@@ -25,6 +25,8 @@ function cueListBody() {
 				delay_millis: 0,
 				out_fade_millis: 2500,
 				out_delay_millis: 0,
+				out_fade_link: "release",
+				out_delay_link: "in_fade",
 				trigger: { type: "manual" },
 				cue_only: false,
 				changes: [
@@ -62,6 +64,8 @@ describe("show-object wire decoders", () => {
 		expect(decoded.body.cues[0]).toMatchObject({
 			out_fade_millis: 2500,
 			out_delay_millis: 0,
+			out_fade_link: "release",
+			out_delay_link: "in_fade",
 		});
 	});
 

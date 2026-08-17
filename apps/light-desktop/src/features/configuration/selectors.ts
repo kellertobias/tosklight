@@ -17,6 +17,10 @@ export function selectSequenceMasterFadeMillis(
 	return snapshot.configuration?.sequence_master_fade_millis ?? null;
 }
 
+export function selectReleaseFadeMillis(snapshot: ConfigurationSnapshot) {
+	return snapshot.configuration?.release_fade_millis ?? null;
+}
+
 export function selectCuelistAutoOffAtZeroDefault(
 	snapshot: ConfigurationSnapshot,
 ) {

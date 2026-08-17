@@ -136,7 +136,7 @@ fn sampled_value_is_the_underlay_for_an_ordinary_programmer_fade() {
             ..EngineSnapshot::default()
         })
         .unwrap();
-    engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000, 0);
+    engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000, 0, 0);
     let sampled = independent_batch(timed_value(fixture_id, "tilt", 0.2, 100, started));
 
     clock.advance_millis(1_000);

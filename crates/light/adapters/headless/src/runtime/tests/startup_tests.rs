@@ -45,6 +45,10 @@ fn startup_preserves_removed_midi_configuration_and_cleans_the_live_document() {
     let configuration = startup_state::load_configuration(&desk, None, None).unwrap();
     assert_eq!(configuration.osc_bind.unwrap().port(), 9100);
     assert_eq!(configuration.programmer_fade_millis, 275);
+    assert_eq!(
+        configuration.release_fade_millis,
+        DeskConfiguration::default().release_fade_millis
+    );
     let report: serde_json::Value = serde_json::from_str(
         &desk.setting("removed_midi_inputs_report").unwrap().unwrap(),
     )

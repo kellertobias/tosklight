@@ -560,7 +560,7 @@ fn schema_v2_snap_bypasses_programmer_fades_but_keeps_non_snap_timing() {
         ("tilt", false, false, false, false, false),
     ]);
     let engine = Engine::new(programmers.clone());
-    engine.set_control_timing([120.0; 5], 1_000, 0);
+    engine.set_control_timing([120.0; 5], 1_000, 0, 0);
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),

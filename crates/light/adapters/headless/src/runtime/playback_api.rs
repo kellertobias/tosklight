@@ -30,7 +30,8 @@ pub(super) fn authoritative_playback_controls(state: &AppState) -> serde_json::V
             "dynamics_paused":state.output.playback_dynamics().paused
         },
         "programmer_fade_millis":timing.programmer_fade_millis,
-        "cue_fade_millis":timing.sequence_master_fade_millis
+        "cue_fade_millis":timing.sequence_master_fade_millis,
+        "release_fade_millis":timing.release_fade_millis
     })
 }
 

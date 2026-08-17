@@ -17,6 +17,8 @@ export interface Cue {
 	delay_millis: number;
 	out_fade_millis?: number;
 	out_delay_millis?: number;
+	out_fade_link?: "release";
+	out_delay_link?: "in_fade";
 	trigger: { type: string; [key: string]: unknown };
 	changes: Array<{
 		fixture_id: string;

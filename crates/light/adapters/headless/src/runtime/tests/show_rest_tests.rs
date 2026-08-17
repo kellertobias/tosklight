@@ -74,7 +74,7 @@ async fn rest_session_show_and_revision_flow() {
             .next()
             .is_some()
     );
-    let configuration=app.clone().oneshot(Request::post("/api/v2/configuration/update").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"request_id":"configuration-test","patch":{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5,"programmer_fade_millis":1250,"command_line_at_uses_programmer_fade":false,"sequence_master_fade_millis":2500}}"#)).unwrap()).await.unwrap();
+    let configuration=app.clone().oneshot(Request::post("/api/v2/configuration/update").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"request_id":"configuration-test","patch":{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5,"programmer_fade_millis":1250,"command_line_at_uses_programmer_fade":false,"sequence_master_fade_millis":2500,"release_fade_millis":1750}}"#)).unwrap()).await.unwrap();
     assert_eq!(configuration.status(), StatusCode::OK);
     assert_eq!(state.output.frame_rate_hz(), 40);
     for (index, bpm) in [101, 102, 103, 104].into_iter().enumerate() {
@@ -97,6 +97,7 @@ async fn rest_session_show_and_revision_flow() {
         state.installation.configuration().sequence_master_fade_millis,
         2_500
     );
+    assert_eq!(state.installation.configuration().release_fade_millis, 1_750);
     let user = app
         .clone()
         .oneshot(

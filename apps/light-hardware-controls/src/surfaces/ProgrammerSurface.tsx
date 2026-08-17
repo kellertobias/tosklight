@@ -140,6 +140,12 @@ export function ProgrammerSurface({
 					maximum={60}
 					send={send}
 				/>
+				<TimeFader
+					label="Release"
+					path={controlSurfaceOscPaths.programmerFade("release")}
+					maximum={60}
+					send={send}
+				/>
 			</div>
 		</aside>
 	);

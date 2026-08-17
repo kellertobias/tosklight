@@ -276,13 +276,13 @@
 	width: 100%;
 	height: 100%;
 	display: grid;
-	grid-template-columns: 86px 88px 88px minmax(0, 1fr);
+	grid-template-columns: 86px 88px 88px 88px minmax(0, 1fr);
 	grid-template-rows: minmax(0, 1fr) 50px;
 	gap: 5px;
 	padding: 0;
 }
 .control-section.touch-connected.playbacks .playback-command-keys {
-	grid-column: 1 / span 3;
+	grid-column: 1 / span 4;
 	grid-row: 2;
 	width: 100%;
 	height: 50px;
@@ -331,8 +331,15 @@
 	min-width: 88px;
 	height: 100%;
 }
-.control-section.touch-connected.playbacks .speed-group-stack {
+.control-section.touch-connected.playbacks .release-fade-master {
 	grid-column: 4;
+	grid-row: 1;
+	width: 88px;
+	min-width: 88px;
+	height: 100%;
+}
+.control-section.touch-connected.playbacks .speed-group-stack {
+	grid-column: 5;
 	grid-row: 1 / span 2;
 	width: 100%;
 	height: 100%;

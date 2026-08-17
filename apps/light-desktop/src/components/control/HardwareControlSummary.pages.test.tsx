@@ -50,6 +50,7 @@ const server = {
 		speed_groups_bpm: [120, 90, 60, 30, 15],
 		programmer_fade_millis: 3_000,
 		sequence_master_fade_millis: 3_000,
+		release_fade_millis: 2_000,
 	},
 	setControlTiming: vi.fn(),
 	highlightError: null,
@@ -73,6 +74,18 @@ vi.mock("../../state/AppContext", () => ({
 	}),
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/configuration/ConfigurationActionsProvider", () => ({
+	useConfigurationActions: () => ({
+		setControlTiming: server.setControlTiming,
+	}),
+}));
+vi.mock("../../features/configuration/ConfigurationState", () => ({
+	useProgrammerFadeMillis: () => server.configuration.programmer_fade_millis,
+	useSequenceMasterFadeMillis: () =>
+		server.configuration.sequence_master_fade_millis,
+	useReleaseFadeMillis: () => server.configuration.release_fade_millis,
+	useSpeedGroupsBpm: () => server.configuration.speed_groups_bpm,
+}));
 vi.mock(
 	"../../features/soundToLight/SoundToLightContext",
 	async (importOriginal) => ({
@@ -165,6 +178,22 @@ function soundState(group: SpeedGroupId): SpeedGroupSoundState {
 }
 
 describe("HardwareControlSummary playback pages", () => {
+	it("keeps Release directly reachable beside the other timing masters", () => {
+		renderWithModals(<HardwareControlSummary />);
+		fireEvent.click(screen.getByRole("button", { name: /Release/ }));
+		expect(
+			screen.getByRole("dialog", { name: "Release fade value" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("heading", { name: "Release" }),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "4" }));
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
+		expect(server.setControlTiming).toHaveBeenCalledWith({
+			release_fade_millis: 4_000,
+		});
+	});
+
 	it("offers Add new page from the hardware-connected page menu", async () => {
 		render(<HardwareControlSummary />);
 		fireEvent.click(screen.getByRole("button", { name: "Page 1" }));

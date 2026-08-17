@@ -153,6 +153,7 @@ pub(super) fn refresh_speed_group_engine(state: &AppState) -> [SpeedSnapshot; 5]
         effective_bpm,
         timing.programmer_fade_millis,
         timing.sequence_master_fade_millis,
+        timing.release_fade_millis,
     );
     state
         .output

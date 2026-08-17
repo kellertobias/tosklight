@@ -70,6 +70,7 @@ const server = {
 	configuration: {
 		programmer_fade_millis: 3_000,
 		sequence_master_fade_millis: 4_000,
+		release_fade_millis: 2_500,
 		speed_groups_bpm: [120, 90, 60, 30, 15],
 	},
 	playbacks: {
@@ -256,8 +257,10 @@ describe("PlaybackTools", () => {
 			"playback-page-controls",
 			"programmer-fade-fader full",
 			"cue-fade-master",
+			"release-fade-master",
 			"speed-group-stack",
 		]);
+		expect(screen.getByRole("slider", { name: "Release" })).toBeInTheDocument();
 		const commandKeys = container.querySelector<HTMLElement>(
 			".playback-command-keys",
 		);

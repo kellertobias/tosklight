@@ -264,13 +264,85 @@ fn legacy_cue_out_timing_follows_existing_fade_and_delay() {
     .unwrap();
     let object = body.as_object_mut().unwrap();
     object.remove("out_fade_millis");
+    object.remove("out_fade_link");
     object.remove("out_delay_millis");
+    object.remove("out_delay_link");
     object.insert("fade_millis".into(), serde_json::json!(1_250));
     object.insert("delay_millis".into(), serde_json::json!(300));
 
     let cue: Cue = serde_json::from_value(body).unwrap();
     assert_eq!(cue.out_fade_millis, None);
+    assert_eq!(cue.out_fade_link, None);
     assert_eq!(cue.out_delay_millis, None);
+    assert_eq!(cue.out_delay_link, None);
+}
+
+#[test]
+fn cue_out_timing_links_round_trip_without_replacing_explicit_values() {
+    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    cue.out_fade_millis = Some(7_500);
+    cue.out_fade_link = Some(CueOutFadeLink::Release);
+    cue.out_delay_millis = Some(625);
+    cue.out_delay_link = Some(CueOutDelayLink::InFade);
+
+    let encoded = serde_json::to_value(&cue).unwrap();
+    assert_eq!(encoded["out_fade_link"], "release");
+    assert_eq!(encoded["out_delay_link"], "in_fade");
+    let restored: Cue = serde_json::from_value(encoded).unwrap();
+    assert_eq!(restored.out_fade_millis, Some(7_500));
+    assert_eq!(restored.out_fade_link, Some(CueOutFadeLink::Release));
+    assert_eq!(restored.out_delay_millis, Some(625));
+    assert_eq!(restored.out_delay_link, Some(CueOutDelayLink::InFade));
+
+    let mut unlinked = restored;
+    unlinked.out_fade_link = None;
+    unlinked.out_delay_link = None;
+    assert_eq!(
+        effective_cue_out_timing(&list(vec![]), &unlinked, 1_000, 2_000),
+        (7_500, 625),
+        "removing a link restores the dormant explicit values"
+    );
+}
+
+#[test]
+fn linked_out_timing_reads_live_release_and_outgoing_in_fade_sources() {
+    let fixture = FixtureId::new();
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    first.fade_millis = 1_000;
+    first.out_fade_millis = Some(9_000);
+    first.out_fade_link = Some(CueOutFadeLink::Release);
+    first.out_delay_millis = Some(8_000);
+    first.out_delay_link = Some(CueOutDelayLink::InFade);
+    first.changes.push(value(fixture, "intensity", 1.0));
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    second.changes.push(value(fixture, "intensity", 0.0));
+    let cue_list = list(vec![first, second]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.set_control_timing([120.0; 5], 0, 2_000);
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    let second_at = started + ChronoDuration::milliseconds(1_000);
+    engine.go_at(id, second_at).unwrap();
+
+    assert_eq!(
+        contribution_level(
+            &engine,
+            second_at + ChronoDuration::milliseconds(500),
+            fixture,
+        ),
+        1.0,
+        "Out Delay follows the outgoing Cue's effective In Fade"
+    );
+    let sample_at = second_at + ChronoDuration::milliseconds(1_500);
+    assert!((contribution_level(&engine, sample_at, fixture) - 0.75).abs() < 0.01);
+
+    engine.set_control_timing([120.0; 5], 0, 4_000);
+    assert!(
+        (contribution_level(&engine, sample_at, fixture) - 0.875).abs() < 0.01,
+        "a linked value reads the changed Release time immediately"
+    );
 }
 
 #[test]
@@ -295,7 +367,7 @@ fn absent_out_fade_follows_the_effective_sequence_master_but_explicit_zero_snaps
     let id = cue_list.id;
     let started = Utc::now();
     let mut engine = PlaybackEngine::default();
-    engine.set_control_timing([120.0; 5], 3_000);
+    engine.set_control_timing([120.0; 5], 3_000, 0);
     engine.register(cue_list).unwrap();
     engine.go_at(id, started).unwrap();
     let second_at = started + ChronoDuration::seconds(3);

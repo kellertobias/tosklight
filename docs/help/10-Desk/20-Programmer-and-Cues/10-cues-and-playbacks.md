@@ -10,6 +10,8 @@ Press `[^SET]` with no source object, then choose a playback button or touch are
 
 Choosing a different playback type immediately loads its standard layout. Cue List uses Go Minus, Go Plus, Flash, and Master. Group Master uses Select, Select dereferenced, Flash, and Master. Speed Master uses Double, Half, Learn, and Learned-speed percentage. Programmer Fade and Cue Fade use Double, Half, and Off above their time fader; Off sets the time to zero. Grand Master uses Blackout, Pause Dynamics, and Flash above its fixed master fader.
 
+The desk timing strip exposes **Programmer Fade**, **Cue Fade**, and **Release** together on touch and attached control surfaces. Release is the authoritative fallback for Cues whose Out Fade is linked to Release; changing it updates those linked Cues without rewriting their remembered explicit Out Fade values.
+
 For a direct Group Master assignment, press `[^SET]`, touch the source Group tile, then touch the destination physical or Virtual Playback. The visible command line remains armed with the explicit Group until that destination completes the assignment.
 
 Choose the red **None** function and then **Apply** to clear that playback without deleting its referenced Cue List or Group. Selecting None only previews the clear; Close keeps the playback unchanged. Assignment persists in the show and remains page-aware.

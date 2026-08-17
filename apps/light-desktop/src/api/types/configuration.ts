@@ -47,6 +47,7 @@ export interface DeskConfiguration {
 	programmer_fade_millis: number;
 	command_line_at_uses_programmer_fade?: boolean;
 	sequence_master_fade_millis: number;
+	release_fade_millis: number;
 	cuelist_auto_off_at_zero_default: boolean;
 	cuelist_auto_off_flash_release_default: boolean;
 	start_after_first_recording: boolean;

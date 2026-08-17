@@ -321,6 +321,7 @@ const CONFIGURATION_FIELDS = Object.keys({
 	programmer_fade_millis: true,
 	command_line_at_uses_programmer_fade: true,
 	sequence_master_fade_millis: true,
+	release_fade_millis: true,
 	cuelist_auto_off_at_zero_default: true,
 	cuelist_auto_off_flash_release_default: true,
 	start_after_first_recording: true,

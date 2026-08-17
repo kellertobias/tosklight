@@ -4,6 +4,10 @@ import type { CSSProperties } from "react";
 import type { Cue, PlaybackSnapshot } from "../../api/types";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import {
+	useReleaseFadeMillis,
+	useSequenceMasterFadeMillis,
+} from "../../features/configuration/ConfigurationState";
+import {
 	cueCommandAddress,
 	cueMutationCommand,
 	cueMutationLabel,
@@ -168,11 +172,15 @@ function CueTimingCells({
 	cue,
 	progress,
 	editable,
+	releaseFadeMillis,
+	sequenceMasterFadeMillis,
 	onActivate,
 }: {
 	cue: Cue;
 	progress: Partial<Record<CueTimingProgressField, number>> | undefined;
 	editable: boolean;
+	releaseFadeMillis: number;
+	sequenceMasterFadeMillis: number;
 	onActivate: (property: CueEditableProperty) => void;
 }) {
 	const activate = (property: CueEditableProperty) =>
@@ -203,13 +211,21 @@ function CueTimingCells({
 			/>
 			<TimingCell
 				label="Out Delay progress"
-				value={formatCueSeconds(cue.out_delay_millis ?? cue.delay_millis)}
+				value={
+					cue.out_delay_link === "in_fade"
+						? `In Fade · ${formatCueSeconds(cue.fade_millis || sequenceMasterFadeMillis)}`
+						: formatCueSeconds(cue.out_delay_millis ?? cue.delay_millis)
+				}
 				progress={progress?.outDelay}
 				onActivate={activate("outDelay")}
 			/>
 			<TimingCell
 				label="Out Fade progress"
-				value={formatCueSeconds(cue.out_fade_millis ?? cue.fade_millis)}
+				value={
+					cue.out_fade_link === "release"
+						? `Release · ${formatCueSeconds(releaseFadeMillis)}`
+						: formatCueSeconds(cue.out_fade_millis ?? cue.fade_millis)
+				}
 				progress={progress?.outFade}
 				onActivate={activate("outFade")}
 			/>
@@ -257,6 +273,8 @@ function CueTableRow({
 	thumbnail,
 	mutationTarget,
 	timingProgress,
+	releaseFadeMillis,
+	sequenceMasterFadeMillis,
 	onActivateCue,
 	onActivateProperty,
 	onOpenPreview,
@@ -272,6 +290,8 @@ function CueTableRow({
 	thumbnail: string | undefined;
 	mutationTarget: ReturnType<typeof cueMutationTarget>;
 	timingProgress: Partial<Record<CueTimingProgressField, number>> | undefined;
+	releaseFadeMillis: number;
+	sequenceMasterFadeMillis: number;
 	onActivateCue: () => void;
 	onActivateProperty: (property: CueEditableProperty) => void;
 	onOpenPreview: () => void;
@@ -386,6 +406,8 @@ function CueTableRow({
 				cue={cue}
 				progress={timingProgress}
 				editable={propertyEditable}
+				releaseFadeMillis={releaseFadeMillis}
+				sequenceMasterFadeMillis={sequenceMasterFadeMillis}
 				onActivate={onActivateProperty}
 			/>
 		</tr>
@@ -423,6 +445,8 @@ export function CueTable({
 	playbackNumber?: number | null;
 	command?: Pick<CommandLineSurface, "text" | "replace" | "execute">;
 }) {
+	const releaseFadeMillis = useReleaseFadeMillis() ?? 3_000;
+	const sequenceMasterFadeMillis = useSequenceMasterFadeMillis() ?? 3_000;
 	const mutationTarget =
 		interactive && !settingsOpen && playbackNumber != null && command
 			? cueMutationTarget(command.text)
@@ -468,6 +492,8 @@ export function CueTable({
 									thumbnail={thumbnails[index]}
 									mutationTarget={mutationTarget}
 									timingProgress={timingProgressByRow[index]}
+									releaseFadeMillis={releaseFadeMillis}
+									sequenceMasterFadeMillis={sequenceMasterFadeMillis}
 									onActivateCue={() => activateCue(index)}
 									onActivateProperty={(property) =>
 										activateProperty(index, property)

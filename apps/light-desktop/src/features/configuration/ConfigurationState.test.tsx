@@ -5,6 +5,7 @@ import type { DeskConfiguration } from "../../api/types";
 import {
 	ConfigurationStateProvider,
 	useProgrammerFadeMillis,
+	useReleaseFadeMillis,
 	useSequenceMasterFadeMillis,
 	useSpeedGroupsBpm,
 } from "./ConfigurationState";
@@ -16,6 +17,7 @@ function configuration(
 	return {
 		programmer_fade_millis: 3_000,
 		sequence_master_fade_millis: 3_000,
+		release_fade_millis: 2_000,
 		speed_groups_bpm: [120, 90, 60, 30, 15],
 		...overrides,
 	} as DeskConfiguration;
@@ -71,6 +73,24 @@ describe("scoped desk configuration", () => {
 		expect(observed.current).toBe(9_000);
 	});
 
+	it("reads Release independently from the other timing masters", () => {
+		const store = new ConfigurationStore();
+		store.install(configuration());
+		const observed: { current: number | null } = { current: null };
+		function Reader() {
+			observed.current = useReleaseFadeMillis();
+			return null;
+		}
+		render(
+			<ConfigurationStateProvider store={store}>
+				<Reader />
+			</ConfigurationStateProvider>,
+		);
+		expect(observed.current).toBe(2_000);
+		act(() => store.install(configuration({ release_fade_millis: 4_500 })));
+		expect(observed.current).toBe(4_500);
+	});
+
 	it("keeps an equal speed-group array stable across a replaced configuration", () => {
 		const store = new ConfigurationStore();
 		store.install(configuration());
@@ -88,9 +108,7 @@ describe("scoped desk configuration", () => {
 
 		// A fresh configuration object carrying an equal array must not rerender the reader.
 		act(() =>
-			store.install(
-				configuration({ speed_groups_bpm: [120, 90, 60, 30, 15] }),
-			),
+			store.install(configuration({ speed_groups_bpm: [120, 90, 60, 30, 15] })),
 		);
 
 		expect(renders).toBe(1);

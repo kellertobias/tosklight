@@ -2,7 +2,10 @@ import { PlaybackToolsView } from "@tosklight/ui/command";
 import { useEffect } from "react";
 import type { SpeedGroupId } from "../../api/types";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
-import { useSequenceMasterFadeMillis } from "../../features/configuration/ConfigurationState";
+import {
+	useReleaseFadeMillis,
+	useSequenceMasterFadeMillis,
+} from "../../features/configuration/ConfigurationState";
 import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../../state/AppContext";
@@ -23,6 +26,7 @@ export function PlaybackTools() {
 	const { state, dispatch } = useApp();
 	const configurationActions = useConfigurationActions();
 	const sequenceMasterFadeMillis = useSequenceMasterFadeMillis();
+	const releaseFadeMillis = useReleaseFadeMillis();
 	const command = useCommandLineSurface({ observeCommand: false });
 	const speedGroups = useSpeedGroupRuntimeView();
 	const speedGroupInteraction = useSpeedGroupInteraction();
@@ -90,6 +94,19 @@ export function PlaybackTools() {
 					onChange={(value) =>
 						void configurationActions?.setControlTiming({
 							sequence_master_fade_millis: Math.round(value * 1_000),
+						})
+					}
+				/>
+			}
+			releaseFade={
+				<TouchTimeSurface
+					label="Release"
+					value={(releaseFadeMillis ?? 3_000) / 1_000}
+					maximum={60}
+					display={`${((releaseFadeMillis ?? 3_000) / 1_000).toFixed(1)} s`}
+					onChange={(value) =>
+						void configurationActions?.setControlTiming({
+							release_fade_millis: Math.round(value * 1_000),
 						})
 					}
 				/>

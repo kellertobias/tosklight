@@ -21,6 +21,7 @@ pub struct PlaybackEngine {
     pub(crate) speed_groups_bpm: [f64; 5],
     pub(crate) speed_groups_paused: [bool; 5],
     pub(crate) sequence_master_fade_millis: u64,
+    pub(crate) release_fade_millis: u64,
     pub(crate) definitions: HashMap<u16, PlaybackDefinition>,
     pub(crate) virtual_definitions: HashMap<VirtualPlaybackAddress, PlaybackDefinition>,
     pub(crate) clock: SharedClock,
@@ -53,6 +54,7 @@ impl PlaybackEngine {
             speed_groups_bpm: [120.0, 90.0, 60.0, 30.0, 15.0],
             speed_groups_paused: [false; 5],
             sequence_master_fade_millis: 0,
+            release_fade_millis: 0,
             definitions: HashMap::new(),
             virtual_definitions: HashMap::new(),
             clock,
@@ -81,6 +83,7 @@ impl PlaybackEngine {
         &mut self,
         speed_groups_bpm: [f64; 5],
         sequence_master_fade_millis: u64,
+        release_fade_millis: u64,
     ) {
         let next_speed_groups_bpm = speed_groups_bpm.map(|bpm| {
             if bpm.is_finite() {
@@ -113,6 +116,7 @@ impl PlaybackEngine {
         }
         self.speed_groups_bpm = next_speed_groups_bpm;
         self.sequence_master_fade_millis = sequence_master_fade_millis.min(60_000);
+        self.release_fade_millis = release_fade_millis.min(60_000);
     }
     pub fn set_speed_groups_paused(&mut self, paused: [bool; 5]) {
         self.speed_groups_paused = paused;

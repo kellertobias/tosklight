@@ -121,6 +121,7 @@ impl PlaybackEngine {
                     speed_groups_bpm: self.speed_groups_bpm,
                     speed_groups_paused: self.speed_groups_paused,
                     sequence_master_fade_millis: self.sequence_master_fade_millis,
+                    release_fade_millis: self.release_fade_millis,
                 },
             );
             if let Some(transition) = transition.as_mut() {
@@ -142,6 +143,7 @@ struct AutomaticTiming {
     speed_groups_bpm: [f64; 5],
     speed_groups_paused: [bool; 5],
     sequence_master_fade_millis: u64,
+    release_fade_millis: u64,
 }
 
 fn update_master_transition(playback: &mut ActivePlayback, now: DateTime<Utc>) -> bool {
@@ -231,7 +233,13 @@ fn advance_link(
         timing.sequence_master_fade_millis,
         &timing.speed_groups_bpm,
     );
-    let completion = cue_completion_millis(cue_list, compiled, playback, cue_fade_millis);
+    let completion = cue_completion_millis(
+        cue_list,
+        compiled,
+        playback,
+        cue_fade_millis,
+        timing.release_fade_millis,
+    );
     let delay_millis = if cue_list.disable_cue_timing {
         0
     } else {
@@ -364,7 +372,13 @@ fn advance_follow_or_wait(
         timing.sequence_master_fade_millis,
         &timing.speed_groups_bpm,
     );
-    let completion = cue_completion_millis(cue_list, compiled, playback, cue_fade_millis);
+    let completion = cue_completion_millis(
+        cue_list,
+        compiled,
+        playback,
+        cue_fade_millis,
+        timing.release_fade_millis,
+    );
     let trigger_delay = if cue_list.disable_cue_timing {
         0
     } else {

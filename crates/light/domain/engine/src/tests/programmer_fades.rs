@@ -11,7 +11,7 @@ fn programmer_fade_starts_from_unowned_fixture_profile_default() {
     let (mut fixture, logical) = fixture();
     fixture.definition.heads[0].parameters[0].default = 0.8;
     let engine = Engine::new(programmers.clone());
-    engine.set_control_timing([120.0; 5], 1_000, 0);
+    engine.set_control_timing([120.0; 5], 1_000, 0, 0);
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
@@ -41,7 +41,7 @@ fn programmer_fade_starts_from_current_immediate_programmer_value() {
     programmers.start(session, UserId::new());
     let (fixture, logical) = fixture();
     let engine = Engine::new(programmers.clone());
-    engine.set_control_timing([120.0; 5], 1_000, 0);
+    engine.set_control_timing([120.0; 5], 1_000, 0, 0);
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
@@ -86,7 +86,7 @@ fn programmer_fade_starts_from_resolved_playback_underlay_and_release_reveals_it
         .unwrap()
         .value = Some(AttributeValue::Normalized(0.25));
     let engine = Engine::new(programmers.clone());
-    engine.set_control_timing([120.0; 5], 1_000, 0);
+    engine.set_control_timing([120.0; 5], 1_000, 0, 0);
     engine.replace_snapshot(snapshot).unwrap();
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
 
@@ -122,7 +122,7 @@ fn immediate_programmer_value_bypasses_non_zero_master_fade_without_zero_overrid
     programmers.start(session, UserId::new());
     let (fixture, logical) = fixture();
     let engine = Engine::new(programmers.clone());
-    engine.set_control_timing([120.0; 5], 5_000, 0);
+    engine.set_control_timing([120.0; 5], 5_000, 0, 0);
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
@@ -156,7 +156,7 @@ fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
     programmers.start(session, UserId::new());
     let (fixture, logical) = fixture();
     let engine = Engine::new(programmers.clone());
-    engine.set_control_timing([120.0; 5], 3_000, 0);
+    engine.set_control_timing([120.0; 5], 3_000, 0, 0);
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
@@ -223,7 +223,7 @@ fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
 #[test]
 fn programmer_master_fade_interpolates_live_values() {
     let engine = Engine::new(ProgrammerRegistry::default());
-    engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000, 0);
+    engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000, 0, 0);
     let now = chrono::Utc::now();
     let value = TimedValue {
         fixture_id: FixtureId::new(),

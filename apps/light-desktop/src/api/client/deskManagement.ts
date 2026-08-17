@@ -362,6 +362,7 @@ function configurationPatch(
 		command_line_at_uses_programmer_fade:
 			configuration.command_line_at_uses_programmer_fade,
 		sequence_master_fade_millis: configuration.sequence_master_fade_millis,
+		release_fade_millis: configuration.release_fade_millis,
 		cuelist_auto_off_at_zero_default:
 			configuration.cuelist_auto_off_at_zero_default,
 		cuelist_auto_off_flash_release_default:

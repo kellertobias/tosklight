@@ -47,6 +47,8 @@ function knownCue(cue: Cue) {
 		delay_millis: cue.delay_millis,
 		out_fade_millis: cue.out_fade_millis ?? null,
 		out_delay_millis: cue.out_delay_millis ?? null,
+		out_fade_link: cue.out_fade_link ?? null,
+		out_delay_link: cue.out_delay_link ?? null,
 		trigger: knownTrigger(cue.trigger),
 		cue_only: cue.cue_only ?? false,
 		changes: cue.changes.map(knownFixtureChange),

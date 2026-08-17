@@ -157,6 +157,7 @@ const configuration: DeskConfiguration = {
 	programmer_fade_millis: 500,
 	command_line_at_uses_programmer_fade: true,
 	sequence_master_fade_millis: 500,
+	release_fade_millis: 500,
 	cuelist_auto_off_at_zero_default: false,
 	cuelist_auto_off_flash_release_default: false,
 	start_after_first_recording: false,

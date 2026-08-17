@@ -713,6 +713,7 @@ fn configure_engine(engine: &Engine, configuration: &DeskConfiguration) -> anyho
         configuration.speed_groups_bpm,
         configuration.programmer_fade_millis,
         configuration.sequence_master_fade_millis,
+        configuration.release_fade_millis,
     );
     engine
         .set_highlight_look(configuration.highlight_look.clone())

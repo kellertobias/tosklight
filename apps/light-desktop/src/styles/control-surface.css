@@ -25,10 +25,10 @@
 	min-height: 0;
 }
 .control-section.playbacks {
-	grid-template-columns: minmax(0, 1fr) calc(var(--control-right) + 190px);
+	grid-template-columns: minmax(0, 1fr) calc(var(--control-right) + 278px);
 }
 .control-section.playbacks .control-right-pane {
-	grid-template-columns: 86px 104px minmax(0, 1fr);
+	grid-template-columns: 86px 88px 88px 88px minmax(0, 1fr);
 }
 .control-section.playbacks .control-right-main,
 .control-section.playbacks .playback-tools {
@@ -42,8 +42,16 @@
 	grid-column: 2;
 	grid-row: 1;
 }
-.control-section.playbacks .speed-group-stack {
+.control-section.playbacks .cue-fade-master {
 	grid-column: 3;
+	grid-row: 1;
+}
+.control-section.playbacks .release-fade-master {
+	grid-column: 4;
+	grid-row: 1;
+}
+.control-section.playbacks .speed-group-stack {
+	grid-column: 5;
 	grid-row: 1;
 }
 .control-section.playbacks .touch-time-surface {
@@ -1270,7 +1278,7 @@
 	grid-template-columns: 104px minmax(0, 1fr);
 }
 .control-section.playbacks .control-right-pane {
-	grid-template-columns: 104px 104px 86px 62px;
+	grid-template-columns: 88px 88px 88px 86px 74px;
 }
 .control-section.playbacks .programmer-fade-fader {
 	grid-column: 1;
@@ -1283,20 +1291,32 @@
 	height: 100%;
 	min-height: 0;
 }
-.control-section.playbacks .cue-fade-master > .vertical-touch-fader {
+.control-section.playbacks .cue-fade-master > .vertical-touch-fader,
+.control-section.playbacks .release-fade-master > .vertical-touch-fader {
 	height: 100%;
 	box-sizing: border-box;
 	padding: 5px;
 }
-.control-section.playbacks .cue-fade-master > .vertical-touch-fader:before {
+.control-section.playbacks .cue-fade-master > .vertical-touch-fader:before,
+.control-section.playbacks .release-fade-master > .vertical-touch-fader:before {
 	inset: 4px;
 }
-.control-section.playbacks .playback-page-controls {
+.control-section.playbacks .release-fade-master {
+	display: block;
 	grid-column: 3;
+	grid-row: 1;
+	height: 100%;
+	min-height: 0;
+}
+.control-section.playbacks .release-fade-master > .vertical-touch-fader-stack {
+	height: 100%;
+}
+.control-section.playbacks .playback-page-controls {
+	grid-column: 4;
 	grid-row: 1;
 }
 .control-section.playbacks .speed-group-stack {
-	grid-column: 4;
+	grid-column: 5;
 	grid-row: 1;
 }
 .speed-group-stack button {

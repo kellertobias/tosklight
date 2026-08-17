@@ -76,8 +76,8 @@ export const controlSurfaceOscPaths = {
 		control: PlaybackControl,
 	) => `playback/${page}/${slot}/${control}`,
 	programmer: (action: ProgrammerControlAction) => `programmer/${action}`,
-	programmerFade: (kind: "programmer" | "cue") =>
-		`programmer/${kind === "programmer" ? "prog" : "cue"}-fade`,
+	programmerFade: (kind: "programmer" | "cue" | "release") =>
+		`programmer/${kind === "programmer" ? "prog" : kind}-fade`,
 	highlight: (action: HighlightControlAction) => `highlight/${action}`,
 	speedGroupButton: (group: number) => `speed-group/${group}/button`,
 	speedGroupEncoder: (group: number) => `speed-group/${group}/encoder`,

@@ -91,6 +91,33 @@ describe("CueTable timing progress", () => {
 		}
 	});
 
+	it("labels linked Out timing with its source and effective value", () => {
+		render(
+			<CueTable
+				cues={[
+					{
+						...cue,
+						out_fade_link: "release",
+						out_delay_link: "in_fade",
+					},
+				]}
+				active={undefined}
+				selectedCue={0}
+				settingsOpen={false}
+				thumbnails={{}}
+				emptyState={{ title: "Empty", description: "Empty", icon: "◎" }}
+				onSelectCue={vi.fn()}
+			/>,
+		);
+
+		expect(screen.getByRole("button", { name: "Out Fade" })).toHaveTextContent(
+			"Release · 3 s",
+		);
+		expect(screen.getByRole("button", { name: "Out Delay" })).toHaveTextContent(
+			"In Fade · 2 s",
+		);
+	});
+
 	it("routes the actual preview pointer/click path without selecting the row", () => {
 		const onOpenCuePreview = vi.fn();
 		const onSelectCue = vi.fn();
@@ -117,7 +144,12 @@ describe("CueTable timing progress", () => {
 	});
 
 	it("resolves a Jump destination through stable identity after renumbering", () => {
-		const destination = { ...cue, id: "destination", number: "42", name: "Encore" };
+		const destination = {
+			...cue,
+			id: "destination",
+			number: "42",
+			name: "Encore",
+		};
 		const source: Cue = {
 			...cue,
 			actions: [{ type: "jump", cue_id: "destination", count: 2 }],
@@ -134,9 +166,9 @@ describe("CueTable timing progress", () => {
 				onEditCueProperty={vi.fn()}
 			/>,
 		);
-		expect(screen.getAllByRole("button", { name: "Jump" })[0]).toHaveTextContent(
-			"Cue 42 · Encore",
-		);
+		expect(
+			screen.getAllByRole("button", { name: "Jump" })[0],
+		).toHaveTextContent("Cue 42 · Encore");
 	});
 });
 

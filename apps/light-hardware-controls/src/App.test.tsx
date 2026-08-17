@@ -94,8 +94,14 @@ describe("hardware controls Programmer layout", () => {
     ]);
   });
 
-  it("uses the revised command area and keeps equal adjacent fade faders", () => {
-    const { container } = render(<HardwareControlsApp />);
+  it("uses the revised command area and keeps three equal timing faders", () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const bridge: OscBridge = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      send,
+      listenFeedback: vi.fn().mockResolvedValue(() => undefined),
+    };
+    const { container } = render(<HardwareControlsApp bridge={bridge} />);
     const commandGrid = container.querySelector(
       ".hardware-keypad-command-section",
     );
@@ -129,14 +135,23 @@ describe("hardware controls Programmer layout", () => {
     const fadeArea = container.querySelector(".fade-times");
     const programmerFade = screen.getByText("Prog Fade").closest("label");
     const cueFade = screen.getByText("Cue Fade").closest("label");
+    const releaseFade = screen.getByText("Release").closest("label");
     expect(fadeArea).not.toBeNull();
     expect(Array.from(fadeArea?.children ?? [])).toEqual([
       programmerFade,
       cueFade,
+      releaseFade,
     ]);
     expect(programmerFade?.classList.contains("time-fader")).toBe(true);
     expect(cueFade?.classList.contains("time-fader")).toBe(true);
+    expect(releaseFade?.classList.contains("time-fader")).toBe(true);
     expect(programmerFade?.className).toBe(cueFade?.className);
+    expect(cueFade?.className).toBe(releaseFade?.className);
+
+    fireEvent.change(releaseFade?.querySelector('input[type="range"]') as Element, {
+      target: { value: "0.5" },
+    });
+    expect(send).toHaveBeenCalledWith("programmer/release-fade", [0.5]);
   });
 
   it("exposes only the four regular Highlight keys and no dedicated status display", () => {

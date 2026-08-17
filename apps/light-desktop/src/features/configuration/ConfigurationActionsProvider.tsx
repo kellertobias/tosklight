@@ -5,8 +5,10 @@ import {
 	useMemo,
 } from "react";
 import type { ConfigurationUpdateResult } from "../../api/client/deskManagement";
-import type { DeskConfiguration } from "../../api/types";
-import type { PoolPresentationConfiguration } from "../../api/types";
+import type {
+	DeskConfiguration,
+	PoolPresentationConfiguration,
+} from "../../api/types";
 import type { ConfigurationStore } from "./store";
 
 export type ControlTimingInput = Partial<
@@ -14,6 +16,7 @@ export type ControlTimingInput = Partial<
 		DeskConfiguration,
 		| "speed_groups_bpm"
 		| "programmer_fade_millis"
+		| "release_fade_millis"
 		| "sequence_master_fade_millis"
 	>
 >;

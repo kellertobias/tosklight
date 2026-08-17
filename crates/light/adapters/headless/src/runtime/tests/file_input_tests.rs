@@ -429,3 +429,24 @@ fn osc_speed_group_button_performs_the_authoritative_learn_action() {
     assert_eq!(event.payload["action"], "learn");
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn osc_release_fade_updates_and_persists_the_desk_timing() {
+    let (state, data_dir) = test_state();
+
+    handle_timing_osc(
+        &state,
+        "/light/main/programmer/release-fade",
+        &[OscArgument::Float(0.25)],
+    );
+
+    assert_eq!(state.installation.configuration().release_fade_millis, 15_000);
+    let persisted = state
+        .installation
+        .setting("server_configuration")
+        .unwrap()
+        .unwrap();
+    let persisted: serde_json::Value = serde_json::from_str(&persisted).unwrap();
+    assert_eq!(persisted["release_fade_millis"], 15_000);
+    let _ = std::fs::remove_dir_all(data_dir);
+}

@@ -5,6 +5,10 @@ import {
 } from "@tosklight/ui";
 import { useState } from "react";
 import type { Cue } from "../../api/types";
+import {
+	useReleaseFadeMillis,
+	useSequenceMasterFadeMillis,
+} from "../../features/configuration/ConfigurationState";
 import type { CueEditableProperty } from "./CueTable";
 import {
 	cueJump,
@@ -38,16 +42,32 @@ type NumberProperty = "jumpCount" | "triggerTime" | TimingProperty;
 type TriggerKind = "go" | "follow" | "time" | "timecode" | "link";
 type TriggerChoice = Exclude<TriggerKind, "link"> | `link:${string}`;
 
-function timingValue(cue: Cue, property: TimingProperty) {
+function timingValue(
+	cue: Cue,
+	property: TimingProperty,
+	releaseFadeMillis: number,
+	sequenceMasterFadeMillis: number,
+) {
+	if (property === "outFade" && cue.out_fade_link === "release")
+		return releaseFadeMillis / 1000;
+	if (property === "outDelay" && cue.out_delay_link === "in_fade")
+		return (cue.fade_millis || sequenceMasterFadeMillis) / 1000;
 	const fallback = property === "outFade" ? cue.fade_millis : cue.delay_millis;
 	return Number(cue[timingKeys[property]] ?? fallback) / 1000;
 }
 
-function numberValue(cue: Cue, property: NumberProperty): string {
+function numberValue(
+	cue: Cue,
+	property: NumberProperty,
+	releaseFadeMillis: number,
+	sequenceMasterFadeMillis: number,
+): string {
 	if (property === "jumpCount") return String(cueJump(cue)?.count ?? 1);
 	if (property === "triggerTime")
 		return String(Number(cue.trigger.delay_millis ?? 0) / 1000);
-	return String(timingValue(cue, property));
+	return String(
+		timingValue(cue, property, releaseFadeMillis, sequenceMasterFadeMillis),
+	);
 }
 
 function cueWithNumber(
@@ -74,6 +94,10 @@ function cueWithNumber(
 					: cueTrigger("time", millis),
 		};
 	}
+	if (property === "outFade")
+		return { ...cue, out_fade_millis: millis, out_fade_link: undefined };
+	if (property === "outDelay")
+		return { ...cue, out_delay_millis: millis, out_delay_link: undefined };
 	return { ...cue, [timingKeys[property]]: millis };
 }
 
@@ -110,13 +134,16 @@ export function CuePropertyModal({
 	onSave: (cue: Cue) => Promise<boolean>;
 }) {
 	const label = propertyLabels[property];
+	const releaseFadeMillis = useReleaseFadeMillis() ?? 3_000;
+	const sequenceMasterFadeMillis = useSequenceMasterFadeMillis() ?? 3_000;
+	const effectiveInFadeMillis = cue.fade_millis || sequenceMasterFadeMillis;
 	const [numberDraft, setNumberDraft] = useState(() =>
 		property === "name" ||
 		property === "information" ||
 		property === "jump" ||
 		property === "trigger"
 			? ""
-			: numberValue(cue, property),
+			: numberValue(cue, property, releaseFadeMillis, sequenceMasterFadeMillis),
 	);
 	const [localError, setLocalError] = useState("");
 	const [busy, setBusy] = useState(false);
@@ -249,9 +276,7 @@ export function CuePropertyModal({
 					const kind: TriggerKind = linkedCueId
 						? "link"
 						: (choice as Exclude<TriggerKind, "link">);
-					void save(
-						cueWithTrigger(cue, kind, linkedCueId),
-					);
+					void save(cueWithTrigger(cue, kind, linkedCueId));
 				}}
 				onClose={onCancel}
 			/>
@@ -262,6 +287,38 @@ export function CuePropertyModal({
 		property === "jumpCount"
 			? "Enter a whole Jump Count of one or greater."
 			: "Enter a time of zero or greater.";
+	const linkedSource =
+		property === "outFade" && cue.out_fade_link === "release"
+			? { label: "Release", millis: releaseFadeMillis }
+			: property === "outDelay" && cue.out_delay_link === "in_fade"
+				? { label: "In Fade", millis: effectiveInFadeMillis }
+				: null;
+	const linkAction =
+		property === "outFade"
+			? {
+					label: linkedSource ? "Use explicit value" : "Use Release",
+					next: {
+						...cue,
+						out_fade_millis:
+							linkedSource && cue.out_fade_millis == null
+								? releaseFadeMillis
+								: cue.out_fade_millis,
+						out_fade_link: linkedSource ? undefined : ("release" as const),
+					},
+				}
+			: property === "outDelay"
+				? {
+						label: linkedSource ? "Use explicit value" : "Use In Fade",
+						next: {
+							...cue,
+							out_delay_millis:
+								linkedSource && cue.out_delay_millis == null
+									? effectiveInFadeMillis
+									: cue.out_delay_millis,
+							out_delay_link: linkedSource ? undefined : ("in_fade" as const),
+						},
+					}
+				: null;
 	return (
 		<ModalNumberEditor
 			ariaLabel={label}
@@ -283,12 +340,24 @@ export function CuePropertyModal({
 			allowDecimal={property !== "jumpCount"}
 			unit={property === "jumpCount" ? undefined : "s"}
 			beforeTitle={
-				error ? (
-					<span className="ui-field-error" role="alert">
-						{error}
-					</span>
+				error || linkedSource ? (
+					<>
+						{linkedSource && (
+							<span className="cue-timing-link-status">
+								Linked to {linkedSource.label} ·{" "}
+								{(linkedSource.millis / 1000).toFixed(1)} s
+							</span>
+						)}
+						{error && (
+							<span className="ui-field-error" role="alert">
+								{error}
+							</span>
+						)}
+					</>
 				) : undefined
 			}
+			onRelease={linkAction ? () => void save(linkAction.next) : undefined}
+			releaseLabel={linkAction?.label}
 		/>
 	);
 }

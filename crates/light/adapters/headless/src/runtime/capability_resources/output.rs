@@ -657,11 +657,13 @@ impl OutputResource {
         speed_groups_bpm: [f64; 5],
         programmer_fade_millis: u64,
         sequence_master_fade_millis: u64,
+        release_fade_millis: u64,
     ) {
         self.engine.set_control_timing(
             speed_groups_bpm,
             programmer_fade_millis,
             sequence_master_fade_millis,
+            release_fade_millis,
         );
     }
 

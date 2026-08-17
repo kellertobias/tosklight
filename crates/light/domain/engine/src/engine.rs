@@ -27,6 +27,7 @@ pub struct Engine {
     pub(crate) speed_groups_bpm: [AtomicU64; 5],
     pub(crate) speed_groups_paused: [AtomicBool; 5],
     pub(crate) sequence_master_fade_millis: AtomicU64,
+    pub(crate) release_fade_millis: AtomicU64,
     pub(crate) programmer_transitions:
         Mutex<HashMap<ProgrammerTransitionKey, ProgrammerTransition>>,
     dynamic_programmer_cache: Mutex<DynamicProgrammerCache>,
@@ -76,6 +77,7 @@ impl Engine {
             ],
             speed_groups_paused: std::array::from_fn(|_| AtomicBool::new(false)),
             sequence_master_fade_millis: AtomicU64::new(0),
+            release_fade_millis: AtomicU64::new(0),
             programmer_transitions: Mutex::new(HashMap::new()),
             dynamic_programmer_cache: Mutex::new(DynamicProgrammerCache::default()),
             move_in_black: Mutex::new(HashMap::new()),
@@ -96,6 +98,7 @@ impl Engine {
         speed_groups_bpm: [f64; 5],
         programmer_fade_millis: u64,
         sequence_master_fade_millis: u64,
+        release_fade_millis: u64,
     ) {
         self.programmer_fade_millis
             .store(programmer_fade_millis.min(60_000), Ordering::Relaxed);
@@ -111,11 +114,17 @@ impl Engine {
         }
         self.sequence_master_fade_millis
             .store(sequence_master_fade_millis.min(60_000), Ordering::Relaxed);
+        self.release_fade_millis
+            .store(release_fade_millis.min(60_000), Ordering::Relaxed);
         self.generation
             .load()
             .playback()
             .write()
-            .set_control_timing(speed_groups_bpm, sequence_master_fade_millis);
+            .set_control_timing(
+                speed_groups_bpm,
+                sequence_master_fade_millis,
+                release_fade_millis,
+            );
     }
 
     pub fn set_speed_groups_paused(&self, paused: [bool; 5]) {

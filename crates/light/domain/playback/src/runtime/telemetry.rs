@@ -75,7 +75,13 @@ impl PlaybackEngine {
             self.sequence_master_fade_millis,
             &self.speed_groups_bpm,
         );
-        let completion = cue_completion_millis(cue_list, compiled, playback, cue_fade_millis);
+        let completion = cue_completion_millis(
+            cue_list,
+            compiled,
+            playback,
+            cue_fade_millis,
+            self.release_fade_millis,
+        );
         if completion == 0 {
             return 1.0;
         }

@@ -80,7 +80,7 @@ fn preload_transition_uses_one_timestamp_and_programmer_fade_only_as_fallback() 
         .with_timezone(&Utc);
     let clock = Arc::new(light_core::ManualClock::new(started));
     let mut engine = PlaybackEngine::with_clock(clock.clone());
-    engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 7_000);
+    engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 7_000, 0);
     engine.register(cue_list).unwrap();
     engine.register_definition(definition(1, id)).unwrap();
     engine.go_playback(1).unwrap();

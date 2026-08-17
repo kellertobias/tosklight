@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
 import {
 	useProgrammerFadeMillis,
+	useReleaseFadeMillis,
 	useSequenceMasterFadeMillis,
 	useSpeedGroupsBpm,
 } from "../../features/configuration/ConfigurationState";
@@ -35,7 +36,7 @@ function HardwareTimeInputModal({
 	onSubmit,
 	value,
 }: {
-	kind: "prog" | "cue";
+	kind: "prog" | "cue" | "release";
 	onChange: (value: string) => void;
 	onClose: () => void;
 	onSubmit: () => void;
@@ -43,8 +44,10 @@ function HardwareTimeInputModal({
 }) {
 	return (
 		<ModalNumberEditor
-			ariaLabel={`${kind === "prog" ? "Programmer" : "Cue"} fade value`}
-			title={kind === "prog" ? "Prog. Fade" : "Cue Fade"}
+			ariaLabel={`${kind === "prog" ? "Programmer" : kind === "cue" ? "Cue" : "Release"} fade value`}
+			title={
+				kind === "prog" ? "Prog. Fade" : kind === "cue" ? "Cue Fade" : "Release"
+			}
 			value={value}
 			onChange={onChange}
 			onSubmit={onSubmit}
@@ -61,7 +64,9 @@ export function HardwareControlSummary() {
 	const [pagesOpen, setPagesOpen] = useState(false);
 	const [renamePage, setRenamePage] =
 		useState<ShowObject<"playback_page"> | null>(null);
-	const [timeInput, setTimeInput] = useState<"prog" | "cue" | null>(null);
+	const [timeInput, setTimeInput] = useState<"prog" | "cue" | "release" | null>(
+		null,
+	);
 	const [inputValue, setInputValue] = useState("");
 	const speedGroupInteraction = useSpeedGroupInteraction();
 	const playbackDesk = usePlaybackDeskView();
@@ -72,9 +77,10 @@ export function HardwareControlSummary() {
 	const bpms = useSpeedGroupsBpm() ?? [120, 90, 60, 30, 15];
 	const prog = (useProgrammerFadeMillis() ?? 3000) / 1000;
 	const cue = (useSequenceMasterFadeMillis() ?? 3000) / 1000;
+	const release = (useReleaseFadeMillis() ?? 3000) / 1000;
 	const runtimeReady = runtimeStatus.status === "ready";
 	const page = runtimeReady ? (playbackDesk?.active_page ?? null) : null;
-	const openTime = (kind: "prog" | "cue", value: number) => {
+	const openTime = (kind: "prog" | "cue" | "release", value: number) => {
 		const next = String(Number(value.toFixed(1)));
 		setTimeInput(kind);
 		setInputValue(next);
@@ -107,7 +113,9 @@ export function HardwareControlSummary() {
 			void configurationActions?.setControlTiming(
 				timeInput === "prog"
 					? { programmer_fade_millis: Math.round(value * 1000) }
-					: { sequence_master_fade_millis: Math.round(value * 1000) },
+					: timeInput === "cue"
+						? { sequence_master_fade_millis: Math.round(value * 1000) }
+						: { release_fade_millis: Math.round(value * 1000) },
 			);
 		setTimeInput(null);
 	};
@@ -123,6 +131,11 @@ export function HardwareControlSummary() {
 					id: "cue-fade",
 					label: "Cue Fade",
 					display: `${cue.toFixed(1)}s`,
+				},
+				{
+					id: "release-fade",
+					label: "Release",
+					display: `${release.toFixed(1)}s`,
 				},
 				{
 					id: "page",
@@ -141,6 +154,7 @@ export function HardwareControlSummary() {
 			onValue={(id) => {
 				if (id === "programmer-fade") openTime("prog", prog);
 				else if (id === "cue-fade") openTime("cue", cue);
+				else if (id === "release-fade") openTime("release", release);
 				else openPagesOrRename();
 			}}
 			onValueSettings={(id) => {

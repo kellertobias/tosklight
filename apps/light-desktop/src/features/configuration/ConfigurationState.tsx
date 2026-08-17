@@ -16,17 +16,20 @@ import {
 	selectMatterEnabled,
 	selectPatchPreviewHighlightDmx,
 	selectProgrammerFadeMillis,
+	selectReleaseFadeMillis,
 	selectSequenceMasterFadeMillis,
 	selectSpeedGroupsBpm,
 	selectStartAfterFirstRecording,
 } from "./selectors";
 import {
 	type ConfigurationSnapshot,
-	ConfigurationStore,
+	type ConfigurationStore,
 	EMPTY_CONFIGURATION_SNAPSHOT,
 } from "./store";
 
-const ConfigurationStoreContext = createContext<ConfigurationStore | null>(null);
+const ConfigurationStoreContext = createContext<ConfigurationStore | null>(
+	null,
+);
 
 export function ConfigurationStateProvider({
 	children,
@@ -46,12 +49,20 @@ export function useProgrammerFadeMillis(): number | null {
 
 /** Whether deliberate absolute value entry uses Programmer Fade. */
 export function useDirectEntryUsesProgrammerFade(): boolean {
-	return useConfigurationSelector(selectDirectEntryUsesProgrammerFade, Object.is);
+	return useConfigurationSelector(
+		selectDirectEntryUsesProgrammerFade,
+		Object.is,
+	);
 }
 
 /** Sequence master fade in milliseconds, or null while the desk configuration is unknown. */
 export function useSequenceMasterFadeMillis(): number | null {
 	return useConfigurationSelector(selectSequenceMasterFadeMillis, Object.is);
+}
+
+/** Release fade in milliseconds, or null while the desk configuration is unknown. */
+export function useReleaseFadeMillis(): number | null {
+	return useConfigurationSelector(selectReleaseFadeMillis, Object.is);
 }
 
 export function useCuelistAutoOffAtZeroDefault(): boolean {
@@ -117,9 +128,7 @@ function useConfigurationSelector<T>(
 		selector: ((snapshot: ConfigurationSnapshot) => T) | null;
 	}>({ source: null, selection: null, hasSelection: false, selector: null });
 	const getSelection = useCallback(() => {
-		const source = store
-			? store.getSnapshot()
-			: EMPTY_CONFIGURATION_SNAPSHOT;
+		const source = store ? store.getSnapshot() : EMPTY_CONFIGURATION_SNAPSHOT;
 		if (
 			cache.current.selector === selector &&
 			cache.current.source === source &&

@@ -37,6 +37,9 @@ describe("shared control-surface contracts", () => {
     expect(controlSurfaceOscPaths.programmerFade("cue")).toBe(
       "programmer/cue-fade",
     );
+    expect(controlSurfaceOscPaths.programmerFade("release")).toBe(
+      "programmer/release-fade",
+    );
     expect(encoderControlActions).toEqual([
       "up",
       "down",

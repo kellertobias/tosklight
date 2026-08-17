@@ -181,6 +181,7 @@ export interface PlaybackToolsViewProps {
 	pageControls: ReactNode;
 	programmerFade: ReactNode;
 	cueFade: ReactNode;
+	releaseFade: ReactNode;
 	speedGroups: readonly SpeedGroupViewModel[];
 	setArmed?: boolean;
 	shiftArmed?: boolean;
@@ -202,6 +203,7 @@ export function PlaybackToolsView({
 	pageControls,
 	programmerFade,
 	cueFade,
+	releaseFade,
 	speedGroups,
 	setArmed = false,
 	shiftArmed = false,
@@ -238,6 +240,7 @@ export function PlaybackToolsView({
 			{pageControls}
 			{programmerFade}
 			<div className="cue-fade-master">{cueFade}</div>
+			<div className="release-fade-master">{releaseFade}</div>
 			<div className="speed-group-stack">
 				{speedGroups.map((group) => (
 					<Button
@@ -275,7 +278,7 @@ export function PlaybackToolsView({
 }
 
 export interface HardwareControlValue {
-	id: "programmer-fade" | "cue-fade" | "page";
+	id: "programmer-fade" | "cue-fade" | "release-fade" | "page";
 	label: string;
 	display: string;
 	disabled?: boolean;

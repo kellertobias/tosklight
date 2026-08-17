@@ -412,6 +412,7 @@ function PlaybackToolsFixture() {
 			pageControls={<PageControlsFixture />}
 			programmerFade={<FullFader label="Prog. Fade" value={3} maximum={20} />}
 			cueFade={<FullFader label="Cue Fade" value={2.5} maximum={60} />}
+			releaseFade={<FullFader label="Release" value={2} maximum={60} />}
 			speedGroups={speedGroups}
 			setArmed={setArmed}
 			shiftArmed={shiftArmed}

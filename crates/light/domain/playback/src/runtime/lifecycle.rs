@@ -362,6 +362,7 @@ impl PlaybackEngine {
                     speed_groups_bpm: self.speed_groups_bpm,
                     speed_groups_paused: self.speed_groups_paused,
                     sequence_master_fade_millis: self.sequence_master_fade_millis,
+                    release_fade_millis: self.release_fade_millis,
                     definitions: self.definitions.clone(),
                     virtual_definitions: self.virtual_definitions.clone(),
                     clock: Arc::clone(&self.clock),

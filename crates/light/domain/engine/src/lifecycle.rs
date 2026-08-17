@@ -221,6 +221,7 @@ impl Engine {
         playback.set_control_timing(
             self.current_speed_groups_bpm(),
             self.sequence_master_fade_millis.load(Ordering::Relaxed),
+            self.release_fade_millis.load(Ordering::Relaxed),
         );
         playback.set_speed_groups_paused(self.current_speed_groups_paused());
         playback

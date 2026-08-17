@@ -28,3 +28,4 @@
 .speed-groups .speed-touch-fader:before{background:linear-gradient(90deg,#176676,#0f3c48);transform:scaleX(var(--fader-level));transform-origin:left}
 .speed-groups .speed-touch-fader strong{margin-top:0;margin-left:auto}
 .speed-groups .speed-touch-fader input{writing-mode:horizontal-tb;direction:ltr}
+.fade-times{grid-template-columns:repeat(3,minmax(0,1fr))}

@@ -194,31 +194,35 @@ impl PlaybackEngine {
         } else {
             cue.delay_millis
         };
-        let out_fade_millis = if cue_list.disable_cue_timing {
-            0
-        } else {
-            outgoing_cue
-                .map(|outgoing| {
-                    outgoing.out_fade_millis.unwrap_or_else(|| {
-                        effective_cue_fade_millis(
-                            cue_list,
-                            outgoing,
-                            playback,
-                            self.sequence_master_fade_millis,
-                            &self.speed_groups_bpm,
-                        )
-                    })
-                })
-                .unwrap_or(in_fade_millis)
-        };
-        let out_delay_millis = if cue_list.disable_cue_timing {
-            0
-        } else {
-            outgoing_cue
-                .and_then(|outgoing| outgoing.out_delay_millis.or(Some(outgoing.delay_millis)))
-                .unwrap_or(in_delay_millis)
-        };
-        let completion_millis = cue_completion_millis(cue_list, compiled, playback, in_fade_millis);
+        let (out_fade_millis, out_delay_millis) = outgoing_cue
+            .map(|outgoing| {
+                let effective_outgoing_in_fade_millis = effective_cue_fade_millis(
+                    cue_list,
+                    outgoing,
+                    playback,
+                    self.sequence_master_fade_millis,
+                    &self.speed_groups_bpm,
+                );
+                let outgoing_in_fade_millis = if outgoing.fade_millis == 0 {
+                    in_fade_millis
+                } else {
+                    effective_outgoing_in_fade_millis
+                };
+                effective_cue_out_timing(
+                    cue_list,
+                    outgoing,
+                    outgoing_in_fade_millis,
+                    self.release_fade_millis,
+                )
+            })
+            .unwrap_or((in_fade_millis, in_delay_millis));
+        let completion_millis = cue_completion_millis(
+            cue_list,
+            compiled,
+            playback,
+            in_fade_millis,
+            self.release_fade_millis,
+        );
         let active_trigger =
             active_trigger_timing(playback, cue_list, current_index, completion_millis);
         Some(CueTimingRuntimeStatus {

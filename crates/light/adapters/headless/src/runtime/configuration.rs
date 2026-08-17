@@ -4,6 +4,10 @@ pub(super) fn default_autosave_interval_seconds() -> u64 {
     30
 }
 
+pub(super) fn default_release_fade_millis() -> u64 {
+    3_000
+}
+
 pub(super) fn default_speed_groups() -> [f64; 5] {
     [120.0, 90.0, 60.0, 30.0, 15.0]
 }
@@ -271,6 +275,9 @@ pub(super) struct DeskConfiguration {
     /// is immediate and records no per-value zero-second override.
     pub(super) command_line_at_uses_programmer_fade: bool,
     pub(super) sequence_master_fade_millis: u64,
+    /// Desk-wide fallback used by Cue Out Fade values linked to Release.
+    #[serde(default = "default_release_fade_millis")]
+    pub(super) release_fade_millis: u64,
     /// Installation default copied onto each newly created Cuelist. Existing Cuelists retain
     /// their persisted behavior when this default changes.
     pub(super) cuelist_auto_off_at_zero_default: bool,
@@ -353,6 +360,7 @@ impl Default for DeskConfiguration {
             programmer_fade_millis: 3_000,
             command_line_at_uses_programmer_fade: false,
             sequence_master_fade_millis: 3_000,
+            release_fade_millis: default_release_fade_millis(),
             cuelist_auto_off_at_zero_default: false,
             cuelist_auto_off_flash_release_default: false,
             start_after_first_recording: false,
@@ -490,7 +498,10 @@ impl DeskConfiguration {
                 .map_err(|error| ApiError::bad_request(error.to_string()))?;
         }
         validate_speed_group_source_graph(&self.speed_group_sources)?;
-        if self.programmer_fade_millis > 60_000 || self.sequence_master_fade_millis > 60_000 {
+        if self.programmer_fade_millis > 60_000
+            || self.sequence_master_fade_millis > 60_000
+            || self.release_fade_millis > 60_000
+        {
             return Err(ApiError::bad_request(
                 "fade times must be 0-60000 milliseconds",
             ));

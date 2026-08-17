@@ -32,15 +32,17 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
     if parts.len() == 4
         && parts[0] == "light"
         && parts[2] == "programmer"
-        && matches!(parts[3], "prog-fade" | "cue-fade")
+        && matches!(parts[3], "prog-fade" | "cue-fade" | "release-fade")
         && let Some(value) = numeric
     {
         state.installation.update_configuration(|configuration| {
             if parts[3] == "prog-fade" {
                 configuration.programmer_fade_millis = (value.clamp(0.0, 1.0) * 20_000.0) as u64;
-            } else {
+            } else if parts[3] == "cue-fade" {
                 configuration.sequence_master_fade_millis =
                     (value.clamp(0.0, 1.0) * 60_000.0) as u64;
+            } else {
+                configuration.release_fade_millis = (value.clamp(0.0, 1.0) * 60_000.0) as u64;
             }
         });
         let _ = persist_server_configuration(state);

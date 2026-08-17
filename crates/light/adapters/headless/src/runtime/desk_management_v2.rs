@@ -544,6 +544,9 @@ fn patched_configuration(
     if let Some(value) = patch.sequence_master_fade_millis {
         configuration.sequence_master_fade_millis = value;
     }
+    if let Some(value) = patch.release_fade_millis {
+        configuration.release_fade_millis = value;
+    }
     if let Some(value) = patch.cuelist_auto_off_at_zero_default {
         configuration.cuelist_auto_off_at_zero_default = value;
     }

@@ -22,6 +22,7 @@ pub(super) struct PlaybackFrame<'a> {
     pub(super) previous: PreviousState,
     pub(super) elapsed: u64,
     pub(super) cue_fade_millis: u64,
+    pub(super) release_fade_millis: u64,
 }
 
 impl<'a> PlaybackFrame<'a> {
@@ -86,6 +87,7 @@ impl<'a> PlaybackFrame<'a> {
             previous,
             elapsed,
             cue_fade_millis,
+            release_fade_millis: context.engine.release_fade_millis,
         }
     }
 

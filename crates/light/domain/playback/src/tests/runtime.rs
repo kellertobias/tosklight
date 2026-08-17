@@ -95,6 +95,42 @@ fn runtime_timing_projects_effective_phases_and_retains_completed_trigger_until_
 }
 
 #[test]
+fn runtime_timing_and_completion_share_linked_out_time_resolution() {
+    let fixture = FixtureId::new();
+    let mut first = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
+    first.fade_millis = 700;
+    first.out_fade_millis = Some(9_000);
+    first.out_fade_link = Some(CueOutFadeLink::Release);
+    first.out_delay_millis = Some(8_000);
+    first.out_delay_link = Some(CueOutDelayLink::InFade);
+    first.changes.push(value(fixture, "intensity", 1.0));
+    let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
+    second.fade_millis = 200;
+    second.changes.push(value(fixture, "intensity", 0.0));
+    let cue_list = list(vec![first, second]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.set_control_timing([120.0; 5], 0, 1_800);
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    engine
+        .go_at(id, started + ChronoDuration::milliseconds(700))
+        .unwrap();
+
+    let timing = engine.runtime_status().remove(0).cue_timing.unwrap();
+    assert_eq!(timing.out_delay_millis, 700);
+    assert_eq!(timing.out_fade_millis, 1_800);
+    assert_eq!(timing.completion_millis, 2_500);
+
+    engine.set_control_timing([120.0; 5], 0, 2_800);
+    let timing = engine.runtime_status().remove(0).cue_timing.unwrap();
+    assert_eq!(timing.out_delay_millis, 700);
+    assert_eq!(timing.out_fade_millis, 2_800);
+    assert_eq!(timing.completion_millis, 3_500);
+}
+
+#[test]
 fn runtime_timing_associates_link_delay_with_its_source_row() {
     let mut source = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     let skipped = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());

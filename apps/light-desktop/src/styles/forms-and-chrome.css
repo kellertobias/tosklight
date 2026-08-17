@@ -943,15 +943,19 @@
 	height: 68px;
 }
 .control-section.playbacks:not(.hardware-connected) .control-right-pane {
-	grid-template-columns: 88px 88px 86px minmax(0, 1fr);
+	grid-template-columns: 88px 88px 88px 86px minmax(0, 1fr);
 }
 .control-section.playbacks .programmer-fade-fader,
-.control-section.playbacks .cue-fade-master {
+.control-section.playbacks .cue-fade-master,
+.control-section.playbacks .release-fade-master {
 	width: 88px;
 	min-width: 88px;
 }
 :root {
 	--command-right-width: 384px;
+}
+.control-section.touch-connected.playbacks {
+	--command-right-width: 472px;
 }
 .control-section.touch-connected.programmer,
 .control-section.touch-connected.playbacks {

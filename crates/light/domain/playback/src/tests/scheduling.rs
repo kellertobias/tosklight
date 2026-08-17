@@ -10,7 +10,7 @@ fn backend_speed_groups_drive_assigned_chasers() {
     cue_list.speed_group = Some("B".into());
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
-    engine.set_control_timing([60.0, 120.0, 30.0, 15.0, 10.0], 0);
+    engine.set_control_timing([60.0, 120.0, 30.0, 15.0, 10.0], 0, 0);
     engine.register(cue_list).unwrap();
     let started = Utc::now();
     engine.go_at(id, started).unwrap();
@@ -100,7 +100,7 @@ fn decimal_speed_group_bpm_reaches_chaser_scheduling_without_integer_rounding() 
     cue_list.speed_group = Some("B".into());
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
-    engine.set_control_timing([120.0, 127.5, 60.0, 30.0, 15.0], 0);
+    engine.set_control_timing([120.0, 127.5, 60.0, 30.0, 15.0], 0, 0);
     engine.register(cue_list).unwrap();
     let started = Utc::now();
     engine.go_at(id, started).unwrap();
@@ -130,7 +130,7 @@ fn chaser_bpm_change_preserves_normalized_step_phase() {
 
     clock.set(started + ChronoDuration::milliseconds(250));
     engine.tick(started + ChronoDuration::milliseconds(250), None);
-    engine.set_control_timing([60.0, 90.0, 60.0, 30.0, 15.0], 0);
+    engine.set_control_timing([60.0, 90.0, 60.0, 30.0, 15.0], 0, 0);
     engine.tick(started + ChronoDuration::milliseconds(749), None);
     assert_eq!(engine.active()[0].cue_index, 0);
     engine.tick(started + ChronoDuration::milliseconds(750), None);
@@ -149,7 +149,7 @@ fn sequence_master_fade_only_fills_missing_cue_fades() {
     let mut cue_list = list(vec![fallback]);
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
-    engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000);
+    engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000, 0);
     engine.register(cue_list.clone()).unwrap();
     let started = Utc::now();
     engine.go_at(id, started).unwrap();
@@ -165,7 +165,7 @@ fn sequence_master_fade_only_fills_missing_cue_fades() {
 
     cue_list.cues[0].fade_millis = 2_000;
     let mut explicit = PlaybackEngine::default();
-    explicit.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000);
+    explicit.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000, 0);
     explicit.register(cue_list).unwrap();
     explicit.go_at(id, started).unwrap();
     assert!(

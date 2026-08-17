@@ -340,7 +340,8 @@
 	color: var(--cyan) !important;
 }
 .programmer-fade-fader > .vertical-touch-fader-stack,
-.cue-fade-master > .vertical-touch-fader-stack {
+.cue-fade-master > .vertical-touch-fader-stack,
+.release-fade-master > .vertical-touch-fader-stack {
 	height: 100%;
 }
 .playback-fader-bank

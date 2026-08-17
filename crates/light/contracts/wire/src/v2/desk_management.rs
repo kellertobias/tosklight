@@ -73,6 +73,10 @@ pub struct ConfigurationPatch {
     pub sequence_master_fade_millis: Option<u64>,
     #[serde(default)]
     #[ts(optional = nullable)]
+    #[ts(type = "number")]
+    pub release_fade_millis: Option<u64>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
     pub cuelist_auto_off_at_zero_default: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]

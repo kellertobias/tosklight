@@ -48,10 +48,18 @@ pub struct Cue {
     /// legacy behavior by following the effective in fade, including the Cue Fade fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub out_fade_millis: Option<u64>,
+    /// Optional live link for Out Fade. The numeric value remains stored as the operator's last
+    /// explicit value and becomes effective again when this link is removed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_fade_link: Option<CueOutFadeLink>,
     /// Independent master hold before Intensity values leave the previous look. `None` preserves
     /// legacy Cue behavior by following `delay_millis` until explicitly separated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub out_delay_millis: Option<u64>,
+    /// Optional live link for Out Delay. The numeric value remains stored as the operator's last
+    /// explicit value and becomes effective again when this link is removed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_delay_link: Option<CueOutDelayLink>,
     pub trigger: CueTrigger,
     /// Marks an operator-recorded Cue-only Cue so an appended following Cue can generate the
     /// required automatic restore/release delta after a save, refresh, or reopen.
@@ -66,6 +74,18 @@ pub struct Cue {
     /// Ordered non-value actions dispatched once when this Cue becomes current.
     #[serde(default)]
     pub actions: Vec<CueAction>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CueOutFadeLink {
+    Release,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CueOutDelayLink {
+    InFade,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -126,7 +146,9 @@ impl Cue {
             fade_millis: 0,
             delay_millis: 0,
             out_fade_millis: None,
+            out_fade_link: None,
             out_delay_millis: None,
+            out_delay_link: None,
             trigger: CueTrigger::Manual,
             cue_only: false,
             group_changes: Vec::new(),
@@ -241,6 +263,7 @@ pub(crate) fn cue_completion_millis(
     compiled: &CompiledCueList,
     playback: &ActivePlayback,
     cue_fade_millis: u64,
+    release_fade_millis: u64,
 ) -> u64 {
     if cue_list.disable_cue_timing
         || playback.transition_timing_bypassed
@@ -296,6 +319,7 @@ pub(crate) fn cue_completion_millis(
                     outgoing_cue.zip(outgoing_cue_fade_millis),
                     attribute.timing(target_index),
                     outgoing,
+                    release_fade_millis,
                 );
                 delay.saturating_add(fade)
             })
@@ -334,16 +358,14 @@ pub(crate) fn effective_attribute_timing(
     outgoing_cue: Option<(&Cue, u64)>,
     timing: Option<(Option<u64>, Option<u64>)>,
     outgoing_intensity: bool,
+    release_fade_millis: u64,
 ) -> (u64, u64) {
     if cue_list.disable_cue_timing {
         return (0, 0);
     }
     let master = if outgoing_intensity && cue_list.mode == CueListMode::Sequence {
         let (cue, fade_millis) = outgoing_cue.unwrap_or((cue, cue_fade_millis));
-        (
-            cue.out_fade_millis.unwrap_or(fade_millis),
-            cue.out_delay_millis.unwrap_or(cue.delay_millis),
-        )
+        effective_cue_out_timing(cue_list, cue, fade_millis, release_fade_millis)
     } else {
         (cue_fade_millis, cue.delay_millis)
     };
@@ -352,6 +374,26 @@ pub(crate) fn effective_attribute_timing(
     }
     let (fade, delay) = timing.unwrap_or((None, None));
     (fade.unwrap_or(master.0), delay.unwrap_or(master.1))
+}
+
+pub(crate) fn effective_cue_out_timing(
+    cue_list: &CueList,
+    cue: &Cue,
+    effective_in_fade_millis: u64,
+    release_fade_millis: u64,
+) -> (u64, u64) {
+    if cue_list.disable_cue_timing {
+        return (0, 0);
+    }
+    let fade = match cue.out_fade_link {
+        Some(CueOutFadeLink::Release) => release_fade_millis,
+        None => cue.out_fade_millis.unwrap_or(effective_in_fade_millis),
+    };
+    let delay = match cue.out_delay_link {
+        Some(CueOutDelayLink::InFade) => effective_in_fade_millis,
+        None => cue.out_delay_millis.unwrap_or(cue.delay_millis),
+    };
+    (fade, delay)
 }
 
 pub(crate) fn is_outgoing_intensity(

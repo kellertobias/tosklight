@@ -1416,14 +1416,15 @@
 	overflow: hidden;
 }
 .control-section.playbacks {
-	grid-template-columns: minmax(0, 1fr) 356px;
+	grid-template-columns: minmax(0, 1fr) 444px;
 }
 .control-section.playbacks .control-right-pane {
-	width: 356px;
-	grid-template-columns: 88px 88px 86px 79px;
+	width: 444px;
+	grid-template-columns: 88px 88px 88px 86px 74px;
 }
 .control-section.playbacks .programmer-fade-fader,
-.control-section.playbacks .cue-fade-master {
+.control-section.playbacks .cue-fade-master,
+.control-section.playbacks .release-fade-master {
 	width: 88px;
 	min-width: 88px;
 }
