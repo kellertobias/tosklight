@@ -218,7 +218,7 @@ export class BrowserOperatorShell {
 					.getByRole("button", { name: "Choose MVR file", exact: true })
 					.click();
 			await this.expectPickerConstraint(files.invalid, files.mvr);
-			await mvr.locator(".modal-close").click();
+			await mvr.getByRole("button", { name: "Close modal" }).click();
 			await this.page
 				.locator(".show-modal")
 				.getByRole("button", { name: "Enter Setup", exact: true })
