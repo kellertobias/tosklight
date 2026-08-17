@@ -209,9 +209,14 @@ export class BrowserOperatorShell {
 			const mvr = this.page.getByRole("dialog", {
 				name: "MVR import and export",
 			});
-			await mvr
-				.getByRole("button", { name: "Choose MVR file", exact: true })
-				.click();
+			// Loading from MVR asks for the file itself, so the chooser may already be up.
+			const mvrPicker = this.page.getByRole("dialog", {
+				name: "Choose files or folders",
+			});
+			if (!(await mvrPicker.count()))
+				await mvr
+					.getByRole("button", { name: "Choose MVR file", exact: true })
+					.click();
 			await this.expectPickerConstraint(files.invalid, files.mvr);
 			await mvr.locator(".modal-close").click();
 			await this.page
