@@ -503,6 +503,7 @@ async fn whole_show_upload_preserves_distinct_root_and_multipatch_appearance() {
     let root_appearance = serde_json::json!({
         "light_source": {"type": "halogen"},
         "color_temperature_kelvin": 3200,
+        "luminous_output_lumens": null,
         "gel": {
             "type": "built_in",
             "catalog_id": "touring-gels",
@@ -519,6 +520,7 @@ async fn whole_show_upload_preserves_distinct_root_and_multipatch_appearance() {
     let copy_appearance = serde_json::json!({
         "light_source": {"type": "other", "label": "Carbon arc"},
         "color_temperature_kelvin": 5600,
+        "luminous_output_lumens": null,
         "gel": {
             "type": "custom",
             "name": "Window blue",

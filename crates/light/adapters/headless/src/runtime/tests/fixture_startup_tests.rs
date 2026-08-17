@@ -62,7 +62,7 @@ fn startup_fixture_library_migrates_schema_v1_and_loads_transferable_packages_on
             .iter()
             .map(|mode| (mode.name.as_str(), mode.splits[0].footprint, mode.heads.len()))
             .collect::<Vec<_>>(),
-        vec![("2 layers", 75, 3), ("8 layers", 279, 9)]
+        vec![("2 layers", 118, 3), ("8 layers", 352, 9)]
     );
     assert!(!profiles.iter().any(|profile| {
         profile.manufacturer == "ToskLight"

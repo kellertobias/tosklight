@@ -129,7 +129,7 @@ impl TemplateGroupScenario {
                             "type": "cue",
                             "cue_list_id": self.cue_object_id(),
                             "expected_revision": 1,
-                            "cue_number": 2.0,
+                            "cue_number": "2",
                             "name": "Preloaded position"
                         }
                     })

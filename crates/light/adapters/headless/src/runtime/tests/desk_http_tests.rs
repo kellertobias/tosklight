@@ -167,7 +167,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                     id: light_core::FixtureId::new(),
                     revision: 1,
                     manufacturer: "Test".into(),
-                    device_type: "media server".into(),
+                    device_type: "media_server".into(),
                     name: "Media Server".into(),
                     model: "Media Server".into(),
                     mode: "2 layers".into(),

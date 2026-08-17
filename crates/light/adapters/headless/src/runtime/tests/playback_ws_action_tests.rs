@@ -45,7 +45,7 @@ async fn playback_action_ws_frame_uses_typed_service_and_ui_source_once() {
     assert_eq!(payload["request_id"], request_id);
     assert_eq!(payload["outcome"]["status"], "applied");
     assert_eq!(payload["resolved"]["playback_number"], 1);
-    assert_eq!(payload["projection"]["runtime"]["current"]["number"], 1.0);
+    assert_eq!(payload["projection"]["runtime"]["current"]["number"], "1");
     assert_eq!(payload["replayed"], false);
     let light_application::EventReplay::Events(events) = state.events.replay(
         cursor,

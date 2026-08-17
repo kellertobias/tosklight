@@ -242,7 +242,7 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
     assert_eq!(first["durability"], "durable");
     assert_eq!(first["projection"]["requested"]["playback_number"], 1);
     assert_eq!(first["projection"]["target"], "cue_list");
-    assert_eq!(first["projection"]["runtime"]["current"]["number"], 1.0);
+    assert_eq!(first["projection"]["runtime"]["current"]["number"], "1");
     assert_eq!(
         first["projection"]["scope"]["show_id"],
         active_show_id(&state).to_string()
@@ -1631,7 +1631,7 @@ async fn v2_explicit_playback_states_report_exact_repeat_no_changes() {
     for (name, action) in [
         ("on", serde_json::json!({"type":"on","pressed":true})),
         ("master", serde_json::json!({"type":"master","value":0.5})),
-        ("load", serde_json::json!({"type":"load","cue_number":1.0})),
+        ("load", serde_json::json!({"type":"load","cue_number":"1"})),
         (
             "temporary",
             serde_json::json!({"type":"temporary","enabled":true,"pressed":true}),
