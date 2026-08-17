@@ -102,6 +102,7 @@
 }
 .timecode-timeline-editor {
 	--timecode-lane-header-width: 160px;
+	--timecode-lane-height: 4.1rem;
 
 	display: flex;
 	flex: 1 1 auto;
@@ -461,7 +462,9 @@
 }
 .timecode-editor-lane {
 	position: relative;
-	min-height: 4.1rem;
+	height: var(--timecode-lane-height);
+	min-height: var(--timecode-lane-height);
+	max-height: var(--timecode-lane-height);
 	border-bottom: 1px solid #2d2f3c;
 }
 .timecode-editor-lane-label {
@@ -470,7 +473,7 @@
 	left: 0;
 	display: grid;
 	width: var(--timecode-lane-header-width);
-	height: 4.1rem;
+	height: 100%;
 	align-content: stretch;
 	padding: 0;
 	border-right: 1px solid #393b49;
@@ -495,13 +498,16 @@
 	min-width: 0;
 	min-height: 0;
 	align-content: center;
+	justify-content: start;
 	justify-items: start;
 	margin: 0;
 	padding: 0.35rem 0;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
+	cursor: grab;
 	text-align: left;
+	touch-action: none;
 }
 .timecode-editor-lane.lane-cue_list .timecode-lane-select.ui-button {
 	justify-items: start;
@@ -511,8 +517,8 @@
 	color: #888c9d;
 }
 .timecode-editor-lane-label button {
-	width: max-content;
-	margin-top: 0.15rem;
+	width: 100%;
+	margin-top: 0;
 }
 .timecode-timeline-item {
 	position: absolute;
@@ -543,7 +549,11 @@
 	font-variant-numeric: tabular-nums;
 }
 .timecode-timeline-item.item-clip {
+	top: 0;
+	height: 100%;
+	min-height: 0;
 	max-width: none;
+	border-radius: 0;
 	border-color: #618d51;
 	background: #1f4027;
 }
@@ -681,21 +691,30 @@
 	align-self: stretch;
 	flex: 0 0 var(--timecode-lane-header-width);
 	align-items: center;
-	padding: 0.35rem 0.5rem;
-	border-right: 1px solid #393b49;
-	background: rgb(18 19 26 / 96%);
+	justify-content: flex-start;
+	padding: 0.35rem 0;
+	border-right: 0;
+	background: transparent;
 	color: #dadde6;
 	font-size: 0.72rem;
+	text-align: left;
 }
-.timecode-keyframe-actions-title.selected {
-	background: #15343b;
-	box-shadow: inset 0 0 0 1px #58d4ef;
-	color: #58d4ef;
+.timecode-keyframe-value-control {
+	display: grid;
+	grid-template-columns: auto minmax(8rem, 12rem) 4.5rem;
+	align-items: center;
+	gap: 0.4rem;
+	color: #b7bac6;
+	font-size: 0.72rem;
 }
-.timecode-keyframe-actions-title.marker {
-	background: color-mix(in srgb, var(--timecode-marker-color) 22%, #12131a);
-	box-shadow: inset 0 0 0 1px var(--timecode-marker-color);
-	color: var(--timecode-marker-text-color, #fff);
+.timecode-keyframe-value-control input[type="range"] {
+	width: 100%;
+	accent-color: #58d4ef;
+}
+.timecode-keyframe-value-control output {
+	color: #fff;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
 }
 .timecode-keyframe-action.ui-button {
 	height: 2.5rem;

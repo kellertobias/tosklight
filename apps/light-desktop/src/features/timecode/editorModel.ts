@@ -153,6 +153,24 @@ export function sameSelection(
 	);
 }
 
+export function reorderTimelineLane(
+	definition: TimecodeDefinition,
+	laneId: string,
+	targetLaneId: string,
+): TimecodeDefinition {
+	const sourceIndex = definition.lanes.findIndex((lane) => lane.id === laneId);
+	const targetIndex = definition.lanes.findIndex(
+		(lane) => lane.id === targetLaneId,
+	);
+	if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex)
+		return definition;
+	const lanes = [...definition.lanes];
+	const [lane] = lanes.splice(sourceIndex, 1);
+	if (!lane) return definition;
+	lanes.splice(targetIndex, 0, lane);
+	return { ...definition, lanes };
+}
+
 export function moveTimelineItem(
 	definition: TimecodeDefinition,
 	selection: TimecodeEditorSelection,

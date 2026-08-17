@@ -1,6 +1,7 @@
 import {
 	Button,
 	CheckboxField,
+	Input,
 	InputModal,
 	NumberField,
 	SelectField,
@@ -23,6 +24,7 @@ import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	deleteTimelineItem,
 	moveTimelineItem,
+	reorderTimelineLane,
 	sameSelection,
 	type TimecodeEditorSelection,
 	timelineItems,
@@ -120,6 +122,8 @@ function TimelineCanvas(props: {
 		frame: number,
 		clipEdge?: "start" | "end",
 	): void;
+	startLaneDrag(event: ReactPointerEvent, laneId: string): void;
+	consumeLaneDragClick(laneId: string): boolean;
 	onSelectItem(selection: TimecodeEditorSelection): void;
 	onSelectLane(laneId: string): void;
 	onScroll(scrollLeft: number): void;
@@ -354,6 +358,7 @@ function EditorLane(
 	return (
 		<div
 			className={`timecode-editor-lane lane-${lane.content.kind} ${props.selectedLaneId === lane.id ? "selected" : ""}`}
+			data-lane-id={lane.id}
 			onPointerDown={(event) => {
 				const target = event.target as Element;
 				if (
@@ -413,7 +418,12 @@ function EditorLane(
 			<div className="timecode-editor-lane-label">
 				<Button
 					className="timecode-lane-select"
-					onClick={() => props.onSelectLane(lane.id)}
+					aria-label={`${lane.name} · ${lane.content.kind.replaceAll("_", " ")}. Drag to reorder lane`}
+					onPointerDown={(event) => props.startLaneDrag(event, lane.id)}
+					onClick={() => {
+						if (!props.consumeLaneDragClick(lane.id))
+							props.onSelectLane(lane.id);
+					}}
 				>
 					<strong>{lane.name}</strong>
 					<span>{lane.content.kind.replaceAll("_", " ")}</span>
@@ -638,6 +648,81 @@ function useTimelineViewportWidth(scrollRef: RefObject<HTMLDivElement | null>) {
 	return viewportWidth;
 }
 
+function useLaneReorder({
+	definition,
+	onPreview,
+	onBeginGesture,
+	onEndGesture,
+}: Pick<
+	Props,
+	"definition" | "onPreview" | "onBeginGesture" | "onEndGesture"
+>) {
+	const latest = useRef(definition);
+	latest.current = definition;
+	const drag = useRef<{
+		laneId: string;
+		pointerId: number;
+		startY: number;
+		active: boolean;
+	} | null>(null);
+	const suppressedClick = useRef<string | null>(null);
+	useEffect(() => {
+		const move = (event: PointerEvent) => {
+			const current = drag.current;
+			if (!current || event.pointerId !== current.pointerId) return;
+			if (!current.active && Math.abs(event.clientY - current.startY) < 8)
+				return;
+			if (!current.active) {
+				current.active = true;
+				suppressedClick.current = current.laneId;
+				onBeginGesture();
+			}
+			const targetLane = document
+				.elementFromPoint(event.clientX, event.clientY)
+				?.closest<HTMLElement>(".timecode-editor-lane")?.dataset.laneId;
+			if (!targetLane || targetLane === current.laneId) return;
+			const next = reorderTimelineLane(
+				latest.current,
+				current.laneId,
+				targetLane,
+			);
+			if (next === latest.current) return;
+			latest.current = next;
+			onPreview(next);
+		};
+		const finish = (event: PointerEvent) => {
+			const current = drag.current;
+			if (!current || event.pointerId !== current.pointerId) return;
+			drag.current = null;
+			if (current.active) onEndGesture();
+		};
+		window.addEventListener("pointermove", move);
+		window.addEventListener("pointerup", finish);
+		window.addEventListener("pointercancel", finish);
+		return () => {
+			window.removeEventListener("pointermove", move);
+			window.removeEventListener("pointerup", finish);
+			window.removeEventListener("pointercancel", finish);
+		};
+	}, [onBeginGesture, onEndGesture, onPreview]);
+	return {
+		start: (event: ReactPointerEvent, laneId: string) => {
+			if (event.button !== 0) return;
+			drag.current = {
+				laneId,
+				pointerId: event.pointerId,
+				startY: event.clientY,
+				active: false,
+			};
+		},
+		consumeClick: (laneId: string) => {
+			if (suppressedClick.current !== laneId) return false;
+			suppressedClick.current = null;
+			return true;
+		},
+	};
+}
+
 export function timelineZoomGeometry(
 	durationFrames: number,
 	viewportWidth: number,
@@ -751,6 +836,12 @@ export const TimecodeTimelineEditor = forwardRef<
 		onBeginGesture,
 		onEndGesture,
 		setSelection,
+	});
+	const laneReorder = useLaneReorder({
+		definition,
+		onPreview,
+		onBeginGesture,
+		onEndGesture,
 	});
 
 	const {
@@ -1047,6 +1138,8 @@ export const TimecodeTimelineEditor = forwardRef<
 					scrollRef,
 					onScrub,
 					startDrag,
+					startLaneDrag: laneReorder.start,
+					consumeLaneDragClick: laneReorder.consumeClick,
 					onSelectItem: setSelection,
 					onScroll: setScrollLeft,
 					viewportId,
@@ -1152,6 +1245,12 @@ function KeyframeActionStrip({
 					(keyframe) => keyframe.id === selection.itemId,
 				)
 			: undefined;
+	const selectedSpeed =
+		selection?.kind === "speed" && lane?.content.kind === "speed_group"
+			? lane.content.keyframes.find(
+					(keyframe) => keyframe.id === selection.itemId,
+				)
+			: undefined;
 	const move = (delta: number) => {
 		if (!laneItems.length) return;
 		const index =
@@ -1187,6 +1286,49 @@ function KeyframeActionStrip({
 			),
 		});
 	};
+	const updateValue = (value: number) => {
+		if (!lane || !selection) return;
+		onCommit({
+			...definition,
+			lanes: definition.lanes.map((candidate) => {
+				if (candidate.id !== lane.id) return candidate;
+				if (
+					selection.kind === "speed" &&
+					candidate.content.kind === "speed_group"
+				)
+					return {
+						...candidate,
+						content: {
+							...candidate.content,
+							keyframes: candidate.content.keyframes.map((keyframe) =>
+								keyframe.id === selection.itemId
+									? { ...keyframe, bpm: Math.max(1, Math.min(999, value)) }
+									: keyframe,
+							),
+						},
+					};
+				if (
+					selection.kind === "volume" &&
+					candidate.content.kind === "audio_volume"
+				)
+					return {
+						...candidate,
+						content: {
+							...candidate.content,
+							keyframes: candidate.content.keyframes.map((keyframe) =>
+								keyframe.id === selection.itemId
+									? {
+											...keyframe,
+											value: Math.max(0, Math.min(100, value)) / 100,
+										}
+									: keyframe,
+							),
+						},
+					};
+				return candidate;
+			}),
+		});
+	};
 	const canInsert =
 		lane?.content.kind === "audio_volume" ||
 		lane?.content.kind === "speed_group";
@@ -1206,9 +1348,7 @@ function KeyframeActionStrip({
 			role="group"
 			aria-label="Selected lane and keyframe actions"
 		>
-			<div
-				className={`timecode-keyframe-actions-title ${lane ? "selected" : ""}`}
-			>
+			<div className="timecode-keyframe-actions-title">
 				<strong>{lane?.name ?? "Select a lane"}</strong>
 			</div>
 			<Button
@@ -1260,6 +1400,26 @@ function KeyframeActionStrip({
 					Add clip at {formatFrame(frame, fps)}
 				</Button>
 			) : null}
+			{selectedSpeed && (
+				<KeyframeValueSlider
+					label="BPM"
+					value={selectedSpeed.bpm}
+					minimum={1}
+					maximum={999}
+					unit=" BPM"
+					onChange={updateValue}
+				/>
+			)}
+			{selectedVolume && (
+				<KeyframeValueSlider
+					label="Volume"
+					value={Math.round(selectedVolume.value * 100)}
+					minimum={0}
+					maximum={100}
+					unit="%"
+					onChange={updateValue}
+				/>
+			)}
 			{selectedVolume && (
 				<SelectField
 					label="Easing"
@@ -1282,6 +1442,38 @@ function KeyframeActionStrip({
 				</span>
 			</Button>
 		</div>
+	);
+}
+
+function KeyframeValueSlider({
+	label,
+	value,
+	minimum,
+	maximum,
+	unit,
+	onChange,
+}: {
+	label: string;
+	value: number;
+	minimum: number;
+	maximum: number;
+	unit: string;
+	onChange(value: number): void;
+}) {
+	return (
+		<label className="timecode-keyframe-value-control">
+			<span>{label}</span>
+			<Input
+				type="range"
+				aria-label={`${label} value`}
+				min={minimum}
+				max={maximum}
+				step={1}
+				value={value}
+				onChange={(event) => onChange(Number(event.currentTarget.value))}
+			/>
+			<output>{`${Math.round(value)}${unit}`}</output>
+		</label>
 	);
 }
 
@@ -1353,15 +1545,7 @@ function MarkerActionStrip({
 			role="group"
 			aria-label="Selected marker actions"
 		>
-			<div
-				className="timecode-keyframe-actions-title selected marker"
-				style={
-					{
-						"--timecode-marker-color": markerColor.value,
-						"--timecode-marker-text-color": markerColor.text,
-					} as CSSProperties
-				}
-			>
+			<div className="timecode-keyframe-actions-title">
 				<strong>{marker.name}</strong>
 			</div>
 			<Button

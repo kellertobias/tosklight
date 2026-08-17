@@ -6,6 +6,7 @@ import {
 	moveTimelineItem,
 	parseMarkerCsv,
 	reconcileAutomaticAudioLane,
+	reorderTimelineLane,
 	snapTimelineFrame,
 	timelineItems,
 } from "./editorModel";
@@ -90,6 +91,21 @@ describe("Timecode editor model", () => {
 			kind: "audio_volume",
 			keyframes: [{ frame: 220 }],
 		});
+	});
+
+	it("reorders complete lanes by their persisted identities", () => {
+		const second = { ...definition.lanes[0], id: "second", name: "Second" };
+		const third = { ...definition.lanes[0], id: "third", name: "Third" };
+		const reordered = reorderTimelineLane(
+			{ ...definition, lanes: [definition.lanes[0], second, third] },
+			definition.lanes[0].id,
+			"third",
+		);
+		expect(reordered.lanes.map((lane) => lane.name)).toEqual([
+			"Second",
+			"Third",
+			"Main audio",
+		]);
 	});
 
 	it("snaps clip ends together and keeps clips non-overlapping regardless of array order", () => {

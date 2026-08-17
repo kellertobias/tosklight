@@ -30,7 +30,10 @@ describe("Timecode timeline layout", () => {
 			/\.timecode-timeline-item\s*\{[\s\S]*?transform:\s*none;/,
 		);
 		expect(css).toMatch(
-			/\.timecode-editor-lane\.selected \.timecode-editor-lane-label\s*\{[\s\S]*?background:\s*#15343b;[\s\S]*?box-shadow:\s*inset 0 0 0 1px #58d4ef;/,
+			/\.timecode-editor-lane\s*\{[\s\S]*?height:\s*var\(--timecode-lane-height\);[\s\S]*?min-height:\s*var\(--timecode-lane-height\);[\s\S]*?max-height:\s*var\(--timecode-lane-height\);/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-item\.item-clip\s*\{[\s\S]*?top:\s*0;[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*0;/,
 		);
 	});
 
@@ -78,7 +81,7 @@ describe("Timecode timeline layout", () => {
 			/\.timecode-cuelist-chooser-grid \.pool-card-name\s*\{[\s\S]*?text-align:\s*left;/,
 		);
 		expect(css).toMatch(
-			/\.timecode-lane-select\.ui-button\s*\{[\s\S]*?padding:\s*0\.35rem 0;[\s\S]*?text-align:\s*left;/,
+			/\.timecode-lane-select\.ui-button\s*\{[\s\S]*?justify-content:\s*start;[\s\S]*?padding:\s*0\.35rem 0;[\s\S]*?text-align:\s*left;/,
 		);
 		expect(css).toMatch(
 			/\.timecode-editor-lane\.lane-cue_list \.timecode-lane-select\.ui-button\s*\{[\s\S]*?justify-items:\s*start;[\s\S]*?text-align:\s*left;/,
@@ -93,8 +96,10 @@ describe("Timecode timeline layout", () => {
 			/\.timecode-keyframe-actions\s*\{[\s\S]*?background:\s*transparent;/,
 		);
 		expect(css).toMatch(
-			/\.timecode-keyframe-actions-title\s*\{[\s\S]*?flex:\s*0 0 var\(--timecode-lane-header-width\);/,
+			/\.timecode-keyframe-actions-title\s*\{[\s\S]*?flex:\s*0 0 var\(--timecode-lane-header-width\);[\s\S]*?background:\s*transparent;[\s\S]*?text-align:\s*left;/,
 		);
+		expect(css).not.toContain(".timecode-keyframe-actions-title.selected");
+		expect(css).toContain(".timecode-keyframe-value-control");
 	});
 
 	it("keeps the playhead label at its top and has only the exact ruler grid", () => {

@@ -352,6 +352,138 @@ describe("TimecodeTimelineEditor", () => {
 		});
 	});
 
+	it("edits Speed and Volume keyframe values with sliders in the edit section", () => {
+		function Harness() {
+			const [draft, setDraft] = useState<TimecodeDefinition>({
+				...definition,
+				audio: null,
+				lanes: [
+					{
+						id: "speed-a",
+						name: "Speed Group A",
+						content: {
+							kind: "speed_group",
+							group: "A",
+							keyframes: [{ id: "speed-1", frame: 44, bpm: 120, phase: 0 }],
+						},
+					},
+					{
+						id: "volume-a",
+						name: "Main Volume",
+						content: {
+							kind: "audio_volume",
+							keyframes: [
+								{
+									id: "volume-1",
+									frame: 44,
+									value: 1,
+									fade_frames: 0,
+									curve: "linear",
+								},
+							],
+						},
+					},
+				],
+			});
+			return (
+				<TimecodeTimelineEditor
+					definition={draft}
+					frame={0}
+					fps={44}
+					cueLists={[]}
+					audioPlayers={[]}
+					onScrub={vi.fn()}
+					onCommit={setDraft}
+					onPreview={setDraft}
+					onBeginGesture={vi.fn()}
+					onEndGesture={vi.fn()}
+				/>
+			);
+		}
+		render(<Harness />);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: /Speed Group A.*Drag to reorder lane/,
+			}),
+		);
+		fireEvent.change(screen.getByLabelText("BPM value"), {
+			target: { value: "180" },
+		});
+		expect(screen.getByTitle(/Speed Group A · 180 BPM/)).toBeTruthy();
+
+		fireEvent.click(
+			screen.getByRole("button", { name: /Main Volume.*Drag to reorder lane/ }),
+		);
+		fireEvent.change(screen.getByLabelText("Volume value"), {
+			target: { value: "35" },
+		});
+		expect(screen.getByTitle(/Main Volume · 35%/)).toBeTruthy();
+	});
+
+	it("reorders lanes by dragging their headers with a pointer", () => {
+		const begin = vi.fn();
+		const end = vi.fn();
+		function Harness() {
+			const [draft, setDraft] = useState<TimecodeDefinition>({
+				...definition,
+				lanes: [
+					definition.lanes[0],
+					{ ...definition.lanes[0], id: "second", name: "Second Lane" },
+				],
+			});
+			return (
+				<TimecodeTimelineEditor
+					definition={draft}
+					frame={0}
+					fps={44}
+					cueLists={[]}
+					audioPlayers={[]}
+					onScrub={vi.fn()}
+					onCommit={setDraft}
+					onPreview={setDraft}
+					onBeginGesture={begin}
+					onEndGesture={end}
+				/>
+			);
+		}
+		const view = render(<Harness />);
+		const firstHeader = screen.getByRole("button", {
+			name: /Audio.*Drag to reorder lane/,
+		});
+		const secondLane = view.container.querySelector<HTMLElement>(
+			'[data-lane-id="second"]',
+		);
+		const originalElementFromPoint = document.elementFromPoint;
+		Object.defineProperty(document, "elementFromPoint", {
+			configurable: true,
+			value: vi.fn(() => secondLane),
+		});
+		fireEvent.pointerDown(firstHeader, {
+			pointerId: 7,
+			button: 0,
+			clientY: 20,
+		});
+		fireEvent.pointerMove(window, {
+			pointerId: 7,
+			clientX: 40,
+			clientY: 100,
+		});
+		fireEvent.pointerUp(window, { pointerId: 7, clientY: 100 });
+		Object.defineProperty(document, "elementFromPoint", {
+			configurable: true,
+			value: originalElementFromPoint,
+		});
+		expect(
+			[
+				...view.container.querySelectorAll(
+					".timecode-editor-lane-label strong",
+				),
+			].map((label) => label.textContent),
+		).toEqual(["Second Lane", "Audio"]);
+		expect(begin).toHaveBeenCalledTimes(1);
+		expect(end).toHaveBeenCalledTimes(1);
+	});
+
 	it("offers only unused Speed Groups when adding a lane", () => {
 		const ref = createRef<TimecodeTimelineEditorHandle>();
 		const onCommit = vi.fn();
