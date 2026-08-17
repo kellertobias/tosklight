@@ -311,11 +311,11 @@ pub(super) fn execute_record_show_command(
         record_group(state, session, body, operation, context)
     } else if body
         .first()
-        .is_some_and(|token| token == "CUE" || token == "SET")
+        .is_some_and(|token| token == "CUE" || token == "PBK")
     {
         record_cue(state, session, body, timing, operation, snapshot, context)
     } else if operation != RecordOperation::Overwrite {
-        Err("RECORD + and RECORD - currently require GROUP or SET ... CUE targets".into())
+        Err("RECORD + and RECORD - currently require GROUP or PBK ... CUE targets".into())
     } else {
         record_preset(state, session, body, context)
     }

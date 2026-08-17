@@ -179,7 +179,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			value: { kind: "normalized", value: 1 },
 			timing: PROGRAMMER_TIMING,
 		});
-		await api.executeCommandLine("RECORD SET 1 CUE 1.5");
+		await api.executeCommandLine("RECORD PBK 1 CUE 1.5");
 		let stored = await object<any>(api, "cue_list", installed.id);
 		expect(stored.body.cues.map((cue: any) => cue.number)).toEqual([1, 1.5, 2]);
 		expect(groupValues(stored.body.cues[0])).toEqual({ "1:intensity": 1 });
@@ -196,7 +196,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 				["2", "red", 0.2],
 			]),
 		]);
-		await api.executeCommandLine("RECORD SET 1 . 2 CUE 1.5");
+		await api.executeCommandLine("RECORD PBK 1 . 2 CUE 1.5");
 		const pageStored = await object<any>(api, "cue_list", pageAddressed.id);
 		const cueSemantics = (body: any) =>
 			body.cues.map((cue: any) => ({
@@ -230,7 +230,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			value: { kind: "normalized", value: 0.8 },
 			timing: PROGRAMMER_TIMING,
 		});
-		await api.executeCommandLine("RECORD + SET 1 CUE 2");
+		await api.executeCommandLine("RECORD + PBK 1 CUE 2");
 		stored = await object<any>(api, "cue_list", installed.id);
 		expect(
 			groupValues(stored.body.cues.find((cue: any) => cue.number === 2)),
@@ -248,7 +248,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			value: { kind: "normalized", value: 0.9 },
 			timing: PROGRAMMER_TIMING,
 		});
-		await api.executeCommandLine("RECORD - SET 1 CUE 2");
+		await api.executeCommandLine("RECORD - PBK 1 CUE 2");
 		stored = await object<any>(api, "cue_list", installed.id);
 		expect(
 			groupValues(stored.body.cues.find((cue: any) => cue.number === 2)),
@@ -262,7 +262,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		const stream = await openEventStream(api);
 		try {
 			let mark = stream.events.length;
-			await api.executeCommandLine("RECORD - SET 1 CUE 2");
+			await api.executeCommandLine("RECORD - PBK 1 CUE 2");
 			const recordMinusEvent = await showObjectEventAfter(
 				stream.events,
 				mark,

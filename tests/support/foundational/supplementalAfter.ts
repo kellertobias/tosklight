@@ -136,7 +136,7 @@ async function verifyLiveSpreadStorage(api: ApiDriver, bench: BenchDriver) {
 	const cueListId = await createCuePlayback(api, 1);
 	await command(api, "GROUP 1 AT 0 THRU 100");
 	await command(api, "RECORD 1.1");
-	await command(api, "RECORD SET 1 CUE 1");
+	await command(api, "RECORD PBK 1 CUE 1");
 	const preset = await object(api, "preset", "1.1");
 	expect(preset.body.group_values["1"]?.[INTENSITY]).toMatchObject({
 		kind: "spread",
@@ -193,7 +193,7 @@ async function verifyDereferencedSpreadStorage(
 		expect(state.values).toHaveLength(10);
 	});
 	await command(api, "RECORD 1.2");
-	await command(api, "RECORD SET 2 CUE 1");
+	await command(api, "RECORD PBK 2 CUE 1");
 	const preset = await object(api, "preset", "1.2");
 	expect(Object.keys(preset.body.group_values)).toHaveLength(0);
 	expect(Object.keys(preset.body.values)).toHaveLength(10);

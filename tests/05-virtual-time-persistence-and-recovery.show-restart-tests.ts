@@ -54,7 +54,7 @@ export function registerShow001PairedScenario(): void {
 			});
 			await api.executeCommandLine("RECORD + GROUP 3");
 			await api.executeCommandLine("GROUP 3 AT 40");
-			await api.executeCommandLine("RECORD SET 1");
+			await api.executeCommandLine("RECORD PBK 1");
 			await mapExistingPlaybackToSlot(api, {
 				surface: "api",
 				showId: state.copyId,

@@ -16,11 +16,11 @@ scenario(
 
 		await t.command.execute("GROUP 1 AT 50");
 		const playback = await t.record.playback(1);
-		await t.command.type("RECORD SET 1 CUE 2 TIME TIME 0");
-		await t.command.expect("RECORD SET 1 CUE 2 DELAY 0");
+		await t.command.type("RECORD PBK 1 CUE 2 TIME TIME 0");
+		await t.command.expect("RECORD PBK 1 CUE 2 DELAY 0");
 		await t.keypad.press(["ENT"]);
-		await t.command.type("RECORD SET 1 CUE 3 TIME TIME 4");
-		await t.command.expect("RECORD SET 1 CUE 3 DELAY 4");
+		await t.command.type("RECORD PBK 1 CUE 3 TIME TIME 4");
+		await t.command.expect("RECORD PBK 1 CUE 3 DELAY 4");
 		await t.keypad.press(["ENT"]);
 
 		await t.cue.expect(playback, 1).trigger({ type: "manual" });

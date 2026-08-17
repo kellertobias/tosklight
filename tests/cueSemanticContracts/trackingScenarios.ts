@@ -182,7 +182,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		);
 		await clearProgrammerValues(api, { surface: "api", showId: show.id });
 		await expect(
-			api.executeCommandLine("RECORD - SET 2 CUE 1"),
+			api.executeCommandLine("RECORD - PBK 2 CUE 1"),
 		).rejects.toThrow();
 		expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(
 			soleBefore.body,

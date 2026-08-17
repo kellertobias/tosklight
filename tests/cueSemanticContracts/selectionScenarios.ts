@@ -88,7 +88,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			value: { kind: "normalized", value: 0.6 },
 			timing: PROGRAMMER_TIMING,
 		});
-		await api.executeCommandLine("RECORD SET 1 CUE 8");
+		await api.executeCommandLine("RECORD PBK 1 CUE 8");
 		expect(
 			(await object<any>(api, "cue_list", first.id)).body.cues.map(
 				(cue: any) => cue.number,
