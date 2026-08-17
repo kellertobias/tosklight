@@ -30,9 +30,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 winit.workspace = true
 
-[dev-dependencies]
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
-light-media = { path = "../../../light/adapters/media" }
-
 [lints]
 workspace = true

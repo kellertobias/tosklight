@@ -358,11 +358,7 @@ export function registerPbk001PhysicalControlsScenario(): void {
 
 		await desk.open(bench.baseUrl);
 		await openPlaybackMode(page);
-		await page.evaluate(() =>
-			window.dispatchEvent(
-				new CustomEvent("light:programmer-key", { detail: "off" }),
-			),
-		);
+		await desk.click(page.locator('[data-keypad-key="OFF"]:visible').first());
 		await expect(page.getByLabel("Command line")).toHaveValue("OFF");
 		await page.getByRole("button", { name: "Turn off OFF target" }).click();
 

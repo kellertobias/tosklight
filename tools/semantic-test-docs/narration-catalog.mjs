@@ -88,6 +88,7 @@ const supportedCallPaths = new Set([
 	"command.expect",
 	"command.history.expectAcceptedAndRejected",
 	"command.type",
+	"command.via.api.execute",
 	"command.via.api.type",
 	"crossSurface.completeSharedValueWhilePeerDraftStaysLocal",
 	"crossSurface.executeOscGroupCommandAndVerifyOutput",
@@ -477,6 +478,10 @@ const exactNarrations = new Map([
 		([revision]) => `Show → revision matches ${revision}.`,
 	],
 	["command.execute", ([command]) => `Execute the desk command ${command}.`],
+	[
+		"command.via.api.execute",
+		([command]) => `Execute the desk command ${command} through the API.`,
+	],
 	["command.expect", ([value]) => `Command line shows ${value}.`],
 	["expect.toBe", ([actual, expected]) => `${actual} is ${expected}.`],
 	["expect.toEqual", ([actual, expected]) => `${actual} equals ${expected}.`],

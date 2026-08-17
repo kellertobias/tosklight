@@ -257,48 +257,50 @@ export function DefaultScreenPicker({
 				)}
 				{removeAllOpen && (
 					<ModalRegistration onClose={() => setRemoveAllOpen(false)}>
-						<section
-							className="nested-modal default-screen-remove-confirm"
-							role="alertdialog"
-							aria-modal="true"
-							aria-label="Remove all other clients?"
-						>
-							<ModalTitleBar title="Remove all other clients?" />
-							<p>
-								Remove every eligible disconnected client configuration. The
-								current client and connected clients remain protected.
-							</p>
-							<p>
-								Portable shows, users, optional screens, and installation-wide
-								configuration will not change.
-							</p>
-							<div className="modal-actions">
-								<Button
-									disabled={removing}
-									onClick={() => setRemoveAllOpen(false)}
-								>
-									Cancel
-								</Button>
-								<Button
-									variant="danger"
-									disabled={removing}
-									onClick={() => {
-										setRemoving(true);
-										setRemoveError(null);
-										void onRemoveAll().then((removed) => {
-											setRemoving(false);
-											setRemoveAllOpen(false);
-											if (!removed)
-												setRemoveError(
-													"Some clients could not be removed because their state changed.",
-												);
-										});
-									}}
-								>
-									{removing ? "Removing…" : "Remove all other clients"}
-								</Button>
-							</div>
-						</section>
+						<div className="stacked-modal-layer">
+							<section
+								className="nested-modal default-screen-remove-confirm"
+								role="alertdialog"
+								aria-modal="true"
+								aria-label="Remove all other clients?"
+							>
+								<ModalTitleBar title="Remove all other clients?" />
+								<p>
+									Remove every eligible disconnected client configuration. The
+									current client and connected clients remain protected.
+								</p>
+								<p>
+									Portable shows, users, optional screens, and installation-wide
+									configuration will not change.
+								</p>
+								<div className="modal-actions">
+									<Button
+										disabled={removing}
+										onClick={() => setRemoveAllOpen(false)}
+									>
+										Cancel
+									</Button>
+									<Button
+										variant="danger"
+										disabled={removing}
+										onClick={() => {
+											setRemoving(true);
+											setRemoveError(null);
+											void onRemoveAll().then((removed) => {
+												setRemoving(false);
+												setRemoveAllOpen(false);
+												if (!removed)
+													setRemoveError(
+														"Some clients could not be removed because their state changed.",
+													);
+											});
+										}}
+									>
+										{removing ? "Removing…" : "Remove all other clients"}
+									</Button>
+								</div>
+							</section>
+						</div>
 					</ModalRegistration>
 				)}
 			</div>
