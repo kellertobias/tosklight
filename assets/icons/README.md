@@ -73,11 +73,11 @@ Cross 1 swaps each local pair of arrows. Cross 2 swaps the complete left and rig
 
 ### Fixture type
 
-`fresnel-barn-doors`, `profile-dimmer-lamp`, `parcan`, `acl-set`, `blinder`, `parcan-short`, `blower`, `hazer`, `strobe`, `strobe-lines`, `strobe-squares`, `strobe-squares-flash`, `strip-light`, `laser`, `scanner`, `profile-moving-light`, `wash-moving-light`, `led-wash-moving-light-lenses`, `projector`, and `led-wall`.
+`fresnel-barn-doors`, `profile-dimmer-lamp`, `parcan`, `acl-set`, `blinder`, `parcan-short`, `blower`, `hazer`, `strobe`, `strobe-lines`, `strobe-squares`, `strobe-squares-flash`, `strip-light`, `laser`, `scanner`, `profile-moving-light`, `wash-moving-light`, `led-wash-moving-light-lenses`, `projector`, `led-wall`, `venue`, and `rigging`.
 
 The files without `.expanded` in their names are the editable source SVG assets. Their generated `.expanded.svg` siblings are the scale-stable integration assets. They are not automatically bundled by the control UI, and ToskLight fixture-package stage icons currently use raster formats. Import or rasterize an individual icon explicitly when integrating it.
 
-Every fixture-type icon is drawn as a side elevation. Moving-light outputs point up-right; suspended conventional lamps point down-left; other optical outputs retain a clear side-facing direction. Multi-cell fixtures show each lamp body in profile.
+Every fixture-type icon is drawn as a side elevation. Moving-light outputs point up-right; suspended conventional lamps point down-left; other optical outputs retain a clear side-facing direction. Multi-cell fixtures show each lamp body in profile. `venue` represents visual-only scenic parts rather than a light-producing fixture; `rigging` represents truss and pipe.
 
 Composite fixture source icons draw lamp bodies behind their foreground arm or bracket. A binary source mask describes the small transparent mounting gap; generation turns that mask into the final cut-out path, so expanded icons contain no mask or shadow-like compositing.
 

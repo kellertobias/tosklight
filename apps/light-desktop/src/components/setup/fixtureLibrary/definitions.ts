@@ -11,6 +11,8 @@ export const FIXTURE_TYPES = [
 	"strobe",
 	"media server",
 	"pixel fixture",
+	"venue",
+	"rigging",
 	"other",
 ];
 

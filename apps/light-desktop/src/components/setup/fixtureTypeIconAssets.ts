@@ -22,6 +22,8 @@ function icon(name: string) {
 
 export function fixtureTypeIconAsset(type: string) {
 	const value = type.toLowerCase();
+	if (/rigging|truss|pipe/.test(value)) return icon("rigging");
+	if (/venue|scenery|scenic/.test(value)) return icon("venue");
 	if (/fog|haze/.test(value)) return icon("hazer");
 	if (/fan|blower/.test(value)) return icon("blower");
 	if (/media|video|projector/.test(value)) return icon("projector");

@@ -173,7 +173,9 @@ function colorSystemsFromDefinition(
 				const sourceAttributes =
 					definition.heads[headIndex]?.parameters
 						.filter((parameter) => {
-							const projection = canonicalAttributeProjection(parameter.attribute);
+							const projection = canonicalAttributeProjection(
+								parameter.attribute,
+							);
 							return (
 								projection.attribute === canonicalAttribute &&
 								projection.canonicalTransform === "identity"
@@ -417,12 +419,26 @@ function channelDefinition(
 	channel: FixtureChannel,
 	primary: Map<string, number>,
 ): FixtureDefinition["heads"][number]["parameters"][number] {
+	const projection = canonicalAttributeProjection(channel.attribute);
+	const canonicalTransform =
+		channel.canonical_transform === "invert_normalized"
+			? channel.canonical_transform
+			: projection.canonicalTransform;
+	const maximum = maxRaw(channel.resolution);
+	const normalizedDefault = channel.default_raw / maximum;
+	const physicalDefault = channel.invert
+		? 1 - normalizedDefault
+		: normalizedDefault;
 	return {
-		attribute: channel.attribute,
+		source_attribute: channel.fixture_attribute || channel.attribute,
+		attribute: projection.attribute,
 		components: [primary.get(channel.id) ?? 1, ...channel.secondary_slots].map(
 			(slot) => ({ offset: slot - 1, byte_order: "msb_first" as const }),
 		),
-		default: channel.default_raw / maxRaw(channel.resolution),
+		default:
+			canonicalTransform === "invert_normalized"
+				? 1 - physicalDefault
+				: physicalDefault,
 		virtual_dimmer: channel.reacts_to_virtual_intensity,
 		metadata: {
 			physical_min: channel.physical_min ?? 0,

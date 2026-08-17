@@ -507,6 +507,42 @@ describe("fixture profile model addressing and geometry", () => {
 	});
 });
 
+describe("legacy media server profile projection", () => {
+	it("projects old layer channels onto the canonical encoder attributes", () => {
+		const profile = blankFixtureProfile();
+		const mode = profile.modes[0];
+		mode.splits[0].footprint = 5;
+		mode.channels = [
+			"media.layer.dimmer",
+			"media.layer.cyan",
+			"media.layer.position.x",
+			"media.layer.file",
+			"media.layer.rotation",
+		].map((attribute) => ({
+			...blankChannel(mode),
+			attribute,
+			fixture_attribute: attribute,
+		}));
+
+		const parameters = fixtureDefinitionFromProfileMode(profile, mode).heads[0]
+			.parameters;
+		expect(parameters.map((parameter) => parameter.attribute)).toEqual([
+			"intensity",
+			"color.red",
+			"media.position.x",
+			"media.file",
+			"position.rotation",
+		]);
+		expect(parameters.map((parameter) => parameter.source_attribute)).toEqual(
+			mode.channels.map((channel) => channel.fixture_attribute),
+		);
+		expect(
+			parameters.find((parameter) => parameter.attribute === "color.red")
+				?.default,
+		).toBe(1);
+	});
+});
+
 describe("fixture profile model migration and catalogs", () => {
 	it("keeps every profile mode distinct while suppressing retained migrated legacy rows", () => {
 		const profile = blankFixtureProfile();

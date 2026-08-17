@@ -18,6 +18,18 @@ describe("FixtureTypeIcon", () => {
 		expect(
 			decodeURIComponent(icon.querySelector("img")?.getAttribute("src") ?? ""),
 		).toContain("fixture type profile moving light");
+
+		rerender(<FixtureTypeIcon type="venue" />);
+		icon = screen.getByRole("img", { name: "Type: venue" });
+		expect(
+			decodeURIComponent(icon.querySelector("img")?.getAttribute("src") ?? ""),
+		).toContain("fixture type venue");
+
+		rerender(<FixtureTypeIcon type="rigging" />);
+		icon = screen.getByRole("img", { name: "Type: rigging" });
+		expect(
+			decodeURIComponent(icon.querySelector("img")?.getAttribute("src") ?? ""),
+		).toContain("fixture type rigging");
 	});
 });
 
