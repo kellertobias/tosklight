@@ -174,6 +174,8 @@ function useProviderDataSources(
 	);
 	const mediaServersState = useMemo(
 		() => ({
+			discoverMediaServers: value.discoverMediaServers,
+			updateDiscoveredMediaAddress: value.updateDiscoveredMediaAddress,
 			mediaServers: value.mediaServers,
 			mediaPreviewUrls: value.mediaPreviewUrls,
 			refreshMediaPreview: value.refreshMediaPreview,
@@ -186,6 +188,8 @@ function useProviderDataSources(
 			matter: value.matter,
 		}),
 		[
+			value.discoverMediaServers,
+			value.updateDiscoveredMediaAddress,
 			value.mediaServers,
 			value.mediaPreviewUrls,
 			value.refreshMediaPreview,

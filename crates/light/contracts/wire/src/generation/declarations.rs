@@ -378,6 +378,10 @@ fn output_control(config: &Config) -> Vec<String> {
         NativeMediaTextSlot::decl(config),
         NativeMediaSnapshot::decl(config),
         NativeMediaTextUpdateRequest::decl(config),
+        DiscoveredMediaAddressUpdateRequest::decl(config),
+        DiscoveredMediaOutput::decl(config),
+        DiscoveredMediaServer::decl(config),
+        MediaServerDiscovery::decl(config),
     ]
 }
 

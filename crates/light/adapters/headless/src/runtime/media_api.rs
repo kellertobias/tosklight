@@ -1,4 +1,8 @@
 use super::*;
+use light_wire::v2::output_control::{
+    DiscoveredMediaAddressUpdateRequest, DiscoveredMediaOutput, DiscoveredMediaServer,
+    MediaServerDiscovery,
+};
 
 const TOSKLIGHT_MEDIA_SERVER_PROFILE_ID: &str = "0a14fb60-280d-5ef1-aa4a-2ff11bd06943";
 const TOSKLIGHT_MEDIA_HTTP_PORT: u16 = 8080;
@@ -27,6 +31,188 @@ struct NativeMediaTextResponse {
     enabled: bool,
     kind: String,
     text: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMediaOutputSummary {
+    id: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMediaOutputConfiguration {
+    id: Uuid,
+    name: String,
+    personality: String,
+    protocol: String,
+    universe: u16,
+    start_address: u16,
+    dmx_pending_restart: bool,
+}
+
+pub(super) async fn discover_native_media_servers(
+    State(state): State<AppState>,
+    show: ShowContext,
+    headers: HeaderMap,
+) -> Result<Json<MediaServerDiscovery>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    let discovered = match discover_servers(Duration::from_millis(750)).await {
+        Ok(servers) => servers,
+        Err(error) => {
+            return Ok(Json(MediaServerDiscovery {
+                servers: Vec::new(),
+                discovery_error: Some(format!("Media Server discovery failed: {error}")),
+            }));
+        }
+    };
+    let client = native_media_client()?;
+    let servers = futures_util::future::join_all(
+        discovered
+            .into_iter()
+            .map(|server| inspect_discovered_native_media_server(client.clone(), server)),
+    )
+    .await;
+    Ok(Json(MediaServerDiscovery {
+        servers,
+        discovery_error: None,
+    }))
+}
+
+async fn inspect_discovered_native_media_server(
+    client: reqwest::Client,
+    server: light_media::DiscoveredCitpServer,
+) -> DiscoveredMediaServer {
+    let key = format!("{}:{}", server.host, server.port);
+    let base = format!("http://{}:{TOSKLIGHT_MEDIA_HTTP_PORT}/api/v2", server.host);
+    let health = native_media_get::<NativeMediaHealth>(&client, &format!("{base}/health")).await;
+    let Ok(health) = health else {
+        return DiscoveredMediaServer {
+            key,
+            name: server.name,
+            host: server.host,
+            citp_port: server.port,
+            status: "Unavailable".to_owned(),
+            instance: None,
+            outputs: Vec::new(),
+            error: Some(
+                "The discovered Media Server did not answer its native configuration API"
+                    .to_owned(),
+            ),
+        };
+    };
+    let operator_name = format!("ToskLight Pixel Media - {}", health.instance);
+    let summaries =
+        native_media_get::<Vec<NativeMediaOutputSummary>>(&client, &format!("{base}/outputs"))
+            .await;
+    let Ok(summaries) = summaries else {
+        return DiscoveredMediaServer {
+            key,
+            name: operator_name,
+            host: server.host,
+            citp_port: server.port,
+            status: health.status,
+            instance: Some(health.instance),
+            outputs: Vec::new(),
+            error: Some("The Media Server output configuration is unavailable".to_owned()),
+        };
+    };
+    let outputs = futures_util::future::join_all(summaries.into_iter().map(|output| {
+        let client = client.clone();
+        let base = base.clone();
+        async move {
+            native_media_get::<NativeMediaOutputConfiguration>(
+                &client,
+                &format!("{base}/outputs/{}/configuration", output.id),
+            )
+            .await
+            .ok()
+        }
+    }))
+    .await
+    .into_iter()
+    .flatten()
+    .map(|output| DiscoveredMediaOutput {
+        id: output.id,
+        name: output.name,
+        personality: output.personality,
+        protocol: output.protocol,
+        universe: output.universe,
+        start_address: output.start_address,
+        dmx_pending_restart: output.dmx_pending_restart,
+    })
+    .collect::<Vec<_>>();
+    let error = outputs
+        .is_empty()
+        .then(|| "The Media Server has no readable output configuration".to_owned());
+    DiscoveredMediaServer {
+        key,
+        name: operator_name,
+        host: server.host,
+        citp_port: server.port,
+        status: health.status,
+        instance: Some(health.instance),
+        outputs,
+        error,
+    }
+}
+
+pub(super) async fn update_discovered_media_server_address(
+    State(state): State<AppState>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+    TolerantJson(input): TolerantJson<DiscoveredMediaAddressUpdateRequest>,
+) -> Result<Json<DiscoveredMediaOutput>, ApiError> {
+    let _session = command_http::authenticate_desk_mutation(&state, &headers, &desk)?;
+    show.verify(&state)?;
+    if input.request_id.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "Media Server address request_id is required",
+        ));
+    }
+    let host = input
+        .host
+        .parse::<Ipv4Addr>()
+        .map_err(|_| ApiError::bad_request("Media Server host is invalid"))?;
+    if host.is_unspecified() || host.is_multicast() {
+        return Err(ApiError::bad_request("Media Server host is not reachable"));
+    }
+    if input.start_address == 0 || input.start_address > 512 {
+        return Err(ApiError::bad_request(
+            "Media Server start address must be between 1 and 512",
+        ));
+    }
+    let client = native_media_client()?;
+    let url = format!(
+        "http://{host}:{TOSKLIGHT_MEDIA_HTTP_PORT}/api/v2/outputs/{}/configuration/update",
+        input.output_id
+    );
+    let response = client
+        .post(url)
+        .json(&serde_json::json!({
+            "requestId": input.request_id,
+            "universe": input.universe,
+            "startAddress": input.start_address,
+        }))
+        .send()
+        .await
+        .map_err(native_media_unavailable)?;
+    let output = native_media_response(response)
+        .await?
+        .json::<NativeMediaOutputConfiguration>()
+        .await
+        .map_err(|_| ApiError::unavailable("Media Server returned an invalid configuration"))?;
+    Ok(Json(DiscoveredMediaOutput {
+        id: output.id,
+        name: output.name,
+        personality: output.personality,
+        protocol: output.protocol,
+        universe: output.universe,
+        start_address: output.start_address,
+        dmx_pending_restart: output.dmx_pending_restart,
+    }))
 }
 
 #[derive(Default, Deserialize)]

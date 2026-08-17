@@ -1387,8 +1387,31 @@ button:not(:disabled):active {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 	gap: 8px;
+	padding: 8px;
 	max-height: calc(100% - 40px);
 	overflow: auto;
+}
+.media-discovery {
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 8px;
+}
+.media-discovery > header,
+.media-discovery > p {
+	grid-column: 1 / -1;
+}
+.media-discovery > header,
+.media-server-card > header > div {
+	display: flex;
+	gap: 4px;
+}
+.media-discovery > header {
+	align-items: start;
+	justify-content: space-between;
+}
+.media-server-card > header > div {
+	flex-direction: column;
 }
 .media-server-setup > p {
 	grid-column: 1 / -1;

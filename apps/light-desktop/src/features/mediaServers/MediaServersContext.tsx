@@ -3,6 +3,8 @@ import type {
 	MediaServerInspection,
 	NativeMediaSnapshot,
 	NativeMediaTextSlot,
+	MediaServerDiscovery,
+	DiscoveredMediaOutput,
 } from "../../api/client/mediaOutput";
 import type { MatterBridgeStatus, MediaServerFixture } from "../../api/types";
 
@@ -11,6 +13,13 @@ import type { MatterBridgeStatus, MediaServerFixture } from "../../api/types";
  * fixtures, their preview URLs, the refresh actions, and the bridge status.
  */
 export interface MediaServersState {
+	discoverMediaServers: () => Promise<MediaServerDiscovery>;
+	updateDiscoveredMediaAddress: (input: {
+		host: string;
+		outputId: string;
+		universe: number;
+		startAddress: number;
+	}) => Promise<DiscoveredMediaOutput>;
 	mediaServers: MediaServerFixture[];
 	mediaPreviewUrls: Record<string, string>;
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;

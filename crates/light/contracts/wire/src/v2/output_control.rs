@@ -124,6 +124,55 @@ pub struct NativeMediaTextUpdateRequest {
     pub text: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DiscoveredMediaAddressUpdateRequest {
+    pub request_id: String,
+    pub host: String,
+    pub output_id: Uuid,
+    pub universe: u16,
+    pub start_address: u16,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DiscoveredMediaOutput {
+    pub id: Uuid,
+    pub name: String,
+    pub personality: String,
+    pub protocol: String,
+    pub universe: u16,
+    pub start_address: u16,
+    pub dmx_pending_restart: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DiscoveredMediaServer {
+    pub key: String,
+    pub name: String,
+    pub host: String,
+    pub citp_port: u16,
+    pub status: String,
+    #[serde(default)]
+    pub instance: Option<String>,
+    pub outputs: Vec<DiscoveredMediaOutput>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct MediaServerDiscovery {
+    pub servers: Vec<DiscoveredMediaServer>,
+    #[serde(default)]
+    pub discovery_error: Option<String>,
+}
+
 fn default_library_type() -> u8 {
     1
 }
@@ -158,5 +207,17 @@ mod tests {
             }))
             .is_err()
         );
+
+        let address: DiscoveredMediaAddressUpdateRequest =
+            serde_json::from_value(serde_json::json!({
+                "requestId": "media-address-1",
+                "host": "127.0.0.1",
+                "outputId": "6b1f0c2a-1111-4a2b-8c3d-000000000001",
+                "universe": 9,
+                "startAddress": 177,
+                "future": true
+            }))
+            .unwrap();
+        assert_eq!(address.start_address, 177);
     }
 }

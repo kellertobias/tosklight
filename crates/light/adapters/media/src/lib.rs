@@ -37,9 +37,18 @@ pub async fn discover_servers(
         std::net::Ipv4Addr::from(CITP_MULTICAST_GROUP),
         DEFAULT_CITP_PORT,
     ));
-    socket
-        .send_to(&console_announcement("Viz Editor"), group)
-        .await?;
+    let announcement = console_announcement("ToskLight Control");
+    socket.send_to(&announcement, group).await?;
+    // The Media Server's same-computer preset deliberately binds CITP to loopback. Multicast
+    // does not cross that boundary on every operating system, so probe the standard local port
+    // as well. A server listening on all interfaces may answer both; the endpoint map below
+    // deduplicates those replies.
+    let _ = socket
+        .send_to(
+            &announcement,
+            std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, DEFAULT_CITP_PORT)),
+        )
+        .await;
     let deadline = tokio::time::Instant::now() + wait;
     let mut found = std::collections::BTreeMap::new();
     let mut bytes = [0_u8; 2048];

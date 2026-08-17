@@ -74,7 +74,7 @@ use light_engine::{
     Engine, EngineError, EnginePlaybackCommand, EnginePlaybackOutcome, EngineSnapshot,
     PoolPlaybackAction, PreparedEngineSnapshot, RenderOptions,
 };
-use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
+use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey, discover_servers};
 use light_output::{NetworkOutput, OutputHealth};
 use light_programmer::{
     HighlightAction, HighlightFixture, HighlightMode, HighlightRegistry, HighlightSelectionWrite,

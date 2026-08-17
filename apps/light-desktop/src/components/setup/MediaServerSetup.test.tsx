@@ -6,7 +6,11 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MediaServerFixture, PatchedFixture } from "../../api/types";
+import type {
+	FixtureDefinition,
+	MediaServerFixture,
+	PatchedFixture,
+} from "../../api/types";
 import {
 	blankFixtureProfile,
 	fixtureDefinitionsFromProfiles,
@@ -23,6 +27,12 @@ const mocks = vi.hoisted(() => ({
 	refreshMediaPreview: vi.fn(),
 	refreshMediaThumbnails: vi.fn(),
 	inspectMediaServer: vi.fn(),
+	discoverMediaServers: vi.fn(),
+	updateDiscoveredMediaAddress: vi.fn(),
+	patchFixtures: vi.fn(),
+	deleteFixture: vi.fn(),
+	fixtureLibrary: [] as FixtureDefinition[],
+	patchError: null as string | null,
 }));
 
 const server = {
@@ -31,6 +41,8 @@ const server = {
 	refreshMediaPreview: mocks.refreshMediaPreview,
 	refreshMediaThumbnails: mocks.refreshMediaThumbnails,
 	inspectMediaServer: mocks.inspectMediaServer,
+	discoverMediaServers: mocks.discoverMediaServers,
+	updateDiscoveredMediaAddress: mocks.updateDiscoveredMediaAddress,
 	putObject: mocks.putObject,
 	deleteObject: mocks.deleteObject,
 	refresh: mocks.refresh,
@@ -43,12 +55,17 @@ vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../features/mediaServers/MediaServersContext", () => ({
 	useMediaServers: () => server,
 }));
+vi.mock("../../features/fixtureLibrary/FixtureLibraryContext", () => ({
+	useFixtureLibrary: () => ({ fixtureLibrary: mocks.fixtureLibrary }),
+}));
 vi.mock("../../features/patch/PatchContext", () => ({
 	usePatch: () => ({
 		status: mocks.status,
 		fixtures: patchFixtures,
-		error: null,
+		error: mocks.patchError,
 		updateFixture: mocks.updateFixture,
+		patchFixtures: mocks.patchFixtures,
+		deleteFixture: mocks.deleteFixture,
 	}),
 	usePatchView: mocks.usePatchView,
 }));
@@ -56,6 +73,7 @@ vi.mock("../../features/patch/PatchContext", () => ({
 beforeEach(() => {
 	vi.clearAllMocks();
 	mocks.status = "ready";
+	mocks.patchError = null;
 	mocks.updateFixture.mockResolvedValue(true);
 	mocks.inspectMediaServer.mockResolvedValue({
 		library_revision: "test",
@@ -86,6 +104,24 @@ beforeEach(() => {
 		capabilities: { provider: "citp_msex", native_action: null, layers: [] },
 	});
 	mocks.refreshMediaPreview.mockResolvedValue(true);
+	mocks.discoverMediaServers.mockResolvedValue({
+		servers: [],
+		discoveryError: null,
+	});
+	mocks.updateDiscoveredMediaAddress.mockResolvedValue({
+		id: "00000000-0000-4000-8000-000000000040",
+		name: "Main",
+		personality: "two-layers",
+		protocol: "sacn",
+		universe: 4,
+		startAddress: 101,
+		dmxPendingRestart: false,
+	});
+	mocks.patchFixtures.mockResolvedValue([
+		{ fixtureId: "patched-media", selectionFixtureIds: ["patched-media"] },
+	]);
+	mocks.deleteFixture.mockResolvedValue(true);
+	mocks.fixtureLibrary = [toskMediaDefinition()];
 	server.mediaServers = [];
 	fixture = mediaFixture();
 	patchFixtures = [fixture];
@@ -229,7 +265,158 @@ describe("Media server Patch authority", () => {
 			),
 		);
 	});
+
+	it("discovers an unpatched ToskLight server and applies its suggested address", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		expect(screen.getByText("Not patched")).toBeInTheDocument();
+		expect(screen.getByText(/Suggested DMX 4\.101/)).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Patch suggested" }));
+
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledOnce());
+		const candidate = mocks.patchFixtures.mock.calls[0][0][0];
+		expect(candidate.input).toMatchObject({
+			fixtureNumber: 1,
+			directControl: {
+				protocol: "citp",
+				ipAddress: "192.168.1.40",
+				port: 4809,
+			},
+			internalBindings: {
+				output: "00000000-0000-4000-8000-000000000040",
+			},
+			splitPatches: [{ split: 1, universe: 4, address: 101 }],
+		});
+		expect(mocks.updateDiscoveredMediaAddress).not.toHaveBeenCalled();
+	});
+
+	it("rolls a new desk patch back when the selected server rejects a chosen address", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		mocks.updateDiscoveredMediaAddress.mockRejectedValue(
+			new Error("Media Server disconnected"),
+		);
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		fireEvent.click(screen.getByRole("button", { name: "Patch address" }));
+		fireEvent.change(screen.getByLabelText("Universe"), {
+			target: { value: "7" },
+		});
+		fireEvent.change(screen.getByLabelText("Address"), {
+			target: { value: "201" },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "Confirm patch address" }),
+		);
+
+		await waitFor(() =>
+			expect(mocks.updateDiscoveredMediaAddress).toHaveBeenCalledWith({
+				host: "192.168.1.40",
+				outputId: "00000000-0000-4000-8000-000000000040",
+				universe: 7,
+				startAddress: 201,
+			}),
+		);
+		expect(mocks.deleteFixture).toHaveBeenCalledOnce();
+		expect(
+			screen.getByText(/The desk patch was restored; retry/),
+		).toBeInTheDocument();
+	});
+
+	it("shows the selected output's authoritative address and restart state after a successful update", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		mocks.updateDiscoveredMediaAddress.mockResolvedValue({
+			id: "00000000-0000-4000-8000-000000000040",
+			name: "Main",
+			personality: "two-layers",
+			protocol: "sacn",
+			universe: 7,
+			startAddress: 201,
+			dmxPendingRestart: true,
+		});
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		fireEvent.click(screen.getByRole("button", { name: "Patch address" }));
+		fireEvent.change(screen.getByLabelText("Universe"), {
+			target: { value: "7" },
+		});
+		fireEvent.change(screen.getByLabelText("Address"), {
+			target: { value: "201" },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "Confirm patch address" }),
+		);
+
+		await screen.findByText(/Restart the Media Server to activate/);
+		expect(screen.getByText(/Suggested DMX 7\.201/)).toBeInTheDocument();
+		expect(
+			screen.getByText(/DMX change pending restart/),
+		).toBeInTheDocument();
+	});
+
+	it("keeps the server untouched when normal desk collision validation rejects the patch", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		mocks.patchFixtures.mockResolvedValue(null);
+		mocks.patchError =
+			"Fixtures 1 and 2 overlap on universe 4. Move or unpatch one fixture.";
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		fireEvent.click(screen.getByRole("button", { name: "Patch suggested" }));
+
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledOnce());
+		expect(mocks.updateDiscoveredMediaAddress).not.toHaveBeenCalled();
+		expect(screen.getAllByRole("alert")[0]).toHaveTextContent("overlap");
+	});
 });
+
+function discoveredServer() {
+	return {
+		servers: [
+			{
+				key: "192.168.1.40:4809",
+				name: "Pixel Rack",
+				host: "192.168.1.40",
+				citpPort: 4809,
+				status: "ready",
+				instance: "pixel-rack-a",
+				error: null,
+				outputs: [
+					{
+						id: "00000000-0000-4000-8000-000000000040",
+						name: "Main",
+						personality: "two-layers",
+						protocol: "sacn",
+						universe: 4,
+						startAddress: 101,
+						dmxPendingRestart: false,
+					},
+				],
+			},
+		],
+		discoveryError: null,
+	};
+}
+
+function toskMediaDefinition() {
+	const profile = blankFixtureProfile();
+	profile.id = "0a14fb60-280d-5ef1-aa4a-2ff11bd06943";
+	profile.revision = 4;
+	profile.manufacturer = "ToskLight";
+	profile.name = "Media Server";
+	profile.short_name = "Media Server";
+	profile.direct_control_protocols = ["citp"];
+	profile.modes[0].id = "a134a5f3-1adf-5bba-a2be-dbfb2c654395";
+	profile.modes[0].name = "2 layers";
+	return fixtureDefinitionsFromProfiles([profile])[0];
+}
 
 function mediaFixture(): PatchedFixture {
 	const profile = blankFixtureProfile();

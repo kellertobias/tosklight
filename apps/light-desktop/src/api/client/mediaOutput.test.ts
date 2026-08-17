@@ -12,6 +12,13 @@ describe("Media output advertised-resource client", () => {
 		} as unknown as LiveClientTransport);
 
 		await client.inspectMediaServer("master-a");
+		await client.discoverMediaServers();
+		await client.updateDiscoveredMediaAddress({
+			host: "192.168.1.40",
+			outputId: "00000000-0000-4000-8000-000000000040",
+			universe: 4,
+			startAddress: 101,
+		});
 		await client.applyMediaLibrarySelection("master-a", {
 			expected_library_revision: "citp-revision-a",
 			layer_fixture_id: "00000000-0000-4000-8000-000000000007",
@@ -30,6 +37,17 @@ describe("Media output advertised-resource client", () => {
 		);
 		expect(request).toHaveBeenNthCalledWith(
 			2,
+			"/api/v2/media-servers/discover",
+		);
+		expect(request).toHaveBeenNthCalledWith(
+			3,
+			"/api/v2/media-servers/discovered/address",
+			expect.objectContaining({
+				body: expect.stringContaining('"startAddress":101'),
+			}),
+		);
+		expect(request).toHaveBeenNthCalledWith(
+			4,
 			"/api/v2/media-servers/master-a/library-selection",
 			expect.objectContaining({
 				body: expect.stringContaining(
@@ -38,7 +56,7 @@ describe("Media output advertised-resource client", () => {
 			}),
 		);
 		expect(request).toHaveBeenNthCalledWith(
-			3,
+			5,
 			"/api/v2/media-servers/master-a/preview/refresh",
 			expect.objectContaining({
 				body: JSON.stringify({ source: 9, width: 640, height: 360 }),
@@ -49,7 +67,7 @@ describe("Media output advertised-resource client", () => {
 			"/api/v2/media-servers/master-a/preview/9",
 		);
 		expect(request).toHaveBeenNthCalledWith(
-			4,
+			6,
 			"/api/v2/media-servers/master-a/thumbnails/refresh",
 			expect.objectContaining({
 				body: JSON.stringify({

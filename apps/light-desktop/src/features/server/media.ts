@@ -12,6 +12,8 @@ export function createMediaActions(
 	| "updateNativeMediaText"
 	| "applyMediaLibrarySelection"
 	| "mediaThumbnail"
+	| "discoverMediaServers"
+	| "updateDiscoveredMediaAddress"
 > {
 	const {
 		api,
@@ -50,6 +52,9 @@ export function createMediaActions(
 		});
 	};
 	return {
+		discoverMediaServers: () => api.mediaOutput.discoverMediaServers(),
+		updateDiscoveredMediaAddress: (input) =>
+			api.mediaOutput.updateDiscoveredMediaAddress(input),
 		inspectMediaServer: async (fixtureId) => {
 			try {
 				const inspection = await api.mediaOutput.inspectMediaServer(fixtureId);

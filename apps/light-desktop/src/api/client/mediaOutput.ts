@@ -4,15 +4,24 @@ import type {
 } from "../../features/outputRuntime/contracts";
 import type {
 	DmxOverrideRequest,
+	DiscoveredMediaAddressUpdateRequest,
+	DiscoveredMediaOutput,
+	DiscoveredMediaServer,
 	HighlightActionRequest,
 	MediaLibrarySelectionOutcome,
 	MediaLibrarySelectionRequest,
+	MediaServerDiscovery,
 	NativeMediaSnapshot as NativeMediaSnapshotWire,
 	NativeMediaTextSlot as NativeMediaTextSlotWire,
 	NativeMediaTextUpdateRequest,
 	MediaPreviewRefreshRequest,
 	MediaThumbnailRefreshRequest,
 	PatchPreviewHighlightRequest,
+} from "../generated/light-wire";
+export type {
+	DiscoveredMediaOutput,
+	DiscoveredMediaServer,
+	MediaServerDiscovery,
 } from "../generated/light-wire";
 import {
 	decodeOutputRuntimeActionOutcome,
@@ -114,6 +123,26 @@ export class MediaOutputApiClient {
 
 	mediaServers(): Promise<{ fixtures: MediaServerFixture[] }> {
 		return this.transport.request("/api/v2/media-servers");
+	}
+
+	discoverMediaServers(): Promise<MediaServerDiscovery> {
+		return this.transport.request("/api/v2/media-servers/discover");
+	}
+
+	updateDiscoveredMediaAddress(input: {
+		host: string;
+		outputId: string;
+		universe: number;
+		startAddress: number;
+	}): Promise<DiscoveredMediaOutput> {
+		const request: DiscoveredMediaAddressUpdateRequest = {
+			requestId: crypto.randomUUID(),
+			...input,
+		};
+		return this.transport.request(
+			"/api/v2/media-servers/discovered/address",
+			jsonRequest("POST", request),
+		);
 	}
 
 	inspectMediaServer(fixtureId: string): Promise<MediaServerInspection> {

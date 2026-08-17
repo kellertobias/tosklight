@@ -10,6 +10,8 @@ import type {
 	MediaServerInspection,
 	NativeMediaSnapshot,
 	NativeMediaTextSlot,
+	MediaServerDiscovery,
+	DiscoveredMediaOutput,
 } from "../../api/client/mediaOutput";
 import type {
 	FixtureDefinition,
@@ -18,6 +20,13 @@ import type {
 } from "../../api/types";
 
 export interface ServerFixtureContext {
+	discoverMediaServers: () => Promise<MediaServerDiscovery>;
+	updateDiscoveredMediaAddress: (input: {
+		host: string;
+		outputId: string;
+		universe: number;
+		startAddress: number;
+	}) => Promise<DiscoveredMediaOutput>;
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
 	refreshMediaThumbnails: (
 		fixtureId: string,

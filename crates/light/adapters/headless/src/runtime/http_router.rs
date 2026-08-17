@@ -61,6 +61,14 @@ fn media_and_output_routes() -> Router<AppState> {
         .route("/api/v2/output/visualization", get(visualization_snapshot))
         .route("/api/v2/media-servers", get(media_servers))
         .route(
+            "/api/v2/media-servers/discover",
+            get(discover_native_media_servers),
+        )
+        .route(
+            "/api/v2/media-servers/discovered/address",
+            post(update_discovered_media_server_address),
+        )
+        .route(
             "/api/v2/media-servers/{fixture_id}/inspect",
             get(inspect_media_server),
         )
