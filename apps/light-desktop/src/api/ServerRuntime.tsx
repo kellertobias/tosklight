@@ -448,7 +448,13 @@ function ServerShowProviderStack({
 	selectiveImportSource: SelectiveImportSource;
 	sessionRole: SessionRole;
 }>) {
-	const showId = state.bootstrap?.active_show?.id ?? null;
+	// The bootstrap and the session arrive independently, and every surface below reads its Show
+	// through a session-backed transport. Naming the Show first asks those surfaces to load
+	// through a transport that does not exist yet, and the desk reports a failure for a desk that
+	// is only still starting — a blocking alert over a console that is about to be fine.
+	const showId = state.session
+		? (state.bootstrap?.active_show?.id ?? null)
+		: null;
 	return (
 		<ServerDeskBoundaries state={state} sessionRole={sessionRole}>
 			<ServerVisualizationRuntimeBoundary
