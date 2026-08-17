@@ -5,6 +5,7 @@ const noAction = async (): Promise<void> => undefined;
 
 export const browserDesktopBridge: DesktopBridge = {
 	available: false,
+	selectFolder: async () => null,
 	frontendReady: noAction,
 	exitApplication: noAction,
 	cancelQuit: noAction,

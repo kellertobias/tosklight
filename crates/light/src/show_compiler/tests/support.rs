@@ -32,10 +32,12 @@ pub(super) fn portable_fixture_with_policy(
     profile.short_name = "Port".into();
     profile.patch_policy = policy;
     profile.modes[0].id = Uuid::from_u128(identity_base + 1);
-    if policy == PatchPolicy::VisualOnly {
+    if policy != PatchPolicy::Dmx {
         for split in &mut profile.modes[0].splits {
             split.footprint = 0;
         }
+    }
+    if policy == PatchPolicy::VisualOnly {
         profile.modes[0].channels.clear();
     }
     profile.modes[0].heads[0].id = Uuid::from_u128(identity_base + 2);

@@ -19,6 +19,13 @@ impl InternalAudioResource {
     pub(in crate::runtime) fn status(&self) -> light_wire::v2::internal_audio::InternalAudioStatus {
         self.runtime.lock().status()
     }
+
+    pub(in crate::runtime) fn replace_library_roots(
+        &self,
+        roots: &std::collections::BTreeMap<String, String>,
+    ) {
+        self.runtime.lock().replace_library_roots(roots);
+    }
 }
 
 #[derive(Clone)]

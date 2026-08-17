@@ -50,6 +50,8 @@ mod engine_selection_refresh_tests;
 mod event_transport_route_tests;
 #[path = "extension_control_tests.rs"]
 mod extension_control_tests;
+#[path = "internal_audio_configuration_tests.rs"]
+mod internal_audio_configuration_tests;
 #[path = "macro_playback_convergence_tests.rs"]
 mod macro_playback_convergence_tests;
 #[path = "macro_semantic_preflight_tests.rs"]

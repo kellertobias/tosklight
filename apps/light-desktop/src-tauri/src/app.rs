@@ -1,5 +1,6 @@
 pub(crate) fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(crate::visualizer::Visualizer::default())
         .manage(crate::stage_pane::StagePanes::default())
         .on_menu_event(crate::menu::handle_event)

@@ -71,7 +71,10 @@ export function newPatchFixtureCandidate(
 		split_patches: splitPatches,
 		layer_id: fixture.layer_id ?? "default",
 		direct_control: null,
-		internal_bindings: {},
+		internal_bindings:
+			fixture.definition.profile_snapshot?.patch_policy === "internal"
+				? { library: "default", output: "default" }
+				: {},
 		location: { x: 0, y: 0, z: 0 },
 		rotation: { x: 0, y: 0, z: 0 },
 		logical_heads: [],

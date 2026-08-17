@@ -9,6 +9,7 @@ import type {
 const coreApi = () => import("@tauri-apps/api/core");
 const eventApi = () => import("@tauri-apps/api/event");
 const windowApi = () => import("@tauri-apps/api/window");
+const dialogApi = () => import("@tauri-apps/plugin-dialog");
 
 async function invoke(command: string, args?: Record<string, unknown>) {
 	const api = await coreApi();
@@ -112,6 +113,15 @@ function screenArguments(screen: ConsoleScreenWindow) {
 
 export const tauriDesktopBridge: DesktopBridge = {
 	available: true,
+	selectFolder: async () => {
+		const api = await dialogApi();
+		const selected = await api.open({
+			directory: true,
+			multiple: false,
+			title: "Select media library",
+		});
+		return typeof selected === "string" ? selected : null;
+	},
 	frontendReady: () => invoke("frontend_ready"),
 	exitApplication: () => invoke("exit_desktop_app"),
 	cancelQuit: () => invoke("cancel_quit"),

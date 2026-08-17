@@ -266,6 +266,34 @@ function candidate(fixtureId = FIXTURE_ID, fixtureNumber = 1) {
 }
 
 describe("Patch v2 wire boundary", () => {
+	it("creates Internal Audio fixtures with regular IDs and portable default bindings", () => {
+		const profile = blankFixtureProfile();
+		profile.id = PROFILE_ID;
+		profile.revision = 3;
+		profile.patch_policy = "internal";
+		profile.modes[0].id = MODE_ID;
+		profile.modes[0].splits = [{ number: 1, footprint: 0 }];
+		const created = newPatchFixtureCandidate({
+			name: "Audio Player 10",
+			fixture_number: 10,
+			definition: fixtureDefinitionsFromProfiles([profile])[0],
+			universe: null,
+			address: null,
+		});
+
+		expect(created.fixture).toMatchObject({
+			fixture_number: 10,
+			virtual_fixture_number: null,
+			universe: null,
+			address: null,
+			internal_bindings: { library: "default", output: "default" },
+		});
+		expect(created.input.internalBindings).toEqual({
+			library: "default",
+			output: "default",
+		});
+	});
+
 	it("derives selection targets from authoritative logical heads", () => {
 		expect(patchedFixtureResults([candidate()], [fixtureProjection()])).toEqual(
 			[

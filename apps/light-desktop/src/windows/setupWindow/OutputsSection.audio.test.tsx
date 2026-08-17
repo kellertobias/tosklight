@@ -1,6 +1,5 @@
 import {
 	cleanup,
-	fireEvent,
 	render,
 	screen,
 	waitFor,
@@ -82,8 +81,8 @@ describe("Outputs audio configuration", () => {
 		expect(screen.getByText("Output routes")).toBeVisible();
 	});
 
-	it("shows and updates the preserved binding fields only under Audio Output", async () => {
-		const { controller, draft, editDraft } = setupController();
+	it("keeps output bindings under Audio Output and moves libraries to Shows", async () => {
+		const { controller } = setupController();
 		const view = render(<OutputsSection controller={controller} />);
 		expect(screen.queryByLabelText("Audio library bindings")).toBeNull();
 
@@ -91,24 +90,12 @@ describe("Outputs audio configuration", () => {
 			<OutputsSection controller={{ ...controller, outputsTab: "audio" }} />,
 		);
 		await waitFor(() =>
-			expect(screen.getByLabelText("Audio library bindings")).toHaveValue(
-				"show = /Volumes/Show/Audio",
-			),
+			expect(screen.queryByLabelText("Audio library bindings")).toBeNull(),
 		);
 		expect(screen.getByLabelText("Audio output bindings")).toHaveValue(
 			"main = Built-in Output",
 		);
 		expect(screen.getByLabelText("Audio latency trim")).toHaveValue("1250");
-
-		const libraries = screen.getByLabelText("Audio library bindings");
-		fireEvent.change(libraries, {
-			target: { value: "show = /Volumes/New Audio" },
-		});
-		fireEvent.blur(libraries);
-		expect(editDraft).toHaveBeenCalledWith({
-			...draft,
-			internal_audio_library_roots: { show: "/Volumes/New Audio" },
-		});
 
 		view.unmount();
 		render(<TimecodeSection controller={controller} />);

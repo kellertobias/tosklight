@@ -17,6 +17,7 @@
   "dependencies": {
     "@tosklight/ui": "0.1.0",
     "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2",
     "@types/three": "^0.185.1",
     "@vitejs/plugin-react": "latest",
     "jszip": "^3.10.1",

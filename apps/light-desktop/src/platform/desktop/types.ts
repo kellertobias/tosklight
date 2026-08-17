@@ -106,6 +106,8 @@ export interface StagePaneBenchmarkSample {
 
 export interface DesktopBridge {
 	readonly available: boolean;
+	/** Choose one machine-local folder without exposing native APIs to feature code. */
+	selectFolder(): Promise<string | null>;
 	frontendReady(): Promise<void>;
 	exitApplication(): Promise<void>;
 	cancelQuit(): Promise<void>;

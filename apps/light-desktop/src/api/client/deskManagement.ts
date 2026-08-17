@@ -354,6 +354,8 @@ function configurationPatch(
 		timecode_external_loss_timeout_millis:
 			configuration.timecode_external_loss_timeout_millis,
 		osc_timecode: configuration.osc_timecode,
+		internal_audio_library_roots: configuration.internal_audio_library_roots,
+		internal_audio_output_devices: configuration.internal_audio_output_devices,
 		backup_retention: configuration.backup_retention,
 		autosave_interval_seconds: configuration.autosave_interval_seconds,
 		programmer_fade_millis: configuration.programmer_fade_millis,

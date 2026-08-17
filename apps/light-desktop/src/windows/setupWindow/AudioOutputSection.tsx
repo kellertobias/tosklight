@@ -85,17 +85,6 @@ export function AudioOutputSection({
 					})
 				}
 			/>
-			<AudioBindingMapField
-				label="Audio library bindings"
-				description="One portable name = absolute local root per line. Example: show-audio = /Volumes/Show/Audio"
-				value={draft.internal_audio_library_roots ?? {}}
-				onChange={(value) =>
-					controller.editDraft({
-						...draft,
-						internal_audio_library_roots: value,
-					})
-				}
-			/>
 			{internalAudioStatus && (
 				<div className="setup-field-description" aria-live="polite">
 					{internalAudioStatus.players.map((player) => (

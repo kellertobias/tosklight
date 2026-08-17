@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{ActionError, lossless_json};
 use light_fixture::{
-    PatchedFixture, PatchedFixtureCompiler, PatchedFixtureProfileReference,
+    PatchPolicy, PatchedFixture, PatchedFixtureCompiler, PatchedFixtureProfileReference,
     PortablePatchedFixtureRecord, ResolvedFixtureProfileRevision, migrate_patched_fixture_to_v2,
 };
 use light_show::{
@@ -222,12 +222,15 @@ fn finish_lean_migration(
 }
 
 fn reconcile_fixture_numbers(fixtures: &mut [LeanFixtureMigration<'_>]) -> Result<(), ActionError> {
-    let all_missing = !fixtures.is_empty()
+    let has_regular_policy = fixtures
+        .iter()
+        .any(|fixture| fixture.fixture.definition.patch_policy() != PatchPolicy::VisualOnly);
+    let all_regular_missing = has_regular_policy
         && fixtures.iter().all(|fixture| {
-            numeric_field(fixture.object.body(), "fixture_number").is_none()
-                && numeric_field(fixture.object.body(), "virtual_fixture_number").is_none()
+            fixture.fixture.definition.patch_policy() == PatchPolicy::VisualOnly
+                || numeric_field(fixture.object.body(), "fixture_number").is_none()
         });
-    let inferred = all_missing.then(|| infer_fixture_numbers(fixtures));
+    let inferred = all_regular_missing.then(|| infer_fixture_numbers(fixtures));
     let mut used_virtual = fixtures
         .iter()
         .filter_map(|fixture| {
@@ -240,17 +243,28 @@ fn reconcile_fixture_numbers(fixtures: &mut [LeanFixtureMigration<'_>]) -> Resul
         if let Some(inferred) = &inferred {
             fixture.fixture.fixture_number = inferred.get(fixture.object.key().id()).copied();
         }
-        if fixture.fixture.definition.is_dmx_patchable() {
-            continue;
-        }
-        fixture.fixture.fixture_number = None;
-        if fixture.fixture.virtual_fixture_number.is_none() {
-            next_virtual = next_available(next_virtual, &used_virtual).ok_or_else(|| {
-                invalid_object(fixture.object, "virtual fixture number range is exhausted")
-            })?;
-            fixture.fixture.virtual_fixture_number = Some(next_virtual);
-            used_virtual.insert(next_virtual);
-            next_virtual = next_virtual.saturating_add(1);
+        match fixture.fixture.definition.patch_policy() {
+            PatchPolicy::Dmx => {
+                fixture.fixture.virtual_fixture_number = None;
+            }
+            PatchPolicy::VisualOnly => {
+                fixture.fixture.fixture_number = None;
+                if fixture.fixture.virtual_fixture_number.is_none() {
+                    next_virtual =
+                        next_available(next_virtual, &used_virtual).ok_or_else(|| {
+                            invalid_object(
+                                fixture.object,
+                                "virtual fixture number range is exhausted",
+                            )
+                        })?;
+                    fixture.fixture.virtual_fixture_number = Some(next_virtual);
+                    used_virtual.insert(next_virtual);
+                    next_virtual = next_virtual.saturating_add(1);
+                }
+            }
+            PatchPolicy::Internal => {
+                fixture.fixture.virtual_fixture_number = None;
+            }
         }
     }
     Ok(())
@@ -259,6 +273,7 @@ fn reconcile_fixture_numbers(fixtures: &mut [LeanFixtureMigration<'_>]) -> Resul
 fn infer_fixture_numbers(fixtures: &[LeanFixtureMigration<'_>]) -> BTreeMap<String, u32> {
     let mut candidates = fixtures
         .iter()
+        .filter(|fixture| fixture.fixture.definition.patch_policy() != PatchPolicy::VisualOnly)
         .map(|fixture| {
             (
                 fixture.object.key().id().to_owned(),

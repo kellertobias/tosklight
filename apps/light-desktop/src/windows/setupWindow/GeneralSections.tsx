@@ -1,8 +1,11 @@
 import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
+import { useEffect, useState } from "react";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
 import { useBootstrapSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
+import { useTimecodeActions } from "../../features/timecode/TimecodeActionsContext";
+import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import type { SetupWindowController } from "./controller";
 
@@ -15,7 +18,42 @@ export function ShowsRecoverySection({
 	const lifecycle = useShowLifecycle();
 	const connectionStatus = useConnectionStatus();
 	const { dispatch } = useApp();
+	const desktop = useDesktopBridge();
+	const timecodes = useTimecodeActions();
+	const [libraryError, setLibraryError] = useState<string | null>(null);
 	const { draft } = controller;
+	const selectedLibrary = draft?.internal_audio_library_roots?.default ?? null;
+	useEffect(() => {
+		let active = true;
+		if (!timecodes || !selectedLibrary) {
+			setLibraryError(null);
+			return;
+		}
+		void timecodes.api
+			.internalAudioStatus()
+			.then((status) => {
+				if (!active) return;
+				const library = status.libraries.find(
+					(candidate) => candidate.binding === "default",
+				);
+				const unavailable = library?.diagnostics.find(
+					(diagnostic) =>
+						diagnostic.includes(" is unavailable:") ||
+						diagnostic.includes(" is not a folder") ||
+						diagnostic.includes(" cannot be read:"),
+				);
+				setLibraryError(unavailable ?? null);
+			})
+			.catch((reason) => {
+				if (active)
+					setLibraryError(
+						reason instanceof Error ? reason.message : String(reason),
+					);
+			});
+		return () => {
+			active = false;
+		};
+	}, [selectedLibrary, timecodes]);
 	const activeShow = bootstrap?.active_show;
 	const autosaveActive =
 		connectionStatus === "connected" && Boolean(activeShow);
@@ -66,6 +104,43 @@ export function ShowsRecoverySection({
 					</small>
 				</section>
 			</div>
+			<section className="setup-media-library">
+				<h3>Audio Player media library</h3>
+				<p>Select the media library for the Audio Player.</p>
+				<p>
+					<b>Current selection:</b> {selectedLibrary ?? "Not configured"}
+				</p>
+				{libraryError && <p role="alert">Library unavailable: {libraryError}</p>}
+				<Button
+					disabled={!desktop.available || !draft}
+					title={
+						desktop.available
+							? undefined
+							: "Folder selection is available in the ToskLight desktop app."
+					}
+					onClick={async () => {
+						if (!draft) return;
+						setLibraryError(null);
+						try {
+							const root = await desktop.selectFolder();
+							if (!root) return;
+							controller.editDraft({
+								...draft,
+								internal_audio_library_roots: {
+									...draft.internal_audio_library_roots,
+									default: root,
+								},
+							});
+						} catch (reason) {
+							setLibraryError(
+								reason instanceof Error ? reason.message : String(reason),
+							);
+						}
+					}}
+				>
+					Select media library
+				</Button>
+			</section>
 			<ShowRecoveryFileManager
 				onOpenFixtureLibrary={() => controller.setFixtureLibraryOpen(true)}
 			/>

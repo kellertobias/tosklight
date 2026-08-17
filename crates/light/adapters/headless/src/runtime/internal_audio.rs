@@ -36,6 +36,7 @@ enum AudioFileKind {
 pub(in crate::runtime) struct AudioLibraryIndex {
     pub entries: BTreeMap<(u8, u8), AudioLibraryEntry>,
     pub diagnostics: Vec<String>,
+    canonical_root: Option<PathBuf>,
 }
 
 impl AudioLibraryIndex {
@@ -57,6 +58,7 @@ impl AudioLibraryIndex {
                 return index;
             }
         };
+        index.canonical_root = Some(canonical_root.clone());
         let mut folders = addressed_children(&canonical_root, true, &mut index.diagnostics);
         folders.sort_by(|left, right| left.relative_name.cmp(&right.relative_name));
         let mut claimed_folders = HashSet::new();
@@ -100,7 +102,20 @@ impl AudioLibraryIndex {
         let entry = self.entries.get(&(folder, file)).ok_or_else(|| {
             format!("audio source {folder:03}/{file:03} is not present in the selected library")
         })?;
-        let bytes = fs::read(&entry.path).map_err(|error| {
+        let canonical_root = self
+            .canonical_root
+            .as_ref()
+            .ok_or_else(|| "audio library root is unavailable".to_owned())?;
+        let canonical_path = entry.path.canonicalize().map_err(|error| {
+            format!("audio file {} is unavailable: {error}", entry.relative_path)
+        })?;
+        if !canonical_path.starts_with(canonical_root) || !canonical_path.is_file() {
+            return Err(format!(
+                "audio file {} is outside the selected library root",
+                entry.relative_path
+            ));
+        }
+        let bytes = fs::read(&canonical_path).map_err(|error| {
             format!("audio file {} cannot be read: {error}", entry.relative_path)
         })?;
         match entry.kind {
@@ -137,7 +152,7 @@ fn addressed_children(
         .filter_map(Result::ok)
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
-            let address = leading_address(&name)?;
+            let address = leading_address(&name, folders)?;
             let path = entry.path();
             let canonical = match path.canonicalize() {
                 Ok(path) if path.starts_with(root) => path,
@@ -166,11 +181,20 @@ fn addressed_children(
         .collect()
 }
 
-fn leading_address(name: &str) -> Option<u8> {
+fn leading_address(name: &str, folder: bool) -> Option<u8> {
     let bytes = name.as_bytes();
-    (bytes.len() >= 3 && bytes[..3].iter().all(u8::is_ascii_digit))
-        .then(|| name[..3].parse().ok())
-        .flatten()
+    if bytes.len() < 3 || !bytes[..3].iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    if folder {
+        if bytes.len() != 3 {
+            return None;
+        }
+    } else if bytes.get(3) != Some(&b'.') {
+        return None;
+    }
+    let address = name[..3].parse::<u8>().ok()?;
+    (address != 0).then_some(address)
 }
 
 fn supported_kind(path: &Path) -> Option<AudioFileKind> {
@@ -220,6 +244,19 @@ impl InternalAudioRuntime {
         }
     }
 
+    pub(in crate::runtime) fn replace_library_roots(
+        &mut self,
+        library_roots: &BTreeMap<String, String>,
+    ) {
+        self.libraries = library_roots
+            .iter()
+            .map(|(name, root)| (name.clone(), AudioLibraryIndex::scan(Path::new(root))))
+            .collect();
+        // Force the next output tick to prepare the currently selected source from the new root.
+        self.states.clear();
+        self.diagnostics.clear();
+    }
+
     pub(in crate::runtime) fn reconcile(
         &mut self,
         fixtures: &[PatchedFixture],
@@ -267,17 +304,20 @@ impl InternalAudioRuntime {
                     }
                 })
                 .collect(),
-            libraries: self
-                .libraries
-                .iter()
-                .map(|(binding, library)| {
-                    light_wire::v2::internal_audio::InternalAudioLibraryStatus {
-                        binding: binding.clone(),
-                        entries: library.entries.len(),
-                        diagnostics: library.diagnostics.clone(),
-                    }
-                })
-                .collect(),
+            libraries: {
+                let mut libraries = self.libraries.iter().collect::<Vec<_>>();
+                libraries.sort_by(|(left, _), (right, _)| left.cmp(right));
+                libraries
+                    .into_iter()
+                    .map(|(binding, library)| {
+                        light_wire::v2::internal_audio::InternalAudioLibraryStatus {
+                            binding: binding.clone(),
+                            entries: library.entries.len(),
+                            diagnostics: library.diagnostics.clone(),
+                        }
+                    })
+                    .collect()
+            },
         }
     }
 
@@ -330,12 +370,12 @@ impl InternalAudioRuntime {
             .internal_bindings
             .library
             .as_deref()
-            .ok_or_else(|| "Audio Player has no logical library binding".to_owned())?;
+            .unwrap_or("default");
         let output_name = fixture
             .internal_bindings
             .output
             .as_deref()
-            .ok_or_else(|| "Audio Player has no logical output binding".to_owned())?;
+            .unwrap_or("default");
         let output = self.outputs.get(output_name).ok_or_else(|| format!("Audio Player output binding {output_name} is not mapped or unavailable on this desk"))?;
         if previous.is_none_or(|old| old.source != state.source) {
             let library = self.libraries.get(library_name).ok_or_else(|| {
@@ -441,17 +481,21 @@ mod tests {
 
     #[test]
     fn leading_addresses_are_exact_decimal_prefixes() {
-        assert_eq!(leading_address("001 Ambience"), Some(1));
-        assert_eq!(leading_address("255.wav"), Some(255));
-        assert_eq!(leading_address("256.wav"), None);
-        assert_eq!(leading_address("01.wav"), None);
+        assert_eq!(leading_address("001", true), Some(1));
+        assert_eq!(leading_address("255.wav", false), Some(255));
+        assert_eq!(leading_address("000.wav", false), None);
+        assert_eq!(leading_address("256.wav", false), None);
+        assert_eq!(leading_address("01.wav", false), None);
+        assert_eq!(leading_address("001 ambience.wav", false), None);
+        assert_eq!(leading_address("001 Ambience", true), None);
+        assert_eq!(leading_address("0012", true), None);
     }
 
     #[test]
     fn library_scan_uses_sorted_supported_duplicate_winners() {
         let library = TestLibrary::new();
-        let first_folder = library.folder("001 A");
-        let ignored_folder = library.folder("001 B");
+        let first_folder = library.folder("001");
+        let ignored_folder = library.folder("001 ignored");
         fs::write(first_folder.join("001.wav"), []).unwrap();
         fs::write(first_folder.join("001.mp3"), []).unwrap();
         fs::write(first_folder.join("002.txt"), []).unwrap();
@@ -460,19 +504,71 @@ mod tests {
 
         let index = AudioLibraryIndex::scan(&library.0);
 
-        assert_eq!(index.entries[&(1, 1)].relative_path, "001 A/001.mp3");
-        assert_eq!(index.entries[&(1, 2)].relative_path, "001 A/002.wav");
+        assert_eq!(index.entries[&(1, 1)].relative_path, "001/001.mp3");
+        assert_eq!(index.entries[&(1, 2)].relative_path, "001/002.wav");
         assert!(!index.entries.contains_key(&(1, 3)));
         assert!(
             index
                 .diagnostics
                 .iter()
-                .any(|message| message.contains("duplicate audio folder 001"))
+                .any(|message| { message.contains("001/001.mp3 wins; 001/001.wav is ignored") })
         );
-        assert!(
-            index.diagnostics.iter().any(|message| {
-                message.contains("001 A/001.mp3 wins; 001 A/001.wav is ignored")
-            })
+    }
+
+    #[test]
+    fn replacing_library_roots_rescans_immediately_and_status_is_stable() {
+        let first = TestLibrary::new();
+        fs::write(first.folder("001").join("001.wav"), []).unwrap();
+        let second = TestLibrary::new();
+        fs::write(second.folder("002").join("002.wav"), []).unwrap();
+        let mut runtime = InternalAudioRuntime::new(
+            &BTreeMap::from([
+                ("z".to_owned(), first.0.display().to_string()),
+                ("a".to_owned(), first.0.display().to_string()),
+            ]),
+            BTreeMap::new(),
         );
+
+        let initial = runtime.status();
+        assert_eq!(
+            initial
+                .libraries
+                .iter()
+                .map(|library| library.binding.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "z"]
+        );
+        runtime.replace_library_roots(&BTreeMap::from([(
+            "default".to_owned(),
+            second.0.display().to_string(),
+        )]));
+
+        let replaced = runtime.status();
+        assert_eq!(replaced.libraries.len(), 1);
+        assert_eq!(replaced.libraries[0].binding, "default");
+        assert_eq!(replaced.libraries[0].entries, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn loading_rechecks_confinement_after_a_scanned_file_is_replaced() {
+        use std::os::unix::fs::symlink;
+
+        let library = TestLibrary::new();
+        let folder = library.folder("001");
+        let file = folder.join("001.wav");
+        fs::write(&file, []).unwrap();
+        let index = AudioLibraryIndex::scan(&library.0);
+        fs::remove_file(&file).unwrap();
+        let outside = std::env::temp_dir().join(format!(
+            "tosklight-internal-audio-outside-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::write(&outside, []).unwrap();
+        symlink(&outside, &file).unwrap();
+
+        let error = index.load(1, 1).unwrap_err();
+        assert!(error.contains("outside the selected library root"));
+        fs::remove_file(outside).unwrap();
     }
 }

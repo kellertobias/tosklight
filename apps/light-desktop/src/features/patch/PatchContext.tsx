@@ -170,16 +170,8 @@ export function PatchViewProvider({
 			selectPatchInstance,
 			patchFixtures: async (candidates, placements = []) => {
 				if (!session || snapshot.status !== "ready") return null;
-				try {
-					const outcome = await session.patchFixtures(
-						candidates,
-						[],
-						placements,
-					);
-					return patchedFixtureResults(candidates, outcome.fixtures);
-				} catch {
-					return null;
-				}
+				const outcome = await session.patchFixtures(candidates, [], placements);
+				return patchedFixtureResults(candidates, outcome.fixtures);
 			},
 			updateFixture: async (fixtureId, changes) => {
 				if (!session || snapshot.status !== "ready") return false;

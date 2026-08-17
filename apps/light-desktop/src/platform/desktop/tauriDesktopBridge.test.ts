@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 		onResized: vi.fn(),
 		onCloseRequested: vi.fn(),
 	},
+	openDialog: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
@@ -26,6 +27,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 	currentMonitor: mocks.currentMonitor,
 	getCurrentWindow: () => mocks.currentWindow,
 }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.openDialog }));
 
 import { tauriDesktopBridge } from "./tauriDesktopBridge";
 
@@ -69,6 +71,20 @@ describe("Tauri desktop bridge", () => {
 		expect(mocks.invoke).toHaveBeenCalledWith("open_visualizer", undefined);
 	});
 
+	it("chooses one native media-library folder and treats cancel as neutral", async () => {
+		mocks.openDialog.mockResolvedValueOnce("/Volumes/Show/Audio");
+		await expect(tauriDesktopBridge.selectFolder()).resolves.toBe(
+			"/Volumes/Show/Audio",
+		);
+		expect(mocks.openDialog).toHaveBeenCalledWith({
+			directory: true,
+			multiple: false,
+			title: "Select media library",
+		});
+		mocks.openDialog.mockResolvedValueOnce(null);
+		await expect(tauriDesktopBridge.selectFolder()).resolves.toBeNull();
+	});
+
 	it("normalizes native geometry into logical screen coordinates", async () => {
 		await expect(tauriDesktopBridge.currentWindowState()).resolves.toEqual({
 			displayId: "Desk display|0,0|1920x1080",
@@ -106,6 +122,7 @@ describe("Tauri desktop bridge", () => {
 				"core:window:allow-is-fullscreen",
 				"core:window:allow-set-fullscreen",
 				"core:window:allow-start-dragging",
+				"dialog:default",
 			]),
 		);
 		expect(desktopCapability.windows).toEqual(

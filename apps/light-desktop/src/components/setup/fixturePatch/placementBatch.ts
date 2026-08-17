@@ -417,7 +417,7 @@ function placementIntent(
 	};
 }
 
-async function commitPlacementBatch(
+export async function commitPlacementBatch(
 	controller: PatchController,
 	candidates: readonly PatchFixtureCandidate[],
 	placements: readonly PatchPlacement[] = [],
@@ -434,9 +434,11 @@ async function commitPlacementBatch(
 				"Fixtures could not be added. Review the Patch status and try again.",
 			);
 		return ids;
-	} catch {
+	} catch (error) {
 		controller.ui.setStatus(
-			"Fixtures could not be added. Review the Patch status and try again.",
+			error instanceof Error
+				? error.message
+				: "Fixtures could not be added. Review the Patch status and try again.",
 		);
 		return null;
 	} finally {

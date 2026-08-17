@@ -47,6 +47,11 @@ pub(super) async fn update_configuration(
     state
         .installation
         .replace_configuration(configuration.clone());
+    if configuration.internal_audio_library_roots != previous.internal_audio_library_roots {
+        state
+            .internal_audio
+            .replace_library_roots(&configuration.internal_audio_library_roots);
+    }
     if !configuration.patch_preview_highlight_dmx {
         state.highlight.clear_patch_previews();
         sync_highlight_output(&state);

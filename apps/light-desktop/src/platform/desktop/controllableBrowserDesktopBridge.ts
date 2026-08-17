@@ -58,6 +58,7 @@ export function controllableBrowserDesktopBridge(
 	};
 	return {
 		available: true,
+		selectFolder: async () => null,
 		frontendReady: () => perform({ type: "frontend_ready" }),
 		exitApplication: () => perform({ type: "exit_application" }),
 		cancelQuit: () => perform({ type: "cancel_quit" }),

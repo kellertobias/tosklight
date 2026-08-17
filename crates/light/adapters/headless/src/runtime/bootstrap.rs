@@ -126,6 +126,9 @@ impl RuntimeResources {
             audio_outputs_by_device.insert(trim_key.to_owned(), output.internal_output());
         }
         let mut internal_outputs = std::collections::BTreeMap::new();
+        if let Some(output) = &native_audio_output {
+            internal_outputs.insert("default".to_owned(), output.internal_output());
+        }
         for (binding, device_name) in &configuration.internal_audio_output_devices {
             let output = if let Some(output) = audio_outputs_by_device.get(device_name) {
                 Some(output.clone())

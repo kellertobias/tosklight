@@ -268,6 +268,70 @@ fn missing_fixture_numbers_and_visual_numbers_follow_legacy_inference() {
     assert_eq!(visual["virtual_fixture_number"], 1);
 }
 
+#[test]
+fn mixed_patch_policies_keep_regular_and_virtual_number_namespaces_distinct() {
+    let (dmx_profile, mut dmx, _) = portable_fixture_with_policy(PatchPolicy::Dmx, 40_000);
+    dmx.fixture_number = None;
+    dmx.virtual_fixture_number = None;
+    let (visual_profile, mut visual, _) =
+        portable_fixture_with_policy(PatchPolicy::VisualOnly, 41_000);
+    visual.fixture_number = Some(44);
+    visual.virtual_fixture_number = Some(44);
+    visual.universe = None;
+    visual.address = None;
+    let (internal_profile, mut internal, _) =
+        portable_fixture_with_policy(PatchPolicy::Internal, 42_000);
+    internal.fixture_number = None;
+    internal.virtual_fixture_number = Some(44);
+    internal.universe = None;
+    internal.address = None;
+
+    let records = [
+        (&dmx, &dmx_profile),
+        (&visual, &visual_profile),
+        (&internal, &internal_profile),
+    ];
+    let objects = records
+        .iter()
+        .map(|(fixture, _)| {
+            (
+                "patched_fixture",
+                fixture.fixture_id.0.to_string(),
+                PortablePatchedFixtureRecord::from_runtime_fixture(fixture)
+                    .unwrap()
+                    .into_body(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let object_refs = objects
+        .iter()
+        .map(|(object_type, id, body)| (*object_type, id.as_str(), body.clone()))
+        .collect::<Vec<_>>();
+    let (store, _) = document_with_objects(&object_refs);
+    for (_, profile) in records {
+        store.insert_fixture_profile_revision(profile).unwrap();
+    }
+    let document = store.portable_document().unwrap();
+    let mut transaction = document.transaction();
+
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+
+    let dmx = fixture_body(candidate, dmx.fixture_id);
+    assert!(dmx["fixture_number"].as_u64().is_some());
+    assert!(dmx["virtual_fixture_number"].is_null());
+    let visual = fixture_body(candidate, visual.fixture_id);
+    assert!(visual["fixture_number"].is_null());
+    assert_eq!(visual["virtual_fixture_number"], 44);
+    let internal = fixture_body(candidate, internal.fixture_id);
+    assert!(internal["fixture_number"].as_u64().is_some());
+    assert!(internal["virtual_fixture_number"].is_null());
+    assert_ne!(dmx["fixture_number"], internal["fixture_number"]);
+
+    let compiled = compile_show_candidate(candidate).unwrap();
+    assert_eq!(compiled.fixtures.len(), 3);
+}
+
 fn fixture_body<'a>(
     candidate: light_show::PortableShowCandidate<'a>,
     fixture_id: FixtureId,

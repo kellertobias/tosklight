@@ -16,6 +16,7 @@ pollster.workspace = true
 bytemuck = "1"
 raw-window-handle = "0.6"
 tauri = { version = "2", features = ["unstable", "macos-private-api"] }
+tauri-plugin-dialog = "2"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

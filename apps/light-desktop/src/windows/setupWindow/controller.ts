@@ -342,7 +342,7 @@ export function configurationFieldsForSection(
 ): DeskConfigurationField[] {
 	switch (section) {
 		case "shows":
-			return ["autosave_interval_seconds"];
+			return ["autosave_interval_seconds", "internal_audio_library_roots"];
 		case "outputs":
 			return ["frame_rate_hz", "output_bind_ip", "backup_retention"];
 		case "timecode":
@@ -355,7 +355,6 @@ export function configurationFieldsForSection(
 				"osc_timecode",
 				"timecode_audio_output_device",
 				"timecode_audio_latency_trim_micros_by_output",
-				"internal_audio_library_roots",
 				"internal_audio_output_devices",
 			];
 		case "preferences-highlight":
