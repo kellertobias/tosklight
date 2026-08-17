@@ -300,8 +300,28 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 				viewport.evaluate((node) => node.scrollWidth - node.clientWidth),
 			)
 			.toBeLessThanOrEqual(1);
-		const zoom = editor.getByLabel("Timeline zoom");
-		await zoom.fill((await zoom.getAttribute("max")) ?? "1");
+		// Zoom lives in the overview window: dragging its end handle towards the start narrows the
+		// visible zone, and the editor zooms to whatever that zone asks for, up to its maximum.
+		const overview = editor.getByRole("scrollbar", {
+			name: "Timeline overview",
+		});
+		const overviewBox = await overview.boundingBox();
+		const endHandle = overview.getByRole("separator", {
+			name: "Resize timeline overview from end",
+		});
+		const handleBox = await endHandle.boundingBox();
+		if (!overviewBox || !handleBox) throw new Error("The overview is not visible");
+		await page.mouse.move(
+			handleBox.x + handleBox.width / 2,
+			handleBox.y + handleBox.height / 2,
+		);
+		await page.mouse.down();
+		await page.mouse.move(
+			overviewBox.x + 1,
+			handleBox.y + handleBox.height / 2,
+			{ steps: 8 },
+		);
+		await page.mouse.up();
 		await expect
 			.poll(() =>
 				editor
