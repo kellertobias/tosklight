@@ -11,11 +11,17 @@ use light_fixture::{PatchPolicy, PatchedFixture};
 
 use super::timecode_audio_output::{NativeInternalAudioOutput, NativeInternalTransport};
 
-const FOLDER_ATTRIBUTE: &str = "audio.folder";
-const FILE_ATTRIBUTE: &str = "audio.file";
-const TRANSPORT_ATTRIBUTE: &str = "audio.transport";
-const REPEAT_ATTRIBUTE: &str = "audio.repeat";
-const VOLUME_ATTRIBUTE: &str = "audio.volume";
+const FOLDER_ATTRIBUTE: &str = "media.folder";
+const FILE_ATTRIBUTE: &str = "media.file";
+const PLAY_MODE_ATTRIBUTE: &str = "media.play_mode";
+const VOLUME_ATTRIBUTE: &str = "volume";
+// Shows patched before TL-367 carry the Audio Player's own attribute names in their embedded
+// profile snapshot. They keep playing through the same reconciliation.
+const LEGACY_FOLDER_ATTRIBUTE: &str = "audio.folder";
+const LEGACY_FILE_ATTRIBUTE: &str = "audio.file";
+const LEGACY_TRANSPORT_ATTRIBUTE: &str = "audio.transport";
+const LEGACY_REPEAT_ATTRIBUTE: &str = "audio.repeat";
+const LEGACY_VOLUME_ATTRIBUTE: &str = "audio.volume";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::runtime) struct AudioLibraryEntry {
@@ -210,14 +216,45 @@ fn supported_kind(path: &Path) -> Option<AudioFileKind> {
     }
 }
 
+/// Resolved transport intent, however the patched personality expresses it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Transport {
+    Stop,
+    Pause,
+    Play,
+    RestartPlay,
+}
+
+impl Transport {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Stop => "stop",
+            Self::Pause => "pause",
+            Self::Play | Self::RestartPlay => "play",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PlayerState {
     source: (u8, u8),
-    transport: u8,
+    transport: Transport,
     repeat: bool,
     volume: u8,
     cursor_millis: u32,
     transport_changed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// What the desk currently plays on one Internal Audio Player voice.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::runtime) struct PlayerSnapshot {
+    pub folder: u8,
+    pub file: u8,
+    pub volume_percent: u8,
+    pub transport: &'static str,
+    pub repeat: bool,
+    pub source: Option<String>,
+    pub diagnostic: Option<String>,
 }
 
 #[derive(Default)]
@@ -321,6 +358,33 @@ impl InternalAudioRuntime {
         }
     }
 
+    /// Live Internal Audio Player state for one patched player, as the Media pane shows it.
+    pub(in crate::runtime) fn player(&self, fixture: &PatchedFixture) -> PlayerSnapshot {
+        let state = self.states.get(&fixture.fixture_id).copied();
+        let library_name = fixture
+            .internal_bindings
+            .library
+            .as_deref()
+            .unwrap_or("default");
+        let source = state.and_then(|state| {
+            self.libraries
+                .get(library_name)
+                .and_then(|library| library.entries.get(&state.source))
+                .map(|entry| entry.relative_path.clone())
+        });
+        PlayerSnapshot {
+            folder: state.map_or(0, |state| state.source.0),
+            file: state.map_or(0, |state| state.source.1),
+            volume_percent: state.map_or(0, |state| {
+                ((u16::from(state.volume) * 100 + 127) / 255) as u8
+            }),
+            transport: state.map_or("stop", |state| state.transport.label()),
+            repeat: state.is_some_and(|state| state.repeat),
+            source,
+            diagnostic: self.diagnostics.get(&fixture.fixture_id).cloned(),
+        }
+    }
+
     fn reconcile_fixture(
         &mut self,
         fixture: &PatchedFixture,
@@ -331,17 +395,51 @@ impl InternalAudioRuntime {
             .logical_heads
             .first()
             .map_or(fixture.fixture_id, |head| head.fixture_id);
+        let attributes = declared_attributes(fixture);
+        let play_mode = attributes.contains(PLAY_MODE_ATTRIBUTE);
+        let transport_attribute = if play_mode {
+            PLAY_MODE_ATTRIBUTE
+        } else {
+            LEGACY_TRANSPORT_ATTRIBUTE
+        };
+        let transport_raw = raw(values, control_id, transport_attribute);
         let state = PlayerState {
             source: (
-                raw(values, control_id, FOLDER_ATTRIBUTE),
-                raw(values, control_id, FILE_ATTRIBUTE),
+                raw_of(
+                    values,
+                    control_id,
+                    &attributes,
+                    FOLDER_ATTRIBUTE,
+                    LEGACY_FOLDER_ATTRIBUTE,
+                ),
+                raw_of(
+                    values,
+                    control_id,
+                    &attributes,
+                    FILE_ATTRIBUTE,
+                    LEGACY_FILE_ATTRIBUTE,
+                ),
             ),
-            transport: raw(values, control_id, TRANSPORT_ATTRIBUTE),
-            repeat: raw(values, control_id, REPEAT_ATTRIBUTE) >= 128,
-            volume: raw(values, control_id, VOLUME_ATTRIBUTE),
+            transport: if play_mode {
+                play_mode_transport(transport_raw)
+            } else {
+                legacy_transport(transport_raw)
+            },
+            repeat: if play_mode {
+                play_mode_repeats(transport_raw)
+            } else {
+                raw(values, control_id, LEGACY_REPEAT_ATTRIBUTE) >= 128
+            },
+            volume: raw_of(
+                values,
+                control_id,
+                &attributes,
+                VOLUME_ATTRIBUTE,
+                LEGACY_VOLUME_ATTRIBUTE,
+            ),
             cursor_millis: exact_raw(values, control_id, "audio.cursor_millis"),
             transport_changed_at: changed_at
-                .get(&(control_id, AttributeKey(TRANSPORT_ATTRIBUTE.into())))
+                .get(&(control_id, AttributeKey(transport_attribute.into())))
                 .copied(),
         };
         let previous = self.states.get(&fixture.fixture_id).copied();
@@ -407,14 +505,63 @@ impl InternalAudioRuntime {
             })
         {
             let action = match state.transport {
-                0..=63 => NativeInternalTransport::Stop,
-                64..=127 => NativeInternalTransport::Pause,
-                128..=191 => NativeInternalTransport::Play,
-                _ => NativeInternalTransport::RestartPlay,
+                Transport::Stop => NativeInternalTransport::Stop,
+                Transport::Pause => NativeInternalTransport::Pause,
+                Transport::Play => NativeInternalTransport::Play,
+                Transport::RestartPlay => NativeInternalTransport::RestartPlay,
             };
             output.transport(fixture.fixture_id, action)?;
         }
         Ok(())
+    }
+}
+
+fn declared_attributes(fixture: &PatchedFixture) -> HashSet<String> {
+    fixture
+        .definition
+        .heads
+        .iter()
+        .flat_map(|head| head.parameters.iter())
+        .map(|parameter| parameter.attribute.0.clone())
+        .collect()
+}
+
+/// Prefers the canonical Media attribute and falls back to the pre-TL-367 Audio Player name.
+fn raw_of(
+    values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    fixture_id: FixtureId,
+    attributes: &HashSet<String>,
+    canonical: &str,
+    legacy: &str,
+) -> u8 {
+    let attribute = if attributes.contains(canonical) {
+        canonical
+    } else {
+        legacy
+    };
+    raw(values, fixture_id, attribute)
+}
+
+/// Play mode carries transport and repeat together, as the Media personality does.
+fn play_mode_transport(raw: u8) -> Transport {
+    match raw {
+        216..=235 => Transport::Stop,
+        236..=255 => Transport::Pause,
+        _ => Transport::Play,
+    }
+}
+
+/// Loop, Reverse, and Bounce repeat; every Once mode plays the source through exactly once.
+fn play_mode_repeats(raw: u8) -> bool {
+    matches!(raw, 0..=59 | 108..=167)
+}
+
+fn legacy_transport(raw: u8) -> Transport {
+    match raw {
+        0..=63 => Transport::Stop,
+        64..=127 => Transport::Pause,
+        128..=191 => Transport::Play,
+        _ => Transport::RestartPlay,
     }
 }
 
@@ -477,6 +624,32 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn play_mode_carries_transport_and_repeat_together() {
+        assert_eq!(play_mode_transport(0), Transport::Play);
+        assert_eq!(play_mode_transport(60), Transport::Play);
+        assert_eq!(play_mode_transport(215), Transport::Play);
+        assert_eq!(play_mode_transport(216), Transport::Stop);
+        assert_eq!(play_mode_transport(235), Transport::Stop);
+        assert_eq!(play_mode_transport(236), Transport::Pause);
+        assert_eq!(play_mode_transport(255), Transport::Pause);
+        for looping in [0, 20, 40, 59, 108, 128, 148, 167] {
+            assert!(play_mode_repeats(looping), "{looping} loops");
+        }
+        for once in [60, 68, 84, 107, 168, 192, 215, 216, 236] {
+            assert!(!play_mode_repeats(once), "{once} plays once");
+        }
+    }
+
+    #[test]
+    fn legacy_transport_ranges_survive_for_shows_patched_before_play_mode() {
+        assert_eq!(legacy_transport(0), Transport::Stop);
+        assert_eq!(legacy_transport(64), Transport::Pause);
+        assert_eq!(legacy_transport(128), Transport::Play);
+        assert_eq!(legacy_transport(192), Transport::RestartPlay);
+        assert_eq!(Transport::RestartPlay.label(), "play");
     }
 
     #[test]

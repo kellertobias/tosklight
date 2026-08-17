@@ -76,9 +76,13 @@ export function normalizedParameterDisplay(
 	attribute: string,
 ) {
 	const mediaAddressLabel =
-		attribute === "media.file" || attribute === "media.mask.file"
+		attribute === "media.file" ||
+		attribute === "media.mask.file" ||
+		attribute === "audio.file"
 			? "File"
-			: attribute === "media.folder" || attribute === "media.mask.folder"
+			: attribute === "media.folder" ||
+					attribute === "media.mask.folder" ||
+					attribute === "audio.folder"
 				? "Folder"
 				: null;
 	const formatMediaAddresses = (values: number[]) => {

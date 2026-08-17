@@ -320,6 +320,25 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     result
 }
 
+/// A player patched from the TL-367 profile revision carries the canonical Media attributes.
+fn audio_player_uses_media_attributes(fixture: &light_fixture::PatchedFixture) -> bool {
+    fixture
+        .definition
+        .heads
+        .iter()
+        .flat_map(|head| head.parameters.iter())
+        .any(|parameter| parameter.attribute.0 == "media.play_mode")
+}
+
+/// Paused holds the voice; playing selects Loop when the track repeats and Once - Hold otherwise.
+fn timecode_play_mode(transport: u32, repeat: bool) -> u32 {
+    match (transport, repeat) {
+        (64, _) => 236,
+        (_, true) => 0,
+        (_, false) => 60,
+    }
+}
+
 fn timecode_audio_contributions(
     timecodes: &light_application::timeline::TimecodeRuntimeService,
     fixtures: &[light_fixture::PatchedFixture],
@@ -338,11 +357,13 @@ fn timecode_audio_contributions(
             .audio_players
             .into_iter()
             .flat_map(|player| {
-                let fixture_id = fixtures
+                let fixture = fixtures
                     .iter()
-                    .find(|fixture| fixture.fixture_id == player.fixture_id)
+                    .find(|fixture| fixture.fixture_id == player.fixture_id);
+                let fixture_id = fixture
                     .and_then(|fixture| fixture.logical_heads.first())
                     .map_or(player.fixture_id, |head| head.fixture_id);
+                let canonical = fixture.is_some_and(audio_player_uses_media_attributes);
                 let cursor_millis = u32::try_from(
                     u128::from(player.cursor_frame.0)
                         .saturating_mul(u128::from(rate.denominator()))
@@ -350,43 +371,63 @@ fn timecode_audio_contributions(
                         / u128::from(rate.numerator()),
                 )
                 .unwrap_or(u32::MAX);
-                [
+                let mut samples = vec![
                     (
-                        "audio.folder",
+                        if canonical {
+                            "media.folder"
+                        } else {
+                            "audio.folder"
+                        },
                         AttributeValue::RawDmxExact(u32::from(player.folder)),
                     ),
                     (
-                        "audio.file",
+                        if canonical {
+                            "media.file"
+                        } else {
+                            "audio.file"
+                        },
                         AttributeValue::RawDmxExact(u32::from(player.file)),
                     ),
-                    ("audio.transport", AttributeValue::RawDmxExact(transport)),
                     (
-                        "audio.repeat",
-                        AttributeValue::RawDmxExact(if player.repeat { 255 } else { 0 }),
+                        if canonical { "volume" } else { "audio.volume" },
+                        AttributeValue::Normalized(player.volume),
                     ),
-                    ("audio.volume", AttributeValue::Normalized(player.volume)),
                     (
                         "audio.cursor_millis",
                         AttributeValue::RawDmxExact(cursor_millis),
                     ),
-                ]
-                .into_iter()
-                .map(|(attribute, value)| {
-                    order = order.saturating_add(1);
-                    ContributionSample::independent(TimedValue {
-                        fixture_id,
-                        attribute: AttributeKey(attribute.into()),
-                        value,
-                        priority: 75,
-                        changed_at,
-                        programmer_order: order,
-                        merge_mode: MergeMode::Ltp,
-                        fade: false,
-                        fade_millis: None,
-                        delay_millis: None,
+                ];
+                if canonical {
+                    // Play mode carries transport and repeat together on the TL-367 personality.
+                    samples.push((
+                        "media.play_mode",
+                        AttributeValue::RawDmxExact(timecode_play_mode(transport, player.repeat)),
+                    ));
+                } else {
+                    samples.push(("audio.transport", AttributeValue::RawDmxExact(transport)));
+                    samples.push((
+                        "audio.repeat",
+                        AttributeValue::RawDmxExact(if player.repeat { 255 } else { 0 }),
+                    ));
+                }
+                samples
+                    .into_iter()
+                    .map(|(attribute, value)| {
+                        order = order.saturating_add(1);
+                        ContributionSample::independent(TimedValue {
+                            fixture_id,
+                            attribute: AttributeKey(attribute.into()),
+                            value,
+                            priority: 75,
+                            changed_at,
+                            programmer_order: order,
+                            merge_mode: MergeMode::Ltp,
+                            fade: false,
+                            fade_millis: None,
+                            delay_millis: None,
+                        })
                     })
-                })
-                .collect::<Vec<_>>()
+                    .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>()
     }))

@@ -311,12 +311,33 @@ fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
             .iter()
             .map(|channel| channel.attribute.0.as_str())
             .collect::<Vec<_>>(),
+        ["media.folder", "media.file", "media.play_mode", "volume",]
+    );
+    // TL-367: the voice is addressed through the canonical Media attributes, so the Media encoder
+    // group and Media pane control it exactly like any other media source. Play mode carries both
+    // transport and repeat, and Stop is the safe patched default.
+    assert_eq!(
+        mode.channels
+            .iter()
+            .map(|channel| channel.fixture_attribute.0.as_str())
+            .collect::<Vec<_>>(),
         [
             "audio.folder",
             "audio.file",
-            "audio.transport",
-            "audio.repeat",
+            "audio.play_mode",
             "audio.volume",
+        ]
+    );
+    assert_eq!(
+        mode.channels
+            .iter()
+            .map(|channel| (channel.attribute.0.as_str(), channel.default_raw))
+            .collect::<Vec<_>>(),
+        [
+            ("media.folder", 0),
+            ("media.file", 0),
+            ("media.play_mode", 216),
+            ("volume", 255),
         ]
     );
     assert!(
