@@ -11,15 +11,14 @@ export function TimecodeParameterControls({
 	hardwareConnected: boolean;
 	deck: TimecodeEncoderDeck;
 }) {
-	const [group, setGroup] = useState<"timeline" | "keyframe">("timeline");
+	const [group, setGroup] = useState<"timeline" | "keyframe">("keyframe");
 	const slots = deck[group];
 
 	useEffect(() => {
 		if (!hardwareConnected) return;
 		const handleEncoder = (event: Event) => {
-			const detail = (
-				event as CustomEvent<{ control: string; value?: string }>
-			).detail;
+			const detail = (event as CustomEvent<{ control: string; value?: string }>)
+				.detail;
 			const slot = slots[Number(detail.control.split("/")[1]) - 1];
 			if (!slot || slot.disabled) return;
 			const direction =
@@ -43,14 +42,17 @@ export function TimecodeParameterControls({
 	return (
 		<div className="parameter-controls timecode-parameter-controls">
 			<div className="family-tabs">
-				<Button active={group === "timeline"} onClick={() => setGroup("timeline")}>
-					Timecode Timeline
-				</Button>
 				<Button
 					active={group === "keyframe"}
 					onClick={() => setGroup("keyframe")}
 				>
-					Selected Keyframe
+					{deck.selectionLabel ?? "Selected Keyframe"}
+				</Button>
+				<Button
+					active={group === "timeline"}
+					onClick={() => setGroup("timeline")}
+				>
+					Timecode Timeline
 				</Button>
 			</div>
 			<div className="parameter-surfaces">

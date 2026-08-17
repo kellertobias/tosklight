@@ -1,4 +1,9 @@
-import { ModalRegistration, ModalTitleBar, SelectField } from "@tosklight/ui";
+import {
+	Button,
+	ModalLayer,
+	ModalTitleBar,
+	SelectionCardContent,
+} from "@tosklight/ui";
 
 export const TIMECODE_SPEED_GROUPS = ["A", "B", "C", "D", "E"] as const;
 
@@ -16,42 +21,45 @@ export function TimecodeSpeedGroupChooser({
 	onAdd(): void;
 }) {
 	return (
-		<ModalRegistration onClose={onClose}>
-			<div
-				className="modal-backdrop"
-				onPointerDown={(event) =>
-					event.target === event.currentTarget && onClose()
-				}
-			>
-				<section
-					className="modal-card"
-					role="dialog"
-					aria-modal="true"
-					aria-label="Choose Speed Group"
-				>
-					<ModalTitleBar
-						title="Choose Speed Group"
-						onClose={onClose}
-						closeLabel="Cancel adding Speed Group lane"
-						accept={{
-							id: "add",
-							label: "Add lane",
-							variant: "primary",
-							disabled: !value || !available.includes(value),
-							onPress: onAdd,
-						}}
-					/>
-					<SelectField
-						label="Speed Group"
-						value={value}
-						onChange={onChange}
-						options={available.map((group) => ({
-							value: group,
-							label: `Speed Group ${group}`,
-						}))}
-					/>
+		<ModalLayer
+			ariaLabel="Choose Speed Group"
+			className="ui-grouped-selection-layer"
+			dialogClassName="ui-grouped-selection-modal timecode-speed-group-chooser"
+			onClose={onClose}
+		>
+			<ModalTitleBar
+				title="Choose Speed Group"
+				onClose={onClose}
+				closeLabel="Cancel adding Speed Group lane"
+				accept={{
+					id: "add",
+					label: "Add lane",
+					variant: "primary",
+					disabled: !value || !available.includes(value),
+					onPress: onAdd,
+				}}
+			/>
+			<div className="ui-grouped-selection-groups">
+				<section>
+					<h3>Speed Group</h3>
+					<div className="ui-grouped-selection-options">
+						{available.map((group) => (
+							<Button
+								key={group}
+								active={group === value}
+								aria-pressed={group === value}
+								contentAlign="left"
+								onClick={() => onChange(group)}
+							>
+								<SelectionCardContent
+									label={`Speed Group ${group}`}
+									description={`Use desk Speed Group ${group} for this lane.`}
+								/>
+							</Button>
+						))}
+					</div>
 				</section>
 			</div>
-		</ModalRegistration>
+		</ModalLayer>
 	);
 }

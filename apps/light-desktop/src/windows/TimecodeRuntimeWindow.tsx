@@ -41,8 +41,10 @@ import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
-import { parseMarkerCsv } from "../features/timecode/editorModel";
-import { reconcileAutomaticAudioLane } from "../features/timecode/editorModel";
+import {
+	parseMarkerCsv,
+	reconcileAutomaticAudioLane,
+} from "../features/timecode/editorModel";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
 import { TimecodeAutosaveWriter } from "../features/timecode/TimecodeAutosaveWriter";
 import {
@@ -361,7 +363,7 @@ export function TimecodeEditor({
 	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
 	useEffect(() => {
 		if (snapshot) setEditorFrame(snapshot.frame);
-	}, [snapshot]);
+	}, [snapshot?.frame]);
 	const [error, setError] = useState<string | null>(null);
 	const [actionBusy, setActionBusy] = useState(false);
 	const [audioImporting, setAudioImporting] = useState(false);

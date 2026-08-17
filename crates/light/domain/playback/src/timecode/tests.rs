@@ -312,3 +312,14 @@ fn validation_rejects_overlapping_cuelist_clips() {
         "Cuelist clips on one lane must not overlap"
     );
 }
+
+#[test]
+fn validation_accepts_non_overlapping_cuelist_clips_in_any_persisted_order() {
+    let mut timecode = definition();
+    let TimecodeLaneContent::CueList { clips, .. } = &mut timecode.lanes[0].content else {
+        panic!("expected Cuelist lane");
+    };
+    clips.reverse();
+
+    timecode.validate().unwrap();
+}

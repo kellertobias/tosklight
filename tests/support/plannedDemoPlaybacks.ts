@@ -111,9 +111,9 @@ export async function installPlannedDemoPlaybacks(
 			...cueList(
 				cueListIds.chase,
 				"ACL Chase",
-				[1, 2, 3, 4].map((active) =>
+				[1, 2, 3, 4, 3, 2, 1].map((active, index) =>
 					stateCue(
-						active,
+						index + 1,
 						`ACL ${active}`,
 						[1, 2, 3, 4].flatMap((number) =>
 							intensity(groups, `ACL${number}`, number === active ? 1 : 0),

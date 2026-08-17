@@ -25,7 +25,7 @@ export function timelineItems(definition: TimecodeDefinition): TimelineItem[] {
 		frame: marker.frame,
 		label: marker.name,
 		kind: "marker",
-		color: marker.color ?? "#ff6a62",
+		color: marker.color ?? "#ffffff",
 	}));
 	for (const lane of definition.lanes) {
 		switch (lane.content.kind) {
@@ -177,36 +177,49 @@ export function moveTimelineItem(
 			switch (lane.content.kind) {
 				case "cue_list":
 					if (selection.kind !== "clip") return lane;
-					return {
-						...lane,
-						content: {
-							...lane.content,
-							clips: lane.content.clips.map((clip) => {
-								if (clip.id !== selection.itemId) return clip;
-								const length = clip.end_frame - clip.start_frame;
-								const start = Math.min(
-									nextFrame,
-									Math.max(0, duration - length),
-								);
-								return {
-									...clip,
-									start_frame: start,
-									end_frame: start + length,
-								};
-							}),
-						},
-					};
+					{
+						const selected = lane.content.clips.find(
+							(clip) => clip.id === selection.itemId,
+						);
+						if (!selected) return lane;
+						const length = selected.end_frame - selected.start_frame;
+						const start = closestNonOverlappingStart(
+							nextFrame,
+							length,
+							lane.content.clips.filter((clip) => clip.id !== selected.id),
+							duration,
+						);
+						return {
+							...lane,
+							content: {
+								...lane.content,
+								clips: lane.content.clips
+									.map((clip) =>
+										clip.id === selection.itemId
+											? {
+													...clip,
+													start_frame: start,
+													end_frame: start + length,
+												}
+											: clip,
+									)
+									.sort(byStartFrame),
+							},
+						};
+					}
 				case "speed_group":
 					if (selection.kind !== "speed") return lane;
 					return {
 						...lane,
 						content: {
 							...lane.content,
-							keyframes: lane.content.keyframes.map((keyframe) =>
-								keyframe.id === selection.itemId
-									? { ...keyframe, frame: nextFrame }
-									: keyframe,
-							),
+							keyframes: lane.content.keyframes
+								.map((keyframe) =>
+									keyframe.id === selection.itemId
+										? { ...keyframe, frame: nextFrame }
+										: keyframe,
+								)
+								.sort(byFrame),
 						},
 					};
 				case "audio_volume":
@@ -215,39 +228,53 @@ export function moveTimelineItem(
 						...lane,
 						content: {
 							...lane.content,
-							keyframes: lane.content.keyframes.map((keyframe) =>
-								keyframe.id === selection.itemId
-									? { ...keyframe, frame: nextFrame }
-									: keyframe,
-							),
+							keyframes: lane.content.keyframes
+								.map((keyframe) =>
+									keyframe.id === selection.itemId
+										? { ...keyframe, frame: nextFrame }
+										: keyframe,
+								)
+								.sort(byFrame),
 						},
 					};
 				case "audio_player":
 					if (selection.kind !== "clip") return lane;
-					return {
-						...lane,
-						content: {
-							...lane.content,
-							clips: lane.content.clips.map((clip) => {
-								if (clip.id !== selection.itemId) return clip;
-								const length = clip.end_frame - clip.start_frame;
-								const start = Math.min(
-									nextFrame,
-									Math.max(0, duration - length),
-								);
-								const offset = start - clip.start_frame;
-								return {
-									...clip,
-									start_frame: start,
-									end_frame: start + length,
-									volume_keyframes: clip.volume_keyframes.map((keyframe) => ({
-										...keyframe,
-										frame: keyframe.frame + offset,
-									})),
-								};
-							}),
-						},
-					};
+					{
+						const selected = lane.content.clips.find(
+							(clip) => clip.id === selection.itemId,
+						);
+						if (!selected) return lane;
+						const length = selected.end_frame - selected.start_frame;
+						const start = closestNonOverlappingStart(
+							nextFrame,
+							length,
+							lane.content.clips.filter((clip) => clip.id !== selected.id),
+							duration,
+						);
+						return {
+							...lane,
+							content: {
+								...lane.content,
+								clips: lane.content.clips
+									.map((clip) => {
+										if (clip.id !== selection.itemId) return clip;
+										const offset = start - clip.start_frame;
+										return {
+											...clip,
+											start_frame: start,
+											end_frame: start + length,
+											volume_keyframes: clip.volume_keyframes.map(
+												(keyframe) => ({
+													...keyframe,
+													frame: keyframe.frame + offset,
+												}),
+											),
+										};
+									})
+									.sort(byStartFrame),
+							},
+						};
+					}
 			}
 			return lane;
 		}),
@@ -266,46 +293,70 @@ export function resizeTimelineClip(
 		...definition,
 		lanes: definition.lanes.map((lane) => {
 			if (lane.id !== selection.laneId) return lane;
-			if (lane.content.kind === "cue_list")
+			if (lane.content.kind === "cue_list") {
+				const bounds = resizeBounds(
+					lane.content.clips,
+					selection.itemId,
+					edge,
+					nextFrame,
+				);
 				return {
 					...lane,
 					content: {
 						...lane.content,
-						clips: lane.content.clips.map((clip) =>
-							clip.id !== selection.itemId
-								? clip
-								: edge === "start"
-									? {
-											...clip,
-											start_frame: Math.min(nextFrame, clip.end_frame - 1),
-										}
-									: {
-											...clip,
-											end_frame: Math.max(nextFrame, clip.start_frame + 1),
-										},
-						),
+						clips: lane.content.clips
+							.map((clip) =>
+								clip.id !== selection.itemId
+									? clip
+									: edge === "start"
+										? {
+												...clip,
+												start_frame: bounds.start,
+											}
+										: {
+												...clip,
+												end_frame: bounds.end,
+											},
+							)
+							.sort(byStartFrame),
 					},
 				};
-			if (lane.content.kind === "audio_player")
+			}
+			if (lane.content.kind === "audio_player") {
+				const bounds = resizeBounds(
+					lane.content.clips,
+					selection.itemId,
+					edge,
+					nextFrame,
+				);
 				return {
 					...lane,
 					content: {
 						...lane.content,
-						clips: lane.content.clips.map((clip) =>
-							clip.id !== selection.itemId
-								? clip
-								: edge === "start"
-									? {
-											...clip,
-											start_frame: Math.min(nextFrame, clip.end_frame - 1),
-										}
-									: {
-											...clip,
-											end_frame: Math.max(nextFrame, clip.start_frame + 1),
-										},
-						),
+						clips: lane.content.clips
+							.map((clip) =>
+								clip.id !== selection.itemId
+									? clip
+									: edge === "start"
+										? {
+												...clip,
+												start_frame: bounds.start,
+												volume_keyframes: clip.volume_keyframes.filter(
+													(keyframe) => keyframe.frame >= bounds.start,
+												),
+											}
+										: {
+												...clip,
+												end_frame: bounds.end,
+												volume_keyframes: clip.volume_keyframes.filter(
+													(keyframe) => keyframe.frame <= bounds.end,
+												),
+											},
+							)
+							.sort(byStartFrame),
 					},
 				};
+			}
 			return lane;
 		}),
 	};
@@ -499,23 +550,111 @@ export function snapTimelineFrame(
 	definition: TimecodeDefinition,
 	pixelsPerFrame: number,
 	thresholdPixels = 12,
+	options?: {
+		selection?: TimecodeEditorSelection;
+		movingClip?: boolean;
+	},
 ): number {
 	const duration = definition.duration_frame ?? Number.MAX_SAFE_INTEGER;
 	const proposed = clampFrame(frame, duration);
 	let best = proposed;
 	let bestDistance = thresholdPixels / Math.max(pixelsPerFrame, 0.0001);
+	const selectedItem = options?.selection
+		? timelineItems(definition).find((item) =>
+				sameSelection(item.selection, options.selection ?? null),
+			)
+		: undefined;
+	const movingLength =
+		options?.movingClip && selectedItem?.endFrame !== undefined
+			? selectedItem.endFrame - selectedItem.frame
+			: 0;
+	const clipEdges = timelineItems(definition).flatMap((item) =>
+		item.kind === "clip" &&
+		item.endFrame !== undefined &&
+		!sameSelection(item.selection, options?.selection ?? null)
+			? [item.frame, item.endFrame]
+			: [],
+	);
 	for (const candidate of [
 		0,
 		duration,
 		...definition.markers.map((marker) => marker.frame),
+		...clipEdges,
 	]) {
-		const distance = Math.abs(candidate - proposed);
-		if (distance <= bestDistance) {
-			best = candidate;
-			bestDistance = distance;
+		for (const anchored of [candidate, candidate - movingLength]) {
+			const distance = Math.abs(anchored - proposed);
+			if (distance <= bestDistance) {
+				best = anchored;
+				bestDistance = distance;
+			}
 		}
 	}
-	return best;
+	return clampFrame(best, duration);
+}
+
+function byStartFrame<T extends { start_frame: number }>(left: T, right: T) {
+	return left.start_frame - right.start_frame;
+}
+
+function byFrame<T extends { frame: number }>(left: T, right: T) {
+	return left.frame - right.frame;
+}
+
+function closestNonOverlappingStart<
+	T extends { start_frame: number; end_frame: number },
+>(
+	proposed: number,
+	length: number,
+	otherClips: readonly T[],
+	duration: number,
+): number {
+	const gaps: Array<[number, number]> = [];
+	let gapStart = 0;
+	for (const clip of [...otherClips].sort(byStartFrame)) {
+		if (clip.start_frame - gapStart >= length)
+			gaps.push([gapStart, clip.start_frame - length]);
+		gapStart = Math.max(gapStart, clip.end_frame);
+	}
+	if (duration - gapStart >= length)
+		gaps.push([gapStart, Math.max(gapStart, duration - length)]);
+	if (!gaps.length) return clampFrame(proposed, Math.max(0, duration - length));
+	return gaps.reduce((best, [minimum, maximum]) => {
+		const candidate = Math.max(minimum, Math.min(maximum, proposed));
+		return Math.abs(candidate - proposed) < Math.abs(best - proposed)
+			? candidate
+			: best;
+	}, gaps[0][0]);
+}
+
+function resizeBounds<
+	T extends { id: string; start_frame: number; end_frame: number },
+>(clips: readonly T[], id: string, edge: "start" | "end", frame: number) {
+	const selected = clips.find((clip) => clip.id === id);
+	if (!selected) return { start: frame, end: frame };
+	const others = clips.filter((clip) => clip.id !== id);
+	const previousEnd = others.reduce(
+		(maximum, clip) =>
+			clip.end_frame <= selected.start_frame
+				? Math.max(maximum, clip.end_frame)
+				: maximum,
+		0,
+	);
+	const nextStart = others.reduce(
+		(minimum, clip) =>
+			clip.start_frame >= selected.end_frame
+				? Math.min(minimum, clip.start_frame)
+				: minimum,
+		Number.MAX_SAFE_INTEGER,
+	);
+	return edge === "start"
+		? {
+				start: Math.max(previousEnd, Math.min(frame, selected.end_frame - 1)),
+				end: selected.end_frame,
+			}
+		: {
+				start: selected.start_frame,
+				end: Math.min(nextStart, Math.max(frame, selected.start_frame + 1)),
+			};
 }
 
 export function parseMarkerCsv(

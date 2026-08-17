@@ -101,7 +101,7 @@
 	font-variant-numeric: tabular-nums;
 }
 .timecode-timeline-editor {
-	--timecode-lane-header-width: 10rem;
+	--timecode-lane-header-width: 160px;
 
 	display: flex;
 	flex: 1 1 auto;
@@ -109,8 +109,8 @@
 	min-height: 0;
 	overflow: hidden;
 	margin: 0;
-	border: 1px solid #343644;
-	background: #0e0f16;
+	border: 0;
+	background: transparent;
 }
 .timecode-timeline-tools {
 	display: flex;
@@ -190,6 +190,100 @@
 	margin: 0;
 	color: #ff8c99;
 }
+.timecode-cuelist-chooser-modal {
+	display: flex;
+	width: min(54rem, calc(100vw - 2rem));
+	max-height: min(44rem, calc(100vh - 2rem));
+	flex-direction: column;
+}
+.timecode-cuelist-chooser-scroll {
+	min-height: 12rem;
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 0.65rem;
+}
+.timecode-cuelist-chooser-grid .pool-card-name {
+	text-align: left;
+}
+.timecode-cuelist-chooser-empty {
+	margin: 2rem;
+	color: #9296a6;
+	text-align: center;
+}
+.timecode-timeline-overview {
+	position: relative;
+	flex: 0 0 auto;
+	box-sizing: border-box;
+	width: 100%;
+	height: 54px;
+	min-height: 54px;
+	max-height: 54px;
+	overflow: hidden;
+	padding: 4px 0;
+	border-top: 1px solid #343644;
+	border-bottom: 1px solid #343644;
+	background: #090a10;
+	cursor: grab;
+	touch-action: none;
+}
+.timecode-timeline-overview:active {
+	cursor: grabbing;
+}
+.timecode-timeline-overview:focus-visible {
+	outline: 2px solid #58d4ef;
+	outline-offset: -2px;
+}
+.timecode-timeline-overview-lanes {
+	display: grid;
+	height: 100%;
+	align-content: center;
+	gap: var(--timecode-overview-lane-gap, 1px);
+}
+.timecode-timeline-overview-lane {
+	position: relative;
+	display: block;
+	height: var(--timecode-overview-lane-height, 3px);
+	background: #242633;
+}
+.timecode-timeline-overview-lane.overview-lane-audio,
+.timecode-timeline-overview-lane.overview-lane-audio_volume {
+	background: #302746;
+}
+.timecode-timeline-overview-lane.overview-lane-speed_group {
+	background: #392f20;
+}
+.timecode-timeline-overview-lane.overview-lane-cue_list {
+	background: #213527;
+}
+.timecode-timeline-overview-lane.overview-lane-audio_player {
+	background: #1c3038;
+}
+.timecode-timeline-overview-lane > i {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	min-width: 2px;
+	background: #d7d9e2;
+}
+.timecode-timeline-overview-marker {
+	position: absolute;
+	z-index: 2;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+}
+.timecode-timeline-overview-visible {
+	position: absolute;
+	z-index: 3;
+	top: 0;
+	bottom: 0;
+	min-width: 3px;
+	border: 1px solid #58d4ef;
+	background: rgb(88 212 239 / 16%);
+	box-shadow: inset 0 0 0 1px rgb(0 0 0 / 45%);
+	pointer-events: none;
+}
 .timecode-timeline-scroll {
 	flex: 1 1 12rem;
 	min-height: 0;
@@ -229,14 +323,7 @@
 	box-sizing: border-box;
 	min-height: max(20rem, 100%);
 	padding-top: 2rem;
-	background:
-		repeating-linear-gradient(
-			90deg,
-			transparent 0 83px,
-			rgb(255 255 255 / 5%) 84px
-		),
-		#11121a;
-	background-position: var(--timecode-lane-header-width) 0;
+	background: #11121a;
 	touch-action: none;
 }
 .timecode-ruler-stripes {
@@ -272,6 +359,10 @@
 	padding-left: 0.25rem;
 	border-left: 1px solid #626679;
 	white-space: nowrap;
+}
+.timecode-ruler .timecode-ruler-first-tick {
+	padding-left: 0;
+	border-left: 0;
 }
 .timecode-ruler .timecode-ruler-final-tick {
 	padding-right: 0.25rem;
@@ -317,7 +408,7 @@
 	stroke-width: 0.65;
 	opacity: 0.85;
 }
-.timecode-timeline-marker {
+.ui-button.timecode-timeline-marker {
 	position: absolute;
 	top: 0;
 	bottom: 0;
@@ -325,7 +416,7 @@
 	min-width: 44px;
 	margin: 0;
 	padding: 0;
-	transform: translateX(-22px);
+	transform: none;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
@@ -337,15 +428,15 @@
 	position: absolute;
 	top: 0;
 	bottom: 0;
-	left: 50%;
+	left: 0;
 	width: 1px;
 	background: currentColor;
 	pointer-events: none;
 }
 .timecode-timeline-marker-label {
 	position: absolute;
-	left: 50%;
-	bottom: 0;
+	bottom: 0.25rem;
+	left: 0;
 	display: block;
 	width: max-content;
 	padding: 0.12rem 0.25rem;
@@ -361,7 +452,12 @@
 .timecode-timeline-marker.selected .timecode-timeline-marker-line {
 	width: 3px;
 	transform: translateX(-1px);
-	box-shadow: 0 0 0 1px #fff;
+	box-shadow: none;
+}
+.timecode-timeline-marker.selected .timecode-timeline-marker-label {
+	border-color: var(--timecode-marker-color);
+	background: var(--timecode-marker-color);
+	color: var(--timecode-marker-text-color, #fff);
 }
 .timecode-editor-lane {
 	position: relative;
@@ -375,9 +471,8 @@
 	display: grid;
 	width: var(--timecode-lane-header-width);
 	height: 4.1rem;
-	align-content: center;
-	gap: 0.1rem;
-	padding: 0.35rem 0.5rem;
+	align-content: stretch;
+	padding: 0;
 	border-right: 1px solid #393b49;
 	background: rgb(18 19 26 / 96%);
 	color: #dadde6;
@@ -386,16 +481,30 @@
 }
 .timecode-editor-lane.selected {
 	background: rgb(88 212 239 / 8%);
-	box-shadow: inset 0 0 0 1px rgb(88 212 239 / 45%);
+	box-shadow: none;
+}
+.timecode-editor-lane.selected .timecode-editor-lane-label {
+	background: #15343b;
+	box-shadow: inset 0 0 0 1px #58d4ef;
+	color: #58d4ef;
 }
 .timecode-lane-select.ui-button {
 	display: grid;
+	width: 100%;
+	height: 100%;
 	min-width: 0;
 	min-height: 0;
+	align-content: center;
 	justify-items: start;
-	padding: 0;
+	margin: 0;
+	padding: 0.35rem 0;
 	border: 0;
+	border-radius: 0;
 	background: transparent;
+	text-align: left;
+}
+.timecode-editor-lane.lane-cue_list .timecode-lane-select.ui-button {
+	justify-items: start;
 	text-align: left;
 }
 .timecode-editor-lane-label span {
@@ -418,7 +527,7 @@
 	gap: 0.1rem;
 	overflow: hidden;
 	padding: 0.35rem 0.5rem;
-	transform: translateX(-0.25rem);
+	transform: none;
 	border: 1px solid #7863ae;
 	border-radius: 0.3rem;
 	background: #30264a;
@@ -434,6 +543,7 @@
 	font-variant-numeric: tabular-nums;
 }
 .timecode-timeline-item.item-clip {
+	max-width: none;
 	border-color: #618d51;
 	background: #1f4027;
 }
@@ -493,6 +603,21 @@
 	stroke-width: 1.5;
 	vector-effect: non-scaling-stroke;
 }
+.timecode-speed-keyframe-curve {
+	position: absolute;
+	z-index: 1;
+	inset: 0 0 0 var(--timecode-lane-header-width);
+	width: calc(100% - var(--timecode-lane-header-width));
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+}
+.timecode-speed-keyframe-curve polyline {
+	fill: none;
+	stroke: #d2a95f;
+	stroke-width: 2;
+	vector-effect: non-scaling-stroke;
+}
 .timecode-timeline-item.selected {
 	outline: 2px solid #fff;
 	outline-offset: 1px;
@@ -515,7 +640,7 @@
 	touch-action: none;
 }
 .timecode-editor-playhead span {
-	position: sticky;
+	position: absolute;
 	top: 0;
 	display: block;
 	width: max-content;
@@ -543,15 +668,60 @@
 .timecode-keyframe-actions {
 	display: flex;
 	flex: 0 0 auto;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
+	min-height: 4.1rem;
 	align-items: center;
 	gap: 0.45rem;
-	padding: 0.4rem 0.55rem;
+	padding: 0 0.55rem 0 0;
 	border-top: 1px solid #343644;
-	background: #151620;
+	background: transparent;
 }
-.timecode-keyframe-actions > strong {
-	min-width: 8rem;
+.timecode-keyframe-actions-title {
+	display: flex;
+	align-self: stretch;
+	flex: 0 0 var(--timecode-lane-header-width);
+	align-items: center;
+	padding: 0.35rem 0.5rem;
+	border-right: 1px solid #393b49;
+	background: rgb(18 19 26 / 96%);
+	color: #dadde6;
+	font-size: 0.72rem;
+}
+.timecode-keyframe-actions-title.selected {
+	background: #15343b;
+	box-shadow: inset 0 0 0 1px #58d4ef;
+	color: #58d4ef;
+}
+.timecode-keyframe-actions-title.marker {
+	background: color-mix(in srgb, var(--timecode-marker-color) 22%, #12131a);
+	box-shadow: inset 0 0 0 1px var(--timecode-marker-color);
+	color: var(--timecode-marker-text-color, #fff);
+}
+.timecode-keyframe-action.ui-button {
+	height: 2.5rem;
+	min-width: 5.25rem;
+	line-height: 1.05;
+}
+.timecode-next-keyframe.ui-button {
+	margin-left: auto;
+}
+.timecode-marker-actions .ui-form-field {
+	width: 9.5rem;
+	margin: 0;
+}
+.timecode-marker-color-action.ui-button {
+	border-color: var(--timecode-marker-color);
+	background: var(--timecode-marker-color);
+	color: var(--timecode-marker-text-color);
+	font-weight: 800;
+}
+.timecode-marker-position-action {
+	display: grid;
+	gap: 0.15rem;
+}
+.timecode-marker-position-action > span {
+	color: #ff8c99;
+	font-size: 0.68rem;
 }
 .timecode-keyframe-actions .ui-field {
 	min-width: 9rem;

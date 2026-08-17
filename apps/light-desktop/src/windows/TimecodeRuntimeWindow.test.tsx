@@ -21,6 +21,73 @@ const SHOW_ID = "00000000-0000-4000-8000-000000000161";
 const TIMECODE_ID = "00000000-0000-4000-8000-000000000162";
 
 describe("TimecodeEditor title and settings", () => {
+	it("keeps the editor playhead when an unchanged transport frame is republished", async () => {
+		const serverDefinition = definition();
+		const api = {
+			create: vi.fn(),
+			update: vi.fn(),
+			delete: vi.fn(),
+			objects: vi.fn(async () => ({
+				show_revision: 4,
+				objects: [{ revision: 4, definition: serverDefinition }],
+			})),
+			transportAction: vi.fn(),
+			importAudio: vi.fn(),
+			waveform: vi.fn(),
+		};
+		const renderEditor = (snapshotRevision: number) => (
+			<TimecodeEditor
+				showId={SHOW_ID}
+				item={{ revision: 4, definition: serverDefinition }}
+				api={api as never}
+				cueLists={[]}
+				audioPlayers={[]}
+				snapshot={{
+					timecode_id: TIMECODE_ID,
+					revision: snapshotRevision,
+					state: "paused",
+					frame: 44,
+					duration_frame: 440,
+					audio_linked: false,
+				}}
+				onClose={vi.fn()}
+			/>
+		);
+		const view = render(renderEditor(1));
+		await screen.findByText("Saved");
+		const viewport = screen.getByLabelText("Timecode timeline viewport");
+		vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+			x: 0,
+			y: 0,
+			left: 0,
+			top: 0,
+			right: 720,
+			bottom: 400,
+			width: 720,
+			height: 400,
+			toJSON: () => ({}),
+		});
+		const canvas = viewport.querySelector<HTMLElement>(
+			".timecode-timeline-canvas",
+		);
+		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
+		const playhead = screen.getByRole("button", {
+			name: "Drag playhead to seek",
+		}) as HTMLButtonElement;
+		playhead.setPointerCapture = vi.fn();
+		fireEvent.pointerDown(playhead, {
+			pointerId: 1,
+			clientX: 160 + 88 * pixelsPerFrame,
+		});
+		expect(playhead).toHaveTextContent("00:00:02.00");
+
+		view.rerender(renderEditor(2));
+		expect(
+			screen.getByRole("button", { name: "Drag playhead to seek" }),
+		).toHaveTextContent("00:00:02.00");
+		view.unmount();
+	});
+
 	it("autosaves Settings, routes title transport, and owns the exact Add menu", async () => {
 		let revision = 4;
 		let serverDefinition = definition();

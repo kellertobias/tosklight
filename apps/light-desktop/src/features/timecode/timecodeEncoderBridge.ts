@@ -16,6 +16,7 @@ export interface TimecodeEncoderSlot {
 export interface TimecodeEncoderDeck {
 	timeline: readonly TimecodeEncoderSlot[];
 	keyframe: readonly TimecodeEncoderSlot[];
+	selectionLabel?: "Selected Keyframe" | "Selected Marker";
 }
 
 let active: { owner: symbol; deck: TimecodeEncoderDeck } | null = null;

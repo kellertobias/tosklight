@@ -68,8 +68,7 @@ describe("Timecode editor model", () => {
 			reconcileAutomaticAudioLane({
 				...linked,
 				lanes: [...linked.lanes, { ...linked.lanes[0], id: "duplicate-audio" }],
-			})
-				.lanes,
+			}).lanes,
 		).toHaveLength(1);
 		expect(
 			reconcileAutomaticAudioLane({ ...linked, audio: null }).lanes,
@@ -91,6 +90,60 @@ describe("Timecode editor model", () => {
 			kind: "audio_volume",
 			keyframes: [{ frame: 220 }],
 		});
+	});
+
+	it("snaps clip ends together and keeps clips non-overlapping regardless of array order", () => {
+		const cueDefinition: TimecodeDefinition = {
+			...definition,
+			lanes: [
+				{
+					id: "00000000-0000-0000-0000-000000000050",
+					name: "Theater Sequence",
+					content: {
+						kind: "cue_list",
+						cue_list_id: "00000000-0000-0000-0000-000000000051",
+						clips: [
+							{
+								id: "00000000-0000-0000-0000-000000000052",
+								start_frame: 200,
+								end_frame: 250,
+								start_cue_id: "00000000-0000-0000-0000-000000000053",
+								end_cue_id: "00000000-0000-0000-0000-000000000054",
+								start_behavior: "state",
+								end_behavior: "release",
+							},
+							{
+								id: "00000000-0000-0000-0000-000000000055",
+								start_frame: 100,
+								end_frame: 150,
+								start_cue_id: "00000000-0000-0000-0000-000000000053",
+								end_cue_id: "00000000-0000-0000-0000-000000000054",
+								start_behavior: "state",
+								end_behavior: "release",
+							},
+						],
+					},
+				},
+			],
+		};
+		const selection = {
+			kind: "clip" as const,
+			laneId: cueDefinition.lanes[0].id,
+			itemId: "00000000-0000-0000-0000-000000000055",
+		};
+
+		expect(
+			snapTimelineFrame(152, cueDefinition, 2, 12, {
+				selection,
+				movingClip: true,
+			}),
+		).toBe(150);
+		const moved = moveTimelineItem(cueDefinition, selection, 190);
+		expect(
+			(
+				moved.lanes[0].content as { clips: Array<{ start_frame: number }> }
+			).clips.map((clip) => clip.start_frame),
+		).toEqual([150, 200]);
 	});
 
 	it("copies and deletes the exact selected item", () => {

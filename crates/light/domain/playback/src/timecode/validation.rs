@@ -56,11 +56,13 @@ impl TimecodeDefinition {
             unique(&mut identities, lane.id.0, "lane")?;
             match &lane.content {
                 TimecodeLaneContent::CueList { clips, .. } => {
-                    let mut previous = TimecodeFrame::ZERO;
+                    let mut clips_by_frame = clips.iter().collect::<Vec<_>>();
+                    clips_by_frame.sort_by_key(|clip| clip.start_frame);
                     let mut previous_end = None;
                     for clip in clips {
                         unique(&mut identities, clip.id.0, "Cuelist clip")?;
-                        ordered(previous, clip.start_frame, "Cuelist clips")?;
+                    }
+                    for clip in clips_by_frame {
                         if previous_end.is_some_and(|end: TimecodeFrame| clip.start_frame.0 < end.0)
                         {
                             return Err(TimecodeValidationError::new(
@@ -78,7 +80,6 @@ impl TimecodeDefinition {
                             ));
                         }
                         within_duration(clip.end_frame, self.duration, "Cuelist clip")?;
-                        previous = clip.start_frame;
                         previous_end = Some(clip.end_frame);
                     }
                 }
@@ -126,11 +127,13 @@ impl TimecodeDefinition {
                             "Audio Player lane fixture id must not be nil",
                         ));
                     }
-                    let mut previous_start = TimecodeFrame::ZERO;
+                    let mut clips_by_frame = clips.iter().collect::<Vec<_>>();
+                    clips_by_frame.sort_by_key(|clip| clip.start_frame);
                     let mut previous_end = None;
                     for clip in clips {
                         unique(&mut identities, clip.id.0, "Audio Player clip")?;
-                        ordered(previous_start, clip.start_frame, "Audio Player clips")?;
+                    }
+                    for clip in clips_by_frame {
                         if previous_end.is_some_and(|end: TimecodeFrame| clip.start_frame.0 < end.0)
                         {
                             return Err(TimecodeValidationError::new(
@@ -170,7 +173,6 @@ impl TimecodeDefinition {
                             }
                             previous_keyframe = keyframe.frame;
                         }
-                        previous_start = clip.start_frame;
                         previous_end = Some(clip.end_frame);
                     }
                 }

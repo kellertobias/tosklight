@@ -98,11 +98,12 @@ describe("Plan 76 initial Playback topology", () => {
 			looped: true,
 			speed_group: "D",
 		});
-		expect(chase.cues).toHaveLength(4);
+		expect(chase.cues).toHaveLength(7);
+		const activeOrder = [0, 1, 2, 3, 2, 1, 0];
 		for (const [index, cue] of chase.cues.entries()) {
 			const values = cue.changes.map((change: any) => change.value.value);
 			expect(values.filter((value: number) => value === 1)).toHaveLength(1);
-			expect(values[index]).toBe(1);
+			expect(values[activeOrder[index] ?? 0]).toBe(1);
 		}
 		const page = writes.find((write) => write.kind === "playback_page")?.body;
 		expect(page?.name).toBe("Busking");

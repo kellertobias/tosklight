@@ -12,14 +12,12 @@ describe("Timecode timeline layout", () => {
 		expect(css).toMatch(
 			/\.timecode-timeline-canvas\s*\{[\s\S]*?min-height:\s*max\(20rem, 100%\);/,
 		);
-		expect(css).toContain(
-			".timecode-timeline-scroll::-webkit-scrollbar-thumb",
-		);
+		expect(css).toContain(".timecode-timeline-scroll::-webkit-scrollbar-thumb");
 	});
 
-	it("keeps lane titles fixed before the timeline origin and puts zoom below the viewport", () => {
+	it("keeps lane titles fixed on the exact shared timeline origin", () => {
 		expect(css).toMatch(
-			/\.timecode-timeline-editor\s*\{[\s\S]*?--timecode-lane-header-width:\s*10rem;/,
+			/\.timecode-timeline-editor\s*\{[\s\S]*?--timecode-lane-header-width:\s*160px;[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/,
 		);
 		expect(css).toMatch(
 			/\.timecode-ruler\s*\{[\s\S]*?top:\s*0;[\s\S]*?left:\s*var\(--timecode-lane-header-width\);/,
@@ -27,8 +25,85 @@ describe("Timecode timeline layout", () => {
 		expect(css).toMatch(
 			/\.timecode-editor-lane-label\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?left:\s*0;/,
 		);
+		expect(css).toContain(".timecode-ruler .timecode-ruler-first-tick");
 		expect(css).toMatch(
-			/\.timecode-timeline-tools\s*\{[\s\S]*?border-top:\s*1px solid #343644;/,
+			/\.timecode-timeline-item\s*\{[\s\S]*?transform:\s*none;/,
 		);
+		expect(css).toMatch(
+			/\.timecode-editor-lane\.selected \.timecode-editor-lane-label\s*\{[\s\S]*?background:\s*#15343b;[\s\S]*?box-shadow:\s*inset 0 0 0 1px #58d4ef;/,
+		);
+	});
+
+	it("does not cap the rendered width of long Timecode clips", () => {
+		expect(css).toMatch(
+			/\.timecode-timeline-item\.item-clip\s*\{[\s\S]*?max-width:\s*none;/,
+		);
+	});
+
+	it("keeps marker touch width invisible and shows selection on the flag", () => {
+		expect(css).toMatch(
+			/\.ui-button\.timecode-timeline-marker\s*\{[\s\S]*?width:\s*44px;[\s\S]*?transform:\s*none;[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-marker-line\s*\{[\s\S]*?left:\s*0;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-marker-label\s*\{[\s\S]*?bottom:\s*0\.25rem;[\s\S]*?left:\s*0;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-marker\.selected \.timecode-timeline-marker-line\s*\{[\s\S]*?box-shadow:\s*none;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-marker\.selected \.timecode-timeline-marker-label\s*\{[\s\S]*?background:\s*var\(--timecode-marker-color\);[\s\S]*?color:\s*var\(--timecode-marker-text-color, #fff\);/,
+		);
+	});
+
+	it("draws a full-width fixed-height draggable timeline overview", () => {
+		expect(css).toMatch(
+			/\.timecode-timeline-overview\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*54px;[\s\S]*?min-height:\s*54px;[\s\S]*?max-height:\s*54px;[\s\S]*?touch-action:\s*none;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-overview-lane\s*\{[\s\S]*?height:\s*var\(--timecode-overview-lane-height, 3px\);/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-overview-visible\s*\{[\s\S]*?border:\s*1px solid #58d4ef;/,
+		);
+	});
+
+	it("keeps the Cue List chooser pool scrollable with left-aligned titles", () => {
+		expect(css).toMatch(
+			/\.timecode-cuelist-chooser-scroll\s*\{[\s\S]*?min-height:\s*12rem;[\s\S]*?overflow:\s*auto;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-cuelist-chooser-grid \.pool-card-name\s*\{[\s\S]*?text-align:\s*left;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-lane-select\.ui-button\s*\{[\s\S]*?padding:\s*0\.35rem 0;[\s\S]*?text-align:\s*left;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-editor-lane\.lane-cue_list \.timecode-lane-select\.ui-button\s*\{[\s\S]*?justify-items:\s*start;[\s\S]*?text-align:\s*left;/,
+		);
+	});
+
+	it("draws the Speed Group graph without adding black footer chrome", () => {
+		expect(css).toMatch(
+			/\.timecode-speed-keyframe-curve\s*\{[\s\S]*?inset:\s*0 0 0 var\(--timecode-lane-header-width\);[\s\S]*?pointer-events:\s*none;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-keyframe-actions\s*\{[\s\S]*?background:\s*transparent;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-keyframe-actions-title\s*\{[\s\S]*?flex:\s*0 0 var\(--timecode-lane-header-width\);/,
+		);
+	});
+
+	it("keeps the playhead label at its top and has only the exact ruler grid", () => {
+		expect(css).toMatch(
+			/\.timecode-editor-playhead span\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*0;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-canvas\s*\{[\s\S]*?background:\s*#11121a;/,
+		);
+		expect(css).not.toContain("repeating-linear-gradient");
 	});
 });

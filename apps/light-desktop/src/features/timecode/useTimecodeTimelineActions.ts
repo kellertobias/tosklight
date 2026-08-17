@@ -54,6 +54,12 @@ export function useTimelineDrag({
 				proposed,
 				latest.current,
 				pixelsPerFrame,
+				12,
+				{
+					selection: active.selection,
+					movingClip:
+						active.selection.kind === "clip" && active.clipEdge === undefined,
+				},
 			);
 			const next =
 				active.clipEdge && active.selection.kind === "clip"
@@ -156,6 +162,7 @@ export function useTimelineActions({
 	audioPlayers,
 	onCommit,
 	setSelection,
+	setSelectedLane,
 }: {
 	definition: TimecodeDefinition;
 	frame: number;
@@ -166,6 +173,7 @@ export function useTimelineActions({
 	audioPlayers: readonly { fixtureId: string; name: string }[];
 	onCommit(value: TimecodeDefinition): void;
 	setSelection(value: TimecodeEditorSelection | null): void;
+	setSelectedLane(laneId: string): void;
 }) {
 	const addMarker = () => {
 		const id = crypto.randomUUID();
@@ -208,14 +216,23 @@ export function useTimelineActions({
 	};
 	const addCueListLane = (cueListId: string) => {
 		const cueList = cueLists.find((candidate) => candidate.id === cueListId);
-		if (cueList)
+		if (cueList) {
+			const laneId = crypto.randomUUID();
 			onCommit(
-				addLane(definition, cueList.name, {
-					kind: "cue_list",
-					cue_list_id: cueList.id,
-					clips: [],
-				}),
+				addLane(
+					definition,
+					cueList.name,
+					{
+						kind: "cue_list",
+						cue_list_id: cueList.id,
+						clips: [],
+					},
+					laneId,
+				),
 			);
+			setSelection(null);
+			setSelectedLane(laneId);
+		}
 	};
 	const addAudioPlayerLane = (fixtureId: string) => {
 		const player = audioPlayers.find(
@@ -348,10 +365,11 @@ function addLane(
 	definition: TimecodeDefinition,
 	name: string,
 	content: TimecodeDefinition["lanes"][number]["content"],
+	id = crypto.randomUUID(),
 ): TimecodeDefinition {
 	return {
 		...definition,
-		lanes: [...definition.lanes, { id: crypto.randomUUID(), name, content }],
+		lanes: [...definition.lanes, { id, name, content }],
 	};
 }
 

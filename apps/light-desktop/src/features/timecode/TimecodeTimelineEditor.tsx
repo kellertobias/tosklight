@@ -1,16 +1,18 @@
 import {
 	Button,
 	CheckboxField,
-	ColorPickerField,
+	InputModal,
 	NumberField,
 	SelectField,
 	TextField,
 } from "@tosklight/ui";
 import {
+	type CSSProperties,
 	forwardRef,
 	type PointerEvent as ReactPointerEvent,
 	type RefObject,
 	useEffect,
+	useId,
 	useImperativeHandle,
 	useLayoutEffect,
 	useMemo,
@@ -19,21 +21,21 @@ import {
 } from "react";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
-	sameSelection,
 	deleteTimelineItem,
 	moveTimelineItem,
+	sameSelection,
 	type TimecodeEditorSelection,
 	timelineItems,
 } from "./editorModel";
-import {
-	clearTimecodeEncoderDeck,
-	publishTimecodeEncoderDeck,
-} from "./timecodeEncoderBridge";
 import { CueListChooser } from "./TimecodeCueListChooser";
 import {
 	TIMECODE_SPEED_GROUPS,
 	TimecodeSpeedGroupChooser,
 } from "./TimecodeSpeedGroupChooser";
+import {
+	clearTimecodeEncoderDeck,
+	publishTimecodeEncoderDeck,
+} from "./timecodeEncoderBridge";
 import {
 	useTimelineActions,
 	useTimelineDrag,
@@ -64,6 +66,36 @@ export interface TimecodeTimelineEditorHandle {
 type TimelineItem = ReturnType<typeof timelineItems>[number];
 
 export const TIMECODE_LANE_HEADER_WIDTH = 160;
+const TIMECODE_MARKER_COLORS = [
+	{ name: "White", value: "#ffffff", text: "#11121a" },
+	{ name: "Blue", value: "#58d4ef", text: "#11121a" },
+	{ name: "Green", value: "#33aa77", text: "#11121a" },
+	{ name: "Yellow", value: "#f5c451", text: "#11121a" },
+	{ name: "Purple", value: "#a67cff", text: "#ffffff" },
+	{ name: "Orange", value: "#f39a4a", text: "#11121a" },
+] as const;
+
+const DEFAULT_TIMECODE_MARKER_COLOR = TIMECODE_MARKER_COLORS[0];
+
+function markerColorOption(color?: string | null) {
+	return (
+		TIMECODE_MARKER_COLORS.find(
+			(option) => option.value.toLowerCase() === color?.toLowerCase(),
+		) ?? DEFAULT_TIMECODE_MARKER_COLOR
+	);
+}
+
+function markerColorIndex(color?: string | null): number {
+	const index = TIMECODE_MARKER_COLORS.findIndex(
+		(option) => option.value.toLowerCase() === color?.toLowerCase(),
+	);
+	return index < 0 ? 0 : index;
+}
+
+function wrappedIndex(value: number, length: number): number {
+	if (!length) return 0;
+	return ((Math.round(value) % length) + length) % length;
+}
 
 export function timelineFrameX(frame: number, pixelsPerFrame: number): number {
 	return TIMECODE_LANE_HEADER_WIDTH + frame * pixelsPerFrame;
@@ -73,7 +105,6 @@ function TimelineCanvas(props: {
 	definition: TimecodeDefinition;
 	frame: number;
 	fps: number;
-	cueLists: readonly TimecodeCueListOption[];
 	waveformPeaks?: readonly number[];
 	markersLocked?: boolean;
 	duration: number;
@@ -89,10 +120,11 @@ function TimelineCanvas(props: {
 		frame: number,
 		clipEdge?: "start" | "end",
 	): void;
-	addKeyframe(laneId: string, frame?: number): void;
-	addClip(laneId: string): void;
+	onSelectItem(selection: TimecodeEditorSelection): void;
 	onSelectLane(laneId: string): void;
+	onScroll(scrollLeft: number): void;
 	selectedLaneId: string | null;
+	viewportId: string;
 }) {
 	const scrub = (event: ReactPointerEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget) return;
@@ -119,9 +151,11 @@ function TimelineCanvas(props: {
 	};
 	return (
 		<section
+			id={props.viewportId}
 			ref={props.scrollRef}
 			className="timecode-timeline-scroll"
 			aria-label="Timecode timeline viewport"
+			onScroll={(event) => props.onScroll(event.currentTarget.scrollLeft)}
 		>
 			<div className="timecode-lane-header-column" aria-hidden="true" />
 			<div
@@ -151,6 +185,7 @@ function TimelineCanvas(props: {
 							pixelsPerFrame={props.pixelsPerFrame}
 							markersLocked={props.markersLocked}
 							startDrag={props.startDrag}
+							onSelect={props.onSelectItem}
 						/>
 					))}
 				<Button
@@ -174,15 +209,148 @@ function TimelineCanvas(props: {
 	);
 }
 
+function TimelineOverview({
+	definition,
+	items,
+	duration,
+	scrollLeft,
+	viewportWidth,
+	totalWidth,
+	scrollRef,
+	viewportId,
+}: {
+	definition: TimecodeDefinition;
+	items: readonly TimelineItem[];
+	duration: number;
+	scrollLeft: number;
+	viewportWidth: number;
+	totalWidth: number;
+	scrollRef: RefObject<HTMLDivElement | null>;
+	viewportId: string;
+}) {
+	const maximumScroll = Math.max(0, totalWidth - viewportWidth);
+	const visibleWidth = Math.min(100, (viewportWidth / totalWidth) * 100);
+	const visibleLeft = Math.min(
+		100 - visibleWidth,
+		Math.max(0, (scrollLeft / totalWidth) * 100),
+	);
+	const seek = (clientX: number, overview: HTMLElement) => {
+		const bounds = overview.getBoundingClientRect();
+		const fraction = Math.max(
+			0,
+			Math.min(1, (clientX - bounds.left) / Math.max(1, bounds.width)),
+		);
+		const next = Math.max(
+			0,
+			Math.min(maximumScroll, fraction * totalWidth - viewportWidth / 2),
+		);
+		if (scrollRef.current) scrollRef.current.scrollLeft = next;
+	};
+	const lanes = [
+		...(definition.audio ? [{ id: "main-audio", kind: "audio" }] : []),
+		...definition.lanes.map((lane) => ({
+			id: lane.id,
+			kind: lane.content.kind,
+		})),
+	];
+	const laneCount = Math.max(1, lanes.length);
+	const laneHeight = Math.max(1, Math.min(3, Math.floor(44 / laneCount)));
+	const laneGap = laneHeight * laneCount + laneCount - 1 <= 44 ? 1 : 0;
+	return (
+		<div
+			className="timecode-timeline-overview"
+			role="scrollbar"
+			aria-label="Timeline overview"
+			aria-controls={viewportId}
+			aria-orientation="horizontal"
+			aria-valuemin={0}
+			aria-valuemax={Math.round(maximumScroll)}
+			aria-valuenow={Math.round(scrollLeft)}
+			tabIndex={0}
+			onPointerDown={(event) => {
+				event.currentTarget.setPointerCapture(event.pointerId);
+				seek(event.clientX, event.currentTarget);
+			}}
+			onPointerMove={(event) => {
+				if (event.currentTarget.hasPointerCapture(event.pointerId))
+					seek(event.clientX, event.currentTarget);
+			}}
+			onKeyDown={(event) => {
+				if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+				event.preventDefault();
+				const direction = event.key === "ArrowRight" ? 1 : -1;
+				if (scrollRef.current)
+					scrollRef.current.scrollLeft = Math.max(
+						0,
+						Math.min(
+							maximumScroll,
+							scrollRef.current.scrollLeft + direction * viewportWidth * 0.1,
+						),
+					);
+			}}
+		>
+			<div
+				className="timecode-timeline-overview-lanes"
+				style={
+					{
+						"--timecode-overview-lane-height": `${laneHeight}px`,
+						"--timecode-overview-lane-gap": `${laneGap}px`,
+					} as CSSProperties
+				}
+				data-lane-height={laneHeight}
+				aria-hidden="true"
+			>
+				{lanes.map((lane) => (
+					<span
+						key={lane.id}
+						className={`timecode-timeline-overview-lane overview-lane-${lane.kind}`}
+					>
+						{items
+							.filter((item) => item.laneId === lane.id)
+							.map((item) => (
+								<i
+									key={item.selection.itemId}
+									style={{
+										left: `${(item.frame / duration) * 100}%`,
+										width: item.endFrame
+											? `${Math.max(0.25, ((item.endFrame - item.frame) / duration) * 100)}%`
+											: undefined,
+									}}
+								/>
+							))}
+					</span>
+				))}
+			</div>
+			{definition.markers.map((marker) => (
+				<i
+					key={marker.id}
+					className="timecode-timeline-overview-marker"
+					style={{
+						left: `${(marker.frame / duration) * 100}%`,
+						background: markerColorOption(marker.color).value,
+					}}
+					aria-hidden="true"
+				/>
+			))}
+			<span
+				className="timecode-timeline-overview-visible"
+				style={{ left: `${visibleLeft}%`, width: `${visibleWidth}%` }}
+				aria-hidden="true"
+			/>
+		</div>
+	);
+}
+
 function EditorLane(
 	props: Parameters<typeof TimelineCanvas>[0] & {
 		lane: TimecodeDefinition["lanes"][number];
 	},
 ) {
 	const { lane } = props;
-	const clipLane =
-		lane.content.kind === "cue_list" || lane.content.kind === "audio_player";
-	const cueList = lane.content.kind === "cue_list" ? lane.content : null;
+	const speedPositions =
+		lane.content.kind === "speed_group"
+			? speedKeyframePositions(lane.content.keyframes)
+			: new Map<string, number>();
 	return (
 		<div
 			className={`timecode-editor-lane lane-${lane.content.kind} ${props.selectedLaneId === lane.id ? "selected" : ""}`}
@@ -225,30 +393,31 @@ function EditorLane(
 					</svg>
 				</div>
 			)}
+			{lane.content.kind === "speed_group" &&
+				lane.content.keyframes.length > 0 && (
+					<svg
+						className="timecode-speed-keyframe-curve"
+						viewBox="0 0 100 100"
+						preserveAspectRatio="none"
+						role="img"
+						aria-label={`${lane.name} value line`}
+					>
+						<polyline
+							points={speedGroupLinePoints(
+								lane.content.keyframes,
+								props.duration,
+							)}
+						/>
+					</svg>
+				)}
 			<div className="timecode-editor-lane-label">
 				<Button
 					className="timecode-lane-select"
-					active={props.selectedLaneId === lane.id}
 					onClick={() => props.onSelectLane(lane.id)}
 				>
 					<strong>{lane.name}</strong>
 					<span>{lane.content.kind.replaceAll("_", " ")}</span>
 				</Button>
-				{clipLane ? (
-					<Button
-						size="compact"
-						disabled={
-							cueList
-								? !props.cueLists.find(
-										(candidate) => candidate.id === cueList.cue_list_id,
-									)?.cues.length
-								: false
-						}
-						onClick={() => props.addClip(lane.id)}
-					>
-						+ clip
-					</Button>
-				) : null}
 			</div>
 			{props.items
 				.filter((item) => item.laneId === lane.id)
@@ -260,6 +429,12 @@ function EditorLane(
 						fps={props.fps}
 						pixelsPerFrame={props.pixelsPerFrame}
 						startDrag={props.startDrag}
+						onSelect={props.onSelectItem}
+						verticalPosition={
+							item.kind === "speed"
+								? speedPositions.get(item.selection.itemId)
+								: undefined
+						}
 						startVolume={
 							item.kind === "volume" && lane.content.kind === "audio_volume"
 								? lane.content.keyframes.find(
@@ -280,7 +455,9 @@ function TimelineItemButton({
 	fps,
 	pixelsPerFrame,
 	startDrag,
+	onSelect,
 	startVolume,
+	verticalPosition,
 	markersLocked = false,
 }: {
 	item: TimelineItem;
@@ -295,24 +472,38 @@ function TimelineItemButton({
 		clipEdge?: "start" | "end",
 		startVolume?: number,
 	): void;
+	onSelect(selection: TimecodeEditorSelection): void;
 	startVolume?: number;
+	verticalPosition?: number;
 	markersLocked?: boolean;
 }) {
 	const width = item.endFrame
 		? Math.max(44, (item.endFrame - item.frame) * pixelsPerFrame)
 		: undefined;
+	const markerColor = marker ? markerColorOption(item.color) : null;
 	return (
 		<Button
 			className={`${marker ? "timecode-timeline-marker" : `timecode-timeline-item item-${item.kind}`} ${sameSelection(selection, item.selection) ? "selected" : ""}`}
-			style={{
-				left: timelineFrameX(item.frame, pixelsPerFrame),
-				...(marker ? { color: item.color } : {}),
-				...(marker ? { width: 44, transform: "translateX(-22px)" } : {}),
-				...(width ? { width } : {}),
-			}}
+			style={
+				{
+					left: timelineFrameX(item.frame, pixelsPerFrame),
+					...(marker
+						? {
+								color: markerColor?.value,
+								"--timecode-marker-color": markerColor?.value,
+								"--timecode-marker-text-color": markerColor?.text,
+							}
+						: {}),
+					...(verticalPosition !== undefined
+						? { top: `${verticalPosition}%` }
+						: {}),
+					...(width ? { width } : {}),
+				} as CSSProperties
+			}
 			onPointerDown={(event) => {
 				if (marker && markersLocked) {
 					event.preventDefault();
+					onSelect(item.selection);
 					return;
 				}
 				startDrag(event, item.selection, item.frame, undefined, startVolume);
@@ -356,6 +547,50 @@ function TimelineItemButton({
 			{!marker && <small>{formatFrame(item.frame, fps)}</small>}
 		</Button>
 	);
+}
+
+type SpeedKeyframe = Extract<
+	TimecodeDefinition["lanes"][number]["content"],
+	{ kind: "speed_group" }
+>["keyframes"][number];
+
+function speedKeyframePositions(
+	keyframes: readonly SpeedKeyframe[],
+): Map<string, number> {
+	if (!keyframes.length) return new Map();
+	const bpms = keyframes.map((keyframe) => keyframe.bpm);
+	const minimum = Math.min(...bpms);
+	const maximum = Math.max(...bpms);
+	const span = maximum - minimum;
+	return new Map(
+		keyframes.map((keyframe) => [
+			keyframe.id,
+			span === 0 ? 50 : 88 - ((keyframe.bpm - minimum) / span) * 76,
+		]),
+	);
+}
+
+export function speedGroupLinePoints(
+	keyframes: readonly SpeedKeyframe[],
+	durationFrames: number,
+): string {
+	const sorted = [...keyframes].sort((left, right) => left.frame - right.frame);
+	const first = sorted[0];
+	if (!first) return "";
+	const positions = speedKeyframePositions(sorted);
+	const duration = Math.max(1, durationFrames);
+	const point = (frame: number, keyframe: SpeedKeyframe) =>
+		`${Math.max(0, Math.min(100, (frame / duration) * 100))},${positions.get(keyframe.id) ?? 50}`;
+	const points = [point(0, first), point(first.frame, first)];
+	for (let index = 1; index < sorted.length; index += 1) {
+		const previous = sorted[index - 1];
+		const current = sorted[index];
+		if (!previous || !current) continue;
+		points.push(point(current.frame, previous), point(current.frame, current));
+	}
+	const last = sorted.at(-1);
+	if (last) points.push(point(duration, last));
+	return points.join(" ");
 }
 
 export interface TimecodeCueListOption {
@@ -451,6 +686,8 @@ export const TimecodeTimelineEditor = forwardRef<
 	const [speedGroupChooserOpen, setSpeedGroupChooserOpen] = useState(false);
 	const [cueListChooserOpen, setCueListChooserOpen] = useState(false);
 	const [cueListId, setCueListId] = useState(cueLists[0]?.id ?? "");
+	const [scrollLeft, setScrollLeft] = useState(0);
+	const viewportId = useId();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const viewportWidth = useTimelineViewportWidth(scrollRef);
 	const duration = Math.max(1, definition.duration_frame ?? fps * 60);
@@ -465,6 +702,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		geometry.fitPixelsPerFrame * zoom,
 	);
 	const width = Math.max(timelineViewportWidth, duration * pixelsPerFrame);
+	const totalTimelineWidth = width + TIMECODE_LANE_HEADER_WIDTH;
 	const items = useMemo(() => timelineItems(definition), [definition]);
 	const activeLaneId =
 		selection && "laneId" in selection ? selection.laneId : selectedLaneId;
@@ -486,6 +724,10 @@ export const TimecodeTimelineEditor = forwardRef<
 	const activeKeyframe = keyframeItems.find((item) =>
 		sameSelection(item.selection, selection),
 	);
+	const activeMarker =
+		selection?.kind === "marker"
+			? definition.markers.find((marker) => marker.id === selection.itemId)
+			: undefined;
 	const speedKeyframe =
 		selection?.kind === "speed" && activeLane?.content.kind === "speed_group"
 			? activeLane.content.keyframes.find(
@@ -528,6 +770,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		audioPlayers,
 		onCommit,
 		setSelection,
+		setSelectedLane: setSelectedLaneId,
 	});
 	useImperativeHandle(
 		ref,
@@ -542,6 +785,14 @@ export const TimecodeTimelineEditor = forwardRef<
 	useEffect(() => {
 		if (zoom > maximumZoom) setZoom(maximumZoom);
 	}, [maximumZoom, zoom]);
+	useLayoutEffect(() => {
+		const viewport = scrollRef.current;
+		if (!viewport) return;
+		const maximumScroll = Math.max(0, totalTimelineWidth - viewportWidth);
+		if (viewport.scrollLeft > maximumScroll)
+			viewport.scrollLeft = maximumScroll;
+		setScrollLeft(viewport.scrollLeft);
+	}, [totalTimelineWidth, viewportWidth]);
 	useEffect(() => {
 		if (!cueLists.some((cueList) => cueList.id === cueListId))
 			setCueListId(cueLists[0]?.id ?? "");
@@ -582,19 +833,32 @@ export const TimecodeTimelineEditor = forwardRef<
 			onCommit(moveTimelineItem(definition, selection, next));
 			onScrub(next);
 		};
-		const updateSelected = (
-			value: number,
-			field: "value" | "aux" | "easing",
-		) => {
+		const setMarkerFrame = (requested: number) => {
+			if (!activeMarker || selection?.kind !== "marker") return;
+			const next = Math.max(0, Math.min(duration, Math.round(requested)));
+			onCommit(moveTimelineItem(definition, selection, next));
+		};
+		const setMarkerColor = (requested: number) => {
+			if (!activeMarker) return;
+			const color =
+				TIMECODE_MARKER_COLORS[
+					wrappedIndex(requested, TIMECODE_MARKER_COLORS.length)
+				]?.value;
+			if (!color) return;
+			onCommit({
+				...definition,
+				markers: definition.markers.map((marker) =>
+					marker.id === activeMarker.id ? { ...marker, color } : marker,
+				),
+			});
+		};
+		const updateSelectedValue = (value: number) => {
 			if (!selection || !activeLane) return;
 			onCommit({
 				...definition,
 				lanes: definition.lanes.map((lane) => {
 					if (lane.id !== activeLane.id) return lane;
-					if (
-						selection.kind === "speed" &&
-						lane.content.kind === "speed_group"
-					)
+					if (selection.kind === "speed" && lane.content.kind === "speed_group")
 						return {
 							...lane,
 							content: {
@@ -602,11 +866,7 @@ export const TimecodeTimelineEditor = forwardRef<
 								keyframes: lane.content.keyframes.map((keyframe) =>
 									keyframe.id !== selection.itemId
 										? keyframe
-										: field === "value"
-											? { ...keyframe, bpm: Math.max(1, Math.min(999, value)) }
-											: field === "aux"
-												? { ...keyframe, phase: value }
-												: keyframe,
+										: { ...keyframe, bpm: Math.max(1, Math.min(999, value)) },
 								),
 							},
 						};
@@ -618,163 +878,165 @@ export const TimecodeTimelineEditor = forwardRef<
 							...lane,
 							content: {
 								...lane.content,
-								keyframes: lane.content.keyframes.map((keyframe) => {
-									if (keyframe.id !== selection.itemId) return keyframe;
-									if (field === "value")
-										return {
-											...keyframe,
-											value: Math.max(0, Math.min(1, value / 100)),
-										};
-									if (field === "aux")
-										return {
-											...keyframe,
-											fade_frames: Math.max(0, Math.round(value)),
-										};
-									return {
-										...keyframe,
-										curve: TIMECODE_EASINGS[clampIndex(value, TIMECODE_EASINGS.length)]
-											?.value ?? "linear",
-									};
-								}),
+								keyframes: lane.content.keyframes.map((keyframe) =>
+									keyframe.id !== selection.itemId
+										? keyframe
+										: {
+												...keyframe,
+												value: Math.max(0, Math.min(1, value / 100)),
+											},
+								),
 							},
 						};
 					return lane;
 				}),
 			});
 		};
-		const selectedValue = speedKeyframe?.bpm ?? (volumeKeyframe?.value ?? 0) * 100;
-		const selectedAux = speedKeyframe?.phase ?? volumeKeyframe?.fade_frames ?? 0;
-		const easingIndex = Math.max(
-			0,
-			TIMECODE_EASINGS.findIndex(
-				(easing) => easing.value === volumeKeyframe?.curve,
-			),
-		);
+		const selectedValue =
+			speedKeyframe?.bpm ?? (volumeKeyframe?.value ?? 0) * 100;
+		const timelineZoneSlot = {
+			id: "timecode-timeline-zone",
+			label: "Timeline zone",
+			display: `${Math.round(zoom * 100)}%`,
+			value: zoom,
+			minimum: 1,
+			maximum: maximumZoom,
+			fineStep: 0.05,
+			coarseStep: 0.25,
+			set: (value: number) =>
+				setZoom(Math.max(1, Math.min(maximumZoom, value))),
+		};
+		const playheadSlot = {
+			id: "timecode-playhead",
+			label: "Playhead",
+			display: formatFrame(frame, fps),
+			value: frame,
+			minimum: 0,
+			maximum: duration,
+			fineStep: 1,
+			coarseStep: fps,
+			set: (value: number) =>
+				onScrub(Math.max(0, Math.min(duration, Math.round(value)))),
+		};
+		const keyframeSelectionSlot = {
+			id: "timecode-keyframe-navigation",
+			label: "Keyframe selection",
+			display: keyframeItems.length
+				? `${keyframeIndex + 1} / ${keyframeItems.length}`
+				: "—",
+			value: keyframeIndex,
+			minimum: 0,
+			maximum: Math.max(0, keyframeItems.length - 1),
+			fineStep: 1,
+			coarseStep: 1,
+			disabled: !keyframeItems.length,
+			set: selectKeyframe,
+		};
+		const laneSlot = {
+			id: "timecode-lane-navigation",
+			label: "Lane",
+			display: activeLane?.name ?? "—",
+			value: laneIndex,
+			minimum: 0,
+			maximum: Math.max(0, definition.lanes.length - 1),
+			fineStep: 1,
+			coarseStep: 1,
+			disabled: !definition.lanes.length,
+			set: selectLane,
+		};
 		publishTimecodeEncoderDeck(encoderOwner, {
 			timeline: [
-				{
-					id: "timecode-zoom",
-					label: "Timeline zoom",
-					display: `${Math.round(zoom * 100)}%`,
-					value: zoom,
-					minimum: 1,
-					maximum: maximumZoom,
-					fineStep: 0.05,
-					coarseStep: 0.25,
-					set: (value) => setZoom(Math.max(1, Math.min(maximumZoom, value))),
-				},
-				{
-					id: "timecode-playhead",
-					label: "Playhead",
-					display: formatFrame(frame, fps),
-					value: frame,
-					minimum: 0,
-					maximum: duration,
-					fineStep: 1,
-					coarseStep: fps,
-					set: (value) => onScrub(Math.max(0, Math.min(duration, Math.round(value)))),
-				},
-				{
-					id: "timecode-keyframe-navigation",
-					label: "Keyframe",
-					display: keyframeItems.length
-						? `${keyframeIndex + 1} / ${keyframeItems.length}`
-						: "—",
-					value: keyframeIndex,
-					minimum: 0,
-					maximum: Math.max(0, keyframeItems.length - 1),
-					fineStep: 1,
-					coarseStep: 1,
-					disabled: !keyframeItems.length,
-					set: selectKeyframe,
-				},
-				{
-					id: "timecode-lane-navigation",
-					label: "Lane",
-					display: activeLane?.name ?? "—",
-					value: laneIndex,
-					minimum: 0,
-					maximum: Math.max(0, definition.lanes.length - 1),
-					fineStep: 1,
-					coarseStep: 1,
-					disabled: !definition.lanes.length,
-					set: selectLane,
-				},
+				laneSlot,
+				keyframeSelectionSlot,
+				playheadSlot,
+				timelineZoneSlot,
 			],
-			keyframe: [
-				{
-					id: "timecode-keyframe-frame",
-					label: "Keyframe position",
-					display: activeKeyframe ? formatFrame(activeKeyframe.frame, fps) : "—",
-					value: activeKeyframe?.frame ?? 0,
-					minimum: 0,
-					maximum: duration,
-					fineStep: 1,
-					coarseStep: fps,
-					disabled: !activeKeyframe,
-					set: setSelectedFrame,
-				},
-				{
-					id: "timecode-keyframe-value",
-					label: speedKeyframe ? "BPM" : "Volume",
-					display: speedKeyframe
-						? `${Math.round(selectedValue)} BPM`
-						: volumeKeyframe
-							? `${Math.round(selectedValue)}%`
-							: "—",
-					value: selectedValue,
-					minimum: speedKeyframe ? 1 : 0,
-					maximum: speedKeyframe ? 999 : 100,
-					fineStep: 1,
-					coarseStep: speedKeyframe ? 5 : 10,
-					disabled: !activeKeyframe,
-					set: (value) => updateSelected(value, "value"),
-				},
-				{
-					id: "timecode-keyframe-aux",
-					label: speedKeyframe ? "Phase" : "Fade frames",
-					display: activeKeyframe ? String(Math.round(selectedAux)) : "—",
-					value: selectedAux,
-					minimum: 0,
-					maximum: speedKeyframe ? 360 : duration,
-					fineStep: 1,
-					coarseStep: speedKeyframe ? 10 : fps,
-					disabled: !activeKeyframe,
-					set: (value) => updateSelected(value, "aux"),
-				},
-				{
-					id: "timecode-keyframe-easing",
-					label: "Easing",
-					display: volumeKeyframe
-						? (TIMECODE_EASINGS[easingIndex]?.label ?? "Linear")
-						: "—",
-					value: easingIndex,
-					minimum: 0,
-					maximum: TIMECODE_EASINGS.length - 1,
-					fineStep: 1,
-					coarseStep: 1,
-					disabled: !volumeKeyframe,
-					set: (value) => updateSelected(value, "easing"),
-				},
-			],
+			keyframe: activeMarker
+				? [
+						{
+							id: "timecode-marker-frame",
+							label: "Marker position",
+							display: formatFrame(activeMarker.frame, fps),
+							value: activeMarker.frame,
+							minimum: 0,
+							maximum: duration,
+							fineStep: 1,
+							coarseStep: fps,
+							set: setMarkerFrame,
+						},
+						{
+							id: "timecode-marker-color",
+							label: "Marker color",
+							display: markerColorOption(activeMarker.color).name,
+							value: markerColorIndex(activeMarker.color),
+							minimum: 0,
+							maximum: TIMECODE_MARKER_COLORS.length - 1,
+							fineStep: 1,
+							coarseStep: 1,
+							set: setMarkerColor,
+						},
+						playheadSlot,
+						timelineZoneSlot,
+					]
+				: [
+						{
+							id: "timecode-keyframe-frame",
+							label: "Keyframe position",
+							display: activeKeyframe
+								? formatFrame(activeKeyframe.frame, fps)
+								: "—",
+							value: activeKeyframe?.frame ?? 0,
+							minimum: 0,
+							maximum: duration,
+							fineStep: 1,
+							coarseStep: fps,
+							disabled: !activeKeyframe,
+							set: setSelectedFrame,
+						},
+						{
+							id: "timecode-keyframe-value",
+							label: "Keyframe value",
+							display: speedKeyframe
+								? `${Math.round(selectedValue)} BPM`
+								: volumeKeyframe
+									? `${Math.round(selectedValue)}%`
+									: "—",
+							value: selectedValue,
+							minimum: speedKeyframe ? 1 : 0,
+							maximum: speedKeyframe ? 999 : 100,
+							fineStep: 1,
+							coarseStep: speedKeyframe ? 5 : 10,
+							disabled: !activeKeyframe,
+							set: updateSelectedValue,
+						},
+						playheadSlot,
+						timelineZoneSlot,
+					],
+			selectionLabel: activeMarker ? "Selected Marker" : "Selected Keyframe",
 		});
 	});
-	useEffect(
-		() => () => clearTimecodeEncoderDeck(encoderOwner),
-		[encoderOwner],
-	);
+	useEffect(() => () => clearTimecodeEncoderDeck(encoderOwner), [encoderOwner]);
 
 	return (
 		<section
 			className="timecode-timeline-editor"
 			aria-label="Timecode timeline editor"
 		>
+			<TimelineOverview
+				definition={definition}
+				items={items}
+				duration={duration}
+				scrollLeft={scrollLeft}
+				viewportWidth={viewportWidth}
+				totalWidth={totalTimelineWidth}
+				scrollRef={scrollRef}
+				viewportId={viewportId}
+			/>
 			<TimelineCanvas
 				{...{
 					definition,
 					frame,
 					fps,
-					cueLists,
 					waveformPeaks,
 					markersLocked,
 					duration,
@@ -785,8 +1047,9 @@ export const TimecodeTimelineEditor = forwardRef<
 					scrollRef,
 					onScrub,
 					startDrag,
-					addKeyframe,
-					addClip,
+					onSelectItem: setSelection,
+					onScroll: setScrollLeft,
+					viewportId,
 					onSelectLane: (laneId: string) => {
 						setSelectedLaneId(laneId);
 						const first = items.find((item) => item.laneId === laneId);
@@ -800,12 +1063,17 @@ export const TimecodeTimelineEditor = forwardRef<
 				selection={selection}
 				laneId={activeLaneId}
 				frame={frame}
+				fps={fps}
 				items={items}
+				cueLists={cueLists}
 				onSelection={(item) => setSelection(item.selection)}
 				onInsert={() => {
 					if (activeLaneId) addKeyframe(activeLaneId, frame);
 				}}
 				onCommit={onCommit}
+				onAddClip={() => {
+					if (activeLaneId) addClip(activeLaneId);
+				}}
 			/>
 			{cueListChooserOpen && (
 				<CueListChooser
@@ -840,20 +1108,39 @@ function KeyframeActionStrip({
 	selection,
 	laneId,
 	frame,
+	fps,
 	items,
+	cueLists,
 	onSelection,
 	onInsert,
 	onCommit,
+	onAddClip,
 }: {
 	definition: TimecodeDefinition;
 	selection: TimecodeEditorSelection | null;
 	laneId: string | null;
 	frame: number;
+	fps: number;
 	items: readonly TimelineItem[];
+	cueLists: readonly TimecodeCueListOption[];
 	onSelection(item: TimelineItem): void;
 	onInsert(): void;
 	onCommit(definition: TimecodeDefinition): void;
+	onAddClip(): void;
 }) {
+	if (selection?.kind === "marker")
+		return (
+			<MarkerActionStrip
+				{...{
+					definition,
+					selection,
+					fps,
+					items,
+					onSelection,
+					onCommit,
+				}}
+			/>
+		);
 	const lane = definition.lanes.find((candidate) => candidate.id === laneId);
 	const laneItems = items.filter((item) => item.laneId === laneId);
 	const selectedIndex = laneItems.findIndex((item) =>
@@ -903,38 +1190,265 @@ function KeyframeActionStrip({
 	const canInsert =
 		lane?.content.kind === "audio_volume" ||
 		lane?.content.kind === "speed_group";
-	const canDelete =
-		selection?.kind === "volume" || selection?.kind === "speed";
+	const selectedCueListId =
+		lane?.content.kind === "cue_list" ? lane.content.cue_list_id : null;
+	const canAddClip =
+		lane?.content.kind === "audio_player" ||
+		(selectedCueListId !== null &&
+			Boolean(
+				cueLists.find((candidate) => candidate.id === selectedCueListId)?.cues
+					.length,
+			));
+	const canDelete = selection?.kind === "volume" || selection?.kind === "speed";
 	return (
 		<div
 			className="timecode-keyframe-actions"
+			role="group"
 			aria-label="Selected lane and keyframe actions"
 		>
-			<strong>{lane?.name ?? "Select a lane"}</strong>
-			<Button disabled={!laneItems.length} onClick={() => move(-1)}>
-				Previous keyframe
-			</Button>
-			<Button disabled={!laneItems.length} onClick={() => move(1)}>
-				Next keyframe
-			</Button>
-			<Button disabled={!canInsert} onClick={onInsert}>
-				Insert keyframe at {formatFrame(frame, 44)}
-			</Button>
-			<SelectField
-				label="Easing"
-				value={selectedVolume?.curve ?? "linear"}
-				disabled={!selectedVolume}
-				onChange={updateEasing}
-				options={TIMECODE_EASINGS}
-			/>
+			<div
+				className={`timecode-keyframe-actions-title ${lane ? "selected" : ""}`}
+			>
+				<strong>{lane?.name ?? "Select a lane"}</strong>
+			</div>
 			<Button
+				className="timecode-keyframe-action"
+				aria-label="Prev Keyframe"
+				size="compact"
+				disabled={!laneItems.length}
+				onClick={() => move(-1)}
+			>
+				<span>
+					Prev
+					<br />
+					Keyframe
+				</span>
+			</Button>
+			{canInsert && (
+				<Button
+					className="timecode-keyframe-action"
+					aria-label="Insert Keyframe"
+					size="compact"
+					onClick={onInsert}
+					title={`Insert keyframe at ${formatFrame(frame, fps)}`}
+				>
+					<span>
+						Insert
+						<br />
+						Keyframe
+					</span>
+				</Button>
+			)}
+			<Button
+				className="timecode-keyframe-action"
+				aria-label="Delete Keyframe"
+				size="compact"
 				disabled={!canDelete}
 				onClick={() => {
-					if (canDelete && selection)
-						onCommit(deleteTimelineItem(definition, selection));
+					if (selection) onCommit(deleteTimelineItem(definition, selection));
 				}}
 			>
-				Delete selected keyframe
+				<span>
+					Delete
+					<br />
+					Keyframe
+				</span>
+			</Button>
+			{lane?.content.kind === "cue_list" ||
+			lane?.content.kind === "audio_player" ? (
+				<Button size="compact" disabled={!canAddClip} onClick={onAddClip}>
+					Add clip at {formatFrame(frame, fps)}
+				</Button>
+			) : null}
+			{selectedVolume && (
+				<SelectField
+					label="Easing"
+					value={selectedVolume.curve}
+					onChange={updateEasing}
+					options={TIMECODE_EASINGS}
+				/>
+			)}
+			<Button
+				className="timecode-keyframe-action timecode-next-keyframe"
+				aria-label="Next Keyframe"
+				size="compact"
+				disabled={!laneItems.length}
+				onClick={() => move(1)}
+			>
+				<span>
+					Next
+					<br />
+					Keyframe
+				</span>
+			</Button>
+		</div>
+	);
+}
+
+function MarkerActionStrip({
+	definition,
+	selection,
+	fps,
+	items,
+	onSelection,
+	onCommit,
+}: {
+	definition: TimecodeDefinition;
+	selection: Extract<TimecodeEditorSelection, { kind: "marker" }>;
+	fps: number;
+	items: readonly TimelineItem[];
+	onSelection(item: TimelineItem): void;
+	onCommit(definition: TimecodeDefinition): void;
+}) {
+	const marker = definition.markers.find(
+		(candidate) => candidate.id === selection.itemId,
+	);
+	const markerItems = items
+		.filter((item) => item.kind === "marker")
+		.sort((left, right) => left.frame - right.frame);
+	const selectedIndex = markerItems.findIndex((item) =>
+		sameSelection(item.selection, selection),
+	);
+	const [nameOpen, setNameOpen] = useState(false);
+	const [positionOpen, setPositionOpen] = useState(false);
+	const [position, setPosition] = useState(
+		marker ? formatFrame(marker.frame, fps) : "",
+	);
+	const [positionInvalid, setPositionInvalid] = useState(false);
+	useEffect(() => {
+		setPosition(marker ? formatFrame(marker.frame, fps) : "");
+		setNameOpen(false);
+		setPositionOpen(false);
+		setPositionInvalid(false);
+	}, [fps, marker?.id]);
+	if (!marker) return null;
+	const markerColor = markerColorOption(marker.color);
+	const update = (patch: Partial<typeof marker>) =>
+		onCommit({
+			...definition,
+			markers: definition.markers.map((candidate) =>
+				candidate.id === marker.id ? { ...candidate, ...patch } : candidate,
+			),
+		});
+	const move = (delta: number) => {
+		if (markerItems.length < 2) return;
+		const nextIndex =
+			(selectedIndex + delta + markerItems.length) % markerItems.length;
+		const next = markerItems[nextIndex];
+		if (next) onSelection(next);
+	};
+	const commitPosition = () => {
+		const frame = parseTimelineFrame(position, fps);
+		if (frame === null || frame > (definition.duration_frame ?? 0)) {
+			setPositionInvalid(true);
+			return;
+		}
+		setPositionInvalid(false);
+		setPosition(formatFrame(frame, fps));
+		if (frame !== marker.frame) update({ frame });
+	};
+	return (
+		<div
+			className="timecode-keyframe-actions timecode-marker-actions"
+			role="group"
+			aria-label="Selected marker actions"
+		>
+			<div
+				className="timecode-keyframe-actions-title selected marker"
+				style={
+					{
+						"--timecode-marker-color": markerColor.value,
+						"--timecode-marker-text-color": markerColor.text,
+					} as CSSProperties
+				}
+			>
+				<strong>{marker.name}</strong>
+			</div>
+			<Button
+				className="timecode-keyframe-action"
+				aria-label="Previous Marker"
+				size="compact"
+				disabled={markerItems.length < 2}
+				onClick={() => move(-1)}
+			>
+				<span>
+					Previous
+					<br />
+					Marker
+				</span>
+			</Button>
+			<Button
+				className="timecode-keyframe-action"
+				aria-label="Set Name"
+				size="compact"
+				onClick={() => setNameOpen(true)}
+			>
+				<span>
+					Set
+					<br />
+					Name
+				</span>
+			</Button>
+			{nameOpen && (
+				<InputModal
+					kind="text"
+					label="Marker name"
+					value={marker.name}
+					initialCaret={marker.name.length}
+					onCancel={() => setNameOpen(false)}
+					onCommit={(candidate) => {
+						const next = candidate.trim() || marker.name;
+						if (next !== marker.name) update({ name: next });
+						setNameOpen(false);
+					}}
+				/>
+			)}
+			<MarkerColorButton
+				color={marker.color}
+				onChange={(color) => update({ color })}
+			/>
+			<Button
+				className="timecode-keyframe-action"
+				aria-label="Place Marker"
+				size="compact"
+				onClick={() => setPositionOpen((open) => !open)}
+			>
+				<span>
+					Place
+					<br />
+					Marker
+				</span>
+			</Button>
+			{positionOpen && (
+				<div className="timecode-marker-position-action">
+					<TextField
+						id={`timecode-marker-action-position-${marker.id}`}
+						label="Marker timecode"
+						value={position}
+						onChange={(event) => {
+							setPosition(event.currentTarget.value);
+							setPositionInvalid(false);
+						}}
+						onBlur={commitPosition}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") commitPosition();
+						}}
+					/>
+					{positionInvalid && <span role="alert">Invalid timecode</span>}
+				</div>
+			)}
+			<Button
+				className="timecode-keyframe-action timecode-next-keyframe"
+				aria-label="Next Marker"
+				size="compact"
+				disabled={markerItems.length < 2}
+				onClick={() => move(1)}
+			>
+				<span>
+					Next
+					<br />
+					Marker
+				</span>
 			</Button>
 		</div>
 	);
@@ -1301,13 +1815,46 @@ function MarkerInspector({
 				value={marker.name}
 				onChange={(event) => update({ name: event.currentTarget.value })}
 			/>
-			<ColorPickerField
-				label="Color"
-				value={marker.color ?? "#a67cff"}
+			<MarkerColorButton
+				color={marker.color}
 				onChange={(color) => update({ color })}
 			/>
 			<span>Trigger {formatFrame(marker.frame, fps)}</span>
 		</div>
+	);
+}
+
+function MarkerColorButton({
+	color,
+	onChange,
+}: {
+	color?: string | null;
+	onChange(color: string): void;
+}) {
+	const selected = markerColorOption(color);
+	const next = () => {
+		const index = wrappedIndex(
+			markerColorIndex(selected.value) + 1,
+			TIMECODE_MARKER_COLORS.length,
+		);
+		const option = TIMECODE_MARKER_COLORS[index];
+		if (option) onChange(option.value);
+	};
+	return (
+		<Button
+			className="timecode-keyframe-action timecode-marker-color-action"
+			size="compact"
+			aria-label={`Marker color: ${selected.name}. Select next color`}
+			style={
+				{
+					"--timecode-marker-color": selected.value,
+					"--timecode-marker-text-color": selected.text,
+				} as CSSProperties
+			}
+			onClick={next}
+		>
+			{selected.name}
+		</Button>
 	);
 }
 
@@ -1556,7 +2103,11 @@ function Ruler({
 					<span
 						key={tick}
 						className={
-							tick === duration ? "timecode-ruler-final-tick" : undefined
+							tick === 0
+								? "timecode-ruler-first-tick"
+								: tick === duration
+									? "timecode-ruler-final-tick"
+									: undefined
 						}
 						style={{ left: tick * pixelsPerFrame }}
 					>
@@ -1592,4 +2143,15 @@ function formatFrame(frame: number, fps: number): string {
 	const whole = Math.max(0, Math.round(frame));
 	const seconds = Math.floor(whole / fps);
 	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}.${String(whole % fps).padStart(2, "0")}`;
+}
+
+function parseTimelineFrame(value: string, fps: number): number | null {
+	const match = value.trim().match(/^(\d{1,2}):(\d{2}):(\d{2})[.:](\d{2})$/);
+	if (!match) return null;
+	const [, hours, minutes, seconds, frames] = match;
+	const minute = Number(minutes);
+	const second = Number(seconds);
+	const frame = Number(frames);
+	if (minute > 59 || second > 59 || frame >= fps) return null;
+	return (Number(hours) * 60 * 60 + minute * 60 + second) * fps + frame;
 }

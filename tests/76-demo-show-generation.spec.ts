@@ -303,7 +303,7 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 	).toMatchObject({ mode: "chaser", speed_group: "D", looped: true });
 	expect(
 		cuelists.find((cuelist) => cuelist.body.name === "ACL Chase")?.body.cues,
-	).toHaveLength(4);
+	).toHaveLength(7);
 	expect(
 		cuelists.find((cuelist) => cuelist.body.name === "Front Light")?.body.cues,
 	).toHaveLength(1);
