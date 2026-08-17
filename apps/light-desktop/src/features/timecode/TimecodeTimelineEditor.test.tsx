@@ -686,7 +686,7 @@ describe("TimecodeTimelineEditor", () => {
 		expect(
 			viewport.querySelectorAll(".timecode-ruler-stripes i").length,
 		).toBeGreaterThan(1);
-		expect(screen.queryByLabelText("Timeline zoom")).toBeNull();
+		expect(screen.getByLabelText("Timeline zoom")).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", { name: /Audio.*audio volume/i }),
 		);

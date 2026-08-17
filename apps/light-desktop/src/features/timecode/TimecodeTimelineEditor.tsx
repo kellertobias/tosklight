@@ -1151,15 +1151,12 @@ export function timelineZoomGeometry(
 ) {
 	const duration = Math.max(1, durationFrames);
 	const viewport = Math.max(1, viewportWidth);
-	const fitPixelsPerFrame = Math.min(
-		TARGET_MAX_PIXELS_PER_FRAME,
-		viewport / duration,
-	);
+	const fit = Math.min(TARGET_MAX_PIXELS_PER_FRAME, viewport / duration);
 	return {
-		fitPixelsPerFrame,
+		fitPixelsPerFrame: fit,
 		maximumZoom: Math.max(
 			1,
-			Math.ceil((TARGET_MAX_PIXELS_PER_FRAME / fitPixelsPerFrame) * 4) / 4,
+			Math.ceil((TARGET_MAX_PIXELS_PER_FRAME / fit) * 4) / 4,
 		),
 	};
 }
@@ -1191,16 +1188,15 @@ export const TimecodeTimelineEditor = forwardRef<
 	},
 	ref,
 ) {
-	const [zoom, setZoom] = useState(1);
-	const [selection, setSelection] = useState<TimecodeEditorSelection | null>(
-		null,
-	);
+	type Selection = TimecodeEditorSelection | null;
+	const [selection, setSelection] = useState<Selection>(null);
 	const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
 	const [speedGroup, setSpeedGroup] = useState("A");
 	const [speedGroupChooserOpen, setSpeedGroupChooserOpen] = useState(false);
 	const [cueListChooserOpen, setCueListChooserOpen] = useState(false);
 	const [cueListId, setCueListId] = useState(cueLists[0]?.id ?? "");
 	const [scrollLeft, setScrollLeft] = useState(0);
+	const [zoom, setZoom] = useState(1);
 	const [overviewResize, setOverviewResize] = useState<{
 		zoom: number;
 		startFraction: number;
@@ -1297,6 +1293,9 @@ export const TimecodeTimelineEditor = forwardRef<
 		setSelection,
 		setSelectedLane: setSelectedLaneId,
 	});
+	useEffect(() => {
+		if (zoom > maximumZoom) setZoom(maximumZoom);
+	}, [maximumZoom, zoom]);
 	useImperativeHandle(
 		ref,
 		() => ({
@@ -1307,9 +1306,6 @@ export const TimecodeTimelineEditor = forwardRef<
 		}),
 		[addAudioPlayerLane, addMarker],
 	);
-	useEffect(() => {
-		if (zoom > maximumZoom) setZoom(maximumZoom);
-	}, [maximumZoom, zoom]);
 	useLayoutEffect(() => {
 		const viewport = scrollRef.current;
 		if (!viewport) return;
