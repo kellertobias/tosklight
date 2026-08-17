@@ -53,8 +53,29 @@ describe("PoolCard", () => {
 			"Update",
 		);
 		expect(card).toHaveClass("has-status", "has-media");
+		expect(card).toHaveClass("has-information");
 		fireEvent.click(card);
 		expect(select).toHaveBeenCalledOnce();
+	});
+
+	it("leaves the lower card area available to a name without information", () => {
+		render(
+			<PoolCard
+				model={{
+					number: 1001,
+					primary: "ToskLight Media Server",
+					kind: "preset",
+				}}
+			/>,
+		);
+
+		const card = screen.getByRole("button", {
+			name: /ToskLight Media Server/,
+		});
+		expect(card).not.toHaveClass("has-information", "has-media", "has-status");
+		expect(
+			card.querySelector(".pool-card-information"),
+		).not.toBeInTheDocument();
 	});
 
 	it("uses a literal accessible description for a compact derived marker", () => {

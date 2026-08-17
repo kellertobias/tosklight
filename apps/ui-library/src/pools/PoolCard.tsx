@@ -57,6 +57,8 @@ export function PoolCard({
 	const hasStatus = Boolean(
 		workflow || model.status != null || model.derived || model.frozen,
 	);
+	const hasInformation =
+		model.secondary != null || Boolean(model.details?.length);
 	const hasMedia = Boolean(model.image || model.icon != null || color);
 	const interactions = usePoolCardPressHold({
 		onPressHold,
@@ -74,6 +76,7 @@ export function PoolCard({
 				model,
 				className,
 				hasStatus,
+				hasInformation,
 				hasMedia,
 				Boolean(color),
 			)}
@@ -159,6 +162,7 @@ function poolCardClassName(
 	model: PoolCardViewModel,
 	className: string,
 	hasStatus: boolean,
+	hasInformation: boolean,
 	hasMedia: boolean,
 	hasColor: boolean,
 ) {
@@ -168,6 +172,7 @@ function poolCardClassName(
 		`${model.kind ?? "generic"}-card`,
 		hasColor && "has-color",
 		hasStatus && "has-status",
+		hasInformation && "has-information",
 		hasMedia && "has-media",
 		model.derived && "derived",
 		model.frozen && "frozen",

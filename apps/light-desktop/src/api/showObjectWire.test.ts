@@ -19,7 +19,7 @@ function cueListBody() {
 		cues: [
 			{
 				id: CUE_ID,
-				number: 1,
+				number: "1",
 				name: "Opening",
 				fade_millis: 1000,
 				delay_millis: 0,

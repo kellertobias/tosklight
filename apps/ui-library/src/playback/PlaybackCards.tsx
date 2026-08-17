@@ -351,7 +351,7 @@ export function TouchPlaybackCardView({
 }
 
 export interface HardwareCueView {
-	number: number;
+	number: string;
 	name?: string;
 	fadeMillis?: number;
 }

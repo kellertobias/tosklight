@@ -1632,6 +1632,12 @@
 	word-break: normal;
 }
 
+.pool-card:not(.has-information, .has-media, .has-status) .pool-card-name {
+	bottom: 8px;
+	max-height: none;
+	-webkit-line-clamp: 6;
+}
+
 .pool-card-information {
 	position: absolute;
 	z-index: 2;
