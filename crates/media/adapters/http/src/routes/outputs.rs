@@ -1099,10 +1099,12 @@ mod tests {
         assert_eq!(body["outputName"], "Main");
         assert_eq!(body["personality"], "twoLayers");
         assert_eq!(body["layerCount"], 2);
-        assert_eq!(body["channels"].as_array().unwrap().len(), 77);
+        assert_eq!(body["channels"].as_array().unwrap().len(), 118);
         assert_eq!(body["channels"][0]["absoluteChannel"], 1);
         assert_eq!(body["channels"][0]["name"], "Folder");
-        assert_eq!(body["channels"][68]["group"]["kind"], "master");
+        // The master section follows both 39-slot layer blocks.
+        assert_eq!(body["channels"][78]["group"]["kind"], "master");
+        assert_eq!(body["channels"][78]["absoluteChannel"], 79);
 
         let (status, body) = send(
             &bench.router,
