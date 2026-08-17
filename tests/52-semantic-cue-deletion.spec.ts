@@ -41,9 +41,9 @@ scenario(
 		await t.playback.expect(playback).runtime({
 			current_cue_number: "2",
 			deleted_cue_hold: {
-				deleted_number: 2,
-				previous_number: 1,
-				next_number: 3,
+				deleted_number: "2",
+				previous_number: "1",
+				next_number: "3",
 			},
 		});
 		await t.expectFixtureDMX(fixture(1), { Intensity: 128 });

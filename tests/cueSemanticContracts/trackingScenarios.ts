@@ -153,7 +153,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		).toEqual([2]);
 		expect(await runtime(api, 1)).toMatchObject({
 			current_cue_number: "1",
-			deleted_cue_hold: { deleted_number: 1, next_number: 2 },
+			deleted_cue_hold: { deleted_number: "1", next_number: "2" },
 			normal_next_cue_number: 2,
 		});
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual(beforeSlots);

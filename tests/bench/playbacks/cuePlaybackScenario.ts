@@ -481,7 +481,7 @@ export class BrowserRecording {
 			requestId: crypto.randomUUID(),
 			target: { kind: "pool", playbackNumber: intent.playback },
 			operation: intent.mode ?? CueRecordMode.Overwrite,
-			cueNumber: intent.cue,
+			cueNumber: formatCueNumber(intent.cue),
 			timing: {},
 			cueOnly: false,
 			capturePolicy: "current_capture",
@@ -780,7 +780,7 @@ export class BrowserCues {
 		return deleteCue(this.api, {
 			surface: "api",
 			address: { type: "pool", playbackNumber: playback },
-			cueNumber: cue,
+			cueNumber: formatCueNumber(cue),
 		});
 	}
 
@@ -906,7 +906,7 @@ export class BrowserCues {
 		await this.mutate(
 			route,
 			playback,
-			`UPDATE ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
+			`UPDATE ${await this.mutationAddress(playback)} CUE ${formatCueNumber(cue)}`,
 		);
 	}
 
@@ -914,7 +914,7 @@ export class BrowserCues {
 		await this.mutate(
 			route,
 			playback,
-			`DELETE ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
+			`DELETE ${await this.mutationAddress(playback)} CUE ${formatCueNumber(cue)}`,
 		);
 	}
 
@@ -925,7 +925,7 @@ export class BrowserCues {
 		cue: number,
 		destination: number,
 	) {
-		const address = await this.address(playback);
+		const address = await this.mutationAddress(playback);
 		const command = `${operation} ${address} CUE ${formatCueNumber(cue)} AT ${address} CUE ${formatCueNumber(destination)}`;
 		const before = await cueListForPlayback(this.api, this.showId(), playback);
 		if (route === "ui") {
@@ -1007,6 +1007,15 @@ export class BrowserCues {
 	private async address(playback: number) {
 		const location = await playbackLocation(this.api, this.showId(), playback);
 		return `PBK ${location.page} . ${location.slot}`;
+	}
+
+	/**
+	 * Cue mutation still addresses a playback with SET, while selection and navigation moved to
+	 * PBK. Each family is spoken the way the desk parses it rather than the way the other does.
+	 */
+	private async mutationAddress(playback: number) {
+		const location = await playbackLocation(this.api, this.showId(), playback);
+		return `SET ${location.page} . ${location.slot}`;
 	}
 
 	private async ensureCommandSurface() {

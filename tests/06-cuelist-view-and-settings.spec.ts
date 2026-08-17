@@ -348,7 +348,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect((await object<any>(api, "cue_list", installed.id)).body.cues.map((item: any) => item.number)).toEqual([1, 3]);
       expect(await runtime(api, 1)).toMatchObject({
         current_cue_number: "2",
-        deleted_cue_hold: { deleted_number: 2, previous_number: 1, next_number: 3 },
+        deleted_cue_hold: { deleted_number: "2", previous_number: "1", next_number: "3" },
       });
       expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
       await api.playbackNumberAction(1, "go", {});
@@ -402,7 +402,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
         .poll(async () => runtime(api, 1))
         .toMatchObject({
           current_cue_number: "2",
-          deleted_cue_hold: { deleted_number: 2, previous_number: 1, next_number: 3 },
+          deleted_cue_hold: { deleted_number: "2", previous_number: "1", next_number: "3" },
           normal_next_cue_number: 3,
         });
       expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
