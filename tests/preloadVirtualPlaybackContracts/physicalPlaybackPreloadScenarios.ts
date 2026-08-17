@@ -156,11 +156,11 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		expect(state.applicationTimestamp).toEqual(expect.any(String));
 		expect(await activePlayback(api, 1)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		expect(await activePlayback(api, 2)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		expect(timestampMillis((await activePlayback(api, 1))?.activated_at)).toBe(
 			timestampMillis(state.applicationTimestamp),
@@ -170,7 +170,7 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		);
 		expect(await activePlayback(api, 3)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		expect(await activePlayback(api, 4)).toMatchObject({ enabled: false });
 		expect(await activePlayback(api, 5)).toMatchObject({ enabled: true });
@@ -267,7 +267,7 @@ const preload002ApiSupplement = async ({
 	await poolAction(api, 9, "go", { surface: "physical" });
 	await poolAction(api, 9, "go", { surface: "physical" });
 	await poolAction(api, 9, "go", { surface: "virtual" });
-	expect((await activePlayback(api, 9))?.current_cue_number).toBe(2);
+	expect((await activePlayback(api, 9))?.current_cue_number).toBe("2");
 	expect(
 		(await programmer(api)).preload_playback_pending
 			.slice(-2)
@@ -304,11 +304,11 @@ const preload002ApiSupplement = async ({
 	await bench.tick(1_000);
 	expect(await activePlayback(api, 1)).toMatchObject({
 		enabled: true,
-		current_cue_number: 1,
+		current_cue_number: "1",
 	});
 	expect(await activePlayback(api, 2)).toMatchObject({
 		enabled: true,
-		current_cue_number: 1,
+		current_cue_number: "1",
 	});
 	expect(await activePlayback(api, 3)).toMatchObject({ enabled: true });
 	expect(await activePlayback(api, 4)).toMatchObject({ enabled: false });
@@ -318,7 +318,7 @@ const preload002ApiSupplement = async ({
 	});
 	// Temp off against an otherwise inactive playback removes the transient runtime entry.
 	expect(await activePlayback(api, 7)).toBeUndefined();
-	expect(await activePlayback(api, 9)).toMatchObject({ current_cue_number: 4 });
+	expect(await activePlayback(api, 9)).toMatchObject({ current_cue_number: "4" });
 
 	const playbackState = summarizePlaybackState(
 		await playbacks(api),

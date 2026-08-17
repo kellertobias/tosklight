@@ -39,7 +39,7 @@ scenario(
 		await t.cue.delete(playback, 2);
 		await t.cue.expect(playback, 2).absent();
 		await t.playback.expect(playback).runtime({
-			current_cue_number: 2,
+			current_cue_number: "2",
 			deleted_cue_hold: {
 				deleted_number: 2,
 				previous_number: 1,
@@ -50,12 +50,12 @@ scenario(
 
 		await t.playback.go(playback);
 		await t.clock.advanceStep();
-		await t.playback.expect(playback).runtime({ current_cue_number: 3 });
+		await t.playback.expect(playback).runtime({ current_cue_number: "3" });
 		await t.expectFixtureDMX(fixture(1), { Intensity: 191 });
 
 		await t.playback.goBack(playback);
 		await t.clock.advanceStep();
-		await t.playback.expect(playback).runtime({ current_cue_number: 1 });
+		await t.playback.expect(playback).runtime({ current_cue_number: "1" });
 		await t.expectFixtureDMX(fixture(1), { Intensity: 64 });
 	},
 );

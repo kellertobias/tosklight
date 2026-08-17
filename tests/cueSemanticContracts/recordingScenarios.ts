@@ -137,7 +137,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		await api.playbackNumberAction(playbackNumber, "go", {});
 		await expect
 			.poll(async () => runtime(api, playbackNumber))
-			.toMatchObject({ current_cue_number: 1, enabled: true });
+			.toMatchObject({ current_cue_number: "1", enabled: true });
 		expect(logicalSlots(await bench.tick(3_000), 4)).toEqual(
 			Array(4).fill(255),
 		);

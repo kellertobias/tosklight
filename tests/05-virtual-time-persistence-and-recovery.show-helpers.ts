@@ -155,7 +155,7 @@ export async function assertShow001State(
 	expect(groupChange.value.value).toBeCloseTo(0.4, 6);
 	expect(
 		playbacks.active.find((runtime: any) => runtime.playback_number === 1),
-	).toMatchObject({ current_cue_number: 1, enabled: true });
+	).toMatchObject({ current_cue_number: "1", enabled: true });
 	const durable = await programmer(api);
 	expect(
 		durable.values.find(

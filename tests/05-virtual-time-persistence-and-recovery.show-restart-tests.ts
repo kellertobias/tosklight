@@ -242,7 +242,7 @@ export function registerShow001ProcessRestartTest(): void {
 			(await object<any>(api, "playback", "1")).body.target.cue_list_id,
 		).toBe(cueListId);
 		expect(await playbackRuntime(api, 1)).toMatchObject({
-			current_cue_number: 1,
+			current_cue_number: "1",
 			enabled: true,
 		});
 		const restored = await programmer(api);

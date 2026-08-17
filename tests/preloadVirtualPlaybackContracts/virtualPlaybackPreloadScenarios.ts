@@ -148,11 +148,11 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 		expect(state.applicationTimestamp).toEqual(expect.any(String));
 		expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		expect(
 			timestampMillis(
@@ -166,7 +166,7 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 		).toBe(timestampMillis(state.applicationTimestamp));
 		expect(await activePlayback(api, 46)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		const finalProgrammer = await programmer(api);
 		expect(finalProgrammer.preload_group_pending).toEqual({});

@@ -68,7 +68,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const selectedId = original.body.cues[1].id;
       const editRuntime = await runtime(api, 1);
       const beforeOutput = slot(await bench.tick(0), 1);
-      expect(editRuntime).toMatchObject({ current_cue_id: original.body.cues[0].id, current_cue_number: 1 });
+      expect(editRuntime).toMatchObject({ current_cue_id: original.body.cues[0].id, current_cue_number: "1" });
 
       const editedCues = original.body.cues.map((item: any) =>
         item.id === selectedId
@@ -93,7 +93,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       });
       expect(await runtime(api, 1)).toMatchObject({
         current_cue_id: original.body.cues[0].id,
-        current_cue_number: 1,
+        current_cue_number: "1",
         activated_at: editRuntime.activated_at,
       });
       expect(slot(await bench.tick(0), 1)).toBe(beforeOutput);
@@ -101,7 +101,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await api.playbackNumberAction(1, "go-to", { cue_number: 1.5 });
       const beforeRenumberRuntime = await runtime(api, 1);
       const beforeRenumberOutput = slot(await bench.tick(4_000), 1);
-      expect(beforeRenumberRuntime).toMatchObject({ current_cue_id: selectedId, current_cue_number: 1.5 });
+      expect(beforeRenumberRuntime).toMatchObject({ current_cue_id: selectedId, current_cue_number: "1.5" });
 
       const renumberedCues = edited.body.cues.map((item: any, index: number) => ({ ...item, number: 10 + index }));
       await putObject(api, "cue_list", installed.id, { ...edited.body, cues: renumberedCues }, edited.revision);
@@ -111,7 +111,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect(renumbered.body.cues.map(stripNumber)).toEqual(edited.body.cues.map(stripNumber));
       expect(await runtime(api, 1)).toMatchObject({
         current_cue_id: selectedId,
-        current_cue_number: 11,
+        current_cue_number: "11",
         activated_at: beforeRenumberRuntime.activated_at,
       });
       expect(slot(await bench.tick(0), 1)).toBe(beforeRenumberOutput);
@@ -253,7 +253,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     expect(fromOne.revision).toBeGreaterThan(original.revision);
     await expect(page.locator(".cue-table tbody tr.selected")).toContainText("Cue 1.5");
     await expect(page.locator(".cue-table tbody tr.selected td").nth(1)).toHaveText("2");
-    await expect.poll(async () => runtime(api, 1)).toMatchObject({ current_cue_id: selectedId, current_cue_number: 2 });
+    await expect.poll(async () => runtime(api, 1)).toMatchObject({ current_cue_id: selectedId, current_cue_number: "2" });
     expect(slot(await bench.tick(0), 1)).toBe(beforeOutput);
     const renumberEvents = (await audit(api)).slice(auditMark).filter((event: any) => event.kind === "show_object_changed" && event.payload?.id === installed.id);
     expect(renumberEvents).toHaveLength(1);
@@ -312,7 +312,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await page.getByRole("dialog", { name: "Renumber Cues" }).getByLabel("Start Cue").fill("10");
     await page.getByRole("dialog", { name: "Renumber Cues" }).getByRole("button", { name: "Renumber", exact: true }).click();
     await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues.map((cue: any) => cue.number)).toEqual([10, 11, 12, 13]);
-    await expect.poll(async () => runtime(api, 1)).toMatchObject({ current_cue_id: selectedId, current_cue_number: 11 });
+    await expect.poll(async () => runtime(api, 1)).toMatchObject({ current_cue_id: selectedId, current_cue_number: "11" });
 
     await page.getByRole("button", { name: "← Cuelist Pool", exact: true }).click();
     await page.locator(".cuelist-card").filter({ hasText: oneCue.name }).click();
@@ -347,14 +347,14 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       });
       expect((await object<any>(api, "cue_list", installed.id)).body.cues.map((item: any) => item.number)).toEqual([1, 3]);
       expect(await runtime(api, 1)).toMatchObject({
-        current_cue_number: 2,
+        current_cue_number: "2",
         deleted_cue_hold: { deleted_number: 2, previous_number: 1, next_number: 3 },
       });
       expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
       await api.playbackNumberAction(1, "go", {});
-      expect(await runtime(api, 1)).toMatchObject({ current_cue_number: 3 });
+      expect(await runtime(api, 1)).toMatchObject({ current_cue_number: "3" });
       await api.playbackNumberAction(1, "go-minus", {});
-      expect(await runtime(api, 1)).toMatchObject({ current_cue_number: 1 });
+      expect(await runtime(api, 1)).toMatchObject({ current_cue_number: "1" });
 
       const sole = await installCuelist(api, { name: "Sole Cue Safeguard", numbers: [1], playback: 2 });
       const soleBefore = await object<any>(api, "cue_list", sole.id);
@@ -401,7 +401,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await expect
         .poll(async () => runtime(api, 1))
         .toMatchObject({
-          current_cue_number: 2,
+          current_cue_number: "2",
           deleted_cue_hold: { deleted_number: 2, previous_number: 1, next_number: 3 },
           normal_next_cue_number: 3,
         });
@@ -411,14 +411,14 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
         .toHaveLength(1);
 
       await api.playbackNumberAction(1, "go", {});
-      await expect.poll(async () => (await runtime(api, 1)).current_cue_number).toBe(3);
+      await expect.poll(async () => (await runtime(api, 1)).current_cue_number).toBe("3");
       expect((await runtime(api, 1)).deleted_cue_hold).toBeUndefined();
       expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
       expect(slot(await bench.tick(500), 1)).toBeGreaterThanOrEqual(159);
       expect(slot(await bench.tick(0), 1)).toBeLessThanOrEqual(160);
       expect(slot(await bench.tick(500), 1)).toBe(191);
       await api.playbackNumberAction(1, "go-minus", {});
-      await expect.poll(async () => runtime(api, 1)).toMatchObject({ current_cue_number: 1 });
+      await expect.poll(async () => runtime(api, 1)).toMatchObject({ current_cue_number: "1" });
       expect(slot(await bench.tick(0), 1)).toBe(64);
       state.completed = true;
     },
@@ -602,15 +602,15 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await api.playbackNumberAction(1, "go", {});
       await bench.tick(0);
       await api.playbackNumberAction(1, "go", {});
-      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect((await runtime(api, 1)).current_cue_number).toBe("2");
       expect(slot(await bench.tick(0), 2)).toBe(255);
       const offBody = await object<any>(api, "cue_list", wrapped.id);
       await putObject(api, "cue_list", wrapped.id, { ...offBody.body, wrap_mode: "tracking" }, offBody.revision);
       await api.playbackNumberAction(1, "go", {});
-      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe("1");
       expect(slot(await bench.tick(0), 2)).toBe(255);
       await api.playbackNumberAction(1, "go-minus", {});
-      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe("1");
       const trackingBody = await object<any>(api, "cue_list", wrapped.id);
       await putObject(api, "cue_list", wrapped.id, { ...trackingBody.body, wrap_mode: "reset" }, trackingBody.revision);
       await api.playbackNumberAction(1, "go-to", { cue_number: 2 });
@@ -626,7 +626,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
         await api.playbackNumberAction(1, "go-to", { cue_number: 2 });
         await api.playbackNumberAction(1, "off", {});
         await api.playbackNumberAction(1, action, {});
-        expect((await runtime(api, 1)).current_cue_number).toBe(1);
+        expect((await runtime(api, 1)).current_cue_number).toBe("1");
       }
       let restartBody = await object<any>(api, "cue_list", restarted.id);
       await putObject(api, "cue_list", restarted.id, { ...restartBody.body, restart_mode: "continue_current_cue" }, restartBody.revision);
@@ -634,20 +634,20 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
         await api.playbackNumberAction(1, "go-to", { cue_number: 2 });
         await api.playbackNumberAction(1, "off", {});
         await api.playbackNumberAction(1, action, {});
-        expect((await runtime(api, 1)).current_cue_number).toBe(2);
+        expect((await runtime(api, 1)).current_cue_number).toBe("2");
         expect(slot(await bench.tick(0), 1)).toBe(128);
       }
       const neverRun = await installCuelist(api, { name: "Never Run Continue", numbers: [1, 2], playback: 2 });
       let neverRunBody = await object<any>(api, "cue_list", neverRun.id);
       await putObject(api, "cue_list", neverRun.id, { ...neverRunBody.body, restart_mode: "continue_current_cue" }, neverRunBody.revision);
       await api.playbackNumberAction(2, "on", {});
-      expect((await runtime(api, 2)).current_cue_number).toBe(1);
+      expect((await runtime(api, 2)).current_cue_number).toBe("1");
       await api.playbackNumberAction(2, "off", {});
       await api.playbackNumberAction(1, "off", {});
       restartBody = await object<any>(api, "cue_list", restarted.id);
       await putObject(api, "cue_list", restarted.id, { ...restartBody.body, cues: restartBody.body.cues.filter((item: any) => item.number !== 2) }, restartBody.revision);
       await api.playbackNumberAction(1, "on", {});
-      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe("1");
 
       await loadCanonicalCopy(api, bench, "cue-012-timing", "compact-rig");
       await setControlTiming(api, [120, 90, 60, 30, 15], 0);
@@ -672,7 +672,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await putObject(api, "cue_list", timed.id, { ...timedBody.body, disable_cue_timing: true }, timedBody.revision);
       await api.playbackNumberAction(1, "go", {});
       expect(slot(await bench.tick(0), 1)).toBe(51);
-      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect((await runtime(api, 1)).current_cue_number).toBe("2");
       timedBody = await object<any>(api, "cue_list", timed.id);
       await putObject(api, "cue_list", timed.id, { ...timedBody.body, disable_cue_timing: false, force_cue_timing: false }, timedBody.revision);
       expect(timingBytes((await object<any>(api, "cue_list", timed.id)).body)).toBe(serializedTiming);
@@ -692,11 +692,11 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const afterRejectedXfade = await object<any>(api, "cue_list", chaser.id);
       expect(afterRejectedXfade.revision).toBe(migrated.revision);
       await api.playbackNumberAction(1, "go", {});
-      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe("1");
       await bench.tick(499);
-      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe("1");
       await bench.tick(1);
-      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect((await runtime(api, 1)).current_cue_number).toBe("2");
       expect(slot(await bench.tick(125), 1)).toBe(96);
       expect(slot(await bench.tick(125), 1)).toBe(128);
 
@@ -722,9 +722,9 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 0.5 }, chaserBody.revision);
       await api.playbackNumberAction(1, "go", {});
       await bench.tick(999);
-      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe("1");
       await bench.tick(1);
-      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect((await runtime(api, 1)).current_cue_number).toBe("2");
 
       await reopenAndReset(api, chaserShowId);
       chaserBody = await object<any>(api, "cue_list", chaser.id);
@@ -733,9 +733,9 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect(chaserBody.body.chaser_xfade_percent).toBe(50);
       await api.playbackNumberAction(1, "go", {});
       await bench.tick(249);
-      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe("1");
       await bench.tick(1);
-      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect((await runtime(api, 1)).current_cue_number).toBe("2");
 
       await reopenAndReset(api, chaserShowId);
       await api.playbackNumberAction(1, "go", {});
@@ -756,9 +756,9 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await bench.tick(250);
       await setControlTiming(api, [60, 90, 60, 30, 15], 0);
       await bench.tick(499);
-      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe("1");
       await bench.tick(1);
-      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect((await runtime(api, 1)).current_cue_number).toBe("2");
 
       await reopenAndReset(api, chaserShowId);
       await setControlTiming(api, [120, 90, 60, 30, 15], 0);
@@ -766,12 +766,12 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 2, disable_cue_timing: true }, chaserBody.revision);
       await api.playbackNumberAction(1, "go", {});
       await bench.tick(250);
-      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect((await runtime(api, 1)).current_cue_number).toBe("2");
       expect(slot(await bench.tick(0), 1)).toBe(128);
       await bench.tick(249);
-      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect((await runtime(api, 1)).current_cue_number).toBe("2");
       await bench.tick(1);
-      expect((await runtime(api, 1)).current_cue_number).toBe(3);
+      expect((await runtime(api, 1)).current_cue_number).toBe("3");
       state.completed = true;
     },
     ui: cue012Ui,

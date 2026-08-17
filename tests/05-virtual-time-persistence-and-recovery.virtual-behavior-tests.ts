@@ -38,9 +38,9 @@ export function registerVirtualBehaviorTest(): void {
 		await bench.tick(250);
 		await setSpeedGroups(api, [60, 90, 60, 30, 15]);
 		await bench.tick(499);
-		expect((await playbackRuntime(api, 1)).current_cue_number).toBe(1);
+		expect((await playbackRuntime(api, 1)).current_cue_number).toBe("1");
 		await bench.tick(1);
-		expect((await playbackRuntime(api, 1)).current_cue_number).toBe(2);
+		expect((await playbackRuntime(api, 1)).current_cue_number).toBe("2");
 
 		await setSpeedGroups(api, [120, 90, 60, 30, 15]);
 		await restartPlaybackRun(api, bench, showId, [1]);
@@ -54,14 +54,14 @@ export function registerVirtualBehaviorTest(): void {
 		});
 		await api.cueListPlaybackAction(chaserId, "go", {});
 		await bench.tick(249);
-		expect((await playbackRuntime(api, 1)).current_cue_number).toBe(1);
+		expect((await playbackRuntime(api, 1)).current_cue_number).toBe("1");
 		await bench.tick(1);
-		expect((await playbackRuntime(api, 1)).current_cue_number).toBe(2);
+		expect((await playbackRuntime(api, 1)).current_cue_number).toBe("2");
 
 		await restartPlaybackRun(api, bench, showId, [1]);
 		const week = await bench.tick(604_800_000);
 		expect(week.now).toBe("2020-01-08T00:00:00Z");
-		expect((await playbackRuntime(api, 1)).current_cue_number).toBe(1);
+		expect((await playbackRuntime(api, 1)).current_cue_number).toBe("1");
 
 		await restartPlaybackRun(api, bench, showId, [2]);
 		await bench.tick(250);

@@ -100,13 +100,13 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 			await activeVirtualPlayback(api, 1, state.firstNumber),
 		).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		expect(
 			await activeVirtualPlayback(api, 1, state.secondNumber),
 		).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		const bootstrap = await api.request<any>(
 			"GET",

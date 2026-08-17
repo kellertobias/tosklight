@@ -56,7 +56,7 @@ scenario(
 		await t.playback.via.api.on(playback);
 		await t.playback.expect(playback).runtime({ enabled: true });
 		await t.playback.via.api.goBack(playback);
-		await t.playback.expect(playback).runtime({ current_cue_number: 1 });
+		await t.playback.expect(playback).runtime({ current_cue_number: "1" });
 
 		expect(await t.playback.runtime(playback)).toMatchObject({
 			playback_number: playback,

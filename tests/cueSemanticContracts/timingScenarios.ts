@@ -50,7 +50,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		expect((await runtime(api, 1)).paused).toBe(false);
 		expect(slot(await bench.tick(3_000), 1)).toBe(255);
 		await api.cueListPlaybackAction(installed.id, "back", {});
-		expect((await runtime(api, 1)).current_cue_number).toBe(1);
+		expect((await runtime(api, 1)).current_cue_number).toBe("1");
 		expect(slot(await bench.tick(0), 1)).toBe(0);
 		await api.cueListPlaybackAction(installed.id, "release", {});
 		expect((await playbackState(api)).active).toHaveLength(0);
@@ -105,7 +105,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await card.getByRole("button", { name: "PAUSE", exact: true }).click();
 		await expect
 			.poll(async () => runtime(api, 1))
-			.toMatchObject({ current_cue_number: 2, paused: true });
+			.toMatchObject({ current_cue_number: "2", paused: true });
 		await expect(
 			card.getByRole("button", { name: "RESUME", exact: true }),
 		).toHaveClass(/playback-button-active/);
@@ -113,7 +113,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await card.getByRole("button", { name: "RESUME", exact: true }).click();
 		await expect
 			.poll(async () => runtime(api, 1))
-			.toMatchObject({ current_cue_number: 2, paused: false });
+			.toMatchObject({ current_cue_number: "2", paused: false });
 		expect(slot(await bench.tick(3_000), 1)).toBe(255);
 		state.completed = true;
 	},
@@ -170,7 +170,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		expect(slot(await bench.tick(0), 2)).toBe(128);
 		expect(slot(await bench.tick(0), 3)).toBe(0);
 		expect(slot(await bench.tick(0), 4)).toBe(0);
-		expect((await runtime(api, 1)).current_cue_number).toBe(2);
+		expect((await runtime(api, 1)).current_cue_number).toBe("2");
 
 		expect(slot(await bench.tick(500), 4)).toBe(0);
 		expect(slot(await bench.tick(250), 4)).toBe(128);
@@ -178,9 +178,9 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		// The final sub-slot level rounds to DMX zero one millisecond before completion; the
 		// authoritative Cue runtime still proves FOLLOW remains gated until the exact boundary.
 		expect(slot(await bench.tick(999), 1)).toBe(0);
-		expect((await runtime(api, 1)).current_cue_number).toBe(2);
+		expect((await runtime(api, 1)).current_cue_number).toBe("2");
 		expect(slot(await bench.tick(1), 1)).toBe(0);
-		expect((await runtime(api, 1)).current_cue_number).toBe(3);
+		expect((await runtime(api, 1)).current_cue_number).toBe("3");
 	});
 });
 

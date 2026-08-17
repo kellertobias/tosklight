@@ -43,7 +43,7 @@ scenario(
 		await t.playback.via.api.off(playback);
 		await t.playback.via.ui.go(playback);
 		await t.playback.expect(playback).runtime({
-			current_cue_number: 1,
+			current_cue_number: "1",
 			enabled: true,
 		});
 		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 51 });

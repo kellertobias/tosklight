@@ -127,7 +127,7 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 		expect(state.applicationTimestamp).toEqual(expect.any(String));
 		expect(await activePlayback(api, 31)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		const finalProgrammer = await programmer(api);
 		expect(finalProgrammer.preload_group_pending).toEqual({});
@@ -187,7 +187,7 @@ const preload001ApiSupplement = async ({
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
 
 	await poolAction(api, 30, "go", { surface: "physical" });
-	expect((await activePlayback(api, 30))?.current_cue_number).toBe(1);
+	expect((await activePlayback(api, 30))?.current_cue_number).toBe("1");
 	expect((await programmer(api)).preload_playback_pending).toEqual([]);
 	await bench.tick(2_000);
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
@@ -235,7 +235,7 @@ const preload001ApiSupplement = async ({
 	).toMatchObject({ status: "changed", active: false });
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
-	expect((await activePlayback(api, 30))?.current_cue_number).toBe(1);
+	expect((await activePlayback(api, 30))?.current_cue_number).toBe("1");
 	expect(prepared.fixtures[12]).toBeTruthy();
 };
 

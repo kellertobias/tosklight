@@ -76,22 +76,22 @@ scenario(
 		await t.clock.advanceBy("2s");
 		await t.playback.expect(togglePlayback).runtime({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		await t.playback.expect(goPlayback).runtime({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		await t.playback.expect(backPlayback).runtime({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		await t.playback.expect(onPlayback).runtime({ enabled: true });
 
 		await t.preload.via.ui.release();
 		await t.playback.expect(togglePlayback).runtime({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		await t.playback.expect(onPlayback).runtime({ enabled: true });
 	},

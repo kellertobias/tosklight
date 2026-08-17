@@ -29,7 +29,7 @@ scenario(
 			buttons: [PlaybackButton.GoBack, PlaybackButton.Go, PlaybackButton.Off],
 		});
 		await t.playback.via.api.go(playback);
-		await t.playback.expect(playback).runtime({ current_cue_number: 1 });
+		await t.playback.expect(playback).runtime({ current_cue_number: "1" });
 
 		let editor = await t.cue.openEditor(playback);
 		await editor.expect.structure();
@@ -57,14 +57,14 @@ scenario(
 		});
 		await editor.inspectSettings();
 		await editor.expect.selected(2);
-		await t.playback.expect(playback).runtime({ current_cue_number: 1 });
+		await t.playback.expect(playback).runtime({ current_cue_number: "1" });
 
 		await editor.reject(2, { fade: "-1" });
 		await t.cue.expect(playback, 2).metadata({
 			fade_millis: 2_500,
 			delay_millis: 1_250,
 		});
-		await t.playback.expect(playback).runtime({ current_cue_number: 1 });
+		await t.playback.expect(playback).runtime({ current_cue_number: "1" });
 
 		editor = await t.cue.reopenEditor(playback);
 		await editor.select(2);

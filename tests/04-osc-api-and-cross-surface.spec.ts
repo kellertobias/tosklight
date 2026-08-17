@@ -282,7 +282,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     assert: async ({ api, bench }, state) => {
       expect(await deskPage(api, state.session!)).toBe(2);
-      expect(await activePlayback(api, 2)).toMatchObject({ current_cue_number: 1 });
+      expect(await activePlayback(api, 2)).toMatchObject({ current_cue_number: "1" });
       expect(await activePlayback(api, 1)).toBeUndefined();
 
       const art = bench.artnet.mark();
@@ -819,13 +819,13 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 
       const firstAddress = `/light/${firstAlias}/page-playback/1/button/1`;
       await firstHardware.send(firstAddress, [true]);
-      await expect.poll(async () => (await activePlayback(api, 1))?.current_cue_number).toBe(1);
+      await expect.poll(async () => (await activePlayback(api, 1))?.current_cue_number).toBe("1");
       await firstHardware.send(firstAddress, [false]);
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(await activePlayback(api, 1)).toMatchObject({ current_cue_number: 1 });
+      expect(await activePlayback(api, 1)).toMatchObject({ current_cue_number: "1" });
 
       await secondHardware.send(`/light/${secondAlias}/page-playback/1/button/1`, [true]);
-      await expect.poll(async () => (await activePlayback(api, 2))?.current_cue_number).toBe(1);
+      await expect.poll(async () => (await activePlayback(api, 2))?.current_cue_number).toBe("1");
 
       const pageFeedbackMark = firstHardware.mark();
       await selectPlaybackPage(page, "Page 2");
@@ -840,7 +840,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
         )
         .toBe(true);
       await firstHardware.send(firstAddress, [true]);
-      await expect.poll(async () => (await activePlayback(api, 2))?.current_cue_number).toBe(2);
+      await expect.poll(async () => (await activePlayback(api, 2))?.current_cue_number).toBe("2");
       expect(await deskPage(api, secondSession)).toBe(2);
 
       const returnFeedbackMark = firstHardware.mark();

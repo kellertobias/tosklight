@@ -535,7 +535,7 @@ export class BrowserCrossSurface {
 			await firstHardware.send(firstAddress, [false]);
 			await new Promise((resolve) => setTimeout(resolve, 50));
 			expect(await this.activePlayback(1)).toMatchObject({
-				current_cue_number: 1,
+				current_cue_number: "1",
 			});
 			await secondHardware.send(
 				`/light/${second.desk.osc_alias}/page-playback/1/button/1`,

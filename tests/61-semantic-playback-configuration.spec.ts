@@ -64,7 +64,7 @@ scenario(
 		await t.playback.go(43);
 		await t.playback.go(43);
 		await t.playback.goBack(43);
-		await t.playback.expect(43).runtime({ current_cue_number: 1 });
+		await t.playback.expect(43).runtime({ current_cue_number: "1" });
 		await t.playbackConfiguration.setButton(1, "Top button", "Select contents");
 		await t.playbackConfiguration.expectAssignment(1, {
 			number: 43,
@@ -88,7 +88,7 @@ scenario(
 		await t.playback.fader(47, 25);
 		await t.clock.advanceBy("0ms");
 		await t.playback.expect(47).runtime({
-			current_cue_number: 1,
+			current_cue_number: "1",
 			manual_xfade_position: 0.25,
 			manual_xfade_progress: 0.25,
 			manual_xfade_direction: "towards_high",
@@ -97,7 +97,7 @@ scenario(
 		await t.playback.fader(47, 100);
 		await t.clock.advanceBy("0ms");
 		await t.playback.expect(47).runtime({
-			current_cue_number: 2,
+			current_cue_number: "2",
 			manual_xfade_position: 1,
 			manual_xfade_direction: "towards_low",
 		});

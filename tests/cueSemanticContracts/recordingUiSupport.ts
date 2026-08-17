@@ -33,7 +33,7 @@ export const cue001Ui = async (
 	await expect
 		.poll(async () => runtime(api, playbackNumber))
 		.toMatchObject({
-			current_cue_number: 1,
+			current_cue_number: "1",
 			enabled: true,
 			flash: false,
 		});

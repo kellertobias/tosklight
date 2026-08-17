@@ -105,7 +105,7 @@ scenario(
 		await t.expectFixtureValue(fixture(1), { intensity: 0.8 });
 		await t.playback.expect(physicalPlayback).runtime({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		await t.virtualPlayback.expect.runtime(virtualPlayback, {
 			runtime: {

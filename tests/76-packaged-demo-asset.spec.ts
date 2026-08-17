@@ -23,8 +23,8 @@ test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and
 		(total, fixture) => total + 1 + (fixture.multipatch?.length ?? 0),
 		0,
 	);
-	expect(patch.fixtures).toHaveLength(296);
-	expect(physicalInstances).toBe(344);
+	expect(patch.fixtures).toHaveLength(297);
+	expect(physicalInstances).toBe(345);
 	expect(await api.showObjects(show.id, "media_server")).toHaveLength(2);
 	const surfaces = await api.showObjects<any>(show.id, "media_surface");
 	expect(surfaces).toHaveLength(2);
@@ -76,7 +76,7 @@ test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and
 			(fixture) => fixture?.definition.model === "Flame Jet",
 		),
 	).toBe(true);
-	expect(byNumber.has(1401)).toBe(false);
+	expect(byNumber.get(1401)?.definition.model).toBe("Kabuki");
 
 	const runtime = await startPlannedDemoBenchmarkLook(api, show.id);
 	const projections = runtime.projections as Array<{

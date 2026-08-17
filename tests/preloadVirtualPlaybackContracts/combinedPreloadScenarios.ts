@@ -157,11 +157,11 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 		expect(state.applicationTimestamp).toEqual(expect.any(String));
 		expect(await activePlayback(api, 61)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		expect(await activePlayback(api, 62)).toMatchObject({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		expect(timestampMillis((await activePlayback(api, 61))?.activated_at)).toBe(
 			timestampMillis(state.applicationTimestamp),

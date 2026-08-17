@@ -104,7 +104,7 @@ scenario(
 		await t.virtualPlayback.expect.physicalRuntimeAbsent(toggleSource);
 		await t.playback.expect(physicalPlayback).runtime({
 			enabled: true,
-			current_cue_number: 1,
+			current_cue_number: "1",
 		});
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(3), { intensity: 0 });

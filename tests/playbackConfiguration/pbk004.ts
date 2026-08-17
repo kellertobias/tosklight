@@ -125,7 +125,7 @@ export function registerPbk004PairedScenario(): void {
 				intensity: 1,
 			});
 			expect(await activePlayback(api, 47)).toMatchObject({
-				current_cue_number: 2,
+				current_cue_number: "2",
 				manual_xfade_position: 1,
 				manual_xfade_direction: "towards_low",
 			});
@@ -167,7 +167,7 @@ export function registerPbk004OwnershipScenario(): void {
 		for (const level of [0, 0.5, 1]) {
 			await poolAction(api, 45, "master", { value: level });
 			expect(await activePlayback(api, 45)).toMatchObject({
-				current_cue_number: 1,
+				current_cue_number: "1",
 				master: level,
 				fader_position: level,
 			});
@@ -188,29 +188,29 @@ export function registerPbk004OwnershipScenario(): void {
 				manual_xfade_position: position,
 				manual_xfade_progress: position,
 				manual_xfade_direction: "towards_high",
-				current_cue_number: 1,
+				current_cue_number: "1",
 			});
 		}
 		await poolAction(api, 45, "master", { value: 1 });
 		expect(await activePlayback(api, 45)).toMatchObject({
-			current_cue_number: 2,
+			current_cue_number: "2",
 			manual_xfade_direction: "towards_low",
 			manual_xfade_position: 1,
 		});
 		await poolAction(api, 45, "master", { value: 1 });
-		expect((await activePlayback(api, 45)).current_cue_number).toBe(2);
+		expect((await activePlayback(api, 45)).current_cue_number).toBe("2");
 		for (const position of [0.75, 0.5, 0.25]) {
 			await poolAction(api, 45, "master", { value: position });
 			expect(await activePlayback(api, 45)).toMatchObject({
 				manual_xfade_position: position,
 				manual_xfade_progress: 1 - position,
 				manual_xfade_direction: "towards_low",
-				current_cue_number: 2,
+				current_cue_number: "2",
 			});
 		}
 		await poolAction(api, 45, "master", { value: 0 });
 		expect(await activePlayback(api, 45)).toMatchObject({
-			current_cue_number: 3,
+			current_cue_number: "3",
 			manual_xfade_direction: "towards_high",
 			manual_xfade_position: 0,
 		});

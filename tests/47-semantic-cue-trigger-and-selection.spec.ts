@@ -106,7 +106,7 @@ scenario(
 		await t.playback.release(playback);
 		await t.playback.go(playback);
 		await t.clock.advanceStep();
-		await t.playback.expect(playback).runtime({ current_cue_number: 1 });
+		await t.playback.expect(playback).runtime({ current_cue_number: "1" });
 		await t.expectFixtureDMX(fixtureRange(1, 4), { Intensity: 255 });
 		await t.expectFixtureDMX(fixtureRange(5, 12), { Intensity: 0 });
 		await t.playback.go(playback);

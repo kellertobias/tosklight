@@ -117,7 +117,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const enabled = mibFor(diagnostics, state.enabledFixture, state.cueListId);
       const disabled = mibFor(diagnostics, state.disabledFixture, state.cueListId);
       expect(enabled.state).toBe("completed");
-      expect(enabled.target_cue_number).toBe(3);
+      expect(enabled.target_cue_number).toBe("3");
       expect(disabled.state).toBe("disabled");
       const frame = await bench.tick(0);
       expect(frame.universes.find((entry: any) => entry.universe === 2)!.slots[1]).toBe(204);
@@ -212,7 +212,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await api.playbackNumberAction(1, "go", {});
     await bench.tick(2_000);
     let enabledRuntime = mibFor(await mibDiagnostics(api), enabled.id, cueListId);
-    expect(enabledRuntime).toMatchObject({ state: "delaying", current_cue_number: 2, target_cue_number: 3 });
+    expect(enabledRuntime).toMatchObject({ state: "delaying", current_cue_number: "2", target_cue_number: "3" });
     expect(enabledRuntime.positions[0].target.value).toBeCloseTo(0.8, 4);
 
     await bench.tick(500);
@@ -225,7 +225,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await putObject(api, "cue_list", cueListId, retargeted, beforeRetarget.revision);
     await bench.tick(0);
     enabledRuntime = mibFor(await mibDiagnostics(api), enabled.id, cueListId);
-    expect(enabledRuntime).toMatchObject({ state: "delaying", target_cue_number: 3, cancellation_reason: "future_target_recalculated" });
+    expect(enabledRuntime).toMatchObject({ state: "delaying", target_cue_number: "3", cancellation_reason: "future_target_recalculated" });
     expect(enabledRuntime.positions[0].target.value).toBeCloseTo(0.6, 4);
 
     const afterRetarget = await object<any>(api, "cue_list", cueListId);

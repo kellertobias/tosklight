@@ -147,23 +147,23 @@ export function registerPbk003ActionMatrixScenario(): void {
 
 		await setFirstButton(api, 1, "go");
 		await pressButton(api, 43);
-		expect((await activePlayback(api, 43)).current_cue_number).toBe(1);
+		expect((await activePlayback(api, 43)).current_cue_number).toBe("1");
 		await pressButton(api, 43);
-		expect((await activePlayback(api, 43)).current_cue_number).toBe(2);
+		expect((await activePlayback(api, 43)).current_cue_number).toBe("2");
 		await setFirstButton(api, 1, "go_minus");
 		await pressButton(api, 43);
-		expect((await activePlayback(api, 43)).current_cue_number).toBe(1);
+		expect((await activePlayback(api, 43)).current_cue_number).toBe("1");
 
 		await setFirstButton(api, 1, "fast_forward");
 		await pressButton(api, 43);
 		expect(await activePlayback(api, 43)).toMatchObject({
-			current_cue_number: 2,
+			current_cue_number: "2",
 			transition_timing_bypassed: true,
 		});
 		await setFirstButton(api, 1, "fast_rewind");
 		await pressButton(api, 43);
 		expect(await activePlayback(api, 43)).toMatchObject({
-			current_cue_number: 1,
+			current_cue_number: "1",
 			transition_timing_bypassed: true,
 		});
 		expect(
