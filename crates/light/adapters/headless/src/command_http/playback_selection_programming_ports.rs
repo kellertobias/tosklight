@@ -16,6 +16,11 @@ impl ServerProgrammingPorts<'_> {
         command: &str,
         _policy: ExecutionPolicy,
     ) -> Option<ProgrammingExecution> {
+        match super::speed_group_binding_command::parse(command) {
+            Ok(Some(_)) => return None,
+            Ok(None) => {}
+            Err(error) => return Some(self.recording_execution(context, command, Err(error))),
+        }
         let parsed = match super::playback_selection_command::parse(command) {
             Ok(Some(parsed)) => parsed,
             Ok(None) => return None,

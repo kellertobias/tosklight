@@ -364,7 +364,7 @@ fn page_and_playback_objects(
     Ok((page_object, playback_object, definition))
 }
 
-fn existing_assignment(
+pub(super) fn existing_assignment(
     state: &AppState,
     context: &light_application::ActionContext,
     target: crate::runtime::command_http::playback_address_command::CommandPlaybackTarget,

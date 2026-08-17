@@ -121,6 +121,8 @@ mod selection_routes;
 mod selection_wire;
 #[path = "command_http/speed_group_action.rs"]
 mod speed_group_action;
+#[path = "command_http/speed_group_binding_command.rs"]
+pub(crate) mod speed_group_binding_command;
 #[path = "command_http/speed_group_command.rs"]
 mod speed_group_command;
 #[path = "command_http/speed_group_programming_ports.rs"]

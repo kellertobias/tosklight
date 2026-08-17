@@ -124,6 +124,9 @@ fn prevalidate_programmer_command_in_state(
     }
     let (tokens, _timing) = tokenize_programmer_command(command_line)?;
     let first = tokens.first().ok_or("the command line is empty")?;
+    if command_http::speed_group_binding_command::parse(command_line)?.is_some() {
+        return command_http::prevalidate_external_command(state, session, command_line, context);
+    }
     if tokens
         .iter()
         .any(|token| matches!(token.as_str(), "FIXAT" | "DYNAMIC" | "RELEASE"))
@@ -191,6 +194,10 @@ pub(super) fn execute_programmer_command_effect_from(
         .is_some_and(|token| token.eq_ignore_ascii_case("PLAYBACK"))
     {
         return Err("PLAYBACK is not a command root; use PBK".into());
+    }
+    if let Some(binding) = command_http::speed_group_binding_command::parse(command_line)? {
+        return super::speed_group_bindings::execute_speed_group_binding(state, context, binding)
+            .map(ProgrammerCommandExecution::Applied);
     }
     let manual_playback_command = raw_tokens.first().is_some_and(|root| {
         root.eq_ignore_ascii_case("GO")

@@ -29,6 +29,12 @@ pub(crate) fn prevalidate_typed_command(
     context: &ActionContext,
 ) -> Result<bool, String> {
     let show_id = state.active_show.current().map(|entry| entry.id);
+    if super::speed_group_binding_command::parse(command)?.is_some() {
+        if show_id.is_none() {
+            return Err("no show is open".into());
+        }
+        return Ok(true);
+    }
     let object = object_command(command)?;
     if object.is_some_and(|command| {
         matches!(
@@ -73,6 +79,9 @@ pub(crate) fn prevalidate_external_command(
     let (tokens, _) = super::super::tokenize_programmer_command(command)?;
     if state.active_show.current().is_none() {
         return Err("no show is open".into());
+    }
+    if super::speed_group_binding_command::parse(command)?.is_some() {
+        return Ok(());
     }
     if let Some(command) = object_command(command)? {
         if matches!(
@@ -303,7 +312,7 @@ fn atomic_policy_error(command: &str, policy: ExistingCommandPolicy) -> Option<S
     }
     match compatibility_only_family(command) {
         Err(error) => Some(error),
-        Ok(Some("UPDATE" | "ASSIGN")) => None,
+        Ok(Some("UPDATE" | "ASSIGN" | "Speed Group binding")) => None,
         Ok(Some(family)) => Some(format!(
             "{family} commands are not yet available through the atomic command-line HTTP API"
         )),
@@ -373,11 +382,11 @@ fn execute_with_policy(
     let policy = if matches!(policy, ExistingCommandPolicy::AtomicProgrammer)
         && matches!(
             compatibility_only_family(command)?,
-            Some("UPDATE" | "ASSIGN")
+            Some("UPDATE" | "ASSIGN" | "Speed Group binding")
         ) {
-        // Update owns an atomic show-object transaction and must read the authoritative live
-        // Programmer. A staged Programmer clone would make the show mutation external to the
-        // staging commit and could replace newer live Programmer state afterwards.
+        // These commands own atomic show-object transactions and must read authoritative live
+        // state. A staged Programmer clone would make the show mutation external to the staging
+        // commit and could replace newer live Programmer state afterwards.
         ExistingCommandPolicy::Compatibility
     } else {
         policy
@@ -484,6 +493,9 @@ fn accepted_command(
 }
 
 pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static str>, String> {
+    if super::speed_group_binding_command::parse(command)?.is_some() {
+        return Ok(Some("Speed Group binding"));
+    }
     if command
         .split_whitespace()
         .any(|token| token.eq_ignore_ascii_case("DYNAMIC"))
