@@ -1713,7 +1713,9 @@ fn a_layer_mask_position_moves_the_mask_without_moving_the_layer() {
         BLACK,
         "the mask moved away from the left edge"
     );
-    assert_eq!(image.at(40, 32), RED, "the mask's bright half moved right");
+    // Between both bright texel centres, where the stretched mask is unambiguously open rather
+    // than part-way through the ramp between its two halves.
+    assert_eq!(image.at(32, 32), RED, "the mask's bright half moved right");
     assert_eq!(image.at(56, 32), BLACK, "the layer itself did not move");
 }
 
@@ -1787,7 +1789,7 @@ fn the_master_mask_position_moves_only_the_final_composite_mask() {
         "the master mask moved away from the edge"
     );
     assert_eq!(
-        image.at(40, 32),
+        image.at(32, 32),
         RED,
         "the bright half moved across the composite"
     );
