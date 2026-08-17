@@ -206,10 +206,7 @@ export function WindowHeader({
 									ariaLabel: "Settings",
 									disabled: !onSettings,
 									className: "ui-window-settings-action",
-									onPress: () => {
-										const anchor = document.activeElement;
-										if (anchor instanceof HTMLElement) onSettings?.(anchor);
-									},
+									onPress: (anchor) => onSettings?.(anchor),
 								},
 							]
 						: []

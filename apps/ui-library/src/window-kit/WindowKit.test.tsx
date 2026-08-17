@@ -57,7 +57,7 @@ describe("window kit", () => {
 					".ui-title-chrome-group > .ui-title-chrome-action > button, .ui-title-chrome-terminals > .ui-title-chrome-action > button",
 				),
 			].map((button) => button.textContent),
-		).toEqual(["First", "Second", "⚙Settings"]);
+		).toEqual(["First", "Second", "⚙"]);
 		const header = container.querySelector(".ui-window-header");
 		const search = screen
 			.getByRole("textbox", { name: "Search Stage" })
@@ -74,6 +74,8 @@ describe("window kit", () => {
 			),
 		);
 		const settingsButton = screen.getByRole("button", { name: "Settings" });
+		document.body.focus();
+		expect(document.activeElement).toBe(document.body);
 		fireEvent.click(settingsButton);
 		expect(onSettings).toHaveBeenCalledWith(settingsButton);
 	});
@@ -84,12 +86,7 @@ describe("window kit", () => {
 		expect(
 			screen.queryByRole("button", { name: "Settings" }),
 		).not.toBeInTheDocument();
-		rerender(
-			<WindowHeader
-				title="Groups"
-				search={{ value: "", onSearch }}
-			/>,
-		);
+		rerender(<WindowHeader title="Groups" search={{ value: "", onSearch }} />);
 		const input = screen.getByRole("textbox", { name: "Search Groups" });
 		fireEvent.change(input, { target: { value: "front" } });
 		expect(onSearch).toHaveBeenCalledWith("front");
