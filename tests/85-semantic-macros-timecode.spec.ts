@@ -282,13 +282,17 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		const addMenu = page.getByRole("menu", { name: "Add" });
 		await expect(addMenu.getByRole("menuitem")).toHaveText([
 			"Add Marker",
-			"Add Audio Lane",
 			"Add Speed Lane",
 			"Add Cuelist Lane",
 		]);
 		await expect(addMenu.getByText("Add Playhead")).toHaveCount(0);
 		await addMenu.getByRole("menuitem", { name: "Add Speed Lane" }).click();
-		await editor.getByRole("button", { name: "+ keyframe" }).last().click();
+		// A Speed lane names its Speed Group before it exists, and Insert Keyframe appears only
+		// once a lane is there to insert into.
+		const speedGroups = page.getByRole("dialog", { name: "Choose Speed Group" });
+		await speedGroups.getByRole("button", { name: "Add lane", exact: true }).click();
+		await editor.getByRole("button", { name: /^Speed Group A · speed group/ }).click();
+		await editor.getByRole("button", { name: "Insert Keyframe" }).click();
 
 		const viewport = editor.getByLabel("Timecode timeline viewport");
 		await expect

@@ -56,6 +56,7 @@ import {
 	clearTimecodeEncoderDeck,
 	publishTimecodeEncoderDeck,
 } from "./timecodeEncoderBridge";
+import { TimelineTools } from "./TimecodeTimelineTools";
 import {
 	useTimelineActions,
 	useTimelineDrag,
@@ -1648,6 +1649,7 @@ export const TimecodeTimelineEditor = forwardRef<
 					if (activeLaneId) addClip(activeLaneId);
 				}}
 			/>
+			<TimelineTools zoom={zoom} setZoom={setZoom} maximumZoom={maximumZoom} />
 			{cueListChooserOpen && (
 				<CueListChooser
 					cueLists={cueLists}
