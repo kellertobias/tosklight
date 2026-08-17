@@ -184,7 +184,7 @@ describe("CueTable command targets", () => {
 		expect(nestedCell).not.toBeNull();
 		if (nestedCell) fireEvent.click(nestedCell);
 		expect(source.command.replace).toHaveBeenCalledWith(
-			`${operation} SET 7 CUE 1 AT`,
+			`${operation} CUELIST 7 CUE 1 AT`,
 		);
 		expect(source.onSelectCue).not.toHaveBeenCalled();
 
@@ -198,7 +198,10 @@ describe("CueTable command targets", () => {
 				emptyState={emptyState}
 				onSelectCue={source.onSelectCue}
 				playbackNumber={7}
-				command={{ ...source.command, text: `${operation} SET 7 CUE 1 AT` }}
+				command={{
+					...source.command,
+					text: `${operation} CUELIST 7 CUE 1 AT`,
+				}}
 			/>,
 		);
 		const destination = source.container.querySelectorAll<HTMLTableRowElement>(
@@ -207,7 +210,7 @@ describe("CueTable command targets", () => {
 		expect(destination).toHaveClass(targetClass);
 		fireEvent.click(destination);
 		expect(source.command.execute).toHaveBeenCalledWith(
-			`${operation} SET 7 CUE 1 AT SET 7 CUE 2`,
+			`${operation} CUELIST 7 CUE 1 AT CUELIST 7 CUE 2`,
 		);
 	});
 
@@ -221,7 +224,9 @@ describe("CueTable command targets", () => {
 		expect(row).toHaveClass("delete-target");
 		expect(row).toHaveTextContent("Delete");
 		fireEvent.click(row);
-		expect(deletion.command.execute).toHaveBeenCalledWith("DELETE SET 7 CUE 1");
+		expect(deletion.command.execute).toHaveBeenCalledWith(
+			"DELETE CUELIST 7 CUE 1",
+		);
 		deletion.unmount();
 
 		const unsupported = renderTable("SET");

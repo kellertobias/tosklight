@@ -36,7 +36,16 @@ pub(super) fn execute_show_command(
         "SET" => execute_set_command(state, session, parsed.body, context),
         "ASSIGN" => execute_assign_command(state, session, parsed.body, context),
         operation => {
-            if operation == "DELETE" && parsed.body.first().is_some_and(|token| token == "GROUP") {
+            if matches!(operation, "MOVE" | "COPY")
+                && parsed
+                    .body
+                    .first()
+                    .is_some_and(|token| matches!(token.as_str(), "GROUP" | "CUELIST"))
+            {
+                execute_pool_object_transfer(state, operation, parsed.body, context)
+            } else if operation == "DELETE"
+                && parsed.body.first().is_some_and(|token| token == "GROUP")
+            {
                 delete_group_command(state, parsed.body, context)
             } else if operation == "DELETE"
                 && parsed.body.first().is_some_and(|token| token == "SET")

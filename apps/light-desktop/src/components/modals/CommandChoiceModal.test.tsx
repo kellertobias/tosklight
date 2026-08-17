@@ -23,17 +23,17 @@ const CHOICE = {
 	showId: SHOW_ID,
 	showRevision: 7,
 	operation: "copy" as const,
-	command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
+	command: "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 	options: [
 		{
 			id: "plain" as const,
 			label: "Plain Copy",
-			command: "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
+			command: "COPY PLAIN CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 		},
 		{
 			id: "status" as const,
 			label: "Status Copy",
-			command: "COPY STATUS SET 1 CUE 2 AT SET 2 CUE 2",
+			command: "COPY STATUS CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 		},
 	],
 	cancelLabel: "Cancel",
@@ -90,17 +90,17 @@ const server = {
 	pendingCommandChoice: {
 		type: "cue_move_copy" as const,
 		operation: "copy" as const,
-		command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
+		command: "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 		options: [
 			{
 				id: "plain",
 				label: "Plain Copy",
-				command: "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
+				command: "COPY PLAIN CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 			},
 			{
 				id: "status",
 				label: "Status Copy",
-				command: "COPY STATUS SET 1 CUE 2 AT SET 2 CUE 2",
+				command: "COPY STATUS CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 			},
 		],
 		cancel_label: "Cancel",
@@ -131,17 +131,17 @@ afterEach(() => {
 	server.pendingCommandChoice = {
 		type: "cue_move_copy",
 		operation: "copy",
-		command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
+		command: "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 		options: [
 			{
 				id: "plain",
 				label: "Plain Copy",
-				command: "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
+				command: "COPY PLAIN CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 			},
 			{
 				id: "status",
 				label: "Status Copy",
-				command: "COPY STATUS SET 1 CUE 2 AT SET 2 CUE 2",
+				command: "COPY STATUS CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 			},
 		],
 		cancel_label: "Cancel",

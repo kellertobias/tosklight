@@ -38,7 +38,7 @@ impl ProgrammingPorts for TestPorts {
                 error: "rejected".into(),
             };
         }
-        if command.starts_with("COPY SET") {
+        if command.starts_with("COPY CUELIST") {
             return ProgrammingExecution::ChoiceRequired {
                 pending_choice: PendingCommandChoice::CueMoveCopy(CueMoveCopyChoice {
                     choice_id: uuid::Uuid::from_u128(1),
@@ -377,7 +377,7 @@ fn request_replay_retains_an_edit_persistence_warning() {
 #[test]
 fn choice_required_is_explicit_revisioned_and_replay_cannot_restore_it() {
     let harness = Harness::new(ActionSource::Http);
-    let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
+    let command = "COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2";
     let typed = ProgrammingCommand::Execute {
         command: Some(command.into()),
         policy: ExecutionPolicy::AtomicProgrammer,
@@ -458,13 +458,13 @@ fn choice_required_is_explicit_revisioned_and_replay_cannot_restore_it() {
 fn accepted_choice_selection_clears_the_command_and_choice_atomically() {
     let harness = Harness::new(ActionSource::UserInterface);
     let pending = harness.handle(ProgrammingCommand::Execute {
-        command: Some("COPY SET 1 CUE 1 AT SET 2 CUE 2".into()),
+        command: Some("COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2".into()),
         policy: ExecutionPolicy::Compatibility,
     });
     let sequence = harness.service.events().latest_sequence();
 
     let accepted = harness.handle(ProgrammingCommand::Execute {
-        command: Some("COPY PLAIN SET 1 CUE 1 AT SET 2 CUE 2".into()),
+        command: Some("COPY PLAIN CUELIST 1 CUE 1 AT CUELIST 2 CUE 2".into()),
         policy: ExecutionPolicy::Compatibility,
     });
 

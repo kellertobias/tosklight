@@ -197,15 +197,17 @@ describe("PresetsWindow normal recording boundary", () => {
 		expect(cards[0]).toHaveTextContent("Copy");
 		expect(cards[1]).not.toHaveClass("copy-target");
 		fireEvent.click(cards[0]);
-		expect(mocks.commandReplace).toHaveBeenCalledWith("COPY 2.1 AT");
+		expect(mocks.commandReplace).toHaveBeenCalledWith("COPY COLOR PRESET 1 AT");
 
-		mocks.commandText = "MOVE 2.1 AT";
+		mocks.commandText = "MOVE COLOR PRESET 1 AT";
 		rerender(<PresetsWindow compact />);
 		cards = container.querySelectorAll<HTMLButtonElement>(".preset-card");
 		expect(cards[0]).not.toHaveClass("move-target");
 		expect(cards[1]).toHaveClass("move-target");
 		fireEvent.click(cards[1]);
-		expect(mocks.commandExecute).toHaveBeenCalledWith("MOVE 2.1 AT 2");
+		expect(mocks.commandExecute).toHaveBeenCalledWith(
+			"MOVE COLOR PRESET 1 AT COLOR PRESET 2",
+		);
 
 		mocks.commandText = "DELETE";
 		rerender(<PresetsWindow compact />);
@@ -213,7 +215,7 @@ describe("PresetsWindow normal recording boundary", () => {
 		expect(cards[0]).toHaveClass("delete-target");
 		expect(cards[1]).not.toHaveClass("delete-target");
 		fireEvent.click(cards[0]);
-		expect(mocks.commandExecute).toHaveBeenCalledWith("DELETE 2.1");
+		expect(mocks.commandExecute).toHaveBeenCalledWith("DELETE COLOR PRESET 1");
 	});
 
 	it("recalls an existing Preset through the scoped typed action", () => {

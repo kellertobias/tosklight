@@ -29,8 +29,8 @@ import {
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import type { PresetCard } from "../../features/presetRecording/presetCards";
 import {
-	poolMutationTargetState,
 	type PoolMutationTarget,
+	poolMutationTargetState,
 } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import {
 	normalizePresetFamily,
@@ -164,8 +164,9 @@ export function PresetCardGrid({
 							? preset !== null && !filtered
 							: mutationTarget?.phase === "destination"
 								? preset === null &&
-									mutationTarget.source.split(".")[0] ===
-										presetStorageKey(presetAddress(family, 1)).split(".")[0]
+									mutationTarget.source.startsWith(
+										`${family.toUpperCase()} PRESET `,
+									)
 								: false;
 					const mutationState = mutationEligible
 						? poolMutationTargetState(mutationTarget)

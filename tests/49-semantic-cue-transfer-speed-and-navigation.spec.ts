@@ -26,7 +26,7 @@ scenario(
 
 		await t.cue.expect(source, 2).present();
 		await t.cue.expect(destination, 2).absent();
-		await t.command.execute("COPY SET 1 CUE 2 AT SET 2 CUE 2");
+		await t.command.execute("COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2");
 		await t.cue.transferChoice("COPY").cancel();
 		await t.cue.expect(source, 2).present();
 		await t.cue.expect(destination, 2).absent();

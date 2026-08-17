@@ -89,7 +89,7 @@ pub(super) fn resolve_endpoint(
     document: &PortableShowDocument,
     endpoint: ProgrammingCueTransferEndpoint,
 ) -> Result<ResolvedCueTransferEndpoint, ActionError> {
-    let resolved = resolve_cue_list(document, cue_list_address(endpoint.address))?;
+    let resolved = resolve_cue_list(document, cue_list_address(endpoint.address)?)?;
     let playback_number = resolved.playback_number;
     let stored = resolved.stored;
     let cue_list_id = stored.typed.id;
@@ -103,15 +103,20 @@ pub(super) fn resolve_endpoint(
     })
 }
 
-fn cue_list_address(address: ProgrammingCueTransferAddress) -> CueListAddress {
-    match address {
+fn cue_list_address(address: ProgrammingCueTransferAddress) -> Result<CueListAddress, ActionError> {
+    Ok(match address {
+        ProgrammingCueTransferAddress::SelectedCuelist => {
+            return Err(invalid(
+                "selected Cuelist must be resolved by the initiating desk",
+            ));
+        }
         ProgrammingCueTransferAddress::Pool { playback_number } => {
             CueListAddress::Pool { playback_number }
         }
         ProgrammingCueTransferAddress::PageSlot { page, slot } => {
             CueListAddress::PageSlot { page, slot }
         }
-    }
+    })
 }
 
 pub(super) fn exact_cue_list(
@@ -168,6 +173,9 @@ fn validate_endpoint(endpoint: &ProgrammingCueTransferEndpoint) -> Result<(), Ac
 
 fn validate_address(address: ProgrammingCueTransferAddress) -> Result<(), ActionError> {
     match address {
+        ProgrammingCueTransferAddress::SelectedCuelist => Err(invalid(
+            "selected Cuelist must be resolved by the initiating desk",
+        )),
         ProgrammingCueTransferAddress::Pool { playback_number }
             if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
         {

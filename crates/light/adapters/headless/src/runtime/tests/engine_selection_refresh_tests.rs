@@ -115,7 +115,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
 #[tokio::test]
 async fn active_show_install_clears_each_desk_pending_choice_once() {
     let scenario = ActiveGroupScenario::new("Pending choice invalidation").await;
-    let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
+    let command = "COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2";
     for session in [&scenario.actor, &scenario.peer] {
         scenario.state.programming.complete_command_execution(
             session.id,

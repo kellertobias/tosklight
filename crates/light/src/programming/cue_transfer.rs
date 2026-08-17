@@ -18,8 +18,16 @@ use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ProgrammingCueTransferAddress {
-    Pool { playback_number: u16 },
-    PageSlot { page: u8, slot: u8 },
+    /// Adapter-level shorthand for the Cuelist selected on the initiating desk. Command adapters
+    /// must freeze this to a concrete Pool address before entering the show-domain transaction.
+    SelectedCuelist,
+    Pool {
+        playback_number: u16,
+    },
+    PageSlot {
+        page: u8,
+        slot: u8,
+    },
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

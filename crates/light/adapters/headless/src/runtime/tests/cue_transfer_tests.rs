@@ -35,7 +35,10 @@ fn typed_choice_selection_resets_the_authoritative_command_once() {
             ),
         )
     };
-    let pending = dispatch("pending-copy", "COPY SET 1 CUE 2 AT SET 2 CUE 2");
+    let pending = dispatch(
+        "pending-copy",
+        "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
+    );
     assert!(pending.ok);
     let pending = pending.payload.unwrap()["pending_choice"].clone();
     assert_eq!(pending["type"], "cue_move_copy");
@@ -56,7 +59,13 @@ fn typed_choice_selection_resets_the_authoritative_command_once() {
     );
     let before = scenario.state.events.latest_sequence();
 
-    assert!(dispatch("plain-copy", "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2").ok);
+    assert!(
+        dispatch(
+            "plain-copy",
+            "COPY PLAIN CUELIST 1 CUE 2 AT CUELIST 2 CUE 2"
+        )
+        .ok
+    );
 
     let command = scenario
         .state
@@ -118,7 +127,7 @@ fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
     let response = dispatch_cue_transfer(
         &scenario,
         "copy-duplicate-destination",
-        "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
+        "COPY PLAIN CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
     );
     assert!(response.ok, "Cue copy failed: {:?}", response.error);
 
@@ -142,6 +151,182 @@ fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
+#[test]
+fn selected_cuelist_shorthand_resolves_once_from_the_initiating_desk() {
+    let scenario = CueTransferScenario::new();
+    let show_id = scenario.state.active_show.current().as_ref().unwrap().id;
+    scenario
+        .state
+        .installation
+        .set_selected_playback(scenario.session.desk.id, show_id, Some(1))
+        .unwrap();
+
+    let response = dispatch_cue_transfer(
+        &scenario,
+        "selected-cuelist-copy",
+        "COPY PLAIN CUE 2 AT CUE 4",
+    );
+    assert!(response.ok, "selected Cuelist copy failed: {:?}", response.error);
+
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
+    let (_, _, list) = cue_list_for_playback(&store, &scenario.state.output.snapshot(), 1).unwrap();
+    assert_eq!(
+        list.cues
+            .iter()
+            .map(|cue| cue.number.to_string())
+            .collect::<Vec<_>>(),
+        vec!["1", "2", "3", "4"]
+    );
+    assert_ne!(
+        list.cues
+            .iter()
+            .find(|cue| cue.number.to_string() == "4")
+            .unwrap()
+            .id,
+        scenario.source_cue_id,
+        "Copy must create a new Cue identity"
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[test]
+fn pool_object_move_copy_requires_typed_compatible_addresses_and_is_atomic() {
+    let scenario = CueTransferScenario::new();
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
+    let mut group = light_programmer::GroupDefinition {
+        id: "10".into(),
+        name: "Source Group".into(),
+        ..Default::default()
+    };
+    group
+        .fixtures
+        .extend([scenario.fixtures[0], scenario.fixtures[1]]);
+    store
+        .put_object("group", "10", &serde_json::to_value(group).unwrap(), 0)
+        .unwrap();
+    let entry = scenario.state.active_show.current().clone().unwrap();
+    scenario
+        .state
+        .output
+        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .unwrap();
+
+    execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "COPY GROUP 10 AT GROUP 11",
+    )
+    .unwrap();
+    execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "MOVE GROUP 11 AT GROUP 12",
+    )
+    .unwrap();
+    let groups = ActiveShowRepository::open(&scenario.show_path)
+        .unwrap()
+        .objects("group")
+        .unwrap();
+    assert!(groups.iter().any(|object| object.id == "10"));
+    assert!(!groups.iter().any(|object| object.id == "11"));
+    assert_eq!(
+        groups
+            .iter()
+            .find(|object| object.id == "12")
+            .unwrap()
+            .body["id"],
+        "12"
+    );
+
+    execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "COPY CUELIST 1 AT CUELIST 3",
+    )
+    .unwrap();
+    let copied = ActiveShowRepository::open(&scenario.show_path)
+        .unwrap()
+        .objects("playback")
+        .unwrap();
+    let source_target = copied
+        .iter()
+        .find(|object| object.id == "1")
+        .unwrap()
+        .body["target"]["cue_list_id"]
+        .clone();
+    let copied_target = copied
+        .iter()
+        .find(|object| object.id == "3")
+        .unwrap()
+        .body["target"]["cue_list_id"]
+        .clone();
+    assert_ne!(source_target, copied_target);
+
+    let page = light_playback::PlaybackPage {
+        number: 1,
+        name: "Main".into(),
+        slots: std::collections::HashMap::from([(1, 3)]),
+        virtual_playbacks: std::collections::HashMap::new(),
+    };
+    ActiveShowRepository::open(&scenario.show_path)
+        .unwrap()
+        .put_object(
+            "playback_page",
+            "1",
+            &serde_json::to_value(page).unwrap(),
+            0,
+        )
+        .unwrap();
+
+    execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "MOVE CUELIST 3 AT CUELIST 4",
+    )
+    .unwrap();
+    let moved = ActiveShowRepository::open(&scenario.show_path)
+        .unwrap()
+        .objects("playback")
+        .unwrap();
+    assert!(!moved.iter().any(|object| object.id == "3"));
+    assert_eq!(
+        moved
+            .iter()
+            .find(|object| object.id == "4")
+            .unwrap()
+            .body["target"]["cue_list_id"],
+        copied_target
+    );
+    let page = ActiveShowRepository::open(&scenario.show_path)
+        .unwrap()
+        .objects("playback_page")
+        .unwrap()
+        .into_iter()
+        .find(|object| object.id == "1")
+        .unwrap();
+    assert_eq!(page.body["slots"]["1"], 4);
+
+    let before = ActiveShowRepository::open(&scenario.show_path)
+        .unwrap()
+        .portable_revision()
+        .unwrap();
+    let error = execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "COPY CUELIST 1 AT GROUP 20",
+    )
+    .unwrap_err();
+    assert!(error.contains("incompatible"));
+    assert_eq!(
+        ActiveShowRepository::open(&scenario.show_path)
+            .unwrap()
+            .portable_revision()
+            .unwrap(),
+        before
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
 fn verify_pending_cue_transfer_choice(
     scenario: &CueTransferScenario,
     before: &CueTransferBaseline,
@@ -154,7 +339,7 @@ fn verify_pending_cue_transfer_choice(
             "pending-copy",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
                 light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                    value: "COPY SET 1 CUE 2 AT SET 2 CUE 2".into(),
+                    value: "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2".into(),
                 },
             ),
         ),
@@ -183,7 +368,7 @@ fn verify_pending_cue_transfer_choice(
     assert!(execute_programmer_command(
         &scenario.state,
         &scenario.session,
-        "COPY SET 1 CUE 2 AT SET 2 CUE 2"
+        "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2"
     )
     .is_err());
     let unchanged = scenario.baseline();
@@ -202,7 +387,7 @@ fn execute_and_verify_cue_transfer(
         .command_line_state(scenario.session.id)
         .is_some_and(|command| command.pending_choice.is_some());
     let command = format!(
-        "{} {} SET 1 CUE 2 AT SET 2 CUE 2",
+        "{} {} CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
         case.operation, case.mode
     );
     let response = dispatch_cue_transfer(scenario, "explicit-transfer", &command);

@@ -135,7 +135,7 @@ describe("Cue transfer wire codec", () => {
 			show_id: SHOW_ID,
 			show_revision: 7,
 			operation: "copy",
-			command: "COPY SET 1 CUE 1 AT SET 2 CUE 2",
+			command: "COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2",
 			options: [],
 			cancel_label: "Cancel",
 		};

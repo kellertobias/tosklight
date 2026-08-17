@@ -26,6 +26,10 @@ import {
 } from "../../components/control/updateWorkflow";
 import { loadRecordSettings } from "../../components/setup/ProgrammerDefaults";
 import { PoolColorSettings } from "../../components/shared/PoolColorSettings";
+import {
+	poolMutationTarget,
+	poolObjectMutationCommand,
+} from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
 import { runtimeMaster } from "../../features/playbackRuntime/legacy";
@@ -151,7 +155,7 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 function useCuelistPoolActions(props: CuelistPoolProps) {
 	const command = useCommandLineSurface({
 		enabled: props.active,
-		observeCommand: false,
+		observeCommand: true,
 	});
 	const cueRecording = useCueRecording();
 	const cueLists = useCueLists();
@@ -163,6 +167,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	} | null>(null);
 	const holdTimer = useRef<number | null>(null);
 	const held = useRef(false);
+	const mutationTarget = poolMutationTarget(command.text);
 	const clearHold = () => {
 		if (holdTimer.current) window.clearTimeout(holdTimer.current);
 		holdTimer.current = null;
@@ -247,6 +252,17 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			requestUpdateTarget(cueUpdateTarget(objectId));
 			return;
 		}
+		const mutation = poolObjectMutationCommand(
+			mutationTarget?.operation === "delete" ? null : mutationTarget,
+			"CUELIST",
+			number,
+			playback !== null,
+		);
+		if (mutation) {
+			if (mutation.kind === "execute") void command.execute(mutation.command);
+			else void command.replace(mutation.command, false);
+			return;
+		}
 		if (state.storeArmed) {
 			const cueListId =
 				playback?.target.type === "cue_list"
@@ -288,6 +304,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	return {
 		state,
 		assignArmed: /^ASSIGN$/i.test(command.read().text.trim()),
+		mutationTarget,
 		clearHold,
 		startHold,
 		click,
@@ -359,6 +376,7 @@ function resolveCuelistPresentation({
 	updateArmed,
 	setTarget,
 	setArmed,
+	mutationTarget,
 }: {
 	slot: CuelistPoolItem;
 	configuration: PoolPresentationConfiguration;
@@ -369,6 +387,7 @@ function resolveCuelistPresentation({
 	updateArmed: boolean;
 	setTarget: boolean;
 	setArmed: boolean;
+	mutationTarget: ReturnType<typeof poolMutationTarget>;
 }) {
 	const itemId =
 		slot.playback?.target.type === "cue_list"
@@ -392,6 +411,14 @@ function resolveCuelistPresentation({
 			...(slot.playback && (setArmed || setTarget)
 				? (["set-target"] as const)
 				: []),
+			...(poolObjectMutationCommand(
+				mutationTarget?.operation === "delete" ? null : mutationTarget,
+				"CUELIST",
+				slot.number,
+				slot.playback !== null,
+			)
+				? ([`${mutationTarget?.operation ?? "copy"}-target`] as const)
+				: []),
 		],
 	});
 }
@@ -407,6 +434,7 @@ function CuelistPoolCards({
 	updateArmed,
 	setTarget,
 	setArmed,
+	mutationTarget,
 	startHold,
 	clearHold,
 	click,
@@ -423,6 +451,7 @@ function CuelistPoolCards({
 	updateArmed: boolean;
 	setTarget: number | null;
 	setArmed: boolean;
+	mutationTarget: ReturnType<typeof poolMutationTarget>;
 	startHold: (number: number, playback: PlaybackDefinition | null) => void;
 	clearHold: () => void;
 	click: (number: number, playback: PlaybackDefinition | null) => void;
@@ -445,6 +474,7 @@ function CuelistPoolCards({
 			updateArmed,
 			setTarget: isSetTarget,
 			setArmed,
+			mutationTarget,
 		});
 		return (
 			<CuelistPoolSlot
@@ -569,6 +599,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 		recordChoice,
 		resolveRecordChoice,
 		assignArmed,
+		mutationTarget,
 	} = useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
 	const [preview, setPreview] = useState<{
@@ -626,6 +657,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 				updateArmed={state.updateArmed}
 				setTarget={state.cueListSetTarget}
 				setArmed={state.cueListSetArmed || assignArmed}
+				mutationTarget={mutationTarget}
 				startHold={startHold}
 				clearHold={clearHold}
 				click={click}

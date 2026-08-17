@@ -3,7 +3,12 @@ import { ButtonGrid } from "@tosklight/ui/window-kit";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import { groups } from "../../data/mockData";
-import { poolMutationTarget } from "../../features/controlSurfaceInteraction/poolCommandTarget";
+import {
+	canonicalPoolMutationOperation,
+	type PoolMutationOperation,
+	poolMutationTarget,
+	poolObjectMutationCommand,
+} from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
 import {
 	useActiveShowId,
@@ -77,7 +82,7 @@ function GroupShortcut({
 	storeArmed,
 	updateArmed,
 	setTarget,
-	deleteTarget,
+	mutationOperation,
 	onClick,
 	onDoubleClick,
 	onContextMenu,
@@ -91,7 +96,7 @@ function GroupShortcut({
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: boolean;
-	deleteTarget: boolean;
+	mutationOperation: PoolMutationOperation | null;
 	onClick: () => void;
 	onDoubleClick: () => void;
 	onContextMenu: () => void;
@@ -119,7 +124,7 @@ function GroupShortcut({
 			...(storeArmed ? (["store-target"] as const) : []),
 			...(updateArmed ? (["update-target"] as const) : []),
 			...(setTarget ? (["set-target"] as const) : []),
-			...(deleteTarget ? (["delete-target"] as const) : []),
+			...(mutationOperation ? ([`${mutationOperation}-target`] as const) : []),
 		],
 	});
 	return (
@@ -161,14 +166,20 @@ function GroupShortcut({
 			<span className="number">{index + 1}</span>
 			<b>{group?.body.name ?? "Empty"}</b>
 			<small>{shortcutDescription(group, storeArmed, updateArmed)}</small>
-			{(storeArmed || setTarget || deleteTarget) && (
+			{(storeArmed || setTarget || mutationOperation) && (
 				<span className="pool-card-status-row">
 					<span
 						className={`pool-card-workflow ${
-							storeArmed ? "record" : setTarget ? "set" : "delete"
+							storeArmed ? "record" : setTarget ? "set" : mutationOperation
 						}`}
 					>
-						{storeArmed ? "Record" : setTarget ? "Set" : "Delete"}
+						{storeArmed
+							? "Record"
+							: setTarget
+								? "Set"
+								: mutationOperation
+									? canonicalPoolMutationOperation(mutationOperation)
+									: null}
 					</span>
 				</span>
 			)}
@@ -212,11 +223,16 @@ function GroupShortcutList({
 					storeArmed={state.storeArmed}
 					updateArmed={state.updateArmed}
 					setTarget={Boolean(group && setTargetArmed)}
-					deleteTarget={Boolean(
-						group &&
-							mutationTarget?.operation === "delete" &&
-							mutationTarget.phase === "source",
-					)}
+					mutationOperation={
+						poolObjectMutationCommand(
+							mutationTarget,
+							"GROUP",
+							group?.id ?? index + 1,
+							group !== null,
+						)
+							? (mutationTarget?.operation ?? null)
+							: null
+					}
 					onClick={() => activateShortcut(group, index)}
 					onDoubleClick={() => {
 						if (group && !state.updateArmed) {
@@ -335,12 +351,16 @@ export function GroupStrip({
 			requestUpdateTarget({ family: { type: "group" }, object_id: id });
 			return;
 		}
-		if (
-			group &&
-			mutationTarget?.operation === "delete" &&
-			mutationTarget.phase === "source"
-		) {
-			void commandLine.execute(`DELETE GROUP ${group.id}`);
+		const mutation = poolObjectMutationCommand(
+			mutationTarget,
+			"GROUP",
+			id,
+			group !== null,
+		);
+		if (mutation) {
+			if (mutation.kind === "execute")
+				void commandLine.execute(mutation.command);
+			else void commandLine.replace(mutation.command, false);
 			return;
 		}
 		if (group && !state.storeArmed) {

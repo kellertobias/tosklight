@@ -1,6 +1,7 @@
 import { PoolCard } from "@tosklight/ui/pools";
 import { useEffect, useRef } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
+import type { PoolMutationOperation } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import { canonicalGroupSource } from "../../features/showObjects/groupProjection";
 import type { Group } from "./model";
@@ -60,7 +61,7 @@ export function GroupCard({
 	storeArmed,
 	updateArmed,
 	setTarget,
-	deleteTarget,
+	mutationOperation,
 	poolPresentation,
 	showId,
 	surfaceKey,
@@ -80,7 +81,7 @@ export function GroupCard({
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: boolean;
-	deleteTarget: boolean;
+	mutationOperation: PoolMutationOperation | null;
 	poolPresentation: PoolPresentationConfiguration;
 	showId: string;
 	surfaceKey: string;
@@ -132,7 +133,7 @@ export function GroupCard({
 			...(storeArmed ? (["store-target"] as const) : []),
 			...(updateArmed ? (["update-target"] as const) : []),
 			...(setTarget ? (["set-target"] as const) : []),
-			...(deleteTarget ? (["delete-target"] as const) : []),
+			...(mutationOperation ? ([`${mutationOperation}-target`] as const) : []),
 		],
 	});
 	const attributesLabel =

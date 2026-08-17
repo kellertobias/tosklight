@@ -19,7 +19,8 @@ pub(crate) fn is_cue_transfer(command: &str) -> bool {
         Some("PLAIN" | "STATUS") => &tokens[2..],
         _ => &tokens[1..],
     };
-    body.first().is_some_and(|token| token == "SET")
+    body.first()
+        .is_some_and(|token| matches!(token.as_str(), "CUE" | "CUELIST" | "SET"))
 }
 
 pub(crate) fn parse(
@@ -53,21 +54,24 @@ pub(crate) fn parse(
 }
 
 fn endpoint(tokens: &[String], label: &str) -> Result<ProgrammingCueTransferEndpoint, String> {
-    if tokens.first().is_none_or(|token| token != "SET") {
-        return Err(format!("Cue transfer {label} must start with SET"));
+    if tokens.first().is_some_and(|token| token == "SET") {
+        return Err(format!(
+            "Cue transfer {label} uses CUELIST <number> CUE <cue-number>, not SET"
+        ));
     }
-    let first = number::<u16>(tokens.get(1), "playback number")?;
-    let (address, cue_index) = if tokens.get(2).is_some_and(|token| token == ".") {
-        let page = u8::try_from(first).map_err(|_| "page number is invalid")?;
-        let slot = number::<u8>(tokens.get(3), "page playback number")?;
-        (ProgrammingCueTransferAddress::PageSlot { page, slot }, 4)
-    } else {
-        (
+    let (address, cue_index) = match tokens.first().map(String::as_str) {
+        Some("CUE") => (ProgrammingCueTransferAddress::SelectedCuelist, 0),
+        Some("CUELIST") => (
             ProgrammingCueTransferAddress::Pool {
-                playback_number: first,
+                playback_number: number::<u16>(tokens.get(1), "Cuelist number")?,
             },
             2,
-        )
+        ),
+        _ => {
+            return Err(format!(
+                "Cue transfer {label} must start with CUELIST <number> or CUE"
+            ));
+        }
     };
     if tokens.get(cue_index).is_none_or(|token| token != "CUE") {
         return Err(format!("Cue transfer {label} requires CUE <cue-number>"));
@@ -137,31 +141,49 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_pool_and_explicit_page_addresses_without_resolving_them() {
-        let parsed = parse("CPY SET 7 CUE 1.2 AT SET 2.3 CUE 4", ShowId::new())
+    fn parses_complete_and_selected_cuelist_addresses() {
+        let parsed = parse("CPY CUELIST 7 CUE 1.2 AT CUELIST 2 CUE 4", ShowId::new())
             .unwrap()
             .unwrap();
         assert_eq!(parsed.request.operation, CueTransferOperation::Copy);
         assert_eq!(parsed.request.source.cue_number.to_string(), "1.2");
         assert!(matches!(
             parsed.request.destination.address,
-            ProgrammingCueTransferAddress::PageSlot { page: 2, slot: 3 }
+            ProgrammingCueTransferAddress::Pool { playback_number: 2 }
         ));
         assert_eq!(parsed.mode, None);
 
-        let deep = parse("COPY SET 7 CUE 2.0.15 AT SET 8 CUE 7.3.1", ShowId::new())
-            .unwrap()
-            .unwrap();
+        let deep = parse(
+            "COPY CUELIST 7 CUE 2.0.15 AT CUELIST 8 CUE 7.3.1",
+            ShowId::new(),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(deep.request.source.cue_number.to_string(), "2.0.15");
         assert_eq!(deep.request.destination.cue_number.to_string(), "7.3.1");
-        assert!(parse("COPY SET 7 CUE 02 AT SET 8 CUE 3", ShowId::new()).is_err());
+        assert!(parse("COPY CUELIST 7 CUE 02 AT CUELIST 8 CUE 3", ShowId::new()).is_err());
+
+        let selected = parse("MOVE CUE 2.1 AT CUE 2.2", ShowId::new())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            selected.request.source.address,
+            ProgrammingCueTransferAddress::SelectedCuelist
+        );
+        assert_eq!(
+            selected.request.destination.address,
+            ProgrammingCueTransferAddress::SelectedCuelist
+        );
     }
 
     #[test]
     fn parses_explicit_transfer_mode() {
-        let parsed = parse("MOVE STATUS SET 1 CUE 2 AT SET 2 CUE 3", ShowId::new())
-            .unwrap()
-            .unwrap();
+        let parsed = parse(
+            "MOVE STATUS CUELIST 1 CUE 2 AT CUELIST 2 CUE 3",
+            ShowId::new(),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(parsed.mode, Some(ProgrammingCueTransferMode::Status));
     }
 
@@ -169,8 +191,9 @@ mod tests {
     fn leaves_unrelated_programmer_commands_to_their_owner() {
         assert!(!is_cue_transfer("FIXTURE 1"));
         assert!(!is_cue_transfer("COPY PRESET 2.1 AT 2"));
-        assert!(!is_cue_transfer("MOVE 2.1 AT 2"));
-        assert!(is_cue_transfer("COPY SET 1 CUE 1 AT SET 2 CUE 2"));
-        assert!(is_cue_transfer("MOVE STATUS SET 1 CUE 1 AT SET 2 CUE 2"));
+        assert!(!is_cue_transfer("MOVE PRESET 2.1 AT PRESET 2.2"));
+        assert!(is_cue_transfer("COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2"));
+        assert!(is_cue_transfer("MOVE STATUS CUE 1 AT CUE 2"));
+        assert!(parse("COPY SET 1 CUE 1 AT SET 2 CUE 2", ShowId::new()).is_err());
     }
 }

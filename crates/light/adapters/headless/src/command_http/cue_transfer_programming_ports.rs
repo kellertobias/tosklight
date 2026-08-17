@@ -18,11 +18,14 @@ impl ServerProgrammingPorts<'_> {
             Ok(show_id) => show_id,
             Err(error) => return self.rejected_transfer(context, command, error),
         };
-        let parsed = match super::cue_transfer_command::parse(command, show_id) {
+        let mut parsed = match super::cue_transfer_command::parse(command, show_id) {
             Ok(Some(parsed)) => parsed,
             Ok(None) => return None,
             Err(error) => return self.rejected_transfer(context, command, error),
         };
+        if let Err(error) = self.resolve_selected_cuelists(&mut parsed.request) {
+            return self.rejected_transfer(context, command, error);
+        }
         let result = match parsed.mode {
             None => self.prepare_transfer_choice(context, parsed.request),
             Some(mode) => {
@@ -30,6 +33,42 @@ impl ServerProgrammingPorts<'_> {
             }
         };
         Some(result)
+    }
+
+    fn resolve_selected_cuelists(
+        &self,
+        request: &mut light_application::ProgrammingCueTransferChoiceRequest,
+    ) -> Result<(), String> {
+        use light_application::ProgrammingCueTransferAddress;
+        if !matches!(
+            request.source.address,
+            ProgrammingCueTransferAddress::SelectedCuelist
+        ) && !matches!(
+            request.destination.address,
+            ProgrammingCueTransferAddress::SelectedCuelist
+        ) {
+            return Ok(());
+        }
+        let playback_number = self
+            .state()
+            .installation
+            .selected_playback(self.session().desk.id, request.show_id)
+            .map_err(|error| error.to_string())?
+            .ok_or("no Cuelist is selected on this desk")?;
+        let concrete = ProgrammingCueTransferAddress::Pool { playback_number };
+        if matches!(
+            request.source.address,
+            ProgrammingCueTransferAddress::SelectedCuelist
+        ) {
+            request.source.address = concrete;
+        }
+        if matches!(
+            request.destination.address,
+            ProgrammingCueTransferAddress::SelectedCuelist
+        ) {
+            request.destination.address = concrete;
+        }
+        Ok(())
     }
 
     fn prepare_transfer_choice(

@@ -30,7 +30,7 @@ const choice: PendingCommandChoice = {
 	showId: SHOW_ID,
 	showRevision: 7,
 	operation: "copy",
-	command: "COPY SET 1 CUE 1 AT SET 2 CUE 2",
+	command: "COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2",
 	options: [
 		{ id: "plain", label: "Plain Copy", command: "COPY PLAIN" },
 		{ id: "status", label: "Status Copy", command: "COPY STATUS" },

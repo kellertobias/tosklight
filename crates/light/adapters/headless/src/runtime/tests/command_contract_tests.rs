@@ -90,10 +90,25 @@ impl CommandContractScenario {
             .keys()
             .all(light_core::AttributeKey::is_intensity)
     }));
-    execute_programmer_command(&self.state, &self.session, "DELETE 1.1").unwrap();
-    execute_programmer_command(&self.state, &self.session, "COPY 0.1 AT 2").unwrap();
-    execute_programmer_command(&self.state, &self.session, "MOVE 0.2 AT 3").unwrap();
-    execute_programmer_command(&self.state, &self.session, "DELETE 0.1").unwrap();
+    execute_programmer_command(
+        &self.state,
+        &self.session,
+        "DELETE INTENSITY PRESET 1",
+    )
+    .unwrap();
+    execute_programmer_command(
+        &self.state,
+        &self.session,
+        "COPY ALL PRESET 1 AT ALL PRESET 2",
+    )
+    .unwrap();
+    execute_programmer_command(
+        &self.state,
+        &self.session,
+        "MOVE ALL PRESET 2 AT ALL PRESET 3",
+    )
+    .unwrap();
+    execute_programmer_command(&self.state, &self.session, "DELETE ALL PRESET 1").unwrap();
     let preset_ids = ActiveShowRepository::open(&self.show_path)
         .unwrap()
         .objects("preset")

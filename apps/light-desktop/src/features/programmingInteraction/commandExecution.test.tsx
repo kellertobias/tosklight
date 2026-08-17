@@ -389,7 +389,7 @@ describe("scoped command-line execution", () => {
 			showId: SHOW_ID,
 			showRevision: 7,
 			operation: "copy" as const,
-			command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
+			command: "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
 			options: [],
 			cancelLabel: "Cancel",
 		};

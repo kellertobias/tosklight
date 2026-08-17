@@ -302,7 +302,7 @@ describe("ProgrammingInteractionViewProvider", () => {
 		);
 		expect(onRender).toHaveBeenCalledTimes(renderCount);
 
-		const command = "COPY SET 1 CUE 2 AT SET 2 CUE 2";
+		const command = "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2";
 		act(() =>
 			transport.emit({
 				type: "event",

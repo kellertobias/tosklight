@@ -7,7 +7,11 @@ import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { type MutableRefObject, useRef } from "react";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../../components/control/updateWorkflow";
-import { poolMutationTarget } from "../../features/controlSurfaceInteraction/poolCommandTarget";
+import {
+	type PoolMutationOperation,
+	poolMutationTarget,
+	poolObjectMutationCommand,
+} from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
 import {
@@ -32,7 +36,7 @@ interface GroupPoolCardSlotProps
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: boolean;
-	deleteTarget: boolean;
+	mutationOperation: PoolMutationOperation | null;
 	poolPresentation: ReturnType<typeof usePoolPresentationConfiguration>;
 	showId: string;
 	surfaceKey: string;
@@ -52,7 +56,7 @@ function GroupPoolCardSlot({
 	storeArmed,
 	updateArmed,
 	setTarget,
-	deleteTarget,
+	mutationOperation,
 	poolPresentation,
 	showId,
 	surfaceKey,
@@ -92,7 +96,7 @@ function GroupPoolCardSlot({
 			storeArmed={storeArmed}
 			updateArmed={updateArmed}
 			setTarget={setTarget}
-			deleteTarget={deleteTarget}
+			mutationOperation={mutationOperation}
 			poolPresentation={poolPresentation}
 			showId={showId}
 			surfaceKey={surfaceKey}
@@ -218,12 +222,15 @@ export function GroupPoolGrid({
 			requestUpdateTarget({ family: { type: "group" }, object_id: id });
 			return;
 		}
-		if (
-			group &&
-			mutationTarget?.operation === "delete" &&
-			mutationTarget.phase === "source"
-		) {
-			void command.execute(`DELETE GROUP ${group.id}`);
+		const mutation = poolObjectMutationCommand(
+			mutationTarget,
+			"GROUP",
+			id,
+			group !== null,
+		);
+		if (mutation) {
+			if (mutation.kind === "execute") void command.execute(mutation.command);
+			else void command.replace(mutation.command, false);
 			return;
 		}
 		if (group && setInteraction?.state?.phase === "set_armed") {
@@ -296,11 +303,16 @@ export function GroupPoolGrid({
 							storeArmed={state.storeArmed}
 							updateArmed={state.updateArmed}
 							setTarget={Boolean(group && setTargetArmed)}
-							deleteTarget={Boolean(
-								group &&
-									mutationTarget?.operation === "delete" &&
-									mutationTarget.phase === "source",
-							)}
+							mutationOperation={
+								poolObjectMutationCommand(
+									mutationTarget,
+									"GROUP",
+									group?.id ?? index + 1,
+									group !== null,
+								)
+									? (mutationTarget?.operation ?? null)
+									: null
+							}
 							poolPresentation={poolPresentation}
 							showId={showId}
 							surfaceKey={surfaceKey}

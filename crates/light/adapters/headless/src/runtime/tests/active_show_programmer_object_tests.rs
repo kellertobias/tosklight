@@ -788,7 +788,8 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
 
     let before_preset_delete = scenario.boundary();
     assert_eq!(
-        execute_programmer_command(&scenario.state, &scenario.session, "DELETE 0.7").unwrap(),
+        execute_programmer_command(&scenario.state, &scenario.session, "DELETE ALL PRESET 7",)
+            .unwrap(),
         1
     );
     scenario.assert_one_commit(&before_preset_delete);
@@ -820,7 +821,12 @@ fn preset_move_commits_destination_and_source_delete_atomically() {
 
     let before_move = scenario.boundary();
     assert_eq!(
-        execute_programmer_command(&scenario.state, &scenario.session, "MOVE 2.1 AT 5").unwrap(),
+        execute_programmer_command(
+            &scenario.state,
+            &scenario.session,
+            "MOVE COLOR PRESET 1 AT COLOR PRESET 5",
+        )
+        .unwrap(),
         1
     );
     scenario.assert_one_commit(&before_move);
@@ -831,8 +837,12 @@ fn preset_move_commits_destination_and_source_delete_atomically() {
     assert_eq!(destination.body["number"], 5);
 
     let before_conflict = scenario.boundary();
-    let error = execute_programmer_command(&scenario.state, &scenario.session, "MOVE 2.2 AT 6")
-        .unwrap_err();
+    let error = execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "MOVE COLOR PRESET 2 AT COLOR PRESET 6",
+    )
+    .unwrap_err();
     assert!(error.contains("already exists"));
     scenario.assert_unchanged(&before_conflict);
     let store = scenario.store();

@@ -6,6 +6,11 @@ import { GroupStrip } from "../components/shared/GroupStrip";
 import type { RecordMode } from "../components/shared/RecordModeDialog";
 import { presets } from "../data/mockData";
 import {
+	canonicalPoolMutationOperation,
+	type PoolMutationTarget,
+	poolMutationTarget,
+} from "../features/controlSurfaceInteraction/poolCommandTarget";
+import {
 	useActiveShowId,
 	useBootstrapReady,
 } from "../features/deskSnapshot/DeskSnapshotState";
@@ -23,11 +28,6 @@ import {
 import { submitPresetRecording } from "../features/presetRecording/submitRecording";
 import { useProgrammerActions } from "../features/programmerActions/ProgrammerActionsContext";
 import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
-import {
-	canonicalPoolMutationOperation,
-	poolMutationTarget,
-	type PoolMutationTarget,
-} from "../features/controlSurfaceInteraction/poolCommandTarget";
 import { usePresets } from "../features/showObjects/ShowObjectsState";
 import {
 	normalizePresetFamily,
@@ -78,12 +78,7 @@ interface PresetActivationOptions {
 }
 
 function presetCommandAddress(preset: PresetCard) {
-	return presetStorageKey(
-		presetAddress(
-			normalizePresetFamily(preset.body.family),
-			preset.body.number,
-		),
-	);
+	return `${normalizePresetFamily(preset.body.family).toUpperCase()} PRESET ${preset.body.number}`;
 }
 
 function presetMutationEligible(
@@ -93,9 +88,13 @@ function presetMutationEligible(
 ) {
 	if (!target) return false;
 	if (target.phase === "source")
-		return preset !== null && normalizePresetFamily(preset.body.family) === family;
-	const familyPrefix = presetStorageKey(presetAddress(family, 1)).split(".")[0];
-	return preset === null && target.source.split(".")[0] === familyPrefix;
+		return (
+			preset !== null && normalizePresetFamily(preset.body.family) === family
+		);
+	return (
+		preset === null &&
+		target.source.startsWith(`${family.toUpperCase()} PRESET `)
+	);
 }
 
 function activatePreset(options: PresetActivationOptions) {
@@ -127,7 +126,9 @@ function activatePreset(options: PresetActivationOptions) {
 				void options.executeCommand(`${operation} ${address}`);
 			else void options.replaceCommand(`${operation} ${address} AT`);
 		} else if (target.phase === "destination")
-			void options.executeCommand(`${operation} ${target.source} AT ${index + 1}`);
+			void options.executeCommand(
+				`${operation} ${target.source} AT ${family.toUpperCase()} PRESET ${index + 1}`,
+			);
 		return;
 	}
 	if (!preset && !options.storeArmed) return;

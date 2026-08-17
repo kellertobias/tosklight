@@ -42,7 +42,10 @@ impl CueTransferRouteScenario {
 
     async fn open_copy_choice(&self) -> PendingTransfer {
         let response = self
-            .execute("open-transfer-choice", "COPY SET 1 CUE 2 AT SET 2 CUE 2")
+            .execute(
+                "open-transfer-choice",
+                "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
+            )
             .await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
@@ -132,11 +135,14 @@ impl CueTransferRouteScenario {
 }
 
 #[tokio::test]
-async fn legacy_command_transfer_emits_only_its_temporary_per_object_facade_notification() {
+async fn command_transfer_emits_only_its_per_object_facade_notification() {
     let scenario = CueTransferRouteScenario::new();
     let compatibility = scenario.compatibility_count();
     let response = scenario
-        .execute("legacy-transfer", "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2")
+        .execute(
+            "command-transfer",
+            "COPY PLAIN CUELIST 1 CUE 2 AT CUELIST 2 CUE 2",
+        )
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
@@ -145,7 +151,7 @@ async fn legacy_command_transfer_emits_only_its_temporary_per_object_facade_noti
 }
 
 #[test]
-fn non_set_copy_and_move_remain_owned_by_legacy_preset_mutation() {
+fn preset_copy_and_move_remain_owned_by_preset_mutation() {
     let scenario = CueTransferRouteScenario::new();
     let show_path = scenario
         .state
@@ -180,10 +186,18 @@ fn non_set_copy_and_move_remain_owned_by_legacy_preset_mutation() {
             ),
         )
     };
-    let copied = dispatch("legacy-preset-copy", "COPY 2.1 AT 2");
+    let copied = dispatch(
+        "preset-copy",
+        "COPY COLOR PRESET 1 AT COLOR PRESET 2",
+    );
     assert!(copied.ok, "Preset Copy failed: {:?}", copied.error);
-    let moved = dispatch("legacy-preset-move", "MOVE 2.2 AT 3");
+    let moved = dispatch(
+        "preset-move",
+        "MOVE COLOR PRESET 2 AT COLOR PRESET 3",
+    );
     assert!(moved.ok, "Preset Move failed: {:?}", moved.error);
+    let obsolete = dispatch("old-preset-copy", "COPY 2.1 AT 4");
+    assert!(!obsolete.ok, "pre-release dotted object grammar must be rejected");
 
     let ids = ShowStore::open(&show_path)
         .unwrap()
@@ -201,7 +215,7 @@ fn non_set_copy_and_move_remain_owned_by_legacy_preset_mutation() {
 #[tokio::test]
 async fn command_line_choice_replay_uses_current_authority_without_resurrecting_choice() {
     let scenario = CueTransferRouteScenario::new();
-    let command = "COPY SET 1 CUE 2 AT SET 2 CUE 2";
+    let command = "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2";
     let original = scenario.execute("replayable-choice", command).await;
     assert_eq!(original.status(), StatusCode::OK);
     let original = json(original).await;
