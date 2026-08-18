@@ -20,7 +20,7 @@ fn compatibility_generator_copies_the_canonical_asset_byte_for_byte() {
     let directory = workspace("canonical-copy");
     let destination = directory.join(DEMO_SHOW_FILE_NAME);
     let generated = generate(library_in(&directory), &destination).expect("canonical demo copies");
-    assert_eq!(generated.fixtures, 293);
+    assert_eq!(generated.fixtures, 297);
     assert_eq!(generated.name, DEMO_SHOW_NAME);
     assert_eq!(
         std::fs::read(destination).expect("copied demo"),
