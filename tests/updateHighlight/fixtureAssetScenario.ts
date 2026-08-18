@@ -61,14 +61,16 @@ async function prepareFixtureAssets({ api, bench }: FixtureAssetContext) {
 		modelA: "fixture-002-model-a.glb",
 		modelB: "fixture-002-model-b.glb",
 	};
+	// The shipped packages carry a photograph and a model rather than an icon, and the curtains
+	// are the pair whose assets differ from each other.
 	await extractFixtureAsset(
-		"generic--dimmer-profile.toskfixture",
-		"assets/icon.png",
+		"venue--curtain-1-m.toskfixture",
+		"assets/photograph.png",
 		`${bench.dataDir}/shows/${files.photoA}`,
 	);
 	await extractFixtureAsset(
-		"generic--dimmer-par-can.toskfixture",
-		"assets/icon.png",
+		"generic--blinder.toskfixture",
+		"assets/photograph.png",
 		`${bench.dataDir}/shows/${files.photoB}`,
 	);
 	await fs.copyFile(
@@ -76,15 +78,20 @@ async function prepareFixtureAssets({ api, bench }: FixtureAssetContext) {
 		`${bench.dataDir}/shows/${files.icon}`,
 	);
 	await extractFixtureAsset(
-		"generic--dimmer-profile.toskfixture",
+		"venue--curtain-1-m.toskfixture",
 		"assets/model.glb",
 		`${bench.dataDir}/shows/${files.modelA}`,
 	);
 	await extractFixtureAsset(
-		"generic--dimmer-par-can.toskfixture",
+		"venue--curtain-2-m.toskfixture",
 		"assets/model.glb",
 		`${bench.dataDir}/shows/${files.modelB}`,
 	);
+	// The summary names the model's own byte length, so it follows whichever package supplied it.
+	const modelSummaries = {
+		a: `GLB 2.0 · ${(await fs.stat(`${bench.dataDir}/shows/${files.modelA}`)).size} bytes`,
+		b: `GLB 2.0 · ${(await fs.stat(`${bench.dataDir}/shows/${files.modelB}`)).size} bytes`,
+	};
 	const expectedAssets = {
 		photoA: `data:image/png;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.photoA}`)).toString("base64")}`,
 		photoB: `data:image/png;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.photoB}`)).toString("base64")}`,
@@ -92,7 +99,7 @@ async function prepareFixtureAssets({ api, bench }: FixtureAssetContext) {
 		modelA: `data:application/octet-stream;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.modelA}`)).toString("base64")}`,
 		modelB: `data:application/octet-stream;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.modelB}`)).toString("base64")}`,
 	};
-	return { manufacturer, name, physical, files, expectedAssets };
+	return { manufacturer, name, physical, files, expectedAssets, modelSummaries };
 }
 
 type FixtureAssetData = Awaited<ReturnType<typeof prepareFixtureAssets>>;
@@ -198,7 +205,7 @@ async function exerciseInitialAssets(
 		.click();
 	await selectConfinedFile(page, files.modelA);
 	await expect(editor.getByRole("status")).toContainText(
-		"GLB 2.0 · 1268 bytes",
+		data.modelSummaries.a,
 	);
 	const preview = editor.getByLabel("Visualizer GLB model preview");
 	const previewCanvas = preview.locator("canvas");
@@ -228,7 +235,7 @@ async function exerciseInitialAssets(
 		.click();
 	await selectConfinedFile(page, files.modelB);
 	await expect(editor.getByRole("status")).toContainText(
-		"GLB 2.0 · 1448 bytes",
+		data.modelSummaries.b,
 	);
 	await editor
 		.getByRole("button", { name: "Save fixture", exact: true })
@@ -283,7 +290,7 @@ async function createProfileRevision(
 	await expect(editor.getByText("Fixture icon assigned")).toBeVisible();
 	await expect(editor.getByText("Visualizer GLB model assigned")).toBeVisible();
 	await expect(editor.getByRole("status")).toContainText(
-		"GLB 2.0 · 1448 bytes",
+		data.modelSummaries.b,
 	);
 
 	await editor.getByLabel("Beam angle (degrees)").fill("42");
@@ -296,7 +303,7 @@ async function createProfileRevision(
 		.click();
 	await selectConfinedFile(page, files.modelA);
 	await expect(editor.getByRole("status")).toContainText(
-		"GLB 2.0 · 1268 bytes",
+		data.modelSummaries.a,
 	);
 	await editor
 		.getByRole("button", { name: "Save fixture", exact: true })
