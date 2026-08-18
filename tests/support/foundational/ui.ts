@@ -25,7 +25,7 @@ export async function pressCommandAndWait(
 	visibleValue = value,
 ): Promise<void> {
 	await pressCommand(page, value, visibleValue);
-	await expect(page.getByLabel("Command line")).toHaveValue(
+	await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
 		/^(FIXTURE|GROUP)$/,
 	);
 }

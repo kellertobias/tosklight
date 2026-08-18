@@ -202,7 +202,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       for (const key of ["GRP", "9", "9", "9", "AT", "5", "0", "ENT"]) {
         await page.getByRole("button", { name: key, exact: true }).click();
       }
-      await expect(page.getByLabel("Command line")).toHaveClass(/error/);
+      await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveClass(/error/);
     },
     assert: async ({ api, bench }) => {
       const states = await api.request<any[]>("GET", "/api/v2/programmers");
@@ -706,15 +706,15 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       const firstAfterSecondKey = firstHardware.mark();
       const secondAfterSecondKey = secondHardware.mark();
       await secondHardware.send(`/light/${secondSession.desk.osc_alias}/programmer/digit-2`, [true]);
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("G1 + F2");
-      await expect(page.getByLabel("Command line")).toHaveValue("G7 +");
+      await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G1 + F2");
+      await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
       await firstHardware.expectAfter(firstAfterSecondKey, `/light/${firstSession.desk.osc_alias}/feedback/speed-group/5`);
       await secondHardware.expectAfter(secondAfterSecondKey, `/light/${secondSession.desk.osc_alias}/feedback/speed-group/5`);
       const firstKeyMark = firstHardware.mark();
       await firstHardware.send(`/light/${firstSession.desk.osc_alias}/programmer/digit-8`, [true]);
       expect((await firstHardware.expectAfter(firstKeyMark, `/light/${firstSession.desk.osc_alias}/feedback/command-line`)).arguments).toEqual(["G7 + F8"]);
-      await expect(page.getByLabel("Command line")).toHaveValue("G7 + F8");
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("G1 + F2");
+      await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 + F8");
+      await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G1 + F2");
 
       const commandRevision = Math.max(0, ...(await audit(api)).map((event) => event.revision));
       for (const action of ["at", "digit-5", "digit-0", "enter"]) {
@@ -724,7 +724,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       for (const number of [1, 2, 3, 4, 8]) {
         await expect.poll(async () => fixtureProgrammerValue(api, fixtures[number], "intensity")).toBeCloseTo(0.5, 4);
       }
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("G1 + F2");
+      await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G1 + F2");
       const completed = (await api.request<any[]>("GET", `/api/v2/audit?after=${commandRevision}`))
         .filter((event) => event.kind === "command_applied");
       expect(completed).toHaveLength(1);
@@ -736,36 +736,36 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await firstHardware.send("/light/unsubscribe", ["osc-005-first"]);
       await secondHardware.send("/light/unsubscribe", ["osc-005-second"]);
       await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(false);
-      await secondPage.getByLabel("Command line").fill("");
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("FIXTURE");
+      await secondPage.getByRole("textbox", { name: "Command line", exact: true }).fill("");
+      await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("FIXTURE");
       await secondPage.getByRole("button", { name: "GRP", exact: true }).click();
       await secondPage.getByRole("button", { name: "GRP", exact: true }).click();
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("DEGROUP");
+      await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("DEGROUP");
       await secondPage.getByRole("button", { name: "ENT", exact: true }).click();
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("GROUP");
+      await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("GROUP");
       await expect.poll(async () => programmerCommand(api, secondSession)).toBe("GROUP");
       const groupModeMark = secondHardware.mark();
       await secondHardware.send("/light/subscribe", ["osc-005-second", secondSession.desk.osc_alias, secondHardware.feedbackPort]);
       await secondHardware.expectAfter(groupModeMark, `/light/${secondSession.desk.osc_alias}/feedback/page`);
       await secondHardware.send(`/light/${secondSession.desk.osc_alias}/programmer/digit-3`, [true]);
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("G3");
+      await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G3");
 
-      await page.getByLabel("Command line").fill("G7 +");
-      await expect(page.getByLabel("Command line")).toHaveValue("G7 +");
+      await page.getByRole("textbox", { name: "Command line", exact: true }).fill("G7 +");
+      await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
       await expect.poll(async () => programmerCommand(api, firstSession)).toBe("G7 +");
       const reconnectMark = firstHardware.mark();
       await firstHardware.send("/light/subscribe", ["osc-005-first", firstSession.desk.osc_alias, firstHardware.feedbackPort]);
       expect((await firstHardware.expectAfter(reconnectMark, `/light/${firstSession.desk.osc_alias}/feedback/page`)).arguments).toEqual([1]);
       expect((await firstHardware.expectAfter(reconnectMark, `/light/${firstSession.desk.osc_alias}/feedback/command-line`)).arguments).toEqual(["G7 +"]);
 
-      await secondPage.getByLabel("Command line").fill("G1 + F2");
+      await secondPage.getByRole("textbox", { name: "Command line", exact: true }).fill("G1 + F2");
       await expect.poll(async () => programmerCommand(api, secondSession)).toBe("G1 + F2");
       const reattachMark = firstHardware.mark();
       await firstHardware.send("/light/subscribe", ["osc-005-first", secondSession.desk.osc_alias, firstHardware.feedbackPort]);
       await firstHardware.expectAfter(reattachMark, `/light/${secondSession.desk.osc_alias}/feedback/page`);
       await firstHardware.send(`/light/${secondSession.desk.osc_alias}/programmer/digit-9`, [true]);
-      await expect(secondPage.getByLabel("Command line")).toHaveValue("G1 + F29");
-      await expect(page.getByLabel("Command line")).toHaveValue("G7 +");
+      await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G1 + F29");
+      await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
     } finally {
       await unsubscribeAndClose(firstHardware, "osc-005-first");
       await unsubscribeAndClose(secondHardware, "osc-005-second");

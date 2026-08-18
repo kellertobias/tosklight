@@ -17,7 +17,7 @@ interface DeskDriver {
 }
 
 function commandUiActions(api: ApiDriver, page: Page) {
-	const commandLine = page.getByLabel("Command line");
+	const commandLine = page.getByRole("textbox", { name: "Command line", exact: true });
 	const press = (key: string) =>
 		page.getByRole("button", { name: key, exact: true }).click();
 	const enter = async (

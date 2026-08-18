@@ -238,7 +238,7 @@ scenario(
 		const cueCreated = await t.record.recordViaApi({ playback: 1, cue: 90 });
 		expect(cueCreated).toMatchObject({
 			status: "changed",
-			recordedCue: { number: 90, deleted: false },
+			recordedCue: { number: "90", deleted: false },
 		});
 		await t.selection.fixtures.via.api.item(2);
 		await t.encoder.intensity.dimmer.via.api.set(75);
@@ -248,7 +248,7 @@ scenario(
 		});
 		expect(cueOverwritten).toMatchObject({
 			status: "changed",
-			recordedCue: { number: 90, deleted: false },
+			recordedCue: { number: "90", deleted: false },
 		});
 		if (cueCreated.status !== "changed" || cueOverwritten.status !== "changed")
 			throw new Error("Cue create and overwrite must both produce events");
@@ -266,7 +266,7 @@ scenario(
 		const cueDeleted = await t.cue.deleteViaApi(1, 90);
 		expect(cueDeleted).toMatchObject({
 			status: "changed",
-			deletedCue: { number: 90 },
+			deletedCue: { number: "90" },
 		});
 		if (cueDeleted.status !== "changed")
 			throw new Error("Cue deletion must produce an event");

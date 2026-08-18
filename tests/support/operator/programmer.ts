@@ -201,7 +201,7 @@ async function expectCommandLine(
 	expected: string | RegExp,
 ): Promise<void> {
 	if (surface.via === "software") {
-		await expect(surface.page.getByLabel("Command line")).toHaveValue(expected);
+		await expect(surface.page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(expected);
 		return;
 	}
 	const commandLine = expect.poll(

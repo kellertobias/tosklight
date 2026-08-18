@@ -804,7 +804,7 @@ export class DeskDriver {
 		value: string,
 		visibleValue = formatVisibleCommand(value),
 	): Promise<void> {
-		const command = this.page.getByLabel("Command line");
+		const command = this.page.getByRole("textbox", { name: "Command line", exact: true });
 		await this.page.getByRole("button", { name: "ESC", exact: true }).click();
 		const keys = value
 			.trim()

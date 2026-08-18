@@ -69,7 +69,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 			expect(await commandLine(api)).toBe("");
 			await hardware.send(`/light/${api.session!.desk.osc_alias}/programmer/digit-1`, [true]);
 			await expect.poll(() => commandLine(api)).toBe("F1");
-			await expect(page.getByLabel("Command line")).toHaveValue("F1");
+			await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("F1");
 			await lateScreen.close();
 		} finally {
 			await hardware.close();

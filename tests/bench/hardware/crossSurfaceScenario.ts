@@ -362,10 +362,10 @@ export class BrowserCrossSurface {
 				`/light/${second.desk.osc_alias}/programmer/digit-2`,
 				[true],
 			);
-			await expect(secondPage.getByLabel("Command line")).toHaveValue(
+			await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
 				"G1 + F2",
 			);
-			await expect(this.page.getByLabel("Command line")).toHaveValue("G7 +");
+			await expect(this.page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
 			const firstFeedbackMark = firstHardware.mark();
 			await firstHardware.send(
 				`/light/${first.desk.osc_alias}/programmer/digit-8`,
@@ -379,8 +379,8 @@ export class BrowserCrossSurface {
 					)
 				).arguments,
 			).toEqual(["G7 + F8"]);
-			await expect(this.page.getByLabel("Command line")).toHaveValue("G7 + F8");
-			await expect(secondPage.getByLabel("Command line")).toHaveValue(
+			await expect(this.page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 + F8");
+			await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
 				"G1 + F2",
 			);
 
@@ -434,7 +434,7 @@ export class BrowserCrossSurface {
 			]);
 			await expect.poll(() => this.hardwareConnected()).toBe(false);
 
-			await secondPage.getByLabel("Command line").fill("");
+			await secondPage.getByRole("textbox", { name: "Command line", exact: true }).fill("");
 			await secondPage
 				.getByRole("button", { name: "GRP", exact: true })
 				.click();
@@ -455,9 +455,9 @@ export class BrowserCrossSurface {
 				`/light/${second.desk.osc_alias}/programmer/digit-3`,
 				[true],
 			);
-			await expect(secondPage.getByLabel("Command line")).toHaveValue("G3");
+			await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G3");
 
-			await this.page.getByLabel("Command line").fill("G7 +");
+			await this.page.getByRole("textbox", { name: "Command line", exact: true }).fill("G7 +");
 			const reconnectMark = firstHardware.mark();
 			await firstHardware.send("/light/subscribe", [
 				"semantic-osc-005-first",
@@ -472,7 +472,7 @@ export class BrowserCrossSurface {
 					)
 				).arguments,
 			).toEqual(["G7 +"]);
-			await secondPage.getByLabel("Command line").fill("G1 + F2");
+			await secondPage.getByRole("textbox", { name: "Command line", exact: true }).fill("G1 + F2");
 			const reattachMark = firstHardware.mark();
 			await firstHardware.send("/light/subscribe", [
 				"semantic-osc-005-first",
@@ -487,10 +487,10 @@ export class BrowserCrossSurface {
 				`/light/${second.desk.osc_alias}/programmer/digit-9`,
 				[true],
 			);
-			await expect(secondPage.getByLabel("Command line")).toHaveValue(
+			await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
 				"G1 + F29",
 			);
-			await expect(this.page.getByLabel("Command line")).toHaveValue("G7 +");
+			await expect(this.page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
 		} finally {
 			await this.close(firstHardware, "semantic-osc-005-first");
 			await this.close(secondHardware, "semantic-osc-005-second");
@@ -531,7 +531,7 @@ export class BrowserCrossSurface {
 			await firstHardware.send(firstAddress, [true]);
 			await expect
 				.poll(async () => (await this.activePlayback(1))?.current_cue_number)
-				.toBe(1);
+				.toBe("1");
 			await firstHardware.send(firstAddress, [false]);
 			await new Promise((resolve) => setTimeout(resolve, 50));
 			expect(await this.activePlayback(1)).toMatchObject({
@@ -543,7 +543,7 @@ export class BrowserCrossSurface {
 			);
 			await expect
 				.poll(async () => (await this.activePlayback(2))?.current_cue_number)
-				.toBe(1);
+				.toBe("1");
 			await this.api.playbackNumberAction(2, "off", {});
 			await expect
 				.poll(async () => (await this.activePlayback(2))?.enabled)

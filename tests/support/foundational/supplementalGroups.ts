@@ -307,7 +307,7 @@ export const missingGroupUi: FoundationalCase = {
 		await pressCommand(page, "DELETE GROUP 4", "DELETE GROUP 4");
 		await expectGroupMissing(api, "4");
 		await pressCommand(page, "GROUP 4", "G4");
-		await expect(page.getByLabel("Command line")).toHaveClass(/error/);
+		await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveClass(/error/);
 
 		await pressCommand(page, "GROUP 1 THRU 5", "G1 THRU 5");
 		await expectProgrammer(api, (state) => {

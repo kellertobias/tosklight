@@ -100,7 +100,7 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
       await expect.poll(async () => groupBody(api, state.compactCopy!.id, "4")).toMatchObject({ fixtures: [expect.any(String)] });
       expect(await groupBody(api, state.compactCopy.id, "4")).toMatchObject({ fixtures: [state.compactFixture] });
 
-      const commandLine = page.getByLabel("Command line");
+      const commandLine = page.getByRole("textbox", { name: "Command line", exact: true });
       await page.getByRole("button", { name: "ESC", exact: true }).click();
       for (const key of ["SET", "GRP", "4"]) await page.getByRole("button", { name: key, exact: true }).click();
       await expect(commandLine).toHaveValue("SET GROUP 4");
@@ -225,7 +225,7 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
     await page.getByRole("button", { name: "REC", exact: true }).click();
     await groupTile(page, "Center Spot").click();
     await expect.poll(async () => groupBody(api, compactCopy.id, "4")).toMatchObject({ fixtures: [expect.any(String)] });
-    const commandLine = page.getByLabel("Command line");
+    const commandLine = page.getByRole("textbox", { name: "Command line", exact: true });
     await page.getByRole("button", { name: "ESC", exact: true }).click();
     await page.getByRole("button", { name: "SET", exact: true }).click();
     await expect(commandLine).toHaveValue("SET");

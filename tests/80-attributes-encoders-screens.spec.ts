@@ -30,13 +30,13 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 		const browserScreen = await page.context().newPage();
 
 		try {
-			await expect(page.getByLabel("Command line")).toBeVisible();
+			await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toBeVisible();
 			await configureBrowserControlScreen(api, screenId);
 			await browserScreen.goto(`${bench.baseUrl}?screen=${screenId}`);
-			const commandLine = browserScreen.getByLabel("Command line");
+			const commandLine = browserScreen.getByRole("textbox", { name: "Command line", exact: true });
 			await expect(commandLine).toHaveValue("FIXTURE", { timeout: 10_000 });
 			/* The main screen keeps its own command line and keypad; only the encoders move. */
-			await expect(page.getByLabel("Command line")).toBeVisible();
+			await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toBeVisible();
 			expect(await sessionProgrammerCount(api, session)).toBe(1);
 
 			await updateProgrammerControlSurface(api, {
@@ -47,7 +47,7 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 			await expect(browserScreen.locator(".parameter-surfaces")).toHaveCount(1);
 			await expect(browserScreen.locator(".parameter-empty")).toBeVisible();
 			await updateProgrammerControlSurface(api, { assign_to_main: true });
-			await expect(page.getByLabel("Command line")).toBeVisible();
+			await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toBeVisible();
 			await expect(browserScreen.locator(".parameter-surfaces")).toHaveCount(0);
 			await updateProgrammerControlSurface(api, {
 				owner_screen_id: screenId,
@@ -117,7 +117,7 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 			expect(await sessionProgrammerCount(api, session)).toBe(1);
 
 			await browserScreen.reload();
-			await expect(browserScreen.getByLabel("Command line")).toHaveValue(
+			await expect(browserScreen.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
 				"GROUP 1 + F2",
 			);
 			expect(await sessionProgrammerCount(api, session)).toBe(1);
@@ -126,7 +126,7 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 			await expect(browserScreen.getByRole("alert")).toContainText(
 				"Screen unavailable",
 			);
-			await expect(browserScreen.getByLabel("Command line")).toHaveCount(0);
+			await expect(browserScreen.getByRole("textbox", { name: "Command line", exact: true })).toHaveCount(0);
 		} finally {
 			await hardware.close();
 			await browserScreen.close();

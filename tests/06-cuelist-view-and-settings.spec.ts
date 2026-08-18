@@ -391,7 +391,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await expect(page.getByRole("button", { name: "Delete Cue", exact: true })).toHaveCount(0);
       await page.getByRole("button", { name: "ESC", exact: true }).click();
       await page.getByRole("button", { name: "DEL", exact: true }).click();
-      await expect(page.getByLabel("Command line")).toHaveValue("DELETE");
+      await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("DELETE");
       const deleteTarget = page.locator(".cue-table tbody tr").nth(1);
       await expect(deleteTarget).toHaveClass(/delete-target/);
       await expect(deleteTarget).toContainText("Delete");

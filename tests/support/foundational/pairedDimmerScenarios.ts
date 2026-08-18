@@ -98,7 +98,7 @@ export function registerDimmerAndDerivedGroupPairedScenarios() {
 		},
 		ui: async ({ api, desk, page }) => {
 			await desk.open(api.baseUrl);
-			const commandLine = page.getByLabel("Command line");
+			const commandLine = page.getByRole("textbox", { name: "Command line", exact: true });
 			await page.getByRole("button", { name: "GRP", exact: true }).click();
 			await expect(commandLine).toHaveValue("GROUP");
 			await page.getByRole("button", { name: "ENT", exact: true }).click();

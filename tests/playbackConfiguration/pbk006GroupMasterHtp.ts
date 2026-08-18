@@ -101,7 +101,7 @@ export function registerPbk006GroupMasterHtpScenario(): void {
 					});
 				},
 				runOffset: async () => {
-					const commandLine = page.getByLabel("Command line");
+					const commandLine = page.getByRole("textbox", { name: "Command line", exact: true });
 					await commandLine.fill("GROUP 5 DIV 2 + 1");
 					await expect(commandLine).toHaveValue("GROUP 5 DIV 2 + 1");
 					await commandLine.press("Enter");

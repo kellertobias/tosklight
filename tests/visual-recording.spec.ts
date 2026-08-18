@@ -31,7 +31,7 @@ test("records the complete desk with OSC and DMX observers", async ({ api, bench
       const oscAddress = `/light/${alias}/programmer/${address}`;
       await hardware.send(oscAddress, [true]);
       sent.push(`→ ${oscAddress}  true`);
-      await expect(page.getByLabel("Command line")).toHaveValue(expected);
+      await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(expected);
       await stage(page, `PHYSICAL ${key}`, `OSC pressed ${key}; the application command line changes exactly like its UI button.`, sent, hardware.messages, await dmxState(api, bench));
       await pause(page, 700);
     }
@@ -85,7 +85,7 @@ async function installRecordingOverlay(page: import("@playwright/test").Page) {
 }
 
 async function stage(page: import("@playwright/test").Page, title: string, copy: string, sent: string[], feedback: Array<{ address: string; arguments: unknown[] }>, dmx: DmxState) {
-  const command = await page.getByLabel("Command line").inputValue().catch(() => "—");
+  const command = await page.getByRole("textbox", { name: "Command line", exact: true }).inputValue().catch(() => "—");
   await page.evaluate(({ title, copy, sent, feedback, dmx, command }) => {
     document.querySelector("#record-stage")!.textContent = title; document.querySelector("#record-copy")!.textContent = copy; document.querySelector("#record-command")!.textContent = `Desk command: ${command || "—"}`;
     const osc = [...sent.slice(-5), ...feedback.slice(-5).map((item) => `← ${item.address}  ${item.arguments.join(", ")}`)]; document.querySelector("#record-osc")!.textContent = osc.join("\n") || "Waiting for OSC…";

@@ -399,7 +399,7 @@ async function enterCueTransfer(page: Page, operation: "COPY" | "MOVE") {
 		"CUE",
 		"2",
 	]);
-	await expect(page.getByLabel("Command line")).toHaveValue(
+	await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
 		`${operation} SET 1 CUE 2 AT SET 2 CUE 2`,
 	);
 	await page
