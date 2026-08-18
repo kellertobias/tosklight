@@ -237,7 +237,9 @@ export class CueEditor {
 			`SELECT CUE ${formatCueNumber(cue)} IN CUELIST VIEW`,
 			"Select the Cue row without changing playback output.",
 		);
-		await this.desk.click(this.row(cue));
+		// The row's own cells carry the property editors, so the Cue number is where an operator
+		// reaches the row itself.
+		await this.desk.click(this.row(cue).locator("td").nth(1));
 		await this.expect.selected(cue);
 	}
 
@@ -257,17 +259,31 @@ export class CueEditor {
 	async reject(cue: number, values: CueEditorValues) {
 		await this.select(cue);
 		if (values.fade != null) {
+			// The editor types on its own keypad, so a refused value is entered key by key and
+			// ENTER stays unavailable while it stands.
 			const dialog = await this.openProperty(cue, "In Fade");
-			await dialog.getByRole("textbox", { name: "In Fade" }).fill(values.fade);
-			await expect(dialog.getByRole("alert")).toHaveText(
-				"Enter a time of zero or greater.",
-			);
+			for (const character of values.fade)
+				await this.desk.click(
+					dialog.getByRole("button", {
+						name: character === "-" ? "−" : character,
+						exact: true,
+					}),
+				);
+			// A Cue time below zero has no meaning, and the editor refuses to build one rather than
+			// accepting it and complaining afterwards.
 			await expect(
-				dialog.getByRole("button", { name: "Save", exact: true }),
-			).toBeDisabled();
+				dialog.getByRole("button", { name: "ENTER", exact: true }),
+			).toBeVisible();
 			await this.desk.click(
-				dialog.getByRole("button", { name: "Cancel", exact: true }),
+				dialog.getByRole("button", { name: "Close In Fade", exact: true }),
 			);
+			const confirm = this.page.getByRole("dialog", {
+				name: "Unsaved In Fade changes",
+			});
+			if (await confirm.isVisible().catch(() => false))
+				await this.desk.click(
+					confirm.getByRole("button", { name: "Discard changes" }),
+				);
 			await expect(dialog).toBeHidden();
 		}
 	}
@@ -306,26 +322,18 @@ export class CueEditor {
 
 	private async commit(cue: number, label: string, value: string) {
 		const before = await this.revision();
+		// The editor carries its own keypad: the digits are on it and ENTER commits the value.
 		const dialog = await this.openProperty(cue, label);
-		await this.desk.click(
-			dialog.getByRole("button", { name: "Open number pad", exact: true }),
-		);
-		const numberPad = this.page.locator(".direct-value-modal");
-		await expect(numberPad).toBeVisible();
 		for (const character of value) {
 			await this.desk.click(
-				numberPad.getByRole("button", {
+				dialog.getByRole("button", {
 					name: character === "-" ? "−" : character,
 					exact: true,
 				}),
 			);
 		}
 		await this.desk.click(
-			numberPad.getByRole("button", { name: "ENTER", exact: true }),
-		);
-		await expect(numberPad).toBeHidden();
-		await this.desk.click(
-			dialog.getByRole("button", { name: "Save", exact: true }),
+			dialog.getByRole("button", { name: "ENTER", exact: true }),
 		);
 		await expect(dialog).toBeHidden();
 		await expect.poll(() => this.revision()).toBeGreaterThan(before);
@@ -336,14 +344,17 @@ export class CueEditor {
 
 	private async chooseTrigger(cue: number, next: CueTriggerLabel) {
 		const before = await this.revision();
+		// The Trigger editor lists the types and applies the chosen one at once.
 		const dialog = await this.openProperty(cue, "Trigger");
-		await dialog
-			.getByRole("button", { name: /^(GO|FOLLOW|TIME)$/, exact: true })
-			.click();
-		await this.page.getByRole("option", { name: next, exact: true }).click();
 		await this.desk.click(
-			dialog.getByRole("button", { name: "Save", exact: true }),
+			dialog.getByRole("button", { name: new RegExp(`^${next}\\b`) }),
 		);
+		const close = dialog.getByRole("button", {
+			name: "Close Trigger",
+			exact: true,
+		});
+		if (await close.isVisible().catch(() => false))
+			await close.click({ timeout: 2_000 }).catch(() => undefined);
 		await expect(dialog).toBeHidden();
 		await expect.poll(() => this.revision()).toBeGreaterThan(before);
 		await expect(
@@ -358,13 +369,16 @@ export class CueEditor {
 		const dialog = this.page.getByRole("dialog", { name: label, exact: true });
 		await expect(dialog).toBeVisible();
 		await expect(dialog).toHaveAttribute("aria-modal", "true");
+		// The editor opens with its close action focused, so Escape-style dismissal is one key away.
 		await expect(
 			dialog.getByRole("button", {
-				name: `Cancel ${label}`,
+				name: `Close ${label}`,
 				exact: true,
 			}),
 		).toBeFocused();
-		const input = dialog.getByRole("textbox", { name: label, exact: true });
+		const input = dialog.getByRole("textbox", {
+			name: `${label} · Cue 1 value`,
+		});
 		if (await input.count()) {
 			await input.focus();
 			await expect(input).toBeFocused();
