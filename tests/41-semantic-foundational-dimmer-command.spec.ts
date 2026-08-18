@@ -62,7 +62,7 @@ scenario(
 		await t.command.expect("GROUP");
 		await t.keypad.press(["ENT"]);
 		await t.command.expect("GROUP");
-		await t.keypad.press(["GRP"]);
+		await t.keypad.press(["SHIFT", "GRP", "SHIFT"]);
 		await t.command.expect("FIXTURE");
 		await t.keypad.press(["ENT"]);
 		await t.command.expect("FIXTURE");

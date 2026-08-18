@@ -5,7 +5,7 @@ interface CueListSnapshot {
 	cues: Array<{ fade_millis: number; out_delay_millis?: number }>;
 }
 
-test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property Save/Cancel modals", async ({
+test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells open their own exact-property editors", async ({
 	api,
 	bench,
 	desk,
@@ -79,8 +79,18 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 	await expect(page.locator(".cue-properties")).toHaveCount(0);
 
 	const firstRow = page.locator(".cue-table tbody tr").first();
+	// The Trigger cell chooses a type and applies it at once, so it closes rather than saving.
+	await firstRow.getByRole("button", { name: "Trigger", exact: true }).click();
+	const trigger = page.getByRole("dialog", { name: "Trigger", exact: true });
+	await expect(trigger).toBeVisible();
+	for (const type of ["GO", "FOLLOW", "TIME", "TIMECODE"])
+		await expect(
+			trigger.getByRole("button", { name: new RegExp(`^${type}\\b`) }),
+		).toBeVisible();
+	await trigger.getByRole("button", { name: "Close Trigger" }).click();
+	await expect(trigger).toBeHidden();
+
 	for (const property of [
-		"Trigger",
 		"Trigger Time",
 		"In Delay",
 		"In Fade",
@@ -90,20 +100,23 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 		await firstRow.getByRole("button", { name: property, exact: true }).click();
 		const modal = page.getByRole("dialog", { name: property, exact: true });
 		await expect(modal).toBeVisible();
+		// A timing cell edits its value on a keypad: ENTER commits it and Close leaves it alone.
 		await expect(
-			modal.getByRole("button", { name: "Save", exact: true }),
+			modal.getByRole("textbox", { name: `${property} · Cue 1 value` }),
 		).toBeVisible();
 		await expect(
-			modal.getByRole("button", { name: "Cancel", exact: true }),
+			modal.getByRole("button", { name: "ENTER", exact: true }),
 		).toBeVisible();
-		await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+		await modal.getByRole("button", { name: `Close ${property}` }).click();
+		await expect(modal).toBeHidden();
 	}
 
 	await firstRow.getByRole("button", { name: "In Fade", exact: true }).click();
 	const fadeModal = page.getByRole("dialog", { name: "In Fade", exact: true });
 	await expect(fadeModal.locator("..")).toHaveAttribute("data-modal-top", "true");
-	await fadeModal.getByRole("textbox", { name: "In Fade", exact: true }).fill("5");
-	await fadeModal.getByRole("button", { name: "Save", exact: true }).click();
+	// The value box is driven by the editor's own keypad rather than typed into.
+	await fadeModal.getByRole("button", { name: "5", exact: true }).click();
+	await fadeModal.getByRole("button", { name: "ENTER", exact: true }).click();
 	await expect
 		.poll(
 			async () =>
@@ -118,11 +131,13 @@ test("CUELIST-LAYOUT-001 @ui › Cue timing and trigger cells use exact-property
 		exact: true,
 	});
 	await expect(cancelModal.locator("..")).toHaveAttribute("data-modal-top", "true");
-	await cancelModal
-		.getByRole("textbox", { name: "Out Delay", exact: true })
-		.fill("9");
-	await cancelModal
-		.getByRole("button", { name: "Cancel", exact: true })
+	await cancelModal.getByRole("button", { name: "9", exact: true }).click();
+	// Closing the editor leaves the Cue as it was: the editor asks first, and discarding keeps
+	// the stored value untouched.
+	await cancelModal.getByRole("button", { name: "Close Out Delay" }).click();
+	await page
+		.getByRole("dialog", { name: "Unsaved Out Delay changes" })
+		.getByRole("button", { name: "Discard changes" })
 		.click();
 	expect(
 		(await object<CueListSnapshot>(api, "cue_list", cueListId)).body.cues[0]
