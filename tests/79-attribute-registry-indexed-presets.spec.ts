@@ -137,8 +137,13 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 		const setValue = page.getByRole("dialog", {
 			name: "Enc 1 · Gobo 1 value",
 		});
-		await expect(setValue.getByText("Direct input")).toBeVisible();
-		await setValue.getByRole("button", { name: "Show presets" }).click();
+		// The editor keeps direct entry and the profile's own presets on their own tabs.
+		await expect(
+			setValue.getByRole("tab", { name: "Direct input", exact: true }),
+		).toBeVisible();
+		await setValue
+			.getByRole("tab", { name: "Indexed Presets", exact: true })
+			.click();
 		const dots = setValue.getByRole("button", { name: /Dots/ });
 		await expect(dots).toContainText("All selected fixtures");
 		await dots.click();

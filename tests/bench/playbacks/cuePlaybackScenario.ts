@@ -932,8 +932,10 @@ export class BrowserCues {
 		cue: number,
 		destination: number,
 	) {
-		const address = await this.address(playback);
-		const command = `${operation} ${address} CUE ${formatCueNumber(cue)} AT ${address} CUE ${formatCueNumber(destination)}`;
+		// Move and Copy address Cues, not playbacks: selecting the playback makes its Cuelist the
+		// selected one, and a single CUE then addresses a Cue inside it.
+		await this.commands.via[route].execute(await this.address(playback));
+		const command = `${operation} CUE ${formatCueNumber(cue)} AT CUE ${formatCueNumber(destination)}`;
 		const before = await cueListForPlayback(this.api, this.showId(), playback);
 		if (route === "ui") {
 			await this.ensureCommandSurface();
