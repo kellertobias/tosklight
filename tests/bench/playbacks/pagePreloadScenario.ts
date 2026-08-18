@@ -463,15 +463,13 @@ export class BrowserPreload {
 	}
 
 	async releaseVia(route: PreloadRoute) {
-		if (route === "api")
-			await releaseProgrammerPreload(this.api, this.intent());
-		else {
-			const preload = this.page.locator(".preload-button:visible").first();
-			await preload.hover();
-			await this.page.mouse.down();
-			await this.page.waitForTimeout(700);
-			await this.page.mouse.up();
-		}
+		// Releasing the programmer's Preload data has no visible desk gesture: holding the Preload
+		// button opens the pending inspector, and Shift with it clears the pending actions instead.
+		if (route !== "api")
+			throw new Error(
+				"Releasing Preload programmer data has no visible desk gesture; use the api route",
+			);
+		await releaseProgrammerPreload(this.api, this.intent());
 		await this.expect.inactive();
 	}
 

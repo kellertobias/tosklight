@@ -133,7 +133,7 @@ scenario(
 		await t.expectFixtureValue(fixture(3), { intensity: 1 });
 		await t.expectFixtureValue(fixture(4), { intensity: 0.8 });
 
-		await t.preload.via.ui.release();
+		await t.preload.release();
 		await t.virtualPlayback.expect.runtime(virtualGo, {
 			target: "cue_list",
 			runtime: { enabled: true },

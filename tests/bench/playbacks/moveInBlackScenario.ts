@@ -38,8 +38,8 @@ interface MoveInBlackRuntime {
 
 export interface MoveInBlackStateExpectation {
 	state: "blocked" | "delaying" | "moving" | "completed" | "disabled";
-	currentCue?: number;
-	targetCue?: number;
+	currentCue?: string;
+	targetCue?: string;
 }
 
 class MoveInBlackUiSurface {

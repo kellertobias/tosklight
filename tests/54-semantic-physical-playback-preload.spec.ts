@@ -88,7 +88,7 @@ scenario(
 		});
 		await t.playback.expect(onPlayback).runtime({ enabled: true });
 
-		await t.preload.via.ui.release();
+		await t.preload.release();
 		await t.playback.expect(togglePlayback).runtime({
 			enabled: true,
 			current_cue_number: "1",

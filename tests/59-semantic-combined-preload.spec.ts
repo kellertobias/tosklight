@@ -114,7 +114,7 @@ scenario(
 			},
 		});
 
-		await t.preload.via.ui.release();
+		await t.preload.release();
 		await t.expectFixtureValue(fixture(1), { intensity: 0.25 });
 		await t.playback.expect(physicalPlayback).runtime({ enabled: true });
 		await t.virtualPlayback.expect.runtime(virtualPlayback, {

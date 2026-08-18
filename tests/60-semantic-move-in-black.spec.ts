@@ -46,22 +46,22 @@ scenario(
 		await t.expectFixtureValue(fixture(101), { pan: 0.1999 });
 		await t.moveInBlack.expectState(101, {
 			state: "delaying",
-			currentCue: 2,
-			targetCue: 3,
+			currentCue: "2",
+			targetCue: "3",
 		});
 
 		await t.clock.advanceBy("1ms");
 		await t.expectFixtureValue(fixture(101), { intensity: 0, pan: 0.2 });
 		await t.moveInBlack.expectState(101, {
 			state: "delaying",
-			currentCue: 2,
-			targetCue: 3,
+			currentCue: "2",
+			targetCue: "3",
 		});
 		await t.moveInBlack.expectSafetyDelay(101, "1s");
 		await t.moveInBlack.expectState(102, {
 			state: "disabled",
-			currentCue: 2,
-			targetCue: 3,
+			currentCue: "2",
+			targetCue: "3",
 		});
 
 		await t.clock.advanceBy("999ms");
@@ -69,8 +69,8 @@ scenario(
 		await t.clock.advanceBy("1ms");
 		await t.moveInBlack.expectState(101, {
 			state: "moving",
-			currentCue: 2,
-			targetCue: 3,
+			currentCue: "2",
+			targetCue: "3",
 		});
 		await t.expectFixtureValue(fixture(101), { pan: 0.2001 });
 
@@ -82,8 +82,8 @@ scenario(
 		await t.expectFixtureValue(fixture(102), { pan: 0.2 });
 		await t.moveInBlack.expectState(101, {
 			state: "completed",
-			currentCue: 2,
-			targetCue: 3,
+			currentCue: "2",
+			targetCue: "3",
 		});
 
 		await t.playback.go(1);
