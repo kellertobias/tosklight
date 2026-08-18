@@ -364,6 +364,8 @@ export function registerPbk001PhysicalControlsScenario(): void {
 			await page.locator(".mode-toggle").click();
 		await desk.click(off);
 		await expect(page.getByLabel("Command line")).toHaveValue("OFF");
+		// The armed OFF takes its target by touch, and the playbacks live on the other face.
+		await page.locator(".mode-toggle").click();
 		await page.getByRole("button", { name: "Turn off OFF target" }).click();
 
 		await expect
