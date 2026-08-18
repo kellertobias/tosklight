@@ -52,7 +52,27 @@ try {
 	);
 } finally {
 	await terminateProcessTree(child.pid);
-	await fs.rm(runtimeDirectory, { recursive: true, force: true });
+	await removeRuntimeDirectory(runtimeDirectory);
+}
+
+/**
+ * Windows reports a process killed before it has let go of its working directory, so removing it
+ * can fail as busy for a moment. The directory is scratch either way: a leftover must not turn a
+ * healthy startup into a failed smoke test.
+ */
+async function removeRuntimeDirectory(directory) {
+	for (let attempt = 0; attempt < 10; attempt += 1) {
+		try {
+			await fs.rm(directory, { recursive: true, force: true });
+			return;
+		} catch (error) {
+			if (attempt === 9) {
+				console.warn(`Could not remove ${directory}: ${error.message}`);
+				return;
+			}
+			await new Promise((resolve) => setTimeout(resolve, 200));
+		}
+	}
 }
 
 async function waitForHealth(child) {
