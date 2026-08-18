@@ -528,7 +528,8 @@ export class BrowserRecording {
 		});
 		await record.hover();
 		await this.page.mouse.down();
-		await this.page.waitForTimeout(700);
+		// Record Settings opens on a long hold of REC, which the desk sets at 2.5 seconds.
+		await this.page.waitForTimeout(3_000);
 		await this.page.mouse.up();
 		const dialog = this.page.locator(".store-settings-modal");
 		await expect(dialog).toBeVisible();

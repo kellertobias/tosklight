@@ -174,7 +174,8 @@ export async function setCueOnlyFromUi(
 	});
 	await record.hover();
 	await page.mouse.down();
-	await page.waitForTimeout(700);
+	// Record Settings opens on a long hold of REC, which the desk sets at 2.5 seconds.
+	await page.waitForTimeout(3_000);
 	await page.mouse.up();
 	const dialog = page.locator(".store-settings-modal");
 	await expect(dialog).toBeVisible();
