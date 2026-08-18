@@ -174,6 +174,19 @@ export class BrowserProgrammerSpecials {
 				`${attribute} is not supplied by the selected ${family} fixtures`,
 			);
 		const dialog = await this.openDialog(family);
+		const blade = /^shaper\.blade\.(\d)\./.exec(attribute);
+		if (blade) {
+			// Shapers is a drawing of the aperture: a blade is inserted and rotated by dragging its
+			// own handle rather than by a slider named after the attribute.
+			await expect(
+				dialog.getByRole("slider", {
+					name: `Blade ${blade[1]} insertion and rotation`,
+					exact: true,
+				}),
+			).toBeVisible();
+			await this.closeDialog(dialog);
+			return;
+		}
 		const slider = dialog.getByRole("slider", {
 			name: attribute.replaceAll(".", " "),
 			exact: true,

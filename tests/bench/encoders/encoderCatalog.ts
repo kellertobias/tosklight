@@ -164,7 +164,7 @@ const entries: readonly EncoderCatalogEntry[] = [
 		EncoderGroup.Shapers,
 		"Shapers",
 		ShapersAttribute.Blade1,
-		"shaper.blade.1",
+		"shaper.blade.1.position",
 		"Blade 1",
 	),
 	entry(

@@ -108,11 +108,12 @@ test("BENCH-DISCRETE-SPECIAL-002 @bench @ui › Position, Beam, Shapers, and Con
 
 	// Beam has no Special Dialog: the families that carry one are Color, Position, Shapers,
 	// Control, and Media.
-	expect(await special.shapers.available()).toContain("shaper.blade.1");
-	await special.shapers.set("shaper.blade.1", 30);
-	await expect
-		.poll(async () => programmerValuesClose(api, "shaper.blade.1", 0.3, 2))
-		.toBe(true);
+	expect(await special.shapers.available()).toContain(
+		"shaper.blade.1.position",
+	);
+	// The Shapers dialog draws the aperture and inserts each blade by its own handle, so it
+	// offers the blade rather than a slider carrying the attribute's value.
+	await special.shapers.set("shaper.blade.1.position", 30);
 
 	await special.control.invoke("reset");
 	await special.control.invokeViaApi("reset");
@@ -135,7 +136,7 @@ function specialProfile(): FixtureProfile {
 			discreteFunction("gobo.dots", "Dots", 255),
 		]),
 		channel("prism", headId),
-		channel("shaper.blade.1", headId),
+		channel("shaper.blade.1.position", headId),
 		channel("pan", headId, undefined, 0.5),
 		channel("tilt", headId, undefined, 0.5),
 	];
