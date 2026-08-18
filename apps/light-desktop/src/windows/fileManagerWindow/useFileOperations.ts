@@ -239,8 +239,8 @@ function useOperationSelectionActions(
 				destination: navigation.currentPath,
 				name,
 			});
-			state.setMessage(`${folder ? "Folder" : "File"} created.`);
 			await navigation.refreshAfterMutation();
+			state.setMessage(`${folder ? "Folder" : "File"} created.`);
 		} catch (error) {
 			state.setMessage(
 				`Could not create ${folder ? "folder" : "file"}: ${String(error)}`,
@@ -279,8 +279,10 @@ function useOperationExecutionActions(
 			activeOperation.kind === "delete"
 				? "Delete"
 				: activeOperation.kind[0].toUpperCase() + activeOperation.kind.slice(1);
-		state.setMessage(`${label} completed.`);
+		// The refresh drops the selection the operation consumed, so it happens before the desk
+		// says it is done: announcing completion first invites a selection the refresh then wipes.
 		await navigation.refreshAfterMutation();
+		state.setMessage(`${label} completed.`);
 	}
 	async function completeOperation() {
 		const activeOperation = state.operationRef.current;
