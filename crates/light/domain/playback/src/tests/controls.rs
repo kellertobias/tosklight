@@ -332,17 +332,24 @@ fn cuelist_flash_and_swap_share_keep_running_or_release_all_policy() {
         engine
     };
 
+    // A Flash the operator never turned on lets go of the whole look when it is released. Swap
+    // keeps its held playback running at zero master so the swapped-away state can return.
+    let mut flashed = build(false);
+    PlaybackEngine::set_flash(&mut flashed, 1, true).unwrap();
+    PlaybackEngine::set_flash(&mut flashed, 1, false).unwrap();
+    assert!(flashed.runtime().iter().all(|runtime| !runtime.enabled));
+
+    let mut swapped = build(false);
+    PlaybackEngine::set_swap(&mut swapped, 1, true).unwrap();
+    PlaybackEngine::set_swap(&mut swapped, 1, false).unwrap();
+    let runtime = &swapped.runtime()[0];
+    assert!(runtime.enabled);
+    assert_eq!(runtime.master, 0.0);
+
     for release in [
         PlaybackEngine::set_flash as fn(&mut PlaybackEngine, u16, bool) -> Result<(), String>,
         PlaybackEngine::set_swap,
     ] {
-        let mut keep_running = build(false);
-        release(&mut keep_running, 1, true).unwrap();
-        release(&mut keep_running, 1, false).unwrap();
-        let runtime = &keep_running.runtime()[0];
-        assert!(runtime.enabled);
-        assert_eq!(runtime.master, 0.0);
-
         let mut release_all = build(true);
         release(&mut release_all, 1, true).unwrap();
         release(&mut release_all, 1, false).unwrap();
@@ -559,33 +566,19 @@ fn keep_running_release_and_swap_protection_preserve_normal_runtime() {
             .into_iter()
             .all(|status| { status.playback.playback_number != Some(2) || !status.playback.flash })
     );
-    let b_runtime = engine
-        .runtime()
-        .into_iter()
-        .find(|runtime| runtime.playback_number == Some(2))
-        .unwrap();
-    assert!(b_runtime.enabled);
-    assert_eq!(b_runtime.master, 0.0);
-    let b_values = engine
-        .contributions()
-        .into_iter()
-        .filter(|value| value.fixture_id == fixture_b)
-        .collect::<Vec<_>>();
-    assert_eq!(
-        b_values
-            .iter()
-            .find(|value| value.attribute.is_intensity())
-            .unwrap()
-            .value,
-        AttributeValue::Normalized(0.0)
+    // The Flash was the only thing running this playback, so releasing it lets go of the whole
+    // look rather than leaving its non-intensity values behind at zero master.
+    assert!(
+        engine
+            .runtime()
+            .into_iter()
+            .all(|runtime| runtime.playback_number != Some(2) || !runtime.enabled)
     );
-    assert_eq!(
-        b_values
-            .iter()
-            .find(|value| value.attribute.0 == "pan")
-            .unwrap()
-            .value,
-        AttributeValue::Normalized(0.8)
+    assert!(
+        engine
+            .contributions()
+            .into_iter()
+            .all(|value| value.fixture_id != fixture_b)
     );
 
     let a_before = engine

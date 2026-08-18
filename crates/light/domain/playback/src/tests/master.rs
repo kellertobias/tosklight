@@ -327,10 +327,9 @@ fn toggle_retains_cue_and_flash_keep_running_retains_current_cue() {
     assert!(engine.active().is_empty());
     engine.set_flash(1, true).unwrap();
     assert_eq!(engine.active()[0].cue_index, 1);
+    // Releasing the Flash lets the playback go, and the Cue it was sitting on is still the one it
+    // returns to when the operator turns it on again.
     engine.set_flash(1, false).unwrap();
-    assert_eq!(engine.active()[0].cue_index, 1);
-    assert_eq!(engine.active()[0].master, 0.0);
-    assert!(!engine.toggle(1).unwrap());
     assert!(engine.active().is_empty());
     assert!(engine.toggle(1).unwrap());
     assert_eq!(engine.active()[0].cue_index, 1);

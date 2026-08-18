@@ -609,7 +609,11 @@ impl PlaybackEngine {
         let auto_off = self.cue_lists[&cue_list_id].auto_off_flash_release
             && flash_state.is_some_and(|state| state.restore_off)
             && !held_peer;
-        let promoted = !auto_off
+        // A Flash on a playback the operator never turned on lets go of everything when it is
+        // released. Only a playback asked to release its intensity alone stays running at zero
+        // master, where it still holds every attribute its Cue carries besides intensity.
+        let promoted = definition.flash_release == FlashReleaseMode::ReleaseIntensityOnly
+            && !auto_off
             && flash_state.is_some_and(|state| state.restore_off)
             && !held_peer
             && self.promote_intensity_release_at(identity, released, true);
