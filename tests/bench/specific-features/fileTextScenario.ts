@@ -105,9 +105,9 @@ export class BrowserFiles {
 				.getByLabel("File text")
 				.fill("Draft retained across rename\n");
 			await this.operation("rename", [name], { name: renamed });
-			await expect(
-				editors.nth(1).getByRole("button", { name: renamed, exact: true }),
-			).toBeVisible();
+			// A rename is reported in the editor's own status: the association follows the file and
+			// the unsaved draft stays put.
+			await expect(editors.nth(1)).toContainText(renamed);
 			await this.desk.click(
 				editors.nth(1).getByRole("button", { name: "Save", exact: true }),
 			);
@@ -219,7 +219,7 @@ export class BrowserFiles {
 			await this.desk.click(
 				manager.getByRole("button", { name: "alpha.txt, file" }),
 			);
-			await this.beginEdit(manager, "Copy");
+			await this.beginEdit(manager, "Copy", "alpha.txt, file");
 			await expect(
 				manager.getByRole("button", { name: "Copy Here" }),
 			).toBeVisible();
@@ -234,7 +234,7 @@ export class BrowserFiles {
 			await this.desk.click(
 				manager.getByRole("button", { name: "alpha.txt, file" }),
 			);
-			await this.beginEdit(manager, "Copy");
+			await this.beginEdit(manager, "Copy", "alpha.txt, file");
 			await expect(
 				manager.getByRole("button", { name: "Copy Here" }),
 			).toBeVisible();
@@ -451,15 +451,26 @@ export class BrowserFiles {
 		);
 	}
 
-	private async beginEdit(manager: Locator, action: string) {
-		await manager
-			.locator(".file-manager-header-actions")
-			.getByRole("button", { name: "Edit", exact: true })
-			.click();
-		const menuItem = this.page
-			.getByRole("menu", { name: "Edit menu" })
-			.getByRole("menuitem", { name: action, exact: true });
-		await menuItem.dispatchEvent("click");
+	private async beginEdit(manager: Locator, action: string, entry?: string) {
+		const open = async () =>
+			manager
+				.locator(".file-manager-header-actions")
+				.getByRole("button", { name: "Edit", exact: true })
+				.click();
+		const menu = this.page.getByRole("menu", { name: "Edit menu" });
+		const item = menu.getByRole("menuitem", { name: action, exact: true });
+		await open();
+		// A row reads as pressed while it is a pending operation's source as well as while it is
+		// selected, so a click meant to select can toggle the selection away instead. The menu
+		// itself is the honest signal: reach the row again when the action stays unavailable.
+		if (entry && (await item.isDisabled())) {
+			await this.page.locator(".file-header-menu-layer").click();
+			await expect(menu).toBeHidden();
+			await this.desk.click(manager.getByRole("button", { name: entry }));
+			await open();
+		}
+		await item.click();
+		await expect(menu).toBeHidden();
 	}
 
 	private async seedText(prefix: string, extension: string, text: string) {
