@@ -521,10 +521,23 @@ export class BrowserRecording {
 			await this.desk.click(this.page.locator(".mode-toggle"));
 			await expect(target).toBeVisible();
 		}
-		await this.desk.click(
-			this.page.locator(".global-store-button:visible").first(),
-		);
+		// REC ignores the press that follows its own long hold, so the bench presses until the key
+		// actually arms rather than assuming the first press took.
+		const record = this.page.locator(".global-store-button:visible").first();
+		await expect
+			.poll(async () => {
+				if ((await record.getAttribute("aria-pressed")) === "true") return true;
+				await this.desk.click(record);
+				return (await record.getAttribute("aria-pressed")) === "true";
+			})
+			.toBe(true);
 		await this.desk.click(target);
+		// Recording onto a playback that already holds Cues asks what to do with the new one.
+		const choice = this.page.getByRole("dialog", { name: "Record Cue choice" });
+		if (await choice.isVisible().catch(() => false))
+			await this.desk.click(
+				choice.getByRole("button", { name: "Add Cue", exact: true }),
+			);
 		await expect
 			.poll(async () => (await this.cueListForPlayback(playback)).revision)
 			.toBeGreaterThan(before.revision);
