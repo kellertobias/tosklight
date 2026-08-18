@@ -1,7 +1,8 @@
 import { useCallback, useEffect } from "react";
 import { useFiles } from "../../features/files/FilesContext";
-import { sortFileEntries } from "./fileUtilities";
 import type { FileManagerLocation, FileManagerPickerOptions } from "./types";
+import { sortFileEntries } from "./fileUtilities";
+import { useFileListing } from "./useFileListing";
 import { currentLocation, type FileManagerState } from "./useFileManagerState";
 
 interface NavigationOptions {
@@ -86,23 +87,7 @@ export function useFileNavigation({
 		}
 	}, [state.historyIndex, rootId, state.roots]);
 
-	const refresh = useCallback(async () => {
-		if (!rootId) return;
-		try {
-			const next = await server.fileEntries(rootId, currentPath, hidden);
-			state.setListing({ ...next, entries: sortFileEntries(next.entries) });
-			state.setMessage((value) =>
-				value.startsWith("Could not open this location:") ? "" : value,
-			);
-		} catch (error) {
-			state.setListing(null);
-			state.setMessage(`Could not open this location: ${String(error)}`);
-		}
-	}, [currentPath, server.fileEntries, hidden, rootId]);
-
-	useEffect(() => {
-		void refresh();
-	}, [refresh]);
+	const refresh = useFileListing(state, { rootId, currentPath, hidden });
 
 	useEffect(() => {
 		state.setTreeChildren({});

@@ -364,8 +364,9 @@ export class BrowserFiles {
 		await expect(
 			dialog.getByRole("button", { name: "Open system file picker" }),
 		).toHaveCount(0);
+		// The hosted picker is the File Manager itself, so it is dismissed by closing it.
 		await this.desk.click(
-			dialog.getByRole("button", { name: "Cancel", exact: true }),
+			dialog.getByRole("button", { name: "Close File Manager", exact: true }),
 		);
 		const configuration = await this.api.request<any>(
 			"GET",
