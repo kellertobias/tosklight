@@ -216,10 +216,8 @@ export class BrowserFiles {
 				manager.getByRole("button", { name: ".operator-note, file" }),
 			).toBeVisible();
 
-			await this.desk.click(
-				manager.getByRole("button", { name: "alpha.txt, file" }),
-			);
-			await this.beginEdit(manager, "Copy", "alpha.txt, file");
+			await this.selectEntry(manager, "alpha.txt, file");
+			await this.beginEdit(manager, "Copy");
 			await expect(
 				manager.getByRole("button", { name: "Copy Here" }),
 			).toBeVisible();
@@ -231,10 +229,8 @@ export class BrowserFiles {
 				.getByRole("navigation", { name: "Breadcrumb" })
 				.getByRole("button", { name: `/ ${workspace}` })
 				.click();
-			await this.desk.click(
-				manager.getByRole("button", { name: "alpha.txt, file" }),
-			);
-			await this.beginEdit(manager, "Copy", "alpha.txt, file");
+			await this.selectEntry(manager, "alpha.txt, file");
+			await this.beginEdit(manager, "Copy");
 			await expect(
 				manager.getByRole("button", { name: "Copy Here" }),
 			).toBeVisible();
@@ -451,25 +447,27 @@ export class BrowserFiles {
 		);
 	}
 
-	private async beginEdit(manager: Locator, action: string, entry?: string) {
-		const open = async () =>
-			manager
-				.locator(".file-manager-header-actions")
-				.getByRole("button", { name: "Edit", exact: true })
-				.click();
+	/** A row stays selected after an operation, so clicking it again would clear the selection. */
+	private async selectEntry(manager: Locator, name: string) {
+		const row = manager.getByRole("button", { name });
+		if ((await row.getAttribute("aria-pressed")) !== "true")
+			await this.desk.click(row);
+		await expect(row).toHaveAttribute("aria-pressed", "true");
+	}
+
+	private async beginEdit(manager: Locator, action: string) {
+		await manager
+			.locator(".file-manager-header-actions")
+			.getByRole("button", { name: "Edit", exact: true })
+			.click();
 		const menu = this.page.getByRole("menu", { name: "Edit menu" });
-		const item = menu.getByRole("menuitem", { name: action, exact: true });
-		await open();
-		// A row reads as pressed while it is a pending operation's source as well as while it is
-		// selected, so a click meant to select can toggle the selection away instead. The menu
-		// itself is the honest signal: reach the row again when the action stays unavailable.
-		if (entry && (await item.isDisabled())) {
-			await this.page.locator(".file-header-menu-layer").click();
-			await expect(menu).toBeHidden();
-			await this.desk.click(manager.getByRole("button", { name: entry }));
-			await open();
-		}
-		await item.click();
+		await menu
+			.getByRole("menuitem", { name: action, exact: true })
+			.dispatchEvent("click");
+		// The menu leaves a layer over the file list until it is dismissed, and that layer would
+		// swallow the next click on a row.
+		const layer = this.page.locator(".file-header-menu-layer");
+		if (await layer.count()) await layer.click();
 		await expect(menu).toBeHidden();
 	}
 
