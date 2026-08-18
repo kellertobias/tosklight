@@ -448,11 +448,23 @@ export class BrowserFiles {
 	}
 
 	/** A row stays selected after an operation, so clicking it again would clear the selection. */
+	/**
+	 * A refresh after a mutation clears the selection when it lands, so the bench waits for the
+	 * manager to finish working before choosing a row, and re-clicks if the list moved underneath.
+	 */
 	private async selectEntry(manager: Locator, name: string) {
+		await expect(manager.locator(".file-message.is-busy")).toHaveCount(0);
 		const row = manager.getByRole("button", { name });
-		if ((await row.getAttribute("aria-pressed")) !== "true")
-			await this.desk.click(row);
-		await expect(row).toHaveAttribute("aria-pressed", "true");
+		await expect
+			.poll(
+				async () => {
+					if ((await row.getAttribute("aria-pressed")) === "true") return true;
+					await this.desk.click(row);
+					return (await row.getAttribute("aria-pressed")) === "true";
+				},
+				{ message: `${name} should be selected` },
+			)
+			.toBe(true);
 	}
 
 	private async beginEdit(manager: Locator, action: string) {

@@ -137,7 +137,8 @@ scenario(
 
 		await t.command.clear();
 		await t.playback.select(sequenceA);
-		await t.command.execute("CUE 1");
+		// CUE selects a Cue; running one again is the manual's GO TO.
+		await t.cue.goto(sequenceA, 1);
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
 			intensity: 0.6,

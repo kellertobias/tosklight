@@ -287,8 +287,11 @@ function DirectoryContents({
 			{visibleEntries.map((item) => {
 				const value = { rootId: navigation.rootId, entry: item };
 				const key = `${value.rootId}:${item.path}`;
-				const selectedItem =
-					controller.selectedKeys.has(key) || controller.sourceKeys.has(key);
+				// A pending operation's source is highlighted like a selection but is not one: the
+				// Edit menu acts on the selection alone, so only a selected row reports itself
+				// pressed and a click on a source row still selects it.
+				const selectedItem = controller.selectedKeys.has(key);
+				const sourceItem = controller.sourceKeys.has(key);
 				const pickerAllowed =
 					!picker ||
 					pickerSelectionIsValid([value], { ...picker, multiple: false });
@@ -296,7 +299,7 @@ function DirectoryContents({
 					<Button
 						variant="ghost"
 						key={item.path}
-						className={`${selectedItem ? "selected" : ""} ${picker && !pickerAllowed ? "picker-invalid" : ""} ${targetClass}`}
+						className={`${selectedItem || sourceItem ? "selected" : ""} ${picker && !pickerAllowed ? "picker-invalid" : ""} ${targetClass}`}
 						aria-pressed={selectedItem}
 						aria-label={`${item.name}, ${item.kind}`}
 						onClick={(event) => operations.selectEntry(item, event)}
