@@ -170,8 +170,27 @@ jobs:
           if [[ "$desk_status" != 0 ]]; then
             echo "--- desk processes"
             ps -ef | grep -iE "light-desktop|WebKit" | grep -v grep || true
-            echo "--- desk server log"
-            find "$out" -name '*.log' -print -exec tail -80 {} + || true
+            # The harness removes its data directory even when it fails, so run the desk once
+            # more here and keep everything it wrote.
+            diag="$tmp/diagnostic"
+            mkdir -p "$diag/data"
+            LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5099 \
+            LIGHT_DESKTOP_TEST_DATA_DIR="$diag/data" \
+            LIGHT_DESKTOP_TEST_READY_FILE="$diag/ready" \
+              xvfb-run -a -s "-screen 0 1920x1080x24" "$desk" >"$diag/desk.out" 2>&1 &
+            sleep 120
+            echo "--- ready marker"
+            ls -l "$diag/ready" 2>&1 || true
+            echo "--- readiness"
+            curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/readiness || true
+            echo "--- bootstrap"
+            curl -fsS --max-time 20 http://127.0.0.1:5099/api/v2/bootstrap | head -c 600 || true
+            echo "--- files"
+            find "$diag" -type f | head -30
+            echo "--- desk output"
+            tail -60 "$diag/desk.out" || true
+            echo "--- desk logs"
+            find "$diag" -name '*.log' -exec tail -60 {} + || true
             exit "$desk_status"
           fi
           node tools/run-release-performance.mjs \
