@@ -107,14 +107,14 @@ jobs:
           CONF
 
       - name: Install released Desk runtime dependencies
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 sudo apt-get update \
-              && timeout 600 sudo apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri; then
+            if timeout 120 sudo apt-get update \
+              && timeout 300 sudo apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -216,14 +216,14 @@ jobs:
           CONF
 
       - name: Install manual rendering dependencies
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 sudo apt-get update \
-              && timeout 600 sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
+            if timeout 120 sudo apt-get update \
+              && timeout 300 sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -276,8 +276,9 @@ jobs:
 
       - name: Install Chrome for Playwright
         # The runner's package mirrors go silent for hours at a time. Killing a stalled attempt
-        # and starting over costs minutes; waiting for one costs the whole job.
-        timeout-minutes: 15
+        # and starting over costs minutes; waiting for one costs the whole job. The cap has to
+        # leave room for all three attempts, or the first stall consumes it alone.
+        timeout-minutes: 25
         run: |
           for attempt in 1 2 3; do
             if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
@@ -343,14 +344,14 @@ jobs:
           CONF
 
       - name: Install native build dependencies
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 sudo apt-get update \
-              && timeout 600 sudo apt-get install -y libudev-dev libasound2-dev pkg-config; then
+            if timeout 120 sudo apt-get update \
+              && timeout 300 sudo apt-get install -y libudev-dev libasound2-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -396,8 +397,9 @@ jobs:
 
       - name: Install Chrome for Playwright
         # The runner's package mirrors go silent for hours at a time. Killing a stalled attempt
-        # and starting over costs minutes; waiting for one costs the whole job.
-        timeout-minutes: 15
+        # and starting over costs minutes; waiting for one costs the whole job. The cap has to
+        # leave room for all three attempts, or the first stall consumes it alone.
+        timeout-minutes: 25
         run: |
           for attempt in 1 2 3; do
             if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
