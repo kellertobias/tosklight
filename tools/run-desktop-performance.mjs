@@ -122,7 +122,7 @@ async function runCase(performanceCase, executionMode) {
 		const sheetRecords = performanceCase.demo
 			? null
 			: performanceCase.fixtureRecords;
-		await waitForFixtureSheet(reportPath, sheetRecords, child);
+		await waitForFixtureSheet(reportPath, sheetRecords, child, executionMode);
 		const measured = await measureWindow(api, child.pid, executionMode);
 		await requireFixtureSheetActive(reportPath, sheetRecords, executionMode);
 		return {
@@ -421,8 +421,11 @@ async function waitForReadiness(child, port) {
 	throw new Error("released Desk did not reach readiness");
 }
 
-async function waitForFixtureSheet(reportPath, expected, child) {
-	const deadline = Date.now() + 60_000;
+async function waitForFixtureSheet(reportPath, expected, child, executionMode) {
+	// Drawing two thousand fixtures on a single core is minutes of work, and the wait for it
+	// is not part of the measurement that follows.
+	const deadline =
+		Date.now() + (executionMode === "one_core" ? 300_000 : 60_000);
 	while (Date.now() < deadline) {
 		assertRunning(child);
 		const records = await readFile(reportPath, "utf8").catch(() => "");
