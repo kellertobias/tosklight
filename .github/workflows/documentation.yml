@@ -172,7 +172,7 @@ jobs:
             ps -ef | grep -iE "light-desktop|WebKit" | grep -v grep || true
             # The harness removes its data directory even when it fails, so run the desk once
             # more here and keep everything it wrote.
-            diag="$tmp/diagnostic"
+            diag="$PWD/$tmp/diagnostic"
             mkdir -p "$diag/data"
             APPIMAGE_EXTRACT_AND_RUN=1 \
             LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5099 \
@@ -188,7 +188,7 @@ jobs:
             echo "--- screens"
             curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/screens | head -c 800 || true
             echo "--- ready marker"
-            ls -l "$diag/ready" 2>&1 || true
+            ls -la "$diag" 2>&1 || true
             echo "--- readiness"
             curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/readiness || true
             echo "--- bootstrap users and clients"
