@@ -33,12 +33,6 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
-  # The runner's Azure mirror intermittently stops answering. Without a transfer timeout apt
-  # waits on that dead connection until the job is killed instead of falling back to
-  # archive.ubuntu.com, and forcing IPv4 avoids the address family the mirror stalls on.
-  APT_FLAGS: >-
-    -o Acquire::Retries=3 -o Acquire::http::Timeout=30
-    -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true
 
 jobs:
   release-metadata:
@@ -101,14 +95,17 @@ jobs:
         with:
           node-version: 22
 
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install released Desk runtime dependencies
         timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update $APT_FLAGS
-          sudo apt-get install -y $APT_FLAGS \
+          sudo apt-get update
+          sudo apt-get install -y \
             xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 \
             librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri
 
@@ -195,14 +192,17 @@ jobs:
           cache: pip
           cache-dependency-path: docs/help/.tooling/requirements.txt
 
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install manual rendering dependencies
         timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update $APT_FLAGS
-          sudo apt-get install -y $APT_FLAGS \
+          sudo apt-get update
+          sudo apt-get install -y \
             libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
 
       - run: npm run manual
@@ -238,6 +238,9 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - run: npm ci
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - run: npx playwright install --with-deps chrome
 
       - name: Build Storybook once and refresh its screenshot candidates
@@ -286,14 +289,17 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - run: npm ci
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install native build dependencies
         timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update $APT_FLAGS
-          sudo apt-get install -y $APT_FLAGS libudev-dev libasound2-dev pkg-config
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev libasound2-dev pkg-config
       - run: bash tools/test.sh e2e-build
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -321,6 +327,9 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - run: npm ci
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - run: npx playwright install --with-deps chrome
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

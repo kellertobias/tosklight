@@ -24,12 +24,6 @@ env:
   # of dev/test artifacts materially shortens the comprehensive workspace and E2E link phases.
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
-  # The runner's Azure mirror intermittently stops answering. Without a transfer timeout apt
-  # waits on that dead connection until the job is killed instead of falling back to
-  # archive.ubuntu.com, and forcing IPv4 avoids the address family the mirror stalls on.
-  APT_FLAGS: >-
-    -o Acquire::Retries=3 -o Acquire::http::Timeout=30
-    -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: sccache
 
@@ -135,14 +129,17 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install native Rust and desktop development files
         timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update $APT_FLAGS
-          sudo apt-get install -y $APT_FLAGS \
+          sudo apt-get update
+          sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev build-essential
 
@@ -197,6 +194,9 @@ jobs:
         with:
           key: unit
 
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install Linux workspace development files
         timeout-minutes: 15
         env:
@@ -204,8 +204,8 @@ jobs:
           NEEDRESTART_MODE: a
         if: github.ref != 'refs/heads/main'
         run: |
-          sudo apt-get update $APT_FLAGS
-          sudo apt-get install -y $APT_FLAGS \
+          sudo apt-get update
+          sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
             mesa-vulkan-drivers build-essential pkg-config
@@ -258,14 +258,17 @@ jobs:
         with:
           key: workspace
 
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install Linux workspace development files
         timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update $APT_FLAGS
-          sudo apt-get install -y $APT_FLAGS \
+          sudo apt-get update
+          sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
             mesa-vulkan-drivers build-essential pkg-config \
@@ -356,13 +359,16 @@ jobs:
         with:
           key: usb-dmx-${{ runner.os }}
 
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install Linux USB serial development files
         timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux'
-        run: sudo apt-get update $APT_FLAGS && sudo apt-get install -y $APT_FLAGS libudev-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
 
       - name: Verify USB DMX protocol and serial adapters
         run: cargo test -p light-usb-dmx-core -p light-usb-dmx-serial --locked
@@ -408,12 +414,15 @@ jobs:
           name: shared-frontends-${{ github.sha }}
           path: .artifacts/build/frontend
 
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install USB serial and audio development files
         timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
-        run: sudo apt-get update $APT_FLAGS && sudo apt-get install -y $APT_FLAGS libudev-dev libasound2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev pkg-config
 
       - name: Build the Playwright application once
         run: bash tools/test.sh e2e-build
@@ -453,6 +462,9 @@ jobs:
 
       - name: Install workspace dependencies
         run: npm ci
+
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
 
       - name: Install Chrome for Playwright
         run: npx playwright install --with-deps chrome
@@ -601,6 +613,9 @@ jobs:
         with:
           key: release-${{ matrix.target }}
 
+      - uses: ./.github/actions/package-mirror
+        if: runner.os == 'Linux'
+
       - name: Install Linux bundling dependencies
         timeout-minutes: 15
         env:
@@ -608,8 +623,8 @@ jobs:
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux' && matrix.desktop
         run: |
-          sudo apt-get update $APT_FLAGS
-          sudo apt-get install -y $APT_FLAGS \
+          sudo apt-get update
+          sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev \
             libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb
@@ -621,8 +636,8 @@ jobs:
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux' && !matrix.desktop
         run: |
-          sudo apt-get update $APT_FLAGS
-          sudo apt-get install -y $APT_FLAGS libasound2-dev libudev-dev pkg-config zip
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config zip
 
       - name: Install workspace dependencies
         shell: bash

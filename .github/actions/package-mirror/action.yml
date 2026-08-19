@@ -1,0 +1,17 @@
+name: Tune package downloads
+description: >-
+  Keep package installs from waiting forever on the runner's intermittently silent Azure mirror.
+  Applied as apt configuration rather than command-line options so that tools which shell out to
+  apt themselves — Playwright's --with-deps among them — inherit it too.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        sudo tee /etc/apt/apt.conf.d/99-tosklight-ci >/dev/null <<'CONF'
+        Acquire::Retries "3";
+        Acquire::http::Timeout "30";
+        Acquire::https::Timeout "30";
+        Acquire::ForceIPv4 "true";
+        CONF
