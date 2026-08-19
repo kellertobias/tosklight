@@ -155,8 +155,7 @@ jobs:
           test -n "$fixture_library"
           chmod +x "$benchmark" "$desk"
           status=0
-          # An explicit 24-bit screen, so the desk's renderer has a visual it can use.
-          xvfb-run -a -s "-screen 0 1920x1080x24" node tools/run-desktop-performance.mjs \
+          xvfb-run -a node tools/run-desktop-performance.mjs \
             --application "$desk" \
             --output-dir "$out" \
             --demo-show assets/demo.show
