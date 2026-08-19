@@ -191,8 +191,9 @@ jobs:
             ls -l "$diag/ready" 2>&1 || true
             echo "--- readiness"
             curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/readiness || true
-            echo "--- bootstrap"
-            curl -fsS --max-time 20 http://127.0.0.1:5099/api/v2/bootstrap | head -c 600 || true
+            echo "--- bootstrap users and clients"
+            curl -fsS --max-time 20 http://127.0.0.1:5099/api/v2/bootstrap \
+              | jq -c '{users: .users, clients: (.clients // [] | length)}' || true
             echo "--- files"
             find "$diag" -type f | head -30
             echo "--- desk output"
