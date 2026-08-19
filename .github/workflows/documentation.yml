@@ -138,8 +138,6 @@ jobs:
           # cannot start its web process and fails silently — an app that answers on its port
           # while the window stays empty. Only this measurement runner is affected.
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
-          # Say why, if it still refuses to paint. GLib's own debugging drowns the desk's
-          # account of the session in socket chatter, so ask the desk instead.
           RUST_LOG: "info"
         run: |
           set -euo pipefail
@@ -157,55 +155,11 @@ jobs:
           test -n "$fixture_library"
           chmod +x "$benchmark" "$desk"
           status=0
-          # An explicit 24-bit screen: xvfb-run's default depth has left web views unable to
-          # produce a frame at all. If the desk still will not paint, say what was actually on
-          # that screen rather than guessing again.
-          desk_status=0
-          xvfb-run -a -s "-screen 0 1920x1080x24" bash -c '
-            node tools/run-desktop-performance.mjs \
-              --application "'"$desk"'" \
-              --output-dir "'"$out"'" \
-              --demo-show assets/demo.show
-          ' || desk_status=$?
-          if [[ "$desk_status" != 0 ]]; then
-            echo "--- desk processes"
-            ps -ef | grep -iE "light-desktop|WebKit" | grep -v grep || true
-            # The harness removes its data directory even when it fails, so run the desk once
-            # more here and keep everything it wrote.
-            diag="$PWD/$tmp/diagnostic"
-            mkdir -p "$diag/data"
-            APPIMAGE_EXTRACT_AND_RUN=1 \
-            LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5099 \
-            LIGHT_DESKTOP_TEST_DATA_DIR="$diag/data" \
-            LIGHT_DESKTOP_TEST_READY_FILE="$diag/ready" \
-              xvfb-run -a -s "-screen 0 1920x1080x24" taskset --cpu-list 0 "$desk" \
-                >"$diag/desk.out" 2>&1 &
-            # The harness pins the whole desk to one CPU, which is the only thing it does that
-            # this diagnostic did not. Give it well past the harness's own budget and see whether
-            # the marker is late or never.
-            sleep 420
-            echo "--- web processes"
-            ps -ef | grep -iE "WebKitWebProcess|WebKitNetworkProcess|light-desktop" | grep -v grep || true
-            echo "--- diagnostics"
-            curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/diagnostics | head -c 800 || true
-            echo ""
-            echo "--- screens"
-            curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/screens | head -c 800 || true
-            echo "--- ready marker"
-            ls -la "$diag" 2>&1 || true
-            echo "--- readiness"
-            curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/readiness || true
-            echo "--- bootstrap users and clients"
-            curl -fsS --max-time 20 http://127.0.0.1:5099/api/v2/bootstrap \
-              | jq -c '{users: .users, clients: (.clients // [] | length)}' || true
-            echo "--- files"
-            find "$diag" -type f | head -30
-            echo "--- desk output"
-            tail -60 "$diag/desk.out" || true
-            echo "--- desk logs"
-            find "$diag" -name '*.log' -exec tail -60 {} + || true
-            exit "$desk_status"
-          fi
+          # An explicit 24-bit screen, so the desk's renderer has a visual it can use.
+          xvfb-run -a -s "-screen 0 1920x1080x24" node tools/run-desktop-performance.mjs \
+            --application "$desk" \
+            --output-dir "$out" \
+            --demo-show assets/demo.show
           node tools/run-release-performance.mjs \
             --binary "$benchmark" \
             --output-dir "$out" \

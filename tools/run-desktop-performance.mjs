@@ -63,7 +63,9 @@ async function runCase(performanceCase, executionMode) {
 	);
 	const port = await freePort();
 	const reportPath = path.join(temporaryRoot, "fixture-sheet.jsonl");
-	const frontendReadyPath = path.join(temporaryRoot, "frontend-ready");
+	// A bundle launched with a benchmark report runs the benchmark surface instead of the
+	// operator interface, and that surface waits for this marker before it starts measuring.
+	const preparedPath = path.join(temporaryRoot, "stage-profile-prepared");
 	const invocation = applicationInvocation(
 		path.resolve(options.application),
 		executionMode,
@@ -76,7 +78,7 @@ async function runCase(performanceCase, executionMode) {
 			APPIMAGE_EXTRACT_AND_RUN: "1",
 			LIGHT_DESKTOP_TEST_BIND: `127.0.0.1:${port}`,
 			LIGHT_DESKTOP_TEST_DATA_DIR: path.join(temporaryRoot, "data"),
-			LIGHT_DESKTOP_TEST_READY_FILE: frontendReadyPath,
+			LIGHT_STAGE_PACKAGED_BENCH_PREPARED: preparedPath,
 			LIGHT_STAGE_PACKAGED_BENCH_REPORT: reportPath,
 			LIGHT_STAGE_PACKAGED_BENCH_PROFILE: performanceCase.caseId,
 			LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW: "0",
@@ -95,14 +97,6 @@ async function runCase(performanceCase, executionMode) {
 		});
 	try {
 		await waitForReadiness(child, port);
-		// First paint on a software renderer is far slower than on a developer machine, and the
-		// single-core case pays for it twice: unpacking the bundle and rasterising every pixel
-		// share one CPU. None of this wait is part of any measurement.
-		await waitForFile(
-			frontendReadyPath,
-			child,
-			executionMode === "one_core" ? 300_000 : 120_000,
-		);
 		const api = apiClient(port);
 		const session = await api.request("POST", "/api/v2/sessions", {
 			username: "Performance Operator",
@@ -113,6 +107,8 @@ async function runCase(performanceCase, executionMode) {
 		const prepared = performanceCase.demo
 			? await prepareDemo(api)
 			: await prepareMixed(api, performanceCase.fixtureRecords);
+		// The show exists now, so let the benchmark surface begin.
+		await writeFile(preparedPath, `${JSON.stringify(prepared)}\n`);
 		await waitForFixtureSheet(
 			reportPath,
 			performanceCase.fixtureRecords,
@@ -458,19 +454,6 @@ async function requireFixtureSheetActive(reportPath, expected) {
 		throw new Error(
 			"Fixture Sheet did not remain active through the timed measurement window",
 		);
-}
-
-async function waitForFile(file, child, timeoutMs) {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		assertRunning(child);
-		try {
-			await readFile(file);
-			return;
-		} catch {}
-		await new Promise((resolve) => setTimeout(resolve, 250));
-	}
-	throw new Error(`frontend did not render (${file})`);
 }
 
 function assertRunning(child) {
