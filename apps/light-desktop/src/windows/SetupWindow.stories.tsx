@@ -15,6 +15,10 @@ import {
 	fixtureDefinitionsFromProfiles,
 } from "../components/setup/fixtureProfileModel";
 import { fixtureTypeIconAsset } from "../components/setup/fixtureTypeIconAssets";
+import type {
+	NetworkSettingsTab,
+	OutputsSettingsTab,
+} from "./setupWindow/SetupChrome";
 import { defaultRecordSettings } from "../components/setup/ProgrammerDefaults";
 import {
 	type DmxDiagnostics,
@@ -411,9 +415,17 @@ export function MarketingSetupWindow({
 	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(
 		initialFixtureLibraryOpen,
 	);
+	// Outputs and Network carry their own tabs in the title chrome, which insists on an active one.
+	const [outputsTab, setOutputsTab] = useState<OutputsSettingsTab>("engine");
+	const [networkTab, setNetworkTab] =
+		useState<NetworkSettingsTab>("control-server");
 	const controller = {
 		section,
 		setSection,
+		outputsTab,
+		setOutputsTab,
+		networkTab,
+		setNetworkTab,
 		restartRequired: false,
 		draft,
 		editDraft: setDraft,

@@ -208,6 +208,7 @@ function ParameterFamiliesExample({
 				? `${Math.round((normalized.get(attribute) ?? 0) * 100)}%`
 				: undefined,
 		encoderDiscreteDisplay: () => undefined,
+		encoderSemanticDisplay: () => undefined,
 		hasProgrammerValue: (attribute: string) => normalized.has(attribute),
 		canWriteValues: true,
 		applyParameter: async () => undefined,
