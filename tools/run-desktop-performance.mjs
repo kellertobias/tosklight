@@ -260,8 +260,11 @@ function summarizePatch(patch, plan) {
 	let parameters = 0;
 	let physicalInstances = 0;
 	for (const fixture of patch.fixtures) {
-		const mode = fixture.definition.profile_snapshot?.modes?.find(
-			(candidate) => candidate.id === fixture.definition.mode_id,
+		// A fixture the show carries without a resolved profile has no footprint to count,
+		// which is ordinary rather than a reason to abandon the measurement.
+		const definition = fixture.definition;
+		const mode = definition?.profile_snapshot?.modes?.find(
+			(candidate) => candidate.id === definition.mode_id,
 		);
 		const footprint =
 			mode?.splits?.reduce((total, split) => total + split.footprint, 0) ?? 0;
