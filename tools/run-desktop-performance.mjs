@@ -117,9 +117,14 @@ async function runCase(performanceCase, executionMode) {
 			: await prepareMixed(api, performanceCase.fixtureRecords);
 		// The show exists now, so let the benchmark surface begin.
 		await writeFile(preparedPath, `${JSON.stringify(prepared)}\n`);
-		await waitForFixtureSheet(reportPath, prepared.fixtureRecords, child);
+		// The Sheet counts the fixtures it shows, which is not the same tally as the patch:
+		// a generated show is measured at whatever it turns out to display.
+		const sheetRecords = performanceCase.demo
+			? null
+			: performanceCase.fixtureRecords;
+		await waitForFixtureSheet(reportPath, sheetRecords, child);
 		const measured = await measureWindow(api, child.pid, executionMode);
-		await requireFixtureSheetActive(reportPath, prepared.fixtureRecords);
+		await requireFixtureSheetActive(reportPath, sheetRecords);
 		return {
 			case_id: performanceCase.caseId,
 			case_name: performanceCase.demo
@@ -435,13 +440,15 @@ async function waitForFixtureSheet(reportPath, expected, child) {
 			.find(
 				(record) =>
 					record.kind === "fixture-sheet-ready" &&
-					record.fixtureRecords === expected,
+					(expected === null || record.fixtureRecords === expected),
 			);
 		if (ready) return;
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
 	throw new Error(
-		`Fixture Sheet did not converge to ${expected} fixture records`,
+		expected === null
+			? "Fixture Sheet never reported itself ready"
+			: `Fixture Sheet did not converge to ${expected} fixture records`,
 	);
 }
 
@@ -461,7 +468,7 @@ async function requireFixtureSheetActive(reportPath, expected) {
 		.filter(
 			(record) =>
 				record.kind === "fixture-sheet-heartbeat" &&
-				record.fixtureRecords === expected,
+				(expected === null || record.fixtureRecords === expected),
 		)
 		.at(-1);
 	if (!heartbeat || Date.now() - Date.parse(heartbeat.recordedAt) > 2_500)
