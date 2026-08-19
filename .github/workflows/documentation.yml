@@ -179,7 +179,11 @@ jobs:
             LIGHT_DESKTOP_TEST_DATA_DIR="$diag/data" \
             LIGHT_DESKTOP_TEST_READY_FILE="$diag/ready" \
               xvfb-run -a -s "-screen 0 1920x1080x24" "$desk" >"$diag/desk.out" 2>&1 &
-            sleep 120
+            sleep 240
+            echo "--- web processes"
+            ps -ef | grep -iE "WebKitWebProcess|WebKitNetworkProcess|light-desktop" | grep -v grep || true
+            echo "--- sessions"
+            curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/sessions | head -c 400 || true
             echo "--- ready marker"
             ls -l "$diag/ready" 2>&1 || true
             echo "--- readiness"
