@@ -81,6 +81,10 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Media | P2/E5 | **Audio Volume** (`audio.volume`) | — |
 | Media | P3/E3 | **Scale X** (`media.scale.x`) | — |
 | Media | P3/E4 | **Scale Y** (`media.scale.y`) | — |
+| Media | P4/E1 | **Media Effect 1** (`media.effect.1`) | — |
+| Media | P4/E2 | **Media Effect 2** (`media.effect.2`) | — |
+| Media | P4/E3 | **Media Effect 3** (`media.effect.3`) | — |
+| Media | P4/E4 | **Media Effect 4** (`media.effect.4`) | — |
 | Media | P5/E1 | **Mask Scale X** (`media.mask.scale.x`) | — |
 | Media | P5/E2 | **Mask Scale Y** (`media.mask.scale.y`) | — |
 | Media | P5/E3 | **Mask Position X** (`media.mask.position.x`) | — |
@@ -133,3 +137,7 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | **Mask Opacity** | **Mask Opacity** (`media.mask.opacity`) |
 | **Invert Mask** | **Invert Mask** (`media.mask.invert`) |
 | **Flip / Mirror** | **Flip / Mirror** (`media.flip_mirror`) |
+| **Media Effect 1** | **Media Effect 1** (`media.effect.1`) |
+| **Media Effect 2** | **Media Effect 2** (`media.effect.2`) |
+| **Media Effect 3** | **Media Effect 3** (`media.effect.3`) |
+| **Media Effect 4** | **Media Effect 4** (`media.effect.4`) |
