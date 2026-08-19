@@ -138,9 +138,9 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev build-essential; then
+              && sudo timeout 600 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev build-essential; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -216,9 +216,9 @@ jobs:
           NEEDRESTART_MODE: a
         if: github.ref != 'refs/heads/main'
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config; then
+              && sudo timeout 600 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -290,9 +290,9 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config fonts-dejavu-core; then
+              && sudo timeout 600 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config fonts-dejavu-core; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -402,9 +402,9 @@ jobs:
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux'
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libudev-dev pkg-config; then
+              && sudo timeout 600 apt-get install -y libudev-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -472,9 +472,9 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libudev-dev libasound2-dev pkg-config; then
+              && sudo timeout 600 apt-get install -y libudev-dev libasound2-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -537,8 +537,8 @@ jobs:
         # leave room for all three attempts, or the first stall consumes it alone.
         timeout-minutes: 35
         run: |
-          for attempt in 1 2 3; do
-            if timeout 480 npx playwright install --with-deps chrome; then exit 0; fi
+          for attempt in 1 2; do
+            if timeout 900 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
@@ -705,9 +705,9 @@ jobs:
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux' && matrix.desktop
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb; then
+              && sudo timeout 600 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -729,9 +729,9 @@ jobs:
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux' && !matrix.desktop
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libasound2-dev libudev-dev pkg-config zip; then
+              && sudo timeout 600 apt-get install -y libasound2-dev libudev-dev pkg-config zip; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2

@@ -112,9 +112,9 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri mesa-vulkan-drivers; then
+              && sudo timeout 600 apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri mesa-vulkan-drivers; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -234,9 +234,9 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
+              && sudo timeout 600 apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -301,8 +301,8 @@ jobs:
         # leave room for all three attempts, or the first stall consumes it alone.
         timeout-minutes: 35
         run: |
-          for attempt in 1 2 3; do
-            if timeout 480 npx playwright install --with-deps chrome; then exit 0; fi
+          for attempt in 1 2; do
+            if timeout 900 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
@@ -378,9 +378,9 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if sudo timeout 180 apt-get update \
-              && sudo timeout 480 apt-get install -y libudev-dev libasound2-dev pkg-config; then
+              && sudo timeout 600 apt-get install -y libudev-dev libasound2-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -438,8 +438,8 @@ jobs:
         # leave room for all three attempts, or the first stall consumes it alone.
         timeout-minutes: 35
         run: |
-          for attempt in 1 2 3; do
-            if timeout 480 npx playwright install --with-deps chrome; then exit 0; fi
+          for attempt in 1 2; do
+            if timeout 900 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
