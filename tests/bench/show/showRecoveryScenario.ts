@@ -101,12 +101,15 @@ export class ShowRecoveryAdapter {
 	}
 
 	async expectRecovered(): Promise<void> {
-		const readiness = await this.readiness();
-		expect(readiness).toMatchObject({
-			status: "ready",
-			recovery_mode: false,
-			active_show_error: null,
-		});
+		// Loading the clean show answers before the desk has finished leaving recovery, so the
+		// desk is given the moment it needs rather than being caught mid-recovery.
+		await expect
+			.poll(async () => await this.readiness())
+			.toMatchObject({
+				status: "ready",
+				recovery_mode: false,
+				active_show_error: null,
+			});
 		expect((await this.bootstrap()).active_show_error).toBeNull();
 		if (this.page) {
 			await expect(
