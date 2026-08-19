@@ -138,8 +138,9 @@ jobs:
           # cannot start its web process and fails silently — an app that answers on its port
           # while the window stays empty. Only this measurement runner is affected.
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
-          # Say why, if it still refuses to paint.
-          G_MESSAGES_DEBUG: "all"
+          # Say why, if it still refuses to paint. GLib's own debugging drowns the desk's
+          # account of the session in socket chatter, so ask the desk instead.
+          RUST_LOG: "info"
         run: |
           set -euo pipefail
           out=".artifacts/performance"
