@@ -124,7 +124,7 @@ async function runCase(performanceCase, executionMode) {
 			: performanceCase.fixtureRecords;
 		await waitForFixtureSheet(reportPath, sheetRecords, child);
 		const measured = await measureWindow(api, child.pid, executionMode);
-		await requireFixtureSheetActive(reportPath, sheetRecords);
+		await requireFixtureSheetActive(reportPath, sheetRecords, executionMode);
 		return {
 			case_id: performanceCase.caseId,
 			case_name: performanceCase.demo
@@ -452,7 +452,7 @@ async function waitForFixtureSheet(reportPath, expected, child) {
 	);
 }
 
-async function requireFixtureSheetActive(reportPath, expected) {
+async function requireFixtureSheetActive(reportPath, expected, executionMode) {
 	const records = (await readFile(reportPath, "utf8"))
 		.trim()
 		.split("\n")
@@ -471,7 +471,10 @@ async function requireFixtureSheetActive(reportPath, expected) {
 				(expected === null || record.fixtureRecords === expected),
 		)
 		.at(-1);
-	if (!heartbeat || Date.now() - Date.parse(heartbeat.recordedAt) > 2_500)
+	// The Sheet beats once a second, and a desk deliberately confined to one core delivers
+	// those beats less punctually. Late is what this case is measuring; silent is the fault.
+	const tolerance = executionMode === "one_core" ? 10_000 : 2_500;
+	if (!heartbeat || Date.now() - Date.parse(heartbeat.recordedAt) > tolerance)
 		throw new Error(
 			"Fixture Sheet did not remain active through the timed measurement window",
 		);
