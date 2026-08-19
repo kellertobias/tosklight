@@ -178,8 +178,12 @@ jobs:
             LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5099 \
             LIGHT_DESKTOP_TEST_DATA_DIR="$diag/data" \
             LIGHT_DESKTOP_TEST_READY_FILE="$diag/ready" \
-              xvfb-run -a -s "-screen 0 1920x1080x24" "$desk" >"$diag/desk.out" 2>&1 &
-            sleep 240
+              xvfb-run -a -s "-screen 0 1920x1080x24" taskset --cpu-list 0 "$desk" \
+                >"$diag/desk.out" 2>&1 &
+            # The harness pins the whole desk to one CPU, which is the only thing it does that
+            # this diagnostic did not. Give it well past the harness's own budget and see whether
+            # the marker is late or never.
+            sleep 420
             echo "--- web processes"
             ps -ef | grep -iE "WebKitWebProcess|WebKitNetworkProcess|light-desktop" | grep -v grep || true
             echo "--- diagnostics"
