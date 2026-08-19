@@ -95,8 +95,16 @@ jobs:
         with:
           node-version: 22
 
-      - uses: ./.github/actions/package-mirror
-        if: runner.os == 'Linux'
+      # Inline rather than the shared action: these jobs check out the released commit, which
+      # predates it. Keeps package downloads from waiting forever on a silent mirror.
+      - name: Tune package downloads
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-tosklight-ci >/dev/null <<'CONF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::ForceIPv4 "true";
+          CONF
 
       - name: Install released Desk runtime dependencies
         timeout-minutes: 15
@@ -104,10 +112,14 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 \
-            librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri
+          for attempt in 1 2 3; do
+            if timeout 240 sudo apt-get update \
+              && timeout 600 sudo apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri; then
+              exit 0
+            fi
+            echo "Package install attempt $attempt stalled; retrying." >&2
+          done
+          exit 1
 
       - name: Measure the published Linux bundle
         id: measure
@@ -192,8 +204,16 @@ jobs:
           cache: pip
           cache-dependency-path: docs/help/.tooling/requirements.txt
 
-      - uses: ./.github/actions/package-mirror
-        if: runner.os == 'Linux'
+      # Inline rather than the shared action: these jobs check out the released commit, which
+      # predates it. Keeps package downloads from waiting forever on a silent mirror.
+      - name: Tune package downloads
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-tosklight-ci >/dev/null <<'CONF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::ForceIPv4 "true";
+          CONF
 
       - name: Install manual rendering dependencies
         timeout-minutes: 15
@@ -201,9 +221,14 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
+          for attempt in 1 2 3; do
+            if timeout 240 sudo apt-get update \
+              && timeout 600 sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
+              exit 0
+            fi
+            echo "Package install attempt $attempt stalled; retrying." >&2
+          done
+          exit 1
 
       - run: npm run manual
 
@@ -238,10 +263,27 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - run: npm ci
-      - uses: ./.github/actions/package-mirror
-        if: runner.os == 'Linux'
+      # Inline rather than the shared action: these jobs check out the released commit, which
+      # predates it. Keeps package downloads from waiting forever on a silent mirror.
+      - name: Tune package downloads
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-tosklight-ci >/dev/null <<'CONF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::ForceIPv4 "true";
+          CONF
 
-      - run: npx playwright install --with-deps chrome
+      - name: Install Chrome for Playwright
+        # The runner's package mirrors go silent for hours at a time. Killing a stalled attempt
+        # and starting over costs minutes; waiting for one costs the whole job.
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
+            echo "Chrome install attempt $attempt stalled; retrying."
+          done
+          exit 1
 
       - name: Build Storybook once and refresh its screenshot candidates
         run: bash tools/test.sh documentation-screenshots
@@ -289,8 +331,16 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - run: npm ci
-      - uses: ./.github/actions/package-mirror
-        if: runner.os == 'Linux'
+      # Inline rather than the shared action: these jobs check out the released commit, which
+      # predates it. Keeps package downloads from waiting forever on a silent mirror.
+      - name: Tune package downloads
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-tosklight-ci >/dev/null <<'CONF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::ForceIPv4 "true";
+          CONF
 
       - name: Install native build dependencies
         timeout-minutes: 15
@@ -298,8 +348,14 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev libasound2-dev pkg-config
+          for attempt in 1 2 3; do
+            if timeout 240 sudo apt-get update \
+              && timeout 600 sudo apt-get install -y libudev-dev libasound2-dev pkg-config; then
+              exit 0
+            fi
+            echo "Package install attempt $attempt stalled; retrying." >&2
+          done
+          exit 1
       - run: bash tools/test.sh e2e-build
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -327,10 +383,27 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - run: npm ci
-      - uses: ./.github/actions/package-mirror
-        if: runner.os == 'Linux'
+      # Inline rather than the shared action: these jobs check out the released commit, which
+      # predates it. Keeps package downloads from waiting forever on a silent mirror.
+      - name: Tune package downloads
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-tosklight-ci >/dev/null <<'CONF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::ForceIPv4 "true";
+          CONF
 
-      - run: npx playwright install --with-deps chrome
+      - name: Install Chrome for Playwright
+        # The runner's package mirrors go silent for hours at a time. Killing a stalled attempt
+        # and starting over costs minutes; waiting for one costs the whole job.
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
+            echo "Chrome install attempt $attempt stalled; retrying."
+          done
+          exit 1
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
