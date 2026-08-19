@@ -182,8 +182,11 @@ jobs:
             sleep 240
             echo "--- web processes"
             ps -ef | grep -iE "WebKitWebProcess|WebKitNetworkProcess|light-desktop" | grep -v grep || true
-            echo "--- sessions"
-            curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/sessions | head -c 400 || true
+            echo "--- diagnostics"
+            curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/diagnostics | head -c 800 || true
+            echo ""
+            echo "--- screens"
+            curl -fsS --max-time 10 http://127.0.0.1:5099/api/v2/screens | head -c 800 || true
             echo "--- ready marker"
             ls -l "$diag/ready" 2>&1 || true
             echo "--- readiness"
