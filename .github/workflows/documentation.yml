@@ -114,7 +114,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri; then
+              && sudo timeout 300 apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri mesa-vulkan-drivers; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
