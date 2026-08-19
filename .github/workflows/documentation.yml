@@ -156,10 +156,23 @@ jobs:
           test -n "$fixture_library"
           chmod +x "$benchmark" "$desk"
           status=0
-          xvfb-run -a node tools/run-desktop-performance.mjs \
-            --application "$desk" \
-            --output-dir "$out" \
-            --demo-show assets/demo.show
+          # An explicit 24-bit screen: xvfb-run's default depth has left web views unable to
+          # produce a frame at all. If the desk still will not paint, say what was actually on
+          # that screen rather than guessing again.
+          desk_status=0
+          xvfb-run -a -s "-screen 0 1920x1080x24" bash -c '
+            node tools/run-desktop-performance.mjs \
+              --application "'"$desk"'" \
+              --output-dir "'"$out"'" \
+              --demo-show assets/demo.show
+          ' || desk_status=$?
+          if [[ "$desk_status" != 0 ]]; then
+            echo "--- desk processes"
+            ps -ef | grep -iE "light-desktop|WebKit" | grep -v grep || true
+            echo "--- X display"
+            xvfb-run -a -s "-screen 0 1920x1080x24" xdpyinfo | head -30 || true
+            exit "$desk_status"
+          fi
           node tools/run-release-performance.mjs \
             --binary "$benchmark" \
             --output-dir "$out" \
