@@ -113,8 +113,8 @@ jobs:
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -222,8 +222,8 @@ jobs:
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -283,6 +283,9 @@ jobs:
           for attempt in 1 2 3; do
             if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
+            # Playwright installs as root, so the kill above cannot reach its apt child. Clear it
+            # out, or the next attempt waits on a lock nobody will release.
+            sudo pkill -9 -x apt-get || true
           done
           exit 1
 
@@ -350,8 +353,8 @@ jobs:
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libudev-dev libasound2-dev pkg-config; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libudev-dev libasound2-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -404,6 +407,9 @@ jobs:
           for attempt in 1 2 3; do
             if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
+            # Playwright installs as root, so the kill above cannot reach its apt child. Clear it
+            # out, or the next attempt waits on a lock nobody will release.
+            sudo pkill -9 -x apt-get || true
           done
           exit 1
 

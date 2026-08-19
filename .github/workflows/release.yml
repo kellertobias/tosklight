@@ -139,8 +139,8 @@ jobs:
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev build-essential; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev build-essential; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -209,8 +209,8 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -275,8 +275,8 @@ jobs:
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config fonts-dejavu-core; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config fonts-dejavu-core; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -379,8 +379,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libudev-dev pkg-config; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libudev-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -441,8 +441,8 @@ jobs:
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libudev-dev libasound2-dev pkg-config; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libudev-dev libasound2-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -500,6 +500,9 @@ jobs:
           for attempt in 1 2 3; do
             if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
+            # Playwright installs as root, so the kill above cannot reach its apt child. Clear it
+            # out, or the next attempt waits on a lock nobody will release.
+            sudo pkill -9 -x apt-get || true
           done
           exit 1
 
@@ -658,8 +661,8 @@ jobs:
         if: runner.os == 'Linux' && matrix.desktop
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
@@ -674,8 +677,8 @@ jobs:
         if: runner.os == 'Linux' && !matrix.desktop
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 sudo apt-get update \
-              && timeout 300 sudo apt-get install -y libasound2-dev libudev-dev pkg-config zip; then
+            if sudo timeout 120 apt-get update \
+              && sudo timeout 300 apt-get install -y libasound2-dev libudev-dev pkg-config zip; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
