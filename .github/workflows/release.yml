@@ -133,17 +133,21 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Install native Rust and desktop development files
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev build-essential; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev build-essential; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -206,18 +210,22 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Install Linux workspace development files
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         if: github.ref != 'refs/heads/main'
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -277,17 +285,21 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Install Linux workspace development files
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config fonts-dejavu-core; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev mesa-vulkan-drivers build-essential pkg-config fonts-dejavu-core; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -384,18 +396,22 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Install Linux USB serial development files
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux'
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libudev-dev pkg-config; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libudev-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -451,17 +467,21 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Install USB serial and audio development files
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libudev-dev libasound2-dev pkg-config; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libudev-dev libasound2-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -515,18 +535,19 @@ jobs:
         # The runner's package mirrors go silent for hours at a time. Killing a stalled attempt
         # and starting over costs minutes; waiting for one costs the whole job. The cap has to
         # leave room for all three attempts, or the first stall consumes it alone.
-        timeout-minutes: 25
+        timeout-minutes: 35
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
+            if timeout 480 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
             echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-            # Playwright installs as root, so the kill above cannot reach its apt child. Clear it
-            # out, or the next attempt waits on a lock nobody will release.
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
             sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
           done
           exit 1
 
@@ -678,18 +699,22 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Install Linux bundling dependencies
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux' && matrix.desktop
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -698,18 +723,22 @@ jobs:
           exit 1
 
       - name: Install Linux ARM64 server dependencies
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         if: runner.os == 'Linux' && !matrix.desktop
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libasound2-dev libudev-dev pkg-config zip; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libasound2-dev libudev-dev pkg-config zip; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.

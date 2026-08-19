@@ -107,17 +107,21 @@ jobs:
           CONF
 
       - name: Install released Desk runtime dependencies
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri mesa-vulkan-drivers; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri mesa-vulkan-drivers; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -225,17 +229,21 @@ jobs:
           CONF
 
       - name: Install manual rendering dependencies
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -291,18 +299,19 @@ jobs:
         # The runner's package mirrors go silent for hours at a time. Killing a stalled attempt
         # and starting over costs minutes; waiting for one costs the whole job. The cap has to
         # leave room for all three attempts, or the first stall consumes it alone.
-        timeout-minutes: 25
+        timeout-minutes: 35
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
+            if timeout 480 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
             echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-            # Playwright installs as root, so the kill above cannot reach its apt child. Clear it
-            # out, or the next attempt waits on a lock nobody will release.
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
             sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
           done
           exit 1
 
@@ -364,17 +373,21 @@ jobs:
           CONF
 
       - name: Install native build dependencies
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get update \
-              && sudo timeout 300 apt-get install -y libudev-dev libasound2-dev pkg-config; then
+            if sudo timeout 180 apt-get update \
+              && sudo timeout 480 apt-get install -y libudev-dev libasound2-dev pkg-config; then
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
@@ -423,18 +436,19 @@ jobs:
         # The runner's package mirrors go silent for hours at a time. Killing a stalled attempt
         # and starting over costs minutes; waiting for one costs the whole job. The cap has to
         # leave room for all three attempts, or the first stall consumes it alone.
-        timeout-minutes: 25
+        timeout-minutes: 35
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
+            if timeout 480 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
             # The runner's own mirror list has been silent for hours at a time. Packages stay
             # signature-checked against Ubuntu's keys wherever they come from, so pointing the
             # retry at a mirror on a different network costs nothing but changes the outcome.
             echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-            # Playwright installs as root, so the kill above cannot reach its apt child. Clear it
-            # out, or the next attempt waits on a lock nobody will release.
+            # A killed install leaves dpkg mid-transaction and holding its lock, which fails
+            # every later attempt for a reason that has nothing to do with the mirror.
             sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
           done
           exit 1
 
