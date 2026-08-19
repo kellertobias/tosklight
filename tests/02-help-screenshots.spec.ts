@@ -158,14 +158,16 @@ async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
   return show;
 }
 
+// The second entry is the card the Open Window catalog offers, which is not always the pane's own
+// title: the catalog files the pool, its Cues, and Cuelist settings under one "Cuelists" card.
 const paneReference = [
   ["presets", "Preset pool", "presets", "Pool"],
   ["groups", "Group pool", "groups", null],
   ["fixtures", "Fixture sheet", "fixtures", "Shortcuts"],
   ["stage", "Stage", "stage", "Stage"],
-  ["cuelist_pool", "Cuelist Pool", "cuelist-pool", null],
-  ["cues", "Cues · Cuelist", "cues", null],
-  ["cuelists", "Cuelists (tabs)", "cuelists", null],
+  ["cuelist_pool", "Cuelists", "cuelist-pool", null],
+  ["cues", "Cues", "cues", null],
+  ["cuelists", "Cuelists", "cuelists", null],
   ["virtual_playbacks", "Virtual Playbacks", "virtual-playbacks", "Virtual Playbacks"],
   ["file_manager", "File Manager", "file-manager", null],
   ["text_editor", "Text Editor", "text-editor", "Text Editor"],
@@ -175,6 +177,23 @@ const paneReference = [
   ["help", "Help", "help", null],
 ] as const;
 
+/**
+ * Open one window the way an operator does: find the catalog tab that files it, then press its
+ * card. A card names the window and describes what it is for, so it is matched on the name alone.
+ */
+async function openCatalogCard(page: Page, title: string) {
+  const dialog = page.getByRole("dialog", { name: "Open Window" });
+  const card = dialog.getByRole("button").filter({ has: page.getByText(title, { exact: true }) });
+  for (const tab of await dialog.getByRole("tab").all()) {
+    await tab.click();
+    if (await card.count()) {
+      await card.first().click();
+      return;
+    }
+  }
+  throw new Error(`The Open Window catalog offers no "${title}" window`);
+}
+
 async function captureWorkflowReference(page: Page) {
   const openShowMenu = async () => {
     await page.getByRole("button", { name: /Open show menu/ }).click();
@@ -182,9 +201,18 @@ async function captureWorkflowReference(page: Page) {
   };
   const closeNested = async (selector: string) => {
     const modal = page.locator(selector);
+    // The MVR modal offers its file chooser straight away, and that chooser sits above whatever
+    // opened it.
+    const picker = page.getByRole("dialog", { name: "Choose files or folders" });
+    if (await picker.count()) {
+      await picker.getByRole("button", { name: "Close File Manager" }).click();
+      await expect(picker).toBeHidden();
+    }
     // Modals close via a legacy ".modal-close" button or a ModalTitleBar "Close …" action.
     const legacyClose = modal.locator(".modal-close");
+    const titleClose = modal.locator(".ui-modal-title-close:visible");
     if (await legacyClose.count()) await legacyClose.click();
+    else if (await titleClose.count()) await titleClose.first().click();
     else await modal.getByRole("button", { name: /^Close / }).first().click();
     await expect(modal).toBeHidden();
   };
@@ -277,7 +305,7 @@ async function capturePaneReference(page: Page, selectedDmx: { universe: number;
   await expect(page.locator(".empty-desk")).toBeVisible();
   for (const [, title, slug, settingsTab] of paneReference) {
     await page.locator(".empty-desk").click({ position: { x: 10, y: 10 } });
-    await page.getByRole("button", { name: title, exact: true }).click();
+    await openCatalogCard(page, title);
     const pane = page.locator(".desk-pane");
     await expect(pane).toBeVisible();
     const gridBox = await page.locator(".desk-grid").boundingBox();
@@ -471,7 +499,7 @@ async function setStagePaneTo3d(page: Page) {
 
 async function openCuelistDetailWithPlayback(page: Page) {
   await showDockMode(page, "builtins");
-  await page.locator(".dock-entry").filter({ hasText: "Cuelists" }).click();
+  await page.locator(".dock-entry").filter({ hasText: "Cue Lists" }).click();
   const firstCuelist = page.locator(".cuelist-card").first();
   await firstCuelist.click();
   await expect(page.locator(".cue-table tbody tr")).toHaveCount(6);
