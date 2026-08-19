@@ -96,9 +96,13 @@ jobs:
           node-version: 22
 
       - name: Install released Desk runtime dependencies
+        timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y -o Acquire::Retries=3 \
             xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 \
             librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri
 
@@ -186,9 +190,14 @@ jobs:
           cache-dependency-path: docs/help/.tooling/requirements.txt
 
       - name: Install manual rendering dependencies
+        timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
         run: |
           sudo apt-get update
-          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
+          sudo apt-get install -y -o Acquire::Retries=3 \
+            libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
 
       - run: npm run manual
 
@@ -271,7 +280,14 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - run: npm ci
-      - run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev pkg-config
+      - name: Install native build dependencies
+        timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -o Acquire::Retries=3 libudev-dev libasound2-dev pkg-config
       - run: bash tools/test.sh e2e-build
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -95,9 +95,14 @@ async function runCase(performanceCase, executionMode) {
 		});
 	try {
 		await waitForReadiness(child, port);
-		// First paint on a software renderer is far slower than on a developer machine, and this
-		// wait is not part of any measurement.
-		await waitForFile(frontendReadyPath, child, 120_000);
+		// First paint on a software renderer is far slower than on a developer machine, and the
+		// single-core case pays for it twice: unpacking the bundle and rasterising every pixel
+		// share one CPU. None of this wait is part of any measurement.
+		await waitForFile(
+			frontendReadyPath,
+			child,
+			executionMode === "one_core" ? 300_000 : 120_000,
+		);
 		const api = apiClient(port);
 		const session = await api.request("POST", "/api/v2/sessions", {
 			username: "Performance Operator",
