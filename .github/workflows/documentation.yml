@@ -100,11 +100,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             xvfb libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 \
-            librsvg2-2 libasound2 libxdo3
+            librsvg2-2 libasound2 libxdo3 libgl1-mesa-dri
 
       - name: Measure the published Linux bundle
         id: measure
         shell: bash
+        env:
+          # A runner has no GPU, and the Desk's web view never paints if it waits for one: the
+          # accelerated paths report themselves as present and then produce no frame.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           set -euo pipefail
           out=".artifacts/performance"

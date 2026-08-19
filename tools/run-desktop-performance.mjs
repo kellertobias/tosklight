@@ -95,7 +95,9 @@ async function runCase(performanceCase, executionMode) {
 		});
 	try {
 		await waitForReadiness(child, port);
-		await waitForFile(frontendReadyPath, child, 60_000);
+		// First paint on a software renderer is far slower than on a developer machine, and this
+		// wait is not part of any measurement.
+		await waitForFile(frontendReadyPath, child, 120_000);
 		const api = apiClient(port);
 		const session = await api.request("POST", "/api/v2/sessions", {
 			username: "Performance Operator",
