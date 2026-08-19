@@ -117,11 +117,11 @@ async function runCase(performanceCase, executionMode) {
 			: await prepareMixed(api, performanceCase.fixtureRecords);
 		// The show exists now, so let the benchmark surface begin.
 		await writeFile(preparedPath, `${JSON.stringify(prepared)}\n`);
-		// The Sheet counts the fixtures it shows, which is not the same tally as the patch:
-		// a generated show is measured at whatever it turns out to display.
+		// The Sheet counts the fixtures it shows, and a show holds what it could actually be
+		// given: measure against the patch that exists rather than the size that was ordered.
 		const sheetRecords = performanceCase.demo
 			? null
-			: performanceCase.fixtureRecords;
+			: prepared.fixtureRecords;
 		// One core draws a show at roughly a fixed rate, so the wait for it has to grow with
 		// the show rather than sit at a constant that only ever suited the smaller ones.
 		await waitForFixtureSheet(
@@ -454,11 +454,34 @@ async function waitForFixtureSheet(reportPath, expected, child, budgetMs) {
 		if (ready) return;
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
+	// Say what the Sheet did report, so a mismatch names itself instead of being guessed at.
+	const seen = await sheetReadyCounts(reportPath);
 	throw new Error(
 		expected === null
 			? "Fixture Sheet never reported itself ready"
-			: `Fixture Sheet did not converge to ${expected} fixture records`,
+			: `Fixture Sheet did not converge to ${expected} fixture records (it reported ${seen.length ? seen.join(", ") : "nothing"})`,
 	);
+}
+
+async function sheetReadyCounts(reportPath) {
+	const records = await readFile(reportPath, "utf8").catch(() => "");
+	return [
+		...new Set(
+			records
+				.trim()
+				.split("\n")
+				.filter(Boolean)
+				.flatMap((line) => {
+					try {
+						return [JSON.parse(line)];
+					} catch {
+						return [];
+					}
+				})
+				.filter((record) => record.kind?.startsWith("fixture-sheet"))
+				.map((record) => record.fixtureRecords),
+		),
+	];
 }
 
 async function requireFixtureSheetActive(reportPath, expected, executionMode) {
