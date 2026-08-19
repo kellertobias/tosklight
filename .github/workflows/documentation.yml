@@ -134,6 +134,12 @@ jobs:
           WEBKIT_DISABLE_COMPOSITING_MODE: "1"
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
           LIBGL_ALWAYS_SOFTWARE: "1"
+          # The web view runs from an unpacked AppImage, where WebKit's own bubblewrap sandbox
+          # cannot start its web process and fails silently — an app that answers on its port
+          # while the window stays empty. Only this measurement runner is affected.
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
+          # Say why, if it still refuses to paint.
+          G_MESSAGES_DEBUG: "all"
         run: |
           set -euo pipefail
           out=".artifacts/performance"
