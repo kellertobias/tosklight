@@ -53,6 +53,11 @@ test("DYNAMICS-POOL-001 @ui › stored Dynamic 29 stays painted through navigati
 });
 
 async function openDynamics(page: import("@playwright/test").Page) {
+	// A reload puts the desk back through its connection, and the dock is only there once the
+	// desk is.
+	await expect(page.locator(".connection-cover")).toBeHidden({
+		timeout: 30_000,
+	});
 	const dockMode = page.getByRole("button", {
 		name: "Desktops / Built-ins",
 		exact: true,
