@@ -144,6 +144,10 @@ jobs:
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # The runner's own mirror list has been silent for hours at a time. Packages stay
+            # signature-checked against Ubuntu's keys wherever they come from, so pointing the
+            # retry at a mirror on a different network costs nothing but changes the outcome.
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           done
           exit 1
 
@@ -214,6 +218,10 @@ jobs:
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # The runner's own mirror list has been silent for hours at a time. Packages stay
+            # signature-checked against Ubuntu's keys wherever they come from, so pointing the
+            # retry at a mirror on a different network costs nothing but changes the outcome.
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           done
           exit 1
 
@@ -280,6 +288,10 @@ jobs:
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # The runner's own mirror list has been silent for hours at a time. Packages stay
+            # signature-checked against Ubuntu's keys wherever they come from, so pointing the
+            # retry at a mirror on a different network costs nothing but changes the outcome.
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           done
           exit 1
 
@@ -384,6 +396,10 @@ jobs:
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # The runner's own mirror list has been silent for hours at a time. Packages stay
+            # signature-checked against Ubuntu's keys wherever they come from, so pointing the
+            # retry at a mirror on a different network costs nothing but changes the outcome.
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           done
           exit 1
 
@@ -446,6 +462,10 @@ jobs:
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # The runner's own mirror list has been silent for hours at a time. Packages stay
+            # signature-checked against Ubuntu's keys wherever they come from, so pointing the
+            # retry at a mirror on a different network costs nothing but changes the outcome.
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           done
           exit 1
 
@@ -500,6 +520,10 @@ jobs:
           for attempt in 1 2 3; do
             if timeout 240 npx playwright install --with-deps chrome; then exit 0; fi
             echo "Chrome install attempt $attempt stalled; retrying."
+            # The runner's own mirror list has been silent for hours at a time. Packages stay
+            # signature-checked against Ubuntu's keys wherever they come from, so pointing the
+            # retry at a mirror on a different network costs nothing but changes the outcome.
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
             # Playwright installs as root, so the kill above cannot reach its apt child. Clear it
             # out, or the next attempt waits on a lock nobody will release.
             sudo pkill -9 -x apt-get || true
@@ -666,6 +690,10 @@ jobs:
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # The runner's own mirror list has been silent for hours at a time. Packages stay
+            # signature-checked against Ubuntu's keys wherever they come from, so pointing the
+            # retry at a mirror on a different network costs nothing but changes the outcome.
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           done
           exit 1
 
@@ -682,6 +710,10 @@ jobs:
               exit 0
             fi
             echo "Package install attempt $attempt stalled; retrying." >&2
+            # The runner's own mirror list has been silent for hours at a time. Packages stay
+            # signature-checked against Ubuntu's keys wherever they come from, so pointing the
+            # retry at a mirror on a different network costs nothing but changes the outcome.
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           done
           exit 1
 
