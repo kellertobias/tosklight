@@ -169,8 +169,8 @@ jobs:
           if [[ "$desk_status" != 0 ]]; then
             echo "--- desk processes"
             ps -ef | grep -iE "light-desktop|WebKit" | grep -v grep || true
-            echo "--- X display"
-            xvfb-run -a -s "-screen 0 1920x1080x24" xdpyinfo | head -30 || true
+            echo "--- desk server log"
+            find "$out" -name '*.log' -print -exec tail -80 {} + || true
             exit "$desk_status"
           fi
           node tools/run-release-performance.mjs \
