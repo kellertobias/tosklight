@@ -83,9 +83,15 @@ async function runCase(performanceCase, executionMode) {
 			LIGHT_STAGE_PACKAGED_BENCH_PROFILE: performanceCase.caseId,
 			LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW: "0",
 			LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET: "1",
-			LIGHT_STAGE_PACKAGED_BENCH_EXPECTED_FIXTURE_RECORDS: String(
-				performanceCase.fixtureRecords,
-			),
+			// The demo show carries whatever it was generated with, which is not ours to
+			// predict before it is loaded. The built workloads are exactly the size we ask for.
+			...(performanceCase.demo
+				? {}
+				: {
+						LIGHT_STAGE_PACKAGED_BENCH_EXPECTED_FIXTURE_RECORDS: String(
+							performanceCase.fixtureRecords,
+						),
+					}),
 		},
 		stdio: ["ignore", "pipe", "pipe"],
 	});
@@ -111,13 +117,9 @@ async function runCase(performanceCase, executionMode) {
 			: await prepareMixed(api, performanceCase.fixtureRecords);
 		// The show exists now, so let the benchmark surface begin.
 		await writeFile(preparedPath, `${JSON.stringify(prepared)}\n`);
-		await waitForFixtureSheet(
-			reportPath,
-			performanceCase.fixtureRecords,
-			child,
-		);
+		await waitForFixtureSheet(reportPath, prepared.fixtureRecords, child);
 		const measured = await measureWindow(api, child.pid, executionMode);
-		await requireFixtureSheetActive(reportPath, performanceCase.fixtureRecords);
+		await requireFixtureSheetActive(reportPath, prepared.fixtureRecords);
 		return {
 			case_id: performanceCase.caseId,
 			case_name: performanceCase.demo
