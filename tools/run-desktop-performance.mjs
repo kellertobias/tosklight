@@ -17,12 +17,12 @@ const LINUX_PROCESS_OPTIONS = {
 	ticksPerSecond: linuxConfiguration("CLK_TCK", 100),
 	pageSize: linuxConfiguration("PAGESIZE", 4096),
 };
+// The Desk surface is measured up to a thousand fixtures. Larger shows are covered by the
+// headless benchmark, which does not depend on a web view drawing every row.
 const CASES = [
 	{ caseId: "demo", fixtureRecords: 264, demo: true },
 	{ caseId: "sixteen_universe", fixtureRecords: 576 },
 	{ caseId: "required_1024", fixtureRecords: 1_024 },
-	{ caseId: "maximum", fixtureRecords: 2_000 },
-	{ caseId: "doubled_2048", fixtureRecords: 2_048 },
 ];
 
 const options = parseArguments(process.argv.slice(2));
