@@ -984,11 +984,23 @@ const fn descriptor(
     }
 }
 
-pub fn attribute_descriptor<'a>(key: &'a AttributeKey) -> ResolvedAttributeDescriptor<'a> {
+/// The built-in registry indexed by name, built once.
+///
+/// Callers ask about an attribute per contribution per frame, and walking a hundred entries
+/// comparing strings to answer is the sort of thing that only looks cheap in isolation.
+static BUILT_INS: std::sync::LazyLock<
+    std::collections::HashMap<&'static str, &'static AttributeDescriptor>,
+> = std::sync::LazyLock::new(|| {
     ATTRIBUTE_REGISTRY
         .iter()
-        .find(|descriptor| descriptor.id == key.0)
-        .map(resolved_descriptor)
+        .map(|descriptor| (descriptor.id, descriptor))
+        .collect()
+});
+
+pub fn attribute_descriptor<'a>(key: &'a AttributeKey) -> ResolvedAttributeDescriptor<'a> {
+    BUILT_INS
+        .get(key.0.as_str())
+        .map(|descriptor| resolved_descriptor(descriptor))
         .unwrap_or_else(|| custom_descriptor(key))
 }
 
