@@ -181,7 +181,9 @@ export class BrowserVirtualPlaybacks {
 		await this.desk.click(
 			modal.getByRole("button", { name: "Apply", exact: true }),
 		);
-		await expect(modal).toBeHidden();
+		// Apply closes the modal only once the desk has stored the playback, which takes
+		// noticeably longer on a loaded machine than on a developer's.
+		await expect(modal).toBeHidden({ timeout: 10_000 });
 		await expect(this.cell(pane, cell, sourceName, page)).toBeVisible();
 		const playbackPage = await this.api.showObject<PlaybackPageBody>(
 			this.showId(),
