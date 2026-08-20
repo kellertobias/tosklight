@@ -311,9 +311,11 @@ pub enum AttributeConfigurationError {
 }
 
 mod configuration;
+mod table;
 #[cfg(test)]
 use configuration::valid_custom_attribute_id;
 pub use configuration::{ATTRIBUTE_REGISTRY, attribute_descriptor};
+pub use table::{AttributeEntry, AttributeId, AttributeTable};
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]

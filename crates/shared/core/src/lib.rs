@@ -7,9 +7,9 @@ mod clock;
 pub use attributes::{
     ATTRIBUTE_CONFIGURATION_VERSION, ATTRIBUTE_REGISTRY, AttributeActivationGroup, AttributeBounds,
     AttributeClass, AttributeConfiguration, AttributeConfigurationError, AttributeDescriptor,
-    AttributeKey, AttributePlacement, AttributeValue, AttributeValueType,
-    CanonicalAttributeTransform, CustomAttributeDescriptor, CustomAttributeLifecycle,
-    ENCODER_SLOTS_PER_PAGE, EncoderGroup, EncoderPlacement, MergeMode,
+    AttributeEntry, AttributeId, AttributeKey, AttributePlacement, AttributeTable, AttributeValue,
+    AttributeValueType, CanonicalAttributeTransform, CustomAttributeDescriptor,
+    CustomAttributeLifecycle, ENCODER_SLOTS_PER_PAGE, EncoderGroup, EncoderPlacement, MergeMode,
     PROJECTION_ONLY_BUILT_IN_ATTRIBUTES, PickerColor, RETIRED_BUILT_IN_ATTRIBUTES,
     ResolvedAttributeDescriptor, SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES, TimedValue, Xyz,
     attribute_descriptor, built_in_attribute_is_projection_only, built_in_attribute_is_retired,

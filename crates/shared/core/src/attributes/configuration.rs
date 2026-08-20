@@ -992,7 +992,7 @@ pub fn attribute_descriptor<'a>(key: &'a AttributeKey) -> ResolvedAttributeDescr
         .unwrap_or_else(|| custom_descriptor(key))
 }
 
-const fn resolved_descriptor(
+pub(super) const fn resolved_descriptor(
     descriptor: &'static AttributeDescriptor,
 ) -> ResolvedAttributeDescriptor<'static> {
     ResolvedAttributeDescriptor {
@@ -1010,7 +1010,7 @@ const fn resolved_descriptor(
     }
 }
 
-fn custom_descriptor(key: &AttributeKey) -> ResolvedAttributeDescriptor<'_> {
+pub(super) fn custom_descriptor(key: &AttributeKey) -> ResolvedAttributeDescriptor<'_> {
     ResolvedAttributeDescriptor {
         id: &key.0,
         label: &key.0,
