@@ -813,7 +813,7 @@ fn assert_sample(
 }
 
 fn assert_normalized(
-    values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    values: &crate::ResolvedValues,
     fixture_id: FixtureId,
     attribute: &str,
     expected: f32,

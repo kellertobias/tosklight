@@ -1,5 +1,6 @@
 use crate::{ResolvedAttributes, contribution::ApplicableSequenceMaster};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
+use rustc_hash::FxHashMap;
 use std::collections::HashMap;
 
 /// Per-fixture view of one render's flat resolved maps.
@@ -92,7 +93,7 @@ impl<'a> ProfileValueIndex<'a> {
 }
 
 fn index_values(
-    values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    values: &crate::ResolvedValues,
 ) -> HashMap<FixtureId, Vec<(&AttributeKey, &AttributeValue)>> {
     let mut indexed = HashMap::<FixtureId, Vec<_>>::new();
     for ((fixture_id, attribute), value) in values {
@@ -105,7 +106,7 @@ fn index_values(
 }
 
 fn index_sequence_masters(
-    masters: &HashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
+    masters: &FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
 ) -> HashMap<FixtureId, Vec<(&AttributeKey, ApplicableSequenceMaster)>> {
     let mut indexed = HashMap::<FixtureId, Vec<_>>::new();
     for ((fixture_id, attribute), master) in masters {

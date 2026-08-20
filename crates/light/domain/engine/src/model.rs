@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use crate::{ResolvedChangedAt, ResolvedValues};
 use light_core::{AttributeKey, AttributeValue, FixtureId, Universe};
 use light_dynamics::{DynamicDefinition, validate_definition};
 use light_fixture::{PatchedFixture, validate_patch};
@@ -206,11 +206,11 @@ pub struct RenderResult {
     /// The authoritative semantic values used to produce `universes`. Keeping this immutable
     /// snapshot with the render result lets observational consumers follow output without
     /// resolving the engine a second time.
-    pub resolved_values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
+    pub resolved_values: Arc<ResolvedValues>,
     /// Winning LTP timestamps for edge-sensitive internal services.
-    pub resolved_changed_at: Arc<HashMap<(FixtureId, AttributeKey), DateTime<Utc>>>,
+    pub resolved_changed_at: Arc<ResolvedChangedAt>,
     /// Profile-head values resolved while producing the same output frame.
-    pub profile_visualization_values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
+    pub profile_visualization_values: Arc<ResolvedValues>,
     /// Highest patched slot for each logical universe. This is kept separately from values so a
     /// patched channel whose default is zero still extends the network payload.
     pub patched_slots: HashMap<Universe, u16>,

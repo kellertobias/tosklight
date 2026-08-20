@@ -20,7 +20,7 @@ pub(crate) struct RuntimeGeneration {
     groups: Arc<HashMap<String, GroupDefinition>>,
     routes: Arc<[OutputRoute]>,
     snap_attributes: Arc<HashMap<FixtureId, HashSet<AttributeKey>>>,
-    default_values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
+    default_values: Arc<crate::ResolvedValues>,
     group_rankings: Arc<HashMap<String, light_dynamics::RankedSelection>>,
     group_masters: Arc<GroupMasterIndex>,
     profile_encodings: Arc<ProfileEncodingIndex>,
@@ -231,10 +231,8 @@ impl RuntimeGeneration {
     }
 }
 
-fn compile_default_values(
-    snapshot: &EngineSnapshot,
-) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
-    let mut values = HashMap::new();
+fn compile_default_values(snapshot: &EngineSnapshot) -> crate::ResolvedValues {
+    let mut values = crate::ResolvedValues::default();
     for fixture in snapshot.fixtures.iter() {
         for parameter in fixture
             .definition

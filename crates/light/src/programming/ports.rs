@@ -1,6 +1,6 @@
 use super::{ExecutionPolicy, PendingCommandChoice, ProgrammingShowUndoTarget};
 use crate::{ActionContext, ActionError};
-use light_core::{AttributeKey, AttributeValue, FixtureId};
+use light_core::{AttributeKey, FixtureId};
 use light_programmer::GroupDefinition;
 use light_programmer::ProgrammerRegistry;
 use std::collections::HashMap;
@@ -27,10 +27,10 @@ pub struct ProgrammingValuesEnvironment {
     pub group_members: HashMap<String, Vec<FixtureId>>,
     /// One frozen view of values explicitly resolved by the engine. Linked captures must only use
     /// this view so an unowned profile default does not silently become Programmer ownership.
-    pub current_values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    pub current_values: light_engine::ResolvedValues,
     /// Profile defaults for addresses absent from `current_values`. Relative intents may use this
     /// fallback as their starting value without materializing unrelated activation links.
-    pub default_values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    pub default_values: light_engine::ResolvedValues,
     /// Attributes supported by each fixture or logical-head identity.
     pub supported_attributes: HashMap<FixtureId, HashSet<AttributeKey>>,
     /// Application policy input. Empty in current production configuration; tests and the future

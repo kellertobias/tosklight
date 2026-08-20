@@ -1,5 +1,5 @@
 use crate::{EngineError, GroupMasterIndex, RenderOptions, apply_safe_values};
-use light_core::{AttributeKey, AttributeValue, FixtureId};
+use light_core::{AttributeKey, AttributeValue};
 use light_fixture::{PatchedFixture, SignalLossPolicy, encode_parameter, mix_color};
 use light_output::DmxFrame;
 use std::collections::HashMap;
@@ -7,7 +7,7 @@ use std::collections::HashMap;
 pub(crate) fn render_fixture(
     frame: &mut DmxFrame,
     fixture: &PatchedFixture,
-    resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    resolved: &crate::ResolvedValues,
     options: RenderOptions,
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,

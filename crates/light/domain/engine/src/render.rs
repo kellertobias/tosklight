@@ -40,8 +40,10 @@ impl Engine {
         let highlight_look = self.highlight_look.read();
         let mut universes = HashMap::new();
         let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
-        let mut profile_visualization_values =
-            HashMap::with_capacity(snapshot.fixtures.len().saturating_mul(2));
+        let mut profile_visualization_values = crate::ResolvedValues::with_capacity_and_hasher(
+            snapshot.fixtures.len().saturating_mul(2),
+            Default::default(),
+        );
         for fixture in snapshot.fixtures.iter() {
             if fixture.definition.schema_version == light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION {
                 let profile = fixture
@@ -285,10 +287,7 @@ fn encode_profile_patch(
 }
 
 fn insert_profile_visualization_values(
-    values: &mut HashMap<
-        (light_core::FixtureId, light_core::AttributeKey),
-        light_core::AttributeValue,
-    >,
+    values: &mut crate::ResolvedValues,
     output: &crate::profile_projection::ResolvedProfileFixtureOutput,
 ) {
     for head in &output.heads {

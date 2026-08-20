@@ -1,13 +1,12 @@
 use crate::{
     AxisInversion, ContributionBatch, Engine, EngineError, RenderOptions, resolve_profile_fixture,
 };
-use light_core::{AttributeKey, AttributeValue, FixtureId};
-use std::collections::HashMap;
+use light_core::{AttributeKey, AttributeValue};
 
 impl Engine {
     /// Returns the same merged abstract attributes that feed DMX rendering. Consumers such as
     /// visualizers can use this without attempting to reverse fixture-specific DMX encoding.
-    pub fn resolved_values(&self) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
+    pub fn resolved_values(&self) -> crate::ResolvedValues {
         self.resolved_values_with_contribution_batches(&[])
     }
 
@@ -15,7 +14,7 @@ impl Engine {
     pub fn resolved_values_with_contribution_batches(
         &self,
         sampled: &[ContributionBatch],
-    ) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
+    ) -> crate::ResolvedValues {
         let generation = self.generation.load_full();
         self.resolved_attributes_at(&generation, self.clock.now(), sampled)
             .values
@@ -27,9 +26,9 @@ impl Engine {
     /// `values` may include temporary visualization-only overrides such as Preload.
     pub fn profile_visualization_values(
         &self,
-        values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+        values: &crate::ResolvedValues,
         options: RenderOptions,
-    ) -> Result<HashMap<(FixtureId, AttributeKey), AttributeValue>, EngineError> {
+    ) -> Result<crate::ResolvedValues, EngineError> {
         let generation = self.generation.load_full();
         let snapshot = generation.snapshot();
         let mut resolved = self.resolved_attributes_at(&generation, self.clock.now(), &[]);
@@ -46,7 +45,7 @@ impl Engine {
         let group_master_flashes = self.group_master_flashes.read();
         let highlight_layers = self.highlight_layers.read();
         let highlight_look = self.highlight_look.read();
-        let mut projected = HashMap::new();
+        let mut projected = crate::ResolvedValues::default();
         for fixture in snapshot.fixtures.iter() {
             let Some(profile) = fixture.definition.profile_snapshot.as_deref() else {
                 continue;

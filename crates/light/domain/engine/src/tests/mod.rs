@@ -439,11 +439,7 @@ fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> Eng
     }
 }
 
-fn normalized(
-    values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
-    fixture_id: FixtureId,
-    attribute: &str,
-) -> f32 {
+fn normalized(values: &crate::ResolvedValues, fixture_id: FixtureId, attribute: &str) -> f32 {
     values[&(fixture_id, AttributeKey(attribute.into()))]
         .normalized()
         .unwrap()

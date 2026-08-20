@@ -223,7 +223,7 @@ fn preload_intent_captures_linked_context_values_once_in_one_checkpoint() {
     let green = AttributeKey("color.green".into());
     setup.ports.environment.supported_attributes =
         HashMap::from([(fixture, HashSet::from([red.clone(), green.clone()]))]);
-    setup.ports.environment.current_values = HashMap::from([
+    setup.ports.environment.current_values = light_engine::ResolvedValues::from_iter([
         ((fixture, red.clone()), AttributeValue::Normalized(0.2)),
         ((fixture, green.clone()), AttributeValue::Normalized(0.6)),
     ]);

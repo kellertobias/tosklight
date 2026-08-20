@@ -43,7 +43,7 @@ impl ProgrammerReconciliationCache {
 
 struct TickSources<'a> {
     engine: &'a Engine,
-    values: OnceLock<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
+    values: OnceLock<light_engine::ResolvedValues>,
 }
 
 impl<'a> TickSources<'a> {
@@ -54,7 +54,7 @@ impl<'a> TickSources<'a> {
         }
     }
 
-    fn values(&self) -> &HashMap<(FixtureId, AttributeKey), AttributeValue> {
+    fn values(&self) -> &light_engine::ResolvedValues {
         self.values.get_or_init(|| self.engine.resolved_values())
     }
 }

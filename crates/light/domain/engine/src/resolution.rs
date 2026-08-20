@@ -77,7 +77,7 @@ impl Engine {
         }
         add_group_contributions(&mut resolver, snapshot, groups, now);
         let base = if playback.move_in_black_candidates.is_empty() {
-            HashMap::new()
+            crate::ResolvedValues::default()
         } else {
             resolver.values()
         };

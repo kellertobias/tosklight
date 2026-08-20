@@ -297,8 +297,8 @@ impl InternalAudioRuntime {
     pub(in crate::runtime) fn reconcile(
         &mut self,
         fixtures: &[PatchedFixture],
-        values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
-        changed_at: &HashMap<(FixtureId, AttributeKey), chrono::DateTime<chrono::Utc>>,
+        values: &light_engine::ResolvedValues,
+        changed_at: &light_engine::ResolvedChangedAt,
     ) {
         let players = fixtures
             .iter()
@@ -388,8 +388,8 @@ impl InternalAudioRuntime {
     fn reconcile_fixture(
         &mut self,
         fixture: &PatchedFixture,
-        values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
-        changed_at: &HashMap<(FixtureId, AttributeKey), chrono::DateTime<chrono::Utc>>,
+        values: &light_engine::ResolvedValues,
+        changed_at: &light_engine::ResolvedChangedAt,
     ) {
         let control_id = fixture
             .logical_heads
@@ -528,7 +528,7 @@ fn declared_attributes(fixture: &PatchedFixture) -> HashSet<String> {
 
 /// Prefers the canonical Media attribute and falls back to the pre-TL-367 Audio Player name.
 fn raw_of(
-    values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    values: &light_engine::ResolvedValues,
     fixture_id: FixtureId,
     attributes: &HashSet<String>,
     canonical: &str,
@@ -565,11 +565,7 @@ fn legacy_transport(raw: u8) -> Transport {
     }
 }
 
-fn raw(
-    values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
-    fixture_id: FixtureId,
-    attribute: &str,
-) -> u8 {
+fn raw(values: &light_engine::ResolvedValues, fixture_id: FixtureId, attribute: &str) -> u8 {
     values
         .get(&(fixture_id, AttributeKey(attribute.into())))
         .map(|value| match value {
@@ -581,11 +577,7 @@ fn raw(
         .unwrap_or(0)
 }
 
-fn exact_raw(
-    values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
-    fixture_id: FixtureId,
-    attribute: &str,
-) -> u32 {
+fn exact_raw(values: &light_engine::ResolvedValues, fixture_id: FixtureId, attribute: &str) -> u32 {
     values
         .get(&(fixture_id, AttributeKey(attribute.into())))
         .map(|value| match value {

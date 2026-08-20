@@ -2,9 +2,9 @@ use crate::{
     Engine, MoveInBlackDiagnostic, MoveInBlackRuntime, PreparedCandidate, RuntimeGeneration,
 };
 use chrono::{DateTime, Utc};
-use light_core::{AttributeKey, AttributeValue, FixtureId, TimedValue};
+use light_core::TimedValue;
 use light_playback::{ActivePlayback, MoveInBlackCandidate};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 impl Engine {
     pub fn move_in_black_runtime(&self) -> Vec<MoveInBlackDiagnostic> {
@@ -27,7 +27,7 @@ impl Engine {
         generation: &RuntimeGeneration,
         candidates: Vec<MoveInBlackCandidate>,
         active: &[ActivePlayback],
-        base_resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+        base_resolved: &crate::ResolvedValues,
         now: DateTime<Utc>,
     ) -> Vec<(TimedValue, u64)> {
         let mut runtimes = self.move_in_black.lock();

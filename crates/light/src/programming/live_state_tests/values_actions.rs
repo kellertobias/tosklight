@@ -574,9 +574,11 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
     let fixture = setup.fixtures[0];
     let intensity = AttributeKey::intensity();
     let pan = AttributeKey("pan".into());
-    setup.ports.environment.current_values =
-        HashMap::from([((fixture, pan.clone()), AttributeValue::Normalized(0.7))]);
-    setup.ports.environment.default_values = HashMap::from([(
+    setup.ports.environment.current_values = light_engine::ResolvedValues::from_iter([(
+        (fixture, pan.clone()),
+        AttributeValue::Normalized(0.7),
+    )]);
+    setup.ports.environment.default_values = light_engine::ResolvedValues::from_iter([(
         (fixture, intensity.clone()),
         AttributeValue::Normalized(0.4),
     )]);
@@ -683,7 +685,7 @@ fn relative_fixture_intent_starts_from_the_owned_programmer_value() {
     let mut setup = ValuesSetup::new();
     let fixture = setup.fixtures[0];
     let intensity = AttributeKey::intensity();
-    setup.ports.environment.current_values = HashMap::from([(
+    setup.ports.environment.current_values = light_engine::ResolvedValues::from_iter([(
         (fixture, intensity.clone()),
         AttributeValue::Normalized(0.0),
     )]);

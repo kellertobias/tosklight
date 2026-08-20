@@ -61,6 +61,7 @@ license-file = "LICENSE"
 authors = ["Light contributors"]
 
 [workspace.dependencies]
+rustc-hash = "2"
 png = "0.18"
 muda = "0.19"
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }

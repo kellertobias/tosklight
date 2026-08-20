@@ -16,7 +16,7 @@ impl PreparedCandidate {
     pub(crate) fn new(
         generation: &RuntimeGeneration,
         mut candidate: MoveInBlackCandidate,
-        base_resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+        base_resolved: &crate::ResolvedValues,
     ) -> Self {
         apply_snap_attributes(generation, &mut candidate);
         let snapshot = generation.snapshot();
@@ -58,7 +58,7 @@ fn candidate_key(candidate: &MoveInBlackCandidate) -> MoveInBlackKey {
 
 fn base_position(
     candidate: &MoveInBlackCandidate,
-    base_resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    base_resolved: &crate::ResolvedValues,
 ) -> HashMap<AttributeKey, AttributeValue> {
     candidate
         .values
@@ -74,10 +74,7 @@ fn base_position(
         .collect()
 }
 
-fn resolved_intensity(
-    fixture_id: FixtureId,
-    base_resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
-) -> f32 {
+fn resolved_intensity(fixture_id: FixtureId, base_resolved: &crate::ResolvedValues) -> f32 {
     base_resolved
         .iter()
         .filter(|((owner, attribute), _)| *owner == fixture_id && attribute.is_intensity())

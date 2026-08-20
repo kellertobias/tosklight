@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, TimedValue};
 use light_playback::{AutomaticPlaybackTransition, PlaybackContribution};
+use rustc_hash::FxHashMap;
 use std::collections::{HashMap, hash_map::Entry};
 
 pub(crate) fn value_for_ordered_position(
@@ -134,20 +135,33 @@ impl EngineContribution {
 
 #[derive(Default)]
 pub(crate) struct ResolvedAttributes {
-    pub(crate) values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
-    pub(crate) changed_at: HashMap<(FixtureId, AttributeKey), DateTime<Utc>>,
-    pub(crate) sequence_masters: HashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
+    pub(crate) values: ResolvedValues,
+    pub(crate) changed_at: ResolvedChangedAt,
+    pub(crate) sequence_masters: FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
     pub(crate) automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,
 }
 
+/// Roughly how many attributes one fixture contributes, used only to size a map before the
+/// contributions are placed. Being wrong costs a little memory, never correctness.
+const ATTRIBUTES_PER_FIXTURE_GUESS: usize = 12;
+
 #[derive(Default)]
 pub(crate) struct EngineContributionResolver {
-    winners: HashMap<FixtureId, HashMap<AttributeKey, EngineWinner>>,
+    winners: FxHashMap<FixtureId, FxHashMap<AttributeKey, EngineWinner>>,
 }
 
 impl EngineContributionResolver {
     pub(crate) fn new(values: impl IntoIterator<Item = EngineContribution>) -> Self {
-        let mut resolver = Self::default();
+        let values = values.into_iter();
+        // A show contributes a value per patched attribute, so the fixtures they belong to are
+        // roughly known before any of them is placed. Sizing for that avoids rehashing the whole
+        // frame's worth of winners as they arrive.
+        let mut resolver = Self {
+            winners: FxHashMap::with_capacity_and_hasher(
+                values.size_hint().0 / ATTRIBUTES_PER_FIXTURE_GUESS,
+                Default::default(),
+            ),
+        };
         resolver.extend(values);
         resolver
     }
@@ -211,7 +225,9 @@ impl EngineContributionResolver {
         transition_ordinal: Option<u64>,
         sequence_master: Option<ApplicableSequenceMaster>,
     ) {
-        let winners = self.winners.entry(fixture_id).or_default();
+        let winners = self.winners.entry(fixture_id).or_insert_with(|| {
+            FxHashMap::with_capacity_and_hasher(ATTRIBUTES_PER_FIXTURE_GUESS, Default::default())
+        });
         let replace = winners.get(attribute).is_none_or(|current| {
             borrowed_winner_wins(
                 value,
@@ -237,7 +253,7 @@ impl EngineContributionResolver {
         }
     }
 
-    pub(crate) fn values(&self) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
+    pub(crate) fn values(&self) -> crate::ResolvedValues {
         self.winners
             .iter()
             .flat_map(|(fixture_id, attributes)| {
@@ -249,15 +265,28 @@ impl EngineContributionResolver {
     }
 
     pub(crate) fn finish(self) -> ResolvedAttributes {
-        let mut resolved = ResolvedAttributes::default();
+        // Every winner lands in these maps, so they are sized for the whole show up front rather
+        // than grown and rehashed a dozen times while a frame is being resolved.
+        let winner_count = self.winners.values().map(FxHashMap::len).sum();
+        let mut resolved = ResolvedAttributes {
+            values: ResolvedValues::with_capacity_and_hasher(winner_count, Default::default()),
+            changed_at: ResolvedChangedAt::with_capacity_and_hasher(
+                winner_count,
+                Default::default(),
+            ),
+            ..ResolvedAttributes::default()
+        };
         for (fixture_id, attributes) in self.winners {
             for (attribute, winner) in attributes {
                 let key = (fixture_id, attribute);
+                // The name is copied only where it has to be: the last insert takes ownership.
                 resolved.changed_at.insert(key.clone(), winner.changed_at);
-                resolved.values.insert(key.clone(), winner.value);
                 if let Some(sequence_master) = winner.sequence_master {
-                    resolved.sequence_masters.insert(key, sequence_master);
+                    resolved
+                        .sequence_masters
+                        .insert(key.clone(), sequence_master);
                 }
+                resolved.values.insert(key, winner.value);
             }
         }
         resolved
@@ -286,7 +315,17 @@ impl EngineContributionResolver {
             transition_ordinal,
             sequence_master,
         };
-        match self.winners.entry(fixture_id).or_default().entry(attribute) {
+        match self
+            .winners
+            .entry(fixture_id)
+            .or_insert_with(|| {
+                FxHashMap::with_capacity_and_hasher(
+                    ATTRIBUTES_PER_FIXTURE_GUESS,
+                    Default::default(),
+                )
+            })
+            .entry(attribute)
+        {
             Entry::Vacant(entry) => {
                 entry.insert(candidate);
             }
@@ -471,3 +510,9 @@ mod transition_order_tests {
         );
     }
 }
+
+/// The show's resolved values for one frame. A frame writes and reads these tens of thousands of
+/// times, and the keys are already unique, so they are hashed for speed rather than against an
+/// adversary.
+pub type ResolvedValues = FxHashMap<(FixtureId, AttributeKey), AttributeValue>;
+pub type ResolvedChangedAt = FxHashMap<(FixtureId, AttributeKey), DateTime<Utc>>;

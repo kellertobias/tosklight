@@ -48,10 +48,8 @@ pub(super) fn attribute_wraps(
     })
 }
 
-fn profile_defaults(
-    fixtures: &[light_fixture::PatchedFixture],
-) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
-    let mut values = HashMap::new();
+fn profile_defaults(fixtures: &[light_fixture::PatchedFixture]) -> light_engine::ResolvedValues {
+    let mut values = light_engine::ResolvedValues::default();
     for fixture in fixtures {
         for parameter in fixture
             .definition

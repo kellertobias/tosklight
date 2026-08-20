@@ -93,9 +93,8 @@ pub(super) struct PublishedVisualizationFrame {
     pub(super) scope: VisualizationScope,
     pub(super) show_revision: u64,
     pub(super) options: RenderOptions,
-    pub(super) values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
-    pub(super) profile_visualization_values:
-        Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
+    pub(super) values: Arc<light_engine::ResolvedValues>,
+    pub(super) profile_visualization_values: Arc<light_engine::ResolvedValues>,
 }
 
 /// Capacity-one, non-blocking publication. Slow or disconnected observers cannot apply
@@ -594,9 +593,9 @@ mod tests {
     fn rendered(revision: u64) -> RenderResult {
         RenderResult {
             universes: HashMap::new(),
-            resolved_values: Arc::new(HashMap::new()),
-            resolved_changed_at: Arc::new(HashMap::new()),
-            profile_visualization_values: Arc::new(HashMap::new()),
+            resolved_values: Arc::new(light_engine::ResolvedValues::default()),
+            resolved_changed_at: Arc::new(light_engine::ResolvedChangedAt::default()),
+            profile_visualization_values: Arc::new(light_engine::ResolvedValues::default()),
             patched_slots: HashMap::new(),
             revision,
             routes: Arc::<[OutputRoute]>::from([]),

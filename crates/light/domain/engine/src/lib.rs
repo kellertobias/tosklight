@@ -51,6 +51,7 @@ pub(crate) use contribution::{
     EngineContribution, EngineContributionResolver, ResolvedAttributes, ResolvedContributionIndex,
     value_for_ordered_position,
 };
+pub use contribution::{ResolvedChangedAt, ResolvedValues};
 pub(crate) use contribution_batch::{replaces_source, sampled_values};
 pub(crate) use fixture::profile_head_owner;
 pub(crate) use legacy_projection::render_fixture;

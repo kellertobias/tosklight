@@ -49,8 +49,7 @@ pub(in crate::runtime) struct OutputSemanticRenderTiming {
 struct CachedVisualizationOrdinary {
     snapshot: Arc<EngineSnapshot>,
     captured_at: std::time::Instant,
-    values:
-        Arc<HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>>,
+    values: Arc<light_engine::ResolvedValues>,
 }
 
 #[derive(Clone)]
@@ -398,17 +397,13 @@ impl OutputResource {
             .expect("prepared Engine snapshot contains valid Dynamic definitions");
     }
 
-    pub(in crate::runtime) fn resolved_values(
-        &self,
-    ) -> HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>
-    {
+    pub(in crate::runtime) fn resolved_values(&self) -> light_engine::ResolvedValues {
         self.engine.resolved_values()
     }
 
     pub(in crate::runtime) fn cached_visualization_ordinary_values(
         &self,
-    ) -> Arc<HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>>
-    {
+    ) -> Arc<light_engine::ResolvedValues> {
         let snapshot = self.engine.snapshot();
         let mut cached = self.visualization_ordinary.lock();
         if let Some(cached) = cached.as_ref()
@@ -431,8 +426,7 @@ impl OutputResource {
         &self,
         extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
         projected: bool,
-    ) -> HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>
-    {
+    ) -> light_engine::ResolvedValues {
         self.visualization_dynamic_projection(extra_programmer_values, projected)
             .0
     }
@@ -442,7 +436,7 @@ impl OutputResource {
         extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
         _projected: bool,
     ) -> (
-        HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
+        light_engine::ResolvedValues,
         light_dynamics::DynamicRuntimeSnapshot,
         Vec<light_dynamics::DynamicRuntimeSample>,
     ) {
@@ -719,15 +713,9 @@ impl OutputResource {
 
     pub(in crate::runtime) fn profile_visualization_values(
         &self,
-        values: &HashMap<
-            (light_core::FixtureId, light_core::AttributeKey),
-            light_core::AttributeValue,
-        >,
+        values: &light_engine::ResolvedValues,
         options: RenderOptions,
-    ) -> Result<
-        HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
-        EngineError,
-    > {
+    ) -> Result<light_engine::ResolvedValues, EngineError> {
         self.engine.profile_visualization_values(values, options)
     }
 

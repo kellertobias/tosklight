@@ -15,6 +15,7 @@ light-output = { path = "../output" }
 light-playback = { path = "../playback" }
 light-programmer = { path = "../programmer" }
 parking_lot.workspace = true
+rustc-hash.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 uuid.workspace = true

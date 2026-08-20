@@ -305,7 +305,7 @@ fn fixture_sheet_ordinary_values(
     state: &AppState,
     session: &Session,
     preload: bool,
-) -> Arc<HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>> {
+) -> Arc<light_engine::ResolvedValues> {
     let ordinary = state.output.cached_visualization_ordinary_values();
     if !preload {
         return ordinary;
@@ -370,10 +370,7 @@ fn fixture_sheet_value_for_ordered_position(
 
 fn project_fixture_sheet_snapshot(
     snapshot: &mut serde_json::Value,
-    ordinary: &HashMap<
-        (light_core::FixtureId, light_core::AttributeKey),
-        light_core::AttributeValue,
-    >,
+    ordinary: &light_engine::ResolvedValues,
     fixture_ids: Option<&HashSet<Uuid>>,
 ) {
     let Some(snapshot_object) = snapshot.as_object_mut() else {
@@ -536,7 +533,7 @@ mod scoped_visualization_tests {
                 }
             ]
         });
-        let ordinary = HashMap::from([
+        let ordinary = light_engine::ResolvedValues::from_iter([
             (
                 (included, light_core::AttributeKey("intensity".into())),
                 light_core::AttributeValue::Normalized(0.25),
@@ -613,12 +610,8 @@ pub(super) fn visualization_snapshot_for_session_content_from_resolved(
     preload: bool,
     include_dynamic_stack: bool,
     summarize_dynamic_stack: bool,
-    authoritative_resolved: Option<
-        &HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
-    >,
-    authoritative_profile_output: Option<
-        &HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
-    >,
+    authoritative_resolved: Option<&light_engine::ResolvedValues>,
+    authoritative_profile_output: Option<&light_engine::ResolvedValues>,
 ) -> Result<serde_json::Value, ApiError> {
     let snapshot = state.output.snapshot();
     let options = state.output.render_options();
@@ -750,9 +743,7 @@ pub(super) fn visualization_snapshot_for_session_content_from_resolved(
     }))
 }
 
-fn visualization_wire_values(
-    values: &HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
-) -> Vec<serde_json::Value> {
+fn visualization_wire_values(values: &light_engine::ResolvedValues) -> Vec<serde_json::Value> {
     values
         .iter()
         .map(|((fixture_id, attribute), value)| {
@@ -791,14 +782,8 @@ struct DynamicStackEntry {
 
 fn dynamic_stack_projection(
     state: &AppState,
-    ordinary: &HashMap<
-        (light_core::FixtureId, light_core::AttributeKey),
-        light_core::AttributeValue,
-    >,
-    resolved: &HashMap<
-        (light_core::FixtureId, light_core::AttributeKey),
-        light_core::AttributeValue,
-    >,
+    ordinary: &light_engine::ResolvedValues,
+    resolved: &light_engine::ResolvedValues,
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
     samples: &[light_dynamics::DynamicRuntimeSample],
     extra: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
@@ -861,14 +846,8 @@ fn dynamic_stack_projection(
 
 fn push_runtime_stack_entries(
     entries: &mut Vec<DynamicStackEntry>,
-    ordinary: &HashMap<
-        (light_core::FixtureId, light_core::AttributeKey),
-        light_core::AttributeValue,
-    >,
-    resolved: &HashMap<
-        (light_core::FixtureId, light_core::AttributeKey),
-        light_core::AttributeValue,
-    >,
+    ordinary: &light_engine::ResolvedValues,
+    resolved: &light_engine::ResolvedValues,
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
     samples: &[light_dynamics::DynamicRuntimeSample],
     now_millis: u64,
@@ -1005,10 +984,7 @@ fn push_semantic_stack_entry(
     stored: light_dynamics::DynamicAddressValue,
     priority: i16,
     source: String,
-    resolved: &HashMap<
-        (light_core::FixtureId, light_core::AttributeKey),
-        light_core::AttributeValue,
-    >,
+    resolved: &light_engine::ResolvedValues,
     summary: bool,
 ) {
     let key = (stored.fixture_id, stored.attribute.clone());
