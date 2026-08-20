@@ -361,6 +361,36 @@ test("warning is a valid measured public state", () => {
 	assert.match(page, /<th>Acceptance tier<\/th><td>warning<\/td>/u);
 });
 
+test("a scenario that stalled below 40 Hz is never presented as healthy", () => {
+	const stalled = measuredStatus("warning");
+	stalled.benchmark_scenarios = [
+		{
+			case_id: "required_1024",
+			case_name: "16,384 parameters / 1,024 fixtures",
+			execution_mode: "one_core",
+			fixture_count: 1_024,
+			parameter_count: 16_384,
+			universes: 32,
+			requested_rate_hz: 60,
+			below_target_hz: 44,
+			windows_below_target: 14,
+			measurement_seconds: 15,
+			// A comfortable typical rate that hides seconds the operator saw stall.
+			average_completed_hz: 25,
+			minimum_one_second_completed_hz: 12,
+			p95_one_second_completed_hz: 81,
+			maximum_one_second_completed_hz: 81,
+			animated_attribute_count: 8_578,
+			master_lane_count: 20,
+			thresholds: { red_below_hz: 40, yellow_below_hz: 44 },
+			resources: { application_cpu_average_percent: 100 },
+		},
+	];
+	const summary = renderCompactPerformanceSummary(stalled);
+	assert.match(summary, /class="performance-row performance-row-warning"/u);
+	assert.doesNotMatch(summary, /performance-row-healthy/u);
+});
+
 test("unknown and invalid measured classifications cannot masquerade as evidence", () => {
 	const unknown = {
 		schema_version: 3,

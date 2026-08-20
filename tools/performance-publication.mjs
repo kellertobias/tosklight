@@ -115,11 +115,20 @@ function compactDuration(value_) {
 	);
 }
 
+/**
+ * The slowest second an operator lived through. A row that dipped below this is never green,
+ * however comfortable its p95: the desk visibly stalled, and a good typical rate does not undo
+ * a second the operator saw drop.
+ */
+const MINIMUM_GREEN_HZ = 40;
+
 function compactScenarioStatus(scenario, thresholds) {
 	const cadence = scenario.p95_one_second_completed_hz;
 	if (!Number.isFinite(cadence)) return "unknown";
 	if (cadence < thresholds.red_below_hz) return "degraded";
 	if (cadence < thresholds.yellow_below_hz) return "warning";
+	const worst = scenario.minimum_one_second_completed_hz;
+	if (Number.isFinite(worst) && worst < MINIMUM_GREEN_HZ) return "warning";
 	return "healthy";
 }
 
