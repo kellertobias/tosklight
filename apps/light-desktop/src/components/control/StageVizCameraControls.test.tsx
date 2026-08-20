@@ -39,15 +39,16 @@ describe("StageVizCameraControls desk encoders", () => {
 		render(<StageVizCameraControls hardwareConnected />);
 		await screen.findByRole("button", { name: "Encoder 1: X Pos, 1.0m" });
 
-		fireEvent(
-			window,
-			new CustomEvent("light:encoder-action", {
-				detail: { control: "encode/1", value: "right" },
-			}),
-		);
-
-		await waitFor(() =>
-			expect(bridge.placeStagePaneCamera).toHaveBeenCalledWith({ x: 2 }),
-		);
+		// The encoder is only listened for once the camera has arrived, and a turn that lands
+		// before then is simply not heard, so the turn is repeated until one is.
+		await waitFor(() => {
+			fireEvent(
+				window,
+				new CustomEvent("light:encoder-action", {
+					detail: { control: "encode/1", value: "right" },
+				}),
+			);
+			expect(bridge.placeStagePaneCamera).toHaveBeenCalledWith({ x: 2 });
+		});
 	});
 });
