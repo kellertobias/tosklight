@@ -16,6 +16,7 @@ use media_domain::{Countdown, MediaAddress, Size, SourceStatus, VisualizerKind};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{TcpListener, UdpSocket};
 
+use crate::citp_console_presence::{ConsolePresence, PRESENCE_SETTLE};
 use crate::dmx::SharedState;
 use crate::presentation::{SharedCatalog, SharedConfiguration};
 use crate::shutdown::Shutdown;
@@ -206,7 +207,12 @@ impl Library for PublishedLibrary {
                 slot.address.folder == folder
                     && element.is_none_or(|file| slot.address.file == file)
             })?;
-            return text_thumbnail(slot, request, &self.fonts);
+            return text_thumbnail(
+                slot,
+                request,
+                &self.fonts,
+                configuration.time.utc_offset_minutes,
+            );
         }
         // A folder's own picture is its first item's, which is what an operator recognises the
         // folder by. Resizing to the console's exact request would need a decoder in the request
@@ -285,12 +291,14 @@ fn text_thumbnail(
     slot: &media_domain::TextSlot,
     request: &ThumbnailRequest,
     fonts: &Arc<Mutex<Option<media_text::Fonts>>>,
+    utc_offset_minutes: i16,
 ) -> Option<Thumbnail> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
         .as_millis() as i64;
-    let words = media_domain::text::render(&slot.entry, &Countdown::new(), now, 0)?;
+    let words =
+        media_domain::text::render(&slot.entry, &Countdown::new(), now, 0, utc_offset_minutes)?;
     let mut fonts = fonts.lock().ok()?;
     let rendered = media_text::render_line(fonts.as_mut()?, &words, &slot.style, 320, 180).ok()?;
     crate::preview::encode(
@@ -602,6 +610,7 @@ async fn announce(
 
 /// Accepts consoles and serves each one.
 async fn listen_for_consoles(service: Service, listen: SocketAddr, shutdown: Shutdown) {
+    let presence = ConsolePresence::default();
     let listener = match TcpListener::bind(listen).await {
         Ok(listener) => listener,
         Err(error) => {
@@ -621,8 +630,18 @@ async fn listen_for_consoles(service: Service, listen: SocketAddr, shutdown: Shu
         tokio::select! {
             accepted = listener.accept() => match accepted {
                 Ok((stream, peer)) => {
-                    tracing::info!(%peer, "a console connected");
-                    tokio::spawn(serve_console(service.clone(), stream, peer, shutdown.clone()));
+                    if presence.arrived(peer.ip()) {
+                        tracing::info!(console = %peer.ip(), "a console connected");
+                    } else {
+                        tracing::debug!(%peer, "a present console opened another connection");
+                    }
+                    tokio::spawn(serve_console(
+                        service.clone(),
+                        stream,
+                        peer,
+                        shutdown.clone(),
+                        presence.clone(),
+                    ));
                 }
                 Err(error) => tracing::warn!(%error, "a console could not be accepted"),
             },
@@ -637,6 +656,7 @@ async fn serve_console(
     mut stream: tokio::net::TcpStream,
     peer: SocketAddr,
     shutdown: Shutdown,
+    presence: ConsolePresence,
 ) {
     // Some CITP consumers receive StFr on the standard multicast group even though the RqSt
     // lifecycle travels over TCP. Multicast is additive: the requesting TCP peer always receives
@@ -755,7 +775,22 @@ async fn serve_console(
             preview.subscribed(false, None);
         }
     }
-    tracing::info!(%peer, "a console disconnected");
+    report_console_departure(peer, presence);
+}
+
+/// A console is reported as gone only once it has stayed away, so the short connections a desk
+/// opens for one request each never appear as a disconnection.
+fn report_console_departure(peer: SocketAddr, presence: ConsolePresence) {
+    tracing::debug!(%peer, "a console connection closed");
+    let Some(generation) = presence.departed(peer.ip()) else {
+        return;
+    };
+    tokio::spawn(async move {
+        tokio::time::sleep(PRESENCE_SETTLE).await;
+        if presence.settled(peer.ip(), generation) {
+            tracing::info!(console = %peer.ip(), "a console disconnected");
+        }
+    });
 }
 
 #[cfg(test)]

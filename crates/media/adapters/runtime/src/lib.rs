@@ -13,6 +13,7 @@ mod beat_move;
 mod beat_scale_turn;
 mod beat_scan;
 mod citp;
+mod citp_console_presence;
 mod dmx;
 mod layer_pipeline;
 mod layer_sources;
