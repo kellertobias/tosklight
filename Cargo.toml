@@ -131,11 +131,18 @@ unsafe_code = "deny"
 # development and acceptance runs can sustain the configured DMX cadence.
 [profile.dev]
 opt-level = 1
-incremental = false
+incremental = true
+# macOS defaults dev builds to `split-debuginfo = "unpacked"`, which leaves every codegen unit's
+# object file on disk forever so the debug map can find its DWARF. Cargo never collects them, so
+# the shared target grew to 362 GB across 1.2M files and a no-op `check --workspace` spent 4m33s
+# stat-ing them. Full DWARF for 900 dependencies buys nothing here; line tables keep backtraces.
+debug = "line-tables-only"
 
-# This repository's shared target has many feature combinations and macOS can spend minutes asleep
-# in filesystem operations over Cargo's fine-grained incremental trees. Ordinary Cargo fingerprints
-# still make unchanged crates instant; disabling incremental objects keeps both dev and test paths
-# bounded and avoids thousands of obsolete per-feature directories.
+[profile.dev.package."*"]
+debug = false
+
+# The macOS filesystem stalls this block previously blamed on incremental compilation were really
+# retained `.rcgu.o` files from unpacked split-debuginfo; capping debuginfo above fixes the cause.
+# Incremental is a 3.5x win on the edit-rebuild loop: 12.1s -> 3.4s on `check --workspace`.
 [profile.test]
-incremental = false
+incremental = true
