@@ -288,6 +288,58 @@ fn shipped_jbled_a7_uses_the_documented_safe_shutter_table_in_every_mode() {
     }
 }
 
+/// Every play-mode range the desk decodes, named, in the order `PlayMode::from_dmx` reads them.
+/// A shipped Media personality must name all of them, so the desk shows a mode rather than a
+/// percentage and the raw value each mode sends stays exactly what the runtime already decodes.
+fn assert_play_mode_is_named(functions: &[crate::ChannelFunction]) {
+    let expected = [
+        (0_u32, 19_u32, "loop"),
+        (20, 39, "reverse"),
+        (40, 59, "bounce"),
+        (60, 67, "once_hold"),
+        (68, 75, "once_black"),
+        (76, 83, "once_transparent"),
+        (84, 91, "reverse_once_hold"),
+        (92, 99, "reverse_once_black"),
+        (100, 107, "reverse_once_transparent"),
+        (108, 127, "loop_synced"),
+        (128, 147, "reverse_synced"),
+        (148, 167, "bounce_synced"),
+        (168, 175, "once_synced_hold"),
+        (176, 183, "once_synced_black"),
+        (184, 191, "once_synced_transparent"),
+        (192, 199, "reverse_once_synced_hold"),
+        (200, 207, "reverse_once_synced_black"),
+        (208, 215, "reverse_once_synced_transparent"),
+        (216, 235, "stop"),
+        (236, 255, "pause"),
+    ];
+    assert_eq!(functions.len(), expected.len(), "every play mode is named");
+    for (function, (from, to, semantic)) in functions.iter().zip(expected) {
+        assert_eq!(function.dmx_from, from);
+        assert_eq!(function.dmx_to, to);
+        match &function.behavior {
+            crate::ChannelFunctionBehavior::Fixed {
+                semantic_id,
+                raw_value,
+                label,
+            } => {
+                assert_eq!(semantic_id, semantic);
+                assert!(
+                    !label.trim().is_empty(),
+                    "{semantic} needs an operator label"
+                );
+                assert_eq!(
+                    u32::from(*raw_value),
+                    from,
+                    "{semantic} sends the first raw value of its own range"
+                );
+            }
+            other => panic!("{semantic} must be a named fixed function, found {other:?}"),
+        }
+    }
+}
+
 #[test]
 fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
     let profile = shipped_profile("tosklight--audio-player.toskfixture");
@@ -344,6 +396,16 @@ fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
         mode.channels
             .iter()
             .all(|channel| channel.secondary_slots.is_empty())
+    );
+    // TL-371: play mode names every mode it can be in, so an operator reads Stop or Loop on the
+    // encoder instead of a percentage and can program a mode by name.
+    assert_play_mode_is_named(
+        &mode
+            .channels
+            .iter()
+            .find(|channel| channel.attribute.0 == "media.play_mode")
+            .expect("the Audio Player carries a play mode")
+            .functions,
     );
     let definition = profile.resolved_definition(mode.id).unwrap();
     assert_eq!(definition.footprint, 0);
@@ -1245,7 +1307,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     let profile = shipped_profile("tosklight--media-server.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "Media Server");
-    assert_eq!(profile.revision, 5);
+    assert_eq!(profile.revision, 6);
     assert_eq!(
         profile.direct_control_protocols,
         vec![crate::DirectControlProtocol::Citp],
