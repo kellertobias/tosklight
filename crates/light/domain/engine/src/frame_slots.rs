@@ -41,6 +41,9 @@ impl Slot {
 /// Marks a (fixture, attribute) column the show cannot produce.
 const UNNUMBERED: u32 = u32::MAX;
 
+/// Attributes every profile head can hold regardless of the channels its mode declares.
+const SYNTHESISED_HEAD_ATTRIBUTES: &[&str] = &["intensity", "color"];
+
 /// Every value the patched show can produce, numbered once.
 ///
 /// Numbering is per generation. A repatch compiles a new table with a new generation tag, so a
@@ -56,6 +59,8 @@ pub(crate) struct SlotTable {
     stride: usize,
     /// What each slot names, for the boundary that still speaks in names.
     pairs: Vec<(FixtureId, AttributeId)>,
+    /// Each fixture's own slots, contiguous, so a head can be read without scanning the show.
+    fixture_slots: FxHashMap<FixtureId, Vec<Slot>>,
 }
 
 impl SlotTable {
@@ -93,6 +98,13 @@ impl SlotTable {
             if let Some(mode) = crate::fixture::profile_mode(fixture) {
                 for (head_index, head) in mode.heads.iter().enumerate() {
                     let owner = crate::fixture::profile_head_owner(fixture, head_index, head);
+                    // Every head can carry a colour and a level whether or not its mode names a
+                    // channel for them: projection composes both from the channels it does have,
+                    // and a Group colour or a virtual dimmer supplies them directly.
+                    for synthesised in SYNTHESISED_HEAD_ATTRIBUTES {
+                        let id = attributes.intern(&AttributeKey((*synthesised).to_owned()));
+                        declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
+                    }
                     for channel in mode
                         .channels
                         .iter()
@@ -124,6 +136,18 @@ impl SlotTable {
                     declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
                 }
             }
+            // A fixture's safe values name attributes it must be able to hold, whether or not a
+            // channel in the current mode declares them.
+            for attribute in fixture.definition.safe_values.keys() {
+                let id = attributes.intern(attribute);
+                declare(
+                    fixture.fixture_id,
+                    id,
+                    &mut owners,
+                    &mut owner_rows,
+                    &mut declared,
+                );
+            }
             // A Freeze holds values that were resolvable when it was taken, so its targets keep
             // their numbering even if the underlying profile no longer offers them.
             for (fixture_id, target) in &fixture.freeze.targets {
@@ -137,15 +161,19 @@ impl SlotTable {
         let stride = attributes.len();
         let mut columns = vec![UNNUMBERED; owners.len().saturating_mul(stride)];
         let mut pairs = Vec::new();
+        let mut fixture_slots: FxHashMap<FixtureId, Vec<Slot>> = FxHashMap::default();
         for (row, attribute_ids) in declared.iter().enumerate() {
             let owner = owners[row];
+            let owned = fixture_slots.entry(owner).or_default();
             for attribute in attribute_ids {
                 let column = row * stride + attribute.ordinal();
                 if columns[column] != UNNUMBERED {
                     continue;
                 }
-                columns[column] = pairs.len() as u32;
+                let slot = Slot(pairs.len() as u32);
+                columns[column] = slot.0;
                 pairs.push((owner, *attribute));
+                owned.push(slot);
             }
         }
         Self {
@@ -159,7 +187,22 @@ impl SlotTable {
             columns,
             stride,
             pairs,
+            fixture_slots,
         }
+    }
+
+    /// Every slot one fixture owns. Compiled with the patch, so reading a head costs a lookup
+    /// rather than a scan of the show.
+    pub(crate) fn fixture_slots(&self, fixture_id: FixtureId) -> &[Slot] {
+        self.fixture_slots
+            .get(&fixture_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    /// The name a slot's attribute is known by.
+    pub(crate) fn attribute_key(&self, slot: Slot) -> &AttributeKey {
+        self.attributes.key(self.pairs[slot.index()].1)
     }
 
     /// The generation that numbered these slots. A frame carries this tag so a reader holding a
@@ -363,6 +406,16 @@ mod tests {
             table.slot(first.fixture_id, &intensity),
             table.slot(second.fixture_id, &intensity)
         );
+    }
+
+    #[test]
+    fn a_fixture_owns_exactly_the_slots_it_declared() {
+        let first = legacy_fixture(&["intensity", "pan"]);
+        let second = legacy_fixture(&["intensity"]);
+        let table = SlotTable::compile(1, &[first.clone(), second.clone()]);
+        assert_eq!(table.fixture_slots(first.fixture_id).len(), 2);
+        assert_eq!(table.fixture_slots(second.fixture_id).len(), 1);
+        assert!(table.fixture_slots(FixtureId::new()).is_empty());
     }
 
     #[test]

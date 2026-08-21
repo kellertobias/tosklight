@@ -191,7 +191,7 @@ impl RuntimeGeneration {
     }
 
     /// This generation's frame buffers.
-    pub(crate) fn frames(&self) -> &crate::FramePool {
+    pub(crate) fn frames(&self) -> &Arc<crate::FramePool> {
         &self.frames
     }
 

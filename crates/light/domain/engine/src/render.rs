@@ -221,11 +221,9 @@ fn apply_fixture_freezes(
     for fixture in fixtures {
         for (fixture_id, target) in &fixture.freeze.targets {
             for (attribute, value) in &target.values {
-                let key = (*fixture_id, attribute.clone());
-                resolved.values.insert(key.clone(), value.clone());
                 // A Freeze is the final LTP hold. Retaining an underlying sequence-master scale
                 // would allow a Cue master to alter the held value after the Freeze was taken.
-                resolved.sequence_masters.remove(&key);
+                resolved.override_value(*fixture_id, attribute, value.clone(), None);
             }
         }
     }

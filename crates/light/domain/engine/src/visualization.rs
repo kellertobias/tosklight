@@ -40,6 +40,9 @@ impl Engine {
             }
         }
         resolved.values.clone_from(values);
+        // These values were assembled elsewhere and replace the frame wholesale, so the frame is
+        // released rather than read: it no longer describes what is being projected.
+        resolved.frame = None;
         let profile_values = crate::ProfileValueIndex::new(&resolved);
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();

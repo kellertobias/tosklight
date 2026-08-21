@@ -232,13 +232,12 @@ impl Engine {
             if programmer_colors.contains(&fixture_id) {
                 continue;
             }
-            let key = (fixture_id, color_attribute.clone());
-            resolved
-                .values
-                .insert(key.clone(), AttributeValue::ColorXyz(contribution.color));
-            let changed_at = contribution.changed_at;
-            resolved.changed_at.insert(key.clone(), changed_at);
-            resolved.sequence_masters.remove(&key);
+            resolved.override_value(
+                fixture_id,
+                &color_attribute,
+                AttributeValue::ColorXyz(contribution.color),
+                Some(contribution.changed_at),
+            );
         }
     }
 

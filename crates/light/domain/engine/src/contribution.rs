@@ -139,6 +139,82 @@ pub(crate) struct ResolvedAttributes {
     pub(crate) changed_at: ResolvedChangedAt,
     pub(crate) sequence_masters: FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
     pub(crate) automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,
+    /// The frame these values were resolved into, kept so the render can read by slot rather than
+    /// by name. Absent for callers that assemble a projection from maps they were handed.
+    pub(crate) frame: Option<ResolvedFrame>,
+}
+
+impl ResolvedAttributes {
+    /// Take an attribute over after arbitration, as a Freeze and a Group colour do.
+    ///
+    /// Writes the frame and the maps together. Anything that changed only one of them would leave
+    /// projection reading a different value than the boundary reports.
+    pub(crate) fn override_value(
+        &mut self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        value: AttributeValue,
+        changed_at: Option<DateTime<Utc>>,
+    ) {
+        let key = (fixture_id, attribute.clone());
+        if let Some(frame) = self.frame.as_mut()
+            && let Some(slot) = frame.slots().slot(fixture_id, attribute)
+        {
+            frame.force(slot, value.clone());
+        }
+        if let Some(changed_at) = changed_at {
+            self.changed_at.insert(key.clone(), changed_at);
+        }
+        // The holder of an attribute after an override is the override, so an underlying Cue
+        // master must not go on scaling what it no longer decides.
+        self.sequence_masters.remove(&key);
+        self.values.insert(key, value);
+    }
+}
+
+/// One frame's dense storage together with the numbering that addresses it.
+///
+/// Owns the borrowed buffer for as long as anything reads the frame, and hands it back to its
+/// pool when dropped. Reclaiming by hand would be one forgotten call away from a desk that
+/// allocates a fresh frame every tick.
+pub(crate) struct ResolvedFrame {
+    slots: std::sync::Arc<crate::SlotTable>,
+    state: Option<crate::FrameState>,
+    pool: Option<std::sync::Arc<crate::FramePool>>,
+}
+
+impl Drop for ResolvedFrame {
+    fn drop(&mut self) {
+        if let (Some(pool), Some(state)) = (self.pool.take(), self.state.take()) {
+            pool.give_back(state);
+        }
+    }
+}
+
+impl ResolvedFrame {
+    /// The value holding a slot, or nothing when nothing contributed to it this frame.
+    pub(crate) fn value(&self, slot: crate::Slot) -> Option<&AttributeValue> {
+        self.state.as_ref()?.get(slot).map(|winner| &winner.value)
+    }
+
+    /// The sequence master scaling a slot, if the winning source carried one.
+    pub(crate) fn sequence_master(&self, slot: crate::Slot) -> Option<ApplicableSequenceMaster> {
+        self.state
+            .as_ref()?
+            .get(slot)
+            .and_then(|winner| winner.sequence_master)
+    }
+
+    pub(crate) fn slots(&self) -> &crate::SlotTable {
+        &self.slots
+    }
+
+    /// Write a value into a slot whatever holds it, as a Freeze does.
+    pub(crate) fn force(&mut self, slot: crate::Slot, value: AttributeValue) {
+        if let Some(state) = self.state.as_mut() {
+            state.force(slot, value);
+        }
+    }
 }
 
 /// Arbitrates one frame's contributions into slot-addressed storage.
@@ -148,8 +224,8 @@ pub(crate) struct ResolvedAttributes {
 /// slot; rather than lose an operator's value, those few land in an overflow map. In a show whose
 /// sources all name attributes their fixtures declare, that map stays empty and is never touched.
 pub(crate) struct EngineContributionResolver<'a> {
-    slots: &'a crate::SlotTable,
-    pool: Option<&'a crate::FramePool>,
+    slots: &'a std::sync::Arc<crate::SlotTable>,
+    pool: Option<std::sync::Arc<crate::FramePool>>,
     frame: crate::FrameState,
     overflow: FxHashMap<(FixtureId, AttributeKey), EngineWinner>,
 }
@@ -157,8 +233,8 @@ pub(crate) struct EngineContributionResolver<'a> {
 impl<'a> EngineContributionResolver<'a> {
     /// Storage for one frame of this generation's shape.
     pub(crate) fn for_generation(
-        slots: &'a crate::SlotTable,
-        pool: &'a crate::FramePool,
+        slots: &'a std::sync::Arc<crate::SlotTable>,
+        pool: &'a std::sync::Arc<crate::FramePool>,
     ) -> Self {
         // A pool that has nothing left is a stalled consumer, not a reason to stall the desk: this
         // frame gets its own storage and simply is not the one that gets reused.
@@ -169,7 +245,7 @@ impl<'a> EngineContributionResolver<'a> {
         });
         Self {
             slots,
-            pool: Some(pool),
+            pool: Some(std::sync::Arc::clone(pool)),
             frame,
             overflow: FxHashMap::default(),
         }
@@ -177,7 +253,7 @@ impl<'a> EngineContributionResolver<'a> {
 
     /// Storage for one frame without a pool behind it, for callers that resolve once rather than
     /// every tick.
-    pub(crate) fn unpooled(slots: &'a crate::SlotTable) -> Self {
+    pub(crate) fn unpooled(slots: &'a std::sync::Arc<crate::SlotTable>) -> Self {
         let mut frame = crate::FrameState::for_generation(slots.generation(), slots.len());
         frame.begin();
         Self {
@@ -413,6 +489,7 @@ impl<'a> EngineContributionResolver<'a> {
 
     /// Hand the frame to the boundary that still speaks in names, and the storage back to the pool.
     pub(crate) fn finish(mut self) -> ResolvedAttributes {
+        let overflowed = !self.overflow.is_empty();
         let winner_count = self.frame.occupied_len() + self.overflow.len();
         let mut resolved = ResolvedAttributes {
             values: ResolvedValues::with_capacity_and_hasher(winner_count, Default::default()),
@@ -443,9 +520,23 @@ impl<'a> EngineContributionResolver<'a> {
             }
             resolved.values.insert(key, winner.value);
         }
-        if let Some(pool) = self.pool {
-            pool.give_back(self.frame);
+        // The frame stays with the values it produced: the render reads it by slot, and it goes
+        // back to the pool when the whole frame is finished with rather than here.
+        //
+        // Unless something overflowed. A frame that does not hold every value the maps hold is not
+        // safe to read by slot — projection would silently miss whatever the patch could not
+        // number — so in that case the buffer goes straight back and readers scan the maps.
+        if overflowed {
+            if let Some(pool) = self.pool.take() {
+                pool.give_back(self.frame);
+            }
+            return resolved;
         }
+        resolved.frame = Some(ResolvedFrame {
+            slots: std::sync::Arc::clone(self.slots),
+            state: Some(self.frame),
+            pool: self.pool.take(),
+        });
         resolved
     }
 }
@@ -536,7 +627,10 @@ mod transition_order_tests {
         contributions: impl IntoIterator<Item = EngineContribution>,
     ) -> ResolvedAttributes {
         let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, attributes);
-        let slots = crate::SlotTable::compile(1, std::slice::from_ref(&fixture));
+        let slots = std::sync::Arc::new(crate::SlotTable::compile(
+            1,
+            std::slice::from_ref(&fixture),
+        ));
         let mut resolver = EngineContributionResolver::unpooled(&slots);
         resolver.extend(contributions);
         resolver.finish()
@@ -571,6 +665,38 @@ mod transition_order_tests {
                 temporary: false,
             },
         })
+    }
+
+    /// A value the compiled patch could not number must still reach the boundary, and the frame
+    /// must not be offered for reading by slot when it does not hold everything the maps hold.
+    #[test]
+    fn a_value_the_patch_never_declared_survives_and_withholds_the_dense_frame() {
+        let fixture_id = FixtureId::new();
+        let undeclared = AttributeKey("neverPatched".into());
+        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["intensity"]);
+        let slots = std::sync::Arc::new(crate::SlotTable::compile(
+            1,
+            std::slice::from_ref(&fixture),
+        ));
+        let mut resolver = EngineContributionResolver::unpooled(&slots);
+        resolver.add_borrowed_unscaled(
+            fixture_id,
+            &undeclared,
+            &AttributeValue::Normalized(0.42),
+            0,
+            Utc::now(),
+            MergeMode::Ltp,
+        );
+        let resolved = resolver.finish();
+        assert_eq!(
+            resolved.values[&(fixture_id, undeclared)],
+            AttributeValue::Normalized(0.42),
+            "an operator's value is never lost to a name the patch did not declare"
+        );
+        assert!(
+            resolved.frame.is_none(),
+            "a frame missing a value the maps hold must not be read by slot"
+        );
     }
 
     #[test]
