@@ -31,6 +31,7 @@ fn definition() -> TimecodeDefinition {
                             end_cue_id: id(6),
                             start_behavior: TimecodeClipStart::State,
                             end_behavior: TimecodeClipEnd::Release,
+                            cue_starts: Vec::new(),
                         },
                         TimecodeCueListClip {
                             id: TimecodeClipId(id(7)),
@@ -40,6 +41,7 @@ fn definition() -> TimecodeDefinition {
                             end_cue_id: id(9),
                             start_behavior: TimecodeClipStart::Cue,
                             end_behavior: TimecodeClipEnd::Hold,
+                            cue_starts: Vec::new(),
                         },
                     ],
                 },
@@ -382,6 +384,7 @@ fn execution_definition(cue_list: &crate::CueList) -> TimecodeDefinition {
                     end_cue_id: cue_list.cues[3].id,
                     start_behavior: TimecodeClipStart::State,
                     end_behavior: TimecodeClipEnd::Release,
+                    cue_starts: Vec::new(),
                 }],
             },
         }],
@@ -450,14 +453,41 @@ fn cuelist_clip_seek_follows_a_stable_link_destination() {
 }
 
 #[test]
-fn cuelist_clip_reports_manual_advance_and_missing_cue_as_unable() {
+fn manual_go_cue_follows_its_predecessor_until_the_lane_places_a_transition() {
     let mut cue_list = execution_cue_list();
     cue_list.cues[1].trigger = crate::CueTrigger::Manual;
     let mut definition = execution_definition(&cue_list);
-    let unable = execution_at(&definition, &cue_list, 100);
-    assert_eq!(unable.kind, TimecodeCueListClipExecutionKind::Unable);
-    assert!(unable.message.unwrap().contains("manual GO"));
+    // Cue 1 completes its 100 ms fade four frames after the clip start, so without a
+    // placed transition the manual Cue 2 takes over there.
+    let followed = execution_at(&definition, &cue_list, 104);
+    assert_eq!(followed.kind, TimecodeCueListClipExecutionKind::Active);
+    assert_eq!(followed.cue_id, Some(cue_list.cues[1].id));
+    assert_eq!(
+        execution_at(&definition, &cue_list, 103).cue_id,
+        Some(cue_list.cues[0].id)
+    );
 
+    let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
+        unreachable!()
+    };
+    clips[0].cue_starts = vec![TimecodeCueStart {
+        cue_id: cue_list.cues[1].id,
+        offset_frame: TimecodeFrame(30),
+    }];
+    assert_eq!(
+        execution_at(&definition, &cue_list, 129).cue_id,
+        Some(cue_list.cues[0].id)
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 130).cue_id,
+        Some(cue_list.cues[1].id)
+    );
+}
+
+#[test]
+fn cuelist_clip_reports_a_missing_cue_as_unable() {
+    let cue_list = execution_cue_list();
+    let mut definition = execution_definition(&cue_list);
     let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
         unreachable!()
     };

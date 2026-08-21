@@ -16,6 +16,7 @@ const clip: TimecodeCueListClip = {
 	end_cue_id: "cue-3",
 	start_behavior: "state",
 	end_behavior: "release",
+	cue_starts: [],
 };
 const defaults = { sequenceFadeMillis: 3_000, releaseFadeMillis: 4_000 };
 
@@ -58,7 +59,7 @@ describe("Cue List clip timing", () => {
 		expect(rows[1]?.diagnostic).toContain("not reached");
 	});
 
-	it("keeps unsupported manual Cues visible with an actionable diagnostic", () => {
+	it("lets the lane own the transition point of a manual GO Cue", () => {
 		const list = cueList([
 			cue("cue-1", "1", { type: "manual" }),
 			cue("cue-2", "2", { type: "manual" }),
@@ -66,8 +67,18 @@ describe("Cue List clip timing", () => {
 		]);
 		const { rows } = cueClipTimingRows(clip, list, defaults);
 		expect(rows).toHaveLength(3);
-		expect(rows[1]?.diagnostic).toContain("manual GO");
-		expect(rows[2]?.diagnostic).toContain("not reached");
+		expect(rows.every((row) => row.diagnostic === undefined)).toBe(true);
+		// Without a placed point the manual Cue follows its predecessor's completion.
+		expect(rows[1]).toMatchObject({ startFrame: 88, transition: "default" });
+		expect(rows[2]?.transition).toBeUndefined();
+
+		const placed = cueClipTimingRows(
+			{ ...clip, cue_starts: [{ cue_id: "cue-2", offset_frame: 88 }] },
+			list,
+			defaults,
+		).rows;
+		expect(placed[1]).toMatchObject({ startFrame: 132, transition: "placed" });
+		expect(placed[2]?.startFrame).toBe(176);
 	});
 
 	it("moves fade starts with a fixed end and clears Out links on explicit edits", () => {

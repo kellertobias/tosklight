@@ -80,12 +80,29 @@ does not keep a second private copy of Cue timing. A linked timing range names i
 one of its handles is the operator's explicit choice to replace that link with the displayed
 independent timing.
 
+A new Cuelist lane opens with one clip already placed. On an empty lane that clip takes the rest
+of the timeline from the playhead; where the lane already has clips it copies the length, Cue range,
+and behavior of the last clip left of the playhead; and a Cuelist whose Cues all schedule themselves
+supplies its own length. A new Speed lane likewise opens with one keyframe at the start of the
+timeline. Select a keyframe and enter its **BPM** directly or through the number pad.
+
+A Cue that waits for a manual **GO** has no timing of its own, so the Timecode lane owns its
+transition point. Such a Cue shows a movable transition handle inside the clip; drag it, or use the
+arrow keys, to place the frame where the clip advances to that Cue. Until a point is placed the Cue
+follows its predecessor's completion, and the handle is drawn dashed to show the position is still
+the default. The transition is stored on the clip as an offset from the clip start, so moving the
+clip carries its transitions with it and the Cuelist keeps its manual trigger for live use.
+
+With a marker selected, **Place Marker** moves it to the current playhead and **Move To** opens a
+modal for typing an exact timecode.
+
 Playing Timecode drives that shared Cuelist runtime and shows which clip and Cue are executing.
 Pause freezes Cue timing and output. Seeking, moving backwards, resuming, and looping reconstruct the
 same current Cue, tracked state, timing progress, and output that uninterrupted playback produces at
 the same frame. **Hold** retains the clip's final Cue until it is superseded; **Release** removes the
-clip's Cuelist ownership at its end frame. A missing Cuelist or Cue, invalid Cue range, unsupported
-Cue kind, or rejected timing remains visible with a concrete recovery cause. The editor never shows
+clip's Cuelist ownership at its end frame. A missing Cuelist or Cue remains visible with a concrete
+recovery cause; the editor otherwise offers only the edits that keep a clip valid, so Cue-order and
+fade-boundary mistakes cannot be made in the first place. The editor never shows
 a clip as executing merely because the Timecode transport is Playing.
 
 Configure the source, frame rate, loss behavior, audio device, and latency trim in Desk Setup. See

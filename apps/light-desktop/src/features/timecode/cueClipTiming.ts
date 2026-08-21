@@ -19,6 +19,10 @@ export interface CueClipTimingRow {
 	inFade: CueClipTimingRange;
 	outFade: CueClipTimingRange;
 	diagnostic?: string;
+	/// Set for a Cue whose start the Timecode lane owns because it waits for a manual GO.
+	/// "placed" means the operator dropped a transition point, "default" means it follows
+	/// its predecessor until one is placed.
+	transition?: "placed" | "default";
 }
 
 export type CueFadeKind = "in" | "out";
@@ -54,6 +58,7 @@ export function cueClipTimingRows(
 		return { rows: [], error: "The clip start Cue has no stable identity." };
 	const scheduled = new Map<string, number>([[first.id, clip.start_frame]]);
 	const diagnostics = new Map<string, string>();
+	const transitions = new Map<string, "placed" | "default">();
 	const visited = new Set<string>();
 	let current: Cue | undefined = first;
 	while (current) {
@@ -98,11 +103,14 @@ export function cueClipTimingRows(
 					Math.max(currentRow.inFade.endFrame, currentRow.outFade.endFrame) +
 					incomingDelay;
 			else {
-				diagnostics.set(
-					next.id ?? current.id,
-					`Cue ${next.number} requires manual GO and is not automatically scheduled.`,
+				const manualId = next.id;
+				const placed = clip.cue_starts?.find(
+					(candidate) => candidate.cue_id === manualId,
 				);
-				break;
+				transitions.set(manualId ?? "", placed ? "placed" : "default");
+				nextStart = placed
+					? clip.start_frame + Math.round(placed.offset_frame)
+					: Math.max(currentRow.inFade.endFrame, currentRow.outFade.endFrame);
 			}
 		}
 		if (!next) break;
@@ -144,6 +152,8 @@ export function cueClipTimingRows(
 					),
 			},
 		};
+		const transition = cue.id ? transitions.get(cue.id) : undefined;
+		if (transition) row.transition = transition;
 		if (!cue.id) row.diagnostic = `Cue ${cue.number} has no stable identity.`;
 		else if (diagnostics.has(cue.id)) row.diagnostic = diagnostics.get(cue.id);
 		else if (!scheduled.has(cue.id))
@@ -249,4 +259,39 @@ function effectiveOutFadeMillis(
 ) {
 	if (cue.out_fade_link === "release") return defaults.releaseFadeMillis;
 	return cue.out_fade_millis ?? effectiveInFade;
+}
+
+/// Total frame length of a Cuelist range whose Cues all schedule automatically.
+/// Returns null when any Cue in the range needs a manual GO or cannot be reached,
+/// so callers can fall back to a copied or full-lane clip length.
+export function automatedCueClipLength(
+	cueList: CueList,
+	startCueId: string,
+	endCueId: string,
+	startFrame: number,
+	defaults: CueClipTimingDefaults,
+): number | null {
+	const probe: TimecodeCueListClip = {
+		id: "automated-length-probe",
+		start_frame: startFrame,
+		end_frame: startFrame + TIMECODE_FPS * 3_600 * 100,
+		start_cue_id: startCueId,
+		end_cue_id: endCueId,
+		start_behavior: "state",
+		end_behavior: "release",
+		cue_starts: [],
+	};
+	const { rows, error } = cueClipTimingRows(probe, cueList, defaults);
+	if (
+		error ||
+		!rows.length ||
+		rows.some((row) => row.diagnostic || row.transition === "default")
+	)
+		return null;
+	const last = rows.reduce(
+		(latest, row) =>
+			Math.max(latest, row.inFade.endFrame, row.outFade.endFrame),
+		startFrame,
+	);
+	return Math.max(1, last - startFrame);
 }

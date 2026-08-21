@@ -127,6 +127,7 @@ describe("Timecode editor model", () => {
 								end_cue_id: "00000000-0000-0000-0000-000000000054",
 								start_behavior: "state",
 								end_behavior: "release",
+								cue_starts: [],
 							},
 							{
 								id: "00000000-0000-0000-0000-000000000055",
@@ -136,6 +137,7 @@ describe("Timecode editor model", () => {
 								end_cue_id: "00000000-0000-0000-0000-000000000054",
 								start_behavior: "state",
 								end_behavior: "release",
+								cue_starts: [],
 							},
 						],
 					},

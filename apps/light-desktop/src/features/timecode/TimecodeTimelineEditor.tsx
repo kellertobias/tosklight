@@ -47,15 +47,35 @@ import {
 	type TimecodeEditorSelection,
 	timelineItems,
 } from "./editorModel";
+import {
+	CueListClipContents,
+	CueListClipStatus,
+} from "./TimecodeCueClipContents";
 import { CueListChooser } from "./TimecodeCueListChooser";
+import { MarkerActionStrip } from "./TimecodeMarkerActions";
+import {
+	formatFrame,
+	markerColorIndex,
+	MarkerColorButton,
+	markerColorOption,
+	parseTimelineFrame,
+	TIMECODE_LANE_HEADER_WIDTH,
+	TIMECODE_MARKER_COLORS,
+	type TimecodeAudioPlayerOption,
+	type TimecodeCueListOption,
+	type TimelineItem,
+	timelineFrameX,
+	wrappedIndex,
+} from "./timecodeEditorShared";
 import {
 	TIMECODE_SPEED_GROUPS,
 	TimecodeSpeedGroupChooser,
 } from "./TimecodeSpeedGroupChooser";
+import { clearTimecodeEncoderDeck } from "./timecodeEncoderBridge";
 import {
-	clearTimecodeEncoderDeck,
-	publishTimecodeEncoderDeck,
-} from "./timecodeEncoderBridge";
+	laneWithKeyframeValue,
+	useTimecodeEncoderSlots,
+} from "./timecodeEncoderSlots";
 import {
 	useTimelineActions,
 	useTimelineDrag,
@@ -80,6 +100,13 @@ interface Props {
 	onCueTimingError?(message: string): void;
 }
 
+export {
+	TIMECODE_LANE_HEADER_WIDTH,
+	timelineFrameX,
+	type TimecodeAudioPlayerOption,
+	type TimecodeCueListOption,
+};
+
 export interface TimecodeTimelineEditorHandle {
 	addMarker(): void;
 	chooseSpeedLane(): void;
@@ -87,43 +114,6 @@ export interface TimecodeTimelineEditorHandle {
 	addAudioPlayerLane(fixtureId: string): void;
 }
 
-type TimelineItem = ReturnType<typeof timelineItems>[number];
-
-export const TIMECODE_LANE_HEADER_WIDTH = 160;
-const TIMECODE_MARKER_COLORS = [
-	{ name: "White", value: "#ffffff", text: "#11121a" },
-	{ name: "Blue", value: "#58d4ef", text: "#11121a" },
-	{ name: "Green", value: "#33aa77", text: "#11121a" },
-	{ name: "Yellow", value: "#f5c451", text: "#11121a" },
-	{ name: "Purple", value: "#a67cff", text: "#ffffff" },
-	{ name: "Orange", value: "#f39a4a", text: "#11121a" },
-] as const;
-
-const DEFAULT_TIMECODE_MARKER_COLOR = TIMECODE_MARKER_COLORS[0];
-
-function markerColorOption(color?: string | null) {
-	return (
-		TIMECODE_MARKER_COLORS.find(
-			(option) => option.value.toLowerCase() === color?.toLowerCase(),
-		) ?? DEFAULT_TIMECODE_MARKER_COLOR
-	);
-}
-
-function markerColorIndex(color?: string | null): number {
-	const index = TIMECODE_MARKER_COLORS.findIndex(
-		(option) => option.value.toLowerCase() === color?.toLowerCase(),
-	);
-	return index < 0 ? 0 : index;
-}
-
-function wrappedIndex(value: number, length: number): number {
-	if (!length) return 0;
-	return ((Math.round(value) % length) + length) % length;
-}
-
-export function timelineFrameX(frame: number, pixelsPerFrame: number): number {
-	return TIMECODE_LANE_HEADER_WIDTH + frame * pixelsPerFrame;
-}
 
 function TimelineCanvas(props: {
 	definition: TimecodeDefinition;
@@ -155,6 +145,12 @@ function TimelineCanvas(props: {
 	cueLists: readonly TimecodeCueListOption[];
 	timingDefaults: CueClipTimingDefaults;
 	onSaveCueList?(cueListId: string, body: CueList): Promise<CueList>;
+	onPlaceCueStart(
+		laneId: string,
+		clipId: string,
+		cueId: string,
+		offsetFrame: number,
+	): void;
 	onCueTimingError?(message: string): void;
 }) {
 	const scrub = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -575,6 +571,9 @@ function EditorLane(
 						}
 						timingDefaults={props.timingDefaults}
 						onSaveCueList={props.onSaveCueList}
+						onPlaceCueStart={(clipId, cueId, offsetFrame) =>
+							props.onPlaceCueStart(lane.id, clipId, cueId, offsetFrame)
+						}
 						onCueTimingError={props.onCueTimingError}
 						clipStatus={
 							lane.content.kind === "cue_list" && item.kind === "clip"
@@ -607,6 +606,7 @@ function TimelineItemButton({
 	cueClip,
 	timingDefaults,
 	onSaveCueList,
+	onPlaceCueStart,
 	onCueTimingError,
 	clipStatus,
 }: {
@@ -630,6 +630,7 @@ function TimelineItemButton({
 	cueClip?: TimecodeCueListClip;
 	timingDefaults?: CueClipTimingDefaults;
 	onSaveCueList?(cueListId: string, body: CueList): Promise<CueList>;
+	onPlaceCueStart?(clipId: string, cueId: string, offsetFrame: number): void;
 	onCueTimingError?(message: string): void;
 	clipStatus?: TimecodeCueListClipStatus;
 }) {
@@ -675,6 +676,7 @@ function TimelineItemButton({
 					pixelsPerFrame={pixelsPerFrame}
 					timingDefaults={timingDefaults}
 					onSaveCueList={onSaveCueList}
+					onPlaceCueStart={onPlaceCueStart}
 					onError={onCueTimingError}
 				/>
 			)}
@@ -716,266 +718,6 @@ function TimelineItemButton({
 	);
 }
 
-function CueListClipStatus({ status }: { status: TimecodeCueListClipStatus }) {
-	const label =
-		status.state === "active"
-			? "Executing"
-			: status.state === "armed"
-				? "Armed"
-				: status.state === "held"
-					? "Held"
-					: status.state === "unable"
-						? "Unable"
-						: "Released";
-	return (
-		<span
-			className={`timecode-cue-clip-status ${status.state}`}
-			role={status.state === "unable" ? "status" : undefined}
-		>
-			<strong>{label}</strong>
-			{status.message && <small>{status.message}</small>}
-		</span>
-	);
-}
-
-function CueListClipContents({
-	cueList,
-	clip,
-	pixelsPerFrame,
-	timingDefaults,
-	onSaveCueList,
-	onError,
-}: {
-	cueList: TimecodeCueListOption & { body: CueList };
-	clip: TimecodeCueListClip;
-	pixelsPerFrame: number;
-	timingDefaults: CueClipTimingDefaults;
-	onSaveCueList?(cueListId: string, body: CueList): Promise<CueList>;
-	onError?(message: string): void;
-}) {
-	const [preview, setPreview] = useState<CueList | null>(null);
-	const [dragError, setDragError] = useState("");
-	const [saving, setSaving] = useState(false);
-	const activeBody = preview ?? cueList.body;
-	const projected = cueClipTimingRows(clip, activeBody, timingDefaults);
-	const drag = useRef<{
-		pointerId: number;
-		startX: number;
-		startHandleFrame: number;
-		row: CueClipTimingRow;
-		kind: CueFadeKind;
-		edge: CueFadeEdge;
-		body: CueList;
-		next: CueList | null;
-		error: string;
-	} | null>(null);
-
-	useEffect(() => {
-		const move = (event: PointerEvent) => {
-			const current = drag.current;
-			if (!current || event.pointerId !== current.pointerId) return;
-			const target =
-				current.startHandleFrame +
-				Math.round((event.clientX - current.startX) / pixelsPerFrame);
-			const sourceCue = current.body.cues.find(
-				(cue) => cue.id === current.row.cue.id,
-			);
-			if (!sourceCue) return;
-			const result = cueWithDraggedFade(
-				sourceCue,
-				current.row,
-				clip,
-				current.kind,
-				current.edge,
-				target,
-			);
-			if (!result.cue) {
-				current.next = null;
-				current.error = result.error ?? "Cue timing is invalid.";
-				setDragError(current.error);
-				setPreview(current.body);
-				return;
-			}
-			const updatedCue = result.cue;
-			const next: CueList = {
-				...current.body,
-				cues: current.body.cues.map((cue) =>
-					cue.id === updatedCue.id ? updatedCue : cue,
-				),
-			};
-			current.next = next;
-			current.error = "";
-			setDragError("");
-			setPreview(next);
-		};
-		const finish = (event: PointerEvent) => {
-			const current = drag.current;
-			if (!current || event.pointerId !== current.pointerId) return;
-			drag.current = null;
-			if (event.type === "pointercancel") {
-				setPreview(null);
-				setDragError("");
-				return;
-			}
-			if (current.error || !current.next) {
-				setPreview(null);
-				if (current.error) onError?.(current.error);
-				return;
-			}
-			if (!onSaveCueList) {
-				const message = "Cue timing editing is unavailable on this desk.";
-				setPreview(null);
-				setDragError(message);
-				onError?.(message);
-				return;
-			}
-			setSaving(true);
-			void onSaveCueList(cueList.id, current.next)
-				.then((saved) => {
-					setPreview(saved);
-					setDragError("");
-				})
-				.catch((reason) => {
-					const message = `Cue ${current.row.cue.number} ${current.kind === "in" ? "In" : "Out"} fade was not saved: ${reason instanceof Error ? reason.message : String(reason)}`;
-					setPreview(null);
-					setDragError(message);
-					onError?.(message);
-				})
-				.finally(() => setSaving(false));
-		};
-		window.addEventListener("pointermove", move);
-		window.addEventListener("pointerup", finish);
-		window.addEventListener("pointercancel", finish);
-		return () => {
-			window.removeEventListener("pointermove", move);
-			window.removeEventListener("pointerup", finish);
-			window.removeEventListener("pointercancel", finish);
-		};
-	}, [clip, cueList.id, onError, onSaveCueList, pixelsPerFrame]);
-
-	const begin = (
-		event: ReactPointerEvent,
-		row: CueClipTimingRow,
-		kind: CueFadeKind,
-		edge: CueFadeEdge,
-	) => {
-		event.preventDefault();
-		event.stopPropagation();
-		if (saving || row.diagnostic) return;
-		const range = kind === "in" ? row.inFade : row.outFade;
-		drag.current = {
-			pointerId: event.pointerId,
-			startX: event.clientX,
-			startHandleFrame: edge === "start" ? range.startFrame : range.endFrame,
-			row,
-			kind,
-			edge,
-			body: structuredClone(activeBody),
-			next: null,
-			error: "",
-		};
-		event.currentTarget.setPointerCapture?.(event.pointerId);
-	};
-	const clipLength = Math.max(1, clip.end_frame - clip.start_frame);
-	const position = (frame: number) =>
-		Math.max(0, Math.min(clipLength, frame - clip.start_frame)) *
-		pixelsPerFrame;
-
-	return (
-		<span className="timecode-cue-clip-contents" aria-busy={saving}>
-			{projected.error && (
-				<span className="timecode-cue-clip-diagnostic" role="status">
-					{projected.error}
-				</span>
-			)}
-			{projected.rows.map((row) => (
-				<span
-					key={row.cue.id}
-					className={`timecode-cue-timing ${row.diagnostic ? "unsupported" : ""}`}
-				>
-					<span
-						className="timecode-cue-start-marker"
-						style={{ left: position(row.startFrame) }}
-						title={`Cue ${row.cue.number} start · ${formatFrame(row.startFrame, TIMECODE_FPS)}`}
-					>
-						{row.cue.number}
-					</span>
-					<CueFadeRange
-						cueNumber={String(row.cue.number)}
-						kind="in"
-						range={row.inFade}
-						position={position}
-						disabled={saving || Boolean(row.diagnostic)}
-						onBegin={(event, edge) => begin(event, row, "in", edge)}
-					/>
-					<CueFadeRange
-						cueNumber={String(row.cue.number)}
-						kind="out"
-						range={row.outFade}
-						position={position}
-						disabled={saving || Boolean(row.diagnostic)}
-						onBegin={(event, edge) => begin(event, row, "out", edge)}
-					/>
-					{row.diagnostic && (
-						<span className="timecode-cue-diagnostic" role="status">
-							{row.diagnostic}
-						</span>
-					)}
-				</span>
-			))}
-			{dragError && (
-				<span className="timecode-cue-clip-diagnostic" role="status">
-					{dragError}
-				</span>
-			)}
-		</span>
-	);
-}
-
-function CueFadeRange({
-	cueNumber,
-	kind,
-	range,
-	position,
-	disabled,
-	onBegin,
-}: {
-	cueNumber: string;
-	kind: CueFadeKind;
-	range: { startFrame: number; endFrame: number };
-	position(frame: number): number;
-	disabled: boolean;
-	onBegin(event: ReactPointerEvent, edge: CueFadeEdge): void;
-}) {
-	const label = kind === "in" ? "In fade" : "Out fade";
-	return (
-		<span
-			className={`timecode-cue-fade-range ${kind}`}
-			style={{
-				left: position(range.startFrame),
-				width: Math.max(
-					2,
-					position(range.endFrame) - position(range.startFrame),
-				),
-			}}
-			title={`Cue ${cueNumber} ${label}`}
-		>
-			{(["start", "end"] as const).map((edge) => (
-				<span
-					key={edge}
-					className={`timecode-cue-fade-handle ${edge}`}
-					role="slider"
-					tabIndex={disabled ? -1 : 0}
-					aria-label={`Cue ${cueNumber} ${label} ${edge}`}
-					aria-valuemin={0}
-					aria-valuenow={edge === "start" ? range.startFrame : range.endFrame}
-					aria-disabled={disabled || undefined}
-					onPointerDown={(event) => onBegin(event, edge)}
-				/>
-			))}
-		</span>
-	);
-}
 
 type SpeedKeyframe = Extract<
 	TimecodeDefinition["lanes"][number]["content"],
@@ -1021,19 +763,6 @@ export function speedGroupLinePoints(
 	return points.join(" ");
 }
 
-export interface TimecodeCueListOption {
-	id: string;
-	name: string;
-	cues: readonly { id?: string; number: string; name: string }[];
-	objectId?: string;
-	revision?: number;
-	body?: CueList;
-}
-
-export interface TimecodeAudioPlayerOption {
-	fixtureId: string;
-	name: string;
-}
 
 const TARGET_MAX_PIXELS_PER_FRAME = 17.5;
 const FALLBACK_VIEWPORT_WIDTH = 720;
@@ -1288,6 +1017,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		cueLists,
 		speedGroup,
 		audioPlayers,
+		timingDefaults,
 		onCommit,
 		setSelection,
 		setSelectedLane: setSelectedLaneId,
@@ -1358,220 +1088,65 @@ export const TimecodeTimelineEditor = forwardRef<
 		if (!availableSpeedGroups.includes(speedGroup as never))
 			setSpeedGroup(availableSpeedGroups[0] ?? "");
 	}, [availableSpeedGroups, speedGroup]);
-	useEffect(() => {
-		const selectLane = (requested: number) => {
-			const index = clampIndex(requested, definition.lanes.length);
-			const lane = definition.lanes[index];
-			if (!lane) return;
-			setSelectedLaneId(lane.id);
-			const first = items.find(
-				(item) =>
-					item.laneId === lane.id &&
-					(item.kind === "speed" || item.kind === "volume"),
-			);
-			setSelection(first?.selection ?? null);
-		};
-		const selectKeyframe = (requested: number) => {
-			const item = keyframeItems[clampIndex(requested, keyframeItems.length)];
-			if (!item) return;
-			setSelection(item.selection);
-			onScrub(item.frame);
-		};
-		const setSelectedFrame = (requested: number) => {
-			if (!selection || !activeKeyframe) return;
-			const next = Math.max(0, Math.min(duration, Math.round(requested)));
-			onCommit(moveTimelineItem(definition, selection, next));
-			onScrub(next);
-		};
-		const setMarkerFrame = (requested: number) => {
-			if (!activeMarker || selection?.kind !== "marker") return;
-			const next = Math.max(0, Math.min(duration, Math.round(requested)));
-			onCommit(moveTimelineItem(definition, selection, next));
-		};
-		const setMarkerColor = (requested: number) => {
-			if (!activeMarker) return;
-			const color =
-				TIMECODE_MARKER_COLORS[
-					wrappedIndex(requested, TIMECODE_MARKER_COLORS.length)
-				]?.value;
-			if (!color) return;
-			onCommit({
-				...definition,
-				markers: definition.markers.map((marker) =>
-					marker.id === activeMarker.id ? { ...marker, color } : marker,
-				),
-			});
-		};
-		const updateSelectedValue = (value: number) => {
-			if (!selection || !activeLane) return;
-			onCommit({
-				...definition,
-				lanes: definition.lanes.map((lane) => {
-					if (lane.id !== activeLane.id) return lane;
-					if (selection.kind === "speed" && lane.content.kind === "speed_group")
-						return {
-							...lane,
-							content: {
-								...lane.content,
-								keyframes: lane.content.keyframes.map((keyframe) =>
-									keyframe.id !== selection.itemId
-										? keyframe
-										: {
-												...keyframe,
-												bpm: Math.max(
-													SPEED_GROUP_MIN_BPM,
-													Math.min(SPEED_GROUP_MAX_BPM, value),
-												),
-											},
-								),
-							},
-						};
-					if (
-						selection.kind === "volume" &&
-						lane.content.kind === "audio_volume"
-					)
-						return {
-							...lane,
-							content: {
-								...lane.content,
-								keyframes: lane.content.keyframes.map((keyframe) =>
-									keyframe.id !== selection.itemId
-										? keyframe
-										: {
-												...keyframe,
-												value: Math.max(0, Math.min(1, value / 100)),
-											},
-								),
-							},
-						};
-					return lane;
-				}),
-			});
-		};
-		const selectedValue =
-			speedKeyframe?.bpm ?? (volumeKeyframe?.value ?? 0) * 100;
-		const timelineZoneSlot = {
-			id: "timecode-timeline-zone",
-			label: "Timeline zone",
-			display: `${Math.round(zoom * 100)}%`,
-			value: zoom,
-			minimum: 1,
-			maximum: maximumZoom,
-			fineStep: 0.05,
-			coarseStep: 0.25,
-			set: (value: number) =>
-				setZoom(Math.max(1, Math.min(maximumZoom, value))),
-		};
-		const playheadSlot = {
-			id: "timecode-playhead",
-			label: "Playhead",
-			display: formatFrame(frame, fps),
-			value: frame,
-			minimum: 0,
-			maximum: duration,
-			fineStep: 1,
-			coarseStep: fps,
-			set: (value: number) =>
-				onScrub(Math.max(0, Math.min(duration, Math.round(value)))),
-		};
-		const keyframeSelectionSlot = {
-			id: "timecode-keyframe-navigation",
-			label: "Keyframe selection",
-			display: keyframeItems.length
-				? `${keyframeIndex + 1} / ${keyframeItems.length}`
-				: "—",
-			value: keyframeIndex,
-			minimum: 0,
-			maximum: Math.max(0, keyframeItems.length - 1),
-			fineStep: 1,
-			coarseStep: 1,
-			disabled: !keyframeItems.length,
-			set: selectKeyframe,
-		};
-		const laneSlot = {
-			id: "timecode-lane-navigation",
-			label: "Lane",
-			display: activeLane?.name ?? "—",
-			value: laneIndex,
-			minimum: 0,
-			maximum: Math.max(0, definition.lanes.length - 1),
-			fineStep: 1,
-			coarseStep: 1,
-			disabled: !definition.lanes.length,
-			set: selectLane,
-		};
-		publishTimecodeEncoderDeck(encoderOwner, {
-			timeline: [
-				laneSlot,
-				keyframeSelectionSlot,
-				playheadSlot,
-				timelineZoneSlot,
-			],
-			keyframe: activeMarker
-				? [
-						{
-							id: "timecode-marker-frame",
-							label: "Marker position",
-							display: formatFrame(activeMarker.frame, fps),
-							value: activeMarker.frame,
-							minimum: 0,
-							maximum: duration,
-							fineStep: 1,
-							coarseStep: fps,
-							set: setMarkerFrame,
-						},
-						{
-							id: "timecode-marker-color",
-							label: "Marker color",
-							display: markerColorOption(activeMarker.color).name,
-							value: markerColorIndex(activeMarker.color),
-							minimum: 0,
-							maximum: TIMECODE_MARKER_COLORS.length - 1,
-							fineStep: 1,
-							coarseStep: 1,
-							set: setMarkerColor,
-						},
-						playheadSlot,
-						timelineZoneSlot,
-					]
-				: [
-						{
-							id: "timecode-keyframe-frame",
-							label: "Keyframe position",
-							display: activeKeyframe
-								? formatFrame(activeKeyframe.frame, fps)
-								: "—",
-							value: activeKeyframe?.frame ?? 0,
-							minimum: 0,
-							maximum: duration,
-							fineStep: 1,
-							coarseStep: fps,
-							disabled: !activeKeyframe,
-							set: setSelectedFrame,
-						},
-						{
-							id: "timecode-keyframe-value",
-							label: "Keyframe value",
-							display: speedKeyframe
-								? `${Math.round(selectedValue)} BPM`
-								: volumeKeyframe
-									? `${Math.round(selectedValue)}%`
-									: "—",
-							value: selectedValue,
-							minimum: speedKeyframe ? SPEED_GROUP_MIN_BPM : 0,
-							maximum: speedKeyframe ? SPEED_GROUP_MAX_BPM : 100,
-							fineStep: speedKeyframe ? 0.1 : 1,
-							coarseStep: speedKeyframe ? 5 : 10,
-							disabled: !activeKeyframe,
-							set: updateSelectedValue,
-						},
-						playheadSlot,
-						timelineZoneSlot,
-					],
-			selectionLabel: activeMarker ? "Selected Marker" : "Selected Keyframe",
-		});
+	useTimecodeEncoderSlots({
+		definition,
+		items,
+		keyframeItems,
+		selection,
+		activeLane,
+		activeKeyframe,
+		activeMarker,
+		speedKeyframe,
+		volumeKeyframe,
+		laneIndex,
+		keyframeIndex,
+		duration,
+		frame,
+		fps,
+		zoom,
+		maximumZoom,
+		encoderOwner,
+		setZoom,
+		setSelection,
+		setSelectedLaneId,
+		onScrub,
+		onCommit,
 	});
 	useEffect(() => () => clearTimecodeEncoderDeck(encoderOwner), [encoderOwner]);
+
+	/// Stores a lane-owned transition point for a Cue that waits for a manual GO.
+	const placeCueStart = (
+		laneId: string,
+		clipId: string,
+		cueId: string,
+		offsetFrame: number,
+	) =>
+		onCommit({
+			...definition,
+			lanes: definition.lanes.map((lane) =>
+				lane.id !== laneId || lane.content.kind !== "cue_list"
+					? lane
+					: {
+							...lane,
+							content: {
+								...lane.content,
+								clips: lane.content.clips.map((clip) =>
+									clip.id !== clipId
+										? clip
+										: {
+												...clip,
+												cue_starts: [
+													...(clip.cue_starts ?? []).filter(
+														(placed) => placed.cue_id !== cueId,
+													),
+													{ cue_id: cueId, offset_frame: offsetFrame },
+												],
+											},
+								),
+							},
+						},
+			),
+		});
 
 	return (
 		<section
@@ -1624,6 +1199,7 @@ export const TimecodeTimelineEditor = forwardRef<
 					cueLists,
 					timingDefaults,
 					onSaveCueList,
+					onPlaceCueStart: placeCueStart,
 					onCueTimingError,
 				}}
 			/>
@@ -1672,6 +1248,33 @@ export const TimecodeTimelineEditor = forwardRef<
 	);
 });
 
+/// Replaces the easing curve of one audio-volume keyframe.
+function laneWithVolumeCurve(
+	definition: TimecodeDefinition,
+	laneId: string,
+	keyframeId: string,
+	curve: string,
+): TimecodeDefinition {
+	return {
+		...definition,
+		lanes: definition.lanes.map((candidate) =>
+			candidate.id !== laneId || candidate.content.kind !== "audio_volume"
+				? candidate
+				: {
+						...candidate,
+						content: {
+							...candidate.content,
+							keyframes: candidate.content.keyframes.map((keyframe) =>
+								keyframe.id === keyframeId
+									? { ...keyframe, curve: curve as typeof keyframe.curve }
+									: keyframe,
+							),
+						},
+					},
+		),
+	};
+}
+
 function KeyframeActionStrip({
 	definition,
 	selection,
@@ -1703,6 +1306,7 @@ function KeyframeActionStrip({
 				{...{
 					definition,
 					selection,
+					frame,
 					fps,
 					items,
 					onSelection,
@@ -1740,76 +1344,11 @@ function KeyframeActionStrip({
 	};
 	const updateEasing = (curve: string) => {
 		if (!selectedVolume || selection?.kind !== "volume" || !lane) return;
-		onCommit({
-			...definition,
-			lanes: definition.lanes.map((candidate) =>
-				candidate.id !== lane.id || candidate.content.kind !== "audio_volume"
-					? candidate
-					: {
-							...candidate,
-							content: {
-								...candidate.content,
-								keyframes: candidate.content.keyframes.map((keyframe) =>
-									keyframe.id === selectedVolume.id
-										? {
-												...keyframe,
-												curve: curve as typeof keyframe.curve,
-											}
-										: keyframe,
-								),
-							},
-						},
-			),
-		});
+		onCommit(laneWithVolumeCurve(definition, lane.id, selectedVolume.id, curve));
 	};
 	const updateValue = (value: number) => {
 		if (!lane || !selection) return;
-		onCommit({
-			...definition,
-			lanes: definition.lanes.map((candidate) => {
-				if (candidate.id !== lane.id) return candidate;
-				if (
-					selection.kind === "speed" &&
-					candidate.content.kind === "speed_group"
-				)
-					return {
-						...candidate,
-						content: {
-							...candidate.content,
-							keyframes: candidate.content.keyframes.map((keyframe) =>
-								keyframe.id === selection.itemId
-									? {
-											...keyframe,
-											bpm: Math.max(
-												SPEED_GROUP_MIN_BPM,
-												Math.min(SPEED_GROUP_MAX_BPM, value),
-											),
-										}
-									: keyframe,
-							),
-						},
-					};
-				if (
-					selection.kind === "volume" &&
-					candidate.content.kind === "audio_volume"
-				)
-					return {
-						...candidate,
-						content: {
-							...candidate.content,
-							keyframes: candidate.content.keyframes.map((keyframe) =>
-								keyframe.id === selection.itemId
-									? {
-											...keyframe,
-											value: Math.max(0, Math.min(100, value)) / 100,
-										}
-									: keyframe,
-							),
-						},
-					};
-				return candidate;
-			}),
-		});
+		onCommit(laneWithKeyframeValue(definition, lane.id, selection, value));
 	};
 	const canInsert =
 		lane?.content.kind === "audio_volume" ||
@@ -1883,7 +1422,7 @@ function KeyframeActionStrip({
 				</Button>
 			) : null}
 			{selectedSpeed && (
-				<KeyframeValueSlider
+				<KeyframeValueNumber
 					label="BPM"
 					value={selectedSpeed.bpm}
 					minimum={SPEED_GROUP_MIN_BPM}
@@ -1928,6 +1467,43 @@ function KeyframeActionStrip({
 	);
 }
 
+function KeyframeValueNumber({
+	label,
+	value,
+	minimum,
+	maximum,
+	step = 1,
+	unit,
+	onChange,
+}: {
+	label: string;
+	value: number;
+	minimum: number;
+	maximum: number;
+	step?: number;
+	unit: string;
+	onChange(value: number): void;
+}) {
+	return (
+		<NumberField
+			className="timecode-keyframe-value-number"
+			label={label}
+			aria-label={`${label} value`}
+			keyboardLabel={label}
+			value={value}
+			min={minimum}
+			max={maximum}
+			step={step}
+			allowDecimal={step < 1}
+			unit={unit}
+			onChange={(event) => {
+				const next = Number(event.currentTarget.value);
+				if (Number.isFinite(next)) onChange(next);
+			}}
+		/>
+	);
+}
+
 function KeyframeValueSlider({
 	label,
 	value,
@@ -1962,166 +1538,6 @@ function KeyframeValueSlider({
 	);
 }
 
-function MarkerActionStrip({
-	definition,
-	selection,
-	fps,
-	items,
-	onSelection,
-	onCommit,
-}: {
-	definition: TimecodeDefinition;
-	selection: Extract<TimecodeEditorSelection, { kind: "marker" }>;
-	fps: number;
-	items: readonly TimelineItem[];
-	onSelection(item: TimelineItem): void;
-	onCommit(definition: TimecodeDefinition): void;
-}) {
-	const marker = definition.markers.find(
-		(candidate) => candidate.id === selection.itemId,
-	);
-	const markerItems = items
-		.filter((item) => item.kind === "marker")
-		.sort((left, right) => left.frame - right.frame);
-	const selectedIndex = markerItems.findIndex((item) =>
-		sameSelection(item.selection, selection),
-	);
-	const [nameOpen, setNameOpen] = useState(false);
-	const [positionOpen, setPositionOpen] = useState(false);
-	const [position, setPosition] = useState(
-		marker ? formatFrame(marker.frame, fps) : "",
-	);
-	const [positionInvalid, setPositionInvalid] = useState(false);
-	useEffect(() => {
-		setPosition(marker ? formatFrame(marker.frame, fps) : "");
-		setNameOpen(false);
-		setPositionOpen(false);
-		setPositionInvalid(false);
-	}, [fps, marker?.id]);
-	if (!marker) return null;
-	const markerColor = markerColorOption(marker.color);
-	const update = (patch: Partial<typeof marker>) =>
-		onCommit({
-			...definition,
-			markers: definition.markers.map((candidate) =>
-				candidate.id === marker.id ? { ...candidate, ...patch } : candidate,
-			),
-		});
-	const move = (delta: number) => {
-		if (markerItems.length < 2) return;
-		const nextIndex =
-			(selectedIndex + delta + markerItems.length) % markerItems.length;
-		const next = markerItems[nextIndex];
-		if (next) onSelection(next);
-	};
-	const commitPosition = () => {
-		const frame = parseTimelineFrame(position, fps);
-		if (frame === null || frame > (definition.duration_frame ?? 0)) {
-			setPositionInvalid(true);
-			return;
-		}
-		setPositionInvalid(false);
-		setPosition(formatFrame(frame, fps));
-		if (frame !== marker.frame) update({ frame });
-	};
-	return (
-		<div
-			className="timecode-keyframe-actions timecode-marker-actions"
-			role="group"
-			aria-label="Selected marker actions"
-		>
-			<div className="timecode-keyframe-actions-title">
-				<strong>{marker.name}</strong>
-			</div>
-			<Button
-				className="timecode-keyframe-action"
-				aria-label="Previous Marker"
-				size="compact"
-				disabled={markerItems.length < 2}
-				onClick={() => move(-1)}
-			>
-				<span>
-					Previous
-					<br />
-					Marker
-				</span>
-			</Button>
-			<Button
-				className="timecode-keyframe-action"
-				aria-label="Set Name"
-				size="compact"
-				onClick={() => setNameOpen(true)}
-			>
-				<span>
-					Set
-					<br />
-					Name
-				</span>
-			</Button>
-			{nameOpen && (
-				<InputModal
-					kind="text"
-					label="Marker name"
-					value={marker.name}
-					initialCaret={marker.name.length}
-					onCancel={() => setNameOpen(false)}
-					onCommit={(candidate) => {
-						const next = candidate.trim() || marker.name;
-						if (next !== marker.name) update({ name: next });
-						setNameOpen(false);
-					}}
-				/>
-			)}
-			<MarkerColorButton
-				color={marker.color}
-				onChange={(color) => update({ color })}
-			/>
-			<Button
-				className="timecode-keyframe-action"
-				aria-label="Place Marker"
-				size="compact"
-				onClick={() => setPositionOpen((open) => !open)}
-			>
-				<span>
-					Place
-					<br />
-					Marker
-				</span>
-			</Button>
-			{positionOpen && (
-				<div className="timecode-marker-position-action">
-					<TextField
-						id={`timecode-marker-action-position-${marker.id}`}
-						label="Marker timecode"
-						value={position}
-						onChange={(event) => {
-							setPosition(event.currentTarget.value);
-							setPositionInvalid(false);
-						}}
-						onBlur={commitPosition}
-						onKeyDown={(event) => {
-							if (event.key === "Enter") commitPosition();
-						}}
-					/>
-					{positionInvalid && <span role="alert">Invalid timecode</span>}
-				</div>
-			)}
-			<Button
-				className="timecode-keyframe-action timecode-next-keyframe"
-				aria-label="Next Marker"
-				size="compact"
-				disabled={markerItems.length < 2}
-				onClick={() => move(1)}
-			>
-				<span>
-					Next
-					<br />
-					Marker
-				</span>
-			</Button>
-		</div>
-	);
-}
 
 interface SelectionInspectorProps {
 	definition: TimecodeDefinition;
@@ -2494,39 +1910,6 @@ function MarkerInspector({
 	);
 }
 
-function MarkerColorButton({
-	color,
-	onChange,
-}: {
-	color?: string | null;
-	onChange(color: string): void;
-}) {
-	const selected = markerColorOption(color);
-	const next = () => {
-		const index = wrappedIndex(
-			markerColorIndex(selected.value) + 1,
-			TIMECODE_MARKER_COLORS.length,
-		);
-		const option = TIMECODE_MARKER_COLORS[index];
-		if (option) onChange(option.value);
-	};
-	return (
-		<Button
-			className="timecode-keyframe-action timecode-marker-color-action"
-			size="compact"
-			aria-label={`Marker color: ${selected.name}. Select next color`}
-			style={
-				{
-					"--timecode-marker-color": selected.value,
-					"--timecode-marker-text-color": selected.text,
-				} as CSSProperties
-			}
-			onClick={next}
-		>
-			{selected.name}
-		</Button>
-	);
-}
 
 function SpeedInspector({
 	label,
@@ -2633,6 +2016,16 @@ function ClipInspector({
 	duration?: number | null;
 	update(patch: Partial<CueClip>): void;
 }) {
+	// Offering only Cues that keep the clip order valid removes the "end Cue is
+	// before its start Cue" error instead of reporting it after the fact.
+	const startIndex = Math.max(
+		0,
+		cues.findIndex((cue) => cue.id === clip.start_cue_id),
+	);
+	const endIndex =
+		cues.findIndex((cue) => cue.id === clip.end_cue_id) < 0
+			? cues.length - 1
+			: cues.findIndex((cue) => cue.id === clip.end_cue_id);
 	return (
 		<div className="timecode-selection-inspector">
 			<strong>{label}</strong>
@@ -2653,13 +2046,13 @@ function ClipInspector({
 			<CueSelect
 				label="Start Cue"
 				value={clip.start_cue_id}
-				cues={cues}
+				cues={cues.slice(0, endIndex + 1)}
 				onValue={(start_cue_id) => update({ start_cue_id })}
 			/>
 			<CueSelect
 				label="End Cue"
 				value={clip.end_cue_id}
-				cues={cues}
+				cues={cues.slice(startIndex)}
 				onValue={(end_cue_id) => update({ end_cue_id })}
 			/>
 			<SelectField
@@ -2808,21 +2201,4 @@ function Waveform({ peaks }: { peaks: readonly number[] }) {
 			))}
 		</svg>
 	);
-}
-
-function formatFrame(frame: number, fps: number): string {
-	const whole = Math.max(0, Math.round(frame));
-	const seconds = Math.floor(whole / fps);
-	return `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}.${String(whole % fps).padStart(2, "0")}`;
-}
-
-function parseTimelineFrame(value: string, fps: number): number | null {
-	const match = value.trim().match(/^(\d{1,2}):(\d{2}):(\d{2})[.:](\d{2})$/);
-	if (!match) return null;
-	const [, hours, minutes, seconds, frames] = match;
-	const minute = Number(minutes);
-	const second = Number(seconds);
-	const frame = Number(frames);
-	if (minute > 59 || second > 59 || frame >= fps) return null;
-	return (Number(hours) * 60 * 60 + minute * 60 + second) * fps + frame;
 }

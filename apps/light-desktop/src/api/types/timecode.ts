@@ -59,6 +59,13 @@ export interface TimecodeCueListClip {
 	end_cue_id: string;
 	start_behavior: "state" | "cue";
 	end_behavior: "release" | "hold";
+	/// Transition points placed in the lane for Cues that wait for a manual GO.
+	cue_starts: TimecodeCueStart[];
+}
+
+export interface TimecodeCueStart {
+	cue_id: string;
+	offset_frame: number;
 }
 
 export interface TimecodeSpeedKeyframe {

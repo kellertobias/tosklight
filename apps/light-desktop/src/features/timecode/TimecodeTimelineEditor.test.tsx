@@ -314,10 +314,19 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.queryByRole("dialog", { name: "Marker name" })).toBeNull();
 
 		fireEvent.click(screen.getByRole("button", { name: "Place Marker" }));
-		fireEvent.change(screen.getByLabelText("Marker timecode"), {
-			target: { value: "00:00:03.00" },
-		});
-		fireEvent.blur(screen.getByLabelText("Marker timecode"));
+		expect(screen.getByTitle("Chorus · 00:00:01.00")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Place Marker" })).toBeDisabled();
+
+		fireEvent.click(screen.getByRole("button", { name: "Move To" }));
+		const moveModal = screen.getByRole("dialog", { name: "Marker timecode" });
+		expect(
+			within(moveModal).getByLabelText("Full text keyboard"),
+		).toBeInTheDocument();
+		for (let index = 0; index < 11; index += 1)
+			fireEvent.keyDown(window, { key: "Backspace" });
+		for (const key of "00:00:03.00") fireEvent.keyDown(window, { key });
+		fireEvent.keyDown(window, { key: "Enter" });
+		expect(screen.queryByRole("dialog", { name: "Marker timecode" })).toBeNull();
 		expect(screen.getByTitle("Chorus · 00:00:03.00")).toBeTruthy();
 
 		fireEvent.click(screen.getByRole("button", { name: "Next Marker" }));
@@ -431,14 +440,18 @@ describe("TimecodeTimelineEditor", () => {
 				name: /Speed Group A.*Drag to reorder lane/,
 			}),
 		);
-		const bpmSlider = screen.getByLabelText("BPM value");
-		expect(bpmSlider).toHaveAttribute("min", "0.1");
-		expect(bpmSlider).toHaveAttribute("max", "999");
-		expect(bpmSlider).toHaveAttribute("step", "0.1");
-		fireEvent.change(screen.getByLabelText("BPM value"), {
-			target: { value: "180" },
-		});
+		const bpmInput = screen.getByLabelText("BPM value");
+		expect(bpmInput).toHaveAttribute("inputmode", "decimal");
+		fireEvent.change(bpmInput, { target: { value: "180" } });
 		expect(screen.getByTitle(/Speed Group A · 180 BPM/)).toBeTruthy();
+		fireEvent.change(bpmInput, { target: { value: "1200" } });
+		expect(screen.getByTitle(/Speed Group A · 999 BPM/)).toBeTruthy();
+		fireEvent.click(
+			within(
+				bpmInput.closest(".ui-number-control") as HTMLElement,
+			).getByRole("button", { name: "Open number pad" }),
+		);
+		expect(screen.getByRole("dialog", { name: "BPM" })).toBeInTheDocument();
 
 		fireEvent.click(
 			screen.getByRole("button", { name: /Main Volume.*Drag to reorder lane/ }),
@@ -572,6 +585,9 @@ describe("TimecodeTimelineEditor", () => {
 						content: expect.objectContaining({
 							kind: "speed_group",
 							group: "D",
+							keyframes: [
+								expect.objectContaining({ frame: 0, bpm: 120, phase: 0 }),
+							],
 						}),
 					}),
 				]),
@@ -625,6 +641,11 @@ describe("TimecodeTimelineEditor", () => {
 				name: /Opening.*cue list/i,
 			}),
 		).toBeInTheDocument();
+		const clip = within(lane as HTMLElement).getByTitle(
+			"Opening · state start → release · 00:00:00.00",
+		);
+		expect(clip).toHaveClass("item-clip");
+		expect(clip).toHaveStyle({ left: "160px", width: "560px" });
 	});
 
 	it("fits the whole timeline at 1x with continuous headers and ruler stripes", () => {
@@ -899,6 +920,7 @@ describe("TimecodeTimelineEditor", () => {
 									end_cue_id: "cue-1",
 									start_behavior: "state",
 									end_behavior: "release",
+									cue_starts: [],
 								},
 							],
 						},
@@ -1060,6 +1082,7 @@ describe("TimecodeTimelineEditor", () => {
 								end_cue_id: "cue-2",
 								start_behavior: "state",
 								end_behavior: "release",
+								cue_starts: [],
 							},
 						],
 					},
@@ -1136,6 +1159,7 @@ describe("TimecodeTimelineEditor", () => {
 										end_cue_id: "cue-1",
 										start_behavior: "state",
 										end_behavior: "release",
+										cue_starts: [],
 									},
 								],
 							},

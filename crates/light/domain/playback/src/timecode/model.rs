@@ -205,6 +205,16 @@ pub struct TimecodeCueListClip {
     pub start_behavior: TimecodeClipStart,
     #[serde(default)]
     pub end_behavior: TimecodeClipEnd,
+    /// Transition points for Cues that would otherwise wait for a manual GO,
+    /// offset from the clip start so the clip stays movable.
+    #[serde(default)]
+    pub cue_starts: Vec<TimecodeCueStart>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TimecodeCueStart {
+    pub cue_id: Uuid,
+    pub offset_frame: TimecodeFrame,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

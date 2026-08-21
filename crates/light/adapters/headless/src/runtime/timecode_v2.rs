@@ -11,6 +11,8 @@ use light_playback::{TimecodeFrame, TimecodeFrameRate, TimecodeId};
 use light_wire::v2::show_objects::ShowObjectActionOutcome;
 use light_wire::v2::timecode as wire;
 
+use super::timecode_v2_clips::{domain_cue_clip, wire_cue_clip};
+
 struct RoutePublisher(light_application::EventBus);
 
 impl TimecodeChangePublisher for RoutePublisher {
@@ -568,24 +570,7 @@ fn domain_lane(lane: wire::TimecodeLane) -> light_playback::TimecodeLane {
         wire::TimecodeLaneContent::CueList { cue_list_id, clips } => {
             domain::TimecodeLaneContent::CueList {
                 cue_list_id: light_core::CueListId(cue_list_id),
-                clips: clips
-                    .into_iter()
-                    .map(|clip| domain::TimecodeCueListClip {
-                        id: domain::TimecodeClipId(clip.id),
-                        start_frame: TimecodeFrame(clip.start_frame),
-                        end_frame: TimecodeFrame(clip.end_frame),
-                        start_cue_id: clip.start_cue_id,
-                        end_cue_id: clip.end_cue_id,
-                        start_behavior: match clip.start_behavior {
-                            wire::TimecodeClipStart::State => domain::TimecodeClipStart::State,
-                            wire::TimecodeClipStart::Cue => domain::TimecodeClipStart::Cue,
-                        },
-                        end_behavior: match clip.end_behavior {
-                            wire::TimecodeClipEnd::Release => domain::TimecodeClipEnd::Release,
-                            wire::TimecodeClipEnd::Hold => domain::TimecodeClipEnd::Hold,
-                        },
-                    })
-                    .collect(),
+                clips: clips.into_iter().map(domain_cue_clip).collect(),
             }
         }
         wire::TimecodeLaneContent::SpeedGroup { group, keyframes } => {
@@ -700,24 +685,7 @@ fn wire_lane(lane: light_playback::TimecodeLane) -> wire::TimecodeLane {
         domain::TimecodeLaneContent::CueList { cue_list_id, clips } => {
             wire::TimecodeLaneContent::CueList {
                 cue_list_id: cue_list_id.0,
-                clips: clips
-                    .into_iter()
-                    .map(|clip| wire::TimecodeCueListClip {
-                        id: clip.id.0,
-                        start_frame: clip.start_frame.0,
-                        end_frame: clip.end_frame.0,
-                        start_cue_id: clip.start_cue_id,
-                        end_cue_id: clip.end_cue_id,
-                        start_behavior: match clip.start_behavior {
-                            domain::TimecodeClipStart::State => wire::TimecodeClipStart::State,
-                            domain::TimecodeClipStart::Cue => wire::TimecodeClipStart::Cue,
-                        },
-                        end_behavior: match clip.end_behavior {
-                            domain::TimecodeClipEnd::Release => wire::TimecodeClipEnd::Release,
-                            domain::TimecodeClipEnd::Hold => wire::TimecodeClipEnd::Hold,
-                        },
-                    })
-                    .collect(),
+                clips: clips.into_iter().map(wire_cue_clip).collect(),
             }
         }
         domain::TimecodeLaneContent::SpeedGroup { group, keyframes } => {

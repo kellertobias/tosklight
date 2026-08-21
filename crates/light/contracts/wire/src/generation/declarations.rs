@@ -108,6 +108,7 @@ fn timecode(config: &Config) -> Vec<String> {
         TimecodeAudioPlayerClip::decl(config),
         TimecodeClipStart::decl(config),
         TimecodeClipEnd::decl(config),
+        TimecodeCueStart::decl(config),
         TimecodeCueListClip::decl(config),
         TimecodeSpeedKeyframe::decl(config),
         TimecodeCurve::decl(config),

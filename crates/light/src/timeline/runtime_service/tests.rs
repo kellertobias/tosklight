@@ -83,6 +83,7 @@ fn definition() -> light_playback::TimecodeDefinition {
                     end_cue_id: Uuid::from_u128(6),
                     start_behavior: TimecodeClipStart::State,
                     end_behavior: TimecodeClipEnd::Release,
+                    cue_starts: Vec::new(),
                 }],
             },
         }],
@@ -158,6 +159,7 @@ fn execution_definition(cue_list: &CueList) -> light_playback::TimecodeDefinitio
             end_cue_id: cue_list.cues[1].id,
             start_behavior: TimecodeClipStart::State,
             end_behavior: TimecodeClipEnd::Release,
+            cue_starts: Vec::new(),
         }],
     };
     value

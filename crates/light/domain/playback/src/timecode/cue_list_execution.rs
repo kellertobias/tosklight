@@ -1,8 +1,9 @@
 use crate::{CueList, CueTrigger};
 
 use super::{
-    TimecodeClipEnd, TimecodeClipId, TimecodeClipStart, TimecodeDefinition, TimecodeFrame,
-    TimecodeFrameRate, TimecodeId, TimecodeLaneContent, TimecodeLaneId, TimecodeTransportState,
+    TimecodeClipEnd, TimecodeClipId, TimecodeClipStart, TimecodeCueStart, TimecodeDefinition,
+    TimecodeFrame, TimecodeFrameRate, TimecodeId, TimecodeLaneContent, TimecodeLaneId,
+    TimecodeTransportState,
 };
 use light_core::CueListId;
 use uuid::Uuid;
@@ -102,6 +103,7 @@ impl TimecodeDefinition {
                     end_index,
                     clip.start_frame,
                     clip.end_frame,
+                    &clip.cue_starts,
                     timing,
                 ) {
                     Ok(schedule) => schedule,
@@ -153,6 +155,7 @@ fn cue_schedule(
     end_index: usize,
     clip_start: TimecodeFrame,
     clip_end: TimecodeFrame,
+    cue_starts: &[TimecodeCueStart],
     timing: TimecodeCueTimingDefaults,
 ) -> Result<Vec<(TimecodeFrame, Uuid)>, String> {
     let mut schedule: Vec<(TimecodeFrame, Uuid)> = Vec::new();
@@ -204,11 +207,10 @@ fn cue_schedule(
                 let next_index = index + 1;
                 let next = &cue_list.cues[next_index];
                 scheduled_start = match next.trigger {
+                    // A manual GO carries no timing of its own, so the Timecode lane owns the
+                    // transition point. Without a placed one the Cue follows its predecessor.
                     CueTrigger::Manual | CueTrigger::Link { .. } => {
-                        return Err(format!(
-                            "Cue {} requires manual GO and is not automatically scheduled",
-                            next.number
-                        ));
+                        manual_transition(cue_starts, next.id, clip_start).unwrap_or(completed_at)
                     }
                     CueTrigger::Wait { delay_millis } => TimecodeFrame(
                         start
@@ -230,6 +232,18 @@ fn cue_schedule(
         index = next_index;
     }
     Ok(schedule)
+}
+
+/// Resolves an operator-placed transition point for one Cue into an absolute frame.
+fn manual_transition(
+    cue_starts: &[TimecodeCueStart],
+    cue_id: Uuid,
+    clip_start: TimecodeFrame,
+) -> Option<TimecodeFrame> {
+    cue_starts
+        .iter()
+        .find(|placed| placed.cue_id == cue_id)
+        .map(|placed| TimecodeFrame(clip_start.0.saturating_add(placed.offset_frame.0)))
 }
 
 fn cue_completion_frames(

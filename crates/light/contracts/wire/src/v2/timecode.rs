@@ -148,6 +148,15 @@ pub enum TimecodeClipEnd {
     Hold,
 }
 
+/// An operator-placed transition point for a Cue that would otherwise wait for a manual GO.
+/// The offset is relative to the clip start, so moving the clip carries its transitions along.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeCueStart {
+    pub cue_id: Uuid,
+    #[ts(type = "number")]
+    pub offset_frame: u64,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct TimecodeCueListClip {
     pub id: Uuid,
@@ -161,6 +170,8 @@ pub struct TimecodeCueListClip {
     pub start_behavior: TimecodeClipStart,
     #[serde(default)]
     pub end_behavior: TimecodeClipEnd,
+    #[serde(default)]
+    pub cue_starts: Vec<TimecodeCueStart>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

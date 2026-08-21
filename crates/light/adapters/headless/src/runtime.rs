@@ -222,6 +222,7 @@ mod timecode_audio_output;
 #[path = "runtime/timecode_audio_output_disabled.rs"]
 mod timecode_audio_output;
 mod timecode_v2;
+mod timecode_v2_clips;
 mod update_api;
 
 pub(crate) use capabilities::active_show::repository::ActiveShowRepository;
