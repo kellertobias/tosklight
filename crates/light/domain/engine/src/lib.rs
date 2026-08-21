@@ -6,6 +6,7 @@ mod contribution_batch;
 mod controls;
 mod engine;
 mod fixture;
+mod frame_pool;
 mod frame_slots;
 mod frame_state;
 mod legacy_projection;
@@ -56,6 +57,8 @@ pub(crate) use contribution::{
 pub use contribution::{ResolvedChangedAt, ResolvedValues};
 pub(crate) use contribution_batch::{replaces_source, sampled_values};
 pub(crate) use fixture::profile_head_owner;
+#[allow(unused_imports)]
+pub(crate) use frame_pool::FramePool;
 pub(crate) use frame_slots::{Slot, SlotTable};
 #[allow(unused_imports)]
 pub(crate) use frame_state::{FrameState, SlotWinner};

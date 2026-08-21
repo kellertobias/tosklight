@@ -208,86 +208,90 @@ impl SlotTable {
     }
 }
 
+/// A schema-v1 fixture whose one shared head declares the named attributes, for tests in this
+/// crate that need a show with a known shape.
 #[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) -> PatchedFixture {
     use light_fixture::{
-        ByteOrder, ChannelComponent, FixtureDefinition, LogicalHead, Parameter, PatchedFixture,
-        PatchedHead, SignalLossPolicy,
+        ByteOrder, ChannelComponent, FixtureDefinition, LogicalHead, Parameter, PatchedHead,
+        SignalLossPolicy,
     };
     use std::collections::BTreeMap;
 
-    fn parameter(attribute: &str) -> Parameter {
-        Parameter {
-            attribute: AttributeKey(attribute.to_owned()),
-            components: vec![ChannelComponent {
-                offset: 0,
-                byte_order: ByteOrder::MsbFirst,
-            }],
-            default: 0.0,
-            virtual_dimmer: false,
-            metadata: light_fixture::ParameterMetadata::default(),
-            capabilities: vec![],
-        }
-    }
-
-    /// A schema-v1 fixture whose one shared head declares the named attributes.
-    fn legacy_fixture(attributes: &[&str]) -> PatchedFixture {
-        PatchedFixture {
-            fixture_id: FixtureId::new(),
-            fixture_number: None,
-            virtual_fixture_number: None,
+    let parameter = |attribute: &&str| Parameter {
+        attribute: AttributeKey((*attribute).to_owned()),
+        components: vec![ChannelComponent {
+            offset: 0,
+            byte_order: ByteOrder::MsbFirst,
+        }],
+        default: 0.0,
+        virtual_dimmer: false,
+        metadata: light_fixture::ParameterMetadata::default(),
+        capabilities: vec![],
+    };
+    PatchedFixture {
+        fixture_id,
+        fixture_number: None,
+        virtual_fixture_number: None,
+        name: "Cell".into(),
+        layer_id: "default".into(),
+        definition: FixtureDefinition {
+            schema_version: 1,
+            id: FixtureId::new(),
+            revision: 1,
+            manufacturer: "Test".into(),
+            device_type: "other".into(),
             name: "Cell".into(),
-            layer_id: "default".into(),
-            definition: FixtureDefinition {
-                schema_version: 1,
-                id: FixtureId::new(),
-                revision: 1,
-                manufacturer: "Test".into(),
-                device_type: "other".into(),
+            model: "Cell".into(),
+            mode: "test".into(),
+            footprint: attributes.len() as u16,
+            heads: vec![LogicalHead {
+                index: 0,
                 name: "Cell".into(),
-                model: "Cell".into(),
-                mode: "test".into(),
-                footprint: attributes.len() as u16,
-                heads: vec![LogicalHead {
-                    index: 0,
-                    name: "Cell".into(),
-                    shared: true,
-                    parameters: attributes.iter().copied().map(parameter).collect(),
-                }],
-                color_calibration: None,
-                physical: Default::default(),
-                model_asset: None,
-                icon_asset: None,
-                hazardous: false,
-                direct_control_protocols: Vec::new(),
-                signal_loss_policy: SignalLossPolicy::HoldLast,
-                safe_values: BTreeMap::new(),
-                profile_id: None,
-                mode_id: None,
-                profile_snapshot: None,
-            },
-            universe: Some(1),
-            address: Some(1),
-            split_patches: Vec::new(),
-            direct_control: None,
-            internal_bindings: Default::default(),
-            location: Default::default(),
-            rotation: Default::default(),
-            logical_heads: Vec::<PatchedHead>::new(),
-            multipatch: Vec::new(),
-            group_masters_enabled: true,
-            grand_master_enabled: true,
-            invert_pan: false,
-            invert_tilt: false,
-            bracket_angle: 0.0,
-            shaper_angle: None,
-            installed_appearance: Default::default(),
-            move_in_black_enabled: true,
-            move_in_black_delay_millis: 0,
-            highlight_overrides: BTreeMap::new(),
-            freeze: Default::default(),
-        }
+                shared: true,
+                parameters: attributes.iter().map(parameter).collect(),
+            }],
+            color_calibration: None,
+            physical: Default::default(),
+            model_asset: None,
+            icon_asset: None,
+            hazardous: false,
+            direct_control_protocols: Vec::new(),
+            signal_loss_policy: SignalLossPolicy::HoldLast,
+            safe_values: BTreeMap::new(),
+            profile_id: None,
+            mode_id: None,
+            profile_snapshot: None,
+        },
+        universe: Some(1),
+        address: Some(1),
+        split_patches: Vec::new(),
+        direct_control: None,
+        internal_bindings: Default::default(),
+        location: Default::default(),
+        rotation: Default::default(),
+        logical_heads: Vec::<PatchedHead>::new(),
+        multipatch: Vec::new(),
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
+        bracket_angle: 0.0,
+        shaper_angle: None,
+        installed_appearance: Default::default(),
+        move_in_black_enabled: true,
+        move_in_black_delay_millis: 0,
+        highlight_overrides: BTreeMap::new(),
+        freeze: Default::default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn legacy_fixture(attributes: &[&str]) -> PatchedFixture {
+        legacy_test_fixture(FixtureId::new(), attributes)
     }
 
     #[test]

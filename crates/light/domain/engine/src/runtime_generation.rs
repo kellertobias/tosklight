@@ -27,6 +27,8 @@ pub(crate) struct RuntimeGeneration {
     profile_projections: Arc<ProfileProjectionIndex>,
     /// The fixed shape of every frame this generation renders.
     slots: Arc<crate::SlotTable>,
+    /// Where this generation's frame buffers wait between frames.
+    frames: Arc<crate::FramePool>,
 }
 
 #[derive(Clone, Copy)]
@@ -53,6 +55,10 @@ impl RuntimeGeneration {
             crate::next_generation(),
             &snapshot.fixtures,
         ));
+        let frames = Arc::new(crate::FramePool::for_generation(
+            slots.generation(),
+            slots.len(),
+        ));
         Self {
             snapshot: Arc::new(snapshot),
             playback,
@@ -65,6 +71,7 @@ impl RuntimeGeneration {
             profile_encodings,
             profile_projections,
             slots,
+            frames,
         }
     }
 
@@ -114,13 +121,18 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.group_masters)
         };
-        let slots = if fixtures_changed {
-            Arc::new(crate::SlotTable::compile(
+        let (slots, frames) = if fixtures_changed {
+            let slots = Arc::new(crate::SlotTable::compile(
                 crate::next_generation(),
                 &snapshot.fixtures,
-            ))
+            ));
+            let frames = Arc::new(crate::FramePool::for_generation(
+                slots.generation(),
+                slots.len(),
+            ));
+            (slots, frames)
         } else {
-            Arc::clone(&current.slots)
+            (Arc::clone(&current.slots), Arc::clone(&current.frames))
         };
         let group_rankings = if groups_changed || stage_positions_changed {
             Arc::new(compile_group_rankings(&groups, &snapshot))
@@ -139,6 +151,7 @@ impl RuntimeGeneration {
             profile_encodings,
             profile_projections,
             slots,
+            frames,
         }
     }
 
@@ -166,6 +179,7 @@ impl RuntimeGeneration {
                 profile_encodings: Arc::clone(&current.profile_encodings),
                 profile_projections: Arc::clone(&current.profile_projections),
                 slots: Arc::clone(&current.slots),
+                frames: Arc::clone(&current.frames),
             }),
             GroupMasterGenerationUpdate::Changed,
         )
@@ -174,6 +188,11 @@ impl RuntimeGeneration {
     /// The slot numbering every frame of this generation is addressed by.
     pub(crate) fn slots(&self) -> &Arc<crate::SlotTable> {
         &self.slots
+    }
+
+    /// This generation's frame buffers.
+    pub(crate) fn frames(&self) -> &crate::FramePool {
+        &self.frames
     }
 
     pub(crate) fn snapshot(&self) -> &EngineSnapshot {

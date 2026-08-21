@@ -71,7 +71,9 @@ impl Engine {
             .map(EngineContribution::fixture_id)
             .collect::<std::collections::HashSet<_>>();
         playback.contributions.extend(programmer);
-        let mut resolver = EngineContributionResolver::new(playback.contributions);
+        let mut resolver =
+            EngineContributionResolver::for_generation(generation.slots(), generation.frames());
+        resolver.extend(playback.contributions);
         if has_samples {
             resolver.extend_borrowed_samples(sampled_values(sampled));
         }
@@ -150,20 +152,31 @@ fn add_group_contributions(
 ) {
     for group in snapshot.groups.iter() {
         let fixtures = resolve_group(&group.id, groups).unwrap_or_default();
-        for fixture_id in fixtures {
-            for (attribute, value) in &group.programming {
-                resolver.add_borrowed_unscaled(
-                    fixture_id,
-                    attribute,
+        if fixtures.is_empty() || group.programming.is_empty() {
+            continue;
+        }
+        // A Group fans one programmed attribute out to every member, so its name is reduced to a
+        // number once here rather than hashed once per member fixture.
+        let programming = group
+            .programming
+            .iter()
+            .filter_map(|(attribute, value)| {
+                Some((
+                    resolver.attribute_id(attribute)?,
                     value,
-                    0,
-                    now,
                     if attribute.is_intensity() {
                         MergeMode::Htp
                     } else {
                         MergeMode::Ltp
                     },
-                );
+                ))
+            })
+            .collect::<Vec<_>>();
+        for fixture_id in fixtures {
+            for (attribute, value, merge_mode) in &programming {
+                // A member that does not have this attribute is left alone rather than given a
+                // value nothing would ever project.
+                resolver.add_numbered_unscaled(fixture_id, *attribute, value, 0, now, *merge_mode);
             }
         }
     }

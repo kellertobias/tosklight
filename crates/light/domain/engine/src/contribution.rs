@@ -141,29 +141,51 @@ pub(crate) struct ResolvedAttributes {
     pub(crate) automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,
 }
 
-/// Roughly how many attributes one fixture contributes, used only to size a map before the
-/// contributions are placed. Being wrong costs a little memory, never correctness.
-const ATTRIBUTES_PER_FIXTURE_GUESS: usize = 12;
-
-#[derive(Default)]
-pub(crate) struct EngineContributionResolver {
-    winners: FxHashMap<FixtureId, FxHashMap<AttributeKey, EngineWinner>>,
+/// Arbitrates one frame's contributions into slot-addressed storage.
+///
+/// The storage is borrowed from the generation's pool and handed back when the frame is finished
+/// with, so the merge itself allocates nothing. A pair the compiled patch cannot produce has no
+/// slot; rather than lose an operator's value, those few land in an overflow map. In a show whose
+/// sources all name attributes their fixtures declare, that map stays empty and is never touched.
+pub(crate) struct EngineContributionResolver<'a> {
+    slots: &'a crate::SlotTable,
+    pool: Option<&'a crate::FramePool>,
+    frame: crate::FrameState,
+    overflow: FxHashMap<(FixtureId, AttributeKey), EngineWinner>,
 }
 
-impl EngineContributionResolver {
-    pub(crate) fn new(values: impl IntoIterator<Item = EngineContribution>) -> Self {
-        let values = values.into_iter();
-        // A show contributes a value per patched attribute, so the fixtures they belong to are
-        // roughly known before any of them is placed. Sizing for that avoids rehashing the whole
-        // frame's worth of winners as they arrive.
-        let mut resolver = Self {
-            winners: FxHashMap::with_capacity_and_hasher(
-                values.size_hint().0 / ATTRIBUTES_PER_FIXTURE_GUESS,
-                Default::default(),
-            ),
-        };
-        resolver.extend(values);
-        resolver
+impl<'a> EngineContributionResolver<'a> {
+    /// Storage for one frame of this generation's shape.
+    pub(crate) fn for_generation(
+        slots: &'a crate::SlotTable,
+        pool: &'a crate::FramePool,
+    ) -> Self {
+        // A pool that has nothing left is a stalled consumer, not a reason to stall the desk: this
+        // frame gets its own storage and simply is not the one that gets reused.
+        let frame = pool.take().unwrap_or_else(|| {
+            let mut state = crate::FrameState::for_generation(slots.generation(), slots.len());
+            state.begin();
+            state
+        });
+        Self {
+            slots,
+            pool: Some(pool),
+            frame,
+            overflow: FxHashMap::default(),
+        }
+    }
+
+    /// Storage for one frame without a pool behind it, for callers that resolve once rather than
+    /// every tick.
+    pub(crate) fn unpooled(slots: &'a crate::SlotTable) -> Self {
+        let mut frame = crate::FrameState::for_generation(slots.generation(), slots.len());
+        frame.begin();
+        Self {
+            slots,
+            pool: None,
+            frame,
+            overflow: FxHashMap::default(),
+        }
     }
 
     pub(crate) fn extend(&mut self, values: impl IntoIterator<Item = EngineContribution>) {
@@ -180,9 +202,9 @@ impl EngineContributionResolver {
         });
     }
 
-    pub(crate) fn extend_borrowed_samples<'a>(
+    pub(crate) fn extend_borrowed_samples<'s>(
         &mut self,
-        samples: impl IntoIterator<Item = &'a crate::ContributionSample>,
+        samples: impl IntoIterator<Item = &'s crate::ContributionSample>,
     ) {
         for sample in samples {
             let value = sample.value();
@@ -213,6 +235,40 @@ impl EngineContributionResolver {
         );
     }
 
+    /// The number for an attribute name, so a caller applying one attribute across many fixtures
+    /// hashes the name once instead of once per fixture.
+    pub(crate) fn attribute_id(&self, attribute: &AttributeKey) -> Option<light_core::AttributeId> {
+        self.slots.attribute_id(attribute)
+    }
+
+    /// Offer a value for a pair already reduced to numbers.
+    ///
+    /// A pair this fixture cannot produce is dropped here rather than stored and ignored later.
+    /// Group programming reaches the resolver this way: a Group that programs an attribute one of
+    /// its members does not have leaves that member alone.
+    pub(crate) fn add_numbered_unscaled(
+        &mut self,
+        fixture_id: FixtureId,
+        attribute: light_core::AttributeId,
+        value: &AttributeValue,
+        priority: i16,
+        changed_at: DateTime<Utc>,
+        merge_mode: MergeMode,
+    ) {
+        let Some(slot) = self.slots.slot_of(fixture_id, attribute) else {
+            return;
+        };
+        self.frame.offer(
+            slot,
+            priority,
+            changed_at,
+            merge_mode,
+            None,
+            value.normalized().unwrap_or(0.0),
+            |winner| winner.value = value.clone(),
+        );
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn add_borrowed(
         &mut self,
@@ -225,22 +281,22 @@ impl EngineContributionResolver {
         transition_ordinal: Option<u64>,
         sequence_master: Option<ApplicableSequenceMaster>,
     ) {
-        let winners = self.winners.entry(fixture_id).or_insert_with(|| {
-            FxHashMap::with_capacity_and_hasher(ATTRIBUTES_PER_FIXTURE_GUESS, Default::default())
-        });
-        let replace = winners.get(attribute).is_none_or(|current| {
-            borrowed_winner_wins(
-                value,
+        match self.slots.slot(fixture_id, attribute) {
+            Some(slot) => self.frame.offer(
+                slot,
                 priority,
                 changed_at,
                 merge_mode,
                 transition_ordinal,
-                current,
-            )
-        });
-        if replace {
-            winners.insert(
-                attribute.clone(),
+                value.normalized().unwrap_or(0.0),
+                |winner| {
+                    winner.value = value.clone();
+                    winner.sequence_master = sequence_master;
+                },
+            ),
+            None => self.offer_overflow(
+                fixture_id,
+                attribute,
                 EngineWinner {
                     value: value.clone(),
                     priority,
@@ -249,47 +305,8 @@ impl EngineContributionResolver {
                     transition_ordinal,
                     sequence_master,
                 },
-            );
-        }
-    }
-
-    pub(crate) fn values(&self) -> crate::ResolvedValues {
-        self.winners
-            .iter()
-            .flat_map(|(fixture_id, attributes)| {
-                attributes.iter().map(move |(attribute, winner)| {
-                    ((*fixture_id, attribute.clone()), winner.value.clone())
-                })
-            })
-            .collect()
-    }
-
-    pub(crate) fn finish(self) -> ResolvedAttributes {
-        // Every winner lands in these maps, so they are sized for the whole show up front rather
-        // than grown and rehashed a dozen times while a frame is being resolved.
-        let winner_count = self.winners.values().map(FxHashMap::len).sum();
-        let mut resolved = ResolvedAttributes {
-            values: ResolvedValues::with_capacity_and_hasher(winner_count, Default::default()),
-            changed_at: ResolvedChangedAt::with_capacity_and_hasher(
-                winner_count,
-                Default::default(),
             ),
-            ..ResolvedAttributes::default()
-        };
-        for (fixture_id, attributes) in self.winners {
-            for (attribute, winner) in attributes {
-                let key = (fixture_id, attribute);
-                // The name is copied only where it has to be: the last insert takes ownership.
-                resolved.changed_at.insert(key.clone(), winner.changed_at);
-                if let Some(sequence_master) = winner.sequence_master {
-                    resolved
-                        .sequence_masters
-                        .insert(key.clone(), sequence_master);
-                }
-                resolved.values.insert(key, winner.value);
-            }
         }
-        resolved
     }
 
     fn add(&mut self, candidate: EngineContribution) {
@@ -307,25 +324,47 @@ impl EngineContributionResolver {
             merge_mode,
             ..
         } = value;
-        let candidate = EngineWinner {
-            value,
-            priority,
-            changed_at,
-            merge_mode,
-            transition_ordinal,
-            sequence_master,
-        };
-        match self
-            .winners
-            .entry(fixture_id)
-            .or_insert_with(|| {
-                FxHashMap::with_capacity_and_hasher(
-                    ATTRIBUTES_PER_FIXTURE_GUESS,
-                    Default::default(),
-                )
-            })
-            .entry(attribute)
-        {
+        match self.slots.slot(fixture_id, &attribute) {
+            Some(slot) => {
+                let level = value.normalized().unwrap_or(0.0);
+                let mut carried = Some(value);
+                self.frame.offer(
+                    slot,
+                    priority,
+                    changed_at,
+                    merge_mode,
+                    transition_ordinal,
+                    level,
+                    |winner| {
+                        if let Some(value) = carried.take() {
+                            winner.value = value;
+                        }
+                        winner.sequence_master = sequence_master;
+                    },
+                );
+            }
+            None => self.offer_overflow(
+                fixture_id,
+                &attribute,
+                EngineWinner {
+                    value,
+                    priority,
+                    changed_at,
+                    merge_mode,
+                    transition_ordinal,
+                    sequence_master,
+                },
+            ),
+        }
+    }
+
+    fn offer_overflow(
+        &mut self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        candidate: EngineWinner,
+    ) {
+        match self.overflow.entry((fixture_id, attribute.clone())) {
             Entry::Vacant(entry) => {
                 entry.insert(candidate);
             }
@@ -336,16 +375,82 @@ impl EngineContributionResolver {
             }
         }
     }
+
+    /// Force a value into a slot whatever holds it, as a Freeze does when it takes the final say.
+    pub(crate) fn freeze(
+        &mut self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        value: &AttributeValue,
+    ) {
+        match self.slots.slot(fixture_id, attribute) {
+            Some(slot) => self.frame.force(slot, value.clone()),
+            None => {
+                if let Some(winner) = self.overflow.get_mut(&(fixture_id, attribute.clone())) {
+                    winner.value = value.clone();
+                    winner.sequence_master = None;
+                }
+            }
+        }
+    }
+
+    /// The values resolved so far, by name. Built only for the Move-in-Black base, which is asked
+    /// for solely when a Cue actually has candidates to move in the dark.
+    pub(crate) fn values(&self) -> crate::ResolvedValues {
+        let mut values = crate::ResolvedValues::with_capacity_and_hasher(
+            self.frame.occupied_len() + self.overflow.len(),
+            Default::default(),
+        );
+        for (slot, winner) in self.frame.occupied() {
+            let (fixture_id, attribute) = self.slots.pair(slot);
+            values.insert((fixture_id, attribute.clone()), winner.value.clone());
+        }
+        for ((fixture_id, attribute), winner) in &self.overflow {
+            values.insert((*fixture_id, attribute.clone()), winner.value.clone());
+        }
+        values
+    }
+
+    /// Hand the frame to the boundary that still speaks in names, and the storage back to the pool.
+    pub(crate) fn finish(mut self) -> ResolvedAttributes {
+        let winner_count = self.frame.occupied_len() + self.overflow.len();
+        let mut resolved = ResolvedAttributes {
+            values: ResolvedValues::with_capacity_and_hasher(winner_count, Default::default()),
+            changed_at: ResolvedChangedAt::with_capacity_and_hasher(
+                winner_count,
+                Default::default(),
+            ),
+            ..ResolvedAttributes::default()
+        };
+        for (slot, winner) in self.frame.occupied() {
+            let (fixture_id, attribute) = self.slots.pair(slot);
+            let key = (fixture_id, attribute.clone());
+            resolved.changed_at.insert(key.clone(), winner.changed_at);
+            if let Some(sequence_master) = winner.sequence_master {
+                resolved
+                    .sequence_masters
+                    .insert(key.clone(), sequence_master);
+            }
+            resolved.values.insert(key, winner.value.clone());
+        }
+        for ((fixture_id, attribute), winner) in std::mem::take(&mut self.overflow) {
+            let key = (fixture_id, attribute);
+            resolved.changed_at.insert(key.clone(), winner.changed_at);
+            if let Some(sequence_master) = winner.sequence_master {
+                resolved
+                    .sequence_masters
+                    .insert(key.clone(), sequence_master);
+            }
+            resolved.values.insert(key, winner.value);
+        }
+        if let Some(pool) = self.pool {
+            pool.give_back(self.frame);
+        }
+        resolved
+    }
 }
 
-struct EngineWinner {
-    value: AttributeValue,
-    priority: i16,
-    changed_at: DateTime<Utc>,
-    merge_mode: MergeMode,
-    transition_ordinal: Option<u64>,
-    sequence_master: Option<ApplicableSequenceMaster>,
-}
+type EngineWinner = crate::SlotWinner;
 
 fn contribution_wins(
     candidate: &TimedValue,
@@ -424,6 +529,19 @@ mod transition_order_tests {
     use light_core::CueListId;
     use light_playback::SequenceMasterSource;
 
+    /// A show of one fixture that declares the attributes these tests arbitrate.
+    fn resolved(
+        fixture_id: FixtureId,
+        attributes: &[&str],
+        contributions: impl IntoIterator<Item = EngineContribution>,
+    ) -> ResolvedAttributes {
+        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, attributes);
+        let slots = crate::SlotTable::compile(1, std::slice::from_ref(&fixture));
+        let mut resolver = EngineContributionResolver::unpooled(&slots);
+        resolver.extend(contributions);
+        resolver.finish()
+    }
+
     fn playback_value(
         fixture_id: FixtureId,
         value: f32,
@@ -459,11 +577,14 @@ mod transition_order_tests {
     fn equal_timestamp_playback_ltp_uses_transition_order() {
         let fixture_id = FixtureId::new();
         let at = Utc::now();
-        let resolved = EngineContributionResolver::new([
-            playback_value(fixture_id, 0.8, MergeMode::Ltp, at, 4),
-            playback_value(fixture_id, 0.2, MergeMode::Ltp, at, 5),
-        ])
-        .finish();
+        let resolved = resolved(
+            fixture_id,
+            &["intensity"],
+            [
+                playback_value(fixture_id, 0.8, MergeMode::Ltp, at, 4),
+                playback_value(fixture_id, 0.2, MergeMode::Ltp, at, 5),
+            ],
+        );
         assert_eq!(
             resolved.values[&(fixture_id, AttributeKey::intensity())],
             AttributeValue::Normalized(0.2)
@@ -474,11 +595,14 @@ mod transition_order_tests {
     fn equal_timestamp_playback_htp_ignores_transition_order() {
         let fixture_id = FixtureId::new();
         let at = Utc::now();
-        let resolved = EngineContributionResolver::new([
-            playback_value(fixture_id, 0.8, MergeMode::Htp, at, 4),
-            playback_value(fixture_id, 0.2, MergeMode::Htp, at, 5),
-        ])
-        .finish();
+        let resolved = resolved(
+            fixture_id,
+            &["intensity"],
+            [
+                playback_value(fixture_id, 0.8, MergeMode::Htp, at, 4),
+                playback_value(fixture_id, 0.2, MergeMode::Htp, at, 5),
+            ],
+        );
         assert_eq!(
             resolved.values[&(fixture_id, AttributeKey::intensity())],
             AttributeValue::Normalized(0.8)
@@ -503,7 +627,7 @@ mod transition_order_tests {
                 delay_millis: None,
             })
         };
-        let resolved = EngineContributionResolver::new([value(0.8), value(0.2)]).finish();
+        let resolved = resolved(fixture_id, &["pan"], [value(0.8), value(0.2)]);
         assert_eq!(
             resolved.values[&(fixture_id, AttributeKey("pan".into()))],
             AttributeValue::Normalized(0.8)

@@ -105,7 +105,8 @@ impl FrameState {
     /// Offer a value for a slot, keeping whichever of the two the merge rules prefer.
     ///
     /// `build` is only called when the candidate actually wins, so a losing contribution costs a
-    /// comparison rather than a clone.
+    /// comparison rather than a clone. `normalized` is the candidate's level for the HTP
+    /// comparison, and is ignored for every other merge mode.
     pub(crate) fn offer(
         &mut self,
         slot: Slot,
@@ -113,7 +114,7 @@ impl FrameState {
         changed_at: DateTime<Utc>,
         merge_mode: MergeMode,
         transition_ordinal: Option<u64>,
-        normalized: impl FnOnce() -> f32,
+        normalized: f32,
         build: impl FnOnce(&mut SlotWinner),
     ) {
         let index = slot.index();
@@ -126,7 +127,7 @@ impl FrameState {
             let wins = if priority != current.priority {
                 priority > current.priority
             } else if merge_mode == MergeMode::Htp {
-                normalized() > current.value.normalized().unwrap_or(0.0)
+                normalized > current.value.normalized().unwrap_or(0.0)
             } else {
                 ltp_wins(
                     changed_at,
@@ -210,7 +211,7 @@ mod tests {
             DateTime::from_timestamp(at, 0).unwrap(),
             MergeMode::Ltp,
             None,
-            || level,
+            level,
             |winner| winner.value = value,
         );
     }
@@ -275,7 +276,7 @@ mod tests {
                 DateTime::from_timestamp(at, 0).unwrap(),
                 MergeMode::Htp,
                 None,
-                || level,
+                level,
                 |winner| winner.value = value,
             );
         };
