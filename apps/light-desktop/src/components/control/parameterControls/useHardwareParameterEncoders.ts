@@ -35,11 +35,15 @@ interface EncoderUndoGroup {
 const ENCODER_UNDO_GROUP_IDLE_MILLIS = 250;
 
 export function encoderDelta(attribute: string, value: string | undefined) {
+	// Every byte-addressed media source steps one DMX address per detent, including the
+	// audio.* names a show patched before TL-367 still declares.
 	const addressStep =
 		attribute === "media.folder" ||
 		attribute === "media.file" ||
 		attribute === "media.mask.folder" ||
-		attribute === "media.mask.file"
+		attribute === "media.mask.file" ||
+		attribute === "audio.folder" ||
+		attribute === "audio.file"
 			? 1 / 255
 			: null;
 	if (value === "up") return addressStep ?? 0.01;

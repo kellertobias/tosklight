@@ -635,6 +635,98 @@ mod tests {
         }
     }
 
+    /// A show patched before TL-367 carries the old profile snapshot, so its stored `audio.*`
+    /// attributes must keep driving the voice even though the shipped package now declares the
+    /// canonical Media names.
+    #[test]
+    fn a_pre_tl367_patch_snapshot_still_addresses_the_voice_through_its_audio_attributes() {
+        let fixture = FixtureId(uuid::Uuid::new_v4());
+        let legacy_attributes: HashSet<String> = [
+            LEGACY_FOLDER_ATTRIBUTE,
+            LEGACY_FILE_ATTRIBUTE,
+            LEGACY_VOLUME_ATTRIBUTE,
+            LEGACY_TRANSPORT_ATTRIBUTE,
+            LEGACY_REPEAT_ATTRIBUTE,
+        ]
+        .iter()
+        .map(|attribute| (*attribute).to_owned())
+        .collect();
+        let canonical_attributes: HashSet<String> = [
+            FOLDER_ATTRIBUTE,
+            FILE_ATTRIBUTE,
+            VOLUME_ATTRIBUTE,
+            PLAY_MODE_ATTRIBUTE,
+        ]
+        .iter()
+        .map(|attribute| (*attribute).to_owned())
+        .collect();
+
+        let mut values = light_engine::ResolvedValues::default();
+        for (attribute, raw) in [
+            (LEGACY_FOLDER_ATTRIBUTE, 7u8),
+            (LEGACY_FILE_ATTRIBUTE, 12),
+            (LEGACY_VOLUME_ATTRIBUTE, 200),
+            (FOLDER_ATTRIBUTE, 1),
+            (FILE_ATTRIBUTE, 2),
+            (VOLUME_ATTRIBUTE, 3),
+        ] {
+            values.insert(
+                (fixture, AttributeKey(attribute.into())),
+                AttributeValue::RawDmx(raw),
+            );
+        }
+
+        // The legacy snapshot reads its own names even while canonical values are present.
+        assert_eq!(
+            raw_of(
+                &values,
+                fixture,
+                &legacy_attributes,
+                FOLDER_ATTRIBUTE,
+                LEGACY_FOLDER_ATTRIBUTE
+            ),
+            7
+        );
+        assert_eq!(
+            raw_of(
+                &values,
+                fixture,
+                &legacy_attributes,
+                FILE_ATTRIBUTE,
+                LEGACY_FILE_ATTRIBUTE
+            ),
+            12
+        );
+        assert_eq!(
+            raw_of(
+                &values,
+                fixture,
+                &legacy_attributes,
+                VOLUME_ATTRIBUTE,
+                LEGACY_VOLUME_ATTRIBUTE
+            ),
+            200
+        );
+        // A snapshot that declares the canonical names prefers them.
+        assert_eq!(
+            raw_of(
+                &values,
+                fixture,
+                &canonical_attributes,
+                FOLDER_ATTRIBUTE,
+                LEGACY_FOLDER_ATTRIBUTE
+            ),
+            1
+        );
+
+        // Which transport table applies follows the same snapshot, so a legacy 128 still plays
+        // and a canonical 216 still stops.
+        assert!(!legacy_attributes.contains(PLAY_MODE_ATTRIBUTE));
+        assert_eq!(legacy_transport(128), Transport::Play);
+        assert!(canonical_attributes.contains(PLAY_MODE_ATTRIBUTE));
+        assert_eq!(play_mode_transport(216), Transport::Stop);
+    }
+
     #[test]
     fn legacy_transport_ranges_survive_for_shows_patched_before_play_mode() {
         assert_eq!(legacy_transport(0), Transport::Stop);

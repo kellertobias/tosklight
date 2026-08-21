@@ -8,6 +8,8 @@ describe("hardware parameter encoder steps", () => {
 			"media.file",
 			"media.mask.folder",
 			"media.mask.file",
+			"audio.folder",
+			"audio.file",
 		]) {
 			expect(encoderDelta(attribute, "up")).toBe(1 / 255);
 			expect(encoderDelta(attribute, "down")).toBe(-1 / 255);
