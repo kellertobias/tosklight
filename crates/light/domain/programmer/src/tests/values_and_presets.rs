@@ -294,8 +294,9 @@ fn update_content_captures_only_normal_programmer_edits_without_consuming_them()
 }
 
 #[test]
-fn update_capture_separates_shared_values_from_the_exact_desk_selection() {
+fn update_capture_reads_the_desk_values_and_the_desk_selection() {
     let registry = ProgrammerRegistry::default();
+    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first_session = SessionId::new();
     let second_session = SessionId::new();
@@ -303,8 +304,9 @@ fn update_capture_separates_shared_values_from_the_exact_desk_selection() {
     let second_fixture = FixtureId::new();
     registry.start(first_session, user);
     registry.start(second_session, user);
-    registry.select(first_session, [first_fixture]);
     registry.select(second_session, [second_fixture]);
+    // One desk, one selection: selecting on either surface replaces it for both.
+    registry.select(first_session, [first_fixture]);
     registry.set(
         first_session,
         first_fixture,
@@ -346,7 +348,7 @@ fn update_capture_separates_shared_values_from_the_exact_desk_selection() {
 
     assert_eq!(first_values.values, second_values.values);
     assert_eq!(first_selection.fixtures, vec![first_fixture]);
-    assert_eq!(second_selection.fixtures, vec![second_fixture]);
+    assert_eq!(second_selection.fixtures, vec![first_fixture]);
 
     let menu = registry.capture_update_menu(first_session).unwrap();
     assert_eq!(menu.selected_fixtures, vec![first_fixture]);

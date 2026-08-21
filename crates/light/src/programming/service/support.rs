@@ -151,7 +151,7 @@ impl Snapshot {
         let Some(version) = programmers.interaction_version(session) else {
             return Ok(Self::default());
         };
-        if programmers.user_id(session) != Some(user_id) {
+        if programmers.session_operates_desk(session, user_id) != Some(true) {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",

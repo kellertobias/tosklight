@@ -184,8 +184,9 @@ fn clamp_wrap_different_attribute_and_off_are_explicit() {
 }
 
 #[test]
-fn alignment_is_command_context_scoped_transactional_and_runtime_only() {
+fn alignment_belongs_to_the_desk_is_transactional_and_stays_runtime_only() {
     let registry = ProgrammerRegistry::default();
+    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
@@ -196,7 +197,10 @@ fn alignment_is_command_context_scoped_transactional_and_runtime_only() {
     registry
         .activate_alignment(first, ProgrammerAlignmentMode::Left)
         .unwrap();
-    assert!(registry.alignment(second).is_none());
+    assert!(
+        registry.alignment(second).is_some(),
+        "Align is the desk's state, so a second surface shows it too"
+    );
 
     let result = registry.with_transaction(first, || {
         assert!(registry.deactivate_alignment(first));

@@ -267,6 +267,9 @@ impl ProgrammerRegistry {
             )]))),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
+            // The snapshot operates the same desk, so it inherits the same authority rather than
+            // settling on one of its own.
+            desk: self.desk.clone(),
             clock: Arc::clone(&self.clock),
         })
     }

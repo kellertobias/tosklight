@@ -18,9 +18,9 @@ impl ProgrammingService {
         let user_id = context_user(context)?;
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
-            match self.programmers.user_id(session) {
-                Some(owner) if owner == user_id => {}
-                Some(_) => {
+            match self.programmers.session_operates_desk(session, user_id) {
+                Some(true) => {}
+                Some(false) => {
                     return Err(ActionError::new(
                         ActionErrorKind::Forbidden,
                         "the Programmer session does not belong to the authenticated user",
