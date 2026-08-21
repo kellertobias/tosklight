@@ -95,7 +95,10 @@ pub struct TextFormatView {
     pub clock_pattern: String,
     pub countdown_pattern: String,
     pub separator: String,
-    pub utc_offset_minutes: i16,
+    /// Absent when the clock follows the server's configured UTC offset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub utc_offset_minutes: Option<i16>,
     pub after_zero: String,
     pub rollover: bool,
 }
@@ -171,7 +174,9 @@ impl TextFormatView {
         {
             return Err(TextEditError::InvalidSeparator);
         }
-        if !(-14 * 60..=14 * 60).contains(&self.utc_offset_minutes) {
+        if let Some(offset) = self.utc_offset_minutes
+            && !(-14 * 60..=14 * 60).contains(&offset)
+        {
             return Err(TextEditError::InvalidUtcOffset);
         }
         Ok(TextFormat {

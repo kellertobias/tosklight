@@ -42,6 +42,30 @@ impl Default for LibraryConfiguration {
     }
 }
 
+/// The server's wall-clock offset from UTC.
+///
+/// A media server is a show machine that may run in a timezone its operating system was never set
+/// to, so the offset every clock and clock-derived text follows is configuration rather than a
+/// host setting. Minutes, not hours, because timezones such as +05:45 exist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TimeConfiguration {
+    /// Zero is UTC, which is what a server that has never been configured shows.
+    #[serde(default)]
+    pub utc_offset_minutes: i16,
+}
+
+/// The widest offset any real timezone uses, in minutes either side of UTC.
+pub const MAXIMUM_UTC_OFFSET_MINUTES: i16 = 14 * 60;
+
+impl TimeConfiguration {
+    /// True when the offset is one a real timezone could use.
+    pub const fn is_valid(&self) -> bool {
+        self.utc_offset_minutes >= -MAXIMUM_UTC_OFFSET_MINUTES
+            && self.utc_offset_minutes <= MAXIMUM_UTC_OFFSET_MINUTES
+    }
+}
+
 /// Playback settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

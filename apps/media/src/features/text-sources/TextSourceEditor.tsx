@@ -95,7 +95,7 @@ export function emptyDraft(): TextDraft {
 			clockPattern: "HH:MM:SS",
 			countdownPattern: "hh:mm:ss",
 			separator: ":",
-			utcOffsetMinutes: 0,
+			utcOffsetMinutes: null,
 			afterZero: "hold",
 			rollover: false,
 		},
@@ -396,16 +396,29 @@ function FormatSection({
 				onChange={(event) => set("separator", event.target.value.slice(0, 3))}
 			/>
 			{clock ? (
-				<NumberField
-					label="UTC offset in minutes"
-					min={-840}
-					max={840}
-					step={15}
-					value={String(draft.format.utcOffsetMinutes)}
-					onChange={(event) =>
-						set("utcOffsetMinutes", Number(event.target.value))
-					}
-				/>
+				<>
+					<CheckboxField
+						label="Own UTC offset"
+						description="Off follows the server's UTC offset, which is what most clocks want."
+						checked={draft.format.utcOffsetMinutes !== null && draft.format.utcOffsetMinutes !== undefined}
+						onChange={(event) =>
+							set("utcOffsetMinutes", event.target.checked ? 0 : null)
+						}
+					/>
+					{draft.format.utcOffsetMinutes !== null &&
+						draft.format.utcOffsetMinutes !== undefined && (
+							<NumberField
+								label="UTC offset in minutes"
+								min={-840}
+								max={840}
+								step={15}
+								value={String(draft.format.utcOffsetMinutes)}
+								onChange={(event) =>
+									set("utcOffsetMinutes", Number(event.target.value))
+								}
+							/>
+						)}
+				</>
 			) : (
 				<>
 					<SelectField

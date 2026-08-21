@@ -24,6 +24,7 @@ mod network;
 mod outputs;
 mod telemetry;
 mod text;
+mod time;
 mod visualizers;
 
 use std::sync::Arc;
@@ -176,6 +177,8 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/network/update", post(network::update_network))
         .route("/api/v2/audio", get(audio::audio))
         .route("/api/v2/audio/update", post(audio::update_audio))
+        .route("/api/v2/time", get(time::time))
+        .route("/api/v2/time/update", post(time::update_time))
         .route("/api/v2/text", get(text::text))
         .route("/api/v2/text/create", post(text::create_text))
         .route(

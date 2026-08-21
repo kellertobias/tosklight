@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../../app/ToastContext";
@@ -213,6 +213,26 @@ describe("the settings page", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("saves the server UTC offset for every clock the server draws", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+
+		await openSettings("Libraries");
+		const article = await screen.findByRole("article", {
+			name: "Server time",
+		});
+		expect(article).toHaveTextContent("+00:00");
+		const offset = within(article).getByLabelText("UTC offset in minutes");
+		await userEvent.clear(offset);
+		await userEvent.type(offset, "345");
+		await userEvent.click(
+			within(article).getByRole("button", { name: "Save server time" }),
+		);
+
+		await waitFor(() => expect(server.time.utcOffsetMinutes).toBe(345));
+		expect(server.writes).toContain("/time/update");
+	});
+
 	it("places restart-aware status beside the content heading", async () => {
 		stubSettingsServer();
 		renderSettings();
@@ -229,7 +249,10 @@ describe("the settings page", () => {
 		expect(screen.getByRole("status").closest(".ui-window-header")).toBeNull();
 
 		await openSettings("Libraries");
-		expect(screen.getByRole("status")).toHaveTextContent("Saved automatically");
+		const libraries = await screen.findByRole("article", { name: "Libraries" });
+		expect(within(libraries).getByRole("status")).toHaveTextContent(
+			"Saved automatically",
+		);
 	});
 
 	it("reverts stored network settings to the running values", async () => {

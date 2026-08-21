@@ -21,6 +21,7 @@ mod logs;
 mod network;
 mod output;
 mod text;
+mod time;
 mod visualizer;
 
 pub use audio::{
@@ -48,6 +49,7 @@ pub use output::{
 pub use text::{
     CreateText, DeleteText, TextEditError, TextFormatView, TextSlotView, TextStyleView, UpdateText,
 };
+pub use time::{TimeEditError, TimeView, UpdateTime};
 pub use visualizer::{
     CreateVisualizer, UpdateVisualizer, VisualizerParametersView, VisualizerView,
 };

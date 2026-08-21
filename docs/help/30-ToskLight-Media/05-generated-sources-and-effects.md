@@ -6,6 +6,8 @@ The Media Server can render more than uploaded video and pictures. Addressed tex
 
 Text content occupies folders `200`–`249`. Configure the text source and its presentation in the Media administration interface, then recall its numeric folder/file address through the matching Media layer. Keep fonts and other local dependencies available on the production server.
 
+A clock, and any text derived from the clock, follows the server's own UTC offset. Set it once in **Settings > Libraries > Server time** as minutes east of UTC; the offset is stored configuration and applies to the next drawn frame, so a clock on an output follows an accepted change without a restart. It is deliberately independent of the timezone the host operating system is set to, because a show machine is not always configured for the venue it is standing in. A single clock that has to show another city can carry **Own UTC offset**; every other clock keeps following the server.
+
 ## Generated visualizers
 
 Generated visualizers occupy folders `250`–`255`. Each visualizer has a stable kind and only exposes parameters that affect that kind. Examples include spectra, waveforms, geometric motion, particles, rays, glitch treatments, digital rain, tunnels, and landscapes.

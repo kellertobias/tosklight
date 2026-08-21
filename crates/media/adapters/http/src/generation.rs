@@ -20,9 +20,9 @@ use crate::wire::{
     NetworkAddressesView, NetworkView, OutputConfigurationValuesView, OutputConfigurationView,
     OutputView, PendingImportView, RemoveFolderPicture, RunningOutputView, RunningServerView,
     ServerLogLevelView, SourceStatusView, StartImport, TelemetryFrame, TextFormatView,
-    TextSlotView, TextStyleView, UpdateAudio, UpdateFolderPresentation, UpdateLayer,
+    TextSlotView, TextStyleView, TimeView, UpdateAudio, UpdateFolderPresentation, UpdateLayer,
     UpdateLibraryFolder, UpdateLibraryItem, UpdateMaster, UpdateNetwork, UpdateOutputConfiguration,
-    UpdateServerLogLevel, UpdateText, UpdateVisualizer, UploadAcceptedView,
+    UpdateServerLogLevel, UpdateText, UpdateTime, UpdateVisualizer, UploadAcceptedView,
     VisualizerParametersView, VisualizerView, WaveformView,
 };
 
@@ -100,6 +100,7 @@ fn declarations(config: &Config) -> Vec<String> {
         VisualizerView::decl(config),
         NetworkAddressesView::decl(config),
         NetworkView::decl(config),
+        TimeView::decl(config),
         TextStyleView::decl(config),
         TextFormatView::decl(config),
         TextSlotView::decl(config),
@@ -122,6 +123,7 @@ fn declarations(config: &Config) -> Vec<String> {
         CreateVisualizer::decl(config),
         UpdateVisualizer::decl(config),
         UpdateNetwork::decl(config),
+        UpdateTime::decl(config),
         CreateText::decl(config),
         UpdateText::decl(config),
         DeleteText::decl(config),

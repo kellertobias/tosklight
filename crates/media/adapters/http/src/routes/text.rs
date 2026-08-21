@@ -249,7 +249,7 @@ mod tests {
             .resolve(media_domain::MediaAddress::new(200, 1))
             .expect("still there");
         assert_eq!(saved.entry.format.clock.separator, ".");
-        assert_eq!(saved.entry.format.clock.utc_offset_minutes, 60);
+        assert_eq!(saved.entry.format.clock.utc_offset_minutes, Some(60));
         assert_eq!(saved.entry.format.countdown.separator, ".");
         assert!(saved.entry.format.countdown.rollover);
     }

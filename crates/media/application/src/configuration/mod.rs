@@ -24,8 +24,8 @@ pub use output::{
     CitpIdentity, DmxProtocol, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
 pub use service::{
-    AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, PlaybackConfiguration,
-    TargetCodec,
+    AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, MAXIMUM_UTC_OFFSET_MINUTES,
+    PlaybackConfiguration, TargetCodec, TimeConfiguration,
 };
 pub use validate::ConfigurationError;
 
@@ -75,6 +75,9 @@ pub struct MediaConfiguration {
     pub audio: AudioConfiguration,
     #[serde(default)]
     pub playback: PlaybackConfiguration,
+    /// What the wall clock of this server reads, for every clock and clock-derived text.
+    #[serde(default)]
+    pub time: TimeConfiguration,
     /// Which generated visualizer answers at which address.
     ///
     /// Configuration rather than a constant, because moving a visualizer is an operator decision
@@ -97,6 +100,7 @@ impl Default for MediaConfiguration {
             library: LibraryConfiguration::default(),
             audio: AudioConfiguration::default(),
             playback: PlaybackConfiguration::default(),
+            time: TimeConfiguration::default(),
             visualizers: GeneratedCatalog::default(),
             text: TextCatalog::default(),
             outputs: vec![OutputConfiguration::new("Main")],

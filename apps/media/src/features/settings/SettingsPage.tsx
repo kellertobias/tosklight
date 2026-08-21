@@ -16,8 +16,14 @@ import { requestId, useEditing } from "../../shared/api/editing";
 import type {
 	Health,
 	NetworkView,
+	TimeView,
 } from "../../shared/api/generated/media-wire";
-import { useHealth, useNetwork, useOutputs } from "../../shared/api/queries";
+import {
+	useHealth,
+	useNetwork,
+	useOutputs,
+	useTime,
+} from "../../shared/api/queries";
 import { LogsPage } from "../logs/LogsPage";
 import { NetworkEditor } from "./NetworkEditor";
 import { OutputSettings } from "./OutputSettings";
@@ -29,7 +35,9 @@ export function SettingsPage() {
 	const health = useHealth(HEALTH_POLL_MS);
 	const outputs = useOutputs(HEALTH_POLL_MS);
 	const network = useNetwork();
+	const time = useTime();
 	const editing = useEditing(network.reload);
+	const timeEditing = useEditing(time.reload);
 	const initialSection: MediaSettingsSection =
 		window.location.pathname === "/logs"
 			? "logs"
@@ -49,6 +57,24 @@ export function SettingsPage() {
 								<h2>Server</h2>
 								<ServerSettings health={data} />
 							</article>
+						)}
+					</ResourceState>
+
+					<ResourceState resource={time} subject="the server time">
+						{(data) => (
+							<ServerTime
+								time={data}
+								busy={timeEditing.busy}
+								failed={timeEditing.failure !== undefined}
+								onSave={(minutes) =>
+									void timeEditing.save(() =>
+										api.updateTime({
+											requestId: requestId(),
+											utcOffsetMinutes: minutes,
+										}),
+									)
+								}
+							/>
 						)}
 					</ResourceState>
 
@@ -195,6 +221,65 @@ function Network({
 			)}
 		</article>
 	);
+}
+
+/// The offset every clock and clock-derived text follows unless it carries one of its own.
+function ServerTime({
+	time,
+	busy,
+	failed,
+	onSave,
+}: {
+	time: TimeView;
+	busy: boolean;
+	failed: boolean;
+	onSave: (utcOffsetMinutes: number) => void;
+}) {
+	const [draft, setDraft] = useState(String(time.utcOffsetMinutes));
+	const minutes = Number(draft);
+	const valid =
+		draft.trim() !== "" &&
+		Number.isInteger(minutes) &&
+		Math.abs(minutes) <= time.maximumUtcOffsetMinutes;
+	return (
+		<article className="media-settings-section" aria-label="Server time">
+			<div className="media-settings-section-heading">
+				<h2>Server time</h2>
+				<SettingsSaveState busy={busy} failed={failed} />
+			</div>
+			<p>
+				Minutes east of UTC, for every clock and countdown this server draws. A
+				clock with its own offset keeps it. Currently{" "}
+				<strong>{offsetLabel(time.utcOffsetMinutes)}</strong>.
+			</p>
+			<label className="media-field">
+				<span>UTC offset in minutes</span>
+				<input
+					type="number"
+					step={15}
+					min={-time.maximumUtcOffsetMinutes}
+					max={time.maximumUtcOffsetMinutes}
+					value={draft}
+					onChange={(event) => setDraft(event.target.value)}
+				/>
+			</label>
+			<Button
+				disabled={busy || !valid || minutes === time.utcOffsetMinutes}
+				onClick={() => onSave(minutes)}
+			>
+				Save server time
+			</Button>
+		</article>
+	);
+}
+
+/// `+02:00`, which is how an operator reads a timezone.
+export function offsetLabel(minutes: number): string {
+	const sign = minutes < 0 ? "-" : "+";
+	const absolute = Math.abs(minutes);
+	return `${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(
+		absolute % 60,
+	).padStart(2, "0")}`;
 }
 
 function ServerSettings({ health }: { health: Health }) {

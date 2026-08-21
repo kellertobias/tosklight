@@ -112,6 +112,7 @@ impl TextSources {
             &drawn.countdown,
             context.now_unix_millis,
             context.now.as_millis(),
+            context.configuration.time.utc_offset_minutes,
         ) else {
             // A disabled entry produces nothing, which is how an operator parks one.
             drawn.texture = None;

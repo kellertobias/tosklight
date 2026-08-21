@@ -7,7 +7,11 @@ import { MediaPreview } from "../../operator/MediaServerSurface";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type { TextSlotView } from "../../shared/api/generated/media-wire";
-import { useFolderPresentations, useText } from "../../shared/api/queries";
+import {
+	useFolderPresentations,
+	useText,
+	useTime,
+} from "../../shared/api/queries";
 import { useMainOutputAspectRatio } from "../../shared/output/useMainOutputAspectRatio";
 import { FolderPresentationEditor } from "../media-library/FolderPresentationEditor";
 import {
@@ -34,6 +38,7 @@ export function TextSourcesPage({
 	onModeChange?: (mode: LibrarySourceType) => void;
 }) {
 	const text = useText();
+	const serverUtcOffsetMinutes = useTime().data?.utcOffsetMinutes ?? 0;
 	const folderPresentations = useFolderPresentations();
 	const editing = useEditing(text.reload);
 	const folderEditing = useEditing(folderPresentations.reload);
@@ -44,8 +49,7 @@ export function TextSourcesPage({
 	const aspectRatio = useMainOutputAspectRatio();
 
 	useEffect(() => {
-		if (selectedKey === null && text.data?.[0])
-			setSelectedKey(key(text.data[0]));
+		if (selectedKey === null && text.data?.[0]) setSelectedKey(key(text.data[0]));
 	}, [selectedKey, text.data]);
 
 	useEffect(() => {
@@ -128,7 +132,7 @@ export function TextSourcesPage({
 								name: slot.name,
 								detail: describe(slot),
 								image: {
-									src: textPreviewUrl(slot, aspectRatio),
+									src: textPreviewUrl(slot, aspectRatio, serverUtcOffsetMinutes),
 									alt: `${slot.name} preview`,
 								},
 							}))}
@@ -331,10 +335,13 @@ function TextDetail({
 export function textPreviewUrl(
 	slot: TextSlotView,
 	aspectRatio: number,
+	serverUtcOffsetMinutes = 0,
 ): string {
 	const width = 640;
 	const height = Math.max(180, Math.round(width / aspectRatio));
-	const words = escapeSvg(formatDraftPreview(draftOf(slot), Date.now()));
+	const words = escapeSvg(
+		formatDraftPreview(draftOf(slot), Date.now(), serverUtcOffsetMinutes),
+	);
 	const red = Math.round(slot.style.red * 255);
 	const green = Math.round(slot.style.green * 255);
 	const blue = Math.round(slot.style.blue * 255);
@@ -352,11 +359,13 @@ export function textPreviewUrl(
 export function formatDraftPreview(
 	draft: TextDraft,
 	nowUnixMillis: number,
+	serverUtcOffsetMinutes = 0,
 ): string {
 	if (draft.kind === "static") return draft.text;
 	const separator = draft.format.separator || ":";
 	if (draft.kind === "clock") {
-		const at = new Date(nowUnixMillis + draft.format.utcOffsetMinutes * 60_000);
+		const offset = draft.format.utcOffsetMinutes ?? serverUtcOffsetMinutes;
+		const at = new Date(nowUnixMillis + offset * 60_000);
 		const hour24 = at.getUTCHours();
 		const hour12 = hour24 % 12 || 12;
 		const pad = (value: number) => String(value).padStart(2, "0");

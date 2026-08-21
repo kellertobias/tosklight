@@ -23,6 +23,7 @@ import type {
 	ServerLogLevelView,
 	StartImport,
 	TextSlotView,
+	TimeView,
 	UpdateAudio,
 	UpdateFolderPresentation,
 	UpdateLayer,
@@ -33,6 +34,7 @@ import type {
 	UpdateOutputConfiguration,
 	UpdateServerLogLevel,
 	UpdateText,
+	UpdateTime,
 	UpdateVisualizer,
 	UploadAcceptedView,
 	VisualizerView,
@@ -296,6 +298,13 @@ export const api = {
 	network: () => request<NetworkView>("/network"),
 	updateNetwork: (edit: UpdateNetwork) =>
 		request<NetworkView>("/network/update", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+
+	time: () => request<TimeView>("/time"),
+	updateTime: (edit: UpdateTime) =>
+		request<TimeView>("/time/update", {
 			method: "POST",
 			body: JSON.stringify(edit),
 		}),

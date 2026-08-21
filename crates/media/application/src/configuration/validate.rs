@@ -43,6 +43,8 @@ pub enum ConfigurationError {
         universe: u16,
         range: &'static str,
     },
+    #[error("the UTC offset {minutes} minutes is outside the range any timezone uses")]
+    InvalidUtcOffset { minutes: i16 },
     #[error(
         "outputs '{first}' and '{second}' both consume universe {universe} at address {start_address}"
     )]
@@ -57,6 +59,11 @@ pub enum ConfigurationError {
 pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), ConfigurationError> {
     if configuration.outputs.is_empty() {
         return Err(ConfigurationError::NoOutputs);
+    }
+    if !configuration.time.is_valid() {
+        return Err(ConfigurationError::InvalidUtcOffset {
+            minutes: configuration.time.utc_offset_minutes,
+        });
     }
 
     let mut seen = HashSet::new();

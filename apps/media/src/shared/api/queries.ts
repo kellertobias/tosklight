@@ -14,6 +14,7 @@ import type {
 	OutputView,
 	RunningServerView,
 	TextSlotView,
+	TimeView,
 	VisualizerView,
 } from "./generated/media-wire";
 import { type Resource, useResource } from "./resource";
@@ -26,6 +27,7 @@ export const KEYS = {
 	outputs: "outputs",
 	visualizers: "visualizers",
 	network: "network",
+	time: "time",
 	audio: "audio",
 	text: "text",
 } as const;
@@ -59,6 +61,11 @@ export function useVisualizers(): Resource<VisualizerView[]> {
 /// Configuration. It changes when an operator saves it, so it is read once.
 export function useNetwork(): Resource<NetworkView> {
 	return useResource(KEYS.network, api.network);
+}
+
+/// Configuration: the server's UTC offset changes only when an operator saves it.
+export function useTime(): Resource<TimeView> {
+	return useResource(KEYS.time, api.time);
 }
 
 export function useText(): Resource<TextSlotView[]> {

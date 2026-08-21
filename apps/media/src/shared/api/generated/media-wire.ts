@@ -189,6 +189,15 @@ takesEffectOnRestart: boolean,
  * Whether stored next-start values differ from the immutable startup values.
  */
 pendingRestart: boolean, };
+export type TimeView = {
+/**
+ * Minutes east of UTC. Negative is west; 0 is UTC itself.
+ */
+utcOffsetMinutes: number,
+/**
+ * The widest offset the server accepts, so a panel can bound its own control.
+ */
+maximumUtcOffsetMinutes: number, };
 export type TextStyleView = {
 /**
  * A family name this machine is asked for. An absent family falls back rather than failing.
@@ -202,7 +211,11 @@ size: number, bold: boolean, italic: boolean,
  * `left`, `center`, or `right`.
  */
 alignment: string, red: number, green: number, blue: number, };
-export type TextFormatView = { clockPattern: string, countdownPattern: string, separator: string, utcOffsetMinutes: number, afterZero: string, rollover: boolean, };
+export type TextFormatView = { clockPattern: string, countdownPattern: string, separator: string,
+/**
+ * Absent when the clock follows the server's configured UTC offset.
+ */
+utcOffsetMinutes?: number | null, afterZero: string, rollover: boolean, };
 export type TextSlotView = { address: AddressView, name: string,
 /**
  * A disabled slot produces nothing, which is how an operator parks one without deleting it.
@@ -373,6 +386,7 @@ export type UpdateNetwork = { requestId: string, sameComputerPreset?: boolean | 
  * which is why an absent field and an explicit null have to be different things here.
  */
 speedGroupEndpoint?: string | null, };
+export type UpdateTime = { requestId: string, utcOffsetMinutes?: number | null, };
 export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null,
 /**
  * Absent means the shipped default appearance, which is what a new slot should look like.

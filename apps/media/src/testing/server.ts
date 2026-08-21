@@ -18,9 +18,12 @@ import type {
 	RunningServerView,
 	ServerLogLevelView,
 	TextSlotView,
+	TimeView,
 	VisualizerView,
 } from "../shared/api/generated/media-wire";
 import { resetResources } from "../shared/api/resource";
+
+import { settingsRoute } from "./serverSettingsRoutes";
 
 export interface StubbedServer {
 	outputs: OutputView[];
@@ -31,6 +34,7 @@ export interface StubbedServer {
 	health: Health;
 	visualizers: VisualizerView[];
 	network: NetworkView;
+	time: TimeView;
 	text: TextSlotView[];
 	audio: AudioPanelView;
 	logs: LogsView;
@@ -70,6 +74,7 @@ export function stubServer(
 		folderPresentations: aFolderPresentations(),
 		visualizers: [aVisualizer()],
 		network: aNetwork(),
+		time: { utcOffsetMinutes: 0, maximumUtcOffsetMinutes: 840 },
 		text: [aClock(), aCountdown()],
 		audio: anAudioPanel(),
 		logs: aLog(),
@@ -205,13 +210,8 @@ export function stubServer(
 			if (path === "/network") return jsonResponse(server.network);
 			if (path === "/text") return jsonResponse(server.text);
 			if (path === "/audio") return jsonResponse(server.audio);
-			if (path === "/logs/level") return jsonResponse(server.serverLogLevel);
-			if (path === "/logs/level/update") {
-				const body = JSON.parse(String(init?.body ?? "{}"));
-				server.serverLogLevel.level = body.level;
-				return jsonResponse(server.serverLogLevel);
-			}
-			if (path.startsWith("/logs")) return jsonResponse(server.logs);
+			const settings = settingsRoute(server, path, init);
+			if (settings) return settings;
 			if (path === "/library/imports") return jsonResponse(server.imports);
 			const imported = writeImport(server, path);
 			if (imported) return imported;
@@ -783,7 +783,7 @@ function writeText(
 	return undefined;
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
+export function jsonResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), {
 		status,
 		headers: { "content-type": "application/json" },

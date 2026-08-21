@@ -54,9 +54,10 @@ pub struct ClockFormat {
     pub pattern: ClockPattern,
     #[serde(default = "default_separator")]
     pub separator: String,
-    /// A deterministic fixed offset from UTC. Zero preserves the previous renderer's meaning.
+    /// A deterministic fixed offset from UTC for this clock alone. `None` follows the server's
+    /// configured offset, which is what a new clock does; an explicit value overrides it.
     #[serde(default)]
-    pub utc_offset_minutes: i16,
+    pub utc_offset_minutes: Option<i16>,
 }
 
 impl Default for ClockFormat {
@@ -64,7 +65,7 @@ impl Default for ClockFormat {
         Self {
             pattern: ClockPattern::default(),
             separator: default_separator(),
-            utc_offset_minutes: 0,
+            utc_offset_minutes: None,
         }
     }
 }
@@ -278,19 +279,25 @@ impl Countdown {
 ///
 /// `now_unix_millis` is wall-clock time, which only the clock and the target countdown consult;
 /// `now_millis` is the monotonic stamp the countdown lifecycle runs on. Keeping them separate means
-/// a clock change cannot make a running countdown jump.
+/// a clock change cannot make a running countdown jump. `server_utc_offset_minutes` is the media
+/// server's configured offset, which every clock follows unless it carries one of its own.
 pub fn render(
     entry: &TextEntry,
     countdown: &Countdown,
     now_unix_millis: i64,
     now_millis: u64,
+    server_utc_offset_minutes: i16,
 ) -> Option<String> {
     if !entry.enabled {
         return None;
     }
     Some(match &entry.kind {
         TextKind::Static { text } => text.clone(),
-        TextKind::Clock => format_clock(now_unix_millis, &entry.format.clock),
+        TextKind::Clock => format_clock(
+            now_unix_millis,
+            &entry.format.clock,
+            server_utc_offset_minutes,
+        ),
         TextKind::CountdownFromDuration { duration } => {
             let remaining =
                 duration.as_millis() as i128 - countdown.elapsed(now_millis).as_millis() as i128;
@@ -304,8 +311,9 @@ pub fn render(
 }
 
 /// `HH:MM:SS` of the day, from a Unix millisecond stamp. No calendar library needed for a clock.
-fn format_clock(unix_millis: i64, format: &ClockFormat) -> String {
-    let shifted = unix_millis.saturating_add(i64::from(format.utc_offset_minutes) * 60_000);
+fn format_clock(unix_millis: i64, format: &ClockFormat, server_offset_minutes: i16) -> String {
+    let offset = format.utc_offset_minutes.unwrap_or(server_offset_minutes);
+    let shifted = unix_millis.saturating_add(i64::from(offset) * 60_000);
     let seconds_of_day = shifted.div_euclid(1_000).rem_euclid(86_400);
     let hours24 = seconds_of_day / 3_600;
     let minutes = (seconds_of_day % 3_600) / 60;
@@ -386,7 +394,7 @@ mod tests {
             text: "Hello".into(),
         });
         entry.enabled = false;
-        assert_eq!(render(&entry, &Countdown::new(), 0, 0), None);
+        assert_eq!(render(&entry, &Countdown::new(), 0, 0, 0), None);
     }
 
     #[test]
@@ -395,7 +403,7 @@ mod tests {
             text: "Doors 19:30".into(),
         });
         assert_eq!(
-            render(&entry, &Countdown::new(), 0, 0).unwrap(),
+            render(&entry, &Countdown::new(), 0, 0, 0).unwrap(),
             "Doors 19:30"
         );
     }
@@ -406,11 +414,11 @@ mod tests {
         // 13:45:30 UTC on any day.
         let stamp = (13 * 3_600 + 45 * 60 + 30) * 1_000;
         assert_eq!(
-            render(&entry, &Countdown::new(), stamp, 0).unwrap(),
+            render(&entry, &Countdown::new(), stamp, 0, 0).unwrap(),
             "13:45:30"
         );
         assert_eq!(
-            render(&entry, &Countdown::new(), stamp + 86_400_000, 0).unwrap(),
+            render(&entry, &Countdown::new(), stamp + 86_400_000, 0, 0).unwrap(),
             "13:45:30"
         );
     }
@@ -418,7 +426,7 @@ mod tests {
     #[test]
     fn a_clock_before_the_epoch_does_not_produce_a_negative_time() {
         let entry = TextEntry::new(TextKind::Clock);
-        let rendered = render(&entry, &Countdown::new(), -1_000, 0).unwrap();
+        let rendered = render(&entry, &Countdown::new(), -1_000, 0, 0).unwrap();
         assert_eq!(rendered, "23:59:59");
     }
 
@@ -428,12 +436,33 @@ mod tests {
         entry.format.clock = ClockFormat {
             pattern: ClockPattern::HoursMinutes12,
             separator: ".".to_owned(),
-            utc_offset_minutes: 60,
+            utc_offset_minutes: Some(60),
         };
         let stamp = (13 * 3_600 + 45 * 60 + 30) * 1_000;
         assert_eq!(
-            render(&entry, &Countdown::new(), stamp, 0).unwrap(),
+            render(&entry, &Countdown::new(), stamp, 0, 0).unwrap(),
             "02.45"
+        );
+    }
+
+    #[test]
+    fn a_clock_without_its_own_offset_follows_the_server_offset() {
+        let entry = TextEntry::new(TextKind::Clock);
+        let stamp = (13 * 3_600 + 45 * 60 + 30) * 1_000;
+        assert_eq!(
+            render(&entry, &Countdown::new(), stamp, 0, 0).unwrap(),
+            "13:45:30"
+        );
+        assert_eq!(
+            render(&entry, &Countdown::new(), stamp, 0, 120).unwrap(),
+            "15:45:30"
+        );
+        // An explicit offset stays the operator's decision whatever the server is set to.
+        let mut fixed = TextEntry::new(TextKind::Clock);
+        fixed.format.clock.utc_offset_minutes = Some(-60);
+        assert_eq!(
+            render(&fixed, &Countdown::new(), stamp, 0, 120).unwrap(),
+            "12:45:30"
         );
     }
 
@@ -513,7 +542,7 @@ mod tests {
 
         let entry = TextEntry::new(TextKind::CountdownFromDuration { duration: MINUTE });
         assert_eq!(
-            render(&entry, &countdown, 0, 3_600_000).unwrap(),
+            render(&entry, &countdown, 0, 3_600_000, 0).unwrap(),
             "00:00:00"
         );
     }
@@ -525,7 +554,7 @@ mod tests {
         let entry = TextEntry::new(TextKind::CountdownFromDuration {
             duration: Duration::from_secs(3_661),
         });
-        assert_eq!(render(&entry, &countdown, 0, 0).unwrap(), "01:01:01");
+        assert_eq!(render(&entry, &countdown, 0, 0, 0).unwrap(), "01:01:01");
     }
 
     #[test]
@@ -537,15 +566,15 @@ mod tests {
         });
         entry.format.countdown.pattern = CountdownPattern::MinutesSeconds;
         entry.format.countdown.separator = ".".to_owned();
-        assert_eq!(render(&entry, &countdown, 0, 0).unwrap(), "61.01");
+        assert_eq!(render(&entry, &countdown, 0, 0, 0).unwrap(), "61.01");
         entry.format.countdown.rollover = true;
-        assert_eq!(render(&entry, &countdown, 0, 0).unwrap(), "01.01");
+        assert_eq!(render(&entry, &countdown, 0, 0, 0).unwrap(), "01.01");
 
         entry.format.countdown.pattern = CountdownPattern::Seconds;
         entry.format.countdown.after_zero = CountdownAfterZero::Negative;
-        assert_eq!(render(&entry, &countdown, 0, 3_662_000).unwrap(), "-01");
+        assert_eq!(render(&entry, &countdown, 0, 3_662_000, 0).unwrap(), "-01");
         entry.format.countdown.after_zero = CountdownAfterZero::CountUp;
-        assert_eq!(render(&entry, &countdown, 0, 3_662_000).unwrap(), "01");
+        assert_eq!(render(&entry, &countdown, 0, 3_662_000, 0).unwrap(), "01");
     }
 
     #[test]
@@ -554,7 +583,7 @@ mod tests {
             .expect("old text entry");
         let stamp = (13 * 3_600 + 45 * 60 + 30) * 1_000;
         assert_eq!(
-            render(&entry, &Countdown::new(), stamp, 0).unwrap(),
+            render(&entry, &Countdown::new(), stamp, 0, 0).unwrap(),
             "13:45:30"
         );
     }
@@ -566,8 +595,8 @@ mod tests {
         let entry = TextEntry::new(TextKind::CountdownFromDuration {
             duration: Duration::from_secs(1),
         });
-        assert_eq!(render(&entry, &countdown, 0, 500).unwrap(), "00:00:01");
-        assert_eq!(render(&entry, &countdown, 0, 1_000).unwrap(), "00:00:00");
+        assert_eq!(render(&entry, &countdown, 0, 500, 0).unwrap(), "00:00:01");
+        assert_eq!(render(&entry, &countdown, 0, 1_000, 0).unwrap(), "00:00:00");
     }
 
     #[test]
@@ -577,10 +606,16 @@ mod tests {
         });
         let countdown = Countdown::new();
 
-        assert_eq!(render(&entry, &countdown, 40_000, 0).unwrap(), "00:01:00");
-        assert_eq!(render(&entry, &countdown, 100_000, 0).unwrap(), "00:00:00");
         assert_eq!(
-            render(&entry, &countdown, 500_000, 0).unwrap(),
+            render(&entry, &countdown, 40_000, 0, 0).unwrap(),
+            "00:01:00"
+        );
+        assert_eq!(
+            render(&entry, &countdown, 100_000, 0, 0).unwrap(),
+            "00:00:00"
+        );
+        assert_eq!(
+            render(&entry, &countdown, 500_000, 0, 0).unwrap(),
             "00:00:00",
             "past the target it holds rather than counting up"
         );
@@ -595,7 +630,7 @@ mod tests {
         let mut countdown = Countdown::new();
         countdown.observe(visible(PlayMode::Pause), 0);
         assert_eq!(
-            render(&entry, &countdown, 40_000, 999_999).unwrap(),
+            render(&entry, &countdown, 40_000, 999_999, 0).unwrap(),
             "00:01:00"
         );
     }
@@ -607,8 +642,8 @@ mod tests {
         countdown.observe(visible(PlayMode::Loop), 0);
         let entry = TextEntry::new(TextKind::CountdownFromDuration { duration: MINUTE });
 
-        let before = render(&entry, &countdown, 0, 10_000).unwrap();
-        let after_clock_change = render(&entry, &countdown, 9_999_999, 10_000).unwrap();
+        let before = render(&entry, &countdown, 0, 10_000, 0).unwrap();
+        let after_clock_change = render(&entry, &countdown, 9_999_999, 10_000, 0).unwrap();
         assert_eq!(before, after_clock_change);
     }
 }
