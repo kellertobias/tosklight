@@ -1,7 +1,6 @@
 //! Latest-value publication from the output boundary to visualization transports.
 
 use arc_swap::ArcSwapOption;
-use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_engine::{RenderOptions, RenderResult};
 use light_wire::v2::{
     preload_values::ProgrammingPreloadAttributeValue,

@@ -8,7 +8,7 @@ fn group_ltp_uses_operator_edit_time_not_render_time() {
     programmers.start(group_session, light_core::UserId::new());
     programmers.start(direct_session, light_core::UserId::new());
     let (mut fixture, logical) = fixture();
-    fixture.definition.heads[0].parameters[0].attribute = AttributeKey("pan".into());
+    retarget_only_channel(&mut fixture, "pan");
     programmers.set_group(
         group_session,
         "position".into(),

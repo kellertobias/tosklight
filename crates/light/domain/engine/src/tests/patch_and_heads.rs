@@ -188,18 +188,37 @@ fn master_only_group_fader_does_not_scale_child_heads() {
     let session = light_core::SessionId::new();
     programmers.start(session, light_core::UserId::new());
     let (mut fixture, child) = fixture();
-    fixture.definition.footprint = 2;
-    let mut master_parameter = fixture.definition.heads[0].parameters[0].clone();
-    master_parameter.components[0].offset = 1;
-    fixture.definition.heads.insert(
-        0,
-        LogicalHead {
-            index: 0,
-            name: "Master".into(),
-            shared: true,
-            parameters: vec![master_parameter],
-        },
-    );
+    // A shared master head alongside the child cell: the child's dimmer takes slot 1, the
+    // master's slot 2, which is what the byte assertions below read.
+    let mut profile = fixture
+        .definition
+        .profile_snapshot
+        .as_deref()
+        .expect("the test fixture carries its profile")
+        .clone();
+    let mode_id = {
+        let mode = &mut profile.modes[0];
+        mode.splits[0].footprint = 2;
+        let child_head = mode.heads[0].id;
+        let master_head = uuid::Uuid::new_v4();
+        mode.heads.insert(
+            0,
+            light_fixture::FixtureHead {
+                id: master_head,
+                name: "Master".into(),
+                master_shared: true,
+            },
+        );
+        let mut master_channel = mode.channels[0].clone();
+        master_channel.id = uuid::Uuid::new_v4();
+        master_channel.head_id = master_head;
+        mode.channels[0].head_id = child_head;
+        mode.channels.push(master_channel);
+        mode.id
+    };
+    fixture.definition = profile.resolved_definition(mode_id).unwrap();
+    // The child head is now the second head of the mode.
+    fixture.logical_heads[0].head_index = 1;
     let master = fixture.fixture_id;
     for fixture_id in [master, child] {
         programmers.set(

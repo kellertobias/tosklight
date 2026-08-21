@@ -171,7 +171,11 @@ pub(super) fn mvr_definitions(
                     }
                 })
                 .collect();
-            let definition = light_fixture::FixtureDefinition {
+            // A GDTF mode is read as the flat parameter list the file describes, then turned into
+            // a profile the way every other imported fixture is. What the desk patches is a
+            // schema-v2 fixture carrying its own profile snapshot; nothing downstream has to know
+            // this one came from GDTF.
+            let described = light_fixture::FixtureDefinition {
                 schema_version: 1,
                 id: light_core::FixtureId::new(),
                 revision: 1,
@@ -198,6 +202,17 @@ pub(super) fn mvr_definitions(
                 profile_id: None,
                 mode_id: None,
                 profile_snapshot: None,
+            };
+            let Ok(profile) =
+                light_fixture::FixtureProfile::from_legacy_modes(std::slice::from_ref(&described))
+            else {
+                continue;
+            };
+            let Some(mode_id) = profile.modes.first().map(|mode| mode.id) else {
+                continue;
+            };
+            let Ok(definition) = profile.resolved_definition(mode_id) else {
+                continue;
             };
             definitions.push(definition.clone());
             imported.push((definition, bytes.clone()));

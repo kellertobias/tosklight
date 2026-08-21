@@ -7,7 +7,7 @@ use light_core::{
 use light_fixture::{
     ByteOrder, ChannelBehavior, ChannelComponent, ChannelFunction, ChannelResolution, ColorSystem,
     FixtureChannel, FixtureDefinition, FixtureFreezeState, FixtureHead, FixtureProfile,
-    FixtureSplit, FreezeFamily, FrozenFixtureTarget, GeometryGraph, GeometryTemplate, LogicalHead,
+    FixtureSplit, FreezeFamily, FrozenFixtureTarget, GeometryGraph, GeometryTemplate,
     MultiPatchInstance, Parameter, PatchedFixture, PatchedHead, SignalLossPolicy, SplitPatch,
 };
 use light_playback::{
@@ -35,55 +35,83 @@ fn execute_cue_list(engine: &Engine, id: light_core::CueListId, action: CueListP
         .unwrap();
 }
 
-fn fixture() -> (PatchedFixture, FixtureId) {
-    let physical = FixtureId::new();
-    let logical = FixtureId::new();
-    let parameter = Parameter {
-        attribute: AttributeKey::intensity(),
-        components: vec![ChannelComponent {
-            offset: 0,
-            byte_order: ByteOrder::MsbFirst,
-        }],
-        default: 0.0,
-        virtual_dimmer: false,
-        metadata: light_fixture::ParameterMetadata::default(),
-        capabilities: vec![],
+/// Rename what a single-channel test fixture controls.
+///
+/// The profile snapshot is the authority, so the channel is renamed there and the definition is
+/// derived again. Editing the derived projection alone would change nothing the engine reads.
+fn retarget_only_channel(fixture: &mut PatchedFixture, attribute: &str) {
+    let mut profile = fixture
+        .definition
+        .profile_snapshot
+        .as_deref()
+        .expect("a test fixture carries its profile")
+        .clone();
+    let mode_id = {
+        let mode = &mut profile.modes[0];
+        let key = AttributeKey(attribute.into());
+        mode.channels[0].fixture_attribute = key.clone();
+        mode.channels[0].attribute = key.clone();
+        mode.channels[0].functions =
+            vec![ChannelFunction::continuous(attribute, key, u8::MAX.into())];
+        mode.id
     };
+    fixture.definition = profile.resolved_definition(mode_id).unwrap();
+}
+
+/// One single-channel dimmer whose head is its own logical fixture, which is what most of these
+/// tests address values to.
+fn fixture() -> (PatchedFixture, FixtureId) {
+    let logical = FixtureId::new();
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Cell".into();
+    profile.short_name = "Cell".into();
+    profile.revision = 1;
+    let (mode_id, head_id) = {
+        let mode = &mut profile.modes[0];
+        mode.name = "1ch".into();
+        mode.splits[0].footprint = 1;
+        mode.heads[0].name = "Cell".into();
+        mode.heads[0].master_shared = false;
+        let head_id = mode.heads[0].id;
+        mode.channels = vec![FixtureChannel {
+            id: uuid::Uuid::new_v4(),
+            head_id,
+            split: 1,
+            fixture_attribute: AttributeKey::intensity(),
+            attribute: AttributeKey::intensity(),
+            canonical_transform: light_fixture::CanonicalTransform::Identity,
+            resolution: ChannelResolution::U8,
+            secondary_slots: vec![],
+            default_raw: 0,
+            highlight_raw: u8::MAX.into(),
+            physical_min: Some(0.0),
+            physical_max: Some(1.0),
+            unit: None,
+            invert: false,
+            snap: false,
+            reacts_to_virtual_intensity: false,
+            reacts_to_sequence_master: true,
+            reacts_to_group_master: true,
+            reacts_to_grand_master: true,
+            behavior: ChannelBehavior::Controlled,
+            functions: vec![ChannelFunction::continuous(
+                "intensity",
+                AttributeKey::intensity(),
+                u8::MAX.into(),
+            )],
+        }];
+        (mode.id, head_id)
+    };
+    let definition = profile.resolved_definition(mode_id).unwrap();
     (
         PatchedFixture {
-            fixture_id: physical,
+            fixture_id: FixtureId::new(),
             fixture_number: None,
             virtual_fixture_number: None,
             name: "Cell".into(),
             layer_id: "default".into(),
-            definition: FixtureDefinition {
-                schema_version: 1,
-                id: FixtureId::new(),
-                revision: 1,
-                manufacturer: "Test".into(),
-                device_type: "other".into(),
-                name: "Cell".into(),
-                model: "Cell".into(),
-                mode: "1ch".into(),
-                footprint: 1,
-                heads: vec![LogicalHead {
-                    index: 1,
-                    name: "Cell".into(),
-                    shared: false,
-                    parameters: vec![parameter],
-                }],
-                color_calibration: None,
-                physical: Default::default(),
-                model_asset: None,
-                icon_asset: None,
-                hazardous: false,
-                direct_control_protocols: Vec::new(),
-                signal_loss_policy: SignalLossPolicy::HoldLast,
-                safe_values: BTreeMap::new(),
-                profile_id: None,
-                mode_id: None,
-                profile_snapshot: None,
-            },
+            definition,
             universe: Some(1),
             address: Some(1),
             split_patches: Vec::new(),
@@ -92,8 +120,8 @@ fn fixture() -> (PatchedFixture, FixtureId) {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![PatchedHead {
-                profile_head_id: None,
-                head_index: 1,
+                profile_head_id: Some(head_id),
+                head_index: 0,
                 fixture_id: logical,
             }],
             multipatch: Vec::new(),

@@ -78,24 +78,3 @@ fn frames_held_past_the_bound_do_not_stall_the_desk() {
         assert!(!frame.universes.is_empty(), "and keeps producing output");
     }
 }
-
-/// A schema-v1 fixture is still projected from a map of names, so a show containing one pays for
-/// that map. Stated here so the difference is a known cost rather than a surprise in a profile.
-#[test]
-fn a_legacy_fixture_still_asks_for_the_frame_by_name() {
-    let (legacy, _) = fixture();
-    let engine = Engine::new(ProgrammerRegistry::default());
-    engine
-        .replace_snapshot(EngineSnapshot {
-            fixtures: vec![legacy].into(),
-            revision: 1,
-            ..Default::default()
-        })
-        .unwrap();
-
-    let rendered = engine.render(RenderOptions::default()).unwrap();
-    assert!(
-        rendered.resolved_values.materialised_by_name(),
-        "legacy projection reads the frame by name"
-    );
-}

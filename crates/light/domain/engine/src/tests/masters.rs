@@ -548,16 +548,56 @@ fn logical_head_master_does_not_limit_sibling_heads() {
     let physical = FixtureId::new();
     let first = FixtureId::new();
     let second = FixtureId::new();
-    let parameter = |offset| Parameter {
-        attribute: AttributeKey::intensity(),
-        components: vec![ChannelComponent {
-            offset,
-            byte_order: light_fixture::ByteOrder::MsbFirst,
-        }],
-        default: 0.0,
-        virtual_dimmer: false,
-        metadata: light_fixture::ParameterMetadata::default(),
-        capabilities: vec![],
+    // Two cells, each its own head, each one dimmer channel.
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Two cell".into();
+    profile.short_name = "Two cell".into();
+    profile.revision = 1;
+    let (mode_id, head_ids) = {
+        let mode = &mut profile.modes[0];
+        mode.name = "2ch".into();
+        mode.splits[0].footprint = 2;
+        mode.heads = ["One", "Two"]
+            .into_iter()
+            .map(|name| light_fixture::FixtureHead {
+                id: uuid::Uuid::new_v4(),
+                name: name.into(),
+                master_shared: false,
+            })
+            .collect();
+        let head_ids = mode.heads.iter().map(|head| head.id).collect::<Vec<_>>();
+        mode.channels = head_ids
+            .iter()
+            .map(|head_id| FixtureChannel {
+                id: uuid::Uuid::new_v4(),
+                head_id: *head_id,
+                split: 1,
+                fixture_attribute: AttributeKey::intensity(),
+                attribute: AttributeKey::intensity(),
+                canonical_transform: light_fixture::CanonicalTransform::Identity,
+                resolution: ChannelResolution::U8,
+                secondary_slots: vec![],
+                default_raw: 0,
+                highlight_raw: u8::MAX.into(),
+                physical_min: Some(0.0),
+                physical_max: Some(1.0),
+                unit: None,
+                invert: false,
+                snap: false,
+                reacts_to_virtual_intensity: false,
+                reacts_to_sequence_master: true,
+                reacts_to_group_master: true,
+                reacts_to_grand_master: true,
+                behavior: ChannelBehavior::Controlled,
+                functions: vec![ChannelFunction::continuous(
+                    "intensity",
+                    AttributeKey::intensity(),
+                    u8::MAX.into(),
+                )],
+            })
+            .collect();
+        (mode.id, head_ids)
     };
     let fixture = PatchedFixture {
         fixture_id: physical,
@@ -565,42 +605,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         virtual_fixture_number: None,
         name: "Two cell".into(),
         layer_id: "default".into(),
-        definition: FixtureDefinition {
-            schema_version: 1,
-            id: FixtureId::new(),
-            revision: 1,
-            manufacturer: "Test".into(),
-            device_type: "other".into(),
-            name: "Two cell".into(),
-            model: "Two cell".into(),
-            mode: "2ch".into(),
-            footprint: 2,
-            heads: vec![
-                LogicalHead {
-                    index: 1,
-                    name: "One".into(),
-                    shared: false,
-                    parameters: vec![parameter(0)],
-                },
-                LogicalHead {
-                    index: 2,
-                    name: "Two".into(),
-                    shared: false,
-                    parameters: vec![parameter(1)],
-                },
-            ],
-            color_calibration: None,
-            physical: Default::default(),
-            model_asset: None,
-            icon_asset: None,
-            hazardous: false,
-            direct_control_protocols: vec![],
-            signal_loss_policy: SignalLossPolicy::HoldLast,
-            safe_values: BTreeMap::new(),
-            profile_id: None,
-            mode_id: None,
-            profile_snapshot: None,
-        },
+        definition: profile.resolved_definition(mode_id).unwrap(),
         universe: Some(1),
         address: Some(1),
         split_patches: Vec::new(),
@@ -610,13 +615,13 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         rotation: Default::default(),
         logical_heads: vec![
             PatchedHead {
-                profile_head_id: None,
-                head_index: 1,
+                profile_head_id: Some(head_ids[0]),
+                head_index: 0,
                 fixture_id: first,
             },
             PatchedHead {
-                profile_head_id: None,
-                head_index: 2,
+                profile_head_id: Some(head_ids[1]),
+                head_index: 1,
                 fixture_id: second,
             },
         ],

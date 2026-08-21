@@ -10,7 +10,6 @@ mod frame_pool;
 mod frame_slots;
 mod frame_state;
 mod frame_values;
-mod legacy_projection;
 mod lifecycle;
 mod model;
 mod move_in_black;
@@ -79,7 +78,6 @@ pub(crate) type HeadValues =
     rustc_hash::FxHashMap<light_core::AttributeKey, light_core::AttributeValue>;
 pub(crate) type HeadSequenceMasters =
     rustc_hash::FxHashMap<light_core::AttributeKey, contribution::ApplicableSequenceMaster>;
-pub(crate) use legacy_projection::render_fixture;
 pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};
 pub(crate) use profile_blackout::blackout_raw;

@@ -3,8 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use light_core::Universe;
 
 use super::{
-    AxisInversion, ContributionBatch, Engine, EngineError, GroupMasterIndex, RenderOptions,
-    RenderResult, RuntimeGeneration, encode_profile_split, render_fixture, resolve_profile_fixture,
+    AxisInversion, ContributionBatch, Engine, EngineError, RenderOptions, RenderResult,
+    RuntimeGeneration, encode_profile_split, resolve_profile_fixture,
 };
 
 impl Engine {
@@ -56,8 +56,6 @@ impl Engine {
             crate::RenderPhase::FixtureProjection,
             || -> Result<(), EngineError> {
                 for fixture in snapshot.fixtures.iter() {
-                    if fixture.definition.schema_version
-                        == light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION
                     {
                         let profile =
                             fixture
@@ -194,17 +192,7 @@ impl Engine {
                                 &mut patched_slots,
                             )?;
                         }
-                        continue;
                     }
-                    render_legacy_fixture(
-                        fixture,
-                        &named_values,
-                        options,
-                        group_masters,
-                        &group_master_flashes,
-                        &mut universes,
-                        &mut patched_slots,
-                    )?;
                 }
                 Ok(())
             },
@@ -325,57 +313,4 @@ fn insert_profile_visualization_values(
             );
         }
     }
-}
-
-fn render_legacy_fixture(
-    fixture: &light_fixture::PatchedFixture,
-    resolved: &crate::FrameValues,
-    options: RenderOptions,
-    group_masters: &GroupMasterIndex,
-    group_master_flashes: &HashMap<String, f32>,
-    universes: &mut HashMap<Universe, light_output::DmxFrame>,
-    patched_slots: &mut HashMap<Universe, u16>,
-) -> Result<(), EngineError> {
-    let mut patches = vec![(
-        fixture.universe,
-        fixture.address,
-        fixture.invert_pan,
-        fixture.invert_tilt,
-    )];
-    patches.extend(fixture.multipatch.iter().map(|instance| {
-        (
-            instance.universe,
-            instance.address,
-            instance.invert_pan,
-            instance.invert_tilt,
-        )
-    }));
-    for (universe, address, invert_pan, invert_tilt) in patches {
-        let (Some(universe), Some(address)) = (universe, address) else {
-            continue;
-        };
-        let frame = universes.entry(universe).or_insert([0; 512]);
-        let last_slot = address
-            .saturating_sub(1)
-            .saturating_add(fixture.definition.footprint)
-            .min(light_output::DMX_SLOTS as u16);
-        patched_slots
-            .entry(universe)
-            .and_modify(|current| *current = (*current).max(last_slot))
-            .or_insert(last_slot);
-        let mut instance = fixture.clone();
-        instance.universe = Some(universe);
-        instance.address = Some(address);
-        instance.invert_pan = invert_pan;
-        instance.invert_tilt = invert_tilt;
-        render_fixture(
-            frame,
-            &instance,
-            resolved.values(),
-            options,
-            group_masters,
-            group_master_flashes,
-        )?;
-    }
-    Ok(())
 }

@@ -6,8 +6,8 @@ use light_engine::{
     Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAction, RenderOptions,
 };
 use light_fixture::{
-    ByteOrder, ChannelComponent, FixtureDefinition, FixtureFreezeState, LogicalHead, Parameter,
-    PatchedFixture, PatchedHead, SignalLossPolicy,
+    CanonicalTransform, ChannelBehavior, ChannelFunction, ChannelResolution, FixtureChannel,
+    FixtureFreezeState, FixtureProfile, PatchedFixture, PatchedHead,
 };
 use light_playback::{
     Cue, CueChange, CueList, CueListMode, CueNumber, IntensityPriorityMode, PlaybackButtonAction,
@@ -76,26 +76,60 @@ fn cue_fades_follow_registry_value_types_through_media_output() {
 fn media_fixture() -> (PatchedFixture, FixtureId) {
     let physical = FixtureId::new();
     let logical = FixtureId::new();
-    let parameters = [
+    let attributes = [
         "media.mask.opacity",
         "focus",
         "media.play_mode",
         "color.wheel.1",
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(offset, attribute)| Parameter {
-        attribute: AttributeKey(attribute.into()),
-        components: vec![ChannelComponent {
-            offset: offset as u16,
-            byte_order: ByteOrder::MsbFirst,
-        }],
-        default: 0.0,
-        virtual_dimmer: false,
-        metadata: light_fixture::ParameterMetadata::default(),
-        capabilities: vec![],
-    })
-    .collect();
+    ];
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Media layer".into();
+    profile.short_name = "Media layer".into();
+    profile.revision = 1;
+    profile.fixture_type = "media_server".into();
+    let (mode_id, head_id) = {
+        let mode = &mut profile.modes[0];
+        mode.name = "4ch".into();
+        mode.splits[0].footprint = attributes.len() as u16;
+        mode.heads[0].name = "Layer".into();
+        mode.heads[0].master_shared = false;
+        let head_id = mode.heads[0].id;
+        mode.channels = attributes
+            .into_iter()
+            .map(|attribute| {
+                let key = AttributeKey(attribute.into());
+                FixtureChannel {
+                    id: uuid::Uuid::new_v4(),
+                    head_id,
+                    split: 1,
+                    fixture_attribute: key.clone(),
+                    attribute: key.clone(),
+                    canonical_transform: CanonicalTransform::Identity,
+                    resolution: ChannelResolution::U8,
+                    secondary_slots: Vec::new(),
+                    default_raw: 0,
+                    highlight_raw: u32::from(u8::MAX),
+                    physical_min: Some(0.0),
+                    physical_max: Some(1.0),
+                    unit: None,
+                    invert: false,
+                    snap: false,
+                    reacts_to_virtual_intensity: false,
+                    reacts_to_sequence_master: true,
+                    reacts_to_group_master: true,
+                    reacts_to_grand_master: true,
+                    behavior: ChannelBehavior::Controlled,
+                    functions: vec![ChannelFunction::continuous(
+                        attribute,
+                        key,
+                        u32::from(u8::MAX),
+                    )],
+                }
+            })
+            .collect();
+        (mode.id, head_id)
+    };
     (
         PatchedFixture {
             fixture_id: physical,
@@ -103,34 +137,7 @@ fn media_fixture() -> (PatchedFixture, FixtureId) {
             virtual_fixture_number: None,
             name: "Media layer".into(),
             layer_id: "default".into(),
-            definition: FixtureDefinition {
-                schema_version: 1,
-                id: FixtureId::new(),
-                revision: 1,
-                manufacturer: "Test".into(),
-                device_type: "media_server".into(),
-                name: "Media layer".into(),
-                model: "Media layer".into(),
-                mode: "4ch".into(),
-                footprint: 4,
-                heads: vec![LogicalHead {
-                    index: 1,
-                    name: "Layer".into(),
-                    shared: false,
-                    parameters,
-                }],
-                color_calibration: None,
-                physical: Default::default(),
-                model_asset: None,
-                icon_asset: None,
-                hazardous: false,
-                direct_control_protocols: Vec::new(),
-                signal_loss_policy: SignalLossPolicy::HoldLast,
-                safe_values: BTreeMap::new(),
-                profile_id: None,
-                mode_id: None,
-                profile_snapshot: None,
-            },
+            definition: profile.resolved_definition(mode_id).unwrap(),
             universe: Some(1),
             address: Some(1),
             split_patches: Vec::new(),
@@ -139,8 +146,8 @@ fn media_fixture() -> (PatchedFixture, FixtureId) {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![PatchedHead {
-                profile_head_id: None,
-                head_index: 1,
+                profile_head_id: Some(head_id),
+                head_index: 0,
                 fixture_id: logical,
             }],
             multipatch: Vec::new(),
