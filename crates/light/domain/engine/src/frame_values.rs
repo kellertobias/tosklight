@@ -85,10 +85,16 @@ impl FrameValues {
         attribute: &AttributeKey,
     ) -> Option<&AttributeValue> {
         match &self.shared.frame {
-            Some(frame) => {
-                let slot = frame.slots().slot(fixture_id, attribute)?;
-                frame.value(slot)
-            }
+            Some(frame) => match frame.slots().slot(fixture_id, attribute) {
+                Some(slot) => frame.value(slot),
+                // A name the compiled patch never numbered still answers, from the short list of
+                // this fixture's unnumbered values rather than from the whole show.
+                None => frame
+                    .overflow(fixture_id)
+                    .iter()
+                    .find(|(candidate, _)| candidate == attribute)
+                    .map(|(_, winner)| &winner.value),
+            },
             None => self
                 .shared
                 .fallback_values
@@ -103,10 +109,14 @@ impl FrameValues {
         attribute: &AttributeKey,
     ) -> Option<DateTime<Utc>> {
         match &self.shared.frame {
-            Some(frame) => {
-                let slot = frame.slots().slot(fixture_id, attribute)?;
-                frame.changed_at(slot)
-            }
+            Some(frame) => match frame.slots().slot(fixture_id, attribute) {
+                Some(slot) => frame.changed_at(slot),
+                None => frame
+                    .overflow(fixture_id)
+                    .iter()
+                    .find(|(candidate, _)| candidate == attribute)
+                    .map(|(_, winner)| winner.changed_at),
+            },
             None => self
                 .shared
                 .fallback_changed_at
@@ -127,6 +137,9 @@ impl FrameValues {
                 let (fixture_id, attribute) = frame.slots().pair(slot);
                 values.insert((fixture_id, attribute.clone()), winner.value.clone());
             }
+            for (fixture_id, attribute, winner) in frame.overflowed() {
+                values.insert((fixture_id, attribute.clone()), winner.value.clone());
+            }
             values
         })
     }
@@ -143,6 +156,9 @@ impl FrameValues {
             );
             for (slot, winner) in frame.occupied() {
                 let (fixture_id, attribute) = frame.slots().pair(slot);
+                changed_at.insert((fixture_id, attribute.clone()), winner.changed_at);
+            }
+            for (fixture_id, attribute, winner) in frame.overflowed() {
                 changed_at.insert((fixture_id, attribute.clone()), winner.changed_at);
             }
             changed_at
@@ -166,6 +182,17 @@ impl FrameValues {
     /// The output path must not: it point-queries what it needs, and building the map would put a
     /// pass over the show back into every frame. Tests assert this so that cannot come back
     /// quietly.
+    /// Whether anything this frame resolved could not be numbered by the compiled patch.
+    ///
+    /// Always false for a show whose sources only name attributes their fixtures declare. A true
+    /// here says something reached the desk under a name the patch does not know.
+    pub fn has_unnumbered_values(&self) -> bool {
+        self.shared
+            .frame
+            .as_ref()
+            .is_some_and(crate::contribution::ResolvedFrame::has_overflow)
+    }
+
     pub fn materialised_by_name(&self) -> bool {
         self.shared.values.get().is_some() || self.shared.changed_at.get().is_some()
     }

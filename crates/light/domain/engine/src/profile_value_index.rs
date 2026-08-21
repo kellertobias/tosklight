@@ -44,7 +44,15 @@ impl<'a> ProfileValueIndex<'a> {
                     .iter()
                     .filter_map(move |slot| {
                         Some((frame.slots().attribute_key(*slot), frame.value(*slot)?))
-                    }),
+                    })
+                    // Anything this fixture holds under a name the patch never numbered is read
+                    // here too, so projection cannot miss a value the boundary would report.
+                    .chain(
+                        frame
+                            .overflow(fixture_id)
+                            .iter()
+                            .map(|(attribute, winner)| (attribute, &winner.value)),
+                    ),
             ),
             Self::Scanned { values, .. } => match values.get(&fixture_id) {
                 Some(values) => Box::new(values.iter().copied()),
@@ -58,18 +66,23 @@ impl<'a> ProfileValueIndex<'a> {
         fixture_id: FixtureId,
     ) -> Box<dyn Iterator<Item = (&'a AttributeKey, ApplicableSequenceMaster)> + '_> {
         match self {
-            Self::Dense(frame) => Box::new(
-                frame
-                    .slots()
-                    .fixture_slots(fixture_id)
-                    .iter()
-                    .filter_map(move |slot| {
-                        Some((
-                            frame.slots().attribute_key(*slot),
-                            frame.sequence_master(*slot)?,
-                        ))
-                    }),
-            ),
+            Self::Dense(frame) => {
+                Box::new(
+                    frame
+                        .slots()
+                        .fixture_slots(fixture_id)
+                        .iter()
+                        .filter_map(move |slot| {
+                            Some((
+                                frame.slots().attribute_key(*slot),
+                                frame.sequence_master(*slot)?,
+                            ))
+                        })
+                        .chain(frame.overflow(fixture_id).iter().filter_map(
+                            |(attribute, winner)| Some((attribute, winner.sequence_master?)),
+                        )),
+                )
+            }
             Self::Scanned {
                 sequence_masters, ..
             } => match sequence_masters.get(&fixture_id) {
@@ -90,8 +103,9 @@ impl<'a> ProfileValueIndex<'a> {
         fixture_id: FixtureId,
         attribute: &AttributeKey,
     ) -> Option<&'a AttributeValue> {
-        if let Self::Dense(frame) = self {
-            let slot = frame.slots().slot(fixture_id, attribute)?;
+        if let Self::Dense(frame) = self
+            && let Some(slot) = frame.slots().slot(fixture_id, attribute)
+        {
             return frame.value(slot);
         }
         self.borrowed_values(fixture_id)
@@ -118,8 +132,9 @@ impl<'a> ProfileValueIndex<'a> {
         fixture_id: FixtureId,
         attribute: &AttributeKey,
     ) -> Option<ApplicableSequenceMaster> {
-        if let Self::Dense(frame) = self {
-            let slot = frame.slots().slot(fixture_id, attribute)?;
+        if let Self::Dense(frame) = self
+            && let Some(slot) = frame.slots().slot(fixture_id, attribute)
+        {
             return frame.sequence_master(slot);
         }
         self.borrowed_sequence_masters(fixture_id)

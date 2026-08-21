@@ -200,6 +200,14 @@ pub(crate) struct ResolvedFrame {
     slots: std::sync::Arc<crate::SlotTable>,
     state: Option<crate::FrameState>,
     pool: Option<std::sync::Arc<crate::FramePool>>,
+    /// Values for pairs the compiled patch could not number, grouped by the fixture that owns
+    /// them. Empty for a show whose sources only name attributes their fixtures declare, which is
+    /// every show that has not been sent something unexpected.
+    ///
+    /// Kept beside the frame rather than instead of it: one unrecognised name from a hardware
+    /// surface or an HTTP client should cost the desk that one value's lookup, not the whole
+    /// frame's dense reading.
+    overflow: FxHashMap<FixtureId, Vec<(AttributeKey, EngineWinner)>>,
 }
 
 impl Drop for ResolvedFrame {
@@ -211,6 +219,30 @@ impl Drop for ResolvedFrame {
 }
 
 impl ResolvedFrame {
+    /// Values this frame could not number, for one fixture.
+    pub(crate) fn overflow(&self, fixture_id: FixtureId) -> &[(AttributeKey, EngineWinner)] {
+        self.overflow
+            .get(&fixture_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    /// Whether anything this frame resolved could not be numbered.
+    pub(crate) fn has_overflow(&self) -> bool {
+        !self.overflow.is_empty()
+    }
+
+    /// Every unnumbered value, with the fixture that owns it.
+    pub(crate) fn overflowed(
+        &self,
+    ) -> impl Iterator<Item = (FixtureId, &AttributeKey, &EngineWinner)> {
+        self.overflow.iter().flat_map(|(fixture_id, values)| {
+            values
+                .iter()
+                .map(move |(attribute, winner)| (*fixture_id, attribute, winner))
+        })
+    }
+
     /// The value holding a slot, or nothing when nothing contributed to it this frame.
     pub(crate) fn value(&self, slot: crate::Slot) -> Option<&AttributeValue> {
         self.state.as_ref()?.get(slot).map(|winner| &winner.value)
@@ -519,58 +551,28 @@ impl<'a> EngineContributionResolver<'a> {
         values
     }
 
-    /// Hand the frame to the boundary that still speaks in names, and the storage back to the pool.
+    /// Hand the frame to the boundary that still speaks in names, with the storage it was filled
+    /// into and whatever the compiled patch could not number.
     pub(crate) fn finish(mut self) -> ResolvedAttributes {
-        let overflowed = !self.overflow.is_empty();
-        if !overflowed {
-            // The frame holds everything, so nothing is copied into a map here. The boundary
-            // builds one on demand, and most frames are never asked.
-            return ResolvedAttributes {
-                frame: Some(ResolvedFrame {
-                    slots: std::sync::Arc::clone(self.slots),
-                    state: Some(self.frame),
-                    pool: self.pool.take(),
-                }),
-                ..ResolvedAttributes::default()
-            };
-        }
-        let winner_count = self.frame.occupied_len() + self.overflow.len();
-        let mut resolved = ResolvedAttributes {
-            values: ResolvedValues::with_capacity_and_hasher(winner_count, Default::default()),
-            changed_at: ResolvedChangedAt::with_capacity_and_hasher(
-                winner_count,
-                Default::default(),
-            ),
-            ..ResolvedAttributes::default()
-        };
-        for (slot, winner) in self.frame.occupied() {
-            let (fixture_id, attribute) = self.slots.pair(slot);
-            let key = (fixture_id, attribute.clone());
-            resolved.changed_at.insert(key.clone(), winner.changed_at);
-            if let Some(sequence_master) = winner.sequence_master {
-                resolved
-                    .sequence_masters
-                    .insert(key.clone(), sequence_master);
-            }
-            resolved.values.insert(key, winner.value.clone());
-        }
+        // Grouped by fixture so a head reads its own unnumbered values without walking everyone
+        // else's. Normally there are none and this costs an empty map.
+        let mut overflow: FxHashMap<FixtureId, Vec<(AttributeKey, EngineWinner)>> =
+            FxHashMap::default();
         for ((fixture_id, attribute), winner) in std::mem::take(&mut self.overflow) {
-            let key = (fixture_id, attribute);
-            resolved.changed_at.insert(key.clone(), winner.changed_at);
-            if let Some(sequence_master) = winner.sequence_master {
-                resolved
-                    .sequence_masters
-                    .insert(key.clone(), sequence_master);
-            }
-            resolved.values.insert(key, winner.value);
+            overflow
+                .entry(fixture_id)
+                .or_default()
+                .push((attribute, winner));
         }
-        // Something overflowed. A frame that does not hold every value the maps hold is not safe
-        // to read by slot — projection would silently miss whatever the patch could not number —
-        // so the buffer goes straight back and every reader scans the maps instead.
-        if let Some(pool) = self.pool.take() {
-            pool.give_back(self.frame);
+        ResolvedAttributes {
+            frame: Some(ResolvedFrame {
+                slots: std::sync::Arc::clone(self.slots),
+                state: Some(self.frame),
+                pool: self.pool.take(),
+                overflow,
+            }),
+            ..ResolvedAttributes::default()
         }
-        resolved
     }
 }
 
@@ -682,10 +684,11 @@ mod transition_order_tests {
         })
     }
 
-    /// A value the compiled patch could not number must still reach the boundary, and the frame
-    /// must not be offered for reading by slot when it does not hold everything the maps hold.
+    /// A value the compiled patch could not number must still reach the boundary and projection,
+    /// and must not cost the rest of the frame its dense reading. One unrecognised name from a
+    /// hardware surface or an HTTP client is a lookup, not a slower desk.
     #[test]
-    fn a_value_the_patch_never_declared_survives_and_withholds_the_dense_frame() {
+    fn a_value_the_patch_never_numbered_costs_itself_a_lookup_not_the_frame() {
         let fixture_id = FixtureId::new();
         let undeclared = AttributeKey("neverPatched".into());
         let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["intensity"]);
@@ -700,15 +703,22 @@ mod transition_order_tests {
             Utc::now(),
             MergeMode::Ltp,
         );
-        let resolved = resolver.finish();
+        let mut resolved = resolver.finish();
+        let values = resolved.named_values();
         assert_eq!(
-            resolved.values[&(fixture_id, undeclared)],
-            AttributeValue::Normalized(0.42),
+            values.value(fixture_id, &undeclared),
+            Some(&AttributeValue::Normalized(0.42)),
             "an operator's value is never lost to a name the patch did not declare"
         );
         assert!(
-            resolved.frame.is_none(),
-            "a frame missing a value the maps hold must not be read by slot"
+            values.is_dense(),
+            "one unnumbered name costs that value a lookup, not the whole frame its dense reading"
+        );
+        assert!(values.has_unnumbered_values());
+        assert_eq!(
+            values.values()[&(fixture_id, undeclared)],
+            AttributeValue::Normalized(0.42),
+            "and it is there when the boundary asks for everything by name"
         );
     }
 
