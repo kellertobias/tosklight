@@ -56,7 +56,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
         .unwrap();
     let seed_path = data_dir.join("legacy-revision-seed.show");
     default_show::initialise_legacy_test_show(&seed_path).unwrap();
-    let legacy_fixture = ShowStore::open(&seed_path)
+    let inline_fixture = ShowStore::open(&seed_path)
         .unwrap()
         .objects("patched_fixture")
         .unwrap()
@@ -65,8 +65,8 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
         .unwrap()
         .put_object(
             "patched_fixture",
-            &legacy_fixture.id,
-            &legacy_fixture.body,
+            &inline_fixture.id,
+            &inline_fixture.body,
             0,
         )
         .unwrap();
@@ -123,7 +123,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     assert!(
         !light_fixture::PortablePatchedFixtureRecord::decode(copy_fixture.body)
             .unwrap()
-            .is_legacy_inline()
+            .is_inline()
     );
 
     let original_objects = revision_layout(&app, &token, show_id).await;

@@ -326,13 +326,13 @@ pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) ->
 mod tests {
     use super::*;
 
-    fn legacy_fixture(attributes: &[&str]) -> PatchedFixture {
+    fn inline_fixture(attributes: &[&str]) -> PatchedFixture {
         legacy_test_fixture(FixtureId::new(), attributes)
     }
 
     #[test]
     fn every_declared_pair_gets_its_own_slot() {
-        let fixture = legacy_fixture(&["intensity", "pan", "tilt"]);
+        let fixture = inline_fixture(&["intensity", "pan", "tilt"]);
         let table = SlotTable::compile(1, std::slice::from_ref(&fixture));
         let slots = ["intensity", "pan", "tilt"].map(|name| {
             table
@@ -348,7 +348,7 @@ mod tests {
 
     #[test]
     fn a_pair_the_show_cannot_produce_has_no_slot() {
-        let fixture = legacy_fixture(&["intensity"]);
+        let fixture = inline_fixture(&["intensity"]);
         let table = SlotTable::compile(1, std::slice::from_ref(&fixture));
         assert!(
             table
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn an_unpatched_fixture_is_numbered_like_any_other() {
-        let mut fixture = legacy_fixture(&["intensity"]);
+        let mut fixture = inline_fixture(&["intensity"]);
         fixture.universe = None;
         fixture.address = None;
         let table = SlotTable::compile(1, std::slice::from_ref(&fixture));
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn a_slot_names_the_pair_it_was_numbered_for() {
-        let fixture = legacy_fixture(&["intensity", "pan"]);
+        let fixture = inline_fixture(&["intensity", "pan"]);
         let table = SlotTable::compile(7, std::slice::from_ref(&fixture));
         let pan = table
             .slot(fixture.fixture_id, &AttributeKey("pan".into()))
@@ -391,8 +391,8 @@ mod tests {
 
     #[test]
     fn two_fixtures_sharing_a_name_do_not_share_a_slot() {
-        let first = legacy_fixture(&["intensity"]);
-        let second = legacy_fixture(&["intensity"]);
+        let first = inline_fixture(&["intensity"]);
+        let second = inline_fixture(&["intensity"]);
         let table = SlotTable::compile(1, &[first.clone(), second.clone()]);
         let intensity = AttributeKey("intensity".into());
         assert_ne!(
@@ -403,8 +403,8 @@ mod tests {
 
     #[test]
     fn a_fixture_owns_exactly_the_slots_it_declared() {
-        let first = legacy_fixture(&["intensity", "pan"]);
-        let second = legacy_fixture(&["intensity"]);
+        let first = inline_fixture(&["intensity", "pan"]);
+        let second = inline_fixture(&["intensity"]);
         let table = SlotTable::compile(1, &[first.clone(), second.clone()]);
         assert_eq!(table.fixture_slots(first.fixture_id).len(), 2);
         assert_eq!(table.fixture_slots(second.fixture_id).len(), 1);

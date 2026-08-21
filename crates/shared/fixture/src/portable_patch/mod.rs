@@ -2,7 +2,7 @@ mod codec;
 mod compiler;
 mod digest;
 mod identity;
-mod legacy;
+mod inline;
 mod merge;
 mod model;
 
@@ -12,7 +12,7 @@ pub use compiler::{
 pub use digest::fixture_profile_content_digest;
 pub use model::{
     PORTABLE_PATCH_RECORD_SCHEMA_VERSION, PatchedFixturePatch, PatchedFixtureProfileReference,
-    PortablePatchError, PortablePatchedFixtureRecord, RETAINED_LEGACY_DEFINITION_FIELDS,
+    PortablePatchError, PortablePatchedFixtureRecord, RETAINED_DEFINITION_FIELDS,
 };
 
 #[cfg(test)]

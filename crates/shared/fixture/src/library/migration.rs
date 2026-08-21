@@ -5,7 +5,7 @@ use rusqlite::{Connection, Transaction, params};
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone)]
-struct StoredLegacyRow {
+struct StoredImportedRow {
     id: String,
     revision: u32,
     json: String,
@@ -13,20 +13,20 @@ struct StoredLegacyRow {
 }
 
 #[derive(Clone)]
-struct LegacyRow {
-    stored: StoredLegacyRow,
+struct ImportedRow {
+    stored: StoredImportedRow,
     definition: FixtureDefinition,
 }
 
-type LegacyFamilies = BTreeMap<String, Vec<LegacyRow>>;
+type ImportedFamilies = BTreeMap<String, Vec<ImportedRow>>;
 
 impl FixtureLibrary {
-    pub(super) fn migrate_legacy_profiles(&self) -> Result<usize, FixtureError> {
-        let valid_rows = self.read_valid_legacy_rows()?;
+    pub(super) fn compile_imported_definitions(&self) -> Result<usize, FixtureError> {
+        let valid_rows = self.read_valid_imported_rows()?;
         if valid_rows.is_empty() {
             return Ok(0);
         }
-        let (families, family_counts) = group_legacy_families(valid_rows)?;
+        let (families, family_counts) = group_imported_families(valid_rows)?;
         let transaction = self.conn.unchecked_transaction()?;
         let mut migrated = 0;
         for (family_key, rows) in families {
@@ -43,20 +43,20 @@ impl FixtureLibrary {
         Ok(migrated)
     }
 
-    fn read_valid_legacy_rows(&self) -> Result<Vec<LegacyRow>, FixtureError> {
+    fn read_valid_imported_rows(&self) -> Result<Vec<ImportedRow>, FixtureError> {
         let mut valid_rows = Vec::new();
-        for stored in read_pending_legacy_rows(&self.conn)? {
+        for stored in read_pending_imported_rows(&self.conn)? {
             match serde_json::from_str(&stored.json) {
-                Ok(definition) => valid_rows.push(LegacyRow { stored, definition }),
-                Err(error) => self.record_legacy_parse_failure(&stored, &error)?,
+                Ok(definition) => valid_rows.push(ImportedRow { stored, definition }),
+                Err(error) => self.record_import_parse_failure(&stored, &error)?,
             }
         }
         Ok(valid_rows)
     }
 
-    fn record_legacy_parse_failure(
+    fn record_import_parse_failure(
         &self,
-        row: &StoredLegacyRow,
+        row: &StoredImportedRow,
         error: &serde_json::Error,
     ) -> Result<(), FixtureError> {
         let message = format!(
@@ -75,12 +75,12 @@ impl FixtureLibrary {
     }
 }
 
-fn read_pending_legacy_rows(conn: &Connection) -> Result<Vec<StoredLegacyRow>, FixtureError> {
+fn read_pending_imported_rows(conn: &Connection) -> Result<Vec<StoredImportedRow>, FixtureError> {
     let mut statement = conn.prepare(
         "SELECT f.id,f.revision,f.definition_json,f.source_gdtf FROM fixture_definitions f JOIN (SELECT id,MAX(revision) revision FROM fixture_definitions GROUP BY id) latest ON latest.id=f.id AND latest.revision=f.revision LEFT JOIN fixture_profile_legacy_map m ON m.legacy_id=f.id AND m.legacy_revision=f.revision LEFT JOIN fixture_profile_migration_failures x ON x.legacy_id=f.id AND x.legacy_revision=f.revision WHERE m.legacy_id IS NULL AND x.legacy_id IS NULL ORDER BY f.manufacturer COLLATE NOCASE,f.model COLLATE NOCASE,f.mode COLLATE NOCASE",
     )?;
     let rows = statement.query_map([], |row| {
-        Ok(StoredLegacyRow {
+        Ok(StoredImportedRow {
             id: row.get(0)?,
             revision: row.get(1)?,
             json: row.get(2)?,
@@ -90,10 +90,10 @@ fn read_pending_legacy_rows(conn: &Connection) -> Result<Vec<StoredLegacyRow>, F
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-fn group_legacy_families(
-    rows: Vec<LegacyRow>,
-) -> Result<(LegacyFamilies, HashMap<String, usize>), FixtureError> {
-    let mut families = LegacyFamilies::new();
+fn group_imported_families(
+    rows: Vec<ImportedRow>,
+) -> Result<(ImportedFamilies, HashMap<String, usize>), FixtureError> {
+    let mut families = ImportedFamilies::new();
     for row in rows {
         let metadata = fixture_level_metadata(&row.definition)?;
         let family = definition_family_key(&row.definition);
@@ -136,7 +136,7 @@ fn base_family_key(key: &str) -> String {
 
 fn migrate_family(
     transaction: &Transaction<'_>,
-    rows: &[LegacyRow],
+    rows: &[ImportedRow],
     conflicting_metadata: bool,
 ) -> Result<bool, FixtureError> {
     let definitions = rows
@@ -161,7 +161,7 @@ fn migrate_family(
 
 fn record_family_failure(
     transaction: &Transaction<'_>,
-    rows: &[LegacyRow],
+    rows: &[ImportedRow],
     error: &impl std::fmt::Display,
 ) -> Result<(), FixtureError> {
     let first = &rows[0].definition;
@@ -210,7 +210,7 @@ fn insert_profile(
 
 fn insert_legacy_sources(
     transaction: &Transaction<'_>,
-    rows: &[LegacyRow],
+    rows: &[ImportedRow],
     profile_id: FixtureId,
 ) -> Result<(), FixtureError> {
     for row in rows {
@@ -228,13 +228,13 @@ fn insert_legacy_sources(
 
 fn record_metadata_conflict(
     transaction: &Transaction<'_>,
-    rows: &[LegacyRow],
+    rows: &[ImportedRow],
 ) -> Result<(), FixtureError> {
     let first = &rows[0].definition;
     transaction.execute(
         "INSERT OR IGNORE INTO fixture_library_warnings(message) VALUES(?1)",
         [format!(
-            "{} {} contained conflicting fixture-level metadata; its legacy modes were retained as separate profiles",
+            "{} {} contained conflicting fixture-level metadata; its modes were retained as separate profiles",
             first.manufacturer, first.model
         )],
     )?;

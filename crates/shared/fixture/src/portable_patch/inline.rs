@@ -1,4 +1,4 @@
-use super::{PortablePatchError, RETAINED_LEGACY_DEFINITION_FIELDS};
+use super::{PortablePatchError, RETAINED_DEFINITION_FIELDS};
 use crate::PatchedFixture;
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -14,7 +14,7 @@ pub(super) fn retained_definition_fields(
     fixture: &PatchedFixture,
 ) -> Result<Vec<RetainedUnknownField>, PortablePatchError> {
     let raw = body.get("definition").ok_or_else(|| {
-        PortablePatchError::InvalidRecord("legacy record has no definition".into())
+        PortablePatchError::InvalidRecord("an inline record has no definition".into())
     })?;
     let known = serde_json::to_value(&fixture.definition)?;
     let mut retained = Vec::new();
@@ -28,7 +28,7 @@ pub(super) fn write_retained_extensions(
 ) -> Result<(), PortablePatchError> {
     if !retained.is_empty() {
         body.insert(
-            RETAINED_LEGACY_DEFINITION_FIELDS.into(),
+            RETAINED_DEFINITION_FIELDS.into(),
             serde_json::to_value(retained)?,
         );
     }

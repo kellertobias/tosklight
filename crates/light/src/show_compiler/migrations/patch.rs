@@ -50,7 +50,7 @@ fn collect_inline(
     for decoded in decode_unique_records(candidate)? {
         let object = decoded.object;
         let record = decoded.record;
-        if !record.is_legacy_inline() {
+        if !record.is_inline() {
             continue;
         }
         let (record, profile) = migrate_inline_record(object, record)?;
@@ -90,7 +90,7 @@ fn migrate_inline_record(
         .map_err(|error| invalid_object(object, error))?;
     ensure_profile_identity(object, reference, &profile)?;
     record
-        .migrate_legacy_to_profile_reference(reference)
+        .into_profile_reference(reference)
         .map_err(|error| invalid_object(object, error))?;
     Ok((record, profile))
 }
@@ -162,7 +162,7 @@ fn collect_lean(candidate: PortableShowCandidate<'_>) -> Result<Vec<ObjectUpdate
     for decoded in decode_unique_records(candidate)? {
         let object = decoded.object;
         let record = decoded.record;
-        if record.is_legacy_inline() {
+        if record.is_inline() {
             return Err(invalid_object(
                 object,
                 "inline fixture remained after profile materialization",

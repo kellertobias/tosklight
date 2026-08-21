@@ -57,7 +57,7 @@ impl FixtureLibrary {
             )?;
         }
         let library = Self { conn };
-        library.migrate_legacy_profiles()?;
+        library.compile_imported_definitions()?;
         library.seed_generic_gel_catalog()?;
         Ok(library)
     }

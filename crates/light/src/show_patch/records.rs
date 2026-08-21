@@ -111,7 +111,7 @@ fn record_changed(
     let Some(record) = existing else {
         return Ok(true);
     };
-    if record.record.is_legacy_inline()
+    if record.record.is_inline()
         || record.object_id != patch.fixture_id.0.to_string()
         || existing_patch != Some(patch)
     {
@@ -140,7 +140,7 @@ fn updated_record(
 }
 
 fn migrate_legacy_record(record: &mut PortablePatchedFixtureRecord) -> Result<(), ActionError> {
-    if !record.is_legacy_inline() {
+    if !record.is_inline() {
         return Ok(());
     }
     let reference = record
@@ -148,7 +148,7 @@ fn migrate_legacy_record(record: &mut PortablePatchedFixtureRecord) -> Result<()
         .map_err(patch_error)?
         .ok_or_else(|| invalid("legacy fixture must be migrated before patch editing"))?;
     record
-        .migrate_legacy_to_profile_reference(reference)
+        .into_profile_reference(reference)
         .map_err(patch_error)
 }
 

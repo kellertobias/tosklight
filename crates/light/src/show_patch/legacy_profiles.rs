@@ -32,7 +32,7 @@ fn discover_fixture_profile(
         return Ok(());
     };
     let record = &existing.record;
-    if !record.is_legacy_inline() {
+    if !record.is_inline() {
         return Ok(());
     }
     let reference = record

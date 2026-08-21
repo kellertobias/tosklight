@@ -128,7 +128,7 @@ fn versioned_reference_record_retains_an_unknown_definition_extension() {
 
     let record = PortablePatchedFixtureRecord::decode(body).unwrap();
 
-    assert!(!record.is_legacy_inline());
+    assert!(!record.is_inline());
     assert_eq!(record.body()["definition"]["future_extension"], true);
     assert!(record.profile_reference().unwrap().is_some());
 }
@@ -148,7 +148,7 @@ fn typed_patch_update_retains_unknown_fields_and_legacy_inline_definition() {
     patch.multipatch[0].name = "Updated instance".into();
     record.update_patch(&patch).unwrap();
 
-    assert!(record.is_legacy_inline());
+    assert!(record.is_inline());
     assert_eq!(record.body()["name"], "Updated name");
     assert_eq!(record.body()["multipatch"][0]["name"], "Updated instance");
     assert_eq!(
@@ -177,7 +177,7 @@ fn typed_patch_update_retains_unknown_fields_in_reference_records() {
     patch.logical_heads[0].head_index = 2;
     record.update_patch(&patch).unwrap();
 
-    assert!(!record.is_legacy_inline());
+    assert!(!record.is_inline());
     assert_eq!(record.body()["name"], "Reference update");
     assert_eq!(
         record.body()["future_binding"],
@@ -290,16 +290,14 @@ fn legacy_migration_removes_inline_definition_and_retains_unknown_fields() {
         mode_id: profile.modes[0].id,
     };
 
-    record
-        .migrate_legacy_to_profile_reference(reference)
-        .unwrap();
+    record.into_profile_reference(reference).unwrap();
 
-    assert!(!record.is_legacy_inline());
+    assert!(!record.is_inline());
     assert_eq!(record.profile_reference().unwrap(), Some(reference));
     assert!(record.body().get("definition").is_none());
     assert!(!contains_key(record.body(), "profile_snapshot"));
     assert_eq!(record.body()["future_binding"]["retain"], true);
-    let retained = record.body()[crate::RETAINED_LEGACY_DEFINITION_FIELDS]
+    let retained = record.body()[crate::RETAINED_DEFINITION_FIELDS]
         .as_array()
         .unwrap();
     assert_retained(retained, "/future_definition", json!({"opaque": 7}));

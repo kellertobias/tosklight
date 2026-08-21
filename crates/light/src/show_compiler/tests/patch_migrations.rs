@@ -51,7 +51,7 @@ fn inline_and_lean_records_compile_equivalently_with_stable_heads() {
             .profile()["future_profile"],
         json!({"kept": [2, 1]})
     );
-    let legacy_fixture = compile_show_candidate(legacy_candidate).unwrap().fixtures;
+    let inline_fixture = compile_show_candidate(legacy_candidate).unwrap().fixtures;
     let first_commit = legacy_store
         .apply_portable_transaction(legacy_transaction)
         .unwrap();
@@ -102,7 +102,7 @@ fn inline_and_lean_records_compile_equivalently_with_stable_heads() {
     let current_fixture = compile_show_candidate(current_candidate).unwrap().fixtures;
 
     assert_eq!(
-        serde_json::to_value(legacy_fixture).unwrap(),
+        serde_json::to_value(inline_fixture).unwrap(),
         serde_json::to_value(current_fixture).unwrap()
     );
 }

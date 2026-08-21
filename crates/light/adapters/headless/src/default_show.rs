@@ -110,7 +110,7 @@ fn migrate_default_record(
     mut record: PortablePatchedFixtureRecord,
     migrate_single_universe_patch: bool,
 ) -> Result<PortablePatchedFixtureRecord, StoreError> {
-    if !record.is_legacy_inline() {
+    if !record.is_inline() {
         let mut patch = record.patch().map_err(portable_patch_error)?;
         apply_default_patch_fields(&mut patch, migrate_single_universe_patch);
         record.update_patch(&patch).map_err(portable_patch_error)?;

@@ -5,7 +5,7 @@ use super::{
 };
 use super::{
     identity::{IdentityPolicy, validate_new_patch_identities, validate_patch_identities},
-    legacy::{retained_definition_fields, write_retained_extensions},
+    inline::{retained_definition_fields, write_retained_extensions},
     merge::merge_typed_delta,
 };
 use crate::{FIXTURE_PROFILE_SCHEMA_VERSION, PatchedFixture};
@@ -78,7 +78,7 @@ impl PortablePatchedFixtureRecord {
         Self::decode(Value::Object(body))
     }
 
-    pub fn is_legacy_inline(&self) -> bool {
+    pub fn is_inline(&self) -> bool {
         self.representation == RecordRepresentation::LegacyInline
     }
 
@@ -108,7 +108,7 @@ impl PortablePatchedFixtureRecord {
     pub fn profile_reference(
         &self,
     ) -> Result<Option<PatchedFixtureProfileReference>, PortablePatchError> {
-        if self.is_legacy_inline() {
+        if self.is_inline() {
             return Ok(None);
         }
         let stored =
@@ -124,10 +124,10 @@ impl PortablePatchedFixtureRecord {
     pub fn selected_profile_reference(
         &self,
     ) -> Result<Option<PatchedFixtureProfileReference>, PortablePatchError> {
-        if !self.is_legacy_inline() {
+        if !self.is_inline() {
             return self.profile_reference();
         }
-        let fixture = self.legacy_fixture()?;
+        let fixture = self.inline_fixture()?;
         if fixture.definition.schema_version != FIXTURE_PROFILE_SCHEMA_VERSION {
             return Ok(None);
         }
@@ -135,8 +135,8 @@ impl PortablePatchedFixtureRecord {
     }
 
     pub fn patch(&self) -> Result<PatchedFixturePatch, PortablePatchError> {
-        if self.is_legacy_inline() {
-            let fixture = self.legacy_fixture()?;
+        if self.is_inline() {
+            let fixture = self.inline_fixture()?;
             Ok(PatchedFixturePatch::from_fixture(&fixture))
         } else {
             serde_json::from_value(self.body.clone()).map_err(invalid_record)
@@ -184,7 +184,7 @@ impl PortablePatchedFixtureRecord {
         &mut self,
         updated: PatchedFixtureProfileReference,
     ) -> Result<(), PortablePatchError> {
-        if self.is_legacy_inline() {
+        if self.is_inline() {
             return Err(PortablePatchError::InvalidRecord(
                 "legacy record must be migrated before its profile reference can change".into(),
             ));
@@ -199,16 +199,16 @@ impl PortablePatchedFixtureRecord {
 
     /// Converts one schema-v2 inline record after its exact profile revision has been
     /// materialized at show level.
-    pub fn migrate_legacy_to_profile_reference(
+    pub fn into_profile_reference(
         &mut self,
         reference: PatchedFixtureProfileReference,
     ) -> Result<(), PortablePatchError> {
-        if !self.is_legacy_inline() {
+        if !self.is_inline() {
             return Err(PortablePatchError::InvalidRecord(
-                "only a legacy inline record can be migrated".into(),
+                "only an inline record can become a profile reference".into(),
             ));
         }
-        let fixture = self.legacy_fixture()?;
+        let fixture = self.inline_fixture()?;
         validate_runtime_fixture(&fixture)?;
         ensure_matching_reference(runtime_profile_reference(&fixture)?, reference)?;
         let extensions = retained_definition_fields(&self.body, &fixture)?;
@@ -219,18 +219,16 @@ impl PortablePatchedFixtureRecord {
         Ok(())
     }
 
-    pub(crate) fn legacy_fixture(&self) -> Result<PatchedFixture, PortablePatchError> {
+    pub(crate) fn inline_fixture(&self) -> Result<PatchedFixture, PortablePatchError> {
         serde_json::from_value(self.body.clone()).map_err(invalid_record)
     }
 
-    pub(crate) fn legacy_profile_snapshot(&self) -> Result<&Value, PortablePatchError> {
+    pub(crate) fn inline_profile_snapshot(&self) -> Result<&Value, PortablePatchError> {
         self.body
             .pointer("/definition/profile_snapshot")
             .filter(|snapshot| !snapshot.is_null())
             .ok_or_else(|| {
-                PortablePatchError::InvalidRecord(
-                    "schema-v2 legacy record has no inline profile snapshot".into(),
-                )
+                PortablePatchError::InvalidRecord("an inline record has no profile snapshot".into())
             })
     }
 }
@@ -364,7 +362,7 @@ fn ensure_matching_reference(
 fn migrated_reference_body(
     source: &Value,
     reference: PatchedFixtureProfileReference,
-    extensions: Vec<super::legacy::RetainedUnknownField>,
+    extensions: Vec<super::inline::RetainedUnknownField>,
 ) -> Result<Value, PortablePatchError> {
     let mut candidate = source.clone();
     let body = candidate_object(&mut candidate)?;

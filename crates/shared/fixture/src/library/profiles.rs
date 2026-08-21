@@ -16,7 +16,7 @@ impl FixtureLibrary {
         let fixture: FixtureDefinition = serde_json::from_str(json)?;
         fixture.validate()?;
         self.conn.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json,source_gdtf) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id,revision) DO UPDATE SET manufacturer=excluded.manufacturer,model=excluded.model,mode=excluded.mode,definition_json=excluded.definition_json,source_gdtf=COALESCE(excluded.source_gdtf,fixture_definitions.source_gdtf)",params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json,source_gdtf])?;
-        self.migrate_legacy_profiles()?;
+        self.compile_imported_definitions()?;
         Ok(fixture)
     }
 
