@@ -1,4 +1,4 @@
-use crate::{ResolvedChangedAt, ResolvedValues};
+use crate::ResolvedValues;
 use light_core::{AttributeKey, AttributeValue, FixtureId, Universe};
 use light_dynamics::{DynamicDefinition, validate_definition};
 use light_fixture::{PatchedFixture, validate_patch};

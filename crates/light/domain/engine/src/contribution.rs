@@ -246,12 +246,6 @@ impl ResolvedFrame {
     }
 
     /// Write a value into a slot whatever holds it, as a Freeze does.
-    pub(crate) fn force(&mut self, slot: crate::Slot, value: AttributeValue) {
-        if let Some(state) = self.state.as_mut() {
-            state.force(slot, value);
-        }
-    }
-
     /// Take a slot over, optionally restamping when it changed.
     pub(crate) fn force_at(
         &mut self,

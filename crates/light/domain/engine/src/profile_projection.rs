@@ -101,8 +101,10 @@ struct ProfileHeadInputs {
     semantic_highlight_color: Option<HighlightColor>,
     suppressed_highlight_attributes: HashSet<AttributeKey>,
     group_scale: f32,
-    values: HashMap<AttributeKey, AttributeValue>,
-    sequence_masters: HashMap<AttributeKey, ApplicableSequenceMaster>,
+    /// Hashed for speed rather than against an adversary: a head's values are read several times
+    /// per channel and never arrive from outside this desk.
+    values: crate::HeadValues,
+    sequence_masters: crate::HeadSequenceMasters,
 }
 
 fn look_for_role(role: HighlightOutputRole, highlight_look: &HighlightLook) -> HighlightLook {
@@ -459,10 +461,7 @@ fn apply_semantic_highlight(
     Ok(())
 }
 
-fn apply_axis_inversion(
-    inversion: AxisInversion,
-    values: &mut HashMap<AttributeKey, AttributeValue>,
-) {
+fn apply_axis_inversion(inversion: AxisInversion, values: &mut crate::HeadValues) {
     for (attribute, value) in values {
         if !inversion.applies(attribute) {
             continue;
@@ -499,7 +498,7 @@ fn apply_control_loss(
 fn apply_hazardous_blackout(
     fixture: &PatchedFixture,
     options: RenderOptions,
-    values: &mut HashMap<AttributeKey, AttributeValue>,
+    values: &mut crate::HeadValues,
 ) {
     if fixture.definition.hazardous && options.blackout {
         for (attribute, value) in &fixture.definition.safe_values {
@@ -516,7 +515,7 @@ fn virtual_intensity(inputs: &ProfileHeadInputs) -> f32 {
         .unwrap_or(1.0)
 }
 
-fn requested_color(values: &HashMap<AttributeKey, AttributeValue>) -> Option<Xyz> {
+fn requested_color(values: &crate::HeadValues) -> Option<Xyz> {
     values
         .get(&AttributeKey("color".into()))
         .and_then(|value| match value {

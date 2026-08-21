@@ -52,7 +52,7 @@ pub(crate) fn render_fixture(
         } else {
             1.0
         };
-        let mut abstract_values: HashMap<AttributeKey, AttributeValue> = resolved
+        let mut abstract_values: crate::HeadValues = resolved
             .iter()
             .filter(|((fixture_id, _), _)| *fixture_id == owner)
             .map(|((_, attribute), value)| (attribute.clone(), value.clone()))

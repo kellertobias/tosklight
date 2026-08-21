@@ -70,6 +70,15 @@ pub(crate) use frame_slots::{Slot, SlotTable};
 #[allow(unused_imports)]
 pub(crate) use frame_state::{FrameState, Offer, SlotWinner};
 pub use frame_values::FrameValues;
+
+/// One profile head's values while it is being projected.
+///
+/// Read several times per channel and rebuilt per head, with keys that never come from outside
+/// this desk, so they are hashed for speed rather than against an adversary.
+pub(crate) type HeadValues =
+    rustc_hash::FxHashMap<light_core::AttributeKey, light_core::AttributeValue>;
+pub(crate) type HeadSequenceMasters =
+    rustc_hash::FxHashMap<light_core::AttributeKey, contribution::ApplicableSequenceMaster>;
 pub(crate) use legacy_projection::render_fixture;
 pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};

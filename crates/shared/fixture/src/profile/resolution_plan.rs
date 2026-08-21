@@ -81,10 +81,12 @@ impl FixtureModeResolutionPlan {
 impl BoundFixtureModeResolution<'_> {
     /// Resolve a channel without rebuilding its control key or rescanning functions twice.
     #[inline]
-    pub fn resolve_channel(
+    /// Generic over the hasher: the caller decides how its own values are hashed, and a frame's
+    /// values never arrive from outside the desk.
+    pub fn resolve_channel<S: std::hash::BuildHasher>(
         &self,
         channel_index: usize,
-        values: &HashMap<AttributeKey, AttributeValue>,
+        values: &HashMap<AttributeKey, AttributeValue, S>,
         highlighted: bool,
         highlight_override: Option<u32>,
         scales: impl FnOnce(Option<&AttributeKey>) -> ChannelScales,

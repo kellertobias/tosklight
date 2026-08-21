@@ -79,7 +79,7 @@ impl<'a> ProfileValueIndex<'a> {
         }
     }
 
-    pub(crate) fn values(&self, fixture_id: FixtureId) -> HashMap<AttributeKey, AttributeValue> {
+    pub(crate) fn values(&self, fixture_id: FixtureId) -> crate::HeadValues {
         self.borrowed_values(fixture_id)
             .map(|(attribute, value)| (attribute.clone(), value.clone()))
             .collect()
@@ -107,10 +107,7 @@ impl<'a> ProfileValueIndex<'a> {
             .find_map(|(candidate, value)| (candidate.0 == attribute).then_some(value))
     }
 
-    pub(crate) fn sequence_masters(
-        &self,
-        fixture_id: FixtureId,
-    ) -> HashMap<AttributeKey, ApplicableSequenceMaster> {
+    pub(crate) fn sequence_masters(&self, fixture_id: FixtureId) -> crate::HeadSequenceMasters {
         self.borrowed_sequence_masters(fixture_id)
             .map(|(attribute, master)| (attribute.clone(), master))
             .collect()
