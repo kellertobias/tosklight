@@ -98,7 +98,7 @@ impl ProgrammerRegistry {
                 apply_mutation(self, state, mutation, changed_at, &mut fixture_batch);
             }
         }
-        let touched = fixture_batch.commit(&mut state.values);
+        let touched = fixture_batch.commit(Arc::make_mut(&mut state.values));
         restamp_transient_values(self, state, &touched, changed_at);
         state.last_activity = changed_at;
         let user_id = state.user_id;
@@ -126,8 +126,8 @@ impl ProgrammerRegistry {
         }
         state.checkpoint();
         state.active_value_undo_group = None;
-        state.values.clear();
-        state.group_values.clear();
+        Arc::make_mut(&mut state.values).clear();
+        Arc::make_mut(&mut state.group_values).clear();
         state.group_release_values.clear();
         Arc::make_mut(&mut state.dynamic_values).clear();
         state.last_activity = self.clock.now();
@@ -175,7 +175,7 @@ impl ProgrammerRegistry {
                 apply_mutation(self, state, mutation, changed_at, &mut fixture_batch);
             }
         }
-        let touched = fixture_batch.commit(&mut state.values);
+        let touched = fixture_batch.commit(Arc::make_mut(&mut state.values));
         restamp_transient_values(self, state, &touched, changed_at);
         state.active_context = Some(active_context);
         state.last_activity = changed_at;
@@ -331,8 +331,7 @@ fn set_group(
     timing: NormalProgrammerValueTiming,
     changed_at: chrono::DateTime<chrono::Utc>,
 ) {
-    state
-        .group_values
+    Arc::make_mut(&mut state.group_values)
         .entry(group_id.to_owned())
         .or_default()
         .insert(
@@ -349,10 +348,10 @@ fn set_group(
 }
 
 fn release_group(state: &mut crate::ProgrammerState, group_id: &str, attribute: &AttributeKey) {
-    if let Some(values) = state.group_values.get_mut(group_id) {
+    if let Some(values) = Arc::make_mut(&mut state.group_values).get_mut(group_id) {
         values.remove(attribute);
         if values.is_empty() {
-            state.group_values.remove(group_id);
+            Arc::make_mut(&mut state.group_values).remove(group_id);
         }
     }
 }

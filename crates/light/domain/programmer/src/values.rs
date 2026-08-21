@@ -2,6 +2,7 @@ use crate::ProgrammerRegistry;
 use crate::state::{ProgrammerValueTiming, TransientProgrammerAction};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, TimedValue};
 use std::collections::HashSet;
+use std::sync::Arc;
 
 impl ProgrammerRegistry {
     pub fn set(
@@ -109,9 +110,7 @@ impl ProgrammerRegistry {
         let changed_at = self.clock.now();
         let mut states = self.states.write();
         let state = states.get_mut(&self.key(session))?;
-        state
-            .transient_values
-            .retain(|action| action.source != source);
+        Arc::make_mut(&mut state.transient_values).retain(|action| action.source != source);
         let values = assignments
             .into_iter()
             .map(|(fixture_id, attribute, value)| TimedValue {
@@ -127,7 +126,7 @@ impl ProgrammerRegistry {
                 delay_millis: None,
             })
             .collect();
-        state.transient_values.push(TransientProgrammerAction {
+        Arc::make_mut(&mut state.transient_values).push(TransientProgrammerAction {
             source,
             generation,
             values,
@@ -151,7 +150,7 @@ impl ProgrammerRegistry {
             return false;
         };
         let before = state.transient_values.len();
-        state.transient_values.retain(|action| {
+        Arc::make_mut(&mut state.transient_values).retain(|action| {
             action.source != source
                 || generation.is_some_and(|generation| action.generation != generation)
         });
@@ -192,7 +191,7 @@ impl ProgrammerRegistry {
                 let values = if preload {
                     &mut state.preload_pending
                 } else {
-                    &mut state.values
+                    Arc::make_mut(&mut state.values)
                 };
                 for (fixture_id, attribute, value) in assignments {
                     values.retain(|existing| {
@@ -215,8 +214,7 @@ impl ProgrammerRegistry {
             // A latched mode change made while a pulse is active belongs underneath that pulse.
             // Restamp the runtime override so it stays on top and reveals the new latched value
             // only when the momentary/timed action ends.
-            for value in state
-                .transient_values
+            for value in Arc::make_mut(&mut state.transient_values)
                 .iter_mut()
                 .flat_map(|action| action.values.iter_mut())
                 .filter(|value| touched.contains(&(value.fixture_id, value.attribute.clone())))
@@ -309,7 +307,7 @@ impl ProgrammerRegistry {
             let values = if preload {
                 &mut state.preload_pending
             } else {
-                &mut state.values
+                Arc::make_mut(&mut state.values)
             };
             values.retain(|v| !(v.fixture_id == fixture_id && v.attribute == attribute));
             values.push(TimedValue {

@@ -341,11 +341,15 @@ fn live_programmer_sample_does_not_replace_the_same_programmers_preload() {
     );
     assert!(programmers.activate_preload_at(session, clock.now()));
     let state = programmers.active().remove(0);
-    let live = state.values.into_iter().map(|value| ProjectedAssignment {
-        value,
-        source: ContributionSourceId::programmer(state.id),
-        sequence_master: None,
-    });
+    let live = state
+        .values
+        .iter()
+        .cloned()
+        .map(|value| ProjectedAssignment {
+            value,
+            source: ContributionSourceId::programmer(state.id),
+            sequence_master: None,
+        });
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
@@ -387,11 +391,15 @@ fn replacing_newer_live_programmer_keeps_older_preload_as_an_htp_competitor() {
         AttributeValue::Normalized(0.0),
     );
     let state = programmers.active().remove(0);
-    let live = state.values.into_iter().map(|value| ProjectedAssignment {
-        value,
-        source: ContributionSourceId::programmer(state.id),
-        sequence_master: None,
-    });
+    let live = state
+        .values
+        .iter()
+        .cloned()
+        .map(|value| ProjectedAssignment {
+            value,
+            source: ContributionSourceId::programmer(state.id),
+            sequence_master: None,
+        });
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
@@ -576,7 +584,8 @@ fn programmer_projection(
     let source = ContributionSourceId::programmer(state.id);
     let assignments = state
         .values
-        .into_iter()
+        .iter()
+        .cloned()
         .map(|value| ProjectedAssignment {
             value,
             source: source.clone(),
@@ -598,7 +607,8 @@ fn preload_projection(
     let source = ContributionSourceId::preload(state.id);
     let assignments = state
         .preload_active
-        .into_iter()
+        .iter()
+        .cloned()
         .map(|value| ProjectedAssignment {
             value,
             source: source.clone(),

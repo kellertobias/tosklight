@@ -1090,7 +1090,7 @@ async fn indexed_preset_uses_each_embedded_profile_raw_value_immediately() {
 
     let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
     assert_eq!(programmer.values.len(), 2);
-    for value in &programmer.values {
+    for value in programmer.values.iter() {
         assert_eq!(
             value.value,
             light_core::AttributeValue::Discrete("gobo.dots".into())

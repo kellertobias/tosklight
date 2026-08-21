@@ -55,8 +55,10 @@ impl Engine {
         let mut playback = crate::timed(crate::RenderPhase::PlaybackResolution, || {
             self.resolve_playback(generation, now, advance_playback, sampled)
         });
-        let programmers = self.programmers.active_output_states();
         let programmer = crate::timed(crate::RenderPhase::ProgrammerContributions, || {
+            // Inside the phase on purpose: reading the Programmer used to copy everything the
+            // operator had programmed, and that cost belonged to no phase at all.
+            let programmers = self.programmers.active_output_states();
             let underlay = crate::programmer_resolution::programmers_need_underlay(&programmers)
                 .then(|| {
                     let mut underlay = ResolvedContributionIndex::new(&playback.contributions);

@@ -26,16 +26,18 @@ pub(crate) struct ProgrammerValueTiming {
 pub struct ProgrammerSnapshot {
     pub selected: Vec<FixtureId>,
     pub selection_expression: Option<SelectionExpression>,
-    pub values: Vec<TimedValue>,
+    /// Shared with the live state, so taking an Undo checkpoint costs a reference count rather
+    /// than a copy of everything the operator has programmed.
+    pub values: Arc<Vec<TimedValue>>,
     pub dynamic_values: Arc<Vec<DynamicAddressValue>>,
-    pub group_values: GroupProgrammerValues,
+    pub group_values: Arc<GroupProgrammerValues>,
     pub group_release_values: Vec<GroupReleaseProgrammerValue>,
     pub preload_pending: Vec<TimedValue>,
-    pub preload_active: Vec<TimedValue>,
+    pub preload_active: Arc<Vec<TimedValue>>,
     pub preload_dynamic_pending: Arc<Vec<DynamicAddressValue>>,
     pub preload_dynamic_active: Arc<Vec<DynamicAddressValue>>,
     pub preload_group_pending: GroupProgrammerValues,
-    pub preload_group_active: GroupProgrammerValues,
+    pub preload_group_active: Arc<GroupProgrammerValues>,
     pub preload_group_release_pending: Vec<GroupReleaseProgrammerValue>,
     pub preload_group_release_active: Vec<GroupReleaseProgrammerValue>,
     pub preload_playback_pending: Vec<PreloadPlaybackAction>,
@@ -55,21 +57,24 @@ pub struct ProgrammerState {
     pub selected: Vec<FixtureId>,
     #[serde(default)]
     pub selection_expression: Option<SelectionExpression>,
-    pub values: Vec<TimedValue>,
+    /// Shared rather than owned: the render reads these every frame and must not pay for a copy of
+    /// the operator's programming to do it. A write clones once, through `Arc::make_mut`, and only
+    /// while a reader still holds the previous contents.
+    pub values: Arc<Vec<TimedValue>>,
     #[serde(default)]
     pub dynamic_values: Arc<Vec<DynamicAddressValue>>,
     /// Runtime-only fixture-control overrides. These sit above normal programmer values while a
     /// momentary or timed action is active, but are never recorded, persisted, or added to Undo.
     #[serde(skip)]
-    pub transient_values: Vec<TransientProgrammerAction>,
+    pub transient_values: Arc<Vec<TransientProgrammerAction>>,
     #[serde(default)]
-    pub group_values: GroupProgrammerValues,
+    pub group_values: Arc<GroupProgrammerValues>,
     #[serde(default)]
     pub group_release_values: Vec<GroupReleaseProgrammerValue>,
     #[serde(default)]
     pub preload_pending: Vec<TimedValue>,
     #[serde(default)]
-    pub preload_active: Vec<TimedValue>,
+    pub preload_active: Arc<Vec<TimedValue>>,
     #[serde(default)]
     pub preload_dynamic_pending: Arc<Vec<DynamicAddressValue>>,
     #[serde(default)]
@@ -77,7 +82,7 @@ pub struct ProgrammerState {
     #[serde(default)]
     pub preload_group_pending: GroupProgrammerValues,
     #[serde(default)]
-    pub preload_group_active: GroupProgrammerValues,
+    pub preload_group_active: Arc<GroupProgrammerValues>,
     #[serde(default)]
     pub preload_group_release_pending: Vec<GroupReleaseProgrammerValue>,
     #[serde(default)]
@@ -126,11 +131,11 @@ pub struct ProgrammerState {
 pub struct ProgrammerOutputState {
     pub id: ProgrammerId,
     pub priority: i16,
-    pub values: Vec<TimedValue>,
-    pub transient_values: Vec<TransientProgrammerAction>,
-    pub group_values: GroupProgrammerValues,
-    pub preload_active: Vec<TimedValue>,
-    pub preload_group_active: GroupProgrammerValues,
+    pub values: Arc<Vec<TimedValue>>,
+    pub transient_values: Arc<Vec<TransientProgrammerAction>>,
+    pub group_values: Arc<GroupProgrammerValues>,
+    pub preload_active: Arc<Vec<TimedValue>>,
+    pub preload_group_active: Arc<GroupProgrammerValues>,
 }
 
 #[derive(Clone, Debug)]

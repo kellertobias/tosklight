@@ -2,6 +2,7 @@ use crate::{ProgrammerRegistry, ProgrammerState};
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, TimedValue};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 pub(crate) struct FixtureValueIndex<'a> {
     values: HashMap<(FixtureId, &'a AttributeKey), &'a TimedValue>,
@@ -113,8 +114,7 @@ pub(crate) fn restamp_transient_values(
     touched: &FixtureAddresses,
     changed_at: DateTime<Utc>,
 ) {
-    for value in state
-        .transient_values
+    for value in Arc::make_mut(&mut state.transient_values)
         .iter_mut()
         .flat_map(|action| action.values.iter_mut())
         .filter(|value| touched.contains(value.fixture_id, &value.attribute))

@@ -23,7 +23,7 @@ impl ProgrammerRegistry {
             number: address.number,
             ..Preset::default()
         };
-        for value in &state.values {
+        for value in state.values.iter() {
             if address.family.accepts(&value.attribute) {
                 preset
                     .values
@@ -32,7 +32,7 @@ impl ProgrammerRegistry {
                     .insert(value.attribute.clone(), value.value.clone());
             }
         }
-        for (group_id, values) in &state.group_values {
+        for (group_id, values) in state.group_values.iter() {
             for (attribute, value) in values {
                 if address.family.accepts(attribute) {
                     preset
