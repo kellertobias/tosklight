@@ -8,6 +8,9 @@ const DEFAULT_WARMUP_SECONDS: u64 = 1;
 #[serde(rename_all = "snake_case")]
 pub enum BenchmarkProfile {
     HardFloor,
+    /// The shape the performance goal actually names: sixteen universes packed with three-channel
+    /// fixtures, each running a Dynamic, at 40 Hz.
+    DenseRig,
     Target,
     #[serde(rename = "low_power_4")]
     LowPower4,
@@ -74,8 +77,9 @@ pub enum ParseOutcome {
 }
 
 impl BenchmarkProfile {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::HardFloor,
+        Self::DenseRig,
         Self::Target,
         Self::LowPower4,
         Self::LowPower8,
@@ -89,6 +93,17 @@ impl BenchmarkProfile {
                 universes: 32,
                 rate_hz: 100,
                 fixtures_per_universe: 1,
+            },
+            Self::DenseRig => ProfileConfig {
+                profile: self,
+                // Reported rather than release-blocking until the rate has been measured on a
+                // quiet machine. Gating on a number nobody has verified would fail CI for the
+                // wrong reason.
+                expectation: Expectation::TargetGoal,
+                universes: 16,
+                rate_hz: 40,
+                // 512 slots divided three ways: a wash rig rather than a handful of big lanterns.
+                fixtures_per_universe: 170,
             },
             Self::Target => ProfileConfig {
                 profile: self,
@@ -197,7 +212,7 @@ impl Arguments {
                     let value = parse_bounded_u64(
                         &required_value(&mut arguments, &argument)?,
                         1,
-                        128,
+                        512,
                         "fixtures per universe",
                     )? as u16;
                     parsed.fixtures_per_universe = Some(value);
@@ -262,13 +277,13 @@ impl Arguments {
          Release-only render-through-protocol-encoding benchmark. JSON is written to stdout.\n\
          \n\
          Options:\n\
-           --profile all|hard-floor|target|low-power-4|low-power-8\n\
+           --profile all|hard-floor|dense-rig|target|low-power-4|low-power-8\n\
            --protocol artnet|sacn|both\n\
            --transport encode-only|loopback\n\
            --seconds N                 Measurement duration, 1-300 (default: 5)\n\
            --warmup-seconds N          Unpaced warmup duration, 0-60 (default: 1)\n\
           --hardware-label TEXT        Reference-machine description included in JSON\n\
-          --fixtures-per-universe N    Equal-size fixtures packed into every universe (1-128)\n\
+          --fixtures-per-universe N    Equal-size fixtures packed into every universe (1-512)\n\
           --universes N                Override the profile universe count (1-512)\n\
           --rate-hz N                  Scheduled output target, 1-240\n\
           --sustained-show             Use the mixed-fixture sustained benchmark show\n\
@@ -293,6 +308,7 @@ fn parse_profiles(value: &str) -> Result<Vec<BenchmarkProfile>, String> {
     Ok(match value {
         "all" => BenchmarkProfile::ALL.to_vec(),
         "hard-floor" => vec![BenchmarkProfile::HardFloor],
+        "dense-rig" => vec![BenchmarkProfile::DenseRig],
         "target" => vec![BenchmarkProfile::Target],
         "low-power-4" => vec![BenchmarkProfile::LowPower4],
         "low-power-8" => vec![BenchmarkProfile::LowPower8],
@@ -395,7 +411,12 @@ mod tests {
             parsed(&["--fixtures-per-universe", "36"]).fixtures_per_universe,
             Some(36)
         );
-        assert!(Arguments::parse(["--fixtures-per-universe".into(), "256".into()]).is_err());
+        // 170 three-channel fixtures fill a universe, so the bound is the universe itself.
+        assert_eq!(
+            parsed(&["--fixtures-per-universe", "170"]).fixtures_per_universe,
+            Some(170)
+        );
+        assert!(Arguments::parse(["--fixtures-per-universe".into(), "513".into()]).is_err());
     }
 
     #[test]
