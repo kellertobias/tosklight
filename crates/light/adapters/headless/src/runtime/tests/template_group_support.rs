@@ -59,7 +59,9 @@ fn template_fixture(
             profile_id: None,
             mode_id: None,
             profile_snapshot: None,
-        },
+        }
+            .resolved_from_flat_layout()
+            .expect("a described test fixture resolves"),
         universe: Some(1),
         address: Some(address),
         split_patches: Vec::new(),

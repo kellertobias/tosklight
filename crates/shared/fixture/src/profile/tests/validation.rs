@@ -325,7 +325,7 @@ fn legacy_migration_derives_invert_aware_full_white_and_open_wheel_highlight() {
         profile_snapshot: None,
     };
 
-    let profile = FixtureProfile::from_legacy_modes(&[definition]).unwrap();
+    let profile = FixtureProfile::from_flat_modes(&[definition]).unwrap();
     let mode = &profile.modes[0];
     let highlights = mode
         .channels

@@ -1,6 +1,4 @@
-use crate::{
-    FixtureError, FixtureProfile, MultiPatchInstance, PatchedFixture, PatchedHead, SplitPatch,
-};
+use crate::{FixtureError, MultiPatchInstance, PatchedFixture, PatchedHead, SplitPatch};
 use light_core::FixtureId;
 use std::collections::HashMap;
 
@@ -60,10 +58,10 @@ impl MultiPatchInstance {
     }
 }
 
-/// Normalize a persisted patched fixture into the schema-v2 portable snapshot and explicit split
-/// assignment shape. This is intentionally an explicit reader/migration rather than relying on
-/// serde defaults: once written, a show no longer needs either the desk fixture library or the
-/// legacy universe/address fallback to understand its patch.
+/// Normalize a persisted patched fixture into the current portable snapshot and explicit split
+/// assignment shape. This is intentionally an explicit reader rather than relying on serde
+/// defaults: once written, a show no longer needs either the desk fixture library or a
+/// universe/address fallback to understand its patch.
 pub fn migrate_patched_fixture_to_v2(fixture: &mut PatchedFixture) -> Result<bool, FixtureError> {
     let original = serde_json::to_value(&*fixture)?;
     if fixture.definition.schema_version == 2 {
@@ -73,31 +71,6 @@ pub fn migrate_patched_fixture_to_v2(fixture: &mut PatchedFixture) -> Result<boo
         // untouched makes this lossless until the show compiler materializes the snapshot as an
         // immutable profile revision and replaces the inline definition with a lean reference.
         fixture.definition.schema_version = crate::FIXTURE_PROFILE_SCHEMA_VERSION;
-    }
-    if fixture.definition.schema_version == 1 {
-        let legacy = fixture.definition.clone();
-        let mut profile = FixtureProfile::from_legacy_modes(std::slice::from_ref(&legacy))
-            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
-        // An embedded snapshot retains the selected legacy revision as its portable identity. The
-        // desk library may independently migrate the same source into its own revision sequence.
-        profile.revision = legacy.revision.max(1);
-        let mode_id = profile
-            .modes
-            .first()
-            .map(|mode| mode.id)
-            .ok_or_else(|| FixtureError::Invalid("migrated fixture has no mode".into()))?;
-        let mut definition = profile
-            .resolved_definition(mode_id)
-            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
-        // These compatibility projections are still consumed by existing programmer and stage
-        // surfaces. Keeping them verbatim avoids a behavior change while schema-v2 runtime paths
-        // use the complete embedded profile snapshot.
-        definition.heads = legacy.heads;
-        definition.color_calibration = legacy.color_calibration;
-        definition.physical.pan_range_degrees = legacy.physical.pan_range_degrees;
-        definition.physical.tilt_range_degrees = legacy.physical.tilt_range_degrees;
-        definition.safe_values = legacy.safe_values;
-        fixture.definition = definition;
     }
 
     let splits = fixture.definition.split_footprints();

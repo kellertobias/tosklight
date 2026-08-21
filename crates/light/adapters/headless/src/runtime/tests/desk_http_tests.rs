@@ -197,7 +197,9 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                     profile_id: None,
                     mode_id: None,
                     profile_snapshot: None,
-                },
+                }
+            .resolved_from_flat_layout()
+            .expect("a described test fixture resolves"),
                 universe: Some(1),
                 address: Some(1),
                 split_patches: Vec::new(),

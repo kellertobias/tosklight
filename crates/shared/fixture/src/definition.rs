@@ -17,6 +17,24 @@ impl FixtureDefinition {
             .map_or(PatchPolicy::Dmx, |profile| profile.patch_policy)
     }
 
+    /// This fixture as the desk patches it, built from the flat parameter layout it describes.
+    ///
+    /// A GDTF import and a hand-written test both describe a fixture as one head list with
+    /// parameters at fixed offsets. Neither is something the desk stores or renders; both become a
+    /// profile and its resolved definition here.
+    pub fn resolved_from_flat_layout(&self) -> Result<Self, FixtureError> {
+        let profile = crate::FixtureProfile::from_flat_modes(std::slice::from_ref(self))
+            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+        let mode_id = profile
+            .modes
+            .first()
+            .map(|mode| mode.id)
+            .ok_or_else(|| FixtureError::Invalid("a described fixture has no mode".into()))?;
+        profile
+            .resolved_definition(mode_id)
+            .map_err(|error| FixtureError::Invalid(error.to_string()))
+    }
+
     pub fn split_footprints(&self) -> BTreeMap<u16, u16> {
         if self.schema_version == FIXTURE_PROFILE_SCHEMA_VERSION
             && let (Some(profile), Some(mode_id)) = (&self.profile_snapshot, self.mode_id)

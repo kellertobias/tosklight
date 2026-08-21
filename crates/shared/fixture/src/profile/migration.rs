@@ -14,10 +14,16 @@ use light_core::AttributeKey;
 use std::collections::HashMap;
 
 impl FixtureProfile {
-    pub fn from_legacy_modes(definitions: &[FixtureDefinition]) -> Result<Self, ProfileError> {
+    /// Build a profile from modes described as flat parameter layouts — one head list, parameters
+    /// at fixed DMX offsets.
+    ///
+    /// That is how a GDTF file describes a fixture, and how a hand-written test describes one. It
+    /// is not a persisted shape: nothing stores a fixture this way, and the desk never patches one
+    /// until it has been through here.
+    pub fn from_flat_modes(definitions: &[FixtureDefinition]) -> Result<Self, ProfileError> {
         let first = definitions
             .first()
-            .ok_or_else(|| ProfileError::Invalid("legacy mode list is empty".into()))?;
+            .ok_or_else(|| ProfileError::Invalid("flat mode list is empty".into()))?;
         if definitions.iter().any(|definition| {
             !definition
                 .manufacturer
@@ -30,7 +36,7 @@ impl FixtureProfile {
                 || definition.physical.weight_kilograms != first.physical.weight_kilograms
         }) {
             return Err(ProfileError::Invalid(
-                "legacy modes have conflicting fixture-level metadata".into(),
+                "flat modes have conflicting fixture-level metadata".into(),
             ));
         }
         // Reuse one legacy definition identity so migration remains deterministic even when two

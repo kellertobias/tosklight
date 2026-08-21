@@ -344,14 +344,12 @@ fn tosklight_mvr_round_trip_preserves_scenery_markers_and_ordinary_fixtures() {
 
     let mut venue = stored_fixture(
         FixtureId(Uuid::from_u128(501)),
-        fixture_definition(1),
+        fixture_definition_from(1, FixtureId(Uuid::from_u128(511)), "Venue"),
         1,
         (true, 0),
     );
     venue.name = "Venue marker".into();
     venue.fixture_number = Some(201);
-    venue.definition.id = FixtureId(Uuid::from_u128(511));
-    venue.definition.manufacturer = "Venue".into();
 
     let visual = visual_fixture(502, 512, "Independent visual-only", "Touring", 7);
     let reserved = visual_fixture(503, 513, "Reserved scenery", "Legacy", 8);

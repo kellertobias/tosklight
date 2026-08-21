@@ -143,7 +143,7 @@ fn migrate_family(
         .iter()
         .map(|row| row.definition.clone())
         .collect::<Vec<_>>();
-    let mut profile = match FixtureProfile::from_legacy_modes(&definitions) {
+    let mut profile = match FixtureProfile::from_flat_modes(&definitions) {
         Ok(profile) => profile,
         Err(error) => {
             record_family_failure(transaction, rows, &error)?;

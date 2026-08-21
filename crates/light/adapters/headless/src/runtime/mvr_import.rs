@@ -204,7 +204,7 @@ pub(super) fn mvr_definitions(
                 profile_snapshot: None,
             };
             let Ok(profile) =
-                light_fixture::FixtureProfile::from_legacy_modes(std::slice::from_ref(&described))
+                light_fixture::FixtureProfile::from_flat_modes(std::slice::from_ref(&described))
             else {
                 continue;
             };

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn embedded_legacy_patch_migrates_to_portable_profile_and_explicit_split_assignments() {
+fn a_flat_layout_becomes_a_portable_profile_with_explicit_split_assignments() {
     let mut legacy = definition(4);
     legacy.revision = 7;
     let intensity = Parameter {
@@ -112,6 +112,10 @@ fn embedded_legacy_patch_migrates_to_portable_profile_and_explicit_split_assignm
         freeze: Default::default(),
     };
 
+    // A described fixture becomes a profile before the desk patches it, the way a GDTF import
+    // does; normalising the patch then fills in the explicit split assignment.
+    fixture.definition = fixture.definition.resolved_from_flat_layout().unwrap();
+    fixture.definition.revision = 7;
     assert!(migrate_patched_fixture_to_v2(&mut fixture).unwrap());
     assert_eq!(
         fixture.definition.schema_version,
@@ -128,9 +132,11 @@ fn embedded_legacy_patch_migrates_to_portable_profile_and_explicit_split_assignm
     assert_eq!(emitters[0].response_curve, 1.0);
     assert!(emitters.iter().all(|emitter| emitter.visible));
     assert_eq!(migrated_mode.color_systems[0].correction_matrix[0][0], 0.9);
+    // A described capability is read for what it says the channel does, not kept as a label: an
+    // Open range reaching full is what makes Highlight open this shutter.
     assert_eq!(
-        fixture.definition.heads[0].parameters[0].capabilities[0].name,
-        "Open"
+        migrated_mode.channels[0].highlight_raw, 255,
+        "an Open capability reaching full is what makes Highlight open this channel"
     );
     assert_eq!(
         fixture.split_patches,
@@ -152,7 +158,7 @@ fn embedded_legacy_patch_migrates_to_portable_profile_and_explicit_split_assignm
 }
 
 #[test]
-fn migrated_normalized_dmx_rounding_matches_the_legacy_encoder() {
+fn a_converted_profile_rounds_dmx_exactly_as_the_flat_layout_did() {
     let parameter = Parameter {
         attribute: AttributeKey::intensity(),
         components: vec![ChannelComponent {
@@ -169,7 +175,7 @@ fn migrated_normalized_dmx_rounding_matches_the_legacy_encoder() {
 
     let mut legacy = definition(1);
     legacy.heads[0].parameters.push(parameter);
-    let profile = FixtureProfile::from_legacy_modes(&[legacy]).unwrap();
+    let profile = FixtureProfile::from_flat_modes(&[legacy]).unwrap();
     let mode = &profile.modes[0];
     let values = std::collections::HashMap::from([(
         AttributeKey::intensity(),
