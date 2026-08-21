@@ -18,6 +18,11 @@ pub(crate) struct CompiledCueList {
 pub(crate) struct CompiledAttribute {
     fixture_id: FixtureId,
     attribute: AttributeKey,
+    /// Whether this attribute snaps rather than fades, decided from its name once here instead of
+    /// asked of the attribute registry for every contribution of every frame.
+    uses_snap_transition: bool,
+    /// Whether this attribute drives brightness, decided for the same reason.
+    is_intensity: bool,
     first_cue_index: usize,
     history: Vec<CompiledChange>,
 }
@@ -101,6 +106,8 @@ impl CompiledCueList {
             let index = self.attributes.len();
             self.attributes.push(CompiledAttribute {
                 fixture_id: change.fixture_id,
+                uses_snap_transition: crate::attribute_uses_snap_transition(&change.attribute),
+                is_intensity: change.attribute.is_intensity(),
                 attribute: change.attribute.clone(),
                 first_cue_index: cue_index,
                 history: Vec::new(),
@@ -133,6 +140,16 @@ impl CompiledAttribute {
 
     pub(crate) fn attribute(&self) -> &AttributeKey {
         &self.attribute
+    }
+
+    /// Whether this attribute snaps rather than fades, decided when the cue list compiled.
+    pub(crate) fn uses_snap_transition(&self) -> bool {
+        self.uses_snap_transition
+    }
+
+    /// Whether this attribute drives brightness, decided when the cue list compiled.
+    pub(crate) fn is_intensity(&self) -> bool {
+        self.is_intensity
     }
 
     pub(crate) fn value(&self, cue_index: usize, tracking_wrap: bool) -> Option<&AttributeValue> {

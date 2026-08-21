@@ -132,9 +132,9 @@ fn playback_resolution(
     transitions: Vec<AutomaticPlaybackTransition>,
     sampled: &[ContributionBatch],
 ) -> PlaybackResolution {
-    let mut contributions = playback.contributions_with_context_at(now, |_, attribute| {
-        light_playback::attribute_uses_snap_transition(attribute)
-    });
+    // No predicate: the compiled cue settled which attributes snap when the cue list compiled,
+    // rather than being asked once per contribution per frame.
+    let mut contributions = playback.contributions_with_context(now, None);
     if sampled.iter().any(ContributionBatch::has_replacements) {
         contributions.retain(|contribution| {
             let source = crate::ContributionSourceId::playback(contribution.source);

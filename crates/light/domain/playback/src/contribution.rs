@@ -8,8 +8,14 @@ use state::PlaybackFrame;
 struct ContributionContext<'a> {
     engine: &'a PlaybackEngine,
     now: DateTime<Utc>,
-    is_snap: &'a dyn Fn(FixtureId, &AttributeKey) -> bool,
+    /// An override for whether an attribute snaps. `None` means the compiled cue already decided,
+    /// which is the ordinary case: the answer depends only on the attribute's name, and that was
+    /// settled when the cue list compiled rather than per contribution per frame.
+    is_snap: Option<SnapOverride<'a>>,
 }
+
+/// A caller's own answer to whether an attribute snaps rather than fades.
+pub type SnapOverride<'a> = &'a dyn Fn(FixtureId, &AttributeKey) -> bool;
 
 impl PlaybackEngine {
     pub fn contributions(&self) -> Vec<TimedValue> {
@@ -17,9 +23,10 @@ impl PlaybackEngine {
     }
 
     pub fn contributions_at(&self, now: DateTime<Utc>) -> Vec<TimedValue> {
-        self.contributions_at_with_snap(now, |_, attribute| {
-            attribute_uses_snap_transition(attribute)
-        })
+        self.contributions_with_context(now, None)
+            .into_iter()
+            .map(|contribution| contribution.value)
+            .collect()
     }
 
     pub(crate) fn transition_source_at(
@@ -32,9 +39,7 @@ impl PlaybackEngine {
             return None;
         }
         let values = self
-            .contributions_with_context_at(now, |_, attribute| {
-                attribute_uses_snap_transition(attribute)
-            })
+            .contributions_with_context(now, None)
             .into_iter()
             .filter(|contribution| {
                 contribution.source.cue_list_id == playback.cue_list_id
@@ -51,7 +56,7 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
         is_snap: impl Fn(FixtureId, &AttributeKey) -> bool,
     ) -> Vec<TimedValue> {
-        self.contributions_with_context_at(now, is_snap)
+        self.contributions_with_context(now, Some(&is_snap))
             .into_iter()
             .map(|contribution| contribution.value)
             .collect()
@@ -68,10 +73,20 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
         is_snap: impl Fn(FixtureId, &AttributeKey) -> bool,
     ) -> Vec<PlaybackContribution> {
+        self.contributions_with_context(now, Some(&is_snap))
+    }
+
+    /// Build this frame's Cue contributions, letting the compiled cue answer whether an attribute
+    /// snaps unless a caller overrides it.
+    pub fn contributions_with_context(
+        &self,
+        now: DateTime<Utc>,
+        is_snap: Option<SnapOverride<'_>>,
+    ) -> Vec<PlaybackContribution> {
         ContributionContext {
             engine: self,
             now,
-            is_snap: &is_snap,
+            is_snap,
         }
         .build()
     }
