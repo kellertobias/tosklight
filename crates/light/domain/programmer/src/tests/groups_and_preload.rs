@@ -349,8 +349,9 @@ fn disconnect_keeps_programmer_until_explicit_clear() {
 }
 
 #[test]
-fn history_and_console_state_are_session_local() {
+fn undo_history_and_console_modes_belong_to_the_one_desk() {
     let registry = ProgrammerRegistry::default();
+    registry.collapse_to_one_desk();
     let first = SessionId::new();
     let second = SessionId::new();
     registry.start(first, UserId::new());
@@ -368,7 +369,12 @@ fn history_and_console_state_are_session_local() {
     assert!(registry.redo(first));
     assert!(!registry.get(first).unwrap().highlight);
     assert!(registry.get(first).unwrap().blind);
-    assert!(registry.get(second).unwrap().command_line.is_empty());
+    assert_eq!(
+        registry.get(second).unwrap().command_line,
+        "Fixture 1 At Full",
+        "a second surface reads the command line the operator typed"
+    );
+    assert!(registry.get(second).unwrap().blind);
 }
 
 #[test]

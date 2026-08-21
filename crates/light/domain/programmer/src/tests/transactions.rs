@@ -1,21 +1,19 @@
 use super::*;
 
 #[test]
-fn rejected_transaction_rolls_back_before_a_same_user_mutation_can_run() {
+fn rejected_transaction_rolls_back_before_another_connections_mutation_can_run() {
     use std::sync::mpsc;
     use std::thread;
     use std::time::Duration;
 
     let registry = Arc::new(ProgrammerRegistry::default());
+    registry.collapse_to_one_desk();
     let user = UserId::new();
     let transaction_session = SessionId::new();
     let concurrent_session = SessionId::new();
-    let unrelated_session = SessionId::new();
     let fixture = FixtureId::new();
-    let unrelated_fixture = FixtureId::new();
     registry.start(transaction_session, user);
     registry.start(concurrent_session, user);
-    registry.start(unrelated_session, UserId::new());
     registry.set(
         transaction_session,
         fixture,
@@ -48,17 +46,9 @@ fn rejected_transaction_rolls_back_before_a_same_user_mutation_can_run() {
     });
 
     transaction_entered_rx.recv().unwrap();
+    // There is one Programmer, so an open transaction on it holds every connection back. Nothing
+    // else on this desk can write while a staged transaction is deciding whether to commit.
     assert!(concurrent_gate.try_lock().is_none());
-    registry.set(
-        unrelated_session,
-        unrelated_fixture,
-        AttributeKey::intensity(),
-        AttributeValue::Normalized(0.7),
-    );
-    assert_eq!(
-        registry.get(unrelated_session).unwrap().values[0].value,
-        AttributeValue::Normalized(0.7)
-    );
 
     let (mutation_attempted_tx, mutation_attempted_rx) = mpsc::channel();
     let (mutation_finished_tx, mutation_finished_rx) = mpsc::channel();
@@ -90,12 +80,14 @@ fn rejected_transaction_rolls_back_before_a_same_user_mutation_can_run() {
     let programmer = registry.get(transaction_session).unwrap();
     assert_eq!(programmer.values.len(), 1);
     assert_eq!(programmer.values[0].value, AttributeValue::Normalized(0.9));
+    // The rollback put "FIXTURE 1" back on the desk's one command line, and the mutation that had
+    // been waiting behind the transaction then wrote over it. Both surfaces read the same line.
     assert_eq!(
         registry
             .command_line_state(transaction_session)
             .unwrap()
             .text,
-        "FIXTURE 1"
+        "GROUP 2"
     );
     assert_eq!(
         registry

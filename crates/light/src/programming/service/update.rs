@@ -334,9 +334,12 @@ impl ProgrammingService {
     }
 
     fn assert_update_owner(&self, identity: &UpdateIdentity) -> Result<(), ActionError> {
-        match self.programmers.user_id(identity.session_id) {
-            Some(owner) if owner == identity.user_id => Ok(()),
-            Some(_) => Err(ActionError::new(
+        match self
+            .programmers
+            .session_operates_desk(identity.session_id, identity.user_id)
+        {
+            Some(true) => Ok(()),
+            Some(false) => Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",
             )),

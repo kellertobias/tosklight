@@ -8,6 +8,9 @@ use std::sync::atomic::Ordering;
 
 impl ProgrammerRegistry {
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
+        // One desk, one Programmer. A session presenting any other identity joins the Programmer
+        // the desk already has rather than opening a second one beside it.
+        let user_id = self.desk.resolve(user_id);
         let mutation_gate = self.mutation_gate_for_user(user_id);
         let _mutation_guard = mutation_gate.lock();
         self.priority_changed_at
@@ -50,10 +53,11 @@ impl ProgrammerRegistry {
             .find_map(|(key, state)| (state.user_id == user_id).then_some(*key));
         if let Some(key) = existing {
             self.sessions.write().insert(session_id, key);
+            let desk_context = self.desk.command_context(session_id);
             self.command_contexts
                 .write()
                 .entry(session_id)
-                .or_insert(session_id);
+                .or_insert(desk_context);
             let command_context = self.command_context(session_id);
             self.command_states
                 .write()
@@ -114,10 +118,11 @@ impl ProgrammerRegistry {
             active_value_undo_group: None,
         };
         self.states.write().insert(session_id, state.clone());
+        let desk_context = self.desk.command_context(session_id);
         self.command_contexts
             .write()
             .entry(session_id)
-            .or_insert(session_id);
+            .or_insert(desk_context);
         let command_context = self.command_context(session_id);
         self.command_states
             .write()
@@ -252,12 +257,17 @@ impl ProgrammerRegistry {
             .copied()
             .unwrap_or(session)
     }
+    /// The interaction context this session operates.
+    ///
+    /// One desk has one of these. Every screen, OSC client, hardware surface and keyboard shares
+    /// the command line, command target, selection gesture and Align state it holds, so the answer
+    /// does not depend on which connection is asking.
     pub(crate) fn command_context(&self, session: SessionId) -> SessionId {
         self.command_contexts
             .read()
             .get(&session)
             .copied()
-            .unwrap_or(session)
+            .unwrap_or_else(|| self.desk.command_context(session))
     }
 
     pub(crate) fn project_selection(&self, state: &mut ProgrammerState, context: SessionId) {
@@ -297,6 +307,13 @@ impl ProgrammerRegistry {
     /// partial command lines, selection gestures, and the active command target are shared only by
     /// sessions attached to this same context.
     pub fn attach_command_context(&self, session: SessionId, context: SessionId) -> bool {
+        // A collapsed desk has one interaction context, so a surface asking for another is already
+        // where it belongs. The call remains so saved hardware configuration and existing clients
+        // keep working against a desk that no longer has contexts to choose between.
+        if self.desk.is_collapsed() {
+            let _ = context;
+            return self.sessions.read().contains_key(&session);
+        }
         if self.sessions.read().contains_key(&session) && self.command_context(session) == context {
             return true;
         }

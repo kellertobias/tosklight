@@ -6,6 +6,7 @@ mod capture_mode;
 mod command_choice;
 mod command_state;
 mod cue_recording;
+mod desk_authority;
 mod dynamic_values;
 mod fixture_value_batch;
 mod group_recording;
@@ -47,6 +48,7 @@ pub use cue_recording::{
     CueRecordingCapture, CueRecordingCaptureError, CueRecordingCapturedSource,
     CueRecordingFixtureValue, CueRecordingGroupValue, CueRecordingSource,
 };
+pub use desk_authority::DeskAuthority;
 pub use dynamic_values::{
     DynamicProgrammerValueMutation, GroupReleaseProgrammerValue, ReleaseProgrammerFixtureValue,
     ReleaseProgrammerGroupValue,

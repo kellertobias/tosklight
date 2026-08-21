@@ -59,6 +59,10 @@ pub struct ProgrammerRegistry {
     /// Failed mutations for unknown sessions share one gate instead of allocating a permanent
     /// real-user gate for every arbitrary UUID.
     pub(crate) unknown_mutation_gate: Arc<ReentrantMutex<()>>,
+    /// The one Programmer this desk has. Every session binds to it, whatever identity the session
+    /// arrived holding, so the command line, selection and values converge across every screen,
+    /// OSC client and attached hardware surface.
+    pub(crate) desk: crate::DeskAuthority,
     pub(crate) clock: SharedClock,
 }
 impl Default for ProgrammerRegistry {
@@ -89,12 +93,26 @@ impl ProgrammerRegistry {
             priority_changed_at: Arc::default(),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
+            desk: crate::DeskAuthority::default(),
             clock,
         }
     }
 
     pub fn clock(&self) -> SharedClock {
         Arc::clone(&self.clock)
+    }
+
+    /// The one Programmer this desk operates.
+    pub fn desk(&self) -> &crate::DeskAuthority {
+        &self.desk
+    }
+
+    /// Collapse this registry onto one Programmer and one interaction context.
+    ///
+    /// Every session then binds to that authority whatever identity or context it presents. Until
+    /// this is called the registry behaves exactly as it did before the collapse existed.
+    pub fn collapse_to_one_desk(&self) {
+        self.desk.collapse();
     }
 
     pub(crate) fn mutation_gate_for_user(&self, user_id: UserId) -> Arc<ReentrantMutex<()>> {
@@ -235,6 +253,7 @@ impl ProgrammerRegistry {
         self.with_all_mutation_gates(|| {
             self.states.write().clear();
             self.sessions.write().clear();
+            self.desk.release();
             self.command_contexts.write().clear();
             self.command_states.write().clear();
             self.selection_contexts.write().clear();
@@ -265,6 +284,20 @@ impl ProgrammerRegistry {
             .get(&user_id)
             .copied()
             .unwrap_or(0)
+    }
+
+    /// Whether this session operates the Programmer the presented identity names.
+    ///
+    /// A desk has one Programmer, so every session it knows operates it. An identity presented by
+    /// an older client, saved hardware configuration, or a stored URL normalises to the desk's own
+    /// rather than being rejected as foreign. `None` when the desk does not know the session at
+    /// all, which remains a real answer: nothing is being operated.
+    ///
+    /// This is the one place legacy identities are accepted, and therefore the one place to change
+    /// when they stop being accepted at all.
+    pub fn session_operates_desk(&self, session: SessionId, presented: UserId) -> Option<bool> {
+        let owner = self.user_id(session)?;
+        Some(owner == self.desk.normalize(presented))
     }
 
     pub fn user_id(&self, session: SessionId) -> Option<UserId> {

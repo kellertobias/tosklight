@@ -94,9 +94,9 @@ impl ProgrammingService {
         session: SessionId,
         user_id: UserId,
     ) -> Result<(), ActionError> {
-        match self.programmers.user_id(session) {
-            Some(owner) if owner == user_id => Ok(()),
-            Some(_) => Err(ActionError::new(
+        match self.programmers.session_operates_desk(session, user_id) {
+            Some(true) => Ok(()),
+            Some(false) => Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",
             )),
@@ -135,7 +135,7 @@ impl ProgrammingService {
             .programmers
             .priority_state(session)
             .ok_or_else(priority_unavailable)?;
-        if owner != user_id {
+        if self.programmers.desk().normalize(user_id) != owner {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",

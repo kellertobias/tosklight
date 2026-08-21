@@ -80,7 +80,7 @@ impl ProgrammingPreloadPlaybackQueueContent {
     ) -> Result<Self, ActionError> {
         #[cfg(test)]
         PROJECTION_READS.set(PROJECTION_READS.get() + 1);
-        if programmers.user_id(session) != Some(user_id) {
+        if programmers.session_operates_desk(session, user_id) != Some(true) {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the requested user",

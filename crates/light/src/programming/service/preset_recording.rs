@@ -97,9 +97,9 @@ impl ProgrammingService {
         session_id: SessionId,
         user_id: UserId,
     ) -> Result<(), ActionError> {
-        match self.programmers.user_id(session_id) {
-            Some(owner) if owner == user_id => Ok(()),
-            Some(_) => Err(ActionError::new(
+        match self.programmers.session_operates_desk(session_id, user_id) {
+            Some(true) => Ok(()),
+            Some(false) => Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",
             )),

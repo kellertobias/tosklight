@@ -212,7 +212,11 @@ impl ProgrammingService {
         session: Option<SessionId>,
     ) -> Result<ProgrammerCaptureMode, ActionError> {
         session.map_or(Ok(ProgrammerCaptureMode::default()), |session| {
-            if self.programmers.user_id(session) != Some(target.user_id) {
+            if self
+                .programmers
+                .session_operates_desk(session, target.user_id)
+                != Some(true)
+            {
                 return Err(ActionError::new(
                     ActionErrorKind::Internal,
                     "replacement Programmer session does not belong to the target user",
@@ -270,7 +274,11 @@ impl ProgrammingService {
                 revision,
             }));
         };
-        if self.programmers.user_id(session) != Some(target.user_id) {
+        if self
+            .programmers
+            .session_operates_desk(session, target.user_id)
+            != Some(true)
+        {
             return Err(ActionError::new(
                 ActionErrorKind::Internal,
                 "replacement Programmer session does not belong to the target user",
