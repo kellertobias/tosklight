@@ -221,6 +221,11 @@ impl Drop for ResolvedFrame {
 impl ResolvedFrame {
     /// Values this frame could not number, for one fixture.
     pub(crate) fn overflow(&self, fixture_id: FixtureId) -> &[(AttributeKey, EngineWinner)] {
+        // Checked for emptiness before hashing: a show whose sources name attributes their
+        // fixtures declare asks this once per head per frame and the answer is always nothing.
+        if self.overflow.is_empty() {
+            return &[];
+        }
         self.overflow
             .get(&fixture_id)
             .map(Vec::as_slice)

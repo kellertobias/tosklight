@@ -31,71 +31,28 @@ impl<'a> ProfileValueIndex<'a> {
         }
     }
 
-    /// Every value one fixture owns, borrowed.
-    fn borrowed_values(
-        &self,
-        fixture_id: FixtureId,
-    ) -> Box<dyn Iterator<Item = (&'a AttributeKey, &'a AttributeValue)> + '_> {
-        match self {
-            Self::Dense(frame) => Box::new(
-                frame
-                    .slots()
-                    .fixture_slots(fixture_id)
-                    .iter()
-                    .filter_map(move |slot| {
-                        Some((frame.slots().attribute_key(*slot), frame.value(*slot)?))
-                    })
-                    // Anything this fixture holds under a name the patch never numbered is read
-                    // here too, so projection cannot miss a value the boundary would report.
-                    .chain(
-                        frame
-                            .overflow(fixture_id)
-                            .iter()
-                            .map(|(attribute, winner)| (attribute, &winner.value)),
-                    ),
-            ),
-            Self::Scanned { values, .. } => match values.get(&fixture_id) {
-                Some(values) => Box::new(values.iter().copied()),
-                None => Box::new(std::iter::empty()),
-            },
-        }
-    }
-
-    fn borrowed_sequence_masters(
-        &self,
-        fixture_id: FixtureId,
-    ) -> Box<dyn Iterator<Item = (&'a AttributeKey, ApplicableSequenceMaster)> + '_> {
+    pub(crate) fn values(&self, fixture_id: FixtureId) -> crate::HeadValues {
+        let mut values = crate::HeadValues::default();
         match self {
             Self::Dense(frame) => {
-                Box::new(
-                    frame
-                        .slots()
-                        .fixture_slots(fixture_id)
-                        .iter()
-                        .filter_map(move |slot| {
-                            Some((
-                                frame.slots().attribute_key(*slot),
-                                frame.sequence_master(*slot)?,
-                            ))
-                        })
-                        .chain(frame.overflow(fixture_id).iter().filter_map(
-                            |(attribute, winner)| Some((attribute, winner.sequence_master?)),
-                        )),
-                )
+                for slot in frame.slots().fixture_slots(fixture_id) {
+                    if let Some(value) = frame.value(*slot) {
+                        values.insert(frame.slots().attribute_key(*slot).clone(), value.clone());
+                    }
+                }
+                for (attribute, winner) in frame.overflow(fixture_id) {
+                    values.insert(attribute.clone(), winner.value.clone());
+                }
             }
             Self::Scanned {
-                sequence_masters, ..
-            } => match sequence_masters.get(&fixture_id) {
-                Some(masters) => Box::new(masters.iter().copied()),
-                None => Box::new(std::iter::empty()),
-            },
+                values: scanned, ..
+            } => {
+                for (attribute, value) in scanned.get(&fixture_id).into_iter().flatten() {
+                    values.insert((*attribute).clone(), (*value).clone());
+                }
+            }
         }
-    }
-
-    pub(crate) fn values(&self, fixture_id: FixtureId) -> crate::HeadValues {
-        self.borrowed_values(fixture_id)
-            .map(|(attribute, value)| (attribute.clone(), value.clone()))
-            .collect()
+        values
     }
 
     pub(crate) fn value(
@@ -103,13 +60,20 @@ impl<'a> ProfileValueIndex<'a> {
         fixture_id: FixtureId,
         attribute: &AttributeKey,
     ) -> Option<&'a AttributeValue> {
-        if let Self::Dense(frame) = self
-            && let Some(slot) = frame.slots().slot(fixture_id, attribute)
-        {
-            return frame.value(slot);
+        match self {
+            Self::Dense(frame) => match frame.slots().slot(fixture_id, attribute) {
+                Some(slot) => frame.value(slot),
+                None => frame
+                    .overflow(fixture_id)
+                    .iter()
+                    .find(|(candidate, _)| candidate == attribute)
+                    .map(|(_, winner)| &winner.value),
+            },
+            Self::Scanned { values, .. } => values
+                .get(&fixture_id)?
+                .iter()
+                .find_map(|(candidate, value)| (*candidate == attribute).then_some(*value)),
         }
-        self.borrowed_values(fixture_id)
-            .find_map(|(candidate, value)| (candidate == attribute).then_some(value))
     }
 
     pub(crate) fn value_named(
@@ -117,14 +81,50 @@ impl<'a> ProfileValueIndex<'a> {
         fixture_id: FixtureId,
         attribute: &str,
     ) -> Option<&'a AttributeValue> {
-        self.borrowed_values(fixture_id)
-            .find_map(|(candidate, value)| (candidate.0 == attribute).then_some(value))
+        match self {
+            Self::Dense(frame) => {
+                for slot in frame.slots().fixture_slots(fixture_id) {
+                    if frame.slots().attribute_key(*slot).0 == attribute {
+                        return frame.value(*slot);
+                    }
+                }
+                frame
+                    .overflow(fixture_id)
+                    .iter()
+                    .find(|(candidate, _)| candidate.0 == attribute)
+                    .map(|(_, winner)| &winner.value)
+            }
+            Self::Scanned { values, .. } => values
+                .get(&fixture_id)?
+                .iter()
+                .find_map(|(candidate, value)| (candidate.0 == attribute).then_some(*value)),
+        }
     }
 
     pub(crate) fn sequence_masters(&self, fixture_id: FixtureId) -> crate::HeadSequenceMasters {
-        self.borrowed_sequence_masters(fixture_id)
-            .map(|(attribute, master)| (attribute.clone(), master))
-            .collect()
+        let mut masters = crate::HeadSequenceMasters::default();
+        match self {
+            Self::Dense(frame) => {
+                for slot in frame.slots().fixture_slots(fixture_id) {
+                    if let Some(master) = frame.sequence_master(*slot) {
+                        masters.insert(frame.slots().attribute_key(*slot).clone(), master);
+                    }
+                }
+                for (attribute, winner) in frame.overflow(fixture_id) {
+                    if let Some(master) = winner.sequence_master {
+                        masters.insert(attribute.clone(), master);
+                    }
+                }
+            }
+            Self::Scanned {
+                sequence_masters, ..
+            } => {
+                for (attribute, master) in sequence_masters.get(&fixture_id).into_iter().flatten() {
+                    masters.insert((*attribute).clone(), *master);
+                }
+            }
+        }
+        masters
     }
 
     pub(crate) fn sequence_master(
@@ -132,13 +132,22 @@ impl<'a> ProfileValueIndex<'a> {
         fixture_id: FixtureId,
         attribute: &AttributeKey,
     ) -> Option<ApplicableSequenceMaster> {
-        if let Self::Dense(frame) = self
-            && let Some(slot) = frame.slots().slot(fixture_id, attribute)
-        {
-            return frame.sequence_master(slot);
+        match self {
+            Self::Dense(frame) => match frame.slots().slot(fixture_id, attribute) {
+                Some(slot) => frame.sequence_master(slot),
+                None => frame
+                    .overflow(fixture_id)
+                    .iter()
+                    .find(|(candidate, _)| candidate == attribute)
+                    .and_then(|(_, winner)| winner.sequence_master),
+            },
+            Self::Scanned {
+                sequence_masters, ..
+            } => sequence_masters
+                .get(&fixture_id)?
+                .iter()
+                .find_map(|(candidate, master)| (*candidate == attribute).then_some(*master)),
         }
-        self.borrowed_sequence_masters(fixture_id)
-            .find_map(|(candidate, master)| (candidate == attribute).then_some(master))
     }
 
     pub(crate) fn sequence_master_named(
@@ -146,8 +155,26 @@ impl<'a> ProfileValueIndex<'a> {
         fixture_id: FixtureId,
         attribute: &str,
     ) -> Option<ApplicableSequenceMaster> {
-        self.borrowed_sequence_masters(fixture_id)
-            .find_map(|(candidate, master)| (candidate.0 == attribute).then_some(master))
+        match self {
+            Self::Dense(frame) => {
+                for slot in frame.slots().fixture_slots(fixture_id) {
+                    if frame.slots().attribute_key(*slot).0 == attribute {
+                        return frame.sequence_master(*slot);
+                    }
+                }
+                frame
+                    .overflow(fixture_id)
+                    .iter()
+                    .find(|(candidate, _)| candidate.0 == attribute)
+                    .and_then(|(_, winner)| winner.sequence_master)
+            }
+            Self::Scanned {
+                sequence_masters, ..
+            } => sequence_masters
+                .get(&fixture_id)?
+                .iter()
+                .find_map(|(candidate, master)| (candidate.0 == attribute).then_some(*master)),
+        }
     }
 }
 
