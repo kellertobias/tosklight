@@ -399,8 +399,12 @@ function FormatSection({
 				<>
 					<CheckboxField
 						label="Own UTC offset"
+						stateLabel="Ignore the server offset for this clock"
 						description="Off follows the server's UTC offset, which is what most clocks want."
-						checked={draft.format.utcOffsetMinutes !== null && draft.format.utcOffsetMinutes !== undefined}
+						checked={
+							draft.format.utcOffsetMinutes !== null &&
+							draft.format.utcOffsetMinutes !== undefined
+						}
 						onChange={(event) =>
 							set("utcOffsetMinutes", event.target.checked ? 0 : null)
 						}
