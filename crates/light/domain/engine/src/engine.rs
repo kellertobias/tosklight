@@ -54,6 +54,12 @@ struct DynamicProgrammerCache {
 }
 
 impl Engine {
+    /// How many frame buffers the current generation has had to build rather than reuse.
+    #[cfg(test)]
+    pub(crate) fn frames_built(&self) -> usize {
+        self.generation.load().frames().built()
+    }
+
     pub fn cue_timing_masters(&self) -> (u64, u64) {
         (
             self.sequence_master_fade_millis.load(Ordering::Relaxed),

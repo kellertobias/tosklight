@@ -6,6 +6,7 @@
 //! rather than a stalled one, and must never be able to make the desk allocate without limit.
 
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::FrameState;
 
@@ -21,6 +22,9 @@ pub(crate) struct FramePool {
     idle: Mutex<Vec<FrameState>>,
     /// Buffers this pool has handed out and not yet had back, capped at [`MAX_BUFFERS`].
     outstanding: Mutex<usize>,
+    /// How many buffers this generation has had to build. A desk holding its rate builds a few
+    /// and then reuses them; a rising count means frames are being allocated rather than reused.
+    built: AtomicUsize,
 }
 
 impl FramePool {
@@ -31,7 +35,14 @@ impl FramePool {
             slots,
             idle: Mutex::new(Vec::with_capacity(MAX_BUFFERS)),
             outstanding: Mutex::new(0),
+            built: AtomicUsize::new(0),
         }
+    }
+
+    /// How many buffers this generation has built rather than reused.
+    #[cfg(test)]
+    pub(crate) fn built(&self) -> usize {
+        self.built.load(Ordering::Relaxed)
     }
 
     /// A buffer to fill, or nothing when every one of this generation's buffers is still held.
@@ -52,6 +63,7 @@ impl FramePool {
                 state
             }
             None => {
+                self.built.fetch_add(1, Ordering::Relaxed);
                 let mut state = FrameState::for_generation(self.generation, self.slots);
                 state.begin();
                 state
@@ -103,6 +115,22 @@ mod tests {
             pool.give_back(state);
         }
         assert!(pool.take().is_some());
+    }
+
+    #[test]
+    fn a_pool_stops_building_buffers_once_it_has_one_to_reuse() {
+        let pool = FramePool::for_generation(1, 8);
+        for _ in 0..20 {
+            let state = pool
+                .take()
+                .expect("a returned buffer is always available again");
+            pool.give_back(state);
+        }
+        assert_eq!(
+            pool.built(),
+            1,
+            "a desk holding its rate builds one buffer and refills it"
+        );
     }
 
     #[test]

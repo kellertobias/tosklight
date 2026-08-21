@@ -160,6 +160,20 @@ impl FrameValues {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Whether anything has asked for the whole frame by name yet.
+    ///
+    /// The output path must not: it point-queries what it needs, and building the map would put a
+    /// pass over the show back into every frame. Tests assert this so that cannot come back
+    /// quietly.
+    pub fn materialised_by_name(&self) -> bool {
+        self.shared.values.get().is_some() || self.shared.changed_at.get().is_some()
+    }
+
+    /// Whether these values are backed by the dense frame rather than a map.
+    pub fn is_dense(&self) -> bool {
+        self.shared.frame.is_some()
+    }
 }
 
 /// Reading a `FrameValues` as the map it stands for. Convenient, and expensive the first time: this
