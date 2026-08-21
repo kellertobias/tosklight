@@ -32,8 +32,12 @@ impl Engine {
         let snapshot = generation.snapshot();
         let mut resolved =
             self.resolved_attributes_for_render(generation, self.clock.now(), sampled);
-        apply_fixture_freezes(&snapshot.fixtures, &mut resolved);
-        let profile_values = crate::ProfileValueIndex::new(&resolved);
+        crate::timed(crate::RenderPhase::FixtureFreezes, || {
+            apply_fixture_freezes(&snapshot.fixtures, &mut resolved)
+        });
+        let profile_values = crate::timed(crate::RenderPhase::ValueIndexBuild, || {
+            crate::ProfileValueIndex::new(&resolved)
+        });
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlight_layers = self.highlight_layers.read();
@@ -44,6 +48,7 @@ impl Engine {
             snapshot.fixtures.len().saturating_mul(2),
             Default::default(),
         );
+        crate::timed(crate::RenderPhase::FixtureProjection, || -> Result<(), EngineError> {
         for fixture in snapshot.fixtures.iter() {
             if fixture.definition.schema_version == light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION {
                 let profile = fixture
@@ -183,6 +188,8 @@ impl Engine {
                 &mut patched_slots,
             )?;
         }
+        Ok(())
+        })?;
         Ok(RenderResult {
             universes,
             resolved_values: Arc::new(resolved.values),

@@ -27,6 +27,7 @@ mod profile_value_index;
 mod programmer_fade;
 mod programmer_resolution;
 mod render;
+mod render_phases;
 mod resolution;
 mod runtime_generation;
 mod safety;
@@ -49,6 +50,7 @@ pub use playback_batch::{
     PlaybackBatchAction, PlaybackBatchCommand, PlaybackBatchOutcome, PreparedPlaybackBatch,
 };
 pub use playback_exclusion::PoolPlaybackTransition;
+pub use render_phases::{accumulated_microseconds, enabled as render_phases_enabled, reset as reset_render_phases};
 
 pub(crate) use contribution::{
     EngineContribution, EngineContributionResolver, ResolvedAttributes, ResolvedContributionIndex,
@@ -79,6 +81,7 @@ pub(crate) use programmer_fade::{
 pub(crate) use runtime_generation::{
     GroupMasterGenerationUpdate, GroupMasterIndex, RuntimeGeneration, group_stage_positions,
 };
+pub(crate) use render_phases::{RenderPhase, timed};
 pub(crate) use safety::{apply_safe_values, apply_safe_values_with_snap};
 
 #[cfg(test)]

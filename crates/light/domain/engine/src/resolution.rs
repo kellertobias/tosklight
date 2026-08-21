@@ -52,9 +52,11 @@ impl Engine {
         let snapshot = generation.snapshot();
         let groups = generation.groups();
         let has_samples = sampled.iter().any(|batch| !batch.is_empty());
-        let mut playback = self.resolve_playback(generation, now, advance_playback, sampled);
+        let mut playback = crate::timed(crate::RenderPhase::PlaybackResolution, || {
+            self.resolve_playback(generation, now, advance_playback, sampled)
+        });
         let programmers = self.programmers.active_output_states();
-        let programmer = {
+        let programmer = crate::timed(crate::RenderPhase::ProgrammerContributions, || {
             let underlay = crate::programmer_resolution::programmers_need_underlay(&programmers)
                 .then(|| {
                     let mut underlay = ResolvedContributionIndex::new(&playback.contributions);
@@ -64,7 +66,7 @@ impl Engine {
                     underlay
                 });
             self.programmer_contributions(programmers, generation, now, underlay.as_ref(), sampled)
-        };
+        });
         let programmer_colors = programmer
             .iter()
             .filter(|contribution| contribution.attribute().0 == "color")
@@ -77,23 +79,27 @@ impl Engine {
         if has_samples {
             resolver.extend_borrowed_samples(sampled_values(sampled));
         }
-        add_group_contributions(&mut resolver, snapshot, groups, now);
+        crate::timed(crate::RenderPhase::GroupContributions, || {
+            add_group_contributions(&mut resolver, snapshot, groups, now)
+        });
         let base = if playback.move_in_black_candidates.is_empty() {
             crate::ResolvedValues::default()
         } else {
             resolver.values()
         };
-        let move_in_black = self.move_in_black_contributions(
-            generation,
-            playback.move_in_black_candidates,
-            &playback.active_playbacks,
-            &base,
-            now,
-        );
+        let move_in_black = crate::timed(crate::RenderPhase::MoveInBlack, || {
+            self.move_in_black_contributions(
+                generation,
+                playback.move_in_black_candidates,
+                &playback.active_playbacks,
+                &base,
+                now,
+            )
+        });
         for (contribution, transition_ordinal) in move_in_black {
             resolver.add_playback_unscaled(contribution, transition_ordinal);
         }
-        let mut resolved = resolver.finish();
+        let mut resolved = crate::timed(crate::RenderPhase::ResolverFinish, || resolver.finish());
         self.apply_group_color_contributions(generation, &mut resolved, &programmer_colors);
         resolved.automatic_playback_transitions = playback.automatic_transitions;
         resolved

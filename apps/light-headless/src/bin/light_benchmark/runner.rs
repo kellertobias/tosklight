@@ -115,7 +115,12 @@ fn run_scenario(
     required_minimum_hz: u16,
 ) -> Result<ScenarioReport, String> {
     let (loopback, scenario) = prepare_scenario(arguments, config)?;
+    // Zeroed here and read straight after, so one scenario's phase costs are not the running total
+    // of every scenario and diagnostic before it.
+    light_engine::reset_render_phases();
     let timed = execute_timed_run(arguments, config, &scenario, loopback.as_ref())?;
+    let render_phase_microseconds = light_engine::render_phases_enabled()
+        .then(|| light_engine::accumulated_microseconds().into_iter().collect());
     let state = timed.state;
     let warmup_ticks = timed.warmup_ticks;
     let warmup_elapsed = timed.warmup_elapsed;
@@ -181,6 +186,7 @@ fn run_scenario(
             deadline_misses: state.deadline_misses,
             definition: "dropped: scheduled interval elapsed before work began; deferred: prior pipeline work crossed this scheduled start; deadline miss: pipeline completed after its interval",
         },
+        render_phase_microseconds,
         phases: PhaseReport {
             total_pipeline: distribution(&state.total),
             engine_render_combined: distribution(&state.render),
