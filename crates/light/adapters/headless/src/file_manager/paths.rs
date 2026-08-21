@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fs,
     path::{Component, Path as FsPath, PathBuf},
     time::UNIX_EPOCH,
@@ -29,13 +29,11 @@ pub(super) struct DirectoryQuery {
 }
 
 pub(super) fn configured_roots(state: &AppState) -> Vec<(ConfiguredRoot, bool)> {
+    let configuration = state.installation.configuration();
     configured_roots_from(
-        state
-            .installation
-            .configuration()
-            .file_manager_roots
-            .clone(),
+        configuration.file_manager_roots.clone(),
         state.installation.data_dir().join("shows"),
+        configuration.internal_audio_library_roots.clone(),
         support::discover_removable_paths(),
     )
 }
@@ -43,24 +41,55 @@ pub(super) fn configured_roots(state: &AppState) -> Vec<(ConfiguredRoot, bool)> 
 pub(super) fn configured_roots_from(
     configured: Vec<ConfiguredRoot>,
     default_shows_path: PathBuf,
+    audio_libraries: BTreeMap<String, String>,
     removable_paths: Vec<PathBuf>,
 ) -> Vec<(ConfiguredRoot, bool)> {
     let mut roots = configured_or_default(configured, default_shows_path);
-    let configured_paths = canonical_root_paths(&roots);
+    // The selected Audio Player media library is browsable beside Shows, and an attached
+    // removable volume is offered only while it is actually mounted.
+    extend_unique(&mut roots, audio_library_roots(audio_libraries), false);
+    extend_unique(&mut roots, removable_roots(removable_paths), true);
+    roots
+}
+
+/// Appends roots that neither repeat a configured path nor reuse a configured ID.
+fn extend_unique(
+    roots: &mut Vec<(ConfiguredRoot, bool)>,
+    candidates: Vec<ConfiguredRoot>,
+    runtime: bool,
+) {
+    let existing_paths = canonical_root_paths(roots);
     let mut ids = roots
         .iter()
         .map(|(root, _)| root.id.clone())
         .collect::<HashSet<_>>();
     roots.extend(
-        removable_roots(removable_paths)
+        candidates
             .into_iter()
             .filter(|root| {
                 let canonical = fs::canonicalize(&root.path).unwrap_or_else(|_| root.path.clone());
-                !configured_paths.contains(&canonical) && ids.insert(root.id.clone())
+                !existing_paths.contains(&canonical) && ids.insert(root.id.clone())
             })
-            .map(|root| (root, true)),
+            .map(|root| (root, runtime)),
     );
-    roots
+}
+
+/// One browsable root per configured Internal Audio library binding.
+fn audio_library_roots(bindings: BTreeMap<String, String>) -> Vec<ConfiguredRoot> {
+    bindings
+        .into_iter()
+        .filter(|(_, path)| !path.trim().is_empty())
+        .map(|(binding, path)| ConfiguredRoot {
+            id: format!("audio-library-{binding}"),
+            label: if binding == "default" {
+                "Audio Library".into()
+            } else {
+                format!("Audio Library · {binding}")
+            },
+            path: PathBuf::from(path),
+            icon: Some("folder".into()),
+        })
+        .collect()
 }
 
 fn configured_or_default(

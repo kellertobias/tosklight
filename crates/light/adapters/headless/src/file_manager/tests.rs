@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use axum::http::StatusCode;
 use uuid::Uuid;
@@ -6,7 +6,7 @@ use uuid::Uuid;
 use super::browse::directory_entry_info;
 use super::input_context::{FileInputAction, pending_file_action};
 use super::operations::safe_name;
-use super::paths::{configured_roots_from, confined};
+use super::paths::{ConfiguredRoot, configured_roots_from, confined};
 use super::streaming::parse_range;
 use super::text::{SaveText, read_text_document, save_text_document, text_revision};
 
@@ -95,7 +95,12 @@ fn portable_names_and_pending_file_keys_are_strict() {
 fn removable_roots_are_runtime_only_and_disappear_from_the_next_discovery_snapshot() {
     let default = PathBuf::from("/desk/shows");
     let removable = PathBuf::from("/media/operator/TOUR_USB");
-    let attached = configured_roots_from(Vec::new(), default.clone(), vec![removable.clone()]);
+    let attached = configured_roots_from(
+        Vec::new(),
+        default.clone(),
+        BTreeMap::new(),
+        vec![removable.clone()],
+    );
     assert!(
         attached
             .iter()
@@ -107,10 +112,62 @@ fn removable_roots_are_runtime_only_and_disappear_from_the_next_discovery_snapsh
             .any(|(root, runtime)| !runtime && root.id == "shows")
     );
 
-    let detached = configured_roots_from(Vec::new(), default, Vec::new());
+    let detached = configured_roots_from(Vec::new(), default, BTreeMap::new(), Vec::new());
     assert_eq!(detached.len(), 1);
     assert_eq!(detached[0].0.id, "shows");
     assert!(!detached[0].1);
+}
+
+#[test]
+fn the_selected_audio_library_is_browsable_beside_shows() {
+    let library = PathBuf::from("/Volumes/Show/Audio");
+    let roots = configured_roots_from(
+        Vec::new(),
+        PathBuf::from("/desk/shows"),
+        BTreeMap::from([
+            (
+                "default".to_string(),
+                library.to_string_lossy().into_owned(),
+            ),
+            ("stage".to_string(), "/Volumes/Stage/Audio".to_string()),
+            ("empty".to_string(), "  ".to_string()),
+        ]),
+        Vec::new(),
+    );
+    assert_eq!(
+        roots
+            .iter()
+            .map(|(root, _)| (root.id.as_str(), root.label.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("shows", "Shows"),
+            ("audio-library-default", "Audio Library"),
+            ("audio-library-stage", "Audio Library · stage"),
+        ]
+    );
+    // A configured library is desk configuration, not a removable volume.
+    assert!(roots.iter().all(|(_, runtime)| !runtime));
+    assert_eq!(roots[1].0.path, library);
+}
+
+#[test]
+fn an_audio_library_that_repeats_a_configured_root_is_offered_only_once() {
+    let shared = temporary_root();
+    let configured = vec![ConfiguredRoot {
+        id: "media".into(),
+        label: "Media".into(),
+        path: shared.clone(),
+        icon: None,
+    }];
+    let roots = configured_roots_from(
+        configured,
+        PathBuf::from("/desk/shows"),
+        BTreeMap::from([("default".to_string(), shared.to_string_lossy().into_owned())]),
+        Vec::new(),
+    );
+    assert_eq!(roots.len(), 1);
+    assert_eq!(roots[0].0.id, "media");
+    fs::remove_dir_all(shared).unwrap();
 }
 
 #[test]

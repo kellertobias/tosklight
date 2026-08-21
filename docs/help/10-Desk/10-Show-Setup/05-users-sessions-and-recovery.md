@@ -14,6 +14,8 @@ The desk owns the interaction that produces those values. Sessions attached to o
 
 **Shows & recovery** displays the active show, library count, server state, and autosave status. Set the autosave interval from 5-3600 seconds (30 by default) to control how often the desk writes an automatic recovery checkpoint of the active show while you program. Its root-confined File Manager starts in the Shows location and accepts only `.show` files. Selecting **Load selected show safely** opens an indexed show or imports a valid file from another configured location, using the safe-blackout transition. Show mutations autosave to the portable `.show` file. Named revisions are explicit restore points; they do not disable later autosaves.
 
+**Audio Player media library** selects the folder the Internal Audio Players read from. That folder is also offered in the File Manager as its own location beside **Shows**, named **Audio Library**, so audio files can be browsed, renamed, and copied without leaving the desk. Selecting a different folder replaces the location; clearing the selection removes it. A location configured under File Manager roots that already points at the same folder is not repeated.
+
 ![Desk show and recovery status](../../assets/screenshots/workflows/desk-setup-shows-recovery.png)
 
 The desk database stores users, show-library index, active-show choice, configuration, desk interaction state, and durable user Programmers. Portable show files are stored separately. Keep both when backing up an installation.

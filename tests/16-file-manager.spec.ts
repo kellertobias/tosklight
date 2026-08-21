@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { artifactPaths } from "../tools/artifact-paths.mjs";
 import { expect, test } from "./bench/core/fixtures";
 import { ControllableHostedFilePickerDriver } from "./bench/window-system/hostedFilePicker";
 import type {
@@ -8,6 +9,69 @@ import type {
 } from "@playwright/test";
 
 test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
+	test("FILE-017 @api › the selected Audio Player media library is browsable beside Shows", async ({
+		api,
+		bench,
+		request,
+	}) => {
+		const authorization = { authorization: `Bearer ${api.session!.token}` };
+		const library = path.join(
+			artifactPaths.tmp,
+			`audio-library-${crypto.randomUUID()}`,
+		);
+		await fs.mkdir(library, { recursive: true });
+		await fs.writeFile(path.join(library, "Intro.wav"), "not really audio");
+		try {
+			await api.request("PUT", "/api/v2/configuration", {
+				internal_audio_library_roots: { default: library },
+			});
+			const roots = (await api.request<Array<Record<string, any>>>(
+				"GET",
+				"/api/v2/files/roots",
+			)) as Array<Record<string, any>>;
+			expect(roots).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ id: "shows", label: "Shows" }),
+					expect.objectContaining({
+						id: "audio-library-default",
+						label: "Audio Library",
+						removable: false,
+					}),
+				]),
+			);
+			// The root exposes only its label and root-relative paths, never the server path.
+			expect(
+				roots.find((root) => root.id === "audio-library-default"),
+			).not.toHaveProperty("path");
+
+			const entries = await api.request<any>(
+				"GET",
+				"/api/v2/files/audio-library-default/entries",
+			);
+			expect(entries.entries.map((entry: any) => entry.name)).toContain(
+				"Intro.wav",
+			);
+			const escape = await request.get(
+				`${bench.baseUrl}/api/v2/files/audio-library-default/entries?path=${encodeURIComponent("../")}`,
+				{ headers: authorization },
+			);
+			expect(escape.status()).toBe(400);
+		} finally {
+			await api.request("PUT", "/api/v2/configuration", {
+				internal_audio_library_roots: {},
+			});
+			await fs.rm(library, { recursive: true, force: true });
+		}
+		expect(
+			(
+				(await api.request<Array<Record<string, any>>>(
+					"GET",
+					"/api/v2/files/roots",
+				)) as Array<Record<string, any>>
+			).some((root) => root.id === "audio-library-default"),
+		).toBe(false);
+	});
+
 	test("FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts", async ({
 		api,
 		bench,
