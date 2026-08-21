@@ -111,6 +111,15 @@ pub struct NativeMediaEffectParameter {
     pub label: String,
     pub value: f32,
     pub default_value: f32,
+    /// What the Media Server accepts for this parameter. A Media Server that predates the
+    /// advertisement reports nothing, and the desk keeps its own conservative range.
+    #[serde(default)]
+    pub minimum: Option<f32>,
+    #[serde(default)]
+    pub maximum: Option<f32>,
+    /// A step of one or more marks a whole-number parameter.
+    #[serde(default)]
+    pub step: Option<f32>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

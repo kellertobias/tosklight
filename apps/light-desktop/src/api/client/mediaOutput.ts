@@ -74,6 +74,11 @@ export interface NativeMediaEffectParameter {
 	label: string;
 	value: number;
 	defaultValue: number;
+	/** What the Media Server accepts. A server that does not advertise it reports null. */
+	minimum: number | null;
+	maximum: number | null;
+	/** A step of one or more marks a whole-number parameter. */
+	step: number | null;
 }
 
 export interface NativeMediaEffectSlot {
@@ -389,6 +394,9 @@ function mapNativeMediaEffectSlot(
 			label: parameter.label,
 			value: parameter.value,
 			defaultValue: parameter.default_value,
+			minimum: parameter.minimum ?? null,
+			maximum: parameter.maximum ?? null,
+			step: parameter.step ?? null,
 		})),
 	};
 }

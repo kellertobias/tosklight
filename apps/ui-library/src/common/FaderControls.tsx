@@ -16,11 +16,26 @@ export interface HorizontalFaderProps {
 	maximum?: number;
 	step?: number;
 	display?: ReactNode;
+	/**
+	 * How to write the fader's own value. A fader that formats its value renders the position the
+	 * operator is dragging, rather than a `display` string built from a value that has to travel
+	 * to a server and back before it agrees with the bar.
+	 */
+	displayFormat?: "percent" | "decimal" | "integer";
 	disabled?: boolean;
 	accentColor?: string;
 	className?: string;
 	showLabel?: boolean;
 	onChange: (value: number) => void;
+}
+
+function formatFaderValue(
+	value: number,
+	format: "percent" | "decimal" | "integer",
+) {
+	if (format === "percent") return `${Math.round(value * 100)}%`;
+	if (format === "integer") return String(Math.round(value));
+	return String(Number(value.toFixed(2)));
 }
 
 export function HorizontalFader({
@@ -30,6 +45,7 @@ export function HorizontalFader({
 	maximum = 100,
 	step = 0.1,
 	display,
+	displayFormat,
 	disabled = false,
 	accentColor,
 	className = "",
@@ -98,7 +114,11 @@ export function HorizontalFader({
 			}
 		>
 			{showLabel && <span>{label}</span>}
-			<strong>{display ?? `${Math.round(local)}%`}</strong>
+			<strong>
+				{displayFormat
+					? formatFaderValue(local, displayFormat)
+					: (display ?? `${Math.round(local)}%`)}
+			</strong>
 			<Input
 				aria-label={label}
 				disabled={disabled}

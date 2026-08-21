@@ -475,7 +475,16 @@ export type MediaLibraryKind = "content" | "mask";
 export type MediaLibrarySelectionRequest = { request_id: string, expected_library_revision: string, layer_fixture_id: string, kind: MediaLibraryKind, folder: number, file: number, };
 export type MediaLibrarySelectionOutcome = { request_id: string, library_revision: string, programmer_revision: number, };
 export type NativeMediaTextSlot = { folder: number, file: number, name: string, enabled: boolean, kind: string, text?: string | null, };
-export type NativeMediaEffectParameter = { id: string, label: string, value: number, default_value: number, };
+export type NativeMediaEffectParameter = { id: string, label: string, value: number, default_value: number,
+/**
+ * What the Media Server accepts for this parameter. A Media Server that predates the
+ * advertisement reports nothing, and the desk keeps its own conservative range.
+ */
+minimum: number | null, maximum: number | null,
+/**
+ * A step of one or more marks a whole-number parameter.
+ */
+step: number | null, };
 export type NativeMediaEffectSlot = { index: number, effect_type?: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capability_detail?: string | null, parameters: Array<NativeMediaEffectParameter>, };
 export type NativeMediaSnapshot = { endpoint: string, status: string, instance: string, outputs: number, catalog_revision: number, catalog_items: number, text_slots: Array<NativeMediaTextSlot>, effect_controls_available: boolean, output_id?: string | null, effect_layers: Array<Array<NativeMediaEffectSlot>>, };
 export type NativeMediaTextUpdateRequest = { request_id: string, text: string, };

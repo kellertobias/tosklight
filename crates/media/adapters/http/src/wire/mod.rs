@@ -19,6 +19,7 @@ mod health;
 mod library;
 mod logs;
 mod network;
+mod effect;
 mod output;
 mod text;
 mod time;
@@ -41,8 +42,9 @@ pub use library::{
 };
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
+pub use effect::{EffectParameterView, EffectSlotView};
 pub use output::{
-    AvailableMonitorView, EffectParameterView, EffectSlotView, LayerView, MaskView, MasterView,
+    AvailableMonitorView, LayerView, MaskView, MasterView,
     OutputConfigurationEditError, OutputConfigurationValuesView, OutputConfigurationView,
     OutputView, UpdateLayer, UpdateMaster, UpdateOutputConfiguration,
 };

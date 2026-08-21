@@ -113,6 +113,11 @@ export interface MediaValueControl extends MediaControlBase {
 	maximum?: number;
 	step?: number;
 	display?: string;
+	/**
+	 * How the fader writes the value it currently holds. A control that sets this reads its own
+	 * position while the operator drags, instead of a number the server last confirmed.
+	 */
+	displayFormat?: "percent" | "decimal" | "integer";
 	accentColor?: string;
 }
 

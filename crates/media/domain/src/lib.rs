@@ -19,6 +19,7 @@ pub mod clock;
 pub mod color;
 pub mod command;
 pub mod dmx;
+pub mod effect_parameters;
 pub mod geometry;
 pub mod layer;
 pub mod master;
@@ -43,6 +44,7 @@ pub use color::{FlipMirror, Tint};
 pub use command::{
     Command, CommandKind, CommandSource, ControlOwnership, LayerControls, MasterControls, Timestamp,
 };
+pub use effect_parameters::{EffectParameterBounds, effect_parameter_bounds};
 pub use geometry::{LayerTransform, Point, Size};
 pub use layer::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,

@@ -30,7 +30,16 @@ source: string,
  * Whether it is currently shaping the layer at all.
  */
 active: boolean, };
-export type EffectParameterView = { id: string, label: string, value: number, defaultValue: number, };
+export type EffectParameterView = { id: string, label: string, value: number, defaultValue: number,
+/**
+ * What this server accepts. A desk that renders a control renders this range, rather than
+ * guessing one and letting the operator drag into values that are always refused.
+ */
+minimum: number, maximum: number,
+/**
+ * A step of one or more marks a whole-number parameter.
+ */
+step: number, };
 export type EffectSlotView = { index: number, effectType: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, visualizerParameters?: VisualizerParametersView | null, };
 export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, blur: number, sourceStatus: SourceStatusView, mask: MaskView, effects: Array<EffectSlotView>,
 /**

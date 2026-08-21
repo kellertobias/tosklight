@@ -553,36 +553,41 @@ function nativeEffectParameterControl(
 			options: choices,
 		};
 	}
-	const range = nativeEffectParameterRange(parameter.id);
-	const { percent, ...bounds } = range;
+	const range = nativeEffectParameterRange(parameter);
 	return {
 		id: `${prefix}-${parameter.id}`,
 		kind: "value",
 		label: parameter.label,
 		value: parameter.value,
-		...bounds,
-		display: percent
-			? `${Math.round(parameter.value * 100)}%`
-			: String(Number(parameter.value.toFixed(2))),
+		minimum: range.minimum,
+		maximum: range.maximum,
+		step: range.step,
+		displayFormat: nativeEffectParameterDisplayFormat(range),
 	};
 }
 
-function nativeEffectParameterRange(id: string) {
-	if (id === "kaleidoscope-repetitions")
-		return { minimum: 1, maximum: 16, step: 1, percent: false };
-	if (id.includes("angle") || id.includes("rotation"))
-		return { minimum: -180, maximum: 360, step: 1, percent: false };
-	if (
-		id.includes("duration") ||
-		id.includes("decay") ||
-		id.includes("lifetime")
-	)
-		return { minimum: 0.05, maximum: 5, step: 0.05, percent: false };
-	if (id.includes("density"))
-		return { minimum: 1, maximum: 64, step: 1, percent: false };
-	if (id === "rasterize-dot-size")
-		return { minimum: 2, maximum: 32, step: 1, percent: false };
-	return { minimum: 0, maximum: 1, step: 0.01, percent: true };
+/**
+ * The Media Server owns what its parameters accept, so a control offers exactly that. Only a
+ * server too old to advertise falls back to a normalized amount, which is what most parameters
+ * are; guessing a wider range only lets an operator drag into values that are always refused.
+ */
+function nativeEffectParameterRange(parameter: NativeMediaEffectParameter) {
+	const minimum = parameter.minimum ?? 0;
+	const maximum = parameter.maximum ?? 1;
+	return {
+		minimum,
+		maximum,
+		step: parameter.step ?? 0.01,
+	};
+}
+
+function nativeEffectParameterDisplayFormat(range: {
+	minimum: number;
+	maximum: number;
+	step: number;
+}): "percent" | "decimal" | "integer" {
+	if (range.minimum === 0 && range.maximum === 1) return "percent";
+	return range.step >= 1 ? "integer" : "decimal";
 }
 
 const MEDIA_CONTROL_GROUPS = [

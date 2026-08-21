@@ -9,6 +9,7 @@
 // rollback matters more than the optimism: when a desk takes an output, the write is refused and
 // the control must snap back to what the desk says, not to what the operator dragged.
 
+import { withEffectParameterBounds } from "./effectParameters";
 import { useCallback, useRef, useState } from "react";
 import { ApiFailure, api } from "./client";
 import type {
@@ -462,7 +463,7 @@ function applyEffectLocally(
 				mix: 1,
 				supported: true,
 				capabilityDetail: null,
-				parameters: [
+				parameters: withEffectParameterBounds([
 					["tv-curvature", "TV curvature", 0.3],
 					["distortion", "Distortion", 0.18],
 					["image-grain", "Image grain", 0.2],
@@ -472,7 +473,7 @@ function applyEffectLocally(
 					label: String(label),
 					value: Number(value),
 					defaultValue: Number(value),
-				})),
+				}))),
 			};
 		} else if (change.effectType === "digital-tv") {
 			next = {
@@ -483,7 +484,7 @@ function applyEffectLocally(
 				mix: 1,
 				supported: true,
 				capabilityDetail: null,
-				parameters: [
+				parameters: withEffectParameterBounds([
 					["compression-damage", "Compression damage", 0.35],
 					["block-size", "Block size", 0.35],
 					["tile-displacement", "Tile displacement", 0.25],
@@ -494,7 +495,7 @@ function applyEffectLocally(
 					label: String(label),
 					value: Number(value),
 					defaultValue: Number(value),
-				})),
+				}))),
 			};
 		}
 		const values: Record<string, number | null | undefined> = {

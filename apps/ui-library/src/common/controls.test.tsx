@@ -421,6 +421,25 @@ describe("shared controls", () => {
 		fireEvent.input(fader, { target: { value: "1.5" } });
 		expect(change).toHaveBeenCalledWith(1.5);
 	});
+	it("writes the value it is holding while the operator drags it", () => {
+		render(
+			<HorizontalFaderField
+				label="Mirror repetitions"
+				value={6}
+				minimum={1}
+				maximum={16}
+				step={1}
+				display="6"
+				displayFormat="integer"
+				onChange={() => undefined}
+			/>,
+		);
+		const fader = screen.getByRole("slider", { name: "Mirror repetitions" });
+		fireEvent.pointerDown(fader);
+		fireEvent.input(fader, { target: { value: "13" } });
+		// The bar and the number used to disagree until the server confirmed the change.
+		expect(fader.closest("label")).toHaveTextContent("13");
+	});
 	it("coalesces a dense drag locally and commits its exact final value", () => {
 		vi.useFakeTimers();
 		const change = vi.fn();

@@ -841,6 +841,9 @@ describe("Media pane disconnected configuration", () => {
 								label: "Blur amount",
 								value: 0.8,
 								defaultValue: 0.5,
+								minimum: 0,
+								maximum: 1,
+								step: 0.01,
 							},
 						],
 					},
@@ -858,6 +861,84 @@ describe("Media pane disconnected configuration", () => {
 				expect.objectContaining({ id: "effect-0-blur-amount", kind: "value" }),
 			]),
 		});
+	});
+
+	it("offers exactly the range the Media Server advertises for a parameter", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "ToskLight Media Server",
+			endpoint: null,
+			native_action: "tosklight_media_v2",
+			layers: [{ fixture_id: "layer-1", head_index: 1 }],
+			status: { online: true, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				nativeEffects: [
+					{
+						index: 0,
+						effectType: "kaleidoscope",
+						label: "Kaleidoscope",
+						enabled: true,
+						mix: 1,
+						supported: true,
+						capabilityDetail: null,
+						parameters: [
+							{
+								id: "kaleidoscope-repetitions",
+								label: "Mirror repetitions",
+								value: 6,
+								defaultValue: 6,
+								minimum: 1,
+								maximum: 16,
+								step: 1,
+							},
+							{
+								id: "kaleidoscope-angle",
+								label: "Angle",
+								value: 0,
+								defaultValue: 0,
+								minimum: -180,
+								maximum: 180,
+								step: 1,
+							},
+							{
+								id: "future-amount",
+								label: "Future amount",
+								value: 0.4,
+								defaultValue: 0.5,
+								minimum: null,
+								maximum: null,
+								step: null,
+							},
+						],
+					},
+				],
+			}),
+		);
+
+		const controls = model.controlSections.at(-1)?.controls ?? [];
+		expect(
+			controls.find((control) => control.id === "effect-0-kaleidoscope-repetitions"),
+		).toMatchObject({
+			kind: "value",
+			minimum: 1,
+			maximum: 16,
+			step: 1,
+			displayFormat: "integer",
+		});
+		// The desk used to offer 360 here, and every value above 180 was refused.
+		expect(
+			controls.find((control) => control.id === "effect-0-kaleidoscope-angle"),
+		).toMatchObject({ minimum: -180, maximum: 180 });
+		// A Media Server too old to advertise still gets the conservative normalized amount.
+		expect(
+			controls.find((control) => control.id === "effect-0-future-amount"),
+		).toMatchObject({ minimum: 0, maximum: 1, displayFormat: "percent" });
 	});
 
 	it("shows percentage controls as percentages instead of raw DMX bytes", () => {

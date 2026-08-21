@@ -20,6 +20,17 @@ After patching, configure the Media endpoint's IP address and CITP port in the p
 
 CITP discovery is not ToskLight show discovery. CITP describes Media outputs and libraries; ToskLight's local-network discovery offers read-only `.show` copies between Desk and the PreViz Rig Editor.
 
+## Edit the native effect controls
+
+An effect slot on a ToskLight Pixel layer also exposes the Media Server's own effect configuration
+over HTTP: the effect type, whether it is bypassed, and each effect's typed parameters. The Media
+Server states what every parameter accepts, and the Desk offers exactly that range and step — an
+angle stops where the server stops it, and a count moves in whole numbers. A control shows the
+value it is holding while you change it, and a refusal is reported as the Media Server's own
+sentence rather than a silent no-op.
+
+Effect **Amount** stays on DMX. The native controls configure the effect; the DMX byte plays it.
+
 ## Work without CITP
 
 When the Media fixture is patched but CITP is unavailable, the Media pane still shows its layers and permits numeric folder/file programming. The Desk does not need thumbnails or library names to emit the correct DMX values. This is the expected fallback, not an error that hides the layer controls.

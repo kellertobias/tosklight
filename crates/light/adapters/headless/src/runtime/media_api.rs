@@ -40,6 +40,13 @@ struct NativeMediaEffectParameterResponse {
     label: String,
     value: f32,
     default_value: f32,
+    // A Media Server older than the advertised bounds sends none of these.
+    #[serde(default)]
+    minimum: Option<f32>,
+    #[serde(default)]
+    maximum: Option<f32>,
+    #[serde(default)]
+    step: Option<f32>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -426,7 +433,7 @@ pub(super) async fn update_native_media_effect(
     if usize::from(layer) >= output.layers.len() {
         return Err(ApiError::bad_request("Media Server layer is unavailable"));
     }
-    let update = native_effect_update(&input)?;
+    let update = native_effect_update(&input, advertised_step(output, layer, &input.control_id))?;
     let response = client
         .post(format!(
             "{base}/outputs/{}/layers/{layer}/native-effects/update",
@@ -475,14 +482,35 @@ fn native_effect_slot(
                     label: parameter.label,
                     value: parameter.value,
                     default_value: parameter.default_value,
+                    minimum: parameter.minimum,
+                    maximum: parameter.maximum,
+                    step: parameter.step,
                 },
             )
             .collect(),
     }
 }
 
+/// What the Media Server says this control's parameter accepts, when it advertises it.
+///
+/// A whole-number parameter lands in an integer field over there, and serde refuses `8.0` for a
+/// `u8`. Reading the advertised step keeps that decision with the server that owns the field
+/// instead of restating its types here.
+fn advertised_step(output: &NativeMediaOutputResponse, layer: u8, control_id: &str) -> Option<f32> {
+    let parameter_id = control_id.splitn(3, '-').nth(2)?;
+    output
+        .layers
+        .get(usize::from(layer))?
+        .effects
+        .iter()
+        .flat_map(|effect| effect.parameters.iter())
+        .find(|parameter| parameter.id == parameter_id)
+        .and_then(|parameter| parameter.step)
+}
+
 fn native_effect_update(
     input: &light_wire::v2::output_control::NativeMediaEffectUpdateRequest,
+    step: Option<f32>,
 ) -> Result<serde_json::Value, ApiError> {
     let mut parts = input.control_id.split('-');
     if parts.next() != Some("effect") {
@@ -539,11 +567,16 @@ fn native_effect_update(
         "drawn-line-detail" => "drawnLineDetail",
         _ => return Err(ApiError::bad_request("unknown native effect control")),
     };
+    // A Media Server that advertises nothing still owns two integer fields, and refusing them
+    // silently is what made Mirror repetitions unreachable.
+    const WHOLE_NUMBER_FIELDS: [&str; 2] = ["kaleidoscopeRepetitions", "beatFormDensity"];
+    let whole_number = step.is_some_and(|step| step >= 1.0) || WHOLE_NUMBER_FIELDS.contains(&field);
     let value = match (
         input.number_value,
         input.string_value.as_ref(),
         input.boolean_value,
     ) {
+        (Some(value), None, None) if whole_number => serde_json::json!(value.round() as i64),
         (Some(value), None, None) => serde_json::json!(value),
         (None, Some(value), None) => serde_json::json!(value),
         (None, None, Some(value)) => serde_json::json!(value),
@@ -572,7 +605,7 @@ mod native_effect_update_tests {
         let mut input = request("effect-2-blur-amount");
         input.number_value = Some(0.8);
 
-        let update = native_effect_update(&input).expect("valid native effect update");
+        let update = native_effect_update(&input, Some(0.01)).expect("valid native effect update");
         assert_eq!(update["effectSlot"], 2);
         assert!((update["blurAmount"].as_f64().expect("number") - 0.8).abs() < 0.000_001);
     }
@@ -583,7 +616,7 @@ mod native_effect_update_tests {
         input.boolean_value = Some(false);
 
         assert_eq!(
-            native_effect_update(&input).expect("valid native effect update"),
+            native_effect_update(&input, None).expect("valid native effect update"),
             serde_json::json!({"effectSlot": 1, "effectEnabled": false})
         );
     }
@@ -593,7 +626,25 @@ mod native_effect_update_tests {
         let mut input = request("clock-format");
         input.string_value = Some("HH:mm".into());
 
-        assert!(native_effect_update(&input).is_err());
+        assert!(native_effect_update(&input, None).is_err());
+    }
+
+    /// A whole-number parameter reaches a `u8` field as an integer. Sent as `8.0` the Media
+    /// Server answers 400 and the control does nothing at all.
+    #[test]
+    fn sends_a_whole_number_parameter_as_an_integer() {
+        let mut input = request("effect-0-kaleidoscope-repetitions");
+        input.number_value = Some(8.0);
+
+        assert_eq!(
+            native_effect_update(&input, Some(1.0)).expect("valid native effect update"),
+            serde_json::json!({"effectSlot": 0, "kaleidoscopeRepetitions": 8})
+        );
+        assert_eq!(
+            native_effect_update(&input, None).expect("valid native effect update"),
+            serde_json::json!({"effectSlot": 0, "kaleidoscopeRepetitions": 8}),
+            "a Media Server that advertises no step still owns an integer field"
+        );
     }
 }
 
@@ -667,15 +718,28 @@ async fn native_media_get<T: serde::de::DeserializeOwned>(
         .map_err(|_| ApiError::unavailable("Media Server returned an invalid response"))
 }
 
+/// The Media Server explains its own refusals; a bare status code leaves the operator guessing
+/// which control it disliked, so its message travels with the failure.
 async fn native_media_response(response: reqwest::Response) -> Result<reqwest::Response, ApiError> {
     if response.status().is_success() {
-        Ok(response)
-    } else {
-        Err(ApiError::unavailable(format!(
-            "Media Server native API answered {}",
-            response.status()
-        )))
+        return Ok(response);
     }
+    let status = response.status();
+    let detail = response
+        .json::<NativeMediaErrorResponse>()
+        .await
+        .ok()
+        .map(|error| error.message)
+        .filter(|message| !message.trim().is_empty());
+    Err(ApiError::unavailable(match detail {
+        Some(detail) => format!("Media Server refused this change: {detail}"),
+        None => format!("Media Server native API answered {status}"),
+    }))
+}
+
+#[derive(Deserialize)]
+struct NativeMediaErrorResponse {
+    message: String,
 }
 
 fn native_media_unavailable(_: reqwest::Error) -> ApiError {

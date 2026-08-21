@@ -3,6 +3,7 @@
 // Tests drive the real client and the real resource cache; only the socket is replaced. That way
 // a test proving a rollback is proving the code an operator runs, not a mock of it.
 
+import { withEffectParameterBounds } from "../shared/api/effectParameters";
 import { vi } from "vitest";
 import type {
 	AudioPanelView,
@@ -915,7 +916,7 @@ function emptyEffect(
 		mix: 0,
 		supported: true,
 		capabilityDetail: null,
-		parameters: [],
+		parameters: withEffectParameterBounds([]),
 	};
 }
 
@@ -928,7 +929,7 @@ function analogTvEffect(
 		label: "Analog TV",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			["tv-curvature", "TV curvature", 0.3],
 			["distortion", "Distortion", 0.18],
 			["image-grain", "Image grain", 0.2],
@@ -938,7 +939,7 @@ function analogTvEffect(
 			label: String(label),
 			value: Number(value),
 			defaultValue: Number(value),
-		})),
+		}))),
 	};
 }
 
@@ -951,9 +952,9 @@ function opacityCycleEffect(
 		label: "Layer opacity cycle",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{ id: "cycle-interval", label: "Interval", value: 0, defaultValue: 0 },
-		],
+		]),
 	};
 }
 
@@ -966,14 +967,14 @@ function blurEffect(
 		label: "Blur",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "blur-amount",
 				label: "Blur amount",
 				value: 0.35,
 				defaultValue: 0.35,
 			},
-		],
+		]),
 	};
 }
 
@@ -986,7 +987,7 @@ function feedbackEffect(
 		label: "Feedback",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "feedback-amount",
 				label: "Feedback amount",
@@ -1005,7 +1006,7 @@ function feedbackEffect(
 				value: 0,
 				defaultValue: 0,
 			},
-		],
+		]),
 	};
 }
 
@@ -1018,7 +1019,7 @@ function beatMoveEffect(
 		label: "Beat Move",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "beat-move-amount",
 				label: "Movement amount",
@@ -1037,7 +1038,7 @@ function beatMoveEffect(
 				value: 0.35,
 				defaultValue: 0.35,
 			},
-		],
+		]),
 	};
 }
 
@@ -1050,7 +1051,7 @@ function kaleidoscopeEffect(
 		label: "Kaleidoscope",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "kaleidoscope-repetitions",
 				label: "Mirror repetitions",
@@ -1063,7 +1064,7 @@ function kaleidoscopeEffect(
 				value: 0,
 				defaultValue: 0,
 			},
-		],
+		]),
 	};
 }
 
@@ -1076,7 +1077,7 @@ function rasterizeEffect(
 		label: "Rasterized Print",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "rasterize-mode",
 				label: "Print mode",
@@ -1089,7 +1090,7 @@ function rasterizeEffect(
 				value: 8,
 				defaultValue: 8,
 			},
-		],
+		]),
 	};
 }
 
@@ -1102,7 +1103,7 @@ function beatScanEffect(
 		label: "Beat Scan",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "beat-scan-width",
 				label: "Scan width",
@@ -1127,7 +1128,7 @@ function beatScanEffect(
 				value: 1,
 				defaultValue: 1,
 			},
-		],
+		]),
 	};
 }
 
@@ -1140,7 +1141,7 @@ function beatScaleTurnEffect(
 		label: "Beat Scale and Turn",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "beat-scale-amount",
 				label: "Scale amount",
@@ -1160,7 +1161,7 @@ function beatScaleTurnEffect(
 				value: 0.35,
 				defaultValue: 0.35,
 			},
-		],
+		]),
 	};
 }
 
@@ -1173,7 +1174,7 @@ function beatGridWaveEffect(
 		label: "Beat Grid Wave",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "beat-grid-density",
 				label: "Grid density",
@@ -1205,7 +1206,7 @@ function beatGridWaveEffect(
 				value: 1,
 				defaultValue: 1,
 			},
-		],
+		]),
 	};
 }
 
@@ -1218,7 +1219,7 @@ function beatFormFlashEffect(
 		label: "Beat Form Flash",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "beat-form-enlargement",
 				label: "Start size",
@@ -1243,7 +1244,7 @@ function beatFormFlashEffect(
 				value: 0.35,
 				defaultValue: 0.35,
 			},
-		],
+		]),
 	};
 }
 
@@ -1256,7 +1257,7 @@ function drawnImageEffect(
 		label: "Drawn Image",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			{
 				id: "drawn-strength",
 				label: "Stylization strength",
@@ -1269,7 +1270,7 @@ function drawnImageEffect(
 				value: 0.55,
 				defaultValue: 0.55,
 			},
-		],
+		]),
 	};
 }
 
@@ -1282,7 +1283,7 @@ function digitalTvEffect(
 		label: "Digital TV",
 		enabled: true,
 		mix: 1,
-		parameters: [
+		parameters: withEffectParameterBounds([
 			["compression-damage", "Compression damage", 0.35],
 			["block-size", "Block size", 0.35],
 			["tile-displacement", "Tile displacement", 0.25],
@@ -1293,7 +1294,7 @@ function digitalTvEffect(
 			label: String(label),
 			value: Number(value),
 			defaultValue: Number(value),
-		})),
+		}))),
 	};
 }
 

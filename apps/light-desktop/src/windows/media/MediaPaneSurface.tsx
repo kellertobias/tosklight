@@ -921,6 +921,7 @@ function MediaControlEditor({
 					maximum={control.maximum}
 					step={control.step}
 					display={control.display}
+					displayFormat={control.displayFormat}
 					accentColor={control.accentColor}
 					onChange={(value) => onChange(control.id, value)}
 				/>
