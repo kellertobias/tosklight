@@ -6,6 +6,7 @@ mod contribution_batch;
 mod controls;
 mod engine;
 mod fixture;
+mod frame_slots;
 mod legacy_projection;
 mod lifecycle;
 mod model;
@@ -54,6 +55,7 @@ pub(crate) use contribution::{
 pub use contribution::{ResolvedChangedAt, ResolvedValues};
 pub(crate) use contribution_batch::{replaces_source, sampled_values};
 pub(crate) use fixture::profile_head_owner;
+pub(crate) use frame_slots::{Slot, SlotTable};
 pub(crate) use legacy_projection::render_fixture;
 pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};

@@ -23,6 +23,12 @@ impl AttributeId {
     fn index(self) -> usize {
         self.0 as usize
     }
+
+    /// This id's place in its table's numbering, for callers that address a parallel array by
+    /// attribute rather than asking the table for an entry. Meaningless against any other table.
+    pub fn ordinal(self) -> usize {
+        self.0 as usize
+    }
 }
 
 /// One attribute, with the answers a render would otherwise recompute from its name every frame.
