@@ -25,6 +25,8 @@ pub(crate) struct RuntimeGeneration {
     group_masters: Arc<GroupMasterIndex>,
     profile_encodings: Arc<ProfileEncodingIndex>,
     profile_projections: Arc<ProfileProjectionIndex>,
+    /// The fixed shape of every frame this generation renders.
+    slots: Arc<crate::SlotTable>,
 }
 
 #[derive(Clone, Copy)]
@@ -47,6 +49,10 @@ impl RuntimeGeneration {
         let default_values = compile_default_values(&snapshot);
         let group_rankings = compile_group_rankings(&groups, &snapshot);
         let group_masters = GroupMasterIndex::compile(&groups, &snapshot, None);
+        let slots = Arc::new(crate::SlotTable::compile(
+            crate::next_generation(),
+            &snapshot.fixtures,
+        ));
         Self {
             snapshot: Arc::new(snapshot),
             playback,
@@ -58,6 +64,7 @@ impl RuntimeGeneration {
             group_masters: Arc::new(group_masters),
             profile_encodings,
             profile_projections,
+            slots,
         }
     }
 
@@ -107,6 +114,14 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.group_masters)
         };
+        let slots = if fixtures_changed {
+            Arc::new(crate::SlotTable::compile(
+                crate::next_generation(),
+                &snapshot.fixtures,
+            ))
+        } else {
+            Arc::clone(&current.slots)
+        };
         let group_rankings = if groups_changed || stage_positions_changed {
             Arc::new(compile_group_rankings(&groups, &snapshot))
         } else {
@@ -123,6 +138,7 @@ impl RuntimeGeneration {
             group_masters,
             profile_encodings,
             profile_projections,
+            slots,
         }
     }
 
@@ -149,9 +165,15 @@ impl RuntimeGeneration {
                 group_masters: Arc::new(group_masters),
                 profile_encodings: Arc::clone(&current.profile_encodings),
                 profile_projections: Arc::clone(&current.profile_projections),
+                slots: Arc::clone(&current.slots),
             }),
             GroupMasterGenerationUpdate::Changed,
         )
+    }
+
+    /// The slot numbering every frame of this generation is addressed by.
+    pub(crate) fn slots(&self) -> &Arc<crate::SlotTable> {
+        &self.slots
     }
 
     pub(crate) fn snapshot(&self) -> &EngineSnapshot {

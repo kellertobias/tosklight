@@ -11,6 +11,16 @@
 use light_core::{AttributeId, AttributeKey, AttributeTable, FixtureId};
 use light_fixture::PatchedFixture;
 use rustc_hash::FxHashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Hands out a fresh tag every time a patch is compiled, so no two tables in one process life
+/// ever number their slots under the same generation.
+static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+/// The tag for a table about to be compiled.
+pub(crate) fn next_generation() -> u64 {
+    NEXT_GENERATION.fetch_add(1, Ordering::Relaxed)
+}
 
 /// A value's place in a frame, valid only against the [`SlotTable`] generation that issued it.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -19,6 +29,12 @@ pub(crate) struct Slot(u32);
 impl Slot {
     pub(crate) fn index(self) -> usize {
         self.0 as usize
+    }
+
+    /// Address a slot by its position. Only frame storage shaped by the same table should need
+    /// this; every other caller asks the table for a slot rather than inventing one.
+    pub(crate) fn from_index(index: usize) -> Self {
+        Self(index as u32)
     }
 }
 
