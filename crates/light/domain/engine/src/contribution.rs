@@ -253,6 +253,7 @@ impl<'a> EngineContributionResolver<'a> {
 
     /// Storage for one frame without a pool behind it, for callers that resolve once rather than
     /// every tick.
+    #[cfg(test)]
     pub(crate) fn unpooled(slots: &'a std::sync::Arc<crate::SlotTable>) -> Self {
         let mut frame = crate::FrameState::for_generation(slots.generation(), slots.len());
         frame.begin();
@@ -297,6 +298,7 @@ impl<'a> EngineContributionResolver<'a> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn add_borrowed_unscaled(
         &mut self,
         fixture_id: FixtureId,
@@ -336,11 +338,13 @@ impl<'a> EngineContributionResolver<'a> {
         };
         self.frame.offer(
             slot,
-            priority,
-            changed_at,
-            merge_mode,
-            None,
-            value.normalized().unwrap_or(0.0),
+            crate::Offer {
+                priority,
+                changed_at,
+                merge_mode,
+                transition_ordinal: None,
+                normalized: value.normalized().unwrap_or(0.0),
+            },
             |winner| winner.value = value.clone(),
         );
     }
@@ -360,11 +364,13 @@ impl<'a> EngineContributionResolver<'a> {
         match self.slots.slot(fixture_id, attribute) {
             Some(slot) => self.frame.offer(
                 slot,
-                priority,
-                changed_at,
-                merge_mode,
-                transition_ordinal,
-                value.normalized().unwrap_or(0.0),
+                crate::Offer {
+                    priority,
+                    changed_at,
+                    merge_mode,
+                    transition_ordinal,
+                    normalized: value.normalized().unwrap_or(0.0),
+                },
                 |winner| {
                     winner.value = value.clone();
                     winner.sequence_master = sequence_master;
@@ -406,11 +412,13 @@ impl<'a> EngineContributionResolver<'a> {
                 let mut carried = Some(value);
                 self.frame.offer(
                     slot,
-                    priority,
-                    changed_at,
-                    merge_mode,
-                    transition_ordinal,
-                    level,
+                    crate::Offer {
+                        priority,
+                        changed_at,
+                        merge_mode,
+                        transition_ordinal,
+                        normalized: level,
+                    },
                     |winner| {
                         if let Some(value) = carried.take() {
                             winner.value = value;
@@ -447,24 +455,6 @@ impl<'a> EngineContributionResolver<'a> {
             Entry::Occupied(mut entry) => {
                 if winner_wins(&candidate, entry.get()) {
                     entry.insert(candidate);
-                }
-            }
-        }
-    }
-
-    /// Force a value into a slot whatever holds it, as a Freeze does when it takes the final say.
-    pub(crate) fn freeze(
-        &mut self,
-        fixture_id: FixtureId,
-        attribute: &AttributeKey,
-        value: &AttributeValue,
-    ) {
-        match self.slots.slot(fixture_id, attribute) {
-            Some(slot) => self.frame.force(slot, value.clone()),
-            None => {
-                if let Some(winner) = self.overflow.get_mut(&(fixture_id, attribute.clone())) {
-                    winner.value = value.clone();
-                    winner.sequence_master = None;
                 }
             }
         }
@@ -578,28 +568,6 @@ fn winner_wins(candidate: &EngineWinner, current: &EngineWinner) -> bool {
     }
 }
 
-fn borrowed_winner_wins(
-    value: &AttributeValue,
-    priority: i16,
-    changed_at: DateTime<Utc>,
-    merge_mode: MergeMode,
-    transition_ordinal: Option<u64>,
-    current: &EngineWinner,
-) -> bool {
-    if priority != current.priority {
-        priority > current.priority
-    } else if merge_mode == MergeMode::Htp {
-        value.normalized().unwrap_or(0.0) > current.value.normalized().unwrap_or(0.0)
-    } else {
-        ltp_wins(
-            changed_at,
-            transition_ordinal,
-            current.changed_at,
-            current.transition_ordinal,
-        )
-    }
-}
-
 fn ltp_wins(
     candidate_at: DateTime<Utc>,
     candidate_ordinal: Option<u64>,
@@ -614,6 +582,12 @@ fn ltp_wins(
             ))
 }
 
+/// The show's resolved values for one frame. A frame writes and reads these tens of thousands of
+/// times, and the keys are already unique, so they are hashed for speed rather than against an
+/// adversary.
+pub type ResolvedValues = FxHashMap<(FixtureId, AttributeKey), AttributeValue>;
+pub type ResolvedChangedAt = FxHashMap<(FixtureId, AttributeKey), DateTime<Utc>>;
+
 #[cfg(test)]
 mod transition_order_tests {
     use super::*;
@@ -627,10 +601,8 @@ mod transition_order_tests {
         contributions: impl IntoIterator<Item = EngineContribution>,
     ) -> ResolvedAttributes {
         let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, attributes);
-        let slots = std::sync::Arc::new(crate::SlotTable::compile(
-            1,
-            std::slice::from_ref(&fixture),
-        ));
+        let slots =
+            std::sync::Arc::new(crate::SlotTable::compile(1, std::slice::from_ref(&fixture)));
         let mut resolver = EngineContributionResolver::unpooled(&slots);
         resolver.extend(contributions);
         resolver.finish()
@@ -674,10 +646,8 @@ mod transition_order_tests {
         let fixture_id = FixtureId::new();
         let undeclared = AttributeKey("neverPatched".into());
         let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["intensity"]);
-        let slots = std::sync::Arc::new(crate::SlotTable::compile(
-            1,
-            std::slice::from_ref(&fixture),
-        ));
+        let slots =
+            std::sync::Arc::new(crate::SlotTable::compile(1, std::slice::from_ref(&fixture)));
         let mut resolver = EngineContributionResolver::unpooled(&slots);
         resolver.add_borrowed_unscaled(
             fixture_id,
@@ -760,9 +730,3 @@ mod transition_order_tests {
         );
     }
 }
-
-/// The show's resolved values for one frame. A frame writes and reads these tens of thousands of
-/// times, and the keys are already unique, so they are hashed for speed rather than against an
-/// adversary.
-pub type ResolvedValues = FxHashMap<(FixtureId, AttributeKey), AttributeValue>;
-pub type ResolvedChangedAt = FxHashMap<(FixtureId, AttributeKey), DateTime<Utc>>;

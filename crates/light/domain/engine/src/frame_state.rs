@@ -11,6 +11,17 @@ use light_core::{AttributeValue, MergeMode};
 use crate::Slot;
 use crate::contribution::ApplicableSequenceMaster;
 
+/// What a candidate offers a slot, apart from the value itself.
+#[derive(Clone, Copy)]
+pub(crate) struct Offer {
+    pub(crate) priority: i16,
+    pub(crate) changed_at: DateTime<Utc>,
+    pub(crate) merge_mode: MergeMode,
+    pub(crate) transition_ordinal: Option<u64>,
+    /// The candidate's level, for the HTP comparison. Ignored under every other merge mode.
+    pub(crate) normalized: f32,
+}
+
 /// The value holding a slot after arbitration.
 #[derive(Clone)]
 pub(crate) struct SlotWinner {
@@ -105,33 +116,22 @@ impl FrameState {
     /// Offer a value for a slot, keeping whichever of the two the merge rules prefer.
     ///
     /// `build` is only called when the candidate actually wins, so a losing contribution costs a
-    /// comparison rather than a clone. `normalized` is the candidate's level for the HTP
-    /// comparison, and is ignored for every other merge mode.
-    pub(crate) fn offer(
-        &mut self,
-        slot: Slot,
-        priority: i16,
-        changed_at: DateTime<Utc>,
-        merge_mode: MergeMode,
-        transition_ordinal: Option<u64>,
-        normalized: f32,
-        build: impl FnOnce(&mut SlotWinner),
-    ) {
+    /// comparison rather than a clone.
+    pub(crate) fn offer(&mut self, slot: Slot, offer: Offer, build: impl FnOnce(&mut SlotWinner)) {
         let index = slot.index();
         if index >= self.winners.len() {
             return;
         }
-        let held = self.stamp[index] == self.epoch;
-        if held {
+        if self.stamp[index] == self.epoch {
             let current = &self.winners[index];
-            let wins = if priority != current.priority {
-                priority > current.priority
-            } else if merge_mode == MergeMode::Htp {
-                normalized > current.value.normalized().unwrap_or(0.0)
+            let wins = if offer.priority != current.priority {
+                offer.priority > current.priority
+            } else if offer.merge_mode == MergeMode::Htp {
+                offer.normalized > current.value.normalized().unwrap_or(0.0)
             } else {
                 ltp_wins(
-                    changed_at,
-                    transition_ordinal,
+                    offer.changed_at,
+                    offer.transition_ordinal,
                     current.changed_at,
                     current.transition_ordinal,
                 )
@@ -144,10 +144,10 @@ impl FrameState {
             self.touched.push(index as u32);
         }
         let winner = &mut self.winners[index];
-        winner.priority = priority;
-        winner.changed_at = changed_at;
-        winner.merge_mode = merge_mode;
-        winner.transition_ordinal = transition_ordinal;
+        winner.priority = offer.priority;
+        winner.changed_at = offer.changed_at;
+        winner.merge_mode = offer.merge_mode;
+        winner.transition_ordinal = offer.transition_ordinal;
         winner.sequence_master = None;
         build(winner);
     }
@@ -170,9 +170,12 @@ impl FrameState {
 
     /// Every slot written this fill, in the order it was first written.
     pub(crate) fn occupied(&self) -> impl Iterator<Item = (Slot, &SlotWinner)> {
-        self.touched
-            .iter()
-            .map(move |index| (Slot::from_index(*index as usize), &self.winners[*index as usize]))
+        self.touched.iter().map(move |index| {
+            (
+                Slot::from_index(*index as usize),
+                &self.winners[*index as usize],
+            )
+        })
     }
 
     /// How many slots this fill wrote.
@@ -207,11 +210,13 @@ mod tests {
         let value = AttributeValue::Normalized(level);
         state.offer(
             Slot::from_index(slot),
-            priority,
-            DateTime::from_timestamp(at, 0).unwrap(),
-            MergeMode::Ltp,
-            None,
-            level,
+            Offer {
+                priority,
+                changed_at: DateTime::from_timestamp(at, 0).unwrap(),
+                merge_mode: MergeMode::Ltp,
+                transition_ordinal: None,
+                normalized: level,
+            },
             |winner| winner.value = value,
         );
     }
@@ -272,11 +277,13 @@ mod tests {
             let value = AttributeValue::Normalized(level);
             state.offer(
                 Slot::from_index(0),
-                0,
-                DateTime::from_timestamp(at, 0).unwrap(),
-                MergeMode::Htp,
-                None,
-                level,
+                Offer {
+                    priority: 0,
+                    changed_at: DateTime::from_timestamp(at, 0).unwrap(),
+                    merge_mode: MergeMode::Htp,
+                    transition_ordinal: None,
+                    normalized: level,
+                },
                 |winner| winner.value = value,
             );
         };

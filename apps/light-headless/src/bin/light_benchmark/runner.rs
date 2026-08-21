@@ -119,8 +119,11 @@ fn run_scenario(
     // of every scenario and diagnostic before it.
     light_engine::reset_render_phases();
     let timed = execute_timed_run(arguments, config, &scenario, loopback.as_ref())?;
-    let render_phase_microseconds = light_engine::render_phases_enabled()
-        .then(|| light_engine::accumulated_microseconds().into_iter().collect());
+    let render_phase_microseconds = light_engine::render_phases_enabled().then(|| {
+        light_engine::accumulated_microseconds()
+            .into_iter()
+            .collect()
+    });
     let state = timed.state;
     let warmup_ticks = timed.warmup_ticks;
     let warmup_elapsed = timed.warmup_elapsed;

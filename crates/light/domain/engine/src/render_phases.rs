@@ -12,7 +12,8 @@ use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
-static ENABLED: LazyLock<bool> = LazyLock::new(|| std::env::var_os("LIGHT_RENDER_PHASES").is_some());
+static ENABLED: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("LIGHT_RENDER_PHASES").is_some());
 
 /// The phases a render is divided into for measurement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -72,11 +72,11 @@ impl SlotTable {
         // Collected before any column is addressed, because the stride is the attribute count and
         // that is only final once every profile has been read.
         let mut declared: Vec<Vec<AttributeId>> = Vec::new();
-        let mut declare = |owner: FixtureId,
-                           attribute: AttributeId,
-                           owners: &mut Vec<FixtureId>,
-                           owner_rows: &mut FxHashMap<FixtureId, usize>,
-                           declared: &mut Vec<Vec<AttributeId>>| {
+        let declare = |owner: FixtureId,
+                       attribute: AttributeId,
+                       owners: &mut Vec<FixtureId>,
+                       owner_rows: &mut FxHashMap<FixtureId, usize>,
+                       declared: &mut Vec<Vec<AttributeId>>| {
             let row = *owner_rows.entry(owner).or_insert_with(|| {
                 owners.push(owner);
                 declared.push(Vec::new());
@@ -241,13 +241,6 @@ impl SlotTable {
     pub(crate) fn pair(&self, slot: Slot) -> (FixtureId, &AttributeKey) {
         let (fixture_id, attribute) = self.pairs[slot.index()];
         (fixture_id, self.attributes.key(attribute))
-    }
-
-    /// Whether this slot's attribute drives brightness, decided when the patch compiled.
-    pub(crate) fn is_intensity(&self, slot: Slot) -> bool {
-        self.attributes
-            .entry(self.pairs[slot.index()].1)
-            .is_intensity()
     }
 }
 
@@ -416,19 +409,5 @@ mod tests {
         assert_eq!(table.fixture_slots(first.fixture_id).len(), 2);
         assert_eq!(table.fixture_slots(second.fixture_id).len(), 1);
         assert!(table.fixture_slots(FixtureId::new()).is_empty());
-    }
-
-    #[test]
-    fn an_intensity_slot_knows_it_drives_brightness() {
-        let fixture = legacy_fixture(&["intensity", "pan"]);
-        let table = SlotTable::compile(1, std::slice::from_ref(&fixture));
-        let intensity = table
-            .slot(fixture.fixture_id, &AttributeKey("intensity".into()))
-            .unwrap();
-        let pan = table
-            .slot(fixture.fixture_id, &AttributeKey("pan".into()))
-            .unwrap();
-        assert!(table.is_intensity(intensity));
-        assert!(!table.is_intensity(pan));
     }
 }

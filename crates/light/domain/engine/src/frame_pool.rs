@@ -117,7 +117,10 @@ mod tests {
     fn each_fill_starts_empty() {
         let pool = FramePool::for_generation(1, 8);
         let mut state = pool.take().unwrap();
-        state.force(crate::Slot::from_index(3), light_core::AttributeValue::Normalized(1.0));
+        state.force(
+            crate::Slot::from_index(3),
+            light_core::AttributeValue::Normalized(1.0),
+        );
         assert_eq!(state.occupied_len(), 1);
         pool.give_back(state);
         let state = pool.take().unwrap();

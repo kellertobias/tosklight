@@ -50,7 +50,9 @@ pub use playback_batch::{
     PlaybackBatchAction, PlaybackBatchCommand, PlaybackBatchOutcome, PreparedPlaybackBatch,
 };
 pub use playback_exclusion::PoolPlaybackTransition;
-pub use render_phases::{accumulated_microseconds, enabled as render_phases_enabled, reset as reset_render_phases};
+pub use render_phases::{
+    accumulated_microseconds, enabled as render_phases_enabled, reset as reset_render_phases,
+};
 
 pub(crate) use contribution::{
     EngineContribution, EngineContributionResolver, ResolvedAttributes, ResolvedContributionIndex,
@@ -61,11 +63,11 @@ pub(crate) use contribution_batch::{replaces_source, sampled_values};
 pub(crate) use fixture::profile_head_owner;
 #[allow(unused_imports)]
 pub(crate) use frame_pool::FramePool;
-pub(crate) use frame_slots::{Slot, SlotTable};
-#[allow(unused_imports)]
-pub(crate) use frame_state::{FrameState, SlotWinner};
 #[allow(unused_imports)]
 pub(crate) use frame_slots::next_generation;
+pub(crate) use frame_slots::{Slot, SlotTable};
+#[allow(unused_imports)]
+pub(crate) use frame_state::{FrameState, Offer, SlotWinner};
 pub(crate) use legacy_projection::render_fixture;
 pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};
@@ -78,10 +80,10 @@ pub(crate) use profile_value_index::ProfileValueIndex;
 pub(crate) use programmer_fade::{
     ProgrammerTransition, ProgrammerTransitionKey, ProgrammerTransitionSource,
 };
+pub(crate) use render_phases::{RenderPhase, timed};
 pub(crate) use runtime_generation::{
     GroupMasterGenerationUpdate, GroupMasterIndex, RuntimeGeneration, group_stage_positions,
 };
-pub(crate) use render_phases::{RenderPhase, timed};
 pub(crate) use safety::{apply_safe_values, apply_safe_values_with_snap};
 
 #[cfg(test)]
