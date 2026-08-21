@@ -168,6 +168,21 @@ impl FrameState {
         winner.sequence_master = None;
     }
 
+    /// Take a slot over, optionally restamping when its value changed.
+    pub(crate) fn force_at(
+        &mut self,
+        slot: Slot,
+        value: AttributeValue,
+        changed_at: Option<DateTime<Utc>>,
+    ) {
+        self.force(slot, value);
+        if let (Some(changed_at), Some(index)) = (changed_at, Some(slot.index()))
+            && index < self.winners.len()
+        {
+            self.winners[index].changed_at = changed_at;
+        }
+    }
+
     /// Every slot written this fill, in the order it was first written.
     pub(crate) fn occupied(&self) -> impl Iterator<Item = (Slot, &SlotWinner)> {
         self.touched.iter().map(move |index| {

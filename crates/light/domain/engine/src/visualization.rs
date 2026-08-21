@@ -16,8 +16,12 @@ impl Engine {
         sampled: &[ContributionBatch],
     ) -> crate::ResolvedValues {
         let generation = self.generation.load_full();
+        // This caller wants every value by name, so the frame is materialised here rather than
+        // left dense. Nothing on the output path takes this route.
         self.resolved_attributes_at(&generation, self.clock.now(), sampled)
-            .values
+            .named_values()
+            .values()
+            .clone()
     }
 
     /// Project schema-v2 profile heads through the same channel-resolution path used for DMX.
@@ -43,7 +47,9 @@ impl Engine {
         // These values were assembled elsewhere and replace the frame wholesale, so the frame is
         // released rather than read: it no longer describes what is being projected.
         resolved.frame = None;
-        let profile_values = crate::ProfileValueIndex::new(&resolved);
+        let sequence_masters = std::mem::take(&mut resolved.sequence_masters);
+        let named_values = resolved.named_values();
+        let profile_values = crate::ProfileValueIndex::new(&named_values, &sequence_masters);
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlight_layers = self.highlight_layers.read();

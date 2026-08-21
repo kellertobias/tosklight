@@ -93,7 +93,7 @@ pub(super) struct PublishedVisualizationFrame {
     pub(super) scope: VisualizationScope,
     pub(super) show_revision: u64,
     pub(super) options: RenderOptions,
-    pub(super) values: Arc<light_engine::ResolvedValues>,
+    pub(super) values: light_engine::FrameValues,
     pub(super) profile_visualization_values: Arc<light_engine::ResolvedValues>,
 }
 
@@ -150,7 +150,7 @@ impl VisualizationFrameHub {
                 scope,
                 show_revision: rendered.revision,
                 options,
-                values: Arc::clone(&rendered.resolved_values),
+                values: rendered.resolved_values.clone(),
                 profile_visualization_values: Arc::clone(&rendered.profile_visualization_values),
             })));
         self.source_notify.notify_one();
@@ -593,8 +593,7 @@ mod tests {
     fn rendered(revision: u64) -> RenderResult {
         RenderResult {
             universes: HashMap::new(),
-            resolved_values: Arc::new(light_engine::ResolvedValues::default()),
-            resolved_changed_at: Arc::new(light_engine::ResolvedChangedAt::default()),
+            resolved_values: light_engine::FrameValues::empty(),
             profile_visualization_values: Arc::new(light_engine::ResolvedValues::default()),
             patched_slots: HashMap::new(),
             revision,

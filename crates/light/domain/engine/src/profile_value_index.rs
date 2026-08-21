@@ -1,4 +1,4 @@
-use crate::{ResolvedAttributes, contribution::ApplicableSequenceMaster};
+use crate::contribution::ApplicableSequenceMaster;
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use rustc_hash::FxHashMap;
 use std::collections::HashMap;
@@ -18,12 +18,15 @@ pub(crate) enum ProfileValueIndex<'a> {
 }
 
 impl<'a> ProfileValueIndex<'a> {
-    pub(crate) fn new(resolved: &'a ResolvedAttributes) -> Self {
-        match resolved.frame.as_ref() {
+    pub(crate) fn new(
+        values: &'a crate::FrameValues,
+        sequence_masters: &'a FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
+    ) -> Self {
+        match values.frame() {
             Some(frame) => Self::Dense(frame),
             None => Self::Scanned {
-                values: index_values(&resolved.values),
-                sequence_masters: index_sequence_masters(&resolved.sequence_masters),
+                values: index_values(values.values()),
+                sequence_masters: index_sequence_masters(sequence_masters),
             },
         }
     }

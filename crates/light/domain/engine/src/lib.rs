@@ -9,6 +9,7 @@ mod fixture;
 mod frame_pool;
 mod frame_slots;
 mod frame_state;
+mod frame_values;
 mod legacy_projection;
 mod lifecycle;
 mod model;
@@ -68,6 +69,7 @@ pub(crate) use frame_slots::next_generation;
 pub(crate) use frame_slots::{Slot, SlotTable};
 #[allow(unused_imports)]
 pub(crate) use frame_state::{FrameState, Offer, SlotWinner};
+pub use frame_values::FrameValues;
 pub(crate) use legacy_projection::render_fixture;
 pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};

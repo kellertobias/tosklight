@@ -282,7 +282,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     runtime.internal_audio.lock().reconcile(
         runtime.engine.snapshot().fixtures.as_ref(),
         rendered.profile_visualization_values.as_ref(),
-        rendered.resolved_changed_at.as_ref(),
+        &rendered.resolved_values,
     );
     let publish_started = Instant::now();
     let (routes, frames, patched_slots) = {

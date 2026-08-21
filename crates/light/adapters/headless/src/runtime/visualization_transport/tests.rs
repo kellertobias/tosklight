@@ -8,7 +8,7 @@ fn source(sequence: u64) -> Arc<super::super::visualization_frame::PublishedVisu
             scope: VisualizationScope { show_id: None },
             show_revision: sequence,
             options: light_engine::RenderOptions::default(),
-            values: Arc::new(light_engine::ResolvedValues::default()),
+            values: light_engine::FrameValues::empty(),
             profile_visualization_values: Arc::new(light_engine::ResolvedValues::default()),
         },
     )

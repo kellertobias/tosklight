@@ -298,7 +298,7 @@ impl InternalAudioRuntime {
         &mut self,
         fixtures: &[PatchedFixture],
         values: &light_engine::ResolvedValues,
-        changed_at: &light_engine::ResolvedChangedAt,
+        changed_at: &light_engine::FrameValues,
     ) {
         let players = fixtures
             .iter()
@@ -389,7 +389,7 @@ impl InternalAudioRuntime {
         &mut self,
         fixture: &PatchedFixture,
         values: &light_engine::ResolvedValues,
-        changed_at: &light_engine::ResolvedChangedAt,
+        changed_at: &light_engine::FrameValues,
     ) {
         let control_id = fixture
             .logical_heads
@@ -438,9 +438,10 @@ impl InternalAudioRuntime {
                 LEGACY_VOLUME_ATTRIBUTE,
             ),
             cursor_millis: exact_raw(values, control_id, "audio.cursor_millis"),
+            // One lookup against the frame rather than a map built from the whole show to answer
+            // it: a handful of players ask this, and only they.
             transport_changed_at: changed_at
-                .get(&(control_id, AttributeKey(transport_attribute.into())))
-                .copied(),
+                .changed_at(control_id, &AttributeKey(transport_attribute.into())),
         };
         let previous = self.states.get(&fixture.fixture_id).copied();
         if previous == Some(state) {

@@ -35,8 +35,12 @@ impl Engine {
         crate::timed(crate::RenderPhase::FixtureFreezes, || {
             apply_fixture_freezes(&snapshot.fixtures, &mut resolved)
         });
+        // Named values for the boundary and for schema-v1 fixtures. Nothing is materialised until
+        // one of them actually asks, and a show of schema-v2 fixtures never asks here at all.
+        let sequence_masters = std::mem::take(&mut resolved.sequence_masters);
+        let named_values = resolved.named_values();
         let profile_values = crate::timed(crate::RenderPhase::ValueIndexBuild, || {
-            crate::ProfileValueIndex::new(&resolved)
+            crate::ProfileValueIndex::new(&named_values, &sequence_masters)
         });
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
@@ -194,7 +198,7 @@ impl Engine {
                     }
                     render_legacy_fixture(
                         fixture,
-                        &resolved,
+                        &named_values,
                         options,
                         group_masters,
                         &group_master_flashes,
@@ -207,8 +211,7 @@ impl Engine {
         )?;
         Ok(RenderResult {
             universes,
-            resolved_values: Arc::new(resolved.values),
-            resolved_changed_at: Arc::new(resolved.changed_at),
+            resolved_values: named_values,
             profile_visualization_values: Arc::new(profile_visualization_values),
             patched_slots,
             revision: snapshot.revision,
@@ -326,7 +329,7 @@ fn insert_profile_visualization_values(
 
 fn render_legacy_fixture(
     fixture: &light_fixture::PatchedFixture,
-    resolved: &super::ResolvedAttributes,
+    resolved: &crate::FrameValues,
     options: RenderOptions,
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
@@ -368,7 +371,7 @@ fn render_legacy_fixture(
         render_fixture(
             frame,
             &instance,
-            &resolved.values,
+            resolved.values(),
             options,
             group_masters,
             group_master_flashes,

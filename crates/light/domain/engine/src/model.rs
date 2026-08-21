@@ -203,12 +203,14 @@ impl Default for RenderOptions {
 #[derive(Clone, Debug)]
 pub struct RenderResult {
     pub universes: HashMap<Universe, DmxFrame>,
-    /// The authoritative semantic values used to produce `universes`. Keeping this immutable
+    /// The authoritative semantic values used to produce `universes`, together with the winning
+    /// LTP timestamps that edge-sensitive internal services follow. Keeping this immutable
     /// snapshot with the render result lets observational consumers follow output without
     /// resolving the engine a second time.
-    pub resolved_values: Arc<ResolvedValues>,
-    /// Winning LTP timestamps for edge-sensitive internal services.
-    pub resolved_changed_at: Arc<ResolvedChangedAt>,
+    ///
+    /// Backed by the frame the render resolved into, so asking for one value costs one lookup and
+    /// no map is built unless something asks for all of them.
+    pub resolved_values: crate::FrameValues,
     /// Profile-head values resolved while producing the same output frame.
     pub profile_visualization_values: Arc<ResolvedValues>,
     /// Highest patched slot for each logical universe. This is kept separately from values so a

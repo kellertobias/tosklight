@@ -135,6 +135,9 @@ impl EngineContribution {
 
 #[derive(Default)]
 pub(crate) struct ResolvedAttributes {
+    /// Everything the frame resolved, by name — populated only when there is no dense frame to
+    /// read instead. A frame that holds the whole show leaves these empty and is materialised at
+    /// the boundary, once, if anyone asks.
     pub(crate) values: ResolvedValues,
     pub(crate) changed_at: ResolvedChangedAt,
     pub(crate) sequence_masters: FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
@@ -145,6 +148,20 @@ pub(crate) struct ResolvedAttributes {
 }
 
 impl ResolvedAttributes {
+    /// This frame's values as the boundary sees them, by name and on demand.
+    ///
+    /// Takes the frame with it, so the pooled buffer lives exactly as long as something can still
+    /// read the values it holds.
+    pub(crate) fn named_values(&mut self) -> crate::FrameValues {
+        match self.frame.take() {
+            Some(frame) => crate::FrameValues::from_frame(frame),
+            None => crate::FrameValues::from_maps(
+                std::mem::take(&mut self.values),
+                std::mem::take(&mut self.changed_at),
+            ),
+        }
+    }
+
     /// Take an attribute over after arbitration, as a Freeze and a Group colour do.
     ///
     /// Writes the frame and the maps together. Anything that changed only one of them would leave
@@ -156,17 +173,19 @@ impl ResolvedAttributes {
         value: AttributeValue,
         changed_at: Option<DateTime<Utc>>,
     ) {
-        let key = (fixture_id, attribute.clone());
-        if let Some(frame) = self.frame.as_mut()
-            && let Some(slot) = frame.slots().slot(fixture_id, attribute)
-        {
-            frame.force(slot, value.clone());
+        // The holder of an attribute after an override is the override, so an underlying Cue
+        // master must not go on scaling what it no longer decides. `force` clears it on the dense
+        // path; the map path removes it here.
+        if let Some(frame) = self.frame.as_mut() {
+            if let Some(slot) = frame.slots().slot(fixture_id, attribute) {
+                frame.force_at(slot, value, changed_at);
+            }
+            return;
         }
+        let key = (fixture_id, attribute.clone());
         if let Some(changed_at) = changed_at {
             self.changed_at.insert(key.clone(), changed_at);
         }
-        // The holder of an attribute after an override is the override, so an underlying Cue
-        // master must not go on scaling what it no longer decides.
         self.sequence_masters.remove(&key);
         self.values.insert(key, value);
     }
@@ -198,6 +217,23 @@ impl ResolvedFrame {
     }
 
     /// The sequence master scaling a slot, if the winning source carried one.
+    /// When the value holding a slot last changed.
+    pub(crate) fn changed_at(&self, slot: crate::Slot) -> Option<DateTime<Utc>> {
+        Some(self.state.as_ref()?.get(slot)?.changed_at)
+    }
+
+    /// Every slot this frame wrote, with the value that won it.
+    pub(crate) fn occupied(&self) -> impl Iterator<Item = (crate::Slot, &crate::SlotWinner)> {
+        self.state.iter().flat_map(|state| state.occupied())
+    }
+
+    /// How many slots this frame wrote.
+    pub(crate) fn occupied_len(&self) -> usize {
+        self.state
+            .as_ref()
+            .map_or(0, crate::FrameState::occupied_len)
+    }
+
     pub(crate) fn sequence_master(&self, slot: crate::Slot) -> Option<ApplicableSequenceMaster> {
         self.state
             .as_ref()?
@@ -213,6 +249,18 @@ impl ResolvedFrame {
     pub(crate) fn force(&mut self, slot: crate::Slot, value: AttributeValue) {
         if let Some(state) = self.state.as_mut() {
             state.force(slot, value);
+        }
+    }
+
+    /// Take a slot over, optionally restamping when it changed.
+    pub(crate) fn force_at(
+        &mut self,
+        slot: crate::Slot,
+        value: AttributeValue,
+        changed_at: Option<DateTime<Utc>>,
+    ) {
+        if let Some(state) = self.state.as_mut() {
+            state.force_at(slot, value, changed_at);
         }
     }
 }
@@ -480,6 +528,18 @@ impl<'a> EngineContributionResolver<'a> {
     /// Hand the frame to the boundary that still speaks in names, and the storage back to the pool.
     pub(crate) fn finish(mut self) -> ResolvedAttributes {
         let overflowed = !self.overflow.is_empty();
+        if !overflowed {
+            // The frame holds everything, so nothing is copied into a map here. The boundary
+            // builds one on demand, and most frames are never asked.
+            return ResolvedAttributes {
+                frame: Some(ResolvedFrame {
+                    slots: std::sync::Arc::clone(self.slots),
+                    state: Some(self.frame),
+                    pool: self.pool.take(),
+                }),
+                ..ResolvedAttributes::default()
+            };
+        }
         let winner_count = self.frame.occupied_len() + self.overflow.len();
         let mut resolved = ResolvedAttributes {
             values: ResolvedValues::with_capacity_and_hasher(winner_count, Default::default()),
@@ -510,23 +570,12 @@ impl<'a> EngineContributionResolver<'a> {
             }
             resolved.values.insert(key, winner.value);
         }
-        // The frame stays with the values it produced: the render reads it by slot, and it goes
-        // back to the pool when the whole frame is finished with rather than here.
-        //
-        // Unless something overflowed. A frame that does not hold every value the maps hold is not
-        // safe to read by slot — projection would silently miss whatever the patch could not
-        // number — so in that case the buffer goes straight back and readers scan the maps.
-        if overflowed {
-            if let Some(pool) = self.pool.take() {
-                pool.give_back(self.frame);
-            }
-            return resolved;
+        // Something overflowed. A frame that does not hold every value the maps hold is not safe
+        // to read by slot — projection would silently miss whatever the patch could not number —
+        // so the buffer goes straight back and every reader scans the maps instead.
+        if let Some(pool) = self.pool.take() {
+            pool.give_back(self.frame);
         }
-        resolved.frame = Some(ResolvedFrame {
-            slots: std::sync::Arc::clone(self.slots),
-            state: Some(self.frame),
-            pool: self.pool.take(),
-        });
         resolved
     }
 }
@@ -599,13 +648,13 @@ mod transition_order_tests {
         fixture_id: FixtureId,
         attributes: &[&str],
         contributions: impl IntoIterator<Item = EngineContribution>,
-    ) -> ResolvedAttributes {
+    ) -> crate::FrameValues {
         let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, attributes);
         let slots =
             std::sync::Arc::new(crate::SlotTable::compile(1, std::slice::from_ref(&fixture)));
         let mut resolver = EngineContributionResolver::unpooled(&slots);
         resolver.extend(contributions);
-        resolver.finish()
+        resolver.finish().named_values()
     }
 
     fn playback_value(
@@ -682,7 +731,7 @@ mod transition_order_tests {
             ],
         );
         assert_eq!(
-            resolved.values[&(fixture_id, AttributeKey::intensity())],
+            resolved[&(fixture_id, AttributeKey::intensity())],
             AttributeValue::Normalized(0.2)
         );
     }
@@ -700,7 +749,7 @@ mod transition_order_tests {
             ],
         );
         assert_eq!(
-            resolved.values[&(fixture_id, AttributeKey::intensity())],
+            resolved[&(fixture_id, AttributeKey::intensity())],
             AttributeValue::Normalized(0.8)
         );
     }
@@ -725,7 +774,7 @@ mod transition_order_tests {
         };
         let resolved = resolved(fixture_id, &["pan"], [value(0.8), value(0.2)]);
         assert_eq!(
-            resolved.values[&(fixture_id, AttributeKey("pan".into()))],
+            resolved[&(fixture_id, AttributeKey("pan".into()))],
             AttributeValue::Normalized(0.8)
         );
     }
