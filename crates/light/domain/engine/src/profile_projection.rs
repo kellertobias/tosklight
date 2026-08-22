@@ -125,6 +125,9 @@ fn resolved_highlight_layer(
     owner: FixtureId,
     layers: &HashMap<FixtureId, HighlightOutputLayer>,
 ) -> Option<HighlightOutputLayer> {
+    if layers.is_empty() {
+        return None;
+    }
     let root = layers.get(&fixture_id).cloned();
     if owner == fixture_id {
         return root;
@@ -165,11 +168,14 @@ pub(crate) fn resolve_profile_head(
     channels: &mut Vec<(uuid::Uuid, u32)>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
     let owner = head.owner;
-    let full_freeze = fixture
-        .freeze
-        .targets
-        .get(&owner)
-        .is_some_and(|target| target.full);
+    // Nothing frozen, nothing highlighted and nothing flashing is the ordinary state of a desk, so
+    // each of these asks whether there is anything to look up before hashing this head's identity.
+    let full_freeze = !fixture.freeze.targets.is_empty()
+        && fixture
+            .freeze
+            .targets
+            .get(&owner)
+            .is_some_and(|target| target.full);
     let options = if full_freeze {
         RenderOptions {
             grand_master: 1.0,
@@ -230,7 +236,9 @@ pub(crate) fn resolve_profile_head(
                 *channel_index,
                 read,
                 legacy_raw_highlight,
-                fixture.highlight_overrides.get(&channel.id).copied(),
+                (!fixture.highlight_overrides.is_empty())
+                    .then(|| fixture.highlight_overrides.get(&channel.id).copied())
+                    .flatten(),
                 |active| {
                     let sequence_master = active
                         .filter(|(_, attribute)| !attribute.is_intensity())
@@ -356,11 +364,14 @@ fn prepare_head_inputs(
     axis_inversion: AxisInversion,
 ) -> Result<ProfileHeadInputs, EngineError> {
     let owner = head.owner;
-    let full_freeze = fixture
-        .freeze
-        .targets
-        .get(&owner)
-        .is_some_and(|target| target.full);
+    // Nothing frozen, nothing highlighted and nothing flashing is the ordinary state of a desk, so
+    // each of these asks whether there is anything to look up before hashing this head's identity.
+    let full_freeze = !fixture.freeze.targets.is_empty()
+        && fixture
+            .freeze
+            .targets
+            .get(&owner)
+            .is_some_and(|target| target.full);
     let options = if full_freeze {
         RenderOptions {
             grand_master: 1.0,

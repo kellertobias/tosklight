@@ -421,6 +421,10 @@ impl GroupMasterIndex {
     }
 
     pub(crate) fn scale(&self, fixture_id: FixtureId, flashes: &HashMap<String, f32>) -> f32 {
+        // A show with no Group Master assigned asks this for every head of every frame.
+        if self.fixtures.is_empty() {
+            return 1.0;
+        }
         self.fixtures
             .get(&fixture_id)
             .into_iter()
