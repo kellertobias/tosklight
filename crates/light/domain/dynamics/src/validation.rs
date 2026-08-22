@@ -171,7 +171,7 @@ fn validate_lane(
 ) -> Result<(), DynamicValidationError> {
     if !attribute_descriptor(&lane.attribute).supports_dynamics() {
         return Err(DynamicValidationError::UnsupportedAttribute(
-            lane.attribute.0.clone(),
+            lane.attribute.0.to_string(),
         ));
     }
     if !valid_rational(lane.speed_multiplier)

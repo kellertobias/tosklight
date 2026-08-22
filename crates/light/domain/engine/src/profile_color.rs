@@ -97,7 +97,7 @@ fn rgb_fallback(
     let level = |attribute: &str| {
         mode.channels
             .iter()
-            .find(|channel| channel.head_id == head_id && channel.attribute.0 == attribute)
+            .find(|channel| channel.head_id == head_id && &*channel.attribute.0 == attribute)
             .and_then(|channel| channel_visual_level(mode, channels, channel.id))
     };
     match (

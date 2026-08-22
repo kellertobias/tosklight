@@ -103,7 +103,7 @@ fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
     let shutter = mode
         .channels
         .iter_mut()
-        .find(|channel| channel.attribute.0 == "shutter")
+        .find(|channel| *channel.attribute.0 == *"shutter")
         .unwrap();
     shutter.default_raw = 0;
     shutter.functions = vec![ChannelFunction::continuous(
@@ -148,7 +148,7 @@ fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
         let value = if channel.attribute.is_intensity() || channel.attribute.0.starts_with("color.")
         {
             255
-        } else if channel.attribute.0 == "shutter" {
+        } else if *channel.attribute.0 == *"shutter" {
             116
         } else {
             channel.default_raw as u8

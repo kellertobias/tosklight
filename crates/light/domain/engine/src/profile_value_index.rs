@@ -143,20 +143,20 @@ impl<'a> ProfileValueIndex<'a> {
         match self {
             Self::Dense { frame, .. } => {
                 for slot in frame.slots().fixture_slots(fixture_id) {
-                    if frame.slots().attribute_key(*slot).0 == attribute {
+                    if &*frame.slots().attribute_key(*slot).0 == attribute {
                         return frame.value(*slot);
                     }
                 }
                 frame
                     .overflow(fixture_id)
                     .iter()
-                    .find(|(candidate, _)| candidate.0 == attribute)
+                    .find(|(candidate, _)| &*candidate.0 == attribute)
                     .map(|(_, winner)| &winner.value)
             }
             Self::Scanned { values, .. } => values
                 .get(&fixture_id)?
                 .iter()
-                .find_map(|(candidate, value)| (candidate.0 == attribute).then_some(*value)),
+                .find_map(|(candidate, value)| (&*candidate.0 == attribute).then_some(*value)),
         }
     }
 
@@ -217,14 +217,14 @@ impl<'a> ProfileValueIndex<'a> {
         match self {
             Self::Dense { frame, .. } => {
                 for slot in frame.slots().fixture_slots(fixture_id) {
-                    if frame.slots().attribute_key(*slot).0 == attribute {
+                    if &*frame.slots().attribute_key(*slot).0 == attribute {
                         return frame.sequence_master(*slot);
                     }
                 }
                 frame
                     .overflow(fixture_id)
                     .iter()
-                    .find(|(candidate, _)| candidate.0 == attribute)
+                    .find(|(candidate, _)| &*candidate.0 == attribute)
                     .and_then(|(_, winner)| winner.sequence_master)
             }
             Self::Scanned {
@@ -232,7 +232,7 @@ impl<'a> ProfileValueIndex<'a> {
             } => sequence_masters
                 .get(&fixture_id)?
                 .iter()
-                .find_map(|(candidate, master)| (candidate.0 == attribute).then_some(*master)),
+                .find_map(|(candidate, master)| (&*candidate.0 == attribute).then_some(*master)),
         }
     }
 }

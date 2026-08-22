@@ -145,7 +145,7 @@ impl TemplateGroupScenario {
         assert_eq!(persisted.cues.len(), 2);
         assert!(persisted.cues[1].group_changes.iter().any(|change| {
             change.group_id == "profile"
-                && change.attribute.0 == "pan"
+                && *change.attribute.0 == *"pan"
                 && change
                     .value
                     .as_ref()
@@ -248,7 +248,7 @@ impl TemplateGroupScenario {
     fn verify_stored_group_values(&self) {
         let cue_list = self.stored_cue_list();
         assert!(cue_list.cues[1].group_changes.iter().any(|change| {
-            change.group_id == "profile" && change.attribute.0 == "pan"
+            change.group_id == "profile" && *change.attribute.0 == *"pan"
         }));
         assert_eq!(
             cue_list.cues[1]

@@ -54,13 +54,13 @@ impl PresetFamily {
             Self::Mixed => true,
             Self::Intensity => {
                 attribute.is_intensity()
-                    || attribute.0 == "dimmer"
+                    || *attribute.0 == *"dimmer"
                     || attribute.0.ends_with(".dimmer")
                     || class == AttributeClass::Intensity
             }
             Self::Color => {
                 class == AttributeClass::Color
-                    || attribute.0 == "color"
+                    || *attribute.0 == *"color"
                     || attribute.0.starts_with("color.")
                     || attribute.0.contains(".color.")
             }

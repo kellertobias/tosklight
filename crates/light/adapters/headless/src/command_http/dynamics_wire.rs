@@ -6,7 +6,7 @@ pub(super) fn programming_value(
 ) -> light_wire::v2::programming::ProgrammingDynamicValue {
     light_wire::v2::programming::ProgrammingDynamicValue {
         fixture_id: value.fixture_id.0,
-        attribute: value.attribute.0.clone(),
+        attribute: value.attribute.0.to_string(),
         value: semantic_value(&value.value),
         programmer_order: value.programmer_order,
         changed_at_millis: value.changed_at_millis,
@@ -220,7 +220,7 @@ fn target_binding(value: &domain::DynamicTargetBinding) -> wire::DynamicTargetBi
 fn lane(value: &domain::DynamicLane) -> wire::DynamicLaneProjection {
     wire::DynamicLaneProjection {
         id: value.id,
-        attribute: value.attribute.0.clone(),
+        attribute: value.attribute.0.to_string(),
         mode: match value.mode {
             domain::DynamicLaneMode::Keyframes => wire::DynamicLaneModeProjection::Keyframes,
             domain::DynamicLaneMode::MaxMin => wire::DynamicLaneModeProjection::MaxMin,
@@ -276,7 +276,7 @@ fn scalar_source(value: &domain::ScalarSource) -> wire::DynamicScalarSourceProje
             last_valid_by_target,
         } => wire::DynamicScalarSourceProjection::Preset {
             preset_id: preset_id.clone(),
-            attribute: attribute.0.clone(),
+            attribute: attribute.0.to_string(),
             last_valid_by_target: last_valid_by_target
                 .iter()
                 .map(|fallback| wire::DynamicTargetScalarFallbackProjection {

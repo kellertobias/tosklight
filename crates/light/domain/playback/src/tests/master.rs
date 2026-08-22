@@ -162,7 +162,7 @@ fn pool_master_scales_intensity_without_scaling_ltp_attributes() {
     assert_eq!(
         values
             .iter()
-            .find(|value| value.attribute.0 == "pan")
+            .find(|value| *value.attribute.0 == *"pan")
             .unwrap()
             .value,
         AttributeValue::Normalized(0.8)

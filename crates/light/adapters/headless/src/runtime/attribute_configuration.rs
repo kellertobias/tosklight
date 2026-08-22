@@ -292,7 +292,7 @@ pub(super) fn configured_descriptors(
                 push_turn_of: placement
                     .push_turn_of
                     .as_ref()
-                    .map(|attribute| attribute.0.clone()),
+                    .map(|attribute| attribute.0.to_string()),
             })
         })
         .collect::<Vec<_>>();
@@ -303,7 +303,7 @@ pub(super) fn configured_descriptors(
             .filter_map(|descriptor| {
                 let placement = configuration.attribute_placement_for(&descriptor.id)?;
                 Some(wire::ConfiguredAttributeDescriptor {
-                    id: descriptor.id.0.clone(),
+                    id: descriptor.id.0.to_string(),
                     label: descriptor.label.clone(),
                     encoder_group: wire_encoder_group(placement.encoder.group),
                     encoder_page: placement.encoder.page,
@@ -325,7 +325,7 @@ pub(super) fn configured_descriptors(
                     push_turn_of: placement
                         .push_turn_of
                         .as_ref()
-                        .map(|attribute| attribute.0.clone()),
+                        .map(|attribute| attribute.0.to_string()),
                 })
             }),
     );
@@ -349,7 +349,7 @@ fn wire_configuration(
             .custom_attributes
             .iter()
             .map(|descriptor| wire::CustomAttributeDescriptor {
-                id: descriptor.id.0.clone(),
+                id: descriptor.id.0.to_string(),
                 label: descriptor.label.clone(),
                 value_type: wire_value_type(descriptor.value_type),
                 display_unit: descriptor.display_unit.clone(),
@@ -372,14 +372,14 @@ fn wire_configuration(
             .placements
             .iter()
             .map(|placement| wire::AttributePlacement {
-                attribute: placement.attribute.0.clone(),
+                attribute: placement.attribute.0.to_string(),
                 encoder_group: wire_encoder_group(placement.encoder.group),
                 encoder_page: placement.encoder.page,
                 encoder_slot: placement.encoder.slot,
                 push_turn_of: placement
                     .push_turn_of
                     .as_ref()
-                    .map(|attribute| attribute.0.clone()),
+                    .map(|attribute| attribute.0.to_string()),
             })
             .collect(),
         activation_groups: configuration
@@ -391,7 +391,7 @@ fn wire_configuration(
                 members: group
                     .members
                     .iter()
-                    .map(|member| member.0.clone())
+                    .map(|member| member.0.to_string())
                     .collect(),
             })
             .collect(),
@@ -415,7 +415,7 @@ fn apply_patch(
         configuration.custom_attributes = custom_attributes
             .into_iter()
             .map(|descriptor| light_core::CustomAttributeDescriptor {
-                id: light_core::AttributeKey(descriptor.id),
+                id: light_core::AttributeKey(descriptor.id.into()),
                 label: descriptor.label,
                 value_type: domain_value_type(descriptor.value_type),
                 display_unit: descriptor.display_unit,
@@ -439,13 +439,15 @@ fn apply_patch(
         configuration.placements = placements
             .into_iter()
             .map(|placement| light_core::AttributePlacement {
-                attribute: light_core::AttributeKey(placement.attribute),
+                attribute: light_core::AttributeKey(placement.attribute.into()),
                 encoder: light_core::EncoderPlacement::new(
                     domain_encoder_group(placement.encoder_group),
                     placement.encoder_page,
                     placement.encoder_slot,
                 ),
-                push_turn_of: placement.push_turn_of.map(light_core::AttributeKey),
+                push_turn_of: placement
+                    .push_turn_of
+                    .map(|attribute| light_core::AttributeKey(attribute.into())),
             })
             .collect();
     }
@@ -458,7 +460,7 @@ fn apply_patch(
                 members: group
                     .members
                     .into_iter()
-                    .map(light_core::AttributeKey)
+                    .map(|attribute| light_core::AttributeKey(attribute.into()))
                     .collect(),
             })
             .collect();

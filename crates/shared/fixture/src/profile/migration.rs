@@ -208,7 +208,7 @@ impl FixtureMode {
                         id: stable_uuid(&format!(
                             "{mode_id}\0function\0{head_index}\0{parameter_index}"
                         )),
-                        name: attribute.0.clone(),
+                        name: attribute.0.to_string(),
                         dmx_from: 0,
                         dmx_to: max,
                         attribute,
@@ -234,10 +234,9 @@ impl FixtureMode {
                             .emitters
                             .iter()
                             .filter_map(|emitter| {
-                                let attribute = AttributeKey(format!(
-                                    "color.emitter.{}",
-                                    emitter.name.to_lowercase()
-                                ));
+                                let attribute = AttributeKey(
+                                    format!("color.emitter.{}", emitter.name.to_lowercase()).into(),
+                                );
                                 channels
                                     .iter()
                                     .find(|channel| {

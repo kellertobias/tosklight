@@ -314,7 +314,7 @@ fn tracking_wrap_keeps_final_state_while_reset_wrap_releases_it() {
         engine
             .contributions_at(started)
             .iter()
-            .any(|value| value.attribute.0 == "pan")
+            .any(|value| *value.attribute.0 == *"pan")
     );
 
     let mut reset = list(vec![first, second]);
@@ -329,7 +329,7 @@ fn tracking_wrap_keeps_final_state_while_reset_wrap_releases_it() {
         !reset_engine
             .contributions_at(started)
             .iter()
-            .any(|value| value.attribute.0 == "pan")
+            .any(|value| *value.attribute.0 == *"pan")
     );
 }
 

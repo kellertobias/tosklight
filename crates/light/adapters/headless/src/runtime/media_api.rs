@@ -940,7 +940,7 @@ fn media_layer_capabilities(
             let attributes = head
                 .parameters
                 .iter()
-                .map(|parameter| parameter.attribute.0.as_str())
+                .map(|parameter| &*parameter.attribute.0)
                 .collect::<std::collections::BTreeSet<_>>();
             let content_library =
                 attributes.contains("media.folder") && attributes.contains("media.file");
@@ -949,7 +949,7 @@ fn media_layer_capabilities(
             let secondary_controls = head
                 .parameters
                 .iter()
-                .map(|parameter| parameter.attribute.0.as_str())
+                .map(|parameter| &*parameter.attribute.0)
                 .filter(|attribute| attribute.starts_with("media."))
                 .filter(|attribute| {
                     !matches!(

@@ -606,7 +606,7 @@ mod tests {
                     attribute,
                     value,
                     ..
-                } => Some((*fixture_id, attribute.0.clone(), value.clone())),
+                } => Some((*fixture_id, attribute.0.to_string(), value.clone())),
                 _ => None,
             })
             .collect()

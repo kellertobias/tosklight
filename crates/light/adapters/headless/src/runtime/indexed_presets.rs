@@ -161,7 +161,7 @@ fn resolve(
             })
             .ok_or_else(|| invalid("Indexed Preset function is no longer available"))?;
         let owner = super::profile_head_owner(fixture, mode, channel.head_id).map_err(invalid)?;
-        if owner != fixture_id || function.attribute.0 != attribute {
+        if owner != fixture_id || &*function.attribute.0 != attribute {
             return Err(invalid(
                 "Indexed Preset function does not belong to the requested fixture and attribute",
             ));

@@ -27,7 +27,7 @@ pub(super) fn ws_programmer_align(
         bound_attribute: state
             .as_ref()
             .and_then(|state| state.binding.as_ref())
-            .map(|binding| binding.attribute.0.clone()),
+            .map(|binding| binding.attribute.0.to_string()),
         fixture_count: state.as_ref().map_or(0, |state| state.fixtures.len()),
     })
 }

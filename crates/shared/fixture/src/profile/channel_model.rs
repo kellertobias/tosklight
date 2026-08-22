@@ -55,7 +55,7 @@ pub(super) fn legacy_canonical_mapping(
     if let Some(mapping) = canonical_attribute_mapping(attribute) {
         return Some(mapping);
     }
-    let (canonical, transform) = match attribute.0.as_str() {
+    let (canonical, transform) = match &*attribute.0 {
         "fog" => ("intensity", CanonicalTransform::Identity),
         "media.volume" => ("volume", CanonicalTransform::Identity),
         "fixture.tint" => ("color.tint", CanonicalTransform::Identity),

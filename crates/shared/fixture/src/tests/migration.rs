@@ -21,7 +21,7 @@ fn a_flat_layout_becomes_a_portable_profile_with_explicit_split_assignments() {
         }],
     };
     let emitter_parameter = |name: &str, offset| Parameter {
-        attribute: AttributeKey(format!("color.emitter.{name}")),
+        attribute: AttributeKey(format!("color.emitter.{name}").into()),
         components: vec![ChannelComponent {
             offset,
             byte_order: ByteOrder::MsbFirst,

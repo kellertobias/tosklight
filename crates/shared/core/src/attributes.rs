@@ -221,7 +221,7 @@ pub struct CustomAttributeDescriptor {
 impl CustomAttributeDescriptor {
     /// Generates a collision-resistant stable ID for a newly authored custom descriptor.
     pub fn generated_id() -> AttributeKey {
-        AttributeKey(format!("custom.{}", Uuid::new_v4()))
+        AttributeKey(format!("custom.{}", Uuid::new_v4()).into())
     }
 }
 
@@ -319,7 +319,7 @@ pub use table::{AttributeEntry, AttributeId, AttributeTable};
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct AttributeKey(pub String);
+pub struct AttributeKey(pub std::sync::Arc<str>);
 
 impl AttributeKey {
     pub fn intensity() -> Self {
@@ -327,12 +327,12 @@ impl AttributeKey {
     }
 
     pub fn is_intensity(&self) -> bool {
-        self.0 == "intensity" || self.0.ends_with(".intensity")
+        *self.0 == *"intensity" || self.0.ends_with(".intensity")
     }
 
     pub fn is_position(&self) -> bool {
-        self.0 == "pan"
-            || self.0 == "tilt"
+        *self.0 == *"pan"
+            || *self.0 == *"tilt"
             || self.0.starts_with("position.")
             || self.0.ends_with(".pan")
             || self.0.ends_with(".tilt")
@@ -376,7 +376,7 @@ pub enum CanonicalAttributeTransform {
 pub fn canonical_attribute_migration(
     attribute: &AttributeKey,
 ) -> Option<(AttributeKey, CanonicalAttributeTransform)> {
-    canonical_attribute_migration_id(attribute.0.as_str())
+    canonical_attribute_migration_id(&attribute.0)
         .map(|(canonical, transform)| (AttributeKey(canonical.into()), transform))
 }
 

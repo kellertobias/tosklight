@@ -285,7 +285,7 @@ fn channels_for(
     let normalised = value.clamp(0.0, 1.0);
     let mut resolved = Vec::new();
     for channel in &mode.channels {
-        let key = channel.attribute.0.as_str();
+        let key = &*channel.attribute.0;
         let fraction = match parameter {
             PreviewParameter::Intensity if key == "intensity" => Some(normalised),
             PreviewParameter::Pan if key == "pan" => Some(normalised),

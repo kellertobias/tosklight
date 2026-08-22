@@ -330,7 +330,7 @@ fn legacy_migration_derives_invert_aware_full_white_and_open_wheel_highlight() {
     let highlights = mode
         .channels
         .iter()
-        .map(|channel| (channel.fixture_attribute.0.as_str(), channel.highlight_raw))
+        .map(|channel| (&*channel.fixture_attribute.0, channel.highlight_raw))
         .collect::<HashMap<_, _>>();
     assert_eq!(highlights["intensity"], 255);
     assert_eq!(highlights["color.red"], 255);
@@ -354,7 +354,7 @@ fn legacy_migration_derives_invert_aware_full_white_and_open_wheel_highlight() {
         let channel = mode
             .channels
             .iter()
-            .find(|channel| channel.attribute.0 == attribute)
+            .find(|channel| &*channel.attribute.0 == attribute)
             .unwrap();
         assert_eq!(channel.highlight_raw, calibrated_white[&channel.id]);
     }
@@ -528,9 +528,9 @@ fn schema_v3_cct_channels_from_existing_installations_migrate_idempotently() {
     let migrated: FixtureProfile =
         serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
     let channel = &migrated.modes[0].channels[0];
-    assert_eq!(channel.fixture_attribute.0, "Imported:ColdWhite");
-    assert_eq!(channel.attribute.0, "color.white");
-    assert_eq!(channel.functions[0].attribute.0, "color.white");
+    assert_eq!(&*channel.fixture_attribute.0, "Imported:ColdWhite");
+    assert_eq!(&*channel.attribute.0, "color.white");
+    assert_eq!(&*channel.functions[0].attribute.0, "color.white");
     assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
 
     let second: FixtureProfile =
@@ -609,7 +609,7 @@ fn legacy_identity_aliases_migrate_to_shared_canonical_controls_without_losing_i
         profile.name = format!("Legacy {source}");
         let mode = &mut profile.modes[0];
         let mut legacy = channel(mode.heads[0].id, ChannelResolution::U8, vec![]);
-        legacy.fixture_attribute = AttributeKey(format!("Imported:{source}"));
+        legacy.fixture_attribute = AttributeKey(format!("Imported:{source}").into());
         legacy.attribute = AttributeKey(source.into());
         legacy.functions[0].attribute = AttributeKey(source.into());
         mode.channels = vec![legacy];
@@ -617,9 +617,9 @@ fn legacy_identity_aliases_migrate_to_shared_canonical_controls_without_losing_i
         let migrated: FixtureProfile =
             serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
         let channel = &migrated.modes[0].channels[0];
-        assert_eq!(channel.fixture_attribute.0, format!("Imported:{source}"));
-        assert_eq!(channel.attribute.0, target);
-        assert_eq!(channel.functions[0].attribute.0, target);
+        assert_eq!(&*channel.fixture_attribute.0, format!("Imported:{source}"));
+        assert_eq!(&*channel.attribute.0, target);
+        assert_eq!(&*channel.functions[0].attribute.0, target);
         assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
         migrated.validate().unwrap();
     }
@@ -686,7 +686,7 @@ fn legacy_identity_aliases_reject_same_head_collisions_but_allow_distinct_heads(
             migrated.modes[0]
                 .channels
                 .iter()
-                .all(|channel| channel.attribute.0 == target)
+                .all(|channel| &*channel.attribute.0 == target)
         );
     }
 }
@@ -709,10 +709,10 @@ fn schema_v2_strobe_migrates_to_canonical_shutter_without_losing_identity() {
         .remove("fixture_attribute");
     let migrated: FixtureProfile = serde_json::from_value(encoded).unwrap();
     let channel = &migrated.modes[0].channels[0];
-    assert_eq!(channel.fixture_attribute.0, "strobe");
-    assert_eq!(channel.attribute.0, "shutter");
+    assert_eq!(&*channel.fixture_attribute.0, "strobe");
+    assert_eq!(&*channel.attribute.0, "shutter");
     assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
-    assert_eq!(channel.functions[0].attribute.0, "shutter");
+    assert_eq!(&*channel.functions[0].attribute.0, "shutter");
 }
 
 #[test]

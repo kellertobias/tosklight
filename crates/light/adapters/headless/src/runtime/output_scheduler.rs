@@ -327,7 +327,7 @@ fn audio_player_uses_media_attributes(fixture: &light_fixture::PatchedFixture) -
         .heads
         .iter()
         .flat_map(|head| head.parameters.iter())
-        .any(|parameter| parameter.attribute.0 == "media.play_mode")
+        .any(|parameter| *parameter.attribute.0 == *"media.play_mode")
 }
 
 /// Paused holds the voice; playing selects Loop when the track repeats and Once - Hold otherwise.

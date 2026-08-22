@@ -149,7 +149,7 @@ impl Engine {
         programmer_id: ProgrammerId,
         source: ProgrammerTransitionSource,
     ) -> TimedValue {
-        let group_color_underlay = (value.attribute.0 == "color")
+        let group_color_underlay = (*value.attribute.0 == *"color")
             .then(|| self.group_color_for_fixture(generation, value.fixture_id))
             .flatten()
             .map(|(value, _)| value);

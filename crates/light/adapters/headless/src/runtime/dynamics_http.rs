@@ -634,7 +634,7 @@ async fn fix_at(
                 &context(session),
                 DynamicFixAtCommand {
                     targets: request.targets.into_iter().map(FixtureId).collect(),
-                    attribute: AttributeKey(request.attribute),
+                    attribute: AttributeKey(request.attribute.into()),
                     value: request.value,
                     timing: timing(request.timing),
                 },

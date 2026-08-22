@@ -577,8 +577,8 @@ fn preview_profile_with(transform: light_fixture::CanonicalTransform) -> Fixture
                 id: Uuid::new_v4(),
                 head_id,
                 split: 1,
-                fixture_attribute: light_core::AttributeKey(attribute.to_owned()),
-                attribute: light_core::AttributeKey(attribute.to_owned()),
+                fixture_attribute: light_core::AttributeKey(attribute.into()),
+                attribute: light_core::AttributeKey(attribute.into()),
                 canonical_transform: if attribute.starts_with("color.") {
                     transform
                 } else {

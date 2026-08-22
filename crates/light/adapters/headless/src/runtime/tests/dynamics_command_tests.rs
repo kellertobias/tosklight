@@ -140,7 +140,7 @@ fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tra
     );
     let programmer = state.programming.get(session.id).unwrap();
     assert_eq!(programmer.values.len(), 1);
-    assert_eq!(programmer.values[0].attribute.0, "color.red");
+    assert_eq!(&*programmer.values[0].attribute.0, "color.red");
     assert!(programmer.dynamic_values.iter().any(|value| matches!(
         value.value,
         light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. }
@@ -160,7 +160,7 @@ fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tra
     assert_eq!(color_release.values.len(), 1);
     assert!(color_release.values[0].attribute.is_intensity());
     assert!(color_release.dynamic_values.iter().any(|value| {
-        value.attribute.0 == "color.red"
+        *value.attribute.0 == *"color.red"
             && matches!(value.value, light_dynamics::DynamicSemanticValue::Release)
     }));
     assert_eq!(

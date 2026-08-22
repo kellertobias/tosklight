@@ -345,8 +345,8 @@ mod attribute_registry_tests {
     fn unknown_identity_is_retained_but_is_not_assumed_safe_for_dynamics() {
         let key = AttributeKey("vendor.custom.zoomish".into());
         let descriptor = attribute_descriptor(&key);
-        assert_eq!(descriptor.id, key.0);
-        assert_eq!(descriptor.label, key.0);
+        assert_eq!(descriptor.id, &*key.0);
+        assert_eq!(descriptor.label, &*key.0);
         assert_eq!(descriptor.family, AttributeClass::Custom);
         assert!(!descriptor.built_in);
         assert!(!descriptor.recordable);
@@ -491,11 +491,11 @@ mod attribute_registry_tests {
         let mut legacy = AttributeConfiguration::recommended();
         legacy
             .placements
-            .retain(|placement| legacy_ids.contains(placement.attribute.0.as_str()));
+            .retain(|placement| legacy_ids.contains(&*placement.attribute.0));
         for group in &mut legacy.activation_groups {
             group
                 .members
-                .retain(|member| legacy_ids.contains(member.0.as_str()));
+                .retain(|member| legacy_ids.contains(&*member.0));
         }
         legacy
             .activation_groups
@@ -985,7 +985,7 @@ mod attribute_registry_tests {
         let mut legacy = recommended.clone();
         legacy.placements.retain(|placement| {
             !matches!(
-                placement.attribute.0.as_str(),
+                &*placement.attribute.0,
                 "control"
                     | "media.play_mode"
                     | "media.playback_speed"
@@ -1048,7 +1048,7 @@ mod attribute_registry_tests {
         customized
             .placements
             .iter_mut()
-            .find(|placement| placement.attribute.0 == "media.play_mode")
+            .find(|placement| *placement.attribute.0 == *"media.play_mode")
             .unwrap()
             .encoder = EncoderPlacement::new(EncoderGroup::Media, 9, 4);
         let migrated = customized.migrate_canonical_attributes().unwrap();
@@ -1074,7 +1074,7 @@ mod attribute_registry_tests {
             let mut source_only = recommended.clone();
             source_only
                 .placements
-                .retain(|placement| placement.attribute.0 != target);
+                .retain(|placement| &*placement.attribute.0 != target);
             source_only.placements.push(AttributePlacement {
                 attribute: AttributeKey(source.into()),
                 encoder: legacy_encoder,
@@ -1082,7 +1082,7 @@ mod attribute_registry_tests {
             });
             for group in &mut source_only.activation_groups {
                 for member in &mut group.members {
-                    if member.0 == target {
+                    if *member.0 == *target {
                         *member = AttributeKey(source.into());
                     }
                 }
@@ -1269,7 +1269,7 @@ mod attribute_registry_tests {
                 recommended
                     .attribute_placement_for(&AttributeKey(companion.into()))
                     .and_then(|placement| placement.push_turn_of.as_ref())
-                    .map(|attribute| attribute.0.as_str()),
+                    .map(|attribute| &*attribute.0),
                 Some(parent)
             );
         }
@@ -1375,7 +1375,7 @@ mod attribute_registry_tests {
             let placement = legacy
                 .placements
                 .iter_mut()
-                .find(|placement| placement.attribute.0 == attribute)
+                .find(|placement| *placement.attribute.0 == *attribute)
                 .unwrap();
             placement.encoder = old_encoder;
             if attribute.starts_with("color.wheel") {
@@ -1397,7 +1397,7 @@ mod attribute_registry_tests {
             configuration
                 .placements
                 .iter()
-                .position(|placement| placement.attribute.0 == "prism.1.rotation")
+                .position(|placement| *placement.attribute.0 == *"prism.1.rotation")
                 .unwrap()
         };
 
@@ -1413,7 +1413,7 @@ mod attribute_registry_tests {
         let parent = chained
             .placements
             .iter_mut()
-            .find(|placement| placement.attribute.0 == "prism.1")
+            .find(|placement| *placement.attribute.0 == *"prism.1")
             .unwrap();
         parent.push_turn_of = Some(AttributeKey("gobo.1".into()));
         assert!(matches!(
@@ -1433,7 +1433,7 @@ mod attribute_registry_tests {
         let animation = duplicate
             .placements
             .iter_mut()
-            .find(|placement| placement.attribute.0 == "animation.1.rotation")
+            .find(|placement| *placement.attribute.0 == *"animation.1.rotation")
             .unwrap();
         animation.push_turn_of = Some(AttributeKey("prism.1".into()));
         assert!(matches!(

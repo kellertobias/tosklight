@@ -89,7 +89,7 @@ impl AttributeTable {
     pub fn with_built_ins() -> Self {
         let mut table = Self::new();
         for descriptor in ATTRIBUTE_REGISTRY {
-            table.intern(&AttributeKey(descriptor.id.to_owned()));
+            table.intern(&AttributeKey(descriptor.id.into()));
         }
         table
     }
@@ -107,7 +107,7 @@ impl AttributeTable {
             key: key.clone(),
             built_in: ATTRIBUTE_REGISTRY
                 .iter()
-                .find(|descriptor| descriptor.id == key.0),
+                .find(|descriptor| descriptor.id == &*key.0),
             is_intensity: key.is_intensity(),
             is_position: key.is_position(),
         });
@@ -155,7 +155,7 @@ mod tests {
     use super::*;
 
     fn key(name: &str) -> AttributeKey {
-        AttributeKey(name.to_owned())
+        AttributeKey(name.into())
     }
 
     #[test]

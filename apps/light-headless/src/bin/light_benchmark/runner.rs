@@ -211,7 +211,7 @@ fn run_scenario(
             programmer_fixture_values: true,
             static_group_programming: true,
             playback_attribute_dynamic: true,
-            dynamic_attribute: scenario.dynamic_attribute.0.clone(),
+            dynamic_attribute: scenario.dynamic_attribute.0.to_string(),
             dynamic_attribute_has_static_or_programmer_value: scenario
                 .dynamic_overlaps_static_or_programmer,
             programmer_assignment_fraction: scenario.programmer_assignment_fraction,

@@ -207,7 +207,7 @@ fn fix_at_operation(
 ) -> Result<bool, String> {
     let attribute = match arguments.first() {
         Some(OscArgument::String(value)) if !value.trim().is_empty() => {
-            AttributeKey(value.trim().to_owned())
+            AttributeKey(value.trim().into())
         }
         _ => return Err("FixAT requires an attribute name as its first argument".to_owned()),
     };

@@ -29,7 +29,7 @@ fn apply_jbled_a7_shutter_compatibility(profile: &mut FixtureProfile) {
 }
 
 fn malformed_whole_range_shutter(channel: &FixtureChannel) -> bool {
-    channel.attribute.0 == "shutter"
+    *channel.attribute.0 == *"shutter"
         && channel.functions.len() == 1
         && channel.functions[0].name == "Shutter / Strobe"
         && channel.functions[0].dmx_from == 0

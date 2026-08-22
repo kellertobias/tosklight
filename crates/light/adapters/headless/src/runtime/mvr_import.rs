@@ -152,7 +152,7 @@ pub(super) fn mvr_definitions(
                         .replace([' ', '_'], ".")
                         .to_ascii_lowercase();
                     light_fixture::Parameter {
-                        attribute: light_core::AttributeKey(normalized.clone()),
+                        attribute: light_core::AttributeKey(normalized.as_str().into()),
                         components: channel
                             .offsets
                             .into_iter()

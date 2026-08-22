@@ -139,7 +139,7 @@ impl AttributeConfiguration {
                 .position(|candidate| candidate.encoder == placement.encoder)
             {
                 let occupant = &self.placements[occupied].attribute;
-                if !built_in_ids.contains(occupant.0.as_str()) {
+                if !built_in_ids.contains(&*occupant.0) {
                     self.placements[occupied].encoder =
                         next_custom_encoder_slot(&self.placements, placement.encoder.group);
                 }
@@ -416,7 +416,7 @@ impl AttributeConfiguration {
 
     fn remove_legacy_default_encoder(&mut self, attribute: &str, encoder: EncoderPlacement) {
         if let Some(index) = self.placements.iter().position(|placement| {
-            placement.attribute.0 == attribute
+            *placement.attribute.0 == *attribute
                 && placement.encoder == encoder
                 && placement.push_turn_of.is_none()
         }) {
@@ -432,10 +432,10 @@ impl AttributeConfiguration {
     ) {
         let recommended_push_turn = recommended_builtin_placements()
             .into_iter()
-            .find(|placement| placement.attribute.0 == attribute && placement.encoder == to)
+            .find(|placement| *placement.attribute.0 == *attribute && placement.encoder == to)
             .and_then(|placement| placement.push_turn_of);
         if let Some(placement) = self.placements.iter_mut().find(|placement| {
-            placement.attribute.0 == attribute
+            *placement.attribute.0 == *attribute
                 && placement.encoder == from
                 && (placement.push_turn_of.is_none()
                     || placement.push_turn_of.as_ref() == recommended_push_turn.as_ref())
@@ -578,13 +578,13 @@ impl AttributeConfiguration {
             validate_custom_descriptor(descriptor, &built_in_ids)?;
             if descriptors
                 .insert(
-                    descriptor.id.0.as_str(),
+                    &*descriptor.id.0,
                     (descriptor.value_type, descriptor.recordable),
                 )
                 .is_some()
             {
                 return Err(AttributeConfigurationError::DuplicateCustomAttribute(
-                    descriptor.id.0.clone(),
+                    descriptor.id.0.to_string(),
                 ));
             }
         }
@@ -592,7 +592,7 @@ impl AttributeConfiguration {
         let mut placements = HashMap::new();
         let mut occupied = HashSet::new();
         for placement in &self.placements {
-            let id = placement.attribute.0.as_str();
+            let id = &*placement.attribute.0;
             if !descriptors.contains_key(id) {
                 return Err(AttributeConfigurationError::UnknownPlacedAttribute(
                     id.to_owned(),
@@ -631,8 +631,8 @@ impl AttributeConfiguration {
             let Some(parent_id) = placement.push_turn_of.as_ref() else {
                 continue;
             };
-            let attribute = placement.attribute.0.as_str();
-            let parent = parent_id.0.as_str();
+            let attribute = &*placement.attribute.0;
+            let parent = &*parent_id.0;
             let Some(parent_placement) = self
                 .placements
                 .iter()
@@ -692,7 +692,7 @@ impl AttributeConfiguration {
             let mut members = HashSet::new();
             let mut encoder_group = None;
             for member in &group.members {
-                let id = member.0.as_str();
+                let id = &*member.0;
                 if !members.insert(id) {
                     return Err(AttributeConfigurationError::DuplicateActivationMember {
                         group: group.id.clone(),
@@ -827,7 +827,7 @@ fn validate_custom_descriptor(
     descriptor: &CustomAttributeDescriptor,
     built_in_ids: &HashSet<&str>,
 ) -> Result<(), AttributeConfigurationError> {
-    let id = descriptor.id.0.as_str();
+    let id = &*descriptor.id.0;
     if built_in_ids.contains(id) {
         return Err(AttributeConfigurationError::BuiltInShadow(id.to_owned()));
     }
@@ -883,7 +883,7 @@ fn recommended_activation_group(
         label: label.to_owned(),
         members: members
             .iter()
-            .map(|member| AttributeKey((*member).to_owned()))
+            .map(|member| AttributeKey((*member).into()))
             .collect(),
     }
 }
@@ -999,7 +999,7 @@ static BUILT_INS: std::sync::LazyLock<
 
 pub fn attribute_descriptor<'a>(key: &'a AttributeKey) -> ResolvedAttributeDescriptor<'a> {
     BUILT_INS
-        .get(key.0.as_str())
+        .get(&*key.0)
         .map(|descriptor| resolved_descriptor(descriptor))
         .unwrap_or_else(|| custom_descriptor(key))
 }

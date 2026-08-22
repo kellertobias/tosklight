@@ -678,12 +678,9 @@ fn external_camera_binding(
 ) -> Result<Option<ExternalCameraBinding>, String> {
     let mut found: HashMap<&str, ChannelRef> = HashMap::new();
     for channel in &mode.channels {
-        let identity = [
-            channel.attribute.0.as_str(),
-            channel.fixture_attribute.0.as_str(),
-        ]
-        .into_iter()
-        .find(|identity| identity.starts_with("camera."));
+        let identity = [&*channel.attribute.0, &*channel.fixture_attribute.0]
+            .into_iter()
+            .find(|identity| identity.starts_with("camera."));
         let Some(identity) = identity else { continue };
         if let Some(reference) = channels.get(&channel.id) {
             found.entry(identity).or_insert_with(|| reference.clone());
@@ -826,7 +823,7 @@ fn stage_channel_functions(
     channel: &FixtureChannel,
 ) -> Vec<ChannelFunction> {
     const ROBIN_DLS_PROFILE_ID: &str = "79e6cc1e-3031-68c2-29ec-026e0c28a505";
-    let malformed = channel.attribute.0 == "shutter"
+    let malformed = *channel.attribute.0 == *"shutter"
         && channel.functions.len() == 1
         && channel.functions[0].name == "Shutter / Strobe"
         && channel.functions[0].dmx_from == 0
@@ -889,10 +886,7 @@ struct MotionAxes {
 fn traits(mode: &FixtureMode) -> FixtureTraits {
     let mut traits = FixtureTraits::default();
     for channel in &mode.channels {
-        traits.observe(
-            channel.attribute.0.as_str(),
-            channel.attribute.is_intensity(),
-        );
+        traits.observe(&channel.attribute.0, channel.attribute.is_intensity());
     }
     traits
 }
@@ -910,7 +904,7 @@ fn motion_axes(mode: &FixtureMode) -> MotionAxes {
             min_degrees: motion.physical_min,
             max_degrees: motion.physical_max,
         };
-        match motion.attribute.0.as_str() {
+        match &*motion.attribute.0 {
             "pan" => axes.pan = Some(axis),
             "tilt" => {
                 axes.tilt = Some(axis);

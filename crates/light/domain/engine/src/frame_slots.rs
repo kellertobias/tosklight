@@ -102,7 +102,7 @@ impl SlotTable {
                     // channel for them: projection composes both from the channels it does have,
                     // and a Group colour or a virtual dimmer supplies them directly.
                     for synthesised in SYNTHESISED_HEAD_ATTRIBUTES {
-                        let id = attributes.intern(&AttributeKey((*synthesised).to_owned()));
+                        let id = attributes.intern(&AttributeKey((*synthesised).into()));
                         declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
                     }
                     for channel in mode
@@ -255,7 +255,7 @@ pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) ->
     use std::collections::BTreeMap;
 
     let parameter = |attribute: &&str| Parameter {
-        attribute: AttributeKey((*attribute).to_owned()),
+        attribute: AttributeKey((*attribute).into()),
         components: vec![ChannelComponent {
             offset: 0,
             byte_order: ByteOrder::MsbFirst,

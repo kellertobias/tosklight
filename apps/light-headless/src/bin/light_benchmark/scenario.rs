@@ -847,7 +847,7 @@ fn routes(
 }
 
 pub fn slot_attribute(slot: u16) -> AttributeKey {
-    AttributeKey(format!("benchmark.slot.{slot:03}"))
+    AttributeKey(format!("benchmark.slot.{slot:03}").into())
 }
 
 fn fixed_uuid(namespace: u64, value: u64) -> Uuid {

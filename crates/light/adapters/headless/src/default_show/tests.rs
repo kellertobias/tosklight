@@ -64,7 +64,7 @@ fn assert_hazer(fixtures: &[PatchedFixture]) {
         hazer.definition.heads[0]
             .parameters
             .iter()
-            .map(|parameter| parameter.attribute.0.as_str())
+            .map(|parameter| &*parameter.attribute.0)
             .collect::<Vec<_>>(),
         vec!["fog", "fan"]
     );

@@ -71,7 +71,7 @@ impl Engine {
         });
         let programmer_colors = programmer
             .iter()
-            .filter(|contribution| contribution.attribute().0 == "color")
+            .filter(|contribution| &*contribution.attribute().0 == "color")
             .map(EngineContribution::fixture_id)
             .collect::<std::collections::HashSet<_>>();
         playback.contributions.extend(programmer);

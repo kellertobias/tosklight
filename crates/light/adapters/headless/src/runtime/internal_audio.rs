@@ -523,7 +523,7 @@ fn declared_attributes(fixture: &PatchedFixture) -> HashSet<String> {
         .heads
         .iter()
         .flat_map(|head| head.parameters.iter())
-        .map(|parameter| parameter.attribute.0.clone())
+        .map(|parameter| parameter.attribute.0.to_string())
         .collect()
 }
 

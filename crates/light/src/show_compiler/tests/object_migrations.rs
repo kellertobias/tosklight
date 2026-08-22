@@ -1921,7 +1921,7 @@ fn legacy_cmy_dynamic_waveforms_migrate_exactly_across_every_lane_mode() {
         migrated
             .lanes
             .iter()
-            .map(|lane| lane.attribute.0.as_str())
+            .map(|lane| &*lane.attribute.0)
             .collect::<Vec<_>>(),
         ["color.red", "color.green", "color.blue", "color.red"]
     );

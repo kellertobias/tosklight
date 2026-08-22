@@ -17,7 +17,7 @@ pub(crate) fn command(
             intent: application::ProgrammingValueIntent {
                 fixture_ids: fixture_ids.into_iter().map(FixtureId).collect(),
                 group_id,
-                attribute: AttributeKey(attribute),
+                attribute: AttributeKey(attribute.into()),
                 operation: match operation {
                     wire::ProgrammingPreloadValueOperation::AbsoluteSet { value } => {
                         application::ProgrammingValueOperation::AbsoluteSet(application_value(
@@ -46,7 +46,7 @@ pub(crate) fn command(
             timing,
         } => application::ProgrammingPreloadValuesCommand::SetFixture {
             fixture_id: FixtureId(fixture_id),
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
             value: application_value(value),
             timing: application_timing(timing),
         },
@@ -55,7 +55,7 @@ pub(crate) fn command(
             attribute,
         } => application::ProgrammingPreloadValuesCommand::ReleaseFixture {
             fixture_id: FixtureId(fixture_id),
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
         },
         wire::ProgrammingPreloadValuesAction::SetGroup {
             group_id,
@@ -64,7 +64,7 @@ pub(crate) fn command(
             timing,
         } => application::ProgrammingPreloadValuesCommand::SetGroup {
             group_id,
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
             value: application_value(value),
             timing: application_timing(timing),
         },
@@ -73,7 +73,7 @@ pub(crate) fn command(
             attribute,
         } => application::ProgrammingPreloadValuesCommand::ReleaseGroup {
             group_id,
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
         },
         wire::ProgrammingPreloadValuesAction::Batch { mutations } => {
             application::ProgrammingPreloadValuesCommand::Batch {
@@ -161,7 +161,7 @@ fn application_mutation(
             timing,
         } => application::ProgrammingPreloadValueMutation::SetFixture {
             fixture_id: FixtureId(fixture_id),
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
             value: application_value(value),
             timing: application_timing(timing),
         },
@@ -170,7 +170,7 @@ fn application_mutation(
             attribute,
         } => application::ProgrammingPreloadValueMutation::ReleaseFixture {
             fixture_id: FixtureId(fixture_id),
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
         },
         wire::ProgrammingPreloadValueMutation::SetGroup {
             group_id,
@@ -179,7 +179,7 @@ fn application_mutation(
             timing,
         } => application::ProgrammingPreloadValueMutation::SetGroup {
             group_id,
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
             value: application_value(value),
             timing: application_timing(timing),
         },
@@ -188,7 +188,7 @@ fn application_mutation(
             attribute,
         } => application::ProgrammingPreloadValueMutation::ReleaseGroup {
             group_id,
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
         },
     }
 }
@@ -227,7 +227,7 @@ fn fixture_value(
 ) -> wire::ProgrammingPreloadFixtureValue {
     wire::ProgrammingPreloadFixtureValue {
         fixture_id: value.fixture_id.0,
-        attribute: value.attribute.0.clone(),
+        attribute: value.attribute.0.to_string(),
         value: attribute_value(&value.value),
         programmer_order: value.programmer_order,
         fade: value.fade,
@@ -241,7 +241,7 @@ fn group_value(
 ) -> wire::ProgrammingPreloadGroupValue {
     wire::ProgrammingPreloadGroupValue {
         group_id: value.group_id.clone(),
-        attribute: value.attribute.0.clone(),
+        attribute: value.attribute.0.to_string(),
         value: attribute_value(&value.value),
         programmer_order: value.programmer_order,
         fade: value.fade,
