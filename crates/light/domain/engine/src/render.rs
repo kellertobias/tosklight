@@ -40,7 +40,11 @@ impl Engine {
         let sequence_masters = std::mem::take(&mut resolved.sequence_masters);
         let named_values = resolved.named_values();
         let profile_values = crate::timed(crate::RenderPhase::ValueIndexBuild, || {
-            crate::ProfileValueIndex::new(&named_values, &sequence_masters)
+            crate::ProfileValueIndex::new(
+                &named_values,
+                &sequence_masters,
+                generation.channel_slots(),
+            )
         });
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();

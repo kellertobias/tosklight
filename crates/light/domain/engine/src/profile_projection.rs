@@ -5,6 +5,7 @@ use crate::{
     apply_safe_values_with_snap, blackout_raw, channel_visual_level, profile_visual_color,
 };
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
+use light_fixture::ChannelAttribute;
 use light_fixture::{
     BoundFixtureModeResolution, ChannelFunctionBehavior, ChannelScales, FixtureChannel,
     FixtureMode, FixtureModeEncodingPlan, HighlightColor, HighlightLook,
@@ -215,18 +216,32 @@ pub(crate) fn resolve_profile_head(
                 .unwrap_or(1.0)
         };
         let intensity_master = values.sequence_master_named(owner, "intensity");
+        // Where this head's channels read from, worked out when the patch compiled. A lookup is an
+        // array index; only an attribute the patch could not number falls back to its name.
+        let addresses = values.channel_addresses(owner);
         let channel_start = channels.len();
         channels.extend(head.channel_indices.iter().map(|channel_index| {
             let channel = &mode.channels[*channel_index];
+            let read = |which: ChannelAttribute, attribute: &AttributeKey| {
+                values.value_at(owner, addresses, *channel_index, which, attribute)
+            };
             let resolved = resolution.resolve_channel_with(
                 *channel_index,
-                |attribute| values.value(owner, attribute),
+                read,
                 legacy_raw_highlight,
                 fixture.highlight_overrides.get(&channel.id).copied(),
                 |active| {
                     let sequence_master = active
-                        .filter(|attribute| !attribute.is_intensity())
-                        .and_then(|attribute| values.sequence_master(owner, attribute))
+                        .filter(|(_, attribute)| !attribute.is_intensity())
+                        .and_then(|(which, attribute)| {
+                            values.sequence_master_at(
+                                owner,
+                                addresses,
+                                *channel_index,
+                                which,
+                                attribute,
+                            )
+                        })
                         .filter(|master| {
                             !channel.reacts_to_virtual_intensity
                                 || intensity_master
@@ -235,7 +250,9 @@ pub(crate) fn resolve_profile_head(
                         .map(|master| master.scale)
                         .unwrap_or(1.0);
                     ChannelScales {
-                        virtual_intensity: if active.is_some_and(AttributeKey::is_intensity) {
+                        virtual_intensity: if active
+                            .is_some_and(|(_, attribute)| attribute.is_intensity())
+                        {
                             1.0
                         } else {
                             virtual_intensity

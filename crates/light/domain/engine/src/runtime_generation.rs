@@ -29,6 +29,8 @@ pub(crate) struct RuntimeGeneration {
     slots: Arc<crate::SlotTable>,
     /// Where this generation's frame buffers wait between frames.
     frames: Arc<crate::FramePool>,
+    /// Where each channel of each head reads its attributes from.
+    channel_slots: Arc<crate::ChannelSlotIndex>,
 }
 
 #[derive(Clone, Copy)]
@@ -59,6 +61,7 @@ impl RuntimeGeneration {
             slots.generation(),
             slots.len(),
         ));
+        let channel_slots = Arc::new(crate::ChannelSlotIndex::compile(&snapshot.fixtures, &slots));
         Self {
             snapshot: Arc::new(snapshot),
             playback,
@@ -72,6 +75,7 @@ impl RuntimeGeneration {
             profile_projections,
             slots,
             frames,
+            channel_slots,
         }
     }
 
@@ -121,7 +125,7 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.group_masters)
         };
-        let (slots, frames) = if fixtures_changed {
+        let (slots, frames, channel_slots) = if fixtures_changed {
             let slots = Arc::new(crate::SlotTable::compile(
                 crate::next_generation(),
                 &snapshot.fixtures,
@@ -130,9 +134,15 @@ impl RuntimeGeneration {
                 slots.generation(),
                 slots.len(),
             ));
-            (slots, frames)
+            let channel_slots =
+                Arc::new(crate::ChannelSlotIndex::compile(&snapshot.fixtures, &slots));
+            (slots, frames, channel_slots)
         } else {
-            (Arc::clone(&current.slots), Arc::clone(&current.frames))
+            (
+                Arc::clone(&current.slots),
+                Arc::clone(&current.frames),
+                Arc::clone(&current.channel_slots),
+            )
         };
         let group_rankings = if groups_changed || stage_positions_changed {
             Arc::new(compile_group_rankings(&groups, &snapshot))
@@ -152,6 +162,7 @@ impl RuntimeGeneration {
             profile_projections,
             slots,
             frames,
+            channel_slots,
         }
     }
 
@@ -180,6 +191,7 @@ impl RuntimeGeneration {
                 profile_projections: Arc::clone(&current.profile_projections),
                 slots: Arc::clone(&current.slots),
                 frames: Arc::clone(&current.frames),
+                channel_slots: Arc::clone(&current.channel_slots),
             }),
             GroupMasterGenerationUpdate::Changed,
         )
@@ -188,6 +200,11 @@ impl RuntimeGeneration {
     /// The slot numbering every frame of this generation is addressed by.
     pub(crate) fn slots(&self) -> &Arc<crate::SlotTable> {
         &self.slots
+    }
+
+    /// Where each channel of each head reads its attributes from.
+    pub(crate) fn channel_slots(&self) -> &crate::ChannelSlotIndex {
+        &self.channel_slots
     }
 
     /// This generation's frame buffers.

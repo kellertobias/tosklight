@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! Deterministic bridge from fixture attributes and playbacks to immutable DMX universe frames.
 
+mod channel_slots;
 mod contribution;
 mod contribution_batch;
 mod controls;
@@ -54,6 +55,7 @@ pub use render_phases::{
     accumulated_microseconds, enabled as render_phases_enabled, reset as reset_render_phases,
 };
 
+pub(crate) use channel_slots::{ChannelSlotIndex, HeadChannelSlots};
 pub(crate) use contribution::{
     EngineContribution, EngineContributionResolver, ResolvedAttributes, ResolvedContributionIndex,
     value_for_ordered_position,

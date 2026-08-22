@@ -49,7 +49,11 @@ impl Engine {
         resolved.frame = None;
         let sequence_masters = std::mem::take(&mut resolved.sequence_masters);
         let named_values = resolved.named_values();
-        let profile_values = crate::ProfileValueIndex::new(&named_values, &sequence_masters);
+        let profile_values = crate::ProfileValueIndex::new(
+            &named_values,
+            &sequence_masters,
+            generation.channel_slots(),
+        );
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlight_layers = self.highlight_layers.read();

@@ -64,6 +64,23 @@ impl FixtureMode {
     }
 }
 
+/// Which of a channel's attributes a resolution lookup is for.
+///
+/// A channel reads at most four kinds of thing, and which one is being asked for is known before
+/// the show runs. Naming them lets a caller answer from a place it worked out when the patch
+/// compiled instead of from the attribute's name.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChannelAttribute {
+    /// One of this channel's functions, by its index in `channel.functions`.
+    Function(usize),
+    /// The channel's canonical attribute.
+    Canonical,
+    /// The manufacturer attribute behind the canonical one.
+    Fixture,
+    /// The attribute that decides which of the channel's functions is in control.
+    Control,
+}
+
 impl FixtureModeResolutionPlan {
     pub fn bind<'a>(
         &'a self,
@@ -91,9 +108,12 @@ impl BoundFixtureModeResolution<'_> {
         highlight_override: Option<u32>,
         scales: impl FnOnce(Option<&AttributeKey>) -> ChannelScales,
     ) -> PlannedChannelResolution<'_> {
+        let scales = |active: Option<(ChannelAttribute, &AttributeKey)>| {
+            scales(active.map(|(_, attribute)| attribute))
+        };
         self.resolve_channel_with(
             channel_index,
-            |attribute| values.get(attribute),
+            |_, attribute| values.get(attribute),
             highlighted,
             highlight_override,
             scales,
@@ -101,14 +121,19 @@ impl BoundFixtureModeResolution<'_> {
     }
 
     /// Resolve a channel from a borrowed semantic lookup without requiring a per-head owned map.
+    ///
+    /// The lookup is told which of the channel's attributes it is being asked for as well as its
+    /// name. A caller that has already worked out where each of them lives can answer from that
+    /// rather than from the name, which is the difference between an array index and a hash of a
+    /// string for every channel of every fixture of every frame.
     #[inline]
     pub fn resolve_channel_with<'values>(
         &self,
         channel_index: usize,
-        value: impl Fn(&AttributeKey) -> Option<&'values AttributeValue>,
+        value: impl Fn(ChannelAttribute, &AttributeKey) -> Option<&'values AttributeValue>,
         highlighted: bool,
         highlight_override: Option<u32>,
-        scales: impl FnOnce(Option<&AttributeKey>) -> ChannelScales,
+        scales: impl FnOnce(Option<(ChannelAttribute, &AttributeKey)>) -> ChannelScales,
     ) -> PlannedChannelResolution<'_> {
         let channel = &self.mode.channels[channel_index];
         let compiled = &self.plan.channels[channel_index];
@@ -116,36 +141,47 @@ impl BoundFixtureModeResolution<'_> {
         let winning_function = compiled
             .functions_by_priority
             .iter()
-            .filter_map(|index| channel.functions.get(*index))
-            .find_map(|function| {
-                if let Some(value) = value(&function.attribute) {
-                    function_value_for(function, Some(value), channel.canonical_transform)
-                        .map(|raw| (&function.attribute, raw))
+            .filter_map(|index| {
+                channel
+                    .functions
+                    .get(*index)
+                    .map(|function| (*index, function))
+            })
+            .find_map(|(index, function)| {
+                if let Some(found) = value(ChannelAttribute::Function(index), &function.attribute) {
+                    function_value_for(function, Some(found), channel.canonical_transform).map(
+                        |raw| {
+                            (
+                                (ChannelAttribute::Function(index), &function.attribute),
+                                raw,
+                            )
+                        },
+                    )
                 } else if function.attribute == channel.attribute
                     && channel.fixture_attribute != channel.attribute
                 {
                     function_value_for(
                         function,
-                        value(&channel.fixture_attribute),
+                        value(ChannelAttribute::Fixture, &channel.fixture_attribute),
                         super::CanonicalTransform::Identity,
                     )
-                    .map(|raw| (&channel.fixture_attribute, raw))
+                    .map(|raw| ((ChannelAttribute::Fixture, &channel.fixture_attribute), raw))
                 } else {
                     None
                 }
             });
-        let control_value = value(&compiled.control_attribute);
+        let control_value = value(ChannelAttribute::Control, &compiled.control_attribute);
         let (attribute_value, active_channel_attribute, attribute_transform) =
-            if let Some(value) = value(&channel.attribute) {
+            if let Some(found) = value(ChannelAttribute::Canonical, &channel.attribute) {
                 (
-                    Some(value),
-                    Some(&channel.attribute),
+                    Some(found),
+                    Some((ChannelAttribute::Canonical, &channel.attribute)),
                     channel.canonical_transform,
                 )
             } else if channel.fixture_attribute != channel.attribute {
                 (
-                    value(&channel.fixture_attribute),
-                    Some(&channel.fixture_attribute),
+                    value(ChannelAttribute::Fixture, &channel.fixture_attribute),
+                    Some((ChannelAttribute::Fixture, &channel.fixture_attribute)),
                     super::CanonicalTransform::Identity,
                 )
             } else {
@@ -154,7 +190,7 @@ impl BoundFixtureModeResolution<'_> {
         let active_attribute = if channel.behavior == ChannelBehavior::Static {
             None
         } else if control_value.is_some() {
-            Some(&compiled.control_attribute)
+            Some((ChannelAttribute::Control, &compiled.control_attribute))
         } else if let Some((attribute, _)) = winning_function {
             Some(attribute)
         } else {
@@ -170,7 +206,7 @@ impl BoundFixtureModeResolution<'_> {
             winning_function.map(|(_, raw)| raw),
         );
         PlannedChannelResolution {
-            active_attribute,
+            active_attribute: active_attribute.map(|(_, attribute)| attribute),
             raw: scale_channel_raw(channel, highlighted, resolved, scales(active_attribute)),
         }
     }
