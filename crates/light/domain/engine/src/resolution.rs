@@ -77,7 +77,9 @@ impl Engine {
         playback.contributions.extend(programmer);
         let mut resolver =
             EngineContributionResolver::for_generation(generation.slots(), generation.frames());
-        resolver.extend(playback.contributions);
+        let mut contributions = std::mem::take(&mut playback.contributions);
+        resolver.extend(contributions.drain(..));
+        self.recycle_contributions(contributions);
         if has_samples {
             resolver.extend_borrowed_samples(sampled_values(sampled));
         }
@@ -119,36 +121,51 @@ impl Engine {
             let mut playback = generation.playback().write();
             let PlaybackTickResult { transitions } =
                 playback.tick(now, (timecode != u64::MAX).then_some(timecode));
-            return playback_resolution(&playback, now, transitions, sampled);
+            return self.playback_resolution(&playback, now, transitions, sampled);
         }
         let playback = generation.playback().read();
-        playback_resolution(&playback, now, Vec::new(), sampled)
+        self.playback_resolution(&playback, now, Vec::new(), sampled)
     }
-}
 
-fn playback_resolution(
-    playback: &PlaybackEngine,
-    now: DateTime<Utc>,
-    transitions: Vec<AutomaticPlaybackTransition>,
-    sampled: &[ContributionBatch],
-) -> PlaybackResolution {
-    // No predicate: the compiled cue settled which attributes snap when the cue list compiled,
-    // rather than being asked once per contribution per frame.
-    let mut contributions = playback.contributions_with_context(now, None);
-    if sampled.iter().any(ContributionBatch::has_replacements) {
-        contributions.retain(|contribution| {
-            let source = crate::ContributionSourceId::playback(contribution.source);
-            !crate::replaces_source(sampled, &source, &contribution.value)
-        });
+    /// This frame's Cue contributions, filled into the buffers the last frame handed back.
+    fn playback_resolution(
+        &self,
+        playback: &PlaybackEngine,
+        now: DateTime<Utc>,
+        transitions: Vec<AutomaticPlaybackTransition>,
+        sampled: &[ContributionBatch],
+    ) -> PlaybackResolution {
+        let mut scratch = self.scratch.lock();
+        let crate::engine::FrameScratch {
+            playback: raw,
+            contributions,
+        } = &mut *scratch;
+        // No predicate: the compiled cue settled which attributes snap when the cue list compiled,
+        // rather than being asked once per contribution per frame.
+        playback.extend_contributions(now, None, raw);
+        if sampled.iter().any(ContributionBatch::has_replacements) {
+            raw.retain(|contribution| {
+                let source = crate::ContributionSourceId::playback(contribution.source);
+                !crate::replaces_source(sampled, &source, &contribution.value)
+            });
+        }
+        contributions.clear();
+        contributions.extend(raw.drain(..).map(EngineContribution::from_playback));
+        PlaybackResolution {
+            contributions: std::mem::take(contributions),
+            move_in_black_candidates: playback.move_in_black_candidates(),
+            active_playbacks: playback.runtime(),
+            automatic_transitions: transitions,
+        }
     }
-    PlaybackResolution {
-        contributions: contributions
-            .into_iter()
-            .map(EngineContribution::from_playback)
-            .collect(),
-        move_in_black_candidates: playback.move_in_black_candidates(),
-        active_playbacks: playback.runtime(),
-        automatic_transitions: transitions,
+
+    /// Hand a frame's contribution buffer back so the next frame fills it rather than growing one.
+    fn recycle_contributions(&self, mut contributions: Vec<EngineContribution>) {
+        contributions.clear();
+        let mut scratch = self.scratch.lock();
+        if scratch.contributions.capacity() < contributions.capacity() {
+            scratch.contributions = contributions;
+        }
     }
 }
 

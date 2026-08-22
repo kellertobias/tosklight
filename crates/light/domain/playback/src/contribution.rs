@@ -83,18 +83,34 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
         is_snap: Option<SnapOverride<'_>>,
     ) -> Vec<PlaybackContribution> {
+        let mut values = Vec::new();
+        self.extend_contributions(now, is_snap, &mut values);
+        values
+    }
+
+    /// Fill a caller's buffer with this frame's Cue contributions.
+    ///
+    /// A desk builds these forty times a second from data whose shape changes only when the show
+    /// does, so the buffer is worth keeping between frames rather than growing a new one each tick.
+    /// Whatever the buffer already held is discarded.
+    pub fn extend_contributions(
+        &self,
+        now: DateTime<Utc>,
+        is_snap: Option<SnapOverride<'_>>,
+        values: &mut Vec<PlaybackContribution>,
+    ) {
+        values.clear();
         ContributionContext {
             engine: self,
             now,
             is_snap,
         }
-        .build()
+        .build_into(values);
     }
 }
 
 impl ContributionContext<'_> {
-    fn build(&self) -> Vec<PlaybackContribution> {
-        let mut values = Vec::new();
+    fn build_into(&self, values: &mut Vec<PlaybackContribution>) {
         for playback in self
             .engine
             .active
@@ -102,10 +118,9 @@ impl ContributionContext<'_> {
             .chain(self.engine.temporary.values())
         {
             if playback.enabled && !self.suppressed(playback) {
-                self.extend_playback(&mut values, playback);
+                self.extend_playback(values, playback);
             }
         }
-        values
     }
 
     fn suppressed(&self, playback: &ActivePlayback) -> bool {
