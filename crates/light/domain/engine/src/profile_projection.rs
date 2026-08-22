@@ -195,13 +195,13 @@ pub(crate) fn resolve_profile_head(
     } else {
         group_masters.scale(owner, group_master_flashes)
     };
-    let borrowed_requested_color =
-        values
-            .value_named(owner, "color")
-            .and_then(|value| match value {
-                AttributeValue::ColorXyz(color) => Some(*color),
-                _ => None,
-            });
+    // Colour, level and the level's master together: three questions every head asks, answered
+    // from its row in one go rather than by matching names against its whole attribute list.
+    let common = values.common(owner);
+    let borrowed_requested_color = common.color.and_then(|value| match value {
+        AttributeValue::ColorXyz(color) => Some(*color),
+        _ => None,
+    });
     if options.control_loss_progress.is_none()
         && !(fixture.definition.hazardous && options.blackout)
         && borrowed_requested_color.is_none()
@@ -211,12 +211,12 @@ pub(crate) fn resolve_profile_head(
         let virtual_intensity = if output_highlighted {
             selected_look.as_ref().map_or(1.0, |look| look.intensity)
         } else {
-            values
-                .value_named(owner, "intensity")
+            common
+                .intensity
                 .and_then(AttributeValue::normalized)
                 .unwrap_or(1.0)
         };
-        let intensity_master = values.sequence_master_named(owner, "intensity");
+        let intensity_master = common.intensity_master;
         // Where this head's channels read from, worked out when the patch compiled. A lookup is an
         // array index; only an attribute the patch could not number falls back to its name.
         let addresses = values.channel_addresses(owner);

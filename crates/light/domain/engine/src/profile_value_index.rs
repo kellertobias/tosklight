@@ -135,6 +135,29 @@ impl<'a> ProfileValueIndex<'a> {
         }
     }
 
+    /// The colour and level of one head, found from its row rather than by name.
+    ///
+    /// Projection asks every head for both before it resolves a channel, so answering them by
+    /// comparing names against the fixture's whole attribute list is work every head pays and no
+    /// head needs.
+    pub(crate) fn common(&self, fixture_id: FixtureId) -> HeadCommon<'a> {
+        let Self::Dense { frame, .. } = self else {
+            return HeadCommon {
+                intensity: self.value_named(fixture_id, "intensity"),
+                color: self.value_named(fixture_id, "color"),
+                intensity_master: self.sequence_master_named(fixture_id, "intensity"),
+            };
+        };
+        let common = frame.slots().common(fixture_id);
+        HeadCommon {
+            intensity: common.intensity.and_then(|slot| frame.value(slot)),
+            color: common.color.and_then(|slot| frame.value(slot)),
+            intensity_master: common
+                .intensity
+                .and_then(|slot| frame.sequence_master(slot)),
+        }
+    }
+
     pub(crate) fn value_named(
         &self,
         fixture_id: FixtureId,
@@ -261,4 +284,12 @@ fn index_sequence_masters(
             .push((attribute, *master));
     }
     indexed
+}
+
+/// What projection asks of every head before it looks at a single channel.
+#[derive(Clone, Copy)]
+pub(crate) struct HeadCommon<'a> {
+    pub(crate) intensity: Option<&'a AttributeValue>,
+    pub(crate) color: Option<&'a AttributeValue>,
+    pub(crate) intensity_master: Option<ApplicableSequenceMaster>,
 }

@@ -44,6 +44,17 @@ const UNNUMBERED: u32 = u32::MAX;
 /// Attributes every profile head can hold regardless of the channels its mode declares.
 const SYNTHESISED_HEAD_ATTRIBUTES: &[&str] = &["intensity", "color"];
 
+/// The two attributes every head is asked for before its channels are resolved.
+///
+/// Projection wants a head's colour and its level whatever the head is, so those two are found
+/// when the patch compiles rather than by walking the fixture's attributes and comparing names
+/// three times over for every head of every frame.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct CommonSlots {
+    pub(crate) intensity: Option<Slot>,
+    pub(crate) color: Option<Slot>,
+}
+
 /// Every value the patched show can produce, numbered once.
 ///
 /// Numbering is per generation. A repatch compiles a new table with a new generation tag, so a
@@ -61,6 +72,9 @@ pub(crate) struct SlotTable {
     pairs: Vec<(FixtureId, AttributeId)>,
     /// Each fixture's own slots, contiguous, so a head can be read without scanning the show.
     fixture_slots: FxHashMap<FixtureId, Vec<Slot>>,
+    /// Where each fixture keeps the two attributes projection asks every head for by name.
+    /// Answered from the row rather than by comparing names against the fixture's whole slot list.
+    common: FxHashMap<FixtureId, CommonSlots>,
 }
 
 impl SlotTable {
@@ -176,9 +190,32 @@ impl SlotTable {
                 owned.push(slot);
             }
         }
+        let intensity = attributes.id(&AttributeKey("intensity".into()));
+        let color = attributes.id(&AttributeKey("color".into()));
+        let common = owners
+            .iter()
+            .enumerate()
+            .map(|(row, owner)| {
+                let at = |attribute: Option<AttributeId>| {
+                    let attribute = attribute?;
+                    match columns.get(row * stride + attribute.ordinal()).copied() {
+                        Some(UNNUMBERED) | None => None,
+                        Some(slot) => Some(Slot(slot)),
+                    }
+                };
+                (
+                    *owner,
+                    CommonSlots {
+                        intensity: at(intensity),
+                        color: at(color),
+                    },
+                )
+            })
+            .collect();
         Self {
             generation,
             attributes,
+            common,
             rows: owners
                 .iter()
                 .enumerate()
@@ -193,6 +230,11 @@ impl SlotTable {
 
     /// Every slot one fixture owns. Compiled with the patch, so reading a head costs a lookup
     /// rather than a scan of the show.
+    /// The slots for the attributes every head is asked for by name.
+    pub(crate) fn common(&self, fixture_id: FixtureId) -> CommonSlots {
+        self.common.get(&fixture_id).copied().unwrap_or_default()
+    }
+
     pub(crate) fn fixture_slots(&self, fixture_id: FixtureId) -> &[Slot] {
         self.fixture_slots
             .get(&fixture_id)
