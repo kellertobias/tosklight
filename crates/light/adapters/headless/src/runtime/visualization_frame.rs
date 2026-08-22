@@ -93,7 +93,8 @@ pub(super) struct PublishedVisualizationFrame {
     pub(super) show_revision: u64,
     pub(super) options: RenderOptions,
     pub(super) values: light_engine::FrameValues,
-    pub(super) profile_visualization_values: Arc<light_engine::ResolvedValues>,
+    pub(super) profile_visualization_values:
+        Arc<light_engine::Pooled<light_engine::ResolvedValues>>,
 }
 
 /// Capacity-one, non-blocking publication. Slow or disconnected observers cannot apply
@@ -591,10 +592,10 @@ mod tests {
 
     fn rendered(revision: u64) -> RenderResult {
         RenderResult {
-            universes: HashMap::new(),
+            universes: light_engine::Pooled::default(),
             resolved_values: light_engine::FrameValues::empty(),
-            profile_visualization_values: Arc::new(light_engine::ResolvedValues::default()),
-            patched_slots: HashMap::new(),
+            profile_visualization_values: Arc::new(light_engine::Pooled::default()),
+            patched_slots: light_engine::Pooled::default(),
             revision,
             routes: Arc::<[OutputRoute]>::from([]),
             automatic_playback_transitions: Vec::new(),

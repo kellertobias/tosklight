@@ -200,9 +200,13 @@ impl Default for RenderOptions {
     }
 }
 
-#[derive(Clone, Debug)]
+/// Not cloneable: a frame's output is borrowed from the engine and returned when the last reader
+/// lets go, so it is handed on rather than copied.
+#[derive(Debug)]
 pub struct RenderResult {
-    pub universes: HashMap<Universe, DmxFrame>,
+    /// Borrowed from the engine and returned when the last reader lets go, so publishing a frame's
+    /// output costs no allocation.
+    pub universes: crate::Pooled<HashMap<Universe, DmxFrame>>,
     /// The authoritative semantic values used to produce `universes`, together with the winning
     /// LTP timestamps that edge-sensitive internal services follow. Keeping this immutable
     /// snapshot with the render result lets observational consumers follow output without
@@ -212,10 +216,10 @@ pub struct RenderResult {
     /// no map is built unless something asks for all of them.
     pub resolved_values: crate::FrameValues,
     /// Profile-head values resolved while producing the same output frame.
-    pub profile_visualization_values: Arc<ResolvedValues>,
+    pub profile_visualization_values: Arc<crate::Pooled<ResolvedValues>>,
     /// Highest patched slot for each logical universe. This is kept separately from values so a
     /// patched channel whose default is zero still extends the network payload.
-    pub patched_slots: HashMap<Universe, u16>,
+    pub patched_slots: crate::Pooled<HashMap<Universe, u16>>,
     pub revision: u64,
     /// Output routes compiled from the same generation as `universes`.
     pub routes: Arc<[OutputRoute]>,

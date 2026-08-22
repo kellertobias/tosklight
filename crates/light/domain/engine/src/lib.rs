@@ -32,6 +32,7 @@ mod render_phases;
 mod resolution;
 mod runtime_generation;
 mod safety;
+mod value_pool;
 mod visualization;
 
 pub use contribution_batch::{
@@ -71,6 +72,7 @@ pub(crate) use frame_slots::{Slot, SlotTable};
 #[allow(unused_imports)]
 pub(crate) use frame_state::{FrameState, Offer, SlotWinner};
 pub use frame_values::FrameValues;
+pub use value_pool::{Pooled, Reusable, ValuePool};
 
 /// One profile head's values while it is being projected.
 ///

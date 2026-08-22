@@ -50,12 +50,9 @@ impl Engine {
         let group_master_flashes = self.group_master_flashes.read();
         let highlight_layers = self.highlight_layers.read();
         let highlight_look = self.highlight_look.read();
-        let mut universes = HashMap::new();
-        let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
-        let mut profile_visualization_values = crate::ResolvedValues::with_capacity_and_hasher(
-            snapshot.fixtures.len().saturating_mul(2),
-            Default::default(),
-        );
+        let mut universes = self.universe_pool.take();
+        let mut patched_slots = self.patched_slot_pool.take();
+        let mut profile_visualization_values = self.visualization_pool.take();
         // One buffer for every fixture of this frame, rather than two vectors per fixture.
         let mut output = crate::ResolvedProfileFixtureOutput::default();
         crate::timed(

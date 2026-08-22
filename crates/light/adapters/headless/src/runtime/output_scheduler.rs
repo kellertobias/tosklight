@@ -743,10 +743,12 @@ fn timecode_frame(timecode: &SmpteTimecode) -> u64 {
 
 fn output_frames(
     control: &mut OutputControl,
-    mut rendered: HashMap<Universe, DmxFrame>,
-) -> HashMap<Universe, DmxFrame> {
+    mut rendered: light_engine::Pooled<HashMap<Universe, DmxFrame>>,
+) -> light_engine::Pooled<HashMap<Universe, DmxFrame>> {
     if control.hold {
-        return control.last_frames.clone();
+        // Hold republishes what was last sent, in the borrowed frame this render already has.
+        rendered.clone_from(&control.last_frames);
+        return rendered;
     }
     apply_raw_overrides(&mut rendered, &control.raw_overrides);
     control.last_frames.clone_from(&rendered);
@@ -756,19 +758,17 @@ fn output_frames(
 fn output_payload(
     control: &mut OutputControl,
     routes: Arc<[light_output::OutputRoute]>,
-    rendered: HashMap<Universe, DmxFrame>,
-    patched_slots: HashMap<Universe, u16>,
+    mut rendered: light_engine::Pooled<HashMap<Universe, DmxFrame>>,
+    mut patched_slots: light_engine::Pooled<HashMap<Universe, u16>>,
 ) -> (
     Arc<[light_output::OutputRoute]>,
-    HashMap<Universe, DmxFrame>,
-    HashMap<Universe, u16>,
+    light_engine::Pooled<HashMap<Universe, DmxFrame>>,
+    light_engine::Pooled<HashMap<Universe, u16>>,
 ) {
     if control.hold {
-        return (
-            Arc::clone(&control.last_routes),
-            control.last_frames.clone(),
-            control.last_patched_slots.clone(),
-        );
+        rendered.clone_from(&control.last_frames);
+        patched_slots.clone_from(&control.last_patched_slots);
+        return (Arc::clone(&control.last_routes), rendered, patched_slots);
     }
     let frames = output_frames(control, rendered);
     control.last_routes = Arc::clone(&routes);
