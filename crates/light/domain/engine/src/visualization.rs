@@ -59,6 +59,7 @@ impl Engine {
         let highlight_layers = self.highlight_layers.read();
         let highlight_look = self.highlight_look.read();
         let mut projected = crate::ResolvedValues::default();
+        let mut output = crate::ResolvedProfileFixtureOutput::default();
         for fixture in snapshot.fixtures.iter() {
             let Some(profile) = fixture.definition.profile_snapshot.as_deref() else {
                 continue;
@@ -74,7 +75,7 @@ impl Engine {
                 .ok_or_else(|| {
                     EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
                 })?;
-            let output = resolve_profile_fixture(
+            resolve_profile_fixture(
                 fixture,
                 mode,
                 projection,
@@ -89,8 +90,9 @@ impl Engine {
                     pan: fixture.invert_pan,
                     tilt: fixture.invert_tilt,
                 },
+                &mut output,
             )?;
-            for output in output.heads {
+            for output in &output.heads {
                 projected.insert(
                     (output.owner, AttributeKey::intensity()),
                     AttributeValue::Normalized(output.intensity),

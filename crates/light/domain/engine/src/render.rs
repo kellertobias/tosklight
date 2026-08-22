@@ -56,6 +56,8 @@ impl Engine {
             snapshot.fixtures.len().saturating_mul(2),
             Default::default(),
         );
+        // One buffer for every fixture of this frame, rather than two vectors per fixture.
+        let mut output = crate::ResolvedProfileFixtureOutput::default();
         crate::timed(
             crate::RenderPhase::FixtureProjection,
             || -> Result<(), EngineError> {
@@ -87,7 +89,7 @@ impl Engine {
                                 )
                             })?;
                         if profile.patch_policy != light_fixture::PatchPolicy::Dmx {
-                            let output = resolve_profile_fixture(
+                            resolve_profile_fixture(
                                 fixture,
                                 mode,
                                 projection,
@@ -99,6 +101,7 @@ impl Engine {
                                 &highlight_layers,
                                 &highlight_look,
                                 AxisInversion::default(),
+                                &mut output,
                             )?;
                             insert_profile_visualization_values(
                                 &mut profile_visualization_values,
@@ -140,7 +143,7 @@ impl Engine {
                                         "schema-v2 fixture encoding plan is missing".into(),
                                     )
                                 })?;
-                        let root_output = resolve_profile_fixture(
+                        resolve_profile_fixture(
                             fixture,
                             mode,
                             projection,
@@ -155,22 +158,23 @@ impl Engine {
                                 pan: fixture.invert_pan,
                                 tilt: fixture.invert_tilt,
                             },
+                            &mut output,
                         )?;
                         insert_profile_visualization_values(
                             &mut profile_visualization_values,
-                            &root_output,
+                            &output,
                         );
                         encode_profile_destination(
                             &fixture.split_patches,
                             fixture.universe,
                             fixture.address,
                             encoding,
-                            &root_output,
+                            &output,
                             &mut universes,
                             &mut patched_slots,
                         )?;
                         for instance in &fixture.multipatch {
-                            let instance_output = resolve_profile_fixture(
+                            resolve_profile_fixture(
                                 fixture,
                                 mode,
                                 projection,
@@ -185,13 +189,14 @@ impl Engine {
                                     pan: instance.invert_pan,
                                     tilt: instance.invert_tilt,
                                 },
+                                &mut output,
                             )?;
                             encode_profile_destination(
                                 &instance.split_patches,
                                 instance.universe,
                                 instance.address,
                                 encoding,
-                                &instance_output,
+                                &output,
                                 &mut universes,
                                 &mut patched_slots,
                             )?;

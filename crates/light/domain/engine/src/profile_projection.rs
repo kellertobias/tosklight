@@ -32,15 +32,16 @@ pub(crate) fn resolve_profile_fixture(
     highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
     highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
-) -> Result<ResolvedProfileFixtureOutput, EngineError> {
+    // Filled rather than returned: a render resolves every fixture in turn and would otherwise
+    // grow two vectors per fixture per frame.
+    fixture_output: &mut ResolvedProfileFixtureOutput,
+) -> Result<(), EngineError> {
     let resolution = projection
         .resolution()
         .bind(mode)
         .map_err(|error| EngineError::Invalid(error.to_string()))?;
-    let mut fixture_output = ResolvedProfileFixtureOutput {
-        heads: Vec::with_capacity(projection.heads().len()),
-        channels: Vec::with_capacity(mode.channels.len()),
-    };
+    fixture_output.heads.clear();
+    fixture_output.channels.clear();
     for head in projection
         .heads()
         .iter()
@@ -62,7 +63,7 @@ pub(crate) fn resolve_profile_fixture(
         )?;
         fixture_output.heads.push(head_output);
     }
-    Ok(fixture_output)
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
