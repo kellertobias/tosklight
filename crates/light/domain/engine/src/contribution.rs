@@ -692,6 +692,36 @@ mod transition_order_tests {
     /// A value the compiled patch could not number must still reach the boundary and projection,
     /// and must not cost the rest of the frame its dense reading. One unrecognised name from a
     /// hardware surface or an HTTP client is a lookup, not a slower desk.
+    /// The slot table is compiled from the patch and from nothing else, so an inbound surface —
+    /// OSC, HTTP, anything that names an attribute freely — cannot grow it. That is the bound the
+    /// item asks for, and it is zero rather than a limit: a name the patch never declared is an
+    /// overflow entry on the frame that made it, discarded with that frame.
+    #[test]
+    fn an_inbound_name_cannot_grow_the_slot_table() {
+        let fixture_id = FixtureId::new();
+        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["intensity"]);
+        let slots =
+            std::sync::Arc::new(crate::SlotTable::compile(1, std::slice::from_ref(&fixture)));
+        let numbered = slots.len();
+        for index in 0..64 {
+            let mut resolver = EngineContributionResolver::unpooled(&slots);
+            resolver.add_borrowed_unscaled(
+                fixture_id,
+                &AttributeKey(format!("inbound{index}").into()),
+                &AttributeValue::Normalized(0.5),
+                0,
+                Utc::now(),
+                MergeMode::Ltp,
+            );
+            let _ = resolver.finish();
+        }
+        assert_eq!(
+            slots.len(),
+            numbered,
+            "sixty-four names the patch never declared leave the numbering exactly as it was"
+        );
+    }
+
     #[test]
     fn a_value_the_patch_never_numbered_costs_itself_a_lookup_not_the_frame() {
         let fixture_id = FixtureId::new();
