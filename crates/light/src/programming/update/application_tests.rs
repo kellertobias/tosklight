@@ -99,61 +99,78 @@ fn no_op_and_stale_revision_stop_before_serialization_backup_or_event() {
 }
 
 #[test]
-fn same_user_desks_share_values_but_group_preview_uses_exact_desk_selection() {
+fn every_surface_previews_the_desks_one_selection() {
     let rig = TestRig::new();
-    let second_session = SessionId::new();
-    let second_desk = Uuid::from_u128(22);
-    rig.registry.start(second_session, rig.user);
+    let second_screen = SessionId::new();
+    let screen_desk = Uuid::from_u128(22);
+    rig.registry.start(second_screen, rig.user);
     assert!(
         rig.registry
-            .attach_command_context(second_session, SessionId(second_desk))
+            .attach_command_context(second_screen, SessionId(screen_desk))
     );
     let first = FixtureId::new();
     let second = FixtureId::new();
+    // One ordered selection: selecting on the second screen moves the desk's selection, it does
+    // not open a second one beside it.
     rig.registry.select(rig.session, [first]);
-    rig.registry.select(second_session, [second]);
+    rig.registry.select(second_screen, [second]);
     rig.seed("group", "front", group_body());
 
-    let first_preview = rig.preview(group_request(), "first-group").unwrap();
-    let second_preview = rig
+    let from_main = rig.preview(group_request(), "first-group").unwrap();
+    let from_screen = rig
         .preview_as(
             group_request(),
             "second-group",
-            second_desk,
-            second_session,
+            screen_desk,
+            second_screen,
             rig.user,
         )
         .unwrap();
 
-    assert!(matches!(
-        first_preview.preview.items[0].address,
-        UpdateAddress::GroupMembership { fixture_id } if fixture_id == first
-    ));
-    assert!(matches!(
-        second_preview.preview.items[0].address,
-        UpdateAddress::GroupMembership { fixture_id } if fixture_id == second
-    ));
+    for preview in [&from_main, &from_screen] {
+        assert!(matches!(
+            preview.preview.items[0].address,
+            UpdateAddress::GroupMembership { fixture_id } if fixture_id == second
+        ));
+    }
 }
 
 #[test]
-fn foreign_user_is_rejected_before_target_or_show_lookup() {
+fn an_unauthenticated_request_is_rejected_before_target_or_show_lookup() {
     let rig = TestRig::new();
     let envelope = ActionEnvelope {
-        context: ActionContext::operator(
-            rig.desk,
-            UserId::new().0,
-            rig.session.0,
-            ActionSource::Http,
-        )
-        .with_request_id("foreign"),
+        context: ActionContext::system(rig.desk, ActionSource::System)
+            .with_request_id("unauthenticated"),
         command: preset_request(),
     };
     let error = rig
         .service
         .preview_update(envelope, &rig.active_show, &rig.ports)
         .unwrap_err();
-    assert_eq!(error.kind, ActionErrorKind::Forbidden);
+    assert_eq!(error.kind, ActionErrorKind::Unauthorized);
     assert!(!rig.steps().contains(&"begin"));
+}
+
+#[test]
+fn an_identity_from_before_the_collapse_operates_the_desk() {
+    let rig = TestRig::new();
+    let fixture = FixtureId::new();
+    rig.registry.select(rig.session, [fixture]);
+    rig.seed("group", "front", group_body());
+    let preview = rig
+        .preview_as(
+            group_request(),
+            "legacy",
+            rig.desk,
+            rig.session,
+            UserId::new(),
+        )
+        .expect("a legacy identity is the desk's own, not a foreign one");
+
+    assert!(matches!(
+        preview.preview.items[0].address,
+        UpdateAddress::GroupMembership { fixture_id } if fixture_id == fixture
+    ));
 }
 
 #[test]
@@ -263,23 +280,16 @@ fn preset_fingerprint_ignores_selection_but_rejects_value_changes() {
 }
 
 #[test]
-fn group_fingerprint_ignores_values_and_other_desk_selection_only() {
+fn group_fingerprint_ignores_values_but_not_the_desks_selection() {
     let rig = TestRig::new();
-    let second_session = SessionId::new();
-    let second_desk = Uuid::from_u128(22);
-    rig.registry.start(second_session, rig.user);
-    assert!(
-        rig.registry
-            .attach_command_context(second_session, SessionId(second_desk))
-    );
     let first = FixtureId::new();
     let second = FixtureId::new();
-    let third = FixtureId::new();
     rig.registry.select(rig.session, [first]);
-    rig.registry.select(second_session, [second]);
     rig.seed("group", "front", group_body());
     rig.seed("group", "back", group_body_with_id("back"));
 
+    // A Programmer value change does not invalidate a Group fingerprint: a Group records
+    // membership, not levels.
     let preview = rig.preview(group_request(), "irrelevant-preview").unwrap();
     rig.registry.set(
         rig.session,
@@ -287,7 +297,6 @@ fn group_fingerprint_ignores_values_and_other_desk_selection_only() {
         AttributeKey::intensity(),
         AttributeValue::Normalized(0.7),
     );
-    rig.registry.select(second_session, [third]);
     rig.apply(
         command_from_preview(&rig, group_target("front"), preview),
         "irrelevant-apply",
