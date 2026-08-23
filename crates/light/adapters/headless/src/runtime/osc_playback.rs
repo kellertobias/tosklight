@@ -408,12 +408,7 @@ pub(super) fn handle_playback_osc(
     else {
         return false;
     };
-    // A remote-control-only route operates the playback and nothing else. It never captures a
-    // Record, even while the operator has one armed on the desk's command line — that is what
-    // lets a guest work a playback beside somebody who is programming.
-    let may_program = source_socket
-        .and_then(|source| state.integrations.osc_subscriber_for_source(source))
-        .is_none_or(|subscriber| subscriber.capability.may_program());
+    let may_program = osc_source_may_program(state, source_socket);
     let record_target = may_program
         && is_physical_record_target(
             state,
@@ -452,15 +447,7 @@ pub(super) fn handle_playback_osc(
         }
     }
     let suppression_input =
-        session
-            .as_ref()
-            .map(|session| osc_cue_record_suppression::OscSuppressionInput {
-                session_id: session.id,
-                source: source_socket,
-                address,
-                continuous: action == "master",
-                pressed,
-            });
+        osc_suppression_input(session.as_ref(), source_socket, address, action, pressed);
     if suppression_input.is_some_and(|input| {
         state
             .integrations
@@ -531,6 +518,34 @@ pub(super) fn handle_playback_osc(
         );
     }
     true
+}
+
+/// The key an already-applied OSC action is remembered under, so its echo is ignored.
+fn osc_suppression_input<'a>(
+    session: Option<&Session>,
+    source: Option<SocketAddr>,
+    address: &'a str,
+    action: &str,
+    pressed: bool,
+) -> Option<osc_cue_record_suppression::OscSuppressionInput<'a>> {
+    session.map(|session| osc_cue_record_suppression::OscSuppressionInput {
+        session_id: session.id,
+        source,
+        address,
+        continuous: action == "master",
+        pressed,
+    })
+}
+
+/// Whether the surface that sent this message may change programming.
+///
+/// A remote-control-only route operates the playback and nothing else. It never captures a Record,
+/// even while the operator has one armed on the desk's command line — that is what lets a guest
+/// work a playback beside somebody who is programming.
+fn osc_source_may_program(state: &AppState, source: Option<SocketAddr>) -> bool {
+    source
+        .and_then(|source| state.integrations.osc_subscriber_for_source(source))
+        .is_none_or(|subscriber| subscriber.capability.may_program())
 }
 
 fn is_physical_record_target(
