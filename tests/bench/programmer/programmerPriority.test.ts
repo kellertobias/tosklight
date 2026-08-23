@@ -31,10 +31,10 @@ describe("Programmer priority acceptance intent", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 		const [snapshotCall, actionCall] = fetchMock.mock.calls;
 		expect(String(snapshotCall[0])).toBe(
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-priority/snapshot`,
+			`http://desk.local/api/v2/programmer/priority/snapshot`,
 		);
 		expect(String(actionCall[0])).toBe(
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-priority/actions`,
+			`http://desk.local/api/v2/programmer/priority/actions`,
 		);
 		expect(JSON.parse(String(actionCall[1]?.body))).toEqual({
 			request_id: REQUEST_ID,
@@ -43,7 +43,7 @@ describe("Programmer priority acceptance intent", () => {
 		});
 		expect(
 			fetchMock.mock.calls.every(([url]) =>
-				String(url).match(/programmer-priority/),
+				String(url).match(/programmer\/priority/),
 			),
 		).toBe(true);
 	});

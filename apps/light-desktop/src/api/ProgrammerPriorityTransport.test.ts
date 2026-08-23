@@ -122,7 +122,7 @@ describe("HttpProgrammerPriorityTransport", () => {
 		});
 		const [url, options] = fetch.mock.calls[0] ?? [];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/users/${USER_ID}/programmer-priority/snapshot`,
+			`http://127.0.0.1:5000/api/v2/programmer/priority/snapshot`,
 		);
 		expect(String(url)).not.toContain("bootstrap");
 		const headers = options?.headers as Headers;
@@ -151,7 +151,7 @@ describe("HttpProgrammerPriorityTransport", () => {
 		});
 		const [url, options] = fetch.mock.calls[0] ?? [];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/users/${USER_ID}/programmer-priority/actions`,
+			`http://127.0.0.1:5000/api/v2/programmer/priority/actions`,
 		);
 		expect(options?.method).toBe("POST");
 		expect(JSON.parse(String(options?.body))).toEqual({

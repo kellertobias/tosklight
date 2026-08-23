@@ -113,7 +113,7 @@ describe("HttpProgrammerPreloadPlaybackQueueTransport", () => {
 		});
 		const [url, init] = fetch.mock.calls[0];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/users/${USER_ID}/programmer-preload-playback-queue/snapshot`,
+			`http://127.0.0.1:5000/api/v2/programmer/preload-playback-queue/snapshot`,
 		);
 		const headers = new Headers(init?.headers);
 		expect(headers.get("authorization")).toBe("Bearer session-token");

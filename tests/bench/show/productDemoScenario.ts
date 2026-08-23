@@ -2876,11 +2876,11 @@ async function setProgrammerFixtureValues(
 	const [capture, programmerValues] = await Promise.all([
 		api.request<any>(
 			"GET",
-			`/api/v2/users/${userId}/programmer-capture-mode/snapshot`,
+			`/api/v2/programmer/capture-mode/snapshot`,
 		),
 		api.request<any>(
 			"GET",
-			`/api/v2/users/${userId}/programmer-values/snapshot`,
+			`/api/v2/programmer/values/snapshot`,
 		),
 	]);
 	const requestId = crypto.randomUUID();
@@ -3042,7 +3042,7 @@ async function preloadProgrammerAttributeLook(
 		throw new Error("The product demo requires an authenticated user");
 	const snapshot = await api.request<any>(
 		"GET",
-		`/api/v2/users/${userId}/programmer-preload-values/snapshot`,
+		`/api/v2/programmer/preload-values/snapshot`,
 	);
 	const targets = new Set(fixtureIds);
 	const values = Object.fromEntries(
@@ -4158,15 +4158,15 @@ async function preloadState(api: ApiDriver) {
 	const [capture, values, playback] = await Promise.all([
 		api.request<any>(
 			"GET",
-			`/api/v2/users/${userId}/programmer-capture-mode/snapshot`,
+			`/api/v2/programmer/capture-mode/snapshot`,
 		),
 		api.request<any>(
 			"GET",
-			`/api/v2/users/${userId}/programmer-preload-values/snapshot`,
+			`/api/v2/programmer/preload-values/snapshot`,
 		),
 		api.request<any>(
 			"GET",
-			`/api/v2/users/${userId}/programmer-preload-playback-queue/snapshot`,
+			`/api/v2/programmer/preload-playback-queue/snapshot`,
 		),
 	]);
 	return {

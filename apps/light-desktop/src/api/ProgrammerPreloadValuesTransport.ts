@@ -194,7 +194,7 @@ export class HttpProgrammerPreloadValuesTransport
 	}
 
 	private valuesPath(scope: ProgrammerPreloadValuesScope) {
-		return `${this.baseUrl}/api/v2/users/${encodeURIComponent(scope.userId)}/programmer-preload-values`;
+		return `${this.baseUrl}/api/v2/programmer/preload-values`;
 	}
 
 	private eventUrl() {

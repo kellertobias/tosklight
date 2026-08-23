@@ -30,6 +30,16 @@ command set including Record, Update and Assign. See [OSC](../../90-Protocols/01
 A guest working a fader while you have Record armed moves the fader. It does not become the target
 of your Record, because the guest never reaches the Programmer at all.
 
+## Programmer routes
+
+The desk's Programmer answers on `/api/v2/programmer/…` — values, capture mode, priority, Preload.
+Those routes name no operator, because there is one Programmer to name.
+
+The same routes as they were spelled when a desk could hold several — `/api/v2/users/{id}/…` — keep
+working, and the identity in them is normalised onto the desk's Programmer rather than checked. They
+are a compatibility path for saved configuration and older clients, and can be retired once none
+remain.
+
 ## Desk Lock
 
 Desk Lock is one lock over the whole installation. Locking the desk in front of you locks every

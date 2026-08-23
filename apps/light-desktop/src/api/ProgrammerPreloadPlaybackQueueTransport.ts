@@ -106,7 +106,7 @@ export class HttpProgrammerPreloadPlaybackQueueTransport
 	}
 
 	private queuePath(scope: ProgrammerPreloadPlaybackQueueScope) {
-		return `${this.baseUrl}/api/v2/users/${encodeURIComponent(scope.userId)}/programmer-preload-playback-queue`;
+		return `${this.baseUrl}/api/v2/programmer/preload-playback-queue`;
 	}
 
 	private eventUrl() {

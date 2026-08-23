@@ -115,7 +115,7 @@ export class HttpProgrammerCaptureModeTransport
 	}
 
 	private snapshotPath(scope: ProgrammerCaptureModeScope) {
-		return `${this.baseUrl}/api/v2/users/${encodeURIComponent(scope.userId)}/programmer-capture-mode/snapshot`;
+		return `${this.baseUrl}/api/v2/programmer/capture-mode/snapshot`;
 	}
 
 	private eventUrl() {

@@ -175,16 +175,16 @@ function lifecycleFetch(
 ) {
 	return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = String(input);
-		if (url.includes("programmer-capture-mode/snapshot"))
+		if (url.includes("programmer/capture-mode/snapshot"))
 			return json(captureModeSnapshot());
-		if (url.includes("programmer-preload-values/snapshot"))
+		if (url.includes("programmer/preload-values/snapshot"))
 			return json(valuesSnapshot());
-		if (url.includes("programmer-preload-playback-queue/snapshot"))
+		if (url.includes("programmer/preload-playback-queue/snapshot"))
 			return json(queueSnapshot());
 		if (url.includes("programming-interaction/snapshot"))
 			return json(interactionSnapshot());
 		if (url.includes("playback-runtime/snapshot")) return json(playback);
-		if (url.includes("programmer-preload/actions"))
+		if (url.includes("programmer/preload/actions"))
 			return json(outcome, status);
 		throw new Error(`Unexpected request ${url} ${init?.method ?? "GET"}`);
 	});
@@ -198,23 +198,23 @@ function assertExactAuthorityCalls(
 	expect(urls).toHaveLength(go ? 6 : 5);
 	expect(urls).toEqual(
 		expect.arrayContaining([
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-capture-mode/snapshot`,
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-preload-values/snapshot`,
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-preload-playback-queue/snapshot`,
+			`http://desk.local/api/v2/programmer/capture-mode/snapshot`,
+			`http://desk.local/api/v2/programmer/preload-values/snapshot`,
+			`http://desk.local/api/v2/programmer/preload-playback-queue/snapshot`,
 			"http://desk.local/api/v2/programming-interaction/snapshot",
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-preload/actions`,
+			`http://desk.local/api/v2/programmer/preload/actions`,
 		]),
 	);
 	expect(urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url))).toBe(
 		false,
 	);
 	expect(
-		urls.filter((url) => url.endsWith("/programmer-preload/actions")),
+		urls.filter((url) => url.endsWith("/programmer/preload/actions")),
 	).toHaveLength(1);
 	expect(
 		fetchMock.mock.calls.filter(
 			([input, init]) =>
-				String(input).endsWith("/programmer-preload/actions") &&
+				String(input).endsWith("/programmer/preload/actions") &&
 				init?.method === "POST",
 		),
 	).toHaveLength(1);
@@ -225,7 +225,7 @@ function assertExactAuthorityCalls(
 
 function actionBodies(fetchMock: ReturnType<typeof lifecycleFetch>) {
 	return fetchMock.mock.calls
-		.filter(([input]) => String(input).endsWith("/programmer-preload/actions"))
+		.filter(([input]) => String(input).endsWith("/programmer/preload/actions"))
 		.map(([, init]) => JSON.parse(String(init?.body)));
 }
 

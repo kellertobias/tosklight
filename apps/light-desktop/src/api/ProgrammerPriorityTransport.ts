@@ -120,11 +120,11 @@ export class HttpProgrammerPriorityTransport
 	}
 
 	private snapshotPath(scope: ProgrammerPriorityScope) {
-		return `${this.baseUrl}/api/v2/users/${encodeURIComponent(scope.userId)}/programmer-priority/snapshot`;
+		return `${this.baseUrl}/api/v2/programmer/priority/snapshot`;
 	}
 
 	private actionPath(scope: ProgrammerPriorityScope) {
-		return `${this.baseUrl}/api/v2/users/${encodeURIComponent(scope.userId)}/programmer-priority/actions`;
+		return `${this.baseUrl}/api/v2/programmer/priority/actions`;
 	}
 
 	private eventUrl() {

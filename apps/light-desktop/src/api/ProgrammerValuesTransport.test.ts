@@ -145,7 +145,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 		expect(fetchImplementation).toHaveBeenCalledOnce();
 		const [url, init] = fetchImplementation.mock.calls[0];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/users/${USER_ID}/programmer-values/snapshot`,
+			`http://127.0.0.1:5000/api/v2/programmer/values/snapshot`,
 		);
 		const headers = new Headers(init?.headers);
 		expect(headers.get("authorization")).toBe("Bearer session-token");
@@ -182,7 +182,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 		});
 		const [url, init] = fetchImplementation.mock.calls[0];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/users/${USER_ID}/programmer-values/actions`,
+			`http://127.0.0.1:5000/api/v2/programmer/values/actions`,
 		);
 		expect(init?.method).toBe("POST");
 		expect(JSON.parse(String(init?.body))).toEqual({

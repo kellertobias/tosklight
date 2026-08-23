@@ -247,3 +247,88 @@ async fn an_unrecognised_command_is_refused_from_a_not_editable_screen() {
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+#[tokio::test]
+async fn the_programmer_answers_on_canonical_routes_and_on_the_ones_that_named_a_user() {
+    let scenario = CommandHttpScenario::new().await;
+    let fixture = scenario.install_direct_fixture();
+    let user = scenario.session.user.id.0;
+
+    // The canonical route names no identity, because the desk has one Programmer.
+    let canonical = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/programmer/values/actions")
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    fixture_set_request("canonical", 0, fixture.0, 0.4).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(canonical.status(), StatusCode::OK);
+
+    // The route as it was named when a desk could hold several Programmers reaches the same one,
+    // and continues its revision rather than starting again.
+    let compatibility = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v2/users/{user}/programmer-values/actions"))
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    fixture_set_request("compatibility", 1, fixture.0, 0.9).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(compatibility.status(), StatusCode::OK);
+
+    // Both routes read back the same Programmer.
+    for path in [
+        "/api/v2/programmer/values/snapshot".to_owned(),
+        format!("/api/v2/users/{user}/programmer-values/snapshot"),
+    ] {
+        let snapshot = scenario
+            .app
+            .clone()
+            .oneshot(
+                Request::get(&path)
+                    .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(snapshot.status(), StatusCode::OK, "{path}");
+        let snapshot = json(snapshot).await;
+        assert_eq!(snapshot["projection"]["revision"], 2, "{path}");
+        assert_eq!(
+            snapshot["projection"]["fixture_values"][0]["value"]["value"],
+            0.9,
+            "{path}"
+        );
+    }
+
+    // A compatibility route still refuses an identity that is not a UUID: a malformed one is a
+    // client bug, not an older client.
+    let malformed = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/users/not-a-uuid/programmer-values/snapshot")
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

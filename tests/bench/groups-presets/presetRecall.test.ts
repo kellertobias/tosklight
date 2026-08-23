@@ -41,9 +41,9 @@ describe("Preset recall acceptance intent", () => {
 		expect(calls.map((call) => call.url)).toEqual(
 			expect.arrayContaining([
 				"http://desk.local/api/v2/objects/preset/2.1",
-				`http://desk.local/api/v2/users/${USER_ID}/programmer-values/snapshot`,
-				`http://desk.local/api/v2/users/${USER_ID}/programmer-preload-values/snapshot`,
-				`http://desk.local/api/v2/users/${USER_ID}/programmer-capture-mode/snapshot`,
+				`http://desk.local/api/v2/programmer/values/snapshot`,
+				`http://desk.local/api/v2/programmer/preload-values/snapshot`,
+				`http://desk.local/api/v2/programmer/capture-mode/snapshot`,
 				"http://desk.local/api/v2/programming-interaction/snapshot",
 				"http://desk.local/api/v2/presets/recall",
 			]),
@@ -156,11 +156,11 @@ function responseFor(url: string, init?: RequestInit) {
 			object_id: "2.1",
 			object: presetObject(),
 		});
-	if (url.includes("programmer-values/snapshot"))
+	if (url.includes("programmer/values/snapshot"))
 		return json(valuesSnapshot(), 200);
-	if (url.includes("programmer-preload-values/snapshot"))
+	if (url.includes("programmer/preload-values/snapshot"))
 		return json(preloadValuesSnapshot(), 200);
-	if (url.includes("programmer-capture-mode/snapshot"))
+	if (url.includes("programmer/capture-mode/snapshot"))
 		return json(captureModeSnapshot(), 200);
 	if (url.includes("programming-interaction/snapshot"))
 		return json(interactionSnapshot(), 200);

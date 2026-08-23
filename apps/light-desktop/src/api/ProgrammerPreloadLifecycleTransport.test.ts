@@ -77,7 +77,7 @@ describe("HttpProgrammerPreloadLifecycleTransport", () => {
 		expect(fetch).toHaveBeenCalledOnce();
 		const [url, options] = fetch.mock.calls[0] ?? [];
 		expect(url).toBe(
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-preload/actions`,
+			`http://desk.local/api/v2/programmer/preload/actions`,
 		);
 		expect(options?.method).toBe("POST");
 		expect(JSON.parse(String(options?.body))).toEqual({

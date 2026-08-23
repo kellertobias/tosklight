@@ -57,7 +57,7 @@ export class HttpProgrammerPreloadLifecycleTransport
 		const body = JSON.stringify(encodeProgrammerPreloadLifecycleRequest(request));
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
-		const path = `/api/v2/users/${encodeURIComponent(scope.userId)}/programmer-preload/actions`;
+		const path = `/api/v2/programmer/preload/actions`;
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(`${this.baseUrl}${path}`, {

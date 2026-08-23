@@ -148,7 +148,7 @@ async function setStaticControls(
 	const [values, capture] = await Promise.all([
 		api.request<{ projection: { revision: number } }>(
 			"GET",
-			`/api/v2/users/${encodeURIComponent(userId)}/programmer-values/snapshot`,
+			`/api/v2/programmer/values/snapshot`,
 			undefined,
 			true,
 			undefined,
@@ -156,7 +156,7 @@ async function setStaticControls(
 		),
 		api.request<{ projection: { revision: number } }>(
 			"GET",
-			`/api/v2/users/${encodeURIComponent(userId)}/programmer-capture-mode/snapshot`,
+			`/api/v2/programmer/capture-mode/snapshot`,
 			undefined,
 			true,
 			undefined,
@@ -165,7 +165,7 @@ async function setStaticControls(
 	]);
 	await api.request(
 		"POST",
-		`/api/v2/users/${encodeURIComponent(userId)}/programmer-values/actions`,
+		`/api/v2/programmer/values/actions`,
 		{
 			request_id: crypto.randomUUID(),
 			expected_revision: values.projection.revision,

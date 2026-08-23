@@ -384,11 +384,11 @@ function programmerFetch(
 			options.onPlayback?.();
 			return json(options.playback ?? playbackSnapshot());
 		}
-		if (url.endsWith("/programmer-values/snapshot"))
+		if (url.endsWith("/programmer/values/snapshot"))
 			return json(options.values ?? valuesSnapshot());
-		if (url.endsWith("/programmer-capture-mode/snapshot"))
+		if (url.endsWith("/programmer/capture-mode/snapshot"))
 			return json(options.captureMode ?? captureModeSnapshot());
-		if (url.endsWith("/programmer-values/actions"))
+		if (url.endsWith("/programmer/values/actions"))
 			return json(outcome, status);
 		throw new Error(`Unexpected request ${url} ${init?.method ?? "GET"}`);
 	});
@@ -402,9 +402,9 @@ function assertExactAuthorityCalls(
 	expect(urls).toEqual(
 		expect.arrayContaining([
 			"http://desk.local/api/v2/playback-runtime/snapshot",
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-values/snapshot`,
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-capture-mode/snapshot`,
-			`http://desk.local/api/v2/users/${USER_ID}/programmer-values/actions`,
+			`http://desk.local/api/v2/programmer/values/snapshot`,
+			`http://desk.local/api/v2/programmer/capture-mode/snapshot`,
+			`http://desk.local/api/v2/programmer/values/actions`,
 		]),
 	);
 	expect(
@@ -422,7 +422,7 @@ function assertExactAuthorityCalls(
 
 function actionCalls(fetchMock: ReturnType<typeof programmerFetch>) {
 	return fetchMock.mock.calls.filter(([input]) =>
-		String(input).endsWith("/programmer-values/actions"),
+		String(input).endsWith("/programmer/values/actions"),
 	);
 }
 

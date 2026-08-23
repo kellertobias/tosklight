@@ -458,7 +458,7 @@ export class BrowserProgrammerSpecials {
 	private async programmerValuesRevision(): Promise<number> {
 		const snapshot = await this.api.request<any>(
 			"GET",
-			`/api/v2/users/${this.session().user.id}/programmer-values/snapshot`,
+			`/api/v2/programmer/values/snapshot`,
 		);
 		return snapshot.projection.revision;
 	}

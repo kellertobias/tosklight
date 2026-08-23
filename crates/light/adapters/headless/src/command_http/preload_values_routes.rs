@@ -20,6 +20,17 @@ const BODY_LIMIT: usize = 2 * 1024 * 1024;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
+        // The desk's Programmer. There is one, so its routes do not name whose it is.
+        .route(
+            "/api/v2/programmer/preload-values/snapshot",
+            get(get_snapshot),
+        )
+        .route(
+            "/api/v2/programmer/preload-values/actions",
+            post(apply_action),
+        )
+        // The same routes as they were named when a desk could hold several Programmers. Kept so
+        // saved configuration and older clients keep working; retire once none of them remain.
         .route(
             "/api/v2/users/{user_id}/programmer-preload-values/snapshot",
             get(get_snapshot),
@@ -33,10 +44,14 @@ pub(super) fn router() -> Router<AppState> {
 
 async fn get_snapshot(
     State(state): State<AppState>,
-    Path(user_id): Path<String>,
+    path_user_id: Option<Path<String>>,
     headers: HeaderMap,
 ) -> Result<Response, PreloadValuesHttpError> {
-    let session = authenticated_user(&state, &headers, &user_id)?;
+    let session = authenticated_user(
+        &state,
+        &headers,
+        path_user_id.as_ref().map(|Path(id)| id.as_str()),
+    )?;
     let context = http_context(&session, None);
     let ports = ServerProgrammingPorts::new(&state, &session, "http", false);
     let snapshot = state
@@ -49,11 +64,15 @@ async fn get_snapshot(
 
 async fn apply_action(
     State(state): State<AppState>,
-    Path(user_id): Path<String>,
+    path_user_id: Option<Path<String>>,
     headers: HeaderMap,
     request: Result<TolerantJson<ProgrammingPreloadValuesActionRequest>, JsonRejection>,
 ) -> Result<Response, PreloadValuesHttpError> {
-    let session = authenticated_user(&state, &headers, &user_id)?;
+    let session = authenticated_user(
+        &state,
+        &headers,
+        path_user_id.as_ref().map(|Path(id)| id.as_str()),
+    )?;
     let TolerantJson(request) = request.map_err(PreloadValuesHttpError::json)?;
     let request_id = request.request_id.clone();
     let context =
@@ -90,15 +109,17 @@ async fn run_action(
 fn authenticated_user(
     state: &AppState,
     headers: &HeaderMap,
-    path_user_id: &str,
+    path_user_id: Option<&str>,
 ) -> Result<Session, PreloadValuesHttpError> {
     let session =
         super::super::authenticate(state, headers).map_err(PreloadValuesHttpError::api)?;
-    Uuid::parse_str(path_user_id)
-        .map_err(|_| PreloadValuesHttpError::invalid("user_id must be a UUID"))?;
-    // A URL naming an identity from before the desk had only one still addresses the desk's one
-    // Programmer, so it is normalised rather than refused. The identity must still parse: a
-    // malformed one is a client bug, not an older client.
+    // The canonical route names no identity. A compatibility route carries one from before the
+    // desk had only one Programmer; it still addresses that Programmer, so it is normalised rather
+    // than refused, but it must parse — a malformed one is a client bug, not an older client.
+    if let Some(path_user_id) = path_user_id {
+        Uuid::parse_str(path_user_id)
+            .map_err(|_| PreloadValuesHttpError::invalid("user_id must be a UUID"))?;
+    }
     Ok(session)
 }
 

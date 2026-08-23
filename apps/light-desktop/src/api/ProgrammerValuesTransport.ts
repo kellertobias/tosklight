@@ -167,7 +167,7 @@ export class HttpProgrammerValuesTransport
 	}
 
 	private valuesPath(scope: ProgrammerValuesScope) {
-		return `${this.baseUrl}/api/v2/users/${encodeURIComponent(scope.userId)}/programmer-values`;
+		return `${this.baseUrl}/api/v2/programmer/values`;
 	}
 
 	private eventUrl() {
