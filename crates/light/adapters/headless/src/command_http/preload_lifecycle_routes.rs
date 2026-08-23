@@ -79,13 +79,11 @@ fn authenticated_user(
 ) -> Result<Session, PreloadLifecycleHttpError> {
     let session =
         super::super::authenticate(state, headers).map_err(PreloadLifecycleHttpError::api)?;
-    let user_id = Uuid::parse_str(path_user_id)
+    Uuid::parse_str(path_user_id)
         .map_err(|_| PreloadLifecycleHttpError::invalid("user_id must be a UUID"))?;
-    if session.user.id.0 != user_id {
-        return Err(PreloadLifecycleHttpError::forbidden(
-            "session is not authorized for this Programmer user",
-        ));
-    }
+    // A URL naming an identity from before the desk had only one still addresses the desk's one
+    // Programmer, so it is normalised rather than refused. The identity must still parse: a
+    // malformed one is a client bug, not an older client.
     if super::super::read_desk_lock(state, session.desk.id).locked {
         return Err(PreloadLifecycleHttpError::conflict("desk is locked"));
     }
@@ -128,17 +126,6 @@ impl PreloadLifecycleHttpError {
         Self::new(
             StatusCode::BAD_REQUEST,
             ProgrammingPreloadLifecycleErrorKind::Invalid,
-            message,
-            None,
-            None,
-            false,
-        )
-    }
-
-    fn forbidden(message: impl Into<String>) -> Self {
-        Self::new(
-            StatusCode::FORBIDDEN,
-            ProgrammingPreloadLifecycleErrorKind::Forbidden,
             message,
             None,
             None,

@@ -313,12 +313,14 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
 }
 
 #[tokio::test]
-async fn programmer_values_http_shares_one_user_between_desks_and_isolates_other_users() {
+async fn programmer_values_over_http_are_the_desks_from_every_surface() {
     let scenario = CommandHttpScenario::new().await;
     let fixture = scenario.install_direct_fixture();
+    // A legacy desk record; a session logging in on one joins the desk's one Programmer.
     let second_desk = scenario
         .state
-        .installation.add_desk("Second desk", "second-values")
+        .installation
+        .add_desk("Second desk", "second-values")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -342,40 +344,56 @@ async fn programmer_values_http_shares_one_user_between_desks_and_isolates_other
     assert_eq!(second.status(), StatusCode::OK);
     let second = json(second).await;
     assert_values_changed(&second, "desk-two", 2, 5);
-    assert_eq!(second["projection"]["fixture_values"].as_array().unwrap().len(), 1);
-    assert_eq!(second["projection"]["group_values"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        second["projection"]["fixture_values"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        second["projection"]["group_values"].as_array().unwrap().len(),
+        1
+    );
 
-    let other_user = scenario.state.installation.add_user("Other values user").unwrap();
-    let (other_token, logged_in_user) = login_on_desk(
-        &scenario,
-        "Other values user",
-        scenario.session.desk.id,
-    )
-    .await;
-    assert_eq!(logged_in_user, other_user.id.0);
-    let other = fixture_set_request("other-user", 0, fixture.0, 0.9);
-    let other = scenario
-        .values_action_for(other_user.id.0, &other_token, other)
+    // A surface arriving under an identity from before the collapse writes into the same
+    // Programmer, so it continues the desk's revision rather than restarting one.
+    let legacy_user = scenario
+        .state
+        .installation
+        .add_user("Other values user")
+        .unwrap();
+    let (legacy_token, logged_in_user) =
+        login_on_desk(&scenario, "Other values user", scenario.session.desk.id).await;
+    assert_eq!(logged_in_user, legacy_user.id.0);
+    let legacy = fixture_set_request("legacy-user", 2, fixture.0, 0.9);
+    let legacy = scenario
+        .values_action_for(legacy_user.id.0, &legacy_token, legacy)
         .await;
-    assert_eq!(other.status(), StatusCode::OK);
-    let other = json(other).await;
-    assert_values_changed(&other, "other-user", 1, 8);
-    assert_eq!(other["projection"]["group_values"].as_array().unwrap().len(), 0);
+    assert_eq!(legacy.status(), StatusCode::OK);
+    let legacy = json(legacy).await;
+    assert_eq!(
+        legacy["projection"]["user_id"],
+        scenario.session.user.id.0.to_string(),
+        "the desk reports its own Programmer, not the name the caller asked under"
+    );
+    assert_eq!(
+        legacy["projection"]["group_values"].as_array().unwrap().len(),
+        1,
+        "the Group value another surface set is still there"
+    );
 
-    let foreign = scenario
+    // A stale revision is still refused, which is what protects concurrent surfaces.
+    let stale = scenario
         .values_action_for(
-            other_user.id.0,
+            scenario.session.user.id.0,
             &scenario.token,
             serde_json::json!({
-                "request_id": "forged-user",
+                "request_id": "stale-revision",
                 "expected_revision": 1,
                 "expected_capture_mode_revision": 0,
                 "action": {"type": "clear"}
             }),
         )
         .await;
-    assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
-    assert_eq!(json(foreign).await["kind"], "forbidden");
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

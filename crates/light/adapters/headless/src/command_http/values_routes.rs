@@ -115,13 +115,11 @@ fn authenticated_user(
     path_user_id: &str,
 ) -> Result<Session, ValuesHttpError> {
     let session = super::super::authenticate(state, headers).map_err(ValuesHttpError::api)?;
-    let user_id = Uuid::parse_str(path_user_id)
+    Uuid::parse_str(path_user_id)
         .map_err(|_| ValuesHttpError::invalid("user_id must be a UUID"))?;
-    if session.user.id.0 != user_id {
-        return Err(ValuesHttpError::forbidden(
-            "session is not authorized for this Programmer user",
-        ));
-    }
+    // A URL naming an identity from before the desk had only one still addresses the desk's one
+    // Programmer, so it is normalised rather than refused. The identity must still parse: a
+    // malformed one is a client bug, not an older client.
     Ok(session)
 }
 
@@ -175,17 +173,6 @@ impl ValuesHttpError {
         Self::new(
             StatusCode::BAD_REQUEST,
             ProgrammingValuesErrorKind::Invalid,
-            message,
-            None,
-            None,
-            false,
-        )
-    }
-
-    fn forbidden(message: impl Into<String>) -> Self {
-        Self::new(
-            StatusCode::FORBIDDEN,
-            ProgrammingValuesErrorKind::Forbidden,
             message,
             None,
             None,

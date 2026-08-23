@@ -94,13 +94,11 @@ fn authenticated_user(
 ) -> Result<Session, PreloadValuesHttpError> {
     let session =
         super::super::authenticate(state, headers).map_err(PreloadValuesHttpError::api)?;
-    let user_id = Uuid::parse_str(path_user_id)
+    Uuid::parse_str(path_user_id)
         .map_err(|_| PreloadValuesHttpError::invalid("user_id must be a UUID"))?;
-    if session.user.id.0 != user_id {
-        return Err(PreloadValuesHttpError::forbidden(
-            "session is not authorized for this Programmer user",
-        ));
-    }
+    // A URL naming an identity from before the desk had only one still addresses the desk's one
+    // Programmer, so it is normalised rather than refused. The identity must still parse: a
+    // malformed one is a client bug, not an older client.
     Ok(session)
 }
 
@@ -154,17 +152,6 @@ impl PreloadValuesHttpError {
         Self::new(
             StatusCode::BAD_REQUEST,
             ProgrammingPreloadValuesErrorKind::Invalid,
-            message,
-            None,
-            None,
-            false,
-        )
-    }
-
-    fn forbidden(message: impl Into<String>) -> Self {
-        Self::new(
-            StatusCode::FORBIDDEN,
-            ProgrammingPreloadValuesErrorKind::Forbidden,
             message,
             None,
             None,
