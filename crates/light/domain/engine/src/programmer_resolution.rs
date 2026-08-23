@@ -325,7 +325,10 @@ fn supersedes(value: &TimedValue, current: &TimedValue) -> bool {
 }
 
 fn programmer_winners(values: Vec<TimedValue>) -> Vec<TimedValue> {
-    let mut winners = HashMap::new();
+    // Rebuilt every frame from the operator's live edits, so it is sized for what it is about to
+    // hold rather than regrown as it fills, and hashed with the desk's hasher rather than SipHash.
+    let mut winners =
+        rustc_hash::FxHashMap::with_capacity_and_hasher(values.len(), rustc_hash::FxBuildHasher);
     for value in values {
         let key = (value.fixture_id, value.attribute.clone());
         let replace = winners

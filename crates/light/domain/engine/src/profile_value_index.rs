@@ -1,7 +1,6 @@
 use crate::contribution::ApplicableSequenceMaster;
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use rustc_hash::FxHashMap;
-use std::collections::HashMap;
 
 /// Per-fixture view of one render's resolved values.
 ///
@@ -16,8 +15,8 @@ pub(crate) enum ProfileValueIndex<'a> {
         channels: &'a crate::ChannelSlotIndex,
     },
     Scanned {
-        values: HashMap<FixtureId, Vec<(&'a AttributeKey, &'a AttributeValue)>>,
-        sequence_masters: HashMap<FixtureId, Vec<(&'a AttributeKey, ApplicableSequenceMaster)>>,
+        values: FxHashMap<FixtureId, Vec<(&'a AttributeKey, &'a AttributeValue)>>,
+        sequence_masters: FxHashMap<FixtureId, Vec<(&'a AttributeKey, ApplicableSequenceMaster)>>,
     },
 }
 
@@ -262,8 +261,8 @@ impl<'a> ProfileValueIndex<'a> {
 
 fn index_values(
     values: &crate::ResolvedValues,
-) -> HashMap<FixtureId, Vec<(&AttributeKey, &AttributeValue)>> {
-    let mut indexed = HashMap::<FixtureId, Vec<_>>::new();
+) -> FxHashMap<FixtureId, Vec<(&AttributeKey, &AttributeValue)>> {
+    let mut indexed = FxHashMap::<FixtureId, Vec<_>>::default();
     for ((fixture_id, attribute), value) in values {
         indexed
             .entry(*fixture_id)
@@ -275,8 +274,8 @@ fn index_values(
 
 fn index_sequence_masters(
     masters: &FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
-) -> HashMap<FixtureId, Vec<(&AttributeKey, ApplicableSequenceMaster)>> {
-    let mut indexed = HashMap::<FixtureId, Vec<_>>::new();
+) -> FxHashMap<FixtureId, Vec<(&AttributeKey, ApplicableSequenceMaster)>> {
+    let mut indexed = FxHashMap::<FixtureId, Vec<_>>::default();
     for ((fixture_id, attribute), master) in masters {
         indexed
             .entry(*fixture_id)
