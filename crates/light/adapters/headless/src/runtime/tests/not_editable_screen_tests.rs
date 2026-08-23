@@ -178,3 +178,72 @@ async fn the_not_editable_flag_survives_being_stored_and_read_back() {
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+async fn execute_from_screen(
+    scenario: &CommandHttpScenario,
+    screen_id: Uuid,
+    request_id: &str,
+    command: &str,
+) -> Response {
+    scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/command-line/execute")
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header("x-tosk-screen", screen_id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": request_id,
+                        "command": command,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_macro_from_a_not_editable_screen_operates_but_never_programs() {
+    let scenario = CommandHttpScenario::new().await;
+    let _show_id = scenario.create_and_open_show("Guest macro").await;
+    let read_only = install_screen(&scenario, "Foyer repeater", true);
+
+    // A speed-group speed touches no Programmer state, so the same screen may set it.
+    let speed = execute_from_screen(&scenario, read_only, "guest-speed", "SPD GRP 1 AT 120").await;
+    assert_ne!(
+        speed.status(),
+        StatusCode::FORBIDDEN,
+        "a command that never reaches the Programmer must run from a guest screen"
+    );
+
+    // Recording does, so the same screen is refused.
+    let record =
+        execute_from_screen(&scenario, read_only, "guest-record", "RECORD GROUP 1").await;
+    assert_eq!(record.status(), StatusCode::FORBIDDEN);
+    assert!(
+        json(record).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("Not Editable")
+    );
+
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn an_unrecognised_command_is_refused_from_a_not_editable_screen() {
+    let scenario = CommandHttpScenario::new().await;
+    let _show_id = scenario.create_and_open_show("Guest unknown command").await;
+    let read_only = install_screen(&scenario, "Foyer repeater", true);
+
+    // The classification is an allow-list on purpose: a command family nobody has decided about
+    // is treated as programming rather than quietly let through.
+    let unknown = execute_from_screen(&scenario, read_only, "guest-unknown", "WOBBLE 3").await;
+    assert_eq!(unknown.status(), StatusCode::FORBIDDEN);
+
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

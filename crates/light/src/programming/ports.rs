@@ -83,6 +83,20 @@ pub trait ProgrammingPorts: Send + Sync {
         self.authorize(context)
     }
 
+    /// Whether this surface may run one command line.
+    ///
+    /// A guest surface may still run the commands that only *operate* the desk — going to a Cue,
+    /// selecting a playback, setting a speed-group speed — because none of those touch the
+    /// Programmer. The default treats every command as a programming change, so a transport that
+    /// does not classify commands stays closed rather than open.
+    fn authorize_command(
+        &self,
+        context: &ActionContext,
+        _command: Option<&str>,
+    ) -> Result<(), ActionError> {
+        self.authorize_programming_change(context)
+    }
+
     fn execute(
         &self,
         programmers: &ProgrammerRegistry,

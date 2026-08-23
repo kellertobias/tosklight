@@ -432,6 +432,21 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         Ok(())
     }
 
+    /// A guest still runs the commands that only operate the desk — a Cue GO, a playback
+    /// selection, a speed-group speed, a Macro that does no programming of its own.
+    fn authorize_command(
+        &self,
+        context: &ActionContext,
+        command: Option<&str>,
+    ) -> Result<(), ActionError> {
+        if self.session.capability.is_guest()
+            && command.is_some_and(super::adapter::command_only_operates_the_desk)
+        {
+            return self.authorize(context);
+        }
+        self.authorize_programming_change(context)
+    }
+
     fn execute(
         &self,
         programmers: &ProgrammerRegistry,

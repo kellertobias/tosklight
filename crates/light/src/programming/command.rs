@@ -60,6 +60,19 @@ pub enum ProgrammingCommand {
 }
 
 impl ProgrammingCommand {
+    /// The command line this action runs, when it is one a transport can classify.
+    ///
+    /// `None` for the keypad, Undo, Preload and the selection commands: those are Programmer
+    /// actions whatever they spell out, so there is nothing to classify.
+    pub fn command_line(&self) -> Option<&str> {
+        match self {
+            Self::Execute { command, .. } => command.as_deref(),
+            _ => None,
+        }
+    }
+}
+
+impl ProgrammingCommand {
     pub const fn returns_selection(&self) -> bool {
         matches!(
             self,
