@@ -351,7 +351,6 @@ fn disconnect_keeps_programmer_until_explicit_clear() {
 #[test]
 fn undo_history_and_console_modes_belong_to_the_one_desk() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let first = SessionId::new();
     let second = SessionId::new();
     registry.start(first, UserId::new());

@@ -7,7 +7,6 @@ fn rejected_transaction_rolls_back_before_another_connections_mutation_can_run()
     use std::time::Duration;
 
     let registry = Arc::new(ProgrammerRegistry::default());
-    registry.collapse_to_one_desk();
     let user = UserId::new();
     let transaction_session = SessionId::new();
     let concurrent_session = SessionId::new();

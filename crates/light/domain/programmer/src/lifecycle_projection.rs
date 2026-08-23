@@ -187,7 +187,6 @@ mod tests {
     #[test]
     fn a_second_surface_replaces_the_shared_selection_rather_than_adding_its_own() {
         let registry = ProgrammerRegistry::default();
-        registry.collapse_to_one_desk();
         let user = UserId(Uuid::from_u128(10));
         let first = SessionId(Uuid::from_u128(11));
         let second = SessionId(Uuid::from_u128(12));
@@ -237,7 +236,6 @@ mod tests {
     /// no second authority to order against a first.
     fn every_connected_identity_projects_the_one_desk_programmer() {
         let registry = ProgrammerRegistry::default();
-        registry.collapse_to_one_desk();
         registry.start(SessionId(Uuid::from_u128(2)), UserId(Uuid::from_u128(20)));
         registry.start(SessionId(Uuid::from_u128(3)), UserId(Uuid::from_u128(10)));
 

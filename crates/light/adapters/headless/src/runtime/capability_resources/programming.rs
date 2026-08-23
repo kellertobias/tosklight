@@ -914,29 +914,26 @@ impl ProgrammingResource {
             .run_external_interaction(context, ports, operation)
     }
 
+    /// The one interaction context every surface of this desk shares, once a surface exists.
+    pub(in crate::runtime) fn desk_interaction_context(&self) -> Option<light_core::SessionId> {
+        self.programmers.desk_interaction_context()
+    }
+
     pub(in crate::runtime) fn run_selection_refresh<T>(
         &self,
         context: &light_application::ActionContext,
-        targets: impl IntoIterator<Item = light_application::ProgrammingSelectionTarget>,
+        operation: impl FnOnce() -> T,
+    ) -> light_application::ProgrammingSelectionRefreshResult<T> {
+        self.service.run_selection_refresh(context, operation)
+    }
+
+    pub(in crate::runtime) fn run_selection_refresh_within_interaction<T>(
+        &self,
+        context: &light_application::ActionContext,
         operation: impl FnOnce() -> T,
     ) -> light_application::ProgrammingSelectionRefreshResult<T> {
         self.service
-            .run_selection_refresh(context, targets, operation)
-    }
-
-    pub(in crate::runtime) fn run_selection_refresh_with_owned_target<T>(
-        &self,
-        context: &light_application::ActionContext,
-        owned_target: light_application::ProgrammingSelectionTarget,
-        targets: impl IntoIterator<Item = light_application::ProgrammingSelectionTarget>,
-        operation: impl FnOnce() -> T,
-    ) -> light_application::ProgrammingSelectionRefreshResult<T> {
-        self.service.run_selection_refresh_with_owned_target(
-            context,
-            owned_target,
-            targets,
-            operation,
-        )
+            .run_selection_refresh_within_interaction(context, operation)
     }
 
     pub(in crate::runtime) fn replace_user_programmer<T>(

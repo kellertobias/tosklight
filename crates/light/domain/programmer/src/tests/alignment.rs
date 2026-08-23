@@ -186,7 +186,6 @@ fn clamp_wrap_different_attribute_and_off_are_explicit() {
 #[test]
 fn alignment_belongs_to_the_desk_is_transactional_and_stays_runtime_only() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();

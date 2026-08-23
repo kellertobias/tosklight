@@ -513,8 +513,6 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         target: &light_application::ProgrammingShowUndoTarget,
     ) -> Result<light_core::Revision, ActionError> {
         let owner = super::super::ProgrammingInstallOwner {
-            desk_id: context.desk_id,
-            user_id: self.session.user.id,
             gesture: super::super::ProgrammingOwnerGesturePolicy::Preserve,
             highlight: super::super::ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
         };

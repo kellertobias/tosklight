@@ -296,7 +296,6 @@ fn update_content_captures_only_normal_programmer_edits_without_consuming_them()
 #[test]
 fn update_capture_reads_the_desk_values_and_the_desk_selection() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first_session = SessionId::new();
     let second_session = SessionId::new();

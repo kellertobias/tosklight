@@ -147,7 +147,6 @@ fn selection_projection_versions_the_gesture_boundary() {
 #[test]
 fn a_connection_presenting_another_identity_joins_the_one_desk_programmer() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let first = SessionId::new();
     let second = SessionId::new();
     let fixture = FixtureId::new();
@@ -193,7 +192,6 @@ fn a_connection_presenting_another_identity_joins_the_one_desk_programmer() {
 /// command line, because the operator typing on either is typing on the desk.
 fn sessions_share_values_selection_and_one_command_line() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
@@ -227,7 +225,6 @@ fn sessions_share_values_selection_and_one_command_line() {
 #[test]
 fn the_identity_projection_returns_every_connection_to_the_one_desk() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let first = SessionId::new();
     let second = SessionId::new();
     let arriving_as_someone_else = SessionId::new();
@@ -258,7 +255,6 @@ fn the_identity_projection_returns_every_connection_to_the_one_desk() {
 /// working and simply lands where every other surface already is.
 fn every_surface_shares_the_desk_values_selection_and_command_interactions() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
@@ -296,7 +292,6 @@ fn every_surface_shares_the_desk_values_selection_and_command_interactions() {
 #[test]
 fn one_command_line_is_shared_by_every_surface_and_rejects_stale_replacements() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
@@ -355,7 +350,6 @@ fn one_command_line_is_shared_by_every_surface_and_rejects_stale_replacements() 
 #[test]
 fn pending_command_choices_are_revisioned_shared_by_every_surface_and_cleared_by_edits() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first = SessionId::new();
     let peer = SessionId::new();
@@ -484,7 +478,6 @@ fn ordered_selection_sources_remove_and_readd_left_to_right_and_stay_live() {
 #[test]
 fn ordinary_selection_gestures_accumulate_across_the_desk_until_a_value_lands() {
     let registry = ProgrammerRegistry::default();
-    registry.collapse_to_one_desk();
     let user = UserId::new();
     let first = SessionId::new();
     let second_surface = SessionId::new();

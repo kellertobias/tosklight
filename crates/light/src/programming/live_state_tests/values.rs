@@ -205,25 +205,15 @@ impl SharedUserSetup {
         let service = self.service.clone();
         let registry = self.registry.clone();
         let context = self.actor_context.clone();
-        let owner = ProgrammingSelectionTarget {
-            desk_id: self.actor_context.desk_id,
-            interaction_id: self.actor_session,
-        };
-        let peer = ProgrammingSelectionTarget {
-            desk_id: self.peer_context.desk_id,
-            interaction_id: self.peer_session,
-        };
+        let peer_session = self.peer_session;
         thread::spawn(move || {
             service
                 .run_external_interaction(&context, &LivePorts::default(), || {
                     entered.send(()).unwrap();
                     proceed.recv().unwrap();
-                    service.run_selection_refresh_with_owned_target(
-                        &context,
-                        owner,
-                        [owner, peer],
-                        || registry.select(peer.interaction_id, [FixtureId::new()]),
-                    );
+                    service.run_selection_refresh_within_interaction(&context, || {
+                        registry.select(peer_session, [FixtureId::new()])
+                    });
                 })
                 .unwrap();
             done.send(()).unwrap();

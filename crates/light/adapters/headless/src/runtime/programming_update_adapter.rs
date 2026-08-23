@@ -30,8 +30,6 @@ impl ServerProgrammingUpdatePorts {
         require_unlocked: bool,
     ) -> Self {
         let owner = ProgrammingInstallOwner {
-            desk_id: session.desk.id,
-            user_id: session.user.id,
             gesture: ProgrammingOwnerGesturePolicy::Preserve,
             highlight: if within_interaction {
                 ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction

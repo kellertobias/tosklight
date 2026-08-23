@@ -14,7 +14,6 @@
 use light_core::{SessionId, UserId};
 use parking_lot::RwLock;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The identity the desk's one Programmer is stored under.
 ///
@@ -24,31 +23,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// persisted adopts the first identity a session presents and keeps it.
 #[derive(Clone, Default)]
 pub struct DeskAuthority {
-    /// Whether this desk has been collapsed onto one Programmer yet.
-    ///
-    /// The collapse is a migration, not a constant, and it arrives in stages: the authority, the
-    /// persistence that chooses which Programmer survives, and the operator surfaces that stop
-    /// offering a choice. Until every stage is in place a desk keeps its previous behaviour
-    /// exactly, so this switch is the one place that says which model is running.
-    collapsed: Arc<AtomicBool>,
     user_id: Arc<RwLock<Option<UserId>>>,
     command_context: Arc<RwLock<Option<SessionId>>>,
 }
 
 impl DeskAuthority {
-    /// Collapse this desk onto one Programmer.
-    ///
-    /// From here every session binds to one authority and one interaction context, whatever
-    /// identity or context it presents.
-    pub fn collapse(&self) {
-        self.collapsed.store(true, Ordering::Release);
-    }
-
-    /// Whether this desk is running the one-Programmer model.
-    pub fn is_collapsed(&self) -> bool {
-        self.collapsed.load(Ordering::Acquire)
-    }
-
     /// Pin the identity the desk's Programmer is stored under.
     ///
     /// Called by startup once persistence has decided which of a legacy database's Programmers is
@@ -70,9 +49,6 @@ impl DeskAuthority {
     /// the one already in use — which is the whole point: a second connection joins the desk
     /// rather than opening a desk of its own.
     pub fn resolve(&self, presented: UserId) -> UserId {
-        if !self.is_collapsed() {
-            return presented;
-        }
         if let Some(pinned) = *self.user_id.read() {
             return pinned;
         }
@@ -89,9 +65,6 @@ impl DeskAuthority {
     /// to be foreign to — so it reads as the desk's own. Read-only on purpose: answering a question
     /// about an identity must never decide which identity the desk has.
     pub fn normalize(&self, presented: UserId) -> UserId {
-        if !self.is_collapsed() {
-            return presented;
-        }
         self.pinned().unwrap_or(presented)
     }
 
@@ -102,14 +75,19 @@ impl DeskAuthority {
     /// typing on the first, because it is the same command line — that is what makes this one desk
     /// rather than several sharing a show.
     pub fn command_context(&self, presented: SessionId) -> SessionId {
-        if !self.is_collapsed() {
-            return presented;
-        }
         if let Some(context) = *self.command_context.read() {
             return context;
         }
         let mut context = self.command_context.write();
         *context.get_or_insert(presented)
+    }
+
+    /// The interaction context this desk has settled on, if any surface has connected yet.
+    ///
+    /// Read-only, like `normalize`: asking which context the desk has must never create one.
+    /// `None` means no surface has connected, so there is no command line to refresh.
+    pub fn settled_command_context(&self) -> Option<SessionId> {
+        *self.command_context.read()
     }
 
     /// Pin the interaction context, as startup does once persistence has chosen one.
@@ -129,25 +107,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_desk_that_has_not_collapsed_yet_keeps_every_identity_it_is_given() {
-        let authority = DeskAuthority::default();
-        let first = UserId::new();
-        let second = UserId::new();
-        assert_eq!(authority.resolve(first), first);
-        assert_eq!(authority.resolve(second), second);
-        assert_eq!(authority.normalize(second), second);
-        assert_eq!(authority.pinned(), None);
-    }
-
-    fn collapsed() -> DeskAuthority {
-        let authority = DeskAuthority::default();
-        authority.collapse();
-        authority
-    }
-
-    #[test]
     fn the_first_identity_to_arrive_becomes_the_desks() {
-        let authority = collapsed();
+        let authority = DeskAuthority::default();
         let first = UserId::new();
         assert_eq!(authority.resolve(first), first);
         assert_eq!(authority.pinned(), Some(first));
@@ -155,7 +116,7 @@ mod tests {
 
     #[test]
     fn a_later_identity_joins_the_desk_rather_than_opening_another() {
-        let authority = collapsed();
+        let authority = DeskAuthority::default();
         let operator = authority.resolve(UserId::new());
         assert_eq!(authority.resolve(UserId::new()), operator);
         assert_eq!(authority.resolve(UserId::new()), operator);
@@ -163,7 +124,7 @@ mod tests {
 
     #[test]
     fn a_pinned_identity_outranks_whichever_connection_arrived_first() {
-        let authority = collapsed();
+        let authority = DeskAuthority::default();
         authority.resolve(UserId::new());
         let migrated = UserId::new();
         authority.pin(migrated);
@@ -172,7 +133,7 @@ mod tests {
 
     #[test]
     fn a_released_authority_settles_again_on_the_next_session() {
-        let authority = collapsed();
+        let authority = DeskAuthority::default();
         authority.resolve(UserId::new());
         authority.command_context(SessionId::new());
         authority.release();
@@ -183,7 +144,7 @@ mod tests {
 
     #[test]
     fn a_legacy_identity_reads_as_the_desks_own_without_claiming_it() {
-        let authority = collapsed();
+        let authority = DeskAuthority::default();
         let legacy = UserId::new();
         assert_eq!(
             authority.normalize(legacy),
@@ -198,7 +159,7 @@ mod tests {
 
     #[test]
     fn every_surface_types_on_the_same_command_line() {
-        let authority = collapsed();
+        let authority = DeskAuthority::default();
         let main_window = SessionId::new();
         let context = authority.command_context(main_window);
         assert_eq!(context, main_window);
@@ -208,7 +169,7 @@ mod tests {
 
     #[test]
     fn a_pinned_command_context_outranks_the_first_connection() {
-        let authority = collapsed();
+        let authority = DeskAuthority::default();
         authority.command_context(SessionId::new());
         let restored = SessionId::new();
         authority.pin_command_context(restored);

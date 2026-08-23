@@ -15,7 +15,8 @@ pub(super) fn commit(
     context: &ActionContext,
     commit: &ProgrammingCueCommit,
 ) -> Result<ProgrammingCueCommitResult, ActionError> {
-    let user_id = context.user_id.ok_or_else(|| {
+    // Authentication still gates programming; which identity it is no longer selects a desk.
+    context.user_id.ok_or_else(|| {
         ActionError::new(
             light_application::ActionErrorKind::Unauthorized,
             "Cue recording requires an authenticated user",
@@ -24,8 +25,6 @@ pub(super) fn commit(
     let ports = ServerActiveShowPorts::show_objects_with_programming_owner(
         state.clone(),
         ProgrammingInstallOwner {
-            desk_id: context.desk_id,
-            user_id: light_core::UserId(user_id),
             gesture: ProgrammingOwnerGesturePolicy::Preserve,
             highlight: ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
         },

@@ -107,12 +107,12 @@ impl ProgrammerRegistry {
         &self.desk
     }
 
-    /// Collapse this registry onto one Programmer and one interaction context.
+    /// The one interaction context every surface of this desk shares, once a surface exists.
     ///
-    /// Every session then binds to that authority whatever identity or context it presents. Until
-    /// this is called the registry behaves exactly as it did before the collapse existed.
-    pub fn collapse_to_one_desk(&self) {
-        self.desk.collapse();
+    /// The desk's command line, ordered selection and Align state live here. `None` before the
+    /// first connection, which is a real answer: there is nothing yet to publish a change to.
+    pub fn desk_interaction_context(&self) -> Option<SessionId> {
+        self.desk.settled_command_context()
     }
 
     pub(crate) fn mutation_gate_for_user(&self, user_id: UserId) -> Arc<ReentrantMutex<()>> {

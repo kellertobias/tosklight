@@ -302,83 +302,13 @@ impl ProgrammerRegistry {
         self.close_selection_gesture(session)
     }
 
-    /// Bind a controller session to the command interaction context for its desk.
-    /// Programmer values remain shared by user identity, while button presses,
-    /// partial command lines, selection gestures, and the active command target are shared only by
-    /// sessions attached to this same context.
-    pub fn attach_command_context(&self, session: SessionId, context: SessionId) -> bool {
-        // A collapsed desk has one interaction context, so a surface asking for another is already
-        // where it belongs. The call remains so saved hardware configuration and existing clients
-        // keep working against a desk that no longer has contexts to choose between.
-        if self.desk.is_collapsed() {
-            let _ = context;
-            return self.sessions.read().contains_key(&session);
-        }
-        if self.sessions.read().contains_key(&session) && self.command_context(session) == context {
-            return true;
-        }
-        let mutation_gate = self.mutation_gate(session);
-        let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
-            return false;
-        }
-        let previous = self.command_context(session);
-        if previous == context {
-            return true;
-        }
-
-        let previous_command = self
-            .command_states
-            .read()
-            .get(&previous)
-            .cloned()
-            .unwrap_or_default();
-        let previous_selection = self
-            .selection_contexts
-            .read()
-            .get(&previous)
-            .cloned()
-            .unwrap_or_default();
-        let previous_alignment = self.alignment_contexts.read().get(&previous).cloned();
-        let promote_previous = self
-            .command_states
-            .read()
-            .get(&context)
-            .is_none_or(|current| current.text.is_empty() && !previous_command.text.is_empty());
-
-        self.command_contexts.write().insert(session, context);
-        {
-            let mut command_states = self.command_states.write();
-            if promote_previous {
-                command_states.insert(context, previous_command);
-            } else {
-                command_states.entry(context).or_default();
-            }
-        }
-        {
-            let mut selection_contexts = self.selection_contexts.write();
-            selection_contexts
-                .entry(context)
-                .or_insert(previous_selection);
-        }
-        if let Some(previous_alignment) = previous_alignment {
-            self.alignment_contexts
-                .write()
-                .entry(context)
-                .or_insert(previous_alignment);
-        }
-
-        if previous == session
-            && !self
-                .command_contexts
-                .read()
-                .values()
-                .any(|candidate| *candidate == previous)
-        {
-            self.command_states.write().remove(&previous);
-            self.selection_contexts.write().remove(&previous);
-            self.alignment_contexts.write().remove(&previous);
-        }
-        true
+    /// Bind a controller session to the desk's one interaction context.
+    ///
+    /// The desk has a single command line, selection gesture and Align state, so a surface asking
+    /// for a particular context is already where it belongs. The call remains because saved
+    /// hardware configuration and existing clients still make it against a desk that no longer has
+    /// contexts to choose between.
+    pub fn attach_command_context(&self, session: SessionId, _context: SessionId) -> bool {
+        self.sessions.read().contains_key(&session)
     }
 }

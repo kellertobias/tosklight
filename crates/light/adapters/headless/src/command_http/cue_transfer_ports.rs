@@ -24,8 +24,6 @@ pub(crate) struct ServerProgrammingCueTransferPorts {
 impl ServerProgrammingCueTransferPorts {
     pub(crate) fn new(state: AppState, session: Session, within_interaction: bool) -> Self {
         let owner = ProgrammingInstallOwner {
-            desk_id: session.desk.id,
-            user_id: session.user.id,
             gesture: ProgrammingOwnerGesturePolicy::Preserve,
             highlight: if within_interaction {
                 ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction
