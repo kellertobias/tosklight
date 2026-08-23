@@ -218,83 +218,21 @@ pub(crate) fn resolve_profile_head(
         && !axis_inversion.any()
         && (!output_highlighted || legacy_raw_highlight)
     {
-        let virtual_intensity = if output_highlighted {
-            selected_look.as_ref().map_or(1.0, |look| look.intensity)
-        } else {
-            common
-                .intensity
-                .and_then(AttributeValue::normalized)
-                .unwrap_or(1.0)
-        };
-        let intensity_master = common.intensity_master;
-        // Where this head's channels read from, worked out when the patch compiled. A lookup is an
-        // array index; only an attribute the patch could not number falls back to its name.
-        let addresses = values.channel_addresses(owner);
-        let channel_start = channels.len();
-        channels.extend(head.channel_indices.iter().map(|channel_index| {
-            let channel = &mode.channels[*channel_index];
-            let read = |which: ChannelAttribute, attribute: &AttributeKey| {
-                values.value_at(owner, addresses, *channel_index, which, attribute)
-            };
-            let resolved = resolution.resolve_channel_with(
-                *channel_index,
-                read,
-                legacy_raw_highlight,
-                (!fixture.highlight_overrides.is_empty())
-                    .then(|| fixture.highlight_overrides.get(&channel.id).copied())
-                    .flatten(),
-                |active| {
-                    let sequence_master = active
-                        .filter(|(_, attribute)| !attribute.is_intensity())
-                        .and_then(|(which, attribute)| {
-                            values.sequence_master_at(
-                                owner,
-                                addresses,
-                                *channel_index,
-                                which,
-                                attribute,
-                            )
-                        })
-                        .filter(|master| {
-                            !channel.reacts_to_virtual_intensity
-                                || intensity_master
-                                    .is_none_or(|intensity| intensity.source != master.source)
-                        })
-                        .map(|master| master.scale)
-                        .unwrap_or(1.0);
-                    ChannelScales {
-                        virtual_intensity: if active
-                            .is_some_and(|(_, attribute)| attribute.is_intensity())
-                        {
-                            1.0
-                        } else {
-                            virtual_intensity
-                        },
-                        sequence_master,
-                        group_master: group_scale,
-                        grand_master: grand_master(fixture, options),
-                    }
-                },
-            );
-            let mut raw = resolved.raw;
-            if options.blackout {
-                raw = blackout_raw(mode, channel, raw);
-            }
-            (*channel_index as u32, raw)
-        }));
-        return Ok(finalize_output(
-            ProfileOutputContext {
+        return Ok(resolve_head_without_overlays(
+            HeadFastPath {
                 fixture,
                 mode,
                 head,
-                owner,
-                head_id: head.head_id,
-                group_scale,
-                virtual_intensity,
-                requested_color: None,
+                resolution,
+                values,
                 options,
+                common,
+                group_scale,
+                output_highlighted,
+                legacy_raw_highlight,
+                selected_look: selected_look.as_ref(),
             },
-            &channels[channel_start..],
+            channels,
         ));
     }
 
@@ -340,6 +278,122 @@ pub(crate) fn resolve_profile_head(
         },
         &channels[channel_start..],
     ))
+}
+
+/// Everything the ordinary head needs, once the overlays have been ruled out.
+struct HeadFastPath<'a> {
+    fixture: &'a PatchedFixture,
+    mode: &'a FixtureMode,
+    head: &'a ProfileHeadPlan,
+    resolution: &'a BoundFixtureModeResolution<'a>,
+    values: &'a ProfileValueIndex<'a>,
+    options: RenderOptions,
+    common: crate::profile_value_index::HeadCommon<'a>,
+    group_scale: f32,
+    output_highlighted: bool,
+    legacy_raw_highlight: bool,
+    selected_look: Option<&'a HighlightLook>,
+}
+
+/// A head with no control loss, no hazardous blackout, no requested colour, no axis inversion and
+/// no semantic Highlight — the state a desk is in almost all of the time. It reads its channels
+/// straight through the numbering the patch compiled and never builds a map.
+fn resolve_head_without_overlays(
+    path: HeadFastPath<'_>,
+    channels: &mut Vec<(u32, u32)>,
+) -> ResolvedProfileHeadOutput {
+    let HeadFastPath {
+        fixture,
+        mode,
+        head,
+        resolution,
+        values,
+        options,
+        common,
+        group_scale,
+        output_highlighted,
+        legacy_raw_highlight,
+        selected_look,
+    } = path;
+    let owner = head.owner;
+    let channel_start = channels.len();
+    let virtual_intensity = if output_highlighted {
+        selected_look.map_or(1.0, |look| look.intensity)
+    } else {
+        common
+            .intensity
+            .and_then(AttributeValue::normalized)
+            .unwrap_or(1.0)
+    };
+    let intensity_master = common.intensity_master;
+    // Where this head's channels read from, worked out when the patch compiled. A lookup is an
+    // array index; only an attribute the patch could not number falls back to its name.
+    let addresses = values.channel_addresses(owner);
+    channels.extend(head.channel_indices.iter().map(|channel_index| {
+        let channel = &mode.channels[*channel_index];
+        let read = |which: ChannelAttribute, attribute: &AttributeKey| {
+            values.value_at(owner, addresses, *channel_index, which, attribute)
+        };
+        let resolved = resolution.resolve_channel_with(
+            *channel_index,
+            read,
+            legacy_raw_highlight,
+            (!fixture.highlight_overrides.is_empty())
+                .then(|| fixture.highlight_overrides.get(&channel.id).copied())
+                .flatten(),
+            |active| {
+                let sequence_master = active
+                    .filter(|(_, attribute)| !attribute.is_intensity())
+                    .and_then(|(which, attribute)| {
+                        values.sequence_master_at(
+                            owner,
+                            addresses,
+                            *channel_index,
+                            which,
+                            attribute,
+                        )
+                    })
+                    .filter(|master| {
+                        !channel.reacts_to_virtual_intensity
+                            || intensity_master
+                                .is_none_or(|intensity| intensity.source != master.source)
+                    })
+                    .map(|master| master.scale)
+                    .unwrap_or(1.0);
+                ChannelScales {
+                    virtual_intensity: if active
+                        .is_some_and(|(_, attribute)| attribute.is_intensity())
+                    {
+                        1.0
+                    } else {
+                        virtual_intensity
+                    },
+                    sequence_master,
+                    group_master: group_scale,
+                    grand_master: grand_master(fixture, options),
+                }
+            },
+        );
+        let mut raw = resolved.raw;
+        if options.blackout {
+            raw = blackout_raw(mode, channel, raw);
+        }
+        (*channel_index as u32, raw)
+    }));
+    finalize_output(
+        ProfileOutputContext {
+            fixture,
+            mode,
+            head,
+            owner,
+            head_id: head.head_id,
+            group_scale,
+            virtual_intensity,
+            requested_color: None,
+            options,
+        },
+        &channels[channel_start..],
+    )
 }
 
 pub(crate) fn encode_profile_split(

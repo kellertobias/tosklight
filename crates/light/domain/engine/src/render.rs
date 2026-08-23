@@ -66,149 +66,27 @@ impl Engine {
         let mut profile_visualization_values = self.visualization_pool.take();
         // One buffer for every fixture of this frame, rather than two vectors per fixture.
         let mut output = crate::ResolvedProfileFixtureOutput::default();
+        let inputs = ProjectionInputs {
+            values: &profile_values,
+            options,
+            group_masters,
+            group_master_flashes: &group_master_flashes,
+            highlight_layers: &highlight_layers,
+            highlight_look: &highlight_look,
+        };
         crate::timed(
             crate::RenderPhase::FixtureProjection,
             || -> Result<(), EngineError> {
                 for fixture in snapshot.fixtures.iter() {
-                    {
-                        let profile =
-                            fixture
-                                .definition
-                                .profile_snapshot
-                                .as_deref()
-                                .ok_or_else(|| {
-                                    EngineError::Invalid(
-                                        "schema-v2 fixture is missing its profile snapshot".into(),
-                                    )
-                                })?;
-                        let mode_id = fixture.definition.mode_id.ok_or_else(|| {
-                            EngineError::Invalid(
-                                "schema-v2 fixture is missing its mode identity".into(),
-                            )
-                        })?;
-                        let mode = profile.mode(mode_id).ok_or_else(|| {
-                            EngineError::Invalid("schema-v2 fixture mode is missing".into())
-                        })?;
-                        let projection = generation
-                            .profile_projection(fixture.fixture_id)
-                            .ok_or_else(|| {
-                                EngineError::Invalid(
-                                    "schema-v2 fixture projection plan is missing".into(),
-                                )
-                            })?;
-                        if profile.patch_policy != light_fixture::PatchPolicy::Dmx {
-                            resolve_profile_fixture(
-                                fixture,
-                                mode,
-                                projection,
-                                None,
-                                &profile_values,
-                                options,
-                                group_masters,
-                                &group_master_flashes,
-                                &highlight_layers,
-                                &highlight_look,
-                                AxisInversion::default(),
-                                &mut output,
-                            )?;
-                            insert_profile_visualization_values(
-                                &mut profile_visualization_values,
-                                &output,
-                            );
-                            for (channel_index, raw) in &output.channels {
-                                // The resolved channel says which one of the mode it is, so this
-                                // is an index rather than a scan of every channel per channel.
-                                let Some(channel) = mode.channels.get(*channel_index as usize)
-                                else {
-                                    continue;
-                                };
-                                let Some((head_index, head)) = mode
-                                    .heads
-                                    .iter()
-                                    .enumerate()
-                                    .find(|(_, head)| head.id == channel.head_id)
-                                else {
-                                    continue;
-                                };
-                                profile_visualization_values.insert(
-                                    (
-                                        crate::fixture::profile_head_owner(
-                                            fixture, head_index, head,
-                                        ),
-                                        channel.attribute.clone(),
-                                    ),
-                                    light_core::AttributeValue::RawDmxExact(*raw),
-                                );
-                            }
-                            continue;
-                        }
-                        let encoding =
-                            generation
-                                .profile_encoding(fixture.fixture_id)
-                                .ok_or_else(|| {
-                                    EngineError::Invalid(
-                                        "schema-v2 fixture encoding plan is missing".into(),
-                                    )
-                                })?;
-                        resolve_profile_fixture(
-                            fixture,
-                            mode,
-                            projection,
-                            None,
-                            &profile_values,
-                            options,
-                            group_masters,
-                            &group_master_flashes,
-                            &highlight_layers,
-                            &highlight_look,
-                            AxisInversion {
-                                pan: fixture.invert_pan,
-                                tilt: fixture.invert_tilt,
-                            },
-                            &mut output,
-                        )?;
-                        insert_profile_visualization_values(
-                            &mut profile_visualization_values,
-                            &output,
-                        );
-                        encode_profile_destination(
-                            &fixture.split_patches,
-                            fixture.universe,
-                            fixture.address,
-                            encoding,
-                            &output,
-                            &mut universes,
-                            &mut patched_slots,
-                        )?;
-                        for instance in &fixture.multipatch {
-                            resolve_profile_fixture(
-                                fixture,
-                                mode,
-                                projection,
-                                None,
-                                &profile_values,
-                                options,
-                                group_masters,
-                                &group_master_flashes,
-                                &highlight_layers,
-                                &highlight_look,
-                                AxisInversion {
-                                    pan: instance.invert_pan,
-                                    tilt: instance.invert_tilt,
-                                },
-                                &mut output,
-                            )?;
-                            encode_profile_destination(
-                                &instance.split_patches,
-                                instance.universe,
-                                instance.address,
-                                encoding,
-                                &output,
-                                &mut universes,
-                                &mut patched_slots,
-                            )?;
-                        }
-                    }
+                    project_fixture(
+                        fixture,
+                        generation,
+                        &inputs,
+                        &mut output,
+                        &mut universes,
+                        &mut patched_slots,
+                        &mut profile_visualization_values,
+                    )?;
                 }
                 Ok(())
             },
@@ -233,6 +111,140 @@ impl Engine {
         let generation = self.generation.load_full();
         hook();
         self.render_generation(&generation, options, &[])
+    }
+}
+
+/// Everything a fixture's projection reads and none of what it writes. Bundled because the render
+/// resolves each of these once for the whole frame, and threading seven borrows through one call
+/// per fixture said nothing the frame did not already say.
+struct ProjectionInputs<'a> {
+    values: &'a crate::ProfileValueIndex<'a>,
+    options: RenderOptions,
+    group_masters: &'a crate::GroupMasterIndex,
+    group_master_flashes: &'a HashMap<String, f32>,
+    highlight_layers: &'a HashMap<light_core::FixtureId, light_programmer::HighlightOutputLayer>,
+    highlight_look: &'a light_fixture::HighlightLook,
+}
+
+/// Resolve one patched fixture and write it to every destination it is patched to.
+fn project_fixture(
+    fixture: &light_fixture::PatchedFixture,
+    generation: &RuntimeGeneration,
+    inputs: &ProjectionInputs<'_>,
+    output: &mut crate::ResolvedProfileFixtureOutput,
+    universes: &mut HashMap<Universe, light_output::DmxFrame>,
+    patched_slots: &mut HashMap<Universe, u16>,
+    visualization: &mut crate::ResolvedValues,
+) -> Result<(), EngineError> {
+    let profile = fixture
+        .definition
+        .profile_snapshot
+        .as_deref()
+        .ok_or_else(|| {
+            EngineError::Invalid("schema-v2 fixture is missing its profile snapshot".into())
+        })?;
+    let mode_id = fixture.definition.mode_id.ok_or_else(|| {
+        EngineError::Invalid("schema-v2 fixture is missing its mode identity".into())
+    })?;
+    let mode = profile
+        .mode(mode_id)
+        .ok_or_else(|| EngineError::Invalid("schema-v2 fixture mode is missing".into()))?;
+    let projection = generation
+        .profile_projection(fixture.fixture_id)
+        .ok_or_else(|| {
+            EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
+        })?;
+    let resolve = |inversion, output: &mut crate::ResolvedProfileFixtureOutput| {
+        resolve_profile_fixture(
+            fixture,
+            mode,
+            projection,
+            None,
+            inputs.values,
+            inputs.options,
+            inputs.group_masters,
+            inputs.group_master_flashes,
+            inputs.highlight_layers,
+            inputs.highlight_look,
+            inversion,
+            output,
+        )
+    };
+    if profile.patch_policy != light_fixture::PatchPolicy::Dmx {
+        resolve(AxisInversion::default(), output)?;
+        insert_profile_visualization_values(visualization, output);
+        insert_raw_channel_values(visualization, fixture, mode, output);
+        return Ok(());
+    }
+    let encoding = generation
+        .profile_encoding(fixture.fixture_id)
+        .ok_or_else(|| EngineError::Invalid("schema-v2 fixture encoding plan is missing".into()))?;
+    resolve(
+        AxisInversion {
+            pan: fixture.invert_pan,
+            tilt: fixture.invert_tilt,
+        },
+        output,
+    )?;
+    insert_profile_visualization_values(visualization, output);
+    encode_profile_destination(
+        &fixture.split_patches,
+        fixture.universe,
+        fixture.address,
+        encoding,
+        output,
+        universes,
+        patched_slots,
+    )?;
+    for instance in &fixture.multipatch {
+        resolve(
+            AxisInversion {
+                pan: instance.invert_pan,
+                tilt: instance.invert_tilt,
+            },
+            output,
+        )?;
+        encode_profile_destination(
+            &instance.split_patches,
+            instance.universe,
+            instance.address,
+            encoding,
+            output,
+            universes,
+            patched_slots,
+        )?;
+    }
+    Ok(())
+}
+
+/// A non-DMX profile publishes its resolved channels for visualization, since nothing encodes them.
+fn insert_raw_channel_values(
+    visualization: &mut crate::ResolvedValues,
+    fixture: &light_fixture::PatchedFixture,
+    mode: &light_fixture::FixtureMode,
+    output: &crate::ResolvedProfileFixtureOutput,
+) {
+    for (channel_index, raw) in &output.channels {
+        // The resolved channel says which one of the mode it is, so this is an index rather than a
+        // scan of every channel per channel.
+        let Some(channel) = mode.channels.get(*channel_index as usize) else {
+            continue;
+        };
+        let Some((head_index, head)) = mode
+            .heads
+            .iter()
+            .enumerate()
+            .find(|(_, head)| head.id == channel.head_id)
+        else {
+            continue;
+        };
+        visualization.insert(
+            (
+                crate::fixture::profile_head_owner(fixture, head_index, head),
+                channel.attribute.clone(),
+            ),
+            light_core::AttributeValue::RawDmxExact(*raw),
+        );
     }
 }
 
