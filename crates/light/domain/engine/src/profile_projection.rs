@@ -86,7 +86,11 @@ impl AxisInversion {
 #[derive(Default)]
 pub(crate) struct ResolvedProfileFixtureOutput {
     pub(crate) heads: Vec<ResolvedProfileHeadOutput>,
-    pub(crate) channels: Vec<(uuid::Uuid, u32)>,
+    /// Resolved raw values, each knowing which channel of the mode it is.
+    ///
+    /// Its position, not its identity: encoding finds where the bytes go by indexing rather than
+    /// by hashing a Uuid twice, and the batch is half the size in memory.
+    pub(crate) channels: Vec<(u32, u32)>,
 }
 
 pub(crate) struct ResolvedProfileHeadOutput {
@@ -165,7 +169,7 @@ pub(crate) fn resolve_profile_head(
     highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
     highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
-    channels: &mut Vec<(uuid::Uuid, u32)>,
+    channels: &mut Vec<(u32, u32)>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
     let owner = head.owner;
     // Nothing frozen, nothing highlighted and nothing flashing is the ordinary state of a desk, so
@@ -276,7 +280,7 @@ pub(crate) fn resolve_profile_head(
             if options.blackout {
                 raw = blackout_raw(mode, channel, raw);
             }
-            (channel.id, raw)
+            (*channel_index as u32, raw)
         }));
         return Ok(finalize_output(
             ProfileOutputContext {
@@ -346,7 +350,7 @@ pub(crate) fn encode_profile_split(
     output: &ResolvedProfileFixtureOutput,
 ) -> Result<(), EngineError> {
     encoding
-        .encode_split(frame, address, split, &output.channels)
+        .encode_split_by_index(frame, address, split, &output.channels)
         .map_err(|error| EngineError::Invalid(error.to_string()))
 }
 
@@ -601,7 +605,7 @@ struct ChannelResolutionContext<'a> {
     options: RenderOptions,
 }
 
-fn resolve_channels(context: ChannelResolutionContext<'_>, channels: &mut Vec<(uuid::Uuid, u32)>) {
+fn resolve_channels(context: ChannelResolutionContext<'_>, channels: &mut Vec<(u32, u32)>) {
     let intensity_master = context
         .inputs
         .sequence_masters
@@ -638,7 +642,7 @@ fn resolve_channels(context: ChannelResolutionContext<'_>, channels: &mut Vec<(u
         if context.options.blackout {
             raw = blackout_raw(context.mode, channel, raw);
         }
-        (channel.id, raw)
+        (*channel_index as u32, raw)
     }))
 }
 
@@ -683,15 +687,13 @@ struct ProfileOutputContext<'a> {
 
 fn finalize_output(
     context: ProfileOutputContext<'_>,
-    channels: &[(uuid::Uuid, u32)],
+    channels: &[(u32, u32)],
 ) -> ResolvedProfileHeadOutput {
     let physical_intensity = context
         .head
         .intensity_channel_indices
         .iter()
-        .filter_map(|index| {
-            channel_visual_level(context.mode, channels, context.mode.channels[*index].id)
-        })
+        .filter_map(|index| channel_visual_level(context.mode, channels, *index as u32))
         .reduce(f32::max);
     let mut color = profile_visual_color(
         context.mode,

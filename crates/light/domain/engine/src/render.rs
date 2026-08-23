@@ -104,11 +104,10 @@ impl Engine {
                                 &mut profile_visualization_values,
                                 &output,
                             );
-                            for (channel_id, raw) in &output.channels {
-                                let Some(channel) = mode
-                                    .channels
-                                    .iter()
-                                    .find(|channel| channel.id == *channel_id)
+                            for (channel_index, raw) in &output.channels {
+                                // The resolved channel says which one of the mode it is, so this
+                                // is an index rather than a scan of every channel per channel.
+                                let Some(channel) = mode.channels.get(*channel_index as usize)
                                 else {
                                     continue;
                                 };

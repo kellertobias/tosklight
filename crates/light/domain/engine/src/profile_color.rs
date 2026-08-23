@@ -3,25 +3,37 @@ use light_fixture::{ColorSystem, FixtureMode, srgb_to_xyz};
 
 pub(crate) fn channel_visual_level(
     mode: &FixtureMode,
-    channels: &[(uuid::Uuid, u32)],
-    channel_id: uuid::Uuid,
+    channels: &[(u32, u32)],
+    channel_index: u32,
 ) -> Option<f32> {
-    let channel = mode
-        .channels
-        .iter()
-        .find(|channel| channel.id == channel_id)?;
+    let channel = mode.channels.get(channel_index as usize)?;
     let level = channels
         .iter()
-        .find_map(|(candidate, raw)| (*candidate == channel_id).then_some(*raw))?
+        .find_map(|(candidate, raw)| (*candidate == channel_index).then_some(*raw))?
         as f32
         / channel.resolution.max_raw() as f32;
     Some(if channel.invert { 1.0 - level } else { level }.clamp(0.0, 1.0))
 }
 
+/// Which channel of the mode a colour system is naming.
+///
+/// A colour system names its emitters by identity, so this is the one place that still has to look
+/// one up. The answer only depends on the mode, not on the frame.
+fn channel_index_of(mode: &FixtureMode, channel_id: uuid::Uuid) -> Option<u32> {
+    mode.channels
+        .iter()
+        .position(|channel| channel.id == channel_id)
+        .map(|index| index as u32)
+}
+
+fn level_of(mode: &FixtureMode, channels: &[(u32, u32)], channel_id: uuid::Uuid) -> Option<f32> {
+    channel_visual_level(mode, channels, channel_index_of(mode, channel_id)?)
+}
+
 pub(crate) fn profile_visual_color(
     mode: &FixtureMode,
     head_id: uuid::Uuid,
-    channels: &[(uuid::Uuid, u32)],
+    channels: &[(u32, u32)],
     fallback: Option<Xyz>,
 ) -> Option<Xyz> {
     let system = mode
@@ -37,7 +49,7 @@ pub(crate) fn profile_visual_color(
                     z: 0.0,
                 },
                 |sum, emitter| {
-                    let emitted = channel_visual_level(mode, channels, emitter.channel_id)
+                    let emitted = level_of(mode, channels, emitter.channel_id)
                         .unwrap_or(0.0)
                         .powf(emitter.response_curve);
                     Xyz {
@@ -53,20 +65,19 @@ pub(crate) fn profile_visual_color(
             magenta_channel_id,
             yellow_channel_id,
         }) => Some(srgb_to_xyz(
-            1.0 - channel_visual_level(mode, channels, *cyan_channel_id).unwrap_or(0.0),
-            1.0 - channel_visual_level(mode, channels, *magenta_channel_id).unwrap_or(0.0),
-            1.0 - channel_visual_level(mode, channels, *yellow_channel_id).unwrap_or(0.0),
+            1.0 - level_of(mode, channels, *cyan_channel_id).unwrap_or(0.0),
+            1.0 - level_of(mode, channels, *magenta_channel_id).unwrap_or(0.0),
+            1.0 - level_of(mode, channels, *yellow_channel_id).unwrap_or(0.0),
         )),
         Some(ColorSystem::HueSaturation {
             hue_channel_id,
             saturation_channel_id,
             intensity_channel_id,
         }) => {
-            let hue = channel_visual_level(mode, channels, *hue_channel_id).unwrap_or(0.0);
-            let saturation =
-                channel_visual_level(mode, channels, *saturation_channel_id).unwrap_or(0.0);
+            let hue = level_of(mode, channels, *hue_channel_id).unwrap_or(0.0);
+            let saturation = level_of(mode, channels, *saturation_channel_id).unwrap_or(0.0);
             let brightness = intensity_channel_id
-                .and_then(|id| channel_visual_level(mode, channels, id))
+                .and_then(|id| level_of(mode, channels, id))
                 .unwrap_or(1.0);
             let [red, green, blue] = light_core::hsv_to_rgb(PickerColor {
                 hue,
@@ -76,9 +87,10 @@ pub(crate) fn profile_visual_color(
             Some(srgb_to_xyz(red, green, blue))
         }
         Some(ColorSystem::DiscreteWheel { channel_id, slots }) => {
+            let wheel = channel_index_of(mode, *channel_id)?;
             let raw = channels
                 .iter()
-                .find_map(|(candidate, raw)| (candidate == channel_id).then_some(*raw))?;
+                .find_map(|(candidate, raw)| (*candidate == wheel).then_some(*raw))?;
             slots
                 .iter()
                 .find(|slot| raw >= slot.dmx_from && raw <= slot.dmx_to)
@@ -89,16 +101,12 @@ pub(crate) fn profile_visual_color(
     }
 }
 
-fn rgb_fallback(
-    mode: &FixtureMode,
-    head_id: uuid::Uuid,
-    channels: &[(uuid::Uuid, u32)],
-) -> Option<Xyz> {
+fn rgb_fallback(mode: &FixtureMode, head_id: uuid::Uuid, channels: &[(u32, u32)]) -> Option<Xyz> {
     let level = |attribute: &str| {
         mode.channels
             .iter()
-            .find(|channel| channel.head_id == head_id && &*channel.attribute.0 == attribute)
-            .and_then(|channel| channel_visual_level(mode, channels, channel.id))
+            .position(|channel| channel.head_id == head_id && &*channel.attribute.0 == attribute)
+            .and_then(|index| channel_visual_level(mode, channels, index as u32))
     };
     match (
         level("color.red"),
