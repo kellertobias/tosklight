@@ -27,7 +27,12 @@ pub struct ProgrammerLifecycleSummary {
 
 impl ProgrammerRegistry {
     /// Read one retained user authority without cloning its complete Programmer state.
+    /// The lifecycle of the desk's one Programmer, whatever identity the caller names.
+    ///
+    /// An identity from before the collapse describes the same Programmer, so it must not read as
+    /// an absent one — a lifecycle transition published under it would otherwise be silent.
     pub fn programmer_lifecycle(&self, user_id: UserId) -> Option<ProgrammerLifecycleSummary> {
+        let user_id = self.desk.normalize(user_id);
         self.with_user_serialized(user_id, || self.lifecycle_for_user(user_id))
     }
 

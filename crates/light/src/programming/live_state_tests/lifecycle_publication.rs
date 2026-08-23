@@ -52,7 +52,7 @@ impl ProgrammingPorts for LifecyclePublicationPorts {
 }
 
 #[test]
-fn session_lifecycle_is_one_safe_per_user_delta_and_snapshot_is_authenticated() {
+fn session_lifecycle_is_one_delta_per_change_to_the_desks_one_programmer() {
     let registry = ProgrammerRegistry::default();
     let events = EventBus::new(16);
     let service = ProgrammingService::new(
@@ -60,17 +60,18 @@ fn session_lifecycle_is_one_safe_per_user_delta_and_snapshot_is_authenticated() 
         events.clone(),
         Arc::new(HighlightRegistry::default()),
     );
-    let first_user = UserId::new();
-    let foreign_user = UserId::new();
-    let first = lifecycle_context(first_user);
-    let second = lifecycle_context(first_user);
-    let foreign = lifecycle_context(foreign_user);
+    let operator = UserId::new();
+    let legacy_user = UserId::new();
+    let first = lifecycle_context(operator);
+    let second = lifecycle_context(operator);
+    // A surface arriving under an identity from before the collapse joins the same Programmer.
+    let third = lifecycle_context(legacy_user);
 
-    start_session(&service, &registry, &first, first_user);
-    start_session(&service, &registry, &second, first_user);
-    start_session(&service, &registry, &foreign, foreign_user);
-    disconnect_session(&service, &registry, &second, first_user);
-    disconnect_session(&service, &registry, &first, first_user);
+    start_session(&service, &registry, &first, operator);
+    start_session(&service, &registry, &second, operator);
+    start_session(&service, &registry, &third, legacy_user);
+    disconnect_session(&service, &registry, &second, operator);
+    disconnect_session(&service, &registry, &first, operator);
 
     let published = lifecycle_events(&events);
     assert_eq!(published.len(), 5);
@@ -86,26 +87,27 @@ fn session_lifecycle_is_one_safe_per_user_delta_and_snapshot_is_authenticated() 
             && event.desk_id.is_none()
             && event.object.as_ref() == Some(&EventObject::programming_lifecycle())
     }));
+    // One Programmer gaining and shedding surfaces, never a second one appearing beside it.
     let session_counts = published
         .iter()
         .filter_map(|event| lifecycle_upsert(event).map(|row| row.sessions.len()))
         .collect::<Vec<_>>();
-    assert_eq!(session_counts, vec![1, 2, 1, 1]);
-    assert!(matches!(
-        lifecycle_change(&published[4]).delta,
+    assert_eq!(session_counts, vec![1, 2, 3, 2, 1]);
+    assert!(published.iter().all(|event| !matches!(
+        lifecycle_change(event).delta,
         ProgrammingLifecycleDelta::Remove { .. }
-    ));
+    )));
 
     let ports = LifecyclePublicationPorts {
         fixture: FixtureId::new(),
         deny: false,
     };
-    let snapshot = service.lifecycle_snapshot(&foreign, &ports).unwrap();
+    let snapshot = service.lifecycle_snapshot(&third, &ports).unwrap();
     assert_eq!(snapshot.event_sequence, 5);
     assert_eq!(snapshot.projection.revision, 5);
     assert_eq!(snapshot.projection.programmers.len(), 1);
     let row = &snapshot.projection.programmers[0];
-    assert_eq!(row.user_id, foreign_user);
+    assert_eq!(row.user_id, operator, "every surface is the one Programmer");
     assert_eq!(row.normal_value_count, 0);
     assert_eq!(row.sessions.len(), 1);
 
@@ -115,11 +117,34 @@ fn session_lifecycle_is_one_safe_per_user_delta_and_snapshot_is_authenticated() 
     };
     assert_eq!(
         service
-            .lifecycle_snapshot(&foreign, &denied)
+            .lifecycle_snapshot(&third, &denied)
             .unwrap_err()
             .kind,
         ActionErrorKind::Unauthorized
     );
+}
+
+#[test]
+fn the_desks_programmer_is_removed_when_its_last_surface_disconnects() {
+    let registry = ProgrammerRegistry::default();
+    let events = EventBus::new(16);
+    let service = ProgrammingService::new(
+        registry.clone(),
+        events.clone(),
+        Arc::new(HighlightRegistry::default()),
+    );
+    let operator = UserId::new();
+    let only = lifecycle_context(operator);
+
+    start_session(&service, &registry, &only, operator);
+    disconnect_session(&service, &registry, &only, operator);
+
+    let published = lifecycle_events(&events);
+    assert_eq!(published.len(), 2);
+    assert!(matches!(
+        lifecycle_change(&published[1]).delta,
+        ProgrammingLifecycleDelta::Remove { .. }
+    ));
 }
 
 #[test]

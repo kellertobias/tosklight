@@ -52,30 +52,24 @@ fn group_ltp_uses_operator_edit_time_not_render_time() {
 }
 
 #[test]
-fn programmer_intensity_is_ltp_within_one_programmer_and_htp_between_programmers() {
+fn programmer_intensity_is_ltp_however_many_surfaces_program_it() {
     let programmers = ProgrammerRegistry::default();
-    let first = light_core::SessionId::new();
-    let second = light_core::SessionId::new();
-    programmers.start(first, light_core::UserId::new());
-    programmers.start(second, light_core::UserId::new());
+    let main_window = light_core::SessionId::new();
+    let second_screen = light_core::SessionId::new();
+    programmers.start(main_window, light_core::UserId::new());
+    programmers.start(second_screen, light_core::UserId::new());
     let (fixture, logical) = fixture();
     programmers.set_group(
-        first,
+        main_window,
         "wash".into(),
         AttributeKey::intensity(),
         AttributeValue::Normalized(0.8),
     );
     programmers.set(
-        first,
+        main_window,
         logical,
         AttributeKey::intensity(),
         AttributeValue::Normalized(0.3),
-    );
-    programmers.set(
-        second,
-        logical,
-        AttributeKey::intensity(),
-        AttributeValue::Normalized(0.6),
     );
     let engine = Engine::new(programmers.clone());
     engine
@@ -94,12 +88,24 @@ fn programmer_intensity_is_ltp_within_one_programmer_and_htp_between_programmers
 
     assert_eq!(
         engine.render(RenderOptions::default()).unwrap().universes[&1][0],
-        153,
-        "the first programmer resolves its newer 30% fixture value before cross-source HTP chooses the second programmer's 60%",
+        77,
+        "the fixture value programmed after the Group value wins: the Programmer is LTP",
     );
-    assert!(programmers.set_priority(second, 110));
+
+    // A second screen is a surface of the same Programmer, not a second one bidding against it.
+    // Its later value therefore replaces the earlier one rather than being merged with it.
     programmers.set(
-        second,
+        second_screen,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.6),
+    );
+    assert_eq!(
+        engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+        153,
+    );
+    programmers.set(
+        main_window,
         logical,
         AttributeKey::intensity(),
         AttributeValue::Normalized(0.2),
@@ -107,13 +113,7 @@ fn programmer_intensity_is_ltp_within_one_programmer_and_htp_between_programmers
     assert_eq!(
         engine.render(RenderOptions::default()).unwrap().universes[&1][0],
         51,
-        "numeric priority resolves before HTP magnitude",
-    );
-    assert!(programmers.set_priority(second, 90));
-    assert_eq!(
-        engine.render(RenderOptions::default()).unwrap().universes[&1][0],
-        77,
-        "changing programmer priority retags its existing values and reveals the higher-priority programmer",
+        "the most recent value wins wherever it was typed, with no HTP between surfaces",
     );
 }
 
@@ -159,12 +159,10 @@ fn empty_group_programming_becomes_effective_when_members_are_added() {
     );
 }
 #[test]
-fn session_group_programmer_remains_live_across_membership_changes() {
+fn a_live_group_selection_remains_live_across_membership_changes() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    let frozen_session = light_core::SessionId::new();
     programmers.start(session, light_core::UserId::new());
-    programmers.start(frozen_session, light_core::UserId::new());
     programmers.select_expression(
         session,
         vec![],
@@ -172,11 +170,6 @@ fn session_group_programmer_remains_live_across_membership_changes() {
             group_id: "template".into(),
             rule: light_programmer::SelectionRule::All,
         },
-    );
-    programmers.select_expression(
-        frozen_session,
-        vec![],
-        light_programmer::SelectionExpression::Sources { items: vec![] },
     );
     programmers.set_group(
         session,
@@ -222,7 +215,14 @@ fn session_group_programmer_remains_live_across_membership_changes() {
         153
     );
     assert_eq!(observed.get(session).unwrap().selected, vec![logical]);
-    assert!(observed.get(frozen_session).unwrap().selected.is_empty());
+
+    // A selection frozen to explicit sources does not follow the same membership change.
+    observed.select_expression(
+        session,
+        vec![],
+        light_programmer::SelectionExpression::Sources { items: vec![] },
+    );
+    assert!(observed.get(session).unwrap().selected.is_empty());
 }
 #[test]
 fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {

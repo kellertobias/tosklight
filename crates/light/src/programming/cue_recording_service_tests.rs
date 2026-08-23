@@ -381,7 +381,7 @@ fn deleting_a_cue_never_attempts_to_activate_the_removed_cue() {
 }
 
 #[test]
-fn replay_scope_includes_user_desk_and_session_and_foreign_ownership_is_rejected() {
+fn replay_scope_separates_desk_session_and_request() {
     let setup = Setup::normal();
     let ports = TestPorts::changed(setup.show_id, 7).start_disabled();
     let first = setup.envelope("shared-id", ProgrammingCueActivationPolicy::Hold);
@@ -428,15 +428,17 @@ fn replay_scope_includes_user_desk_and_session_and_foreign_ownership_is_rejected
         .unwrap();
     assert_eq!(ports.commits.load(Ordering::Relaxed), 4);
 
-    let mut foreign = first;
-    foreign.context.user_id = Some(UserId::new().0);
-    foreign.context.request_id = Some("foreign".into());
-    let error = setup
+    // An identity from before the collapse records onto the desk rather than being turned away,
+    // so replay scope still separates it by request id alone.
+    let mut legacy = first;
+    legacy.context.user_id = Some(UserId::new().0);
+    legacy.context.request_id = Some("legacy".into());
+    setup
         .service
-        .handle_cue_recording(foreign, &ports)
-        .unwrap_err();
-    assert_eq!(error.kind, ActionErrorKind::Forbidden);
-    assert_eq!(ports.environments.load(Ordering::Relaxed), 4);
+        .handle_cue_recording(legacy, &ports)
+        .expect("a legacy identity is the desk's own");
+    assert_eq!(ports.commits.load(Ordering::Relaxed), 5);
+    assert_eq!(ports.environments.load(Ordering::Relaxed), 5);
 }
 
 #[test]
