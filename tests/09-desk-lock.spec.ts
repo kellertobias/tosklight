@@ -14,7 +14,8 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 			username: "Operator",
 			client_id: crypto.randomUUID(),
 		}, false);
-		expect(otherDeskSession.desk.id).not.toBe(pageDeskSession.desk.id);
+		// Two clients are two windows of the one desk, not two desks.
+		expect(otherDeskSession.desk.id).toBe(pageDeskSession.desk.id);
 		api.session = pageDeskSession;
 		const secondScreen = await page.context().newPage();
 		await secondScreen.goto(bench.baseUrl);
