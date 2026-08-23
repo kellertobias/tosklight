@@ -70,7 +70,7 @@ function report({
 					p95_one_second_completed_hz: achieved + 1,
 					maximum_one_second_completed_hz: achieved + 2,
 					windows_below_minimum: deadlineMisses,
-					reporting_target_hz: 44,
+					reporting_target_hz: Math.min(44, rateHz),
 					windows_below_reporting_target: Math.min(deadlineMisses, 3),
 				},
 				dynamic_definition_count: 4,
@@ -444,7 +444,8 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 			(scenario) =>
 				scenario.requested_rate_hz ===
 					(scenario.case_id === "dense_rig" ? 40 : 60) &&
-				scenario.below_target_hz === 44 &&
+				scenario.below_target_hz ===
+					Math.min(44, scenario.requested_rate_hz) &&
 				Number.isFinite(scenario.resources.application_cpu_average_percent),
 		),
 	);

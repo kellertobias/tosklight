@@ -525,7 +525,8 @@ function benchmarkScenarioEvidence(caseId, stage) {
 		!scenario ||
 		stage.exit_code == null ||
 		scenario.configured_rate_hz !== (PERFORMANCE_CASES[caseId]?.rate_hz ?? 60) ||
-		scenario.frame_rate?.reporting_target_hz !== 44 ||
+		scenario.frame_rate?.reporting_target_hz !==
+			Math.min(44, PERFORMANCE_CASES[caseId]?.rate_hz ?? 60) ||
 		!Number.isInteger(scenario.frame_rate?.windows_below_reporting_target) ||
 		!finite(scenario.elapsed_seconds) ||
 		!Number.isInteger(scenario.animated_attribute_count) ||

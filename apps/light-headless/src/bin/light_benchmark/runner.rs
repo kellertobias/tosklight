@@ -563,9 +563,13 @@ fn frame_rate_report(
         .iter()
         .filter(|completed| **completed < required)
         .count() as u64;
+    // A profile scheduled below the reporting target can never reach it, so counting its windows
+    // against 44 Hz marked every one of them a failure. The target a run is reported against is
+    // the one it was actually asked to hold.
+    let reporting_target_hz = REPORTING_TARGET_HZ.min(required_minimum_hz);
     let windows_below_reporting_target = completed_ticks_by_second
         .iter()
-        .filter(|completed| **completed < u64::from(REPORTING_TARGET_HZ))
+        .filter(|completed| **completed < u64::from(reporting_target_hz))
         .count() as u64;
     let average = completed_ticks as f64 / measured_seconds as f64;
     FrameRateReport {
@@ -577,7 +581,7 @@ fn frame_rate_report(
         maximum_one_second_completed_hz: maximum as f64,
         one_second_windows: completed_ticks_by_second.len() as u64,
         windows_below_minimum,
-        reporting_target_hz: REPORTING_TARGET_HZ,
+        reporting_target_hz,
         windows_below_reporting_target,
         gate_met: average >= f64::from(required_minimum_hz) && windows_below_minimum == 0,
         definition: "average uses completed scheduled frames over the configured measurement duration; minimum, p95, and maximum describe completed scheduled frames in non-overlapping one-second intervals",
