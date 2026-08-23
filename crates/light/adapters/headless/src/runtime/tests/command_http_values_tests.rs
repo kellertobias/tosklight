@@ -738,7 +738,7 @@ fn programmer_color_values(
         programmer
             .values
             .iter()
-            .find(|value| value.fixture_id == fixture && value.attribute.0 == attribute)
+            .find(|value| value.fixture_id == fixture && &*value.attribute.0 == attribute)
             .and_then(|value| value.value.normalized())
     }
 }
@@ -839,7 +839,7 @@ async fn color_picker_persists_canonical_color_and_renders_native_hsi_channels()
 
     let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
     assert_eq!(programmer.values.len(), 1);
-    assert_eq!(programmer.values[0].attribute.0, "color");
+    assert_eq!(&*programmer.values[0].attribute.0, "color");
     let light_core::AttributeValue::ColorXyz(stored) = programmer.values[0].value else {
         panic!("whole-color picker must persist one canonical XYZ value")
     };
@@ -1090,7 +1090,7 @@ async fn indexed_preset_uses_each_embedded_profile_raw_value_immediately() {
 
     let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
     assert_eq!(programmer.values.len(), 2);
-    for value in &programmer.values {
+    for value in programmer.values.iter() {
         assert_eq!(
             value.value,
             light_core::AttributeValue::Discrete("gobo.dots".into())

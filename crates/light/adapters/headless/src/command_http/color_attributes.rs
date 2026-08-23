@@ -82,7 +82,7 @@ fn color_target(
                 selected_heads.iter().any(|head| {
                     head.parameters
                         .iter()
-                        .any(|parameter| parameter.attribute.0 == *attribute)
+                        .any(|parameter| &*parameter.attribute.0 == *attribute)
                 })
             })
             .map(|(attribute, _, _)| *attribute)

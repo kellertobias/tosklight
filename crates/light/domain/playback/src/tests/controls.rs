@@ -163,7 +163,7 @@ fn fast_navigation_bypasses_only_the_current_transition_timing() {
     let pan = engine
         .contributions()
         .into_iter()
-        .find(|value| value.attribute.0 == "pan")
+        .find(|value| *value.attribute.0 == *"pan")
         .unwrap();
     assert_eq!(pan.value, AttributeValue::Normalized(0.8));
     let stored = &engine.cue_lists[&cue_list_id].cues[1];
@@ -175,7 +175,7 @@ fn fast_navigation_bypasses_only_the_current_transition_timing() {
     let pan = engine
         .contributions()
         .into_iter()
-        .find(|value| value.attribute.0 == "pan")
+        .find(|value| *value.attribute.0 == *"pan")
         .unwrap();
     assert_eq!(pan.value, AttributeValue::Normalized(0.2));
 }

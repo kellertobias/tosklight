@@ -1,7 +1,6 @@
 //! Latest-value publication from the output boundary to visualization transports.
 
 use arc_swap::ArcSwapOption;
-use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_engine::{RenderOptions, RenderResult};
 use light_wire::v2::{
     preload_values::ProgrammingPreloadAttributeValue,
@@ -93,8 +92,9 @@ pub(super) struct PublishedVisualizationFrame {
     pub(super) scope: VisualizationScope,
     pub(super) show_revision: u64,
     pub(super) options: RenderOptions,
-    pub(super) values: Arc<light_engine::ResolvedValues>,
-    pub(super) profile_visualization_values: Arc<light_engine::ResolvedValues>,
+    pub(super) values: light_engine::FrameValues,
+    pub(super) profile_visualization_values:
+        Arc<light_engine::Pooled<light_engine::ResolvedValues>>,
 }
 
 /// Capacity-one, non-blocking publication. Slow or disconnected observers cannot apply
@@ -150,7 +150,7 @@ impl VisualizationFrameHub {
                 scope,
                 show_revision: rendered.revision,
                 options,
-                values: Arc::clone(&rendered.resolved_values),
+                values: rendered.resolved_values.clone(),
                 profile_visualization_values: Arc::clone(&rendered.profile_visualization_values),
             })));
         self.source_notify.notify_one();
@@ -592,11 +592,10 @@ mod tests {
 
     fn rendered(revision: u64) -> RenderResult {
         RenderResult {
-            universes: HashMap::new(),
-            resolved_values: Arc::new(light_engine::ResolvedValues::default()),
-            resolved_changed_at: Arc::new(light_engine::ResolvedChangedAt::default()),
-            profile_visualization_values: Arc::new(light_engine::ResolvedValues::default()),
-            patched_slots: HashMap::new(),
+            universes: light_engine::Pooled::default(),
+            resolved_values: light_engine::FrameValues::empty(),
+            profile_visualization_values: Arc::new(light_engine::Pooled::default()),
+            patched_slots: light_engine::Pooled::default(),
             revision,
             routes: Arc::<[OutputRoute]>::from([]),
             automatic_playback_transitions: Vec::new(),

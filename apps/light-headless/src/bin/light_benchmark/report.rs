@@ -73,6 +73,10 @@ pub struct ScenarioReport {
     pub frame_rate: FrameRateReport,
     pub deadline: DeadlineReport,
     pub phases: PhaseReport,
+    /// What each render phase cost across this scenario, in microseconds. Present only when
+    /// `LIGHT_RENDER_PHASES` asked the engine to keep the counters.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub render_phase_microseconds: Option<std::collections::BTreeMap<&'static str, u64>>,
     pub output: OutputReport,
     pub contribution_sources: ContributionSources,
     pub sampled_contributions: SampledContributionReport,

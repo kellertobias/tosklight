@@ -232,6 +232,7 @@ function runStage(
 	mutationGate,
 	patchGate,
 	executionMode = "unrestricted",
+	rateHz = REQUIRED_RATE_HZ,
 ) {
 	const arguments_ = [
 		"--profile",
@@ -249,7 +250,7 @@ function runStage(
 		"--universes",
 		String(universes),
 		"--rate-hz",
-		String(REQUIRED_RATE_HZ),
+		String(rateHz),
 		"--hardware-label",
 		hardwareLabel,
 	];
@@ -484,6 +485,13 @@ function canonicalDemoEvidence(candidate) {
 }
 
 const PERFORMANCE_CASES = {
+	// The shape the performance goal names: sixteen universes packed with three-channel fixtures,
+	// a Dynamic on every one. It is scheduled at 40 Hz rather than 60, which is why a case carries
+	// the rate it was measured at instead of every case being assumed to be 60.
+	dense_rig: {
+		rate_hz: 40,
+		thresholds: { red_below_hz: 40, yellow_below_hz: 40 },
+	},
 	demo: {
 		thresholds: {
 			red_below_hz: 44,
@@ -516,8 +524,9 @@ function benchmarkScenarioEvidence(caseId, stage) {
 		stage?.report?.schema_version !== 8 ||
 		!scenario ||
 		stage.exit_code == null ||
-		scenario.configured_rate_hz !== 60 ||
-		scenario.frame_rate?.reporting_target_hz !== 44 ||
+		scenario.configured_rate_hz !== (PERFORMANCE_CASES[caseId]?.rate_hz ?? 60) ||
+		scenario.frame_rate?.reporting_target_hz !==
+			Math.min(44, PERFORMANCE_CASES[caseId]?.rate_hz ?? 60) ||
 		!Number.isInteger(scenario.frame_rate?.windows_below_reporting_target) ||
 		!finite(scenario.elapsed_seconds) ||
 		!Number.isInteger(scenario.animated_attribute_count) ||
@@ -848,6 +857,24 @@ function main() {
 				{ case_id: "doubled_2048", stage: doubled },
 				...(twoThousand ? [{ case_id: "maximum", stage: twoThousand }] : []),
 			];
+	if (!desktopScenarios)
+		// Three-channel fixtures fill a universe 170 at a time, which is the density the goal is
+		// stated in and the one no other case measures.
+		benchmarkRuns.push({
+			case_id: "dense_rig",
+			stage: runStage(
+				resolve(options.binary),
+				outputDirectory,
+				"dense-rig",
+				16,
+				170,
+				hardwareLabel,
+				false,
+				false,
+				"unrestricted",
+				40,
+			),
+		});
 	if (!desktopScenarios)
 		for (const executionMode of ["one_core", "unrestricted"]) {
 			for (const workload of [

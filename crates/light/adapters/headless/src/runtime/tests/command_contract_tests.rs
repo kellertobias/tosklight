@@ -183,8 +183,8 @@ impl CommandContractScenario {
     let color = light_core::AttributeKey("color.emitter.red".into());
     let set_only_color = || {
         let mut programmer = self.state.programming.get(self.session.id).unwrap();
-        programmer.values.clear();
-        programmer.group_values.clear();
+        std::sync::Arc::make_mut(&mut programmer.values).clear();
+        std::sync::Arc::make_mut(&mut programmer.group_values).clear();
         self.state.programming.restore(programmer);
         assert!(self.state.programming.set_group(
             self.session.id,
@@ -231,8 +231,8 @@ impl CommandContractScenario {
     assert_eq!(overwritten.group_changes[0].attribute, color);
 
     let mut programmer = self.state.programming.get(self.session.id).unwrap();
-    programmer.values.clear();
-    programmer.group_values.clear();
+    std::sync::Arc::make_mut(&mut programmer.values).clear();
+    std::sync::Arc::make_mut(&mut programmer.group_values).clear();
     self.state.programming.restore(programmer);
     execute_programmer_command(&self.state, &self.session, "RECORD - CUELIST 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(

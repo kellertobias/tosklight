@@ -217,7 +217,8 @@ fn sampled_batches(
         let source = ContributionSourceId::programmer(programmer.id);
         for value in programmer
             .values
-            .into_iter()
+            .iter()
+            .cloned()
             .step_by(SAMPLED_ASSIGNMENT_DIVISOR)
         {
             buckets[index % SAMPLED_BATCH_COUNT]
@@ -846,7 +847,7 @@ fn routes(
 }
 
 pub fn slot_attribute(slot: u16) -> AttributeKey {
-    AttributeKey(format!("benchmark.slot.{slot:03}"))
+    AttributeKey(format!("benchmark.slot.{slot:03}").into())
 }
 
 fn fixed_uuid(namespace: u64, value: u64) -> Uuid {

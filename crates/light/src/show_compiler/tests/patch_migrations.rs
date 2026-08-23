@@ -51,7 +51,7 @@ fn inline_and_lean_records_compile_equivalently_with_stable_heads() {
             .profile()["future_profile"],
         json!({"kept": [2, 1]})
     );
-    let legacy_fixture = compile_show_candidate(legacy_candidate).unwrap().fixtures;
+    let inline_fixture = compile_show_candidate(legacy_candidate).unwrap().fixtures;
     let first_commit = legacy_store
         .apply_portable_transaction(legacy_transaction)
         .unwrap();
@@ -102,49 +102,8 @@ fn inline_and_lean_records_compile_equivalently_with_stable_heads() {
     let current_fixture = compile_show_candidate(current_candidate).unwrap().fixtures;
 
     assert_eq!(
-        serde_json::to_value(legacy_fixture).unwrap(),
+        serde_json::to_value(inline_fixture).unwrap(),
         serde_json::to_value(current_fixture).unwrap()
-    );
-}
-
-#[test]
-fn schema_one_fixture_is_materialized_and_compiled_in_one_candidate() {
-    let (_, mut fixture, _) = portable_fixture();
-    fixture.definition.schema_version = 1;
-    fixture.definition.profile_id = None;
-    fixture.definition.mode_id = None;
-    fixture.definition.profile_snapshot = None;
-    let mut legacy_body = serde_json::to_value(&fixture).unwrap();
-    legacy_body["definition"]["future_schema_one"] = json!({"kept": true});
-
-    let (_, document) = document_with_objects(&[(
-        "patched_fixture",
-        &fixture.fixture_id.0.to_string(),
-        legacy_body,
-    )]);
-    let mut transaction = document.transaction();
-    stage_candidate_migrations(&document, &mut transaction).unwrap();
-    let candidate = document.candidate(&transaction).unwrap();
-    let migrated = candidate
-        .object("patched_fixture", &fixture.fixture_id.0.to_string())
-        .unwrap()
-        .body();
-
-    assert!(migrated.get("definition").is_none());
-    assert_eq!(candidate.fixture_profile_revisions().count(), 1);
-    assert!(
-        migrated["_light_legacy_definition_fields"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|field| field["json_pointer"] == "/future_schema_one"
-                && field["value"] == json!({"kept": true}))
-    );
-    let compiled = compile_show_candidate(candidate).unwrap();
-    assert_eq!(compiled.fixtures.len(), 1);
-    assert_eq!(
-        compiled.fixtures[0].definition.schema_version,
-        light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION
     );
 }
 

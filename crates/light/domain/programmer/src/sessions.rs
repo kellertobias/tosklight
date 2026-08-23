@@ -86,17 +86,17 @@ impl ProgrammerRegistry {
             priority: 100,
             selected: vec![],
             selection_expression: None,
-            values: vec![],
+            values: Arc::new(vec![]),
             dynamic_values: Arc::new(vec![]),
-            transient_values: vec![],
-            group_values: HashMap::new(),
+            transient_values: Arc::new(vec![]),
+            group_values: Arc::new(HashMap::new()),
             group_release_values: vec![],
             preload_pending: vec![],
-            preload_active: vec![],
+            preload_active: Arc::new(vec![]),
             preload_dynamic_pending: Arc::new(vec![]),
             preload_dynamic_active: Arc::new(vec![]),
             preload_group_pending: HashMap::new(),
-            preload_group_active: HashMap::new(),
+            preload_group_active: Arc::new(HashMap::new()),
             preload_group_release_pending: vec![],
             preload_group_release_active: vec![],
             preload_playback_pending: vec![],
@@ -177,7 +177,7 @@ impl ProgrammerRegistry {
             .values
             .iter()
             .chain(&state.preload_pending)
-            .chain(&state.preload_active)
+            .chain(state.preload_active.iter())
             .map(|value| value.programmer_order)
             .chain(
                 state

@@ -13,12 +13,18 @@ use uuid::Uuid;
 fn frame_selection_applies_overrides_and_reuses_held_frames() {
     let mut control = OutputControl::default();
     control.raw_overrides.insert((1, 2), 77);
-    let live = output_frames(&mut control, frames_with_value(1, 10));
+    let live = output_frames(
+        &mut control,
+        light_engine::Pooled::unpooled(frames_with_value(1, 10)),
+    );
     assert_eq!(live[&1][0], 10);
     assert_eq!(live[&1][1], 77);
 
     control.hold = true;
-    let held = output_frames(&mut control, frames_with_value(1, 99));
+    let held = output_frames(
+        &mut control,
+        light_engine::Pooled::unpooled(frames_with_value(1, 99)),
+    );
     assert_eq!(held, live);
 }
 
@@ -38,21 +44,21 @@ fn held_output_reuses_one_coherent_route_frame_and_slot_snapshot() {
     let live = output_payload(
         &mut control,
         Arc::from([live_route.clone()]),
-        frames_with_value(1, 10),
-        HashMap::from([(1, 24)]),
+        light_engine::Pooled::unpooled(frames_with_value(1, 10)),
+        light_engine::Pooled::unpooled(HashMap::from([(1, 24)])),
     );
 
     control.hold = true;
     let held = output_payload(
         &mut control,
         Arc::from([]),
-        frames_with_value(2, 99),
-        HashMap::from([(2, 512)]),
+        light_engine::Pooled::unpooled(frames_with_value(2, 99)),
+        light_engine::Pooled::unpooled(HashMap::from([(2, 512)])),
     );
 
     assert_eq!(held.0.as_ref(), &[live_route]);
     assert_eq!(held.1, live.1);
-    assert_eq!(held.2, HashMap::from([(1, 24)]));
+    assert_eq!(*held.2, HashMap::from([(1, 24)]));
 }
 
 #[test]

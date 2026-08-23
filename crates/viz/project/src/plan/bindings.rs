@@ -95,7 +95,7 @@ pub(super) fn build_binding(
 }
 
 fn assign(binding: &mut EmitterBinding, attribute: &AttributeKey, reference: &ChannelRef) {
-    let key = attribute.0.as_str();
+    let key = &*attribute.0;
     let base = key.rsplit('.').next().unwrap_or(key);
     let slot = |target: &mut Option<ChannelRef>| {
         if target.is_none() {
@@ -213,7 +213,7 @@ pub(super) fn cell_bindings(
 ) -> Vec<ColourBinding> {
     let mut per_attribute: HashMap<&str, Vec<&ChannelRef>> = HashMap::new();
     for (channel, reference) in owned {
-        let key = channel.attribute.0.as_str();
+        let key = &*channel.attribute.0;
         if key.starts_with("color") || channel.attribute.is_intensity() {
             per_attribute.entry(key).or_default().push(reference);
         }

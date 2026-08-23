@@ -252,13 +252,13 @@ fn parameter_metadata(channel: &FixtureChannel) -> ParameterMetadata {
 fn position_axis_representation(
     channel: &FixtureChannel,
 ) -> Option<crate::PositionAxisRepresentation> {
-    match channel.attribute.0.as_str() {
-        "pan" => Some(if channel.fixture_attribute.0 == "pan.continuous" {
+    match &*channel.attribute.0 {
+        "pan" => Some(if *channel.fixture_attribute.0 == *"pan.continuous" {
             crate::PositionAxisRepresentation::Endless
         } else {
             crate::PositionAxisRepresentation::Absolute
         }),
-        "tilt" => Some(if channel.fixture_attribute.0 == "tilt.continuous" {
+        "tilt" => Some(if *channel.fixture_attribute.0 == *"tilt.continuous" {
             crate::PositionAxisRepresentation::Endless
         } else {
             crate::PositionAxisRepresentation::Absolute
@@ -270,10 +270,10 @@ fn position_axis_representation(
 fn position_movement_representation(
     channel: &FixtureChannel,
 ) -> Option<crate::PositionMovementRepresentation> {
-    if channel.attribute.0 != "position.movement" {
+    if *channel.attribute.0 != *"position.movement" {
         return None;
     }
-    match channel.fixture_attribute.0.as_str() {
+    match &*channel.fixture_attribute.0 {
         "fixture.pan_tilt_speed" | "position.speed" => {
             Some(crate::PositionMovementRepresentation::Speed)
         }

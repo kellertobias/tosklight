@@ -9,6 +9,7 @@ use light_dynamics::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct GroupProgrammerValue {
@@ -555,7 +556,7 @@ impl ProgrammerRegistry {
         let target = if preload {
             &mut state.preload_group_pending
         } else {
-            &mut state.group_values
+            Arc::make_mut(&mut state.group_values)
         };
         target.entry(group_id).or_default().insert(
             attribute,
@@ -598,7 +599,7 @@ impl ProgrammerRegistry {
         let values = if preload {
             &mut state.preload_pending
         } else {
-            &mut state.values
+            Arc::make_mut(&mut state.values)
         };
         let before = values.len();
         if values
@@ -611,7 +612,7 @@ impl ProgrammerRegistry {
         let values = if preload {
             &mut state.preload_pending
         } else {
-            &mut state.values
+            Arc::make_mut(&mut state.values)
         };
         values.retain(|value| value.fixture_id != fixture_id || value.attribute != *attribute);
         debug_assert!(values.len() < before);
@@ -645,7 +646,7 @@ impl ProgrammerRegistry {
         let target = if preload {
             &mut state.preload_group_pending
         } else {
-            &mut state.group_values
+            Arc::make_mut(&mut state.group_values)
         };
         if !target
             .get(group_id)
@@ -657,7 +658,7 @@ impl ProgrammerRegistry {
         let target = if preload {
             &mut state.preload_group_pending
         } else {
-            &mut state.group_values
+            Arc::make_mut(&mut state.group_values)
         };
         if let Some(attributes) = target.get_mut(group_id) {
             attributes.remove(attribute);

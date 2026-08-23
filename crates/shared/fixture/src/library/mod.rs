@@ -8,7 +8,7 @@ pub use attribute_mapping::*;
 pub use gel_catalog::*;
 
 use crate::FixtureError;
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use std::path::Path;
 
 pub struct FixtureLibrary {
@@ -27,8 +27,6 @@ pub type LegacyFixtureProfileSource = (String, String, Option<Vec<u8>>);
 
 // Removed code-owned catalogs used these markers. They remain only for a one-time data migration
 // that releases old catalog rows before loading the same fixtures from transferable packages.
-const LEGACY_GENERIC_CATALOG_SOURCE: &str = "builtin:generic-catalog";
-const LEGACY_VENDOR_CATALOG_SOURCE: &str = "builtin:vendor-catalog";
 
 impl FixtureLibrary {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, FixtureError> {
@@ -59,63 +57,8 @@ impl FixtureLibrary {
             )?;
         }
         let library = Self { conn };
-        library.remove_legacy_code_owned_catalogs()?;
-        library.migrate_legacy_profiles()?;
+        library.compile_imported_definitions()?;
         library.seed_generic_gel_catalog()?;
         Ok(library)
-    }
-
-    fn remove_legacy_code_owned_catalogs(&self) -> Result<(), FixtureError> {
-        let transaction = self.conn.unchecked_transaction()?;
-        let owned_profile_ids = {
-            let mut statement = transaction.prepare(
-                "SELECT DISTINCT id FROM fixture_profiles WHERE reserved_source IN (?1,?2)",
-            )?;
-            statement
-                .query_map(
-                    params![LEGACY_GENERIC_CATALOG_SOURCE, LEGACY_VENDOR_CATALOG_SOURCE],
-                    |row| row.get::<_, String>(0),
-                )?
-                .collect::<Result<Vec<_>, _>>()?
-        };
-        let legacy_definition_ids = {
-            let mut statement = transaction.prepare(
-                "SELECT DISTINCT m.legacy_id FROM fixture_profile_legacy_map m JOIN fixture_profiles p ON p.id=m.profile_id AND p.revision=m.profile_revision WHERE p.reserved_source IN (?1,?2)",
-            )?;
-            statement
-                .query_map(
-                    params![LEGACY_GENERIC_CATALOG_SOURCE, LEGACY_VENDOR_CATALOG_SOURCE],
-                    |row| row.get::<_, String>(0),
-                )?
-                .collect::<Result<Vec<_>, _>>()?
-        };
-        for profile_id in owned_profile_ids {
-            transaction.execute(
-                "DELETE FROM fixture_profile_sources WHERE profile_id=?1",
-                [&profile_id],
-            )?;
-            transaction.execute(
-                "DELETE FROM fixture_profile_legacy_sources WHERE profile_id=?1",
-                [&profile_id],
-            )?;
-            transaction.execute(
-                "DELETE FROM fixture_profile_legacy_map WHERE profile_id=?1",
-                [&profile_id],
-            )?;
-            transaction.execute("DELETE FROM fixture_profiles WHERE id=?1", [&profile_id])?;
-        }
-        for legacy_id in legacy_definition_ids {
-            transaction.execute(
-                "DELETE FROM fixture_profile_migration_failures WHERE legacy_id=?1",
-                [&legacy_id],
-            )?;
-            transaction.execute("DELETE FROM fixture_definitions WHERE id=?1", [&legacy_id])?;
-        }
-        transaction.execute(
-            "DELETE FROM library_metadata WHERE key IN ('generic_catalog_version','generic_catalog_profile_count','vendor_catalog_version','vendor_catalog_profile_count')",
-            [],
-        )?;
-        transaction.commit()?;
-        Ok(())
     }
 }

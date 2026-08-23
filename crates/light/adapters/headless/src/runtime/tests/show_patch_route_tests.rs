@@ -479,7 +479,8 @@ async fn appearance_and_static_geometry_updates_leave_programmer_and_output_valu
             "metadata update {index} changed DMX"
         );
         assert_eq!(
-            output.resolved_values, baseline_output.resolved_values,
+            output.resolved_values.values(),
+            baseline_output.resolved_values.values(),
             "metadata update {index} changed resolved output"
         );
         assert_eq!(

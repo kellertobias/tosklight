@@ -16,7 +16,7 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
     let shutter = mode
         .channels
         .iter()
-        .find(|channel| channel.attribute.0 == "shutter")
+        .find(|channel| *channel.attribute.0 == *"shutter")
         .unwrap();
     let intensity = mode
         .channels
@@ -854,7 +854,7 @@ fn virtual_dimmer_intensity_multiplies_reacting_channels_one_way() {
     let red = stored
         .values
         .iter()
-        .find(|value| value.attribute.0 == "color.red")
+        .find(|value| *value.attribute.0 == *"color.red")
         .unwrap();
     assert_eq!(red.value, AttributeValue::Normalized(0.8));
 }

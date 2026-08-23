@@ -324,7 +324,7 @@ fn execute_fix_at_command(
         {
             (
                 address,
-                Some(light_core::AttributeKey(attribute.to_lowercase())),
+                Some(light_core::AttributeKey(attribute.to_lowercase().into())),
             )
         }
         _ => (before_fix_at, None),

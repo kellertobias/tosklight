@@ -64,7 +64,7 @@ fn embedded_jbled_a7_revision_one_uses_safe_open_shutter_runtime_compatibility()
     let shutter = mode
         .channels
         .iter_mut()
-        .find(|channel| channel.attribute.0 == "shutter")
+        .find(|channel| *channel.attribute.0 == *"shutter")
         .unwrap();
     shutter.default_raw = 0;
     shutter.functions = vec![ChannelFunction::continuous(
@@ -95,7 +95,7 @@ fn embedded_jbled_a7_revision_one_uses_safe_open_shutter_runtime_compatibility()
     let shutter = snapshot.modes[0]
         .channels
         .iter()
-        .find(|channel| channel.attribute.0 == "shutter")
+        .find(|channel| *channel.attribute.0 == *"shutter")
         .unwrap();
     assert_eq!(shutter.default_raw, 16);
     assert_eq!(shutter.functions.len(), 23);

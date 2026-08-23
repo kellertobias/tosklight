@@ -288,7 +288,7 @@ impl FreezeFamily {
             Self::Intensity => attribute.is_intensity() || class == AttributeClass::Intensity,
             Self::Color => {
                 class == AttributeClass::Color
-                    || attribute.0 == "color"
+                    || *attribute.0 == *"color"
                     || attribute.0.starts_with("color.")
                     || attribute.0.contains(".color.")
             }

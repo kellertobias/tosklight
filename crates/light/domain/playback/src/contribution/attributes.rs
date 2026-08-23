@@ -12,7 +12,11 @@ impl ContributionContext<'_> {
         snap_sequence_master: f32,
     ) {
         values.extend(hold.contributions.iter().cloned().map(|value| {
-            let sequence_master = if (self.is_snap)(value.fixture_id, &value.attribute) {
+            let snaps = match self.is_snap {
+                Some(is_snap) => is_snap(value.fixture_id, &value.attribute),
+                None => crate::attribute_uses_snap_transition(&value.attribute),
+            };
+            let sequence_master = if snaps {
                 snap_sequence_master
             } else {
                 sequence_master
@@ -60,10 +64,14 @@ impl ContributionContext<'_> {
         }
         let fixture_id = attribute.fixture_id();
         let key = attribute.attribute();
-        let snap = (self.is_snap)(fixture_id, key);
-        let progress = progress(
+        // The compiled cue already knows; a caller only overrides it deliberately.
+        let snap = match self.is_snap {
+            Some(is_snap) => is_snap(fixture_id, key),
+            None => attribute.uses_snap_transition(),
+        };
+        let progress = progress_for(
             frame,
-            key,
+            attribute.is_intensity(),
             previous,
             target,
             attribute.timing(frame.target_index),
@@ -89,7 +97,10 @@ impl ContributionContext<'_> {
         attribute: &AttributeKey,
         previous: &AttributeValue,
     ) {
-        let snap = (self.is_snap)(fixture_id, attribute);
+        let snap = match self.is_snap {
+            Some(is_snap) => is_snap(fixture_id, attribute),
+            None => crate::attribute_uses_snap_transition(attribute),
+        };
         let progress = progress(frame, attribute, Some(previous), None, None, snap);
         let Some(value) = interpolate(Some(previous), None, progress) else {
             return;
@@ -112,7 +123,31 @@ fn progress(
     timing: Option<(Option<u64>, Option<u64>)>,
     snap: bool,
 ) -> f32 {
-    let outgoing_intensity = is_outgoing_intensity(attribute, previous, target);
+    progress_for(
+        frame,
+        attribute.is_intensity(),
+        previous,
+        target,
+        timing,
+        snap,
+    )
+}
+
+/// The same question with the intensity test already answered, for callers holding a compiled
+/// attribute that settled it when the cue list compiled.
+fn progress_for(
+    frame: &PlaybackFrame<'_>,
+    is_intensity: bool,
+    previous: Option<&AttributeValue>,
+    target: Option<&AttributeValue>,
+    timing: Option<(Option<u64>, Option<u64>)>,
+    snap: bool,
+) -> f32 {
+    let outgoing_intensity = is_intensity && {
+        let previous = previous.and_then(AttributeValue::normalized).unwrap_or(0.0);
+        let target = target.and_then(AttributeValue::normalized).unwrap_or(0.0);
+        target < previous
+    };
     let (fade_millis, delay_millis) = effective_timing(frame, timing, outgoing_intensity);
     if frame.playback.manual_xfade_from_index.is_some() {
         return if snap {

@@ -61,7 +61,7 @@ impl FixtureMode {
     /// It is channel-specific because one action may drive several channels that otherwise expose
     /// the same public attribute.
     pub fn control_action_attribute(channel_id: Uuid) -> AttributeKey {
-        AttributeKey(format!("__fixture_control_channel.{channel_id}"))
+        AttributeKey(format!("__fixture_control_channel.{channel_id}").into())
     }
 
     /// Resolve one physical channel after normal semantic LTP/HTP resolution. Competing

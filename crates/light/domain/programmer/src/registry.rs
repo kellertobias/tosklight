@@ -203,19 +203,21 @@ impl ProgrammerRegistry {
             return Some(false);
         }
         state.priority = priority;
-        for value in state
-            .values
-            .iter_mut()
-            .chain(&mut state.preload_pending)
-            .chain(&mut state.preload_active)
-            .chain(
-                state
-                    .transient_values
-                    .iter_mut()
-                    .flat_map(|action| action.values.iter_mut()),
-            )
-        {
+        // Each of these is its own shared buffer, so they are restamped one at a time rather
+        // than through one chained borrow of the whole state.
+        for value in Arc::make_mut(&mut state.values).iter_mut() {
             value.priority = priority;
+        }
+        for value in state.preload_pending.iter_mut() {
+            value.priority = priority;
+        }
+        for value in Arc::make_mut(&mut state.preload_active).iter_mut() {
+            value.priority = priority;
+        }
+        for action in Arc::make_mut(&mut state.transient_values).iter_mut() {
+            for value in action.values.iter_mut() {
+                value.priority = priority;
+            }
         }
         let changed_at = self.clock.now();
         state.last_activity = changed_at;
@@ -456,9 +458,9 @@ impl ProgrammerRegistry {
             || !state.group_values.is_empty()
             || !state.dynamic_values.is_empty();
         state.checkpoint();
-        state.values.clear();
-        state.transient_values.clear();
-        state.group_values.clear();
+        Arc::make_mut(&mut state.values).clear();
+        Arc::make_mut(&mut state.transient_values).clear();
+        Arc::make_mut(&mut state.group_values).clear();
         Arc::make_mut(&mut state.dynamic_values).clear();
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
@@ -521,14 +523,16 @@ impl ProgrammerRegistry {
         self.states
             .read()
             .values()
+            // Reference counts, not copies. A render reads this every frame and the operator's
+            // programming can be the whole show.
             .map(|state| ProgrammerOutputState {
                 id: state.id,
                 priority: state.priority,
-                values: state.values.clone(),
-                transient_values: state.transient_values.clone(),
-                group_values: state.group_values.clone(),
-                preload_active: state.preload_active.clone(),
-                preload_group_active: state.preload_group_active.clone(),
+                values: Arc::clone(&state.values),
+                transient_values: Arc::clone(&state.transient_values),
+                group_values: Arc::clone(&state.group_values),
+                preload_active: Arc::clone(&state.preload_active),
+                preload_group_active: Arc::clone(&state.preload_group_active),
             })
             .collect()
     }

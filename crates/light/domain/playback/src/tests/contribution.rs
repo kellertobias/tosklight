@@ -80,7 +80,7 @@ fn move_in_black_looks_through_dark_cues_and_uses_future_position_timing() {
         1,
         "only Position-family values move early"
     );
-    assert_eq!(candidate.values[0].attribute.0, "pan");
+    assert_eq!(&*candidate.values[0].attribute.0, "pan");
     assert_eq!(candidate.values[0].current, AttributeValue::Normalized(0.2));
     assert_eq!(candidate.values[0].target, AttributeValue::Normalized(0.8));
     assert_eq!(candidate.values[0].fade_millis, 3_000);
@@ -131,7 +131,7 @@ fn snap_attributes_bypass_cue_crossfades() {
     let halfway = started + ChronoDuration::milliseconds(500);
     clock.set(halfway);
     let values =
-        resolve(engine.contributions_at_with_snap(halfway, |_, attribute| attribute.0 == "pan"));
+        resolve(engine.contributions_at_with_snap(halfway, |_, attribute| *attribute.0 == *"pan"));
     assert_eq!(
         values[&(fixture, AttributeKey("pan".into()))],
         AttributeValue::Normalized(1.0)

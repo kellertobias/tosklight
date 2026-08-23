@@ -5,7 +5,7 @@
 //! that. The name remains what is written to disk, sent over the wire, and shown to an operator;
 //! the number never leaves the process.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use super::configuration::{custom_descriptor, resolved_descriptor};
 use super::{ATTRIBUTE_REGISTRY, AttributeDescriptor, AttributeKey, ResolvedAttributeDescriptor};
@@ -21,6 +21,12 @@ pub struct AttributeId(u32);
 impl AttributeId {
     /// The position this id addresses. Only the owning table should need this.
     fn index(self) -> usize {
+        self.0 as usize
+    }
+
+    /// This id's place in its table's numbering, for callers that address a parallel array by
+    /// attribute rather than asking the table for an entry. Meaningless against any other table.
+    pub fn ordinal(self) -> usize {
         self.0 as usize
     }
 }
@@ -69,7 +75,10 @@ impl AttributeEntry {
 #[derive(Clone, Debug, Default)]
 pub struct AttributeTable {
     entries: Vec<AttributeEntry>,
-    ids: HashMap<AttributeKey, AttributeId>,
+    /// A frame asks this map once per contribution and once per channel read, and the keys are
+    /// attribute names the desk itself made. The default hasher answered those in SipHash, which
+    /// the profile showed above every other leaf in a render.
+    ids: FxHashMap<AttributeKey, AttributeId>,
 }
 
 impl AttributeTable {
@@ -83,7 +92,7 @@ impl AttributeTable {
     pub fn with_built_ins() -> Self {
         let mut table = Self::new();
         for descriptor in ATTRIBUTE_REGISTRY {
-            table.intern(&AttributeKey(descriptor.id.to_owned()));
+            table.intern(&AttributeKey(descriptor.id.into()));
         }
         table
     }
@@ -101,7 +110,7 @@ impl AttributeTable {
             key: key.clone(),
             built_in: ATTRIBUTE_REGISTRY
                 .iter()
-                .find(|descriptor| descriptor.id == key.0),
+                .find(|descriptor| descriptor.id == &*key.0),
             is_intensity: key.is_intensity(),
             is_position: key.is_position(),
         });
@@ -149,7 +158,7 @@ mod tests {
     use super::*;
 
     fn key(name: &str) -> AttributeKey {
-        AttributeKey(name.to_owned())
+        AttributeKey(name.into())
     }
 
     #[test]

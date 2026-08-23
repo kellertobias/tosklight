@@ -133,8 +133,8 @@ impl ProgrammerRegistry {
             )
         } else {
             (
-                &state.values,
-                &state.group_values,
+                state.values.as_ref(),
+                state.group_values.as_ref(),
                 &state.group_release_values,
                 state.dynamic_values.as_ref(),
             )
@@ -172,8 +172,8 @@ impl ProgrammerRegistry {
             )
         } else {
             (
-                &mut state.values,
-                &mut state.group_values,
+                Arc::make_mut(&mut state.values),
+                Arc::make_mut(&mut state.group_values),
                 &mut state.group_release_values,
                 Arc::make_mut(&mut state.dynamic_values),
             )

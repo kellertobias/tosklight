@@ -37,6 +37,12 @@ either way. Mixed referenced mappings use visible source order until the Group r
 mapping. There is no general Layout pane or selection grid: edit fixture positions in Stage, Group
 ordering here, and a Dynamic-only override in that Dynamic's **Projection** tab.
 
+A value programmed on a Group reaches every member that can hold it. A member without that
+attribute is left alone rather than given a value it has no channel for: a colour set on a Group of
+washes and profiles reaches the washes, and the profiles keep whatever they already had. Output and
+the Fixture Sheet are unchanged either way, because neither has ever shown an attribute a fixture
+does not have.
+
 Group settings never contain a master. To create a Group Master, press `[SET]`, choose the explicit
 Group, then press the destination physical or Virtual Playback. Every Playback targeting the same
 Group controls one shared master; Playbacks targeting different Groups remain independent HTP

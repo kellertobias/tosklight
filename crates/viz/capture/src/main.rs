@@ -341,7 +341,7 @@ fn apply_gobo_prism_demo(
         let shutter = mode
             .channels
             .iter()
-            .find(|channel| channel.attribute.0 == "shutter")
+            .find(|channel| *channel.attribute.0 == *"shutter")
             .ok_or_else(|| format!("{name} mode has no shutter"))?;
         let shutter_offset = *primary
             .get(&shutter.id)
@@ -357,7 +357,7 @@ fn apply_gobo_prism_demo(
                 let channel = mode
                     .channels
                     .iter()
-                    .find(|channel| channel.attribute.0 == attribute)
+                    .find(|channel| &*channel.attribute.0 == attribute)
                     .ok_or_else(|| format!("{name} mode has no {attribute}"))?;
                 let offset = *primary
                     .get(&channel.id)

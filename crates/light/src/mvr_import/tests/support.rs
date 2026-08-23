@@ -236,7 +236,30 @@ impl Drop for Rig {
     }
 }
 
+/// An MVR fixture as its file describes it: a flat parameter layout, turned into a profile the way
+/// the importer does before the desk ever sees it.
 pub fn fixture_definition(footprint: u16) -> FixtureDefinition {
+    described_fixture(footprint)
+        .resolved_from_flat_layout()
+        .expect("a described MVR fixture resolves")
+}
+
+/// The same fixture under another maker's name. The identity has to be set before the profile is
+/// built, because the profile snapshot is what the desk reads it back from.
+pub fn fixture_definition_from(
+    footprint: u16,
+    id: FixtureId,
+    manufacturer: &str,
+) -> FixtureDefinition {
+    let mut described = described_fixture(footprint);
+    described.id = id;
+    described.manufacturer = manufacturer.into();
+    described
+        .resolved_from_flat_layout()
+        .expect("a described MVR fixture resolves")
+}
+
+fn described_fixture(footprint: u16) -> FixtureDefinition {
     FixtureDefinition {
         schema_version: 1,
         id: FixtureId(Uuid::from_u128(800)),

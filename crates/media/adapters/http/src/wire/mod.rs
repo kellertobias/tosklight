@@ -15,11 +15,11 @@
 mod audio;
 mod catalog;
 mod dmx;
+mod effect;
 mod health;
 mod library;
 mod logs;
 mod network;
-mod effect;
 mod output;
 mod text;
 mod time;
@@ -34,6 +34,7 @@ pub use dmx::{
     DmxChannelGroupView, DmxChannelView, DmxIngressView, DmxMapView, DmxPersonalityView,
     DmxResolutionView, DmxValueSetView,
 };
+pub use effect::{EffectParameterView, EffectSlotView};
 pub use health::{AddressView, Health, RunningOutputView, RunningServerView, SourceStatusView};
 pub use library::{
     FolderPresentationView, FolderPresentationsView, ImportJobView, ImportsView, PendingImportView,
@@ -42,11 +43,10 @@ pub use library::{
 };
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
-pub use effect::{EffectParameterView, EffectSlotView};
 pub use output::{
-    AvailableMonitorView, LayerView, MaskView, MasterView,
-    OutputConfigurationEditError, OutputConfigurationValuesView, OutputConfigurationView,
-    OutputView, UpdateLayer, UpdateMaster, UpdateOutputConfiguration,
+    AvailableMonitorView, LayerView, MaskView, MasterView, OutputConfigurationEditError,
+    OutputConfigurationValuesView, OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
+    UpdateOutputConfiguration,
 };
 pub use text::{
     CreateText, DeleteText, TextEditError, TextFormatView, TextSlotView, TextStyleView, UpdateText,

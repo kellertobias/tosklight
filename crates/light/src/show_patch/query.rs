@@ -47,7 +47,7 @@ fn decode_fixture(
     insert_profile(
         document,
         record.body(),
-        record.is_legacy_inline(),
+        record.is_inline(),
         profile,
         profiles,
     )?;

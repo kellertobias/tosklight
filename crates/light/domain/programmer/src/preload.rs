@@ -84,11 +84,11 @@ impl ProgrammerRegistry {
                     incoming.fade = true;
                     incoming.fade_millis = Some(fade_millis);
                 }
-                state.preload_active.retain(|value| {
+                Arc::make_mut(&mut state.preload_active).retain(|value| {
                     !(value.fixture_id == incoming.fixture_id
                         && value.attribute == incoming.attribute)
                 });
-                state.preload_active.push(incoming);
+                Arc::make_mut(&mut state.preload_active).push(incoming);
             }
             for (group, mut attributes) in std::mem::take(&mut state.preload_group_pending) {
                 for value in attributes.values_mut() {
@@ -98,8 +98,7 @@ impl ProgrammerRegistry {
                         value.fade_millis = Some(fade_millis);
                     }
                 }
-                state
-                    .preload_group_active
+                Arc::make_mut(&mut state.preload_group_active)
                     .entry(group)
                     .or_default()
                     .extend(attributes);
@@ -273,11 +272,11 @@ impl ProgrammerRegistry {
         }
         state.checkpoint();
         state.preload_pending.clear();
-        state.preload_active.clear();
+        Arc::make_mut(&mut state.preload_active).clear();
         Arc::make_mut(&mut state.preload_dynamic_pending).clear();
         Arc::make_mut(&mut state.preload_dynamic_active).clear();
         state.preload_group_pending.clear();
-        state.preload_group_active.clear();
+        Arc::make_mut(&mut state.preload_group_active).clear();
         state.preload_group_release_pending.clear();
         state.preload_group_release_active.clear();
         state.preload_playback_pending.clear();

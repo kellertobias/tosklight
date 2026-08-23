@@ -49,7 +49,7 @@ pub(crate) fn programmers_need_underlay(programmers: &[ProgrammerOutputState]) -
                     .iter()
                     .flat_map(|action| &action.values),
             )
-            .chain(&programmer.preload_active)
+            .chain(programmer.preload_active.iter())
             .any(|value| value.fade)
             || programmer
                 .group_values
@@ -123,16 +123,16 @@ impl Engine {
             has_replacements,
             active_transition_keys: RefCell::new(HashSet::new()),
         };
-        let mut contributions = resolver.fixture_values(values, ProgrammerValueSource::Live);
-        for action in transient_values {
+        let mut contributions = resolver.fixture_values(&values, ProgrammerValueSource::Live);
+        for action in transient_values.iter() {
             contributions.extend(resolver.fixture_values(
-                action.values,
+                &action.values,
                 ProgrammerValueSource::Transient(&action.source),
             ));
         }
         contributions
-            .extend(resolver.fixture_values(preload_active, ProgrammerValueSource::Preload));
-        contributions.extend(resolver.group_values(group_values, preload_group_active));
+            .extend(resolver.fixture_values(&preload_active, ProgrammerValueSource::Preload));
+        contributions.extend(resolver.group_values(&group_values, &preload_group_active));
         let active_transition_keys = resolver.active_transition_keys.into_inner();
         self.programmer_transitions
             .lock()
@@ -149,7 +149,7 @@ impl Engine {
         programmer_id: ProgrammerId,
         source: ProgrammerTransitionSource,
     ) -> TimedValue {
-        let group_color_underlay = (value.attribute.0 == "color")
+        let group_color_underlay = (*value.attribute.0 == *"color")
             .then(|| self.group_color_for_fixture(generation, value.fixture_id))
             .flatten()
             .map(|(value, _)| value);
@@ -164,36 +164,38 @@ impl Engine {
 }
 
 impl ProgrammerValueResolver<'_> {
+    /// Borrowed rather than owned: the Programmer's stored values are shared with every other
+    /// reader, so a value is copied here only if it survives to contribute.
     fn fixture_values(
         &self,
-        values: Vec<TimedValue>,
+        values: &[TimedValue],
         source: ProgrammerValueSource<'_>,
     ) -> Vec<TimedValue> {
         let context = self.source_context(source);
         values
-            .into_iter()
-            .filter_map(|value| self.resolve_value(value, &context))
+            .iter()
+            .filter_map(|value| self.resolve_value(value.clone(), &context))
             .collect()
     }
 
     fn group_values(
         &self,
-        group_values: GroupValues,
-        preload_values: GroupValues,
+        group_values: &GroupValues,
+        preload_values: &GroupValues,
     ) -> Vec<TimedValue> {
         let mut resolved = Vec::new();
         for (group_id, attributes) in group_values {
             resolved.extend(self.one_group(
-                &group_id,
+                group_id,
                 attributes,
-                ProgrammerValueSource::Group(&group_id),
+                ProgrammerValueSource::Group(group_id),
             ));
         }
         for (group_id, attributes) in preload_values {
             resolved.extend(self.one_group(
-                &group_id,
+                group_id,
                 attributes,
-                ProgrammerValueSource::PreloadGroup(&group_id),
+                ProgrammerValueSource::PreloadGroup(group_id),
             ));
         }
         resolved
@@ -202,7 +204,7 @@ impl ProgrammerValueResolver<'_> {
     fn one_group(
         &self,
         group_id: &str,
-        attributes: GroupAttributes,
+        attributes: &GroupAttributes,
         source: ProgrammerValueSource<'_>,
     ) -> Vec<TimedValue> {
         let Some(ranking) = self.generation.group_ranking(group_id) else {
@@ -323,7 +325,10 @@ fn supersedes(value: &TimedValue, current: &TimedValue) -> bool {
 }
 
 fn programmer_winners(values: Vec<TimedValue>) -> Vec<TimedValue> {
-    let mut winners = HashMap::new();
+    // Rebuilt every frame from the operator's live edits, so it is sized for what it is about to
+    // hold rather than regrown as it fills, and hashed with the desk's hasher rather than SipHash.
+    let mut winners =
+        rustc_hash::FxHashMap::with_capacity_and_hasher(values.len(), rustc_hash::FxBuildHasher);
     for value in values {
         let key = (value.fixture_id, value.attribute.clone());
         let replace = winners

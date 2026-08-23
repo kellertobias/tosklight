@@ -25,6 +25,12 @@ pub(crate) struct RuntimeGeneration {
     group_masters: Arc<GroupMasterIndex>,
     profile_encodings: Arc<ProfileEncodingIndex>,
     profile_projections: Arc<ProfileProjectionIndex>,
+    /// The fixed shape of every frame this generation renders.
+    slots: Arc<crate::SlotTable>,
+    /// Where this generation's frame buffers wait between frames.
+    frames: Arc<crate::FramePool>,
+    /// Where each channel of each head reads its attributes from.
+    channel_slots: Arc<crate::ChannelSlotIndex>,
 }
 
 #[derive(Clone, Copy)]
@@ -47,6 +53,15 @@ impl RuntimeGeneration {
         let default_values = compile_default_values(&snapshot);
         let group_rankings = compile_group_rankings(&groups, &snapshot);
         let group_masters = GroupMasterIndex::compile(&groups, &snapshot, None);
+        let slots = Arc::new(crate::SlotTable::compile(
+            crate::next_generation(),
+            &snapshot.fixtures,
+        ));
+        let frames = Arc::new(crate::FramePool::for_generation(
+            slots.generation(),
+            slots.len(),
+        ));
+        let channel_slots = Arc::new(crate::ChannelSlotIndex::compile(&snapshot.fixtures, &slots));
         Self {
             snapshot: Arc::new(snapshot),
             playback,
@@ -58,6 +73,9 @@ impl RuntimeGeneration {
             group_masters: Arc::new(group_masters),
             profile_encodings,
             profile_projections,
+            slots,
+            frames,
+            channel_slots,
         }
     }
 
@@ -107,6 +125,25 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.group_masters)
         };
+        let (slots, frames, channel_slots) = if fixtures_changed {
+            let slots = Arc::new(crate::SlotTable::compile(
+                crate::next_generation(),
+                &snapshot.fixtures,
+            ));
+            let frames = Arc::new(crate::FramePool::for_generation(
+                slots.generation(),
+                slots.len(),
+            ));
+            let channel_slots =
+                Arc::new(crate::ChannelSlotIndex::compile(&snapshot.fixtures, &slots));
+            (slots, frames, channel_slots)
+        } else {
+            (
+                Arc::clone(&current.slots),
+                Arc::clone(&current.frames),
+                Arc::clone(&current.channel_slots),
+            )
+        };
         let group_rankings = if groups_changed || stage_positions_changed {
             Arc::new(compile_group_rankings(&groups, &snapshot))
         } else {
@@ -123,6 +160,9 @@ impl RuntimeGeneration {
             group_masters,
             profile_encodings,
             profile_projections,
+            slots,
+            frames,
+            channel_slots,
         }
     }
 
@@ -149,9 +189,27 @@ impl RuntimeGeneration {
                 group_masters: Arc::new(group_masters),
                 profile_encodings: Arc::clone(&current.profile_encodings),
                 profile_projections: Arc::clone(&current.profile_projections),
+                slots: Arc::clone(&current.slots),
+                frames: Arc::clone(&current.frames),
+                channel_slots: Arc::clone(&current.channel_slots),
             }),
             GroupMasterGenerationUpdate::Changed,
         )
+    }
+
+    /// The slot numbering every frame of this generation is addressed by.
+    pub(crate) fn slots(&self) -> &Arc<crate::SlotTable> {
+        &self.slots
+    }
+
+    /// Where each channel of each head reads its attributes from.
+    pub(crate) fn channel_slots(&self) -> &crate::ChannelSlotIndex {
+        &self.channel_slots
+    }
+
+    /// This generation's frame buffers.
+    pub(crate) fn frames(&self) -> &Arc<crate::FramePool> {
+        &self.frames
     }
 
     pub(crate) fn snapshot(&self) -> &EngineSnapshot {
@@ -363,6 +421,10 @@ impl GroupMasterIndex {
     }
 
     pub(crate) fn scale(&self, fixture_id: FixtureId, flashes: &HashMap<String, f32>) -> f32 {
+        // A show with no Group Master assigned asks this for every head of every frame.
+        if self.fixtures.is_empty() {
+            return 1.0;
+        }
         self.fixtures
             .get(&fixture_id)
             .into_iter()

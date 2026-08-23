@@ -541,11 +541,11 @@ fn startup_migrates_legacy_patch_to_lean_once_and_reopens_at_the_relocated_addre
         .body()
         .clone();
     let record = light_fixture::PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
-    assert!(!record.is_legacy_inline());
+    assert!(!record.is_inline());
     assert!(body.get("definition").is_none());
     assert_eq!(body["future_fixture"], serde_json::json!({"kept": [3, 1, 2]}));
     assert!(
-        body[light_fixture::RETAINED_LEGACY_DEFINITION_FIELDS]
+        body[light_fixture::RETAINED_DEFINITION_FIELDS]
             .as_array()
             .unwrap()
             .iter()

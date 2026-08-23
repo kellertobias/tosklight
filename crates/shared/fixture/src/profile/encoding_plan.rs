@@ -11,6 +11,11 @@ const MAX_CHANNEL_COMPONENTS: usize = 4;
 /// the mode's already-validated component slots.
 #[derive(Clone, Debug)]
 pub struct FixtureModeEncodingPlan {
+    /// One entry per channel of the mode, in the mode's own order.
+    ///
+    /// A resolved channel arrives knowing which channel of the mode it is, so it is found by that
+    /// position rather than by hashing its identity — twice, as validation and writing each did.
+    ordered: Box<[CompiledChannelEncoding]>,
     channels: HashMap<Uuid, CompiledChannelEncoding>,
     split_footprints: HashMap<u16, u16>,
 }
@@ -43,7 +48,13 @@ impl FixtureMode {
                 },
             );
         }
+        let ordered = self
+            .channels
+            .iter()
+            .map(|channel| channels[&channel.id])
+            .collect();
         Ok(FixtureModeEncodingPlan {
+            ordered,
             channels,
             split_footprints: self
                 .splits
@@ -78,6 +89,52 @@ impl FixtureModeEncodingPlan {
             }
         }
         Ok(())
+    }
+
+    /// Encode resolved channels that already know their place in the mode.
+    ///
+    /// The same checked batch as [`Self::encode_split`], without hashing a channel's identity to
+    /// find where its bytes go.
+    pub fn encode_split_by_index(
+        &self,
+        frame: &mut [u8; 512],
+        base: u16,
+        split: u16,
+        values: &[(u32, u32)],
+    ) -> Result<(), ProfileError> {
+        let start = self.validate_indexed_batch(frame.len(), base, split, values)?;
+        for &(index, raw) in values {
+            let encoding = self.ordered[index as usize];
+            if encoding.split == split {
+                encoding.write(frame, start, raw);
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_indexed_batch(
+        &self,
+        frame_len: usize,
+        base: u16,
+        split: u16,
+        values: &[(u32, u32)],
+    ) -> Result<usize, ProfileError> {
+        let mut start = None;
+        for &(index, _) in values {
+            let encoding = self.ordered.get(index as usize).ok_or_else(|| {
+                ProfileError::Invalid("resolved channel is not part of this mode".into())
+            })?;
+            if encoding.split != split {
+                continue;
+            }
+            let frame_start = *start.get_or_insert_with(|| usize::from(base.saturating_sub(1)));
+            if base == 0 || !encoding.fits(frame_start, frame_len) {
+                return Err(ProfileError::Invalid(
+                    "encoded channel exceeds its universe".into(),
+                ));
+            }
+        }
+        Ok(start.unwrap_or(0))
     }
 
     pub fn split_footprint(&self, split: u16) -> Option<u16> {

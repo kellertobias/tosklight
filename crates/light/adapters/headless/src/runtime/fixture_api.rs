@@ -440,7 +440,7 @@ fn validate_source_mapping_target(state: &AppState, target: &str) -> Result<(), 
         .configuration
         .custom_attributes
         .iter()
-        .find(|descriptor| descriptor.id.0 == target)
+        .find(|descriptor| &*descriptor.id.0 == target)
         .ok_or_else(|| {
             ApiError::bad_request(format!(
                 "source mapping target `{target}` is not configured"
@@ -711,7 +711,7 @@ fn unknown_canonical_attributes(
         .configuration
         .custom_attributes
         .iter()
-        .map(|descriptor| descriptor.id.0.as_str())
+        .map(|descriptor| &*descriptor.id.0)
         .collect::<HashSet<_>>();
     let is_unknown = |attribute: &str| {
         !light_core::ATTRIBUTE_REGISTRY.iter().any(|descriptor| {
@@ -722,7 +722,7 @@ fn unknown_canonical_attributes(
     for channel in profile.modes.iter().flat_map(|mode| &mode.channels) {
         if is_unknown(&channel.attribute.0) {
             unknown
-                .entry(channel.attribute.0.clone())
+                .entry(channel.attribute.0.to_string())
                 .or_insert(light_core::AttributeValueType::Continuous);
         }
         for function in &channel.functions {
@@ -742,7 +742,7 @@ fn unknown_canonical_attributes(
                 }
             };
             unknown
-                .entry(function.attribute.0.clone())
+                .entry(function.attribute.0.to_string())
                 .and_modify(|current| {
                     if import_value_type_rank(value_type) > import_value_type_rank(*current) {
                         *current = value_type;
@@ -807,7 +807,7 @@ fn apply_fixture_attribute_mappings(
             .iter()
             .map(|descriptor| {
                 (
-                    descriptor.id.0.as_str(),
+                    &*descriptor.id.0,
                     (
                         descriptor.value_type,
                         descriptor.lifecycle == light_core::CustomAttributeLifecycle::Retired,
@@ -870,12 +870,12 @@ fn apply_fixture_attribute_mappings(
     }
     drop(installed);
     for channel in profile.modes.iter_mut().flat_map(|mode| &mut mode.channels) {
-        if let Some(target) = resolved.get(&channel.attribute.0) {
-            channel.attribute = light_core::AttributeKey(target.clone());
+        if let Some(target) = resolved.get(&*channel.attribute.0) {
+            channel.attribute = light_core::AttributeKey(target.as_str().into());
         }
         for function in &mut channel.functions {
-            if let Some(target) = resolved.get(&function.attribute.0) {
-                function.attribute = light_core::AttributeKey(target.clone());
+            if let Some(target) = resolved.get(&*function.attribute.0) {
+                function.attribute = light_core::AttributeKey(target.as_str().into());
             }
         }
     }

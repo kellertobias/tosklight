@@ -264,7 +264,7 @@ fn shipped_jbled_a7_uses_the_documented_safe_shutter_table_in_every_mode() {
         let shutter = mode
             .channels
             .iter()
-            .find(|channel| channel.attribute.0 == "shutter")
+            .find(|channel| *channel.attribute.0 == *"shutter")
             .unwrap();
         assert_eq!(shutter.default_raw, 16, "{} shutter home", mode.name);
         assert_eq!(shutter.highlight_raw, 255, "{} Highlight", mode.name);
@@ -361,7 +361,7 @@ fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
     assert_eq!(
         mode.channels
             .iter()
-            .map(|channel| channel.attribute.0.as_str())
+            .map(|channel| &*channel.attribute.0)
             .collect::<Vec<_>>(),
         ["media.folder", "media.file", "media.play_mode", "volume",]
     );
@@ -371,7 +371,7 @@ fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
     assert_eq!(
         mode.channels
             .iter()
-            .map(|channel| channel.fixture_attribute.0.as_str())
+            .map(|channel| &*channel.fixture_attribute.0)
             .collect::<Vec<_>>(),
         [
             "audio.folder",
@@ -383,7 +383,7 @@ fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
     assert_eq!(
         mode.channels
             .iter()
-            .map(|channel| (channel.attribute.0.as_str(), channel.default_raw))
+            .map(|channel| (&*channel.attribute.0, channel.default_raw))
             .collect::<Vec<_>>(),
         [
             ("media.folder", 0),
@@ -403,7 +403,7 @@ fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
         &mode
             .channels
             .iter()
-            .find(|channel| channel.attribute.0 == "media.play_mode")
+            .find(|channel| *channel.attribute.0 == *"media.play_mode")
             .expect("the Audio Player carries a play mode")
             .functions,
     );
@@ -487,11 +487,11 @@ fn assert_moving_lamp_geometry(filename: &str) {
             && mode.geometry.nodes[1]
                 .motion
                 .as_ref()
-                .is_some_and(|motion| motion.attribute.0 == "pan")
+                .is_some_and(|motion| *motion.attribute.0 == *"pan")
             && mode.geometry.nodes[2]
                 .motion
                 .as_ref()
-                .is_some_and(|motion| motion.attribute.0 == "tilt")
+                .is_some_and(|motion| *motion.attribute.0 == *"tilt")
             && mode.geometry.nodes[2].transform.translation.y < 0.0
             && mode.geometry.emitters.len() == 1
             && mode.geometry.emitters[0].node_id == mode.geometry.nodes[2].id
@@ -518,7 +518,7 @@ fn robe_dls_profile_exposes_canonical_framing_controls() {
         let rotation = mode
             .channels
             .iter()
-            .find(|channel| channel.attribute.0 == "shaper.rotation")
+            .find(|channel| *channel.attribute.0 == *"shaper.rotation")
             .unwrap();
         assert_eq!(rotation.fixture_attribute, rotation.attribute);
         assert_eq!(rotation.default_raw, 128);
@@ -533,7 +533,7 @@ fn robe_dls_profile_exposes_canonical_framing_controls() {
             let position = mode
                 .channels
                 .iter()
-                .find(|channel| channel.attribute.0 == position_attribute)
+                .find(|channel| &*channel.attribute.0 == position_attribute)
                 .unwrap();
             assert_eq!(position.fixture_attribute, position.attribute);
             assert_eq!(position.default_raw, 0);
@@ -547,7 +547,7 @@ fn robe_dls_profile_exposes_canonical_framing_controls() {
             let angle = mode
                 .channels
                 .iter()
-                .find(|channel| channel.attribute.0 == angle_attribute)
+                .find(|channel| &*channel.attribute.0 == angle_attribute)
                 .unwrap();
             assert_eq!(angle.fixture_attribute, angle.attribute);
             assert_eq!(angle.default_raw, 128);
@@ -561,7 +561,7 @@ fn robe_dls_profile_exposes_canonical_framing_controls() {
         let shutter = mode
             .channels
             .iter()
-            .find(|channel| channel.attribute.0 == "shutter")
+            .find(|channel| *channel.attribute.0 == *"shutter")
             .expect("the independent shutter/strobe channel remains canonical Shutter / Strobe");
         assert_eq!(shutter.default_raw, 32);
         assert_eq!(shutter.highlight_raw, 32);
@@ -757,14 +757,14 @@ fn shipped_generic_cmy_retains_fixture_identity_and_maps_into_canonical_rgb() {
     assert_eq!(profile.modes.len(), 18);
     for mode in &profile.modes {
         for channel in &mode.channels {
-            let expected = match channel.fixture_attribute.0.as_str() {
+            let expected = match &*channel.fixture_attribute.0 {
                 "color.cyan" => Some("color.red"),
                 "color.magenta" => Some("color.green"),
                 "color.yellow" => Some("color.blue"),
                 _ => None,
             };
             if let Some(expected) = expected {
-                assert_eq!(channel.attribute.0, expected);
+                assert_eq!(&*channel.attribute.0, expected);
                 assert_eq!(
                     channel.canonical_transform,
                     CanonicalTransform::InvertNormalized
@@ -799,24 +799,24 @@ fn shipped_cct_emitters_retain_physical_identity_and_map_to_white_and_amber() {
                 let channels = mode
                     .channels
                     .iter()
-                    .filter(|channel| channel.fixture_attribute.0 == fixture_attribute)
+                    .filter(|channel| &*channel.fixture_attribute.0 == fixture_attribute)
                     .collect::<Vec<_>>();
                 assert_eq!(channels.len(), 1, "{filename} / {}", mode.name);
                 let channel = channels[0];
-                assert_eq!(channel.attribute.0, canonical);
+                assert_eq!(&*channel.attribute.0, canonical);
                 assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
                 assert!(
                     channel
                         .functions
                         .iter()
-                        .all(|function| function.attribute.0 == canonical)
+                        .all(|function| &*function.attribute.0 == canonical)
                 );
             }
             assert!(
                 mode.channels
                     .iter()
-                    .all(|channel| channel.attribute.0 != "color.cold_white"
-                        && channel.attribute.0 != "color.warm_white")
+                    .all(|channel| *channel.attribute.0 != *"color.cold_white"
+                        && *channel.attribute.0 != *"color.warm_white")
             );
         }
     }
@@ -916,19 +916,19 @@ fn shipped_strobe_channels_keep_fixture_identity_and_program_canonical_shutter()
             .modes
             .iter()
             .flat_map(|mode| &mode.channels)
-            .filter(|channel| channel.fixture_attribute.0 == "strobe")
+            .filter(|channel| *channel.fixture_attribute.0 == *"strobe")
             .collect::<Vec<_>>();
         assert!(
             !channels.is_empty(),
             "{filename} must retain physical strobe"
         );
         assert!(channels.iter().all(|channel| {
-            channel.attribute.0 == "shutter"
+            *channel.attribute.0 == *"shutter"
                 && channel.canonical_transform == CanonicalTransform::Identity
                 && channel
                     .functions
                     .iter()
-                    .all(|function| function.attribute.0 == "shutter")
+                    .all(|function| *function.attribute.0 == *"shutter")
         }));
     }
 }
@@ -945,7 +945,7 @@ fn shipped_primary_frost_channels_program_canonical_softness() {
             let channels = mode
                 .channels
                 .iter()
-                .filter(|channel| channel.fixture_attribute.0 == "frost")
+                .filter(|channel| *channel.fixture_attribute.0 == *"frost")
                 .collect::<Vec<_>>();
             if channels.is_empty() {
                 continue;
@@ -953,13 +953,13 @@ fn shipped_primary_frost_channels_program_canonical_softness() {
             affected_modes += 1;
             assert_eq!(channels.len(), 1, "{filename} / {}", mode.name);
             let channel = channels[0];
-            assert_eq!(channel.attribute.0, "softness");
+            assert_eq!(&*channel.attribute.0, "softness");
             assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
             assert!(
                 channel
                     .functions
                     .iter()
-                    .all(|function| function.attribute.0 == "softness")
+                    .all(|function| *function.attribute.0 == *"softness")
             );
         }
     }
@@ -1018,8 +1018,8 @@ fn rare_capability_profiles_remain_independent_and_round_trip() {
         channels
             .iter()
             .map(|channel| (
-                channel.fixture_attribute.0.as_str(),
-                channel.attribute.0.as_str(),
+                &*channel.fixture_attribute.0,
+                &*channel.attribute.0,
                 channel.default_raw,
                 channel.highlight_raw,
             ))
@@ -1044,8 +1044,8 @@ fn rare_capability_profiles_remain_independent_and_round_trip() {
         mode.channels
             .iter()
             .map(|channel| (
-                channel.fixture_attribute.0.as_str(),
-                channel.attribute.0.as_str(),
+                &*channel.fixture_attribute.0,
+                &*channel.attribute.0,
                 channel.resolution,
                 channel.secondary_slots.as_slice(),
             ))
@@ -1074,10 +1074,7 @@ fn rare_capability_profiles_remain_independent_and_round_trip() {
         beam.modes[0]
             .channels
             .iter()
-            .map(|channel| (
-                channel.fixture_attribute.0.as_str(),
-                channel.attribute.0.as_str(),
-            ))
+            .map(|channel| (&*channel.fixture_attribute.0, &*channel.attribute.0,))
             .collect::<Vec<_>>(),
         [
             ("intensity", "intensity"),
@@ -1098,7 +1095,7 @@ fn rare_capability_profiles_remain_independent_and_round_trip() {
         media.modes[0]
             .channels
             .iter()
-            .map(|channel| channel.attribute.0.as_str())
+            .map(|channel| &*channel.attribute.0)
             .collect::<Vec<_>>(),
         ["media.position.x", "media.position.y"]
     );
@@ -1118,11 +1115,11 @@ fn rare_capability_profiles_remain_independent_and_round_trip() {
         .find(|mode| mode.name == "Studio")
         .unwrap();
     assert!(studio.channels.iter().any(|channel| {
-        channel.fixture_attribute.0 == "color.temperature"
-            && channel.attribute.0 == "color.temperature"
+        *channel.fixture_attribute.0 == *"color.temperature"
+            && *channel.attribute.0 == *"color.temperature"
     }));
     assert!(studio.channels.iter().any(|channel| {
-        channel.fixture_attribute.0 == "fixture.tint" && channel.attribute.0 == "color.tint"
+        *channel.fixture_attribute.0 == *"fixture.tint" && *channel.attribute.0 == *"color.tint"
     }));
 }
 
@@ -1167,8 +1164,8 @@ fn visualizer_camera_package_keeps_its_exact_seventeen_slot_wire_contract() {
         mode.channels
             .iter()
             .map(|channel| (
-                channel.fixture_attribute.0.as_str(),
-                channel.attribute.0.as_str(),
+                &*channel.fixture_attribute.0,
+                &*channel.attribute.0,
                 channel.resolution,
                 channel.secondary_slots.as_slice(),
                 channel.default_raw,
@@ -1367,7 +1364,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
             assert_eq!(
                 mode.channels
                     .iter()
-                    .filter(|channel| channel.attribute.0 == attribute)
+                    .filter(|channel| &*channel.attribute.0 == attribute)
                     .count(),
                 count,
                 "{attribute} must use the desk's canonical programmer attribute"
@@ -1384,7 +1381,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
                 channels
                     .iter()
                     .copied()
-                    .find(|channel| channel.attribute.0 == attribute)
+                    .find(|channel| &*channel.attribute.0 == attribute)
                     .unwrap_or_else(|| panic!("{} is missing {attribute}", head.name))
             };
             let intensity = channel("intensity");
@@ -1459,7 +1456,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
             assert_eq!(
                 mode.channels
                     .iter()
-                    .filter(|channel| channel.attribute.0 == attribute)
+                    .filter(|channel| &*channel.attribute.0 == attribute)
                     .count(),
                 layer_count,
                 "every layer must expose canonical {attribute} encoder ownership"
@@ -1476,7 +1473,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
             assert_eq!(
                 mode.channels
                     .iter()
-                    .filter(|channel| channel.attribute.0 == attribute)
+                    .filter(|channel| &*channel.attribute.0 == attribute)
                     .count(),
                 layer_count + 1,
                 "every layer and the master must expose canonical {attribute} encoder ownership"
@@ -1486,7 +1483,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
             assert_eq!(
                 mode.channels
                     .iter()
-                    .filter(|channel| channel.attribute.0 == attribute)
+                    .filter(|channel| &*channel.attribute.0 == attribute)
                     .count(),
                 layer_count + 1,
                 "every layer and the master must expose canonical {attribute} encoder ownership"
@@ -1522,7 +1519,7 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
             let movement_channels = mode
                 .channels
                 .iter()
-                .filter(|channel| channel.attribute.0 == "position.movement")
+                .filter(|channel| *channel.attribute.0 == *"position.movement")
                 .collect::<Vec<_>>();
             if !movement_channels.is_empty() {
                 position_movement_modes += 1;
@@ -1539,12 +1536,12 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
                     channel
                         .functions
                         .iter()
-                        .all(|function| { function.attribute.0 == "position.movement" })
+                        .all(|function| { *function.attribute.0 == *"position.movement" })
                 );
                 *position_movement_sources
-                    .entry(channel.fixture_attribute.0.clone())
+                    .entry(channel.fixture_attribute.0.to_string())
                     .or_default() += 1;
-                let expected_representation = match channel.fixture_attribute.0.as_str() {
+                let expected_representation = match &*channel.fixture_attribute.0 {
                     "fixture.pan_tilt_speed" => PositionMovementRepresentation::Speed,
                     "fixture.mspeed" | "fixture.pan_tilt_time" => {
                         PositionMovementRepresentation::Time
@@ -1557,7 +1554,7 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
                     .heads
                     .iter()
                     .flat_map(|head| &head.parameters)
-                    .find(|parameter| parameter.attribute.0 == "position.movement")
+                    .find(|parameter| *parameter.attribute.0 == *"position.movement")
                     .unwrap();
                 assert_eq!(
                     projected.metadata.position_movement_representation,
@@ -1570,11 +1567,11 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
             let prism_selection = mode
                 .channels
                 .iter()
-                .find(|channel| channel.attribute.0 == "prism.1");
+                .find(|channel| *channel.attribute.0 == *"prism.1");
             let prism_rotation = mode
                 .channels
                 .iter()
-                .find(|channel| channel.attribute.0 == "prism.1.rotation");
+                .find(|channel| *channel.attribute.0 == *"prism.1.rotation");
             if prism_selection.is_some() {
                 prism_selection_modes += 1;
             }
@@ -1591,7 +1588,7 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
             if mode
                 .channels
                 .iter()
-                .any(|channel| channel.fixture_attribute.0 == "fixture.control")
+                .any(|channel| *channel.fixture_attribute.0 == *"fixture.control")
             {
                 generic_control_modes += 1;
             }
@@ -1614,10 +1611,7 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
                         profile.name, mode.name, channel.fixture_attribute.0
                     ));
                 }
-                if matches!(
-                    channel.attribute.0.as_str(),
-                    "pan.continuous" | "tilt.continuous"
-                ) {
+                if matches!(&*channel.attribute.0, "pan.continuous" | "tilt.continuous") {
                     continuous_pan_or_tilt.push(format!(
                         "{} / {} / {}",
                         profile.name, mode.name, channel.attribute.0
@@ -2225,7 +2219,7 @@ fn shipped_library_homes_to_white_and_centred_position() {
             let definition = profile.resolved_definition(mode.id).unwrap();
             for head in &definition.heads {
                 for parameter in &head.parameters {
-                    let attribute = parameter.attribute.0.as_str();
+                    let attribute = &*parameter.attribute.0;
                     let expected = if WHITE.contains(&attribute) {
                         1.0
                     } else if attribute == "color.saturation" {

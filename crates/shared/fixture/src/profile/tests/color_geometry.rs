@@ -45,7 +45,7 @@ fn additive_color_applies_response_drive_limit_inversion_and_gamut_clipping() {
         .into_iter()
         .map(|name| {
             let mut channel = channel(head_id, ChannelResolution::U8, vec![]);
-            channel.attribute = AttributeKey(format!("color.{name}"));
+            channel.attribute = AttributeKey(format!("color.{name}").into());
             channel
         })
         .collect();
@@ -60,7 +60,7 @@ fn additive_color_applies_response_drive_limit_inversion_and_gamut_clipping() {
                 .enumerate()
                 .map(|(index, channel)| EmitterBinding {
                     channel_id: channel.id,
-                    name: channel.attribute.0.clone(),
+                    name: channel.attribute.0.to_string(),
                     xyz: match index {
                         0 => Xyz {
                             x: 1.0,
@@ -126,7 +126,7 @@ fn subtractive_color_uses_cmy_fallback_and_honors_continuous_inversion() {
         .into_iter()
         .map(|name| {
             let mut channel = channel(head_id, ChannelResolution::U8, vec![]);
-            channel.attribute = AttributeKey(format!("color.{name}"));
+            channel.attribute = AttributeKey(format!("color.{name}").into());
             channel
         })
         .collect();
@@ -160,11 +160,11 @@ fn hue_saturation_color_resolves_canonical_xyz_to_authored_hsi_channels() {
         .into_iter()
         .map(|name| {
             let mut channel = channel(head_id, ChannelResolution::U8, vec![]);
-            channel.fixture_attribute = AttributeKey(format!("fixture.{name}"));
+            channel.fixture_attribute = AttributeKey(format!("fixture.{name}").into());
             channel.attribute = AttributeKey(if name == "intensity" {
                 "intensity".into()
             } else {
-                format!("color.{name}")
+                format!("color.{name}").into()
             });
             channel
         })
@@ -478,7 +478,7 @@ fn internal_profiles_keep_semantic_channels_without_dmx_components() {
     assert_eq!(definition.footprint, 0);
     assert_eq!(definition.patch_policy(), PatchPolicy::Internal);
     assert_eq!(
-        definition.heads[0].parameters[0].attribute.0,
+        &*definition.heads[0].parameters[0].attribute.0,
         "audio.volume"
     );
     assert!(definition.heads[0].parameters[0].components.is_empty());

@@ -588,7 +588,7 @@ fn dispatch_dynamic_fix_at(
                     .into_iter()
                     .map(light_core::FixtureId)
                     .collect(),
-                attribute: light_core::AttributeKey(request.attribute),
+                attribute: light_core::AttributeKey(request.attribute.into()),
                 value: request.value,
                 timing: dynamic_timing(request.timing),
             },

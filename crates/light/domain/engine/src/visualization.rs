@@ -16,8 +16,12 @@ impl Engine {
         sampled: &[ContributionBatch],
     ) -> crate::ResolvedValues {
         let generation = self.generation.load_full();
+        // This caller wants every value by name, so the frame is materialised here rather than
+        // left dense. Nothing on the output path takes this route.
         self.resolved_attributes_at(&generation, self.clock.now(), sampled)
-            .values
+            .named_values()
+            .values()
+            .clone()
     }
 
     /// Project schema-v2 profile heads through the same channel-resolution path used for DMX.
@@ -40,12 +44,22 @@ impl Engine {
             }
         }
         resolved.values.clone_from(values);
-        let profile_values = crate::ProfileValueIndex::new(&resolved);
+        // These values were assembled elsewhere and replace the frame wholesale, so the frame is
+        // released rather than read: it no longer describes what is being projected.
+        resolved.frame = None;
+        let sequence_masters = std::mem::take(&mut resolved.sequence_masters);
+        let named_values = resolved.named_values();
+        let profile_values = crate::ProfileValueIndex::new(
+            &named_values,
+            &sequence_masters,
+            generation.channel_slots(),
+        );
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlight_layers = self.highlight_layers.read();
         let highlight_look = self.highlight_look.read();
         let mut projected = crate::ResolvedValues::default();
+        let mut output = crate::ResolvedProfileFixtureOutput::default();
         for fixture in snapshot.fixtures.iter() {
             let Some(profile) = fixture.definition.profile_snapshot.as_deref() else {
                 continue;
@@ -61,7 +75,7 @@ impl Engine {
                 .ok_or_else(|| {
                     EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
                 })?;
-            let output = resolve_profile_fixture(
+            resolve_profile_fixture(
                 fixture,
                 mode,
                 projection,
@@ -76,8 +90,9 @@ impl Engine {
                     pan: fixture.invert_pan,
                     tilt: fixture.invert_tilt,
                 },
+                &mut output,
             )?;
-            for output in output.heads {
+            for output in &output.heads {
                 projected.insert(
                     (output.owner, AttributeKey::intensity()),
                     AttributeValue::Normalized(output.intensity),

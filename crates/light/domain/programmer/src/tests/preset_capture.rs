@@ -39,7 +39,7 @@ fn narrow_capture_filters_every_family_and_strips_timing() {
             .unwrap();
         let mut attributes = captured.values[&fixture]
             .keys()
-            .map(|attribute| attribute.0.as_str())
+            .map(|attribute| &*attribute.0)
             .collect::<Vec<_>>();
         attributes.sort_unstable();
         assert_eq!(attributes, expected);

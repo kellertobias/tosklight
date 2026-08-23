@@ -11,7 +11,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 pub const PORTABLE_PATCH_RECORD_SCHEMA_VERSION: u16 = 1;
-pub const RETAINED_LEGACY_DEFINITION_FIELDS: &str = "_light_legacy_definition_fields";
+pub const RETAINED_DEFINITION_FIELDS: &str = "_light_legacy_definition_fields";
 
 /// Stable reference to one immutable profile revision and its selected mode.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]

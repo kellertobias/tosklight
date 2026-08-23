@@ -335,16 +335,30 @@ mod tests {
             if spec.resolution == Resolution::Fine {
                 continue;
             }
+            // A wire block is defined by where its controls sit, so the spec is matched to the
+            // channel occupying its slot. Matching by label instead would tie this test to how a
+            // channel happens to be named, which is not what it is checking.
+            let slot = block_offset + spec.offset + 1;
             let channel = mode
                 .channels
                 .iter()
                 .find(|channel| {
-                    channel.head_id == head_id && channel.functions[0].name == spec.name
+                    channel.head_id == head_id && primary_slots.get(&channel.id) == Some(&slot)
                 })
-                .unwrap_or_else(|| panic!("{} is missing {}", mode.name, spec.name));
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{} has no channel at slot {slot} for {}",
+                        mode.name, spec.name
+                    )
+                });
             assert_eq!(channel.split, 1);
             assert_eq!(channel.default_raw, u32::from(spec.default_value));
-            assert_eq!(primary_slots[&channel.id], block_offset + spec.offset + 1);
+            // One function labels its channel. A channel that names its value bands instead —
+            // Play mode names all twenty, so an operator reads Stop rather than a percentage — is
+            // labelled by those, and the fixture-package tests cover those names.
+            if let [only] = channel.functions.as_slice() {
+                assert_eq!(only.name, spec.name, "{} label", mode.name);
+            }
             assert_eq!(
                 channel.secondary_slots,
                 if spec.resolution == Resolution::Coarse {

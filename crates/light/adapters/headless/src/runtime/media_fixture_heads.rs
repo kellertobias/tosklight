@@ -34,7 +34,7 @@ fn head_attributes(
         .iter()
         .filter(|head| keep(head))
         .flat_map(|head| head.parameters.iter())
-        .map(|parameter| parameter.attribute.0.clone())
+        .map(|parameter| parameter.attribute.0.to_string())
         .collect::<Vec<_>>();
     attributes.sort();
     attributes.dedup();

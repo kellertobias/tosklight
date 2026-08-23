@@ -11,7 +11,7 @@ pub fn migrate_canonical_attributes(definition: &mut DynamicDefinition) -> Resul
     validate_definition(definition).map_err(|error| error.to_string())?;
     let mut targets = HashMap::new();
     for lane in &definition.lanes {
-        let source = lane.attribute.0.as_str();
+        let source = &*lane.attribute.0;
         let target =
             canonical_attribute_migration_id(source).map_or(source, |migration| migration.0);
         if let Some(previous) = targets.insert(target.to_owned(), source.to_owned())

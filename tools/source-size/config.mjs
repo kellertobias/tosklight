@@ -10,7 +10,7 @@ const EXCLUDED_DIRECTORY =
 	/(?:^|\/)(?:artifacts|assets|docs|experiments)(?:\/|$)/u;
 const SOURCE_EXTENSION = /\.(?:js|py|rs|ts|tsx)$/iu;
 const TEST_DIRECTORY =
-	/(^|\/)(?:__tests__|e2e|stories|[a-z0-9_]*tests)(?:\/|$)/u;
+	/(^|\/)(?:__tests__|e2e|stories|testing|[a-z0-9_]*tests)(?:\/|$)/u;
 const TEST_FILENAME =
 	/(?:^|\.)(?:spec|test|stories)\.[^.]+$|(?:^|_)(?:test|tests)\.rs$/u;
 

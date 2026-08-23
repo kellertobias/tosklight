@@ -191,14 +191,14 @@ fn wire_preview_item(
                 attribute,
             } => wire::ProgrammingUpdateAddress::FixtureAttribute {
                 fixture_id: fixture_id.0,
-                attribute: attribute.0,
+                attribute: attribute.0.to_string(),
             },
             application::UpdateAddress::GroupAttribute {
                 group_id,
                 attribute,
             } => wire::ProgrammingUpdateAddress::GroupAttribute {
                 group_id,
-                attribute: attribute.0,
+                attribute: attribute.0.to_string(),
             },
             application::UpdateAddress::DynamicAttribute {
                 fixture_id,
@@ -206,7 +206,7 @@ fn wire_preview_item(
                 instance_link,
             } => wire::ProgrammingUpdateAddress::DynamicAttribute {
                 fixture_id: fixture_id.0,
-                attribute: attribute.0,
+                attribute: attribute.0.to_string(),
                 instance_link,
             },
             application::UpdateAddress::GroupMembership { fixture_id } => {

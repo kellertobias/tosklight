@@ -20,7 +20,7 @@ pub(crate) fn values_command(
             intent: application::ProgrammingValueIntent {
                 fixture_ids: fixture_ids.into_iter().map(FixtureId).collect(),
                 group_id,
-                attribute: AttributeKey(attribute),
+                attribute: AttributeKey(attribute.into()),
                 operation: match operation {
                     wire::ProgrammingValueOperation::AbsoluteSet { value } => {
                         application::ProgrammingValueOperation::AbsoluteSet(application_value(
@@ -81,7 +81,7 @@ pub(crate) fn values_command(
             timing,
         } => application::ProgrammingValuesCommand::SetFixture {
             fixture_id: FixtureId(fixture_id),
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
             value: application_value(value),
             timing: application_timing(timing),
         },
@@ -90,7 +90,7 @@ pub(crate) fn values_command(
             attribute,
         } => application::ProgrammingValuesCommand::ReleaseFixture {
             fixture_id: FixtureId(fixture_id),
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
         },
         wire::ProgrammingValuesAction::SetGroup {
             group_id,
@@ -99,7 +99,7 @@ pub(crate) fn values_command(
             timing,
         } => application::ProgrammingValuesCommand::SetGroup {
             group_id,
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
             value: application_value(value),
             timing: application_timing(timing),
         },
@@ -108,7 +108,7 @@ pub(crate) fn values_command(
             attribute,
         } => application::ProgrammingValuesCommand::ReleaseGroup {
             group_id,
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
         },
         wire::ProgrammingValuesAction::Batch { mutations } => {
             let mut expanded = Vec::with_capacity(mutations.len());
@@ -225,7 +225,7 @@ pub(in crate::runtime) fn values_change(
             .iter()
             .map(|address| wire::ProgrammingFixtureValueAddress {
                 fixture_id: address.fixture_id.0,
-                attribute: address.attribute.0.clone(),
+                attribute: address.attribute.0.to_string(),
             })
             .collect(),
         group_values: change.delta.group_values.iter().map(group_value).collect(),
@@ -235,7 +235,7 @@ pub(in crate::runtime) fn values_change(
             .iter()
             .map(|address| wire::ProgrammingGroupValueAddress {
                 group_id: address.group_id.clone(),
-                attribute: address.attribute.0.clone(),
+                attribute: address.attribute.0.to_string(),
             })
             .collect(),
         dynamic_definitions,
@@ -251,7 +251,7 @@ pub(in crate::runtime) fn values_change(
             .iter()
             .map(|address| wire::ProgrammingDynamicValueAddress {
                 fixture_id: address.fixture_id.0,
-                attribute: address.attribute.0.clone(),
+                attribute: address.attribute.0.to_string(),
                 instance_link: address.instance_link,
             })
             .collect(),
@@ -353,7 +353,7 @@ fn application_mutations(
                 };
                 application::ProgrammingValueMutation::SetFixture {
                     fixture_id: FixtureId(fixture_id),
-                    attribute: AttributeKey(attribute.clone()),
+                    attribute: AttributeKey(attribute.as_str().into()),
                     value: resolved,
                     timing: application_timing(timing),
                 }
@@ -463,7 +463,7 @@ fn application_mutation(
             timing,
         } => application::ProgrammingValueMutation::SetFixture {
             fixture_id: FixtureId(fixture_id),
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
             value: application_value(value),
             timing: application_timing(timing),
         },
@@ -472,7 +472,7 @@ fn application_mutation(
             attribute,
         } => application::ProgrammingValueMutation::ReleaseFixture {
             fixture_id: FixtureId(fixture_id),
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
         },
         wire::ProgrammingValueMutation::SetGroup {
             group_id,
@@ -481,7 +481,7 @@ fn application_mutation(
             timing,
         } => application::ProgrammingValueMutation::SetGroup {
             group_id,
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
             value: application_value(value),
             timing: application_timing(timing),
         },
@@ -490,7 +490,7 @@ fn application_mutation(
             attribute,
         } => application::ProgrammingValueMutation::ReleaseGroup {
             group_id,
-            attribute: AttributeKey(attribute),
+            attribute: AttributeKey(attribute.into()),
         },
     }
 }
@@ -525,7 +525,7 @@ fn fixture_value(
 ) -> wire::ProgrammingFixtureValue {
     wire::ProgrammingFixtureValue {
         fixture_id: value.fixture_id.0,
-        attribute: value.attribute.0.clone(),
+        attribute: value.attribute.0.to_string(),
         value: attribute_value(&value.value),
         programmer_order: value.programmer_order,
         fade: value.fade,
@@ -537,7 +537,7 @@ fn fixture_value(
 fn group_value(value: &light_programmer::ProgrammerGroupUpdate) -> wire::ProgrammingGroupValue {
     wire::ProgrammingGroupValue {
         group_id: value.group_id.clone(),
-        attribute: value.attribute.0.clone(),
+        attribute: value.attribute.0.to_string(),
         value: attribute_value(&value.value),
         programmer_order: value.programmer_order,
         fade: value.fade,

@@ -907,7 +907,7 @@ fn lane_snapshot(
             preload,
             include_dynamic_stack,
             true,
-            Some(source.values.as_ref()),
+            Some(source.values.values()),
             Some(source.profile_visualization_values.as_ref()),
         )?)
         .map_err(|error| ApiError::internal(error.to_string()))?;

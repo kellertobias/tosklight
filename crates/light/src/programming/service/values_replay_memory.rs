@@ -54,8 +54,7 @@ pub(super) fn programming_values_projection_retained_bytes(
     bytes = bytes
         .saturating_add(projection.group_values.capacity() * size_of::<ProgrammerGroupUpdate>());
     for value in &projection.fixture_values {
-        bytes = bytes
-            .saturating_add(value.attribute.0.capacity() + attribute_value_bytes(&value.value));
+        bytes = bytes.saturating_add(value.attribute.0.len() + attribute_value_bytes(&value.value));
     }
     bytes = bytes.saturating_add(
         projection.dynamic_values.capacity()
@@ -64,7 +63,7 @@ pub(super) fn programming_values_projection_retained_bytes(
     for value in &projection.group_values {
         bytes = bytes.saturating_add(
             value.group_id.capacity()
-                + value.attribute.0.capacity()
+                + value.attribute.0.len()
                 + attribute_value_bytes(&value.value),
         );
     }
@@ -94,13 +93,12 @@ pub(super) fn preload_projection_retained_bytes(
         projection.dynamic_values.capacity() * size_of::<light_dynamics::DynamicAddressValue>(),
     );
     for value in &projection.fixture_values {
-        bytes = bytes
-            .saturating_add(value.attribute.0.capacity() + attribute_value_bytes(&value.value));
+        bytes = bytes.saturating_add(value.attribute.0.len() + attribute_value_bytes(&value.value));
     }
     for value in &projection.group_values {
         bytes = bytes.saturating_add(
             value.group_id.capacity()
-                + value.attribute.0.capacity()
+                + value.attribute.0.len()
                 + attribute_value_bytes(&value.value),
         );
     }

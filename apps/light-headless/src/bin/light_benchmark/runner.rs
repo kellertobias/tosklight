@@ -32,7 +32,6 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     let mut scenarios = Vec::with_capacity(profiles.len());
     for profile in profiles {
         let mut config = profile.config();
-        let required_minimum_hz = REPORTING_TARGET_HZ;
         if let Some(rate_hz) = arguments.rate_hz {
             config.rate_hz = rate_hz;
         }
@@ -58,6 +57,11 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
                 profile, config.universes, config.fixtures_per_universe, config.rate_hz
             );
         }
+        // What this profile must hold is its own rate, or the reporting target where the profile
+        // is paced faster than that. Requiring 44 Hz of a profile scheduled at 40 asked for
+        // something pacing makes impossible, so every window of every 40 Hz profile counted as a
+        // failure and no such profile could ever gate.
+        let required_minimum_hz = REPORTING_TARGET_HZ.min(config.rate_hz);
         scenarios.push(run_scenario(arguments, config, required_minimum_hz)?);
     }
     let required_floor_met = required_floor_result(&scenarios);
@@ -115,7 +119,14 @@ fn run_scenario(
     required_minimum_hz: u16,
 ) -> Result<ScenarioReport, String> {
     let (loopback, scenario) = prepare_scenario(arguments, config)?;
+    // Zeroed here and read straight after, so one scenario's phase costs are not the running total
+    // of every scenario and diagnostic before it.
     let timed = execute_timed_run(arguments, config, &scenario, loopback.as_ref())?;
+    let render_phase_microseconds = light_engine::render_phases_enabled().then(|| {
+        light_engine::accumulated_microseconds()
+            .into_iter()
+            .collect()
+    });
     let state = timed.state;
     let warmup_ticks = timed.warmup_ticks;
     let warmup_elapsed = timed.warmup_elapsed;
@@ -181,6 +192,7 @@ fn run_scenario(
             deadline_misses: state.deadline_misses,
             definition: "dropped: scheduled interval elapsed before work began; deferred: prior pipeline work crossed this scheduled start; deadline miss: pipeline completed after its interval",
         },
+        render_phase_microseconds,
         phases: PhaseReport {
             total_pipeline: distribution(&state.total),
             engine_render_combined: distribution(&state.render),
@@ -202,7 +214,7 @@ fn run_scenario(
             programmer_fixture_values: true,
             static_group_programming: true,
             playback_attribute_dynamic: true,
-            dynamic_attribute: scenario.dynamic_attribute.0.clone(),
+            dynamic_attribute: scenario.dynamic_attribute.0.to_string(),
             dynamic_attribute_has_static_or_programmer_value: scenario
                 .dynamic_overlaps_static_or_programmer,
             programmer_assignment_fraction: scenario.programmer_assignment_fraction,
@@ -245,6 +257,9 @@ fn execute_timed_run(
         warmup_ticks += 1;
     }
     let warmup_elapsed = warmup_started.elapsed();
+    // Zeroed after warmup, not before it: a warmup render is cheaper than a measured one, and
+    // counting both makes every phase look like a fraction of a frame that nothing accounts for.
+    light_engine::reset_render_phases();
     let expected_ticks = u64::from(config.rate_hz) * arguments.seconds;
     let mut resource_sampler =
         crate::light_benchmark::process_resources::MeasurementSampler::start();
@@ -548,9 +563,13 @@ fn frame_rate_report(
         .iter()
         .filter(|completed| **completed < required)
         .count() as u64;
+    // A profile scheduled below the reporting target can never reach it, so counting its windows
+    // against 44 Hz marked every one of them a failure. The target a run is reported against is
+    // the one it was actually asked to hold.
+    let reporting_target_hz = REPORTING_TARGET_HZ.min(required_minimum_hz);
     let windows_below_reporting_target = completed_ticks_by_second
         .iter()
-        .filter(|completed| **completed < u64::from(REPORTING_TARGET_HZ))
+        .filter(|completed| **completed < u64::from(reporting_target_hz))
         .count() as u64;
     let average = completed_ticks as f64 / measured_seconds as f64;
     FrameRateReport {
@@ -562,7 +581,7 @@ fn frame_rate_report(
         maximum_one_second_completed_hz: maximum as f64,
         one_second_windows: completed_ticks_by_second.len() as u64,
         windows_below_minimum,
-        reporting_target_hz: REPORTING_TARGET_HZ,
+        reporting_target_hz,
         windows_below_reporting_target,
         gate_met: average >= f64::from(required_minimum_hz) && windows_below_minimum == 0,
         definition: "average uses completed scheduled frames over the configured measurement duration; minimum, p95, and maximum describe completed scheduled frames in non-overlapping one-second intervals",

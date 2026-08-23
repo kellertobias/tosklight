@@ -115,14 +115,14 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
         &mut self,
         record: &PortablePatchedFixtureRecord,
     ) -> Result<PatchedFixture, PortablePatchError> {
-        if record.is_legacy_inline() {
-            let fixture = record.legacy_fixture()?;
+        if record.is_inline() {
+            let fixture = record.inline_fixture()?;
             fixture
                 .definition
                 .validate()
                 .map_err(|error| PortablePatchError::InvalidRecord(error.to_string()))?;
             if let Some(reference) = record.selected_profile_reference()? {
-                self.verify_legacy_profile(record, reference)?;
+                self.verify_inline_profile(record, reference)?;
             }
             return Ok(fixture);
         }
@@ -192,12 +192,12 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
         }
     }
 
-    fn verify_legacy_profile(
+    fn verify_inline_profile(
         &mut self,
         record: &PortablePatchedFixtureRecord,
         reference: PatchedFixtureProfileReference,
     ) -> Result<(), PortablePatchError> {
-        let inline_digest = fixture_profile_content_digest(record.legacy_profile_snapshot()?)?;
+        let inline_digest = fixture_profile_content_digest(record.inline_profile_snapshot()?)?;
         let canonical_digest = &self.profile(reference)?.content_digest;
         if inline_digest == *canonical_digest {
             return Ok(());

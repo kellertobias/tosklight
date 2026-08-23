@@ -146,14 +146,14 @@ pub(super) fn programmer_preset(
         number: address.number,
         ..Default::default()
     };
-    for value in &programmer.values {
+    for value in programmer.values.iter() {
         preset
             .values
             .entry(value.fixture_id)
             .or_default()
             .insert(value.attribute.clone(), value.value.clone());
     }
-    for (group, attributes) in &programmer.group_values {
+    for (group, attributes) in programmer.group_values.iter() {
         for (attribute, value) in attributes {
             preset
                 .group_values

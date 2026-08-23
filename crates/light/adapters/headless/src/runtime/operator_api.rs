@@ -919,7 +919,7 @@ fn push_runtime_stack_entries(
                     let winner = dynamic_winners.get(&key).copied();
                     entries.push(DynamicStackEntry {
                         fixture_id: target.0,
-                        attribute: lane.attribute.0.clone(),
+                        attribute: lane.attribute.0.to_string(),
                         entry_type: "dynamic",
                         priority: controller.priority,
                         changed_at_millis: controller.activated_at_millis,
@@ -952,7 +952,7 @@ fn push_runtime_stack_entries(
                     {
                         entries.push(DynamicStackEntry {
                             fixture_id: target.0,
-                            attribute: lane.attribute.0.clone(),
+                            attribute: lane.attribute.0.to_string(),
                             entry_type: "ordinary_static",
                             priority: i16::MIN,
                             changed_at_millis: 0,
@@ -1009,7 +1009,7 @@ fn push_semantic_stack_entry(
     };
     entries.push(DynamicStackEntry {
         fixture_id: stored.fixture_id.0,
-        attribute: stored.attribute.0,
+        attribute: stored.attribute.0.to_string(),
         entry_type,
         priority,
         changed_at_millis: stored.changed_at_millis,

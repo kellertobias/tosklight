@@ -110,8 +110,8 @@ impl SpreadRecallRig {
 
     fn clear_programmer(&self) {
         let mut programmer = self.state.programming.get(self.session.id).unwrap();
-        programmer.values.clear();
-        programmer.group_values.clear();
+        std::sync::Arc::make_mut(&mut programmer.values).clear();
+        std::sync::Arc::make_mut(&mut programmer.group_values).clear();
         self.state.programming.restore(programmer);
     }
 

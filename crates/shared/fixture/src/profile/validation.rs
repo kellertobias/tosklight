@@ -545,7 +545,7 @@ impl FixtureMode {
                 else {
                     return false;
                 };
-                match channel.attribute.0.as_str() {
+                match &*channel.attribute.0 {
                     "color.hue" => *hue_channel_id == channel.id,
                     "color.saturation" => *saturation_channel_id == channel.id,
                     "color.brightness" => *intensity_channel_id == Some(channel.id),

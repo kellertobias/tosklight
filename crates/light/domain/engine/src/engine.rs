@@ -6,6 +6,7 @@ use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use light_core::{FixtureId, SharedClock, Xyz};
 use light_fixture::{HighlightLook, HighlightLookCompatibility};
+use light_output::DmxFrame;
 use light_playback::PlaybackEngine;
 use light_programmer::{ActiveDynamicSessionSource, HighlightOutputLayer, ProgrammerRegistry};
 use parking_lot::{Mutex, RwLock};
@@ -43,7 +44,22 @@ pub struct Engine {
     /// Installation-owned Highlight intent. A bare engine starts in review-required compatibility
     /// mode so callers that have not installed desk configuration retain exact legacy raw output.
     pub(crate) highlight_look: RwLock<HighlightLook>,
+    /// Working room a frame borrows and hands back, so the vectors a render fills are grown once
+    /// rather than every tick. Held under one lock because only one render fills them at a time.
+    pub(crate) scratch: Mutex<FrameScratch>,
+    /// Where a frame's published output waits between frames. These leave the engine and are held
+    /// by whoever reads them, so they cannot be overwritten — they are borrowed and returned.
+    pub(crate) universe_pool: Arc<crate::ValuePool<HashMap<light_core::Universe, DmxFrame>>>,
+    pub(crate) patched_slot_pool: Arc<crate::ValuePool<HashMap<light_core::Universe, u16>>>,
+    pub(crate) visualization_pool: Arc<crate::ValuePool<crate::ResolvedValues>>,
     pub(crate) clock: SharedClock,
+}
+
+/// The vectors a render fills and empties again.
+#[derive(Default)]
+pub(crate) struct FrameScratch {
+    pub(crate) playback: Vec<light_playback::PlaybackContribution>,
+    pub(crate) contributions: Vec<crate::EngineContribution>,
 }
 
 #[derive(Default)]
@@ -54,6 +70,12 @@ struct DynamicProgrammerCache {
 }
 
 impl Engine {
+    /// How many frame buffers the current generation has had to build rather than reuse.
+    #[cfg(test)]
+    pub(crate) fn frames_built(&self) -> usize {
+        self.generation.load().frames().built()
+    }
+
     pub fn cue_timing_masters(&self) -> (u64, u64) {
         (
             self.sequence_master_fade_millis.load(Ordering::Relaxed),
@@ -96,6 +118,10 @@ impl Engine {
                 compatibility: HighlightLookCompatibility::NeedsReview,
                 ..HighlightLook::default()
             }),
+            scratch: Mutex::new(FrameScratch::default()),
+            universe_pool: Arc::default(),
+            patched_slot_pool: Arc::default(),
+            visualization_pool: Arc::default(),
             clock,
         }
     }

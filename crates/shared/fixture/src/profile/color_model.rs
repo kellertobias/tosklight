@@ -121,7 +121,7 @@ pub(super) fn semantic_highlight_raw(
     if attribute.is_intensity() {
         return semantic_endpoint(max, true, invert);
     }
-    match attribute.0.as_str() {
+    match &*attribute.0 {
         "color.red" | "color.green" | "color.blue" | "color.white" | "color.cold_white"
         | "color.warm_white" | "color.amber" => {
             return semantic_endpoint(max, true, invert);

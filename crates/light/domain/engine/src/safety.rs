@@ -1,8 +1,8 @@
 use light_core::{AttributeKey, AttributeValue};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 pub(crate) fn apply_safe_values(
-    values: &mut HashMap<AttributeKey, AttributeValue>,
+    values: &mut crate::HeadValues,
     safe: &BTreeMap<AttributeKey, AttributeValue>,
     progress: f32,
 ) {
@@ -10,7 +10,7 @@ pub(crate) fn apply_safe_values(
 }
 
 pub(crate) fn apply_safe_values_with_snap(
-    values: &mut HashMap<AttributeKey, AttributeValue>,
+    values: &mut crate::HeadValues,
     safe: &BTreeMap<AttributeKey, AttributeValue>,
     progress: f32,
     is_snap: impl Fn(&AttributeKey) -> bool,
