@@ -49,6 +49,18 @@ impl Engine {
         sampled: &[ContributionBatch],
         advance_playback: bool,
     ) -> ResolvedAttributes {
+        crate::timed(crate::RenderPhase::ResolveTotal, || {
+            self.resolve_attributes_inner(generation, now, sampled, advance_playback)
+        })
+    }
+
+    fn resolve_attributes_inner(
+        &self,
+        generation: &RuntimeGeneration,
+        now: DateTime<Utc>,
+        sampled: &[ContributionBatch],
+        advance_playback: bool,
+    ) -> ResolvedAttributes {
         let snapshot = generation.snapshot();
         let groups = generation.groups();
         let has_samples = sampled.iter().any(|batch| !batch.is_empty());
@@ -77,12 +89,14 @@ impl Engine {
         playback.contributions.extend(programmer);
         let mut resolver =
             EngineContributionResolver::for_generation(generation.slots(), generation.frames());
-        let mut contributions = std::mem::take(&mut playback.contributions);
-        resolver.extend(contributions.drain(..));
-        self.recycle_contributions(contributions);
-        if has_samples {
-            resolver.extend_borrowed_samples(sampled_values(sampled));
-        }
+        crate::timed(crate::RenderPhase::ContributionMerge, || {
+            let mut contributions = std::mem::take(&mut playback.contributions);
+            resolver.extend(contributions.drain(..));
+            self.recycle_contributions(contributions);
+            if has_samples {
+                resolver.extend_borrowed_samples(sampled_values(sampled));
+            }
+        });
         crate::timed(crate::RenderPhase::GroupContributions, || {
             add_group_contributions(&mut resolver, snapshot, groups, now)
         });

@@ -29,6 +29,17 @@ impl Engine {
         options: RenderOptions,
         sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
+        crate::timed(crate::RenderPhase::RenderTotal, || {
+            self.render_generation_inner(generation, options, sampled)
+        })
+    }
+
+    fn render_generation_inner(
+        &self,
+        generation: &RuntimeGeneration,
+        options: RenderOptions,
+        sampled: &[ContributionBatch],
+    ) -> Result<RenderResult, EngineError> {
         let snapshot = generation.snapshot();
         let mut resolved =
             self.resolved_attributes_for_render(generation, self.clock.now(), sampled);

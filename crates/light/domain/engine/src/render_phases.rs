@@ -18,10 +18,13 @@ static ENABLED: LazyLock<bool> =
 /// The phases a render is divided into for measurement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RenderPhase {
+    ResolveTotal,
+    RenderTotal,
     PlaybackResolution,
     ProgrammerContributions,
     GroupContributions,
     MoveInBlack,
+    ContributionMerge,
     ResolverFinish,
     FixtureFreezes,
     ValueIndexBuild,
@@ -30,11 +33,14 @@ pub enum RenderPhase {
 }
 
 impl RenderPhase {
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 12] = [
+        Self::ResolveTotal,
+        Self::RenderTotal,
         Self::PlaybackResolution,
         Self::ProgrammerContributions,
         Self::GroupContributions,
         Self::MoveInBlack,
+        Self::ContributionMerge,
         Self::ResolverFinish,
         Self::FixtureFreezes,
         Self::ValueIndexBuild,
@@ -44,10 +50,13 @@ impl RenderPhase {
 
     fn name(self) -> &'static str {
         match self {
+            Self::ResolveTotal => "= resolve total",
+            Self::RenderTotal => "= render total",
             Self::PlaybackResolution => "playback resolution",
             Self::ProgrammerContributions => "programmer contributions",
             Self::GroupContributions => "group contributions",
             Self::MoveInBlack => "move in black",
+            Self::ContributionMerge => "contribution merge",
             Self::ResolverFinish => "resolver finish",
             Self::FixtureFreezes => "fixture freezes",
             Self::ValueIndexBuild => "value index build",
@@ -57,7 +66,10 @@ impl RenderPhase {
     }
 }
 
-static NANOS: [AtomicU64; 9] = [
+static NANOS: [AtomicU64; 12] = [
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
     AtomicU64::new(0),
     AtomicU64::new(0),
     AtomicU64::new(0),

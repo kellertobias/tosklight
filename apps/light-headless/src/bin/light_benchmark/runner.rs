@@ -117,7 +117,6 @@ fn run_scenario(
     let (loopback, scenario) = prepare_scenario(arguments, config)?;
     // Zeroed here and read straight after, so one scenario's phase costs are not the running total
     // of every scenario and diagnostic before it.
-    light_engine::reset_render_phases();
     let timed = execute_timed_run(arguments, config, &scenario, loopback.as_ref())?;
     let render_phase_microseconds = light_engine::render_phases_enabled().then(|| {
         light_engine::accumulated_microseconds()
@@ -254,6 +253,9 @@ fn execute_timed_run(
         warmup_ticks += 1;
     }
     let warmup_elapsed = warmup_started.elapsed();
+    // Zeroed after warmup, not before it: a warmup render is cheaper than a measured one, and
+    // counting both makes every phase look like a fraction of a frame that nothing accounts for.
+    light_engine::reset_render_phases();
     let expected_ticks = u64::from(config.rate_hz) * arguments.seconds;
     let mut resource_sampler =
         crate::light_benchmark::process_resources::MeasurementSampler::start();
