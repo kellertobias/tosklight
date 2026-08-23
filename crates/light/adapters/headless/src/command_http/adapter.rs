@@ -120,6 +120,33 @@ pub(crate) fn prevalidate_external_command(
     }
 }
 
+/// Whether a command line only *operates* the desk, leaving the Programmer untouched.
+///
+/// Deliberately an allow-list. A guest surface runs a command only when it is one of the families
+/// that are known not to reach the Programmer — going to a Cue, selecting a playback, setting a
+/// speed-group speed, running a Macro. Anything unrecognised counts as programming, so a command
+/// added later is refused from a guest until somebody decides it is safe.
+pub(crate) fn command_only_operates_the_desk(command: &str) -> bool {
+    let Ok((tokens, _)) = super::super::tokenize_programmer_command(command) else {
+        return false;
+    };
+    if super::speed_group_binding_command::parse(command)
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        return true;
+    }
+    // Running a stored Macro is operating; editing one is programming.
+    if let Ok(Some(object)) = object_command(command) {
+        return matches!(object, ObjectCommand::RunMacro(_));
+    }
+    matches!(
+        tokens.first().map(String::as_str),
+        Some("GO" | "LOAD" | "PBK" | "VPBK" | "CUELIST" | "SPD")
+    )
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum ExistingCommandPolicy {
     /// Temporary adapter for the legacy WebSocket and OSC grammar while owning services migrate.

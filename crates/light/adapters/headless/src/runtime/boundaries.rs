@@ -50,31 +50,60 @@ pub(super) async fn desk_boundary(
     }
 }
 
-pub(super) fn desk_lock_key(id: Uuid) -> String {
-    format!("desk_lock:{id}")
-}
+/// The one Desk Lock. There is one desk, so there is one lock over every screen and every
+/// attached control surface.
+pub(super) const DESK_LOCK_KEY: &str = "desk_lock";
+/// The prefix locks were stored under while a desk could be one of several.
+const LEGACY_DESK_LOCK_PREFIX: &str = "desk_lock:";
 
-pub(super) fn read_desk_lock(state: &AppState, id: Uuid) -> DeskLockConfiguration {
-    state
+pub(super) fn read_desk_lock(state: &AppState) -> DeskLockConfiguration {
+    if let Some(configuration) = state
         .installation
-        .setting(&desk_lock_key(id))
+        .setting(DESK_LOCK_KEY)
         .ok()
         .flatten()
-        .and_then(|value| serde_json::from_str(&value).ok())
+        .and_then(|value| serde_json::from_str::<DeskLockConfiguration>(&value).ok())
+    {
+        return configuration;
+    }
+    // An installation written before the collapse holds a lock per desk. A desk that was locked
+    // must not come back unlocked, so any locked one carries over; the rest are equivalent.
+    legacy_desk_locks(state)
+        .into_iter()
+        .find(|configuration| configuration.locked)
         .unwrap_or_default()
+}
+
+fn legacy_desk_locks(state: &AppState) -> Vec<DeskLockConfiguration> {
+    state
+        .installation
+        .settings_with_prefix(LEGACY_DESK_LOCK_PREFIX)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(_, value)| serde_json::from_str::<DeskLockConfiguration>(&value).ok())
+        .collect()
 }
 
 pub(super) fn write_desk_lock(
     state: &AppState,
-    id: Uuid,
     configuration: &DeskLockConfiguration,
 ) -> Result<(), ApiError> {
     let value = serde_json::to_string(configuration)
         .map_err(|error| ApiError::internal(error.to_string()))?;
     state
         .installation
-        .set_setting(&desk_lock_key(id), &value)
-        .map_err(ApiError::store)
+        .set_setting(DESK_LOCK_KEY, &value)
+        .map_err(ApiError::store)?;
+    // The per-desk keys can no longer be reached, and leaving them would let a stale one
+    // reappear if the singleton were ever cleared.
+    for (key, _) in state
+        .installation
+        .settings_with_prefix(LEGACY_DESK_LOCK_PREFIX)
+        .unwrap_or_default()
+    {
+        let _ = state.installation.remove_setting(&key);
+    }
+    Ok(())
 }
 
 pub(super) fn desk_lock_response(configuration: DeskLockConfiguration) -> DeskLockResponse {
@@ -116,7 +145,7 @@ pub(super) async fn desk_lock_boundary(
         .and_then(|token| authenticate_token(&state, token).ok());
     if session
         .as_ref()
-        .is_some_and(|session| read_desk_lock(&state, session.desk.id).locked)
+        .is_some_and(|_| read_desk_lock(&state).locked)
     {
         return ApiError::conflict("desk is locked").into_response();
     }
@@ -187,11 +216,9 @@ pub(super) async fn desk_lock(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    Ok(Json(desk_lock_response(read_desk_lock(
-        &state,
-        session.desk.id,
-    ))))
+    // Authentication still gates the read; the lock itself belongs to the desk, not the session.
+    authenticate(&state, &headers)?;
+    Ok(Json(desk_lock_response(read_desk_lock(&state))))
 }
 
 pub(super) async fn update_desk_lock(
@@ -201,7 +228,7 @@ pub(super) async fn update_desk_lock(
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
     state.programming.run_desk_operation(session.desk.id, || {
-        let mut configuration = read_desk_lock(&state, session.desk.id);
+        let mut configuration = read_desk_lock(&state);
         if configuration.locked {
             return Err(ApiError::conflict(
                 "unlock the desk before changing its lock configuration",
@@ -238,7 +265,7 @@ pub(super) async fn update_desk_lock(
             configuration.pin_hash = None;
             configuration.pin_salt = None;
         }
-        write_desk_lock(&state, session.desk.id, &configuration)?;
+        write_desk_lock(&state, &configuration)?;
         emit(
             &state,
             "desk_lock_changed",
@@ -254,9 +281,9 @@ pub(super) async fn lock_desk(
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
     state.programming.run_desk_operation(session.desk.id, || {
-        let mut configuration = read_desk_lock(&state, session.desk.id);
+        let mut configuration = read_desk_lock(&state);
         configuration.locked = true;
-        write_desk_lock(&state, session.desk.id, &configuration)?;
+        write_desk_lock(&state, &configuration)?;
         emit(
             &state,
             "desk_lock_changed",
@@ -273,7 +300,7 @@ pub(super) async fn unlock_desk(
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
     state.programming.run_desk_operation(session.desk.id, || {
-        let mut configuration = read_desk_lock(&state, session.desk.id);
+        let mut configuration = read_desk_lock(&state);
         if configuration.unlock_mode == "pin" {
             let Some(pin) = input.pin else {
                 return Err(ApiError::unauthorized("PIN is required"));
@@ -288,7 +315,7 @@ pub(super) async fn unlock_desk(
             }
         }
         configuration.locked = false;
-        write_desk_lock(&state, session.desk.id, &configuration)?;
+        write_desk_lock(&state, &configuration)?;
         emit(
             &state,
             "desk_lock_changed",

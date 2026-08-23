@@ -19,6 +19,26 @@ impl DeskStore {
             .map_err(Into::into)
     }
 
+    /// Every setting whose key starts with `prefix`, in key order.
+    ///
+    /// Used to fold settings that were once stored per desk into one installation-wide value.
+    pub fn settings_with_prefix(&self, prefix: &str) -> Result<Vec<(String, String)>, StoreError> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT key,value FROM settings WHERE key LIKE ?1 ORDER BY key")?;
+        let rows = statement
+            .query_map([format!("{prefix}%")], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Remove a setting outright, as retiring a per-desk key does once it has been folded in.
+    pub fn remove_setting(&self, key: &str) -> Result<(), StoreError> {
+        self.conn
+            .execute("DELETE FROM settings WHERE key=?1", [key])?;
+        Ok(())
+    }
+
     pub fn set_active_show(&self, id: Option<ShowId>) -> Result<(), StoreError> {
         match id {
             Some(id) => self.set_setting("active_show_id", &id.0.to_string()),

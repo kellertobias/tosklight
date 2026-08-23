@@ -31,8 +31,6 @@ export interface ServerCoreContext
 	>;
 	bootstrap: BootstrapSnapshot | null;
 	session: SessionResponse | null;
-	createUser: (name: string) => Promise<void>;
-	changeUser: (user: import("../../api/types").DeskUser) => Promise<void>;
 	outputRoutes: VersionedObject<OutputRoute>[];
 	patchLayers: VersionedObject<PatchLayer>[];
 	shows: ShowEntry[];

@@ -13,11 +13,13 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPrioritySnapshot, ActionError> {
         let (session, user_id) = priority_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
-            self.assert_priority_owner(session, user_id)?;
+            let user_id = self.operated_priority_owner(session, user_id)?;
             let event_sequence = self.events.latest_sequence();
-            let revision = self.programmers.priority_revision(user_id);
+            let revision = self.programmers.priority_revision();
             Ok(ProgrammingPrioritySnapshot {
                 event_sequence,
                 projection: self.priority_projection(session, user_id, revision)?,
@@ -31,9 +33,11 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPriorityResult, ActionError> {
         let (session, user_id, request_id) = priority_context(&action)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
-            ports.authorize(&action.context)?;
-            self.assert_priority_owner(session, user_id)?;
+            ports.authorize_programming_change(&action.context)?;
+            let user_id = self.operated_priority_owner(session, user_id)?;
             if let Some(cached) = self.priority_replay.lock().get(
                 user_id,
                 action.context.desk_id,
@@ -44,13 +48,13 @@ impl ProgrammingService {
                 return Ok(cached);
             }
             let revision_before =
-                self.assert_priority_revision(user_id, action.command.expected_revision)?;
+                self.assert_priority_revision(action.command.expected_revision)?;
             let changed = self
                 .programmers
                 .update_priority(session, action.command.priority)
                 .ok_or_else(priority_unavailable)?;
             let revision = if changed {
-                self.programmers.advance_priority_revision(user_id)
+                self.programmers.advance_priority_revision()
             } else {
                 revision_before
             };
@@ -89,27 +93,25 @@ impl ProgrammingService {
         })
     }
 
-    fn assert_priority_owner(
+    /// The desk identity this session operates, given whatever identity it presented.
+    ///
+    /// Returned rather than merely checked: the presented identity may be a legacy one, which
+    /// names no revision and no priority. Callers must key desk state on what comes back.
+    fn operated_priority_owner(
         &self,
         session: SessionId,
         user_id: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.user_id(session) {
-            Some(owner) if owner == user_id => Ok(()),
-            Some(_) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(priority_unavailable()),
-        }
+    ) -> Result<UserId, ActionError> {
+        self.programmers
+            .operated_desk_user(session, user_id)
+            .ok_or_else(priority_unavailable)
     }
 
     fn assert_priority_revision(
         &self,
-        user_id: UserId,
         expected: ProgrammingPriorityRevisionExpectation,
     ) -> Result<u64, ActionError> {
-        let actual = self.programmers.priority_revision(user_id);
+        let actual = self.programmers.priority_revision();
         match expected {
             ProgrammingPriorityRevisionExpectation::Current => Ok(actual),
             ProgrammingPriorityRevisionExpectation::Exact(expected) if actual == expected => {
@@ -135,7 +137,7 @@ impl ProgrammingService {
             .programmers
             .priority_state(session)
             .ok_or_else(priority_unavailable)?;
-        if owner != user_id {
+        if self.programmers.desk().normalize(user_id) != owner {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",

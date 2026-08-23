@@ -123,34 +123,42 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
-    fn active_projection_preserves_domain_order_and_omits_disconnected_users() {
+    fn the_active_projection_is_the_desks_one_programmer() {
         let registry = ProgrammerRegistry::default();
-        let disconnected = UserId(Uuid::from_u128(30));
-        let later = UserId(Uuid::from_u128(20));
-        let earlier = UserId(Uuid::from_u128(10));
-        let disconnected_session = SessionId(Uuid::from_u128(1));
-        let earlier_session = SessionId(Uuid::from_u128(3));
-        registry.start(disconnected_session, disconnected);
-        registry.start(SessionId(Uuid::from_u128(2)), later);
-        registry.start(earlier_session, earlier);
-        registry.disconnect(disconnected_session);
+        let first = SessionId(Uuid::from_u128(1));
+        let second = SessionId(Uuid::from_u128(2));
+        let third = SessionId(Uuid::from_u128(3));
+        // Three surfaces arriving under three identities are one Programmer.
+        let desk_user = registry.start(first, UserId(Uuid::from_u128(30))).user_id;
+        registry.start(second, UserId(Uuid::from_u128(20)));
+        registry.start(third, UserId(Uuid::from_u128(10)));
         registry.set_preload_group(
-            earlier_session,
+            third,
             "7".into(),
             light_core::AttributeKey::intensity(),
             light_core::AttributeValue::Normalized(0.5),
         );
-        registry.activate_preload(earlier_session);
+        registry.activate_preload(third);
 
         let projection = ProgrammingLifecycleProjection::active(&registry, 7);
 
         assert_eq!(projection.revision, 7);
-        assert_eq!(projection.programmers.len(), 2);
-        assert_eq!(projection.programmers[0].user_id, earlier);
-        assert_eq!(projection.programmers[1].user_id, later);
+        assert_eq!(projection.programmers.len(), 1);
+        assert_eq!(projection.programmers[0].user_id, desk_user);
         assert!(projection.programmers[0].preload_active);
-        assert!(!projection.programmers[1].preload_active);
-        assert!(projection.programmers.iter().all(|row| row.connected));
+        assert!(projection.programmers[0].connected);
+    }
+
+    #[test]
+    fn a_desk_with_every_surface_disconnected_projects_no_programmer() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId(Uuid::from_u128(1));
+        registry.start(session, UserId(Uuid::from_u128(30)));
+        registry.disconnect(session);
+
+        let projection = ProgrammingLifecycleProjection::active(&registry, 7);
+
+        assert!(projection.programmers.is_empty());
     }
 
     #[test]

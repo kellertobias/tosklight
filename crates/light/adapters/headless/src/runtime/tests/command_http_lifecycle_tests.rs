@@ -45,38 +45,38 @@ async fn lifecycle_snapshot_is_authenticated_cursor_bound_and_content_safe() {
 }
 
 #[tokio::test]
-async fn lifecycle_tracks_same_user_desks_foreign_users_disconnect_and_remove_once() {
+async fn lifecycle_tracks_every_surface_of_the_one_programmer_and_removes_it_once() {
     let scenario = CommandHttpScenario::new().await;
+    // Legacy desk and user records still exist in older installations. A session logging in on
+    // one joins the desk's Programmer rather than opening a second one beside it.
     let second_desk = scenario
         .state
-        .installation.add_desk("Lifecycle second", "lifecycle-second")
+        .installation
+        .add_desk("Lifecycle second", "lifecycle-second")
         .unwrap();
-    let (second_token, second_user) =
-        login_on_desk(&scenario, "Operator", second_desk.id).await;
+    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
     let second_session = scenario
         .state
-        .sessions.sessions().into_iter()
+        .sessions
+        .sessions()
+        .into_iter()
         .find(|session| session.token == second_token)
         .unwrap()
         .id;
-    let other = scenario
+    scenario
         .state
-        .installation.add_user("Lifecycle other")
+        .installation
+        .add_user("Lifecycle other")
         .unwrap();
-    let (other_token, other_user) =
+    let (other_token, _) =
         login_on_desk(&scenario, "Lifecycle other", scenario.session.desk.id).await;
-    assert_eq!(other_user, other.id.0);
 
     let snapshot = json(scenario.lifecycle_snapshot(Some(&other_token)).await).await;
     assert_eq!(snapshot["projection"]["revision"], 3);
     let rows = snapshot["projection"]["programmers"].as_array().unwrap();
-    assert_eq!(rows.len(), 2);
-    let own = rows
-        .iter()
-        .find(|row| row["user_id"] == scenario.session.user.id.0.to_string())
-        .unwrap();
-    assert_eq!(own["sessions"].as_array().unwrap().len(), 2);
+    assert_eq!(rows.len(), 1, "three surfaces are one Programmer");
+    assert_eq!(rows[0]["sessions"].as_array().unwrap().len(), 3);
 
     assert_eq!(
         close_session_request(&scenario, second_session, &second_token)
@@ -86,13 +86,9 @@ async fn lifecycle_tracks_same_user_desks_foreign_users_disconnect_and_remove_on
     );
     let after_peer = json(scenario.lifecycle_snapshot(Some(&other_token)).await).await;
     assert_eq!(after_peer["projection"]["revision"], 4);
-    let own = after_peer["projection"]["programmers"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| row["user_id"] == scenario.session.user.id.0.to_string())
-        .unwrap();
-    assert_eq!(own["sessions"].as_array().unwrap().len(), 1);
+    let rows = after_peer["projection"]["programmers"].as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["sessions"].as_array().unwrap().len(), 2);
 
     assert_eq!(
         close_session_request(&scenario, scenario.session.id, &scenario.token)
@@ -100,19 +96,17 @@ async fn lifecycle_tracks_same_user_desks_foreign_users_disconnect_and_remove_on
             .status(),
         StatusCode::NO_CONTENT
     );
-    let removed = json(scenario.lifecycle_snapshot(Some(&other_token)).await).await;
-    assert_eq!(removed["projection"]["revision"], 5);
-    assert_eq!(
-        removed["projection"]["programmers"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
+    let after_main = json(scenario.lifecycle_snapshot(Some(&other_token)).await).await;
+    assert_eq!(after_main["projection"]["revision"], 5);
+    let rows = after_main["projection"]["programmers"].as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["sessions"].as_array().unwrap().len(), 1);
+
     let lifecycle = replay_lifecycle_events(&scenario.state);
     assert_eq!(lifecycle.len(), 5);
-    assert!(matches!(
-        lifecycle.last().unwrap().payload,
+    // The Programmer is not removed while a surface still operates it.
+    assert!(lifecycle.iter().all(|event| !matches!(
+        event.payload,
         light_application::ApplicationEvent::Programming(
             light_application::ProgrammingEvent::LifecycleChanged(
                 light_application::ProgrammingLifecycleChange {
@@ -121,7 +115,7 @@ async fn lifecycle_tracks_same_user_desks_foreign_users_disconnect_and_remove_on
                 }
             )
         )
-    ));
+    )));
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

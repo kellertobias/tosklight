@@ -45,7 +45,7 @@ async fn output_runtime_action(
     .map_err(OutputRuntimeHttpError::api)?;
     let _activation = state.active_show.acquire().await;
     state.programming.run_desk_operation(session.desk.id, || {
-        if read_desk_lock(&state, session.desk.id).locked {
+        if read_desk_lock(&state).locked {
             return Err(OutputRuntimeHttpError::conflict(
                 "desk is locked",
                 Some(state.output.control_projection().revision),

@@ -62,10 +62,10 @@ impl ProgrammingService {
         active_show: &ActiveShowService,
         ports: &P,
     ) -> Result<ProgrammingUpdateTargetsResult, ActionError> {
-        let identity = update_identity(&envelope.context)?;
+        let mut identity = update_identity(&envelope.context)?;
         self.with_user_and_desk_gate(identity.desk_id, identity.user_id, || {
             ports.authorize_programming_update(&envelope.context)?;
-            self.assert_update_owner(&identity)?;
+            self.bind_update_owner(&mut identity)?;
             let capture = self
                 .programmers
                 .capture_update_menu(identity.session_id)
@@ -116,10 +116,10 @@ impl ProgrammingService {
         active_show: &ActiveShowService,
         ports: &P,
     ) -> Result<ProgrammingUpdatePreviewResult, ActionError> {
-        let identity = update_identity(&envelope.context)?;
+        let mut identity = update_identity(&envelope.context)?;
         self.with_user_and_desk_gate(identity.desk_id, identity.user_id, || {
             ports.authorize_programming_update(&envelope.context)?;
-            self.assert_update_owner(&identity)?;
+            self.bind_update_owner(&mut identity)?;
             let capture = self.capture_update(identity.session_id, &envelope.command.target)?;
             ensure_capture_owner(&capture, identity.user_id)?;
             let programmer_revision = capture.fingerprint()?;
@@ -153,8 +153,8 @@ impl ProgrammingService {
         active_show: &ActiveShowService,
         ports: &P,
     ) -> Result<ProgrammingUpdateResult, ActionError> {
-        let identity = update_identity(&envelope.context)?;
-        if let Some(result) = self.prepare_update_attempt(&envelope, ports, &identity)? {
+        let mut identity = update_identity(&envelope.context)?;
+        if let Some(result) = self.prepare_update_attempt(&envelope, ports, &mut identity)? {
             return Ok(result);
         }
         self.apply_new_update(envelope, active_show, ports, identity)
@@ -181,10 +181,10 @@ impl ProgrammingService {
         &self,
         envelope: &ActionEnvelope<ProgrammingUpdateCommand>,
         ports: &P,
-        identity: &UpdateIdentity,
+        identity: &mut UpdateIdentity,
     ) -> Result<Option<ProgrammingUpdateResult>, ActionError> {
         ports.authorize_programming_update(&envelope.context)?;
-        self.assert_update_owner(identity)?;
+        self.bind_update_owner(identity)?;
         self.replayed_update(identity, &envelope.command)
     }
 
@@ -251,9 +251,9 @@ impl ProgrammingService {
         envelope: ActionEnvelope<ProgrammingUpdateCommand>,
         active_show: &ActiveShowService,
         ports: &P,
-        identity: UpdateIdentity,
+        mut identity: UpdateIdentity,
     ) -> Result<ProgrammingUpdateResult, ActionError> {
-        if let Some(result) = self.prepare_update_attempt(&envelope, ports, &identity)? {
+        if let Some(result) = self.prepare_update_attempt(&envelope, ports, &mut identity)? {
             return Ok(result);
         }
         let before = self.update_interaction_snapshot(&identity)?;
@@ -333,15 +333,16 @@ impl ProgrammingService {
         Ok(capture)
     }
 
-    fn assert_update_owner(&self, identity: &UpdateIdentity) -> Result<(), ActionError> {
-        match self.programmers.user_id(identity.session_id) {
-            Some(owner) if owner == identity.user_id => Ok(()),
-            Some(_) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(missing_programmer()),
-        }
+    /// Bind this identity to the Programmer its session actually operates.
+    ///
+    /// The presented identity may be a legacy one, which names no Programmer state. Normalising
+    /// it in place means every later step — capture, fingerprint, replay — keys the desk's own.
+    fn bind_update_owner(&self, identity: &mut UpdateIdentity) -> Result<(), ActionError> {
+        identity.user_id = self
+            .programmers
+            .operated_desk_user(identity.session_id, identity.user_id)
+            .ok_or_else(missing_programmer)?;
+        Ok(())
     }
 }
 

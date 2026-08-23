@@ -12,7 +12,7 @@ use crate::runtime::ActiveShowRepository;
 
 impl ProgrammingPresetRecallPorts for ServerProgrammingPorts<'_> {
     fn authorize_preset_recall(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
+        <Self as ProgrammingPorts>::authorize_programming_change(self, context)
     }
 
     fn preset_recall_environment(

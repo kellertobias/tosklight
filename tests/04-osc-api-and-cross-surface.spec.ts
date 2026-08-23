@@ -123,12 +123,11 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 
   pairedScenario<OscIsolationState>({
     id: "OSC-003",
-    title: "separate desk subscribers isolate partial commands and unsubscribe independently",
+    title: "two OSC surfaces share the desk's command line and unsubscribe is reference-counted",
     surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `osc-003-${surface}`);
       const second = await createSession(api, crypto.randomUUID());
-      await withSession(api, second, () => api.setCommandLineText("GROUP 2 +"));
       return { second };
     },
     api: async ({ api, bench }, state) => {
@@ -150,18 +149,19 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       const firstAlias = first.desk.osc_alias;
       const secondAlias = state.second.desk.osc_alias;
       try {
+        // One desk, one command line: both sessions read the same partial command.
         await expect.poll(async () => normalizeCommand((await programmerForSession(api, first)).command_line)).toBe("GROUP 1 +");
-        await expect.poll(async () => normalizeCommand((await programmerForSession(api, state.second)).command_line)).toBe("GROUP 2 +");
+        await expect.poll(async () => normalizeCommand((await programmerForSession(api, state.second)).command_line)).toBe("GROUP 1 +");
         const states = await api.request<any[]>("GET", "/api/v2/programmers");
         expect(states.filter((entry) => [first.session_id, state.second.session_id].includes(entry.session_id))
           .every((entry) => entry.values.length === 0 && Object.keys(entry.group_values).length === 0)).toBe(true);
 
+        // And both wings are told about it, each on the path it connected on.
         const firstFeedback = await firstHardware.expectAfter(state.firstMark!, `/light/${firstAlias}/feedback/command-line`);
         expect(normalizeCommand(String(firstFeedback.arguments[0]))).toBe("GROUP 1 +");
         await bench.tick(0);
-        await secondHardware.expectAfter(state.secondMark!, `/light/${secondAlias}/feedback/page`);
-        expect(secondHardware.messages.slice(state.secondMark!).filter((message) => message.address.endsWith("/feedback/command-line"))
-          .every((message) => normalizeCommand(String(message.arguments[0])) !== "GROUP 1 +")).toBe(true);
+        const secondFeedback = await secondHardware.expectAfter(state.secondMark!, `/light/${secondAlias}/feedback/command-line`);
+        expect(normalizeCommand(String(secondFeedback.arguments[0]))).toBe("GROUP 1 +");
 
         await firstHardware.send("/light/unsubscribe", ["osc-003-a"]);
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -174,7 +174,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
           .slice(secondActionMark)
           .filter((message) => message.address === secondFeedbackAddress)
           .map((message) => normalizeCommand(String(message.arguments[0])))
-          .find((command) => command === "GROUP 2 + F3") ?? null).toBe("GROUP 2 + F3");
+          .find((command) => command === "GROUP 1 + F3") ?? null).toBe("GROUP 1 + F3");
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(firstHardware.messages.slice(disconnectedMark)).toHaveLength(0);
         expect((await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);

@@ -107,7 +107,7 @@ fn priority_is_lightweight_revisioned_replay_safe_and_stable_across_unrelated_va
 }
 
 #[test]
-fn priority_snapshot_is_shared_between_user_desks_and_rejects_a_foreign_owner() {
+fn priority_is_the_desks_and_every_surface_reads_it() {
     let registry = ProgrammerRegistry::default();
     let user = UserId::new();
     let first_session = SessionId::new();
@@ -145,14 +145,24 @@ fn priority_snapshot_is_shared_between_user_desks_and_rejects_a_foreign_owner() 
         80
     );
 
-    let foreign = ActionContext::operator(
+    // An identity from before the desk had only one reads the desk's priority rather than being
+    // rejected as foreign, and is reported as the desk's Programmer.
+    let legacy = ActionContext::operator(
         peer.desk_id,
         UserId::new().0,
         second_session.0,
         ActionSource::Http,
     );
-    let error = service.priority_snapshot(&foreign, &ports).unwrap_err();
-    assert_eq!(error.kind, ActionErrorKind::Forbidden);
+    let snapshot = service.priority_snapshot(&legacy, &ports).unwrap();
+    assert_eq!(snapshot.projection.priority, 80);
+    assert_eq!(snapshot.projection.user_id, user);
+
+    // Authentication still gates the read.
+    let system = ActionContext::system(peer.desk_id, ActionSource::System);
+    assert_eq!(
+        service.priority_snapshot(&system, &ports).unwrap_err().kind,
+        ActionErrorKind::Unauthorized
+    );
 }
 
 #[test]

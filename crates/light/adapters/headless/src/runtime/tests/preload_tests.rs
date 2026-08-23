@@ -318,6 +318,7 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "atomic-preload".into(),
@@ -373,6 +374,7 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
         .installation.add_desk("Preload exclusions", "preload-exclusions")
         .unwrap();
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "typed-preload".into(),
@@ -566,6 +568,7 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "preload-auto-off".into(),
@@ -639,6 +642,7 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
         .installation.add_desk("Explicit Preload page", "explicit-preload-page")
         .unwrap();
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "explicit-preload-page".into(),

@@ -446,16 +446,13 @@ impl OutputResource {
             ));
         }
         {
+            // Every surface is a surface of the one desk, so audio arriving from a second one is
+            // the same desk's analyzer feeding the same Speed Group, not a second desk competing
+            // for it. The owner is still recorded — a manual value has to know that Sound was
+            // driving the group — but it is no longer a claim anything is refused against.
             let mut owners = self.sound_capture_owners.lock();
-            if owners[index].is_some_and(|owner| {
-                owner.desk_id != desk_id && now.saturating_sub(owner.last_seen_millis) <= 3_000
-            }) {
-                return Err(ApiError::conflict(
-                    "this Speed Group is receiving audio from another desk",
-                ));
-            }
+            let _ = desk_id;
             owners[index] = Some(SoundCaptureOwner {
-                desk_id,
                 last_seen_millis: now,
             });
         }

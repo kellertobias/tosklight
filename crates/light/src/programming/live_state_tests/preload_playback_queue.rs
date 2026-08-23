@@ -126,7 +126,7 @@ impl QueueSetup {
 }
 
 #[test]
-fn snapshot_is_authenticated_exact_user_and_preserves_ordered_duplicates() {
+fn snapshot_is_authenticated_and_preserves_ordered_duplicates() {
     let setup = QueueSetup::new();
     setup.queue_on_page(&setup.first_context, 3, Some(4));
     setup.queue(&setup.second_context, 3);
@@ -156,17 +156,18 @@ fn snapshot_is_authenticated_exact_user_and_preserves_ordered_duplicates() {
         [Some(4), None]
     );
 
-    let foreign = ActionContext::operator(
+    // An identity from before the collapse reads the desk's queue rather than being turned away.
+    let legacy = ActionContext::operator(
         setup.first_context.desk_id,
         UserId::new().0,
         setup.first.0,
         ActionSource::Http,
     );
-    let error = setup
+    let through_legacy = setup
         .service
-        .preload_playback_queue_snapshot(&foreign, &setup.ports)
-        .unwrap_err();
-    assert_eq!(error.kind, ActionErrorKind::Forbidden);
+        .preload_playback_queue_snapshot(&legacy, &setup.ports)
+        .expect("a legacy identity is the desk's own");
+    assert_eq!(through_legacy.projection.actions.len(), 2);
     let error = setup
         .service
         .preload_playback_queue_snapshot(

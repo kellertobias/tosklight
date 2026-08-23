@@ -7,14 +7,15 @@ interface ProgrammerProjection {
 }
 
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
-	test("LOCK-001 @api @failure-mode › PIN lock covers every screen and drops every desk input without changing output", async ({ api, bench, desk, page }) => {
+	test("LOCK-001 @api @failure-mode › PIN lock covers every screen and control surface and drops every input without changing output", async ({ api, bench, desk, page }) => {
 		await desk.open(bench.baseUrl);
 		const pageDeskSession = await desk.session();
 		const otherDeskSession = await api.request<typeof pageDeskSession>("POST", "/api/v2/sessions", {
 			username: "Operator",
 			client_id: crypto.randomUUID(),
 		}, false);
-		expect(otherDeskSession.desk.id).not.toBe(pageDeskSession.desk.id);
+		// Two clients are two windows of the one desk, not two desks.
+		expect(otherDeskSession.desk.id).toBe(pageDeskSession.desk.id);
 		api.session = pageDeskSession;
 		const secondScreen = await page.context().newPage();
 		await secondScreen.goto(bench.baseUrl);
@@ -48,9 +49,13 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 			expect(await commandLine(api)).toBe("");
 			expect(await api.request<any>("GET", "/api/v2/output/dmx")).toEqual(before);
 
+			// Desk Lock is installation-wide: a session that logged in on another desk record is
+			// locked with the rest, and cannot move the Grand Master past it.
 			api.session = otherDeskSession;
-			expect((await api.request<any>("GET", "/api/v2/desk-lock")).locked).toBe(false);
-			await api.request("POST", "/api/v2/output-runtime/global-master/actions", { grand_master: 1 });
+			expect((await api.request<any>("GET", "/api/v2/desk-lock")).locked).toBe(true);
+			await expect(
+				api.request("POST", "/api/v2/output-runtime/global-master/actions", { grand_master: 1 }),
+			).rejects.toThrow(/409.*desk is locked/);
 			api.session = pageDeskSession;
 
 			await lock.getByLabel("PIN").fill("9999");

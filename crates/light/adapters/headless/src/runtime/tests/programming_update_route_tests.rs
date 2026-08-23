@@ -18,6 +18,7 @@ impl UpdateRouteScenario {
         let mut desk = test_control_desk();
         desk.id = Uuid::new_v4();
         let session = Session {
+            capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
             user: user.clone(),
             token: "programming-update-v2".into(),
@@ -136,7 +137,6 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
         });
     write_desk_lock(
         &scenario.state,
-        scenario.session.desk.id,
         &DeskLockConfiguration {
             locked: true,
             ..Default::default()
@@ -249,12 +249,7 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
     assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
     assert_eq!(json(foreign).await["kind"], "forbidden");
 
-    write_desk_lock(
-        &scenario.state,
-        scenario.session.desk.id,
-        &DeskLockConfiguration::default(),
-    )
-    .unwrap();
+    write_desk_lock(&scenario.state, &DeskLockConfiguration::default()).unwrap();
     let saved = put_settings_request(&scenario, &settings_path).await;
     assert_eq!(saved.status(), StatusCode::OK);
     assert_eq!(json(saved).await["settings"]["cue_mode"], "existing_only");

@@ -21,8 +21,10 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPreloadValuesResult, ActionError> {
         let (session, user_id, request_id, expected_revision) = preload_values_context(&action)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
-            ports.authorize(&action.context)?;
+            ports.authorize_programming_change(&action.context)?;
             self.assert_preload_values_owner(session, user_id)?;
             let fingerprint = preload_request_fingerprint(expected_revision, &action.command);
             let replay_identity = PreloadReplayIdentity {
@@ -38,10 +40,9 @@ impl ProgrammingService {
             {
                 return Ok(cached);
             }
-            self.assert_preload_values_revision(user_id, expected_revision)?;
+            self.assert_preload_values_revision(expected_revision)?;
             let capture_mode_revision = self.assert_preload_capture_precondition(
                 session,
-                user_id,
                 action.command.expected_capture_mode_revision,
             )?;
             let result = self.apply_preload_values_action(
@@ -181,9 +182,9 @@ impl ProgrammingService {
         session: SessionId,
         user_id: UserId,
     ) -> Result<(), ActionError> {
-        match self.programmers.user_id(session) {
-            Some(owner) if owner == user_id => Ok(()),
-            Some(_) => Err(ActionError::new(
+        match self.programmers.session_operates_desk(session, user_id) {
+            Some(true) => Ok(()),
+            Some(false) => Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",
             )),
@@ -194,12 +195,8 @@ impl ProgrammingService {
         }
     }
 
-    fn assert_preload_values_revision(
-        &self,
-        user_id: UserId,
-        expected: u64,
-    ) -> Result<(), ActionError> {
-        let actual = self.programmers.preload_values_revision(user_id);
+    fn assert_preload_values_revision(&self, expected: u64) -> Result<(), ActionError> {
+        let actual = self.programmers.preload_values_revision();
         if expected == actual {
             Ok(())
         } else {
@@ -214,11 +211,10 @@ impl ProgrammingService {
     fn assert_preload_capture_precondition(
         &self,
         session: SessionId,
-        user_id: UserId,
         expected: u64,
     ) -> Result<u64, ActionError> {
-        let actual = self.programmers.capture_mode_revision(user_id);
-        let values_revision = self.programmers.preload_values_revision(user_id);
+        let actual = self.programmers.capture_mode_revision();
+        let values_revision = self.programmers.preload_values_revision();
         if expected != actual {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,

@@ -99,6 +99,7 @@ pub(super) async fn create_session(
         .resolve_client_desk(client_id, input.desk_id)
         .map_err(ApiError::store)?;
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: Uuid::new_v4().to_string(),
@@ -140,29 +141,6 @@ pub(super) async fn create_session(
         desk: runtime_wire::desk(desk),
     }))
 }
-pub(super) async fn create_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(input): Json<UserInput>,
-) -> Result<(StatusCode, Json<DeskUser>), ApiError> {
-    let _session = authenticate(&state, &headers)?;
-    let mut user = state
-        .installation
-        .add_user(&input.name)
-        .map_err(ApiError::store)?;
-    if !input.enabled {
-        user = state
-            .installation
-            .update_user(user.id, &user.name, false)
-            .map_err(ApiError::store)?;
-    }
-    emit(
-        &state,
-        "desk_user_changed",
-        serde_json::json!({"user":user}),
-    );
-    Ok((StatusCode::CREATED, Json(user)))
-}
 pub(super) async fn close_session(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -201,8 +179,8 @@ pub(super) async fn close_session(
             .touch_client(client_id)
             .map_err(ApiError::store)?;
     }
-    let same_context_connected = state.sessions.same_context_connected(&session);
-    if !same_context_connected {
+    // Highlight is the desk's, so it is released when the last surface leaves, not the first.
+    if !state.sessions.any_surface_connected() {
         state
             .highlight
             .clear_context(session.desk.id, session.user.id);

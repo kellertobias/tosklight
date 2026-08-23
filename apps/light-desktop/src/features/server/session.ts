@@ -5,37 +5,12 @@ export function createSessionActions(
 	model: ServerController,
 ): Pick<
 	ServerCapabilities,
-	| "createUser"
-	| "changeUser"
 	| "updateControlDesk"
 	| "selectControlDesk"
 	| "removeClient"
 > {
 	const { api, setError, setBootstrap, setSession } = model;
 	return {
-		createUser: async (name) => {
-			try {
-				if (model.sessionRole !== "primary")
-					throw new Error("Only the primary screen can change the desk user");
-				setError(null);
-				const user = await api.desk.createUser(name);
-				setBootstrap(await api.runtime.bootstrap());
-				await api.runtime.closeSession();
-				localStorage.setItem("light.operator", user.name);
-				window.location.reload();
-			} catch (caught) {
-				setError(caught instanceof Error ? caught.message : String(caught));
-			}
-		},
-		changeUser: async (user) => {
-			if (model.sessionRole !== "primary") {
-				setError("Only the primary screen can change the desk user");
-				return;
-			}
-			localStorage.setItem("light.operator", user.name);
-			await api.runtime.closeSession();
-			window.location.reload();
-		},
 		updateControlDesk: async (desk) => {
 			try {
 				const updated = await api.playback.updateControlDesk(

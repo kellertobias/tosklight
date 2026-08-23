@@ -107,9 +107,8 @@ impl ProgrammerRegistry {
         let touched = fixture_batch.commit(&mut state.preload_pending);
         restamp_transient_values(self, state, &touched, changed_at);
         state.last_activity = changed_at;
-        let user_id = state.user_id;
         drop(states);
-        self.mark_preload_values_changed(user_id);
+        self.mark_preload_values_changed();
         true
     }
 

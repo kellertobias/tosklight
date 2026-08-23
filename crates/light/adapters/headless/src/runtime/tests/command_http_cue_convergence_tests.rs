@@ -60,6 +60,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
     scenario.state.integrations.register_osc_subscriber(
         "cue-record-keys".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: osc_alias.clone(),
             target: source,
             command_source: source,
@@ -151,6 +152,7 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
     scenario.state.integrations.register_osc_subscriber(
         "cue-record-touch".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: scenario.session.desk.osc_alias.clone(),
             target: source,
             command_source: source,
@@ -282,6 +284,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
     scenario.state.integrations.register_osc_subscriber(
         "set-playback-touch".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: scenario.session.desk.osc_alias.clone(),
             target: source,
             command_source: source,
@@ -496,6 +499,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
     scenario.state.integrations.register_osc_subscriber(
         "off-playback-touch".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: scenario.session.desk.osc_alias.clone(),
             target: source,
             command_source: source,
@@ -699,6 +703,7 @@ async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
     scenario.state.integrations.register_osc_subscriber(
         "unsupported-playback-touch".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: scenario.session.desk.osc_alias.clone(),
             target: source,
             command_source: source,
@@ -881,4 +886,130 @@ fn assert_osc_record_event_order(state: &AppState, baseline: u64) {
             light_application::ProgrammingEvent::InteractionChanged(_)
         )
     ));
+}
+
+#[tokio::test]
+async fn a_guest_runs_playback_while_the_programming_user_holds_a_record() {
+    let scenario = CommandHttpScenario::new().await;
+    scenario
+        .state
+        .installation
+        .update_configuration(|configuration| {
+            configuration.start_after_first_recording = true;
+        });
+    let _show_id = scenario.create_and_open_show("Guest playback").await;
+    set_cue_record_value(&scenario);
+
+    // The operator's desk-button wing, and a guest phone on the remote-control-only path.
+    let desk_source: SocketAddr = "127.0.0.1:9027".parse().unwrap();
+    let guest_source: SocketAddr = "127.0.0.1:9037".parse().unwrap();
+    scenario.state.integrations.register_osc_subscriber(
+        "operator-wing".into(),
+        OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
+            desk_alias: scenario.session.desk.osc_alias.clone(),
+            target: desk_source,
+            command_source: desk_source,
+            session_id: scenario.session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+    // The guest is its own transport session; it is not a second Programmer, but it is a
+    // separate connection with its own input state.
+    let guest = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(),
+        user: scenario.session.user.clone(),
+        token: "guest-phone".into(),
+        connected: true,
+        desk: scenario.session.desk.clone(),
+    };
+    scenario.state.programming.start(guest.id, guest.user.id);
+    scenario.state.sessions.insert_session(guest.clone());
+    scenario.state.integrations.register_osc_subscriber(
+        "guest-phone".into(),
+        OscSubscriber {
+            capability: light_core::SurfaceCapability::PlaybackOnly,
+            desk_alias: "remote".into(),
+            target: guest_source,
+            command_source: guest_source,
+            session_id: guest.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+
+    // The operator records a playback, leaving RECORD armed on the command line.
+    assert_osc_surface_records(
+        &scenario,
+        11,
+        "button/1",
+        OscArgument::Bool(true),
+        Some(OscArgument::Bool(false)),
+    );
+    scenario
+        .state
+        .programming
+        .set_command_line(scenario.session.id, "RECORD".into());
+
+    // The guest raises that playback's fader. It runs, and the operator's armed Record is
+    // untouched — which is the whole reason the guest role exists.
+    handle_control_event(
+        &scenario.state,
+        ControlEvent::Osc {
+            address: "/light/playback/4/11/fader".into(),
+            arguments: vec![OscArgument::Float(0.6)],
+            source: Some(guest_source.to_string()),
+        },
+    );
+    let runtime = runtime_for_page_slot(&scenario, 11);
+    assert!(
+        (runtime.fader_position - 0.6).abs() < 0.001,
+        "the guest's fader reached the playback"
+    );
+    assert!(
+        runtime.fader_pickup_required,
+        "ordinary fader pickup still applies to a guest surface"
+    );
+
+    assert_eq!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .command_line,
+        "RECORD",
+        "a guest must not disturb the programming user's Programmer"
+    );
+
+    // The same guest pressing a programmer key changes nothing.
+    handle_control_event(
+        &scenario.state,
+        ControlEvent::Osc {
+            address: "/light/remote/programmer/clear".into(),
+            arguments: vec![OscArgument::Bool(true)],
+            source: Some(guest_source.to_string()),
+        },
+    );
+    assert_eq!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .command_line,
+        "RECORD"
+    );
+
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

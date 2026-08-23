@@ -132,6 +132,44 @@ impl InstallationResource {
         self.desk.lock().setting(key)
     }
 
+    /// Create a user record.
+    ///
+    /// Nothing in the desk does this any more: there is one programming user, and a surface that
+    /// may not program is a Not Editable screen or an OSC remote-control route rather than a
+    /// second person. It remains for tests that build a database from before the collapse and
+    /// check that a session logging in on one still joins the desk.
+    #[cfg(test)]
+    pub(in crate::runtime) fn add_user(
+        &self,
+        name: &str,
+    ) -> Result<DeskUser, light_show::StoreError> {
+        self.desk.lock().add_user(name)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn update_user(
+        &self,
+        id: light_core::UserId,
+        name: &str,
+        enabled: bool,
+    ) -> Result<DeskUser, light_show::StoreError> {
+        self.desk.lock().update_user(id, name, enabled)
+    }
+
+    pub(in crate::runtime) fn settings_with_prefix(
+        &self,
+        prefix: &str,
+    ) -> Result<Vec<(String, String)>, light_show::StoreError> {
+        self.desk.lock().settings_with_prefix(prefix)
+    }
+
+    pub(in crate::runtime) fn remove_setting(
+        &self,
+        key: &str,
+    ) -> Result<(), light_show::StoreError> {
+        self.desk.lock().remove_setting(key)
+    }
+
     pub(in crate::runtime) fn set_setting(
         &self,
         key: &str,
@@ -144,27 +182,11 @@ impl InstallationResource {
         self.desk.lock().users()
     }
 
-    pub(in crate::runtime) fn add_user(
-        &self,
-        name: &str,
-    ) -> Result<DeskUser, light_show::StoreError> {
-        self.desk.lock().add_user(name)
-    }
-
     pub(in crate::runtime) fn find_user(
         &self,
         name: &str,
     ) -> Result<Option<DeskUser>, light_show::StoreError> {
         self.desk.lock().find_user(name)
-    }
-
-    pub(in crate::runtime) fn update_user(
-        &self,
-        id: light_core::UserId,
-        name: &str,
-        enabled: bool,
-    ) -> Result<DeskUser, light_show::StoreError> {
-        self.desk.lock().update_user(id, name, enabled)
     }
 
     pub(in crate::runtime) fn defer_session_save(

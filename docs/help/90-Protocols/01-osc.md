@@ -1,10 +1,38 @@
 # OSC Protocol
 
-Use this interface only on a trusted lighting network. One ToskLight application and its attached OSC hardware form one desk with one shared command line and authoritative desk state. A different desk alias remains an isolated control context.
+Use this interface only on a trusted lighting network. One ToskLight application and its attached
+OSC hardware form one desk with one shared command line and authoritative desk state.
 
-## OSC
+## Two paths
 
-An OSC client subscribes with `/light/subscribe` and the arguments `client ID`, `desk alias`, and feedback port. Unsubscribe with `/light/unsubscribe` and the client ID. A successful subscription returns feedback under `/light/{desk}/feedback/...`, including the current page, command line, keys, playbacks, Speed Groups, and lock state.
+The path a client connects on decides what it may do.
+
+| Path | Role | Command set |
+| --- | --- | --- |
+| `/light/desk/...` | Desk button | The full set, including Record, Update and the Assign keyword, exactly as the main window. |
+| `/light/remote/...` | Remote control only | Playback only. No Record, no Update, no Assign, no keypad, no encoders. |
+
+A remote-control surface is a **guest**. It does not get a Programmer, a user record, or a desk of
+its own — it addresses the same singleton desk and is simply refused the commands that would change
+what is programmed on it. Pressing a playback on the guest path operates that playback; it never
+captures a Record, even while the operator has one armed. Ordinary fader pickup still applies,
+because a guest is still a physical surface.
+
+This is what makes it safe for somebody to work a playback while you record a cue.
+
+A client must send on the path it subscribed on. A guest cannot reach a desk-button route by
+addressing one.
+
+## Subscribing
+
+An OSC client subscribes with `/light/subscribe` and the arguments `client ID`, `path`, and feedback
+port. Unsubscribe with `/light/unsubscribe` and the client ID. A successful subscription returns
+feedback under `/light/{path}/feedback/...`, including the current page, command line, keys,
+playbacks, Speed Groups, and lock state — on the same path the client connected on.
+
+Saved hardware configuration naming a path from before these two existed keeps working: any path
+other than `remote` connects as a desk-button surface. Those older names are a compatibility path
+only, and can be retired once no saved configuration still uses one.
 
 Keypad input uses `/light/{desk}/programmer/{key}` with a pressed value. Digits are `digit-0` through `digit-9`; command names include `group`, `at`, `plus`, `minus`, `time`, `delay`, `link`, `shift`, `set`, `record`, `enter`, `clear`, and `backspace`. The [Command Line Reference](../10-Desk/20-Programmer-and-Cues/01-command-line.md) defines their operator semantics. A successful Link transition is published through the ordinary playback event with cause `link`, previous/current stable Cue references, and transition ordinal. Playback `effective-next-cue` feedback resolves a current Link destination unless an explicit loaded Cue overrides it.
 
@@ -20,11 +48,11 @@ Playback addresses deliberately distinguish current-page and explicit-page opera
 Changing a page in the application changes where the same `page-playback` packet is routed. It
 does not change an explicit physical or Virtual address. A Virtual number is never an alias for
 physical Playback 1–1000 or an old page slot. Its assignment, runtime, and exclusion zones are
-shared across desks; the desk alias records the action source but does not select a separate copy.
+shared across the desk; the path records the action source but does not select a separate copy.
 
 ### Dynamics
 
-Dynamics OSC is scoped to a subscribed desk alias. Pool actions take one pressed Boolean or numeric
+Dynamics OSC requires a desk-button surface; it is programming, so the guest path does not accept it. Pool actions take one pressed Boolean or numeric
 value; release values are ignored:
 
 | Input address | Arguments | Authoritative action |
@@ -49,7 +77,7 @@ as authoritative replacements for a locally cached instance list.
 
 ### Highlight and Step Through
 
-Highlight and selection-step actions use the OSC subscriber's authenticated user/session and the desk named in the address. Send a pressed Boolean value to one of these addresses; releases and messages from an unsubscribed command socket are ignored. Highlight state is independent of the actual programmer selection and its step state.
+Highlight and selection-step actions require a desk-button surface and use the OSC subscriber's authenticated session. Send a pressed Boolean value to one of these addresses; releases and messages from an unsubscribed command socket are ignored. Highlight state is independent of the actual programmer selection and its step state.
 
 | Input address | Authoritative action |
 | --- | --- |

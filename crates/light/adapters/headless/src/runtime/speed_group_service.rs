@@ -139,7 +139,7 @@ impl SpeedGroupPorts for ServerSpeedGroupPorts<'_> {
         if self.require_unlocked
             && self
                 .session
-                .is_some_and(|session| read_desk_lock(self.state, session.desk.id).locked)
+                .is_some_and(|_| read_desk_lock(self.state).locked)
         {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,

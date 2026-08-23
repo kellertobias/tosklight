@@ -17,6 +17,7 @@ fn screens_persist_and_keep_independent_pages_per_show() {
     let show = ShowId::new();
     let id = Uuid::new_v4();
     let screen = ScreenConfiguration {
+        not_editable: false,
         id,
         name: "Wing".into(),
         layout: serde_json::json!({"desks":[],"activeDeskId":""}),
@@ -68,6 +69,7 @@ fn screen_playback_range_must_fit_page_slots() {
     let path = temporary("screen-validation");
     let store = DeskStore::open(&path).unwrap();
     let invalid = ScreenConfiguration {
+        not_editable: false,
         id: Uuid::new_v4(),
         name: "Bad".into(),
         layout: serde_json::json!({}),
@@ -155,10 +157,10 @@ fn client_history_migrates_unknown_rows_reuses_identity_and_recreates_removed_de
 fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
     let path = temporary("client-removal");
     let mut store = DeskStore::open(&path).unwrap();
-    let removed_client = Uuid::new_v4();
-    let retained_client = Uuid::new_v4();
-    let removed = store.resolve_client_desk(removed_client, None).unwrap();
-    let retained = store.resolve_client_desk(retained_client, None).unwrap();
+    // Two desk records, as an installation from before the collapse holds. Connecting clients no
+    // longer produce them — a client is its own record now — so they are made directly.
+    let removed = store.add_desk("Removed wing", "removed-wing").unwrap();
+    let retained = store.add_desk("Retained wing", "retained-wing").unwrap();
     let show_id = ShowId::new();
     store.set_desk_page(removed.id, show_id, 17).unwrap();
     store
@@ -191,6 +193,7 @@ fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
         )
         .unwrap();
     let screen = ScreenConfiguration {
+        not_editable: false,
         id: Uuid::new_v4(),
         name: "Shared optional screen".into(),
         layout: serde_json::json!({"desks":[],"activeDeskId":""}),
@@ -333,6 +336,7 @@ fn programmer_control_surface_persists_one_screen_owner_and_reassigns_deleted_ow
     let store = DeskStore::open(&path).unwrap();
     let screen = store
         .put_screen(ScreenConfiguration {
+            not_editable: false,
             id: Uuid::new_v4(),
             name: "Programmer wing".into(),
             layout: serde_json::json!({}),
@@ -406,6 +410,7 @@ fn fixed_screen_content_round_trips_and_forces_dock_off() {
     let cue_list_id = Uuid::new_v4();
     let saved = store
         .put_screen(ScreenConfiguration {
+            not_editable: false,
             id,
             name: "Fixed fixtures".into(),
             layout: serde_json::json!({"desks":[],"activeDeskId":"preserved"}),
@@ -474,6 +479,7 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
     let store = DeskStore::open(&path).unwrap();
     let id = Uuid::new_v4();
     let base = ScreenConfiguration {
+        not_editable: false,
         id,
         name: "Side fixtures".into(),
         layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
@@ -556,6 +562,7 @@ fn fixed_side_pane_turns_desktop_dock_off() {
     let store = DeskStore::open(&path).unwrap();
     let saved = store
         .put_screen(ScreenConfiguration {
+            not_editable: false,
             id: Uuid::new_v4(),
             name: "Side controls".into(),
             layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
@@ -592,6 +599,7 @@ fn control_and_empty_screen_content_round_trip_without_desktop_dock() {
     let path = temporary("utility-screen-content");
     let store = DeskStore::open(&path).unwrap();
     let base = ScreenConfiguration {
+        not_editable: false,
         id: Uuid::new_v4(),
         name: "Utility".into(),
         layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
@@ -632,6 +640,7 @@ fn fixed_screen_content_rejects_invalid_display_settings_without_resolving_refer
     let path = temporary("fixed-screen-validation");
     let store = DeskStore::open(&path).unwrap();
     let base = ScreenConfiguration {
+        not_editable: false,
         id: Uuid::new_v4(),
         name: "Invalid fixed screen".into(),
         layout: serde_json::json!({}),

@@ -31,8 +31,12 @@ pub(super) struct AppState {
 pub(super) type CapturedOscMessage = (SocketAddr, String, Vec<OscArgument>);
 
 #[derive(Clone, Copy)]
+/// The surface whose audio last drove a Speed Group.
+///
+/// Recorded so a manual value knows Sound was driving the group and can take over cleanly. Not an
+/// ownership claim: there is one desk, so a second surface feeding the same analyzer is the same
+/// desk, and nothing is refused against this.
 pub(super) struct SoundCaptureOwner {
-    pub(super) desk_id: Uuid,
     pub(super) last_seen_millis: u64,
 }
 
@@ -127,6 +131,8 @@ pub(super) struct MvrExportPreview {
 #[derive(Clone)]
 pub(super) struct OscSubscriber {
     pub(super) desk_alias: String,
+    /// What this surface may do to the desk, decided by the path it connected on.
+    pub(super) capability: light_core::SurfaceCapability,
     pub(super) target: SocketAddr,
     pub(super) command_source: SocketAddr,
     pub(super) session_id: SessionId,
@@ -215,6 +221,13 @@ pub(super) struct Session {
     pub(super) token: String,
     pub(super) connected: bool,
     pub(super) desk: ControlDesk,
+    /// What this request's surface may do to the desk.
+    ///
+    /// Not stored with the session: it is resolved per request from the screen the request says
+    /// it comes from, because one Tauri process drives the main window and every optional screen
+    /// on the same session. A screen can only ever *reduce* what a request may do.
+    #[serde(skip)]
+    pub(super) capability: light_core::SurfaceCapability,
 }
 #[derive(Clone, Serialize)]
 pub(super) struct Event {

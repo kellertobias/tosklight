@@ -164,6 +164,7 @@ async fn command_history_is_desk_scoped_bounded_newest_first_and_redacted() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "history-token".into(),
@@ -171,6 +172,7 @@ async fn command_history_is_desk_scoped_bounded_newest_first_and_redacted() {
         desk: test_control_desk(),
     };
     let other = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "other-history-token".into(),

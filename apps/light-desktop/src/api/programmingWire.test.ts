@@ -322,14 +322,6 @@ describe("Programming event wire validation", () => {
 			},
 		],
 		[
-			"wrong envelope desk",
-			"commandLine",
-			BOTH,
-			(event: ReturnType<typeof programmingEvent>) => {
-				event.event.desk_id = OTHER_PROGRAMMING_DESK_ID;
-			},
-		],
-		[
 			"wrong payload desk",
 			"commandLine",
 			BOTH,
@@ -404,5 +396,16 @@ describe("Programming event wire validation", () => {
 		expect(() =>
 			decodeProgrammingEventMessage(event, PROGRAMMING_DESK_ID, scope),
 		).toThrow();
+	});
+
+	it("accepts a change whose envelope names another desk record", () => {
+		// There is one desk and one Programmer. A surface whose session was created under a
+		// different desk record must still be told about the desk's command line — refusing the
+		// event on that basis is how a second screen used to miss what the operator was typing.
+		const event = programmingEvent("commandLine");
+		event.event.desk_id = OTHER_PROGRAMMING_DESK_ID;
+		expect(() =>
+			decodeProgrammingEventMessage(event, PROGRAMMING_DESK_ID, BOTH),
+		).not.toThrow();
 	});
 });

@@ -55,7 +55,7 @@ fn one_external_action_publishes_one_full_deterministic_values_projection() {
     assert_eq!(completed.event_sequence, None);
     assert_eq!(completed.values_event_sequence, Some(1));
     assert_eq!(projection_read_count(), 1);
-    assert_eq!(registry.normal_values_revision(user_id), 1);
+    assert_eq!(registry.normal_values_revision(), 1);
     let filter = EventFilter::for_desk(setup.context.desk_id)
         .with_object(EventObject::programming_values(user_id.0));
     let EventReplay::Events(events) = setup.events.replay(0, &filter) else {
@@ -94,7 +94,6 @@ fn one_external_action_publishes_one_full_deterministic_values_projection() {
 #[test]
 fn no_op_does_not_advance_revision_or_publish_values() {
     let setup = LiveSetup::new(8);
-    let user_id = UserId(setup.context.user_id.unwrap());
     reset_projection_read_count();
 
     let completed = setup
@@ -104,7 +103,7 @@ fn no_op_does_not_advance_revision_or_publish_values() {
 
     assert_eq!(completed.values_event_sequence, None);
     assert_eq!(setup.events.latest_sequence(), 0);
-    assert_eq!(setup.service.programmers.normal_values_revision(user_id), 0);
+    assert_eq!(setup.service.programmers.normal_values_revision(), 0);
     assert_eq!(projection_read_count(), 0);
 }
 
@@ -134,7 +133,7 @@ fn same_user_peer_waits_before_its_desk_gate_during_nested_refresh() {
     peer_done_rx.recv_timeout(Duration::from_secs(1)).unwrap();
     actor.join().unwrap();
     peer.join().unwrap();
-    assert_eq!(setup.registry.normal_values_revision(setup.user), 1);
+    assert_eq!(setup.registry.normal_values_revision(), 1);
     let object = EventObject::programming_values(setup.user.0);
     for desk in [setup.actor_context.desk_id, setup.peer_context.desk_id] {
         let filter = EventFilter::for_desk(desk).with_object(object.clone());
@@ -205,25 +204,15 @@ impl SharedUserSetup {
         let service = self.service.clone();
         let registry = self.registry.clone();
         let context = self.actor_context.clone();
-        let owner = ProgrammingSelectionTarget {
-            desk_id: self.actor_context.desk_id,
-            interaction_id: self.actor_session,
-        };
-        let peer = ProgrammingSelectionTarget {
-            desk_id: self.peer_context.desk_id,
-            interaction_id: self.peer_session,
-        };
+        let peer_session = self.peer_session;
         thread::spawn(move || {
             service
                 .run_external_interaction(&context, &LivePorts::default(), || {
                     entered.send(()).unwrap();
                     proceed.recv().unwrap();
-                    service.run_selection_refresh_with_owned_target(
-                        &context,
-                        owner,
-                        [owner, peer],
-                        || registry.select(peer.interaction_id, [FixtureId::new()]),
-                    );
+                    service.run_selection_refresh_within_interaction(&context, || {
+                        registry.select(peer_session, [FixtureId::new()])
+                    });
                 })
                 .unwrap();
             done.send(()).unwrap();

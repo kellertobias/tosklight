@@ -98,18 +98,23 @@ async fn rest_session_show_and_revision_flow() {
         2_500
     );
     assert_eq!(state.installation.configuration().release_fade_millis, 1_750);
-    let user = app
+    // Creating an operator is gone with the rest of the multi-user model: the desk has one
+    // programming user, and a surface that may not program is a Not Editable screen or an OSC
+    // remote-control route rather than a second person.
+    let removed = app
         .clone()
         .oneshot(
             Request::post("/api/v2/users/create")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"request_id":"create-video","name":"Video","enabled":true}"#))
+                .body(Body::from(
+                    r#"{"request_id":"create-video","name":"Video","enabled":true}"#,
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(user.status(), StatusCode::CREATED);
+    assert_eq!(removed.status(), StatusCode::NOT_FOUND);
     assert!(authenticate_token(&state, "not-a-session-token").is_err());
     let _ = std::fs::remove_dir_all(data_dir);
 }

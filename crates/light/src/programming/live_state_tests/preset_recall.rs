@@ -440,7 +440,7 @@ fn active_preload_empty_selection_first_tap_selects_then_second_tap_writes_pendi
     assert!(programmer.group_values.is_empty());
     assert!(programmer.preload_active.is_empty());
     assert!(programmer.preload_group_active.is_empty());
-    assert_eq!(setup.registry.normal_values_revision(programmer.user_id), 0);
+    assert_eq!(setup.registry.normal_values_revision(), 0);
 }
 
 #[test]
@@ -632,56 +632,46 @@ fn stale_preload_revision_is_rejected_before_resolving_or_mutating_the_preset() 
 }
 
 #[test]
-fn preset_recall_is_shared_between_user_desks_and_isolated_from_another_user() {
+fn a_preset_recall_reaches_every_surface_of_the_desk() {
     let setup = RecallSetup::new();
     let user = UserId(setup.context.user_id.unwrap());
-    let peer_session = SessionId::new();
-    let foreign_user = UserId::new();
-    let foreign_session = SessionId::new();
-    setup.registry.start(peer_session, user);
-    setup.registry.start(foreign_session, foreign_user);
+    let second_screen = SessionId::new();
+    let legacy_user = UserId::new();
+    let legacy_session = SessionId::new();
+    setup.registry.start(second_screen, user);
+    // A connection arriving under an identity from before the collapse joins the same Programmer.
+    setup.registry.start(legacy_session, legacy_user);
 
     setup.apply("recall-shared", setup.request.clone());
 
-    let peer_context =
-        ActionContext::operator(Uuid::new_v4(), user.0, peer_session.0, ActionSource::Http);
-    let peer = setup
-        .service
-        .values_snapshot(&peer_context, &LivePorts::default())
-        .unwrap();
-    assert_eq!(peer.projection.revision, 1);
-    assert_eq!(peer.projection.fixture_values.len(), 3);
-    let foreign_context = ActionContext::operator(
-        Uuid::new_v4(),
-        foreign_user.0,
-        foreign_session.0,
-        ActionSource::Http,
-    );
-    let foreign = setup
-        .service
-        .values_snapshot(&foreign_context, &LivePorts::default())
-        .unwrap();
-    assert_eq!(foreign.projection.revision, 0);
-    assert!(foreign.projection.fixture_values.is_empty());
+    for (desk, identity, session) in [
+        (Uuid::new_v4(), user, second_screen),
+        (Uuid::new_v4(), legacy_user, legacy_session),
+    ] {
+        let context = ActionContext::operator(desk, identity.0, session.0, ActionSource::Http);
+        let snapshot = setup
+            .service
+            .values_snapshot(&context, &LivePorts::default())
+            .unwrap();
+        assert_eq!(snapshot.projection.revision, 1);
+        assert_eq!(snapshot.projection.fixture_values.len(), 3);
+        assert_eq!(snapshot.projection.user_id, user);
+    }
 
-    let forged = ActionContext::operator(
-        peer_context.desk_id,
-        foreign_user.0,
-        peer_session.0,
-        ActionSource::Http,
-    )
-    .with_request_id("recall-forged-owner");
+    // Authentication still gates a recall. A system context operates no surface.
+    let system = ActionContext::system(Uuid::new_v4(), ActionSource::System)
+        .with_request_id("recall-unauthenticated");
     let error = setup
         .service
         .handle_preset_recall(
             ActionEnvelope {
-                context: forged,
+                context: system,
                 command: setup.request.clone(),
             },
             &setup.ports,
         )
         .unwrap_err();
-    assert_eq!(error.kind, ActionErrorKind::Forbidden);
+    assert_eq!(error.kind, ActionErrorKind::Unauthorized);
     assert_eq!(setup.events.latest_sequence(), 1);
 }
 

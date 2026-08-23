@@ -30,8 +30,6 @@ impl ServerProgrammingUpdatePorts {
         require_unlocked: bool,
     ) -> Self {
         let owner = ProgrammingInstallOwner {
-            desk_id: session.desk.id,
-            user_id: session.user.id,
             gesture: ProgrammingOwnerGesturePolicy::Preserve,
             highlight: if within_interaction {
                 ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction
@@ -77,10 +75,17 @@ impl ServerProgrammingUpdatePorts {
                 "Update authority does not match the authenticated session",
             ));
         }
-        if self.require_unlocked && read_desk_lock(&self.state, context.desk_id).locked {
+        if self.require_unlocked && read_desk_lock(&self.state).locked {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "desk is locked",
+            ));
+        }
+        // Update is programming, so a Not Editable screen cannot do it.
+        if self.session.capability.is_guest() {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "this screen is marked Not Editable and cannot change programming",
             ));
         }
         Ok(())

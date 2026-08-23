@@ -55,7 +55,7 @@ impl ProgrammingPreloadValuesContent {
     ) -> Result<Self, ActionError> {
         #[cfg(test)]
         PROJECTION_READS.set(PROJECTION_READS.get() + 1);
-        if programmers.user_id(session) != Some(user_id) {
+        if programmers.session_operates_desk(session, user_id) != Some(true) {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the requested user",
@@ -107,12 +107,14 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPreloadValuesSnapshot, ActionError> {
         let (session, user_id) = preload_values_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
             let event_sequence = self.events.latest_sequence();
             let content =
                 ProgrammingPreloadValuesContent::read(&self.programmers, session, user_id)?;
-            let revision = self.programmers.preload_values_revision(user_id);
+            let revision = self.programmers.preload_values_revision();
             Ok(ProgrammingPreloadValuesSnapshot {
                 event_sequence,
                 projection: content.projection(user_id, revision),

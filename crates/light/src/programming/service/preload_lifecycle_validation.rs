@@ -17,9 +17,9 @@ impl ProgrammingService {
         session: SessionId,
         user: UserId,
     ) -> Result<(), ActionError> {
-        match self.programmers.user_id(session) {
-            Some(owner) if owner == user => Ok(()),
-            Some(_) => Err(ActionError::new(
+        match self.programmers.session_operates_desk(session, user) {
+            Some(true) => Ok(()),
+            Some(false) => Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",
             )),
@@ -30,12 +30,11 @@ impl ProgrammingService {
     pub(super) fn assert_lifecycle_revisions(
         &self,
         session_id: SessionId,
-        user_id: UserId,
         request: &ProgrammingPreloadLifecycleRequest,
     ) -> Result<(), ActionError> {
-        let capture = self.programmers.capture_mode_revision(user_id);
-        let values = self.programmers.preload_values_revision(user_id);
-        let queue = self.programmers.preload_playback_queue_revision(user_id);
+        let capture = self.programmers.capture_mode_revision();
+        let values = self.programmers.preload_values_revision();
+        let queue = self.programmers.preload_playback_queue_revision();
         let selection = self
             .programmers
             .selection(session_id)

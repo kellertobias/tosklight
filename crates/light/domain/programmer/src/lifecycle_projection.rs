@@ -27,7 +27,12 @@ pub struct ProgrammerLifecycleSummary {
 
 impl ProgrammerRegistry {
     /// Read one retained user authority without cloning its complete Programmer state.
+    /// The lifecycle of the desk's one Programmer, whatever identity the caller names.
+    ///
+    /// An identity from before the collapse describes the same Programmer, so it must not read as
+    /// an absent one — a lifecycle transition published under it would otherwise be silent.
     pub fn programmer_lifecycle(&self, user_id: UserId) -> Option<ProgrammerLifecycleSummary> {
+        let user_id = self.desk.normalize(user_id);
         self.with_user_serialized(user_id, || self.lifecycle_for_user(user_id))
     }
 
@@ -185,17 +190,13 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
-    fn groups_same_user_sessions_and_counts_only_owned_addresses() {
+    fn a_second_surface_replaces_the_shared_selection_rather_than_adding_its_own() {
         let registry = ProgrammerRegistry::default();
         let user = UserId(Uuid::from_u128(10));
         let first = SessionId(Uuid::from_u128(11));
         let second = SessionId(Uuid::from_u128(12));
-        let first_desk = SessionId(Uuid::from_u128(21));
-        let second_desk = SessionId(Uuid::from_u128(22));
         registry.start(first, user);
         registry.start(second, user);
-        assert!(registry.attach_command_context(first, first_desk));
-        assert!(registry.attach_command_context(second, second_desk));
         registry.select(first, [FixtureId(Uuid::from_u128(31))]);
         registry.select(
             second,
@@ -208,7 +209,10 @@ mod tests {
 
         let summary = registry.programmer_lifecycle(user).unwrap();
         assert_eq!(summary.normal_value_count, 2);
-        assert_eq!(summary.selected_fixture_count, 3);
+        assert_eq!(
+            summary.selected_fixture_count, 2,
+            "two surfaces share one selection; the second replaced the first"
+        );
         assert!(summary.connected);
         assert_eq!(summary.connected_sessions.len(), 2);
     }
@@ -233,17 +237,16 @@ mod tests {
     }
 
     #[test]
-    fn active_rows_include_foreign_users_in_deterministic_order() {
+    /// Whatever identities connections arrive holding, the desk projects one Programmer. There is
+    /// no second authority to order against a first.
+    fn every_connected_identity_projects_the_one_desk_programmer() {
         let registry = ProgrammerRegistry::default();
-        let later_user = UserId(Uuid::from_u128(20));
-        let earlier_user = UserId(Uuid::from_u128(10));
-        registry.start(SessionId(Uuid::from_u128(2)), later_user);
-        registry.start(SessionId(Uuid::from_u128(3)), earlier_user);
+        registry.start(SessionId(Uuid::from_u128(2)), UserId(Uuid::from_u128(20)));
+        registry.start(SessionId(Uuid::from_u128(3)), UserId(Uuid::from_u128(10)));
 
         let summaries = registry.active_programmer_lifecycles();
-        assert_eq!(summaries.len(), 2);
-        assert_eq!(summaries[0].user_id, earlier_user);
-        assert_eq!(summaries[1].user_id, later_user);
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].connected_sessions.len(), 2);
     }
 
     #[test]

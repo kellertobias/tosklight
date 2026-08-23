@@ -774,67 +774,6 @@ function MvrDialog({ model }: ModelProps) {
 	);
 }
 
-function ChangeUserDialog({ model }: ModelProps) {
-	const { bootstrap, lifecycle, session } = model.authorities;
-	const dialogs = model.dialogs;
-	if (!dialogs.changeUserOpen) return null;
-	return (
-		<StackedModal onClose={() => dialogs.setChangeUserOpen(false)}>
-			<div
-				className="nested-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Change user"
-			>
-				<ModalTitleBar title="Change User" onClose={() => dialogs.setChangeUserOpen(false)} />
-				<div className="show-library">
-					{bootstrap?.users
-						.filter((user) => user.enabled)
-						.map((user) => (
-							<article key={user.id}>
-								<span>
-									<b>{user.name}</b>
-									<small>
-										{user.id === session?.user.id
-											? "Current user"
-											: "Use this user's programmer"}
-									</small>
-								</span>
-								<Button
-									disabled={user.id === session?.user.id}
-									onClick={() => void lifecycle?.changeUser(user)}
-								>
-									{user.id === session?.user.id ? "Logged in" : "Log in"}
-								</Button>
-							</article>
-						))}
-				</div>
-				<div className="user-create-row">
-					<TextInput
-						clearable
-						value={dialogs.newUserName}
-						onChange={(event) => dialogs.setNewUserName(event.target.value)}
-						onKeyboardCommit={(value) => {
-							if (value.trim()) void lifecycle?.createUser(value.trim());
-						}}
-						placeholder="New user name"
-						aria-label="New user name"
-					/>
-					<Button
-						variant="primary"
-						disabled={!dialogs.newUserName.trim()}
-						onClick={() =>
-							void lifecycle?.createUser(dialogs.newUserName.trim())
-						}
-					>
-						Add user
-					</Button>
-				</div>
-			</div>
-		</StackedModal>
-	);
-}
-
 function ShutdownDialog({ model }: ModelProps) {
 	const { confirmShutdown, setConfirmShutdown } = model.dialogs;
 	if (!confirmShutdown) return null;
@@ -875,7 +814,6 @@ export function QuickSetupDialogs({ model }: ModelProps) {
 			<SelectiveImportDialog model={model} />
 			<NewShowDialog model={model} />
 			<MvrDialog model={model} />
-			<ChangeUserDialog model={model} />
 			<ShutdownDialog model={model} />
 		</>
 	);

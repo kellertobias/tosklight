@@ -97,7 +97,7 @@ impl PreloadValuesSetup {
                 self.registry.arm_preload(self.session, true)
             })
             .unwrap();
-        self.registry.capture_mode_revision(self.user)
+        self.registry.capture_mode_revision()
     }
 
     fn action(
@@ -342,7 +342,7 @@ fn no_op_replay_and_preconditions_do_not_materialize_pending_projection() {
         &setup.ports,
     );
     assert_eq!(reused.unwrap_err().kind, ActionErrorKind::Conflict);
-    assert_eq!(setup.registry.preload_values_revision(setup.user), 1);
+    assert_eq!(setup.registry.preload_values_revision(), 1);
 
     let exact = setup
         .service
@@ -436,7 +436,7 @@ fn rejected_batch_does_not_advance_pending_generation_or_checkpoint() {
 }
 
 #[test]
-fn same_user_desks_share_pending_values_and_foreign_identity_is_rejected() {
+fn every_surface_shares_the_desks_pending_values() {
     let setup = PreloadValuesSetup::new();
     let capture_revision = setup.enter_capture();
     let peer_session = SessionId::new();
@@ -472,20 +472,19 @@ fn same_user_desks_share_pending_values_and_foreign_identity_is_rejected() {
     assert_eq!(peer.projection.revision, 1);
     assert_eq!(peer.projection.group_values.len(), 1);
 
-    let foreign = ActionContext::operator(
+    // An identity from before the collapse reads the desk's pending values, not an empty set.
+    let legacy = ActionContext::operator(
         peer_desk,
         Uuid::new_v4(),
         peer_session.0,
         ActionSource::Http,
     );
-    assert_eq!(
-        setup
-            .service
-            .preload_values_snapshot(&foreign, &setup.ports)
-            .unwrap_err()
-            .kind,
-        ActionErrorKind::Forbidden
-    );
+    let through_legacy = setup
+        .service
+        .preload_values_snapshot(&legacy, &setup.ports)
+        .expect("a legacy identity is the desk's own");
+    assert_eq!(through_legacy.projection.revision, 1);
+    assert_eq!(through_legacy.projection.group_values.len(), 1);
 }
 
 #[test]
@@ -528,7 +527,7 @@ fn legacy_clear_go_release_undo_and_lifecycle_publish_pending_transitions_once()
         .unwrap();
     assert!(undo.preload_values_event_sequence.is_some());
 
-    let revision_before_redo = setup.registry.preload_values_revision(setup.user);
+    let revision_before_redo = setup.registry.preload_values_revision();
     let events_before_redo = setup.values_events().len();
     let redo = setup
         .service
@@ -539,7 +538,7 @@ fn legacy_clear_go_release_undo_and_lifecycle_publish_pending_transitions_once()
     assert!(redo.output);
     assert!(redo.preload_values_event_sequence.is_some());
     assert_eq!(
-        setup.registry.preload_values_revision(setup.user),
+        setup.registry.preload_values_revision(),
         revision_before_redo + 1
     );
     assert_eq!(setup.values_events().len(), events_before_redo + 1);

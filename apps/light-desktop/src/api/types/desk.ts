@@ -305,6 +305,11 @@ export interface ScreenConfiguration {
 	show_page_controls: boolean;
 	/** Programmer command line above this screen's encoders. */
 	show_programmer: boolean;
+	/**
+	 * Whether this screen may change programming. A Not Editable screen presents the desk and
+	 * operates playback, macros and timecodes, but cannot record, update or assign.
+	 */
+	not_editable: boolean;
 	desired_open: boolean;
 	display_id: string | null;
 	bounds: { x: number; y: number; width: number; height: number } | null;

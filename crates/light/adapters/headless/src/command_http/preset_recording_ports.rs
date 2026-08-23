@@ -13,7 +13,7 @@ impl ProgrammingPresetActiveShowPorts for ServerActiveShowPorts {}
 
 impl ProgrammingPresetRecordingPorts for ServerProgrammingPorts<'_> {
     fn authorize_preset_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
+        <Self as ProgrammingPorts>::authorize_programming_change(self, context)
     }
 
     fn commit_preset(
@@ -30,7 +30,8 @@ pub(super) fn commit(
     context: &ActionContext,
     commit: &ProgrammingPresetCommit,
 ) -> Result<ProgrammingPresetCommitResult, ActionError> {
-    let user_id = context.user_id.ok_or_else(|| {
+    // Authentication still gates programming; which identity it is no longer selects a desk.
+    context.user_id.ok_or_else(|| {
         ActionError::new(
             light_application::ActionErrorKind::Unauthorized,
             "Preset recording requires an authenticated user",
@@ -39,8 +40,6 @@ pub(super) fn commit(
     let ports = ServerActiveShowPorts::show_objects_with_programming_owner(
         state.clone(),
         ProgrammingInstallOwner {
-            desk_id: context.desk_id,
-            user_id: light_core::UserId(user_id),
             gesture: ProgrammingOwnerGesturePolicy::Preserve,
             highlight: ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
         },

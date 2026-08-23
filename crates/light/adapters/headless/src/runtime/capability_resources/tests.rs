@@ -6,6 +6,7 @@ mod tests {
 
     fn standalone_session(token: &str, desk_id: Uuid) -> Session {
         Session {
+            capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
             user: DeskUser {
                 id: light_core::UserId(Uuid::new_v4()),
@@ -204,6 +205,7 @@ mod tests {
         integrations.register_osc_subscriber(
             "standalone".into(),
             OscSubscriber {
+                capability: light_core::SurfaceCapability::Programming,
                 desk_alias: "main".into(),
                 target: source,
                 command_source: source,

@@ -29,36 +29,37 @@ pub struct ProgrammerRegistry {
     /// Cheap write stamp for normal recordable values. Low-level helpers may advance this more
     /// than once while composing one application action; the application boundary uses it only
     /// to detect whether a full value projection must be materialized.
-    pub(crate) normal_values_generations: Arc<RwLock<HashMap<UserId, u64>>>,
+    pub(crate) normal_values_generations: crate::desk_stamp::DeskStamp,
     /// Monotonic public projection revision, advanced exactly once by the application service for
     /// each completed semantic normal-value transition.
-    pub(crate) normal_values_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    pub(crate) normal_values_revisions: crate::desk_stamp::DeskStamp,
     /// Cheap write stamp for the pending fixture and Group values prepared by Preload.
-    pub(crate) preload_values_generations: Arc<RwLock<HashMap<UserId, u64>>>,
+    pub(crate) preload_values_generations: crate::desk_stamp::DeskStamp,
     /// Monotonic public projection revision for pending Preload values.
-    pub(crate) preload_values_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    pub(crate) preload_values_revisions: crate::desk_stamp::DeskStamp,
     /// Cheap per-user stamp for the ordered pending Preload playback queue.
-    pub(crate) preload_playback_queue_generations: Arc<RwLock<HashMap<UserId, u64>>>,
+    pub(crate) preload_playback_queue_generations: crate::desk_stamp::DeskStamp,
     /// Monotonic public projection revision for the pending Preload playback queue.
-    pub(crate) preload_playback_queue_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    pub(crate) preload_playback_queue_revisions: crate::desk_stamp::DeskStamp,
     /// Runtime-only public revision for the exact capture-mode tuple. Domain helpers never
     /// advance it; the Programming application boundary advances it once per semantic tuple
     /// transition after all nested mutations and reconciliation have completed.
-    pub(crate) capture_mode_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    pub(crate) capture_mode_revisions: crate::desk_stamp::DeskStamp,
     /// Monotonic public revision for the lightweight per-user Programmer priority authority.
     /// Priority changes intentionally do not advance the normal-values generation because that
     /// projection excludes interaction metadata.
-    pub(crate) priority_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    pub(crate) priority_revisions: crate::desk_stamp::DeskStamp,
     /// Timestamp paired with `priority_revisions`. General Programmer activity must never change
     /// this value because priority clients reconcile it under that independent revision.
-    pub(crate) priority_changed_at: Arc<RwLock<HashMap<UserId, chrono::DateTime<chrono::Utc>>>>,
-    /// Serializes compound mutations per user without preventing unrelated programmers from
-    /// progressing concurrently. The mutex is reentrant because public mutation helpers compose
-    /// other public helpers (for example, `activate_preload` calls `activate_preload_at`).
-    pub(crate) mutation_gates: Arc<RwLock<HashMap<UserId, Arc<ReentrantMutex<()>>>>>,
-    /// Failed mutations for unknown sessions share one gate instead of allocating a permanent
-    /// real-user gate for every arbitrary UUID.
-    pub(crate) unknown_mutation_gate: Arc<ReentrantMutex<()>>,
+    pub(crate) priority_changed_at: Arc<RwLock<Option<chrono::DateTime<chrono::Utc>>>>,
+    /// Serializes compound mutations on the desk's one Programmer. The mutex is reentrant
+    /// because public mutation helpers compose other public helpers (for example,
+    /// `activate_preload` calls `activate_preload_at`).
+    pub(crate) mutation_gate: Arc<ReentrantMutex<()>>,
+    /// The one Programmer this desk has. Every session binds to it, whatever identity the session
+    /// arrived holding, so the command line, selection and values converge across every screen,
+    /// OSC client and attached hardware surface.
+    pub(crate) desk: crate::DeskAuthority,
     pub(crate) clock: SharedClock,
 }
 impl Default for ProgrammerRegistry {
@@ -78,17 +79,17 @@ impl ProgrammerRegistry {
             selection_revision: Arc::default(),
             alignment_revision: Arc::default(),
             programmer_order: Arc::default(),
-            normal_values_generations: Arc::default(),
-            normal_values_revisions: Arc::default(),
-            preload_values_generations: Arc::default(),
-            preload_values_revisions: Arc::default(),
-            preload_playback_queue_generations: Arc::default(),
-            preload_playback_queue_revisions: Arc::default(),
-            capture_mode_revisions: Arc::default(),
-            priority_revisions: Arc::default(),
+            normal_values_generations: crate::desk_stamp::DeskStamp::default(),
+            normal_values_revisions: crate::desk_stamp::DeskStamp::default(),
+            preload_values_generations: crate::desk_stamp::DeskStamp::default(),
+            preload_values_revisions: crate::desk_stamp::DeskStamp::default(),
+            preload_playback_queue_generations: crate::desk_stamp::DeskStamp::default(),
+            preload_playback_queue_revisions: crate::desk_stamp::DeskStamp::default(),
+            capture_mode_revisions: crate::desk_stamp::DeskStamp::default(),
+            priority_revisions: crate::desk_stamp::DeskStamp::default(),
             priority_changed_at: Arc::default(),
-            mutation_gates: Arc::default(),
-            unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
+            mutation_gate: Arc::new(ReentrantMutex::new(())),
+            desk: crate::DeskAuthority::default(),
             clock,
         }
     }
@@ -97,100 +98,58 @@ impl ProgrammerRegistry {
         Arc::clone(&self.clock)
     }
 
-    pub(crate) fn mutation_gate_for_user(&self, user_id: UserId) -> Arc<ReentrantMutex<()>> {
-        if let Some(gate) = self.mutation_gates.read().get(&user_id).cloned() {
-            return gate;
-        }
-        Arc::clone(
-            self.mutation_gates
-                .write()
-                .entry(user_id)
-                .or_insert_with(|| Arc::new(ReentrantMutex::new(()))),
-        )
+    /// The one Programmer this desk operates.
+    pub fn desk(&self) -> &crate::DeskAuthority {
+        &self.desk
     }
 
-    /// Serialize a complete application-level transition for one user's shared Programmer.
+    /// The one interaction context every surface of this desk shares, once a surface exists.
+    ///
+    /// The desk's command line, ordered selection and Align state live here. `None` before the
+    /// first connection, which is a real answer: there is nothing yet to publish a change to.
+    pub fn desk_interaction_context(&self) -> Option<SessionId> {
+        self.desk.settled_command_context()
+    }
+
+    /// Serialize a complete application-level transition on the desk's one Programmer.
     ///
     /// The gate is the same reentrant boundary used by every registry mutator, so callers may
     /// capture state, compose existing mutation helpers, and publish the final projection without
-    /// another session for that user interleaving a write. Application services must acquire this
-    /// user gate before any desk-interaction gate.
-    pub fn with_user_serialized<R>(&self, user_id: UserId, operation: impl FnOnce() -> R) -> R {
-        let gate = self.mutation_gate_for_user(user_id);
-        let _guard = gate.lock();
+    /// another surface interleaving a write. Application services must acquire this gate before
+    /// any desk-interaction gate.
+    pub fn with_user_serialized<R>(&self, _user_id: UserId, operation: impl FnOnce() -> R) -> R {
+        let _guard = self.mutation_gate.lock();
         operation()
     }
 
-    /// Serialize one transition across a deterministic set of user authorities.
+    /// Serialize one transition on the desk's Programmer.
+    ///
+    /// The desk has one, so the set of identities a caller names no longer selects which gates to
+    /// take — but real concurrent writes from several connections are still serialized here.
     pub fn with_users_serialized<R>(
         &self,
-        users: impl IntoIterator<Item = UserId>,
+        _users: impl IntoIterator<Item = UserId>,
         operation: impl FnOnce() -> R,
     ) -> R {
-        let mut users = users.into_iter().collect::<Vec<_>>();
-        users.sort_unstable_by_key(|user| user.0);
-        users.dedup();
-        let gates = users
-            .into_iter()
-            .map(|user| self.mutation_gate_for_user(user))
-            .collect::<Vec<_>>();
-        let _guards = gates.iter().map(|gate| gate.lock()).collect::<Vec<_>>();
+        let _guard = self.mutation_gate.lock();
         operation()
     }
 
-    pub(crate) fn mutation_gate(&self, session: SessionId) -> Arc<ReentrantMutex<()>> {
-        let state_key = self.key(session);
-        let user_id = self
-            .states
-            .read()
-            .get(&state_key)
-            .map(|state| state.user_id);
-        user_id.map_or_else(
-            || Arc::clone(&self.unknown_mutation_gate),
-            |user_id| self.mutation_gate_for_user(user_id),
-        )
+    pub(crate) fn mutation_gate(&self, _session: SessionId) -> Arc<ReentrantMutex<()>> {
+        Arc::clone(&self.mutation_gate)
     }
 
-    /// Run an operation while every currently addressable user gate is held. New user gates are
-    /// prevented from appearing between the stable-set check and the operation, while ordinary
-    /// per-user mutations remain independent at all other times.
+    /// Run an operation while the desk's mutation gate is held.
     pub(crate) fn with_all_mutation_gates<R>(&self, operation: impl FnOnce() -> R) -> R {
-        loop {
-            let mut gates = self
-                .mutation_gates
-                .read()
-                .iter()
-                .map(|(user_id, gate)| (*user_id, Arc::clone(gate)))
-                .collect::<Vec<_>>();
-            gates.sort_unstable_by_key(|(user_id, _)| user_id.0);
-            let guards = gates
-                .iter()
-                .map(|(_, gate)| gate.lock())
-                .collect::<Vec<_>>();
-
-            let registered = self.mutation_gates.read();
-            let stable = registered.len() == gates.len()
-                && gates.iter().all(|(user_id, gate)| {
-                    registered
-                        .get(user_id)
-                        .is_some_and(|registered| Arc::ptr_eq(registered, gate))
-                });
-            if stable {
-                let result = operation();
-                drop(registered);
-                drop(guards);
-                return result;
-            }
-            drop(registered);
-            drop(guards);
-        }
+        let _guard = self.mutation_gate.lock();
+        operation()
     }
 
     pub fn set_priority(&self, session: SessionId, priority: i16) -> bool {
         self.update_priority(session, priority).is_some()
     }
 
-    /// Updates shared user-owned priority without materializing a normal-values projection.
+    /// Updates the desk's Programmer priority without materializing a normal-values projection.
     ///
     /// `None` means the session is absent, `Some(false)` is an exact semantic no-op, and
     /// `Some(true)` means the priority and the priority stamped onto retained values changed.
@@ -221,9 +180,8 @@ impl ProgrammerRegistry {
         }
         let changed_at = self.clock.now();
         state.last_activity = changed_at;
-        let user_id = state.user_id;
         drop(states);
-        self.priority_changed_at.write().insert(user_id, changed_at);
+        *self.priority_changed_at.write() = Some(changed_at);
         Some(true)
     }
 
@@ -235,6 +193,7 @@ impl ProgrammerRegistry {
         self.with_all_mutation_gates(|| {
             self.states.write().clear();
             self.sessions.write().clear();
+            self.desk.release();
             self.command_contexts.write().clear();
             self.command_states.write().clear();
             self.selection_contexts.write().clear();
@@ -242,29 +201,60 @@ impl ProgrammerRegistry {
             self.selection_revision.store(0, Ordering::Relaxed);
             self.alignment_revision.store(0, Ordering::Relaxed);
             self.programmer_order.store(0, Ordering::Relaxed);
-            self.normal_values_generations.write().clear();
-            self.normal_values_revisions.write().clear();
-            self.preload_values_generations.write().clear();
-            self.preload_values_revisions.write().clear();
-            self.preload_playback_queue_generations.write().clear();
-            self.preload_playback_queue_revisions.write().clear();
-            self.capture_mode_revisions.write().clear();
-            self.priority_revisions.write().clear();
-            self.priority_changed_at.write().clear();
+            self.normal_values_generations.clear();
+            self.normal_values_revisions.clear();
+            self.preload_values_generations.clear();
+            self.preload_values_revisions.clear();
+            self.preload_playback_queue_generations.clear();
+            self.preload_playback_queue_revisions.clear();
+            self.capture_mode_revisions.clear();
+            self.priority_revisions.clear();
+            *self.priority_changed_at.write() = None;
         });
     }
 
     pub fn normal_values_generation(&self, session: SessionId) -> Option<u64> {
-        let user_id = self.states.read().get(&self.key(session))?.user_id;
-        Some(self.normal_values_generation_for_user(user_id))
+        // Present only when the desk knows the session; the stamp itself is the desk's.
+        self.states.read().get(&self.key(session))?;
+        Some(self.normal_values_generation_for_user())
     }
 
-    pub(crate) fn normal_values_generation_for_user(&self, user_id: UserId) -> u64 {
-        self.normal_values_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0)
+    pub(crate) fn normal_values_generation_for_user(&self) -> u64 {
+        self.normal_values_generations.get()
+    }
+
+    /// Whether this session operates the Programmer the presented identity names.
+    ///
+    /// A desk has one Programmer, so every session it knows operates it. An identity presented by
+    /// an older client, saved hardware configuration, or a stored URL normalises to the desk's own
+    /// rather than being rejected as foreign. `None` when the desk does not know the session at
+    /// all, which remains a real answer: nothing is being operated.
+    ///
+    /// This is the one place legacy identities are accepted, and therefore the one place to change
+    /// when they stop being accepted at all.
+    pub fn session_operates_desk(&self, session: SessionId, presented: UserId) -> Option<bool> {
+        let owner = self.user_id(session)?;
+        Some(owner == self.desk.normalize(presented))
+    }
+
+    /// The desk's Programmer identity for a session, given whatever identity it presented.
+    ///
+    /// Unlike `operated_desk_user` this always answers, because callers use it to key state
+    /// before they have established that the session exists at all; a session the desk does not
+    /// know simply reads the desk's identity and then fails its own existence check.
+    pub fn desk_user_for(&self, session: SessionId, presented: UserId) -> UserId {
+        self.user_id(session)
+            .unwrap_or(self.desk.normalize(presented))
+    }
+
+    /// The desk identity this session operates, given whatever identity it presented.
+    ///
+    /// `Some` whenever the desk knows the session and the presented identity resolves to the
+    /// desk's own — which, with one Programmer, is every identity. Callers should read and report
+    /// the returned identity rather than the presented one: a legacy identity names no state.
+    pub fn operated_desk_user(&self, session: SessionId, presented: UserId) -> Option<UserId> {
+        let owner = self.user_id(session)?;
+        (owner == self.desk.normalize(presented)).then_some(owner)
     }
 
     pub fn user_id(&self, session: SessionId) -> Option<UserId> {
@@ -281,131 +271,80 @@ impl ProgrammerRegistry {
     ) -> Option<(UserId, i16, chrono::DateTime<chrono::Utc>)> {
         let states = self.states.read();
         let state = states.get(&self.key(session))?;
-        let changed_at = self
-            .priority_changed_at
-            .read()
-            .get(&state.user_id)
-            .cloned()?;
+        let changed_at = self.priority_changed_at.read().as_ref().copied()?;
         Some((state.user_id, state.priority, changed_at))
     }
 
-    pub fn normal_values_revision(&self, user_id: UserId) -> u64 {
-        self.normal_values_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0)
+    pub fn normal_values_revision(&self) -> u64 {
+        self.normal_values_revisions.get()
     }
 
-    pub fn advance_normal_values_revision(&self, user_id: UserId) -> u64 {
-        let mut revisions = self.normal_values_revisions.write();
-        let revision = revisions.entry(user_id).or_default();
-        *revision = revision.saturating_add(1);
-        *revision
+    pub fn advance_normal_values_revision(&self) -> u64 {
+        self.normal_values_revisions.advance()
     }
 
-    pub fn priority_revision(&self, user_id: UserId) -> u64 {
-        self.priority_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0)
+    pub fn priority_revision(&self) -> u64 {
+        self.priority_revisions.get()
     }
 
-    pub fn advance_priority_revision(&self, user_id: UserId) -> u64 {
-        let mut revisions = self.priority_revisions.write();
-        let revision = revisions.entry(user_id).or_default();
-        *revision = revision.saturating_add(1);
-        *revision
+    pub fn advance_priority_revision(&self) -> u64 {
+        self.priority_revisions.advance()
     }
 
     pub fn preload_values_generation(&self, session: SessionId) -> Option<u64> {
-        let user_id = self.states.read().get(&self.key(session))?.user_id;
-        Some(self.preload_values_generation_for_user(user_id))
+        // Present only when the desk knows the session; the stamp itself is the desk's.
+        self.states.read().get(&self.key(session))?;
+        Some(self.preload_values_generation_for_user())
     }
 
-    pub(crate) fn preload_values_generation_for_user(&self, user_id: UserId) -> u64 {
-        self.preload_values_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0)
+    pub(crate) fn preload_values_generation_for_user(&self) -> u64 {
+        self.preload_values_generations.get()
     }
 
-    pub fn preload_values_revision(&self, user_id: UserId) -> u64 {
-        self.preload_values_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0)
+    pub fn preload_values_revision(&self) -> u64 {
+        self.preload_values_revisions.get()
     }
 
-    pub fn advance_preload_values_revision(&self, user_id: UserId) -> u64 {
-        let mut revisions = self.preload_values_revisions.write();
-        let revision = revisions.entry(user_id).or_default();
-        *revision = revision.saturating_add(1);
-        *revision
+    pub fn advance_preload_values_revision(&self) -> u64 {
+        self.preload_values_revisions.advance()
     }
 
     pub fn preload_playback_queue_generation(&self, session: SessionId) -> Option<u64> {
-        let user_id = self.states.read().get(&self.key(session))?.user_id;
-        Some(self.preload_playback_queue_generation_for_user(user_id))
+        // Present only when the desk knows the session; the stamp itself is the desk's.
+        self.states.read().get(&self.key(session))?;
+        Some(self.preload_playback_queue_generation_for_user())
     }
 
-    pub(crate) fn preload_playback_queue_generation_for_user(&self, user_id: UserId) -> u64 {
-        self.preload_playback_queue_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0)
+    pub(crate) fn preload_playback_queue_generation_for_user(&self) -> u64 {
+        self.preload_playback_queue_generations.get()
     }
 
-    pub fn preload_playback_queue_revision(&self, user_id: UserId) -> u64 {
-        self.preload_playback_queue_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0)
+    pub fn preload_playback_queue_revision(&self) -> u64 {
+        self.preload_playback_queue_revisions.get()
     }
 
-    pub fn advance_preload_playback_queue_revision(&self, user_id: UserId) -> u64 {
-        let mut revisions = self.preload_playback_queue_revisions.write();
-        let revision = revisions.entry(user_id).or_default();
-        *revision = revision.saturating_add(1);
-        *revision
+    pub fn advance_preload_playback_queue_revision(&self) -> u64 {
+        self.preload_playback_queue_revisions.advance()
     }
 
-    pub fn capture_mode_revision(&self, user_id: UserId) -> u64 {
-        self.capture_mode_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0)
+    pub fn capture_mode_revision(&self) -> u64 {
+        self.capture_mode_revisions.get()
     }
 
-    pub fn advance_capture_mode_revision(&self, user_id: UserId) -> u64 {
-        let mut revisions = self.capture_mode_revisions.write();
-        let revision = revisions.entry(user_id).or_default();
-        *revision = revision.saturating_add(1);
-        *revision
+    pub fn advance_capture_mode_revision(&self) -> u64 {
+        self.capture_mode_revisions.advance()
     }
 
-    pub(crate) fn mark_normal_values_changed(&self, user_id: UserId) {
-        let mut generations = self.normal_values_generations.write();
-        let generation = generations.entry(user_id).or_default();
-        *generation = generation.saturating_add(1);
+    pub(crate) fn mark_normal_values_changed(&self) {
+        self.normal_values_generations.advance();
     }
 
-    pub(crate) fn mark_preload_values_changed(&self, user_id: UserId) {
-        let mut generations = self.preload_values_generations.write();
-        let generation = generations.entry(user_id).or_default();
-        *generation = generation.saturating_add(1);
+    pub(crate) fn mark_preload_values_changed(&self) {
+        self.preload_values_generations.advance();
     }
 
-    pub(crate) fn mark_preload_playback_queue_changed(&self, user_id: UserId) {
-        let mut generations = self.preload_playback_queue_generations.write();
-        let generation = generations.entry(user_id).or_default();
-        *generation = generation.saturating_add(1);
+    pub(crate) fn mark_preload_playback_queue_changed(&self) {
+        self.preload_playback_queue_generations.advance();
     }
 
     pub(crate) fn next_programmer_order(&self) -> u64 {
@@ -463,10 +402,9 @@ impl ProgrammerRegistry {
         Arc::make_mut(&mut state.group_values).clear();
         Arc::make_mut(&mut state.dynamic_values).clear();
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
         if normal_values_changed {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         true
     }
@@ -501,19 +439,19 @@ impl ProgrammerRegistry {
             || !state.group_values.is_empty()
             || !state.dynamic_values.is_empty()
         {
-            self.mark_normal_values_changed(state.user_id);
+            self.mark_normal_values_changed();
         }
         if !state.preload_pending.is_empty()
             || !state.preload_group_pending.is_empty()
             || !state.preload_dynamic_pending.is_empty()
         {
-            self.mark_preload_values_changed(state.user_id);
+            self.mark_preload_values_changed();
         }
         if !state.preload_playback_pending.is_empty() {
-            self.mark_preload_playback_queue_changed(state.user_id);
+            self.mark_preload_playback_queue_changed();
         }
-        self.advance_priority_revision(state.user_id);
-        self.priority_changed_at.write().remove(&state.user_id);
+        self.advance_priority_revision();
+        *self.priority_changed_at.write() = None;
         true
     }
     pub fn active(&self) -> Vec<ProgrammerState> {
@@ -557,8 +495,12 @@ impl ProgrammerRegistry {
     pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
         self.active_sessions_for_user(None)
     }
+    /// Every session operating the desk's one Programmer.
+    ///
+    /// The identity is normalised first: a caller authenticated under an identity from before the
+    /// collapse operates the same Programmer, so it must not read as having none.
     pub fn active_for_user_sessions(&self, user_id: UserId) -> Vec<ProgrammerState> {
-        self.active_sessions_for_user(Some(user_id))
+        self.active_sessions_for_user(Some(self.desk.normalize(user_id)))
     }
     fn active_sessions_for_user(&self, user_id: Option<UserId>) -> Vec<ProgrammerState> {
         let states = self.states.read();

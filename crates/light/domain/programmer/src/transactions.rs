@@ -149,60 +149,17 @@ impl ProgrammerRegistry {
         let state_key = self.key(session);
         let context = self.command_context(session);
         let state = self.states.read().get(&state_key)?.clone();
-        let user_id = state.user_id;
-        let normal_values_generation = self
-            .normal_values_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let normal_values_revision = self
-            .normal_values_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let preload_values_generation = self
-            .preload_values_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let preload_values_revision = self
-            .preload_values_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let preload_playback_queue_generation = self
-            .preload_playback_queue_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let preload_playback_queue_revision = self
-            .preload_playback_queue_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let capture_mode_revision = self
-            .capture_mode_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let priority_revision = self
-            .priority_revisions
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
+        let normal_values_generation = self.normal_values_generations.get();
+        let normal_values_revision = self.normal_values_revisions.get();
+        let preload_values_generation = self.preload_values_generations.get();
+        let preload_values_revision = self.preload_values_revisions.get();
+        let preload_playback_queue_generation = self.preload_playback_queue_generations.get();
+        let preload_playback_queue_revision = self.preload_playback_queue_revisions.get();
+        let capture_mode_revision = self.capture_mode_revisions.get();
+        let priority_revision = self.priority_revisions.get();
         let priority_changed_at = self
             .priority_changed_at
             .read()
-            .get(&user_id)
-            .cloned()
             .unwrap_or(state.last_activity);
         let selection = self.selection_contexts.read().get(&context).cloned();
         let command = self.command_states.read().get(&context).cloned();
@@ -229,44 +186,27 @@ impl ProgrammerRegistry {
             selection_revision: Arc::clone(&self.selection_revision),
             alignment_revision: Arc::clone(&self.alignment_revision),
             programmer_order: Arc::clone(&self.programmer_order),
-            normal_values_generations: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
+            normal_values_generations: crate::desk_stamp::DeskStamp::seeded(
                 normal_values_generation,
-            )]))),
-            normal_values_revisions: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
-                normal_values_revision,
-            )]))),
-            preload_values_generations: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
+            ),
+            normal_values_revisions: crate::desk_stamp::DeskStamp::seeded(normal_values_revision),
+            preload_values_generations: crate::desk_stamp::DeskStamp::seeded(
                 preload_values_generation,
-            )]))),
-            preload_values_revisions: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
-                preload_values_revision,
-            )]))),
-            preload_playback_queue_generations: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
+            ),
+            preload_values_revisions: crate::desk_stamp::DeskStamp::seeded(preload_values_revision),
+            preload_playback_queue_generations: crate::desk_stamp::DeskStamp::seeded(
                 preload_playback_queue_generation,
-            )]))),
-            preload_playback_queue_revisions: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
+            ),
+            preload_playback_queue_revisions: crate::desk_stamp::DeskStamp::seeded(
                 preload_playback_queue_revision,
-            )]))),
-            capture_mode_revisions: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
-                capture_mode_revision,
-            )]))),
-            priority_revisions: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
-                priority_revision,
-            )]))),
-            priority_changed_at: Arc::new(RwLock::new(HashMap::from([(
-                user_id,
-                priority_changed_at,
-            )]))),
-            mutation_gates: Arc::default(),
-            unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
+            ),
+            capture_mode_revisions: crate::desk_stamp::DeskStamp::seeded(capture_mode_revision),
+            priority_revisions: crate::desk_stamp::DeskStamp::seeded(priority_revision),
+            priority_changed_at: Arc::new(RwLock::new(Some(priority_changed_at))),
+            mutation_gate: Arc::new(ReentrantMutex::new(())),
+            // The snapshot operates the same desk, so it inherits the same authority rather than
+            // settling on one of its own.
+            desk: self.desk.clone(),
             clock: Arc::clone(&self.clock),
         })
     }
@@ -285,30 +225,13 @@ impl ProgrammerRegistry {
         let Some(state) = staged.states.read().get(&staged_state_key).cloned() else {
             return false;
         };
-        let user_id = state.user_id;
-        let staged_values_generation = staged
-            .normal_values_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let staged_preload_values_generation = staged
-            .preload_values_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
-        let staged_preload_playback_queue_generation = staged
-            .preload_playback_queue_generations
-            .read()
-            .get(&user_id)
-            .copied()
-            .unwrap_or(0);
+        let staged_values_generation = staged.normal_values_generations.get();
+        let staged_preload_values_generation = staged.preload_values_generations.get();
+        let staged_preload_playback_queue_generation =
+            staged.preload_playback_queue_generations.get();
         let staged_priority_changed_at = staged
             .priority_changed_at
             .read()
-            .get(&user_id)
-            .cloned()
             .unwrap_or(state.last_activity);
         let selection = staged.selection_contexts.read().get(&context).cloned();
         let command = staged.command_states.read().get(&context).cloned();
@@ -350,18 +273,12 @@ impl ProgrammerRegistry {
         drop(selections);
         drop(commands);
         drop(states);
-        self.normal_values_generations
-            .write()
-            .insert(user_id, staged_values_generation);
+        self.normal_values_generations.set(staged_values_generation);
         self.preload_values_generations
-            .write()
-            .insert(user_id, staged_preload_values_generation);
+            .set(staged_preload_values_generation);
         self.preload_playback_queue_generations
-            .write()
-            .insert(user_id, staged_preload_playback_queue_generation);
-        self.priority_changed_at
-            .write()
-            .insert(user_id, staged_priority_changed_at);
+            .set(staged_preload_playback_queue_generation);
+        *self.priority_changed_at.write() = Some(staged_priority_changed_at);
         true
     }
 
@@ -378,29 +295,14 @@ impl ProgrammerRegistry {
         let state_key = self.key(session);
         let interaction_context = self.command_context(session);
         let state = self.states.read().get(&state_key)?.clone();
-        let normal_values_generation = self
-            .normal_values_generations
-            .read()
-            .get(&state.user_id)
-            .copied()
-            .unwrap_or(0);
-        let preload_values_generation = self
-            .preload_values_generations
-            .read()
-            .get(&state.user_id)
-            .copied()
-            .unwrap_or(0);
-        let preload_playback_queue_generation = self
-            .preload_playback_queue_generations
-            .read()
-            .get(&state.user_id)
-            .copied()
-            .unwrap_or(0);
+        let normal_values_generation = self.normal_values_generations.get();
+        let preload_values_generation = self.preload_values_generations.get();
+        let preload_playback_queue_generation = self.preload_playback_queue_generations.get();
         let priority_changed_at = self
             .priority_changed_at
             .read()
-            .get(&state.user_id)
-            .cloned()
+            .as_ref()
+            .copied()
             .unwrap_or(state.last_activity);
         let selection = self
             .selection_contexts
@@ -433,24 +335,18 @@ impl ProgrammerRegistry {
 
     /// Restore an exact checkpoint after a command rejected without committing.
     pub fn restore_transaction_snapshot(&self, snapshot: ProgrammerTransactionSnapshot) {
-        let mutation_gate = self.mutation_gate_for_user(snapshot.state.user_id);
+        let mutation_gate = std::sync::Arc::clone(&self.mutation_gate);
         let _mutation_guard = mutation_gate.lock();
-        let user_id = snapshot.state.user_id;
         self.states
             .write()
             .insert(snapshot.state_key, snapshot.state);
         self.normal_values_generations
-            .write()
-            .insert(user_id, snapshot.normal_values_generation);
+            .set(snapshot.normal_values_generation);
         self.preload_values_generations
-            .write()
-            .insert(user_id, snapshot.preload_values_generation);
+            .set(snapshot.preload_values_generation);
         self.preload_playback_queue_generations
-            .write()
-            .insert(user_id, snapshot.preload_playback_queue_generation);
-        self.priority_changed_at
-            .write()
-            .insert(user_id, snapshot.priority_changed_at);
+            .set(snapshot.preload_playback_queue_generation);
+        *self.priority_changed_at.write() = Some(snapshot.priority_changed_at);
         let mut selections = self.selection_contexts.write();
         match snapshot.selection {
             Some(selection) => {

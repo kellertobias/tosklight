@@ -85,19 +85,13 @@ pub(super) fn run_active_show_object_action(
     run_active_show_object_action_with_ports(state, action, &ports)
 }
 
-/// Runs a show mutation from inside the actor desk's existing Programming interaction. Runtime
-/// selection refresh excludes that desk so the outer boundary remains its sole publisher.
+/// Runs a show mutation from inside the desk's existing Programming interaction, so the outer
+/// boundary remains the sole publisher of the resulting selection change.
 pub(super) fn run_active_show_object_action_in_programming_interaction(
     state: &AppState,
     action: light_application::ActionEnvelope<light_application::MutateActiveShowObjectsCommand>,
 ) -> Result<light_application::MutateActiveShowObjectsResult, ApiError> {
     let owner = ProgrammingInstallOwner {
-        desk_id: action.context.desk_id,
-        user_id: action
-            .context
-            .user_id
-            .map(light_core::UserId)
-            .ok_or_else(|| ApiError::internal("Programming-owned show mutation has no user"))?,
         gesture: super::ProgrammingOwnerGesturePolicy::Preserve,
         highlight: super::ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
     };

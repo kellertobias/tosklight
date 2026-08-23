@@ -12,6 +12,7 @@ impl CommandContractScenario {
     let user = state.installation.users().unwrap().remove(0);
     let control_desk = state.installation.add_desk("Commands", "commands").unwrap();
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "test".into(),
@@ -499,6 +500,7 @@ fn spd_grp_commands_preserve_precision_mapping_relative_changes_and_phase_links(
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "speed-command".into(),

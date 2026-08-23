@@ -205,9 +205,7 @@ async fn direct_current_page_action_returns_authority_and_replays_before_page_an
             2,
         )
         .unwrap();
-    write_desk_lock(
-        &scenario.state,
-        scenario.session.desk.id,
+    write_desk_lock(&scenario.state,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()

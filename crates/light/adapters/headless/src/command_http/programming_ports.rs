@@ -409,14 +409,42 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
                 "the action context does not match the authenticated operator session",
             ));
         }
-        if self.require_unlocked && super::super::read_desk_lock(self.state, context.desk_id).locked
-        {
+        if self.require_unlocked && super::super::read_desk_lock(self.state).locked {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "desk is locked",
             ));
         }
         Ok(())
+    }
+
+    /// A Not Editable screen may present and operate the desk, but never change what is
+    /// programmed on it. This is the one place that decision is made for every HTTP and
+    /// WebSocket programming change.
+    fn authorize_programming_change(&self, context: &ActionContext) -> Result<(), ActionError> {
+        self.authorize(context)?;
+        if self.session.capability.is_guest() {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "this screen is marked Not Editable and cannot change programming",
+            ));
+        }
+        Ok(())
+    }
+
+    /// A guest still runs the commands that only operate the desk — a Cue GO, a playback
+    /// selection, a speed-group speed, a Macro that does no programming of its own.
+    fn authorize_command(
+        &self,
+        context: &ActionContext,
+        command: Option<&str>,
+    ) -> Result<(), ActionError> {
+        if self.session.capability.is_guest()
+            && command.is_some_and(super::adapter::command_only_operates_the_desk)
+        {
+            return self.authorize(context);
+        }
+        self.authorize_programming_change(context)
     }
 
     fn execute(
@@ -513,8 +541,6 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         target: &light_application::ProgrammingShowUndoTarget,
     ) -> Result<light_core::Revision, ActionError> {
         let owner = super::super::ProgrammingInstallOwner {
-            desk_id: context.desk_id,
-            user_id: self.session.user.id,
             gesture: super::super::ProgrammingOwnerGesturePolicy::Preserve,
             highlight: super::super::ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
         };

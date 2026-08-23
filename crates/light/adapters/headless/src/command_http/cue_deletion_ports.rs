@@ -23,8 +23,6 @@ pub(crate) struct ServerProgrammingCueDeletionPorts {
 impl ServerProgrammingCueDeletionPorts {
     pub(crate) fn new(state: AppState, session: Session, within_interaction: bool) -> Self {
         let owner = ProgrammingInstallOwner {
-            desk_id: session.desk.id,
-            user_id: session.user.id,
             gesture: ProgrammingOwnerGesturePolicy::Preserve,
             highlight: if within_interaction {
                 ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction
@@ -65,6 +63,13 @@ impl ServerProgrammingCueDeletionPorts {
                 "Cue deletion authority does not match the authenticated session",
             ));
         }
+        // Deleting a Cue is programming, so a Not Editable screen cannot do it.
+        if self.session.capability.is_guest() {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "this screen is marked Not Editable and cannot change programming",
+            ));
+        }
         Ok(())
     }
 }
@@ -75,7 +80,7 @@ impl ActiveShowPorts for ServerProgrammingCueDeletionPorts {
 
     fn authorize_mutation(&self, context: &ActionContext) -> Result<(), ActionError> {
         self.authorize_identity(context)?;
-        if read_desk_lock(&self.state, context.desk_id).locked {
+        if read_desk_lock(&self.state).locked {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "desk is locked",

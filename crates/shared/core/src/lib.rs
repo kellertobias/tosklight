@@ -3,6 +3,7 @@
 
 mod attributes;
 mod clock;
+mod surface;
 
 pub use attributes::{
     ATTRIBUTE_CONFIGURATION_VERSION, ATTRIBUTE_REGISTRY, AttributeActivationGroup, AttributeBounds,
@@ -18,6 +19,7 @@ pub use attributes::{
     transform_canonical_normalized, transform_canonical_value,
 };
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
+pub use surface::SurfaceCapability;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

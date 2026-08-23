@@ -8,41 +8,14 @@ use std::sync::atomic::Ordering;
 
 impl ProgrammerRegistry {
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
-        let mutation_gate = self.mutation_gate_for_user(user_id);
+        // One desk, one Programmer. A session presenting any other identity joins the Programmer
+        // the desk already has rather than opening a second one beside it.
+        let user_id = self.desk.resolve(user_id);
+        let mutation_gate = std::sync::Arc::clone(&self.mutation_gate);
         let _mutation_guard = mutation_gate.lock();
         self.priority_changed_at
             .write()
-            .entry(user_id)
-            .or_insert_with(|| self.clock.now());
-        self.normal_values_generations
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.normal_values_revisions
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.preload_values_generations
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.preload_values_revisions
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.preload_playback_queue_generations
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.preload_playback_queue_revisions
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.capture_mode_revisions
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.priority_revisions.write().entry(user_id).or_default();
+            .get_or_insert_with(|| self.clock.now());
         let existing = self
             .states
             .read()
@@ -50,10 +23,11 @@ impl ProgrammerRegistry {
             .find_map(|(key, state)| (state.user_id == user_id).then_some(*key));
         if let Some(key) = existing {
             self.sessions.write().insert(session_id, key);
+            let desk_context = self.desk.command_context(session_id);
             self.command_contexts
                 .write()
                 .entry(session_id)
-                .or_insert(session_id);
+                .or_insert(desk_context);
             let command_context = self.command_context(session_id);
             self.command_states
                 .write()
@@ -114,10 +88,11 @@ impl ProgrammerRegistry {
             active_value_undo_group: None,
         };
         self.states.write().insert(session_id, state.clone());
+        let desk_context = self.desk.command_context(session_id);
         self.command_contexts
             .write()
             .entry(session_id)
-            .or_insert(session_id);
+            .or_insert(desk_context);
         let command_context = self.command_context(session_id);
         self.command_states
             .write()
@@ -135,44 +110,11 @@ impl ProgrammerRegistry {
     /// Programmer. Existing public authority revisions are retained so an incidental repeated
     /// restore cannot make a live client revision current again.
     pub fn restore(&self, state: ProgrammerState) {
-        let mutation_gate = self.mutation_gate_for_user(state.user_id);
+        let mutation_gate = std::sync::Arc::clone(&self.mutation_gate);
         let _mutation_guard = mutation_gate.lock();
         self.priority_changed_at
             .write()
-            .entry(state.user_id)
-            .or_insert_with(|| self.clock.now());
-        self.normal_values_generations
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.normal_values_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.preload_values_generations
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.preload_values_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.preload_playback_queue_generations
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.preload_playback_queue_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.capture_mode_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.priority_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
+            .get_or_insert_with(|| self.clock.now());
         let restored_order = state
             .values
             .iter()
@@ -252,12 +194,17 @@ impl ProgrammerRegistry {
             .copied()
             .unwrap_or(session)
     }
+    /// The interaction context this session operates.
+    ///
+    /// One desk has one of these. Every screen, OSC client, hardware surface and keyboard shares
+    /// the command line, command target, selection gesture and Align state it holds, so the answer
+    /// does not depend on which connection is asking.
     pub(crate) fn command_context(&self, session: SessionId) -> SessionId {
         self.command_contexts
             .read()
             .get(&session)
             .copied()
-            .unwrap_or(session)
+            .unwrap_or_else(|| self.desk.command_context(session))
     }
 
     pub(crate) fn project_selection(&self, state: &mut ProgrammerState, context: SessionId) {
@@ -292,76 +239,13 @@ impl ProgrammerRegistry {
         self.close_selection_gesture(session)
     }
 
-    /// Bind a controller session to the command interaction context for its desk.
-    /// Programmer values remain shared by user identity, while button presses,
-    /// partial command lines, selection gestures, and the active command target are shared only by
-    /// sessions attached to this same context.
-    pub fn attach_command_context(&self, session: SessionId, context: SessionId) -> bool {
-        if self.sessions.read().contains_key(&session) && self.command_context(session) == context {
-            return true;
-        }
-        let mutation_gate = self.mutation_gate(session);
-        let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
-            return false;
-        }
-        let previous = self.command_context(session);
-        if previous == context {
-            return true;
-        }
-
-        let previous_command = self
-            .command_states
-            .read()
-            .get(&previous)
-            .cloned()
-            .unwrap_or_default();
-        let previous_selection = self
-            .selection_contexts
-            .read()
-            .get(&previous)
-            .cloned()
-            .unwrap_or_default();
-        let previous_alignment = self.alignment_contexts.read().get(&previous).cloned();
-        let promote_previous = self
-            .command_states
-            .read()
-            .get(&context)
-            .is_none_or(|current| current.text.is_empty() && !previous_command.text.is_empty());
-
-        self.command_contexts.write().insert(session, context);
-        {
-            let mut command_states = self.command_states.write();
-            if promote_previous {
-                command_states.insert(context, previous_command);
-            } else {
-                command_states.entry(context).or_default();
-            }
-        }
-        {
-            let mut selection_contexts = self.selection_contexts.write();
-            selection_contexts
-                .entry(context)
-                .or_insert(previous_selection);
-        }
-        if let Some(previous_alignment) = previous_alignment {
-            self.alignment_contexts
-                .write()
-                .entry(context)
-                .or_insert(previous_alignment);
-        }
-
-        if previous == session
-            && !self
-                .command_contexts
-                .read()
-                .values()
-                .any(|candidate| *candidate == previous)
-        {
-            self.command_states.write().remove(&previous);
-            self.selection_contexts.write().remove(&previous);
-            self.alignment_contexts.write().remove(&previous);
-        }
-        true
+    /// Bind a controller session to the desk's one interaction context.
+    ///
+    /// The desk has a single command line, selection gesture and Align state, so a surface asking
+    /// for a particular context is already where it belongs. The call remains because saved
+    /// hardware configuration and existing clients still make it against a desk that no longer has
+    /// contexts to choose between.
+    pub fn attach_command_context(&self, session: SessionId, _context: SessionId) -> bool {
+        self.sessions.read().contains_key(&session)
     }
 }

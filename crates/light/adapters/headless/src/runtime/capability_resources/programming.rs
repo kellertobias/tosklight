@@ -581,31 +581,28 @@ impl ProgrammingResource {
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn normal_values_revision(&self, user_id: light_core::UserId) -> u64 {
-        self.programmers.normal_values_revision(user_id)
+    pub(in crate::runtime) fn normal_values_revision(&self) -> u64 {
+        self.programmers.normal_values_revision()
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn preload_values_revision(&self, user_id: light_core::UserId) -> u64 {
-        self.programmers.preload_values_revision(user_id)
+    pub(in crate::runtime) fn preload_values_revision(&self) -> u64 {
+        self.programmers.preload_values_revision()
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn preload_playback_queue_revision(
-        &self,
-        user_id: light_core::UserId,
-    ) -> u64 {
-        self.programmers.preload_playback_queue_revision(user_id)
+    pub(in crate::runtime) fn preload_playback_queue_revision(&self) -> u64 {
+        self.programmers.preload_playback_queue_revision()
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn capture_mode_revision(&self, user_id: light_core::UserId) -> u64 {
-        self.programmers.capture_mode_revision(user_id)
+    pub(in crate::runtime) fn capture_mode_revision(&self) -> u64 {
+        self.programmers.capture_mode_revision()
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn priority_revision(&self, user_id: light_core::UserId) -> u64 {
-        self.programmers.priority_revision(user_id)
+    pub(in crate::runtime) fn priority_revision(&self) -> u64 {
+        self.programmers.priority_revision()
     }
 
     pub(in crate::runtime) fn handle(
@@ -914,29 +911,26 @@ impl ProgrammingResource {
             .run_external_interaction(context, ports, operation)
     }
 
+    /// The one interaction context every surface of this desk shares, once a surface exists.
+    pub(in crate::runtime) fn desk_interaction_context(&self) -> Option<light_core::SessionId> {
+        self.programmers.desk_interaction_context()
+    }
+
     pub(in crate::runtime) fn run_selection_refresh<T>(
         &self,
         context: &light_application::ActionContext,
-        targets: impl IntoIterator<Item = light_application::ProgrammingSelectionTarget>,
+        operation: impl FnOnce() -> T,
+    ) -> light_application::ProgrammingSelectionRefreshResult<T> {
+        self.service.run_selection_refresh(context, operation)
+    }
+
+    pub(in crate::runtime) fn run_selection_refresh_within_interaction<T>(
+        &self,
+        context: &light_application::ActionContext,
         operation: impl FnOnce() -> T,
     ) -> light_application::ProgrammingSelectionRefreshResult<T> {
         self.service
-            .run_selection_refresh(context, targets, operation)
-    }
-
-    pub(in crate::runtime) fn run_selection_refresh_with_owned_target<T>(
-        &self,
-        context: &light_application::ActionContext,
-        owned_target: light_application::ProgrammingSelectionTarget,
-        targets: impl IntoIterator<Item = light_application::ProgrammingSelectionTarget>,
-        operation: impl FnOnce() -> T,
-    ) -> light_application::ProgrammingSelectionRefreshResult<T> {
-        self.service.run_selection_refresh_with_owned_target(
-            context,
-            owned_target,
-            targets,
-            operation,
-        )
+            .run_selection_refresh_within_interaction(context, operation)
     }
 
     pub(in crate::runtime) fn replace_user_programmer<T>(

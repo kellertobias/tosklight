@@ -97,7 +97,7 @@ impl ProgrammingValuesContent {
         let state = programmers
             .get(session)
             .ok_or_else(programmer_values_unavailable)?;
-        if state.user_id != user_id {
+        if programmers.session_operates_desk(session, user_id) != Some(true) {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the requested user",
@@ -314,13 +314,20 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingValuesSnapshot, ActionError> {
         let (session, user_id) = values_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
             // Reading the cursor first permits a duplicate after repair, but cannot skip a
             // same-user mutation because that transition uses this same user gate.
             let event_sequence = self.events.latest_sequence();
             let content = ProgrammingValuesContent::read(&self.programmers, session, user_id)?;
-            let revision = self.programmers.normal_values_revision(user_id);
+            // Report the Programmer the session operates, not the name it asked under.
+            let user_id = self
+                .programmers
+                .operated_desk_user(session, user_id)
+                .ok_or_else(programmer_values_unavailable)?;
+            let revision = self.programmers.normal_values_revision();
             Ok(ProgrammingValuesSnapshot {
                 event_sequence,
                 projection: content.projection(user_id, revision),

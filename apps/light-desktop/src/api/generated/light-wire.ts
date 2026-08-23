@@ -892,7 +892,15 @@ export type ScreenConfiguration = { id: string, name: string, layout: unknown, s
 /**
  * Programmer command line above this optional screen's encoders.
  */
-show_programmer: boolean, desired_open: boolean, display_id: string | null, bounds: unknown, fullscreen: boolean, playback_layout: ScreenPlaybackSurfaceLayout | null, content: ScreenContent, };
+show_programmer: boolean, desired_open: boolean, display_id: string | null, bounds: unknown, fullscreen: boolean, playback_layout: ScreenPlaybackSurfaceLayout | null, content: ScreenContent,
+/**
+ * Whether this screen may change programming.
+ *
+ * A Not Editable screen is a guest: it presents the desk and operates playback, macros and
+ * timecodes, but cannot record, update or assign. Screen-local presentation configuration,
+ * not a second desk or a second user.
+ */
+not_editable: boolean, };
 export type ScreenConfigurationSnapshot = { screens: Array<ScreenConfiguration>, active_pages: Record<string, number>, programmer_control_surface: ProgrammerControlSurfaceConfiguration, };
 export type ProgrammerControlSurfaceConfiguration = { owner_screen_id: string | null, visible_encoders: number, };
 export type ProgrammerControlSurfacePatch = { owner_screen_id: string | null, assign_to_main: boolean, visible_encoders: number | null, };
@@ -901,7 +909,7 @@ export type ScreenConfigurationCreateRequest = { request_id: string, configurati
 export type ScreenConfigurationUpdateRequest = { request_id: string, patch: ScreenConfigurationPatch, };
 export type ScreenConfigurationDeleteRequest = { request_id: string, };
 export type ScreenConfigurationAction = { "type": "create", configuration: ScreenConfiguration, } | { "type": "update", screen_id: string, patch: ScreenConfigurationPatch, } | { "type": "delete", screen_id: string, } | { "type": "set_page", screen_id: string, page: number, } | { "type": "update_programmer_control_surface", patch: ProgrammerControlSurfacePatch, };
-export type ScreenConfigurationPatch = { name: string | null, layout: unknown, show_dock: boolean | null, show_playbacks: boolean | null, playback_count: number | null, playback_rows: number | null, first_playback_slot: number | null, page_mode: ScreenPageMode | null, show_page_controls: boolean | null, show_programmer: boolean | null, desired_open: boolean | null, display_id: string | null, clear_display_id: boolean, bounds: unknown, clear_bounds: boolean, fullscreen: boolean | null, playback_layout: ScreenPlaybackSurfaceLayout | null, clear_playback_layout: boolean, content: ScreenContent | null, };
+export type ScreenConfigurationPatch = { name: string | null, layout: unknown, show_dock: boolean | null, show_playbacks: boolean | null, playback_count: number | null, playback_rows: number | null, first_playback_slot: number | null, page_mode: ScreenPageMode | null, show_page_controls: boolean | null, show_programmer: boolean | null, desired_open: boolean | null, display_id: string | null, clear_display_id: boolean, bounds: unknown, clear_bounds: boolean, fullscreen: boolean | null, playback_layout: ScreenPlaybackSurfaceLayout | null, clear_playback_layout: boolean, content: ScreenContent | null, not_editable: boolean | null, };
 export type ScreenConfigurationActionOutcome = { request_id: string, replayed: boolean, screen: ScreenConfiguration | null, active_page: number | null, programmer_control_surface: ProgrammerControlSurfaceConfiguration | null, };
 export type VirtualPlaybackExclusionZone = { id: string, name: string,
 /**

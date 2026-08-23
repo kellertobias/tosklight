@@ -25,9 +25,11 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingValuesResult, ActionError> {
         let (session, user_id, request_id, expected_revision) = values_context(&action)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
-            ports.authorize(&action.context)?;
-            self.assert_values_owner(session, user_id)?;
+            ports.authorize_programming_change(&action.context)?;
+            let user_id = self.operated_values_owner(session, user_id)?;
             let fingerprint = values_request_fingerprint(expected_revision, &action.command);
             if let Some(cached) = self.cached_values(
                 user_id,
@@ -38,10 +40,9 @@ impl ProgrammingService {
             )? {
                 return Ok(cached);
             }
-            self.assert_values_revision(user_id, expected_revision)?;
+            self.assert_values_revision(expected_revision)?;
             let capture_mode_revision = self.assert_capture_mode_precondition(
                 session,
-                user_id,
                 action.command.expected_capture_mode_revision,
             )?;
             let result = self.apply_values_action(
@@ -318,22 +319,24 @@ impl ProgrammingService {
         }
     }
 
-    fn assert_values_owner(&self, session: SessionId, user_id: UserId) -> Result<(), ActionError> {
-        match self.programmers.user_id(session) {
-            Some(owner) if owner == user_id => Ok(()),
-            Some(_) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(ActionError::new(
-                ActionErrorKind::NotFound,
-                "Programmer values are unavailable",
-            )),
-        }
+    /// The Programmer this session operates, given whatever identity it presented.
+    fn operated_values_owner(
+        &self,
+        session: SessionId,
+        user_id: UserId,
+    ) -> Result<UserId, ActionError> {
+        self.programmers
+            .operated_desk_user(session, user_id)
+            .ok_or_else(|| {
+                ActionError::new(
+                    ActionErrorKind::NotFound,
+                    "Programmer values are unavailable",
+                )
+            })
     }
 
-    fn assert_values_revision(&self, user_id: UserId, expected: u64) -> Result<(), ActionError> {
-        let actual = self.programmers.normal_values_revision(user_id);
+    fn assert_values_revision(&self, expected: u64) -> Result<(), ActionError> {
+        let actual = self.programmers.normal_values_revision();
         if expected == actual {
             Ok(())
         } else {
@@ -350,11 +353,10 @@ impl ProgrammingService {
     fn assert_capture_mode_precondition(
         &self,
         session: SessionId,
-        user_id: UserId,
         expected: u64,
     ) -> Result<u64, ActionError> {
-        let actual = self.programmers.capture_mode_revision(user_id);
-        let values_revision = self.programmers.normal_values_revision(user_id);
+        let actual = self.programmers.capture_mode_revision();
+        let values_revision = self.programmers.normal_values_revision();
         if expected != actual {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,

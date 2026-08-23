@@ -13,7 +13,7 @@ use super::programming_ports::ServerProgrammingPorts;
 
 impl GroupManagementPorts for ServerProgrammingPorts<'_> {
     fn authorize_group_management(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
+        <Self as ProgrammingPorts>::authorize_programming_change(self, context)
     }
 
     fn commit_group_management(
@@ -28,15 +28,14 @@ impl GroupManagementPorts for ServerProgrammingPorts<'_> {
                 "Group management requires an operator session",
             )
         })?;
-        let user_id = context.user_id.ok_or_else(|| {
+        // Authentication still gates programming; which identity it is no longer selects a desk.
+        context.user_id.ok_or_else(|| {
             ActionError::new(
                 ActionErrorKind::Unauthorized,
                 "Group management requires an authenticated user",
             )
         })?;
         let owner = ProgrammingInstallOwner {
-            desk_id: context.desk_id,
-            user_id: light_core::UserId(user_id),
             gesture: ProgrammingOwnerGesturePolicy::Preserve,
             highlight: ProgrammingOwnerHighlightPolicy::Reconcile,
         };

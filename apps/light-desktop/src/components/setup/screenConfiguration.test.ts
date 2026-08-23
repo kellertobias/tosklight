@@ -22,6 +22,7 @@ const configuredScreen: ScreenConfiguration = {
 	page_mode: "independent",
 	show_page_controls: false,
 	show_programmer: false,
+	not_editable: false,
 	desired_open: false,
 	display_id: "display-2",
 	bounds: { x: 10, y: 20, width: 900, height: 700 },

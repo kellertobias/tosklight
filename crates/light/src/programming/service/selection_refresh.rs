@@ -1,71 +1,67 @@
 use super::ProgrammingService;
 use crate::{
     ActionContext, ProgrammingInteractionChange, ProgrammingSelectionRefreshEvent,
-    ProgrammingSelectionRefreshResult, ProgrammingSelectionTarget,
+    ProgrammingSelectionRefreshResult,
 };
 
 impl ProgrammingService {
-    /// Runs one engine- or show-driven selection reconciliation across multiple desks.
+    /// Runs one engine- or show-driven reconciliation of the desk's selection.
     ///
-    /// Targets are deduplicated and locked by desk UUID before the operation runs. The operation
-    /// may refresh live Group membership and complete adapter reconciliation; final selection
-    /// projections are then published once per changed desk in the same deterministic order. Use
-    /// `run_selection_refresh_with_owned_target` when the caller already holds one target's desk
-    /// boundary.
+    /// The operation may refresh live Group membership and complete adapter reconciliation; the
+    /// desk's final selection projection is then published once, if it changed. Use
+    /// `run_selection_refresh_within_interaction` when the caller already holds the desk's
+    /// Programming boundary.
     pub fn run_selection_refresh<T>(
         &self,
         context: &ActionContext,
-        targets: impl IntoIterator<Item = ProgrammingSelectionTarget>,
         operation: impl FnOnce() -> T,
     ) -> ProgrammingSelectionRefreshResult<T> {
-        self.run_selection_refresh_inner(context, None, targets, operation)
+        self.run_selection_refresh_inner(context, false, operation)
     }
 
-    /// Runs a shared refresh from inside `owned_target`'s already-held Programming interaction.
-    /// The owner is observed and published with the peers but deliberately not re-locked. The
-    /// outer interaction recognizes that selection revision as already published and emits only
-    /// any remaining command-line component after the nested operation returns.
-    pub fn run_selection_refresh_with_owned_target<T>(
+    /// Runs a refresh from inside the desk's already-held Programming interaction.
+    ///
+    /// The desk is observed and published but deliberately not re-locked. The outer interaction
+    /// recognizes that selection revision as already published and emits only any remaining
+    /// command-line component after the nested operation returns.
+    pub fn run_selection_refresh_within_interaction<T>(
         &self,
         context: &ActionContext,
-        owned_target: ProgrammingSelectionTarget,
-        targets: impl IntoIterator<Item = ProgrammingSelectionTarget>,
         operation: impl FnOnce() -> T,
     ) -> ProgrammingSelectionRefreshResult<T> {
-        self.run_selection_refresh_inner(context, Some(owned_target), targets, operation)
+        self.run_selection_refresh_inner(context, true, operation)
     }
 
     fn run_selection_refresh_inner<T>(
         &self,
         context: &ActionContext,
-        owned_target: Option<ProgrammingSelectionTarget>,
-        targets: impl IntoIterator<Item = ProgrammingSelectionTarget>,
+        within_interaction: bool,
         operation: impl FnOnce() -> T,
     ) -> ProgrammingSelectionRefreshResult<T> {
-        let locked_targets = normalized_targets(targets)
-            .into_iter()
-            .filter(|target| Some(target.desk_id) != owned_target.map(|owner| owner.desk_id))
-            .collect::<Vec<_>>();
-        let desk_ids = locked_targets
-            .iter()
-            .map(|target| target.desk_id)
-            .collect::<Vec<_>>();
-        let targets = normalized_targets(locked_targets.iter().copied().chain(owned_target));
-        let mut users = targets
-            .iter()
-            .flat_map(|target| {
-                self.programmers
-                    .lifecycle_users_for_interaction(target.interaction_id)
-            })
-            .collect::<Vec<_>>();
+        let Some(interaction) = self.programmers.desk_interaction_context() else {
+            // No surface has connected, so there is no command line or selection to reconcile.
+            return ProgrammingSelectionRefreshResult {
+                output: operation(),
+                events: Vec::new(),
+            };
+        };
+        let mut users = self
+            .programmers
+            .lifecycle_users_for_interaction(interaction);
         users.sort_unstable_by_key(|user| user.0);
         users.dedup();
+        // A refresh already running inside the desk's interaction must not take its gate again.
+        let desk_gates: &[uuid::Uuid] = if within_interaction {
+            &[]
+        } else {
+            std::slice::from_ref(&interaction.0)
+        };
         self.programmers.with_users_serialized(users.clone(), || {
-            self.with_desk_gates(&desk_ids, || {
+            self.with_desk_gates(desk_gates, || {
                 self.run_locked_selection_refresh(
                     context,
-                    owned_target,
-                    &targets,
+                    within_interaction,
+                    interaction,
                     &users,
                     operation,
                 )
@@ -76,8 +72,8 @@ impl ProgrammingService {
     fn run_locked_selection_refresh<T>(
         &self,
         context: &ActionContext,
-        owned_target: Option<ProgrammingSelectionTarget>,
-        targets: &[ProgrammingSelectionTarget],
+        within_interaction: bool,
+        interaction: light_core::SessionId,
         users: &[light_core::UserId],
         operation: impl FnOnce() -> T,
     ) -> ProgrammingSelectionRefreshResult<T> {
@@ -85,58 +81,32 @@ impl ProgrammingService {
             .iter()
             .map(|user| (*user, self.active_lifecycle_programmer(*user)))
             .collect::<Vec<_>>();
-        let before = targets
-            .iter()
-            .map(|target| {
-                (
-                    *target,
-                    self.programmers
-                        .interaction_context_version(target.interaction_id),
-                )
-            })
-            .collect::<Vec<_>>();
+        let before = self.programmers.interaction_context_version(interaction);
         let output = operation();
-        let events = before
-            .into_iter()
-            .filter_map(|(target, before)| {
-                let after = self
-                    .programmers
-                    .interaction_context_version(target.interaction_id);
-                let command_line =
-                    (before.command_line != after.command_line).then_some(after.command_line);
-                let selection =
-                    (before.selection_revision != after.selection_revision).then(|| {
-                        self.programmers
-                            .interaction_selection_for_context(target.interaction_id)
-                    });
-                let change = ProgrammingInteractionChange::from_components(
-                    target.desk_id,
-                    command_line,
-                    selection,
-                )?;
-                let event_sequence = self.publish_selection_refresh(
-                    context,
-                    change,
-                    Some(target.desk_id) == owned_target.map(|owner| owner.desk_id),
-                );
-                Some(ProgrammingSelectionRefreshEvent {
-                    desk_id: target.desk_id,
-                    event_sequence,
+        let after = self.programmers.interaction_context_version(interaction);
+        let command_line =
+            (before.command_line != after.command_line).then_some(after.command_line);
+        let selection = (before.selection_revision != after.selection_revision).then(|| {
+            self.programmers
+                .interaction_selection_for_context(interaction)
+        });
+        // Published under the acting context's desk, which is the key an outer interaction uses
+        // to recognise a selection revision it has already sent.
+        let desk_id = context.desk_id;
+        let events =
+            ProgrammingInteractionChange::from_components(desk_id, command_line, selection)
+                .map(|change| {
+                    let event_sequence =
+                        self.publish_selection_refresh(context, change, within_interaction);
+                    vec![ProgrammingSelectionRefreshEvent {
+                        desk_id,
+                        event_sequence,
+                    }]
                 })
-            })
-            .collect();
+                .unwrap_or_default();
         for (user, before) in lifecycle_before {
             self.publish_lifecycle_for_user(context, user, before);
         }
         ProgrammingSelectionRefreshResult { output, events }
     }
-}
-
-fn normalized_targets(
-    targets: impl IntoIterator<Item = ProgrammingSelectionTarget>,
-) -> Vec<ProgrammingSelectionTarget> {
-    let mut targets = targets.into_iter().collect::<Vec<_>>();
-    targets.sort_unstable_by_key(|target| (target.desk_id, target.interaction_id.0));
-    targets.dedup_by_key(|target| target.desk_id);
-    targets
 }

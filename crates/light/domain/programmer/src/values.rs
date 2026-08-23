@@ -225,11 +225,11 @@ impl ProgrammerRegistry {
             state.last_activity = changed_at;
             Some((state.user_id, preload))
         };
-        if let Some((user_id, preload)) = changed_user {
+        if let Some((_, preload)) = changed_user {
             if preload {
-                self.mark_preload_values_changed(user_id);
+                self.mark_preload_values_changed();
             } else {
-                self.mark_normal_values_changed(user_id);
+                self.mark_normal_values_changed();
             }
         }
     }
@@ -325,11 +325,11 @@ impl ProgrammerRegistry {
             state.last_activity = self.clock.now();
             Some((state.user_id, preload))
         };
-        if let Some((user_id, preload)) = changed_user {
+        if let Some((_, preload)) = changed_user {
             if preload {
-                self.mark_preload_values_changed(user_id);
+                self.mark_preload_values_changed();
             } else {
-                self.mark_normal_values_changed(user_id);
+                self.mark_normal_values_changed();
             }
         }
     }

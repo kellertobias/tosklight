@@ -69,7 +69,10 @@ fn subscribe_osc_client(
     let Some(desk) = osc_control_desk(state, requested_alias) else {
         return;
     };
-    let desk_alias = desk.osc_alias.clone();
+    // The surface keeps the path it connected on, so feedback returns the way commands arrive and
+    // both canonical paths — `desk` and `remote` — work alongside any alias saved configuration
+    // still names.
+    let desk_alias = requested_alias.to_ascii_lowercase();
     let existing = state.integrations.osc_subscriber(&client_id);
     let attached = attached_osc_session(state, desk.id);
     let reusable = reusable_osc_session(state, &client_id, &desk_alias, existing.as_ref());
@@ -85,6 +88,7 @@ fn subscribe_osc_client(
         state,
         client_id,
         OscSubscriber {
+            capability: osc_surface_capability(requested_alias),
             desk_alias,
             target,
             command_source,
@@ -173,6 +177,7 @@ fn create_osc_session(state: &AppState, desk: &ControlDesk) -> SessionId {
     };
     let id = SessionId::new();
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id,
         user: user.clone(),
         token: Uuid::new_v4().to_string(),

@@ -26,52 +26,50 @@ const PROGRAMMER_TIMING = {
 } as const;
 
 test.describe(CUE_SEMANTIC_CONTRACTS, () => {
-	test("MERGE-001 @api › two programmer identities arbitrate by priority, HTP magnitude, and stable LTP edit time", async ({
+	test("MERGE-001 @api › every surface writes one Programmer and the most recent value wins", async ({
 		api,
 		bench,
 	}) => {
 		const show = await loadCanonicalCopy(
 			api,
 			bench,
-			"merge-001-two-programmers",
+			"merge-001-one-programmer",
 			"compact-rig",
 		);
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
-		await api.request("POST", "/api/v2/users", {
-			name: "Programmer A",
-			enabled: true,
-		});
-		await api.request("POST", "/api/v2/users", {
-			name: "Programmer B",
-			enabled: true,
-		});
-		const first = new ApiDriver(api.baseUrl);
-		const second = new ApiDriver(api.baseUrl);
-		await first.login("Programmer A");
-		await second.login("Programmer B");
-		await setProgrammerPriority(first, { surface: "api", priority: 0 });
-		await setProgrammerPriority(second, { surface: "api", priority: 0 });
-		await setFixtureValue(first, show.id, fixtures[1], "intensity", 0.4);
+		// Two connections to the same desk. They are surfaces of one Programmer, not two
+		// Programmers bidding against each other.
+		const mainWindow = new ApiDriver(api.baseUrl);
+		const wing = new ApiDriver(api.baseUrl);
+		await mainWindow.login("Operator");
+		await wing.login("Operator");
+
+		await setFixtureValue(mainWindow, show.id, fixtures[1], "intensity", 0.4);
 		await bench.tick(1);
-		await setFixtureValue(second, show.id, fixtures[1], "intensity", 0.7);
+		await setFixtureValue(wing, show.id, fixtures[1], "intensity", 0.7);
 		expect(slot(await bench.tick(0), 1)).toBe(179);
 
-		await setProgrammerPriority(first, { surface: "api", priority: 10 });
-		await setProgrammerPriority(second, { surface: "api", priority: 20 });
-		await setFixtureValue(first, show.id, fixtures[1], "intensity", 0.9);
-		await setFixtureValue(second, show.id, fixtures[1], "intensity", 0.2);
+		// LTP, not HTP: a lower value typed later still wins, because there is no second
+		// Programmer for it to be measured against.
+		await setFixtureValue(wing, show.id, fixtures[1], "intensity", 0.2);
 		expect(slot(await bench.tick(0), 1)).toBe(51);
+		await setFixtureValue(mainWindow, show.id, fixtures[1], "intensity", 0.9);
+		expect(slot(await bench.tick(0), 1)).toBe(230);
+
+		// Priority is the desk's, so setting it from either surface sets the same one and does
+		// not divide the Programmer in two.
+		await setProgrammerPriority(mainWindow, { surface: "api", priority: 20 });
+		await setFixtureValue(wing, show.id, fixtures[1], "intensity", 0.5);
+		expect(slot(await bench.tick(0), 1)).toBe(128);
 
 		const rgb = fixtures[21];
-		await setProgrammerPriority(first, { surface: "api", priority: 10 });
-		await setProgrammerPriority(second, { surface: "api", priority: 10 });
-		await setFixtureValue(first, show.id, rgb, "red", 0.4);
+		await setFixtureValue(mainWindow, show.id, rgb, "red", 0.4);
 		await bench.tick(1);
-		await setFixtureValue(second, show.id, rgb, "red", 0.8);
-		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0.8);
+		await setFixtureValue(wing, show.id, rgb, "red", 0.8);
 		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0.8);
 
+		// One Programmer holds the value, so there is one row to find it in.
 		const diagnostics = await api.request<any>("GET", "/api/v2/diagnostics");
 		expect(
 			diagnostics.active_programmers.filter((programmer: any) =>
@@ -79,14 +77,17 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 					(value: any) => value.fixture_id === rgb && value.attribute === "red",
 				),
 			),
-		).toHaveLength(2);
-		await releaseProgrammerFixtureValue(second, {
+		).toHaveLength(1);
+
+		// Releasing it from either surface releases the desk's value outright; there is no
+		// second copy underneath to be revealed.
+		await releaseProgrammerFixtureValue(wing, {
 			surface: "api",
 			showId: show.id,
 			fixtureId: rgb,
 			attribute: "red",
 		});
-		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0.4);
+		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0);
 	});
 });
 

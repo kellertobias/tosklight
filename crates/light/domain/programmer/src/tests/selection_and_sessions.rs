@@ -141,8 +141,11 @@ fn selection_projection_versions_the_gesture_boundary() {
     assert_eq!(registry.selection(session).unwrap().selected, vec![second]);
 }
 
+/// One desk, one Programmer. A connection presenting a different identity — a second screen, an
+/// OSC client, an attached hardware surface — joins the Programmer the desk already has instead of
+/// opening a private one beside it.
 #[test]
-fn users_are_isolated() {
+fn a_connection_presenting_another_identity_joins_the_one_desk_programmer() {
     let registry = ProgrammerRegistry::default();
     let first = SessionId::new();
     let second = SessionId::new();
@@ -156,9 +159,19 @@ fn users_are_isolated() {
         AttributeKey::intensity(),
         AttributeValue::Normalized(1.0),
     );
-    assert_eq!(registry.get(first).unwrap().selected.len(), 1);
-    assert!(registry.get(second).unwrap().selected.is_empty());
-    assert!(registry.get(second).unwrap().values.is_empty());
+
+    assert_eq!(registry.active().len(), 1, "a desk has one Programmer");
+    assert_eq!(registry.get(second).unwrap().selected.len(), 1);
+    assert_eq!(
+        registry.get(second).unwrap().values[0].value,
+        AttributeValue::Normalized(1.0)
+    );
+    assert_eq!(
+        registry.get(first).unwrap().user_id,
+        registry.get(second).unwrap().user_id,
+        "both connections operate the same authority"
+    );
+
     registry.set_group(
         first,
         "front".into(),
@@ -167,15 +180,17 @@ fn users_are_isolated() {
     );
     assert!(
         registry
-            .get(first)
+            .get(second)
             .unwrap()
             .group_values
             .contains_key("front")
     );
-    assert!(registry.get(second).unwrap().group_values.is_empty());
 }
+
 #[test]
-fn sessions_for_the_same_user_share_values_but_keep_command_lines_local() {
+/// Two connections are two views of one desk: the same values, the same selection, and the same
+/// command line, because the operator typing on either is typing on the desk.
+fn sessions_share_values_selection_and_one_command_line() {
     let registry = ProgrammerRegistry::default();
     let user = UserId::new();
     let first = SessionId::new();
@@ -185,68 +200,72 @@ fn sessions_for_the_same_user_share_values_but_keep_command_lines_local() {
     registry.select(first, [fixture]);
     registry.start(second, user);
     assert_eq!(registry.active().len(), 1);
-    assert!(registry.get(second).unwrap().selected.is_empty());
+    assert_eq!(registry.get(second).unwrap().selected, vec![fixture]);
     assert!(registry.set_command_line(first, "GROUP 1 +".into()));
+    assert_eq!(registry.get(second).unwrap().command_line, "GROUP 1 +");
     assert!(registry.set_command_line(second, "GROUP 2 +".into()));
+    assert_eq!(registry.get(first).unwrap().command_line, "GROUP 2 +");
     assert!(registry.set_command_target(first, "GROUP".into()));
     assert_eq!(registry.command_target(first), "GROUP");
-    assert_eq!(registry.command_target(second), "FIXTURE");
-    let mut command_lines = registry
+    assert_eq!(registry.command_target(second), "GROUP");
+    let command_lines = registry
         .active_for_sessions()
         .into_iter()
         .map(|state| state.command_line)
         .collect::<Vec<_>>();
-    command_lines.sort();
-    assert_eq!(command_lines, ["GROUP 1 +", "GROUP 2 +"]);
-    assert_eq!(registry.get(second).unwrap().command_line, "GROUP 2 +");
+    assert_eq!(command_lines, ["GROUP 2 +", "GROUP 2 +"]);
     registry.disconnect(first);
     assert!(registry.get(second).unwrap().connected);
     registry.disconnect(second);
     assert!(!registry.active()[0].connected);
 }
 
+/// The compatibility projection keyed by identity still answers, and now answers with every
+/// connection: a foreign identity is no longer foreign, so nothing is filtered out of the desk.
 #[test]
-fn user_session_projection_filters_before_returning_compatibility_rows() {
+fn the_identity_projection_returns_every_connection_to_the_one_desk() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
-    let foreign_user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
-    let foreign = SessionId::new();
-    registry.start(first, user);
-    registry.start(second, user);
-    registry.start(foreign, foreign_user);
+    let arriving_as_someone_else = SessionId::new();
+    registry.start(first, UserId::new());
+    registry.start(second, UserId::new());
+    registry.start(arriving_as_someone_else, UserId::new());
+    let desk_user = registry.get(first).unwrap().user_id;
     registry.set(
-        foreign,
+        arriving_as_someone_else,
         FixtureId::new(),
         AttributeKey::intensity(),
         AttributeValue::Normalized(0.5),
     );
 
-    let rows = registry.active_for_user_sessions(user);
+    let rows = registry.active_for_user_sessions(desk_user);
 
-    assert_eq!(rows.len(), 2);
-    assert!(rows.iter().all(|row| row.user_id == user));
-    assert!(rows.iter().all(|row| row.values.is_empty()));
+    assert_eq!(rows.len(), 3);
+    assert!(rows.iter().all(|row| row.user_id == desk_user));
+    assert!(
+        rows.iter().all(|row| row.values.len() == 1),
+        "every connection observes the value any of them set"
+    );
 }
 
 #[test]
-fn sessions_share_programmer_values_by_user_and_command_interactions_by_desk() {
+/// A surface that asks to attach to some other interaction context joins this desk's instead.
+/// There is no other context to attach to, so a saved hardware configuration naming one keeps
+/// working and simply lands where every other surface already is.
+fn every_surface_shares_the_desk_values_selection_and_command_interactions() {
     let registry = ProgrammerRegistry::default();
     let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
-    let other_desk_session = SessionId::new();
-    let desk = SessionId::new();
-    let other_desk = SessionId::new();
+    let hardware = SessionId::new();
+    let saved_context = SessionId::new();
     let fixture = FixtureId::new();
 
     registry.start(first, user);
     registry.start(second, user);
-    registry.start(other_desk_session, user);
-    assert!(registry.attach_command_context(first, desk));
-    assert!(registry.attach_command_context(second, desk));
-    assert!(registry.attach_command_context(other_desk_session, other_desk));
+    registry.start(hardware, user);
+    assert!(registry.attach_command_context(hardware, saved_context));
 
     registry.select(first, [fixture]);
     registry.set(
@@ -256,47 +275,30 @@ fn sessions_share_programmer_values_by_user_and_command_interactions_by_desk() {
         AttributeValue::Normalized(0.75),
     );
     assert_eq!(registry.get(second).unwrap().selected, vec![fixture]);
-    assert!(
-        registry
-            .get(other_desk_session)
-            .unwrap()
-            .selected
-            .is_empty()
-    );
-    assert_eq!(registry.get(other_desk_session).unwrap().values.len(), 1);
+    assert_eq!(registry.get(hardware).unwrap().selected, vec![fixture]);
+    assert_eq!(registry.get(hardware).unwrap().values.len(), 1);
 
     assert!(registry.set_command_line(first, "GROUP 1 +".into()));
     assert!(registry.set_command_target(first, "GROUP".into()));
     assert_eq!(registry.get(second).unwrap().command_line, "GROUP 1 +");
     assert_eq!(registry.command_target(second), "GROUP");
-    assert!(
-        registry
-            .get(other_desk_session)
-            .unwrap()
-            .command_line
-            .is_empty()
-    );
-    assert_eq!(registry.command_target(other_desk_session), "FIXTURE");
+    assert_eq!(registry.get(hardware).unwrap().command_line, "GROUP 1 +");
+    assert_eq!(registry.command_target(hardware), "GROUP");
 
-    assert!(registry.set_command_line(other_desk_session, "FIXTURE 9".into()));
-    assert_eq!(registry.get(first).unwrap().command_line, "GROUP 1 +");
+    assert!(registry.set_command_line(hardware, "FIXTURE 9".into()));
+    assert_eq!(registry.get(first).unwrap().command_line, "FIXTURE 9");
 }
 
 #[test]
-fn command_line_revisions_are_shared_by_desk_and_reject_stale_replacements() {
+fn one_command_line_is_shared_by_every_surface_and_rejects_stale_replacements() {
     let registry = ProgrammerRegistry::default();
     let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
-    let other = SessionId::new();
-    let desk = SessionId::new();
-    let other_desk = SessionId::new();
+    let third = SessionId::new();
     registry.start(first, user);
     registry.start(second, user);
-    registry.start(other, user);
-    assert!(registry.attach_command_context(first, desk));
-    assert!(registry.attach_command_context(second, desk));
-    assert!(registry.attach_command_context(other, other_desk));
+    registry.start(third, user);
 
     let initial = registry.command_line_state(first).unwrap();
     assert_eq!(initial.visible_text(), "FIXTURE");
@@ -304,33 +306,25 @@ fn command_line_revisions_are_shared_by_desk_and_reject_stale_replacements() {
     assert!(initial.pristine);
     assert_eq!(initial.revision, 0);
 
+    // Replacing the line with what it already says is not a change, so the revision holds and a
+    // surface reconciling against it is not made stale for nothing.
     let same_default = registry
-        .replace_command_line(other, 0, "FIXTURE".into())
+        .replace_command_line(third, 0, "FIXTURE".into())
         .unwrap();
     assert_eq!(same_default.text, "");
     assert_eq!(same_default.visible_text(), "FIXTURE");
     assert_eq!(same_default.revision, 0);
-
-    let group_default = registry
-        .update_command_line(other, |_| ("GROUP".into(), CommandTarget::Group, true))
-        .unwrap();
-    assert_eq!(group_default.text, "");
-    assert_eq!(group_default.visible_text(), "GROUP");
-    assert_eq!(group_default.revision, 1);
-    assert_eq!(
-        registry
-            .replace_command_line(other, group_default.revision, "GROUP".into())
-            .unwrap()
-            .revision,
-        group_default.revision
-    );
 
     let changed = registry
         .replace_command_line(first, 0, "GROUP 1 +".into())
         .unwrap();
     assert_eq!(changed.revision, 1);
     assert_eq!(registry.command_line_state(second).unwrap(), changed);
-    assert_eq!(registry.command_line_state(other).unwrap(), group_default);
+    assert_eq!(
+        registry.command_line_state(third).unwrap(),
+        changed,
+        "every surface is looking at the one command line"
+    );
 
     assert_eq!(
         registry.replace_command_line(second, 0, "GROUP 2".into()),
@@ -354,20 +348,15 @@ fn command_line_revisions_are_shared_by_desk_and_reject_stale_replacements() {
 }
 
 #[test]
-fn pending_command_choices_are_revisioned_shared_by_desk_and_cleared_by_edits() {
+fn pending_command_choices_are_revisioned_shared_by_every_surface_and_cleared_by_edits() {
     let registry = ProgrammerRegistry::default();
     let user = UserId::new();
     let first = SessionId::new();
     let peer = SessionId::new();
     let other = SessionId::new();
-    let desk = SessionId::new();
-    let other_desk = SessionId::new();
     for session in [first, peer, other] {
         registry.start(session, user);
     }
-    assert!(registry.attach_command_context(first, desk));
-    assert!(registry.attach_command_context(peer, desk));
-    assert!(registry.attach_command_context(other, other_desk));
     let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
     let edited = registry
         .replace_command_line(first, 0, command.into())
@@ -390,12 +379,10 @@ fn pending_command_choices_are_revisioned_shared_by_desk_and_cleared_by_edits() 
     assert_eq!(pending.revision, edited.revision + 1);
     assert_eq!(pending.pending_choice.as_deref(), Some(&pending_choice));
     assert_eq!(registry.command_line_state(peer).unwrap(), pending);
-    assert!(
-        registry
-            .command_line_state(other)
-            .unwrap()
-            .pending_choice
-            .is_none()
+    assert_eq!(
+        registry.command_line_state(other).unwrap(),
+        pending,
+        "a choice the desk is waiting on is put to every surface, not one of them"
     );
 
     let repeated = registry
@@ -489,23 +476,18 @@ fn ordered_selection_sources_remove_and_readd_left_to_right_and_stay_live() {
 }
 
 #[test]
-fn ordinary_selection_gestures_accumulate_per_desk_until_a_value_lands() {
+fn ordinary_selection_gestures_accumulate_across_the_desk_until_a_value_lands() {
     let registry = ProgrammerRegistry::default();
     let user = UserId::new();
     let first = SessionId::new();
-    let same_desk = SessionId::new();
-    let other_desk = SessionId::new();
-    let desk_context = SessionId::new();
-    let other_context = SessionId::new();
+    let second_surface = SessionId::new();
+    let third_surface = SessionId::new();
     let first_fixture = FixtureId::new();
     let second_fixture = FixtureId::new();
     let third_fixture = FixtureId::new();
     registry.start(first, user);
-    registry.start(same_desk, user);
-    registry.start(other_desk, user);
-    registry.attach_command_context(first, desk_context);
-    registry.attach_command_context(same_desk, desk_context);
-    registry.attach_command_context(other_desk, other_context);
+    registry.start(second_surface, user);
+    registry.start(third_surface, user);
 
     assert!(registry.apply_selection_gesture(
         first,
@@ -515,17 +497,22 @@ fn ordinary_selection_gestures_accumulate_per_desk_until_a_value_lands() {
         &HashMap::new(),
     ));
     assert!(registry.apply_selection_gesture(
-        same_desk,
+        second_surface,
         vec![SelectionReference::Fixture {
             fixture_id: second_fixture,
         }],
         &HashMap::new(),
     ));
+    // A gesture continued on another surface continues the same gesture, because the operator
+    // pressing either is building one selection on one desk.
     assert_eq!(
         registry.get(first).unwrap().selected,
         vec![first_fixture, second_fixture]
     );
-    assert!(registry.get(other_desk).unwrap().selected.is_empty());
+    assert_eq!(
+        registry.get(third_surface).unwrap().selected,
+        vec![first_fixture, second_fixture]
+    );
 
     registry.set(
         first,
@@ -541,5 +528,5 @@ fn ordinary_selection_gestures_accumulate_per_desk_until_a_value_lands() {
         &HashMap::new(),
     ));
     assert_eq!(registry.get(first).unwrap().selected, vec![third_fixture]);
-    assert_eq!(registry.get(other_desk).unwrap().values.len(), 1);
+    assert_eq!(registry.get(third_surface).unwrap().values.len(), 1);
 }

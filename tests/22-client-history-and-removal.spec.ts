@@ -78,11 +78,11 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
 		await expect(
 			chooser.getByRole("heading", { name: "Connected clients", exact: true }),
 		).toBeVisible();
-		// Every client owns its desk, so this chooser stays desk-local and never offers another
-		// desk's client as a screen for this one.
+		// A client is a window, not a desk. Every window that has connected to the desk is offered
+		// here, because they are all screens of the same desk.
 		await expect(
 			chooser.getByRole("article").filter({ hasText: clientB }),
-		).toHaveCount(0);
+		).toHaveCount(1);
 		await chooser
 			.getByRole("button", { name: "Close default screen chooser" })
 			.click();

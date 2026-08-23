@@ -5,7 +5,7 @@ use crate::{
     ProgrammingPreloadLifecycleRequest, ProgrammingPreloadLifecycleResult,
     ProgrammingPreloadLifecycleState,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::sync::Arc;
 
 use super::preload_lifecycle_replay::PreloadLifecycleReplayIdentity;
@@ -52,7 +52,7 @@ impl ProgrammingService {
         {
             return Ok(result);
         }
-        self.assert_lifecycle_revisions(identity.session_id, identity.user_id, &action.command)?;
+        self.assert_lifecycle_revisions(identity.session_id, &action.command)?;
         self.programmers.deactivate_alignment(identity.session_id);
         let result = self.mutate_preload_lifecycle(&action, ports, &identity)?;
         self.preload_lifecycle_replay.lock().insert(
@@ -178,9 +178,9 @@ impl ProgrammingService {
         let (capture_mode, capture_mode_event_sequence) =
             self.finish_capture(&action.context, identity, after.capture_mode, capture)?;
         let (values_revision, values_projection, values_event_sequence) =
-            self.finish_preload_values(&action.context, identity.user_id, values);
+            self.finish_preload_values(&action.context, values);
         let (queue_revision, queue_projection, queue_event_sequence) =
-            self.finish_preload_queue(&action.context, identity.user_id, queue);
+            self.finish_preload_queue(&action.context, queue);
         let changed = mutation.changed
             || interaction_event_sequence.is_some()
             || capture_mode_event_sequence.is_some()
@@ -227,7 +227,7 @@ impl ProgrammingService {
             let sequence = self.publish_capture_mode(context, Some(change));
             return Ok((projection, sequence));
         }
-        let revision = self.programmers.capture_mode_revision(identity.user_id);
+        let revision = self.programmers.capture_mode_revision();
         Ok((
             Arc::new(ProgrammingCaptureModeProjection::from_mode(
                 identity.user_id,
@@ -241,7 +241,6 @@ impl ProgrammingService {
     fn finish_preload_values(
         &self,
         context: &crate::ActionContext,
-        user_id: UserId,
         change: Option<crate::ProgrammingPreloadValuesChange>,
     ) -> (
         u64,
@@ -249,7 +248,7 @@ impl ProgrammingService {
         Option<u64>,
     ) {
         let revision = change.as_ref().map_or_else(
-            || self.programmers.preload_values_revision(user_id),
+            || self.programmers.preload_values_revision(),
             |change| change.projection.revision,
         );
         let projection = change.as_ref().map(|change| Arc::clone(&change.projection));
@@ -260,7 +259,6 @@ impl ProgrammingService {
     fn finish_preload_queue(
         &self,
         context: &crate::ActionContext,
-        user_id: UserId,
         change: Option<crate::ProgrammingPreloadPlaybackQueueChange>,
     ) -> (
         u64,
@@ -268,7 +266,7 @@ impl ProgrammingService {
         Option<u64>,
     ) {
         let revision = change.as_ref().map_or_else(
-            || self.programmers.preload_playback_queue_revision(user_id),
+            || self.programmers.preload_playback_queue_revision(),
             |change| change.projection.revision,
         );
         let projection = change.as_ref().map(|change| Arc::clone(&change.projection));

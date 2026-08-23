@@ -1,14 +1,40 @@
-# Operators, Sessions, and Recovery
+# Surfaces, Sessions, and Recovery
 
-Desk users separate operator programmers while sharing the same show and engine.
+The desk has one Programmer. Every surface showing it is a view onto that one, not a copy.
 
-## Operators and sessions
+## One desk, many surfaces
 
-Desk Setup does not contain a user-management or operator-switching page. Use **Show > Change User** to switch or add an operator from the active show surface. Confirmed fixture- and Group-scoped values belong to that user's Programmer: once a value lands there, every session for the same user sees it, including sessions attached to different desks. A different user has an independent Programmer.
+Whoever is standing at the desk — at the main window, an optional screen, a browser session, an
+OSC wing, the keyboard — is operating the same command line, the same ordered selection, the same
+Programmer values. A value confirmed on one surface is on all of them, because there is only one
+place for it to be. Typing `GROUP 7` on a wing shows `G7` on the main screen, and finishing it
+there finishes it everywhere.
 
-The desk owns the interaction that produces those values. Sessions attached to one desk share its unfinished command line, open ordered selection/source gesture, current playback page, and pressed-button state exactly as if the controls were on one physical console. The same user may simultaneously use another desk with a different partial selection or command. OSC hardware joins the interaction state of the desk alias to which it subscribes; pressing an OSC key therefore behaves like pressing the corresponding key in that desk's UI.
+There is no operator to switch to and none to add. What differs between surfaces is not who is
+behind them but what they are allowed to do.
 
-![Change or add the active operator](../../assets/screenshots/workflows/show-change-user.png)
+## Guest surfaces
+
+Sometimes somebody else needs to work a light while you are programming. Two ways to let them,
+neither of which gives them a Programmer of their own:
+
+**Mark a screen Not Editable.** In a screen's settings, set **Programming** to *Not editable*. That
+screen still shows the fixture sheet, the Stage and the desk's values, and still runs playbacks,
+macros and timecodes — it simply cannot record, update or assign. Use it for a repeater in the
+foyer, a monitor by the stage door, or a tablet somebody is holding.
+
+**Connect an OSC remote on the remote-control path.** A surface that subscribes on `remote` works
+playbacks and nothing else; one that subscribes on `desk` is a desk button and takes the full
+command set including Record, Update and Assign. See [OSC](../../90-Protocols/01-osc.md).
+
+A guest working a fader while you have Record armed moves the fader. It does not become the target
+of your Record, because the guest never reaches the Programmer at all.
+
+## Desk Lock
+
+Desk Lock is one lock over the whole installation. Locking the desk in front of you locks every
+screen and every attached control surface with it, including an OSC wing. Running output is
+unaffected; only input is held.
 
 ## Shows and recovery
 
@@ -18,6 +44,13 @@ The desk owns the interaction that produces those values. Sessions attached to o
 
 ![Desk show and recovery status](../../assets/screenshots/workflows/desk-setup-shows-recovery.png)
 
-The desk database stores users, show-library index, active-show choice, configuration, desk interaction state, and durable user Programmers. Portable show files are stored separately. Keep both when backing up an installation.
+The desk database stores the show-library index, active-show choice, configuration, desk
+interaction state, and the desk's durable Programmer. Portable show files are stored separately.
+Keep both when backing up an installation.
+
+An installation from before the desk had one Programmer may hold several. On first start the desk
+keeps the one touched most recently and writes the rest, whole, to `backups/desk-collapse-*.json`
+under the data directory, so nothing programmed is lost. The log says what it kept and where the
+rest went.
 
 If startup reports an invalid show, preserve the affected file, load a known revision or other show, and inspect diagnostics before overwriting anything. See [Shows, Revisions, and MVR](10-shows-revisions-and-mvr.md).

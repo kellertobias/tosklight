@@ -532,7 +532,7 @@ fn explicit_delete_preserves_gesture_but_empty_subtract_finishes_it() {
 }
 
 #[test]
-fn same_user_desks_capture_independent_authoritative_selections() {
+fn every_surface_records_the_desks_one_selection() {
     let setup = GroupSetup::new();
     let peer_session = SessionId::new();
     let peer_desk = Uuid::new_v4();
@@ -542,6 +542,7 @@ fn same_user_desks_capture_independent_authoritative_selections() {
         .attach_command_context(peer_session, SessionId(peer_desk));
     let actor_fixture = FixtureId::new();
     let peer_fixture = FixtureId::new();
+    // One ordered selection: the second press moves it rather than opening another.
     setup.registry.select(setup.session_id, [actor_fixture]);
     setup.registry.select(peer_session, [peer_fixture]);
     let actor = setup.request(
@@ -576,34 +577,32 @@ fn same_user_desks_capture_independent_authoritative_selections() {
         )
         .unwrap();
 
+    // Both recordings captured the desk's selection as it stood, which is the same selection.
     assert_eq!(
         setup.ports.stored("actor").unwrap().fixtures,
-        [actor_fixture]
+        [peer_fixture]
     );
     assert_eq!(setup.ports.stored("peer").unwrap().fixtures, [peer_fixture]);
 }
 
 #[test]
-fn foreign_user_revision_conflict_and_request_reuse_are_rejected() {
+fn revision_conflict_and_request_reuse_are_rejected() {
     let setup = GroupSetup::new();
     setup.registry.select(setup.session_id, [FixtureId::new()]);
-    let mut foreign = setup.action(
-        "foreign",
+    // An identity from before the collapse records onto the desk rather than being turned away.
+    let mut legacy = setup.action(
+        "legacy",
         setup.request(
-            "foreign",
+            "legacy",
             ProgrammingGroupRecordOperation::Overwrite,
             ProgrammingGroupRevisionExpectation::Current,
         ),
     );
-    foreign.context.user_id = Some(UserId::new().0);
-    assert_eq!(
-        setup
-            .service
-            .handle_group_recording(foreign, setup.ports.as_ref())
-            .unwrap_err()
-            .kind,
-        ActionErrorKind::Forbidden
-    );
+    legacy.context.user_id = Some(UserId::new().0);
+    setup
+        .service
+        .handle_group_recording(legacy, setup.ports.as_ref())
+        .expect("a legacy identity is the desk's own");
 
     setup.ports.seed(
         "stale",

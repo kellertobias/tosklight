@@ -114,7 +114,7 @@ impl ProgrammerRegistry {
         values.sort_by(compare_values);
         Ok(ProgrammerUpdateValuesCapture {
             user_id,
-            revision: self.normal_values_revision(user_id),
+            revision: self.normal_values_revision(),
             values,
         })
     }
@@ -161,7 +161,7 @@ impl ProgrammerRegistry {
         group_ids.sort();
         Ok(ProgrammerUpdateMenuCapture {
             user_id,
-            values_revision: self.normal_values_revision(user_id),
+            values_revision: self.normal_values_revision(),
             selection_revision: selection.map_or(0, |value| value.revision),
             values,
             selected_fixtures,

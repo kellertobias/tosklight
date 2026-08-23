@@ -9,7 +9,7 @@ fn dirty_generation_tracks_only_normal_recordable_values() {
     registry.start(session, user);
 
     assert_eq!(registry.normal_values_generation(session), Some(0));
-    assert_eq!(registry.normal_values_revision(user), 0);
+    assert_eq!(registry.normal_values_revision(), 0);
 
     registry.select(session, [fixture]);
     registry.set_command_line(session, "GROUP 1".into());
@@ -67,7 +67,7 @@ fn dirty_generation_tracks_only_normal_recordable_values() {
     assert_eq!(registry.normal_values_generation(session), Some(6));
     assert!(registry.clear_values(session));
     assert_eq!(registry.normal_values_generation(session), Some(6));
-    assert_eq!(registry.normal_values_revision(user), 0);
+    assert_eq!(registry.normal_values_revision(), 0);
 }
 
 #[test]

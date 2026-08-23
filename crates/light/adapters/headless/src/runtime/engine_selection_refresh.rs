@@ -1,16 +1,12 @@
 use super::{AppState, Session, reconcile_highlight_selection};
-use light_application::{
-    ActionContext, ProgrammingSelectionRefreshResult, ProgrammingSelectionTarget,
-};
-use light_core::{SessionId, UserId};
+use light_application::{ActionContext, ProgrammingSelectionRefreshResult};
+use light_core::SessionId;
 use light_engine::PreparedEngineSnapshot;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use uuid::Uuid;
+use std::collections::{BTreeMap, HashMap};
 
+/// An outer Programming interaction already holding the desk, on whose behalf this install runs.
 #[derive(Clone, Copy)]
 pub(super) struct ProgrammingInstallOwner {
-    pub(super) desk_id: Uuid,
-    pub(super) user_id: UserId,
     pub(super) gesture: ProgrammingOwnerGesturePolicy,
     pub(super) highlight: ProgrammingOwnerHighlightPolicy,
 }
@@ -39,11 +35,11 @@ pub(super) enum HighlightInstallPolicy {
     Clear,
 }
 
-/// Installs one already-prepared runtime while publishing every desk selection that the new Group
-/// generation changes. The caller owns the activation boundary. `owner` identifies an outer
-/// Programming interaction whose actor desk must not be re-locked. Its final selection is
+/// Installs one already-prepared runtime while publishing the desk selection that the new Group
+/// generation changes. The caller owns the activation boundary. `owner` marks an outer Programming
+/// interaction already holding the desk, which must not be re-locked. The desk's final selection is
 /// published inside the install boundary, and the outer interaction suppresses that already-sent
-/// component while still publishing any command-line change. The exact owner Highlight context is
+/// component while still publishing any command-line change. The desk's Highlight context is
 /// either reconciled here or deferred to the outer boundary according to the owner policy.
 pub(super) fn install_prepared_snapshot_with_selection_refresh(
     state: &AppState,
@@ -57,12 +53,12 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
         != selection_topology(&prepared.snapshot().groups);
     let finish_owner = owner
         .is_some_and(|owner| matches!(owner.gesture, ProgrammingOwnerGesturePolicy::Finish(_)));
-    let owner_context = owner.and_then(|owner| selection_target(state, owner.desk_id));
+    let desk_context = state.programming.desk_interaction_context();
+    // An owner already holds the desk's interaction, so its own pending choice is not a reason to
+    // publish again; without one, any pending choice on the desk is.
     let pending_choice = state
         .programming
-        .has_pending_command_choices_except_context(
-            owner_context.map(|target| target.interaction_id),
-        );
+        .has_pending_command_choices_except_context(owner.and(desk_context));
     if !groups_changed && !finish_owner && !pending_choice {
         install(state, prepared, playback);
         return ProgrammingSelectionRefreshResult {
@@ -71,8 +67,6 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
         };
     }
 
-    let owned_target = owner_context;
-    let targets = selection_targets(state, owner.map(|owner| owner.desk_id));
     let highlight_sessions =
         if groups_changed && matches!(highlight, HighlightInstallPolicy::Reconcile) {
             highlight_sessions(state, owner)
@@ -83,24 +77,17 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
         install(state, prepared, playback);
         state
             .programming
-            .clear_pending_command_choices_except_context(
-                owned_target.map(|target| target.interaction_id),
-            );
+            .clear_pending_command_choices_except_context(owner.and(desk_context));
         finish_owned_selection_gesture(state, owner);
         for session in highlight_sessions {
             reconcile_highlight_selection(state, &session, "show_selection_refresh");
         }
     };
-    match owned_target {
-        Some(owned_target) => state.programming.run_selection_refresh_with_owned_target(
-            context,
-            owned_target,
-            targets,
-            install,
-        ),
-        None => state
+    match owner {
+        Some(_) => state
             .programming
-            .run_selection_refresh(context, targets, install),
+            .run_selection_refresh_within_interaction(context, install),
+        None => state.programming.run_selection_refresh(context, install),
     }
 }
 
@@ -125,53 +112,19 @@ fn install(state: &AppState, prepared: PreparedEngineSnapshot, policy: PlaybackI
     }
 }
 
-fn selection_targets(
-    state: &AppState,
-    owned_desk: Option<Uuid>,
-) -> Vec<ProgrammingSelectionTarget> {
-    let mut sessions = state
-        .sessions
-        .sessions()
-        .into_iter()
-        .filter(|session| Some(session.desk.id) != owned_desk)
-        .collect::<Vec<_>>();
-    sessions.sort_unstable_by_key(|session| (session.desk.id, session.id.0));
-    sessions.dedup_by_key(|session| session.desk.id);
-    sessions
-        .into_iter()
-        .filter_map(|session| selection_target(state, session.desk.id))
-        .collect()
-}
-
-fn selection_target(state: &AppState, desk_id: Uuid) -> Option<ProgrammingSelectionTarget> {
-    let interaction_id = SessionId(desk_id);
-    state
-        .programming
-        .selection(interaction_id)
-        .map(|_| ProgrammingSelectionTarget {
-            desk_id,
-            interaction_id,
-        })
-}
-
+/// The desk's Highlight context, reconciled here unless an outer interaction will do it.
+///
+/// One desk means one Highlight context, so this is at most one session — the lowest-numbered
+/// connected one, chosen deterministically so repeated installs reconcile the same surface.
 fn highlight_sessions(state: &AppState, owner: Option<ProgrammingInstallOwner>) -> Vec<Session> {
-    let mut sessions = state
-        .sessions
-        .sessions()
-        .into_iter()
-        .filter(|session| should_reconcile_highlight(session, owner))
-        .collect::<Vec<_>>();
-    sessions.sort_unstable_by_key(|session| (session.desk.id, session.user.id.0, session.id.0));
-    let mut seen = HashSet::new();
-    sessions.retain(|session| seen.insert((session.desk.id, session.user.id)));
-    sessions
-}
-
-fn should_reconcile_highlight(session: &Session, owner: Option<ProgrammingInstallOwner>) -> bool {
-    owner.is_none_or(|owner| {
-        owner.highlight == ProgrammingOwnerHighlightPolicy::Reconcile
-            || (session.desk.id, session.user.id) != (owner.desk_id, owner.user_id)
-    })
+    if owner.is_some_and(|owner| {
+        owner.highlight == ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction
+    }) {
+        return Vec::new();
+    }
+    let mut sessions = state.sessions.sessions();
+    sessions.sort_unstable_by_key(|session| session.id.0);
+    sessions.into_iter().take(1).collect()
 }
 
 fn selection_topology(

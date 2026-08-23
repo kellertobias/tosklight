@@ -34,6 +34,7 @@ impl CueTransferScenario {
             .installation.add_desk("Cue transfer", "cue-transfer")
             .unwrap();
         let session = Session {
+            capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
             user: user.clone(),
             token: "cue-transfer".into(),

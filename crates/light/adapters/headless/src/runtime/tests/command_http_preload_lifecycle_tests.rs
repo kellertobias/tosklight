@@ -83,7 +83,7 @@ fn application_event_count(state: &AppState, object: light_application::EventObj
 }
 
 #[tokio::test]
-async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_desks() {
+async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces() {
     let scenario = CommandHttpScenario::new().await;
     scenario.state.installation.update_configuration(|configuration| {
         configuration.preload_physical_playback_actions = true;
@@ -131,12 +131,14 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, user_id);
+    // The peer is a surface of the same desk, so it must satisfy the desk's current selection
+    // revision rather than one of its own.
     let peer_enter = lifecycle_request(
         "preload-enter-peer",
         1,
         0,
         0,
-        0,
+        1,
         serde_json::json!({"type":"enter"}),
     );
     let peer = json(
@@ -148,12 +150,13 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
     assert_eq!(peer["status"], "no_change");
     assert_eq!(peer["capture_mode"]["blind"], true);
 
-    let foreign = scenario
+    // An identity from before the collapse acts on the desk rather than being turned away.
+    let legacy = scenario
         .preload_lifecycle_action_for(
             Uuid::new_v4(),
             &scenario.token,
             lifecycle_request(
-                "preload-foreign-path",
+                "preload-legacy-path",
                 1,
                 0,
                 0,
@@ -162,8 +165,8 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
             ),
         )
         .await;
-    assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
-    assert_eq!(json(foreign).await["kind"], "forbidden");
+    assert_eq!(legacy.status(), StatusCode::OK);
+    assert_eq!(json(legacy).await["status"], "no_change");
 
     let pending = scenario
         .preload_values_action(preload_fixture_request(
@@ -270,7 +273,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
         2,
         2,
         2,
-        0,
+        1,
         serde_json::json!({"type":"enter"}),
     );
     assert_eq!(
@@ -468,10 +471,16 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
             cursor,
         ))
         .await;
+    // Every surface shares the desk's Preload, so a second surface pressing a playback key
+    // queues into the same pending queue rather than moving playback under this Go. The Go is
+    // still refused, by the queue revision that surface advanced.
     assert_eq!(target.status(), StatusCode::CONFLICT);
     let target = json(target).await;
-    assert_eq!(target["current_revision"], current);
-    assert_eq!(target["current_related_revision"], show_revision);
+    assert_eq!(
+        target["current_revision"], 2,
+        "the peer surface's queued action advanced the desk's Preload queue"
+    );
+    assert!(current >= cursor);
     assert!(
         scenario
             .state
@@ -504,7 +513,9 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
             "cursor-gap-conflict",
             1,
             0,
-            1,
+            // Carrying the desk's current Preload queue revision, so the retained-history gap is
+            // the precondition under test rather than the queue.
+            2,
             0,
             show_id,
             show_revision,

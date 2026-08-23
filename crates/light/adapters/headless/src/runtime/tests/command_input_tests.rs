@@ -67,12 +67,13 @@ fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
 }
 
 #[test]
-fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
+fn osc_and_ui_share_the_desks_one_command_line() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let front = state.installation.add_desk("Front", "front").unwrap();
     let wing = state.installation.add_desk("Wing", "wing").unwrap();
     let ui = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "front-ui".into(),
@@ -80,6 +81,7 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
         desk: front.clone(),
     };
     let second_front = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "front-second".into(),
@@ -87,6 +89,7 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
         desk: front.clone(),
     };
     let wing_ui = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "wing-ui".into(),
@@ -101,10 +104,7 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
     state.programming.set_command_line(ui.id, "GROUP".into());
     state.programming.set_command_target(ui.id, "GROUP".into());
 
-    write_desk_lock(
-        &state,
-        front.id,
-        &DeskLockConfiguration {
+    write_desk_lock(&state, &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()
         },
@@ -133,7 +133,7 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
     );
     assert_eq!(state.programming.get(ui.id).unwrap().command_line, "GROUP");
 
-    write_desk_lock(&state, front.id, &DeskLockConfiguration::default()).unwrap();
+    write_desk_lock(&state, &DeskLockConfiguration::default()).unwrap();
     handle_control_event(
         &state,
         ControlEvent::Osc {
@@ -142,20 +142,12 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
             source: Some(source.into()),
         },
     );
-    assert_eq!(state.programming.get(ui.id).unwrap().command_line, "G7");
-    assert_eq!(
-        state.programming.get(second_front.id).unwrap().command_line,
-        "G7"
-    );
-    assert!(
-        state
-            .programming
-            .get(wing_ui.id)
-            .unwrap()
-            .command_line
-            .is_empty()
-    );
-    assert_eq!(state.programming.command_target(wing_ui.id), "FIXTURE");
+    // One desk, one command line: every surface shows what was typed on any of them, including
+    // one that logged in on a legacy second desk record.
+    for session in [&ui, &second_front, &wing_ui] {
+        assert_eq!(state.programming.get(session.id).unwrap().command_line, "G7");
+        assert_eq!(state.programming.command_target(session.id), "GROUP");
+    }
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -165,6 +157,7 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
     let user = state.installation.users().unwrap().remove(0);
     let front = state.installation.add_desk("Front", "front").unwrap();
     let ui = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "front-ui".into(),
@@ -172,6 +165,7 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
         desk: front.clone(),
     };
     let second_ui = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "front-second".into(),
@@ -313,6 +307,7 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
     wing.id = Uuid::new_v4();
     wing.osc_alias = "wing".into();
     let owner = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "owner".into(),
@@ -320,6 +315,7 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
         desk: front.clone(),
     };
     let same_desk_hardware = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "hardware".into(),
@@ -327,6 +323,7 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
         desk: front,
     };
     let different_desk = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "wing".into(),
@@ -517,5 +514,120 @@ fn synthetic_osc_resubscribe_reuses_an_orphan_session_without_transient_lifecycl
     assert!(lifecycle_events.is_empty());
     assert_eq!(state.sessions.session_count(), 1);
     assert_eq!(state.programming.active_for_sessions().len(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+/// Subscribe an OSC surface on `alias` from `source`, and return the session it operates.
+fn subscribe_osc_surface(state: &AppState, client: &str, alias: &str, source: &str) -> SessionId {
+    assert!(handle_subscription_osc(
+        state,
+        "/light/subscribe",
+        &[
+            OscArgument::String(client.into()),
+            OscArgument::String(alias.into()),
+            OscArgument::Int(19_011),
+        ],
+        Some(source),
+    ));
+    state
+        .integrations
+        .osc_subscriber(client)
+        .unwrap_or_else(|| panic!("subscriber {client} was not retained"))
+        .session_id
+}
+
+fn press_osc(state: &AppState, address: &str, source: &str) {
+    handle_control_event(
+        state,
+        ControlEvent::Osc {
+            address: address.into(),
+            arguments: vec![OscArgument::Bool(true)],
+            source: Some(source.into()),
+        },
+    );
+}
+
+#[test]
+fn a_desk_button_surface_types_on_the_command_line_and_a_remote_one_cannot() {
+    let (state, data_dir) = test_state();
+    state.installation.add_desk("Capability", "capability").unwrap();
+    let desk_source = "127.0.0.1:19010";
+    let remote_source = "127.0.0.1:19020";
+    let desk_session = subscribe_osc_surface(&state, "desk-wing", "desk", desk_source);
+    let remote_session = subscribe_osc_surface(&state, "phone", "remote", remote_source);
+
+    // The desk-button path accepts the full command set, exactly as the main window does.
+    press_osc(&state, "/light/desk/programmer/group", desk_source);
+    press_osc(&state, "/light/desk/programmer/digit-7", desk_source);
+    assert_eq!(
+        state.programming.get(desk_session).unwrap().command_line,
+        "G7"
+    );
+
+    // The remote-control-only path operates playback and nothing else, so the same press never
+    // reaches the Programmer — the operator's command line is untouched.
+    press_osc(&state, "/light/remote/programmer/digit-8", remote_source);
+    assert_eq!(
+        state.programming.get(desk_session).unwrap().command_line,
+        "G7",
+        "a guest must not type on the operator's command line"
+    );
+    assert_eq!(
+        state.programming.get(remote_session).unwrap().command_line,
+        "G7",
+        "a guest still observes the one desk, it simply cannot change it"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn a_remote_surface_cannot_record_update_or_assign() {
+    let (state, data_dir) = test_state();
+    state.installation.add_desk("Capability", "capability").unwrap();
+    let desk_source = "127.0.0.1:19010";
+    let remote_source = "127.0.0.1:19020";
+    let desk_session = subscribe_osc_surface(&state, "desk-wing", "desk", desk_source);
+    subscribe_osc_surface(&state, "phone", "remote", remote_source);
+
+    // Every programming key of the desk-button set, refused on the guest path.
+    for key in ["record", "update", "assign", "clear", "highlight", "blind"] {
+        press_osc(&state, &format!("/light/remote/programmer/{key}"), remote_source);
+        assert!(
+            state
+                .programming
+                .get(desk_session)
+                .unwrap()
+                .command_line
+                .is_empty(),
+            "the guest path must not accept {key}"
+        );
+    }
+
+    // The same command-line keys on the desk-button path do reach the Programmer.
+    press_osc(&state, "/light/desk/programmer/group", desk_source);
+    press_osc(&state, "/light/desk/programmer/digit-4", desk_source);
+    assert_eq!(
+        state.programming.get(desk_session).unwrap().command_line,
+        "G4",
+        "the desk-button path types on the command line exactly as the main window does"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn a_legacy_alias_still_connects_as_a_desk_button_surface() {
+    let (state, data_dir) = test_state();
+    state.installation.add_desk("Capability", "capability").unwrap();
+    // Saved hardware configuration naming an alias from before the two paths existed keeps the
+    // full command set rather than being silently downgraded or refused.
+    let source = "127.0.0.1:19010";
+    let session = subscribe_osc_surface(&state, "old-wing", "front-of-house", source);
+
+    press_osc(&state, "/light/front-of-house/programmer/group", source);
+    press_osc(&state, "/light/front-of-house/programmer/digit-3", source);
+    assert_eq!(state.programming.get(session).unwrap().command_line, "G3");
+
     let _ = std::fs::remove_dir_all(data_dir);
 }

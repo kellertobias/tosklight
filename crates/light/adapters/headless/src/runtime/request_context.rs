@@ -107,18 +107,19 @@ impl FromRequestParts<AppState> for DeskContext {
     }
 }
 
+/// Authenticate a request that names a desk.
+///
+/// The desk context is still resolved, so a header naming nothing at all is still an error — a
+/// client sending a malformed desk is a client bug. What is gone is the comparison against the
+/// session's own desk: there is one desk, so a header naming a record from before the collapse
+/// addresses it rather than being refused as somebody else's.
 pub(super) fn session_for_desk(
     state: &AppState,
     headers: &HeaderMap,
     context: &DeskContext,
 ) -> Result<super::Session, ApiError> {
     let session = super::authenticate(state, headers)?;
-    let desk = context.resolve(state)?;
-    if session.desk.id != desk.id {
-        return Err(ApiError::forbidden(
-            "the authenticated session does not belong to this desk",
-        ));
-    }
+    context.resolve(state)?;
     Ok(session)
 }
 

@@ -73,7 +73,7 @@ fn authenticated_mutation(
     headers: &HeaderMap,
 ) -> Result<Session, GroupRecordHttpError> {
     let session = super::super::authenticate(state, headers).map_err(GroupRecordHttpError::api)?;
-    if super::super::read_desk_lock(state, session.desk.id).locked {
+    if super::super::read_desk_lock(state).locked {
         return Err(GroupRecordHttpError::conflict("desk is locked"));
     }
     Ok(session)

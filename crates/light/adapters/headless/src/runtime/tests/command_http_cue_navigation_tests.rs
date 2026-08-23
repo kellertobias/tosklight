@@ -390,7 +390,7 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
 }
 
 #[tokio::test]
-async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
+async fn selection_is_the_desks_and_a_locked_desk_is_rejected() {
     let (scenario, _show_id) = cue_navigation_scenario().await;
     let second_desk = scenario.state.installation.add_desk("Wing", "wing").unwrap();
     select_playback(&scenario, scenario.session.desk.id, Some(2));
@@ -452,13 +452,16 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
                 .header("x-tosk-desk", second_desk.id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    serde_json::json!({"request_id":"foreign-desk","command":"GO TO PBK 1 CUE 1"}).to_string(),
+                    serde_json::json!({"request_id":"legacy-desk","command":"GO TO PBK 1 CUE 1"}).to_string(),
                 ))
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // A header naming a desk record from before the collapse addresses the one desk, so the
+    // command runs and moves the shared Cue list like any other.
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(current_cue(&scenario, 1), Some("1".into()));
 
     // An unauthenticated caller cannot navigate at all.
     let response = scenario
@@ -478,9 +481,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
 
     // A locked desk rejects the mutating action without moving the runtime.
     let baseline = scenario.state.events.latest_sequence();
-    write_desk_lock(
-        &scenario.state,
-        scenario.session.desk.id,
+    write_desk_lock(&scenario.state,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()
@@ -492,7 +493,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
         .await;
     assert_eq!(response.status(), StatusCode::CONFLICT);
     assert_eq!(playback_events(&scenario, baseline), 0);
-    assert_eq!(current_cue(&scenario, 2), Some("2".into()));
+    assert_eq!(current_cue(&scenario, 2), Some("1".into()));
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -550,6 +551,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     scenario.state.integrations.register_osc_subscriber(
         "cue-navigation-keys".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: osc_alias.clone(),
             target: source,
             command_source: source,

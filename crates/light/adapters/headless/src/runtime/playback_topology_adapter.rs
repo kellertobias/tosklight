@@ -65,6 +65,14 @@ impl ServerPlaybackTopologyPorts {
                 "Playback topology authority does not match the authenticated session",
             ));
         }
+        // Which playbacks exist and where they sit is show programming, not operating one, so a
+        // Not Editable screen cannot change it.
+        if self.session.capability.is_guest() {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "this screen is marked Not Editable and cannot change programming",
+            ));
+        }
         Ok(())
     }
 

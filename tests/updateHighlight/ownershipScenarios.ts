@@ -13,7 +13,7 @@ import {
 	softwareHighlightGeometry,
 } from "../support/updateHighlight/highlight";
 
-test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, release on the last session, and stay desk-local", async ({
+test("HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it", async ({
 	api,
 	bench,
 }) => {
@@ -24,106 +24,70 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 		"default-stage",
 	);
 	const fixtures = await fixturesByNumber(api, [101, 102, 103]);
-	await api.request("POST", "/api/v2/users", {
-		name: "Highlight A",
-		enabled: true,
-	});
-	await api.request("POST", "/api/v2/users", {
-		name: "Highlight B",
-		enabled: true,
-	});
 
-	const userAFirst = new ApiDriver(api.baseUrl);
-	userAFirst.session = await userAFirst.request(
-		"POST",
-		"/api/v2/sessions",
-		{ username: "Highlight A", desk_id: api.session!.desk.id },
-		false,
-	);
-	const userASecond = new ApiDriver(api.baseUrl);
-	userASecond.session = await userASecond.request(
-		"POST",
-		"/api/v2/sessions",
-		{ username: "Highlight A", desk_id: api.session!.desk.id },
-		false,
-	);
-	const userB = new ApiDriver(api.baseUrl);
-	userB.session = await userB.request(
-		"POST",
-		"/api/v2/sessions",
-		{ username: "Highlight B", desk_id: api.session!.desk.id },
-		false,
-	);
+	// Three connections to the one desk: a main window, a second screen, and a wing.
+	const mainWindow = new ApiDriver(api.baseUrl);
+	const secondScreen = new ApiDriver(api.baseUrl);
+	const wing = new ApiDriver(api.baseUrl);
+	for (const surface of [mainWindow, secondScreen, wing]) {
+		await surface.login("Operator");
+	}
 
-	await replaceProgrammingSelection(userAFirst, {
+	await replaceProgrammingSelection(mainWindow, {
 		surface: "api",
 		showId: show.id,
 		fixtures: [fixtures[0].id],
 	});
-	await replaceProgrammingSelection(userB, {
-		surface: "api",
-		showId: show.id,
-		fixtures: [fixtures[1].id],
-	});
-	await highlightAction(userAFirst, "on");
-	const ownerBeforeConflict = await highlightState(userAFirst);
-	expect(ownerBeforeConflict).toMatchObject({
+	await highlightAction(mainWindow, "on");
+	const held = await highlightState(mainWindow);
+	expect(held).toMatchObject({ active: true, output_enabled: true });
+	expect(held.remembered).toHaveLength(1);
+
+	// There is no second operator to be refused: every surface reads the same Highlight.
+	for (const surface of [secondScreen, wing]) {
+		expect(await highlightState(surface)).toMatchObject({
+			active: true,
+			output_enabled: true,
+			owner_user_name: held.owner_user_name,
+		});
+	}
+
+	// And every surface may step it, because it is the desk's Highlight and the desk's selection.
+	await highlightAction(wing, "next");
+	expect((await programmer(mainWindow)).selected).toEqual([fixtures[0].id]);
+	expect(await highlightState(secondScreen)).toMatchObject({
 		active: true,
 		output_enabled: true,
-		owner_user_name: "Highlight A",
-	});
-	expect(ownerBeforeConflict.remembered).toHaveLength(1);
-	await expect(highlightAction(userB, "toggle")).rejects.toThrow(
-		/another user on this desk/i,
-	);
-	expect(await highlightState(userAFirst)).toMatchObject(ownerBeforeConflict);
-	expect(await highlightState(userB)).toMatchObject({
-		active: false,
-		output_enabled: false,
 	});
 
-	await highlightAction(userB, "next");
-	expect((await programmer(userB)).selected).toEqual([fixtures[1].id]);
-	expect(await highlightState(userAFirst)).toMatchObject({
-		active: true,
-		output_enabled: true,
-		owner_user_name: "Highlight A",
-	});
-	await userASecond.request(
+	// Closing one surface leaves the desk holding Highlight; the others are still standing at it.
+	await secondScreen.request(
 		"DELETE",
-		`/api/v2/sessions/${userASecond.session!.session_id}`,
+		`/api/v2/sessions/${secondScreen.session!.session_id}`,
 	);
-	expect((await highlightState(userAFirst)).active).toBe(true);
-	await expect(highlightAction(userB, "on")).rejects.toThrow(
-		/another user on this desk/i,
-	);
+	expect((await highlightState(mainWindow)).active).toBe(true);
 
-	await userAFirst.request(
-		"DELETE",
-		`/api/v2/sessions/${userAFirst.session!.session_id}`,
-	);
-	await highlightAction(userB, "on");
-	expect(await highlightState(userB)).toMatchObject({
-		active: true,
-		output_enabled: true,
-		owner_user_name: "Highlight B",
-	});
-
-	const otherDesk = new ApiDriver(api.baseUrl);
-	await otherDesk.login("Highlight A");
-	await replaceProgrammingSelection(otherDesk, {
+	// A surface that arrives later joins the Highlight that is already running rather than
+	// contending for it — and rather than restarting it, so the activation basis it was turned on
+	// with survives.
+	const remembered = (await highlightState(mainWindow)).remembered;
+	const lateSurface = new ApiDriver(api.baseUrl);
+	await lateSurface.login("Operator");
+	await replaceProgrammingSelection(lateSurface, {
 		surface: "api",
 		showId: show.id,
 		fixtures: [fixtures[2].id],
 	});
-	await highlightAction(otherDesk, "on");
-	expect(await highlightState(otherDesk)).toMatchObject({
+	await highlightAction(lateSurface, "on");
+	expect(await highlightState(lateSurface)).toMatchObject({
 		active: true,
 		output_enabled: true,
-		owner_user_name: "Highlight A",
-		remembered: [{ fixture_id: fixtures[2].id }],
+		remembered,
 	});
-	expect((await highlightState(userB)).owner_user_name).toBe("Highlight B");
+	expect(await highlightState(mainWindow)).toMatchObject({
+		active: true,
+		remembered,
+	});
 });
 
 test("HIGHLIGHT-005 @supplemental-ui › Highlight errors remain reachable above production content without moving accepted controls", async ({

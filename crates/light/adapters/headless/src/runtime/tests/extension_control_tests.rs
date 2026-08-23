@@ -239,6 +239,7 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
     let desk = state.installation.add_desk("Main", "main").unwrap();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: light_core::SessionId::new(),
         user: user.clone(),
         token: "extension-controls".into(),
@@ -443,6 +444,7 @@ async fn extension_programmer_keys_do_not_cross_an_active_show_transition() {
     let desk = state.installation.add_desk("Main", "main").unwrap();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: light_core::SessionId::new(),
         user: user.clone(),
         token: "extension-transition".into(),

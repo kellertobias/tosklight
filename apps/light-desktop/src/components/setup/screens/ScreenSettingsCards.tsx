@@ -548,6 +548,16 @@ function ScreenLayoutFields({
 					}
 					description="The encoder section of this screen always keeps the keypad, the programmer fader and the Delete/Move tools on the main screen. Visible adds the command line above its encoders."
 				/>
+				<SwitchField
+					label="Programming"
+					offLabel="Not editable"
+					onLabel="Allowed"
+					checked={!draft.not_editable}
+					onChange={(event) =>
+						update({ not_editable: !event.target.checked })
+					}
+					description="Not editable makes this a guest screen: it still shows the fixture sheet, the Stage and the desk's values, and still runs playbacks, macros and timecodes, but it cannot record, update or assign. Use it for a repeater somebody else is standing at while you program."
+				/>
 			</div>
 		</section>
 	);

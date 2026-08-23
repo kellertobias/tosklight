@@ -315,7 +315,22 @@ export class LightClientRuntime {
 		if (!this.session) throw new Error("A server session is required");
 		headers.set("authorization", `Bearer ${this.session.token}`);
 		if (this.session.desk) headers.set("x-tosk-desk", this.session.desk.id);
+		const screenId = requestingScreenId();
+		if (screenId) headers.set("x-tosk-screen", screenId);
 	}
+}
+
+/**
+ * The optional screen this window is rendering, if it is one.
+ *
+ * One desktop process drives the main window and every optional screen, so they share a
+ * session and the desk cannot tell them apart from the token alone. The window says which
+ * screen it is, and the server uses that only to decide whether the screen may change
+ * programming — a screen can never grant itself programming by claiming to be another one.
+ */
+function requestingScreenId(): string | null {
+	if (typeof window === "undefined") return null;
+	return new URLSearchParams(window.location.search).get("screen");
 }
 
 async function apiError(response: Response): Promise<ApiRequestError> {

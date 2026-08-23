@@ -7,6 +7,7 @@ include!("command_http_revision_tests.rs");
 include!("command_http_event_tests.rs");
 include!("command_http_key_tests.rs");
 include!("command_http_lifecycle_tests.rs");
+include!("not_editable_screen_tests.rs");
 include!("command_http_selection_tests.rs");
 include!("command_http_values_tests.rs");
 include!("command_http_preload_values_tests.rs");

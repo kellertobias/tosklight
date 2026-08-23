@@ -68,7 +68,7 @@ impl ProgrammerRegistry {
     ) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (user_id, pending_values_changed) = {
+        let pending_values_changed = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -132,10 +132,10 @@ impl ProgrammerRegistry {
             // programmer. Entering preload again starts the next blind edit.
             state.blind = false;
             state.last_activity = committed_at;
-            (state.user_id, pending_values_changed)
+            pending_values_changed
         };
         if pending_values_changed {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         }
         true
     }
@@ -182,9 +182,8 @@ impl ProgrammerRegistry {
             surface,
         });
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
-        self.mark_preload_playback_queue_changed(user_id);
+        self.mark_preload_playback_queue_changed();
         true
     }
 
@@ -207,17 +206,16 @@ impl ProgrammerRegistry {
             return Vec::new();
         };
         let drained = std::mem::take(&mut state.preload_playback_pending);
-        let user_id = state.user_id;
         drop(states);
         if !drained.is_empty() {
-            self.mark_preload_playback_queue_changed(user_id);
+            self.mark_preload_playback_queue_changed();
         }
         drained
     }
     pub fn clear_preload_pending(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (user_id, pending_values_changed, queue_changed) = {
+        let (pending_values_changed, queue_changed) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -234,13 +232,13 @@ impl ProgrammerRegistry {
             state.preload_group_release_pending.clear();
             state.preload_playback_pending.clear();
             state.last_activity = self.clock.now();
-            (state.user_id, pending_values_changed, queue_changed)
+            (pending_values_changed, queue_changed)
         };
         if pending_values_changed {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         }
         if queue_changed {
-            self.mark_preload_playback_queue_changed(user_id);
+            self.mark_preload_playback_queue_changed();
         }
         true
     }
@@ -283,13 +281,12 @@ impl ProgrammerRegistry {
         state.preload_playback_active = false;
         state.blind = false;
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
         if pending_values_changed {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         }
         if queue_changed {
-            self.mark_preload_playback_queue_changed(user_id);
+            self.mark_preload_playback_queue_changed();
         }
         true
     }
@@ -324,9 +321,8 @@ impl ProgrammerRegistry {
                 },
             );
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
-        self.mark_preload_values_changed(user_id);
+        self.mark_preload_values_changed();
         true
     }
 

@@ -455,7 +455,7 @@ fn already_gated_interaction_uses_the_non_reentrant_recording_bridge() {
 }
 
 #[test]
-fn owner_and_preload_capture_are_rejected_before_commit() {
+fn preload_capture_is_rejected_before_commit() {
     let setup = PresetSetup::new();
     setup.registry.set(
         setup.session_id,
@@ -469,13 +469,13 @@ fn owner_and_preload_capture_are_rejected_before_commit() {
         PresetStoreMode::Overwrite,
         ProgrammingPresetRevisionExpectation::Current,
     );
-    let mut forged = setup.action("forged", request.clone());
-    forged.context.user_id = Some(Uuid::new_v4());
-    let error = setup
+    // An identity from before the collapse records onto the desk rather than being turned away.
+    let mut legacy = setup.action("legacy", request.clone());
+    legacy.context.user_id = Some(Uuid::new_v4());
+    setup
         .service
-        .handle_preset_recording(forged, setup.ports.as_ref())
-        .unwrap_err();
-    assert_eq!(error.kind, ActionErrorKind::Forbidden);
+        .handle_preset_recording(legacy, setup.ports.as_ref())
+        .expect("a legacy identity is the desk's own");
 
     assert!(setup.registry.arm_preload(setup.session_id, true));
     let error = setup
@@ -483,7 +483,11 @@ fn owner_and_preload_capture_are_rejected_before_commit() {
         .handle_preset_recording(setup.action("preload", request), setup.ports.as_ref())
         .unwrap_err();
     assert_eq!(error.kind, ActionErrorKind::Conflict);
-    assert_eq!(setup.ports.calls.load(Ordering::Relaxed), 0);
+    assert_eq!(
+        setup.ports.calls.load(Ordering::Relaxed),
+        1,
+        "only the legacy-identity recording committed; the armed-Preload one did not"
+    );
 }
 
 #[test]

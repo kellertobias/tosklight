@@ -584,7 +584,6 @@ mod tests {
     use super::*;
     use light_output::OutputRoute;
     use std::{
-        collections::HashMap,
         sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
         sync::mpsc,
         thread,

@@ -80,7 +80,7 @@ impl ProgrammingPreloadPlaybackQueueContent {
     ) -> Result<Self, ActionError> {
         #[cfg(test)]
         PROJECTION_READS.set(PROJECTION_READS.get() + 1);
-        if programmers.user_id(session) != Some(user_id) {
+        if programmers.session_operates_desk(session, user_id) != Some(true) {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the requested user",
@@ -125,6 +125,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPreloadPlaybackQueueSnapshot, ActionError> {
         let (session, user_id) = queue_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
             let event_sequence = self.events.latest_sequence();
@@ -132,10 +134,8 @@ impl ProgrammingService {
                 ProgrammingPreloadPlaybackQueueContent::read(&self.programmers, session, user_id)?;
             Ok(ProgrammingPreloadPlaybackQueueSnapshot {
                 event_sequence,
-                projection: content.projection(
-                    user_id,
-                    self.programmers.preload_playback_queue_revision(user_id),
-                ),
+                projection: content
+                    .projection(user_id, self.programmers.preload_playback_queue_revision()),
             })
         })
     }

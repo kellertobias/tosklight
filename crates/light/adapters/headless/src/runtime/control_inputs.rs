@@ -84,7 +84,7 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         parts
             .get(1)
             .and_then(|alias| osc_control_desk(state, alias))
-            .is_some_and(|desk| read_desk_lock(state, desk.id).locked)
+            .is_some_and(|_| read_desk_lock(state).locked)
     } else {
         false
     };
@@ -128,15 +128,20 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
             begin_authenticated_osc_action_timing(state, address, arguments, source.as_deref());
         let mut measured_action_succeeded = false;
         if !handle_subscription_osc(state, address, arguments, source.as_deref()) && !input_locked {
+            // A guest operates playback and nothing else. It never reaches the Programmer, so
+            // there is no Record to capture, no Update to arm and no encoder to move — which is
+            // the whole point of it being able to work beside somebody who is programming.
             measured_action_succeeded |=
                 handle_playback_osc(state, address, arguments, source.as_deref());
-            handle_highlight_osc(state, address, arguments, source.as_deref());
-            measured_action_succeeded |=
-                handle_dynamics_osc(state, address, arguments, source.as_deref());
-            measured_action_succeeded |=
-                handle_programmer_osc(state, address, arguments, source.as_deref());
             handle_timing_osc(state, address, arguments);
-            handle_encoder_osc(state, address, arguments, source.as_deref());
+            if osc_source_capability(state, source.as_deref()).may_program() {
+                handle_highlight_osc(state, address, arguments, source.as_deref());
+                measured_action_succeeded |=
+                    handle_dynamics_osc(state, address, arguments, source.as_deref());
+                measured_action_succeeded |=
+                    handle_programmer_osc(state, address, arguments, source.as_deref());
+                handle_encoder_osc(state, address, arguments, source.as_deref());
+            }
         }
         send_osc_feedback(state, false);
         if let Some(action_timing) = action_timing {
@@ -169,6 +174,19 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         serde_json::to_value(event)
             .unwrap_or_else(|_| serde_json::json!({"error":"serialization failed"})),
     );
+}
+
+/// What the surface that sent this message is allowed to do.
+///
+/// An unknown source has not subscribed, so it has no surface and reaches nothing; treating it as
+/// a guest keeps the programming path closed to anything that never announced itself.
+fn osc_source_capability(state: &AppState, source: Option<&str>) -> light_core::SurfaceCapability {
+    source
+        .and_then(|source| source.parse().ok())
+        .and_then(|source| state.integrations.osc_subscriber_for_source(source))
+        .map_or(light_core::SurfaceCapability::PlaybackOnly, |subscriber| {
+            subscriber.capability
+        })
 }
 
 struct AuthenticatedOscActionTiming {

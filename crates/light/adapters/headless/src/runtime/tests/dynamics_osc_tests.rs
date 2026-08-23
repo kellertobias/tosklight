@@ -3,6 +3,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "dynamics-osc".into(),
@@ -22,6 +23,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
     let source: SocketAddr = "127.0.0.1:19121".parse().unwrap();
     let target: SocketAddr = "127.0.0.1:19122".parse().unwrap();
     let subscriber = OscSubscriber {
+        capability: light_core::SurfaceCapability::Programming,
         desk_alias: session.desk.osc_alias.clone(),
         target,
         command_source: source,

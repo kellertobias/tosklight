@@ -123,6 +123,7 @@ export function createScreenConfiguration(
 		page_mode: "follow_main",
 		show_page_controls: true,
 		show_programmer: false,
+		not_editable: false,
 		desired_open: desiredOpen,
 		display_id: null,
 		bounds: null,

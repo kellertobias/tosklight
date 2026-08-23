@@ -25,13 +25,10 @@ async fn get_snapshot(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let requested =
-        Uuid::parse_str(&user_id).map_err(|_| ApiError::bad_request("user_id must be a UUID"))?;
-    if session.user.id.0 != requested {
-        return Err(ApiError::forbidden(
-            "session is not authorized for this Programmer user",
-        ));
-    }
+    Uuid::parse_str(&user_id).map_err(|_| ApiError::bad_request("user_id must be a UUID"))?;
+    // A URL naming an identity from before the desk had only one still addresses the desk's one
+    // Programmer, so it is normalised rather than refused. The identity must still parse: a
+    // malformed one is a client bug, not an older client.
     let context = http_context(&session, None);
     let ports = ServerProgrammingPorts::new(&state, &session, "http_preload_playback_queue", false);
     let snapshot = state

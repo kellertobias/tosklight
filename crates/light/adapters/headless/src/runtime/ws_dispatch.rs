@@ -217,7 +217,7 @@ fn validate_frame(
     if !matches!(
         frame.action,
         LiveAction::SpeedGroup(_) | LiveAction::OutputRuntime(_)
-    ) && read_desk_lock(state, session.desk.id).locked
+    ) && read_desk_lock(state).locked
     {
         return Err("desk is locked".into());
     }
