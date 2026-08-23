@@ -307,21 +307,17 @@ pub(super) fn osc_playback_session(
     let source = source.and_then(|source| source.parse::<SocketAddr>().ok());
     let subscribed = source.and_then(|source| state.integrations.osc_subscriber_for_source(source));
     if let Some(subscriber) = subscribed {
-        let desk = action_desk.ok_or(())?;
+        // The alias no longer names which desk this is — there is one. It names the path the
+        // surface connected on, and therefore what it may do. A message must still arrive on the
+        // path its sender subscribed to, so a guest cannot reach the desk-button routes.
         if !subscriber.desk_alias.eq_ignore_ascii_case(action_alias) {
             return Err(());
         }
         let session = state
             .sessions
             .session(subscriber.session_id)
-            .filter(|session| session.connected && session.desk.id == desk.id)
+            .filter(|session| session.connected)
             .ok_or(())?;
-        if !subscriber
-            .desk_alias
-            .eq_ignore_ascii_case(&session.desk.osc_alias)
-        {
-            return Err(());
-        }
         return Ok(Some(session));
     }
     Ok(action_desk.and_then(|desk| {
@@ -412,13 +408,20 @@ pub(super) fn handle_playback_osc(
     else {
         return false;
     };
-    let record_target = is_physical_record_target(
-        state,
-        &playback_address,
-        parts[action_index],
-        button,
-        action_desk.as_ref(),
-    );
+    // A remote-control-only route operates the playback and nothing else. It never captures a
+    // Record, even while the operator has one armed on the desk's command line — that is what
+    // lets a guest work a playback beside somebody who is programming.
+    let may_program = source_socket
+        .and_then(|source| state.integrations.osc_subscriber_for_source(source))
+        .is_none_or(|subscriber| subscriber.capability.may_program());
+    let record_target = may_program
+        && is_physical_record_target(
+            state,
+            &playback_address,
+            parts[action_index],
+            button,
+            action_desk.as_ref(),
+        );
     let mut action = if parts[action_index] == "fader" {
         "master"
     } else {
@@ -470,7 +473,7 @@ pub(super) fn handle_playback_osc(
     // authoritative show transaction instead of deadlocking behind this ingress guard.
     drop(activation);
     let mut off_target = false;
-    if let Some(session) = session.as_ref() {
+    if let Some(session) = session.as_ref().filter(|_| may_program) {
         match command_http::intercept_armed_cue_playback(
             state,
             session,

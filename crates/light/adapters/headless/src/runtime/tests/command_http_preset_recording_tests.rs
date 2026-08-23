@@ -211,6 +211,7 @@ async fn osc_record_key_sequence_commits_through_the_typed_preset_capability() {
     scenario.state.integrations.register_osc_subscriber(
         "preset-record".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: "main".into(),
             target: source,
             command_source: source,

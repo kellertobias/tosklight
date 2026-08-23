@@ -15,6 +15,7 @@ fn focused_macro_editor_routes_attached_keypad_input_without_mutating_command_li
     state.integrations.register_osc_subscriber(
         "macro-editor-test".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: "main".into(),
             target: source,
             command_source: source,
@@ -81,6 +82,7 @@ fn osc_shifted_group_dmx_command_executes_the_same_physical_address_selection() 
     state.integrations.register_osc_subscriber(
         "dmx-test".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: "main".into(),
             target: source,
             command_source: source,
@@ -144,6 +146,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     state.integrations.register_osc_subscriber(
         "test".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: "main".into(),
             target: source,
             command_source: source,
@@ -438,6 +441,7 @@ fn held_shift_all_previous_and_next_are_unassigned_without_leaking_highlight_act
     state.integrations.register_osc_subscriber(
         "grid-test".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: "main".into(),
             target: source,
             command_source: source,
@@ -499,7 +503,7 @@ fn held_shift_all_previous_and_next_are_unassigned_without_leaking_highlight_act
 }
 
 #[test]
-fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
+fn an_osc_source_cannot_send_on_a_path_it_did_not_subscribe_to() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
@@ -514,7 +518,8 @@ fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
     state.integrations.register_osc_subscriber(
         "cross-desk".into(),
         OscSubscriber {
-            desk_alias: "other-desk".into(),
+            capability: light_core::SurfaceCapability::PlaybackOnly,
+            desk_alias: "remote".into(),
             target: source,
             command_source: source,
             session_id: session.id,
@@ -527,14 +532,26 @@ fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
         },
     );
 
+    // The path is the capability, so a guest cannot reach a desk-button route by addressing it.
     assert!(
         osc_playback_session(
             &state,
             Some("127.0.0.1:9011"),
-            "other-desk",
+            "desk",
             Some(&session.desk),
         )
         .is_err()
+    );
+    // Its own path still works. The desk it addresses is the only one there is, whatever the
+    // session's stored desk record happens to be called.
+    assert!(
+        osc_playback_session(
+            &state,
+            Some("127.0.0.1:9011"),
+            "remote",
+            Some(&session.desk),
+        )
+        .is_ok_and(|resolved| resolved.is_some())
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -556,6 +573,7 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
     state.integrations.register_osc_subscriber(
         "update-test".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: "main".into(),
             target: source,
             command_source: source,

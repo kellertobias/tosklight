@@ -259,6 +259,7 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
     state.integrations.register_osc_subscriber(
         "hardware-update".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: session.desk.osc_alias.clone(),
             target: "127.0.0.1:19022".parse().unwrap(),
             command_source: source,

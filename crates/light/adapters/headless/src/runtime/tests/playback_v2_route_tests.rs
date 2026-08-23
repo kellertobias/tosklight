@@ -997,6 +997,7 @@ async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
     state.integrations.register_osc_subscriber(
         "playback-selection-test".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: session.desk.osc_alias.clone(),
             target: source,
             command_source: source,

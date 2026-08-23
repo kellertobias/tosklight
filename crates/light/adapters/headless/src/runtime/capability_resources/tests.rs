@@ -204,6 +204,7 @@ mod tests {
         integrations.register_osc_subscriber(
             "standalone".into(),
             OscSubscriber {
+                capability: light_core::SurfaceCapability::Programming,
                 desk_alias: "main".into(),
                 target: source,
                 command_source: source,

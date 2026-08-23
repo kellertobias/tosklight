@@ -190,14 +190,35 @@ pub(super) fn playback_color_rgb(color: &str, active: bool) -> (f32, f32, f32) {
     )
 }
 
-pub(super) fn osc_control_desk(state: &AppState, alias: &str) -> Option<ControlDesk> {
-    if alias.eq_ignore_ascii_case("main") || alias.is_empty() {
-        state.installation.desks().ok()?.into_iter().next()
+/// The canonical path a desk-button surface connects on. It accepts the full command set.
+pub(super) const OSC_DESK_ALIAS: &str = "desk";
+/// The canonical path a remote-control-only guest connects on. Playback only: no Record, no
+/// Update, no Assign.
+pub(super) const OSC_REMOTE_ALIAS: &str = "remote";
+
+/// What a surface connecting on `alias` is allowed to do.
+///
+/// The path is the capability. `remote` is the guest path; everything else — `desk`, the legacy
+/// `main`, and any alias a saved hardware configuration still names — is a surface of the one
+/// programming user.
+pub(super) fn osc_surface_capability(alias: &str) -> light_core::SurfaceCapability {
+    if alias.eq_ignore_ascii_case(OSC_REMOTE_ALIAS) {
+        light_core::SurfaceCapability::PlaybackOnly
     } else {
-        state
-            .installation
-            .control_desk_by_alias(alias)
-            .ok()
-            .flatten()
+        light_core::SurfaceCapability::Programming
     }
+}
+
+/// The desk an OSC alias addresses.
+///
+/// There is one desk, so every alias addresses it. A saved hardware configuration naming an alias
+/// from before the collapse is not foreign — there is nothing left for it to be foreign to — so it
+/// resolves rather than being refused and left silently unable to connect.
+pub(super) fn osc_control_desk(state: &AppState, alias: &str) -> Option<ControlDesk> {
+    state
+        .installation
+        .control_desk_by_alias(alias)
+        .ok()
+        .flatten()
+        .or_else(|| state.installation.desks().ok()?.into_iter().next())
 }

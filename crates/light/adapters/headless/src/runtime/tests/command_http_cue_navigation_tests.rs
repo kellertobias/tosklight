@@ -548,6 +548,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     scenario.state.integrations.register_osc_subscriber(
         "cue-navigation-keys".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: osc_alias.clone(),
             target: source,
             command_source: source,

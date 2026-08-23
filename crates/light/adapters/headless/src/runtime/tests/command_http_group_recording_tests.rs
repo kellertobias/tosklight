@@ -608,6 +608,7 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
     scenario.state.integrations.register_osc_subscriber(
         "group-record".into(),
         OscSubscriber {
+            capability: light_core::SurfaceCapability::Programming,
             desk_alias: "main".into(),
             target: source,
             command_source: source,
