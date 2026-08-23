@@ -1,11 +1,5 @@
 use super::*;
 
-#[derive(Deserialize)]
-pub(super) struct UserInput {
-    pub(super) name: String,
-    #[serde(default = "default_true")]
-    pub(super) enabled: bool,
-}
 pub(super) fn default_true() -> bool {
     true
 }

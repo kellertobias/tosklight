@@ -16,7 +16,6 @@ async fn direct_manual_entry_resets_pause_scale_sound_and_capture_ownership() {
     state.output.set_sound_capture_owner(
         0,
         Some(SoundCaptureOwner {
-            desk_id: session.desk.id,
             last_seen_millis: 10,
         }),
     );
@@ -171,20 +170,22 @@ async fn v2_speed_groups_are_revisioned_shared_strict_and_replay_before_desk_loc
         130.0
     );
 
-    let foreign = get_speed_groups(&app, Some(&front_token), wing.id).await;
-    assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
-    let foreign_action = post_speed_groups(
+    // Speed Groups are the desk's, so a header naming a desk record from before the collapse
+    // reads and writes the same ones rather than being refused.
+    let legacy = get_speed_groups(&app, Some(&front_token), wing.id).await;
+    assert_eq!(legacy.status(), StatusCode::OK);
+    let legacy_action = post_speed_groups(
         &app,
         &front_token,
         wing.id,
         speed_request(
-            "foreign-speed",
+            "legacy-speed",
             &front_snapshot,
             serde_json::json!({"type":"set_bpm","group":"E","bpm":150.0}),
         ),
     )
     .await;
-    assert_eq!(foreign_action.status(), StatusCode::FORBIDDEN);
+    assert_eq!(legacy_action.status(), StatusCode::OK);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

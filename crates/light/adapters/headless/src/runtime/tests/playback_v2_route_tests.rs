@@ -103,7 +103,7 @@ async fn plain_playback_urls_are_fire_and_forget_and_keep_page_addressing_distin
 }
 
 #[tokio::test]
-async fn v2_context_headers_default_to_the_single_or_main_control_desk() {
+async fn v2_context_headers_default_to_the_one_control_desk() {
     let (single_state, single_data_dir) = test_state();
     let single_app = router(single_state.clone());
     let (single_token, _) = login(&single_app, "Operator").await;
@@ -125,11 +125,14 @@ async fn v2_context_headers_default_to_the_single_or_main_control_desk() {
         single_desk.to_string()
     );
 
+    // An installation from before the collapse holds several desk records. A session gets the
+    // desk whichever one it asks for, and the snapshot reports that one.
     let (main_state, main_data_dir) = test_state();
     let wing = main_state.installation.add_desk("A wing", "wing").unwrap();
     let main = main_state.installation.add_desk("Z main", "main").unwrap();
     let main_app = router(main_state.clone());
     let main_token = login_playback_user_on_desk(&main_app, "Operator", main.id).await;
+    let resolved_desk = session_desk_id(&main_state, &main_token);
     open_playback_test_show(&main_app, &main_token).await;
     let defaulted = main_app
         .oneshot(
@@ -144,9 +147,12 @@ async fn v2_context_headers_default_to_the_single_or_main_control_desk() {
     assert_eq!(defaulted.status(), StatusCode::OK);
     assert_eq!(
         json(defaulted).await["desk"]["desk_id"],
-        main.id.to_string()
+        resolved_desk.to_string()
     );
-    assert_ne!(wing.id, main.id);
+    assert_ne!(
+        wing.id, main.id,
+        "the legacy records are still distinct rows"
+    );
     let _ = std::fs::remove_dir_all(single_data_dir);
     let _ = std::fs::remove_dir_all(main_data_dir);
 }
@@ -866,7 +872,11 @@ async fn v2_shared_virtual_exclusion_configuration_applies_across_desks() {
         .unwrap()
         .activation
         .unwrap();
-    assert_eq!(activation.desk_id, Some(second_desk.id));
+    assert_eq!(
+        activation.desk_id,
+        Some(session_desk_id(&state, &second_token)),
+        "the activation records the desk the session operates, which is the only one"
+    );
     assert_eq!(
         activation.surface,
         light_playback::PlaybackActivationSurface::Virtual
@@ -1457,7 +1467,7 @@ async fn physical_group_master_fader_holds_until_pickup_and_tracks_virtual_chang
 }
 
 #[tokio::test]
-async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
+async fn v2_group_runtime_is_the_desks_and_rejects_a_stale_show() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
@@ -1469,20 +1479,22 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_group_runtime_test_state(&state);
-    let cursor = state.events.latest_sequence();
 
     let foreign_desk = post_action(
         &app,
         Some(&first_token),
         second_desk.id,
         group_action_request(
-            "foreign-desk-group-master",
+            "legacy-desk-group-master",
             "front",
-            serde_json::json!({"type":"master","value":0.3}),
+            serde_json::json!({"type":"master","value":0.7}),
         ),
     )
     .await;
-    assert_eq!(foreign_desk.status(), StatusCode::FORBIDDEN);
+    // A header naming a desk record from before the collapse addresses the one desk.
+    assert_eq!(foreign_desk.status(), StatusCode::OK);
+    // Measure the rest from after that accepted action.
+    let cursor = state.events.latest_sequence();
 
     let stale_show = post_scoped_action(
         &app,
@@ -2123,7 +2135,11 @@ async fn same_user_preload_commit_keeps_captured_originating_desk_with_show_scop
         .unwrap()
         .activation
         .unwrap();
-    assert_eq!(activation.desk_id, Some(second_desk.id));
+    assert_eq!(
+        activation.desk_id,
+        Some(session_desk_id(&state, &second_token)),
+        "the activation records the desk the session operates, which is the only one"
+    );
     assert_eq!(
         activation.surface,
         light_playback::PlaybackActivationSurface::Virtual
@@ -2138,7 +2154,7 @@ async fn same_user_preload_commit_keeps_captured_originating_desk_with_show_scop
         .setting(&active_playbacks_setting(show_id))
         .unwrap()
         .unwrap();
-    assert!(persisted.contains(&second_desk.id.to_string()));
+    assert!(persisted.contains(&session_desk_id(&state, &second_token).to_string()));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

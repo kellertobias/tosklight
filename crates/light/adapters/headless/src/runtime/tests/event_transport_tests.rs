@@ -109,9 +109,9 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
     let waiting = tokio::spawn(async move { stream.next().await });
     tokio::task::yield_now().await;
 
-    let mut other_desk = transition_draft(None, cue_list_id.0);
-    other_desk.desk_id = Some(Uuid::from_u128(2));
-    bus.publish(other_desk);
+    // A different Cue list's transition must not wake this subscriber. There is no longer a
+    // second desk to be filtered out — an event about *this* Cue list is this desk's, whichever
+    // surface caused it — so what a narrow subscription still narrows is the object.
     bus.publish(transition_draft(Some(99), Uuid::from_u128(99)));
     clock.set(started + ChronoDuration::milliseconds(100));
     let rendered = engine.render(RenderOptions::default()).unwrap();
@@ -130,7 +130,7 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
     let wire::EventServerMessage::Event { event } = message else {
         panic!("expected an event delivery");
     };
-    assert_eq!(event.sequence, 3);
+    assert_eq!(event.sequence, 2);
     assert_eq!(event.object, Some(object));
     let wire::EventPayload::PlaybackRuntimeChanged { change } = event.payload else {
         panic!("expected a Playback runtime change");
@@ -356,7 +356,7 @@ fn programmer_priority_objects_are_limited_to_the_exact_authenticated_user() {
 }
 
 #[tokio::test]
-async fn broad_subscription_delivers_only_authenticated_user_priority() {
+async fn broad_subscription_delivers_the_desks_priority() {
     let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
@@ -368,8 +368,13 @@ async fn broad_subscription_delivers_only_authenticated_user_priority() {
     });
     let mut stream = EventStream::subscribe(&bus, &session, request).unwrap();
 
-    bus.publish(programmer_priority_draft(Uuid::from_u128(12), 1));
-    assert!(stream.subscription.try_next().is_none());
+    // A change published under an identity from before the collapse describes the same
+    // Programmer, so a broad subscription is told about it rather than filtering it away.
+    let first = bus.publish(programmer_priority_draft(Uuid::from_u128(12), 1));
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("the desk's Programmer state reaches a broad subscription")
+    };
+    assert_eq!(event.sequence, first.sequence);
     let expected = bus.publish(programmer_priority_draft(user_id, 2));
 
     let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
@@ -599,7 +604,7 @@ fn programmer_preload_playback_queue_objects_are_limited_to_the_authenticated_us
 }
 
 #[tokio::test]
-async fn broad_subscription_delivers_only_authenticated_user_programmer_values() {
+async fn broad_subscription_delivers_the_desks_programmer_values() {
     let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
@@ -611,8 +616,13 @@ async fn broad_subscription_delivers_only_authenticated_user_programmer_values()
     });
     let mut stream = EventStream::subscribe(&bus, &session, request).unwrap();
 
-    bus.publish(programmer_values_draft(Uuid::from_u128(12), 1));
-    assert!(stream.subscription.try_next().is_none());
+    // A change published under an identity from before the collapse describes the same
+    // Programmer, so a broad subscription is told about it rather than filtering it away.
+    let first = bus.publish(programmer_values_draft(Uuid::from_u128(12), 1));
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("the desk's Programmer values reach a broad subscription")
+    };
+    assert_eq!(event.sequence, first.sequence);
     let expected = bus.publish(programmer_values_draft(user_id, 2));
 
     let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
@@ -627,7 +637,7 @@ async fn broad_subscription_delivers_only_authenticated_user_programmer_values()
 }
 
 #[tokio::test]
-async fn broad_subscription_delivers_only_authenticated_user_capture_mode() {
+async fn broad_subscription_delivers_the_desks_capture_mode() {
     let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
@@ -639,8 +649,13 @@ async fn broad_subscription_delivers_only_authenticated_user_capture_mode() {
     });
     let mut stream = EventStream::subscribe(&bus, &session, request).unwrap();
 
-    bus.publish(programmer_capture_mode_draft(Uuid::from_u128(12), 1));
-    assert!(stream.subscription.try_next().is_none());
+    // A change published under an identity from before the collapse describes the same
+    // Programmer, so a broad subscription is told about it rather than filtering it away.
+    let first = bus.publish(programmer_capture_mode_draft(Uuid::from_u128(12), 1));
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("the desk's Programmer state reaches a broad subscription")
+    };
+    assert_eq!(event.sequence, first.sequence);
     let expected = bus.publish(programmer_capture_mode_draft(user_id, 2));
 
     let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
@@ -655,7 +670,7 @@ async fn broad_subscription_delivers_only_authenticated_user_capture_mode() {
 }
 
 #[tokio::test]
-async fn broad_subscription_delivers_only_authenticated_user_preload_values() {
+async fn broad_subscription_delivers_the_desks_preload_values() {
     let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
@@ -667,8 +682,13 @@ async fn broad_subscription_delivers_only_authenticated_user_preload_values() {
     });
     let mut stream = EventStream::subscribe(&bus, &session, request).unwrap();
 
-    bus.publish(programmer_preload_values_draft(Uuid::from_u128(12), 1));
-    assert!(stream.subscription.try_next().is_none());
+    // A change published under an identity from before the collapse describes the same
+    // Programmer, so a broad subscription is told about it rather than filtering it away.
+    let first = bus.publish(programmer_preload_values_draft(Uuid::from_u128(12), 1));
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("the desk's Programmer state reaches a broad subscription")
+    };
+    assert_eq!(event.sequence, first.sequence);
     let expected = bus.publish(programmer_preload_values_draft(user_id, 2));
 
     let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
@@ -683,7 +703,7 @@ async fn broad_subscription_delivers_only_authenticated_user_preload_values() {
 }
 
 #[tokio::test]
-async fn broad_subscription_delivers_only_authenticated_user_preload_playback_queue() {
+async fn broad_subscription_delivers_the_desks_preload_playback_queue() {
     let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
@@ -695,11 +715,16 @@ async fn broad_subscription_delivers_only_authenticated_user_preload_playback_qu
     });
     let mut stream = EventStream::subscribe(&bus, &session, request).unwrap();
 
-    bus.publish(programmer_preload_playback_queue_draft(
+    // A change published under an identity from before the collapse describes the same
+    // Programmer, so a broad subscription is told about it rather than filtering it away.
+    let first = bus.publish(programmer_preload_playback_queue_draft(
         Uuid::from_u128(12),
         1,
     ));
-    assert!(stream.subscription.try_next().is_none());
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("the desk's Preload playback queue reaches a broad subscription")
+    };
+    assert_eq!(event.sequence, first.sequence);
     let expected = bus.publish(programmer_preload_playback_queue_draft(user_id, 2));
 
     let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {

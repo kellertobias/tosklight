@@ -49,7 +49,8 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_osc_event() {
 #[test]
 fn mapped_global_output_respects_the_osc_desk_alias_lock() {
     let (state, data_dir) = test_state();
-    let wing = state.installation.add_desk("Wing", "wing").unwrap();
+    // A legacy desk record; a session logging in on one joins the desk all the same.
+    let _wing = state.installation.add_desk("Wing", "wing").unwrap();
     state
         .output
         .replace_snapshot(EngineSnapshot {

@@ -239,12 +239,9 @@ export class BrowserCrossSurface {
 		).toEqual(Array(12).fill(0));
 	}
 
-	async expectDeskSubscriberIsolation(): Promise<void> {
+	async expectSubscribersShareTheDeskCommandLine(): Promise<void> {
 		const first = this.requiredSession();
 		const second = await this.createSession();
-		await this.withSession(second, () =>
-			this.api.setCommandLineText("GROUP 2 +"),
-		);
 		await this.commands.type("GROUP 1 +");
 		const firstHardware = await this.bench.osc();
 		const secondHardware = await this.bench.osc();
@@ -264,20 +261,22 @@ export class BrowserCrossSurface {
 				secondMark,
 				`/light/${second.desk.osc_alias}/feedback/speed-group/5`,
 			);
+			// One desk, one command line: both sessions and both wings see the same partial
+			// command, each on the path it connected on.
 			expect(await this.commandFor(first)).toMatch(/^(?:G ?1|GROUP 1) \+$/);
-			expect(await this.commandFor(second)).toMatch(/^(?:G ?2|GROUP 2) \+$/);
+			expect(await this.commandFor(second)).toMatch(/^(?:G ?1|GROUP 1) \+$/);
 			const feedback = await firstHardware.expectAfter(
 				firstMark,
 				`/light/${first.desk.osc_alias}/feedback/command-line`,
 			);
 			expect(String(feedback.arguments[0])).toMatch(/^(?:G ?1|GROUP 1) \+$/);
-			expect(
-				secondHardware.messages
-					.slice(secondMark)
-					.some((message) =>
-						String(message.arguments[0]).includes("GROUP 1 +"),
-					),
-			).toBe(false);
+			const peerFeedback = await secondHardware.expectAfter(
+				secondMark,
+				`/light/${second.desk.osc_alias}/feedback/command-line`,
+			);
+			expect(String(peerFeedback.arguments[0])).toMatch(
+				/^(?:G ?1|GROUP 1) \+$/,
+			);
 
 			await firstHardware.send("/light/unsubscribe", ["semantic-osc-003-a"]);
 			// OSC unsubscribe has no acknowledgement frame. Let the server process it and
@@ -314,7 +313,7 @@ export class BrowserCrossSurface {
 		}
 	}
 
-	async completeSharedValueWhilePeerDraftStaysLocal(): Promise<void> {
+	async completeOneSharedValueFromSeveralSurfaces(): Promise<void> {
 		const first = this.requiredSession();
 		const fixtures = await this.fixtureIds();
 		const existing = await this.api.showObject<any>(
@@ -345,11 +344,12 @@ export class BrowserCrossSurface {
 		const firstHardware = await this.bench.osc();
 		const secondHardware = await this.bench.osc();
 		try {
+			// One command line, built from several surfaces in turn: two browser screens and two
+			// wings. Each press lands on the same partial command and every surface shows it.
 			await this.commands.type("GROUP 7 +");
-			for (const key of ["GRP", "1", "+"])
-				await secondPage
-					.getByRole("button", { name: key, exact: true })
-					.click();
+			await expect(
+				secondPage.getByRole("textbox", { name: "Command line", exact: true }),
+			).toHaveValue("G7 +");
 			await firstHardware.subscribe(
 				"semantic-osc-005-first",
 				first.desk.osc_alias,
@@ -358,32 +358,37 @@ export class BrowserCrossSurface {
 				"semantic-osc-005-second",
 				second.desk.osc_alias,
 			);
-			await secondHardware.send(
-				`/light/${second.desk.osc_alias}/programmer/digit-2`,
-				[true],
-			);
-			await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
-				"G1 + F2",
-			);
-			await expect(this.page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
-			const firstFeedbackMark = firstHardware.mark();
-			await firstHardware.send(
-				`/light/${first.desk.osc_alias}/programmer/digit-8`,
-				[true],
-			);
-			expect(
-				(
-					await firstHardware.expectAfter(
-						firstFeedbackMark,
-						`/light/${first.desk.osc_alias}/feedback/command-line`,
-					)
-				).arguments,
-			).toEqual(["G7 + F8"]);
-			await expect(this.page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 + F8");
-			await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
-				"G1 + F2",
-			);
 
+			const firstFeedbackMark = firstHardware.mark();
+			await secondHardware.send(
+				`/light/${second.desk.osc_alias}/programmer/digit-8`,
+				[true],
+			);
+			await expect(
+				this.page.getByRole("textbox", { name: "Command line", exact: true }),
+			).toHaveValue("G7 + F8");
+			await expect(
+				secondPage.getByRole("textbox", { name: "Command line", exact: true }),
+			).toHaveValue("G7 + F8");
+			// The wing that did not press is told about it too. Polled rather than taken from the
+			// first frame after the mark: a fresh subscription is still draining its initial full
+			// feedback cycle, which carries the command line as it stood a moment earlier.
+			await expect
+				.poll(() =>
+					firstHardware.messages
+						.slice(firstFeedbackMark)
+						.filter(
+							(message) =>
+								message.address ===
+								`/light/${first.desk.osc_alias}/feedback/command-line`,
+						)
+						.map((message) => String(message.arguments[0]))
+						.find((command) => command === "G7 + F8") ?? null,
+				)
+				.toBe("G7 + F8");
+
+			// Completing it from a wing writes one value into the desk's one Programmer, audited
+			// exactly once however many surfaces helped build the command.
 			const auditBefore = await this.auditSequence();
 			for (const action of ["at", "digit-5", "digit-0", "enter"])
 				await firstHardware.send(
@@ -408,7 +413,6 @@ export class BrowserCrossSurface {
 					this.normalizedFixtureValue(firstState, fixtures[number]),
 					4,
 				);
-			expect(secondState.command_line).toBe("G1 + F2");
 			const completed = (
 				await this.api.request<any[]>(
 					"GET",
@@ -416,6 +420,7 @@ export class BrowserCrossSurface {
 				)
 			).filter((event) => event.kind === "command_applied");
 			expect(completed).toHaveLength(1);
+
 			const artnetMark = this.bench.artnet.mark();
 			await this.bench.tick(3_000);
 			expect(
@@ -426,38 +431,20 @@ export class BrowserCrossSurface {
 				),
 			).toEqual([128, 128, 128, 128, 0, 0, 0, 128, 0, 0, 0, 0]);
 
+			// Hardware presence is reference-counted across both wings.
 			await firstHardware.send("/light/unsubscribe", [
 				"semantic-osc-005-first",
 			]);
+			expect(await this.hardwareConnected()).toBe(true);
 			await secondHardware.send("/light/unsubscribe", [
 				"semantic-osc-005-second",
 			]);
 			await expect.poll(() => this.hardwareConnected()).toBe(false);
 
-			await secondPage.getByRole("textbox", { name: "Command line", exact: true }).fill("");
-			await secondPage
-				.getByRole("button", { name: "GRP", exact: true })
-				.click();
-			await secondPage
-				.getByRole("button", { name: "ENT", exact: true })
-				.click();
-			const groupModeMark = secondHardware.mark();
-			await secondHardware.send("/light/subscribe", [
-				"semantic-osc-005-second",
-				second.desk.osc_alias,
-				secondHardware.feedbackPort,
-			]);
-			await secondHardware.expectAfter(
-				groupModeMark,
-				`/light/${second.desk.osc_alias}/feedback/page`,
-			);
-			await secondHardware.send(
-				`/light/${second.desk.osc_alias}/programmer/digit-3`,
-				[true],
-			);
-			await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G3");
-
-			await this.page.getByRole("textbox", { name: "Command line", exact: true }).fill("G7 +");
+			// A wing that reconnects is handed the command line as it stands, whoever typed it.
+			await this.page
+				.getByRole("textbox", { name: "Command line", exact: true })
+				.fill("G7 +");
 			const reconnectMark = firstHardware.mark();
 			await firstHardware.send("/light/subscribe", [
 				"semantic-osc-005-first",
@@ -472,25 +459,6 @@ export class BrowserCrossSurface {
 					)
 				).arguments,
 			).toEqual(["G7 +"]);
-			await secondPage.getByRole("textbox", { name: "Command line", exact: true }).fill("G1 + F2");
-			const reattachMark = firstHardware.mark();
-			await firstHardware.send("/light/subscribe", [
-				"semantic-osc-005-first",
-				second.desk.osc_alias,
-				firstHardware.feedbackPort,
-			]);
-			await firstHardware.expectAfter(
-				reattachMark,
-				`/light/${second.desk.osc_alias}/feedback/page`,
-			);
-			await firstHardware.send(
-				`/light/${second.desk.osc_alias}/programmer/digit-9`,
-				[true],
-			);
-			await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue(
-				"G1 + F29",
-			);
-			await expect(this.page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
 		} finally {
 			await this.close(firstHardware, "semantic-osc-005-first");
 			await this.close(secondHardware, "semantic-osc-005-second");
@@ -501,7 +469,9 @@ export class BrowserCrossSurface {
 	async verifyCurrentAndExplicitPageOscAddressing(): Promise<void> {
 		const first = this.requiredSession();
 		const second = await this.createSession();
-		await this.setDeskPage(second, 2);
+		// The desk has one current playback page. A screen that wants its own follows the
+		// Dedicated Page mode in its screen configuration, which is screen-local and separate
+		// from this.
 		await this.selectPlaybackPage("Page 1");
 		const firstHardware = await this.bench.osc();
 		const secondHardware = await this.bench.osc();
@@ -525,7 +495,7 @@ export class BrowserCrossSurface {
 						`/light/${second.desk.osc_alias}/feedback/page`,
 					)
 				).arguments,
-			).toEqual([2]);
+			).toEqual([1]);
 
 			const firstAddress = `/light/${first.desk.osc_alias}/page-playback/1/button/1`;
 			await firstHardware.send(firstAddress, [true]);
@@ -537,16 +507,18 @@ export class BrowserCrossSurface {
 			expect(await this.activePlayback(1)).toMatchObject({
 				current_cue_number: "1",
 			});
+			// The second wing is on the same current page, so its slot-one press addresses the
+			// same playback the first one did.
 			await secondHardware.send(
 				`/light/${second.desk.osc_alias}/page-playback/1/button/1`,
 				[true],
 			);
 			await expect
-				.poll(async () => (await this.activePlayback(2))?.current_cue_number)
+				.poll(async () => (await this.activePlayback(1))?.current_cue_number)
 				.toBe("1");
-			await this.api.playbackNumberAction(2, "off", {});
+            await this.api.playbackNumberAction(1, "off", {});
 			await expect
-				.poll(async () => (await this.activePlayback(2))?.enabled)
+				.poll(async () => (await this.activePlayback(1))?.enabled)
 				.toBe(false);
 
 			const pageFeedbackMark = firstHardware.mark();

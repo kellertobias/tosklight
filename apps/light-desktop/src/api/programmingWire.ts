@@ -152,11 +152,9 @@ function validateProgrammingEnvelope(
 	event: Record<string, unknown>,
 	expectedDeskId: string,
 ) {
-	assertDesk(
-		programmingUuidAt(event.desk_id, "$.event.desk_id"),
-		expectedDeskId,
-		"$.event.desk_id",
-	);
+	// The envelope must carry a desk id, but not ours: see decodeEvent.
+	void expectedDeskId;
+	programmingUuidAt(event.desk_id, "$.event.desk_id");
 	enumAt(event.class, "$.event.class", ["projection"]);
 	enumAt(event.delivery, "$.event.delivery", ["lossless"]);
 	plainProgrammingStringAt(event.occurred_at, "$.event.occurred_at");
@@ -187,16 +185,15 @@ function decodeEvent(
 		payload.change,
 		"$.event.payload.change",
 	);
-	assertDesk(
-		change.deskId,
-		expectedDeskId,
-		"$.event.payload.change.desk_id",
-	);
+	// The desk id is not checked against our own. There is one desk and one Programmer, and this
+	// change describes it — but a surface's session may have been created under a different desk
+	// record, and refusing the event on that basis is how a second screen used to miss the command
+	// line the operator was typing on the first. The id is carried for correlation, not routing.
 	const components = programmingComponentPresence(change);
 	assertSubscribedComponent(components, scope);
 	assertExactRoutes(
 		decodeRoutes(event),
-		expectedRoutes(expectedDeskId, components),
+		expectedRoutes(change.deskId, components),
 	);
 	return { type: "event", sequence, correlationId, change };
 }

@@ -38,13 +38,13 @@ scenario(
 
 scenario(
 	"OSC-003",
-	"separate desk subscribers isolate partial commands and unsubscribe independently",
+	"two OSC surfaces share the desk's command line and unsubscribe is reference-counted",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
 		await t.app.expect.ready();
 
-		await t.crossSurface.expectDeskSubscriberIsolation();
+		await t.crossSurface.expectSubscribersShareTheDeskCommandLine();
 	},
 );
 
@@ -62,13 +62,13 @@ scenario(
 
 scenario(
 	"OSC-005",
-	"completed values are user-shared while unfinished commands stay desk-local",
+	"one command line is built from several surfaces and completed once",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
 		await t.app.expect.ready();
 
-		await t.crossSurface.completeSharedValueWhilePeerDraftStaysLocal();
+		await t.crossSurface.completeOneSharedValueFromSeveralSurfaces();
 	},
 );
 

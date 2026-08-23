@@ -264,7 +264,7 @@ async fn speed_group_sources_follow_directed_chains_and_reject_cycles() {
 }
 
 #[tokio::test]
-async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_scoped() {
+async fn sound_to_light_is_authoritative_per_speed_group_on_the_one_desk() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -322,10 +322,12 @@ async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_sco
         post_sound_observation(&app, &same_desk_token, &observation).await;
     assert_eq!(same_desk_observation.status(), StatusCode::OK);
 
+    // A session logging in on a legacy desk record operates the same desk, so its observation is
+    // the same authority's rather than a contending one's.
     let other_desk = state.installation.add_desk("Other", "other").unwrap();
     let other_token = login_to_speed_group_desk(&app, other_desk.id).await;
-    let contested = post_sound_observation(&app, &other_token, &observation).await;
-    assert_eq!(contested.status(), StatusCode::CONFLICT);
+    let same_authority = post_sound_observation(&app, &other_token, &observation).await;
+    assert_eq!(same_authority.status(), StatusCode::OK);
 
     // A direct/manual value from any attached surface takes ownership and remains the stable
     // fallback instead of silently retaining Sound mode.
@@ -409,7 +411,6 @@ fn osc_speed_group_button_performs_the_authoritative_learn_action() {
     state.output.set_sound_capture_owner(
         0,
         Some(SoundCaptureOwner {
-            desk_id: Uuid::new_v4(),
             last_seen_millis: 1,
         }),
     );

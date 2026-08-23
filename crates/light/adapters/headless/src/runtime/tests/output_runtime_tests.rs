@@ -389,7 +389,7 @@ async fn typed_output_runtime_ws_action_is_atomic_replay_safe_and_lock_gated() {
 }
 
 #[tokio::test]
-async fn v2_output_is_shared_across_desks_but_enforces_exact_desk_and_lock() {
+async fn v2_output_is_the_desks_and_enforces_the_desk_lock() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (front_token, _) = login(&app, "Operator").await;
@@ -412,17 +412,18 @@ async fn v2_output_is_shared_across_desks_but_enforces_exact_desk_and_lock() {
     assert_eq!(front_projection["projection"]["revision"], 1);
     assert_eq!(front_projection["projection"]["grand_master"], 0.7);
 
-    let foreign_action = post_output(
+    // Output is the desk's. A header naming a desk record from before the collapse addresses it
+    // rather than being refused as somebody else's.
+    let legacy_action = post_output(
         &app,
         &front_token,
         wing.id,
-        output_request("foreign-output", &front_projection, None, Some(true)),
+        output_request("legacy-output", &front_projection, None, Some(true)),
     )
     .await;
-    assert_eq!(foreign_action.status(), StatusCode::FORBIDDEN);
-    assert_eq!(json(foreign_action).await["kind"], "forbidden");
-    let foreign_snapshot = get_output(&app, &front_token, wing.id).await;
-    assert_eq!(foreign_snapshot.status(), StatusCode::FORBIDDEN);
+    assert_eq!(legacy_action.status(), StatusCode::OK);
+    let legacy_snapshot = get_output(&app, &front_token, wing.id).await;
+    assert_eq!(legacy_snapshot.status(), StatusCode::OK);
 
     write_desk_lock(
         &state,
@@ -444,7 +445,8 @@ async fn v2_output_is_shared_across_desks_but_enforces_exact_desk_and_lock() {
     assert_eq!(locked.status(), StatusCode::CONFLICT);
     let locked = json(locked).await;
     assert_eq!(locked["kind"], "conflict");
-    assert_eq!(locked["current_revision"], 1);
+    // The accepted legacy-desk action above advanced the shared output revision.
+    assert_eq!(locked["current_revision"], 2);
     assert_eq!(output_events(&state, cursor).len(), 0);
     assert_eq!(output_persistence_attempts(&state), attempts);
     let _ = std::fs::remove_dir_all(data_dir);

@@ -157,10 +157,10 @@ fn client_history_migrates_unknown_rows_reuses_identity_and_recreates_removed_de
 fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
     let path = temporary("client-removal");
     let mut store = DeskStore::open(&path).unwrap();
-    let removed_client = Uuid::new_v4();
-    let retained_client = Uuid::new_v4();
-    let removed = store.resolve_client_desk(removed_client, None).unwrap();
-    let retained = store.resolve_client_desk(retained_client, None).unwrap();
+    // Two desk records, as an installation from before the collapse holds. Connecting clients no
+    // longer produce them — a client is its own record now — so they are made directly.
+    let removed = store.add_desk("Removed wing", "removed-wing").unwrap();
+    let retained = store.add_desk("Retained wing", "retained-wing").unwrap();
     let show_id = ShowId::new();
     store.set_desk_page(removed.id, show_id, 17).unwrap();
     store

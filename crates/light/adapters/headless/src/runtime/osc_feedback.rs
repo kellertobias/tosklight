@@ -190,10 +190,9 @@ pub(super) fn playback_color_rgb(color: &str, active: bool) -> (f32, f32, f32) {
     )
 }
 
-/// The canonical path a desk-button surface connects on. It accepts the full command set.
-pub(super) const OSC_DESK_ALIAS: &str = "desk";
 /// The canonical path a remote-control-only guest connects on. Playback only: no Record, no
-/// Update, no Assign.
+/// Update, no Assign. Its counterpart is `desk`, which is not named here because every path that
+/// is not this one is a desk-button surface.
 pub(super) const OSC_REMOTE_ALIAS: &str = "remote";
 
 /// What a surface connecting on `alias` is allowed to do.

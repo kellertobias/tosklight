@@ -47,75 +47,72 @@ impl DeskStore {
             .find(|desk| desk.osc_alias.eq_ignore_ascii_case(alias)))
     }
 
+    /// Every window that has connected, each shown against the desk it operates.
+    ///
+    /// A client is a window, not a desk. Both used to live on the same row, which is why opening
+    /// a second window created a second control desk — and why two browser screens then filtered
+    /// each other's events away. They are separate records now: one desk, and however many
+    /// clients have connected to it.
     pub fn client_desks(&self) -> Result<Vec<ClientDesk>, StoreError> {
-        let desks = self.desks()?;
-        desks
-            .into_iter()
-            .map(|desk| {
-                let (client_id, last_connected_at) = self.conn.query_row(
-                    "SELECT client_id,last_connected_at FROM control_desks WHERE id=?1",
-                    [desk.id.to_string()],
-                    |row| Ok((row.get::<_, Option<String>>(0)?, row.get(1)?)),
-                )?;
+        let Some(desk) = self.desks()?.into_iter().next() else {
+            return Ok(Vec::new());
+        };
+        let mut statement = self
+            .conn
+            .prepare("SELECT client_id,last_connected_at FROM desk_clients ORDER BY client_id")?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        if rows.is_empty() {
+            return Ok(vec![ClientDesk {
+                client_id: None,
+                last_connected_at: None,
+                desk,
+            }]);
+        }
+        rows.into_iter()
+            .map(|(client_id, last_connected_at)| {
                 Ok(ClientDesk {
-                    client_id: client_id.map(|value| Uuid::parse_str(&value)).transpose()?,
-                    last_connected_at,
-                    desk,
+                    client_id: Some(Uuid::parse_str(&client_id)?),
+                    last_connected_at: (!last_connected_at.is_empty()).then_some(last_connected_at),
+                    desk: desk.clone(),
                 })
             })
             .collect()
     }
 
+    /// The desk a connecting client operates.
+    ///
+    /// There is one. This used to create a control desk per client; the client is remembered in
+    /// its own record instead, so a window is still known without a desk appearing behind it. A
+    /// desk record from before the collapse is honoured rather than discarded, so saved screen
+    /// configuration and OSC aliases keep working.
     pub fn resolve_client_desk(
         &self,
         client_id: Uuid,
-        remembered_desk_id: Option<Uuid>,
+        _remembered_desk_id: Option<Uuid>,
     ) -> Result<ControlDesk, StoreError> {
         let now = Utc::now().to_rfc3339();
-        if let Some(home) = self
-            .client_desks()?
-            .into_iter()
-            .find(|entry| entry.client_id == Some(client_id))
-        {
-            self.conn.execute(
-                "UPDATE control_desks SET last_connected_at=?1 WHERE client_id=?2",
-                params![now, client_id.to_string()],
-            )?;
-            return Ok(remembered_desk_id
-                .and_then(|id| self.control_desk(id).ok().flatten())
-                .unwrap_or(home.desk));
-        }
-        if let Some(remembered) = remembered_desk_id
-            && let Some(candidate) = self
-                .client_desks()?
-                .into_iter()
-                .find(|entry| entry.desk.id == remembered && entry.client_id.is_none())
-        {
-            self.conn.execute(
-                "UPDATE control_desks SET client_id=?1,last_connected_at=?2 WHERE id=?3 AND client_id IS NULL",
-                params![client_id.to_string(), now, candidate.desk.id.to_string()],
-            )?;
-            return Ok(candidate.desk);
-        }
-        let remembered_default = remembered_desk_id
-            .map(|id| self.control_desk(id))
-            .transpose()?
-            .flatten();
-        let suffix = client_id.simple().to_string();
-        let desk = self.add_desk(
-            &format!("Client {}", &suffix[..6]),
-            &format!("desk-{}", &suffix[..8]),
-        )?;
         self.conn.execute(
-            "UPDATE control_desks SET client_id=?1,last_connected_at=?2 WHERE id=?3",
-            params![client_id.to_string(), now, desk.id.to_string()],
+            "INSERT INTO desk_clients(client_id,last_connected_at) VALUES(?1,?2) \
+             ON CONFLICT(client_id) DO UPDATE SET last_connected_at=excluded.last_connected_at",
+            params![client_id.to_string(), now],
         )?;
-        Ok(remembered_default.unwrap_or(desk))
+        if let Some(desk) = self.desks()?.into_iter().next() {
+            return Ok(desk);
+        }
+        let suffix = client_id.simple().to_string();
+        self.add_desk(
+            &format!("Desk {}", &suffix[..6]),
+            &format!("desk-{}", &suffix[..8]),
+        )
     }
 
     pub fn touch_client(&self, client_id: Uuid) -> Result<(), StoreError> {
         self.conn.execute(
-            "UPDATE control_desks SET last_connected_at=?1 WHERE client_id=?2",
+            "UPDATE desk_clients SET last_connected_at=?1 WHERE client_id=?2",
             params![Utc::now().to_rfc3339(), client_id.to_string()],
         )?;
         Ok(())

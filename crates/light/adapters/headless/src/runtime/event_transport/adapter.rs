@@ -24,13 +24,22 @@ pub(super) fn application_rate_limits(
         .collect()
 }
 
+/// The events one subscriber asked for.
+///
+/// Deliberately not scoped to the session's desk record or its user. A subscription used to be
+/// narrowed to both, from when a desk could hold several of each — which now means a second
+/// browser screen never hears about the command line the operator is typing on the first, because
+/// its session happens to have been created under a different desk record. There is one desk and
+/// one Programmer; every surface subscribes to the same events and asks for the ones it wants by
+/// capability and object.
 pub(super) fn application_filter(
     session: &Session,
     filter: wire::EventSubscriptionFilter,
 ) -> application::EventFilter {
+    let _ = session;
     application::EventFilter {
-        desk_id: Some(session.desk.id),
-        programmer_user_id: Some(session.user.id.0),
+        desk_id: None,
+        programmer_user_id: None,
         capabilities: filter
             .capabilities
             .into_iter()

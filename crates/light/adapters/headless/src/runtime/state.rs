@@ -31,8 +31,12 @@ pub(super) struct AppState {
 pub(super) type CapturedOscMessage = (SocketAddr, String, Vec<OscArgument>);
 
 #[derive(Clone, Copy)]
+/// The surface whose audio last drove a Speed Group.
+///
+/// Recorded so a manual value knows Sound was driving the group and can take over cleanly. Not an
+/// ownership claim: there is one desk, so a second surface feeding the same analyzer is the same
+/// desk, and nothing is refused against this.
 pub(super) struct SoundCaptureOwner {
-    pub(super) desk_id: Uuid,
     pub(super) last_seen_millis: u64,
 }
 
