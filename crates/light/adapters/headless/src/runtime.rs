@@ -5,6 +5,7 @@ mod bootstrap;
 mod command_http;
 #[path = "default_show.rs"]
 mod default_show;
+mod desk_collapse_migration;
 mod discovery_http;
 mod dynamics_adapter;
 mod dynamics_http;

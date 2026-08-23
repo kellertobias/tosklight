@@ -356,10 +356,34 @@ fn restore_programmers(
         .then(|| Arc::new(ManualClock::new(fixed_test_time())));
     let programmers = ProgrammerRegistry::with_clock(application_clock(manual_clock.as_ref()));
     let users = persistent.desk.users()?;
-    for session in persistent.desk.persisted_sessions()? {
-        if users.iter().any(|user| user.id == session.user_id) {
-            restore_programmer(&programmers, session);
-        }
+    // A desk written before the collapse can hold a Programmer per user. Restoring them all would
+    // merge divergent work with nothing said about it, so one is chosen and the rest are written
+    // out where an operator can get them back.
+    let persisted = persistent
+        .desk
+        .persisted_sessions()?
+        .into_iter()
+        .filter(|session| users.iter().any(|user| user.id == session.user_id))
+        .collect::<Vec<_>>();
+    let collapse = super::desk_collapse_migration::DeskCollapse::decide(persisted);
+    if collapse.superseded_anything() {
+        let report = super::desk_collapse_migration::write_collapse_report(
+            &persistent.data_dir,
+            &collapse,
+            &chrono::Utc::now().to_rfc3339(),
+        )?;
+        tracing::warn!(
+            superseded = collapse.superseded.len(),
+            report = %report.display(),
+            "this desk held more than one Programmer; the most recently touched one was kept and \
+             the rest were written out"
+        );
+    }
+    if let Some(session) = collapse.canonical {
+        // Pin before restoring, so the desk keeps operating the Programmer it already had rather
+        // than adopting whichever identity happens to connect first.
+        programmers.desk().pin(session.user_id);
+        restore_programmer(&programmers, session);
     }
     tracing::info!("persisted programmers restored");
     Ok((manual_clock, programmers))
