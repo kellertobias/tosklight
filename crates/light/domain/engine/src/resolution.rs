@@ -86,13 +86,16 @@ impl Engine {
             .filter(|contribution| &*contribution.attribute().0 == "color")
             .map(EngineContribution::fixture_id)
             .collect::<std::collections::HashSet<_>>();
-        playback.contributions.extend(programmer);
         let mut resolver =
             EngineContributionResolver::for_generation(generation.slots(), generation.frames());
         crate::timed(crate::RenderPhase::ContributionMerge, || {
+            // Each source is offered to the frame where it is. Appending one list to the other
+            // first moved every Programmer value twice for no reason: the frame arbitrates them in
+            // the order they arrive either way.
             let mut contributions = std::mem::take(&mut playback.contributions);
             resolver.extend(contributions.drain(..));
             self.recycle_contributions(contributions);
+            resolver.extend(programmer);
             if has_samples {
                 resolver.extend_borrowed_samples(sampled_values(sampled));
             }
