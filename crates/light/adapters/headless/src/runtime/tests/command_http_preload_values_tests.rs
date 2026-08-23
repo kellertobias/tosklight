@@ -11,10 +11,11 @@ async fn preload_values_snapshot_is_exact_user_owned_and_empty_before_capture() 
     assert!(snapshot.projection.fixture_values.is_empty());
     assert!(snapshot.projection.group_values.is_empty());
 
-    let foreign = scenario
+    // A URL naming an identity from before the collapse reads the desk's own Programmer.
+    let legacy = scenario
         .preload_values_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
         .await;
-    assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
+    assert_eq!(legacy.status(), StatusCode::OK);
     let missing = scenario
         .preload_values_snapshot_for(scenario.session.user.id.0, None)
         .await;

@@ -1,5 +1,5 @@
 #[tokio::test]
-async fn priority_snapshot_and_action_are_exact_user_shared_sparse_and_replay_safe() {
+async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     let scenario = CommandHttpScenario::new().await;
     let user_id = scenario.session.user.id.0;
     let initial = scenario
@@ -12,12 +12,13 @@ async fn priority_snapshot_and_action_are_exact_user_shared_sparse_and_replay_sa
     assert_eq!(initial.projection.user_id, user_id);
     assert_eq!(initial.projection.priority, 100);
 
+    // A URL naming an identity from before the collapse reads the desk's own Programmer.
     assert_eq!(
         scenario
             .priority_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
             .await
             .status(),
-        StatusCode::FORBIDDEN
+        StatusCode::OK
     );
     assert_eq!(
         scenario.priority_snapshot_for(user_id, None).await.status(),
@@ -114,18 +115,21 @@ async fn priority_snapshot_and_action_are_exact_user_shared_sparse_and_replay_sa
     assert_eq!(json(conflict).await["current_revision"], 1);
     assert_eq!(priority_event_count(&scenario.state, user_id), event_count);
 
-    let foreign = scenario
+    // A URL naming an identity from before the collapse sets the desk's own priority, and is
+    // held to the desk's revision like any other surface.
+    let legacy = scenario
         .priority_action_for(
             Uuid::new_v4(),
             &scenario.token,
             serde_json::json!({
-                "request_id":"priority-http-foreign",
+                "request_id":"priority-http-legacy",
                 "expected_revision":1,
                 "priority":20,
             }),
         )
         .await;
-    assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
+    assert_eq!(legacy.status(), StatusCode::OK);
+    assert_eq!(json(legacy).await["projection"]["priority"], 20);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

@@ -273,7 +273,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
         2,
         2,
         2,
-        0,
+        1,
         serde_json::json!({"type":"enter"}),
     );
     assert_eq!(
@@ -471,10 +471,16 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
             cursor,
         ))
         .await;
+    // Every surface shares the desk's Preload, so a second surface pressing a playback key
+    // queues into the same pending queue rather than moving playback under this Go. The Go is
+    // still refused, by the queue revision that surface advanced.
     assert_eq!(target.status(), StatusCode::CONFLICT);
     let target = json(target).await;
-    assert_eq!(target["current_revision"], current);
-    assert_eq!(target["current_related_revision"], show_revision);
+    assert_eq!(
+        target["current_revision"], 2,
+        "the peer surface's queued action advanced the desk's Preload queue"
+    );
+    assert!(current >= cursor);
     assert!(
         scenario
             .state
@@ -507,7 +513,9 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
             "cursor-gap-conflict",
             1,
             0,
-            1,
+            // Carrying the desk's current Preload queue revision, so the retained-history gap is
+            // the precondition under test rather than the queue.
+            2,
             0,
             show_id,
             show_revision,

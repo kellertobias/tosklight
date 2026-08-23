@@ -38,13 +38,14 @@ async fn programmer_values_snapshot_returns_authenticated_projection_and_safe_cu
 }
 
 #[tokio::test]
-async fn programmer_values_snapshot_rejects_foreign_user_and_missing_authentication() {
+async fn programmer_values_snapshot_normalizes_a_legacy_user_and_requires_authentication() {
     let scenario = CommandHttpScenario::new().await;
 
+    // A URL naming an identity from before the collapse reads the desk's own Programmer.
     let response = scenario
         .values_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
         .await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response.status(), StatusCode::OK);
 
     let response = scenario
         .values_snapshot_for(scenario.session.user.id.0, None)
@@ -93,12 +94,13 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
         serde_json::from_value(json(second).await).unwrap();
     assert_eq!(second.projection, snapshot.projection);
 
+    // A URL naming an identity from before the collapse reads the desk's own Programmer.
     assert_eq!(
         scenario
             .capture_mode_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
             .await
             .status(),
-        StatusCode::FORBIDDEN
+        StatusCode::OK
     );
     assert_eq!(
         scenario
