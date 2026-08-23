@@ -64,6 +64,13 @@ impl ServerProgrammingCueTransferPorts {
                 "Cue transfer authority does not match the authenticated session",
             ));
         }
+        // Moving or copying a Cue is programming, so a Not Editable screen cannot do it.
+        if self.session.capability.is_guest() {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "this screen is marked Not Editable and cannot change programming",
+            ));
+        }
         if read_desk_lock(&self.state).locked {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,

@@ -11,6 +11,7 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
     );
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "timed-control-action".into(),
@@ -248,6 +249,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "highlight-safety".into(),

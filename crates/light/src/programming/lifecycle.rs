@@ -79,7 +79,7 @@ impl ProgrammingService {
         target: ProgrammingLifecycleTarget,
         operation: impl FnOnce() -> ProgrammingLifecycleCompletion<T>,
     ) -> Result<ProgrammingLifecycleResult<T>, ActionError> {
-        ports.authorize(actor_context)?;
+        ports.authorize_programming_change(actor_context)?;
         let user_id = target.user_id;
         let desk_ids = target.desk_ids.clone();
         self.programmers.with_user_serialized(user_id, || {

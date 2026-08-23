@@ -324,6 +324,7 @@ fn two_desk_sessions(state: &AppState) -> (Session, Session) {
         (actor_user, peer_user, actor_desk, peer_desk)
     };
     let actor = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: actor_user,
         token: "group-refresh-actor".into(),
@@ -331,6 +332,7 @@ fn two_desk_sessions(state: &AppState) -> (Session, Session) {
         desk: actor_desk,
     };
     let peer = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: peer_user,
         token: "group-refresh-peer".into(),

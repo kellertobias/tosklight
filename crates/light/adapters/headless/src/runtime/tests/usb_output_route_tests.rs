@@ -5,6 +5,7 @@ async fn usb_endpoint_api_authenticates_replays_guards_revision_and_persists() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "usb-endpoint-writer".into(),
@@ -105,6 +106,7 @@ async fn malformed_endpoint_setting_is_reported_and_requires_explicit_reset() {
         .unwrap();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "usb-recovery".into(),

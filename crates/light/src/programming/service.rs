@@ -245,7 +245,7 @@ impl ProgrammingService {
         user_id: UserId,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingResult, ActionError> {
-        ports.authorize(&action.context)?;
+        ports.authorize_programming_change(&action.context)?;
         if let Some(mut cached) = self.cached(action, session)? {
             cached.command_line = command_line(&self.programmers, session)?;
             return Ok(cached);

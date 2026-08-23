@@ -99,6 +99,7 @@ pub(super) async fn create_session(
         .resolve_client_desk(client_id, input.desk_id)
         .map_err(ApiError::store)?;
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: Uuid::new_v4().to_string(),

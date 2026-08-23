@@ -13,7 +13,7 @@ use super::programming_ports::ServerProgrammingPorts;
 
 impl GroupManagementPorts for ServerProgrammingPorts<'_> {
     fn authorize_group_management(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
+        <Self as ProgrammingPorts>::authorize_programming_change(self, context)
     }
 
     fn commit_group_management(

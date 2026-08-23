@@ -922,6 +922,7 @@ async fn a_guest_runs_playback_while_the_programming_user_holds_a_record() {
     // The guest is its own transport session; it is not a second Programmer, but it is a
     // separate connection with its own input state.
     let guest = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: scenario.session.user.clone(),
         token: "guest-phone".into(),

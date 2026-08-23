@@ -1,12 +1,33 @@
 use super::*;
 
+/// The screen a request comes from, when the surface names one.
+///
+/// One desktop process drives the main window and every optional screen, so they share a session.
+/// A request therefore says which screen it originates from, and a screen marked Not Editable
+/// downgrades it to a guest. The header can only take capability away — a surface cannot grant
+/// itself programming by claiming to be a different screen.
+pub(super) const SCREEN_CONTEXT_HEADER: &str = "x-tosk-screen";
+
 pub(super) fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<Session, ApiError> {
     let token = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .ok_or_else(|| ApiError::unauthorized("missing session token"))?;
-    authenticate_token(state, token)
+    let mut session = authenticate_token(state, token)?;
+    if requesting_screen_is_not_editable(state, headers) {
+        session.capability = light_core::SurfaceCapability::PlaybackOnly;
+    }
+    Ok(session)
+}
+
+fn requesting_screen_is_not_editable(state: &AppState, headers: &HeaderMap) -> bool {
+    headers
+        .get(SCREEN_CONTEXT_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| uuid::Uuid::parse_str(value.trim()).ok())
+        .and_then(|screen_id| state.installation.screen(screen_id).ok().flatten())
+        .is_some_and(|screen| screen.not_editable)
 }
 pub(super) fn authenticate_token(state: &AppState, token: &str) -> Result<Session, ApiError> {
     let session = state

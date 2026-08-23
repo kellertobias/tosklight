@@ -63,6 +63,13 @@ impl ServerProgrammingCueDeletionPorts {
                 "Cue deletion authority does not match the authenticated session",
             ));
         }
+        // Deleting a Cue is programming, so a Not Editable screen cannot do it.
+        if self.session.capability.is_guest() {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "this screen is marked Not Editable and cannot change programming",
+            ));
+        }
         Ok(())
     }
 }

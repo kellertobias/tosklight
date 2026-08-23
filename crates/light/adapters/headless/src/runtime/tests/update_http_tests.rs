@@ -8,6 +8,7 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     wing.id = Uuid::new_v4();
     wing.osc_alias = "wing".into();
     let writer = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "update-settings-writer".into(),
@@ -15,6 +16,7 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
         desk: front.clone(),
     };
     let reader = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "update-settings-reader".into(),
@@ -22,6 +24,7 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
         desk: front.clone(),
     };
     let other_desk = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "update-settings-other-desk".into(),
@@ -160,6 +163,7 @@ fn locked_desk_can_preview_update_but_cannot_apply_it() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "locked-update-preview".into(),
@@ -239,6 +243,7 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "hardware-update-target".into(),

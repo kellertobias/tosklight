@@ -6,6 +6,7 @@ mod tests {
 
     fn standalone_session(token: &str, desk_id: Uuid) -> Session {
         Session {
+            capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
             user: DeskUser {
                 id: light_core::UserId(Uuid::new_v4()),

@@ -177,6 +177,7 @@ fn create_osc_session(state: &AppState, desk: &ControlDesk) -> SessionId {
     };
     let id = SessionId::new();
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id,
         user: user.clone(),
         token: Uuid::new_v4().to_string(),

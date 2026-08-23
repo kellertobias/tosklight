@@ -74,6 +74,15 @@ pub trait ProgrammingPorts: Send + Sync {
         Ok(())
     }
 
+    /// Whether this surface may change what is programmed on the desk.
+    ///
+    /// Separate from `authorize` because presenting the desk and changing it are different
+    /// permissions: a Not Editable screen reads the Programmer, the fixture sheet and the Stage
+    /// exactly as any other screen does, and is refused only when it tries to alter them.
+    fn authorize_programming_change(&self, context: &ActionContext) -> Result<(), ActionError> {
+        self.authorize(context)
+    }
+
     fn execute(
         &self,
         programmers: &ProgrammerRegistry,

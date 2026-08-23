@@ -240,6 +240,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
     assert!(response.ok, "{:?}", response.error);
 
     let same_user_session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: session.user.clone(),
         token: "same-user".into(),
@@ -272,6 +273,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
 
     let other_user = state.installation.add_user("Other operator").unwrap();
     let other_session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: other_user,
         token: "other-user".into(),

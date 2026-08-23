@@ -204,6 +204,7 @@ async fn screen_configuration_v2_reads_existing_desk_store_rows_without_migratio
     state
         .installation
         .put_screen(ScreenConfiguration {
+            not_editable: false,
             id: screen_id,
             name: "Existing row".into(),
             layout: serde_json::json!({"desks":[],"activeDeskId":"legacy"}),

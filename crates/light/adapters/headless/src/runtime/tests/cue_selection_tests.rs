@@ -110,6 +110,7 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
         .installation.set_selected_playback(first_desk.id, show_id, Some(1))
         .unwrap();
     let first = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "first".into(),
@@ -117,6 +118,7 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
         desk: first_desk,
     };
     let second = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "second".into(),
@@ -527,6 +529,7 @@ fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "multi-head-selection".into(),

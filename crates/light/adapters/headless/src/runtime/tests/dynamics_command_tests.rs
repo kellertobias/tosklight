@@ -4,6 +4,7 @@ fn fix_at_command_uses_first_class_fat_timing_and_the_final_contribution_path() 
     let (state, data_dir) = test_state_with_clock(clock.clone());
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "fix-at-command".into(),
@@ -90,6 +91,7 @@ fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tra
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "release-command".into(),
@@ -177,6 +179,7 @@ fn fix_at_command_accepts_a_named_preset_batch_with_timing() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "fix-at-preset".into(),
@@ -249,6 +252,7 @@ fn preload_dynamic_start_stays_projected_until_go_then_installs_and_persists_run
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "preload-dynamic".into(),
@@ -332,6 +336,7 @@ fn grouped_dynamic_starts_share_one_programmer_undo_checkpoint() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "grouped-dynamic-starts".into(),
@@ -382,6 +387,7 @@ fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
     let (state, data_dir) = test_state_with_clock(clock);
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "dynamic-restart".into(),
@@ -645,6 +651,7 @@ fn websocket_dynamic_toggle_matches_the_authoritative_target_scope() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "dynamic-toggle".into(),
@@ -725,6 +732,7 @@ async fn production_dynamic_action_waits_for_active_show_contention() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "dynamic-contention".into(),
@@ -860,6 +868,7 @@ fn live_and_preload_visualization_resolve_different_dynamic_layers_authoritative
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "dynamic-visualization".into(),
@@ -948,6 +957,7 @@ fn dynamic_command_line_routes_start_parameters_and_off_through_one_controller()
     });
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "dynamic-command".into(),
@@ -1100,6 +1110,7 @@ fn ambiguous_targetless_dynamic_command_retains_typed_exact_instance_choice() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "dynamic-instance-choice".into(),
@@ -1206,6 +1217,7 @@ fn preload_controller_edit_updates_projection_without_touching_live_runtime() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "preload-dynamic-edit".into(),
@@ -1280,6 +1292,7 @@ fn target_bound_dynamic_command_uses_its_stored_targets_over_the_current_selecti
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "target-bound-dynamic-command".into(),

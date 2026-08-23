@@ -320,6 +320,7 @@ fn apply_patch(
 
 fn domain_screen(screen: wire::ScreenConfiguration) -> Result<ScreenConfiguration, ApiError> {
     Ok(ScreenConfiguration {
+        not_editable: false,
         id: screen.id,
         name: screen.name,
         layout: screen.layout,

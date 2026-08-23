@@ -17,7 +17,7 @@ impl ProgrammingService {
         let session = context_session(context)?;
         let user_id = context_user(context)?;
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
-            ports.authorize(context)?;
+            ports.authorize_programming_change(context)?;
             match self.programmers.session_operates_desk(session, user_id) {
                 Some(true) => {}
                 Some(false) => {

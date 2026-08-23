@@ -23,6 +23,7 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "test".into(),
@@ -89,6 +90,7 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "test".into(),
@@ -188,6 +190,7 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "test".into(),
@@ -244,6 +247,7 @@ fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment()
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "test".into(),
@@ -358,6 +362,7 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "test".into(),
@@ -487,6 +492,7 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "test".into(),
@@ -670,6 +676,7 @@ fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutati
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "spread-reject".into(),

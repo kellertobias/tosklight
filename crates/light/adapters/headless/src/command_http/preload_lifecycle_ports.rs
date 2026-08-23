@@ -8,7 +8,7 @@ use super::programming_ports::ServerProgrammingPorts;
 
 impl ProgrammingPreloadLifecyclePorts for ServerProgrammingPorts<'_> {
     fn authorize_preload_lifecycle(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
+        <Self as ProgrammingPorts>::authorize_programming_change(self, context)
     }
 
     fn capture_programmer_on_preload(&self, _context: &ActionContext) -> bool {

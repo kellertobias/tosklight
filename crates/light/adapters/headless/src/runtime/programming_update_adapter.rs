@@ -81,6 +81,13 @@ impl ServerProgrammingUpdatePorts {
                 "desk is locked",
             ));
         }
+        // Update is programming, so a Not Editable screen cannot do it.
+        if self.session.capability.is_guest() {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "this screen is marked Not Editable and cannot change programming",
+            ));
+        }
         Ok(())
     }
 }

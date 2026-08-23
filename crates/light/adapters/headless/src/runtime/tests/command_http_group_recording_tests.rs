@@ -541,6 +541,7 @@ fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Se
         (same_desk, other_user, other_desk)
     };
     let same_user = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: scenario.session.user.clone(),
         token: "same-user-group-record".into(),
@@ -548,6 +549,7 @@ fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Se
         desk: same_desk,
     };
     let other_user = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: other_user,
         token: "other-user-group-record".into(),

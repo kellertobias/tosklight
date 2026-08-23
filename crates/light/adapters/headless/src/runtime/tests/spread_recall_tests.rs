@@ -18,6 +18,7 @@ impl SpreadRecallRig {
         let (state, data_dir) = test_state();
         let user = state.installation.users().unwrap().remove(0);
         let session = Session {
+            capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
             user: user.clone(),
             token: "spread-recall".into(),

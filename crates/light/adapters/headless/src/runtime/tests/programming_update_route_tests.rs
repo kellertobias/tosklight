@@ -18,6 +18,7 @@ impl UpdateRouteScenario {
         let mut desk = test_control_desk();
         desk.id = Uuid::new_v4();
         let session = Session {
+            capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
             user: user.clone(),
             token: "programming-update-v2".into(),

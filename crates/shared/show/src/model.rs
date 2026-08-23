@@ -208,6 +208,13 @@ pub struct ScreenConfiguration {
     pub playback_layout: Option<PlaybackSurfaceLayout>,
     #[serde(default)]
     pub content: ScreenContent,
+    /// Whether this screen may change programming.
+    ///
+    /// A Not Editable screen still presents and operates read-only fixture sheets, Stage views,
+    /// virtual playbacks, macros and timecodes; it simply cannot record, update or assign. It is
+    /// screen-local presentation configuration, not a second desk or a second user.
+    #[serde(default)]
+    pub not_editable: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

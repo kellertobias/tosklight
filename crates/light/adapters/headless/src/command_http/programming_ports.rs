@@ -418,6 +418,20 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         Ok(())
     }
 
+    /// A Not Editable screen may present and operate the desk, but never change what is
+    /// programmed on it. This is the one place that decision is made for every HTTP and
+    /// WebSocket programming change.
+    fn authorize_programming_change(&self, context: &ActionContext) -> Result<(), ActionError> {
+        self.authorize(context)?;
+        if self.session.capability.is_guest() {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "this screen is marked Not Editable and cannot change programming",
+            ));
+        }
+        Ok(())
+    }
+
     fn execute(
         &self,
         programmers: &ProgrammerRegistry,

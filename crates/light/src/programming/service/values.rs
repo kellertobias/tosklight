@@ -28,7 +28,7 @@ impl ProgrammingService {
         // Whatever identity arrived, this session operates the desk's one Programmer.
         let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
-            ports.authorize(&action.context)?;
+            ports.authorize_programming_change(&action.context)?;
             let user_id = self.operated_values_owner(session, user_id)?;
             let fingerprint = values_request_fingerprint(expected_revision, &action.command);
             if let Some(cached) = self.cached_values(

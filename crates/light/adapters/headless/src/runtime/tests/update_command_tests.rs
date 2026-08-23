@@ -71,6 +71,7 @@ fn command_line_update_all_adds_new_group_content_without_using_a_desk_default()
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "update-enter-default".into(),
@@ -137,6 +138,7 @@ fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_
         .add_desk("Manual Update", "manual-update")
         .unwrap();
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "manual-update-grammar".into(),
@@ -276,6 +278,7 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "update-confirmation".into(),

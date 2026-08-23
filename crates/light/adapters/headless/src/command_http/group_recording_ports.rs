@@ -13,7 +13,7 @@ impl ProgrammingGroupActiveShowPorts for ServerActiveShowPorts {}
 
 impl ProgrammingGroupRecordingPorts for ServerProgrammingPorts<'_> {
     fn authorize_group_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
+        <Self as ProgrammingPorts>::authorize_programming_change(self, context)
     }
 
     fn commit_group(

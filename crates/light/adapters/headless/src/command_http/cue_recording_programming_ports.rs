@@ -179,7 +179,7 @@ fn resolve_command_target(
 
 impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
     fn authorize_cue_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
+        <Self as ProgrammingPorts>::authorize_programming_change(self, context)
     }
 
     fn cue_recording_environment(

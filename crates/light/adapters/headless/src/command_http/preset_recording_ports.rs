@@ -13,7 +13,7 @@ impl ProgrammingPresetActiveShowPorts for ServerActiveShowPorts {}
 
 impl ProgrammingPresetRecordingPorts for ServerProgrammingPorts<'_> {
     fn authorize_preset_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
+        <Self as ProgrammingPorts>::authorize_programming_change(self, context)
     }
 
     fn commit_preset(

@@ -73,6 +73,7 @@ fn osc_and_ui_share_the_desks_one_command_line() {
     let front = state.installation.add_desk("Front", "front").unwrap();
     let wing = state.installation.add_desk("Wing", "wing").unwrap();
     let ui = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "front-ui".into(),
@@ -80,6 +81,7 @@ fn osc_and_ui_share_the_desks_one_command_line() {
         desk: front.clone(),
     };
     let second_front = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "front-second".into(),
@@ -87,6 +89,7 @@ fn osc_and_ui_share_the_desks_one_command_line() {
         desk: front.clone(),
     };
     let wing_ui = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "wing-ui".into(),
@@ -154,6 +157,7 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
     let user = state.installation.users().unwrap().remove(0);
     let front = state.installation.add_desk("Front", "front").unwrap();
     let ui = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "front-ui".into(),
@@ -161,6 +165,7 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
         desk: front.clone(),
     };
     let second_ui = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "front-second".into(),
@@ -302,6 +307,7 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
     wing.id = Uuid::new_v4();
     wing.osc_alias = "wing".into();
     let owner = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "owner".into(),
@@ -309,6 +315,7 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
         desk: front.clone(),
     };
     let same_desk_hardware = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "hardware".into(),
@@ -316,6 +323,7 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
         desk: front,
     };
     let different_desk = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "wing".into(),

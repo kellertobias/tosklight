@@ -217,6 +217,13 @@ pub(super) struct Session {
     pub(super) token: String,
     pub(super) connected: bool,
     pub(super) desk: ControlDesk,
+    /// What this request's surface may do to the desk.
+    ///
+    /// Not stored with the session: it is resolved per request from the screen the request says
+    /// it comes from, because one Tauri process drives the main window and every optional screen
+    /// on the same session. A screen can only ever *reduce* what a request may do.
+    #[serde(skip)]
+    pub(super) capability: light_core::SurfaceCapability,
 }
 #[derive(Clone, Serialize)]
 pub(super) struct Event {

@@ -717,6 +717,7 @@ async fn broad_subscription_delivers_only_authenticated_user_preload_playback_qu
 
 fn event_session(desk_id: Uuid, user_id: Uuid) -> Session {
     Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: light_core::SessionId(Uuid::new_v4()),
         user: light_show::DeskUser {
             id: light_core::UserId(user_id),

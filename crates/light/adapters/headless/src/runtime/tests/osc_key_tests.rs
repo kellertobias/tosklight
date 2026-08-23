@@ -3,6 +3,7 @@ fn focused_macro_editor_routes_attached_keypad_input_without_mutating_command_li
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "macro-editor-osc-test".into(),
@@ -70,6 +71,7 @@ fn osc_shifted_group_dmx_command_executes_the_same_physical_address_selection() 
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "osc-dmx-test".into(),
@@ -134,6 +136,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "osc-test".into(),
@@ -429,6 +432,7 @@ fn held_shift_all_previous_and_next_are_unassigned_without_leaking_highlight_act
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "osc-grid-test".into(),
@@ -507,6 +511,7 @@ fn an_osc_source_cannot_send_on_a_path_it_did_not_subscribe_to() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "osc-alias-isolation".into(),
@@ -561,6 +566,7 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "osc-update-test".into(),
@@ -642,6 +648,7 @@ fn software_update_armed_state_is_shared_across_the_desk() {
     wing.id = Uuid::new_v4();
     wing.osc_alias = "wing".into();
     let first = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "update-front-one".into(),
@@ -649,6 +656,7 @@ fn software_update_armed_state_is_shared_across_the_desk() {
         desk: front.clone(),
     };
     let second = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user: user.clone(),
         token: "update-front-two".into(),
@@ -656,6 +664,7 @@ fn software_update_armed_state_is_shared_across_the_desk() {
         desk: front,
     };
     let other = Session {
+        capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         user,
         token: "update-wing".into(),
