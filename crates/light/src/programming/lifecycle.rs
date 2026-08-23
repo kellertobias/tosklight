@@ -97,11 +97,8 @@ impl ProgrammingService {
     ) -> Result<ProgrammingLifecycleResult<T>, ActionError> {
         self.assert_lifecycle_target(&target)?;
         let lifecycle_before = self.active_lifecycle_programmer(target.user_id);
-        let before_values = ProgrammingValuesContent::read(
-            &self.programmers,
-            target.current_session_id,
-            target.user_id,
-        )?;
+        let before_values =
+            ProgrammingValuesContent::read(&self.programmers, target.current_session_id)?;
         let before_mode = self
             .programmers
             .capture_mode(target.current_session_id)
@@ -111,15 +108,11 @@ impl ProgrammingService {
             target.user_id,
             self.programmers.priority_revision(),
         )?;
-        let before_preload_values = ProgrammingPreloadValuesContent::read(
-            &self.programmers,
-            target.current_session_id,
-            target.user_id,
-        )?;
+        let before_preload_values =
+            ProgrammingPreloadValuesContent::read(&self.programmers, target.current_session_id)?;
         let before_preload_playback_queue = ProgrammingPreloadPlaybackQueueContent::read(
             &self.programmers,
             target.current_session_id,
-            target.user_id,
         )?;
         let completion = operation();
         self.invalidate_values_replay(target.user_id);
@@ -132,12 +125,12 @@ impl ProgrammingService {
         self.invalidate_group_recording_replay(target.user_id);
         self.invalidate_preset_recording_replay(target.user_id);
         self.invalidate_update_replay(target.user_id);
-        let after_values = self.lifecycle_values(&target, completion.replacement_session_id)?;
+        let after_values = self.lifecycle_values(completion.replacement_session_id)?;
         let after_preload_values =
-            self.lifecycle_preload_values(&target, completion.replacement_session_id)?;
+            self.lifecycle_preload_values(completion.replacement_session_id)?;
         let after_preload_playback_queue =
-            self.lifecycle_preload_playback_queue(&target, completion.replacement_session_id)?;
-        let after_mode = self.lifecycle_mode(&target, completion.replacement_session_id)?;
+            self.lifecycle_preload_playback_queue(completion.replacement_session_id)?;
+        let after_mode = self.lifecycle_mode(completion.replacement_session_id)?;
         let values = self.lifecycle_values_change(target.user_id, before_values, after_values);
         let preload_values = self.lifecycle_preload_values_change(
             target.user_id,
@@ -195,29 +188,23 @@ impl ProgrammingService {
 
     fn lifecycle_values(
         &self,
-        target: &ProgrammingLifecycleTarget,
         session: Option<SessionId>,
     ) -> Result<ProgrammingValuesContent, ActionError> {
         session.map_or_else(
             || Ok(ProgrammingValuesContent::default()),
-            |session| ProgrammingValuesContent::read(&self.programmers, session, target.user_id),
+            |session| ProgrammingValuesContent::read(&self.programmers, session),
         )
     }
 
     fn lifecycle_mode(
         &self,
-        target: &ProgrammingLifecycleTarget,
         session: Option<SessionId>,
     ) -> Result<ProgrammerCaptureMode, ActionError> {
         session.map_or(Ok(ProgrammerCaptureMode::default()), |session| {
-            if self
-                .programmers
-                .session_operates_desk(session, target.user_id)
-                != Some(true)
-            {
+            if !self.programmers.knows_session(session) {
                 return Err(ActionError::new(
                     ActionErrorKind::Internal,
-                    "replacement Programmer session does not belong to the target user",
+                    "replacement Programmer session does not exist",
                 ));
             }
             self.programmers
@@ -228,31 +215,21 @@ impl ProgrammingService {
 
     fn lifecycle_preload_values(
         &self,
-        target: &ProgrammingLifecycleTarget,
         session: Option<SessionId>,
     ) -> Result<ProgrammingPreloadValuesContent, ActionError> {
         session.map_or_else(
             || Ok(ProgrammingPreloadValuesContent::default()),
-            |session| {
-                ProgrammingPreloadValuesContent::read(&self.programmers, session, target.user_id)
-            },
+            |session| ProgrammingPreloadValuesContent::read(&self.programmers, session),
         )
     }
 
     fn lifecycle_preload_playback_queue(
         &self,
-        target: &ProgrammingLifecycleTarget,
         session: Option<SessionId>,
     ) -> Result<ProgrammingPreloadPlaybackQueueContent, ActionError> {
         session.map_or_else(
             || Ok(ProgrammingPreloadPlaybackQueueContent::default()),
-            |session| {
-                ProgrammingPreloadPlaybackQueueContent::read(
-                    &self.programmers,
-                    session,
-                    target.user_id,
-                )
-            },
+            |session| ProgrammingPreloadPlaybackQueueContent::read(&self.programmers, session),
         )
     }
 
@@ -272,14 +249,10 @@ impl ProgrammingService {
                 revision,
             }));
         };
-        if self
-            .programmers
-            .session_operates_desk(session, target.user_id)
-            != Some(true)
-        {
+        if !self.programmers.knows_session(session) {
             return Err(ActionError::new(
                 ActionErrorKind::Internal,
-                "replacement Programmer session does not belong to the target user",
+                "replacement Programmer session does not exist",
             ));
         }
         let mut revision = self.programmers.priority_revision();

@@ -294,7 +294,7 @@ impl OutputResource {
             SpeedGroupController::new(manual_bpm[index], sound[index].clone())
                 .expect("validated Speed Group configuration")
         });
-        *self.sound_capture_owners.lock() = [None; 5];
+        *self.sound_capture_active.lock() = [false; 5];
     }
 
     pub(in crate::runtime) fn speed_group_snapshots(&self, now: u64) -> [SpeedSnapshot; 5] {
@@ -339,7 +339,7 @@ impl OutputResource {
                     .map_err(|error| ApiError::bad_request(error.to_string()))?;
                 controllers[index].set_paused_at(false, now);
                 applied_sound[index].enabled = false;
-                self.sound_capture_owners.lock()[index] = None;
+                self.sound_capture_active.lock()[index] = false;
             } else {
                 controllers[index]
                     .set_manual_fallback_bpm(next_bpm[index])
@@ -360,7 +360,7 @@ impl OutputResource {
         let mut controllers = self.speed_groups.lock();
         speed_groups::unlink_speed_group(&mut controllers, index, now);
         let result = controllers[index].tap_learn(now);
-        self.sound_capture_owners.lock()[index] = None;
+        self.sound_capture_active.lock()[index] = false;
         result
     }
 
@@ -387,7 +387,7 @@ impl OutputResource {
                 .set_sound_config(sound)
                 .map_err(|error| ApiError::bad_request(error.to_string()))?;
         }
-        self.sound_capture_owners.lock()[index] = None;
+        self.sound_capture_active.lock()[index] = false;
         Ok(())
     }
 
@@ -450,11 +450,8 @@ impl OutputResource {
             // the same desk's analyzer feeding the same Speed Group, not a second desk competing
             // for it. The owner is still recorded — a manual value has to know that Sound was
             // driving the group — but it is no longer a claim anything is refused against.
-            let mut owners = self.sound_capture_owners.lock();
             let _ = desk_id;
-            owners[index] = Some(SoundCaptureOwner {
-                last_seen_millis: now,
-            });
+            self.sound_capture_active.lock()[index] = true;
         }
         observation.captured_at_millis = now;
         self.speed_groups.lock()[index].observe_sound(observation);
@@ -503,7 +500,7 @@ impl OutputResource {
             }
         };
         if action == "learn" {
-            self.sound_capture_owners.lock()[index] = None;
+            self.sound_capture_active.lock()[index] = false;
         }
         Ok(affected)
     }
@@ -534,7 +531,7 @@ impl OutputResource {
         &self,
     ) -> light_application::SpeedGroupPortState {
         let controllers = self.speed_groups.lock();
-        let owners = self.sound_capture_owners.lock();
+        let sound_active = self.sound_capture_active.lock();
         let groups = controllers
             .iter()
             .enumerate()
@@ -557,8 +554,7 @@ impl OutputResource {
             .iter()
             .enumerate()
             .filter(|(index, controller)| {
-                controller.manual_entry_is_current(controller.manual_bpm())
-                    && owners[*index].is_none()
+                controller.manual_entry_is_current(controller.manual_bpm()) && !sound_active[*index]
             })
             .filter_map(|(index, _)| light_application::SpeedGroupId::new((index + 1) as u8))
             .collect();
@@ -624,7 +620,7 @@ impl OutputResource {
     ) -> Result<(bool, Vec<usize>, bool), ApiError> {
         let takes_manual_control = action != "pause";
         let mut controllers = self.speed_groups.lock();
-        let owner_present = self.sound_capture_owners.lock()[index].is_some();
+        let owner_present = self.sound_capture_active.lock()[index];
         let manual_ownership_changed = takes_manual_control
             && (configured_source != SpeedGroupSource::Manual
                 || controllers[index].sound_config().enabled
@@ -662,30 +658,24 @@ impl OutputResource {
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn sound_capture_owner(
-        &self,
-        index: usize,
-    ) -> Option<SoundCaptureOwner> {
-        self.sound_capture_owners.lock()[index]
+    /// Whether Sound is currently driving this Speed Group.
+    pub(in crate::runtime) fn sound_capture_active(&self, index: usize) -> bool {
+        self.sound_capture_active.lock()[index]
     }
 
     pub(in crate::runtime) fn clear_sound_capture_owner(&self, index: usize) {
-        self.sound_capture_owners.lock()[index] = None;
+        self.sound_capture_active.lock()[index] = false;
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn set_sound_capture_owner(
-        &self,
-        index: usize,
-        owner: Option<SoundCaptureOwner>,
-    ) {
-        self.sound_capture_owners.lock()[index] = owner;
+    pub(in crate::runtime) fn set_sound_capture_active(&self, index: usize, active: bool) {
+        self.sound_capture_active.lock()[index] = active;
     }
 
     pub(in crate::runtime) fn clear_sound_capture_owners(&self, indices: &[usize]) {
-        let mut owners = self.sound_capture_owners.lock();
+        let mut active = self.sound_capture_active.lock();
         for &index in indices {
-            owners[index] = None;
+            active[index] = false;
         }
     }
 

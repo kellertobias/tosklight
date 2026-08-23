@@ -12,18 +12,11 @@ pub(super) struct LifecycleIdentity {
 }
 
 impl ProgrammingService {
-    pub(super) fn assert_preload_owner(
-        &self,
-        session: SessionId,
-        user: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session, user) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(preload_unavailable()),
+    pub(super) fn assert_preload_owner(&self, session: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session) {
+            Ok(())
+        } else {
+            Err(preload_unavailable())
         }
     }
 

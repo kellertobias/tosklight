@@ -28,7 +28,7 @@ impl ProgrammingService {
     ) -> Result<CueMoveCopyChoice, ActionError> {
         let scope = transfer_scope(context)?;
         ports.authorize_cue_transfer(context)?;
-        self.assert_transfer_owner(scope.session_id, scope.user_id)?;
+        self.assert_transfer_owner(scope.session_id)?;
         let authority =
             active_show.prepare_programming_cue_transfer_choice(context, &request, ports)?;
         let choice = transfer_choice(&authority, &request);
@@ -59,7 +59,7 @@ impl ProgrammingService {
     ) -> Result<ProgrammingCueTransferOutcome, ActionError> {
         let scope = transfer_scope(context)?;
         ports.authorize_cue_transfer(context)?;
-        self.assert_transfer_owner(scope.session_id, scope.user_id)?;
+        self.assert_transfer_owner(scope.session_id)?;
         let authority = self.authority_for(&scope, request)?;
         active_show.commit_programming_cue_transfer(context, &authority, request.mode, ports)
     }
@@ -76,7 +76,7 @@ impl ProgrammingService {
     ) -> Result<ProgrammingCueTransferOutcome, ActionError> {
         let scope = transfer_scope(context)?;
         ports.authorize_cue_transfer(context)?;
-        self.assert_transfer_owner(scope.session_id, scope.user_id)?;
+        self.assert_transfer_owner(scope.session_id)?;
         active_show.commit_current_programming_cue_transfer(context, request, mode, ports)
     }
 
@@ -88,7 +88,7 @@ impl ProgrammingService {
         identity: TransferIdentity,
     ) -> Result<ProgrammingCueTransferResult, ActionError> {
         ports.authorize_cue_transfer(&envelope.context)?;
-        self.assert_transfer_owner(identity.scope.session_id, identity.scope.user_id)?;
+        self.assert_transfer_owner(identity.scope.session_id)?;
         if let Some(result) = self.cue_transfer_replay.lock().get(
             &identity.scope,
             &identity.request_id,
@@ -101,7 +101,6 @@ impl ProgrammingService {
             &self.programmers,
             identity.scope.desk_id,
             identity.scope.session_id,
-            identity.scope.user_id,
         )?;
         let mut outcome = active_show.commit_programming_cue_transfer(
             &envelope.context,
@@ -115,7 +114,6 @@ impl ProgrammingService {
             &self.programmers,
             identity.scope.desk_id,
             identity.scope.session_id,
-            identity.scope.user_id,
         )?;
         outcome.command_line = after.command_line.clone();
         outcome.interaction_event_sequence = self.publish_interaction(
@@ -190,18 +188,11 @@ impl ProgrammingService {
         Ok(())
     }
 
-    fn assert_transfer_owner(
-        &self,
-        session_id: SessionId,
-        user_id: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session_id, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(missing_programmer()),
+    fn assert_transfer_owner(&self, session_id: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session_id) {
+            Ok(())
+        } else {
+            Err(missing_programmer())
         }
     }
 }

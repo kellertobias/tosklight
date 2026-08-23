@@ -279,14 +279,9 @@ impl ProgrammingService {
         );
         let read_snapshot = || {
             if tracks_values {
-                Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)
+                Snapshot::read(&self.programmers, action.context.desk_id, session)
             } else {
-                Snapshot::read_without_values(
-                    &self.programmers,
-                    action.context.desk_id,
-                    session,
-                    user_id,
-                )
+                Snapshot::read_without_values(&self.programmers, action.context.desk_id, session)
             }
         };
         let before = read_snapshot()?;

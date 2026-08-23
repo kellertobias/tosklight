@@ -356,7 +356,7 @@ async fn sound_to_light_is_authoritative_per_speed_group_on_the_one_desk() {
     assert_eq!(current["snapshot"]["source"], "manual");
     assert_eq!(current["snapshot"]["effective_bpm"], 111.0);
     assert_eq!(current["configuration"]["enabled"], false);
-    assert!(state.output.sound_capture_owner(0).is_none());
+    assert!(state.output.sound_capture_active(0) == false);
 
     let persisted: DeskConfiguration = serde_json::from_str(
         &state
@@ -408,12 +408,7 @@ fn osc_speed_group_button_performs_the_authoritative_learn_action() {
     state.installation.update_configuration(|configuration| {
         configuration.speed_group_sound_to_light[0] = enabled;
     });
-    state.output.set_sound_capture_owner(
-        0,
-        Some(SoundCaptureOwner {
-            last_seen_millis: 1,
-        }),
-    );
+    state.output.set_sound_capture_active(0, true);
 
     handle_timing_osc(
         &state,
@@ -423,7 +418,7 @@ fn osc_speed_group_button_performs_the_authoritative_learn_action() {
 
     assert!(!state.output.speed_group_sound_config(0).enabled);
     assert!(!state.installation.configuration().speed_group_sound_to_light[0].enabled);
-    assert!(state.output.sound_capture_owner(0).is_none());
+    assert!(state.output.sound_capture_active(0) == false);
     let event = state.events.audit_events().last().cloned().unwrap();
     assert_eq!(event.kind, "speed_group_action");
     assert_eq!(event.payload["source"], "osc");

@@ -34,7 +34,7 @@ impl ProgrammingService {
         identity: RecallIdentity,
     ) -> Result<ProgrammingPresetRecallResult, ActionError> {
         ports.authorize_preset_recall(&action.context)?;
-        self.assert_recall_owner(identity.session_id, identity.user_id)?;
+        self.assert_recall_owner(identity.session_id)?;
         validate_request(&action.command)?;
         let (capture_mode_revision, target) = self.assert_recall_capture_revision(
             identity.session_id,
@@ -59,7 +59,6 @@ impl ProgrammingService {
             &self.programmers,
             action.context.desk_id,
             identity.session_id,
-            identity.user_id,
         )?;
         let environment = ports.preset_recall_environment(&action.context, &action.command)?;
         validate_environment(&action.command, &environment, values_revision)?;
@@ -103,7 +102,6 @@ impl ProgrammingService {
             &self.programmers,
             action.context.desk_id,
             identity.session_id,
-            identity.user_id,
         )?;
         self.finish_applied_preset_recall(
             action,
@@ -274,7 +272,6 @@ impl ProgrammingService {
             &self.programmers,
             action.context.desk_id,
             identity.session_id,
-            identity.user_id,
         )?;
         let interaction = interaction_change(
             &self.programmers,
@@ -358,14 +355,11 @@ impl ProgrammingService {
         (Some(projection), event_sequence, revision)
     }
 
-    fn assert_recall_owner(&self, session: SessionId, user_id: UserId) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(recall_unavailable()),
+    fn assert_recall_owner(&self, session: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session) {
+            Ok(())
+        } else {
+            Err(recall_unavailable())
         }
     }
 

@@ -146,16 +146,6 @@ impl InstallationResource {
         self.desk.lock().add_user(name)
     }
 
-    #[cfg(test)]
-    pub(in crate::runtime) fn update_user(
-        &self,
-        id: light_core::UserId,
-        name: &str,
-        enabled: bool,
-    ) -> Result<DeskUser, light_show::StoreError> {
-        self.desk.lock().update_user(id, name, enabled)
-    }
-
     pub(in crate::runtime) fn settings_with_prefix(
         &self,
         prefix: &str,

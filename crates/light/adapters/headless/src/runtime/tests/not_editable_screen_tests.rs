@@ -1,5 +1,3 @@
-use super::*;
-
 /// Store a screen and return its id. `not_editable` decides whether it may change programming.
 fn install_screen(scenario: &CommandHttpScenario, name: &str, not_editable: bool) -> Uuid {
     let screen = light_show::ScreenConfiguration {

@@ -18,20 +18,11 @@ impl ProgrammingService {
         let user_id = context_user(context)?;
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize_programming_change(context)?;
-            match self.programmers.session_operates_desk(session, user_id) {
-                Some(true) => {}
-                Some(false) => {
-                    return Err(ActionError::new(
-                        ActionErrorKind::Forbidden,
-                        "the Programmer session does not belong to the authenticated user",
-                    ));
-                }
-                None => {
-                    return Err(ActionError::new(
-                        ActionErrorKind::NotFound,
-                        "Programmer Align is unavailable",
-                    ));
-                }
+            if !self.programmers.knows_session(session) {
+                return Err(ActionError::new(
+                    ActionErrorKind::NotFound,
+                    "Programmer Align is unavailable",
+                ));
             }
             match mode {
                 None => {

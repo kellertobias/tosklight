@@ -37,7 +37,7 @@ impl ProgrammingService {
     ) -> Result<crate::ProgrammingCueDeletionOutcome, ActionError> {
         let identity = deletion_identity(context)?;
         ports.authorize_cue_deletion_identity(context)?;
-        self.assert_deletion_owner(identity.scope.session_id, identity.scope.user_id)?;
+        self.assert_deletion_owner(identity.scope.session_id)?;
         validate_request(request)?;
         let resolved = resolve_request(context, request, ports)?;
         active_show.delete_programming_cue(context, &resolved, ports)
@@ -51,7 +51,7 @@ impl ProgrammingService {
         identity: CueDeletionIdentity,
     ) -> Result<ProgrammingCueDeletionResult, ActionError> {
         ports.authorize_cue_deletion_identity(&envelope.context)?;
-        self.assert_deletion_owner(identity.scope.session_id, identity.scope.user_id)?;
+        self.assert_deletion_owner(identity.scope.session_id)?;
         if let Some(result) = self.cue_deletion_replay.lock().get(
             &identity.scope,
             &identity.request_id,
@@ -82,21 +82,14 @@ impl ProgrammingService {
         Ok(result)
     }
 
-    fn assert_deletion_owner(
-        &self,
-        session_id: SessionId,
-        user_id: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session_id, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(ActionError::new(
+    fn assert_deletion_owner(&self, session_id: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session_id) {
+            Ok(())
+        } else {
+            Err(ActionError::new(
                 ActionErrorKind::NotFound,
                 "the Programmer session does not exist",
-            )),
+            ))
         }
     }
 }

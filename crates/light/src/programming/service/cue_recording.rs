@@ -55,7 +55,7 @@ impl ProgrammingService {
         identity: RecordingIdentity,
     ) -> Result<ProgrammingCueRecordResult, ActionError> {
         ports.authorize_cue_recording(&envelope.context)?;
-        self.assert_cue_owner(identity.session_id, identity.user_id)?;
+        self.assert_cue_owner(identity.session_id)?;
         validate_request(&envelope.command)?;
         if let Some(result) = self.cached_cue_recording(&identity, &envelope.command)? {
             return Ok(result);
@@ -128,21 +128,11 @@ impl ProgrammingService {
         identity: &RecordingIdentity,
     ) -> Result<(), ActionError> {
         let lifecycle_before = self.active_lifecycle_programmer(identity.user_id);
-        let before = Snapshot::read(
-            &self.programmers,
-            identity.desk_id,
-            identity.session_id,
-            identity.user_id,
-        )?;
+        let before = Snapshot::read(&self.programmers, identity.desk_id, identity.session_id)?;
         if !self.programmers.clear_normal_values(identity.session_id) {
             return Ok(());
         }
-        let after = Snapshot::read(
-            &self.programmers,
-            identity.desk_id,
-            identity.session_id,
-            identity.user_id,
-        )?;
+        let after = Snapshot::read(&self.programmers, identity.desk_id, identity.session_id)?;
         let values = self.values_change(
             identity.user_id,
             &before.values_content,
@@ -153,14 +143,11 @@ impl ProgrammingService {
         Ok(())
     }
 
-    fn assert_cue_owner(&self, session: SessionId, user_id: UserId) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(missing_programmer()),
+    fn assert_cue_owner(&self, session: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session) {
+            Ok(())
+        } else {
+            Err(missing_programmer())
         }
     }
 
@@ -195,7 +182,6 @@ impl ProgrammingService {
             &self.programmers,
             envelope.context.desk_id,
             identity.session_id,
-            identity.user_id,
         )
         .map(Some)
     }
@@ -215,7 +201,6 @@ impl ProgrammingService {
             &self.programmers,
             envelope.context.desk_id,
             identity.session_id,
-            identity.user_id,
         )?;
         self.publish_released_preload(&envelope.context, identity, &before, &after)?;
         self.publish_lifecycle_for_context(&envelope.context, lifecycle_before);

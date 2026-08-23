@@ -304,12 +304,7 @@ impl ProgrammingService {
         &self,
         identity: &UpdateIdentity,
     ) -> Result<super::Snapshot, ActionError> {
-        super::Snapshot::read(
-            &self.programmers,
-            identity.desk_id,
-            identity.session_id,
-            identity.user_id,
-        )
+        super::Snapshot::read(&self.programmers, identity.desk_id, identity.session_id)
     }
 
     fn capture_update(

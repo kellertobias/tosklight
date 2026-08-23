@@ -25,11 +25,11 @@ impl ProgrammingService {
         let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
             ports.authorize_programming_change(&action.context)?;
-            self.assert_preload_values_owner(session, user_id)?;
+            self.assert_preload_values_owner(session)?;
             let fingerprint = preload_request_fingerprint(expected_revision, &action.command);
             let replay_identity = PreloadReplayIdentity {
-                user_id,
                 desk_id: action.context.desk_id,
+                user_id,
                 session_id: session,
                 request_id,
             };
@@ -69,7 +69,7 @@ impl ProgrammingService {
         revision_before: u64,
         capture_mode_revision: u64,
     ) -> Result<ProgrammingPreloadValuesResult, ActionError> {
-        let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
+        let before = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         let raw_mutations = action.command.command.mutations();
         let environment = (!raw_mutations.is_empty() || action.command.command.intent().is_some())
             .then(|| ports.values_environment(&action.context))
@@ -130,7 +130,7 @@ impl ProgrammingService {
         let warning = changed
             .then(|| ports.persist(&action.context, "programmer.preload_values"))
             .flatten();
-        let after = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
+        let after = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         let interaction = interaction_change(
             &self.programmers,
             action.context.desk_id,
@@ -177,21 +177,14 @@ impl ProgrammingService {
         }
     }
 
-    fn assert_preload_values_owner(
-        &self,
-        session: SessionId,
-        user_id: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(ActionError::new(
+    fn assert_preload_values_owner(&self, session: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session) {
+            Ok(())
+        } else {
+            Err(ActionError::new(
                 ActionErrorKind::NotFound,
                 "Preload values are unavailable",
-            )),
+            ))
         }
     }
 

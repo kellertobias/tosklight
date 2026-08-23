@@ -120,25 +120,22 @@ impl Snapshot {
         programmers: &ProgrammerRegistry,
         desk_id: Uuid,
         session: SessionId,
-        user_id: UserId,
     ) -> Result<Self, ActionError> {
-        Self::read_with_values(programmers, desk_id, session, user_id, false)
+        Self::read_with_values(programmers, desk_id, session, false)
     }
 
     pub(super) fn read(
         programmers: &ProgrammerRegistry,
         desk_id: Uuid,
         session: SessionId,
-        user_id: UserId,
     ) -> Result<Self, ActionError> {
-        Self::read_with_values(programmers, desk_id, session, user_id, true)
+        Self::read_with_values(programmers, desk_id, session, true)
     }
 
     fn read_with_values(
         programmers: &ProgrammerRegistry,
         _desk_id: Uuid,
         session: SessionId,
-        user_id: UserId,
         include_values: bool,
     ) -> Result<Self, ActionError> {
         // An authenticated session without a live Programmer has no Programmer state to reconcile.
@@ -151,7 +148,7 @@ impl Snapshot {
         let Some(version) = programmers.interaction_version(session) else {
             return Ok(Self::default());
         };
-        if programmers.session_operates_desk(session, user_id) != Some(true) {
+        if !programmers.knows_session(session) {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the authenticated user",
@@ -165,7 +162,6 @@ impl Snapshot {
                 super::super::values_projection::ProgrammingValuesContent::read_for_diff(
                     programmers,
                     session,
-                    user_id,
                 )?
             } else {
                 Default::default()

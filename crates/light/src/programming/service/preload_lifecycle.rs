@@ -38,7 +38,7 @@ impl ProgrammingService {
         identity: LifecycleIdentity,
     ) -> Result<ProgrammingPreloadLifecycleResult, ActionError> {
         ports.authorize_preload_lifecycle(&action.context)?;
-        self.assert_preload_owner(identity.session_id, identity.user_id)?;
+        self.assert_preload_owner(identity.session_id)?;
         let replay_identity = PreloadLifecycleReplayIdentity {
             user_id: identity.user_id,
             desk_id: action.context.desk_id,
@@ -74,7 +74,6 @@ impl ProgrammingService {
             &self.programmers,
             action.context.desk_id,
             identity.session_id,
-            identity.user_id,
         )?;
         self.assert_go_is_armed(identity.session_id, &action.command.action)?;
         let mutation = self.run_preload_mutation(action, ports, identity.session_id, &before)?;
@@ -82,7 +81,6 @@ impl ProgrammingService {
             &self.programmers,
             action.context.desk_id,
             identity.session_id,
-            identity.user_id,
         )?;
         if before.capture_mode != mutated.capture_mode {
             ports.reconcile_preload_capture(&action.context);
@@ -91,7 +89,6 @@ impl ProgrammingService {
             &self.programmers,
             action.context.desk_id,
             identity.session_id,
-            identity.user_id,
         )?;
         let result = self.finish_preload_lifecycle(action, identity, before, after, mutation)?;
         self.publish_lifecycle_for_context(&action.context, lifecycle_before);

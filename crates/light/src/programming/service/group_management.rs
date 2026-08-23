@@ -35,7 +35,7 @@ impl ProgrammingService {
         identity: ManagementIdentity,
     ) -> Result<GroupManagementResult, ActionError> {
         ports.authorize_group_management(&envelope.context)?;
-        self.assert_group_management_owner(identity.session_id, identity.user_id)?;
+        self.assert_group_management_owner(identity.session_id)?;
         validate_request(&envelope.command)?;
         if let Some(result) = self.cached_group_management(&identity, &envelope.command)? {
             return Ok(result);
@@ -80,21 +80,14 @@ impl ProgrammingService {
         self.publish_interaction(context, change);
     }
 
-    fn assert_group_management_owner(
-        &self,
-        session_id: SessionId,
-        user_id: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session_id, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(ActionError::new(
+    fn assert_group_management_owner(&self, session_id: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session_id) {
+            Ok(())
+        } else {
+            Err(ActionError::new(
                 ActionErrorKind::NotFound,
                 "the Programmer session does not exist",
-            )),
+            ))
         }
     }
 

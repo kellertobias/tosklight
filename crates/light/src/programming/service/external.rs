@@ -32,9 +32,9 @@ impl ProgrammingService {
         operation: impl FnOnce() -> T,
     ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
         let lifecycle_before = self.active_lifecycle_programmer(user_id);
-        let before = super::Snapshot::read(&self.programmers, context.desk_id, session, user_id)?;
+        let before = super::Snapshot::read(&self.programmers, context.desk_id, session)?;
         let output = operation();
-        let after = super::Snapshot::read(&self.programmers, context.desk_id, session, user_id)?;
+        let after = super::Snapshot::read(&self.programmers, context.desk_id, session)?;
         let result = ProgrammingInteractionResult {
             output,
             event_sequence: self.publish_interaction(

@@ -223,18 +223,15 @@ impl ProgrammerRegistry {
         self.normal_values_generations.get()
     }
 
-    /// Whether this session operates the Programmer the presented identity names.
+    /// Whether the desk knows this session, and therefore has a Programmer for it to operate.
     ///
-    /// A desk has one Programmer, so every session it knows operates it. An identity presented by
-    /// an older client, saved hardware configuration, or a stored URL normalises to the desk's own
-    /// rather than being rejected as foreign. `None` when the desk does not know the session at
-    /// all, which remains a real answer: nothing is being operated.
-    ///
-    /// This is the one place legacy identities are accepted, and therefore the one place to change
-    /// when they stop being accepted at all.
-    pub fn session_operates_desk(&self, session: SessionId, presented: UserId) -> Option<bool> {
-        let owner = self.user_id(session)?;
-        Some(owner == self.desk.normalize(presented))
+    /// This used to ask whether the session operated the Programmer a presented identity named.
+    /// A desk has one Programmer, so every session it knows operates it and the identity part of
+    /// the question could only ever answer yes — leaving an unreachable "belongs to another user"
+    /// error behind every call. What is left is the half that can still be false: the desk may
+    /// not know the session at all.
+    pub fn knows_session(&self, session: SessionId) -> bool {
+        self.states.read().contains_key(&self.key(session))
     }
 
     /// The desk's Programmer identity for a session, given whatever identity it presented.
@@ -247,14 +244,13 @@ impl ProgrammerRegistry {
             .unwrap_or(self.desk.normalize(presented))
     }
 
-    /// The desk identity this session operates, given whatever identity it presented.
+    /// The desk identity this session operates, whatever identity it presented.
     ///
-    /// `Some` whenever the desk knows the session and the presented identity resolves to the
-    /// desk's own — which, with one Programmer, is every identity. Callers should read and report
-    /// the returned identity rather than the presented one: a legacy identity names no state.
-    pub fn operated_desk_user(&self, session: SessionId, presented: UserId) -> Option<UserId> {
-        let owner = self.user_id(session)?;
-        (owner == self.desk.normalize(presented)).then_some(owner)
+    /// `Some` whenever the desk knows the session. Callers should read and report the returned
+    /// identity rather than the presented one: an identity from before the collapse names no
+    /// state, so keying on it reads an empty Programmer at revision zero.
+    pub fn operated_desk_user(&self, session: SessionId, _presented: UserId) -> Option<UserId> {
+        self.user_id(session)
     }
 
     pub fn user_id(&self, session: SessionId) -> Option<UserId> {

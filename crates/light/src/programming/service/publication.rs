@@ -131,7 +131,7 @@ impl ProgrammingService {
         if before_generation == after_generation {
             return Ok(None);
         }
-        let content = ProgrammingPreloadValuesContent::read(&self.programmers, session, user_id)?;
+        let content = ProgrammingPreloadValuesContent::read(&self.programmers, session)?;
         let revision = self.programmers.advance_preload_values_revision();
         Ok(Some(ProgrammingPreloadValuesChange {
             projection: Arc::new(content.projection(user_id, revision)),
@@ -148,8 +148,7 @@ impl ProgrammingService {
         if before_generation == after_generation {
             return Ok(None);
         }
-        let content =
-            ProgrammingPreloadPlaybackQueueContent::read(&self.programmers, session, user_id)?;
+        let content = ProgrammingPreloadPlaybackQueueContent::read(&self.programmers, session)?;
         let revision = self.programmers.advance_preload_playback_queue_revision();
         Ok(Some(ProgrammingPreloadPlaybackQueueChange {
             projection: Arc::new(content.projection(user_id, revision)),

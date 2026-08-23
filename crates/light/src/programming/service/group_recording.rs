@@ -49,7 +49,7 @@ impl ProgrammingService {
         within_interaction: bool,
     ) -> Result<ProgrammingGroupRecordResult, ActionError> {
         ports.authorize_group_recording(&envelope.context)?;
-        self.assert_group_owner(identity.session_id, identity.user_id)?;
+        self.assert_group_owner(identity.session_id)?;
         validate_request(&envelope.command)?;
         if let Some(result) = self.cached_group_recording(&identity, &envelope.command)? {
             return Ok(result);
@@ -105,18 +105,11 @@ impl ProgrammingService {
         Ok(result)
     }
 
-    fn assert_group_owner(
-        &self,
-        session_id: SessionId,
-        user_id: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session_id, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(missing_programmer()),
+    fn assert_group_owner(&self, session_id: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session_id) {
+            Ok(())
+        } else {
+            Err(missing_programmer())
         }
     }
 

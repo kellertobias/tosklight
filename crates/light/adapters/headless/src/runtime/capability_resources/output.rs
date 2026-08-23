@@ -24,7 +24,7 @@ pub(in crate::runtime) struct OutputResource {
     visualization_ordinary: Arc<Mutex<Option<CachedVisualizationOrdinary>>>,
     dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
     visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
-    sound_capture_owners: Arc<Mutex<[Option<SoundCaptureOwner>; 5]>>,
+    sound_capture_active: Arc<Mutex<[bool; 5]>>,
     #[cfg(test)]
     runtime_persistence_attempts: Arc<AtomicU64>,
     #[cfg(test)]
@@ -174,7 +174,7 @@ impl OutputResource {
             visualization_ordinary: Arc::new(Mutex::new(None)),
             dynamic_auto_offs,
             visualization_frames,
-            sound_capture_owners: Arc::new(Mutex::new([None; 5])),
+            sound_capture_active: Arc::new(Mutex::new([false; 5])),
             #[cfg(test)]
             runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
             #[cfg(test)]

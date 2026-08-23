@@ -75,7 +75,7 @@ impl ProgrammingService {
         capture_mode_revision: u64,
     ) -> Result<ProgrammingValuesResult, ActionError> {
         let lifecycle_before = self.active_lifecycle_programmer(user_id);
-        let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
+        let before = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         let environment = (!action.command.command.is_clear())
             .then(|| ports.values_environment(&action.context))
             .transpose()?;
@@ -172,7 +172,7 @@ impl ProgrammingService {
         let warning = changed
             .then(|| ports.persist(&action.context, "programmer.values"))
             .flatten();
-        let after = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
+        let after = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         let interaction = interaction_change(
             &self.programmers,
             action.context.desk_id,

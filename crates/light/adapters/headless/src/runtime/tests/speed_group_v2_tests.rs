@@ -13,12 +13,7 @@ async fn direct_manual_entry_resets_pause_scale_sound_and_capture_ownership() {
     state
         .output
         .configure_speed_group_test_state(0, sound, 0.5, true, 10);
-    state.output.set_sound_capture_owner(
-        0,
-        Some(SoundCaptureOwner {
-            last_seen_millis: 10,
-        }),
-    );
+    state.output.set_sound_capture_active(0, true);
     let initial = speed_group_snapshot(&app, &token, session.desk.id).await;
     let cursor = state.events.latest_sequence();
     let attempts = persistence_attempts(&state);
@@ -41,7 +36,7 @@ async fn direct_manual_entry_resets_pause_scale_sound_and_capture_ownership() {
     assert_eq!(response["groups"][0]["speed_master_scale"], 1.0);
     let controller = state.output.speed_group_controller(0);
     assert!(!controller.sound_config().enabled);
-    assert!(state.output.sound_capture_owner(0).is_none());
+    assert!(state.output.sound_capture_active(0) == false);
     assert!(
         !state
             .installation

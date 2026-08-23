@@ -82,22 +82,20 @@ impl ProgrammingValuesContent {
     pub(super) fn read(
         programmers: &ProgrammerRegistry,
         session: SessionId,
-        user_id: UserId,
     ) -> Result<Self, ActionError> {
         #[cfg(test)]
         PROJECTION_READS.set(PROJECTION_READS.get() + 1);
-        Self::read_for_diff(programmers, session, user_id)
+        Self::read_for_diff(programmers, session)
     }
 
     pub(super) fn read_for_diff(
         programmers: &ProgrammerRegistry,
         session: SessionId,
-        user_id: UserId,
     ) -> Result<Self, ActionError> {
         let state = programmers
             .get(session)
             .ok_or_else(programmer_values_unavailable)?;
-        if programmers.session_operates_desk(session, user_id) != Some(true) {
+        if !programmers.knows_session(session) {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "the Programmer session does not belong to the requested user",
@@ -321,7 +319,7 @@ impl ProgrammingService {
             // Reading the cursor first permits a duplicate after repair, but cannot skip a
             // same-user mutation because that transition uses this same user gate.
             let event_sequence = self.events.latest_sequence();
-            let content = ProgrammingValuesContent::read(&self.programmers, session, user_id)?;
+            let content = ProgrammingValuesContent::read(&self.programmers, session)?;
             // Report the Programmer the session operates, not the name it asked under.
             let user_id = self
                 .programmers

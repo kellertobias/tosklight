@@ -52,7 +52,7 @@ impl ProgrammingService {
         identity: RecordingIdentity,
     ) -> Result<ProgrammingPresetRecordResult, ActionError> {
         ports.authorize_preset_recording(&envelope.context)?;
-        self.assert_preset_owner(identity.session_id, identity.user_id)?;
+        self.assert_preset_owner(identity.session_id)?;
         validate_recording_request(&envelope.command)?;
         if let Some(result) = self.cached_preset_recording(&identity, &envelope.command)? {
             return Ok(result);
@@ -92,21 +92,14 @@ impl ProgrammingService {
         Ok(result)
     }
 
-    fn assert_preset_owner(
-        &self,
-        session_id: SessionId,
-        user_id: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session_id, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(ActionError::new(
+    fn assert_preset_owner(&self, session_id: SessionId) -> Result<(), ActionError> {
+        if self.programmers.knows_session(session_id) {
+            Ok(())
+        } else {
+            Err(ActionError::new(
                 ActionErrorKind::NotFound,
                 "the Programmer session does not exist",
-            )),
+            ))
         }
     }
 

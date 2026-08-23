@@ -62,7 +62,6 @@ fn no_op_active_context_and_round_trip_mode_actions_stay_quiet() {
     let setup = LiveSetup::new(8);
     let registry = setup.ports.registry.as_ref().unwrap();
     let session = SessionId(setup.context.session_id.unwrap());
-    let user = UserId(setup.context.user_id.unwrap());
     reset_projection_read_count();
 
     let active_context = setup
