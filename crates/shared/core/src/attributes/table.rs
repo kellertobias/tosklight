@@ -5,7 +5,7 @@
 //! that. The name remains what is written to disk, sent over the wire, and shown to an operator;
 //! the number never leaves the process.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use super::configuration::{custom_descriptor, resolved_descriptor};
 use super::{ATTRIBUTE_REGISTRY, AttributeDescriptor, AttributeKey, ResolvedAttributeDescriptor};
@@ -75,7 +75,10 @@ impl AttributeEntry {
 #[derive(Clone, Debug, Default)]
 pub struct AttributeTable {
     entries: Vec<AttributeEntry>,
-    ids: HashMap<AttributeKey, AttributeId>,
+    /// A frame asks this map once per contribution and once per channel read, and the keys are
+    /// attribute names the desk itself made. The default hasher answered those in SipHash, which
+    /// the profile showed above every other leaf in a render.
+    ids: FxHashMap<AttributeKey, AttributeId>,
 }
 
 impl AttributeTable {
