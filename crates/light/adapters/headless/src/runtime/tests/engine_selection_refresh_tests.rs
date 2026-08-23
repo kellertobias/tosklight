@@ -1,17 +1,10 @@
 use super::*;
 
 #[tokio::test]
-async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocking() {
-    let scenario = ActiveGroupScenario::new("Multi-desk Group refresh").await;
+async fn active_group_put_and_undo_refresh_the_desk_once_without_deadlocking() {
+    let scenario = ActiveGroupScenario::new("Desk Group refresh").await;
 
-    scenario.state.programming.select_expression(
-        scenario.actor.id,
-        Vec::new(),
-        light_programmer::SelectionExpression::LiveGroup {
-            group_id: "1".into(),
-            rule: light_programmer::SelectionRule::Even,
-        },
-    );
+    // The desk has one live-group selection, set from whichever surface last touched it.
     scenario.state.programming.select_expression(
         scenario.peer.id,
         vec![scenario.first],
@@ -49,19 +42,11 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
         &scenario.state,
         &scenario.actor,
         before_put,
-        &[scenario.second],
+        &[scenario.first, scenario.second],
         light_application::ActionSource::Http,
         None,
     );
-    assert_selection_refresh(
-        &scenario.state,
-        &scenario.peer,
-        before_put,
-        &[scenario.first, scenario.second],
-        light_application::ActionSource::Http,
-        Some(put_correlation),
-    );
-    assert_eq!(put_events.len(), 5);
+    assert_eq!(put_events.len(), 3);
     assert_selection_events_precede_show_event(&scenario.state, before_put);
     assert_group_membership(&scenario.state, &[scenario.first, scenario.second]);
 
@@ -92,20 +77,12 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
         &scenario.state,
         &scenario.actor,
         before_undo,
-        &[],
+        &[scenario.first],
         light_application::ActionSource::Http,
         None,
     );
-    assert_selection_refresh(
-        &scenario.state,
-        &scenario.peer,
-        before_undo,
-        &[scenario.first],
-        light_application::ActionSource::Http,
-        Some(undo_correlation),
-    );
     assert_ne!(put_correlation, undo_correlation);
-    assert_eq!(undo_events.len(), 5);
+    assert_eq!(undo_events.len(), 3);
     assert_selection_events_precede_show_event(&scenario.state, before_undo);
     assert_group_membership(&scenario.state, &[scenario.first]);
 
@@ -113,7 +90,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
 }
 
 #[tokio::test]
-async fn active_show_install_clears_each_desk_pending_choice_once() {
+async fn active_show_install_clears_the_desks_pending_choice_once() {
     let scenario = ActiveGroupScenario::new("Pending choice invalidation").await;
     let command = "COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2";
     for session in [&scenario.actor, &scenario.peer] {
@@ -147,6 +124,7 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
     .await;
 
     assert_eq!(response.status(), StatusCode::OK);
+    // One command line, so every surface sees the choice gone.
     for session in [&scenario.actor, &scenario.peer] {
         assert!(
             scenario
@@ -157,43 +135,38 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
                 .pending_choice
                 .is_none()
         );
-        let filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
-            light_application::EventObject::programming_command_line(session.desk.id),
-        );
-        let light_application::EventReplay::Events(events) =
-            scenario.state.events.replay(before, &filter)
-        else {
-            panic!("choice invalidation should remain replayable")
-        };
-        assert_eq!(events.len(), 1);
-        let light_application::ApplicationEvent::Programming(
-            light_application::ProgrammingEvent::InteractionChanged(change),
-        ) = &events[0].payload
-        else {
-            panic!("expected a Programming interaction change")
-        };
-        assert!(change.command_line().unwrap().pending_choice.is_none());
     }
+    // ...and one invalidation is published, under the desk the action acted on.
+    let desk = scenario.actor.desk.id;
+    let filter = light_application::EventFilter::for_desk(desk).with_object(
+        light_application::EventObject::programming_command_line(desk),
+    );
+    let light_application::EventReplay::Events(events) =
+        scenario.state.events.replay(before, &filter)
+    else {
+        panic!("choice invalidation should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    let light_application::ApplicationEvent::Programming(
+        light_application::ProgrammingEvent::InteractionChanged(change),
+    ) = &events[0].payload
+    else {
+        panic!("expected a Programming interaction change")
+    };
+    assert!(change.command_line().unwrap().pending_choice.is_none());
     scenario.cleanup();
 }
 
 #[tokio::test]
-async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the_actor() {
+async fn nested_record_group_refreshes_the_desk_once_without_relocking_it() {
     let scenario = ActiveGroupScenario::new("Nested Record Group refresh").await;
+    // One ordered selection, whichever surface last touched it.
     scenario.state.programming.select_expression(
         scenario.actor.id,
         vec![scenario.first, scenario.second],
         light_programmer::SelectionExpression::LiveGroup {
             group_id: "1".into(),
             rule: light_programmer::SelectionRule::Even,
-        },
-    );
-    scenario.state.programming.select_expression(
-        scenario.peer.id,
-        vec![scenario.first],
-        light_programmer::SelectionExpression::LiveGroup {
-            group_id: "1".into(),
-            rule: light_programmer::SelectionRule::All,
         },
     );
 
@@ -225,7 +198,9 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
     assert!(response.ok, "{:?}", response.error);
     assert_eq!(response.payload.unwrap()["applied"], 2);
 
-    let correlation = assert_selection_refresh(
+    // Recording the selection into Group 1 changed its membership, so the live-group selection
+    // re-resolves and the desk publishes exactly one final selection.
+    assert_selection_refresh(
         &scenario.state,
         &scenario.actor,
         before_record,
@@ -233,18 +208,10 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
         light_application::ActionSource::UserInterface,
         None,
     );
-    assert_selection_refresh(
-        &scenario.state,
-        &scenario.peer,
-        before_record,
-        &[scenario.first, scenario.second],
-        light_application::ActionSource::UserInterface,
-        Some(correlation),
-    );
     assert_eq!(
         selection_refresh_events(&scenario.state, before_record).len(),
-        5,
-        "the mutation must publish one Show event plus one selection and lifecycle event per changed desk"
+        3,
+        "the mutation must publish one Show event plus one selection and one lifecycle event"
     );
     assert_selection_events_precede_show_event(&scenario.state, before_record);
     assert_eq!(
@@ -462,23 +429,25 @@ fn assert_group_membership(state: &AppState, expected: &[light_core::FixtureId])
     );
 }
 
+/// The desk's final selection and lifecycle must reach a client before the Show change that
+/// caused them, so a client never renders a Show generation against a stale selection.
 fn assert_selection_events_precede_show_event(state: &AppState, after_sequence: u64) {
     let events = selection_refresh_events(state, after_sequence);
-    assert_eq!(events.len(), 5);
-    assert!(events[..2].iter().all(|event| matches!(
-        &event.payload,
+    assert_eq!(events.len(), 3);
+    assert!(matches!(
+        &events[0].payload,
         light_application::ApplicationEvent::Programming(
             light_application::ProgrammingEvent::InteractionChanged(_)
         )
-    )));
-    assert!(events[2..4].iter().all(|event| matches!(
-        &event.payload,
+    ));
+    assert!(matches!(
+        &events[1].payload,
         light_application::ApplicationEvent::Programming(
             light_application::ProgrammingEvent::LifecycleChanged(_)
         )
-    )));
+    ));
     assert!(matches!(
-        &events[4].payload,
+        &events[2].payload,
         light_application::ApplicationEvent::Show(light_application::ShowEvent::ObjectsChanged(_))
     ));
 }
