@@ -203,6 +203,58 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
     }
 
+    #[test]
+    fn collapsing_a_desk_leaves_every_screen_configuration_alone() {
+        // The collapse chooses a Programmer. Screens are presentation, not desk authority, so a
+        // desk that held several Programmers keeps every screen exactly as it was — names,
+        // layouts, playback layouts, Follow Main / Dedicated Page, display assignment, and the
+        // Not Editable flag.
+        let directory = scratch_directory();
+        let store = light_show::DeskStore::open(&directory.join("desk.sqlite")).unwrap();
+        let screen = light_show::ScreenConfiguration {
+            id: uuid::Uuid::new_v4(),
+            name: "Foyer repeater".into(),
+            layout: serde_json::json!({"desks": [], "activeDeskId": ""}),
+            show_dock: false,
+            show_playbacks: true,
+            playback_count: 6,
+            playback_rows: 2,
+            first_playback_slot: 3,
+            page_mode: "independent".into(),
+            show_page_controls: false,
+            show_programmer: true,
+            desired_open: true,
+            display_id: Some("display-2".into()),
+            bounds: Some(serde_json::json!({"x": 10, "y": 20, "width": 800, "height": 600})),
+            fullscreen: true,
+            playback_layout: None,
+            content: light_show::ScreenContent::default(),
+            not_editable: true,
+        };
+        let stored = store.put_screen(screen.clone()).unwrap();
+
+        let collapse = DeskCollapse::decide(vec![
+            session(1, 10, "2026-08-01T00:00:00Z"),
+            session(2, 20, "2026-08-03T00:00:00Z"),
+        ]);
+        write_collapse_report(&directory, &collapse, "2026-08-23T12:00:00Z").unwrap();
+
+        let after = store
+            .screen(screen.id)
+            .unwrap()
+            .expect("the screen survives");
+        assert_eq!(after.name, stored.name);
+        assert_eq!(after.layout, stored.layout);
+        assert_eq!(after.playback_count, stored.playback_count);
+        assert_eq!(after.playback_rows, stored.playback_rows);
+        assert!(after.not_editable);
+        assert_eq!(after.page_mode, "independent");
+        assert_eq!(after.first_playback_slot, 3);
+        assert_eq!(after.display_id.as_deref(), Some("display-2"));
+        assert!(after.fullscreen);
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
     /// A scratch directory under the repository's temporary root when one is set.
     fn scratch_directory() -> std::path::PathBuf {
         let root = std::env::var_os("LIGHT_TMP_DIR")
