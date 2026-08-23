@@ -13,6 +13,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPrioritySnapshot, ActionError> {
         let (session, user_id) = priority_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
             let user_id = self.operated_priority_owner(session, user_id)?;
@@ -31,6 +33,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPriorityResult, ActionError> {
         let (session, user_id, request_id) = priority_context(&action)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
             ports.authorize(&action.context)?;
             let user_id = self.operated_priority_owner(session, user_id)?;

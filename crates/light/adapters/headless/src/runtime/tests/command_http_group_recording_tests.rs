@@ -427,7 +427,7 @@ async fn group_record_route_rejects_missing_auth_forged_state_and_wrong_show() {
 }
 
 #[tokio::test]
-async fn group_recording_captures_each_desk_selection_and_keeps_other_users_isolated() {
+async fn group_recording_captures_the_desks_one_selection_from_any_surface() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario
         .create_and_open_show("Group recording identity scopes")
@@ -435,51 +435,51 @@ async fn group_recording_captures_each_desk_selection_and_keeps_other_users_isol
     let first = scenario.install_direct_fixture();
     let second = light_core::FixtureId::new();
     let third = light_core::FixtureId::new();
-    let (same_user, other_user) = group_recording_peer_sessions(&scenario);
+    let (second_screen, legacy_surface) = group_recording_peer_sessions(&scenario);
+    // Three surfaces, one ordered selection: the last press moves it.
     scenario
         .state
         .programming
         .select(scenario.session.id, [first]);
-    scenario.state.programming.select(same_user.id, [second]);
-    scenario.state.programming.select(other_user.id, [third]);
+    scenario.state.programming.select(second_screen.id, [second]);
 
-    let same_user_record = scenario
+    let from_screen = scenario
         .group_recording_action(
             &show_id,
-            Some(&same_user.token),
-            group_record_request("same-user-record", "shared", "overwrite", 0),
+            Some(&second_screen.token),
+            group_record_request("screen-record", "shared", "overwrite", 0),
         )
         .await;
-    assert_eq!(same_user_record.status(), StatusCode::OK);
-    assert_stored_group_fixtures(same_user_record, &[second]).await;
+    assert_eq!(from_screen.status(), StatusCode::OK);
+    assert_stored_group_fixtures(from_screen, &[second]).await;
 
-    let other_user_record = scenario
+    // A surface arriving under an identity from before the collapse records the same selection.
+    scenario
+        .state
+        .programming
+        .select(legacy_surface.id, [third]);
+    let from_legacy = scenario
         .group_recording_action(
             &show_id,
-            Some(&other_user.token),
-            group_record_request("other-user-record", "shared", "overwrite", 1),
+            Some(&legacy_surface.token),
+            group_record_request("legacy-record", "shared", "overwrite", 1),
         )
         .await;
-    assert_eq!(other_user_record.status(), StatusCode::OK);
-    assert_stored_group_fixtures(other_user_record, &[third]).await;
-    assert_eq!(
-        scenario
-            .state
-            .programming
-            .selection(scenario.session.id)
-            .unwrap()
-            .selected,
-        vec![first]
-    );
-    assert_eq!(
-        scenario
-            .state
-            .programming
-            .selection(same_user.id)
-            .unwrap()
-            .selected,
-        vec![second]
-    );
+    assert_eq!(from_legacy.status(), StatusCode::OK);
+    assert_stored_group_fixtures(from_legacy, &[third]).await;
+
+    // Every surface reads back that same selection.
+    for session in [scenario.session.id, second_screen.id, legacy_surface.id] {
+        assert_eq!(
+            scenario
+                .state
+                .programming
+                .selection(session)
+                .unwrap()
+                .selected,
+            vec![third]
+        );
+    }
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

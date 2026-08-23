@@ -83,6 +83,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingCaptureModeSnapshot, ActionError> {
         let (session, user_id) = capture_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
             // A cursor captured before the immutable projection can permit a duplicate after

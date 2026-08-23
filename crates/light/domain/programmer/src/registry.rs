@@ -237,6 +237,16 @@ impl ProgrammerRegistry {
         Some(owner == self.desk.normalize(presented))
     }
 
+    /// The desk's Programmer identity for a session, given whatever identity it presented.
+    ///
+    /// Unlike `operated_desk_user` this always answers, because callers use it to key state
+    /// before they have established that the session exists at all; a session the desk does not
+    /// know simply reads the desk's identity and then fails its own existence check.
+    pub fn desk_user_for(&self, session: SessionId, presented: UserId) -> UserId {
+        self.user_id(session)
+            .unwrap_or(self.desk.normalize(presented))
+    }
+
     /// The desk identity this session operates, given whatever identity it presented.
     ///
     /// `Some` whenever the desk knows the session and the presented identity resolves to the

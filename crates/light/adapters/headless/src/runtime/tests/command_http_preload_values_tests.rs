@@ -128,7 +128,7 @@ async fn preload_values_batch_is_atomic_revisioned_replay_safe_and_sparse_on_no_
 }
 
 #[tokio::test]
-async fn preload_values_share_one_user_across_desks_and_reject_foreign_actions() {
+async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
     let scenario = CommandHttpScenario::new().await;
     let fixture = scenario.install_direct_fixture();
     assert_eq!(
@@ -138,9 +138,12 @@ async fn preload_values_share_one_user_across_desks_and_reject_foreign_actions()
             .status(),
         StatusCode::OK
     );
+    // A legacy desk record still exists in older installations; a session logging in on one
+    // prepares the desk's Preload rather than one of its own.
     let second_desk = scenario
         .state
-        .installation.add_desk("Second Preload desk", "second-preload-values")
+        .installation
+        .add_desk("Second Preload desk", "second-preload-values")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -157,57 +160,65 @@ async fn preload_values_share_one_user_across_desks_and_reject_foreign_actions()
     assert_preload_values_changed(&scenario, &peer, "peer-preload", 1);
     let snapshot = json(scenario.preload_values_snapshot().await).await;
     assert_eq!(snapshot["projection"]["revision"], 1);
-    assert_eq!(snapshot["projection"]["fixture_values"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        snapshot["projection"]["fixture_values"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 
-    let other_user = scenario
+    // A surface arriving under an identity from before the collapse writes into the same Preload,
+    // so it must supply the desk's current revision rather than starting again from zero.
+    let legacy_user = scenario
         .state
-        .installation.add_user("Other Preload values user")
+        .installation
+        .add_user("Other Preload values user")
         .unwrap();
-    let (other_token, logged_in_user) = login_on_desk(
+    let (legacy_token, logged_in_user) = login_on_desk(
         &scenario,
         "Other Preload values user",
         scenario.session.desk.id,
     )
     .await;
-    assert_eq!(logged_in_user, other_user.id.0);
-    assert_eq!(
-        scenario
-            .press_key(&other_token, "PRE", "other-preload-enter")
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    let other = scenario
+    assert_eq!(logged_in_user, legacy_user.id.0);
+    let legacy = scenario
         .preload_values_action_for(
-            other_user.id.0,
-            &other_token,
-            preload_fixture_request("other-preload", 0, 1, fixture.0, 0.9),
+            legacy_user.id.0,
+            &legacy_token,
+            preload_fixture_request("legacy-preload", 1, 1, fixture.0, 0.9),
         )
         .await;
-    assert_eq!(other.status(), StatusCode::OK);
-    let other = json(other).await;
-    assert_eq!(other["projection"]["user_id"], other_user.id.0.to_string());
-    assert_eq!(other["projection"]["revision"], 1);
-    assert_eq!(other["projection"]["fixture_values"][0]["value"]["value"], 0.9);
+    assert_eq!(legacy.status(), StatusCode::OK);
+    let legacy = json(legacy).await;
+    assert_eq!(
+        legacy["projection"]["user_id"],
+        scenario.session.user.id.0.to_string(),
+        "the desk reports its own Programmer, not the name the caller asked under"
+    );
+    assert_eq!(legacy["projection"]["revision"], 2);
+    assert_eq!(
+        legacy["projection"]["fixture_values"][0]["value"]["value"],
+        0.9
+    );
 
+    // The desk's own snapshot shows the same value: there is one set of pending values.
     let original = json(scenario.preload_values_snapshot().await).await;
-    assert_eq!(original["projection"]["revision"], 1);
+    assert_eq!(original["projection"]["revision"], 2);
     assert_eq!(
         original["projection"]["fixture_values"][0]["value"]["value"],
-        0.4
+        0.9
     );
 
-    let foreign = scenario
+    // A stale revision is still refused, which is what protects concurrent surfaces.
+    let stale = scenario
         .preload_values_action_for(
-            Uuid::new_v4(),
+            scenario.session.user.id.0,
             &scenario.token,
-            preload_fixture_request("foreign-preload", 1, 1, fixture.0, 0.8),
+            preload_fixture_request("stale-preload", 1, 1, fixture.0, 0.8),
         )
         .await;
-    assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
-    assert_eq!(json(foreign).await["kind"], "forbidden");
-    assert_only_preload_values_events(&scenario, 1);
-    assert_preload_values_event_count(&scenario, other_user.id.0, 1);
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

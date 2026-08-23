@@ -107,6 +107,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPreloadValuesSnapshot, ActionError> {
         let (session, user_id) = preload_values_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session, user_id);
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
             let event_sequence = self.events.latest_sequence();

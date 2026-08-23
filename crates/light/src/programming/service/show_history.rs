@@ -12,6 +12,8 @@ impl ProgrammingService {
         target: crate::SelectiveShowImportUndoTarget,
     ) -> Result<(), ActionError> {
         let (session_id, user_id) = history_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session_id, user_id);
         if target.objects.is_empty() {
             return Ok(());
         }
@@ -51,6 +53,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<bool, ActionError> {
         let (session_id, user_id) = history_identity(context)?;
+        // Whatever identity arrived, this session operates the desk's one Programmer.
+        let user_id = self.programmers.desk_user_for(session_id, user_id);
         let undo_depth = self
             .programmers
             .undo_depth(session_id)
