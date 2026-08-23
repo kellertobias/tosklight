@@ -32,7 +32,6 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     let mut scenarios = Vec::with_capacity(profiles.len());
     for profile in profiles {
         let mut config = profile.config();
-        let required_minimum_hz = REPORTING_TARGET_HZ;
         if let Some(rate_hz) = arguments.rate_hz {
             config.rate_hz = rate_hz;
         }
@@ -58,6 +57,11 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
                 profile, config.universes, config.fixtures_per_universe, config.rate_hz
             );
         }
+        // What this profile must hold is its own rate, or the reporting target where the profile
+        // is paced faster than that. Requiring 44 Hz of a profile scheduled at 40 asked for
+        // something pacing makes impossible, so every window of every 40 Hz profile counted as a
+        // failure and no such profile could ever gate.
+        let required_minimum_hz = REPORTING_TARGET_HZ.min(config.rate_hz);
         scenarios.push(run_scenario(arguments, config, required_minimum_hz)?);
     }
     let required_floor_met = required_floor_result(&scenarios);
