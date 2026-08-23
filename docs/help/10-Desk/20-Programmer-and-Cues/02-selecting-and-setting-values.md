@@ -43,7 +43,9 @@ The Fixture Sheet keeps the complete original set visible with a subdued treatme
 
 The transient layer is applied after ordinary Programmer, playback, and output resolution. Turning HIGH off therefore reveals the exact underlying winners in the next frame without an intervening default frame. Profile resolution, inversion, physical limits, Grand Master, Blackout, disabled routes, and hazardous safe values remain authoritative. Blind and Preload suppress live Highlight output while leaving its state inspectable.
 
-One user owns live Highlight output on a desk at a time. Other sessions for that same user and desk share the authoritative original set, position, and touched-attribute state. A different user cannot silently take over live output. Saving or reopening a show never restores live Highlight output or a stale step position.
+The desk owns live Highlight output. Every surface shares the authoritative original set, position,
+and touched-attribute state, because there is one of each. Saving or reopening a show never
+restores live Highlight output or a stale step position.
 
 ## Clear and undo
 
@@ -51,4 +53,10 @@ The first `[CLR]` clears selection while leaving programmed values; the blinking
 
 ## Multiple users
 
-Each user has an independent durable programmer. Two users can work against the same show without merging their temporary values. Record and clear deliberately, and verify source ownership when another user or playback is active.
+The desk has one durable Programmer. Every surface writes into it, so a value set on a wing is the
+same value the main screen shows and the same value a Record captures — there is nothing to merge.
+Record and clear deliberately, and check what is in the Programmer when a playback is also active.
+
+A screen marked Not Editable, and an OSC remote on the remote-control path, can work playbacks
+without touching the Programmer at all. See
+[Surfaces, Sessions, and Recovery](../10-Show-Setup/05-users-sessions-and-recovery.md).

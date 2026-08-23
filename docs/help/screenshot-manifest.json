@@ -434,16 +434,6 @@
 			"reason": "No deterministic Add Fixture browser story exists."
 		},
 		{
-			"file": "workflows/show-change-user.png",
-			"source": "live-app",
-			"storyId": null,
-			"viewport": { "width": 650, "height": 238 },
-			"theme": "dark",
-			"mode": "software",
-			"interactions": [],
-			"reason": "No deterministic Change User dialog story exists."
-		},
-		{
 			"file": "workflows/show-load-revisions.png",
 			"source": "live-app",
 			"storyId": null,
