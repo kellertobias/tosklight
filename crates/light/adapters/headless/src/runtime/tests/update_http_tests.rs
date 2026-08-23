@@ -196,10 +196,7 @@ fn locked_desk_can_preview_update_but_cannot_apply_it() {
             0,
         )
         .unwrap();
-    write_desk_lock(
-        &state,
-        session.desk.id,
-        &DeskLockConfiguration {
+    write_desk_lock(&state, &DeskLockConfiguration {
             locked: true,
             ..Default::default()
         },

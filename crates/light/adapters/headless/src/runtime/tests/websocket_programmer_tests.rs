@@ -291,7 +291,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
                 "type":"programming_values",
                 "request":{
                     "request_id":"other-user",
-                    "expected_revision":0,
+                    "expected_revision":2,
                     "expected_capture_mode_revision":0,
                     "action":{"type":"set_fixture","fixture_id":fixture_id,
                         "attribute":"intensity","value":{"kind":"normalized","value":0.2}}
@@ -300,8 +300,14 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
             .unwrap(),
         ),
     );
-    assert!(competing_update.ok, "different users own independent programmers");
-    assert_ne!(
+    // A second surface writes into the desk's one Programmer, so it must carry the revision that
+    // Programmer is actually at rather than starting from zero.
+    assert!(
+        competing_update.ok,
+        "every surface writes the desk's one Programmer: {:?}",
+        competing_update.error
+    );
+    assert_eq!(
         state.programming.get(session.id).unwrap().id,
         state.programming.get(other_session.id).unwrap().id
     );
@@ -326,7 +332,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
                 "type":"programming_values",
                 "request":{
                     "request_id":"clear",
-                    "expected_revision":2,
+                    "expected_revision":3,
                     "expected_capture_mode_revision":0,
                     "action":{"type":"clear"}
                 }

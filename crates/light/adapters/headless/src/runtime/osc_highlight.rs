@@ -134,7 +134,7 @@ fn handle_shift_osc(
     pressed: bool,
 ) {
     state.programming.run_desk_operation(session.desk.id, || {
-        if read_desk_lock(state, session.desk.id).locked {
+        if read_desk_lock(state).locked {
             return;
         }
         if let Some(source) = source {
@@ -254,7 +254,7 @@ fn handle_record_osc(
         RouteRecord,
     }
     let outcome = state.programming.run_desk_operation(session.desk.id, || {
-        if read_desk_lock(state, session.desk.id).locked {
+        if read_desk_lock(state).locked {
             return RecordOutcome::Handled(true);
         }
         let gesture = source
@@ -454,7 +454,7 @@ pub(super) fn handle_programmer_osc(
     let Some((subscriber, session)) = programmer_osc_session(state, source) else {
         return false;
     };
-    if read_desk_lock(state, session.desk.id).locked {
+    if read_desk_lock(state).locked {
         return false;
     }
     let action = parts[3];
@@ -505,8 +505,7 @@ pub(super) fn handle_programmer_osc(
         return true;
     }
     let handled = state.programming.run_desk_operation(session.desk.id, || {
-        read_desk_lock(state, session.desk.id).locked
-            || file_manager::route_osc_input(state, &session, action)
+        read_desk_lock(state).locked || file_manager::route_osc_input(state, &session, action)
     });
     if handled {
         return true;

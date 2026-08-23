@@ -93,7 +93,7 @@ fn authenticated_user(
     // A URL naming an identity from before the desk had only one still addresses the desk's one
     // Programmer, so it is normalised rather than refused. The identity must still parse: a
     // malformed one is a client bug, not an older client.
-    if require_unlocked && super::super::read_desk_lock(state, session.desk.id).locked {
+    if require_unlocked && super::super::read_desk_lock(state).locked {
         return Err(PriorityHttpError::conflict("desk is locked"));
     }
     Ok(session)

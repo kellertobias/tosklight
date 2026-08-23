@@ -299,10 +299,7 @@ async fn rest_highlight_status_publishes_only_an_authoritative_selection_repair(
     let mut snapshot = (*state.output.snapshot()).clone();
     std::sync::Arc::make_mut(&mut snapshot.fixtures).remove(0);
     state.output.replace_snapshot(snapshot).unwrap();
-    write_desk_lock(
-        &state,
-        session.desk.id,
-        &DeskLockConfiguration {
+    write_desk_lock(&state, &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()
         },

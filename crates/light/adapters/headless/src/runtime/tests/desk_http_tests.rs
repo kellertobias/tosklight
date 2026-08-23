@@ -1,5 +1,5 @@
 #[tokio::test]
-async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
+async fn desk_lock_is_persisted_installation_wide_and_enforced_by_the_server() {
     let (state, data_dir) = test_state();
     let second = state.installation.add_desk("Second", "second").unwrap();
     let app = router(state.clone());
@@ -19,21 +19,10 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
         .await
         .unwrap();
     assert_eq!(lock.status(), StatusCode::OK);
-    assert!(
-        read_desk_lock(
-            &state,
-            state
-                .sessions.sessions().into_iter()
-                .find(|session| session.token == token)
-                .unwrap()
-                .desk
-                .id
-        )
-        .locked
-    );
+    assert!(read_desk_lock(&state).locked);
     let reopened = DeskStore::open(data_dir.join("desk.sqlite")).unwrap();
     let persisted: DeskLockConfiguration =
-        serde_json::from_str(&reopened.setting(&desk_lock_key(desk_id)).unwrap().unwrap()).unwrap();
+        serde_json::from_str(&reopened.setting(DESK_LOCK_KEY).unwrap().unwrap()).unwrap();
     assert!(
         persisted.locked,
         "a server restart must reopen the desk as locked"
@@ -79,7 +68,9 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
         .as_str()
         .unwrap()
         .to_owned();
-    let unaffected = app
+    // Desk Lock is installation-wide: one desk, one lock over every screen and control surface.
+    // A session that logged in on a legacy second desk record is locked out with the rest.
+    let also_locked = app
         .clone()
         .oneshot(
             Request::post("/api/v2/output-runtime/global-master/actions")
@@ -90,7 +81,7 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
         )
         .await
         .unwrap();
-    assert_eq!(unaffected.status(), StatusCode::OK);
+    assert_eq!(also_locked.status(), StatusCode::CONFLICT);
 
     let unlock = app
         .oneshot(
@@ -104,14 +95,8 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
         .unwrap();
     assert_eq!(unlock.status(), StatusCode::OK);
     let stored = state
-        .installation.setting(&desk_lock_key(
-            state
-                .sessions.sessions().into_iter()
-                .find(|session| session.token == token)
-                .unwrap()
-                .desk
-                .id,
-        ))
+        .installation
+        .setting(DESK_LOCK_KEY)
         .unwrap()
         .unwrap();
     assert!(!stored.contains("1234"));

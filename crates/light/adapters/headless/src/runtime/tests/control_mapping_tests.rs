@@ -77,7 +77,6 @@ fn mapped_global_output_respects_the_osc_desk_alias_lock() {
         .unwrap();
     write_desk_lock(
         &state,
-        wing.id,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()
@@ -94,7 +93,7 @@ fn mapped_global_output_respects_the_osc_desk_alias_lock() {
     assert!(!state.output.control_projection().blackout);
     assert_eq!(state.events.latest_sequence(), 0);
 
-    write_desk_lock(&state, wing.id, &DeskLockConfiguration::default()).unwrap();
+    write_desk_lock(&state, &DeskLockConfiguration::default()).unwrap();
     handle_control_event(&state, event());
     assert!(state.output.control_projection().blackout);
     assert_eq!(state.output.control_projection().grand_master, 0.35);

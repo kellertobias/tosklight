@@ -199,12 +199,12 @@ pub(crate) fn authenticate_desk_mutation(
     desk: &DeskContext,
 ) -> Result<Session, ApiError> {
     let session = session_for_desk(state, headers, desk)?;
-    ensure_desk_unlocked(state, session.desk.id)?;
+    ensure_desk_unlocked(state)?;
     Ok(session)
 }
 
-fn ensure_desk_unlocked(state: &AppState, desk_id: uuid::Uuid) -> Result<(), ApiError> {
-    if super::super::read_desk_lock(state, desk_id).locked {
+fn ensure_desk_unlocked(state: &AppState) -> Result<(), ApiError> {
+    if super::super::read_desk_lock(state).locked {
         Err(ApiError::conflict("desk is locked"))
     } else {
         Ok(())

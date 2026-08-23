@@ -478,9 +478,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
 
     // A locked desk rejects the mutating action without moving the runtime.
     let baseline = scenario.state.events.latest_sequence();
-    write_desk_lock(
-        &scenario.state,
-        scenario.session.desk.id,
+    write_desk_lock(&scenario.state,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()

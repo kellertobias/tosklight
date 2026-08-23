@@ -142,7 +142,7 @@ async fn command_line_v2_is_revisioned_desk_scoped_and_idempotent() {
         locked: true,
         ..DeskLockConfiguration::default()
     };
-    write_desk_lock(&scenario.state, scenario.session.desk.id, &lock).unwrap();
+    write_desk_lock(&scenario.state, &lock).unwrap();
     assert_eq!(
         scenario.interaction_snapshot().await.status(),
         StatusCode::OK,

@@ -126,7 +126,7 @@ fn authenticated_mutation(
 ) -> Result<Session, GroupManagementHttpError> {
     let session =
         super::super::authenticate(state, headers).map_err(GroupManagementHttpError::api)?;
-    if super::super::read_desk_lock(state, session.desk.id).locked {
+    if super::super::read_desk_lock(state).locked {
         return Err(GroupManagementHttpError::conflict("desk is locked"));
     }
     Ok(session)

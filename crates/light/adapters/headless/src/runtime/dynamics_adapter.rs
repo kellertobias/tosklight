@@ -64,7 +64,7 @@ impl DynamicsPorts for ServerDynamicsPorts<'_> {
                 "the action context does not match the authenticated operator session",
             ));
         }
-        if super::read_desk_lock(self.state, context.desk_id).locked {
+        if super::read_desk_lock(self.state).locked {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "desk is locked",

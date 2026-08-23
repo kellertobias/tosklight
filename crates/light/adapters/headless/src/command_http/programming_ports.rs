@@ -409,8 +409,7 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
                 "the action context does not match the authenticated operator session",
             ));
         }
-        if self.require_unlocked && super::super::read_desk_lock(self.state, context.desk_id).locked
-        {
+        if self.require_unlocked && super::super::read_desk_lock(self.state).locked {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "desk is locked",

@@ -495,8 +495,12 @@ impl ProgrammerRegistry {
     pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
         self.active_sessions_for_user(None)
     }
+    /// Every session operating the desk's one Programmer.
+    ///
+    /// The identity is normalised first: a caller authenticated under an identity from before the
+    /// collapse operates the same Programmer, so it must not read as having none.
     pub fn active_for_user_sessions(&self, user_id: UserId) -> Vec<ProgrammerState> {
-        self.active_sessions_for_user(Some(user_id))
+        self.active_sessions_for_user(Some(self.desk.normalize(user_id)))
     }
     fn active_sessions_for_user(&self, user_id: Option<UserId>) -> Vec<ProgrammerState> {
         let states = self.states.read();

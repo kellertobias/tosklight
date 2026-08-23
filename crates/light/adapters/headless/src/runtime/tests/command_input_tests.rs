@@ -67,7 +67,7 @@ fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
 }
 
 #[test]
-fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
+fn osc_and_ui_share_the_desks_one_command_line() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let front = state.installation.add_desk("Front", "front").unwrap();
@@ -101,10 +101,7 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
     state.programming.set_command_line(ui.id, "GROUP".into());
     state.programming.set_command_target(ui.id, "GROUP".into());
 
-    write_desk_lock(
-        &state,
-        front.id,
-        &DeskLockConfiguration {
+    write_desk_lock(&state, &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()
         },
@@ -133,7 +130,7 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
     );
     assert_eq!(state.programming.get(ui.id).unwrap().command_line, "GROUP");
 
-    write_desk_lock(&state, front.id, &DeskLockConfiguration::default()).unwrap();
+    write_desk_lock(&state, &DeskLockConfiguration::default()).unwrap();
     handle_control_event(
         &state,
         ControlEvent::Osc {
@@ -142,20 +139,12 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
             source: Some(source.into()),
         },
     );
-    assert_eq!(state.programming.get(ui.id).unwrap().command_line, "G7");
-    assert_eq!(
-        state.programming.get(second_front.id).unwrap().command_line,
-        "G7"
-    );
-    assert!(
-        state
-            .programming
-            .get(wing_ui.id)
-            .unwrap()
-            .command_line
-            .is_empty()
-    );
-    assert_eq!(state.programming.command_target(wing_ui.id), "FIXTURE");
+    // One desk, one command line: every surface shows what was typed on any of them, including
+    // one that logged in on a legacy second desk record.
+    for session in [&ui, &second_front, &wing_ui] {
+        assert_eq!(state.programming.get(session.id).unwrap().command_line, "G7");
+        assert_eq!(state.programming.command_target(session.id), "GROUP");
+    }
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

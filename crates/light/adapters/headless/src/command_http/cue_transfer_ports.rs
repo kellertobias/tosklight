@@ -64,7 +64,7 @@ impl ServerProgrammingCueTransferPorts {
                 "Cue transfer authority does not match the authenticated session",
             ));
         }
-        if read_desk_lock(&self.state, context.desk_id).locked {
+        if read_desk_lock(&self.state).locked {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "desk is locked",

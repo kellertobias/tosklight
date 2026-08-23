@@ -357,7 +357,6 @@ async fn typed_output_runtime_ws_action_is_atomic_replay_safe_and_lock_gated() {
 
     write_desk_lock(
         &state,
-        session.desk.id,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()
@@ -427,7 +426,6 @@ async fn v2_output_is_shared_across_desks_but_enforces_exact_desk_and_lock() {
 
     write_desk_lock(
         &state,
-        wing.id,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()

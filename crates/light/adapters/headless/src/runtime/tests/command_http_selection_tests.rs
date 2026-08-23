@@ -391,9 +391,7 @@ async fn programming_selection_request_identity_scope_and_lock_are_enforced() {
         .await;
     assert_eq!(wrong_desk.status(), StatusCode::NOT_FOUND);
 
-    write_desk_lock(
-        &scenario.state,
-        scenario.session.desk.id,
+    write_desk_lock(&scenario.state,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()

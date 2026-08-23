@@ -404,7 +404,7 @@ pub(super) fn send_programmer_osc_feedback(
         state,
         subscriber.target,
         format!("{prefix}/locked"),
-        vec![OscArgument::Bool(read_desk_lock(state, desk.id).locked)],
+        vec![OscArgument::Bool(read_desk_lock(state).locked)],
     );
     send_osc(
         state,

@@ -71,7 +71,7 @@ pub(super) fn ws_output_runtime_action(
         .try_acquire()
         .map_err(|_| "the active show is changing; retry the output action")?;
     state.programming.run_desk_operation(session.desk.id, || {
-        if read_desk_lock(state, session.desk.id).locked {
+        if read_desk_lock(state).locked {
             return Err("desk is locked".into());
         }
         let context = light_application::ActionContext::operator(

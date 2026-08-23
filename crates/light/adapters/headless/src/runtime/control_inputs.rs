@@ -84,7 +84,7 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         parts
             .get(1)
             .and_then(|alias| osc_control_desk(state, alias))
-            .is_some_and(|desk| read_desk_lock(state, desk.id).locked)
+            .is_some_and(|_| read_desk_lock(state).locked)
     } else {
         false
     };

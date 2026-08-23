@@ -132,6 +132,20 @@ impl InstallationResource {
         self.desk.lock().setting(key)
     }
 
+    pub(in crate::runtime) fn settings_with_prefix(
+        &self,
+        prefix: &str,
+    ) -> Result<Vec<(String, String)>, light_show::StoreError> {
+        self.desk.lock().settings_with_prefix(prefix)
+    }
+
+    pub(in crate::runtime) fn remove_setting(
+        &self,
+        key: &str,
+    ) -> Result<(), light_show::StoreError> {
+        self.desk.lock().remove_setting(key)
+    }
+
     pub(in crate::runtime) fn set_setting(
         &self,
         key: &str,

@@ -616,7 +616,7 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
 }
 
 #[test]
-fn software_update_armed_state_is_shared_only_with_the_same_desk() {
+fn software_update_armed_state_is_shared_across_the_desk() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let front = test_control_desk();
@@ -668,13 +668,11 @@ fn software_update_armed_state_is_shared_only_with_the_same_desk() {
         state.programming.get(second.id).unwrap().command_line,
         "UPDATE "
     );
-    assert!(
-        state
-            .programming
-            .get(other.id)
-            .unwrap()
-            .command_line
-            .is_empty()
+    // One desk, one command line: the surface that logged in on a legacy second desk record
+    // shows the armed Update too.
+    assert_eq!(
+        state.programming.get(other.id).unwrap().command_line,
+        "UPDATE "
     );
     let event = state
         .events.audit_events()

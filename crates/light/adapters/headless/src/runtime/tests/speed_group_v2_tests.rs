@@ -95,7 +95,6 @@ async fn v2_speed_groups_are_revisioned_shared_strict_and_replay_before_desk_loc
 
     write_desk_lock(
         &state,
-        front.desk.id,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()
@@ -125,7 +124,7 @@ async fn v2_speed_groups_are_revisioned_shared_strict_and_replay_before_desk_loc
     .await;
     assert_eq!(locked.status(), StatusCode::CONFLICT);
     assert_eq!(json(locked).await["kind"], "conflict");
-    write_desk_lock(&state, front.desk.id, &DeskLockConfiguration::default()).unwrap();
+    write_desk_lock(&state, &DeskLockConfiguration::default()).unwrap();
 
     let no_change = post_speed_groups(
         &app,
@@ -366,7 +365,6 @@ async fn typed_speed_group_ws_action_replays_before_lock_and_emits_once() {
 
     write_desk_lock(
         &state,
-        session.desk.id,
         &DeskLockConfiguration {
             locked: true,
             ..DeskLockConfiguration::default()

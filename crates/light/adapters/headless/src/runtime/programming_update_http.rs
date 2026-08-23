@@ -161,7 +161,7 @@ async fn put_settings(
         return Ok(Json(value).into_response());
     }
     let outcome = state.programming.run_desk_operation(desk_id, || {
-        if read_desk_lock(&state, desk_id).locked {
+        if read_desk_lock(&state).locked {
             return Err(ProgrammingUpdateHttpError::conflict("desk is locked"));
         }
         let current = update_settings_for(&state, desk_id);
