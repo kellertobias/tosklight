@@ -17,8 +17,10 @@ pub struct PlatformTarget {
 impl PlatformTarget {
     pub fn current() -> Self {
         Self {
-            os: normalized_os(std::env::consts::OS).into(),
-            architecture: normalized_arch(std::env::consts::ARCH).into(),
+            // A manifest names its platform the way Rust does — "macos"/"windows" and
+            // "x86_64"/"aarch64" — so the host reports the constant unchanged.
+            os: std::env::consts::OS.into(),
+            architecture: std::env::consts::ARCH.into(),
         }
     }
 }
@@ -358,20 +360,6 @@ fn invalid_with_manifest(
         readiness: PackageReadiness::Disabled,
         diagnostics: vec![diag(code, detail)],
         locally_approved_unsigned: false,
-    }
-}
-fn normalized_os(value: &str) -> &str {
-    match value {
-        "macos" => "macos",
-        "windows" => "windows",
-        other => other,
-    }
-}
-fn normalized_arch(value: &str) -> &str {
-    match value {
-        "x86_64" => "x86_64",
-        "aarch64" => "aarch64",
-        other => other,
     }
 }
 
