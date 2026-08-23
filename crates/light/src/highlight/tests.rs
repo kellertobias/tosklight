@@ -173,7 +173,7 @@ fn stepping_persists_selection_before_output_and_publication() {
 }
 
 #[test]
-fn ownership_conflict_has_no_adapter_effects() {
+fn a_second_surface_joins_the_desks_highlight_rather_than_being_refused() {
     let fixture = FixtureId(Uuid::from_u128(4));
     let ports = RecordingPorts::with_selection(vec![fixture]);
     ports.environment.lock().as_mut().unwrap().fixtures = vec![HighlightFixture {
@@ -192,19 +192,21 @@ fn ownership_conflict_has_no_adapter_effects() {
         )
         .unwrap();
 
+    // A second surface — even one arriving under an identity from before the collapse — is the
+    // same operator at the same desk. Highlight is already on; asking again is not a conflict.
     ports.calls.lock().clear();
-    let mut other = context(crate::ActionSource::Http);
-    other.user_id = Some(Uuid::from_u128(20));
-    let error = service
+    let mut second_surface = context(crate::ActionSource::Http);
+    second_surface.user_id = Some(Uuid::from_u128(20));
+    let state = service
         .handle(
             ActionEnvelope {
-                context: other,
+                context: second_surface,
                 command: HighlightCommand::action(HighlightAction::On),
             },
             &ports,
         )
-        .unwrap_err();
+        .expect("every surface shares the desk's Highlight");
 
-    assert_eq!(error.kind, ActionErrorKind::Conflict);
-    assert_eq!(*ports.calls.lock(), ["environment"]);
+    assert!(state.state.active);
+    assert!(state.state.output_enabled);
 }

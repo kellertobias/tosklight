@@ -7,10 +7,8 @@ use super::state::{HighlightRuntime, OperatorState};
 use crate::{GroupDefinition, SelectionExpression};
 use light_core::{FixtureId, UserId};
 use std::collections::HashMap;
-use uuid::Uuid;
 
 pub(super) struct ActionContext<'a> {
-    pub(super) desk_id: Uuid,
     pub(super) user_id: UserId,
     pub(super) valid_fixtures: &'a [HighlightFixture],
     pub(super) groups: &'a HashMap<String, GroupDefinition>,
@@ -25,9 +23,9 @@ pub(super) fn apply_action(
 ) -> Result<Option<HighlightSelectionWrite>, HighlightError> {
     match action {
         HighlightAction::On => enable_highlight(runtime, operator, context)?,
-        HighlightAction::Off => disable_highlight(runtime, operator, context),
+        HighlightAction::Off => disable_highlight(runtime, operator),
         HighlightAction::Toggle if operator.active => {
-            disable_highlight(runtime, operator, context);
+            disable_highlight(runtime, operator);
         }
         HighlightAction::Toggle => enable_highlight(runtime, operator, context)?,
         HighlightAction::Next | HighlightAction::Previous if operator.active => {
@@ -39,18 +37,12 @@ pub(super) fn apply_action(
     Ok(None)
 }
 
-fn acquire_output_owner(
-    runtime: &mut HighlightRuntime,
-    desk_id: Uuid,
-    user_id: UserId,
-) -> Result<(), HighlightError> {
-    if let Some(owner) = runtime.output_owners.get(&desk_id)
-        && *owner != user_id
-    {
-        return Err(HighlightError::OwnedByAnotherUser(*owner));
-    }
-    runtime.output_owners.insert(desk_id, user_id);
-    Ok(())
+/// Attribute Highlight output to the surface that turned it on.
+///
+/// Never refuses. Every surface is the same operator standing at the same desk, so taking
+/// Highlight from a second screen is not a conflict — it is the same hand.
+fn acquire_output_owner(runtime: &mut HighlightRuntime, user_id: UserId) {
+    runtime.output_owner = Some(user_id);
 }
 
 fn enable_highlight(
@@ -66,24 +58,18 @@ fn enable_highlight(
         operator.output_enabled = false;
         operator.message = Some(blind_message().into());
     } else {
-        acquire_output_owner(runtime, context.desk_id, context.user_id)?;
+        acquire_output_owner(runtime, context.user_id);
         operator.output_enabled = true;
     }
     Ok(())
 }
 
-fn disable_highlight(
-    runtime: &mut HighlightRuntime,
-    operator: &mut OperatorState,
-    context: &ActionContext<'_>,
-) {
+fn disable_highlight(runtime: &mut HighlightRuntime, operator: &mut OperatorState) {
     operator.active = false;
     operator.output_enabled = false;
     operator.explicit_attributes.clear();
     operator.observed_selection_revision = None;
-    if runtime.output_owners.get(&context.desk_id) == Some(&context.user_id) {
-        runtime.output_owners.remove(&context.desk_id);
-    }
+    runtime.output_owner = None;
 }
 
 fn step_selection(
@@ -174,9 +160,7 @@ pub(super) fn reconcile_capture_mode(
 ) {
     if context.capture_only && operator.output_enabled {
         operator.output_enabled = false;
-        if runtime.output_owners.get(&context.desk_id) == Some(&context.user_id) {
-            runtime.output_owners.remove(&context.desk_id);
-        }
+        runtime.output_owner = None;
         operator.message = Some(blind_message().into());
     }
 }
@@ -189,19 +173,10 @@ pub(super) fn restore_live_output(
     if !operator.active || context.capture_only || operator.output_enabled {
         return;
     }
-    if runtime
-        .output_owners
-        .get(&context.desk_id)
-        .is_none_or(|owner| *owner == context.user_id)
-    {
-        runtime
-            .output_owners
-            .insert(context.desk_id, context.user_id);
-        operator.output_enabled = true;
-        operator.message = None;
-    } else {
-        operator.message = Some("Highlight output is active for another user on this desk".into());
-    }
+    // Nothing to contend with: leaving Blind hands live output back to the desk.
+    runtime.output_owner = Some(context.user_id);
+    operator.output_enabled = true;
+    operator.message = None;
 }
 
 fn blind_message() -> &'static str {

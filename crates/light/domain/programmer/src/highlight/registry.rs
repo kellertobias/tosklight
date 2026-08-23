@@ -7,7 +7,7 @@ use super::operations::{
     response, restore_live_output,
 };
 use super::selection::synchronize_actual_selection;
-use super::state::{HighlightRuntime, RecentHighlightActions};
+use super::state::{HighlightRuntime, OperatorState, RecentHighlightActions};
 use crate::{GroupDefinition, ProgrammerSelection};
 use light_core::{AttributeKey, FixtureId, UserId};
 use parking_lot::Mutex;
@@ -88,12 +88,10 @@ impl HighlightRegistry {
         // the programmer selection.
         let mut live_runtime = self.runtime.lock();
         let mut runtime = live_runtime.clone();
-        let key = (desk_id, user_id);
-        let mut operator = runtime.operators.remove(&key).unwrap_or_default();
+        let mut operator = std::mem::take(&mut runtime.operator);
         let mut working_selection =
             synchronize_actual_selection(&mut operator, current_selection, valid_fixtures, groups);
         let context = ActionContext {
-            desk_id,
             user_id,
             valid_fixtures,
             groups,
@@ -115,7 +113,7 @@ impl HighlightRegistry {
             working_selection,
             desk_id,
         );
-        runtime.operators.insert(key, operator);
+        runtime.operator = operator;
         *live_runtime = runtime;
         Ok(transition)
     }
@@ -132,12 +130,10 @@ impl HighlightRegistry {
         capture_only: bool,
     ) -> HighlightTransition {
         let mut runtime = self.runtime.lock();
-        let key = (desk_id, user_id);
-        let mut operator = runtime.operators.remove(&key).unwrap_or_default();
+        let mut operator = std::mem::take(&mut runtime.operator);
         let working_selection =
             synchronize_actual_selection(&mut operator, current_selection, valid_fixtures, groups);
         let context = ActionContext {
-            desk_id,
             user_id,
             valid_fixtures,
             groups,
@@ -155,7 +151,7 @@ impl HighlightRegistry {
             working_selection,
             desk_id,
         );
-        runtime.operators.insert(key, operator);
+        runtime.operator = operator;
         transition
     }
 
@@ -169,9 +165,8 @@ impl HighlightRegistry {
         user_id: UserId,
         selection: &ProgrammerSelection,
     ) {
-        if let Some(operator) = self.runtime.lock().operators.get_mut(&(desk_id, user_id)) {
-            operator.observed_selection_revision = Some(selection.revision);
-        }
+        let _ = (desk_id, user_id);
+        self.runtime.lock().operator.observed_selection_revision = Some(selection.revision);
     }
 
     /// Suppress temporary look attributes for exact fixture addresses explicitly authored in the
@@ -182,10 +177,9 @@ impl HighlightRegistry {
         user_id: UserId,
         touched: impl IntoIterator<Item = (FixtureId, AttributeKey)>,
     ) -> bool {
+        let _ = (desk_id, user_id);
         let mut runtime = self.runtime.lock();
-        let Some(operator) = runtime.operators.get_mut(&(desk_id, user_id)) else {
-            return false;
-        };
+        let operator = &mut runtime.operator;
         if !operator.active {
             return false;
         }
@@ -208,80 +202,56 @@ impl HighlightRegistry {
     }
 
     pub fn clear_desk(&self, desk_id: Uuid) {
-        let mut runtime = self.runtime.lock();
-        runtime.operators.retain(|(desk, _), _| *desk != desk_id);
-        runtime.output_owners.remove(&desk_id);
-        drop(runtime);
+        self.clear_all_but_repeat_guard();
         self.recent_actions
             .lock()
             .retain(|(desk, _), _| *desk != desk_id);
     }
 
     pub fn clear_context(&self, desk_id: Uuid, user_id: UserId) {
-        let mut runtime = self.runtime.lock();
-        runtime.operators.remove(&(desk_id, user_id));
-        if runtime.output_owners.get(&desk_id) == Some(&user_id) {
-            runtime.output_owners.remove(&desk_id);
-        }
-        drop(runtime);
+        self.clear_all_but_repeat_guard();
         self.recent_actions.lock().remove(&(desk_id, user_id));
     }
 
     pub fn clear_user(&self, user_id: UserId) {
-        let mut runtime = self.runtime.lock();
-        runtime.operators.retain(|(_, user), _| *user != user_id);
-        runtime.output_owners.retain(|_, owner| *owner != user_id);
-        drop(runtime);
+        self.clear_all_but_repeat_guard();
         self.recent_actions
             .lock()
             .retain(|(_, user), _| *user != user_id);
     }
 
     pub fn clear_all(&self) {
-        let mut runtime = self.runtime.lock();
-        runtime.operators.clear();
-        runtime.output_owners.clear();
-        drop(runtime);
+        self.clear_all_but_repeat_guard();
         self.recent_actions.lock().clear();
+    }
+
+    /// Forget the desk's Highlight.
+    ///
+    /// There is one, so every clearing path clears the same thing. What still differs between
+    /// them is which surfaces' repeat guards go with it.
+    fn clear_all_but_repeat_guard(&self) {
+        let mut runtime = self.runtime.lock();
+        runtime.operator = OperatorState::default();
+        runtime.output_owner = None;
     }
 
     /// Compatibility projection containing only full Highlight identities. New output adapters
     /// should install [`Self::output_layers`] so Low Light and explicit-attribute suppression are
     /// preserved.
     pub fn output_fixtures(&self) -> Vec<FixtureId> {
-        let runtime = self.runtime.lock();
         let mut seen = HashSet::new();
-        runtime
-            .operators
-            .values()
-            .flat_map(output_fixture_ids)
+        output_fixture_ids(&self.runtime.lock().operator)
+            .into_iter()
             .filter(|fixture| seen.insert(*fixture))
             .collect()
     }
 
-    /// Combined output across desk contexts. Highlight wins over Low Light. When equal winning
-    /// roles overlap, an attribute falls through only when every winning layer suppresses it.
+    /// The desk's Highlight output. Highlight wins over Low Light.
+    ///
+    /// This used to combine layers across desk contexts, resolving overlaps between them. One
+    /// desk has one Highlight, so there is nothing to combine.
     pub fn output_layers(&self) -> Vec<HighlightOutputLayer> {
-        let runtime = self.runtime.lock();
-        let mut combined = HashMap::<FixtureId, HighlightOutputLayer>::new();
-        for candidate in runtime.operators.values().flat_map(output_layers) {
-            match combined.entry(candidate.fixture_id) {
-                std::collections::hash_map::Entry::Vacant(entry) => {
-                    entry.insert(candidate);
-                }
-                std::collections::hash_map::Entry::Occupied(mut entry) => {
-                    let current = entry.get_mut();
-                    if candidate.role > current.role {
-                        *current = candidate;
-                    } else if candidate.role == current.role {
-                        current.suppressed_attributes.retain(|attribute| {
-                            candidate.suppressed_attributes.contains(attribute)
-                        });
-                    }
-                }
-            }
-        }
-        let mut layers = combined.into_values().collect::<Vec<_>>();
+        let mut layers = output_layers(&self.runtime.lock().operator);
         layers.sort_by_key(|layer| layer.fixture_id.0);
         layers
     }
@@ -298,7 +268,8 @@ fn build_transition(
     working_selection: Option<super::model::HighlightSelectionWrite>,
     desk_id: Uuid,
 ) -> HighlightTransition {
-    let owner = runtime.output_owners.get(&desk_id).copied();
+    let _ = desk_id;
+    let owner = runtime.output_owner;
     HighlightTransition {
         state: response(
             operator,

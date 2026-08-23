@@ -179,8 +179,8 @@ pub(super) async fn close_session(
             .touch_client(client_id)
             .map_err(ApiError::store)?;
     }
-    let same_context_connected = state.sessions.same_context_connected(&session);
-    if !same_context_connected {
+    // Highlight is the desk's, so it is released when the last surface leaves, not the first.
+    if !state.sessions.any_surface_connected() {
         state
             .highlight
             .clear_context(session.desk.id, session.user.id);

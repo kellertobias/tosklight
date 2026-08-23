@@ -167,10 +167,17 @@ impl SessionResource {
         self.client_connected(client_id) || self.desk_in_use(desk_id)
     }
 
-    pub(in crate::runtime) fn same_context_connected(&self, session: &Session) -> bool {
-        self.sessions.read().values().any(|candidate| {
-            candidate.user.id == session.user.id && candidate.desk.id == session.desk.id
-        })
+    /// Whether any surface is still standing at the desk.
+    ///
+    /// This used to ask whether another session of the same user on the same desk remained, from
+    /// when those picked out one operator among several. There is one desk and one Programmer, so
+    /// the question is simply whether anybody is still connected — Highlight and the rest of the
+    /// desk's interaction state are released when the last surface goes, not when the first does.
+    pub(in crate::runtime) fn any_surface_connected(&self) -> bool {
+        self.sessions
+            .read()
+            .values()
+            .any(|candidate| candidate.connected)
     }
 
     pub(crate) fn prune_file_input_contexts(&self, now: std::time::Instant) {

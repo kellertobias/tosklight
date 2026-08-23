@@ -208,13 +208,13 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
 }
 
 #[test]
-fn combined_layers_prefer_high_and_require_unanimous_suppression() {
+fn an_explicitly_programmed_attribute_is_suppressed_on_the_desks_highlight() {
     use crate::highlight::HighlightOutputRole;
     use light_core::AttributeKey;
 
     let registry = HighlightRegistry::default();
-    let users = [UserId::new(), UserId::new()];
-    let desks = [Uuid::new_v4(), Uuid::new_v4()];
+    let desk = Uuid::new_v4();
+    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2)];
     let ids = fixtures
         .iter()
@@ -222,39 +222,22 @@ fn combined_layers_prefer_high_and_require_unanimous_suppression() {
         .collect::<Vec<_>>();
     let groups = no_groups();
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
-    for (desk, user) in desks.into_iter().zip(users) {
-        registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::On,
-                &complete,
-                &fixtures,
-                &groups,
-                false,
-            )
-            .unwrap();
-    }
-    registry.mark_explicit_fixture_attributes(
-        desks[0],
-        users[0],
-        [(ids[0], AttributeKey::intensity())],
-    );
-    let combined = registry.output_layers();
-    assert!(
-        !combined
-            .iter()
-            .find(|layer| layer.fixture_id == ids[0])
-            .unwrap()
-            .suppressed_attributes
-            .contains(&AttributeKey::intensity())
-    );
-    registry.mark_explicit_fixture_attributes(
-        desks[1],
-        users[1],
-        [(ids[0], AttributeKey::intensity())],
-    );
+    registry
+        .action(
+            desk,
+            user,
+            None,
+            HighlightAction::On,
+            &complete,
+            &fixtures,
+            &groups,
+            false,
+        )
+        .unwrap();
+
+    // Authoring the attribute in the normal Programmer suppresses the temporary look for it.
+    // There is one Highlight, so one surface saying so is the desk saying so.
+    registry.mark_explicit_fixture_attributes(desk, user, [(ids[0], AttributeKey::intensity())]);
     assert!(
         registry
             .output_layers()
@@ -265,10 +248,12 @@ fn combined_layers_prefer_high_and_require_unanimous_suppression() {
             .contains(&AttributeKey::intensity())
     );
 
+    // Stepping focuses one fixture: it stays Highlight and the rest fall to Low Light. With one
+    // Highlight there is no second operator's un-stepped layer covering them.
     let next = registry
         .action(
-            desks[0],
-            users[0],
+            desk,
+            user,
             None,
             HighlightAction::Next,
             &complete,
@@ -282,11 +267,14 @@ fn combined_layers_prefer_high_and_require_unanimous_suppression() {
         next.working_selection.as_ref().unwrap().expression.clone(),
         2,
     );
-    registry.acknowledge_internal_selection(desks[0], users[0], &stepped);
-    let combined = registry.output_layers();
-    assert!(
-        combined
-            .iter()
-            .all(|layer| layer.role == HighlightOutputRole::Highlight)
-    );
+    registry.acknowledge_internal_selection(desk, user, &stepped);
+    let focused = next.working_selection.as_ref().unwrap().selected.clone();
+    for layer in registry.output_layers() {
+        let expected = if focused.contains(&layer.fixture_id) {
+            HighlightOutputRole::Highlight
+        } else {
+            HighlightOutputRole::LowLight
+        };
+        assert_eq!(layer.role, expected, "fixture {:?}", layer.fixture_id);
+    }
 }
