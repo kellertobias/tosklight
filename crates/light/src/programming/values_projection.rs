@@ -320,6 +320,11 @@ impl ProgrammingService {
             // same-user mutation because that transition uses this same user gate.
             let event_sequence = self.events.latest_sequence();
             let content = ProgrammingValuesContent::read(&self.programmers, session, user_id)?;
+            // Report the Programmer the session operates, not the name it asked under.
+            let user_id = self
+                .programmers
+                .operated_desk_user(session, user_id)
+                .ok_or_else(programmer_values_unavailable)?;
             let revision = self.programmers.normal_values_revision();
             Ok(ProgrammingValuesSnapshot {
                 event_sequence,

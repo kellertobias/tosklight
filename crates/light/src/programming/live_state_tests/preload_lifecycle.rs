@@ -479,7 +479,7 @@ fn every_captured_revision_conflict_is_primary_and_has_no_related_authority() {
 }
 
 #[test]
-fn ownership_is_exact_and_same_user_peer_desk_observes_shared_capture_authority() {
+fn every_surface_observes_the_desks_capture_authority() {
     let setup = LifecycleSetup::new();
     setup
         .handle(setup.exact_action("owner-enter", ProgrammingPreloadLifecycleAction::Enter))
@@ -520,7 +520,7 @@ fn ownership_is_exact_and_same_user_peer_desk_observes_shared_capture_authority(
             setup.session.0,
             ActionSource::Http,
         )
-        .with_request_id("foreign-enter"),
+        .with_request_id("legacy-enter"),
         command: ProgrammingPreloadLifecycleRequest {
             expected_capture_mode_revision: ProgrammingPreloadRevisionExpectation::Exact(1),
             expected_values_revision: ProgrammingPreloadRevisionExpectation::Exact(0),
@@ -529,8 +529,9 @@ fn ownership_is_exact_and_same_user_peer_desk_observes_shared_capture_authority(
             action: ProgrammingPreloadLifecycleAction::Enter,
         },
     };
-    assert_eq!(
-        setup.handle(forged).unwrap_err().kind,
-        ActionErrorKind::Forbidden
-    );
+    // An identity from before the collapse acts on the desk rather than being turned away; the
+    // revision expectations it carries are checked against the desk's own Programmer.
+    setup
+        .handle(forged)
+        .expect("a legacy identity is the desk's own");
 }

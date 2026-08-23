@@ -436,7 +436,7 @@ fn rejected_batch_does_not_advance_pending_generation_or_checkpoint() {
 }
 
 #[test]
-fn same_user_desks_share_pending_values_and_foreign_identity_is_rejected() {
+fn every_surface_shares_the_desks_pending_values() {
     let setup = PreloadValuesSetup::new();
     let capture_revision = setup.enter_capture();
     let peer_session = SessionId::new();
@@ -472,20 +472,19 @@ fn same_user_desks_share_pending_values_and_foreign_identity_is_rejected() {
     assert_eq!(peer.projection.revision, 1);
     assert_eq!(peer.projection.group_values.len(), 1);
 
-    let foreign = ActionContext::operator(
+    // An identity from before the collapse reads the desk's pending values, not an empty set.
+    let legacy = ActionContext::operator(
         peer_desk,
         Uuid::new_v4(),
         peer_session.0,
         ActionSource::Http,
     );
-    assert_eq!(
-        setup
-            .service
-            .preload_values_snapshot(&foreign, &setup.ports)
-            .unwrap_err()
-            .kind,
-        ActionErrorKind::Forbidden
-    );
+    let through_legacy = setup
+        .service
+        .preload_values_snapshot(&legacy, &setup.ports)
+        .expect("a legacy identity is the desk's own");
+    assert_eq!(through_legacy.projection.revision, 1);
+    assert_eq!(through_legacy.projection.group_values.len(), 1);
 }
 
 #[test]
