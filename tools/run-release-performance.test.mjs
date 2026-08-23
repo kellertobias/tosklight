@@ -36,6 +36,7 @@ function report({
 	achieved = 100,
 	minimum = achieved,
 	deadlineMisses = 0,
+	rateHz = 60,
 } = {}) {
 	return {
 		schema_version: 8,
@@ -60,7 +61,7 @@ function report({
 				fixture_count: 1024,
 				fixtures_per_universe: 32,
 				fixture_footprint: 16,
-				configured_rate_hz: 60,
+				configured_rate_hz: rateHz,
 				achieved_ticks_per_second: achieved,
 				elapsed_seconds: 15.04,
 				frame_rate: {
@@ -380,11 +381,21 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 	);
 	const output = resolve(temporary, "output");
 	mkdirSync(output, { recursive: true });
+	// The fake reports back the rate it was asked for, the way the real binary does. A case that
+	// runs at its own cadence is only measured if the harness passes that cadence through.
 	writeFileSync(
 		executable,
-		`#!/usr/bin/env node\nconsole.log(${JSON.stringify(
-			JSON.stringify(report({ floor: false, achieved: 88, deadlineMisses: 4 })),
-		)}); process.exit(1);\n`,
+		`#!/usr/bin/env node\nconst rate = Number(process.argv[process.argv.indexOf("--rate-hz") + 1]);\nconst byRate = ${JSON.stringify(
+			JSON.stringify({
+				40: report({
+					floor: false,
+					achieved: 88,
+					deadlineMisses: 4,
+					rateHz: 40,
+				}),
+				60: report({ floor: false, achieved: 88, deadlineMisses: 4 }),
+			}),
+		)};\nconsole.log(JSON.stringify(JSON.parse(byRate)[rate])); process.exit(1);\n`,
 	);
 	chmodSync(executable, 0o755);
 	writeFileSync(canonicalDemoPath, JSON.stringify(canonicalDemo()));
@@ -415,17 +426,24 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 	const measuredStatus = JSON.parse(
 		readFileSync(resolve(output, "status.json")),
 	);
-	assert.equal(measuredStatus.benchmark_scenarios.length, 8);
+	assert.equal(measuredStatus.benchmark_scenarios.length, 9);
 	assert.deepEqual(
 		new Set(
 			measuredStatus.benchmark_scenarios.map((scenario) => scenario.case_id),
 		),
-		new Set(["demo", "sixteen_universe", "required_1024", "doubled_2048"]),
+		new Set([
+			"demo",
+			"sixteen_universe",
+			"dense_rig",
+			"required_1024",
+			"doubled_2048",
+		]),
 	);
 	assert.ok(
 		measuredStatus.benchmark_scenarios.every(
 			(scenario) =>
-				scenario.requested_rate_hz === 60 &&
+				scenario.requested_rate_hz ===
+					(scenario.case_id === "dense_rig" ? 40 : 60) &&
 				scenario.below_target_hz === 44 &&
 				Number.isFinite(scenario.resources.application_cpu_average_percent),
 		),
@@ -583,4 +601,34 @@ test("scheduled publication separates release delivery from performance and Page
 		7,
 	);
 	assert.equal(releaseWorkflow.match(/version: v0\.17\.0/g)?.length, 7);
+});
+
+test("the dense rig is measured at the rate it is scheduled at, not the release rate", () => {
+	const dense = report({ achieved: 40, minimum: 40, rateHz: 40 });
+	dense.scenarios[0].universes = 16;
+	dense.scenarios[0].fixtures_per_universe = 170;
+	dense.scenarios[0].fixture_count = 2720;
+	const status = statusDocument(
+		options,
+		stage(report(), 0),
+		null,
+		null,
+		null,
+		[{ case_id: "dense_rig", stage: stage(dense, 0) }],
+	);
+	const [scenario] = status.benchmark_scenarios;
+	assert.equal(scenario.case_id, "dense_rig");
+	assert.equal(scenario.requested_rate_hz, 40);
+	assert.equal(scenario.thresholds.red_below_hz, 40);
+
+	// A dense-rig run that came back at 60 Hz measured something else, so it is not evidence.
+	const wrongRate = statusDocument(
+		options,
+		stage(report(), 0),
+		null,
+		null,
+		null,
+		[{ case_id: "dense_rig", stage: stage(report(), 0) }],
+	);
+	assert.deepEqual(wrongRate.benchmark_scenarios, []);
 });
