@@ -113,18 +113,18 @@ fn typed_preload_handle_publishes_capture_mode_and_reconciles_exact_tuple() {
 }
 
 #[test]
-fn capture_snapshot_is_user_owned_and_same_user_desk_independent() {
+fn capture_mode_is_the_desks_and_every_surface_reads_it() {
     let setup = LiveSetup::new(8);
     let registry = setup.ports.registry.as_ref().unwrap();
     let user = UserId(setup.context.user_id.unwrap());
-    let peer_session = SessionId::new();
-    let peer_desk = Uuid::new_v4();
-    registry.start(peer_session, user);
-    registry.attach_command_context(peer_session, SessionId(peer_desk));
-    let peer_context = ActionContext::operator(
-        peer_desk,
+    let second_screen = SessionId::new();
+    let screen_desk = Uuid::new_v4();
+    registry.start(second_screen, user);
+    registry.attach_command_context(second_screen, SessionId(screen_desk));
+    let screen_context = ActionContext::operator(
+        screen_desk,
         user.0,
-        peer_session.0,
+        second_screen.0,
         ActionSource::UserInterface,
     );
     setup.handle(ProgrammingCommand::Preload {
@@ -133,7 +133,7 @@ fn capture_snapshot_is_user_owned_and_same_user_desk_independent() {
 
     let snapshot = setup
         .service
-        .capture_mode_snapshot(&peer_context, &setup.ports)
+        .capture_mode_snapshot(&screen_context, &setup.ports)
         .unwrap();
     assert_eq!(snapshot.event_sequence, 1);
     assert_eq!(snapshot.projection.user_id, user);
@@ -141,17 +141,20 @@ fn capture_snapshot_is_user_owned_and_same_user_desk_independent() {
     assert!(snapshot.projection.blind);
     assert!(!snapshot.projection.preload_capture_programmer);
 
-    let foreign = UserId::new();
-    let forged = ActionContext::operator(peer_desk, foreign.0, peer_session.0, ActionSource::Http);
-    assert_eq!(
-        setup
-            .service
-            .capture_mode_snapshot(&forged, &setup.ports)
-            .unwrap_err()
-            .kind,
-        crate::ActionErrorKind::Forbidden
-    );
-    let system = ActionContext::system(peer_desk, ActionSource::System);
+    // An identity from before the desk had only one is not foreign: there is nothing left for it
+    // to be foreign to, so it reads the desk's own capture mode.
+    let legacy = UserId::new();
+    let legacy_context =
+        ActionContext::operator(screen_desk, legacy.0, second_screen.0, ActionSource::Http);
+    let through_legacy_identity = setup
+        .service
+        .capture_mode_snapshot(&legacy_context, &setup.ports)
+        .unwrap();
+    assert_eq!(through_legacy_identity.projection.user_id, user);
+    assert!(through_legacy_identity.projection.blind);
+
+    // Authentication still gates the read. A system context operates no surface.
+    let system = ActionContext::system(screen_desk, ActionSource::System);
     assert_eq!(
         setup
             .service
@@ -161,9 +164,10 @@ fn capture_snapshot_is_user_owned_and_same_user_desk_independent() {
         crate::ActionErrorKind::Unauthorized
     );
 
+    // A subscription filtered to a different Programmer still matches nothing.
     let denied = EventFilter {
-        programmer_user_id: Some(foreign.0),
-        ..EventFilter::for_desk(peer_desk)
+        programmer_user_id: Some(legacy.0),
+        ..EventFilter::for_desk(screen_desk)
             .with_object(EventObject::programming_capture_mode(user.0))
     };
     assert!(matches!(

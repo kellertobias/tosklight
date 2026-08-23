@@ -15,7 +15,7 @@ impl ProgrammingService {
         let (session, user_id) = priority_identity(context)?;
         self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
-            self.assert_priority_owner(session, user_id)?;
+            let user_id = self.operated_priority_owner(session, user_id)?;
             let event_sequence = self.events.latest_sequence();
             let revision = self.programmers.priority_revision(user_id);
             Ok(ProgrammingPrioritySnapshot {
@@ -33,7 +33,7 @@ impl ProgrammingService {
         let (session, user_id, request_id) = priority_context(&action)?;
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
             ports.authorize(&action.context)?;
-            self.assert_priority_owner(session, user_id)?;
+            let user_id = self.operated_priority_owner(session, user_id)?;
             if let Some(cached) = self.priority_replay.lock().get(
                 user_id,
                 action.context.desk_id,
@@ -89,19 +89,18 @@ impl ProgrammingService {
         })
     }
 
-    fn assert_priority_owner(
+    /// The desk identity this session operates, given whatever identity it presented.
+    ///
+    /// Returned rather than merely checked: the presented identity may be a legacy one, which
+    /// names no revision and no priority. Callers must key desk state on what comes back.
+    fn operated_priority_owner(
         &self,
         session: SessionId,
         user_id: UserId,
-    ) -> Result<(), ActionError> {
-        match self.programmers.session_operates_desk(session, user_id) {
-            Some(true) => Ok(()),
-            Some(false) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            )),
-            None => Err(priority_unavailable()),
-        }
+    ) -> Result<UserId, ActionError> {
+        self.programmers
+            .operated_desk_user(session, user_id)
+            .ok_or_else(priority_unavailable)
     }
 
     fn assert_priority_revision(

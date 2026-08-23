@@ -31,12 +31,16 @@ impl ProgrammingCaptureModeProjection {
         let mode = programmers
             .capture_mode(session)
             .ok_or_else(capture_mode_unavailable)?;
-        if programmers.session_operates_desk(session, user_id) != Some(true) {
-            return Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the requested user",
-            ));
-        }
+        // Report the desk's Programmer, not the identity the caller happened to present: a legacy
+        // identity names no capture mode and no revision.
+        let user_id = programmers
+            .operated_desk_user(session, user_id)
+            .ok_or_else(|| {
+                ActionError::new(
+                    ActionErrorKind::Forbidden,
+                    "the session does not operate this desk",
+                )
+            })?;
         Ok(Self::from_mode(
             user_id,
             programmers.capture_mode_revision(user_id),

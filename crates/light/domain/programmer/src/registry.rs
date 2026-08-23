@@ -300,6 +300,16 @@ impl ProgrammerRegistry {
         Some(owner == self.desk.normalize(presented))
     }
 
+    /// The desk identity this session operates, given whatever identity it presented.
+    ///
+    /// `Some` whenever the desk knows the session and the presented identity resolves to the
+    /// desk's own — which, with one Programmer, is every identity. Callers should read and report
+    /// the returned identity rather than the presented one: a legacy identity names no state.
+    pub fn operated_desk_user(&self, session: SessionId, presented: UserId) -> Option<UserId> {
+        let owner = self.user_id(session)?;
+        (owner == self.desk.normalize(presented)).then_some(owner)
+    }
+
     pub fn user_id(&self, session: SessionId) -> Option<UserId> {
         self.states
             .read()
