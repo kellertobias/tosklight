@@ -352,9 +352,7 @@ fn assert_preload_values_changed(
     assert_eq!(value["revision"], revision);
     assert_eq!(value["projection"]["revision"], revision);
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_preload_values(
-            scenario.session.user.id.0,
-        ),
+        light_application::EventObject::programming_preload_values(),
     );
     let light_application::EventReplay::Events(events) =
         scenario.state.events.replay(0, &filter)
@@ -386,7 +384,7 @@ fn assert_preload_values_event_count(
     expected: usize,
 ) {
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_preload_values(user_id),
+        light_application::EventObject::programming_preload_values(),
     );
     let light_application::EventReplay::Events(events) =
         scenario.state.events.replay(0, &filter)

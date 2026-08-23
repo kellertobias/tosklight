@@ -109,7 +109,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     assert_eq!(
         application_event_count(
             &scenario.state,
-            light_application::EventObject::programming_capture_mode(user_id),
+            light_application::EventObject::programming_capture_mode(),
         ),
         1
     );
@@ -238,21 +238,21 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     assert_eq!(
         application_event_count(
             &scenario.state,
-            light_application::EventObject::programming_capture_mode(user_id),
+            light_application::EventObject::programming_capture_mode(),
         ),
         2
     );
     assert_eq!(
         application_event_count(
             &scenario.state,
-            light_application::EventObject::programming_preload_values(user_id),
+            light_application::EventObject::programming_preload_values(),
         ),
         2
     );
     assert_eq!(
         application_event_count(
             &scenario.state,
-            light_application::EventObject::programming_preload_playback_queue(user_id),
+            light_application::EventObject::programming_preload_playback_queue(),
         ),
         2
     );

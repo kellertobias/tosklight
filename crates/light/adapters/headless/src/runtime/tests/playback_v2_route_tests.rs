@@ -2415,7 +2415,7 @@ fn preload_queue_events(
     user_id: Uuid,
 ) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
     let filter = light_application::EventFilter::default()
-        .with_object(light_application::EventObject::programming_preload_playback_queue(user_id));
+        .with_object(light_application::EventObject::programming_preload_playback_queue());
     let light_application::EventReplay::Events(events) = state.events.replay(0, &filter) else {
         panic!("queue events should remain replayable")
     };

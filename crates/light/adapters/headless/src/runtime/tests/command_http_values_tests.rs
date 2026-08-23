@@ -124,7 +124,7 @@ async fn capture_mode_event_is_user_scoped_replaceable_and_has_no_desk_scope() {
     );
 
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_capture_mode(scenario.session.user.id.0),
+        light_application::EventObject::programming_capture_mode(),
     );
     let light_application::EventReplay::Events(events) =
         scenario.state.events.replay(0, &filter)
@@ -141,7 +141,7 @@ async fn capture_mode_event_is_user_scoped_replaceable_and_has_no_desk_scope() {
     );
     assert_eq!(
         event.object.as_ref().unwrap(),
-        &light_application::EventObject::programming_capture_mode(scenario.session.user.id.0)
+        &light_application::EventObject::programming_capture_mode()
     );
     let light_application::ApplicationEvent::Programming(
         light_application::ProgrammingEvent::CaptureModeChanged(change),
@@ -207,7 +207,7 @@ async fn active_preload_rejects_normal_values_without_mutation_or_values_event()
         .unwrap()
         .is_empty());
     let values_filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_values(scenario.session.user.id.0),
+        light_application::EventObject::programming_values(),
     );
     let light_application::EventReplay::Events(values_events) =
         scenario.state.events.replay(0, &values_filter)
@@ -651,7 +651,7 @@ async fn login_on_desk(
 
 fn assert_only_values_events(scenario: &CommandHttpScenario, expected: usize) {
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_values(scenario.session.user.id.0),
+        light_application::EventObject::programming_values(),
     );
     let light_application::EventReplay::Events(events) = scenario
         .state

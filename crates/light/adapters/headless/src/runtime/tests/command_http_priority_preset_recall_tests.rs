@@ -627,7 +627,7 @@ fn preset_recall_request(
 
 fn priority_event_count(state: &AppState, user_id: Uuid) -> usize {
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_priority(user_id),
+        light_application::EventObject::programming_priority(),
     );
     let light_application::EventReplay::Events(events) =
         state.events.replay(0, &filter)
@@ -639,7 +639,7 @@ fn priority_event_count(state: &AppState, user_id: Uuid) -> usize {
 
 fn values_event_count(state: &AppState, user_id: Uuid) -> usize {
     let filter = light_application::EventFilter::default()
-        .with_object(light_application::EventObject::programming_values(user_id));
+        .with_object(light_application::EventObject::programming_values());
     let light_application::EventReplay::Events(events) =
         state.events.replay(0, &filter)
     else {
@@ -650,7 +650,7 @@ fn values_event_count(state: &AppState, user_id: Uuid) -> usize {
 
 fn preload_values_event_count(state: &AppState, user_id: Uuid) -> usize {
     let filter = light_application::EventFilter::default()
-        .with_object(light_application::EventObject::programming_preload_values(user_id));
+        .with_object(light_application::EventObject::programming_preload_values());
     let light_application::EventReplay::Events(events) = state.events.replay(0, &filter) else {
         panic!("Preload values events should remain replayable")
     };

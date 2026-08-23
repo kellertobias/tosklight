@@ -75,86 +75,31 @@ impl EventObject {
         )
     }
 
-    pub fn programming_values(user_id: Uuid) -> Self {
-        Self::new(
-            EventCapability::Programmer,
-            format!("programming-values:{user_id}"),
-        )
+    pub fn programming_values() -> Self {
+        Self::new(EventCapability::Programmer, "programming-values")
     }
 
-    pub fn programming_priority(user_id: Uuid) -> Self {
-        Self::new(
-            EventCapability::Programmer,
-            format!("programming-priority:{user_id}"),
-        )
+    pub fn programming_priority() -> Self {
+        Self::new(EventCapability::Programmer, "programming-priority")
     }
 
-    pub fn programming_capture_mode(user_id: Uuid) -> Self {
-        Self::new(
-            EventCapability::Programmer,
-            format!("programming-capture-mode:{user_id}"),
-        )
+    pub fn programming_capture_mode() -> Self {
+        Self::new(EventCapability::Programmer, "programming-capture-mode")
     }
 
-    pub fn programming_preload_values(user_id: Uuid) -> Self {
-        Self::new(
-            EventCapability::Programmer,
-            format!("programming-preload-values:{user_id}"),
-        )
+    pub fn programming_preload_values() -> Self {
+        Self::new(EventCapability::Programmer, "programming-preload-values")
     }
 
-    pub fn programming_preload_playback_queue(user_id: Uuid) -> Self {
+    pub fn programming_preload_playback_queue() -> Self {
         Self::new(
             EventCapability::Programmer,
-            format!("programming-preload-playback-queue:{user_id}"),
+            "programming-preload-playback-queue",
         )
     }
 
     pub fn programming_lifecycle() -> Self {
         Self::new(EventCapability::Programmer, "programming-lifecycle")
-    }
-
-    pub fn programming_values_user_id(&self) -> Option<Uuid> {
-        (self.capability == EventCapability::Programmer)
-            .then(|| self.id.strip_prefix("programming-values:"))
-            .flatten()
-            .and_then(|value| Uuid::parse_str(value).ok())
-    }
-
-    pub fn programming_priority_user_id(&self) -> Option<Uuid> {
-        (self.capability == EventCapability::Programmer)
-            .then(|| self.id.strip_prefix("programming-priority:"))
-            .flatten()
-            .and_then(|value| Uuid::parse_str(value).ok())
-    }
-
-    pub fn programming_capture_mode_user_id(&self) -> Option<Uuid> {
-        (self.capability == EventCapability::Programmer)
-            .then(|| self.id.strip_prefix("programming-capture-mode:"))
-            .flatten()
-            .and_then(|value| Uuid::parse_str(value).ok())
-    }
-
-    pub fn programming_preload_values_user_id(&self) -> Option<Uuid> {
-        (self.capability == EventCapability::Programmer)
-            .then(|| self.id.strip_prefix("programming-preload-values:"))
-            .flatten()
-            .and_then(|value| Uuid::parse_str(value).ok())
-    }
-
-    pub fn programming_user_id(&self) -> Option<Uuid> {
-        self.programming_values_user_id()
-            .or_else(|| self.programming_priority_user_id())
-            .or_else(|| self.programming_preload_values_user_id())
-            .or_else(|| self.programming_preload_playback_queue_user_id())
-            .or_else(|| self.programming_capture_mode_user_id())
-    }
-
-    pub fn programming_preload_playback_queue_user_id(&self) -> Option<Uuid> {
-        (self.capability == EventCapability::Programmer)
-            .then(|| self.id.strip_prefix("programming-preload-playback-queue:"))
-            .flatten()
-            .and_then(|value| Uuid::parse_str(value).ok())
     }
 }
 
@@ -163,7 +108,7 @@ impl EventDraft {
         context: &ActionContext,
         change: ProgrammingPriorityChange,
     ) -> Self {
-        let object = EventObject::programming_priority(change.user_id().0);
+        let object = EventObject::programming_priority();
         Self {
             desk_id: None,
             class: EventClass::Projection,
@@ -217,7 +162,7 @@ impl EventDraft {
         context: &ActionContext,
         change: ProgrammingValuesChange,
     ) -> Self {
-        let object = EventObject::programming_values(change.projection.user_id.0);
+        let object = EventObject::programming_values();
         Self {
             desk_id: None,
             class: EventClass::Projection,
@@ -236,7 +181,7 @@ impl EventDraft {
         context: &ActionContext,
         change: ProgrammingCaptureModeChange,
     ) -> Self {
-        let object = EventObject::programming_capture_mode(change.projection.user_id.0);
+        let object = EventObject::programming_capture_mode();
         Self {
             desk_id: None,
             class: EventClass::Projection,
@@ -253,7 +198,7 @@ impl EventDraft {
         context: &ActionContext,
         change: ProgrammingPreloadValuesChange,
     ) -> Self {
-        let object = EventObject::programming_preload_values(change.projection.user_id.0);
+        let object = EventObject::programming_preload_values();
         Self {
             desk_id: None,
             class: EventClass::Projection,
@@ -270,7 +215,7 @@ impl EventDraft {
         context: &ActionContext,
         change: ProgrammingPreloadPlaybackQueueChange,
     ) -> Self {
-        let object = EventObject::programming_preload_playback_queue(change.projection.user_id.0);
+        let object = EventObject::programming_preload_playback_queue();
         Self {
             desk_id: None,
             class: EventClass::Projection,

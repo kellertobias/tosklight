@@ -358,36 +358,31 @@ fn validate_programming_scope(
     Ok(())
 }
 
+/// The Programmer objects a client may subscribe to.
+///
+/// These used to carry the identity of the Programmer they described, and a subscription was
+/// checked against the authenticated one. The desk has a single Programmer, so each object names
+/// itself and there is nothing to check it against — only whether the name exists at all, which
+/// still catches a client asking for a topic the desk does not publish.
 fn validate_programming_object(
-    session: &Session,
+    _session: &Session,
     object: &wire::EventObject,
 ) -> Result<(), String> {
+    const PROGRAMMER_OBJECTS: [&str; 6] = [
+        "programming-lifecycle",
+        "programming-values",
+        "programming-priority",
+        "programming-preload-values",
+        "programming-preload-playback-queue",
+        "programming-capture-mode",
+    ];
     if object.capability != wire::EventCapability::Programmer {
         return Ok(());
     }
-    if object.id == "programming-lifecycle" {
+    if PROGRAMMER_OBJECTS.contains(&object.id.as_str()) {
         return Ok(());
     }
-    let user = object
-        .id
-        .strip_prefix("programming-values:")
-        .or_else(|| object.id.strip_prefix("programming-priority:"))
-        .or_else(|| object.id.strip_prefix("programming-preload-values:"))
-        .or_else(|| {
-            object
-                .id
-                .strip_prefix("programming-preload-playback-queue:")
-        })
-        .or_else(|| object.id.strip_prefix("programming-capture-mode:"));
-    let Some(user) = user else {
-        return Err("unknown Programmer event object".into());
-    };
-    let user = Uuid::parse_str(user)
-        .map_err(|_| "user-scoped Programmer event objects require a valid user UUID".to_owned())?;
-    if user != session.user.id.0 {
-        return Err("Programmer subscriptions may only address the authenticated user".into());
-    }
-    Ok(())
+    Err("unknown Programmer event object".into())
 }
 
 fn validate_cursor(events: &EventResource, cursor: Option<u64>) -> Result<(), String> {

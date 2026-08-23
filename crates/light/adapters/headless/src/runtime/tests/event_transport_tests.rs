@@ -268,42 +268,59 @@ fn wire_rate_limits_map_only_replaceable_topics() {
 }
 
 #[test]
-fn programmer_values_objects_are_limited_to_the_authenticated_user() {
+fn a_subscription_is_refused_for_a_programmer_object_the_desk_does_not_publish() {
     let bus = EventResource::new(EventBus::new(8));
     let session = event_session(Uuid::from_u128(1), Uuid::from_u128(11));
-    let foreign = wire::EventObject {
-        capability: wire::EventCapability::Programmer,
-        id: format!("programming-values:{}", Uuid::from_u128(12)),
-    };
-    let filter_request = Ok(wire::EventClientMessage::Subscribe {
-        filter: wire::EventSubscriptionFilter {
-            objects: vec![foreign.clone()],
-            ..Default::default()
-        },
-        after_sequence: None,
-        capacity: None,
-        rate_limits: Vec::new(),
-    });
-    assert!(EventStream::subscribe(&bus, &session, filter_request).is_err());
-
-    let rate_request = Ok(wire::EventClientMessage::Subscribe {
-        filter: wire::EventSubscriptionFilter::default(),
-        after_sequence: None,
-        capacity: None,
-        rate_limits: vec![wire::EventRateLimit {
+    // Programmer objects used to carry the identity of the Programmer they described, and a
+    // subscription was checked against the authenticated one. There is one Programmer, so each
+    // object names itself; what is still refused is a topic the desk does not publish — including
+    // one spelled the old way, with an identity appended.
+    for id in [
+        "programming-values:00000000-0000-0000-0000-000000000011",
+        "programming-values:not-a-uuid",
+        "programming-nonsense",
+    ] {
+        let unknown = wire::EventObject {
             capability: wire::EventCapability::Programmer,
-            class: wire::EventClass::Projection,
-            object: Some(foreign),
-            min_interval_millis: 16,
-        }],
-    });
-    assert!(EventStream::subscribe(&bus, &session, rate_request).is_err());
+            id: id.into(),
+        };
+        let filter_request = Ok(wire::EventClientMessage::Subscribe {
+            filter: wire::EventSubscriptionFilter {
+                objects: vec![unknown.clone()],
+                ..Default::default()
+            },
+            after_sequence: None,
+            capacity: None,
+            rate_limits: Vec::new(),
+        });
+        assert!(
+            EventStream::subscribe(&bus, &session, filter_request).is_err(),
+            "{id}"
+        );
 
-    let malformed_request = Ok(wire::EventClientMessage::Subscribe {
+        let rate_request = Ok(wire::EventClientMessage::Subscribe {
+            filter: wire::EventSubscriptionFilter::default(),
+            after_sequence: None,
+            capacity: None,
+            rate_limits: vec![wire::EventRateLimit {
+                capability: wire::EventCapability::Programmer,
+                class: wire::EventClass::Projection,
+                object: Some(unknown),
+                min_interval_millis: 16,
+            }],
+        });
+        assert!(
+            EventStream::subscribe(&bus, &session, rate_request).is_err(),
+            "{id}"
+        );
+    }
+
+    // The desk's own Programmer objects are accepted.
+    let known = Ok(wire::EventClientMessage::Subscribe {
         filter: wire::EventSubscriptionFilter {
             objects: vec![wire::EventObject {
                 capability: wire::EventCapability::Programmer,
-                id: "programming-values:not-a-uuid".into(),
+                id: "programming-values".into(),
             }],
             ..Default::default()
         },
@@ -311,48 +328,7 @@ fn programmer_values_objects_are_limited_to_the_authenticated_user() {
         capacity: None,
         rate_limits: Vec::new(),
     });
-    assert!(EventStream::subscribe(&bus, &session, malformed_request).is_err());
-}
-
-#[test]
-fn programmer_priority_objects_are_limited_to_the_exact_authenticated_user() {
-    let bus = EventResource::new(EventBus::new(8));
-    let user_id = Uuid::from_u128(11);
-    let session = event_session(Uuid::from_u128(1), user_id);
-    let object = |user_id| wire::EventObject {
-        capability: wire::EventCapability::Programmer,
-        id: format!("programming-priority:{user_id}"),
-    };
-    assert!(
-        EventStream::subscribe(
-            &bus,
-            &session,
-            programmer_subscription(object(Uuid::from_u128(12)), None),
-        )
-        .is_err()
-    );
-    assert!(
-        EventStream::subscribe(
-            &bus,
-            &session,
-            programmer_subscription(object(user_id), None),
-        )
-        .is_ok()
-    );
-    assert!(
-        EventStream::subscribe(
-            &bus,
-            &session,
-            programmer_subscription(
-                wire::EventObject {
-                    capability: wire::EventCapability::Programmer,
-                    id: "programming-priority:not-a-uuid".into(),
-                },
-                None,
-            ),
-        )
-        .is_err()
-    );
+    assert!(EventStream::subscribe(&bus, &session, known).is_ok());
 }
 
 #[tokio::test]
@@ -467,140 +443,6 @@ async fn lifecycle_aggregate_delivers_foreign_safe_rows_through_the_wire_adapter
     assert_eq!(programmer.normal_value_count, 2);
     assert_eq!(programmer.selected_fixture_count, 3);
     assert!(programmer.preload_active);
-}
-
-#[test]
-fn programmer_capture_mode_objects_are_limited_to_the_authenticated_user() {
-    let bus = EventResource::new(EventBus::new(8));
-    let user_id = Uuid::from_u128(11);
-    let session = event_session(Uuid::from_u128(1), user_id);
-    let own = wire::EventObject {
-        capability: wire::EventCapability::Programmer,
-        id: format!("programming-capture-mode:{user_id}"),
-    };
-    let own_request = Ok(wire::EventClientMessage::Subscribe {
-        filter: wire::EventSubscriptionFilter {
-            objects: vec![own],
-            ..Default::default()
-        },
-        after_sequence: None,
-        capacity: None,
-        rate_limits: Vec::new(),
-    });
-    assert!(EventStream::subscribe(&bus, &session, own_request).is_ok());
-
-    for id in [
-        format!("programming-capture-mode:{}", Uuid::from_u128(12)),
-        "programming-capture-mode:not-a-uuid".into(),
-    ] {
-        let request = Ok(wire::EventClientMessage::Subscribe {
-            filter: wire::EventSubscriptionFilter {
-                objects: vec![wire::EventObject {
-                    capability: wire::EventCapability::Programmer,
-                    id,
-                }],
-                ..Default::default()
-            },
-            after_sequence: None,
-            capacity: None,
-            rate_limits: Vec::new(),
-        });
-        assert!(EventStream::subscribe(&bus, &session, request).is_err());
-    }
-
-    let foreign_rate = Ok(wire::EventClientMessage::Subscribe {
-        filter: wire::EventSubscriptionFilter::default(),
-        after_sequence: None,
-        capacity: None,
-        rate_limits: vec![wire::EventRateLimit {
-            capability: wire::EventCapability::Programmer,
-            class: wire::EventClass::Projection,
-            object: Some(wire::EventObject {
-                capability: wire::EventCapability::Programmer,
-                id: format!("programming-capture-mode:{}", Uuid::from_u128(12)),
-            }),
-            min_interval_millis: 16,
-        }],
-    });
-    assert!(EventStream::subscribe(&bus, &session, foreign_rate).is_err());
-}
-
-#[test]
-fn programmer_preload_values_objects_are_limited_to_the_authenticated_user() {
-    let bus = EventResource::new(EventBus::new(8));
-    let user_id = Uuid::from_u128(11);
-    let session = event_session(Uuid::from_u128(1), user_id);
-    for id in [
-        format!("programming-preload-values:{}", Uuid::from_u128(12)),
-        "programming-preload-values:not-a-uuid".into(),
-    ] {
-        let request = Ok(wire::EventClientMessage::Subscribe {
-            filter: wire::EventSubscriptionFilter {
-                objects: vec![wire::EventObject {
-                    capability: wire::EventCapability::Programmer,
-                    id,
-                }],
-                ..Default::default()
-            },
-            after_sequence: None,
-            capacity: None,
-            rate_limits: Vec::new(),
-        });
-        assert!(EventStream::subscribe(&bus, &session, request).is_err());
-    }
-
-    let own = Ok(wire::EventClientMessage::Subscribe {
-        filter: wire::EventSubscriptionFilter {
-            objects: vec![wire::EventObject {
-                capability: wire::EventCapability::Programmer,
-                id: format!("programming-preload-values:{user_id}"),
-            }],
-            ..Default::default()
-        },
-        after_sequence: None,
-        capacity: None,
-        rate_limits: Vec::new(),
-    });
-    assert!(EventStream::subscribe(&bus, &session, own).is_ok());
-}
-
-#[test]
-fn programmer_preload_playback_queue_objects_are_limited_to_the_authenticated_user() {
-    let bus = EventResource::new(EventBus::new(8));
-    let user_id = Uuid::from_u128(11);
-    let session = event_session(Uuid::from_u128(1), user_id);
-    for id in [
-        format!("programming-preload-playback-queue:{}", Uuid::from_u128(12)),
-        "programming-preload-playback-queue:not-a-uuid".into(),
-    ] {
-        let request = Ok(wire::EventClientMessage::Subscribe {
-            filter: wire::EventSubscriptionFilter {
-                objects: vec![wire::EventObject {
-                    capability: wire::EventCapability::Programmer,
-                    id,
-                }],
-                ..Default::default()
-            },
-            after_sequence: None,
-            capacity: None,
-            rate_limits: Vec::new(),
-        });
-        assert!(EventStream::subscribe(&bus, &session, request).is_err());
-    }
-
-    let own = Ok(wire::EventClientMessage::Subscribe {
-        filter: wire::EventSubscriptionFilter {
-            objects: vec![wire::EventObject {
-                capability: wire::EventCapability::Programmer,
-                id: format!("programming-preload-playback-queue:{user_id}"),
-            }],
-            ..Default::default()
-        },
-        after_sequence: None,
-        capacity: None,
-        rate_limits: Vec::new(),
-    });
-    assert!(EventStream::subscribe(&bus, &session, own).is_ok());
 }
 
 #[tokio::test]

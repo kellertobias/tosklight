@@ -173,8 +173,7 @@ impl ValuesSetup {
     }
 
     fn values_events(&self, desk_id: Uuid, user_id: UserId) -> Vec<Arc<crate::EventEnvelope>> {
-        let filter =
-            EventFilter::for_desk(desk_id).with_object(EventObject::programming_values(user_id.0));
+        let filter = EventFilter::for_desk(desk_id).with_object(EventObject::programming_values());
         let EventReplay::Events(events) = self.events.replay(0, &filter) else {
             panic!("values events should remain replayable")
         };
@@ -447,7 +446,7 @@ fn concurrent_capture_transition_and_normal_write_have_one_serial_order() {
     assert!(capture.capture_mode_event_sequence.is_some());
     assert_eq!(setup.registry.capture_mode_revision(), 1);
     let capture_filter =
-        EventFilter::default().with_object(EventObject::programming_capture_mode(setup.user.0));
+        EventFilter::default().with_object(EventObject::programming_capture_mode());
     let EventReplay::Events(capture_events) = setup.events.replay(0, &capture_filter) else {
         panic!("capture events should remain replayable")
     };

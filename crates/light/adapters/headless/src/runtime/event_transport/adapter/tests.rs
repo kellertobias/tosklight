@@ -484,7 +484,7 @@ fn combined_programming_change_routes_once_through_both_exact_objects() {
 }
 
 #[test]
-fn programming_values_keep_user_scope_full_projection_and_action_identity() {
+fn programming_values_keep_the_full_projection_and_action_identity() {
     let bus = EventBus::new(4);
     let context = context(ActionSource::Osc);
     let user_id = UserId(Uuid::from_u128(3));
@@ -535,7 +535,7 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
         event.object,
         Some(wire::EventObject {
             capability: wire::EventCapability::Programmer,
-            id: format!("programming-values:{}", user_id.0),
+            id: "programming-values".into(),
         })
     );
     let wire::EventPayload::ProgrammingValuesChanged { change } = event.payload else {
@@ -552,7 +552,7 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
 }
 
 #[test]
-fn programming_capture_mode_keeps_user_scope_projection_and_action_identity() {
+fn programming_capture_mode_keeps_its_projection_and_action_identity() {
     let bus = EventBus::new(4);
     let context = context(ActionSource::Http);
     let user_id = UserId(Uuid::from_u128(3));
@@ -583,7 +583,7 @@ fn programming_capture_mode_keeps_user_scope_projection_and_action_identity() {
         event.object,
         Some(wire::EventObject {
             capability: wire::EventCapability::Programmer,
-            id: format!("programming-capture-mode:{}", user_id.0),
+            id: "programming-capture-mode".into(),
         })
     );
     let wire::EventPayload::ProgrammingCaptureModeChanged { change } = event.payload else {

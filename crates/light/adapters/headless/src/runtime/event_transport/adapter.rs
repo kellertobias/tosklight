@@ -39,7 +39,6 @@ pub(super) fn application_filter(
     let _ = session;
     application::EventFilter {
         desk_id: None,
-        programmer_user_id: None,
         capabilities: filter
             .capabilities
             .into_iter()

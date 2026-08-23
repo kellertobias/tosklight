@@ -274,7 +274,7 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
 
     // The mutation landed exactly once: one values event and one accepted history entry.
     let filter = light_application::EventFilter::default()
-        .with_object(light_application::EventObject::programming_values(ui.user.id.0));
+        .with_object(light_application::EventObject::programming_values());
     let light_application::EventReplay::Events(events) = state.events.replay(0, &filter)
     else {
         panic!("the values event history should remain replayable")
