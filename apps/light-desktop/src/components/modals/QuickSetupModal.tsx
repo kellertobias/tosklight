@@ -30,15 +30,11 @@ interface QuickSetupKeyboardOptions {
 	enabled: boolean;
 	revisionOpen: boolean;
 	saveAsOpen: boolean;
-	changeUserOpen: boolean;
-	newUserName: string;
 	closeTopLayer: () => void;
 	saveNamedRevision: () => Promise<void>;
 	saveAs: () => Promise<void>;
-	createUser: (name: string) => Promise<void>;
 	setRevisionName: Dispatch<SetStateAction<string>>;
 	setShowName: Dispatch<SetStateAction<string>>;
-	setNewUserName: Dispatch<SetStateAction<string>>;
 }
 
 function useQuickSetupKeyboard(options: QuickSetupKeyboardOptions) {
@@ -55,26 +51,17 @@ function useQuickSetupKeyboard(options: QuickSetupKeyboardOptions) {
 				current.closeTopLayer();
 				return;
 			}
-			if (
-				!current.revisionOpen &&
-				!current.saveAsOpen &&
-				!current.changeUserOpen
-			)
-				return;
+			if (!current.revisionOpen && !current.saveAsOpen) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
 			if (event.key === "Enter") {
 				if (current.revisionOpen) void current.saveNamedRevision();
 				else if (current.saveAsOpen) void current.saveAs();
-				else if (current.newUserName.trim())
-					void current.createUser(current.newUserName.trim());
 				return;
 			}
 			const setValue = current.revisionOpen
 				? current.setRevisionName
-				: current.saveAsOpen
-					? current.setShowName
-					: current.setNewUserName;
+				: current.setShowName;
 			if (event.key === "Backspace") setValue((value) => value.slice(0, -1));
 			else if (event.key.length === 1) setValue((value) => value + event.key);
 		};
@@ -286,17 +273,13 @@ function useQuickSetupDialogState() {
 	const osShowPickerInput = useRef<HTMLInputElement | null>(null);
 	const [newShowOpen, setNewShowOpen] = useState(false);
 	const [confirmShutdown, setConfirmShutdown] = useState(false);
-	const [changeUserOpen, setChangeUserOpen] = useState(false);
-	const [newUserName, setNewUserName] = useState("");
 	const [destination, setDestination] = useState<"local" | "flash">("local");
 	return {
-		changeUserOpen,
 		confirmShutdown,
 		copySaveOpen,
 		destination,
 		loadOpen,
 		newShowOpen,
-		newUserName,
 		osShowPickerInput,
 		overwriteBusy,
 		overwriteTarget,
@@ -305,13 +288,11 @@ function useQuickSetupDialogState() {
 		saveAsOpen,
 		selectiveImportClose,
 		selectiveImportOpen,
-		setChangeUserOpen,
 		setConfirmShutdown,
 		setCopySaveOpen,
 		setDestination,
 		setLoadOpen,
 		setNewShowOpen,
-		setNewUserName,
 		setOverwriteBusy,
 		setOverwriteTarget,
 		setRevisionName,
@@ -373,7 +354,6 @@ function useQuickSetupModel() {
 		else if (dialogs.copySaveOpen) dialogs.setCopySaveOpen(false);
 		else if (dialogs.revisionOpen) dialogs.setRevisionOpen(false);
 		else if (dialogs.saveAsOpen) dialogs.setSaveAsOpen(false);
-		else if (dialogs.changeUserOpen) dialogs.setChangeUserOpen(false);
 		else if (dialogs.selectiveImportOpen)
 			dialogs.selectiveImportClose.current?.();
 		else if (dialogs.loadOpen) dialogs.setLoadOpen(false);
@@ -385,15 +365,11 @@ function useQuickSetupModel() {
 		enabled: state.setupOpen,
 		revisionOpen: dialogs.revisionOpen,
 		saveAsOpen: dialogs.saveAsOpen,
-		changeUserOpen: dialogs.changeUserOpen,
-		newUserName: dialogs.newUserName,
 		closeTopLayer,
 		saveNamedRevision,
 		saveAs: () => saveAs(),
-		createUser: lifecycle?.createUser ?? (async () => undefined),
 		setRevisionName: dialogs.setRevisionName,
 		setShowName: dialogs.setShowName,
-		setNewUserName: dialogs.setNewUserName,
 	});
 	async function saveAs(value = dialogs.showName) {
 		const name = value.trim();
@@ -488,12 +464,6 @@ function QuickSetupTitleBar({ model }: { model: QuickSetupModel }) {
 				{
 					id: "show",
 					actions: [
-						{
-							id: "change-user",
-							label: "Change User",
-							icon: <span aria-hidden="true">♙</span>,
-							onPress: () => model.dialogs.setChangeUserOpen(true),
-						},
 						...(desktop.available
 							? [
 									{

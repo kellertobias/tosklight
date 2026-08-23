@@ -141,29 +141,6 @@ pub(super) async fn create_session(
         desk: runtime_wire::desk(desk),
     }))
 }
-pub(super) async fn create_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(input): Json<UserInput>,
-) -> Result<(StatusCode, Json<DeskUser>), ApiError> {
-    let _session = authenticate(&state, &headers)?;
-    let mut user = state
-        .installation
-        .add_user(&input.name)
-        .map_err(ApiError::store)?;
-    if !input.enabled {
-        user = state
-            .installation
-            .update_user(user.id, &user.name, false)
-            .map_err(ApiError::store)?;
-    }
-    emit(
-        &state,
-        "desk_user_changed",
-        serde_json::json!({"user":user}),
-    );
-    Ok((StatusCode::CREATED, Json(user)))
-}
 pub(super) async fn close_session(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

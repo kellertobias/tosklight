@@ -43,7 +43,6 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v2/control-desks/{desk_id}/desk-lock/unlock",
             post(unlock_desk),
         )
-        .route("/api/v2/users/create", post(create_user))
         .route("/api/v2/command-history", get(command_history))
         .route("/api/v2/audit", get(audit_events))
         .route("/api/v2/programmers", get(list_programmers))
@@ -367,43 +366,6 @@ async fn unlock_desk(
         Json(DeskUnlockInput { pin: request.pin }),
     )
     .await
-}
-
-async fn create_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    request: Result<TolerantJson<wire::UserCreateRequest>, JsonRejection>,
-) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
-    let session = authenticate(&state, &headers)?;
-    let TolerantJson(request) =
-        request.map_err(|error| ApiError::bad_request(error.body_text()))?;
-    show_objects_v2::validate_request_id(&request.request_id)?;
-    let key = ReplayKey::new(session.id, "user-create", &request.request_id);
-    let fingerprint =
-        serde_json::to_value(&request).map_err(|error| ApiError::internal(error.to_string()))?;
-    if let Some(value) = state
-        .replay
-        .lookup_desk_management(&key, &fingerprint)
-        .await?
-    {
-        return Ok((StatusCode::OK, Json(value)));
-    }
-    let (_, Json(user)) = sessions::create_user(
-        State(state.clone()),
-        headers,
-        Json(UserInput {
-            name: request.name,
-            enabled: request.enabled,
-        }),
-    )
-    .await?;
-    let mut value = serde_json::json!({"user":user});
-    attach_intent_metadata(&mut value, &request.request_id, false);
-    state
-        .replay
-        .insert_desk_management(key, fingerprint, value.clone())
-        .await;
-    Ok((StatusCode::CREATED, Json(value)))
 }
 
 async fn command_history(
