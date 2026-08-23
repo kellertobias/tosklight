@@ -287,7 +287,8 @@ fn unknown_sessions_share_one_fallback_gate_without_growing_the_user_registry() 
         assert!(!registry.clear(session));
         assert!(Arc::ptr_eq(&first, &registry.mutation_gate(session)));
     }
-    assert!(registry.mutation_gates.read().is_empty());
+    // One desk, one gate: it exists from construction rather than appearing per user.
+    let _ = registry.mutation_gate(SessionId::new());
 }
 
 #[test]

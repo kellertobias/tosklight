@@ -570,12 +570,11 @@ impl ProgrammerRegistry {
             },
         );
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
         if preload {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         } else {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         true
     }
@@ -617,12 +616,11 @@ impl ProgrammerRegistry {
         values.retain(|value| value.fixture_id != fixture_id || value.attribute != *attribute);
         debug_assert!(values.len() < before);
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
         if preload {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         } else {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         true
     }
@@ -667,12 +665,11 @@ impl ProgrammerRegistry {
             }
         }
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
         if preload {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         } else {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         true
     }

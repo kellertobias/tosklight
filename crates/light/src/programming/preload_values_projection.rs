@@ -112,7 +112,7 @@ impl ProgrammingService {
             let event_sequence = self.events.latest_sequence();
             let content =
                 ProgrammingPreloadValuesContent::read(&self.programmers, session, user_id)?;
-            let revision = self.programmers.preload_values_revision(user_id);
+            let revision = self.programmers.preload_values_revision();
             Ok(ProgrammingPreloadValuesSnapshot {
                 event_sequence,
                 projection: content.projection(user_id, revision),

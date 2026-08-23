@@ -92,12 +92,11 @@ impl ProgrammerRegistry {
             apply_mutation(self, values, mutation);
         }
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
         if preload {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         } else {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         true
     }
@@ -210,12 +209,11 @@ impl ProgrammerRegistry {
             });
         }
         state.last_activity = changed_at;
-        let user_id = state.user_id;
         drop(states);
         if preload {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         } else {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         true
     }

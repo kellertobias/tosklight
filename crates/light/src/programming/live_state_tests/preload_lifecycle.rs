@@ -145,13 +145,9 @@ impl LifecycleSetup {
         ActionEnvelope {
             context: self.context.clone().with_request_id(request_id),
             command: ProgrammingPreloadLifecycleRequest {
-                expected_capture_mode_revision: exact(
-                    self.registry.capture_mode_revision(self.user),
-                ),
-                expected_values_revision: exact(self.registry.preload_values_revision(self.user)),
-                expected_queue_revision: exact(
-                    self.registry.preload_playback_queue_revision(self.user),
-                ),
+                expected_capture_mode_revision: exact(self.registry.capture_mode_revision()),
+                expected_values_revision: exact(self.registry.preload_values_revision()),
+                expected_queue_revision: exact(self.registry.preload_playback_queue_revision()),
                 expected_selection_revision: exact(expected_selection_revision),
                 action,
             },

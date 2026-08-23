@@ -24,7 +24,7 @@ fn replay_skips_environment_capture_commit_activation_and_active_preload_release
         .service
         .handle_cue_recording(envelope.clone(), &ports)
         .unwrap();
-    let values_revision_after_first = setup.registry.normal_values_revision(setup.user);
+    let values_revision_after_first = setup.registry.normal_values_revision();
     let replay = setup
         .service
         .handle_cue_recording(envelope, &ports)
@@ -36,7 +36,7 @@ fn replay_skips_environment_capture_commit_activation_and_active_preload_release
     assert_eq!(ports.commits.load(Ordering::Relaxed), 1);
     assert_eq!(ports.activations.load(Ordering::Relaxed), 1);
     assert_eq!(
-        setup.registry.normal_values_revision(setup.user),
+        setup.registry.normal_values_revision(),
         values_revision_after_first
     );
     assert!(matches!(

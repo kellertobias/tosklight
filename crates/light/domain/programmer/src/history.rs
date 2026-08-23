@@ -94,7 +94,7 @@ impl ProgrammerRegistry {
     pub fn undo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (selected, expression, user_id, values_changed, preload_values_changed, queue_changed) = {
+        let (selected, expression, values_changed, preload_values_changed, queue_changed) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -116,7 +116,6 @@ impl ProgrammerRegistry {
             (
                 state.selected.clone(),
                 state.selection_expression.clone(),
-                state.user_id,
                 values_changed,
                 preload_values_changed,
                 queue_changed,
@@ -132,20 +131,20 @@ impl ProgrammerRegistry {
             },
         );
         if values_changed {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         if preload_values_changed {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         }
         if queue_changed {
-            self.mark_preload_playback_queue_changed(user_id);
+            self.mark_preload_playback_queue_changed();
         }
         true
     }
     pub fn redo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (selected, expression, user_id, values_changed, preload_values_changed, queue_changed) = {
+        let (selected, expression, values_changed, preload_values_changed, queue_changed) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -165,7 +164,6 @@ impl ProgrammerRegistry {
             (
                 state.selected.clone(),
                 state.selection_expression.clone(),
-                state.user_id,
                 values_changed,
                 preload_values_changed,
                 queue_changed,
@@ -181,13 +179,13 @@ impl ProgrammerRegistry {
             },
         );
         if values_changed {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         if preload_values_changed {
-            self.mark_preload_values_changed(user_id);
+            self.mark_preload_values_changed();
         }
         if queue_changed {
-            self.mark_preload_playback_queue_changed(user_id);
+            self.mark_preload_playback_queue_changed();
         }
         true
     }

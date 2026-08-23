@@ -38,15 +38,11 @@ impl ProgrammingService {
         validate_request(&action.command)?;
         let (capture_mode_revision, target) = self.assert_recall_capture_revision(
             identity.session_id,
-            identity.user_id,
             action.command.expected_capture_mode_revision,
         )?;
-        let values_revision = self.assert_recall_values_revision(
-            identity.user_id,
-            action.command.expected_values_revision,
-        )?;
+        let values_revision =
+            self.assert_recall_values_revision(action.command.expected_values_revision)?;
         let preload_values_revision = self.assert_recall_preload_values_revision(
-            identity.user_id,
             action.command.expected_preload_values_revision,
         )?;
         let selection = self
@@ -375,20 +371,18 @@ impl ProgrammingService {
 
     fn assert_recall_values_revision(
         &self,
-        user_id: UserId,
         expected: ProgrammingPresetRecallRevisionExpectation,
     ) -> Result<u64, ActionError> {
-        let actual = self.programmers.normal_values_revision(user_id);
+        let actual = self.programmers.normal_values_revision();
         assert_expected(expected, actual, "Programmer values", actual)?;
         Ok(actual)
     }
 
     fn assert_recall_preload_values_revision(
         &self,
-        user_id: UserId,
         expected: ProgrammingPresetRecallRevisionExpectation,
     ) -> Result<u64, ActionError> {
-        let actual = self.programmers.preload_values_revision(user_id);
+        let actual = self.programmers.preload_values_revision();
         assert_expected(expected, actual, "Preload values", actual)?;
         Ok(actual)
     }
@@ -396,10 +390,9 @@ impl ProgrammingService {
     fn assert_recall_capture_revision(
         &self,
         session: SessionId,
-        user_id: UserId,
         expected: ProgrammingPresetRecallRevisionExpectation,
     ) -> Result<(u64, ProgrammingPresetRecallTarget), ActionError> {
-        let actual = self.programmers.capture_mode_revision(user_id);
+        let actual = self.programmers.capture_mode_revision();
         assert_expected(expected, actual, "Programmer capture-mode", actual)?;
         let mode = self
             .programmers

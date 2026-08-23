@@ -320,7 +320,7 @@ impl ProgrammingService {
             // same-user mutation because that transition uses this same user gate.
             let event_sequence = self.events.latest_sequence();
             let content = ProgrammingValuesContent::read(&self.programmers, session, user_id)?;
-            let revision = self.programmers.normal_values_revision(user_id);
+            let revision = self.programmers.normal_values_revision();
             Ok(ProgrammingValuesSnapshot {
                 event_sequence,
                 projection: content.projection(user_id, revision),

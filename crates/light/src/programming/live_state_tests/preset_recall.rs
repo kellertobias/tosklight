@@ -440,7 +440,7 @@ fn active_preload_empty_selection_first_tap_selects_then_second_tap_writes_pendi
     assert!(programmer.group_values.is_empty());
     assert!(programmer.preload_active.is_empty());
     assert!(programmer.preload_group_active.is_empty());
-    assert_eq!(setup.registry.normal_values_revision(programmer.user_id), 0);
+    assert_eq!(setup.registry.normal_values_revision(), 0);
 }
 
 #[test]

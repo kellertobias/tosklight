@@ -24,7 +24,7 @@ fn external_mode_changes_publish_one_exact_user_projection() {
     assert_eq!(result.event_sequence, None);
     assert_eq!(result.capture_mode_event_sequence, Some(1));
     assert_eq!(result.values_event_sequence, None);
-    assert_eq!(registry.capture_mode_revision(user), 1);
+    assert_eq!(registry.capture_mode_revision(), 1);
     assert_eq!(projection_read_count(), 0);
     let filter = EventFilter::for_desk(setup.context.desk_id)
         .with_object(EventObject::programming_capture_mode(user.0));
@@ -87,7 +87,7 @@ fn no_op_active_context_and_round_trip_mode_actions_stay_quiet() {
 
     assert_eq!(active_context.capture_mode_event_sequence, None);
     assert_eq!(round_trip.capture_mode_event_sequence, None);
-    assert_eq!(registry.capture_mode_revision(user), 0);
+    assert_eq!(registry.capture_mode_revision(), 0);
     assert_eq!(setup.events.latest_sequence(), 0);
     assert_eq!(projection_read_count(), 0);
 }
@@ -95,7 +95,6 @@ fn no_op_active_context_and_round_trip_mode_actions_stay_quiet() {
 #[test]
 fn typed_preload_handle_publishes_capture_mode_and_reconciles_exact_tuple() {
     let setup = LiveSetup::new(8);
-    let user = UserId(setup.context.user_id.unwrap());
     reset_projection_read_count();
 
     let result = setup.handle(ProgrammingCommand::Preload {
@@ -105,7 +104,7 @@ fn typed_preload_handle_publishes_capture_mode_and_reconciles_exact_tuple() {
     assert_eq!(result.capture_mode_event_sequence, Some(1));
     assert_eq!(result.values_event_sequence, None);
     assert_eq!(projection_read_count(), 0);
-    assert_eq!(setup.service.programmers.capture_mode_revision(user), 1);
+    assert_eq!(setup.service.programmers.capture_mode_revision(), 1);
     assert_eq!(
         *setup.ports.reconciliations.lock(),
         vec![ProgrammingReconciliation::CaptureModeChanged]

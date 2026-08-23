@@ -17,7 +17,7 @@ impl ProgrammingService {
             ports.authorize(context)?;
             let user_id = self.operated_priority_owner(session, user_id)?;
             let event_sequence = self.events.latest_sequence();
-            let revision = self.programmers.priority_revision(user_id);
+            let revision = self.programmers.priority_revision();
             Ok(ProgrammingPrioritySnapshot {
                 event_sequence,
                 projection: self.priority_projection(session, user_id, revision)?,
@@ -44,13 +44,13 @@ impl ProgrammingService {
                 return Ok(cached);
             }
             let revision_before =
-                self.assert_priority_revision(user_id, action.command.expected_revision)?;
+                self.assert_priority_revision(action.command.expected_revision)?;
             let changed = self
                 .programmers
                 .update_priority(session, action.command.priority)
                 .ok_or_else(priority_unavailable)?;
             let revision = if changed {
-                self.programmers.advance_priority_revision(user_id)
+                self.programmers.advance_priority_revision()
             } else {
                 revision_before
             };
@@ -105,10 +105,9 @@ impl ProgrammingService {
 
     fn assert_priority_revision(
         &self,
-        user_id: UserId,
         expected: ProgrammingPriorityRevisionExpectation,
     ) -> Result<u64, ActionError> {
-        let actual = self.programmers.priority_revision(user_id);
+        let actual = self.programmers.priority_revision();
         match expected {
             ProgrammingPriorityRevisionExpectation::Current => Ok(actual),
             ProgrammingPriorityRevisionExpectation::Exact(expected) if actual == expected => {

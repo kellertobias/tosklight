@@ -581,31 +581,28 @@ impl ProgrammingResource {
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn normal_values_revision(&self, user_id: light_core::UserId) -> u64 {
-        self.programmers.normal_values_revision(user_id)
+    pub(in crate::runtime) fn normal_values_revision(&self) -> u64 {
+        self.programmers.normal_values_revision()
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn preload_values_revision(&self, user_id: light_core::UserId) -> u64 {
-        self.programmers.preload_values_revision(user_id)
+    pub(in crate::runtime) fn preload_values_revision(&self) -> u64 {
+        self.programmers.preload_values_revision()
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn preload_playback_queue_revision(
-        &self,
-        user_id: light_core::UserId,
-    ) -> u64 {
-        self.programmers.preload_playback_queue_revision(user_id)
+    pub(in crate::runtime) fn preload_playback_queue_revision(&self) -> u64 {
+        self.programmers.preload_playback_queue_revision()
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn capture_mode_revision(&self, user_id: light_core::UserId) -> u64 {
-        self.programmers.capture_mode_revision(user_id)
+    pub(in crate::runtime) fn capture_mode_revision(&self) -> u64 {
+        self.programmers.capture_mode_revision()
     }
 
     #[cfg(test)]
-    pub(in crate::runtime) fn priority_revision(&self, user_id: light_core::UserId) -> u64 {
-        self.programmers.priority_revision(user_id)
+    pub(in crate::runtime) fn priority_revision(&self) -> u64 {
+        self.programmers.priority_revision()
     }
 
     pub(in crate::runtime) fn handle(

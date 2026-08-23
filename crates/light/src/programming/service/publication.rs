@@ -100,7 +100,7 @@ impl ProgrammingService {
         if before == after {
             return None;
         }
-        let revision = self.programmers.advance_capture_mode_revision(user_id);
+        let revision = self.programmers.advance_capture_mode_revision();
         Some(ProgrammingCaptureModeChange {
             projection: Arc::new(ProgrammingCaptureModeProjection::from_mode(
                 user_id, revision, after,
@@ -117,7 +117,7 @@ impl ProgrammingService {
         if before == after {
             return Ok(None);
         }
-        let revision = self.programmers.advance_normal_values_revision(user_id);
+        let revision = self.programmers.advance_normal_values_revision();
         Ok(Some(after.clone().change(before, user_id, revision)))
     }
 
@@ -132,7 +132,7 @@ impl ProgrammingService {
             return Ok(None);
         }
         let content = ProgrammingPreloadValuesContent::read(&self.programmers, session, user_id)?;
-        let revision = self.programmers.advance_preload_values_revision(user_id);
+        let revision = self.programmers.advance_preload_values_revision();
         Ok(Some(ProgrammingPreloadValuesChange {
             projection: Arc::new(content.projection(user_id, revision)),
         }))
@@ -150,9 +150,7 @@ impl ProgrammingService {
         }
         let content =
             ProgrammingPreloadPlaybackQueueContent::read(&self.programmers, session, user_id)?;
-        let revision = self
-            .programmers
-            .advance_preload_playback_queue_revision(user_id);
+        let revision = self.programmers.advance_preload_playback_queue_revision();
         Ok(Some(ProgrammingPreloadPlaybackQueueChange {
             projection: Arc::new(content.projection(user_id, revision)),
         }))

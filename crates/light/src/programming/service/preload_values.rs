@@ -38,10 +38,9 @@ impl ProgrammingService {
             {
                 return Ok(cached);
             }
-            self.assert_preload_values_revision(user_id, expected_revision)?;
+            self.assert_preload_values_revision(expected_revision)?;
             let capture_mode_revision = self.assert_preload_capture_precondition(
                 session,
-                user_id,
                 action.command.expected_capture_mode_revision,
             )?;
             let result = self.apply_preload_values_action(
@@ -194,12 +193,8 @@ impl ProgrammingService {
         }
     }
 
-    fn assert_preload_values_revision(
-        &self,
-        user_id: UserId,
-        expected: u64,
-    ) -> Result<(), ActionError> {
-        let actual = self.programmers.preload_values_revision(user_id);
+    fn assert_preload_values_revision(&self, expected: u64) -> Result<(), ActionError> {
+        let actual = self.programmers.preload_values_revision();
         if expected == actual {
             Ok(())
         } else {
@@ -214,11 +209,10 @@ impl ProgrammingService {
     fn assert_preload_capture_precondition(
         &self,
         session: SessionId,
-        user_id: UserId,
         expected: u64,
     ) -> Result<u64, ActionError> {
-        let actual = self.programmers.capture_mode_revision(user_id);
-        let values_revision = self.programmers.preload_values_revision(user_id);
+        let actual = self.programmers.capture_mode_revision();
+        let values_revision = self.programmers.preload_values_revision();
         if expected != actual {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,

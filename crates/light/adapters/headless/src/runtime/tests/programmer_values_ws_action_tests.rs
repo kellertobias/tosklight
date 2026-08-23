@@ -219,7 +219,7 @@ async fn programmer_values_ws_frame_rejects_mismatched_identity_without_mutation
             .unwrap()
             .contains("action payload request_id must match the frame request_id")
     );
-    assert_eq!(state.programming.normal_values_revision(session.user.id), 0);
+    assert_eq!(state.programming.normal_values_revision(), 0);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

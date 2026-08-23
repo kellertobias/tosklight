@@ -11,41 +11,11 @@ impl ProgrammerRegistry {
         // One desk, one Programmer. A session presenting any other identity joins the Programmer
         // the desk already has rather than opening a second one beside it.
         let user_id = self.desk.resolve(user_id);
-        let mutation_gate = self.mutation_gate_for_user(user_id);
+        let mutation_gate = std::sync::Arc::clone(&self.mutation_gate);
         let _mutation_guard = mutation_gate.lock();
         self.priority_changed_at
             .write()
-            .entry(user_id)
-            .or_insert_with(|| self.clock.now());
-        self.normal_values_generations
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.normal_values_revisions
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.preload_values_generations
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.preload_values_revisions
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.preload_playback_queue_generations
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.preload_playback_queue_revisions
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.capture_mode_revisions
-            .write()
-            .entry(user_id)
-            .or_default();
-        self.priority_revisions.write().entry(user_id).or_default();
+            .get_or_insert_with(|| self.clock.now());
         let existing = self
             .states
             .read()
@@ -140,44 +110,11 @@ impl ProgrammerRegistry {
     /// Programmer. Existing public authority revisions are retained so an incidental repeated
     /// restore cannot make a live client revision current again.
     pub fn restore(&self, state: ProgrammerState) {
-        let mutation_gate = self.mutation_gate_for_user(state.user_id);
+        let mutation_gate = std::sync::Arc::clone(&self.mutation_gate);
         let _mutation_guard = mutation_gate.lock();
         self.priority_changed_at
             .write()
-            .entry(state.user_id)
-            .or_insert_with(|| self.clock.now());
-        self.normal_values_generations
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.normal_values_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.preload_values_generations
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.preload_values_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.preload_playback_queue_generations
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.preload_playback_queue_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.capture_mode_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
-        self.priority_revisions
-            .write()
-            .entry(state.user_id)
-            .or_default();
+            .get_or_insert_with(|| self.clock.now());
         let restored_order = state
             .values
             .iter()

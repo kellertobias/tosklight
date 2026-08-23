@@ -109,7 +109,7 @@ impl ProgrammingService {
         let before_priority = self.priority_projection(
             target.current_session_id,
             target.user_id,
-            self.programmers.priority_revision(target.user_id),
+            self.programmers.priority_revision(),
         )?;
         let before_preload_values = ProgrammingPreloadValuesContent::read(
             &self.programmers,
@@ -166,13 +166,11 @@ impl ProgrammingService {
         self.publish_lifecycle_for_user(actor_context, target.user_id, lifecycle_before);
         Ok(ProgrammingLifecycleResult {
             output: completion.output,
-            values_revision: self.programmers.normal_values_revision(target.user_id),
-            capture_mode_revision: self.programmers.capture_mode_revision(target.user_id),
-            preload_values_revision: self.programmers.preload_values_revision(target.user_id),
-            preload_playback_queue_revision: self
-                .programmers
-                .preload_playback_queue_revision(target.user_id),
-            priority_revision: self.programmers.priority_revision(target.user_id),
+            values_revision: self.programmers.normal_values_revision(),
+            capture_mode_revision: self.programmers.capture_mode_revision(),
+            preload_values_revision: self.programmers.preload_values_revision(),
+            preload_playback_queue_revision: self.programmers.preload_playback_queue_revision(),
+            priority_revision: self.programmers.priority_revision(),
             values_event_sequence,
             preload_values_event_sequence,
             preload_playback_queue_event_sequence,
@@ -265,9 +263,9 @@ impl ProgrammingService {
         before: super::ProgrammingPriorityProjection,
     ) -> Result<Option<ProgrammingPriorityChange>, ActionError> {
         let Some(session) = replacement else {
-            let mut revision = self.programmers.priority_revision(target.user_id);
+            let mut revision = self.programmers.priority_revision();
             if revision <= before.revision {
-                revision = self.programmers.advance_priority_revision(target.user_id);
+                revision = self.programmers.advance_priority_revision();
             }
             return Ok(Some(ProgrammingPriorityChange::Remove {
                 user_id: target.user_id,
@@ -284,10 +282,10 @@ impl ProgrammingService {
                 "replacement Programmer session does not belong to the target user",
             ));
         }
-        let mut revision = self.programmers.priority_revision(target.user_id);
+        let mut revision = self.programmers.priority_revision();
         let mut after = self.priority_projection(session, target.user_id, revision)?;
         if after != before && revision <= before.revision {
-            revision = self.programmers.advance_priority_revision(target.user_id);
+            revision = self.programmers.advance_priority_revision();
             after.revision = revision;
         }
         Ok((before != after).then_some(ProgrammingPriorityChange::Upsert { projection: after }))
@@ -302,7 +300,7 @@ impl ProgrammingService {
         if before == after {
             return None;
         }
-        let revision = self.programmers.advance_normal_values_revision(user_id);
+        let revision = self.programmers.advance_normal_values_revision();
         Some(after.change(&before, user_id, revision))
     }
 
@@ -315,7 +313,7 @@ impl ProgrammingService {
         if before == after {
             return None;
         }
-        let revision = self.programmers.advance_preload_values_revision(user_id);
+        let revision = self.programmers.advance_preload_values_revision();
         Some(ProgrammingPreloadValuesChange {
             projection: Arc::new(after.projection(user_id, revision)),
         })
@@ -330,9 +328,7 @@ impl ProgrammingService {
         if before == after {
             return None;
         }
-        let revision = self
-            .programmers
-            .advance_preload_playback_queue_revision(user_id);
+        let revision = self.programmers.advance_preload_playback_queue_revision();
         Some(ProgrammingPreloadPlaybackQueueChange {
             projection: Arc::new(after.projection(user_id, revision)),
         })

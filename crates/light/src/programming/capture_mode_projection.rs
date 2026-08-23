@@ -43,7 +43,7 @@ impl ProgrammingCaptureModeProjection {
             })?;
         Ok(Self::from_mode(
             user_id,
-            programmers.capture_mode_revision(user_id),
+            programmers.capture_mode_revision(),
             mode,
         ))
     }

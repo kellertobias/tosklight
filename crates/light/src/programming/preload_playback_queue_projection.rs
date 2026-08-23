@@ -132,10 +132,8 @@ impl ProgrammingService {
                 ProgrammingPreloadPlaybackQueueContent::read(&self.programmers, session, user_id)?;
             Ok(ProgrammingPreloadPlaybackQueueSnapshot {
                 event_sequence,
-                projection: content.projection(
-                    user_id,
-                    self.programmers.preload_playback_queue_revision(user_id),
-                ),
+                projection: content
+                    .projection(user_id, self.programmers.preload_playback_queue_revision()),
             })
         })
     }

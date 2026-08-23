@@ -435,9 +435,9 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
     let user_id = scenario.session.user.id;
-    assert_eq!(scenario.state.programming.normal_values_revision(user_id), 2);
-    assert_eq!(scenario.state.programming.capture_mode_revision(user_id), 2);
-    assert_eq!(scenario.state.programming.priority_revision(user_id), 1);
+    assert_eq!(scenario.state.programming.normal_values_revision(), 2);
+    assert_eq!(scenario.state.programming.capture_mode_revision(), 2);
+    assert_eq!(scenario.state.programming.priority_revision(), 1);
     for session_id in [scenario.session.id, second_session] {
         let programmer = scenario.state.programming.get(session_id).unwrap();
         assert!(programmer.values.is_empty());

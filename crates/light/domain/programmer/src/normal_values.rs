@@ -101,9 +101,8 @@ impl ProgrammerRegistry {
         let touched = fixture_batch.commit(Arc::make_mut(&mut state.values));
         restamp_transient_values(self, state, &touched, changed_at);
         state.last_activity = changed_at;
-        let user_id = state.user_id;
         drop(states);
-        self.mark_normal_values_changed(user_id);
+        self.mark_normal_values_changed();
         true
     }
 
@@ -131,9 +130,8 @@ impl ProgrammerRegistry {
         state.group_release_values.clear();
         Arc::make_mut(&mut state.dynamic_values).clear();
         state.last_activity = self.clock.now();
-        let user_id = state.user_id;
         drop(states);
-        self.mark_normal_values_changed(user_id);
+        self.mark_normal_values_changed();
         true
     }
 
@@ -179,10 +177,9 @@ impl ProgrammerRegistry {
         restamp_transient_values(self, state, &touched, changed_at);
         state.active_context = Some(active_context);
         state.last_activity = changed_at;
-        let user_id = state.user_id;
         drop(states);
         if transition.values_changed {
-            self.mark_normal_values_changed(user_id);
+            self.mark_normal_values_changed();
         }
         Some(transition)
     }

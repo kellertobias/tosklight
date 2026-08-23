@@ -218,7 +218,7 @@ fn align_modifies_future_relative_steps_and_reanchors_without_mutating_on_activa
         .unwrap()
         .expect("Align should activate");
     assert_eq!(activated.fixtures, setup.fixtures);
-    assert_eq!(setup.registry.normal_values_revision(setup.user), 0);
+    assert_eq!(setup.registry.normal_values_revision(), 0);
     assert!(setup.registry.get(setup.session).unwrap().values.is_empty());
 
     let request = setup.action(
@@ -331,7 +331,7 @@ fn capture_precondition_is_atomic_and_successful_replay_survives_mode_changes() 
         })
         .unwrap();
     assert_eq!(mode_change.capture_mode_event_sequence, Some(3));
-    assert_eq!(setup.registry.capture_mode_revision(setup.user), 1);
+    assert_eq!(setup.registry.capture_mode_revision(), 1);
     super::super::values_projection::reset_projection_read_count();
 
     let replay = setup.service.handle_values(original, &setup.ports).unwrap();
@@ -382,7 +382,7 @@ fn capture_precondition_is_atomic_and_successful_replay_survives_mode_changes() 
     assert_eq!(redirected.current_revision, Some(1));
     assert_eq!(redirected.current_related_revision, Some(1));
     assert_eq!(super::super::values_projection::projection_read_count(), 0);
-    assert_eq!(setup.registry.normal_values_revision(setup.user), 1);
+    assert_eq!(setup.registry.normal_values_revision(), 1);
 
     setup
         .service
@@ -445,7 +445,7 @@ fn concurrent_capture_transition_and_normal_write_have_one_serial_order() {
     });
 
     assert!(capture.capture_mode_event_sequence.is_some());
-    assert_eq!(setup.registry.capture_mode_revision(setup.user), 1);
+    assert_eq!(setup.registry.capture_mode_revision(), 1);
     let capture_filter =
         EventFilter::default().with_object(EventObject::programming_capture_mode(setup.user.0));
     let EventReplay::Events(capture_events) = setup.events.replay(0, &capture_filter) else {
@@ -460,7 +460,7 @@ fn concurrent_capture_transition_and_normal_write_have_one_serial_order() {
                 result.outcome,
                 ProgrammingValuesOutcome::Changed { .. }
             ));
-            assert_eq!(setup.registry.normal_values_revision(setup.user), 1);
+            assert_eq!(setup.registry.normal_values_revision(), 1);
             assert_eq!(setup.registry.get(setup.session).unwrap().values.len(), 1);
             assert_eq!(value_events.len(), 1);
         }
@@ -468,7 +468,7 @@ fn concurrent_capture_transition_and_normal_write_have_one_serial_order() {
             assert_eq!(error.kind, ActionErrorKind::Conflict);
             assert_eq!(error.current_revision, Some(0));
             assert_eq!(error.current_related_revision, Some(1));
-            assert_eq!(setup.registry.normal_values_revision(setup.user), 0);
+            assert_eq!(setup.registry.normal_values_revision(), 0);
             assert!(setup.registry.get(setup.session).unwrap().values.is_empty());
             assert!(value_events.is_empty());
         }
@@ -1133,16 +1133,20 @@ fn release_and_clear_preserve_preload_transient_selection_and_modes() {
 }
 
 #[test]
-fn same_user_desks_share_values_while_other_users_and_forged_contexts_are_isolated() {
+fn every_surface_programs_the_same_values() {
     let setup = ValuesSetup::new();
-    let peer_session = SessionId::new();
-    let peer_desk = Uuid::new_v4();
-    setup.registry.start(peer_session, setup.user);
+    let second_screen = SessionId::new();
+    let screen_desk = Uuid::new_v4();
+    setup.registry.start(second_screen, setup.user);
     setup
         .registry
-        .attach_command_context(peer_session, SessionId(peer_desk));
-    let peer_context =
-        ActionContext::operator(peer_desk, setup.user.0, peer_session.0, ActionSource::Osc);
+        .attach_command_context(second_screen, SessionId(screen_desk));
+    let screen_context = ActionContext::operator(
+        screen_desk,
+        setup.user.0,
+        second_screen.0,
+        ActionSource::Osc,
+    );
     setup.handle(
         "actor-set",
         0,
@@ -1157,9 +1161,9 @@ fn same_user_desks_share_values_while_other_users_and_forged_contexts_are_isolat
         .service
         .handle_values(
             ActionEnvelope {
-                context: peer_context
+                context: screen_context
                     .clone()
-                    .with_request_id("peer-set")
+                    .with_request_id("screen-set")
                     .with_expected_revision(1),
                 command: ProgrammingValuesRequest {
                     expected_capture_mode_revision: 0,
@@ -1174,40 +1178,46 @@ fn same_user_desks_share_values_while_other_users_and_forged_contexts_are_isolat
             &setup.ports,
         )
         .unwrap();
-    let actor_snapshot = setup
-        .service
-        .values_snapshot(&setup.context, &setup.ports)
-        .unwrap();
-    assert_eq!(actor_snapshot.projection.revision, 2);
-    assert_eq!(actor_snapshot.projection.fixture_values.len(), 1);
-    assert_eq!(actor_snapshot.projection.group_values.len(), 1);
+
+    // Both surfaces wrote into one Programmer, so both read back both values.
+    for context in [&setup.context, &screen_context] {
+        let snapshot = setup
+            .service
+            .values_snapshot(context, &setup.ports)
+            .unwrap();
+        assert_eq!(snapshot.projection.revision, 2);
+        assert_eq!(snapshot.projection.fixture_values.len(), 1);
+        assert_eq!(snapshot.projection.group_values.len(), 1);
+    }
     assert_eq!(
         setup.values_events(setup.context.desk_id, setup.user).len(),
         2
     );
-    assert_eq!(setup.values_events(peer_desk, setup.user).len(), 2);
+    assert_eq!(setup.values_events(screen_desk, setup.user).len(), 2);
 
-    let other_user = UserId::new();
-    let other_session = SessionId::new();
-    let other_desk = Uuid::new_v4();
-    setup.registry.start(other_session, other_user);
+    // A connection arriving under an identity from before the collapse joins the same Programmer
+    // rather than opening a second one beside it.
+    let legacy_user = UserId::new();
+    let legacy_session = SessionId::new();
+    let legacy_desk = Uuid::new_v4();
+    setup.registry.start(legacy_session, legacy_user);
     setup
         .registry
-        .attach_command_context(other_session, SessionId(other_desk));
-    let other_context = ActionContext::operator(
-        other_desk,
-        other_user.0,
-        other_session.0,
+        .attach_command_context(legacy_session, SessionId(legacy_desk));
+    let legacy_context = ActionContext::operator(
+        legacy_desk,
+        legacy_user.0,
+        legacy_session.0,
         ActionSource::Http,
     );
     setup
         .service
         .handle_values(
             ActionEnvelope {
-                context: other_context
+                context: legacy_context
                     .clone()
-                    .with_request_id("other-set")
-                    .with_expected_revision(0),
+                    .with_request_id("legacy-set")
+                    .with_expected_revision(2),
                 command: ProgrammingValuesRequest {
                     expected_capture_mode_revision: 0,
                     command: ProgrammingValuesCommand::SetFixture {
@@ -1221,42 +1231,16 @@ fn same_user_desks_share_values_while_other_users_and_forged_contexts_are_isolat
             &setup.ports,
         )
         .unwrap();
-    let other_snapshot = setup
-        .service
-        .values_snapshot(&other_context, &setup.ports)
-        .unwrap();
-    assert_eq!(other_snapshot.projection.revision, 1);
-    assert_eq!(
-        other_snapshot.projection.fixture_values[0].fixture_id,
-        setup.fixtures[1]
-    );
-    assert_eq!(setup.values_events(other_desk, other_user).len(), 1);
-    assert_eq!(setup.values_events(other_desk, setup.user).len(), 2);
 
-    let forged = ActionContext::operator(
-        other_desk,
-        other_user.0,
-        setup.session.0,
-        ActionSource::Http,
+    let snapshot = setup
+        .service
+        .values_snapshot(&legacy_context, &setup.ports)
+        .unwrap();
+    assert_eq!(snapshot.projection.revision, 3);
+    assert_eq!(
+        snapshot.projection.fixture_values.len(),
+        2,
+        "the desk holds every surface's values in one Programmer"
     );
-    let snapshot_error = setup
-        .service
-        .values_snapshot(&forged, &setup.ports)
-        .unwrap_err();
-    assert_eq!(snapshot_error.kind, ActionErrorKind::Forbidden);
-    let action_error = setup
-        .service
-        .handle_values(
-            ActionEnvelope {
-                context: forged.with_request_id("forged").with_expected_revision(1),
-                command: ProgrammingValuesRequest {
-                    expected_capture_mode_revision: 0,
-                    command: ProgrammingValuesCommand::Clear,
-                },
-            },
-            &setup.ports,
-        )
-        .unwrap_err();
-    assert_eq!(action_error.kind, ActionErrorKind::Forbidden);
-    assert_eq!(setup.events.latest_sequence(), 6);
+    assert_eq!(snapshot.projection.user_id, setup.user);
 }

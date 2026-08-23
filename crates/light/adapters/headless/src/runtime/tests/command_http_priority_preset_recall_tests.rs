@@ -485,7 +485,7 @@ async fn preset_recall_http_redirects_fixture_and_live_group_values_to_pending_p
         scenario
             .state
             .programming
-            .normal_values_revision(scenario.session.user.id),
+            .normal_values_revision(),
         0
     );
     assert_eq!(

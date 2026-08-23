@@ -376,11 +376,11 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
                     request_id: "preload".into(),
                     expected_capture_mode_revision: state
                         .programming
-                        .capture_mode_revision(user.id),
-                    expected_values_revision: state.programming.preload_values_revision(user.id),
+                        .capture_mode_revision(),
+                    expected_values_revision: state.programming.preload_values_revision(),
                     expected_queue_revision: state
                         .programming
-                        .preload_playback_queue_revision(user.id),
+                        .preload_playback_queue_revision(),
                     expected_selection_revision: state
                         .programming
                         .selection(session.id)
