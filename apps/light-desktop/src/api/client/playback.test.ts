@@ -28,6 +28,7 @@ const screen: ScreenConfiguration = {
 	page_mode: "follow_main",
 	show_page_controls: true,
 	show_programmer: false,
+	not_editable: false,
 	desired_open: false,
 	display_id: null,
 	bounds: null,

@@ -78,6 +78,7 @@ function screenConfiguration(
 		page_mode: "independent",
 		show_page_controls: true,
 		show_programmer: false,
+		not_editable: false,
 		desired_open: true,
 		display_id: null,
 		bounds: null,

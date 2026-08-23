@@ -181,6 +181,13 @@ pub struct ScreenConfiguration {
     pub playback_layout: Option<ScreenPlaybackSurfaceLayout>,
     #[serde(default)]
     pub content: ScreenContent,
+    /// Whether this screen may change programming.
+    ///
+    /// A Not Editable screen is a guest: it presents the desk and operates playback, macros and
+    /// timecodes, but cannot record, update or assign. Screen-local presentation configuration,
+    /// not a second desk or a second user.
+    #[serde(default)]
+    pub not_editable: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -281,6 +288,7 @@ pub struct ScreenConfigurationPatch {
     #[serde(default)]
     pub clear_playback_layout: bool,
     pub content: Option<ScreenContent>,
+    pub not_editable: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
