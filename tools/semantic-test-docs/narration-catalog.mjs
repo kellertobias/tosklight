@@ -90,10 +90,10 @@ const supportedCallPaths = new Set([
 	"command.type",
 	"command.via.api.execute",
 	"command.via.api.type",
-	"crossSurface.completeSharedValueWhilePeerDraftStaysLocal",
+	"crossSurface.completeOneSharedValueFromSeveralSurfaces",
 	"crossSurface.executeOscGroupCommandAndVerifyOutput",
 	"crossSurface.expectCompleteFeedbackForPage",
-	"crossSurface.expectDeskSubscriberIsolation",
+	"crossSurface.expectSubscribersShareTheDeskCommandLine",
 	"crossSurface.applyGroupOneAtFiftyViaApi",
 	"crossSurface.applyGroupOneAtFiftyViaOsc",
 	"crossSurface.reconcileExternalGroupMutation",
@@ -568,8 +568,8 @@ const exactNarrations = new Map([
 
 const implicitOutcomes = new Map([
 	[
-		"crossSurface.completeSharedValueWhilePeerDraftStaysLocal",
-		"Completed programmer values are shared while the peer desk's unfinished command remains local.",
+		"crossSurface.completeOneSharedValueFromSeveralSurfaces",
+		"One command line is built from several surfaces of the desk and completed once, writing one value into the desk's one Programmer.",
 	],
 	[
 		"crossSurface.reconcileExternalGroupMutation",
