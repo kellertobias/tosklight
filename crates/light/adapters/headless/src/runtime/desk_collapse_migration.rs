@@ -48,10 +48,24 @@ impl DeskCollapse {
     }
 }
 
+/// How many superseded Programmers are written out whole.
+///
+/// A desk that has been running for months accumulates a persisted session per window that ever
+/// connected — on a real development desk, over a thousand, and a Programmer holding a rig's worth
+/// of values is a couple of hundred kilobytes. Copying every one produced a report of well over a
+/// gigabyte, which is not a backup so much as a way to fill somebody's disk during startup.
+///
+/// So the report always *lists* every superseded Programmer, and copies the content of the most
+/// recent few that actually hold something. Those are the ones an operator could plausibly want
+/// back; the rest are recorded with what they held so nothing is silently unaccounted for.
+const WHOLE_COPIES: usize = 20;
+
 #[derive(Serialize)]
 struct CollapseReport<'a> {
     collapsed_at: String,
     policy: &'a str,
+    /// What this report copied and what it only listed.
+    completeness: String,
     kept: ReportedProgrammer<'a>,
     superseded: Vec<ReportedProgrammer<'a>>,
 }
@@ -61,17 +75,71 @@ struct ReportedProgrammer<'a> {
     session_id: uuid::Uuid,
     user_id: uuid::Uuid,
     updated_at: &'a str,
-    /// The Programmer exactly as it was stored, so the operator can put it back by hand.
-    programmer: serde_json::Value,
+    /// What this Programmer held, so a listed-only entry still says whether it mattered.
+    held: Held,
+    /// The Programmer exactly as it was stored. Absent when only listed; see `completeness`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    programmer: Option<serde_json::Value>,
 }
 
-fn reported<'a>(session: &'a PersistedSession) -> ReportedProgrammer<'a> {
+/// A count of what a stored Programmer held, read without interpreting it.
+#[derive(Default, Serialize)]
+struct Held {
+    fixture_values: usize,
+    group_values: usize,
+    preload_values: usize,
+    selected_fixtures: usize,
+    command_line: bool,
+}
+
+impl Held {
+    fn read(programmer: &serde_json::Value) -> Self {
+        let count = |key: &str| {
+            programmer
+                .get(key)
+                .map(|value| match value {
+                    serde_json::Value::Array(items) => items.len(),
+                    serde_json::Value::Object(entries) => entries.len(),
+                    _ => 0,
+                })
+                .unwrap_or_default()
+        };
+        Self {
+            fixture_values: count("values"),
+            group_values: count("group_values"),
+            preload_values: count("preload_pending") + count("preload_active"),
+            selected_fixtures: count("selected"),
+            command_line: programmer
+                .get("command_line")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|text| !text.trim().is_empty()),
+        }
+    }
+
+    /// Whether there is anything here somebody could want back.
+    const fn is_anything(&self) -> bool {
+        self.fixture_values > 0
+            || self.group_values > 0
+            || self.preload_values > 0
+            || self.selected_fixtures > 0
+            || self.command_line
+    }
+}
+
+fn stored_programmer(session: &PersistedSession) -> serde_json::Value {
+    serde_json::from_str(&session.programmer_json)
+        .unwrap_or_else(|_| serde_json::Value::String(session.programmer_json.clone()))
+}
+
+fn reported<'a>(session: &'a PersistedSession, whole: bool) -> ReportedProgrammer<'a> {
+    let programmer = stored_programmer(session);
+    let held = Held::read(&programmer);
     ReportedProgrammer {
         session_id: session.id.0,
         user_id: session.user_id.0,
         updated_at: &session.updated_at,
-        programmer: serde_json::from_str(&session.programmer_json)
-            .unwrap_or_else(|_| serde_json::Value::String(session.programmer_json.clone())),
+        held,
+        programmer: whole.then_some(programmer),
     }
 }
 
@@ -90,11 +158,29 @@ pub(super) fn write_collapse_report(
     let directory = data_dir.join("backups");
     std::fs::create_dir_all(&directory)?;
     let path = directory.join(format!("desk-collapse-{}.json", now.replace(':', "-")));
+    let mut copied = 0usize;
+    let superseded = collapse
+        .superseded
+        .iter()
+        .map(|session| {
+            let holds_anything = Held::read(&stored_programmer(session)).is_anything();
+            let whole = holds_anything && copied < WHOLE_COPIES;
+            if whole {
+                copied += 1;
+            }
+            reported(session, whole)
+        })
+        .collect::<Vec<_>>();
+    let listed_only = superseded.len() - copied;
     let report = CollapseReport {
         collapsed_at: now.to_owned(),
         policy: "the Programmer touched most recently is kept; ties are broken by session id",
-        kept: reported(canonical),
-        superseded: collapse.superseded.iter().map(reported).collect(),
+        completeness: format!(
+            "{copied} superseded Programmers were copied whole, newest first; {listed_only} more \
+             are listed with what they held but not copied"
+        ),
+        kept: reported(canonical, true),
+        superseded,
     };
     std::fs::write(&path, serde_json::to_string_pretty(&report)?)?;
     Ok(path)
@@ -106,11 +192,28 @@ mod tests {
     use light_core::{SessionId, UserId};
 
     fn session(id: u128, user: u128, updated_at: &str) -> PersistedSession {
+        programmed_session(id, user, updated_at, 1)
+    }
+
+    /// A persisted session holding `values` retained fixture values.
+    fn programmed_session(
+        id: u128,
+        user: u128,
+        updated_at: &str,
+        values: usize,
+    ) -> PersistedSession {
+        let held = (0..values)
+            .map(|index| serde_json::json!({ "fixture_id": index }))
+            .collect::<Vec<_>>();
         PersistedSession {
             id: SessionId(uuid::Uuid::from_u128(id)),
             user_id: UserId(uuid::Uuid::from_u128(user)),
             token: format!("token-{id}"),
-            programmer_json: format!(r#"{{"session_id":"{}"}}"#, uuid::Uuid::from_u128(id)),
+            programmer_json: serde_json::json!({
+                "session_id": uuid::Uuid::from_u128(id),
+                "values": held,
+            })
+            .to_string(),
             connected: false,
             updated_at: updated_at.to_owned(),
         }
@@ -200,6 +303,54 @@ mod tests {
                 .unwrap()
                 .contains("most recently")
         );
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_desk_with_a_long_history_reports_all_of_it_without_copying_all_of_it() {
+        // A desk that has been running for months accumulates a persisted session per window that
+        // ever connected. Copying every Programmer produced a report over a gigabyte on a real
+        // development desk, so the report lists them all and copies the recent ones that held
+        // something.
+        let directory = scratch_directory();
+        let mut sessions = (0..60)
+            .map(|index| {
+                programmed_session(
+                    index + 1,
+                    10,
+                    &format!("2026-08-01T00:{:02}:00Z", index),
+                    40,
+                )
+            })
+            .collect::<Vec<_>>();
+        // An empty Programmer has nothing to recover, so it is listed rather than copied.
+        sessions.push(programmed_session(999, 10, "2026-08-01T00:00:30Z", 0));
+        let collapse = DeskCollapse::decide(sessions);
+
+        let path = write_collapse_report(&directory, &collapse, "2026-08-23T12:00:00Z").unwrap();
+
+        let written: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let superseded = written["superseded"].as_array().unwrap();
+        assert_eq!(
+            superseded.len(),
+            60,
+            "every superseded Programmer is listed"
+        );
+        let copied = superseded
+            .iter()
+            .filter(|entry| entry.get("programmer").is_some())
+            .count();
+        assert_eq!(copied, WHOLE_COPIES);
+        // The empty one is listed with what it held, and not copied.
+        let empty = superseded
+            .iter()
+            .find(|entry| entry["session_id"] == uuid::Uuid::from_u128(999).to_string())
+            .expect("the empty Programmer is still accounted for");
+        assert!(empty.get("programmer").is_none());
+        assert_eq!(empty["held"]["fixture_values"], 0);
+        // And the ones that were copied say how much they held.
+        assert_eq!(superseded[0]["held"]["fixture_values"], 40);
         let _ = std::fs::remove_dir_all(&directory);
     }
 
