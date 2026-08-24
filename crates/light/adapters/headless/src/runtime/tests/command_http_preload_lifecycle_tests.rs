@@ -143,7 +143,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     );
     let peer = json(
         scenario
-            .preload_lifecycle_action_for(user_id, &second_token, peer_enter)
+            .preload_lifecycle_action_for( &second_token, peer_enter)
             .await,
     )
     .await;
@@ -152,9 +152,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
 
     // An identity from before the collapse acts on the desk rather than being turned away.
     let legacy = scenario
-        .preload_lifecycle_action_for(
-            Uuid::new_v4(),
-            &scenario.token,
+        .preload_lifecycle_action_for(            &scenario.token,
             lifecycle_request(
                 "preload-legacy-path",
                 1,
@@ -162,8 +160,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
                 0,
                 1,
                 serde_json::json!({"type":"enter"}),
-            ),
-        )
+            ))
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
     assert_eq!(json(legacy).await["status"], "no_change");
@@ -192,15 +189,12 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     // A later unrelated Programmer event must not invalidate the queued Playback target.
     assert_eq!(
         scenario
-            .priority_action_for(
-                user_id,
-                &scenario.token,
+            .priority_action_for(                &scenario.token,
                 serde_json::json!({
                     "request_id":"preload-unrelated-priority",
                     "expected_revision":0,
                     "priority":70,
-                }),
-            )
+                }))
             .await
             .status(),
         StatusCode::OK
@@ -278,18 +272,15 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     );
     assert_eq!(
         scenario
-            .preload_lifecycle_action_for(user_id, &second_token, reenter)
+            .preload_lifecycle_action_for( &second_token, reenter)
             .await
             .status(),
         StatusCode::OK
     );
     assert_eq!(
         scenario
-            .preload_values_action_for(
-                user_id,
-                &second_token,
-                preload_fixture_request("preload-peer-pending", 2, 3, fixture.0, 0.8,),
-            )
+            .preload_values_action_for(                &second_token,
+                preload_fixture_request("preload-peer-pending", 2, 3, fixture.0, 0.8,))
             .await
             .status(),
         StatusCode::OK
@@ -315,7 +306,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     );
     let cleared = json(
         scenario
-            .preload_lifecycle_action_for(user_id, &second_token, clear)
+            .preload_lifecycle_action_for( &second_token, clear)
             .await,
     )
     .await;

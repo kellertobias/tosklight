@@ -22,7 +22,7 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPresetRecallPorts,
     ) -> Result<ProgrammingPresetRecallResult, ActionError> {
         let identity = recall_identity(&action)?;
-        self.with_user_and_desk_gate(action.context.desk_id, identity.user_id, || {
+        self.with_programmer_and_desk_gate(action.context.desk_id, || {
             self.apply_preset_recall(action, ports, identity)
         })
     }

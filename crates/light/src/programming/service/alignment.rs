@@ -15,8 +15,8 @@ impl ProgrammingService {
         mode: Option<ProgrammerAlignmentMode>,
     ) -> Result<Option<ProgrammerAlignmentState>, ActionError> {
         let session = context_session(context)?;
-        let user_id = context_user(context)?;
-        self.with_user_and_desk_gate(context.desk_id, user_id, || {
+        context_user(context)?;
+        self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize_programming_change(context)?;
             if !self.programmers.knows_session(session) {
                 return Err(ActionError::new(

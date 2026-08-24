@@ -3,13 +3,13 @@ async fn preload_playback_queue_snapshot_is_exact_user_authenticated_and_narrow(
     let scenario = CommandHttpScenario::new().await;
 
     let denied = scenario
-        .preload_playback_queue_snapshot_for(scenario.session.user.id.0, None)
+        .preload_playback_queue_snapshot_for( None)
         .await;
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
 
     // A URL naming an identity from before the collapse reads the desk's own Programmer.
     let legacy = scenario
-        .preload_playback_queue_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
+        .preload_playback_queue_snapshot_for( Some(&scenario.token))
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
 

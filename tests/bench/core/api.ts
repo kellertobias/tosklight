@@ -371,13 +371,6 @@ export class ApiDriver {
               : body,
       };
     }
-    if (method === "POST" && path === "/api/v2/users") {
-      return {
-        method,
-        path: "/api/v2/users/create",
-        body: { request_id: crypto.randomUUID(), ...(body as object) },
-      };
-    }
     return { method, path, body };
   }
 

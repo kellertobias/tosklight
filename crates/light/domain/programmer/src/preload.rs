@@ -22,7 +22,7 @@ impl ProgrammerRegistry {
     /// Reads only whether retained active Preload values exist; no Programmer projection is
     /// cloned or serialized.
     pub fn has_active_preload(&self, session: SessionId) -> Option<bool> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let states = self.states.read();
         let state = states.get(&self.key(session))?;
@@ -36,7 +36,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn activate_preload(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.activate_preload_at(session, self.clock.now())
     }
@@ -66,7 +66,7 @@ impl ProgrammerRegistry {
         committed_at: DateTime<Utc>,
         programmer_fade_millis: Option<u64>,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let pending_values_changed = {
             let mut states = self.states.write();
@@ -167,7 +167,7 @@ impl ProgrammerRegistry {
         surface: PreloadPlaybackQueueSurface,
         origin_desk_id: Option<Uuid>,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -199,7 +199,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn take_preload_playback_actions(&self, session: SessionId) -> Vec<PreloadPlaybackAction> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -213,7 +213,7 @@ impl ProgrammerRegistry {
         drained
     }
     pub fn clear_preload_pending(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let (pending_values_changed, queue_changed) = {
             let mut states = self.states.write();
@@ -243,7 +243,7 @@ impl ProgrammerRegistry {
         true
     }
     pub fn release_preload(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -297,7 +297,7 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -327,7 +327,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn arm_preload(&self, session: SessionId, capture_programmer: bool) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {

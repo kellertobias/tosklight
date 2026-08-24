@@ -457,7 +457,7 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_group_with_fade(session, group_id, attribute, value, false)
     }
@@ -468,7 +468,7 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_group_with_fade(session, group_id, attribute, value, true)
     }
@@ -481,7 +481,7 @@ impl ProgrammerRegistry {
         fade_millis: Option<u64>,
         delay_millis: Option<u64>,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_group_with_timing(
             session,
@@ -503,7 +503,7 @@ impl ProgrammerRegistry {
         value: AttributeValue,
         delay_millis: Option<u64>,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_group_with_timing(
             session,
@@ -587,7 +587,7 @@ impl ProgrammerRegistry {
         fixture_id: FixtureId,
         attribute: &AttributeKey,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();
@@ -633,7 +633,7 @@ impl ProgrammerRegistry {
         group_id: &str,
         attribute: &AttributeKey,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();

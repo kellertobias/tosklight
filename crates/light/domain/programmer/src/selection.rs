@@ -152,7 +152,7 @@ impl ProgrammerRegistry {
         fixtures: impl IntoIterator<Item = FixtureId>,
         expression: SelectionExpression,
     ) -> Result<ProgrammerSelection, SelectionReplaceError> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return Err(SelectionReplaceError::UnknownSession);
@@ -199,7 +199,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn select(&self, session: SessionId, fixtures: impl IntoIterator<Item = FixtureId>) -> u64 {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut seen = HashSet::new();
         let selected = fixtures
@@ -233,7 +233,7 @@ impl ProgrammerRegistry {
         fixtures: Vec<FixtureId>,
         expression: SelectionExpression,
     ) -> u64 {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
@@ -262,7 +262,7 @@ impl ProgrammerRegistry {
         references: Vec<SelectionReference>,
         groups: &HashMap<String, GroupDefinition>,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return false;

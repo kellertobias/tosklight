@@ -42,12 +42,12 @@ async fn programmer_values_snapshot_normalizes_a_legacy_user_and_requires_authen
 
     // A URL naming an identity from before the collapse reads the desk's own Programmer.
     let response = scenario
-        .values_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
+        .values_snapshot_for( Some(&scenario.token))
         .await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let response = scenario
-        .values_snapshot_for(scenario.session.user.id.0, None)
+        .values_snapshot_for( None)
         .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -85,7 +85,7 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
     let (second_token, second_user) =
         login_on_desk(&scenario, "Operator", second_desk.id).await;
     let second = scenario
-        .capture_mode_snapshot_for(second_user, Some(&second_token))
+        .capture_mode_snapshot_for( Some(&second_token))
         .await;
     assert_eq!(second.status(), StatusCode::OK);
     let second: light_wire::v2::programming::ProgrammingCaptureModeSnapshot =
@@ -95,14 +95,14 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
     // A URL naming an identity from before the collapse reads the desk's own Programmer.
     assert_eq!(
         scenario
-            .capture_mode_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
+            .capture_mode_snapshot_for( Some(&scenario.token))
             .await
             .status(),
         StatusCode::OK
     );
     assert_eq!(
         scenario
-            .capture_mode_snapshot_for(scenario.session.user.id.0, None)
+            .capture_mode_snapshot_for( None)
             .await
             .status(),
         StatusCode::UNAUTHORIZED
@@ -339,7 +339,7 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
         }
     });
     let second = scenario
-        .values_action_for(second_user, &second_token, second)
+        .values_action_for( &second_token, second)
         .await;
     assert_eq!(second.status(), StatusCode::OK);
     let second = json(second).await;
@@ -365,7 +365,7 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
     assert_eq!(logged_in_user, legacy_user.id.0);
     let legacy = fixture_set_request("legacy-user", 2, fixture.0, 0.9);
     let legacy = scenario
-        .values_action_for(legacy_user.id.0, &legacy_token, legacy)
+        .values_action_for( &legacy_token, legacy)
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
     let legacy = json(legacy).await;
@@ -381,16 +381,13 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
 
     // A stale revision is still refused, which is what protects concurrent surfaces.
     let stale = scenario
-        .values_action_for(
-            scenario.session.user.id.0,
-            &scenario.token,
+        .values_action_for(            &scenario.token,
             serde_json::json!({
                 "request_id": "stale-revision",
                 "expected_revision": 1,
                 "expected_capture_mode_revision": 0,
                 "action": {"type": "clear"}
-            }),
-        )
+            }))
         .await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     let _ = std::fs::remove_dir_all(scenario.data_dir);

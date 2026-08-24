@@ -23,7 +23,7 @@ impl ProgrammingService {
         let (session, user_id, request_id, expected_revision) = preload_values_context(&action)?;
         // Whatever identity arrived, this session operates the desk's one Programmer.
         let user_id = self.programmers.desk_user_for(session, user_id);
-        self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
+        self.with_programmer_and_desk_gate(action.context.desk_id, || {
             ports.authorize_programming_change(&action.context)?;
             self.assert_preload_values_owner(session)?;
             let fingerprint = preload_request_fingerprint(expected_revision, &action.command);

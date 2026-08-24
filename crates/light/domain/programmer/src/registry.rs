@@ -117,25 +117,16 @@ impl ProgrammerRegistry {
     /// capture state, compose existing mutation helpers, and publish the final projection without
     /// another surface interleaving a write. Application services must acquire this gate before
     /// any desk-interaction gate.
-    pub fn with_user_serialized<R>(&self, _user_id: UserId, operation: impl FnOnce() -> R) -> R {
-        let _guard = self.mutation_gate.lock();
-        operation()
-    }
-
-    /// Serialize one transition on the desk's Programmer.
     ///
-    /// The desk has one, so the set of identities a caller names no longer selects which gates to
-    /// take — but real concurrent writes from several connections are still serialized here.
-    pub fn with_users_serialized<R>(
-        &self,
-        _users: impl IntoIterator<Item = UserId>,
-        operation: impl FnOnce() -> R,
-    ) -> R {
+    /// This used to take the identity, or the set of identities, whose gates to hold. The desk has
+    /// one Programmer and one gate; real concurrent writes from several connections are still
+    /// serialized, there is simply nothing left to name.
+    pub fn serialized<R>(&self, operation: impl FnOnce() -> R) -> R {
         let _guard = self.mutation_gate.lock();
         operation()
     }
 
-    pub(crate) fn mutation_gate(&self, _session: SessionId) -> Arc<ReentrantMutex<()>> {
+    pub(crate) fn mutation_gate(&self) -> Arc<ReentrantMutex<()>> {
         Arc::clone(&self.mutation_gate)
     }
 
@@ -154,7 +145,7 @@ impl ProgrammerRegistry {
     /// `None` means the session is absent, `Some(false)` is an exact semantic no-op, and
     /// `Some(true)` means the priority and the priority stamped onto retained values changed.
     pub fn update_priority(&self, session: SessionId, priority: i16) -> Option<bool> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let state = states.get_mut(&self.key(session))?;
@@ -244,12 +235,12 @@ impl ProgrammerRegistry {
             .unwrap_or(self.desk.normalize(presented))
     }
 
-    /// The desk identity this session operates, whatever identity it presented.
+    /// The desk identity this session operates.
     ///
-    /// `Some` whenever the desk knows the session. Callers should read and report the returned
-    /// identity rather than the presented one: an identity from before the collapse names no
-    /// state, so keying on it reads an empty Programmer at revision zero.
-    pub fn operated_desk_user(&self, session: SessionId, _presented: UserId) -> Option<UserId> {
+    /// `Some` whenever the desk knows the session. Callers should read and report this rather than
+    /// an identity a caller presented: one from before the collapse names no state, so keying on
+    /// it reads an empty Programmer at revision zero.
+    pub fn operated_desk_user(&self, session: SessionId) -> Option<UserId> {
         self.user_id(session)
     }
 
@@ -359,7 +350,7 @@ impl ProgrammerRegistry {
         highlight: Option<bool>,
         active_context: Option<Option<String>>,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -382,7 +373,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn clear_values(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();
@@ -406,7 +397,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn disconnect(&self, session: SessionId) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let key = self.key(session);
         self.sessions.write().remove(&session);
@@ -416,7 +407,7 @@ impl ProgrammerRegistry {
         }
     }
     pub fn connect(&self, session: SessionId) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.connected = true;
@@ -424,7 +415,7 @@ impl ProgrammerRegistry {
         }
     }
     pub fn clear(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let key = self.key(session);
         self.sessions.write().retain(|_, bound| *bound != key);

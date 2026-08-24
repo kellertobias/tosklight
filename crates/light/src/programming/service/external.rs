@@ -18,7 +18,7 @@ impl ProgrammingService {
     ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
         let session = super::context_session(context)?;
         let user_id = super::context_user(context)?;
-        self.with_user_and_desk_gate(context.desk_id, user_id, || {
+        self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize_programming_change(context)?;
             self.capture_external_interaction(context, session, user_id, operation)
         })

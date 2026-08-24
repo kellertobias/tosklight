@@ -31,7 +31,7 @@ impl ProgrammingService {
         ports: &dyn ProgrammingCueRecordingPorts,
     ) -> Result<ProgrammingCueRecordResult, ActionError> {
         let identity = recording_identity(&envelope)?;
-        self.with_user_and_desk_gate(envelope.context.desk_id, identity.user_id, || {
+        self.with_programmer_and_desk_gate(envelope.context.desk_id, || {
             self.apply_cue_recording(envelope, ports, identity)
         })
     }

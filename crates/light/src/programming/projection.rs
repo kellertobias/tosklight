@@ -46,8 +46,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingLiveSnapshot, ActionError> {
         let session = snapshot_session(context)?;
-        let user = snapshot_user(context)?;
-        self.with_user_and_desk_gate(context.desk_id, user, || {
+        snapshot_user(context)?;
+        self.with_programmer_and_desk_gate(context.desk_id, || {
             self.capture_snapshot(context, ports, session)
         })
     }

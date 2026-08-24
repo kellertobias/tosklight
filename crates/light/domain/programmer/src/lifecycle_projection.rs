@@ -33,7 +33,7 @@ impl ProgrammerRegistry {
     /// an absent one — a lifecycle transition published under it would otherwise be silent.
     pub fn programmer_lifecycle(&self, user_id: UserId) -> Option<ProgrammerLifecycleSummary> {
         let user_id = self.desk.normalize(user_id);
-        self.with_user_serialized(user_id, || self.lifecycle_for_user(user_id))
+        self.serialized(|| self.lifecycle_for_user(user_id))
     }
 
     /// Read only connected Programmer authorities in deterministic user/Programmer order.

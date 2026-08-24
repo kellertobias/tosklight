@@ -234,7 +234,7 @@ impl ProgrammerRegistry {
     /// visible selection. Recording a target uses this boundary so the next fixture or Group press
     /// starts a fresh selection while the just-recorded source remains inspectable.
     pub fn finish_selection_gesture(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session)
     }

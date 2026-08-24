@@ -36,7 +36,7 @@ impl ProgrammerRegistry {
         E: From<String>,
         F: FnOnce(&ProgrammerRegistry) -> Result<T, E>,
     {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let detached = self
             .detached_session(session)
@@ -54,7 +54,7 @@ impl ProgrammerRegistry {
     where
         F: FnOnce() -> Result<T, E>,
     {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let snapshot = self.transaction_snapshot(session);
         match transaction() {
@@ -107,7 +107,7 @@ impl ProgrammerRegistry {
         E: From<String>,
         F: FnOnce(&ProgrammerRegistry) -> Result<T, E>,
     {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let staged = self
             .detached_session(session)
@@ -287,7 +287,7 @@ impl ProgrammerRegistry {
         &self,
         session: SessionId,
     ) -> Option<ProgrammerTransactionSnapshot> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return None;

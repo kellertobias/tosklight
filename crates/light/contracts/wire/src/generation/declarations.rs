@@ -363,7 +363,6 @@ fn desk_management(config: &Config) -> Vec<String> {
         DeskLockConfigurationUpdateRequest::decl(config),
         DeskUnlockMode::decl(config),
         DeskUnlockRequest::decl(config),
-        UserCreateRequest::decl(config),
     ]
 }
 

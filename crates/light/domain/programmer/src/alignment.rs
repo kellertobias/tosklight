@@ -84,7 +84,7 @@ impl ProgrammerRegistry {
         session: SessionId,
         mode: ProgrammerAlignmentMode,
     ) -> Result<ProgrammerAlignmentState, ProgrammerAlignmentError> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return Err(ProgrammerAlignmentError::UnknownSession);
@@ -128,7 +128,7 @@ impl ProgrammerRegistry {
         mode: ProgrammerAlignmentMode,
         bases: &[ProgrammerAlignmentBase],
     ) -> Result<ProgrammerAlignmentState, ProgrammerAlignmentError> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let context = self.command_context(session);
         let current = self
@@ -190,7 +190,7 @@ impl ProgrammerRegistry {
         session: SessionId,
         mut plan: ProgrammerAlignmentPlan,
     ) -> Result<ProgrammerAlignmentState, ProgrammerAlignmentError> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return Err(ProgrammerAlignmentError::UnknownSession);
@@ -216,7 +216,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn deactivate_alignment(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.alignment_contexts
             .write()
@@ -232,7 +232,7 @@ impl ProgrammerRegistry {
         session: SessionId,
         attribute: &AttributeKey,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let context = self.command_context(session);
         let different = self

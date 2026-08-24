@@ -35,10 +35,8 @@ of your Record, because the guest never reaches the Programmer at all.
 The desk's Programmer answers on `/api/v2/programmer/…` — values, capture mode, priority, Preload.
 Those routes name no operator, because there is one Programmer to name.
 
-The same routes as they were spelled when a desk could hold several — `/api/v2/users/{id}/…` — keep
-working, and the identity in them is normalised onto the desk's Programmer rather than checked. They
-are a compatibility path for saved configuration and older clients, and can be retired once none
-remain.
+The spellings from when a desk could hold several — `/api/v2/users/{id}/…` — are retired. They were
+a compatibility path while saved configuration might still have carried an identity; nothing does.
 
 ## Desk Lock
 

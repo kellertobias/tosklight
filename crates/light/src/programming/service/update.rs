@@ -63,7 +63,7 @@ impl ProgrammingService {
         ports: &P,
     ) -> Result<ProgrammingUpdateTargetsResult, ActionError> {
         let mut identity = update_identity(&envelope.context)?;
-        self.with_user_and_desk_gate(identity.desk_id, identity.user_id, || {
+        self.with_programmer_and_desk_gate(identity.desk_id, || {
             ports.authorize_programming_update(&envelope.context)?;
             self.bind_update_owner(&mut identity)?;
             let capture = self
@@ -117,7 +117,7 @@ impl ProgrammingService {
         ports: &P,
     ) -> Result<ProgrammingUpdatePreviewResult, ActionError> {
         let mut identity = update_identity(&envelope.context)?;
-        self.with_user_and_desk_gate(identity.desk_id, identity.user_id, || {
+        self.with_programmer_and_desk_gate(identity.desk_id, || {
             ports.authorize_programming_update(&envelope.context)?;
             self.bind_update_owner(&mut identity)?;
             let capture = self.capture_update(identity.session_id, &envelope.command.target)?;
@@ -142,7 +142,7 @@ impl ProgrammingService {
         ports: &P,
     ) -> Result<ProgrammingUpdateResult, ActionError> {
         let identity = update_identity(&envelope.context)?;
-        self.with_user_and_desk_gate(identity.desk_id, identity.user_id, || {
+        self.with_programmer_and_desk_gate(identity.desk_id, || {
             self.handle_update_locked(envelope, active_show, ports, identity)
         })
     }
@@ -335,7 +335,7 @@ impl ProgrammingService {
     fn bind_update_owner(&self, identity: &mut UpdateIdentity) -> Result<(), ActionError> {
         identity.user_id = self
             .programmers
-            .operated_desk_user(identity.session_id, identity.user_id)
+            .operated_desk_user(identity.session_id)
             .ok_or_else(missing_programmer)?;
         Ok(())
     }
