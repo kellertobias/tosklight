@@ -60,37 +60,25 @@ export function encodeProgrammerPriorityActionRequest(
 
 export function decodeProgrammerPrioritySnapshot(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerPrioritySnapshot {
-	validateExpectedUser(expectedUserId);
 	const snapshot = exactRecordAt(value, "$", ["cursor", "projection"]);
 	return {
 		cursor: cursorAt(snapshot.cursor, "$.cursor"),
-		projection: projectionAt(
-			snapshot.projection,
-			"$.projection",
-			expectedUserId,
-		),
+		projection: projectionAt(snapshot.projection, "$.projection"),
 	};
 }
 
 export function decodeProgrammerPriorityActionOutcome(
 	value: unknown,
-	expectedUserId: string,
 	request: ProgrammerPriorityActionRequest,
 ): ProgrammerPriorityActionOutcome {
-	validateExpectedUser(expectedUserId);
 	const response = recordAt(value, "$"),
 		status = enumAt(response.status, "$.status", ["changed", "no_change"]);
 	exactRecordAt(response, "$", outcomeFields(response, status));
 	const requestId = stringAt(response.request_id, "$.request_id");
 	if (requestId !== request.requestId)
 		throw mismatch("$.request_id", request.requestId, requestId);
-	const projection = projectionAt(
-		response.projection,
-		"$.projection",
-		expectedUserId,
-	);
+	const projection = projectionAt(response.projection, "$.projection");
 	const expectedRevision =
 		status === "changed"
 			? request.expectedRevision + 1
@@ -122,9 +110,7 @@ export function decodeProgrammerPriorityActionOutcome(
 
 export function decodeProgrammerPriorityEventMessage(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerPriorityEventMessage {
-	validateExpectedUser(expectedUserId);
 	const message = recordAt(value, "$"),
 		type = enumAt(message.type, "$.type", [
 			"ready",
@@ -139,31 +125,26 @@ export function decodeProgrammerPriorityEventMessage(
 	if (type === "error")
 		return { type, error: stringAt(message.error, "$.error") };
 	if (type === "gap") return gapAt(message.gap);
-	return eventAt(message.event, expectedUserId);
+	return eventAt(message.event);
 }
 
 function projectionAt(
 	value: unknown,
 	path: string,
-	expectedUserId: string,
 ): ProgrammerPriorityProjection {
 	const projection = exactRecordAt(value, path, [
-		"user_id",
 		"revision",
 		"priority",
 		"changed_at",
 	]);
-	const userId = programmingUuidAt(projection.user_id, `${path}.user_id`);
-	assertUser(userId, expectedUserId, `${path}.user_id`);
 	return {
-		userId,
 		revision: integerAt(projection.revision, `${path}.revision`),
 		priority: priorityAt(projection.priority, `${path}.priority`),
 		changedAt: timestampAt(projection.changed_at, `${path}.changed_at`),
 	};
 }
 
-function eventAt(value: unknown, expectedUserId: string) {
+function eventAt(value: unknown) {
 	const event = recordAt(value, "$.event");
 	exactRecordAt(
 		event,
@@ -187,7 +168,7 @@ function eventAt(value: unknown, expectedUserId: string) {
 		throw new WireValidationError("$.event.desk_id", "null", event.desk_id);
 	enumAt(event.class, "$.event.class", ["projection"]);
 	enumAt(event.delivery, "$.event.delivery", ["replaceable"]);
-	eventObjectAt(event.object, expectedUserId);
+	eventObjectAt(event.object);
 	noRelatedObjects(event.related_objects);
 	actionSourceAt(event.source);
 	const payload = exactRecordAt(event.payload, "$.event.payload", [
@@ -199,39 +180,28 @@ function eventAt(value: unknown, expectedUserId: string) {
 		type: "event" as const,
 		sequence,
 		correlationId: requiredNullableUuid(event, "correlation_id", "$.event"),
-		change: changeAt(payload.change, "$.event.payload.change", expectedUserId),
+		change: changeAt(payload.change, "$.event.payload.change"),
 	};
 }
 
-function changeAt(
-	value: unknown,
-	path: string,
-	expectedUserId: string,
-): ProgrammerPriorityChange {
+function changeAt(value: unknown, path: string): ProgrammerPriorityChange {
 	const change = recordAt(value, path),
 		type = enumAt(change.type, `${path}.type`, ["upsert", "remove"]);
 	if (type === "upsert") {
 		exactRecordAt(change, path, ["type", "projection"]);
 		return {
 			type,
-			projection: projectionAt(
-				change.projection,
-				`${path}.projection`,
-				expectedUserId,
-			),
+			projection: projectionAt(change.projection, `${path}.projection`),
 		};
 	}
-	exactRecordAt(change, path, ["type", "user_id", "revision"]);
-	const userId = programmingUuidAt(change.user_id, `${path}.user_id`);
-	assertUser(userId, expectedUserId, `${path}.user_id`);
+	exactRecordAt(change, path, ["type", "revision"]);
 	return {
 		type,
-		userId,
 		revision: integerAt(change.revision, `${path}.revision`),
 	};
 }
 
-function eventObjectAt(value: unknown, expectedUserId: string) {
+function eventObjectAt(value: unknown) {
 	const object = exactRecordAt(value, "$.event.object", ["capability", "id"]);
 	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
 	const expected = "programming-priority";
@@ -295,15 +265,6 @@ function timestampAt(value: unknown, path: string) {
 	} catch {
 		throw new WireValidationError(path, "RFC 3339 calendar timestamp", value);
 	}
-}
-
-function validateExpectedUser(userId: string) {
-	programmingUuidAt(userId, "$.requested_user_id");
-}
-
-function assertUser(actual: string, expected: string, path: string) {
-	if (actual.toLowerCase() !== expected.toLowerCase())
-		throw mismatch(path, `requested user ${expected}`, actual);
 }
 
 function requiredNullableUuid(

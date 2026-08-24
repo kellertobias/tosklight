@@ -8,10 +8,6 @@ import {
 } from "./projectionValue";
 import { ProgrammerPriorityProtocolError } from "./transport";
 
-export function priorityChangeUserId(change: ProgrammerPriorityChange) {
-	return change.type === "upsert" ? change.projection.userId : change.userId;
-}
-
 export function priorityChangeRevision(change: ProgrammerPriorityChange) {
 	return change.type === "upsert"
 		? change.projection.revision

@@ -56,10 +56,7 @@ export class HttpProgrammerPriorityTransport
 			const response = await this.fetchRequest(this.snapshotPath(scope), {
 				headers: this.headers(),
 			});
-			return decodeProgrammerPrioritySnapshot(
-				await responseValue(response),
-				scope.userId,
-			);
+			return decodeProgrammerPrioritySnapshot(await responseValue(response));
 		});
 	}
 
@@ -79,7 +76,6 @@ export class HttpProgrammerPriorityTransport
 		});
 		return decodeProgrammerPriorityActionOutcome(
 			await responseValue(response),
-			scope.userId,
 			request,
 		);
 	}
@@ -170,7 +166,7 @@ function bindSocket(
 		socket.send(JSON.stringify(prioritySubscription(userId, afterSequence))),
 	);
 	socket.addEventListener("message", (event) =>
-		deliverEvent(event, userId, observer),
+		deliverEvent(event, observer),
 	);
 	socket.addEventListener("error", () =>
 		observer.error(new Error("Programmer priority event connection failed")),
@@ -196,13 +192,12 @@ function eventStream(
 
 function deliverEvent(
 	event: MessageEvent,
-	userId: string,
 	observer: ProgrammerPriorityEventObserver,
 ) {
 	let value: unknown;
 	try {
 		value = JSON.parse(String(event.data));
-		observer.message(decodeProgrammerPriorityEventMessage(value, userId));
+		observer.message(decodeProgrammerPriorityEventMessage(value));
 	} catch (reason) {
 		observer.error(
 			new ProgrammerPriorityProtocolError(

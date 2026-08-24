@@ -2,9 +2,8 @@ export interface ProgrammerPriorityScope {
 	userId: string;
 }
 
-/** User-owned priority metadata; normal Programmer values never enter this slice. */
+/** The Programmer's priority metadata; normal Programmer values never enter this slice. */
 export interface ProgrammerPriorityProjection {
-	userId: string;
 	revision: number;
 	priority: number;
 	changedAt: string;
@@ -17,7 +16,7 @@ export interface ProgrammerPrioritySnapshot {
 
 export type ProgrammerPriorityChange =
 	| { type: "upsert"; projection: ProgrammerPriorityProjection }
-	| { type: "remove"; userId: string; revision: number };
+	| { type: "remove"; revision: number };
 
 export type ProgrammerPriorityEventMessage =
 	| { type: "ready"; cursor: number }

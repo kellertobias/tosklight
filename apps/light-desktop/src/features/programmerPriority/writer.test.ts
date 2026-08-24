@@ -200,7 +200,7 @@ describe("ProgrammerPriorityWriter", () => {
 		await Promise.resolve();
 		const request = applyAction.mock.calls[0]?.[1];
 		if (!request) throw new Error("missing request");
-		store.applyChange({ type: "remove", userId: USER_ID, revision: 2 }, 11);
+		store.applyChange({ type: "remove", revision: 2 }, 11);
 		response.resolve(changed(request));
 
 		await expect(pending).resolves.toBeNull();
@@ -233,7 +233,7 @@ describe("ProgrammerPriorityWriter", () => {
 		await Promise.resolve();
 		const firstRequest = applyAction.mock.calls[0]?.[1];
 		if (!firstRequest) throw new Error("missing first request");
-		store.applyChange({ type: "remove", userId: USER_ID, revision: 2 }, 11);
+		store.applyChange({ type: "remove", revision: 2 }, 11);
 		firstResponse.resolve(changed(firstRequest));
 
 		await expect(first).resolves.toBeNull();

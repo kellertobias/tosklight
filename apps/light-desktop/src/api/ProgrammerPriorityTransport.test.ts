@@ -48,7 +48,6 @@ class FakeWebSocket {
 
 function wireProjection(overrides: Record<string, unknown> = {}) {
 	return {
-		user_id: USER_ID,
 		revision: 5,
 		priority: 8,
 		changed_at: "2026-07-21T10:00:00Z",
@@ -118,7 +117,7 @@ describe("HttpProgrammerPriorityTransport", () => {
 
 		await expect(transport.loadSnapshot(SCOPE)).resolves.toMatchObject({
 			cursor: 18,
-			projection: { userId: USER_ID, priority: 8 },
+			projection: { priority: 8 },
 		});
 		const [url, options] = fetch.mock.calls[0] ?? [];
 		expect(url).toBe(

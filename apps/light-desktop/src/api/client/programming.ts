@@ -131,7 +131,7 @@ export class ProgrammingApiClient {
 			{ type: "programmer_priority", request: wireRequest },
 			wireRequest.request_id,
 		);
-		return decodeProgrammerPriorityActionOutcome(value, userId, request);
+		return decodeProgrammerPriorityActionOutcome(value, request);
 	}
 
 	async presetRecallLiveAction(

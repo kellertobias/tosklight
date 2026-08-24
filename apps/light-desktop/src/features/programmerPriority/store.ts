@@ -1,7 +1,6 @@
 import {
 	assertDuplicatePriorityChange,
 	assertNextPriorityChange,
-	priorityChangeUserId,
 	priorityProtocolError,
 } from "./change";
 import type {
@@ -78,8 +77,7 @@ export class ProgrammerPriorityStore {
 		sequence: number,
 		expectedScope = this.scope,
 	) {
-		if (!this.canAccept(priorityChangeUserId(change), expectedScope))
-			return false;
+		if (!this.isScopeCurrent(expectedScope)) return false;
 		try {
 			assertPriorityCursor(sequence);
 			const currentSequence = this.requireEventSequence(sequence);
@@ -130,7 +128,6 @@ export class ProgrammerPriorityStore {
 	): ProgrammerPrioritySettlement {
 		if (!this.hasOperation(requestId, expectedScope)) return "ignored";
 		try {
-			if (!this.matchesUser(projection.userId)) return "ignored";
 			this.applyChange({ type: "upsert", projection }, sequence, expectedScope);
 			this.operations.delete(requestId);
 			this.publishRendered();
@@ -148,7 +145,6 @@ export class ProgrammerPriorityStore {
 		if (!this.hasOperation(requestId, expectedScope)) return "ignored";
 		try {
 			const incoming = canonicalPriorityProjection(projection);
-			if (!this.matchesUser(incoming.userId)) return "ignored";
 			const currentRevision = this.state.authorityRevision;
 			if (currentRevision === null || incoming.revision > currentRevision)
 				return "repair";
@@ -226,8 +222,7 @@ export class ProgrammerPriorityStore {
 		expectedScope: number,
 		repair: boolean,
 	) {
-		if (!this.canAccept(snapshot.projection.userId, expectedScope))
-			return false;
+		if (!this.isScopeCurrent(expectedScope)) return false;
 		try {
 			assertPriorityCursor(snapshot.cursor);
 			const projection = canonicalPriorityProjection(snapshot.projection);
@@ -345,17 +340,6 @@ export class ProgrammerPriorityStore {
 		this.state = { ...this.state, ...update };
 		this.emit();
 		return true;
-	}
-
-	private canAccept(userId: string, expectedScope: number) {
-		return this.isScopeCurrent(expectedScope) && this.matchesUser(userId);
-	}
-
-	private matchesUser(userId: string) {
-		return Boolean(
-			this.state.userId &&
-				userId.toLowerCase() === this.state.userId.toLowerCase(),
-		);
 	}
 
 	private rejectProtocol(reason: unknown, sequence: number | null): never {

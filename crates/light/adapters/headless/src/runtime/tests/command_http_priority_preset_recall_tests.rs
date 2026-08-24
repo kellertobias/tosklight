@@ -9,7 +9,6 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     assert_eq!(initial.headers()[header::ETAG], "\"0\"");
     let initial: light_wire::v2::programmer_priority::ProgrammerPrioritySnapshot =
         serde_json::from_value(json(initial).await).unwrap();
-    assert_eq!(initial.projection.user_id, user_id);
     assert_eq!(initial.projection.priority, 100);
 
     // A URL naming an identity from before the collapse reads the desk's own Programmer.

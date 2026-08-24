@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { ProgrammerPriorityActionRequest } from "../features/programmerPriority/contracts";
 import {
 	CORRELATION_ID,
-	OTHER_USER_ID,
 	USER_ID,
 } from "../features/programmerPriority/testFixtures";
 import {
@@ -22,7 +21,6 @@ const REQUEST: ProgrammerPriorityActionRequest = {
 
 function projection(overrides: Record<string, unknown> = {}) {
 	return {
-		user_id: USER_ID,
 		revision: 5,
 		priority: 8,
 		changed_at: "2026-07-21T10:00:00.123+02:00",
@@ -67,16 +65,15 @@ describe("Programmer priority wire", () => {
 		).toThrow(WireValidationError);
 	});
 
-	it("strictly decodes an exact-user snapshot", () => {
+	it("strictly decodes a snapshot", () => {
 		expect(
-			decodeProgrammerPrioritySnapshot(
-				{ cursor: { sequence: 18 }, projection: projection() },
-				USER_ID,
-			),
+			decodeProgrammerPrioritySnapshot({
+				cursor: { sequence: 18 },
+				projection: projection(),
+			}),
 		).toEqual({
 			cursor: 18,
 			projection: {
-				userId: USER_ID,
 				revision: 5,
 				priority: 8,
 				changedAt: "2026-07-21T10:00:00.123+02:00",
@@ -85,7 +82,7 @@ describe("Programmer priority wire", () => {
 	});
 
 	it.each([
-		["foreign user", { user_id: OTHER_USER_ID }],
+		["an undeclared user", { user_id: USER_ID }],
 		["negative revision", { revision: -1 }],
 		["fractional priority", { priority: 2.5 }],
 		["priority overflow", { priority: -32_769 }],
@@ -93,13 +90,10 @@ describe("Programmer priority wire", () => {
 		["invalid offset", { changed_at: "2026-07-21T10:00:00+24:00" }],
 	])("rejects a snapshot with %s", (_label, replacement) => {
 		expect(() =>
-			decodeProgrammerPrioritySnapshot(
-				{
-					cursor: { sequence: 18 },
-					projection: projection(replacement),
-				},
-				USER_ID,
-			),
+			decodeProgrammerPrioritySnapshot({
+				cursor: { sequence: 18 },
+				projection: projection(replacement),
+			}),
 		).toThrow(WireValidationError);
 	});
 
@@ -115,7 +109,6 @@ describe("Programmer priority wire", () => {
 					replayed: false,
 					warning: null,
 				},
-				USER_ID,
 				REQUEST,
 			),
 		).toMatchObject({
@@ -132,7 +125,6 @@ describe("Programmer priority wire", () => {
 					status: "no_change",
 					replayed: true,
 				},
-				USER_ID,
 				REQUEST,
 			),
 		).toMatchObject({
@@ -146,10 +138,7 @@ describe("Programmer priority wire", () => {
 	it.each([
 		["wrong request", { request_id: "another-request" }],
 		["wrong revision", { projection: projection({ revision: 8 }) }],
-		[
-			"foreign response",
-			{ projection: projection({ user_id: OTHER_USER_ID }) },
-		],
+		["an undeclared projection field", { projection: projection({ user_id: USER_ID }) }],
 		["missing correlation", { correlation_id: undefined }],
 		["unknown field", { values: [] }],
 	])("rejects an outcome with %s", (_label, replacement) => {
@@ -168,7 +157,7 @@ describe("Programmer priority wire", () => {
 		)
 			delete candidate.correlation_id;
 		expect(() =>
-			decodeProgrammerPriorityActionOutcome(candidate, USER_ID, REQUEST),
+			decodeProgrammerPriorityActionOutcome(candidate, REQUEST),
 		).toThrow(WireValidationError);
 	});
 
@@ -183,17 +172,15 @@ describe("Programmer priority wire", () => {
 					event_sequence: 19,
 					replayed: false,
 				},
-				USER_ID,
 				REQUEST,
 			),
 		).toThrow(WireValidationError);
 	});
 
-	it("decodes exact upsert, remove, and gap messages", () => {
+	it("decodes upsert, remove, and gap messages", () => {
 		expect(
 			decodeProgrammerPriorityEventMessage(
 				event({ type: "upsert", projection: projection() }),
-				USER_ID,
 			),
 		).toMatchObject({
 			type: "event",
@@ -202,12 +189,9 @@ describe("Programmer priority wire", () => {
 		});
 		expect(
 			decodeProgrammerPriorityEventMessage(
-				event({ type: "remove", user_id: USER_ID, revision: 6 }),
-				USER_ID,
+				event({ type: "remove", revision: 6 }),
 			),
-		).toMatchObject({
-			change: { type: "remove", userId: USER_ID, revision: 6 },
-		});
+		).toMatchObject({ change: { type: "remove", revision: 6 } });
 		expect(
 			decodeProgrammerPriorityEventMessage(
 				{
@@ -218,7 +202,6 @@ describe("Programmer priority wire", () => {
 						latest_sequence: 30,
 					},
 				},
-				USER_ID,
 			),
 		).toEqual({
 			type: "gap",
@@ -255,9 +238,9 @@ describe("Programmer priority wire", () => {
 			replacement.correlation_id === undefined
 		)
 			delete (candidate.event as Record<string, unknown>).correlation_id;
-		expect(() =>
-			decodeProgrammerPriorityEventMessage(candidate, USER_ID),
-		).toThrow(WireValidationError);
+		expect(() => decodeProgrammerPriorityEventMessage(candidate)).toThrow(
+			WireValidationError,
+		);
 	});
 
 	it("decodes typed conflicts and rejects undeclared error fields", () => {

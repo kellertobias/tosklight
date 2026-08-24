@@ -365,7 +365,6 @@ async fn broad_subscription_delivers_the_desks_priority() {
     else {
         panic!("expected a Programmer priority payload")
     };
-    assert_eq!(projection.user_id, user_id);
     assert_eq!(projection.revision, 2);
 }
 

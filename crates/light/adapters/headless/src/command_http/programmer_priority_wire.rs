@@ -42,9 +42,8 @@ pub(in crate::runtime) fn change(
                 projection: projection(value),
             }
         }
-        application::ProgrammingPriorityChange::Remove { user_id, revision } => {
+        application::ProgrammingPriorityChange::Remove { revision, .. } => {
             wire::ProgrammerPriorityChange::Remove {
-                user_id: user_id.0,
                 revision: *revision,
             }
         }
@@ -55,7 +54,6 @@ fn projection(
     projection: &application::ProgrammingPriorityProjection,
 ) -> wire::ProgrammerPriorityProjection {
     wire::ProgrammerPriorityProjection {
-        user_id: projection.user_id.0,
         revision: projection.revision,
         priority: projection.priority,
         changed_at: projection.changed_at.to_rfc3339(),

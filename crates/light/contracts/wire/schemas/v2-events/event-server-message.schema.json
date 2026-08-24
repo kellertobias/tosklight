@@ -5190,16 +5190,11 @@
             "type": {
               "type": "string",
               "const": "remove"
-            },
-            "user_id": {
-              "type": "string",
-              "format": "uuid"
             }
           },
           "additionalProperties": false,
           "required": [
             "type",
-            "user_id",
             "revision"
           ]
         }
@@ -5221,15 +5216,10 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "additionalProperties": false,
       "required": [
-        "user_id",
         "revision",
         "priority",
         "changed_at"
