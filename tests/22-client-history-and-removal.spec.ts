@@ -27,9 +27,8 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
 		page,
 	}) => {
 		test.setTimeout(90_000);
-		// The desk is heading for a single user with however many browsers on it, so what matters
-		// here is that a second client neither disturbs this desk nor survives a restart as a
-		// stale one. The wider multi-user history and removal behaviour is deliberately not pinned.
+		// The desk has one user with however many browsers on it, so what matters here is that a
+		// second client neither disturbs this desk nor survives a restart as a stale one.
 		const clientB = crypto.randomUUID();
 		const sessionB = await createSession(bench.baseUrl, clientB);
 		const clientBApi = new ApiDriver(bench.baseUrl);

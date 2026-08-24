@@ -41,7 +41,6 @@ mod tests {
         );
         assert!(sessions.session_token_matches(session.id, "standalone-token"));
         assert!(sessions.client_connected(client_id));
-        assert!(sessions.desk_in_use(desk_id));
 
         let context = file_manager::FileInputContext {
             instance_id: "standalone-files".into(),

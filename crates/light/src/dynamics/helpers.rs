@@ -114,19 +114,20 @@ pub(super) fn validate_release_targets(
 #[derive(Clone, Copy)]
 pub(super) struct DynamicsIdentity {
     pub(super) session: SessionId,
-    pub(super) user: UserId,
 }
 
 pub(super) fn identity(context: &ActionContext) -> Result<DynamicsIdentity, ActionError> {
+    // A Dynamic runs as the desk's operator rather than anonymously, so an authenticated identity
+    // is still required. Which identity it is no longer selects a Programmer.
+    context
+        .user_id
+        .map(UserId)
+        .ok_or_else(|| ActionError::new(ActionErrorKind::Unauthorized, "user required"))?;
     Ok(DynamicsIdentity {
         session: context
             .session_id
             .map(SessionId)
             .ok_or_else(|| ActionError::new(ActionErrorKind::Unauthorized, "session required"))?,
-        user: context
-            .user_id
-            .map(UserId)
-            .ok_or_else(|| ActionError::new(ActionErrorKind::Unauthorized, "user required"))?,
     })
 }
 

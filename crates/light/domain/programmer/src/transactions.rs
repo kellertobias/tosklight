@@ -44,12 +44,12 @@ impl ProgrammerRegistry {
         operation(&detached)
     }
 
-    /// Execute a fallible compound Programmer mutation atomically for one user.
+    /// Execute a fallible compound Programmer mutation atomically.
     ///
-    /// Every public mutator uses this same reentrant per-user gate, so a transaction may freely
-    /// compose existing registry operations. On rejection, only the user's Programmer state and
-    /// the initiating desk's selection/command interaction are restored; a mutation waiting on
-    /// the gate then runs against that restored state instead of being overwritten by rollback.
+    /// Every public mutator uses this same reentrant gate, so a transaction may freely compose
+    /// existing registry operations. On rejection, only the Programmer state and the initiating
+    /// desk's selection/command interaction are restored; a mutation waiting on the gate then
+    /// runs against that restored state instead of being overwritten by rollback.
     pub fn with_transaction<T, E, F>(&self, session: SessionId, transaction: F) -> Result<T, E>
     where
         F: FnOnce() -> Result<T, E>,
@@ -72,9 +72,9 @@ impl ProgrammerRegistry {
     /// and desk-interaction result in one commit.
     ///
     /// Readers continue to observe the previous live state while `transaction` runs. The
-    /// per-user mutation gate prevents another writer from racing the final commit, while global
+    /// mutation gate prevents another writer from racing the final commit, while global
     /// order/revision counters remain shared so staged work cannot duplicate identities used by
-    /// another user's concurrent command.
+    /// a concurrent command from another surface.
     pub fn with_staged_transaction<T, E, F>(
         &self,
         session: SessionId,

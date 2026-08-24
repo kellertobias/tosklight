@@ -98,7 +98,7 @@ test("HIGHLIGHT-005 @supplemental-ui › Highlight errors remain reachable above
 }) => {
 	await loadCanonicalCopy(api, bench, "highlight-005", "default-stage");
 	const errors = [
-		"Highlight output is active for another user on this desk",
+		"The Highlight action was refused by the desk",
 		"The Highlight action was rejected by the desk",
 	];
 	let nextHighlightError: string | null = null;

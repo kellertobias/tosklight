@@ -3,9 +3,8 @@ use crate::{
 };
 use light_core::{FixtureId, UserId};
 use light_programmer::{
-    GroupDefinition, HighlightAction, HighlightError, HighlightFixture, HighlightOutputLayer,
-    HighlightRegistry, HighlightSelectionWrite, HighlightState, HighlightTransition,
-    ProgrammerSelection,
+    GroupDefinition, HighlightAction, HighlightFixture, HighlightOutputLayer, HighlightRegistry,
+    HighlightSelectionWrite, HighlightState, HighlightTransition, ProgrammerSelection,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -138,7 +137,7 @@ impl HighlightService {
         let user_id = required_user(&envelope.context)?;
         let environment = ports.environment(&envelope.context)?;
         let transition =
-            self.transition(&envelope.context, user_id, &environment, &envelope.command)?;
+            self.transition(&envelope.context, user_id, &environment, &envelope.command);
         let selection_changed = if let Some(write) = transition.working_selection.as_ref() {
             let selection = ports.apply_selection(&envelope.context, write)?;
             self.registry.acknowledge_internal_selection(
@@ -197,28 +196,23 @@ impl HighlightService {
         user_id: UserId,
         environment: &HighlightEnvironment,
         command: &HighlightCommand,
-    ) -> Result<HighlightTransition, ActionError> {
+    ) -> HighlightTransition {
         match command {
-            HighlightCommand::Action { action, .. } => self
-                .registry
-                .action_guarded(
-                    context.desk_id,
-                    user_id,
-                    *action,
-                    &environment.selection,
-                    &environment.fixtures,
-                    &environment.groups,
-                    environment.output_suppressed,
-                )
-                .map_err(highlight_error),
-            HighlightCommand::Status | HighlightCommand::Reconcile { .. } => {
-                Ok(self.registry.status(
-                    &environment.selection,
-                    &environment.fixtures,
-                    &environment.groups,
-                    environment.output_suppressed,
-                ))
-            }
+            HighlightCommand::Action { action, .. } => self.registry.action_guarded(
+                context.desk_id,
+                user_id,
+                *action,
+                &environment.selection,
+                &environment.fixtures,
+                &environment.groups,
+                environment.output_suppressed,
+            ),
+            HighlightCommand::Status | HighlightCommand::Reconcile { .. } => self.registry.status(
+                &environment.selection,
+                &environment.fixtures,
+                &environment.groups,
+                environment.output_suppressed,
+            ),
         }
     }
 }
@@ -230,14 +224,6 @@ fn required_user(context: &ActionContext) -> Result<UserId, ActionError> {
             "Highlight requires an authenticated user",
         )
     })
-}
-
-fn highlight_error(error: HighlightError) -> ActionError {
-    match error {
-        HighlightError::OwnedByAnotherUser(_) => {
-            ActionError::new(ActionErrorKind::Conflict, error.to_string())
-        }
-    }
 }
 
 const fn publishes_programmer_change(command: &HighlightCommand) -> bool {

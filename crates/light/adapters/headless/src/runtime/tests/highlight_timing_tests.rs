@@ -279,8 +279,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
             &fixtures,
             &groups,
             false,
-        )
-        .unwrap();
+        );
     sync_highlight_output(&state);
     assert_eq!(state.output.highlighted_fixtures(), vec![fixture_id]);
 
@@ -314,8 +313,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
             &fixtures,
             &groups,
             false,
-        )
-        .unwrap();
+        );
     sync_highlight_output(&state);
     assert_eq!(state.output.highlighted_fixtures(), vec![fixture_id]);
 

@@ -471,8 +471,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
             &fixtures,
             &HashMap::new(),
             false,
-        )
-        .unwrap();
+        );
     let first = registry
         .action(
                         HighlightAction::Next,
@@ -480,8 +479,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
             &fixtures,
             &HashMap::new(),
             false,
-        )
-        .unwrap();
+        );
     assert_eq!(
         first.working_selection.as_ref().unwrap().selected,
         vec![first_head]
@@ -500,8 +498,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
             &fixtures,
             &HashMap::new(),
             false,
-        )
-        .unwrap();
+        );
     assert_eq!(
         second.working_selection.as_ref().unwrap().selected,
         vec![second_head]

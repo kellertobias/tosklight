@@ -299,9 +299,6 @@ export class ApiDriver {
     );
     if (response.status === 204) return undefined as T;
     const value = await response.json();
-    if (method === "POST" && path === "/api/v2/users") {
-      return value.user as T;
-    }
     return value as T;
   }
 

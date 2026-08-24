@@ -1,5 +1,5 @@
 use crate::SelectionExpression;
-use light_core::{AttributeKey, FixtureId, UserId};
+use light_core::{AttributeKey, FixtureId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -113,19 +113,4 @@ pub struct HighlightTransition {
     /// Authoritative actual programmer selection requested by PREV, NEXT, ALL, or reconciliation
     /// after an item disappeared. Attribute values are never touched by this write.
     pub working_selection: Option<HighlightSelectionWrite>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum HighlightError {
-    OwnedByAnotherUser(UserId),
-}
-
-impl std::fmt::Display for HighlightError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::OwnedByAnotherUser(_) => {
-                formatter.write_str("Highlight output is active for another user on this desk")
-            }
-        }
-    }
 }

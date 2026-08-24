@@ -282,11 +282,16 @@ fn timed_http_action(method: &Method, path: &str) -> Option<(&'static str, bool)
         "/api/v2/programming-align/actions" => Some(("align", true)),
         "/api/v2/fixture-controls/actions" => Some(("fixture_control", true)),
         "/api/v2/presets/recall" => Some(("preset_recall", true)),
+        // The desk's Programmer routes. These are matched by their canonical spelling — they
+        // used to be `programmer-values` under a named user, and the hyphenated forms went with
+        // the routes that carried them. Order matters: `preload-values` before `preload`, and
+        // both before the bare Programmer arms.
+        "/api/v2/programmer/preload-values/actions" => Some(("preload_values", false)),
+        "/api/v2/programmer/preload/actions" => Some(("preload_lifecycle", true)),
+        "/api/v2/programmer/values/actions" => Some(("values", true)),
+        "/api/v2/programmer/priority/actions" => Some(("priority", true)),
+        "/api/v2/programmer/capture-mode/actions" => Some(("capture_mode", true)),
         _ if path.contains("programming-selection") => Some(("selection", false)),
-        _ if path.contains("programmer-preload-values") => Some(("preload_values", false)),
-        _ if path.contains("programmer-values") => Some(("values", true)),
-        _ if path.contains("programmer-preload") => Some(("preload_lifecycle", true)),
-        _ if path.contains("programmer-priority") => Some(("priority", true)),
         _ if path.contains("/dynamics/") => Some(("dynamic", true)),
         _ if path.starts_with("/api/v2/playbacks/") => Some(("playback_action", true)),
         _ => None,
@@ -299,24 +304,28 @@ mod action_timing_route_tests {
 
     #[test]
     fn typed_programmer_value_routes_match_their_actual_v2_paths() {
-        assert_eq!(
-            timed_http_action(
-                &Method::POST,
-                "/api/v2/users/operator/programmer-values/actions"
+        // Every one of these is a route the server actually registers. The previous version of
+        // this test matched `/api/v2/users/operator/programmer-values/actions`, so it kept
+        // passing after the canonical routes arrived while nothing live was being timed.
+        for (path, expected) in [
+            ("/api/v2/programmer/values/actions", ("values", true)),
+            ("/api/v2/programmer/priority/actions", ("priority", true)),
+            (
+                "/api/v2/programmer/preload-values/actions",
+                ("preload_values", false),
             ),
-            Some(("values", true))
-        );
-        assert_eq!(
-            timed_http_action(
-                &Method::POST,
-                "/api/v2/users/operator/programmer-preload-values/actions"
+            (
+                "/api/v2/programmer/preload/actions",
+                ("preload_lifecycle", true),
             ),
-            Some(("preload_values", false))
-        );
-        assert_eq!(
-            timed_http_action(&Method::POST, "/api/v2/playback-actions"),
-            Some(("playback_action", true))
-        );
+            ("/api/v2/playback-actions", ("playback_action", true)),
+        ] {
+            assert_eq!(
+                timed_http_action(&Method::POST, path),
+                Some(expected),
+                "{path}"
+            );
+        }
         assert_eq!(
             timed_http_action(&Method::GET, "/api/v2/playbacks/1/go"),
             Some(("playback_action", true))
