@@ -44,7 +44,6 @@ class FakeWebSocket {
 function row() {
 	return {
 		programmer_id: PROGRAMMER_ID,
-		user_id: USER_ID,
 		connected: true,
 		selected_fixture_count: 2,
 		normal_value_count: 1,

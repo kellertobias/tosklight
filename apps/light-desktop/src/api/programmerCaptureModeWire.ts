@@ -32,25 +32,17 @@ const ACTION_SOURCES = [
 
 export function decodeProgrammerCaptureModeSnapshot(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerCaptureModeSnapshot {
-	programmingUuidAt(expectedUserId, "$.requested_user_id");
 	const snapshot = recordAt(value, "$");
 	return {
 		cursor: decodeCursor(snapshot, "$"),
-		projection: decodeCaptureModeProjection(
-			snapshot.projection,
-			"$.projection",
-			expectedUserId,
-		),
+		projection: decodeCaptureModeProjection(snapshot.projection, "$.projection"),
 	};
 }
 
 export function decodeProgrammerCaptureModeEventMessage(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerCaptureModeEventMessage {
-	programmingUuidAt(expectedUserId, "$.requested_user_id");
 	const message = recordAt(value, "$");
 	const type = enumAt(message.type, "$.type", [
 		"ready",
@@ -64,25 +56,20 @@ export function decodeProgrammerCaptureModeEventMessage(
 	if (type === "error")
 		return { type, error: stringAt(message.error, "$.error") };
 	if (type === "gap") return decodeGap(message);
-	return decodeCaptureModeEvent(message, expectedUserId);
+	return decodeCaptureModeEvent(message);
 }
 
 export function decodeCaptureModeProjection(
 	value: unknown,
 	path: string,
-	expectedUserId: string,
 ): ProgrammerCaptureModeProjection {
 	const projection = exactRecordAt(value, path, [
-		"user_id",
 		"revision",
 		"blind",
 		"preview",
 		"preload_capture_programmer",
 	]);
-	const userId = programmingUuidAt(projection.user_id, `${path}.user_id`);
-	assertExpectedUser(userId, expectedUserId, `${path}.user_id`);
 	return {
-		userId,
 		revision: integerAt(projection.revision, `${path}.revision`),
 		blind: booleanAt(projection.blind, `${path}.blind`),
 		preview: booleanAt(projection.preview, `${path}.preview`),
@@ -95,11 +82,10 @@ export function decodeCaptureModeProjection(
 
 function decodeCaptureModeEvent(
 	message: Record<string, unknown>,
-	expectedUserId: string,
 ): ProgrammerCaptureModeEventMessage {
 	const event = recordAt(message.event, "$.event");
 	const sequence = integerAt(event.sequence, "$.event.sequence");
-	validateCaptureModeEnvelope(event, expectedUserId);
+	validateCaptureModeEnvelope(event);
 	const payload = recordAt(event.payload, "$.event.payload");
 	enumAt(payload.type, "$.event.payload.type", [
 		"programming_capture_mode_changed",
@@ -112,29 +98,25 @@ function decodeCaptureModeEvent(
 		projection: decodeCaptureModeProjection(
 			change.projection,
 			"$.event.payload.change.projection",
-			expectedUserId,
 		),
 	};
 }
 
-function validateCaptureModeEnvelope(
-	event: Record<string, unknown>,
-	expectedUserId: string,
-) {
+function validateCaptureModeEnvelope(event: Record<string, unknown>) {
 	stringAt(event.occurred_at, "$.event.occurred_at");
 	if (!("desk_id" in event) || event.desk_id !== null)
 		throw new WireValidationError("$.event.desk_id", "null", event.desk_id);
 	enumAt(event.class, "$.event.class", ["projection"]);
 	enumAt(event.delivery, "$.event.delivery", ["replaceable"]);
-	validateCaptureModeObject(event.object, expectedUserId);
+	validateCaptureModeObject(event.object);
 	validateNoRelatedObjects(event);
 	validateActionSource(event.source);
 }
 
-function validateCaptureModeObject(value: unknown, expectedUserId: string) {
+function validateCaptureModeObject(value: unknown) {
 	const object = recordAt(value, "$.event.object");
 	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
-	const expectedObject = `programming-capture-mode:${expectedUserId}`;
+	const expectedObject = "programming-capture-mode";
 	const objectId = stringAt(object.id, "$.event.object.id");
 	if (objectId.toLowerCase() !== expectedObject.toLowerCase())
 		throw new WireValidationError(
@@ -190,9 +172,4 @@ function nullableUuid(
 	return object[key] == null
 		? null
 		: programmingUuidAt(object[key], `${path}.${key}`);
-}
-
-function assertExpectedUser(actual: string, expected: string, path: string) {
-	if (actual.toLowerCase() !== expected.toLowerCase())
-		throw new WireValidationError(path, `requested user ${expected}`, actual);
 }

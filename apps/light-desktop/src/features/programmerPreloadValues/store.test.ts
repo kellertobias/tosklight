@@ -39,17 +39,11 @@ function fixtureLevel(store: ProgrammerPreloadValuesStore) {
 }
 
 describe("ProgrammerPreloadValuesStore authority", () => {
-	it("accepts only the exact user and invalidates all work on scope replacement", () => {
+	it("invalidates all work on scope replacement", () => {
 		const store = readyStore();
 		const oldScope = store.captureScope();
 		store.beginOptimistic("pending", setFixtureLevel(0.8), oldScope);
 
-		expect(
-			store.applyProjection(
-				preloadProjection({ userId: OTHER_USER_ID, revision: 2 }),
-				11,
-			),
-		).toBe(false);
 		store.reset(SHOW_ID, USER_ID, "session-b");
 
 		expect(store.getSnapshot()).toMatchObject({

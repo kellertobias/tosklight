@@ -91,7 +91,6 @@ fn update_control_desk(
         .update_desk(
             desk_id,
             patch.name.as_deref().unwrap_or(&current.name),
-            patch.osc_alias.as_deref().unwrap_or(&current.osc_alias),
             patch.columns.unwrap_or(current.columns),
             patch.rows.unwrap_or(current.rows),
             patch.buttons.unwrap_or(current.buttons),

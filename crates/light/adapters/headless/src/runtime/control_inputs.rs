@@ -83,7 +83,7 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
         parts
             .get(1)
-            .and_then(|alias| osc_control_desk(state, alias))
+            .and_then(|_| osc_control_desk(state))
             .is_some_and(|_| read_desk_lock(state).locked)
     } else {
         false
@@ -191,14 +191,14 @@ fn osc_source_capability(state: &AppState, source: Option<&str>) -> light_core::
 
 struct AuthenticatedOscActionTiming {
     receipt: ActionTimingReceipt,
-    desk_alias: String,
+    path: String,
     feedback_target: SocketAddr,
 }
 
 impl AuthenticatedOscActionTiming {
     fn acknowledge(self, state: &AppState, succeeded: bool) {
         let timing = self.receipt.acknowledge(succeeded);
-        send_action_timing_feedback(state, &self.desk_alias, self.feedback_target, &timing);
+        send_action_timing_feedback(state, &self.path, self.feedback_target, &timing);
     }
 }
 
@@ -220,12 +220,12 @@ fn begin_authenticated_osc_action_timing(
     if state.sessions.session(subscriber.session_id).is_none() {
         return None;
     }
-    let desk_alias = parts
+    let path = parts
         .get(1)
         .filter(|alias| !matches!(**alias, "playback" | "cuelist" | "qlist"))
         .copied()
-        .unwrap_or(&subscriber.desk_alias);
-    if !subscriber.desk_alias.eq_ignore_ascii_case(desk_alias) {
+        .unwrap_or(&subscriber.path);
+    if !subscriber.path.eq_ignore_ascii_case(path) {
         return None;
     }
     let (action, may_change_output) = osc_action_timing(&parts, arguments)?;
@@ -243,7 +243,7 @@ fn begin_authenticated_osc_action_timing(
             request_id,
             state.output.frame_rate_hz(),
             OscActionFeedback {
-                desk_alias: desk_alias.to_owned(),
+                path: path.to_owned(),
                 target: subscriber.target,
             },
         );
@@ -257,7 +257,7 @@ fn begin_authenticated_osc_action_timing(
             state.output.frame_rate_hz(),
             may_change_output,
         ),
-        desk_alias: desk_alias.to_owned(),
+        path: path.to_owned(),
         feedback_target: subscriber.target,
     })
 }

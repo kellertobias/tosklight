@@ -158,7 +158,7 @@ describe("ProgrammerPreloadValuesViewProvider", () => {
 		expect(transport.subscriptions).toHaveLength(0);
 	});
 
-	it("opens authority only while exact-user Preload capture is active", async () => {
+	it("opens authority only while Preload capture is active", async () => {
 		const captureModeStore = readyCaptureStore(false);
 		const preloadStore = new ProgrammerPreloadValuesStore();
 		const transport = new FakeProgrammerPreloadValuesTransport();
@@ -198,10 +198,7 @@ describe("ProgrammerPreloadValuesViewProvider", () => {
 		await waitFor(() =>
 			expect(screen.getByText("Revision 1")).toBeInTheDocument(),
 		);
-		expect(transport.subscriptions[0]?.scope).toEqual({
-			showId: SHOW_ID,
-			userId: USER_ID,
-		});
+		expect(transport.subscriptions[0]?.scope).toEqual({ showId: SHOW_ID });
 
 		act(() => {
 			captureModeStore.applyProjection(

@@ -60,7 +60,6 @@ export function preloadProjection(
 	} = {},
 ): ProgrammerPreloadValuesProjection {
 	return {
-		userId: options.userId ?? USER_ID,
 		revision: options.revision ?? 1,
 		fixtureValues: options.fixtureValues ?? [preloadFixtureValue()],
 		groupValues: options.groupValues ?? [],

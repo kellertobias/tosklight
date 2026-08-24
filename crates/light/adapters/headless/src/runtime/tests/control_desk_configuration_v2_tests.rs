@@ -27,7 +27,6 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
     let changed = json(changed).await;
     assert_eq!(changed["replayed"], false);
     assert_eq!(changed["desk"]["name"], "Front desk renamed");
-    assert_eq!(changed["desk"]["osc_alias"], original.osc_alias);
     assert_eq!(changed["desk"]["columns"], original.columns);
     assert_eq!(
         scenario

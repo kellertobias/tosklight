@@ -195,7 +195,6 @@ mod tests {
         let object = draft.object.unwrap();
         assert_eq!(object.capability, EventCapability::Programmer);
         assert_eq!(object.id, "programming-lifecycle");
-        assert_eq!(object.programming_user_id(), None);
         assert_eq!(
             draft.payload,
             ApplicationEvent::Programming(ProgrammingEvent::LifecycleChanged(change))

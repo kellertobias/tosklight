@@ -22,7 +22,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 		await expect(secondScreen.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
 		await api.setCommandLineText("");
 		const hardware = await bench.osc();
-		await hardware.subscribe(`desk-lock-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
+		await hardware.subscribe(`desk-lock-${crypto.randomUUID()}`, "desk");
 		const before = await api.request<any>("GET", "/api/v2/output/dmx");
 		const wallpaper = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath fill='%23123456' d='M0 0h8v8H0z'/%3E%3C/svg%3E";
 		try {
@@ -44,7 +44,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 
 			await expect(api.request("POST", "/api/v2/output-runtime/global-master/actions", { grand_master: 0.25 })).rejects.toThrow(/409.*desk is locked/);
 			await expect(api.executeCommandLine("1 AT 50")).rejects.toThrow(/desk is locked/i);
-			await hardware.send(`/light/${api.session!.desk.osc_alias}/programmer/digit-5`, [true]);
+			await hardware.send(`/light/desk/programmer/digit-5`, [true]);
 			await page.waitForTimeout(100);
 			expect(await commandLine(api)).toBe("");
 			expect(await api.request<any>("GET", "/api/v2/output/dmx")).toEqual(before);
@@ -72,7 +72,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 
 			await page.waitForTimeout(100);
 			expect(await commandLine(api)).toBe("");
-			await hardware.send(`/light/${api.session!.desk.osc_alias}/programmer/digit-1`, [true]);
+			await hardware.send(`/light/desk/programmer/digit-1`, [true]);
 			await expect.poll(() => commandLine(api)).toBe("F1");
 			await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("F1");
 			await lateScreen.close();

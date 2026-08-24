@@ -44,7 +44,7 @@ export class BrowserCrossSurface {
 		const hardware = await this.bench.osc();
 		const clientId = `cross-001-osc-${crypto.randomUUID()}`;
 		try {
-			await hardware.subscribe(clientId, session.desk.osc_alias);
+			await hardware.subscribe(clientId, "desk");
 			const auditBefore = await this.auditSequence();
 			const artnetMark = this.bench.artnet.mark();
 			const sacnMark = this.bench.sacn.mark();
@@ -57,7 +57,7 @@ export class BrowserCrossSurface {
 				"enter",
 			] as const)
 				await hardware.send(
-					`/light/${session.desk.osc_alias}/${controlSurfaceOscPaths.programmer(action)}`,
+					`/light/desk/${controlSurfaceOscPaths.programmer(action)}`,
 					[true],
 				);
 			await this.bench.waitForGroupProgrammer("1", 0.5, session.token);
@@ -82,11 +82,11 @@ export class BrowserCrossSurface {
 		const hardware = await this.bench.osc();
 		const clientId = `semantic-osc-001-${crypto.randomUUID()}`;
 		try {
-			await hardware.subscribe(clientId, session.desk.osc_alias);
+			await hardware.subscribe(clientId, "desk");
 			await expect.poll(() => this.hardwareConnected()).toBe(true);
 			await hardware.expectAfter(
 				0,
-				`/light/${session.desk.osc_alias}/feedback/speed-group/5`,
+				`/light/desk/feedback/speed-group/5`,
 			);
 			// The subscription snapshot is a multi-message datagram burst. Drain all of it
 			// before marking the page-change cycle so a slower runner cannot mix the tail
@@ -139,7 +139,7 @@ export class BrowserCrossSurface {
 			for (const address of requiredAddresses)
 				await hardware.expectAfter(
 					mark,
-					`/light/${session.desk.osc_alias}/feedback/${address}`,
+					`/light/desk/feedback/${address}`,
 				);
 			await waitForFeedbackToSettle(hardware.messages);
 			const cycle = hardware.messages.slice(mark);
@@ -161,7 +161,7 @@ export class BrowserCrossSurface {
 		const hardware = await this.bench.osc();
 		const clientId = `semantic-osc-002-${crypto.randomUUID()}`;
 		try {
-			await hardware.subscribe(clientId, session.desk.osc_alias);
+			await hardware.subscribe(clientId, "desk");
 			const feedbackMark = hardware.mark();
 			for (const action of [
 				"group",
@@ -172,7 +172,7 @@ export class BrowserCrossSurface {
 				"enter",
 			])
 				await hardware.send(
-					`/light/${session.desk.osc_alias}/programmer/${action}`,
+					`/light/desk/programmer/${action}`,
 					[true],
 				);
 			await expect
@@ -184,7 +184,7 @@ export class BrowserCrossSurface {
 				.toBeCloseTo(0.25, 4);
 			await hardware.expectAfter(
 				feedbackMark,
-				`/light/${session.desk.osc_alias}/feedback/command-line`,
+				`/light/desk/feedback/command-line`,
 			);
 			const artnetMark = this.bench.artnet.mark();
 			const sacnMark = this.bench.sacn.mark();
@@ -247,19 +247,19 @@ export class BrowserCrossSurface {
 		const secondHardware = await this.bench.osc();
 		try {
 			const firstMark = firstHardware.mark();
-			await firstHardware.subscribe("semantic-osc-003-a", first.desk.osc_alias);
+			await firstHardware.subscribe("semantic-osc-003-a", "desk");
 			await firstHardware.expectAfter(
 				firstMark,
-				`/light/${first.desk.osc_alias}/feedback/speed-group/5`,
+				`/light/desk/feedback/speed-group/5`,
 			);
 			const secondMark = secondHardware.mark();
 			await secondHardware.subscribe(
 				"semantic-osc-003-b",
-				second.desk.osc_alias,
+				"desk",
 			);
 			await secondHardware.expectAfter(
 				secondMark,
-				`/light/${second.desk.osc_alias}/feedback/speed-group/5`,
+				`/light/desk/feedback/speed-group/5`,
 			);
 			// One desk, one command line: both sessions and both wings see the same partial
 			// command, each on the path it connected on.
@@ -267,12 +267,12 @@ export class BrowserCrossSurface {
 			expect(await this.commandFor(second)).toMatch(/^(?:G ?1|GROUP 1) \+$/);
 			const feedback = await firstHardware.expectAfter(
 				firstMark,
-				`/light/${first.desk.osc_alias}/feedback/command-line`,
+				`/light/desk/feedback/command-line`,
 			);
 			expect(String(feedback.arguments[0])).toMatch(/^(?:G ?1|GROUP 1) \+$/);
 			const peerFeedback = await secondHardware.expectAfter(
 				secondMark,
-				`/light/${second.desk.osc_alias}/feedback/command-line`,
+				`/light/desk/feedback/command-line`,
 			);
 			expect(String(peerFeedback.arguments[0])).toMatch(
 				/^(?:G ?1|GROUP 1) \+$/,
@@ -286,12 +286,12 @@ export class BrowserCrossSurface {
 			const disconnected = firstHardware.mark();
 			const secondAction = secondHardware.mark();
 			await secondHardware.send(
-				`/light/${second.desk.osc_alias}/programmer/digit-3`,
+				`/light/desk/programmer/digit-3`,
 				[true],
 			);
 			await secondHardware.expectAfter(
 				secondAction,
-				`/light/${second.desk.osc_alias}/feedback/command-line`,
+				`/light/desk/feedback/command-line`,
 			);
 			await new Promise((resolve) => setTimeout(resolve, 50));
 			expect(firstHardware.messages.slice(disconnected)).toHaveLength(0);
@@ -352,16 +352,16 @@ export class BrowserCrossSurface {
 			).toHaveValue("G7 +");
 			await firstHardware.subscribe(
 				"semantic-osc-005-first",
-				first.desk.osc_alias,
+				"desk",
 			);
 			await secondHardware.subscribe(
 				"semantic-osc-005-second",
-				second.desk.osc_alias,
+				"desk",
 			);
 
 			const firstFeedbackMark = firstHardware.mark();
 			await secondHardware.send(
-				`/light/${second.desk.osc_alias}/programmer/digit-8`,
+				`/light/desk/programmer/digit-8`,
 				[true],
 			);
 			await expect(
@@ -380,7 +380,7 @@ export class BrowserCrossSurface {
 						.filter(
 							(message) =>
 								message.address ===
-								`/light/${first.desk.osc_alias}/feedback/command-line`,
+								`/light/desk/feedback/command-line`,
 						)
 						.map((message) => String(message.arguments[0]))
 						.find((command) => command === "G7 + F8") ?? null,
@@ -392,7 +392,7 @@ export class BrowserCrossSurface {
 			const auditBefore = await this.auditSequence();
 			for (const action of ["at", "digit-5", "digit-0", "enter"])
 				await firstHardware.send(
-					`/light/${first.desk.osc_alias}/programmer/${action}`,
+					`/light/desk/programmer/${action}`,
 					[true],
 				);
 			for (const number of [1, 2, 3, 4, 8])
@@ -448,14 +448,14 @@ export class BrowserCrossSurface {
 			const reconnectMark = firstHardware.mark();
 			await firstHardware.send("/light/subscribe", [
 				"semantic-osc-005-first",
-				first.desk.osc_alias,
+				"desk",
 				firstHardware.feedbackPort,
 			]);
 			expect(
 				(
 					await firstHardware.expectAfter(
 						reconnectMark,
-						`/light/${first.desk.osc_alias}/feedback/command-line`,
+						`/light/desk/feedback/command-line`,
 					)
 				).arguments,
 			).toEqual(["G7 +"]);
@@ -478,13 +478,13 @@ export class BrowserCrossSurface {
 		const firstId = "semantic-osc-006-first";
 		const secondId = "semantic-osc-006-second";
 		try {
-			await firstHardware.subscribe(firstId, first.desk.osc_alias);
-			await secondHardware.subscribe(secondId, second.desk.osc_alias);
+			await firstHardware.subscribe(firstId, "desk");
+			await secondHardware.subscribe(secondId, "desk");
 			expect(
 				(
 					await firstHardware.expectAfter(
 						0,
-						`/light/${first.desk.osc_alias}/feedback/page`,
+						`/light/desk/feedback/page`,
 					)
 				).arguments,
 			).toEqual([1]);
@@ -492,12 +492,12 @@ export class BrowserCrossSurface {
 				(
 					await secondHardware.expectAfter(
 						0,
-						`/light/${second.desk.osc_alias}/feedback/page`,
+						`/light/desk/feedback/page`,
 					)
 				).arguments,
 			).toEqual([1]);
 
-			const firstAddress = `/light/${first.desk.osc_alias}/page-playback/1/button/1`;
+			const firstAddress = `/light/desk/page-playback/1/button/1`;
 			await firstHardware.send(firstAddress, [true]);
 			await expect
 				.poll(async () => (await this.activePlayback(1))?.current_cue_number)
@@ -510,7 +510,7 @@ export class BrowserCrossSurface {
 			// The second wing is on the same current page, so its slot-one press addresses the
 			// same playback the first one did.
 			await secondHardware.send(
-				`/light/${second.desk.osc_alias}/page-playback/1/button/1`,
+				`/light/desk/page-playback/1/button/1`,
 				[true],
 			);
 			await expect
@@ -528,7 +528,7 @@ export class BrowserCrossSurface {
 				(
 					await firstHardware.expectAfter(
 						pageFeedbackMark,
-						`/light/${first.desk.osc_alias}/feedback/page`,
+						`/light/desk/feedback/page`,
 					)
 				).arguments,
 			).toEqual([2]);
@@ -543,7 +543,7 @@ export class BrowserCrossSurface {
 			for (const level of [0, 0.5, 1]) {
 				const feedbackMark = firstHardware.mark();
 				await firstHardware.sendFloat(
-					`/light/${first.desk.osc_alias}/page-playback/1/fader`,
+					`/light/desk/page-playback/1/fader`,
 					level,
 				);
 				await expect
@@ -551,7 +551,7 @@ export class BrowserCrossSurface {
 					.toBeCloseTo(level, 4);
 				await firstHardware.expectAfter(
 					feedbackMark,
-					`/light/${first.desk.osc_alias}/feedback/page-playback/1/fader`,
+					`/light/desk/feedback/page-playback/1/fader`,
 				);
 			}
 			for (const level of [0, 0.5, 1]) {
@@ -568,7 +568,7 @@ export class BrowserCrossSurface {
 
 			const beforeNoOp = await this.playbackOperationalState();
 			await firstHardware.send(
-				`/light/${first.desk.osc_alias}/page-playback/2/button/1`,
+				`/light/desk/page-playback/2/button/1`,
 				[true],
 			);
 			await firstHardware.send("/light/playback/1/2/button/1", [true]);

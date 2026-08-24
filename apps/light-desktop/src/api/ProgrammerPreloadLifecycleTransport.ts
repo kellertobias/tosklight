@@ -70,7 +70,6 @@ export class HttpProgrammerPreloadLifecycleTransport
 		}
 		return decodeProgrammerPreloadLifecycleOutcome(
 			await this.responseValue(response),
-			scope.userId,
 			request,
 		);
 	}

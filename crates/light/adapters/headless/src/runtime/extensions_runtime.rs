@@ -27,8 +27,8 @@ use light_wire::v2::extensions::{
 use parking_lot::{Mutex, RwLock};
 
 use super::{
-    ApiError, AppState, ControlDesk, Session, application_millis, authenticate, command_http,
-    copy_speed_group_runtime_to_configuration, emit, output_runtime_service,
+    ApiError, AppState, ControlDesk, OSC_DESK_PATH, Session, application_millis, authenticate,
+    command_http, copy_speed_group_runtime_to_configuration, emit, output_runtime_service,
     persist_server_configuration, playback_service, refresh_speed_group_engine,
 };
 use crate::tolerant_json::TolerantJson;
@@ -266,13 +266,7 @@ fn extension_desk(state: &AppState, context: &HostControlContext) -> Option<Cont
     uuid::Uuid::parse_str(&context.desk_id)
         .ok()
         .and_then(|id| state.installation.control_desk(id).ok().flatten())
-        .or_else(|| {
-            state
-                .installation
-                .control_desk_by_alias(&context.desk_id)
-                .ok()
-                .flatten()
-        })
+        .or_else(|| state.installation.desks().ok()?.into_iter().next())
 }
 
 fn apply_playback_feedback(
@@ -558,13 +552,7 @@ pub(super) fn apply_bound_control(
     let desk = uuid::Uuid::parse_str(&host.desk_id)
         .ok()
         .and_then(|id| state.installation.control_desk(id).ok().flatten())
-        .or_else(|| {
-            state
-                .installation
-                .control_desk_by_alias(&host.desk_id)
-                .ok()
-                .flatten()
-        })
+        .or_else(|| state.installation.desks().ok()?.into_iter().next())
         .ok_or_else(|| PortError::new(format!("logical desk `{}` is unavailable", host.desk_id)))?;
     let session = state
         .sessions
@@ -661,7 +649,7 @@ pub(super) fn apply_bound_control(
             Ok(())
         }
         (CanonicalControlIntent::SpeedGroup { group, control }, input) => {
-            apply_speed_group(&state, &desk, *group, *control, input)
+            apply_speed_group(&state, *group, *control, input)
         }
         (intent, input) => {
             let Some(notification) = desk_action_notification(intent, input) else {
@@ -671,7 +659,7 @@ pub(super) fn apply_bound_control(
                 state,
                 "desk_action",
                 serde_json::json!({
-                    "desk_alias": desk.osc_alias,
+                    "path": OSC_DESK_PATH,
                     "desk_id": desk.id,
                     "session_id": session.as_ref().map(|session| session.id),
                     "action": notification.action,
@@ -724,7 +712,7 @@ fn apply_programmer_key(
             state,
             "desk_action",
             serde_json::json!({
-                "desk_alias": desk.osc_alias,
+                "path": OSC_DESK_PATH,
                 "desk_id": desk.id,
                 "session_id": session.id,
                 "action": "set",
@@ -806,7 +794,7 @@ fn apply_programmer_key(
                 state,
                 "desk_action",
                 serde_json::json!({
-                    "desk_alias": desk.osc_alias,
+                    "path": OSC_DESK_PATH,
                     "desk_id": desk.id,
                     "session_id": session.id,
                     "action": action,
@@ -880,7 +868,6 @@ fn apply_programmer_modifier(
 
 fn apply_speed_group(
     state: &AppState,
-    desk: &ControlDesk,
     group: char,
     control: SpeedGroupControl,
     input: &ControlInput,
@@ -921,7 +908,7 @@ fn apply_speed_group(
         "speed_group_action",
         serde_json::json!({
             "group": group.to_ascii_uppercase().to_string(),
-            "desk_alias": desk.osc_alias,
+            "path": OSC_DESK_PATH,
             "source": "extension",
             "action": match control {
                 SpeedGroupControl::Tap => "learn",

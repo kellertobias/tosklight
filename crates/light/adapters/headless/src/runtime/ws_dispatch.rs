@@ -90,7 +90,7 @@ fn acknowledge_live_action(
         if let Some(osc_feedback) = osc_feedback {
             send_action_timing_feedback(
                 state,
-                &osc_feedback.desk_alias,
+                &osc_feedback.path,
                 osc_feedback.target,
                 &projection,
             );

@@ -29,19 +29,14 @@ const UUID_PATTERN =
 export function decodeProgrammerValuesProjection(
 	value: unknown,
 	path: string,
-	expectedUserId: string,
 ): ProgrammerValuesProjection {
-	programmerValuesUuidAt(expectedUserId, "$.requested_user_id");
 	const projection = exactRecordAt(value, path, [
-		"user_id",
 		"revision",
 		"fixture_values",
 		"group_values",
 		"dynamic_definitions",
 		"dynamic_values",
 	]);
-	const userId = programmerValuesUuidAt(projection.user_id, `${path}.user_id`);
-	assertExpectedUser(userId, expectedUserId, `${path}.user_id`);
 	const fixtureValues = arrayAt(
 		projection.fixture_values,
 		`${path}.fixture_values`,
@@ -82,7 +77,6 @@ export function decodeProgrammerValuesProjection(
 	);
 	assertUniqueAddresses(fixtureValues, groupValues, path);
 	return {
-		userId,
 		revision: integerAt(projection.revision, `${path}.revision`),
 		fixtureValues,
 		groupValues,
@@ -507,9 +501,4 @@ export function programmerValuesUuidAt(value: unknown, path: string): string {
 	if (!UUID_PATTERN.test(decoded))
 		throw new WireValidationError(path, "hyphenated UUID", value);
 	return decoded;
-}
-
-function assertExpectedUser(actual: string, expected: string, path: string) {
-	if (actual.toLowerCase() !== expected.toLowerCase())
-		throw new WireValidationError(path, `requested user ${expected}`, actual);
 }

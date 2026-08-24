@@ -50,7 +50,6 @@ export class HttpPresetRecallTransport implements PresetRecallTransport {
 		}
 		return decodePresetRecallOutcome(
 			await this.responseValue(response),
-			scope.userId,
 			request,
 		);
 	}

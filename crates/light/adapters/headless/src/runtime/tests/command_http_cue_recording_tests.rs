@@ -504,7 +504,7 @@ async fn cue_recording_shares_one_users_values_across_desks_and_isolates_another
     let fixture = set_cue_record_value(&scenario);
     let second_desk = scenario
         .state
-        .installation.add_desk("Cue peer", "cue-peer")
+        .installation.add_desk("Cue peer")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -530,7 +530,7 @@ async fn cue_recording_shares_one_users_values_across_desks_and_isolates_another
     let other_user = scenario.state.installation.add_user("Other Cue user").unwrap();
     let other_desk = scenario
         .state
-        .installation.add_desk("Other Cue desk", "other-cue")
+        .installation.add_desk("Other Cue desk")
         .unwrap();
     let (other_token, logged_in_user) =
         login_on_desk(&scenario, "Other Cue user", other_desk.id).await;

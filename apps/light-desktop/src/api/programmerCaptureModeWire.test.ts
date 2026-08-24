@@ -6,12 +6,10 @@ import {
 import { WireValidationError } from "./wireValidation";
 
 const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const OTHER_USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 function projection(overrides: Record<string, unknown> = {}) {
 	return {
-		user_id: USER_ID,
 		revision: 4,
 		blind: true,
 		preview: false,
@@ -30,7 +28,7 @@ function captureEvent(overrides: Record<string, unknown> = {}) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-capture-mode:${USER_ID}`,
+				id: "programming-capture-mode",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "osc" },
@@ -46,16 +44,15 @@ function captureEvent(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Programmer capture-mode wire", () => {
-	it("decodes an exact-user snapshot", () => {
+	it("decodes a snapshot", () => {
 		expect(
-			decodeProgrammerCaptureModeSnapshot(
-				{ cursor: { sequence: 18 }, projection: projection() },
-				USER_ID,
-			),
+			decodeProgrammerCaptureModeSnapshot({
+				cursor: { sequence: 18 },
+				projection: projection(),
+			}),
 		).toEqual({
 			cursor: 18,
 			projection: {
-				userId: USER_ID,
 				revision: 4,
 				blind: true,
 				preview: false,
@@ -64,36 +61,27 @@ describe("Programmer capture-mode wire", () => {
 		});
 	});
 
-	it("rejects foreign users and malformed switches", () => {
+	it("rejects an undeclared field and malformed switches", () => {
 		expect(() =>
-			decodeProgrammerCaptureModeSnapshot(
-				{
-					cursor: { sequence: 18 },
-					projection: projection({ user_id: OTHER_USER_ID }),
-				},
-				USER_ID,
-			),
-		).toThrow(/requested user/);
+			decodeProgrammerCaptureModeSnapshot({
+				cursor: { sequence: 18 },
+				projection: projection({ user_id: USER_ID }),
+			}),
+		).toThrow(/user_id/);
 		expect(() =>
-			decodeProgrammerCaptureModeSnapshot(
-				{
-					cursor: { sequence: 18 },
-					projection: projection({ blind: "yes" }),
-				},
-				USER_ID,
-			),
+			decodeProgrammerCaptureModeSnapshot({
+				cursor: { sequence: 18 },
+				projection: projection({ blind: "yes" }),
+			}),
 		).toThrow(WireValidationError);
 	});
 
-	it("decodes the exact replaceable user event and control messages", () => {
-		expect(
-			decodeProgrammerCaptureModeEventMessage(captureEvent(), USER_ID),
-		).toEqual({
+	it("decodes the replaceable event and control messages", () => {
+		expect(decodeProgrammerCaptureModeEventMessage(captureEvent())).toEqual({
 			type: "event",
 			sequence: 19,
 			correlationId: CORRELATION_ID,
 			projection: {
-				userId: USER_ID,
 				revision: 4,
 				blind: true,
 				preview: false,
@@ -110,7 +98,6 @@ describe("Programmer capture-mode wire", () => {
 						latest_sequence: 30,
 					},
 				},
-				USER_ID,
 			),
 		).toEqual({
 			type: "gap",
@@ -121,7 +108,7 @@ describe("Programmer capture-mode wire", () => {
 	});
 
 	it.each([
-		["desk-scoped event", { desk_id: OTHER_USER_ID }],
+		["desk-scoped event", { desk_id: USER_ID }],
 		["lossless delivery", { delivery: "lossless" }],
 		["runtime source", { source: { kind: "runtime" } }],
 		["missing correlation", { correlation_id: undefined }],
@@ -130,27 +117,27 @@ describe("Programmer capture-mode wire", () => {
 		if ("correlation_id" in replacement)
 			delete (candidate.event as Record<string, unknown>).correlation_id;
 		expect(() =>
-			decodeProgrammerCaptureModeEventMessage(candidate, USER_ID),
+			decodeProgrammerCaptureModeEventMessage(candidate),
 		).toThrow(WireValidationError);
 	});
 
-	it("rejects another Programmer object and a foreign projection", () => {
+	it("rejects another Programmer object and an undeclared projection field", () => {
 		const wrongObject = captureEvent({
 			object: {
 				capability: "programmer",
-				id: `programming-values:${USER_ID}`,
+				id: "programming-values",
 			},
 		});
 		expect(() =>
-			decodeProgrammerCaptureModeEventMessage(wrongObject, USER_ID),
+			decodeProgrammerCaptureModeEventMessage(wrongObject),
 		).toThrow(/programming-capture-mode/);
 
-		const foreignProjection = captureEvent();
-		foreignProjection.event.payload.change.projection = projection({
-			user_id: OTHER_USER_ID,
+		const undeclared = captureEvent();
+		undeclared.event.payload.change.projection = projection({
+			user_id: USER_ID,
 		});
-		expect(() =>
-			decodeProgrammerCaptureModeEventMessage(foreignProjection, USER_ID),
-		).toThrow(/requested user/);
+		expect(() => decodeProgrammerCaptureModeEventMessage(undeclared)).toThrow(
+			/user_id/,
+		);
 	});
 });

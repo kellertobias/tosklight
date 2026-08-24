@@ -21,11 +21,11 @@ function actions() {
 	];
 }
 
-function projection(userId = USER_ID) {
-	return { user_id: userId, revision: 3, actions: actions() };
+function projection() {
+	return { revision: 3, actions: actions() };
 }
 
-function event(userId = USER_ID) {
+function event() {
 	return {
 		type: "event",
 		event: {
@@ -35,7 +35,7 @@ function event(userId = USER_ID) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-preload-playback-queue:${userId}`,
+				id: "programming-preload-playback-queue",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "osc" },
@@ -43,7 +43,7 @@ function event(userId = USER_ID) {
 			delivery: "replaceable",
 			payload: {
 				type: "programming_preload_playback_queue_changed",
-				change: { projection: projection(userId) },
+				change: { projection: projection() },
 			},
 		},
 	};
@@ -53,13 +53,10 @@ describe("Preload playback queue wire decoding", () => {
 	it("preserves ordered duplicate actions from a strict snapshot", () => {
 		expect(
 			decodeProgrammerPreloadPlaybackQueueSnapshot(
-				{ cursor: { sequence: 11 }, projection: projection() },
-				USER_ID,
-			),
+				{ cursor: { sequence: 11 }, projection: projection() }),
 		).toEqual({
 			cursor: 11,
 			projection: {
-				userId: USER_ID,
 				revision: 3,
 				actions: [
 					{ playbackNumber: 4, page: 3, action: "go", surface: "physical" },
@@ -75,32 +72,30 @@ describe("Preload playback queue wire decoding", () => {
 		});
 	});
 
-	it("decodes only the exact-user replaceable event", () => {
+	it("decodes the replaceable event", () => {
 		expect(
-			decodeProgrammerPreloadPlaybackQueueEventMessage(event(), USER_ID),
+			decodeProgrammerPreloadPlaybackQueueEventMessage(event()),
 		).toMatchObject({
 			type: "event",
 			sequence: 12,
 			correlationId: CORRELATION_ID,
-			projection: { userId: USER_ID, revision: 3 },
+			projection: { revision: 3 },
 		});
 	});
 
-	it("rejects foreign users and undeclared queue content", () => {
+	it("rejects undeclared queue content", () => {
 		expect(() =>
-			decodeProgrammerPreloadPlaybackQueueSnapshot(
-				{ cursor: { sequence: 1 }, projection: projection(OTHER_USER) },
-				USER_ID,
-			),
-		).toThrow(/requested user/);
+			decodeProgrammerPreloadPlaybackQueueSnapshot({
+				cursor: { sequence: 1 },
+				projection: { ...projection(), user_id: OTHER_USER },
+			}),
+		).toThrow(/user_id/);
 		expect(() =>
 			decodeProgrammerPreloadPlaybackQueueSnapshot(
 				{
 					cursor: { sequence: 1 },
 					projection: { ...projection(), values: [] },
-				},
-				USER_ID,
-			),
+				}),
 		).toThrow(/values/);
 	});
 
@@ -117,30 +112,26 @@ describe("Preload playback queue wire decoding", () => {
 				{
 					cursor: { sequence: 1 },
 					projection: { ...projection(), actions: malformed },
-				},
-				USER_ID,
-			),
+				}),
 		).toThrow();
 	});
 
 	it("rejects the wrong object, delivery, and missing correlation", () => {
 		const wrongObject = event();
-		wrongObject.event.object.id = `programming-preload-values:${USER_ID}`;
+		wrongObject.event.object.id = "programming-preload-values";
 		expect(() =>
-			decodeProgrammerPreloadPlaybackQueueEventMessage(wrongObject, USER_ID),
+			decodeProgrammerPreloadPlaybackQueueEventMessage(wrongObject),
 		).toThrow(/playback-queue/);
 		const wrongDelivery = event();
 		wrongDelivery.event.delivery = "lossless";
 		expect(() =>
-			decodeProgrammerPreloadPlaybackQueueEventMessage(wrongDelivery, USER_ID),
+			decodeProgrammerPreloadPlaybackQueueEventMessage(wrongDelivery),
 		).toThrow(/replaceable/);
 		const missingCorrelation = event();
 		Reflect.deleteProperty(missingCorrelation.event, "correlation_id");
 		expect(() =>
 			decodeProgrammerPreloadPlaybackQueueEventMessage(
-				missingCorrelation,
-				USER_ID,
-			),
+				missingCorrelation),
 		).toThrow(/correlation_id/);
 	});
 });

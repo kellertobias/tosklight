@@ -75,22 +75,22 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     api: async ({ api, bench }, state) => {
       state.session = api.session!;
       state.hardware = await bench.osc();
-      await state.hardware.subscribe(state.clientId, state.session.desk.osc_alias);
-      await state.hardware.expectAfter(0, `/light/${state.session.desk.osc_alias}/feedback/speed-group/5`);
+      await state.hardware.subscribe(state.clientId, "desk");
+      await state.hardware.expectAfter(0, `/light/desk/feedback/speed-group/5`);
       await setDeskPage(api, state.session, 2);
     },
     ui: async ({ bench, desk, page }, state) => {
       await desk.open(bench.baseUrl);
       state.session = await desk.session();
       state.hardware = await bench.osc();
-      await state.hardware.subscribe(state.clientId, state.session.desk.osc_alias);
-      await state.hardware.expectAfter(0, `/light/${state.session.desk.osc_alias}/feedback/speed-group/5`);
+      await state.hardware.subscribe(state.clientId, "desk");
+      await state.hardware.expectAfter(0, `/light/desk/feedback/speed-group/5`);
       await selectPlaybackPage(page, "Page 2");
     },
     assert: async ({ api, bench }, state) => {
       const session = state.session!;
       const hardware = state.hardware!;
-      const alias = session.desk.osc_alias;
+      const alias = "desk";
       try {
         expect(await deskPage(api, session)).toBe(2);
         expect((await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
@@ -146,8 +146,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       const first = state.first!;
       const firstHardware = state.firstHardware!;
       const secondHardware = state.secondHardware!;
-      const firstAlias = first.desk.osc_alias;
-      const secondAlias = state.second.desk.osc_alias;
+      const firstAlias = "desk";
+      const secondAlias = "desk";
       try {
         // One desk, one command line: both sessions read the same partial command.
         await expect.poll(async () => normalizeCommand((await programmerForSession(api, first)).command_line)).toBe("GROUP 1 +");
@@ -557,7 +557,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   test("OSC-001 @osc › subscription and one tick return a complete deterministic feedback cycle", async ({ api, bench }) => {
     await loadCanonicalCopy(api, bench, "osc-001-wire");
     const hardware = await bench.osc();
-    const alias = api.session!.desk.osc_alias;
+    const alias = "desk";
     const clientId = `osc-001-${crypto.randomUUID()}`;
     try {
       await hardware.subscribe(clientId, alias);
@@ -593,17 +593,18 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     expect(Array.from((await bench.sacn.nextAfter(sacn, "sacn", 101)).slots.slice(0, 12))).toEqual(Array(12).fill(64));
   });
 
-  test("OSC-003 @osc › subscribers on separate desk aliases stay isolated and unsubscribe is reference-counted", async ({ api, bench }) => {
+  test("OSC-003 @osc › two desk-button surfaces share the one command line and unsubscribe is reference-counted", async ({ api, bench }) => {
     await loadCanonicalCopy(api, bench, "osc-003-wire");
-    const second = await createSession(api, crypto.randomUUID());
     const a = await bench.osc(); const b = await bench.osc();
     try {
-      await a.subscribe("osc-003-a", api.session!.desk.osc_alias);
-      await b.subscribe("osc-003-b", second.desk.osc_alias);
+      await a.subscribe("osc-003-a", "desk");
+      await b.subscribe("osc-003-b", "desk");
       const aMark = a.mark(); const bMark = b.mark();
-      await a.send(`/light/${api.session!.desk.osc_alias}/programmer/digit-1`, [true]);
-      await a.expectAfter(aMark, `/light/${api.session!.desk.osc_alias}/feedback/command-line`);
-      expect(b.messages.slice(bMark).some((message) => message.address.includes(api.session!.desk.osc_alias))).toBe(false);
+      await a.send(`/light/desk/programmer/digit-1`, [true]);
+      await a.expectAfter(aMark, `/light/desk/feedback/command-line`);
+      // One desk, so the other button surface sees the same command line rather than being
+      // partitioned away from it by an alias.
+      await b.expectAfter(bMark, `/light/desk/feedback/command-line`);
       await a.send("/light/unsubscribe", ["osc-003-a"]);
       await new Promise((resolve) => setTimeout(resolve, 100));
       const disconnected = a.mark();
@@ -624,7 +625,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     const hardware = await bench.osc();
     const replacement = await bench.osc();
     const unsubscribed = await bench.osc();
-    const alias = api.session!.desk.osc_alias;
+    const alias = "desk";
     const authoritativeState = async () => ({
       programmers: await api.request<any[]>("GET", "/api/v2/programmers"),
       playbacks: await api.request<any>("GET", "/api/v2/playback-overview"),
@@ -640,7 +641,10 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       expect(newAudit.some((event) => ["command_applied", "programmer_changed"].includes(event.kind))).toBe(false);
     };
     try {
-      await expectUnchangedAfter(() => hardware.send("/light/subscribe", ["missing-alias", "missing-desk", hardware.feedbackPort]));
+      // A path a saved hardware configuration named before the two canonical ones still connects:
+      // there is one desk, so nothing is foreign to it. Connecting alone still changes nothing.
+      await expectUnchangedAfter(() => hardware.send("/light/subscribe", ["legacy-path", "main", hardware.feedbackPort]));
+      await hardware.send("/light/unsubscribe", ["legacy-path"]);
       await expectUnchangedAfter(() => hardware.send("/light/subscribe", ["wrong-port", alias, "wrong-port"]));
       await expectUnchangedAfter(() => hardware.send(`/light/${alias}/programmer`, [true]));
       await expectUnchangedAfter(() => hardware.send(`/light/${alias}/programmer/unknown`, [true]));
@@ -688,7 +692,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     const secondContext = await browser.newContext();
     const secondPage = await secondContext.newPage();
     const secondSession = await desk.openPeer(secondPage, bench.baseUrl);
-    expect(secondSession.desk.osc_alias).not.toBe(firstSession.desk.osc_alias);
+    expect(secondSession.desk.id).toBe(firstSession.desk.id);
     const firstHardware = await bench.osc();
     const secondHardware = await bench.osc();
     try {
@@ -696,29 +700,29 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       for (const key of ["GRP", "1", "+"]) await secondPage.getByRole("button", { name: key, exact: true }).click();
       await expect.poll(async () => programmerCommand(api, firstSession)).toBe("G7 +");
       await expect.poll(async () => programmerCommand(api, secondSession)).toBe("G1 +");
-      await firstHardware.subscribe("osc-005-first", firstSession.desk.osc_alias);
-      await firstHardware.expectAfter(0, `/light/${firstSession.desk.osc_alias}/feedback/speed-group/5`);
+      await firstHardware.subscribe("osc-005-first", "desk");
+      await firstHardware.expectAfter(0, `/light/desk/feedback/speed-group/5`);
       const firstSecondSubscriptionMark = firstHardware.mark();
       const secondSubscriptionMark = secondHardware.mark();
-      await secondHardware.subscribe("osc-005-second", secondSession.desk.osc_alias);
-      await firstHardware.expectAfter(firstSecondSubscriptionMark, `/light/${firstSession.desk.osc_alias}/feedback/speed-group/5`);
-      await secondHardware.expectAfter(secondSubscriptionMark, `/light/${secondSession.desk.osc_alias}/feedback/speed-group/5`);
+      await secondHardware.subscribe("osc-005-second", "desk");
+      await firstHardware.expectAfter(firstSecondSubscriptionMark, `/light/desk/feedback/speed-group/5`);
+      await secondHardware.expectAfter(secondSubscriptionMark, `/light/desk/feedback/speed-group/5`);
       const firstAfterSecondKey = firstHardware.mark();
       const secondAfterSecondKey = secondHardware.mark();
-      await secondHardware.send(`/light/${secondSession.desk.osc_alias}/programmer/digit-2`, [true]);
+      await secondHardware.send(`/light/desk/programmer/digit-2`, [true]);
       await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G1 + F2");
       await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
-      await firstHardware.expectAfter(firstAfterSecondKey, `/light/${firstSession.desk.osc_alias}/feedback/speed-group/5`);
-      await secondHardware.expectAfter(secondAfterSecondKey, `/light/${secondSession.desk.osc_alias}/feedback/speed-group/5`);
+      await firstHardware.expectAfter(firstAfterSecondKey, `/light/desk/feedback/speed-group/5`);
+      await secondHardware.expectAfter(secondAfterSecondKey, `/light/desk/feedback/speed-group/5`);
       const firstKeyMark = firstHardware.mark();
-      await firstHardware.send(`/light/${firstSession.desk.osc_alias}/programmer/digit-8`, [true]);
-      expect((await firstHardware.expectAfter(firstKeyMark, `/light/${firstSession.desk.osc_alias}/feedback/command-line`)).arguments).toEqual(["G7 + F8"]);
+      await firstHardware.send(`/light/desk/programmer/digit-8`, [true]);
+      expect((await firstHardware.expectAfter(firstKeyMark, `/light/desk/feedback/command-line`)).arguments).toEqual(["G7 + F8"]);
       await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 + F8");
       await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G1 + F2");
 
       const commandRevision = Math.max(0, ...(await audit(api)).map((event) => event.revision));
       for (const action of ["at", "digit-5", "digit-0", "enter"]) {
-        await firstHardware.send(`/light/${firstSession.desk.osc_alias}/programmer/${action}`, [true]);
+        await firstHardware.send(`/light/desk/programmer/${action}`, [true]);
       }
       const fixtures = await fixtureIdsByNumber(api);
       for (const number of [1, 2, 3, 4, 8]) {
@@ -745,25 +749,25 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("GROUP");
       await expect.poll(async () => programmerCommand(api, secondSession)).toBe("GROUP");
       const groupModeMark = secondHardware.mark();
-      await secondHardware.send("/light/subscribe", ["osc-005-second", secondSession.desk.osc_alias, secondHardware.feedbackPort]);
-      await secondHardware.expectAfter(groupModeMark, `/light/${secondSession.desk.osc_alias}/feedback/page`);
-      await secondHardware.send(`/light/${secondSession.desk.osc_alias}/programmer/digit-3`, [true]);
+      await secondHardware.send("/light/subscribe", ["osc-005-second", "desk", secondHardware.feedbackPort]);
+      await secondHardware.expectAfter(groupModeMark, `/light/desk/feedback/page`);
+      await secondHardware.send(`/light/desk/programmer/digit-3`, [true]);
       await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G3");
 
       await page.getByRole("textbox", { name: "Command line", exact: true }).fill("G7 +");
       await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
       await expect.poll(async () => programmerCommand(api, firstSession)).toBe("G7 +");
       const reconnectMark = firstHardware.mark();
-      await firstHardware.send("/light/subscribe", ["osc-005-first", firstSession.desk.osc_alias, firstHardware.feedbackPort]);
-      expect((await firstHardware.expectAfter(reconnectMark, `/light/${firstSession.desk.osc_alias}/feedback/page`)).arguments).toEqual([1]);
-      expect((await firstHardware.expectAfter(reconnectMark, `/light/${firstSession.desk.osc_alias}/feedback/command-line`)).arguments).toEqual(["G7 +"]);
+      await firstHardware.send("/light/subscribe", ["osc-005-first", "desk", firstHardware.feedbackPort]);
+      expect((await firstHardware.expectAfter(reconnectMark, `/light/desk/feedback/page`)).arguments).toEqual([1]);
+      expect((await firstHardware.expectAfter(reconnectMark, `/light/desk/feedback/command-line`)).arguments).toEqual(["G7 +"]);
 
       await secondPage.getByRole("textbox", { name: "Command line", exact: true }).fill("G1 + F2");
       await expect.poll(async () => programmerCommand(api, secondSession)).toBe("G1 + F2");
       const reattachMark = firstHardware.mark();
-      await firstHardware.send("/light/subscribe", ["osc-005-first", secondSession.desk.osc_alias, firstHardware.feedbackPort]);
-      await firstHardware.expectAfter(reattachMark, `/light/${secondSession.desk.osc_alias}/feedback/page`);
-      await firstHardware.send(`/light/${secondSession.desk.osc_alias}/programmer/digit-9`, [true]);
+      await firstHardware.send("/light/subscribe", ["osc-005-first", "desk", firstHardware.feedbackPort]);
+      await firstHardware.expectAfter(reattachMark, `/light/desk/feedback/page`);
+      await firstHardware.send(`/light/desk/programmer/digit-9`, [true]);
       await expect(secondPage.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G1 + F29");
       await expect(page.getByRole("textbox", { name: "Command line", exact: true })).toHaveValue("G7 +");
     } finally {
@@ -783,8 +787,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     await setDeskPage(api, secondSession, 2);
     const firstHardware = await bench.osc();
     const secondHardware = await bench.osc();
-    const firstAlias = firstSession.desk.osc_alias;
-    const secondAlias = secondSession.desk.osc_alias;
+    const firstAlias = "desk";
+    const secondAlias = "desk";
     try {
       const firstSubscriptionMark = firstHardware.mark();
       await firstHardware.send("/light/subscribe", [
@@ -873,7 +877,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 
   test("CROSS-001 @osc › OSC matches UI and API normalized Group output", async ({ api, bench }) => {
     await loadCanonicalCopy(api, bench, "cross-001-osc");
-    const hardware = await bench.osc(); const alias = api.session!.desk.osc_alias;
+    const hardware = await bench.osc(); const alias = "desk";
     try {
       await hardware.subscribe("cross-001-osc", alias);
       for (const action of ["grp", "digit-1", "at", "digit-5", "digit-0", "enter"]) await hardware.send(`/light/${alias}/programmer/${action}`, [true]);
@@ -928,13 +932,13 @@ async function subscribeIsolatedHardware(bench: any, state: OscIsolationState): 
   state.firstHardware = await bench.osc();
   state.secondHardware = await bench.osc();
   state.firstMark = state.firstHardware.mark();
-  await state.firstHardware.subscribe("osc-003-a", state.first!.desk.osc_alias);
-  await state.firstHardware.expectAfter(state.firstMark, `/light/${state.first!.desk.osc_alias}/feedback/speed-group/5`);
+  await state.firstHardware.subscribe("osc-003-a", "desk");
+  await state.firstHardware.expectAfter(state.firstMark, `/light/desk/feedback/speed-group/5`);
   const firstSecondSubscriptionMark = state.firstHardware.mark();
   state.secondMark = state.secondHardware.mark();
-  await state.secondHardware.subscribe("osc-003-b", state.second.desk.osc_alias);
-  await state.firstHardware.expectAfter(firstSecondSubscriptionMark, `/light/${state.first!.desk.osc_alias}/feedback/speed-group/5`);
-  await state.secondHardware.expectAfter(state.secondMark, `/light/${state.second.desk.osc_alias}/feedback/speed-group/5`);
+  await state.secondHardware.subscribe("osc-003-b", "desk");
+  await state.firstHardware.expectAfter(firstSecondSubscriptionMark, `/light/desk/feedback/speed-group/5`);
+  await state.secondHardware.expectAfter(state.secondMark, `/light/desk/feedback/speed-group/5`);
 }
 
 async function assertRevisionConflict(api: ApiDriver, state: RevisionConflictState): Promise<void> {

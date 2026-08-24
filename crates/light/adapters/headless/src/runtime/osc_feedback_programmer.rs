@@ -16,7 +16,7 @@ fn send_command_key_feedback(state: &AppState, subscriber: &OscSubscriber, comma
         send_osc(
             state,
             subscriber.target,
-            format!("/light/{}/feedback/programmer/{key}", subscriber.desk_alias),
+            format!("/light/{}/feedback/programmer/{key}", subscriber.path),
             vec![OscArgument::Bool(
                 command_line.split_whitespace().any(|part| part == token),
             )],
@@ -112,7 +112,7 @@ fn send_highlight_feedback(
     let Ok(highlight) = state.highlight.snapshot(&context, &ports) else {
         return;
     };
-    let prefix = format!("/light/{}/feedback/highlight", subscriber.desk_alias);
+    let prefix = format!("/light/{}/feedback/highlight", subscriber.path);
     for (suffix, arguments) in highlight_arguments(&highlight) {
         send_osc(
             state,
@@ -140,7 +140,7 @@ fn send_dynamic_feedback(
     subscriber: &OscSubscriber,
     programmer: Option<&light_programmer::ProgrammerState>,
 ) {
-    let prefix = format!("/light/{}/feedback/dynamic", subscriber.desk_alias);
+    let prefix = format!("/light/{}/feedback/dynamic", subscriber.path);
     send_runtime_dynamic_feedback(state, subscriber, &prefix);
     send_programmer_dynamic_feedback(state, subscriber, &prefix, programmer);
 }
@@ -399,7 +399,7 @@ pub(super) fn send_programmer_osc_feedback(
     highlight_fixtures: &[HighlightFixture],
     highlight_groups: &HashMap<String, light_programmer::GroupDefinition>,
 ) {
-    let prefix = format!("/light/{}/feedback", subscriber.desk_alias);
+    let prefix = format!("/light/{}/feedback", subscriber.path);
     send_osc(
         state,
         subscriber.target,

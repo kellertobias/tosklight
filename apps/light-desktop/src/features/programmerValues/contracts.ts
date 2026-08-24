@@ -46,9 +46,8 @@ export type HydratedProgrammingDynamicSemanticValue =
 	| Exclude<ProgrammingDynamicSemanticValue, { type: "dynamic_on" }>
 	| HydratedDynamicOn;
 
-/** Normal, recordable Programmer values owned by one user. */
+/** The Programmer's normal, recordable values. */
 export interface ProgrammerValuesProjection {
-	userId: string;
 	revision: number;
 	fixtureValues: readonly ProgrammerFixtureValue[];
 	groupValues: readonly ProgrammerGroupValue[];
@@ -76,7 +75,6 @@ export interface ProgrammerGroupValueAddress {
 }
 
 export interface ProgrammerValuesChange {
-	userId: string;
 	revision: number;
 	fixtureValues: readonly ProgrammerFixtureValue[];
 	removedFixtureValues: readonly ProgrammerFixtureValueAddress[];
@@ -112,7 +110,6 @@ export type ProgrammerValuesEventMessage =
 
 export interface ProgrammerValuesScope {
 	showId: string;
-	userId: string;
 }
 
 export type ProgrammerValuesMutation =

@@ -9,6 +9,7 @@ import {
 	lifecycleSnapshot,
 	otherLifecycleRow,
 	PROGRAMMER_A,
+	PROGRAMMER_B,
 	removalChange,
 	settleLifecycleSession,
 	upsertChange,
@@ -105,7 +106,7 @@ describe("ProgrammerLifecycleSession authority", () => {
 			eventSequence: 12,
 			projection: {
 				revision: 6,
-				programmers: [{ userId: "operator-b" }],
+				programmers: [{ programmerId: PROGRAMMER_B }],
 			},
 		});
 	});

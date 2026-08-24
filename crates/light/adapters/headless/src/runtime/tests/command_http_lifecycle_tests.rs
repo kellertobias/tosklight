@@ -15,7 +15,7 @@ async fn lifecycle_snapshot_is_authenticated_cursor_bound_and_content_safe() {
     let rows = snapshot["projection"]["programmers"].as_array().unwrap();
     assert_eq!(rows.len(), 1);
     let row = &rows[0];
-    assert_eq!(row["user_id"], scenario.session.user.id.0.to_string());
+    assert!(row.get("user_id").is_none(), "the one Programmer does not name a user");
     assert_eq!(row["normal_value_count"], 0);
     assert_eq!(row["preload_active"], false);
     assert_eq!(row["sessions"].as_array().unwrap().len(), 1);
@@ -52,7 +52,7 @@ async fn lifecycle_tracks_every_surface_of_the_one_programmer_and_removes_it_onc
     let second_desk = scenario
         .state
         .installation
-        .add_desk("Lifecycle second", "lifecycle-second")
+        .add_desk("Lifecycle second")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);

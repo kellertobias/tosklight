@@ -1,6 +1,5 @@
-/** User-owned Programmer capture switches that determine where value writes land. */
+/** The Programmer's capture switches, which determine where value writes land. */
 export interface ProgrammerCaptureModeProjection {
-	userId: string;
 	revision: number;
 	blind: boolean;
 	preview: boolean;
@@ -14,7 +13,6 @@ export interface ProgrammerCaptureModeSnapshot {
 
 export interface ProgrammerCaptureModeScope {
 	showId: string;
-	userId: string;
 }
 
 export type ProgrammerCaptureModeEventMessage =

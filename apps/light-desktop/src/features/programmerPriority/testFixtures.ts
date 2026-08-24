@@ -20,7 +20,6 @@ export function priorityProjection(
 	overrides: Partial<ProgrammerPriorityProjection> = {},
 ): ProgrammerPriorityProjection {
 	return {
-		userId: USER_ID,
 		revision: 1,
 		priority: 0,
 		changedAt: "2026-07-21T10:00:00Z",
@@ -79,18 +78,17 @@ export class FakeProgrammerPriorityTransport
 	implements ProgrammerPriorityTransport
 {
 	readonly subscriptions: FakePrioritySubscription[] = [];
-	readonly loadSnapshot = vi.fn(async (scope: ProgrammerPriorityScope) =>
-		prioritySnapshot({ userId: scope.userId }),
+	readonly loadSnapshot = vi.fn(async (_scope: ProgrammerPriorityScope) =>
+		prioritySnapshot(),
 	);
 	readonly applyAction = vi.fn(
 		async (
-			scope: ProgrammerPriorityScope,
+			_scope: ProgrammerPriorityScope,
 			request: ProgrammerPriorityActionRequest,
 		) =>
 			changedOutcome(
 				request.requestId,
 				priorityProjection({
-					userId: scope.userId,
 					revision: request.expectedRevision + 1,
 					priority: request.priority,
 				}),

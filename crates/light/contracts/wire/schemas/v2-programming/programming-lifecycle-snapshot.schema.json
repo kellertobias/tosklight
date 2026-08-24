@@ -58,16 +58,11 @@
           "items": {
             "$ref": "#/$defs/ProgrammingLifecycleSession"
           }
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "additionalProperties": false,
       "required": [
         "programmer_id",
-        "user_id",
         "connected",
         "selected_fixture_count",
         "normal_value_count",

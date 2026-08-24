@@ -17,7 +17,7 @@ fn focused_macro_editor_routes_attached_keypad_input_without_mutating_command_li
         "macro-editor-test".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: source,
             command_source: source,
             session_id: session.id,
@@ -85,7 +85,7 @@ fn osc_shifted_group_dmx_command_executes_the_same_physical_address_selection() 
         "dmx-test".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: source,
             command_source: source,
             session_id: session.id,
@@ -150,7 +150,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         "test".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: source,
             command_source: source,
             session_id: session.id,
@@ -446,7 +446,7 @@ fn held_shift_all_previous_and_next_are_unassigned_without_leaking_highlight_act
         "grid-test".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: source,
             command_source: source,
             session_id: session.id,
@@ -524,7 +524,7 @@ fn an_osc_source_cannot_send_on_a_path_it_did_not_subscribe_to() {
         "cross-desk".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::PlaybackOnly,
-            desk_alias: "remote".into(),
+            path: "remote".into(),
             target: source,
             command_source: source,
             session_id: session.id,
@@ -580,7 +580,7 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
         "update-test".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: source,
             command_source: source,
             session_id: session.id,
@@ -646,7 +646,6 @@ fn software_update_armed_state_is_shared_across_the_desk() {
     let front = test_control_desk();
     let mut wing = test_control_desk();
     wing.id = Uuid::new_v4();
-    wing.osc_alias = "wing".into();
     let first = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),

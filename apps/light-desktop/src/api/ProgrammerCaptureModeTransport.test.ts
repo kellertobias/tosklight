@@ -8,7 +8,7 @@ import {
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const SCOPE = { showId: SHOW_ID, userId: USER_ID };
+const SCOPE = { showId: SHOW_ID };
 
 class FakeWebSocket {
 	static readonly OPEN = 1;
@@ -44,7 +44,6 @@ class FakeWebSocket {
 
 function projection() {
 	return {
-		user_id: USER_ID,
 		revision: 3,
 		blind: true,
 		preview: false,
@@ -62,7 +61,7 @@ function eventMessage() {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-capture-mode:${USER_ID}`,
+				id: "programming-capture-mode",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -113,7 +112,7 @@ describe("HttpProgrammerCaptureModeTransport", () => {
 
 		await expect(transport.loadSnapshot(SCOPE)).resolves.toMatchObject({
 			cursor: 11,
-			projection: { userId: USER_ID, revision: 3 },
+			projection: { revision: 3 },
 		});
 		const [url, options] = fetch.mock.calls[0];
 		expect(url).toBe(
@@ -149,7 +148,7 @@ describe("HttpProgrammerCaptureModeTransport", () => {
 		);
 	});
 
-	it("subscribes only to the exact user object and repairs from a cursor", () => {
+	it("subscribes to the capture-mode object and repairs from a cursor", () => {
 		const { observer, transport } = harness();
 		const stream = transport.subscribe(SCOPE, 8, observer);
 		const socket = FakeWebSocket.instances[0];
@@ -169,7 +168,7 @@ describe("HttpProgrammerCaptureModeTransport", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-capture-mode:${USER_ID}`,
+						id: "programming-capture-mode",
 					},
 				],
 			},
@@ -209,7 +208,7 @@ describe("HttpProgrammerCaptureModeTransport", () => {
 	it("validates scope and suppresses close callbacks for explicit closure", () => {
 		const { observer, transport } = harness();
 		expect(() =>
-			transport.subscribe({ showId: "show", userId: USER_ID }, null, observer),
+			transport.subscribe({ showId: "show" }, null, observer),
 		).toThrow();
 		expect(FakeWebSocket.instances).toHaveLength(0);
 

@@ -229,13 +229,6 @@ impl InstallationResource {
         self.desk.lock().control_desk(id)
     }
 
-    pub(in crate::runtime) fn control_desk_by_alias(
-        &self,
-        alias: &str,
-    ) -> Result<Option<ControlDesk>, light_show::StoreError> {
-        self.desk.lock().control_desk_by_alias(alias)
-    }
-
     pub(in crate::runtime) fn client_desks(
         &self,
     ) -> Result<Vec<light_show::ClientDesk>, light_show::StoreError> {
@@ -270,17 +263,14 @@ impl InstallationResource {
     pub(in crate::runtime) fn add_desk(
         &self,
         name: &str,
-        alias: &str,
     ) -> Result<ControlDesk, light_show::StoreError> {
-        self.desk.lock().add_desk(name, alias)
+        self.desk.lock().add_desk(name)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(in crate::runtime) fn update_desk(
         &self,
         id: Uuid,
         name: &str,
-        alias: &str,
         columns: u8,
         rows: u8,
         buttons: u8,
@@ -288,7 +278,7 @@ impl InstallationResource {
     ) -> Result<ControlDesk, light_show::StoreError> {
         self.desk
             .lock()
-            .update_desk(id, name, alias, columns, rows, buttons, playback_layout)
+            .update_desk(id, name, columns, rows, buttons, playback_layout)
     }
 
     pub(in crate::runtime) fn desk_page(

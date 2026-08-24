@@ -142,7 +142,7 @@ function api() {
 		client_id: "client",
 		token: "token",
 		user: { id: USER_ID, name: "Operator" },
-		desk: { id: DESK_ID, osc_alias: "main" },
+		desk: { id: DESK_ID },
 	};
 	return driver;
 }
@@ -196,7 +196,6 @@ function valuesSnapshot() {
 	return {
 		cursor: { sequence: 30 },
 		projection: {
-			user_id: USER_ID,
 			revision: 6,
 			fixture_values: [],
 			group_values: [],
@@ -209,7 +208,6 @@ function preloadValuesSnapshot() {
 	return {
 		cursor: { sequence: 10 },
 		projection: {
-			user_id: USER_ID,
 			revision: 2,
 			fixture_values: [],
 			group_values: [],
@@ -222,7 +220,6 @@ function captureModeSnapshot() {
 	return {
 		cursor: { sequence: 31 },
 		projection: {
-			user_id: USER_ID,
 			revision: 3,
 			blind: false,
 			preview: false,

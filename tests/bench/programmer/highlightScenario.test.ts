@@ -145,7 +145,7 @@ function apiDriver(): ApiDriver {
 		client_id: "client-a",
 		token: "token-a",
 		user: { id: "user-a", name: "Operator" },
-		desk: { id: "desk-a", osc_alias: "front-desk" },
+		desk: { id: "desk-a" },
 	};
 	return api;
 }

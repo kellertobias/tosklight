@@ -212,7 +212,7 @@ async fn osc_record_key_sequence_commits_through_the_typed_preset_capability() {
         "preset-record".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: source,
             command_source: source,
             session_id: scenario.session.id,

@@ -13,9 +13,8 @@ const OTHER_USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const FIXTURE_ID = "11111111-1111-4111-8111-111111111111";
 const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-function projection(userId = USER_ID, revision = 7) {
+function projection(revision = 7) {
 	return {
-		user_id: userId,
 		revision,
 		fixture_values: [
 			{
@@ -48,21 +47,21 @@ function snapshot() {
 	return { cursor: { sequence: 18 }, projection: projection() };
 }
 
-function changedOutcome(userId = USER_ID) {
+function changedOutcome() {
 	return {
 		request_id: "request-1",
 		correlation_id: CORRELATION_ID,
 		revision: 7,
 		capture_mode_revision: 4,
 		status: "changed",
-		projection: projection(userId),
+		projection: projection(),
 		event_sequence: 19,
 		replayed: false,
 		warning: null,
 	};
 }
 
-function preloadEvent(userId = USER_ID) {
+function preloadEvent() {
 	return {
 		type: "event",
 		event: {
@@ -72,7 +71,7 @@ function preloadEvent(userId = USER_ID) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-preload-values:${userId}`,
+				id: "programming-preload-values",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -80,7 +79,7 @@ function preloadEvent(userId = USER_ID) {
 			delivery: "replaceable",
 			payload: {
 				type: "programming_preload_values_changed",
-				change: { projection: projection(userId) },
+				change: { projection: projection() },
 			},
 		},
 	};
@@ -95,11 +94,10 @@ function addExtra(value: unknown) {
 }
 
 describe("Preload Programmer values snapshot wire", () => {
-	it("decodes only pending exact-user values with timing and order", () => {
-		expect(decodeProgrammerPreloadValuesSnapshot(snapshot(), USER_ID)).toEqual({
+	it("decodes only pending values with timing and order", () => {
+		expect(decodeProgrammerPreloadValuesSnapshot(snapshot())).toEqual({
 			cursor: 18,
 			projection: {
-				userId: USER_ID,
 				revision: 7,
 				fixtureValues: [
 					{
@@ -124,12 +122,12 @@ describe("Preload Programmer values snapshot wire", () => {
 		});
 	});
 
-	it("rejects a foreign-user snapshot", () => {
+	it("rejects a snapshot carrying an undeclared field", () => {
 		const candidate = snapshot();
-		candidate.projection.user_id = OTHER_USER_ID;
-		expect(() =>
-			decodeProgrammerPreloadValuesSnapshot(candidate, USER_ID),
-		).toThrow(/requested user/);
+		(candidate.projection as Record<string, unknown>).user_id = OTHER_USER_ID;
+		expect(() => decodeProgrammerPreloadValuesSnapshot(candidate)).toThrow(
+			/user_id/,
+		);
 	});
 
 	it("rejects unknown fields at every snapshot object level", () => {
@@ -149,7 +147,7 @@ describe("Preload Programmer values snapshot wire", () => {
 			const candidate = structuredClone(snapshot());
 			mutate(candidate);
 			expect(() =>
-				decodeProgrammerPreloadValuesSnapshot(candidate, USER_ID),
+				decodeProgrammerPreloadValuesSnapshot(candidate),
 			).toThrow(/declared wire field/);
 		}
 	});
@@ -257,16 +255,14 @@ describe("Preload Programmer values mutation wire", () => {
 		expect(
 			decodeProgrammerPreloadValuesActionOutcome(
 				changedOutcome(),
-				USER_ID,
-				"request-1",
-			),
+				"request-1"),
 		).toMatchObject({
 			status: "changed",
 			requestId: "request-1",
 			preloadRevision: 7,
 			captureModeRevision: 4,
 			eventSequence: 19,
-			projection: { userId: USER_ID, revision: 7 },
+			projection: { revision: 7 },
 		});
 		const noChange = changedOutcome();
 		noChange.status = "no_change";
@@ -276,9 +272,7 @@ describe("Preload Programmer values mutation wire", () => {
 		expect(
 			decodeProgrammerPreloadValuesActionOutcome(
 				noChange,
-				USER_ID,
-				"request-1",
-			),
+				"request-1"),
 		).toEqual({
 			status: "no_change",
 			requestId: "request-1",
@@ -290,25 +284,21 @@ describe("Preload Programmer values mutation wire", () => {
 		});
 	});
 
-	it("rejects a foreign action projection, materialized no-op, and extras", () => {
+	it("rejects an undeclared action projection field, materialized no-op, and extras", () => {
+		const undeclared = changedOutcome();
+		(undeclared.projection as Record<string, unknown>).user_id = OTHER_USER_ID;
 		expect(() =>
-			decodeProgrammerPreloadValuesActionOutcome(
-				changedOutcome(OTHER_USER_ID),
-				USER_ID,
-				"request-1",
-			),
-		).toThrow(/requested user/);
+			decodeProgrammerPreloadValuesActionOutcome(undeclared, "request-1"),
+		).toThrow(/user_id/);
 		const noOp = changedOutcome();
 		noOp.status = "no_change";
 		expect(() =>
-			decodeProgrammerPreloadValuesActionOutcome(noOp, USER_ID, "request-1"),
+			decodeProgrammerPreloadValuesActionOutcome(noOp, "request-1"),
 		).toThrow(/no projection/);
 		expect(() =>
 			decodeProgrammerPreloadValuesActionOutcome(
 				{ ...changedOutcome(), extra: true },
-				USER_ID,
-				"request-1",
-			),
+				"request-1"),
 		).toThrow(/declared wire field/);
 	});
 
@@ -340,27 +330,32 @@ describe("Preload Programmer values mutation wire", () => {
 });
 
 describe("Preload Programmer values event wire", () => {
-	it("decodes only the exact replaceable user projection object", () => {
+	it("decodes the replaceable projection object", () => {
 		expect(
-			decodeProgrammerPreloadValuesEventMessage(preloadEvent(), USER_ID),
+			decodeProgrammerPreloadValuesEventMessage(preloadEvent()),
 		).toEqual({
 			type: "event",
 			sequence: 19,
 			correlationId: CORRELATION_ID,
-			projection: expect.objectContaining({ userId: USER_ID, revision: 7 }),
+			projection: expect.objectContaining({ revision: 7 }),
 		});
 	});
 
-	it("rejects foreign object and projection users", () => {
+	it("rejects another Programmer object and an undeclared projection field", () => {
 		const foreignObject = preloadEvent();
-		foreignObject.event.object.id = `programming-preload-values:${OTHER_USER_ID}`;
+		foreignObject.event.object.id = "programming-values";
 		expect(() =>
-			decodeProgrammerPreloadValuesEventMessage(foreignObject, USER_ID),
+			decodeProgrammerPreloadValuesEventMessage(foreignObject),
 		).toThrow(WireValidationError);
 		const foreignProjection = preloadEvent();
-		foreignProjection.event.payload.change.projection.user_id = OTHER_USER_ID;
+		(
+			foreignProjection.event.payload.change.projection as Record<
+				string,
+				unknown
+			>
+		).user_id = OTHER_USER_ID;
 		expect(() =>
-			decodeProgrammerPreloadValuesEventMessage(foreignProjection, USER_ID),
+			decodeProgrammerPreloadValuesEventMessage(foreignProjection),
 		).toThrow(WireValidationError);
 	});
 
@@ -380,7 +375,7 @@ describe("Preload Programmer values event wire", () => {
 			const candidate = structuredClone(preloadEvent());
 			mutate(candidate);
 			expect(() =>
-				decodeProgrammerPreloadValuesEventMessage(candidate, USER_ID),
+				decodeProgrammerPreloadValuesEventMessage(candidate),
 			).toThrow(/declared wire field/);
 		}
 	});
@@ -388,15 +383,11 @@ describe("Preload Programmer values event wire", () => {
 	it("strictly decodes cursor and gap control messages", () => {
 		expect(
 			decodeProgrammerPreloadValuesEventMessage(
-				{ type: "ready", cursor: { sequence: 3 } },
-				USER_ID,
-			),
+				{ type: "ready", cursor: { sequence: 3 } }),
 		).toEqual({ type: "ready", cursor: 3 });
 		expect(() =>
 			decodeProgrammerPreloadValuesEventMessage(
-				{ type: "ready", cursor: { sequence: 3, extra: true } },
-				USER_ID,
-			),
+				{ type: "ready", cursor: { sequence: 3, extra: true } }),
 		).toThrow(/declared wire field/);
 		expect(() =>
 			decodeProgrammerPreloadValuesEventMessage(
@@ -408,9 +399,7 @@ describe("Preload Programmer values event wire", () => {
 						latest_sequence: 9,
 						extra: true,
 					},
-				},
-				USER_ID,
-			),
+				}),
 		).toThrow(/declared wire field/);
 	});
 });

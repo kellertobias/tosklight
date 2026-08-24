@@ -22,9 +22,8 @@ export interface ProgrammerPreloadPlaybackQueueEntry {
 	surface: ProgrammerPreloadPlaybackSurface;
 }
 
-/** Ordered pending playback actions owned by exactly one authenticated user. */
+/** The Programmer's ordered pending playback actions. */
 export interface ProgrammerPreloadPlaybackQueueProjection {
-	userId: string;
 	revision: number;
 	actions: readonly ProgrammerPreloadPlaybackQueueEntry[];
 }
@@ -36,7 +35,6 @@ export interface ProgrammerPreloadPlaybackQueueSnapshot {
 
 export interface ProgrammerPreloadPlaybackQueueScope {
 	showId: string;
-	userId: string;
 }
 
 export type ProgrammerPreloadPlaybackQueueEventMessage =

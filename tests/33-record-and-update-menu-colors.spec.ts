@@ -7,7 +7,7 @@ test("WORKFLOW-COLOR-001 @ui › Record red and Update amber remain distinct wit
   await assertWorkflowThemes(page);
 
   const hardware = await bench.osc();
-  await hardware.subscribe(`workflow-colors-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
+  await hardware.subscribe(`workflow-colors-${crypto.randomUUID()}`, "desk");
   try {
     await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
     await assertWorkflowThemes(page);

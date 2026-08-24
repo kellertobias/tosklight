@@ -100,7 +100,7 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
         "home",
         state.output.frame_rate_hz(),
         OscActionFeedback {
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: "127.0.0.1:9010".parse().unwrap(),
         },
     );
@@ -555,7 +555,7 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
     assert!(value_only.ok, "{:?}", value_only.error);
     assert_eq!(state.events.latest_sequence(), sequence + 1);
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_priority(session.user.id.0),
+        light_application::EventObject::programming_priority(),
     );
     let light_application::EventReplay::Events(events) =
         state.events.replay(sequence, &filter)
@@ -596,7 +596,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
         live_action_frame(&session, request_id, action)
     };
     let values_filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_values(session.user.id.0),
+        light_application::EventObject::programming_values(),
     );
     let before = state.events.latest_sequence();
     let no_op = dispatch_live_action(
@@ -729,7 +729,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
     );
     assert!(preload_values.ok, "{:?}", preload_values.error);
     let preload_filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_preload_values(session.user.id.0),
+        light_application::EventObject::programming_preload_values(),
     );
     let light_application::EventReplay::Events(events) =
         state.events.replay(0, &preload_filter)
@@ -762,7 +762,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
     );
     assert!(priority.ok, "{:?}", priority.error);
     let priority_filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_priority(session.user.id.0),
+        light_application::EventObject::programming_priority(),
     );
     let light_application::EventReplay::Events(events) =
         state.events.replay(0, &priority_filter)
@@ -830,7 +830,7 @@ async fn transient_control_retriggers_remain_projection_quiet_and_repeated_relea
         );
     }
     let values_filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_values(session.user.id.0),
+        light_application::EventObject::programming_values(),
     );
     let light_application::EventReplay::Events(events) = state
         .events

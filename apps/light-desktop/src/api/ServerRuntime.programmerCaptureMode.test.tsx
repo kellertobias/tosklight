@@ -38,7 +38,6 @@ vi.mock("../features/server/useServerConnection", async () => {
 				const desk = {
 					id: DESK_ID,
 					name: "Main",
-					osc_alias: "main",
 					columns: 1,
 					rows: 1,
 					buttons: 1,
@@ -189,7 +188,7 @@ describe("ServerRuntime Programmer capture-mode boundary", () => {
 		expect(boundaries.loadCaptureMode).toHaveBeenCalledOnce();
 		expect(boundaries.subscribeCaptureMode).toHaveBeenCalledOnce();
 		expect(boundaries.subscribeCaptureMode).toHaveBeenCalledWith(
-			{ showId: SHOW_ID, userId: USER_ID },
+			{ showId: SHOW_ID },
 			10,
 			expect.any(Object),
 		);

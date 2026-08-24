@@ -79,7 +79,7 @@ describe("ProgrammerPrioritySession", () => {
 		});
 	});
 
-	it("rejects a foreign event and repairs exact-user authority", async () => {
+	it("rejects a non-contiguous event and repairs authority", async () => {
 		const current = harness();
 		current.session.activate();
 		await settlePrioritySession();
@@ -93,17 +93,14 @@ describe("ProgrammerPrioritySession", () => {
 			correlationId: null,
 			change: {
 				type: "upsert",
-				projection: priorityProjection({
-					userId: OTHER_USER_ID,
-					revision: 9,
-				}),
+				projection: priorityProjection({ revision: 9 }),
 			},
 		});
 		await settlePrioritySession();
 
 		expect(current.onError).toHaveBeenCalledWith(expect.any(Error));
 		expect(current.transport.subscriptions[0]?.repair).toHaveBeenCalledWith(20);
-		expect(current.store.getSnapshot().projection?.userId).toBe(USER_ID);
+		expect(current.store.getSnapshot().projection?.revision).toBe(1);
 	});
 
 	it("applies removal tombstones and a later recreation", async () => {
@@ -115,7 +112,7 @@ describe("ProgrammerPrioritySession", () => {
 			type: "event",
 			sequence: 11,
 			correlationId: null,
-			change: { type: "remove", userId: USER_ID, revision: 2 },
+			change: { type: "remove", revision: 2 },
 		});
 		expect(current.store.getSnapshot()).toMatchObject({
 			authorityRevision: 2,
@@ -176,7 +173,7 @@ describe("ProgrammerPrioritySession", () => {
 		expect(stores[1]?.getSnapshot().projection?.priority).toBe(55);
 		expect(stores[2]?.getSnapshot()).toMatchObject({
 			userId: OTHER_USER_ID,
-			projection: { userId: OTHER_USER_ID, priority: 0 },
+			projection: { priority: 0 },
 		});
 	});
 

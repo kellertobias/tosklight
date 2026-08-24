@@ -588,7 +588,6 @@ describe("default screen picker", () => {
 		desk: {
 			id: `desk-${id}`,
 			name: `${name} screen`,
-			osc_alias: id,
 			columns: 8,
 			rows: 2,
 			buttons: 3,

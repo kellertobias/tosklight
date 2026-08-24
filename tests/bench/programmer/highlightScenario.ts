@@ -230,5 +230,5 @@ function deskId(api: ApiDriver): string {
 
 function deskAlias(api: ApiDriver): string {
 	if (!api.session) throw new Error("API session is not initialized");
-	return api.session.desk.osc_alias;
+	return "desk";
 }

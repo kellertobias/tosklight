@@ -218,7 +218,7 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
     state.output.replace_snapshot(snapshot).unwrap();
     state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     let desk = state
-        .installation.add_desk("Matter restart desk", "matter-restart")
+        .installation.add_desk("Matter restart desk")
         .unwrap();
     state
         .installation.set_desk_page(desk.id, show.id, 1)

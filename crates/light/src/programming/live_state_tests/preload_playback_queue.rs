@@ -116,8 +116,8 @@ impl QueueSetup {
     }
 
     fn queue_events(&self) -> Vec<Arc<crate::EventEnvelope>> {
-        let filter = EventFilter::default()
-            .with_object(EventObject::programming_preload_playback_queue(self.user.0));
+        let filter =
+            EventFilter::default().with_object(EventObject::programming_preload_playback_queue());
         let EventReplay::Events(events) = self.events.replay(0, &filter) else {
             panic!("queue events should remain replayable")
         };

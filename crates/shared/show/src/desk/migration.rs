@@ -10,7 +10,7 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,revision_source_show_id TEXT,revision_source_show_name TEXT,revision_source_revision INTEGER,revision_source_name TEXT,revision_copy_created_at TEXT);
       CREATE TABLE IF NOT EXISTS show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision),FOREIGN KEY(show_id) REFERENCES show_library(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT,client_id TEXT,last_connected_at TEXT);
+      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT,client_id TEXT,last_connected_at TEXT);
       CREATE TABLE IF NOT EXISTS desk_clients(client_id TEXT PRIMARY KEY,last_connected_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS control_desk_pages(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS control_desk_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,playback INTEGER NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
@@ -109,7 +109,49 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     )?;
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
     tx.commit()?;
+    drop_desk_osc_alias(conn)?;
     Ok(())
+}
+
+/// Retire the per-desk OSC alias from installations that still carry it.
+///
+/// An alias used to pick which desk a wing was plugged into. There is one desk now, and the OSC
+/// path says what a surface may do rather than which desk it reaches, so the column selects
+/// nothing — and being `NOT NULL UNIQUE` it would refuse every insert that no longer supplies one.
+/// The unique constraint is why this rebuilds the table instead of dropping the column: SQLite
+/// will not drop an indexed column.
+fn drop_desk_osc_alias(conn: &mut Connection) -> Result<(), StoreError> {
+    if !column_exists(conn, "control_desks", "osc_alias")? {
+        return Ok(());
+    }
+    conn.execute_batch("PRAGMA foreign_keys=OFF")?;
+    let result = rebuild_control_desks(conn);
+    conn.execute_batch("PRAGMA foreign_keys=ON")?;
+    result
+}
+
+fn rebuild_control_desks(conn: &mut Connection) -> Result<(), StoreError> {
+    let tx = conn.transaction()?;
+    tx.execute_batch(
+        r#"CREATE TABLE control_desks_without_alias(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT,client_id TEXT,last_connected_at TEXT);
+      INSERT INTO control_desks_without_alias(id,name,columns_count,rows_count,buttons_count,playback_layout_json,client_id,last_connected_at) SELECT id,name,columns_count,rows_count,buttons_count,playback_layout_json,client_id,last_connected_at FROM control_desks;
+      DROP TABLE control_desks;
+      ALTER TABLE control_desks_without_alias RENAME TO control_desks;
+      CREATE UNIQUE INDEX IF NOT EXISTS control_desks_client_id ON control_desks(client_id) WHERE client_id IS NOT NULL;"#,
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool, StoreError> {
+    let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        if row.get::<_, String>(1)? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn add_column_if_missing(

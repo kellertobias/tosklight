@@ -25,10 +25,8 @@ const SURFACES = new Set<ProgrammerPreloadPlaybackSurface>([
 export function canonicalPreloadPlaybackQueueProjection(
 	projection: ProgrammerPreloadPlaybackQueueProjection,
 ): ProgrammerPreloadPlaybackQueueProjection {
-	assertIdentifier(projection.userId, "user ID");
 	assertNonNegativeInteger(projection.revision, "revision");
 	return Object.freeze({
-		userId: projection.userId,
 		revision: projection.revision,
 		actions: Object.freeze(projection.actions.map(canonicalEntry)),
 	});

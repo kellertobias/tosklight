@@ -48,7 +48,6 @@ class FakeWebSocket {
 
 function wireProjection(overrides: Record<string, unknown> = {}) {
 	return {
-		user_id: USER_ID,
 		revision: 5,
 		priority: 8,
 		changed_at: "2026-07-21T10:00:00Z",
@@ -66,7 +65,7 @@ function eventMessage() {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-priority:${USER_ID}`,
+				id: "programming-priority",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -118,7 +117,7 @@ describe("HttpProgrammerPriorityTransport", () => {
 
 		await expect(transport.loadSnapshot(SCOPE)).resolves.toMatchObject({
 			cursor: 18,
-			projection: { userId: USER_ID, priority: 8 },
+			projection: { priority: 8 },
 		});
 		const [url, options] = fetch.mock.calls[0] ?? [];
 		expect(url).toBe(
@@ -219,7 +218,7 @@ describe("HttpProgrammerPriorityTransport", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-priority:${USER_ID}`,
+						id: "programming-priority",
 					},
 				],
 			},
@@ -256,13 +255,13 @@ describe("HttpProgrammerPriorityTransport", () => {
 		expect(FakeWebSocket.instances).toHaveLength(0);
 	});
 
-	it("rejects foreign socket traffic and suppresses explicit close callbacks", () => {
+	it("rejects another object's socket traffic and suppresses explicit close callbacks", () => {
 		const { observer, transport } = harness();
 		const stream = transport.subscribe(SCOPE, null, observer);
 		const socket = FakeWebSocket.instances[0];
 		if (!socket) throw new Error("missing socket");
 		const foreign = eventMessage();
-		foreign.event.object.id = `programming-priority:${OTHER_USER_ID}`;
+		foreign.event.object.id = "programming-values";
 		socket.emit("message", message(foreign));
 
 		expect(observer.message).not.toHaveBeenCalled();

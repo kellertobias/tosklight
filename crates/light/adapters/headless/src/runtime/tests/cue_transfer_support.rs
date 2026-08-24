@@ -31,7 +31,7 @@ impl CueTransferScenario {
         let (state, data_dir) = test_state();
         let user = state.installation.users().unwrap().remove(0);
         let desk = state
-            .installation.add_desk("Cue transfer", "cue-transfer")
+            .installation.add_desk("Cue transfer")
             .unwrap();
         let session = Session {
             capability: light_core::SurfaceCapability::Programming,

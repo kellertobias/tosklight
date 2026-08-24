@@ -53,7 +53,6 @@ function lifecycleRow(
 ): ProgrammerLifecycleRow & { preloadActive: boolean } {
 	return {
 		programmerId: userId === USER_ID ? USER_ID : OTHER_ID,
-		userId,
 		connected: true,
 		selectedFixtureCount: 1,
 		normalValueCount: 2,

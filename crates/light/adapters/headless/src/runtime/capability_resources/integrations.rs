@@ -84,14 +84,14 @@ impl IntegrationResource {
     pub(in crate::runtime) fn accept_highlight_action(
         &self,
         source: SocketAddr,
-        desk_alias: &str,
+        path: &str,
         action: HighlightAction,
         now: Instant,
     ) -> Option<SessionId> {
         let mut subscribers = self.osc_subscribers.lock();
-        let subscriber = subscribers.values_mut().find(|subscriber| {
-            subscriber.command_source == source && subscriber.desk_alias == desk_alias
-        })?;
+        let subscriber = subscribers
+            .values_mut()
+            .find(|subscriber| subscriber.command_source == source && subscriber.path == path)?;
         if is_duplicate_osc_action(
             subscriber
                 .last_highlight_action
@@ -175,13 +175,13 @@ impl IntegrationResource {
     pub(in crate::runtime) fn consume_unassigned_shifted_highlight(
         &self,
         source: SocketAddr,
-        desk_alias: &str,
+        path: &str,
         action: HighlightAction,
     ) -> bool {
         let mut subscribers = self.osc_subscribers.lock();
         let Some(target) = subscribers
             .values_mut()
-            .find(|target| target.command_source == source && target.desk_alias == desk_alias)
+            .find(|target| target.command_source == source && target.path == path)
         else {
             return false;
         };

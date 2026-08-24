@@ -28,19 +28,13 @@ describe("ProgrammerCaptureModeStore", () => {
 		);
 	});
 
-	it("rejects foreign users and stale scopes without publishing", () => {
+	it("rejects stale scopes without publishing", () => {
 		const store = new ProgrammerCaptureModeStore();
 		store.reset(SHOW_ID, USER_ID);
 		const scope = store.captureScope();
 		const listener = vi.fn();
 		store.subscribe(listener);
 
-		expect(
-			store.installSnapshot(
-				captureModeSnapshot({ userId: OTHER_USER_ID }),
-				scope,
-			),
-		).toBe(false);
 		store.reset("new-show", USER_ID);
 		expect(store.installSnapshot(captureModeSnapshot(), scope)).toBe(false);
 		expect(store.getSnapshot().projection).toBeNull();

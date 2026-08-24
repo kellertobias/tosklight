@@ -69,7 +69,6 @@ export class HttpProgrammerPreloadPlaybackQueueTransport
 		);
 		return decodeProgrammerPreloadPlaybackQueueSnapshot(
 			await responseValue(response),
-			scope.userId,
 		);
 	}
 
@@ -85,24 +84,16 @@ export class HttpProgrammerPreloadPlaybackQueueTransport
 			this.protocols(),
 		);
 		const lifecycle = { explicitlyClosed: false };
-		bindSocket(socket, scope.userId, afterSequence, observer, lifecycle);
+		bindSocket(socket, afterSequence, observer, lifecycle);
 		return eventStream(socket, this.WebSocketImplementation.OPEN, lifecycle);
 	}
 
 	private validateScope(scope: ProgrammerPreloadPlaybackQueueScope) {
 		programmerPreloadValuesUuidAt(scope.showId, "$.scope.showId");
-		const userId = programmerPreloadValuesUuidAt(
-			scope.userId,
-			"$.scope.userId",
-		);
-		const authenticated = programmerPreloadValuesUuidAt(
+		programmerPreloadValuesUuidAt(
 			this.options.authenticatedUserId,
 			"$.authenticatedUserId",
 		);
-		if (userId.toLowerCase() !== authenticated.toLowerCase())
-			throw new ProgrammerPreloadPlaybackQueueProtocolError(
-				"Preload playback queue scope does not match the authenticated user",
-			);
 	}
 
 	private queuePath(scope: ProgrammerPreloadPlaybackQueueScope) {
@@ -143,17 +134,14 @@ interface SocketLifecycle {
 
 function bindSocket(
 	socket: WebSocket,
-	userId: string,
 	afterSequence: number | null,
 	observer: ProgrammerPreloadPlaybackQueueEventObserver,
 	lifecycle: SocketLifecycle,
 ) {
 	socket.addEventListener("open", () =>
-		socket.send(JSON.stringify(subscription(userId, afterSequence))),
+		socket.send(JSON.stringify(subscription(afterSequence))),
 	);
-	socket.addEventListener("message", (event) =>
-		deliverEvent(event, userId, observer),
-	);
+	socket.addEventListener("message", (event) => deliverEvent(event, observer));
 	socket.addEventListener("error", () =>
 		observer.error(new Error("Preload playback queue event connection failed")),
 	);
@@ -164,15 +152,12 @@ function bindSocket(
 
 function deliverEvent(
 	event: MessageEvent,
-	userId: string,
 	observer: ProgrammerPreloadPlaybackQueueEventObserver,
 ) {
 	let value: unknown;
 	try {
 		value = JSON.parse(String(event.data));
-		observer.message(
-			decodeProgrammerPreloadPlaybackQueueEventMessage(value, userId),
-		);
+		observer.message(decodeProgrammerPreloadPlaybackQueueEventMessage(value));
 	} catch (reason) {
 		const error = reason instanceof Error ? reason : new Error(String(reason));
 		observer.error(
@@ -209,10 +194,7 @@ function repairStream(socket: WebSocket, cursor: number, openState: number) {
 	);
 }
 
-function subscription(
-	userId: string,
-	afterSequence: number | null,
-): EventClientMessage {
+function subscription(afterSequence: number | null): EventClientMessage {
 	return {
 		type: "subscribe",
 		filter: {
@@ -221,7 +203,7 @@ function subscription(
 			objects: [
 				{
 					capability: "programmer",
-					id: `programming-preload-playback-queue:${userId}`,
+					id: "programming-preload-playback-queue",
 				},
 			],
 		},

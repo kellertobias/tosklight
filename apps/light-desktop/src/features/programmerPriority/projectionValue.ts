@@ -7,7 +7,6 @@ const RFC3339 =
 export function canonicalPriorityProjection(
 	projection: ProgrammerPriorityProjection,
 ): ProgrammerPriorityProjection {
-	if (!projection.userId) throw protocolError("projection is missing its user");
 	assertPriorityRevision(projection.revision);
 	assertProgrammerPriority(projection.priority);
 	assertPriorityTimestamp(projection.changedAt);
@@ -19,7 +18,6 @@ export function samePriorityProjection(
 	right: ProgrammerPriorityProjection,
 ) {
 	return (
-		left.userId === right.userId &&
 		left.revision === right.revision &&
 		left.priority === right.priority &&
 		left.changedAt === right.changedAt

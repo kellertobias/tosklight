@@ -94,11 +94,10 @@ fn screen_playback_range_must_fit_page_slots() {
 }
 
 #[test]
-fn control_desks_have_unique_aliases_and_per_show_pages() {
+fn control_desks_keep_a_page_per_show() {
     let path = temporary("control-desks");
     let desk = DeskStore::open(&path).unwrap();
-    let control = desk.add_desk("Front", "front-desk").unwrap();
-    assert!(desk.add_desk("Other", "front-desk").is_err());
+    let control = desk.add_desk("Front").unwrap();
     let first = ShowId::new();
     let second = ShowId::new();
     desk.set_desk_page(control.id, first, 12).unwrap();
@@ -115,7 +114,7 @@ fn client_history_migrates_unknown_rows_reuses_identity_and_recreates_removed_de
     let client_id = Uuid::new_v4();
     let (legacy_id, first_connected_at) = {
         let store = DeskStore::open(&path).unwrap();
-        let legacy = store.add_desk("Legacy wing", "legacy-wing").unwrap();
+        let legacy = store.add_desk("Legacy wing").unwrap();
         let before = store.client_desks().unwrap();
         assert_eq!(before.len(), 1);
         assert_eq!(before[0].client_id, None);
@@ -159,8 +158,8 @@ fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
     let mut store = DeskStore::open(&path).unwrap();
     // Two desk records, as an installation from before the collapse holds. Connecting clients no
     // longer produce them — a client is its own record now — so they are made directly.
-    let removed = store.add_desk("Removed wing", "removed-wing").unwrap();
-    let retained = store.add_desk("Retained wing", "retained-wing").unwrap();
+    let removed = store.add_desk("Removed wing").unwrap();
+    let retained = store.add_desk("Retained wing").unwrap();
     let show_id = ShowId::new();
     store.set_desk_page(removed.id, show_id, 17).unwrap();
     store
@@ -717,8 +716,8 @@ fn selected_playback_is_persisted_per_desk_and_show() {
     let second_show = ShowId::new();
     let (first_desk, second_desk) = {
         let store = DeskStore::open(&path).unwrap();
-        let first = store.add_desk("Front", "front").unwrap();
-        let second = store.add_desk("Backup", "backup").unwrap();
+        let first = store.add_desk("Front").unwrap();
+        let second = store.add_desk("Backup").unwrap();
         store
             .set_selected_playback(first.id, first_show, Some(17))
             .unwrap();
@@ -747,6 +746,59 @@ fn selected_playback_is_persisted_per_desk_and_show() {
         store.selected_playback(first_desk, first_show).unwrap(),
         None
     );
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn a_desk_saved_with_an_osc_alias_keeps_its_configuration_without_one() {
+    let path = temporary("legacy-desk-osc-alias");
+    let desk_id = Uuid::new_v4();
+    let client_id = Uuid::new_v4();
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(&format!(
+                r#"CREATE TABLE schema_info(version INTEGER NOT NULL);
+                INSERT INTO schema_info(version) VALUES(9);
+                CREATE TABLE control_desks(
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    columns_count INTEGER NOT NULL DEFAULT 8,
+                    rows_count INTEGER NOT NULL DEFAULT 1,
+                    buttons_count INTEGER NOT NULL DEFAULT 3,
+                    playback_layout_json TEXT,
+                    client_id TEXT,
+                    last_connected_at TEXT
+                );
+                INSERT INTO control_desks VALUES(
+                    '{desk_id}','Front of house','main',12,2,3,NULL,'{client_id}','2026-08-01T10:00:00Z'
+                );
+                CREATE TABLE control_desk_pages(
+                    desk_id TEXT NOT NULL,
+                    show_id TEXT NOT NULL,
+                    page INTEGER NOT NULL DEFAULT 1,
+                    PRIMARY KEY(desk_id,show_id),
+                    FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE
+                );"#
+            ))
+            .unwrap();
+    }
+
+    let store = DeskStore::open(&path).unwrap();
+    let desks = store.desks().unwrap();
+    assert_eq!(desks.len(), 1, "the saved desk survives losing its alias");
+    assert_eq!(desks[0].id, desk_id);
+    assert_eq!(desks[0].name, "Front of house");
+    assert_eq!(desks[0].columns, 12);
+    assert_eq!(desks[0].rows, 2);
+    let clients = store.client_desks().unwrap();
+    assert_eq!(clients.len(), 1);
+    assert_eq!(clients[0].client_id, Some(client_id));
+    // A second desk can now be added without inventing an alias for it.
+    store.add_desk("Wing").unwrap();
+    assert_eq!(store.desks().unwrap().len(), 2);
     drop(store);
     let _ = fs::remove_file(path);
 }

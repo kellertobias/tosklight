@@ -392,7 +392,7 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
 #[tokio::test]
 async fn selection_is_the_desks_and_a_locked_desk_is_rejected() {
     let (scenario, _show_id) = cue_navigation_scenario().await;
-    let second_desk = scenario.state.installation.add_desk("Wing", "wing").unwrap();
+    let second_desk = scenario.state.installation.add_desk("Wing").unwrap();
     select_playback(&scenario, scenario.session.desk.id, Some(2));
     select_playback(&scenario, second_desk.id, Some(1));
 
@@ -547,12 +547,12 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
 
     // Real OSC keys build the same command and reach the same typed action.
     let source: SocketAddr = "127.0.0.1:9031".parse().unwrap();
-    let osc_alias = scenario.session.desk.osc_alias.clone();
+    let path = "desk".to_owned();
     scenario.state.integrations.register_osc_subscriber(
         "cue-navigation-keys".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: osc_alias.clone(),
+            path: path.clone(),
             target: source,
             command_source: source,
             session_id: scenario.session.id,
@@ -578,7 +578,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     ] {
         handle_programmer_osc(
             &scenario.state,
-            &format!("/light/{osc_alias}/programmer/{action}"),
+            &format!("/light/{path}/programmer/{action}"),
             &[OscArgument::Bool(pressed)],
             Some("127.0.0.1:9031"),
         );

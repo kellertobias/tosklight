@@ -24,7 +24,6 @@ pub(super) fn projection(
     projection: &application::ProgrammingPreloadPlaybackQueueProjection,
 ) -> wire::ProgrammingPreloadPlaybackQueueProjection {
     wire::ProgrammingPreloadPlaybackQueueProjection {
-        user_id: projection.user_id.0,
         revision: projection.revision,
         actions: projection.actions.iter().copied().map(queue_item).collect(),
     }

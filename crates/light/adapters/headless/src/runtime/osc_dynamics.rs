@@ -18,7 +18,7 @@ pub(super) fn handle_dynamics_osc(
     if parts.first() != Some(&"light") {
         return false;
     }
-    let Some((session, desk_alias, feedback_target)) = osc_session(state, &parts, source) else {
+    let Some((session, path, feedback_target)) = osc_session(state, &parts, source) else {
         return false;
     };
     let operation = if parts.len() == 5 && parts[2] == "dynamic" {
@@ -38,7 +38,7 @@ pub(super) fn handle_dynamics_osc(
                     emit_rejection(
                         state,
                         &session,
-                        &desk_alias,
+                        &path,
                         feedback_target,
                         address,
                         &error.message,
@@ -49,7 +49,7 @@ pub(super) fn handle_dynamics_osc(
                     emit_rejection(
                         state,
                         &session,
-                        &desk_alias,
+                        &path,
                         feedback_target,
                         address,
                         &error.message,
@@ -61,7 +61,7 @@ pub(super) fn handle_dynamics_osc(
                 state,
                 "dynamic_action",
                 serde_json::json!({
-                    "desk_alias": desk_alias,
+                    "path": path,
                     "session_id": session.id,
                     "address": address,
                     "changed": changed,
@@ -71,14 +71,7 @@ pub(super) fn handle_dynamics_osc(
             changed
         }
         Err(message) => {
-            emit_rejection(
-                state,
-                &session,
-                &desk_alias,
-                feedback_target,
-                address,
-                &message,
-            );
+            emit_rejection(state, &session, &path, feedback_target, address, &message);
             false
         }
     }
@@ -89,15 +82,15 @@ fn osc_session(
     parts: &[&str],
     source: Option<&str>,
 ) -> Option<(Session, String, SocketAddr)> {
-    let desk_alias = parts.get(1)?.to_string();
+    let path = parts.get(1)?.to_string();
     let source = source?.parse::<SocketAddr>().ok()?;
     let subscriber = state.integrations.osc_subscriber_for_source(source)?;
-    if !subscriber.desk_alias.eq_ignore_ascii_case(&desk_alias) {
+    if !subscriber.path.eq_ignore_ascii_case(&path) {
         return None;
     }
     let session = state.sessions.session(subscriber.session_id)?;
     attach_session_command_context(state, &session);
-    Some((session, desk_alias, subscriber.target))
+    Some((session, path, subscriber.target))
 }
 
 fn pool_operation(
@@ -247,7 +240,7 @@ fn numeric_argument(arguments: &[OscArgument]) -> Option<f32> {
 fn emit_rejection(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     target: SocketAddr,
     address: &str,
     message: &str,
@@ -255,7 +248,7 @@ fn emit_rejection(
     send_osc(
         state,
         target,
-        format!("/light/{desk_alias}/feedback/dynamic/error"),
+        format!("/light/{path}/feedback/dynamic/error"),
         vec![
             OscArgument::String(address.to_owned()),
             OscArgument::String(message.to_owned()),

@@ -206,10 +206,7 @@ export function lifecycleWriterHarness(
 	const readActive = () => {
 		const state = lifecycleStore.getSnapshot();
 		if (state.status !== "ready" || state.repairRequired) return null;
-		return (
-			state.projection?.programmers.find((row) => row.userId === USER_ID)
-				?.preloadActive ?? null
-		);
+		return state.projection?.programmers[0]?.preloadActive ?? null;
 	};
 	const setActive = (preloadActive: boolean) => {
 		const state = lifecycleStore.getSnapshot();

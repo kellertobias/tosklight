@@ -79,12 +79,7 @@ export class PresetRecallWriter implements PresetRecallActions {
 				try {
 					const outcome = await this.send(authority);
 					if (!this.isCurrent(authority)) return null;
-					assertOutcome(
-						authority.request,
-						outcome,
-						this.options.scope.userId,
-						authority.target,
-					);
+					assertOutcome(authority.request, outcome, authority.target);
 					if (!(await this.reconcile(authority, outcome))) return null;
 					this.options.onError?.(
 						outcome.warning ? new Error(outcome.warning) : null,
@@ -475,22 +470,12 @@ function request(
 function assertOutcome(
 	request: PresetRecallRequest,
 	outcome: PresetRecallOutcome,
-	userId: string,
 	target: "programmer" | "preload",
 ) {
 	if (outcome.preset.id !== request.presetId)
 		throw new Error("Preset recall response object does not match");
 	if (outcome.target !== target)
 		throw new Error("Preset recall response values target does not match");
-	if (outcome.projection && outcome.projection.userId !== userId) {
-		const message = `Preset recall returned another user's ${outcome.target === "preload" ? "Preload Programmer" : "Programmer"} values`;
-		if (outcome.target === "preload")
-			throw new ProgrammerPreloadValuesProtocolError(
-				message,
-				outcome.eventSequence,
-			);
-		throw new ProgrammerValuesProtocolError(message, outcome.eventSequence);
-	}
 }
 
 function asError(reason: unknown) {

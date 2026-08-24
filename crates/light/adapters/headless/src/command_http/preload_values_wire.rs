@@ -134,7 +134,6 @@ pub(super) fn projection_from_application(
     projection: &application::ProgrammingPreloadValuesProjection,
 ) -> wire::ProgrammingPreloadValuesProjection {
     wire::ProgrammingPreloadValuesProjection {
-        user_id: projection.user_id.0,
         revision: projection.revision,
         fixture_values: projection
             .fixture_values

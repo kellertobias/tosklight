@@ -15,9 +15,7 @@ import { WireValidationError } from "./wireValidation";
 
 export function decodeProgrammerPreloadValuesEventMessage(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerPreloadValuesEventMessage {
-	programmerPreloadValuesUuidAt(expectedUserId, "$.requested_user_id");
 	const message = recordAt(value, "$");
 	const type = enumAt(message.type, "$.type", [
 		"ready",
@@ -31,10 +29,7 @@ export function decodeProgrammerPreloadValuesEventMessage(
 	if (type === "error") return decodeErrorMessage(message);
 	if (type === "gap") return decodeGap(message);
 	exactRecordAt(message, "$", ["type", "event"]);
-	return decodePreloadValuesEvent(
-		recordAt(message.event, "$.event"),
-		expectedUserId,
-	);
+	return decodePreloadValuesEvent(recordAt(message.event, "$.event"));
 }
 
 function decodeCursorMessage(
@@ -54,7 +49,6 @@ function decodeErrorMessage(
 
 function decodePreloadValuesEvent(
 	event: Record<string, unknown>,
-	expectedUserId: string,
 ): ProgrammerPreloadValuesEventMessage {
 	exactRecordAt(event, "$.event", [
 		"sequence",
@@ -69,7 +63,7 @@ function decodePreloadValuesEvent(
 		"payload",
 	]);
 	const sequence = integerAt(event.sequence, "$.event.sequence");
-	validateEnvelope(event, expectedUserId);
+	validateEnvelope(event);
 	const change = decodeChange(event.payload);
 	return {
 		type: "event",
@@ -78,7 +72,6 @@ function decodePreloadValuesEvent(
 		projection: decodeProgrammerPreloadValuesProjection(
 			change.projection,
 			"$.event.payload.change.projection",
-			expectedUserId,
 		),
 	};
 }
@@ -93,24 +86,21 @@ function decodeChange(value: unknown) {
 	]);
 }
 
-function validateEnvelope(
-	event: Record<string, unknown>,
-	expectedUserId: string,
-) {
+function validateEnvelope(event: Record<string, unknown>) {
 	stringAt(event.occurred_at, "$.event.occurred_at");
 	if (!("desk_id" in event) || event.desk_id !== null)
 		throw new WireValidationError("$.event.desk_id", "null", event.desk_id);
 	enumAt(event.class, "$.event.class", ["projection"]);
 	enumAt(event.delivery, "$.event.delivery", ["replaceable"]);
-	validateObject(event.object, expectedUserId);
+	validateObject(event.object);
 	assertNoRelatedObjects(event);
 	validateSource(event.source);
 }
 
-function validateObject(value: unknown, expectedUserId: string) {
+function validateObject(value: unknown) {
 	const object = exactRecordAt(value, "$.event.object", ["capability", "id"]);
 	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
-	const expectedObject = `programming-preload-values:${expectedUserId}`;
+	const expectedObject = "programming-preload-values";
 	const objectId = stringAt(object.id, "$.event.object.id");
 	if (objectId.toLowerCase() !== expectedObject.toLowerCase())
 		throw new WireValidationError(

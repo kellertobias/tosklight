@@ -16,7 +16,6 @@ pub(super) fn desk(desk: ControlDesk) -> wire::RuntimeControlDesk {
     wire::RuntimeControlDesk {
         id: desk.id,
         name: desk.name,
-        osc_alias: desk.osc_alias,
         columns: desk.columns,
         rows: desk.rows,
         buttons: desk.buttons,

@@ -82,7 +82,6 @@ export class HttpProgrammerPreloadValuesTransport
 		);
 		return decodeProgrammerPreloadValuesSnapshot(
 			await this.responseValue(response),
-			scope.userId,
 		);
 	}
 
@@ -105,7 +104,6 @@ export class HttpProgrammerPreloadValuesTransport
 		);
 		return decodeProgrammerPreloadValuesActionOutcome(
 			await this.responseValue(response),
-			scope.userId,
 			request.requestId,
 		);
 	}
@@ -123,10 +121,10 @@ export class HttpProgrammerPreloadValuesTransport
 		);
 		let explicitlyClosed = false;
 		socket.addEventListener("open", () =>
-			socket.send(JSON.stringify(subscription(scope.userId, afterSequence))),
+			socket.send(JSON.stringify(subscription(afterSequence))),
 		);
 		socket.addEventListener("message", (event) =>
-			this.deliverEvent(event, scope.userId, observer),
+			this.deliverEvent(event, observer),
 		);
 		socket.addEventListener("error", () =>
 			observer.error(
@@ -156,15 +154,12 @@ export class HttpProgrammerPreloadValuesTransport
 
 	private deliverEvent(
 		event: MessageEvent,
-		userId: string,
 		observer: ProgrammerPreloadValuesEventObserver,
 	) {
 		let value: unknown;
 		try {
 			value = JSON.parse(String(event.data));
-			observer.message(
-				decodeProgrammerPreloadValuesEventMessage(value, userId),
-			);
+			observer.message(decodeProgrammerPreloadValuesEventMessage(value));
 		} catch (reason) {
 			const error =
 				reason instanceof Error ? reason : new Error(String(reason));
@@ -179,18 +174,10 @@ export class HttpProgrammerPreloadValuesTransport
 
 	private validateScope(scope: ProgrammerPreloadValuesScope) {
 		programmerPreloadValuesUuidAt(scope.showId, "$.scope.showId");
-		const userId = programmerPreloadValuesUuidAt(
-			scope.userId,
-			"$.scope.userId",
-		);
-		const authenticatedUserId = programmerPreloadValuesUuidAt(
+		programmerPreloadValuesUuidAt(
 			this.options.authenticatedUserId,
 			"$.authenticatedUserId",
 		);
-		if (userId.toLowerCase() !== authenticatedUserId.toLowerCase())
-			throw new ProgrammerPreloadValuesProtocolError(
-				"Preload Programmer values scope does not match the authenticated user",
-			);
 	}
 
 	private valuesPath(scope: ProgrammerPreloadValuesScope) {
@@ -250,10 +237,7 @@ export class HttpProgrammerPreloadValuesTransport
 	}
 }
 
-function subscription(
-	userId: string,
-	afterSequence: number | null,
-): EventClientMessage {
+function subscription(afterSequence: number | null): EventClientMessage {
 	return {
 		type: "subscribe",
 		filter: {
@@ -262,7 +246,7 @@ function subscription(
 			objects: [
 				{
 					capability: "programmer",
-					id: `programming-preload-values:${userId}`,
+					id: "programming-preload-values",
 				},
 			],
 		},

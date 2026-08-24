@@ -80,7 +80,6 @@ function decodeProgrammer(
 ): ProgrammerLifecycleRow {
 	const row = exactRecordAt(value, path, [
 		"programmer_id",
-		"user_id",
 		"connected",
 		"selected_fixture_count",
 		"normal_value_count",
@@ -89,7 +88,6 @@ function decodeProgrammer(
 	]);
 	return {
 		programmerId: programmingUuidAt(row.programmer_id, `${path}.programmer_id`),
-		userId: programmingUuidAt(row.user_id, `${path}.user_id`),
 		connected: booleanAt(row.connected, `${path}.connected`),
 		selectedFixtureCount: integerAt(
 			row.selected_fixture_count,

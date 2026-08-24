@@ -163,7 +163,7 @@ function api() {
 		client_id: "client",
 		token: "token",
 		user: { id: USER_ID, name: "Operator" },
-		desk: { id: DESK_ID, osc_alias: "main" },
+		desk: { id: DESK_ID },
 	};
 	return driver;
 }
@@ -237,7 +237,6 @@ function playbackSnapshotBodies(fetchMock: ReturnType<typeof lifecycleFetch>) {
 
 function captureMode(revision: number) {
 	return {
-		user_id: USER_ID,
 		revision,
 		blind: revision > 3,
 		preview: false,
@@ -251,7 +250,6 @@ function captureModeSnapshot() {
 
 function valuesProjection(revision: number) {
 	return {
-		user_id: USER_ID,
 		revision,
 		fixture_values: [],
 		group_values: [],
@@ -264,7 +262,7 @@ function valuesSnapshot() {
 }
 
 function queueProjection(revision: number) {
-	return { user_id: USER_ID, revision, actions: [] };
+	return { revision, actions: [] };
 }
 
 function queueSnapshot() {

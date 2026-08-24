@@ -57,7 +57,6 @@ pub struct RuntimePlaybackSurfaceLayout {
 pub struct RuntimeControlDesk {
     pub id: Uuid,
     pub name: String,
-    pub osc_alias: String,
     pub columns: u8,
     pub rows: u8,
     pub buttons: u8,

@@ -104,10 +104,10 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 			await expect(commandLine).toHaveValue("GROUP 1 +");
 			await hardware.subscribe(
 				`tl-65-browser-${crypto.randomUUID()}`,
-				session.desk.osc_alias,
+				"desk",
 			);
 			await hardware.send(
-				`/light/${session.desk.osc_alias}/programmer/digit-2`,
+				`/light/desk/programmer/digit-2`,
 				[true],
 			);
 			await expect(commandLine).toHaveValue("GROUP 1 + F2");

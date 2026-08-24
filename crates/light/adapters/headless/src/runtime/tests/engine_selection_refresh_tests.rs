@@ -319,8 +319,8 @@ fn two_desk_sessions(state: &AppState) -> (Session, Session) {
     let (actor_user, peer_user, actor_desk, peer_desk) = {
         let actor_user = state.installation.users().unwrap().remove(0);
         let peer_user = state.installation.add_user("Peer operator").unwrap();
-        let actor_desk = state.installation.add_desk("Front", "front").unwrap();
-        let peer_desk = state.installation.add_desk("Wing", "wing").unwrap();
+        let actor_desk = state.installation.add_desk("Front").unwrap();
+        let peer_desk = state.installation.add_desk("Wing").unwrap();
         (actor_user, peer_user, actor_desk, peer_desk)
     };
     let actor = Session {

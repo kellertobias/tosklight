@@ -176,7 +176,7 @@ test("HIGHLIGHT-005 @supplemental-ui › Highlight errors remain reachable above
 			await highlightKey(page, "HIGH").click();
 			const alert = page.locator("[data-highlight-error-alert]");
 			await expect(alert).toBeVisible();
-			await hardware.subscribe(clientId, api.session!.desk.osc_alias);
+			await hardware.subscribe(clientId, "desk");
 			await expect
 				.poll(
 					async () =>

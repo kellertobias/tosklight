@@ -49,7 +49,6 @@ vi.mock("../features/server/useServerConnection", async () => {
 				const desk = {
 					id: DESK_ID,
 					name: "Main",
-					osc_alias: "main",
 					columns: 1,
 					rows: 1,
 					buttons: 1,
@@ -227,7 +226,7 @@ describe("ServerRuntime Programmer Preload-values boundary", () => {
 		await waitFor(() => expect(screen.getByText("3")).toBeInTheDocument());
 		expect(boundaries.loadPreloadValues).toHaveBeenCalledOnce();
 		expect(boundaries.subscribePreloadValues).toHaveBeenCalledWith(
-			{ showId: SHOW_ID, userId: USER_ID },
+			{ showId: SHOW_ID },
 			20,
 			expect.any(Object),
 		);

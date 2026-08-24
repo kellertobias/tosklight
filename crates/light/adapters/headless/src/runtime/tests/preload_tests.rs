@@ -2,7 +2,6 @@ fn test_control_desk() -> ControlDesk {
     ControlDesk {
         id: Uuid::nil(),
         name: "Test desk".into(),
-        osc_alias: "test-desk".into(),
         columns: 8,
         rows: 1,
         buttons: 3,
@@ -371,7 +370,7 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let desk = state
-        .installation.add_desk("Preload exclusions", "preload-exclusions")
+        .installation.add_desk("Preload exclusions")
         .unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
@@ -639,7 +638,7 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let desk = state
-        .installation.add_desk("Explicit Preload page", "explicit-preload-page")
+        .installation.add_desk("Explicit Preload page")
         .unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,

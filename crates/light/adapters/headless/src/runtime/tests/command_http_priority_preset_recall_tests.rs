@@ -9,7 +9,6 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     assert_eq!(initial.headers()[header::ETAG], "\"0\"");
     let initial: light_wire::v2::programmer_priority::ProgrammerPrioritySnapshot =
         serde_json::from_value(json(initial).await).unwrap();
-    assert_eq!(initial.projection.user_id, user_id);
     assert_eq!(initial.projection.priority, 100);
 
     // A URL naming an identity from before the collapse reads the desk's own Programmer.
@@ -27,7 +26,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
 
     let second_desk = scenario
         .state
-        .installation.add_desk("Priority peer", "priority-peer")
+        .installation.add_desk("Priority peer")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, user_id);
@@ -67,7 +66,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
         serde_json::from_value(json(peer).await).unwrap();
     assert_eq!(peer.projection, changed.projection);
 
-    let event_count = priority_event_count(&scenario.state, user_id);
+    let event_count = priority_event_count(&scenario.state);
     assert_eq!(event_count, 1);
     let replay = scenario
         .priority_action_for(user_id, &scenario.token, request)
@@ -75,7 +74,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     let replay: light_wire::v2::programmer_priority::ProgrammerPriorityActionOutcome =
         serde_json::from_value(json(replay).await).unwrap();
     assert!(replay.replayed);
-    assert_eq!(priority_event_count(&scenario.state, user_id), event_count);
+    assert_eq!(priority_event_count(&scenario.state), event_count);
     assert_eq!(
         compatibility_event_count(&scenario.state),
         compatibility_before
@@ -98,7 +97,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
         no_change.outcome,
         light_wire::v2::programmer_priority::ProgrammerPriorityActionState::NoChange
     ));
-    assert_eq!(priority_event_count(&scenario.state, user_id), event_count);
+    assert_eq!(priority_event_count(&scenario.state), event_count);
 
     let conflict = scenario
         .priority_action_for(
@@ -113,7 +112,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
         .await;
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
     assert_eq!(json(conflict).await["current_revision"], 1);
-    assert_eq!(priority_event_count(&scenario.state, user_id), event_count);
+    assert_eq!(priority_event_count(&scenario.state), event_count);
 
     // A URL naming an identity from before the collapse sets the desk's own priority, and is
     // held to the desk's revision like any other surface.
@@ -278,7 +277,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         vec![selected[0]]
     );
     assert_eq!(
-        values_event_count(&scenario.state, scenario.session.user.id.0),
+        values_event_count(&scenario.state),
         0
     );
     assert_eq!(
@@ -314,7 +313,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
     assert_eq!(projection.fixture_values.len(), 1);
     assert_eq!(projection.fixture_values[0].fixture_id, selected[0].0);
     assert_eq!(
-        values_event_count(&scenario.state, scenario.session.user.id.0),
+        values_event_count(&scenario.state),
         1
     );
 
@@ -337,7 +336,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         light_wire::v2::preset_recall::PresetRecallActionState::NoChange
     ));
     assert_eq!(
-        values_event_count(&scenario.state, scenario.session.user.id.0),
+        values_event_count(&scenario.state),
         1
     );
 
@@ -493,11 +492,11 @@ async fn preset_recall_http_redirects_fixture_and_live_group_values_to_pending_p
         0
     );
     assert_eq!(
-        values_event_count(&scenario.state, scenario.session.user.id.0),
+        values_event_count(&scenario.state),
         0
     );
     assert_eq!(
-        preload_values_event_count(&scenario.state, scenario.session.user.id.0),
+        preload_values_event_count(&scenario.state),
         1
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -625,9 +624,9 @@ fn preset_recall_request(
     })
 }
 
-fn priority_event_count(state: &AppState, user_id: Uuid) -> usize {
+fn priority_event_count(state: &AppState) -> usize {
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_priority(user_id),
+        light_application::EventObject::programming_priority(),
     );
     let light_application::EventReplay::Events(events) =
         state.events.replay(0, &filter)
@@ -637,9 +636,9 @@ fn priority_event_count(state: &AppState, user_id: Uuid) -> usize {
     events.len()
 }
 
-fn values_event_count(state: &AppState, user_id: Uuid) -> usize {
+fn values_event_count(state: &AppState) -> usize {
     let filter = light_application::EventFilter::default()
-        .with_object(light_application::EventObject::programming_values(user_id));
+        .with_object(light_application::EventObject::programming_values());
     let light_application::EventReplay::Events(events) =
         state.events.replay(0, &filter)
     else {
@@ -648,9 +647,9 @@ fn values_event_count(state: &AppState, user_id: Uuid) -> usize {
     events.len()
 }
 
-fn preload_values_event_count(state: &AppState, user_id: Uuid) -> usize {
+fn preload_values_event_count(state: &AppState) -> usize {
     let filter = light_application::EventFilter::default()
-        .with_object(light_application::EventObject::programming_preload_values(user_id));
+        .with_object(light_application::EventObject::programming_preload_values());
     let light_application::EventReplay::Events(events) = state.events.replay(0, &filter) else {
         panic!("Preload values events should remain replayable")
     };

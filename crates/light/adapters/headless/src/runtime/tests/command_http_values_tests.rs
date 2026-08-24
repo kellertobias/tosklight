@@ -14,7 +14,6 @@ async fn programmer_values_snapshot_returns_authenticated_projection_and_safe_cu
         serde_json::from_value(json(response).await).unwrap();
 
     assert_eq!(snapshot.cursor.sequence, expected_cursor);
-    assert_eq!(snapshot.projection.user_id, scenario.session.user.id.0);
     assert_eq!(snapshot.projection.revision, 1);
     assert!(snapshot.projection.fixture_values.is_empty());
     assert_eq!(snapshot.projection.group_values.len(), 1);
@@ -74,7 +73,6 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
         snapshot.cursor.sequence,
         scenario.state.events.latest_sequence()
     );
-    assert_eq!(snapshot.projection.user_id, scenario.session.user.id.0);
     assert_eq!(snapshot.projection.revision, 1);
     assert!(snapshot.projection.blind);
     assert!(!snapshot.projection.preview);
@@ -82,7 +80,7 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
 
     let second_desk = scenario
         .state
-        .installation.add_desk("Second capture desk", "second-capture")
+        .installation.add_desk("Second capture desk")
         .unwrap();
     let (second_token, second_user) =
         login_on_desk(&scenario, "Operator", second_desk.id).await;
@@ -124,7 +122,7 @@ async fn capture_mode_event_is_user_scoped_replaceable_and_has_no_desk_scope() {
     );
 
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_capture_mode(scenario.session.user.id.0),
+        light_application::EventObject::programming_capture_mode(),
     );
     let light_application::EventReplay::Events(events) =
         scenario.state.events.replay(0, &filter)
@@ -141,7 +139,7 @@ async fn capture_mode_event_is_user_scoped_replaceable_and_has_no_desk_scope() {
     );
     assert_eq!(
         event.object.as_ref().unwrap(),
-        &light_application::EventObject::programming_capture_mode(scenario.session.user.id.0)
+        &light_application::EventObject::programming_capture_mode()
     );
     let light_application::ApplicationEvent::Programming(
         light_application::ProgrammingEvent::CaptureModeChanged(change),
@@ -207,7 +205,7 @@ async fn active_preload_rejects_normal_values_without_mutation_or_values_event()
         .unwrap()
         .is_empty());
     let values_filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_values(scenario.session.user.id.0),
+        light_application::EventObject::programming_values(),
     );
     let light_application::EventReplay::Events(values_events) =
         scenario.state.events.replay(0, &values_filter)
@@ -322,7 +320,7 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
     let second_desk = scenario
         .state
         .installation
-        .add_desk("Second desk", "second-values")
+        .add_desk("Second desk")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -371,10 +369,9 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
     let legacy = json(legacy).await;
-    assert_eq!(
-        legacy["projection"]["user_id"],
-        scenario.session.user.id.0.to_string(),
-        "the desk reports its own Programmer, not the name the caller asked under"
+    assert!(
+        legacy["projection"].get("user_id").is_none(),
+        "the projection is the desk's own Programmer and names nobody"
     );
     assert_eq!(
         legacy["projection"]["group_values"].as_array().unwrap().len(),
@@ -405,7 +402,7 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     let fixture = scenario.install_direct_fixture();
     let second_desk = scenario
         .state
-        .installation.add_desk("Lifecycle peer", "lifecycle-peer")
+        .installation.add_desk("Lifecycle peer")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -651,7 +648,7 @@ async fn login_on_desk(
 
 fn assert_only_values_events(scenario: &CommandHttpScenario, expected: usize) {
     let filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_values(scenario.session.user.id.0),
+        light_application::EventObject::programming_values(),
     );
     let light_application::EventReplay::Events(events) = scenario
         .state

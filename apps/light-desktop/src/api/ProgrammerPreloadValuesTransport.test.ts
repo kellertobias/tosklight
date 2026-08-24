@@ -11,7 +11,7 @@ const OTHER_USER_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const FIXTURE_ID = "11111111-1111-4111-8111-111111111111";
 const CORRELATION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const scope = { showId: SHOW_ID, userId: USER_ID };
-const foreignScope = { showId: SHOW_ID, userId: OTHER_USER_ID };
+const foreignScope = { showId: "not-a-show" };
 
 class FakeWebSocket {
 	static readonly OPEN = 1;
@@ -45,9 +45,8 @@ class FakeWebSocket {
 	}
 }
 
-function projection(userId = USER_ID) {
+function projection() {
 	return {
-		user_id: userId,
 		revision: 3,
 		fixture_values: [
 			{
@@ -63,21 +62,21 @@ function projection(userId = USER_ID) {
 	};
 }
 
-function changedOutcome(userId = USER_ID) {
+function changedOutcome() {
 	return {
 		request_id: "request-1",
 		correlation_id: CORRELATION_ID,
 		revision: 3,
 		capture_mode_revision: 4,
 		status: "changed",
-		projection: projection(userId),
+		projection: projection(),
 		event_sequence: 12,
 		replayed: false,
 		warning: null,
 	};
 }
 
-function preloadEvent(userId = USER_ID) {
+function preloadEvent() {
 	return {
 		type: "event",
 		event: {
@@ -87,7 +86,7 @@ function preloadEvent(userId = USER_ID) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-preload-values:${userId}`,
+				id: "programming-preload-values",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -95,7 +94,7 @@ function preloadEvent(userId = USER_ID) {
 			delivery: "replaceable",
 			payload: {
 				type: "programming_preload_values_changed",
-				change: { projection: projection(userId) },
+				change: { projection: projection() },
 			},
 		},
 	};
@@ -146,7 +145,7 @@ function createHarness(fetchImplementation = vi.fn()) {
 }
 
 describe("HttpProgrammerPreloadValuesTransport HTTP", () => {
-	it("is dormant until an exact-user snapshot is requested", async () => {
+	it("is dormant until a snapshot is requested", async () => {
 		const { fetchImplementation, transport } = createHarness();
 		expect(fetchImplementation).not.toHaveBeenCalled();
 		expect(FakeWebSocket.instances).toHaveLength(0);
@@ -156,7 +155,7 @@ describe("HttpProgrammerPreloadValuesTransport HTTP", () => {
 
 		await expect(transport.loadSnapshot(scope)).resolves.toMatchObject({
 			cursor: 11,
-			projection: { userId: USER_ID, revision: 3 },
+			projection: { revision: 3 },
 		});
 		const [url, init] = fetchImplementation.mock.calls[0];
 		expect(url).toBe(
@@ -234,40 +233,39 @@ describe("HttpProgrammerPreloadValuesTransport HTTP", () => {
 		);
 	});
 
-	it("rejects foreign snapshot and action projections", async () => {
+	it("rejects undeclared snapshot and action projection fields", async () => {
 		const { fetchImplementation, transport } = createHarness();
 		fetchImplementation.mockResolvedValueOnce(
 			jsonResponse({
 				cursor: { sequence: 11 },
-				projection: projection(OTHER_USER_ID),
+				projection: { ...projection(), user_id: OTHER_USER_ID },
 			}),
 		);
-		await expect(transport.loadSnapshot(scope)).rejects.toThrow(
-			/requested user/,
-		);
+		await expect(transport.loadSnapshot(scope)).rejects.toThrow(/user_id/);
 		fetchImplementation.mockResolvedValueOnce(
-			jsonResponse(changedOutcome(OTHER_USER_ID)),
+			jsonResponse({
+				...changedOutcome(),
+				projection: { ...projection(), user_id: OTHER_USER_ID },
+			}),
 		);
 		await expect(transport.applyAction(scope, request())).rejects.toThrow(
-			/requested user/,
+			/user_id/,
 		);
 	});
 
-	it("rejects every foreign-user HTTP scope before making a request", async () => {
+	it("rejects every malformed HTTP scope before making a request", async () => {
 		const { fetchImplementation, transport } = createHarness();
 
-		await expect(transport.loadSnapshot(foreignScope)).rejects.toThrow(
-			/authenticated user/,
-		);
+		await expect(transport.loadSnapshot(foreignScope)).rejects.toThrow(/UUID/);
 		await expect(
 			transport.applyAction(foreignScope, request()),
-		).rejects.toThrow(/authenticated user/);
+		).rejects.toThrow(/UUID/);
 		expect(fetchImplementation).not.toHaveBeenCalled();
 	});
 });
 
 describe("HttpProgrammerPreloadValuesTransport events", () => {
-	it("subscribes only to the authenticated user's Preload projection object", () => {
+	it("subscribes to the Preload projection object", () => {
 		const { transport } = createHarness();
 		const observer = { message: vi.fn(), error: vi.fn(), closed: vi.fn() };
 		const stream = transport.subscribe(scope, 10, observer);
@@ -288,7 +286,7 @@ describe("HttpProgrammerPreloadValuesTransport events", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-preload-values:${USER_ID}`,
+						id: "programming-preload-values",
 					},
 				],
 			},
@@ -307,14 +305,15 @@ describe("HttpProgrammerPreloadValuesTransport events", () => {
 		});
 	});
 
-	it("reports foreign events as repair-requiring protocol errors", () => {
+	it("reports undecodable events as repair-requiring protocol errors", () => {
 		const { transport } = createHarness();
 		const observer = { message: vi.fn(), error: vi.fn(), closed: vi.fn() };
 		transport.subscribe(scope, null, observer);
-		FakeWebSocket.instances[0]?.emit(
-			"message",
-			message(preloadEvent(OTHER_USER_ID)),
-		);
+		const undecodable = preloadEvent();
+		(
+			undecodable.event.payload.change.projection as Record<string, unknown>
+		).user_id = OTHER_USER_ID;
+		FakeWebSocket.instances[0]?.emit("message", message(undecodable));
 
 		expect(observer.message).not.toHaveBeenCalled();
 		expect(observer.error).toHaveBeenCalledWith(
@@ -326,12 +325,12 @@ describe("HttpProgrammerPreloadValuesTransport events", () => {
 		);
 	});
 
-	it("rejects a different valid user before opening a socket", () => {
+	it("rejects a malformed scope before opening a socket", () => {
 		const { transport } = createHarness();
 		const observer = { message: vi.fn(), error: vi.fn(), closed: vi.fn() };
 
 		expect(() => transport.subscribe(foreignScope, null, observer)).toThrow(
-			/authenticated user/,
+			/UUID/,
 		);
 		expect(FakeWebSocket.instances).toHaveLength(0);
 	});

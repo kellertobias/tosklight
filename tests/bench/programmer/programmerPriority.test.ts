@@ -8,7 +8,7 @@ const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
 const CORRELATION_ID = "44444444-4444-4444-8444-444444444444";
 
 describe("Programmer priority acceptance intent", () => {
-	it("reads only the exact user snapshot and sends one revisioned v2 action", async () => {
+	it("reads the Programmer snapshot and sends one revisioned v2 action", async () => {
 		const fetchMock = vi.fn(
 			async (input: RequestInfo | URL, init?: RequestInit) => {
 				const url = String(input);
@@ -26,7 +26,7 @@ describe("Programmer priority acceptance intent", () => {
 		expect(outcome).toMatchObject({
 			status: "no_change",
 			requestId: REQUEST_ID,
-			projection: { userId: USER_ID, revision: 7, priority: -23 },
+			projection: { revision: 7, priority: -23 },
 		});
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 		const [snapshotCall, actionCall] = fetchMock.mock.calls;
@@ -85,7 +85,7 @@ describe("Programmer priority acceptance intent", () => {
 				{ surface: "api", priority: -23 },
 				{ fetch: malformedFetch as typeof fetch, requestId: () => REQUEST_ID },
 			),
-		).rejects.toThrow(/requested user/);
+		).rejects.toThrow(/user_id/);
 	});
 
 	it("surfaces a typed revision conflict without attempting another action", async () => {
@@ -128,14 +128,13 @@ function api() {
 		client_id: "client",
 		token: "token",
 		user: { id: USER_ID, name: "Operator" },
-		desk: { id: DESK_ID, osc_alias: "main" },
+		desk: { id: DESK_ID },
 	};
 	return driver;
 }
 
 function projection(revision: number) {
 	return {
-		user_id: USER_ID,
 		revision,
 		priority: -23,
 		changed_at: "2026-07-21T10:00:00Z",

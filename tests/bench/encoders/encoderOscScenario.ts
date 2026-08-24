@@ -45,7 +45,7 @@ export class BrowserOscEncoderRoute {
 		let revision = (await values.loadSnapshot(scope)).projection.revision;
 		for (let index = 0; index < steps; index += 1) {
 			await this.hardware.send(
-				`/light/${session.desk.osc_alias}/encode/${slot}`,
+				`/light/desk/encode/${slot}`,
 				[operation === "add" ? "up" : "down"],
 			);
 			revision = await this.waitForProgrammerRevision(values, scope, revision);

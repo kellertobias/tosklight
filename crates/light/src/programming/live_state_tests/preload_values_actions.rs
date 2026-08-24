@@ -121,8 +121,7 @@ impl PreloadValuesSetup {
     }
 
     fn values_events(&self) -> Vec<Arc<crate::EventEnvelope>> {
-        let filter = EventFilter::default()
-            .with_object(EventObject::programming_preload_values(self.user.0));
+        let filter = EventFilter::default().with_object(EventObject::programming_preload_values());
         let EventReplay::Events(events) = self.events.replay(0, &filter) else {
             panic!("Preload values events should remain replayable")
         };

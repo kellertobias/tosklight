@@ -338,7 +338,7 @@ async fn same_user_two_desks_and_another_user_share_the_active_show() {
         let same = scenario
             .state
             .installation
-            .add_desk("Topology wing", "topology-wing")
+            .add_desk("Topology wing")
             .unwrap();
         scenario
             .state
@@ -348,7 +348,7 @@ async fn same_user_two_desks_and_another_user_share_the_active_show() {
         let other = scenario
             .state
             .installation
-            .add_desk("Topology guest desk", "topology-guest")
+            .add_desk("Topology guest desk")
             .unwrap();
         (same, other)
     };

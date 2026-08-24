@@ -195,7 +195,7 @@ describe("LightClientRuntime", () => {
 					value: null,
 					session_id: "session-a",
 					desk_id: "desk-a",
-					desk_alias: "main",
+					path: "main",
 				},
 			},
 		} satisfies EventPayload;
@@ -370,7 +370,6 @@ function session(): SessionResponse {
 		desk: {
 			id: "desk-a",
 			name: "Main",
-			osc_alias: "main",
 			columns: 10,
 			rows: 4,
 			buttons: 40,

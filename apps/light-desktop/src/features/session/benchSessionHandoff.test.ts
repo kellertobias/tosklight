@@ -105,7 +105,6 @@ function capture(
 				desk: {
 					id: deskId,
 					name: deskId,
-					osc_alias: deskId,
 					columns: 10,
 					rows: 4,
 					buttons: 40,

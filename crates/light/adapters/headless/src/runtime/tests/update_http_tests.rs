@@ -6,7 +6,6 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     front.id = Uuid::new_v4();
     let mut wing = test_control_desk();
     wing.id = Uuid::new_v4();
-    wing.osc_alias = "wing".into();
     let writer = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
@@ -265,7 +264,7 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
         "hardware-update".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: session.desk.osc_alias.clone(),
+            path: "desk".to_owned(),
             target: "127.0.0.1:19022".parse().unwrap(),
             command_source: source,
             session_id: session.id,

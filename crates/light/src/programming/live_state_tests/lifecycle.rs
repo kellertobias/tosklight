@@ -225,7 +225,7 @@ fn target_user_removal_publishes_one_exact_priority_tombstone() {
     assert_eq!(result.priority_event_sequence, Some(1));
     let EventReplay::Events(events) = events.replay(
         0,
-        &EventFilter::default().with_object(EventObject::programming_priority(target_user.0)),
+        &EventFilter::default().with_object(EventObject::programming_priority()),
     ) else {
         panic!("priority removal should remain replayable")
     };

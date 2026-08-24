@@ -6,6 +6,7 @@ import {
 	lifecycleSnapshot,
 	otherLifecycleRow,
 	PROGRAMMER_A,
+	PROGRAMMER_B,
 	removalChange,
 	upsertChange,
 } from "./testFixtures";
@@ -26,7 +27,7 @@ describe("ProgrammerLifecycleStore deltas", () => {
 		expect(store.getSnapshot().projection?.programmers[0]).toBe(unchanged);
 		expect(store.getSnapshot().projection).toMatchObject({
 			revision: 5,
-			programmers: [{ userId: "operator-a" }, { userId: "operator-b" }],
+			programmers: [{ programmerId: PROGRAMMER_A }, { programmerId: PROGRAMMER_B }],
 		});
 
 		store.applyChange(removalChange(PROGRAMMER_A, 6), 12);
@@ -34,7 +35,7 @@ describe("ProgrammerLifecycleStore deltas", () => {
 			eventSequence: 12,
 			projection: {
 				revision: 6,
-				programmers: [{ userId: "operator-b" }],
+				programmers: [{ programmerId: PROGRAMMER_B }],
 			},
 		});
 	});
@@ -54,16 +55,13 @@ describe("ProgrammerLifecycleStore deltas", () => {
 		);
 
 		const projection = store.getSnapshot().projection;
-		expect(projection?.programmers.map((row) => row.userId)).toEqual([
-			"operator-a",
-			"operator-b",
-		]);
+		expect(projection?.programmers).toHaveLength(2);
 		expect(
 			projection?.programmers[0].sessions.map((row) => row.sessionId),
 		).toEqual(["a", "z"]);
 	});
 
-	it("replaces the prior Programmer identity for the same user", () => {
+	it("adds a Programmer identity the snapshot did not carry", () => {
 		const store = hydratedStore();
 
 		store.applyChange(
@@ -80,10 +78,8 @@ describe("ProgrammerLifecycleStore deltas", () => {
 		expect(store.getSnapshot().projection).toMatchObject({
 			revision: 5,
 			programmers: [
-				{
-					programmerId: "33333333-3333-4333-8333-333333333333",
-					userId: "operator-a",
-				},
+				{ programmerId: PROGRAMMER_A },
+				{ programmerId: "33333333-3333-4333-8333-333333333333" },
 			],
 		});
 	});

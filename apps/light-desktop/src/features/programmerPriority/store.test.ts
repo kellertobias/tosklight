@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProgrammerPriorityStore } from "./store";
 import {
-	OTHER_USER_ID,
 	priorityProjection,
 	prioritySnapshot,
 	USER_ID,
@@ -15,7 +14,7 @@ function readyStore() {
 }
 
 describe("ProgrammerPriorityStore", () => {
-	it("installs immutable exact-user authority and rejects stale scopes", () => {
+	it("installs immutable authority and rejects stale scopes", () => {
 		const store = new ProgrammerPriorityStore();
 		store.reset(USER_ID, "session-a");
 		const scope = store.captureScope();
@@ -24,9 +23,6 @@ describe("ProgrammerPriorityStore", () => {
 		expect(store.installSnapshot({ cursor: 10, projection }, scope)).toBe(true);
 		expect(store.getSnapshot().projection).not.toBe(projection);
 		expect(Object.isFrozen(store.getSnapshot().projection)).toBe(true);
-		expect(
-			store.installSnapshot(prioritySnapshot({ userId: OTHER_USER_ID }), scope),
-		).toBe(false);
 		store.reset(USER_ID, "session-b");
 		expect(store.installSnapshot(prioritySnapshot(), scope)).toBe(false);
 		expect(store.getSnapshot().projection).toBeNull();
@@ -99,7 +95,7 @@ describe("ProgrammerPriorityStore", () => {
 	it("tombstones pending optimism and accepts later recreation", () => {
 		const store = readyStore();
 		store.beginOptimistic("removed", 100);
-		store.applyChange({ type: "remove", userId: USER_ID, revision: 2 }, 11);
+		store.applyChange({ type: "remove", revision: 2 }, 11);
 
 		expect(store.getSnapshot()).toMatchObject({
 			eventSequence: 11,

@@ -9,7 +9,6 @@ import {
 const desk: ControlDesk = {
 	id: "desk-1",
 	name: "Main desk",
-	osc_alias: "main",
 	columns: 8,
 	rows: 1,
 	buttons: 3,
@@ -34,17 +33,17 @@ describe("default screen mutation history", () => {
 			}),
 		);
 
-		act(() => result.current.beginTextEdit("osc_alias"));
-		act(() => result.current.updateText("osc_alias", "main-a"));
-		act(() => result.current.updateText("osc_alias", "main-ab"));
+		act(() => result.current.beginTextEdit("name"));
+		act(() => result.current.updateText("name", "Front-a"));
+		act(() => result.current.updateText("name", "Front-ab"));
 		await waitFor(() => expect(persist).toHaveBeenCalledTimes(2));
-		expect(result.current.draft?.osc_alias).toBe("main-ab");
+		expect(result.current.draft?.name).toBe("Front-ab");
 		expect(availability).toHaveBeenLastCalledWith(true);
 
 		act(() => undoRef.current?.());
 		await waitFor(() => expect(persist).toHaveBeenCalledTimes(3));
 		expect(persist).toHaveBeenLastCalledWith(desk);
-		expect(result.current.draft?.osc_alias).toBe("main");
+		expect(result.current.draft?.name).toBe(desk.name);
 		expect(availability).toHaveBeenLastCalledWith(false);
 
 		act(() => result.current.updateDesk({ name: desk.name }));

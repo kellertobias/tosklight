@@ -25,7 +25,7 @@ test("PLAYBACK-COLOR-001 @ui › runtime strengthens configured color while sele
   expect(await card.getAttribute("data-selected-playback")).toBe("true");
 
   const hardware = await bench.osc();
-  await hardware.subscribe(`playback-colors-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
+  await hardware.subscribe(`playback-colors-${crypto.randomUUID()}`, "desk");
   try {
     await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
     const hardwareCard = page.locator(`.hardware-playback-card[data-playback-slot="${slot}"]`);

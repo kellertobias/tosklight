@@ -129,7 +129,7 @@ pub(super) fn programmer_osc_session(
 fn handle_shift_osc(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     source: Option<SocketAddr>,
     pressed: bool,
 ) {
@@ -143,7 +143,7 @@ fn handle_shift_osc(
         emit(
             state,
             "desk_action",
-            serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"action":if pressed { "shift-down" } else { "shift-up" },"source":"osc"}),
+            serde_json::json!({"path":path,"desk_id":session.desk.id,"session_id":session.id,"action":if pressed { "shift-down" } else { "shift-up" },"source":"osc"}),
         );
     });
 }
@@ -267,7 +267,7 @@ fn handle_record_osc(
             emit(
                 state,
                 "desk_action",
-                serde_json::json!({"desk_alias":subscriber.desk_alias,"desk_id":session.desk.id,"session_id":session.id,"action":"record-settings","source":"osc"}),
+                serde_json::json!({"path":subscriber.path,"desk_id":session.desk.id,"session_id":session.id,"action":"record-settings","source":"osc"}),
             );
             return RecordOutcome::Handled(true);
         }
@@ -285,7 +285,7 @@ fn handle_record_osc(
             let _ = command_http::route_osc_command_key_outcome(
                 state,
                 session,
-                &subscriber.desk_alias,
+                &subscriber.path,
                 "record",
                 None,
             );
@@ -297,7 +297,7 @@ fn handle_record_osc(
 fn handle_shifted_shortcut(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     action: &str,
     source: Option<SocketAddr>,
     request_id: Option<&str>,
@@ -313,7 +313,7 @@ fn handle_shifted_shortcut(
             emit(
                 state,
                 "programmer_changed",
-                serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"source":"osc"}),
+                serde_json::json!({"path":path,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"source":"osc"}),
             );
         }
         return;
@@ -327,7 +327,7 @@ fn handle_shifted_shortcut(
         emit(
             state,
             "programmer_changed",
-            serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"source":"osc"}),
+            serde_json::json!({"path":path,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"source":"osc"}),
         );
         return;
     }
@@ -380,7 +380,7 @@ fn handle_shifted_shortcut(
         let _ = command_http::route_osc_command_gesture_outcome(
             state,
             session,
-            desk_alias,
+            path,
             action,
             request_id,
             Some(light_programmer::command_line::CommandGesture {
@@ -397,14 +397,14 @@ fn handle_shifted_shortcut(
     emit(
         state,
         "desk_action",
-        serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":format!("shift-{}", action.strip_prefix("digit-").unwrap_or(action)),"source":"osc"}),
+        serde_json::json!({"path":path,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":format!("shift-{}", action.strip_prefix("digit-").unwrap_or(action)),"source":"osc"}),
     );
 }
 
 fn route_programmer_osc_action(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     action: &str,
     request_id: Option<&str>,
 ) -> bool {
@@ -416,7 +416,7 @@ fn route_programmer_osc_action(
         emit(
             state,
             "desk_action",
-            serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"set","source":"osc"}),
+            serde_json::json!({"path":path,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"set","source":"osc"}),
         );
         true
     } else if matches!(
@@ -426,11 +426,11 @@ fn route_programmer_osc_action(
         emit(
             state,
             "desk_action",
-            serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":action,"source":"osc"}),
+            serde_json::json!({"path":path,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":action,"source":"osc"}),
         );
         true
     } else {
-        command_http::route_osc_command_key_outcome(state, session, desk_alias, action, request_id)
+        command_http::route_osc_command_key_outcome(state, session, path, action, request_id)
             .unwrap_or(false)
     }
 }
@@ -469,7 +469,7 @@ pub(super) fn handle_programmer_osc(
         emit(
             state,
             "desk_action",
-            serde_json::json!({"desk_alias":parts[1],"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":action,"value":if pressed { "down" } else { "up" },"source":"osc"}),
+            serde_json::json!({"path":parts[1],"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":action,"value":if pressed { "down" } else { "up" },"source":"osc"}),
         );
         return true;
     }

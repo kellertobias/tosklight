@@ -290,7 +290,7 @@ function selectLifecycleRow(
 	userId: string | null,
 	lifecycleAuthorityKey: string | null,
 ) {
-	const row = state.projection?.programmers.find((item) => item.userId === userId);
+	const row = state.projection?.programmers[0];
 	return {
 		active: readRowPreloadActive(row),
 		ready:
@@ -343,9 +343,7 @@ function readPreloadActive(
 		state.repairRequired
 	)
 		return null;
-	return readRowPreloadActive(
-		state.projection?.programmers.find((row) => row.userId === userId),
-	);
+	return readRowPreloadActive(state.projection?.programmers[0]);
 }
 
 function readRowPreloadActive(row: ProgrammerLifecycleRow | undefined) {

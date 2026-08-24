@@ -6,7 +6,6 @@ import { fixtureSheetProgrammerValueIndex } from "./fixtureSheetProjection";
 describe("Fixture Sheet programmer value projection", () => {
 	it("uses Programmer order across direct and spread Group values", () => {
 		const projection: ProgrammerValuesProjection = {
-			userId: "operator",
 			revision: 1,
 			fixtureValues: [
 				{
@@ -54,7 +53,6 @@ describe("Fixture Sheet programmer value projection", () => {
 
 	it("spreads Group values over canonical source order instead of a legacy cache", () => {
 		const projection: ProgrammerValuesProjection = {
-			userId: "operator",
 			revision: 1,
 			fixtureValues: [],
 			groupValues: [

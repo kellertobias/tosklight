@@ -16,10 +16,10 @@ pub(in crate::runtime) fn handle_subscription_osc(
         unsubscribe_osc_client(state, &client_id);
         return true;
     }
-    let Some((desk_alias, port, command_source)) = subscription_target(arguments, source) else {
+    let Some((path, port, command_source)) = subscription_target(arguments, source) else {
         return true;
     };
-    subscribe_osc_client(state, client_id, &desk_alias, port, command_source);
+    subscribe_osc_client(state, client_id, &path, port, command_source);
     true
 }
 
@@ -34,12 +34,12 @@ fn subscription_target(
     arguments: &[OscArgument],
     source: Option<&str>,
 ) -> Option<(String, u16, SocketAddr)> {
-    let desk_alias = osc_string(arguments.get(1))?;
+    let path = osc_string(arguments.get(1))?;
     let port = match arguments.get(2)? {
         OscArgument::Int(value) => u16::try_from(*value).ok()?,
         _ => return None,
     };
-    Some((desk_alias, port, source?.parse().ok()?))
+    Some((path, port, source?.parse().ok()?))
 }
 
 fn unsubscribe_osc_client(state: &AppState, client_id: &str) {
@@ -66,30 +66,24 @@ fn subscribe_osc_client(
 ) {
     let mut target = command_source;
     target.set_port(port);
-    let Some(desk) = osc_control_desk(state, requested_alias) else {
+    let Some(desk) = osc_control_desk(state) else {
         return;
     };
     // The surface keeps the path it connected on, so feedback returns the way commands arrive and
     // both canonical paths — `desk` and `remote` — work alongside any alias saved configuration
     // still names.
-    let desk_alias = requested_alias.to_ascii_lowercase();
+    let path = requested_alias.to_ascii_lowercase();
     let existing = state.integrations.osc_subscriber(&client_id);
     let attached = attached_osc_session(state, desk.id);
-    let reusable = reusable_osc_session(state, &client_id, &desk_alias, existing.as_ref());
-    let session_id = resolve_osc_session(
-        state,
-        &desk,
-        &desk_alias,
-        existing.as_ref(),
-        attached,
-        reusable,
-    );
+    let reusable = reusable_osc_session(state, &client_id, &path, existing.as_ref());
+    let session_id =
+        resolve_osc_session(state, &desk, &path, existing.as_ref(), attached, reusable);
     replace_osc_subscriber(
         state,
         client_id,
         OscSubscriber {
             capability: osc_surface_capability(requested_alias),
-            desk_alias,
+            path,
             target,
             command_source,
             session_id,
@@ -124,11 +118,11 @@ fn attached_osc_session(state: &AppState, desk_id: Uuid) -> Option<Session> {
 fn reusable_osc_session(
     state: &AppState,
     client_id: &str,
-    desk_alias: &str,
+    path: &str,
     existing: Option<&OscSubscriber>,
 ) -> Option<Session> {
     existing
-        .filter(|subscriber| !subscriber.desk_alias.eq_ignore_ascii_case(desk_alias))
+        .filter(|subscriber| !subscriber.path.eq_ignore_ascii_case(path))
         .filter(|subscriber| !state.sessions.has_bound_client(subscriber.session_id))
         .filter(|subscriber| {
             state
@@ -141,13 +135,13 @@ fn reusable_osc_session(
 fn resolve_osc_session(
     state: &AppState,
     desk: &ControlDesk,
-    desk_alias: &str,
+    path: &str,
     existing: Option<&OscSubscriber>,
     attached: Option<Session>,
     reusable: Option<Session>,
 ) -> SessionId {
     existing
-        .filter(|subscriber| subscriber.desk_alias.eq_ignore_ascii_case(desk_alias))
+        .filter(|subscriber| subscriber.path.eq_ignore_ascii_case(path))
         .map(|subscriber| subscriber.session_id)
         .or_else(|| attached.map(|session| session.id))
         .or_else(|| reusable.map(|session| reuse_osc_session(state, desk, session)))

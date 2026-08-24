@@ -223,9 +223,7 @@ function upsertRow(
 	row: ProgrammerLifecycleRow,
 ) {
 	const index = rows.findIndex(
-		(candidate) =>
-			candidate.programmerId === row.programmerId ||
-			candidate.userId === row.userId,
+		(candidate) => candidate.programmerId === row.programmerId,
 	);
 	if (index >= 0) rows[index] = row;
 	else rows.push(row);

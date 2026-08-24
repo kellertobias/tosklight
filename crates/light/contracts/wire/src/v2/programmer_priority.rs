@@ -1,4 +1,4 @@
-//! Lightweight user-scoped Programmer priority mutation and event contracts.
+//! Lightweight Programmer priority mutation and event contracts.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,6 @@ pub struct ProgrammerPriorityActionRequest {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProgrammerPriorityProjection {
-    pub user_id: Uuid,
     #[ts(type = "number")]
     pub revision: u64,
     pub priority: i16,
@@ -33,7 +32,6 @@ pub enum ProgrammerPriorityChange {
         projection: ProgrammerPriorityProjection,
     },
     Remove {
-        user_id: Uuid,
         #[ts(type = "number")]
         revision: u64,
     },
@@ -102,7 +100,6 @@ mod tests {
             request_id: "priority-1".into(),
             correlation_id: Uuid::from_u128(2),
             projection: ProgrammerPriorityProjection {
-                user_id: Uuid::from_u128(3),
                 revision: 4,
                 priority: 90,
                 changed_at: "2026-07-21T10:00:00Z".into(),

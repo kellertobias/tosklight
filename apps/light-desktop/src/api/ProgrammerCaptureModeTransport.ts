@@ -85,10 +85,7 @@ export class HttpProgrammerCaptureModeTransport
 		const response = await this.fetchImplementation(this.snapshotPath(scope), {
 			headers: this.headers(),
 		});
-		return decodeProgrammerCaptureModeSnapshot(
-			await responseValue(response),
-			scope.userId,
-		);
+		return decodeProgrammerCaptureModeSnapshot(await responseValue(response));
 	}
 
 	subscribe(
@@ -100,13 +97,7 @@ export class HttpProgrammerCaptureModeTransport
 		validateSequence(afterSequence, "event cursor");
 		const socket = this.openEventSocket();
 		const lifecycle = { explicitlyClosed: false };
-		bindCaptureModeSocket(
-			socket,
-			scope.userId,
-			afterSequence,
-			observer,
-			lifecycle,
-		);
+		bindCaptureModeSocket(socket, afterSequence, observer, lifecycle);
 		return eventStream(socket, this.WebSocketImplementation.OPEN, lifecycle);
 	}
 
@@ -152,17 +143,14 @@ interface SocketLifecycle {
 
 function bindCaptureModeSocket(
 	socket: WebSocket,
-	userId: string,
 	afterSequence: number | null,
 	observer: ProgrammerCaptureModeEventObserver,
 	lifecycle: SocketLifecycle,
 ) {
 	socket.addEventListener("open", () =>
-		socket.send(JSON.stringify(captureModeSubscription(userId, afterSequence))),
+		socket.send(JSON.stringify(captureModeSubscription(afterSequence))),
 	);
-	socket.addEventListener("message", (event) =>
-		deliverEvent(event, userId, observer),
-	);
+	socket.addEventListener("message", (event) => deliverEvent(event, observer));
 	socket.addEventListener("error", () =>
 		observer.error(
 			new Error("Programmer capture mode event connection failed"),
@@ -189,13 +177,12 @@ function eventStream(
 
 function deliverEvent(
 	event: MessageEvent,
-	userId: string,
 	observer: ProgrammerCaptureModeEventObserver,
 ) {
 	let value: unknown;
 	try {
 		value = JSON.parse(String(event.data));
-		observer.message(decodeProgrammerCaptureModeEventMessage(value, userId));
+		observer.message(decodeProgrammerCaptureModeEventMessage(value));
 	} catch (reason) {
 		const error = reason instanceof Error ? reason : new Error(String(reason));
 		observer.error(
@@ -219,7 +206,6 @@ function repairStream(socket: WebSocket, cursor: number, openState: number) {
 }
 
 function captureModeSubscription(
-	userId: string,
 	afterSequence: number | null,
 ): EventClientMessage {
 	return {
@@ -230,7 +216,7 @@ function captureModeSubscription(
 			objects: [
 				{
 					capability: "programmer",
-					id: `programming-capture-mode:${userId}`,
+					id: "programming-capture-mode",
 				},
 			],
 		},
@@ -242,7 +228,6 @@ function captureModeSubscription(
 
 function validateScope(scope: ProgrammerCaptureModeScope) {
 	programmingUuidAt(scope.showId, "$.scope.showId");
-	programmingUuidAt(scope.userId, "$.scope.userId");
 }
 
 function validateSequence(value: number | null, label: string) {

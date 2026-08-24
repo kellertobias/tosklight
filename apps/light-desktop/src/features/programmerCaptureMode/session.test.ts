@@ -49,7 +49,7 @@ describe("ProgrammerCaptureModeSession", () => {
 		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
 		expect(harness.transport.subscriptions).toHaveLength(1);
 		expect(harness.transport.subscriptions[0]).toMatchObject({
-			scope: { showId: SHOW_ID, userId: USER_ID },
+			scope: { showId: SHOW_ID },
 			after: 10,
 		});
 
@@ -138,7 +138,7 @@ describe("ProgrammerCaptureModeSession", () => {
 		});
 	});
 
-	it("rejects a foreign event and repairs before accepting more events", async () => {
+	it("rejects a conflicting event and repairs before accepting more events", async () => {
 		const harness = createHarness();
 		harness.session.activate();
 		await settleCaptureModeSession();
@@ -146,29 +146,27 @@ describe("ProgrammerCaptureModeSession", () => {
 			captureModeSnapshot({ cursor: 20 }),
 		);
 
+		// The same sequence carrying different capture switches cannot be reconciled.
 		harness.transport.emit({
 			type: "event",
-			sequence: 19,
-			correlationId: "foreign",
-			projection: captureModeProjection({
-				userId: OTHER_USER_ID,
-				revision: 9,
-			}),
+			sequence: 10,
+			correlationId: "conflicting",
+			projection: captureModeProjection({ revision: 9 }),
 		});
 		await settleCaptureModeSession();
 
 		expect(harness.onError).toHaveBeenCalledWith(
 			expect.objectContaining({
-				message: expect.stringContaining("event user"),
+				message: expect.stringContaining("events"),
 			}),
 		);
 		expect(harness.transport.subscriptions[0].repair).toHaveBeenCalledWith(20);
-		expect(harness.store.getSnapshot().projection?.userId).toBe(USER_ID);
+		expect(harness.store.getSnapshot().projection?.revision).toBe(1);
 
 		harness.transport.emit({
 			type: "event",
 			sequence: 21,
-			correlationId: "same-user",
+			correlationId: "later",
 			projection: captureModeProjection({ revision: 2, preview: true }),
 		});
 		expect(harness.store.getSnapshot()).toMatchObject({

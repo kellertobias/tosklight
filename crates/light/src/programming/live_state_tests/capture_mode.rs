@@ -27,7 +27,7 @@ fn external_mode_changes_publish_one_exact_user_projection() {
     assert_eq!(registry.capture_mode_revision(), 1);
     assert_eq!(projection_read_count(), 0);
     let filter = EventFilter::for_desk(setup.context.desk_id)
-        .with_object(EventObject::programming_capture_mode(user.0));
+        .with_object(EventObject::programming_capture_mode());
     let EventReplay::Events(events) = setup.events.replay(0, &filter) else {
         panic!("capture-mode events should remain replayable")
     };
@@ -162,14 +162,11 @@ fn capture_mode_is_the_desks_and_every_surface_reads_it() {
         crate::ActionErrorKind::Unauthorized
     );
 
-    // A subscription filtered to a different Programmer still matches nothing.
-    let denied = EventFilter {
-        programmer_user_id: Some(legacy.0),
-        ..EventFilter::for_desk(screen_desk)
-            .with_object(EventObject::programming_capture_mode(user.0))
-    };
+    // Capture mode is one object on the wire, not one per operator, so a subscription to it
+    // receives the desk's changes whichever surface caused them.
+    let subscribed = EventFilter::default().with_object(EventObject::programming_capture_mode());
     assert!(matches!(
-        setup.events.replay(0, &denied),
-        EventReplay::Events(events) if events.is_empty()
+        setup.events.replay(0, &subscribed),
+        EventReplay::Events(events) if events.len() == 1
     ));
 }

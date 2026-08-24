@@ -50,7 +50,6 @@ fn lifecycle_programmer(
 ) -> wire::ProgrammingLifecycleProgrammer {
     wire::ProgrammingLifecycleProgrammer {
         programmer_id: programmer.programmer_id.0,
-        user_id: programmer.user_id.0,
         connected: programmer.connected,
         selected_fixture_count: programmer.selected_fixture_count,
         normal_value_count: programmer.normal_value_count,

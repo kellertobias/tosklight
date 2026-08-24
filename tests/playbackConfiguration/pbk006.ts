@@ -335,7 +335,7 @@ export function registerPbk006OscScenario(): void {
 			{ 1: 71 },
 		);
 		const hardware = await bench.osc();
-		const alias = api.session!.desk.osc_alias;
+		const alias = "desk";
 		try {
 			await hardware.subscribe(`pbk-006-${crypto.randomUUID()}`, alias);
 			let mark = hardware.mark();

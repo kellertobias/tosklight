@@ -10,7 +10,7 @@ impl CommandContractScenario {
     fn new() -> Self {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
-    let control_desk = state.installation.add_desk("Commands", "commands").unwrap();
+    let control_desk = state.installation.add_desk("Commands").unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),

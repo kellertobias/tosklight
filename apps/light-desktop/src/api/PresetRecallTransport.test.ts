@@ -34,7 +34,6 @@ function request(
 
 function projection(revision = 7) {
 	return {
-		user_id: USER_ID,
 		revision,
 		fixture_values: [
 			{
@@ -107,16 +106,14 @@ describe("Preset recall v2 wire", () => {
 	it("decodes a legacy normal response without a target discriminator", () => {
 		const decoded = decodePresetRecallOutcome(
 			changedOutcome(),
-			USER_ID,
-			request(),
-		);
+			request());
 		expect(decoded).toMatchObject({
 			target: "programmer",
 			status: "changed",
 			programmerRevision: 7,
 			disposition: "recalled",
 			eventSequence: 41,
-			projection: { userId: USER_ID, revision: 7 },
+			projection: { revision: 7 },
 			preset: {
 				id: "2.7",
 				revision: 4,
@@ -140,20 +137,18 @@ describe("Preset recall v2 wire", () => {
 		delete (redirected as Partial<typeof redirected>).event_sequence;
 
 		expect(
-			decodePresetRecallOutcome(redirected, USER_ID, redirectedRequest),
+			decodePresetRecallOutcome(redirected, redirectedRequest),
 		).toMatchObject({
 			target: "preload",
 			programmerRevision: 6,
 			preloadValuesRevision: 6,
 			eventSequence: 44,
-			projection: { userId: USER_ID, revision: 6 },
+			projection: { revision: 6 },
 		});
 		expect(() =>
 			decodePresetRecallOutcome(
 				{ ...redirected, projection: projection() },
-				USER_ID,
-				redirectedRequest,
-			),
+				redirectedRequest),
 		).toThrow(/absent for preload target/);
 	});
 
@@ -166,7 +161,7 @@ describe("Preset recall v2 wire", () => {
 		(
 			sparse as typeof sparse & { interaction_event_sequence: number }
 		).interaction_event_sequence = 42;
-		expect(decodePresetRecallOutcome(sparse, USER_ID, request())).toMatchObject(
+		expect(decodePresetRecallOutcome(sparse, request())).toMatchObject(
 			{
 				status: "changed",
 				projection: null,
@@ -179,12 +174,12 @@ describe("Preset recall v2 wire", () => {
 		delete (sparse as { interaction_event_sequence?: number })
 			.interaction_event_sequence;
 		sparse.selection_revision = 8;
-		expect(decodePresetRecallOutcome(sparse, USER_ID, request())).toMatchObject(
+		expect(decodePresetRecallOutcome(sparse, request())).toMatchObject(
 			{ status: "changed", interactionEventSequence: null },
 		);
 
 		sparse.status = "no_change";
-		expect(decodePresetRecallOutcome(sparse, USER_ID, request())).toMatchObject(
+		expect(decodePresetRecallOutcome(sparse, request())).toMatchObject(
 			{ status: "no_change", projection: null },
 		);
 
@@ -201,9 +196,7 @@ describe("Preset recall v2 wire", () => {
 		expect(
 			decodePresetRecallOutcome(
 				targetsSelected,
-				USER_ID,
-				request({ selectedFixtureCount: 0 }),
-			),
+				request({ selectedFixtureCount: 0 })),
 		).toMatchObject({
 			disposition: "targets_selected",
 			selectedTargets: 1,
@@ -232,17 +225,17 @@ describe("Preset recall v2 wire", () => {
 			{ ...changedOutcome(), extra: true },
 		])
 			expect(() =>
-				decodePresetRecallOutcome(candidate, USER_ID, request()),
+				decodePresetRecallOutcome(candidate, request()),
 			).toThrow();
 
 		const missingEvent = changedOutcome();
 		delete (missingEvent as Partial<typeof missingEvent>).event_sequence;
 		expect(() =>
-			decodePresetRecallOutcome(missingEvent, USER_ID, request()),
+			decodePresetRecallOutcome(missingEvent, request()),
 		).toThrow(/paired values/);
 		const materializedNoChange = { ...changedOutcome(), status: "no_change" };
 		expect(() =>
-			decodePresetRecallOutcome(materializedNoChange, USER_ID, request()),
+			decodePresetRecallOutcome(materializedNoChange, request()),
 		).toThrow(/no_change/);
 	});
 

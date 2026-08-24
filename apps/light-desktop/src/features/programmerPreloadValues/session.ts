@@ -23,6 +23,7 @@ export interface ProgrammerPreloadValuesSessionOptions {
 /** A reference-counted exact-user authority that is dormant without a view. */
 export class ProgrammerPreloadValuesSession {
 	private readonly eventScope: ProgrammerPreloadValuesScope;
+	private readonly userId: string;
 	private readonly authorityKey: string;
 	private readonly store: ProgrammerPreloadValuesStore;
 	private readonly transport: ProgrammerPreloadValuesEventTransport | null;
@@ -42,7 +43,8 @@ export class ProgrammerPreloadValuesSession {
 		null;
 
 	constructor(options: ProgrammerPreloadValuesSessionOptions) {
-		this.eventScope = { showId: options.showId, userId: options.userId };
+		this.eventScope = { showId: options.showId };
+		this.userId = options.userId;
 		this.authorityKey = options.authorityKey ?? "";
 		this.store = options.store;
 		this.transport = options.transport;
@@ -128,7 +130,6 @@ export class ProgrammerPreloadValuesSession {
 		try {
 			const snapshot = await this.loadSnapshot();
 			if (!this.isCurrent(generation)) return;
-			this.assertSnapshotUser(snapshot);
 			const installed = repair
 				? this.store.installRepairSnapshot(snapshot, this.expectedStoreScope())
 				: this.store.installSnapshot(snapshot, {
@@ -195,10 +196,6 @@ export class ProgrammerPreloadValuesSession {
 			);
 			return;
 		}
-		if (message.projection.userId !== this.eventScope.userId) {
-			void this.repair(generation, this.scopeError("event user"));
-			return;
-		}
 		try {
 			this.store.applyProjection(
 				message.projection,
@@ -229,7 +226,6 @@ export class ProgrammerPreloadValuesSession {
 		try {
 			const snapshot = await this.loadSnapshot();
 			if (!this.isCurrent(generation)) return;
-			this.assertSnapshotUser(snapshot);
 			if (
 				!this.store.installRepairSnapshot(snapshot, this.expectedStoreScope())
 			)
@@ -253,7 +249,6 @@ export class ProgrammerPreloadValuesSession {
 			!this.store.isScopeCurrent(expectedScope)
 		)
 			return;
-		this.assertSnapshotUser(snapshot);
 		if (!this.store.installRepairSnapshot(snapshot, expectedScope))
 			throw this.scopeError("repair snapshot");
 		this.hydrated = true;
@@ -281,26 +276,17 @@ export class ProgrammerPreloadValuesSession {
 		if (this.stopped) return false;
 		const state = this.store.getSnapshot();
 		if (state.showId === null && state.userId === null)
-			this.store.reset(
-				this.eventScope.showId,
-				this.eventScope.userId,
-				this.authorityKey,
-			);
+			this.store.reset(this.eventScope.showId, this.userId, this.authorityKey);
 		const scoped = this.store.getSnapshot();
 		if (
 			scoped.showId !== this.eventScope.showId ||
-			scoped.userId !== this.eventScope.userId
+			scoped.userId !== this.userId
 		) {
 			this.onError?.(this.scopeError("session"));
 			return false;
 		}
 		this.storeScope = this.store.captureScope();
 		return true;
-	}
-
-	private assertSnapshotUser(snapshot: ProgrammerPreloadValuesSnapshot) {
-		if (snapshot.projection.userId !== this.eventScope.userId)
-			throw this.scopeError("snapshot user");
 	}
 
 	private scopeError(subject: string) {

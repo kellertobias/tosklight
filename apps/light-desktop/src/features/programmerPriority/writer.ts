@@ -179,10 +179,6 @@ export class ProgrammerPriorityWriter implements ProgrammerPriorityActions {
 			throw new ProgrammerPriorityProtocolError(
 				"Programmer priority response request identity does not match",
 			);
-		if (outcome.projection.userId !== this.options.scope.userId)
-			throw new ProgrammerPriorityProtocolError(
-				"Programmer priority response belongs to another user",
-			);
 	}
 
 	private async repairError(error: Error) {

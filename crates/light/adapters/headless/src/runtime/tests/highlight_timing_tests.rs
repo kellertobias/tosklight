@@ -107,7 +107,7 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
     );
     assert!(persisted_programmer(&state, session.id).transient_values.is_empty());
     let values_filter = light_application::EventFilter::default().with_object(
-        light_application::EventObject::programming_values(user.id.0),
+        light_application::EventObject::programming_values(),
     );
     let light_application::EventReplay::Events(values_events) =
         state.events.replay(0, &values_filter)

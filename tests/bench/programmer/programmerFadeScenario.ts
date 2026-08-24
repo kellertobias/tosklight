@@ -195,7 +195,7 @@ export class BrowserProgrammerFade implements ProgrammerFadeSetPort {
 		if (!session)
 			throw new Error("Programmer Fade OSC route requires a session");
 		await this.hardware.send(
-			`/light/${session.desk.osc_alias}/programmer/prog-fade`,
+			`/light/desk/programmer/prog-fade`,
 			[millis / 20_000],
 		);
 	}

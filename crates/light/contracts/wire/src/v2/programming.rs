@@ -96,10 +96,9 @@ pub struct ProgrammingDynamicValue {
     pub changed_at_millis: u64,
 }
 
-/// Full retained projection of one user's normal, recordable Programmer values.
+/// Full retained projection of the Programmer's normal, recordable values.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingValuesProjection {
-    pub user_id: Uuid,
     #[ts(type = "number")]
     pub revision: u64,
     pub fixture_values: Vec<ProgrammingFixtureValue>,
@@ -110,11 +109,10 @@ pub struct ProgrammingValuesProjection {
     pub dynamic_values: Vec<ProgrammingDynamicValue>,
 }
 
-/// Authoritative capture routing for one user's Programmer.
+/// Authoritative capture routing for the Programmer.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProgrammingCaptureModeProjection {
-    pub user_id: Uuid,
     #[ts(type = "number")]
     pub revision: u64,
     pub blind: bool,
@@ -137,7 +135,6 @@ pub struct ProgrammingCaptureModeSnapshot {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingValuesChange {
-    pub user_id: Uuid,
     #[ts(type = "number")]
     pub revision: u64,
     pub fixture_values: Vec<ProgrammingFixtureValue>,
@@ -474,7 +471,6 @@ mod tests {
     #[test]
     fn capture_mode_projection_rejects_unknown_fields() {
         let value = serde_json::json!({
-            "user_id": Uuid::from_u128(1),
             "revision": 2,
             "blind": false,
             "preview": false,

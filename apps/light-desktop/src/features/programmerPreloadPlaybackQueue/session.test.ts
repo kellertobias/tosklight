@@ -49,18 +49,18 @@ describe("ProgrammerPreloadPlaybackQueueSession", () => {
 		expect(current.transport.subscriptions).toHaveLength(0);
 	});
 
-	it("subscribes only to the exact show and user", async () => {
+	it("subscribes to the exact show", async () => {
 		const current = harness();
 		current.session.activate();
 		await settleQueueSession();
 
 		expect(current.transport.subscriptions[0]).toMatchObject({
-			scope: { showId: SHOW_ID, userId: USER_ID },
+			scope: { showId: SHOW_ID },
 			after: 10,
 		});
 		expect(current.store.getSnapshot()).toMatchObject({
 			status: "ready",
-			projection: { userId: USER_ID, revision: 2 },
+			projection: { revision: 2 },
 		});
 	});
 
@@ -93,24 +93,6 @@ describe("ProgrammerPreloadPlaybackQueueSession", () => {
 			repairRequired: false,
 			projection: { revision: 4, actions: [{ action: "off" }] },
 		});
-	});
-
-	it("rejects a foreign-user snapshot without opening a socket", async () => {
-		const current = harness();
-		current.loadSnapshot.mockResolvedValueOnce(
-			queueSnapshot({ userId: OTHER_USER_ID }),
-		);
-
-		current.session.activate();
-		await settleQueueSession();
-
-		expect(current.transport.subscriptions).toHaveLength(0);
-		expect(current.store.getSnapshot()).toMatchObject({
-			projection: null,
-			status: "error",
-			repairRequired: true,
-		});
-		current.session.stop();
 	});
 
 	it("drops a late snapshot after server or session replacement", async () => {
@@ -161,11 +143,7 @@ describe("ProgrammerPreloadPlaybackQueueSession", () => {
 			store: current.store,
 			transport: null,
 			loadSnapshot: async () =>
-				queueSnapshot({
-					cursor: 50,
-					userId: OTHER_USER_ID,
-					revision: 7,
-				}),
+				queueSnapshot({ cursor: 50, revision: 7 }),
 		});
 		replacement.activate();
 		await settleQueueSession();
@@ -178,7 +156,7 @@ describe("ProgrammerPreloadPlaybackQueueSession", () => {
 			userId: OTHER_USER_ID,
 			authorityKey: AUTHORITY_B,
 			eventSequence: 50,
-			projection: { userId: OTHER_USER_ID, revision: 7 },
+			projection: { revision: 7 },
 		});
 	});
 

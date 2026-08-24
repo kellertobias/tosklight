@@ -19,7 +19,6 @@ export function captureModeProjection(
 	overrides: Partial<ProgrammerCaptureModeProjection> = {},
 ): ProgrammerCaptureModeProjection {
 	return {
-		userId: USER_ID,
 		revision: 1,
 		blind: false,
 		preview: false,

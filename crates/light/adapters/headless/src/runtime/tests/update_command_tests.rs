@@ -135,7 +135,7 @@ fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_
     let user = state.installation.users().unwrap().remove(0);
     let desk = state
         .installation
-        .add_desk("Manual Update", "manual-update")
+        .add_desk("Manual Update")
         .unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,

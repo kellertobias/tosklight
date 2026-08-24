@@ -123,7 +123,7 @@ describe("ProgrammerPreloadLifecycleWriter recovery", () => {
 		foreignUser.valuesStore.reset(SHOW_ID, OTHER_ID, "session-a");
 		foreignUser.valuesStore.installSnapshot({
 			cursor: 12,
-			projection: { ...values(), userId: OTHER_ID },
+			projection: { ...values() },
 		});
 		await expect(foreignUser.writer.release("foreign-user")).resolves.toBeNull();
 		expect(foreignUser.apply).not.toHaveBeenCalled();

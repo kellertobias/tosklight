@@ -39,7 +39,7 @@ export function useDefaultScreenDraft({
 	const draftRef = useRef<ControlDesk | null>(desk ?? null);
 	const saveQueue = useRef(Promise.resolve());
 	const pendingSaves = useRef(0);
-	const textEditRecorded = useRef({ name: false, osc_alias: false });
+	const textEditRecorded = useRef({ name: false });
 
 	useEffect(() => {
 		if (!desk || pendingSaves.current > 0) return;
@@ -83,14 +83,14 @@ export function useDefaultScreenDraft({
 		const current = draftRef.current ?? desk;
 		return current ? applyDesk({ ...current, ...changes }, remember) : false;
 	};
-	const updateText = (field: "name" | "osc_alias", value: string) => {
+	const updateText = (field: "name", value: string) => {
 		const changed = updateDesk(
 			{ [field]: value },
 			!textEditRecorded.current[field],
 		);
 		if (changed) textEditRecorded.current[field] = true;
 	};
-	const beginTextEdit = (field: "name" | "osc_alias") => {
+	const beginTextEdit = (field: "name") => {
 		textEditRecorded.current[field] = false;
 	};
 	const endTextEdit = beginTextEdit;
@@ -107,7 +107,7 @@ export function useDefaultScreenDraft({
 		if (previous.regularNumberShortcuts !== regularNumberShortcuts) {
 			onKeyboardShortcuts(previous.regularNumberShortcuts);
 		}
-		textEditRecorded.current = { name: false, osc_alias: false };
+		textEditRecorded.current = { name: false };
 	};
 	if (undoRef) undoRef.current = undo;
 

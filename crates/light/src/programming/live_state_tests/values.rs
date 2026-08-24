@@ -56,8 +56,8 @@ fn one_external_action_publishes_one_full_deterministic_values_projection() {
     assert_eq!(completed.values_event_sequence, Some(1));
     assert_eq!(projection_read_count(), 1);
     assert_eq!(registry.normal_values_revision(), 1);
-    let filter = EventFilter::for_desk(setup.context.desk_id)
-        .with_object(EventObject::programming_values(user_id.0));
+    let filter =
+        EventFilter::for_desk(setup.context.desk_id).with_object(EventObject::programming_values());
     let EventReplay::Events(events) = setup.events.replay(0, &filter) else {
         panic!("normal Programmer values should be replayable")
     };
@@ -134,7 +134,7 @@ fn same_user_peer_waits_before_its_desk_gate_during_nested_refresh() {
     actor.join().unwrap();
     peer.join().unwrap();
     assert_eq!(setup.registry.normal_values_revision(), 1);
-    let object = EventObject::programming_values(setup.user.0);
+    let object = EventObject::programming_values();
     for desk in [setup.actor_context.desk_id, setup.peer_context.desk_id] {
         let filter = EventFilter::for_desk(desk).with_object(object.clone());
         assert!(matches!(

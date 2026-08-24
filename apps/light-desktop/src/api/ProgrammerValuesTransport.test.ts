@@ -44,9 +44,8 @@ class FakeWebSocket {
 	}
 }
 
-function projection(userId = USER_ID) {
+function projection() {
 	return {
-		user_id: userId,
 		revision: 3,
 		fixture_values: [
 			{
@@ -76,8 +75,8 @@ function changedOutcome() {
 	};
 }
 
-function event(userId = USER_ID) {
-	const changed = projection(userId);
+function event() {
+	const changed = projection();
 	return {
 		type: "event",
 		event: {
@@ -87,7 +86,7 @@ function event(userId = USER_ID) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-values:${userId}`,
+				id: "programming-values",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -130,7 +129,7 @@ function createHarness(fetchImplementation = vi.fn()) {
 }
 
 describe("HttpProgrammerValuesTransport HTTP", () => {
-	it("is dormant until an exact-user snapshot is requested", async () => {
+	it("is dormant until a snapshot is requested", async () => {
 		const { fetchImplementation, transport } = createHarness();
 		expect(fetchImplementation).not.toHaveBeenCalled();
 		expect(FakeWebSocket.instances).toHaveLength(0);
@@ -140,7 +139,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 
 		await expect(transport.loadSnapshot(scope)).resolves.toMatchObject({
 			cursor: 11,
-			projection: { userId: USER_ID, revision: 3 },
+			projection: { revision: 3 },
 		});
 		expect(fetchImplementation).toHaveBeenCalledOnce();
 		const [url, init] = fetchImplementation.mock.calls[0];
@@ -208,7 +207,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 		});
 	});
 
-	it("surfaces typed revision conflicts and rejects a foreign snapshot", async () => {
+	it("surfaces typed revision conflicts and rejects an undeclared field", async () => {
 		const { fetchImplementation, transport } = createHarness();
 		fetchImplementation.mockResolvedValueOnce(
 			jsonResponse(
@@ -241,17 +240,15 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 		fetchImplementation.mockResolvedValueOnce(
 			jsonResponse({
 				cursor: { sequence: 11 },
-				projection: projection(OTHER_USER_ID),
+				projection: { ...projection(), user_id: OTHER_USER_ID },
 			}),
 		);
-		await expect(transport.loadSnapshot(scope)).rejects.toThrow(
-			/requested user/,
-		);
+		await expect(transport.loadSnapshot(scope)).rejects.toThrow(/user_id/);
 	});
 });
 
 describe("HttpProgrammerValuesTransport events", () => {
-	it("subscribes only to the current user's lossless delta object", () => {
+	it("subscribes to the lossless delta object", () => {
 		const { transport } = createHarness();
 		const observer = { message: vi.fn(), error: vi.fn(), closed: vi.fn() };
 		const stream = transport.subscribe(scope, 10, observer);
@@ -272,7 +269,7 @@ describe("HttpProgrammerValuesTransport events", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-values:${USER_ID}`,
+						id: "programming-values",
 					},
 				],
 			},
@@ -291,11 +288,15 @@ describe("HttpProgrammerValuesTransport events", () => {
 		});
 	});
 
-	it("reports a foreign event as a repair-requiring protocol error", () => {
+	it("reports an undecodable event as a repair-requiring protocol error", () => {
 		const { transport } = createHarness();
 		const observer = { message: vi.fn(), error: vi.fn(), closed: vi.fn() };
 		transport.subscribe(scope, null, observer);
-		FakeWebSocket.instances[0].emit("message", message(event(OTHER_USER_ID)));
+		const undecodable = event();
+		(
+			undecodable.event.payload.change as Record<string, unknown>
+		).user_id = OTHER_USER_ID;
+		FakeWebSocket.instances[0].emit("message", message(undecodable));
 
 		expect(observer.message).not.toHaveBeenCalled();
 		expect(observer.error).toHaveBeenCalledWith(
@@ -307,15 +308,11 @@ describe("HttpProgrammerValuesTransport events", () => {
 		);
 	});
 
-	it("rejects foreign-user subscription shapes before opening a socket", () => {
+	it("rejects malformed subscription shapes before opening a socket", () => {
 		const { transport } = createHarness();
 		const observer = { message: vi.fn(), error: vi.fn(), closed: vi.fn() };
 		expect(() =>
-			transport.subscribe(
-				{ showId: SHOW_ID, userId: "foreign-user" },
-				null,
-				observer,
-			),
+			transport.subscribe({ showId: "foreign-show" }, null, observer),
 		).toThrow(/UUID/);
 		expect(FakeWebSocket.instances).toHaveLength(0);
 	});

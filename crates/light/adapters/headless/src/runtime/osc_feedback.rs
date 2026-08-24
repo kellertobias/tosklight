@@ -2,14 +2,14 @@ use super::*;
 
 pub(super) fn send_action_timing_feedback(
     state: &AppState,
-    desk_alias: &str,
+    path: &str,
     target: SocketAddr,
     timing: &ActionTimingProjection,
 ) {
     send_osc(
         state,
         target,
-        format!("/light/{desk_alias}/feedback/action"),
+        format!("/light/{path}/feedback/action"),
         vec![
             OscArgument::String(timing.request_id.clone()),
             OscArgument::Bool(timing.succeeded),
@@ -66,7 +66,7 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
         emit(
             state,
             "speed_group_action",
-            serde_json::json!({"group":speed_group_name(index),"desk_alias":parts[1],"source":"osc","action":"learn","snapshot":snapshots[index]}),
+            serde_json::json!({"group":speed_group_name(index),"path":parts[1],"source":"osc","action":"learn","snapshot":snapshots[index]}),
         );
     }
     if parts.len() == 5
@@ -92,7 +92,7 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
             emit(
                 state,
                 "speed_group_changed",
-                serde_json::json!({"group":speed_group_name(index),"desk_alias":parts[1],"source":"osc","manual_bpm":bpm}),
+                serde_json::json!({"group":speed_group_name(index),"path":parts[1],"source":"osc","manual_bpm":bpm}),
             );
         }
     }
@@ -134,14 +134,14 @@ pub(super) fn handle_encoder_osc(
     let Some((subscriber, session)) = programmer_osc_session(state, source) else {
         return;
     };
-    if !subscriber.desk_alias.eq_ignore_ascii_case(parts[1]) {
+    if !subscriber.path.eq_ignore_ascii_case(parts[1]) {
         return;
     }
     emit(
         state,
         "desk_action",
         serde_json::json!({
-            "desk_alias":parts[1],
+            "path":parts[1],
             "desk_id":session.desk.id,
             "session_id":session.id,
             "request_id":request_id,
@@ -193,31 +193,30 @@ pub(super) fn playback_color_rgb(color: &str, active: bool) -> (f32, f32, f32) {
 /// The canonical path a remote-control-only guest connects on. Playback only: no Record, no
 /// Update, no Assign. Its counterpart is `desk`, which is not named here because every path that
 /// is not this one is a desk-button surface.
-pub(super) const OSC_REMOTE_ALIAS: &str = "remote";
+pub(super) const OSC_GUEST_PATH: &str = "remote";
 
-/// What a surface connecting on `alias` is allowed to do.
+/// The canonical path a desk-button surface connects on, and what a surface that is part of the
+/// desk rather than a connected one — an extension, say — reports itself as.
+pub(super) const OSC_DESK_PATH: &str = "desk";
+
+/// What a surface connecting on `path` is allowed to do.
 ///
 /// The path is the capability. `remote` is the guest path; everything else — `desk`, the legacy
-/// `main`, and any alias a saved hardware configuration still names — is a surface of the one
+/// `main`, and any path a saved hardware configuration still names — is a surface of the one
 /// programming user.
-pub(super) fn osc_surface_capability(alias: &str) -> light_core::SurfaceCapability {
-    if alias.eq_ignore_ascii_case(OSC_REMOTE_ALIAS) {
+pub(super) fn osc_surface_capability(path: &str) -> light_core::SurfaceCapability {
+    if path.eq_ignore_ascii_case(OSC_GUEST_PATH) {
         light_core::SurfaceCapability::PlaybackOnly
     } else {
         light_core::SurfaceCapability::Programming
     }
 }
 
-/// The desk an OSC alias addresses.
+/// The desk an OSC surface operates.
 ///
-/// There is one desk, so every alias addresses it. A saved hardware configuration naming an alias
-/// from before the collapse is not foreign — there is nothing left for it to be foreign to — so it
-/// resolves rather than being refused and left silently unable to connect.
-pub(super) fn osc_control_desk(state: &AppState, alias: &str) -> Option<ControlDesk> {
-    state
-        .installation
-        .control_desk_by_alias(alias)
-        .ok()
-        .flatten()
-        .or_else(|| state.installation.desks().ok()?.into_iter().next())
+/// There is one desk, so every path reaches it. A saved hardware configuration naming a path from
+/// before the collapse is not foreign — there is nothing left for it to be foreign to — so it
+/// connects rather than being refused and left silently unable to reach anything.
+pub(super) fn osc_control_desk(state: &AppState) -> Option<ControlDesk> {
+    state.installation.desks().ok()?.into_iter().next()
 }

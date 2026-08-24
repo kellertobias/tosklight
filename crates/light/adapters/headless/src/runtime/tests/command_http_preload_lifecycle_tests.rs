@@ -109,7 +109,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     assert_eq!(
         application_event_count(
             &scenario.state,
-            light_application::EventObject::programming_capture_mode(user_id),
+            light_application::EventObject::programming_capture_mode(),
         ),
         1
     );
@@ -127,7 +127,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
 
     let second_desk = scenario
         .state
-        .installation.add_desk("Preload lifecycle peer", "preload-lifecycle-peer")
+        .installation.add_desk("Preload lifecycle peer")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, user_id);
@@ -238,21 +238,21 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     assert_eq!(
         application_event_count(
             &scenario.state,
-            light_application::EventObject::programming_capture_mode(user_id),
+            light_application::EventObject::programming_capture_mode(),
         ),
         2
     );
     assert_eq!(
         application_event_count(
             &scenario.state,
-            light_application::EventObject::programming_preload_values(user_id),
+            light_application::EventObject::programming_preload_values(),
         ),
         2
     );
     assert_eq!(
         application_event_count(
             &scenario.state,
-            light_application::EventObject::programming_preload_playback_queue(user_id),
+            light_application::EventObject::programming_preload_playback_queue(),
         ),
         2
     );
@@ -442,7 +442,7 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
         .unwrap();
     let other_desk = scenario
         .state
-        .installation.add_desk("Preload cursor other", "preload-cursor-other")
+        .installation.add_desk("Preload cursor other")
         .unwrap();
     let (other_token, logged_user) =
         login_on_desk(&scenario, "Preload cursor other", other_desk.id).await;

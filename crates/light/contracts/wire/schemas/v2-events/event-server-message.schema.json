@@ -527,13 +527,13 @@
             "null"
           ]
         },
-        "desk_alias": {
+        "desk_id": {
           "type": [
             "string",
             "null"
           ]
         },
-        "desk_id": {
+        "path": {
           "type": [
             "string",
             "null"
@@ -564,7 +564,7 @@
         "value",
         "session_id",
         "desk_id",
-        "desk_alias"
+        "path"
       ]
     },
     "DynamicActivationBoundaryProjection": {
@@ -5190,16 +5190,11 @@
             "type": {
               "type": "string",
               "const": "remove"
-            },
-            "user_id": {
-              "type": "string",
-              "format": "uuid"
             }
           },
           "additionalProperties": false,
           "required": [
             "type",
-            "user_id",
             "revision"
           ]
         }
@@ -5221,15 +5216,10 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "additionalProperties": false,
       "required": [
-        "user_id",
         "revision",
         "priority",
         "changed_at"
@@ -5605,7 +5595,7 @@
       ]
     },
     "ProgrammingCaptureModeProjection": {
-      "description": "Authoritative capture routing for one user's Programmer.",
+      "description": "Authoritative capture routing for the Programmer.",
       "type": "object",
       "properties": {
         "blind": {
@@ -5621,15 +5611,10 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "additionalProperties": false,
       "required": [
-        "user_id",
         "revision",
         "blind",
         "preview",
@@ -6090,16 +6075,11 @@
           "items": {
             "$ref": "#/$defs/ProgrammingLifecycleSession"
           }
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "additionalProperties": false,
       "required": [
         "programmer_id",
-        "user_id",
         "connected",
         "selected_fixture_count",
         "normal_value_count",
@@ -6445,14 +6425,9 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "required": [
-        "user_id",
         "revision",
         "actions"
       ]
@@ -6503,15 +6478,10 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "additionalProperties": false,
       "required": [
-        "user_id",
         "revision",
         "fixture_values",
         "group_values",
@@ -6567,14 +6537,9 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "required": [
-        "user_id",
         "revision",
         "fixture_values",
         "removed_fixture_values",

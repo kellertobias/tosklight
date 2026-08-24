@@ -35,7 +35,6 @@ function noChange(requestId = "preload-release") {
 		status: "no_change",
 		active: false,
 		capture_mode: {
-			user_id: USER_ID,
 			revision: 3,
 			blind: false,
 			preview: false,
