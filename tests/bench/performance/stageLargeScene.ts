@@ -144,7 +144,7 @@ async function setStaticControls(
 	fixtureIds: string[],
 ): Promise<void> {
 	if (!api.session) throw new Error("Large Stage API session is unavailable");
-	const userId = api.session.user.id;
+	const sessionId = api.session.session_id;
 	const [values, capture] = await Promise.all([
 		api.request<{ projection: { revision: number } }>(
 			"GET",

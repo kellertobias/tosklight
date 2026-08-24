@@ -87,7 +87,6 @@ struct LifecycleSetup {
     registry: ProgrammerRegistry,
     service: ProgrammingService,
     events: EventBus,
-    user: UserId,
     session: SessionId,
     context: ActionContext,
     ports: LifecyclePorts,
@@ -97,10 +96,9 @@ struct LifecycleSetup {
 impl LifecycleSetup {
     fn new() -> Self {
         let registry = ProgrammerRegistry::default();
-        let user = UserId::new();
         let session = SessionId::new();
         let desk = Uuid::new_v4();
-        registry.start(session, user);
+        registry.start(session);
         registry.attach_command_context(session, SessionId(desk));
         let events = EventBus::new(64);
         let service = ProgrammingService::new(
@@ -112,9 +110,8 @@ impl LifecycleSetup {
             registry: registry.clone(),
             service,
             events,
-            user,
             session,
-            context: ActionContext::operator(desk, user.0, session.0, ActionSource::Http),
+            context: ActionContext::operator(desk, session.0, ActionSource::Http),
             ports: LifecyclePorts {
                 registry,
                 capture_programmer: AtomicBool::new(true),
@@ -486,18 +483,13 @@ fn every_surface_observes_the_desks_capture_authority() {
         .unwrap();
     let peer_session = SessionId::new();
     let peer_desk = Uuid::new_v4();
-    setup.registry.start(peer_session, setup.user);
+    setup.registry.start(peer_session);
     setup
         .registry
         .attach_command_context(peer_session, SessionId(peer_desk));
     let peer = ActionEnvelope {
-        context: ActionContext::operator(
-            peer_desk,
-            setup.user.0,
-            peer_session.0,
-            ActionSource::Http,
-        )
-        .with_request_id("peer-enter"),
+        context: ActionContext::operator(peer_desk, peer_session.0, ActionSource::Http)
+            .with_request_id("peer-enter"),
         command: ProgrammingPreloadLifecycleRequest {
             expected_capture_mode_revision: ProgrammingPreloadRevisionExpectation::Exact(1),
             expected_values_revision: ProgrammingPreloadRevisionExpectation::Exact(0),
@@ -516,7 +508,6 @@ fn every_surface_observes_the_desks_capture_authority() {
     let forged = ActionEnvelope {
         context: ActionContext::operator(
             setup.context.desk_id,
-            UserId::new().0,
             setup.session.0,
             ActionSource::Http,
         )

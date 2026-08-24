@@ -145,8 +145,7 @@ async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
         .installation
         .add_desk("Second Preload desk")
         .unwrap();
-    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
-    assert_eq!(second_user, scenario.session.user.id.0);
+    let second_token = login_on_desk(&scenario, second_desk.id).await;
 
     let peer = scenario
         .preload_values_action_for(            &second_token,
@@ -165,20 +164,9 @@ async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
         1
     );
 
-    // A surface arriving under an identity from before the collapse writes into the same Preload,
-    // so it must supply the desk's current revision rather than starting again from zero.
-    let legacy_user = scenario
-        .state
-        .installation
-        .add_user("Other Preload values user")
-        .unwrap();
-    let (legacy_token, logged_in_user) = login_on_desk(
-        &scenario,
-        "Other Preload values user",
-        scenario.session.desk.id,
-    )
-    .await;
-    assert_eq!(logged_in_user, legacy_user.id.0);
+    // A second surface writes into the same Preload, so it must supply the desk's current
+    // revision rather than starting again from zero.
+    let legacy_token = login_on_desk(&scenario, scenario.session.desk.id).await;
     let legacy = scenario
         .preload_values_action_for(            &legacy_token,
             preload_fixture_request("legacy-preload", 1, 1, fixture.0, 0.9))

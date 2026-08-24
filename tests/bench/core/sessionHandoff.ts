@@ -224,17 +224,11 @@ function decodeBrowserPublication(value: unknown): BrowserPublication {
 
 function decodeSession(value: unknown): SessionResponse {
 	const session = record(value, "session");
-	const user = record(session.user, "session user");
 	const desk = record(session.desk, "session desk");
 	return {
 		session_id: stringAt(session, "session_id"),
 		client_id: stringAt(session, "client_id"),
 		token: stringAt(session, "token"),
-		user: {
-			id: stringAt(user, "id"),
-			name: stringAt(user, "name"),
-			enabled: booleanAt(user, "enabled"),
-		},
 		desk: {
 			id: stringAt(desk, "id"),
 			name: stringAt(desk, "name"),

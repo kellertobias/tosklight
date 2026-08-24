@@ -326,12 +326,9 @@ async fn cue_record_route_rejects_missing_authority_and_forged_context() {
     );
     let valid = light_application::ActionContext::operator(
         scenario.session.desk.id,
-        scenario.session.user.id.0,
         scenario.session.id.0,
-        light_application::ActionSource::Http,
-    );
+        light_application::ActionSource::Http);
     for forged in [
-        light_application::ActionContext { user_id: Some(Uuid::new_v4()), ..valid.clone() },
         light_application::ActionContext { session_id: Some(Uuid::new_v4()), ..valid.clone() },
         light_application::ActionContext { desk_id: Uuid::new_v4(), ..valid.clone() },
     ] {
@@ -506,8 +503,7 @@ async fn cue_recording_shares_one_users_values_across_desks_and_isolates_another
         .state
         .installation.add_desk("Cue peer")
         .unwrap();
-    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
-    assert_eq!(second_user, scenario.session.user.id.0);
+    let second_token = login_on_desk(&scenario, second_desk.id).await;
     let initial_revision = active_show_revision(&scenario);
 
     let shared = scenario
@@ -527,14 +523,11 @@ async fn cue_recording_shares_one_users_values_across_desks_and_isolates_another
     assert_eq!(shared.status(), StatusCode::OK);
     assert_eq!(recorded_fixture_value(&scenario, 40, fixture), 0.5);
 
-    let other_user = scenario.state.installation.add_user("Other Cue user").unwrap();
     let other_desk = scenario
         .state
         .installation.add_desk("Other Cue desk")
         .unwrap();
-    let (other_token, logged_in_user) =
-        login_on_desk(&scenario, "Other Cue user", other_desk.id).await;
-    assert_eq!(logged_in_user, other_user.id.0);
+    let other_token = login_on_desk(&scenario, other_desk.id).await;
     let other_session = scenario
         .state
         .sessions.sessions().into_iter()

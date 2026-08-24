@@ -1,6 +1,5 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use chrono::{DateTime, Utc};
-use light_core::UserId;
 
 /// One revision-checked update of user-owned Programmer priority.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -27,7 +26,6 @@ impl ApplicationCommand for ProgrammingPriorityRequest {
 /// the complete Programmer-values projection.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammingPriorityProjection {
-    pub user_id: UserId,
     pub revision: u64,
     pub priority: i16,
     pub changed_at: DateTime<Utc>,
@@ -39,19 +37,11 @@ pub enum ProgrammingPriorityChange {
         projection: ProgrammingPriorityProjection,
     },
     Remove {
-        user_id: UserId,
         revision: u64,
     },
 }
 
 impl ProgrammingPriorityChange {
-    pub const fn user_id(&self) -> UserId {
-        match self {
-            Self::Upsert { projection } => projection.user_id,
-            Self::Remove { user_id, .. } => *user_id,
-        }
-    }
-
     pub const fn revision(&self) -> u64 {
         match self {
             Self::Upsert { projection } => projection.revision,

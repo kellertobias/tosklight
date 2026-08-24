@@ -5,7 +5,7 @@ import {
 } from "./programmerCaptureModeWire";
 import { WireValidationError } from "./wireValidation";
 
-const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 function projection(overrides: Record<string, unknown> = {}) {
@@ -65,7 +65,7 @@ describe("Programmer capture-mode wire", () => {
 		expect(() =>
 			decodeProgrammerCaptureModeSnapshot({
 				cursor: { sequence: 18 },
-				projection: projection({ user_id: USER_ID }),
+				projection: projection({ user_id: SESSION_ID }),
 			}),
 		).toThrow(/user_id/);
 		expect(() =>
@@ -108,7 +108,7 @@ describe("Programmer capture-mode wire", () => {
 	});
 
 	it.each([
-		["desk-scoped event", { desk_id: USER_ID }],
+		["desk-scoped event", { desk_id: SESSION_ID }],
 		["lossless delivery", { delivery: "lossless" }],
 		["runtime source", { source: { kind: "runtime" } }],
 		["missing correlation", { correlation_id: undefined }],
@@ -134,7 +134,7 @@ describe("Programmer capture-mode wire", () => {
 
 		const undeclared = captureEvent();
 		undeclared.event.payload.change.projection = projection({
-			user_id: USER_ID,
+			user_id: SESSION_ID,
 		});
 		expect(() => decodeProgrammerCaptureModeEventMessage(undeclared)).toThrow(
 			/user_id/,

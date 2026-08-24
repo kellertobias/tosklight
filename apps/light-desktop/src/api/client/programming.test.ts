@@ -4,7 +4,7 @@ import type { LiveClientTransport } from "./transport";
 
 const DESK_ID = "11111111-1111-4111-8111-111111111111";
 const FIXTURE_ID = "22222222-2222-4222-8222-222222222222";
-const USER_ID = "44444444-4444-4444-8444-444444444444";
+const SESSION_ID = "44444444-4444-4444-8444-444444444444";
 
 function commandLine(revision = 4) {
 	return {
@@ -109,7 +109,7 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 		const { client, sendAction } = clientReturning(response);
 
 		await expect(
-			client.programmerValuesLiveAction(USER_ID, {
+			client.programmerValuesLiveAction(SESSION_ID, {
 				requestId: "values-1",
 				expectedRevision: 2,
 				expectedCaptureModeRevision: 1,

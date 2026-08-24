@@ -25,7 +25,7 @@ import { PresetRecallWriter } from "./writer";
 
 interface PresetRecallProviderProps {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	deskId: string | null;
 	authorityKey: string;
 	showStore: ShowObjectsStore;
@@ -43,7 +43,7 @@ const PresetRecallContext = createContext<PresetRecallActions | null>(null);
 export function PresetRecallProvider({
 	children,
 	showId,
-	userId,
+	sessionId,
 	deskId,
 	authorityKey,
 	showStore,
@@ -56,8 +56,8 @@ export function PresetRecallProvider({
 	const captureMode = useProgrammerCaptureModeAuthority();
 	const selection = useProgrammingSelectionAuthority();
 	const scope = useMemo<PresetRecallScope | null>(
-		() => (showId && userId && deskId ? { showId, userId, deskId } : null),
-		[deskId, showId, userId],
+		() => (showId && sessionId && deskId ? { showId, sessionId, deskId } : null),
+		[deskId, showId, sessionId],
 	);
 	const writer = useMemo(
 		() =>

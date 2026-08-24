@@ -620,12 +620,7 @@ pub(crate) fn route_osc_command_gesture_outcome(
         );
         return Some(false);
     };
-    let context = ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        ActionSource::Osc,
-    );
+    let context = ActionContext::operator(session.desk.id, session.id.0, ActionSource::Osc);
     let context = request_id.map_or(context.clone(), |id| context.with_request_id(id));
     let command = ProgrammingCommand::ApplyKey {
         key,
@@ -654,7 +649,6 @@ fn publish_osc_rejection(state: &AppState, session: &Session, error: String) {
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "source":"osc",
             "error":error,
         }),

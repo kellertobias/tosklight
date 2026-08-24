@@ -81,5 +81,5 @@ export interface CueTransferCapability {
 export interface CueTransferScope {
 	showId: string;
 	deskId: string;
-	userId: string;
+	sessionId: string;
 }

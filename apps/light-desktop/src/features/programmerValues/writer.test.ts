@@ -14,7 +14,7 @@ import {
 	FIXTURE_1,
 	fixtureValue,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -22,10 +22,10 @@ import { ProgrammerValuesWriter } from "./writer";
 
 function harness(captureReady = true) {
 	const store = new ProgrammerValuesStore();
-	store.reset(SHOW_ID, USER_ID, "session-a");
+	store.reset(SHOW_ID, SESSION_ID, "session-a");
 	store.installSnapshot(valuesSnapshot());
 	const captureModeStore = new ProgrammerCaptureModeStore();
-	captureModeStore.reset(SHOW_ID, USER_ID, "session-a");
+	captureModeStore.reset(SHOW_ID, SESSION_ID, "session-a");
 	if (captureReady) captureModeStore.installSnapshot(captureModeSnapshot());
 	const applyAction =
 		vi.fn<
@@ -484,7 +484,7 @@ describe("ProgrammerValuesWriter reconciliation", () => {
 		applyAction.mockReturnValueOnce(lateCapture.promise);
 		const pendingCapture = writer.clear("late-capture");
 		await Promise.resolve();
-		captureModeStore.reset(SHOW_ID, USER_ID, "session-b");
+		captureModeStore.reset(SHOW_ID, SESSION_ID, "session-b");
 		lateCapture.resolve(noChange("late-capture"));
 		await expect(pendingCapture).resolves.toBeNull();
 		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
@@ -494,7 +494,7 @@ describe("ProgrammerValuesWriter reconciliation", () => {
 		next.applyAction.mockReturnValueOnce(late.promise);
 		const pending = next.writer.clear("late-values");
 		await Promise.resolve();
-		next.store.reset(SHOW_ID, USER_ID, "session-b");
+		next.store.reset(SHOW_ID, SESSION_ID, "session-b");
 		late.resolve(noChange("late-values", 2));
 		await expect(pending).resolves.toBeNull();
 		expect(next.store.getSnapshot()).toMatchObject({
@@ -527,8 +527,8 @@ describe("ProgrammerValuesWriter reconciliation", () => {
 		expect(repairCaptureMode).toHaveBeenCalledOnce();
 
 		writer.stop();
-		store.reset(SHOW_ID, USER_ID, "session-b");
-		captureModeStore.reset(SHOW_ID, USER_ID, "session-b");
+		store.reset(SHOW_ID, SESSION_ID, "session-b");
+		captureModeStore.reset(SHOW_ID, SESSION_ID, "session-b");
 		valuesRepair.resolve();
 		captureRepair.resolve();
 		await expect(pending).resolves.toBeNull();

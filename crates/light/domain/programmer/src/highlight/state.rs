@@ -1,5 +1,5 @@
 use crate::SelectionExpression;
-use light_core::{AttributeKey, FixtureId, UserId};
+use light_core::{AttributeKey, FixtureId};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use uuid::Uuid;
@@ -33,4 +33,4 @@ pub(super) struct HighlightRuntime {
 pub(super) type RecentHighlightActions = HashMap<OperatorKey, (&'static str, Instant)>;
 /// Repeat guarding stays per physical surface: two adapters must not advance the selection twice
 /// for one press, and that is a property of the press, not of the desk.
-pub(super) type OperatorKey = (Uuid, UserId);
+pub(super) type OperatorKey = Uuid;

@@ -60,7 +60,7 @@ const programmerValues = vi.hoisted(() => ({
 const captureMode = vi.hoisted(() => ({
 	ready: true,
 	projection: {
-		userId: "operator",
+		sessionId: "operator",
 		revision: 1,
 		blind: false,
 		preview: false,

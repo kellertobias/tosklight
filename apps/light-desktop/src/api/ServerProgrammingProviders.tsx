@@ -47,13 +47,13 @@ function SelectedGroupMembershipSync({
 function PresetRecallBoundary({
 	children,
 	showId,
-	userId,
+	sessionId,
 	state,
 	boundaries,
 }: PropsWithChildren<
 	Pick<ServerProgrammingProvidersProps, "state" | "boundaries"> & {
 		showId: string | null;
-		userId: string | null;
+		sessionId: string | null;
 	}
 >) {
 	const loadPreset = useCallback(
@@ -64,7 +64,7 @@ function PresetRecallBoundary({
 	return (
 		<PresetRecallProvider
 			showId={showId}
-			userId={userId}
+			sessionId={sessionId}
 			deskId={state.session?.desk.id ?? null}
 			authorityKey={boundaries.presetRecallAuthorityKey}
 			showStore={state.showObjectsStore}
@@ -93,7 +93,7 @@ export function ServerProgrammingProviders(
 		<ServerSpeedGroupRuntimeBoundary state={state} boundaries={boundaries}>
 			<ServerOutputRuntimeBoundary state={state} boundaries={boundaries}>
 				<ProgrammerPriorityProvider
-					userId={state.session?.user.id ?? null}
+					sessionId={state.session?.session_id ?? null}
 					authorityKey={boundaries.programmerPriorityAuthorityKey}
 					store={state.programmerPriorityStore}
 					transport={boundaries.programmerPriorityTransport}
@@ -183,20 +183,20 @@ function GroupManagementBoundary({
 function ProgrammingUpdateBoundary({
 	children,
 	showId,
-	userId,
+	sessionId,
 	state,
 	boundaries,
 }: PropsWithChildren<
 	Pick<ServerProgrammingProvidersProps, "state" | "boundaries"> & {
 		showId: string | null;
-		userId: string | null;
+		sessionId: string | null;
 	}
 >) {
 	return (
 		<ProgrammingUpdateProvider
 			showId={showId}
 			deskId={state.session?.desk.id ?? null}
-			userId={userId}
+			sessionId={sessionId}
 			initialShowRevision={state.bootstrap?.active_show?.revision ?? null}
 			authorityKey={boundaries.programmingUpdateAuthorityKey}
 			store={state.showObjectsStore}
@@ -211,14 +211,14 @@ function ProgrammingUpdateBoundary({
 function PreloadProgrammingProviders({
 	children,
 	showId,
-	userId,
+	sessionId,
 	state,
 	boundaries,
 	value,
 }: PropsWithChildren<
 	ServerProgrammingProvidersProps & {
 		showId: string | null;
-		userId: string | null;
+		sessionId: string | null;
 	}
 >) {
 	const executeCommand = useCommandExecution(value);
@@ -243,7 +243,7 @@ function PreloadProgrammingProviders({
 	return (
 		<ProgrammerPreloadValuesViewProvider
 			showId={showId}
-			userId={userId}
+			sessionId={sessionId}
 			authorityKey={boundaries.programmerPreloadValuesAuthorityKey}
 			store={state.programmerPreloadValuesStore}
 			transport={boundaries.programmerPreloadValuesTransport}
@@ -254,7 +254,7 @@ function PreloadProgrammingProviders({
 		>
 			<ProgrammerPreloadPlaybackQueueViewProvider
 				showId={showId}
-				userId={userId}
+				sessionId={sessionId}
 				authorityKey={boundaries.programmerPreloadPlaybackQueueAuthorityKey}
 				store={state.programmerPreloadPlaybackQueueStore}
 				transport={boundaries.programmerPreloadPlaybackQueueTransport}
@@ -278,7 +278,7 @@ function PreloadProgrammingProviders({
 				>
 					<ProgrammerPreloadLifecycleProvider
 						showId={showId}
-						userId={userId}
+						sessionId={sessionId}
 						deskId={state.session?.desk.id ?? null}
 						authorityKey={boundaries.programmerPreloadLifecycleAuthorityKey}
 						lifecycleAuthorityKey={boundaries.programmerLifecycleAuthorityKey}
@@ -302,7 +302,7 @@ function ServerShowProgrammingProviders({
 	value,
 }: PropsWithChildren<ServerProgrammingProvidersProps>) {
 	const showId = state.bootstrap?.active_show?.id ?? null;
-	const userId = state.session?.user.id ?? null;
+	const sessionId = state.session?.session_id ?? null;
 	return (
 		<GroupManagementBoundary
 			showId={showId}
@@ -311,7 +311,7 @@ function ServerShowProgrammingProviders({
 		>
 			<ProgrammingUpdateBoundary
 				showId={showId}
-				userId={userId}
+				sessionId={sessionId}
 				state={state}
 				boundaries={boundaries}
 			>
@@ -335,7 +335,7 @@ function ServerShowProgrammingProviders({
 					>
 						<ProgrammerCaptureModeViewProvider
 							showId={showId}
-							userId={userId}
+							sessionId={sessionId}
 							authorityKey={boundaries.programmerCaptureModeAuthorityKey}
 							store={state.programmerCaptureModeStore}
 							transport={boundaries.programmerCaptureModeTransport}
@@ -347,7 +347,7 @@ function ServerShowProgrammingProviders({
 							<CueTransferProvider
 								showId={showId}
 								deskId={state.session?.desk.id ?? null}
-								userId={userId}
+								sessionId={sessionId}
 								authorityKey={boundaries.cueTransferAuthorityKey}
 								showStore={state.showObjectsStore}
 								programmingStore={state.programmingInteractionStore}
@@ -357,7 +357,7 @@ function ServerShowProgrammingProviders({
 							>
 								<ProgrammerValuesViewProvider
 									showId={showId}
-									userId={userId}
+									sessionId={sessionId}
 									authorityKey={boundaries.programmerValuesAuthorityKey}
 									store={state.programmerValuesStore}
 									transport={boundaries.programmerValuesTransport}
@@ -370,14 +370,14 @@ function ServerShowProgrammingProviders({
 								>
 									<PreloadProgrammingProviders
 										showId={showId}
-										userId={userId}
+										sessionId={sessionId}
 										state={state}
 										boundaries={boundaries}
 										value={value}
 									>
 										<PresetRecallBoundary
 											showId={showId}
-											userId={userId}
+											sessionId={sessionId}
 											state={state}
 											boundaries={boundaries}
 										>

@@ -158,12 +158,7 @@ fn sparse_components_are_lossless_when_multiple_views_share_one_subscription() {
 }
 
 fn action_context(desk_id: Uuid) -> ActionContext {
-    ActionContext::operator(
-        desk_id,
-        UserId::new().0,
-        SessionId::new().0,
-        ActionSource::UserInterface,
-    )
+    ActionContext::operator(desk_id, SessionId::new().0, ActionSource::UserInterface)
 }
 
 fn both_components(desk_id: Uuid) -> ProgrammingInteractionChange {

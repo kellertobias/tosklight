@@ -17,7 +17,6 @@ pub(super) type RequestFingerprint = [u8; 32];
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) struct ReplayKey {
-    user_id: Uuid,
     desk_id: Uuid,
     session_id: Uuid,
     request_id: String,
@@ -33,9 +32,6 @@ impl ReplayKey {
             return Err(invalid("request_id must contain 1-128 bytes"));
         }
         Ok(Self {
-            user_id: context
-                .user_id
-                .ok_or_else(|| unauthorized("Playback topology action requires a user"))?,
             desk_id: context.desk_id,
             session_id: context
                 .session_id

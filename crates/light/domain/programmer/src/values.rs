@@ -223,9 +223,9 @@ impl ProgrammerRegistry {
                 value.programmer_order = self.next_programmer_order();
             }
             state.last_activity = changed_at;
-            Some((state.user_id, preload))
+            Some(preload)
         };
-        if let Some((_, preload)) = changed_user {
+        if let Some(preload) = changed_user {
             if preload {
                 self.mark_preload_values_changed();
             } else {
@@ -323,9 +323,9 @@ impl ProgrammerRegistry {
                 delay_millis: timing.delay_millis,
             });
             state.last_activity = self.clock.now();
-            Some((state.user_id, preload))
+            Some(preload)
         };
-        if let Some((_, preload)) = changed_user {
+        if let Some(preload) = changed_user {
             if preload {
                 self.mark_preload_values_changed();
             } else {

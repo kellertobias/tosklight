@@ -8,7 +8,7 @@ use light_application::{
     SelectiveShowImportChange, SelectiveShowObjectChange, SpeedGroupChange, SpeedGroupId,
     SpeedGroupProjection, VisualizerConnectionNotification,
 };
-use light_core::{AttributeKey, AttributeValue, ShowId, UserId};
+use light_core::{AttributeKey, AttributeValue, ShowId};
 use light_show::PortableShowObjectKey;
 
 #[test]
@@ -482,7 +482,6 @@ fn combined_programming_change_routes_once_through_both_exact_objects() {
 fn programming_values_keep_the_full_projection_and_action_identity() {
     let bus = EventBus::new(4);
     let context = context(ActionSource::Osc);
-    let user_id = UserId(Uuid::from_u128(3));
     let event = bus.publish(EventDraft::programming_values_changed(
         &context,
         ProgrammingValuesChange {
@@ -500,7 +499,6 @@ fn programming_values_keep_the_full_projection_and_action_identity() {
             },
             projection: ProgrammingValuesProjection {
                 dynamic_values: Vec::new().into(),
-                user_id,
                 revision: 7,
                 fixture_values: Vec::new(),
                 group_values: vec![light_programmer::ProgrammerGroupUpdate {
@@ -549,12 +547,10 @@ fn programming_values_keep_the_full_projection_and_action_identity() {
 fn programming_capture_mode_keeps_its_projection_and_action_identity() {
     let bus = EventBus::new(4);
     let context = context(ActionSource::Http);
-    let user_id = UserId(Uuid::from_u128(3));
     let event = bus.publish(EventDraft::programming_capture_mode_changed(
         &context,
         ProgrammingCaptureModeChange {
             projection: ProgrammingCaptureModeProjection {
-                user_id,
                 revision: 4,
                 blind: true,
                 preview: false,
@@ -717,10 +713,5 @@ fn dynamic_runtime_event_keeps_exact_instance_controller_and_failure_identity() 
 }
 
 fn context(source: ActionSource) -> ActionContext {
-    ActionContext::operator(
-        Uuid::from_u128(1),
-        Uuid::from_u128(2),
-        Uuid::from_u128(3),
-        source,
-    )
+    ActionContext::operator(Uuid::from_u128(1), Uuid::from_u128(3), source)
 }

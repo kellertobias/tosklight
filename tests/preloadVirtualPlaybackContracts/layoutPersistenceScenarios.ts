@@ -59,7 +59,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 		};
 	},
 	api: async ({ api }, state) => {
-		const layoutId = api.session!.user.id;
+		const layoutId = api.session!.session_id;
 		const existing = (await objects<any>(api, "user_layout")).find(
 			(entry) => entry.id === layoutId,
 		);

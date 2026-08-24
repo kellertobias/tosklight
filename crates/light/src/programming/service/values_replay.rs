@@ -5,13 +5,12 @@ use super::values_replay_memory::{
     ENTRY_CONTAINER_OVERHEAD, ReplayLimits, values_result_retained_bytes,
 };
 use crate::{ActionError, ActionErrorKind};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::collections::{HashMap, VecDeque};
 use std::mem::size_of;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ReplayKey {
-    user_id: UserId,
     desk_id: uuid::Uuid,
     session_id: SessionId,
     request_id: String,
@@ -32,9 +31,10 @@ pub(super) struct ValuesReplayCache {
 }
 
 impl ValuesReplayCache {
-    pub(super) fn invalidate_user(&mut self, user_id: UserId) {
-        self.entries.retain(|key, _| key.user_id != user_id);
-        self.order.retain(|key| key.user_id != user_id);
+    pub(super) fn invalidate(&mut self) {
+        // One desk, one Programmer: an invalidation clears the cache rather than one user's part.
+        self.entries.clear();
+        self.order.clear();
         self.retained_bytes = self
             .entries
             .values()
@@ -44,14 +44,12 @@ impl ValuesReplayCache {
 
     pub(super) fn get(
         &self,
-        user_id: UserId,
         desk_id: uuid::Uuid,
         session_id: SessionId,
         request_id: &str,
         fingerprint: RequestFingerprint,
     ) -> Result<Option<ProgrammingValuesResult>, ActionError> {
         let key = ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.to_owned(),
@@ -72,7 +70,6 @@ impl ValuesReplayCache {
 
     pub(super) fn insert(
         &mut self,
-        user_id: UserId,
         desk_id: uuid::Uuid,
         session_id: SessionId,
         request_id: String,
@@ -80,7 +77,6 @@ impl ValuesReplayCache {
         result: ProgrammingValuesResult,
     ) {
         let key = ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id,
@@ -132,8 +128,8 @@ fn retained_entry_bytes(key: &ReplayKey, result: &ProgrammingValuesResult) -> us
 }
 
 impl ProgrammingService {
-    pub(in crate::programming) fn invalidate_values_replay(&self, user_id: UserId) {
-        self.values_replay.lock().invalidate_user(user_id);
+    pub(in crate::programming) fn invalidate_values_replay(&self) {
+        self.values_replay.lock().invalidate();
     }
 }
 
@@ -150,47 +146,38 @@ mod tests {
 
     #[test]
     fn byte_budget_evicts_oldest_large_projection() {
-        let user_id = UserId::new();
         let desk_id = Uuid::new_v4();
         let session_id = SessionId::new();
-        let first = result(user_id, desk_id, session_id, "first", 4_096);
-        let second = result(user_id, desk_id, session_id, "second", 4_096);
-        let first_key = key(user_id, desk_id, session_id, "first");
-        let second_key = key(user_id, desk_id, session_id, "second");
+        let first = result(desk_id, session_id, "first", 4_096);
+        let second = result(desk_id, session_id, "second", 4_096);
+        let first_key = key(desk_id, session_id, "first");
+        let second_key = key(desk_id, session_id, "second");
         let budget = retained_entry_bytes(&first_key, &first)
             + retained_entry_bytes(&second_key, &second)
             - 1;
         let mut cache = ValuesReplayCache::with_limits(10, budget);
 
-        cache.insert(user_id, desk_id, session_id, "first".into(), [1; 32], first);
-        cache.insert(
-            user_id,
-            desk_id,
-            session_id,
-            "second".into(),
-            [2; 32],
-            second,
-        );
+        cache.insert(desk_id, session_id, "first".into(), [1; 32], first);
+        cache.insert(desk_id, session_id, "second".into(), [2; 32], second);
 
         assert_eq!(cache.entries.len(), 1);
         assert!(cache.retained_bytes <= budget);
         assert!(
             cache
-                .get(user_id, desk_id, session_id, "first", [1; 32])
+                .get(desk_id, session_id, "first", [1; 32])
                 .unwrap()
                 .is_none()
         );
         assert!(
             cache
-                .get(user_id, desk_id, session_id, "second", [2; 32])
+                .get(desk_id, session_id, "second", [2; 32])
                 .unwrap()
                 .is_some()
         );
     }
 
-    fn key(user_id: UserId, desk_id: Uuid, session_id: SessionId, request_id: &str) -> ReplayKey {
+    fn key(desk_id: Uuid, session_id: SessionId, request_id: &str) -> ReplayKey {
         ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.into(),
@@ -198,7 +185,6 @@ mod tests {
     }
 
     fn result(
-        user_id: UserId,
         desk_id: Uuid,
         session_id: SessionId,
         request_id: &str,
@@ -206,7 +192,6 @@ mod tests {
     ) -> ProgrammingValuesResult {
         let projection = ProgrammingValuesProjection {
             dynamic_values: Vec::new().into(),
-            user_id,
             revision: 1,
             fixture_values: Vec::new(),
             group_values: vec![ProgrammerGroupUpdate {
@@ -220,7 +205,7 @@ mod tests {
             }],
         };
         ProgrammingValuesResult {
-            context: ActionContext::operator(desk_id, user_id.0, session_id.0, ActionSource::Http)
+            context: ActionContext::operator(desk_id, session_id.0, ActionSource::Http)
                 .with_request_id(request_id)
                 .with_expected_revision(0),
             outcome: ProgrammingValuesOutcome::Changed {

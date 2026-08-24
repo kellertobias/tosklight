@@ -2,10 +2,12 @@ use crate::{
     PortableShowObjectRedo, PortableShowObjectUndo, PortableShowRevision, RevisionCopySource,
     StoreError, VersionedObject, connection::configure, portable,
 };
-use light_core::{Revision, ShowId, UserId};
+use light_core::{Revision, ShowId};
 use rusqlite::{Connection, MAIN_DB, OpenFlags, OptionalExtension, params};
 use std::path::Path;
 use uuid::Uuid;
+
+pub const DESK_LAYOUT_ID: &str = "desk";
 
 pub struct ShowStore {
     pub(crate) conn: Connection,
@@ -245,13 +247,17 @@ impl ShowStore {
         portable::delete_legacy_object(&self.conn, kind, id)
     }
 
-    pub fn put_user_layout(
+    /// The desk's saved layout.
+    ///
+    /// Stored under the `user_layout` kind and the fixed `desk` id. The kind is what a show file
+    /// written before the collapse already uses, so an old show keeps loading; the id used to be
+    /// the operator's, which named the one operator there has ever been.
+    pub fn put_desk_layout(
         &self,
-        user_id: UserId,
         layout: &serde_json::Value,
         expected: Revision,
     ) -> Result<Revision, StoreError> {
-        self.put_object("user_layout", &user_id.0.to_string(), layout, expected)
+        self.put_object("user_layout", DESK_LAYOUT_ID, layout, expected)
     }
 
     pub fn backup_to(&self, destination: impl AsRef<Path>) -> Result<(), StoreError> {

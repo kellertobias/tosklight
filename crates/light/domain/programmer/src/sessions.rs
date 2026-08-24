@@ -1,26 +1,21 @@
 use crate::command_state::{CommandLineState, CommandTarget, canonical_command_text};
 use crate::selection::SelectionContext;
 use crate::{ProgrammerRegistry, ProgrammerState};
-use light_core::{ProgrammerId, SessionId, UserId};
+use light_core::{ProgrammerId, SessionId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 impl ProgrammerRegistry {
-    pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
-        // One desk, one Programmer. A session presenting any other identity joins the Programmer
-        // the desk already has rather than opening a second one beside it.
-        let user_id = self.desk.resolve(user_id);
+    pub fn start(&self, session_id: SessionId) -> ProgrammerState {
         let mutation_gate = std::sync::Arc::clone(&self.mutation_gate);
         let _mutation_guard = mutation_gate.lock();
         self.priority_changed_at
             .write()
             .get_or_insert_with(|| self.clock.now());
-        let existing = self
-            .states
-            .read()
-            .iter()
-            .find_map(|(key, state)| (state.user_id == user_id).then_some(*key));
+        // One desk, one Programmer. A session joins the Programmer the desk already has rather
+        // than opening a second one beside it.
+        let existing = self.states.read().keys().next().copied();
         if let Some(key) = existing {
             self.sessions.write().insert(session_id, key);
             let desk_context = self.desk.command_context(session_id);
@@ -56,7 +51,6 @@ impl ProgrammerRegistry {
         let state = ProgrammerState {
             id: ProgrammerId::new(),
             session_id,
-            user_id,
             priority: 100,
             selected: vec![],
             selection_expression: None,
@@ -171,11 +165,7 @@ impl ProgrammerRegistry {
         // connections after a process restart. Only `start` may add a session to `self.sessions`;
         // otherwise every historical browser session is projected as connected and its desk-local
         // selection is added to lifecycle counts (and formerly duplicated output-side work).
-        let existing = self
-            .states
-            .read()
-            .iter()
-            .find_map(|(key, current)| (current.user_id == state.user_id).then_some(*key));
+        let existing = self.states.read().keys().next().copied();
         if let Some(existing) = existing {
             let mut shared = state;
             shared.session_id = existing;

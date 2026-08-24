@@ -7,12 +7,11 @@ fn rejected_transaction_rolls_back_before_another_connections_mutation_can_run()
     use std::time::Duration;
 
     let registry = Arc::new(ProgrammerRegistry::default());
-    let user = UserId::new();
     let transaction_session = SessionId::new();
     let concurrent_session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(transaction_session, user);
-    registry.start(concurrent_session, user);
+    registry.start(transaction_session);
+    registry.start(concurrent_session);
     registry.set(
         transaction_session,
         fixture,
@@ -105,7 +104,7 @@ fn staged_transaction_is_invisible_until_one_successful_commit() {
     let registry = Arc::new(ProgrammerRegistry::default());
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, [fixture]);
     registry.set(
         session,
@@ -163,7 +162,7 @@ fn staged_command_is_one_undo_step_even_when_helpers_checkpoint_internally() {
     let original = FixtureId::new();
     let first = FixtureId::new();
     let second = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, [original]);
     registry.set(
         session,
@@ -213,7 +212,7 @@ fn rejected_staged_transaction_never_changes_live_state() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     let before = serde_json::to_value(registry.get(session).unwrap()).unwrap();
 
     let result = registry.with_staged_transaction(session, |staged| {
@@ -242,7 +241,7 @@ fn projected_reads_cannot_mix_old_state_with_a_staged_commit() {
     let session = SessionId::new();
     let old_fixture = FixtureId::new();
     let new_fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, [old_fixture]);
     registry.set_command_line(session, "FIXTURE 1".into());
 
@@ -294,17 +293,16 @@ fn unknown_sessions_share_one_fallback_gate_without_growing_the_user_registry() 
 #[test]
 fn reset_preserves_the_per_user_gate_across_session_aliases() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first_session = SessionId::new();
     let alias_session = SessionId::new();
-    registry.start(first_session, user);
-    registry.start(alias_session, user);
+    registry.start(first_session);
+    registry.start(alias_session);
 
     let before = registry.mutation_gate();
     registry.reset_all();
 
     let restored_session = SessionId::new();
-    registry.start(restored_session, user);
+    registry.start(restored_session);
     let after = registry.mutation_gate();
     assert!(Arc::ptr_eq(&before, &after));
 }

@@ -1,7 +1,6 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import type { DiscoveredPeer } from "../../api/client/discovery";
 import type {
-	DeskUser,
 	MvrApplyResult,
 	MvrExportPreview,
 	MvrImportPreview,

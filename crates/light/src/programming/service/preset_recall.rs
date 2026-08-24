@@ -6,13 +6,12 @@ use crate::{
     ProgrammingPresetRecallRevisionExpectation, ProgrammingPresetRecallTarget,
     ProgrammingRecalledPresetProjection,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::SelectionExpression;
 use std::sync::Arc;
 
 struct RecallIdentity {
     session_id: SessionId,
-    user_id: UserId,
 }
 
 impl ProgrammingService {
@@ -147,19 +146,12 @@ impl ProgrammingService {
             &after,
         );
         let values_change = (target == ProgrammingPresetRecallTarget::Programmer)
-            .then(|| {
-                self.values_change(
-                    identity.user_id,
-                    &before.values_content,
-                    &after.values_content,
-                )
-            })
+            .then(|| self.values_change(&before.values_content, &after.values_content))
             .transpose()?
             .flatten();
         let preload_values_change = (target == ProgrammingPresetRecallTarget::Preload)
             .then(|| {
                 self.preload_values_change(
-                    identity.user_id,
                     identity.session_id,
                     before.preload_values_generation,
                     after.preload_values_generation,
@@ -412,16 +404,7 @@ fn recall_identity(
             "Preset recall requires an operator session",
         )
     })?;
-    let user_id = action.context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Preset recall requires an authenticated user",
-        )
-    })?;
-    Ok(RecallIdentity {
-        session_id,
-        user_id,
-    })
+    Ok(RecallIdentity { session_id })
 }
 
 fn validate_request(request: &ProgrammingPresetRecallRequest) -> Result<(), ActionError> {

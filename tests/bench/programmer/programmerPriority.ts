@@ -34,11 +34,11 @@ export async function setProgrammerPriority(
 ): Promise<ProgrammerPriorityActionOutcome> {
 	validateIntent(intent);
 	const session = intentSession(api);
-	const scope = { userId: session.user.id };
+	const scope = { sessionId: session.session_id };
 	const transport = new HttpProgrammerPriorityTransport({
 		baseUrl: api.baseUrl,
 		sessionToken: session.token,
-		authenticatedUserId: session.user.id,
+		authenticatedSessionId: session.session_id,
 		fetch: intentFetch(dependencies),
 	});
 	const snapshot = await transport.loadSnapshot(scope);

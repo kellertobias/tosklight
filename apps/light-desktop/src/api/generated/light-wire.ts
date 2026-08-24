@@ -794,7 +794,7 @@ replayed: boolean,
  */
 changed: boolean, };
 export type StageLayoutErrorResponse = { error: string, retryable: boolean, };
-export type RuntimeSessionCreateRequest = { username: string, desk_id: string | null, client_id: string | null,
+export type RuntimeSessionCreateRequest = { desk_id: string | null, client_id: string | null,
 /**
  * Absent means the historical operator session. A `visualizer` session is read-only: it
  * never starts a programmer, claims the command line, or changes desk selection, and the
@@ -802,11 +802,10 @@ export type RuntimeSessionCreateRequest = { username: string, desk_id: string | 
  */
 role: RuntimeSessionRole | null, };
 export type RuntimeSessionRole = "operator" | "visualizer";
-export type RuntimeDeskUser = { id: string, name: string, enabled: boolean, };
 export type RuntimePlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
 export type RuntimePlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<RuntimePlaybackSurfaceRow>, };
 export type RuntimeControlDesk = { id: string, name: string, columns: number, rows: number, buttons: number, playback_layout: RuntimePlaybackSurfaceLayout | null, };
-export type RuntimeSessionResponse = { role: RuntimeSessionRole, session_id: string, client_id: string, token: string, user: RuntimeDeskUser, desk: RuntimeControlDesk, };
+export type RuntimeSessionResponse = { role: RuntimeSessionRole, session_id: string, client_id: string, token: string, desk: RuntimeControlDesk, };
 export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
 export type RuntimeShowEntry = { id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
 export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, };
@@ -815,7 +814,7 @@ export type RuntimeAttributeDescriptor = { id: string, label: string, family: st
 export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };
 export type RuntimeHighlightState = { active: boolean, mode: string, output_enabled: boolean, capture_only: boolean, remembered: Array<RuntimeHighlightFixture>, active_index: number | null, active_fixture: RuntimeHighlightFixture | null, can_previous: boolean, can_next: boolean, message: string | null, };
 export type RuntimeBootstrapHighlightState = { session_id: string, desk_id: string, state: RuntimeHighlightState, };
-export type RuntimeBootstrapSnapshot = { api_version: string, attribute_registry: Array<RuntimeAttributeDescriptor>, users: Array<RuntimeDeskUser>, desks: Array<RuntimeControlDesk>, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
+export type RuntimeBootstrapSnapshot = { api_version: string, attribute_registry: Array<RuntimeAttributeDescriptor>, desks: Array<RuntimeControlDesk>, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
 /**
  * Retained as an empty compatibility collection until the facade is removed.
  */

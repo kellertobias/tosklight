@@ -4,15 +4,15 @@ import { ProgrammerCaptureModeStore } from "./store";
 import {
 	captureModeProjection,
 	captureModeSnapshot,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 describe("ProgrammerCaptureModeStore", () => {
 	it("publishes canonical immutable capture authority", () => {
 		const store = new ProgrammerCaptureModeStore();
-		store.reset(SHOW_ID, USER_ID);
+		store.reset(SHOW_ID, SESSION_ID);
 		const projection = captureModeProjection({
 			blind: true,
 			preloadCaptureProgrammer: true,
@@ -30,12 +30,12 @@ describe("ProgrammerCaptureModeStore", () => {
 
 	it("rejects stale scopes without publishing", () => {
 		const store = new ProgrammerCaptureModeStore();
-		store.reset(SHOW_ID, USER_ID);
+		store.reset(SHOW_ID, SESSION_ID);
 		const scope = store.captureScope();
 		const listener = vi.fn();
 		store.subscribe(listener);
 
-		store.reset("new-show", USER_ID);
+		store.reset("new-show", SESSION_ID);
 		expect(store.installSnapshot(captureModeSnapshot(), scope)).toBe(false);
 		expect(store.getSnapshot().projection).toBeNull();
 		expect(listener).toHaveBeenCalledOnce();
@@ -43,7 +43,7 @@ describe("ProgrammerCaptureModeStore", () => {
 
 	it("suppresses duplicate events and requires repair for divergence", () => {
 		const store = new ProgrammerCaptureModeStore();
-		store.reset(SHOW_ID, USER_ID);
+		store.reset(SHOW_ID, SESSION_ID);
 		store.installSnapshot(captureModeSnapshot());
 		const listener = vi.fn();
 		store.subscribe(listener);

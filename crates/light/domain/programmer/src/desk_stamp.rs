@@ -1,6 +1,6 @@
 //! Revision and generation stamps for the desk's one Programmer.
 //!
-//! These were maps keyed by `UserId`, from when a desk could hold several Programmers at once.
+//! These were maps keyed by the operator, from when a desk could hold several Programmers.
 //! A desk has one, so each map held exactly one entry — and keying a read on the identity a
 //! caller happened to present meant a legacy identity read a revision of zero for a Programmer
 //! that was several revisions in. Making the stamp a single value removes the key, and with it

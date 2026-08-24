@@ -201,7 +201,6 @@ fn embedded_desk_provider(embedding: &Embedding, epoch: Instant) -> Option<Box<D
             DeskConnection {
                 host: desk.host.clone(),
                 port: desk.port,
-                user: desk.user.clone(),
                 target: desk.target.clone(),
                 // Embedded rendering reads the desk's output instead of waiting for network DMX.
                 values_from_desk_output: true,

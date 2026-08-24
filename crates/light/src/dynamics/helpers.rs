@@ -117,12 +117,8 @@ pub(super) struct DynamicsIdentity {
 }
 
 pub(super) fn identity(context: &ActionContext) -> Result<DynamicsIdentity, ActionError> {
-    // A Dynamic runs as the desk's operator rather than anonymously, so an authenticated identity
-    // is still required. Which identity it is no longer selects a Programmer.
-    context
-        .user_id
-        .map(UserId)
-        .ok_or_else(|| ActionError::new(ActionErrorKind::Unauthorized, "user required"))?;
+    // A Dynamic runs as the desk's operator rather than anonymously, so a live session is still
+    // required.
     Ok(DynamicsIdentity {
         session: context
             .session_id

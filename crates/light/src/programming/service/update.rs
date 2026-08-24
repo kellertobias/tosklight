@@ -9,7 +9,7 @@ use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ActiveShowService, ProgrammingShowUndoObject,
     ProgrammingShowUndoOperation, ProgrammingShowUndoTarget,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::{
     ProgrammerUpdateCaptureError, ProgrammerUpdateContent, ProgrammerUpdateMenuCapture,
     ProgrammerUpdateSelectionCapture, ProgrammerUpdateValuesCapture,
@@ -19,7 +19,6 @@ use sha2::{Digest, Sha256};
 #[derive(Clone)]
 struct UpdateIdentity {
     session_id: SessionId,
-    user_id: UserId,
     desk_id: uuid::Uuid,
     request_id: String,
 }
@@ -55,10 +54,9 @@ impl ProgrammingService {
         active_show: &ActiveShowService,
         ports: &P,
     ) -> Result<ProgrammingUpdateTargetsResult, ActionError> {
-        let mut identity = update_identity(&envelope.context)?;
+        let identity = update_identity(&envelope.context)?;
         self.with_programmer_and_desk_gate(identity.desk_id, || {
             ports.authorize_programming_update(&envelope.context)?;
-            self.bind_update_owner(&mut identity)?;
             let capture = self
                 .programmers
                 .capture_update_menu(identity.session_id)
@@ -66,7 +64,6 @@ impl ProgrammingService {
             let values_fingerprint = fingerprint(&capture.values)?;
             let selection_fingerprint = fingerprint(&capture.selected_fixtures)?;
             let ProgrammerUpdateMenuCapture {
-                user_id,
                 values_revision,
                 selection_revision: _,
                 values,
@@ -78,7 +75,6 @@ impl ProgrammingService {
                 values_fingerprint,
                 selection_fingerprint,
                 values: ProgrammerUpdateValuesCapture {
-                    user_id,
                     revision: values_revision,
                     values,
                 }
@@ -106,10 +102,9 @@ impl ProgrammingService {
         active_show: &ActiveShowService,
         ports: &P,
     ) -> Result<ProgrammingUpdatePreviewResult, ActionError> {
-        let mut identity = update_identity(&envelope.context)?;
+        let identity = update_identity(&envelope.context)?;
         self.with_programmer_and_desk_gate(identity.desk_id, || {
             ports.authorize_programming_update(&envelope.context)?;
-            self.bind_update_owner(&mut identity)?;
             let capture = self.capture_update(identity.session_id, &envelope.command.target)?;
             let programmer_revision = capture.fingerprint()?;
             let content = capture.content();
@@ -173,7 +168,6 @@ impl ProgrammingService {
         identity: &mut UpdateIdentity,
     ) -> Result<Option<ProgrammingUpdateResult>, ActionError> {
         ports.authorize_programming_update(&envelope.context)?;
-        self.bind_update_owner(identity)?;
         self.replayed_update(identity, &envelope.command)
     }
 
@@ -183,7 +177,6 @@ impl ProgrammingService {
         command: &ProgrammingUpdateCommand,
     ) -> Result<Option<ProgrammingUpdateResult>, ActionError> {
         self.update_replay.lock().get(
-            identity.user_id,
             identity.desk_id,
             identity.session_id,
             &identity.request_id,
@@ -224,7 +217,6 @@ impl ProgrammingService {
             outcome,
         };
         self.update_replay.lock().insert(
-            identity.user_id,
             identity.desk_id,
             identity.session_id,
             identity.request_id,
@@ -254,7 +246,6 @@ impl ProgrammingService {
             let projection = &result.outcome.projection;
             self.remember_show_mutation(
                 identity.session_id,
-                identity.user_id,
                 identity.desk_id,
                 ProgrammingShowUndoTarget {
                     show_id: projection.show_id,
@@ -315,18 +306,6 @@ impl ProgrammingService {
         };
         Ok(capture)
     }
-
-    /// Bind this identity to the Programmer its session actually operates.
-    ///
-    /// The presented identity may be a legacy one, which names no Programmer state. Normalising
-    /// it in place means every later step — capture, fingerprint, replay — keys the desk's own.
-    fn bind_update_owner(&self, identity: &mut UpdateIdentity) -> Result<(), ActionError> {
-        identity.user_id = self
-            .programmers
-            .operated_desk_user(identity.session_id)
-            .ok_or_else(missing_programmer)?;
-        Ok(())
-    }
 }
 
 fn update_identity(context: &crate::ActionContext) -> Result<UpdateIdentity, ActionError> {
@@ -336,19 +315,12 @@ fn update_identity(context: &crate::ActionContext) -> Result<UpdateIdentity, Act
             "Update requires an operator session",
         )
     })?;
-    let user_id = context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Update requires an authenticated user",
-        )
-    })?;
     let request_id = context.request_id.as_deref().ok_or_else(|| {
         ActionError::new(ActionErrorKind::Invalid, "Update requires a request_id")
     })?;
     super::values_validation::validate_request_id(request_id)?;
     Ok(UpdateIdentity {
         session_id,
-        user_id,
         desk_id: context.desk_id,
         request_id: request_id.to_owned(),
     })

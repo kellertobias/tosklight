@@ -40,7 +40,7 @@ const highlight = vi.hoisted(() => ({ active: false }));
 
 const playbackQueue = vi.hoisted(() => ({
 	current: null as null | {
-		userId: string;
+		sessionId: string;
 		revision: number;
 		actions: Array<{
 			playbackNumber: number;
@@ -460,7 +460,7 @@ describe("Shift+Record Update gestures", () => {
 			pendingValueCount: 2,
 		};
 		playbackQueue.current = {
-			userId: "user-a",
+			sessionId: "user-a",
 			revision: 3,
 			actions: [
 				{ playbackNumber: 4, page: null, action: "go", surface: "virtual" },

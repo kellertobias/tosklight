@@ -6,7 +6,6 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction()?;
     tx.execute_batch(
         r#"CREATE TABLE IF NOT EXISTS schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) SELECT 0 WHERE NOT EXISTS(SELECT 1 FROM schema_info);
-      CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN(0,1)));
       CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,revision_source_show_id TEXT,revision_source_show_name TEXT,revision_source_revision INTEGER,revision_source_name TEXT,revision_copy_created_at TEXT);
       CREATE TABLE IF NOT EXISTS show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision),FOREIGN KEY(show_id) REFERENCES show_library(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -18,7 +17,7 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS screen_pages(screen_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(screen_id,show_id),FOREIGN KEY(screen_id) REFERENCES screens(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS programmer_control_surface(singleton INTEGER PRIMARY KEY CHECK(singleton=1),owner_screen_id TEXT,visible_encoders INTEGER NOT NULL DEFAULT 6 CHECK(visible_encoders IN(4,6)),FOREIGN KEY(owner_screen_id) REFERENCES screens(id) ON DELETE SET NULL);
       INSERT OR IGNORE INTO programmer_control_surface(singleton,owner_screen_id,visible_encoders) VALUES(1,NULL,6);
-      CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id));"#,
+      CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL);"#,
     )?;
     add_column_if_missing(
         &tx,
@@ -111,6 +110,38 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     tx.commit()?;
     drop_desk_osc_alias(conn)?;
     collapse_control_desks(conn)?;
+    drop_desk_users(conn)?;
+    Ok(())
+}
+
+/// Retire the desk's users.
+///
+/// The `users` table held an id, a name and an enabled flag — no password and no credential of any
+/// kind. A login named one, the lookup could only ever find the single seeded `Operator`, and
+/// nothing chose between them. The session and its token carry the desk's authority.
+///
+/// `sessions.user_id` is `NOT NULL` with a foreign key into that table, so the table is rebuilt
+/// rather than the column dropped: SQLite will not drop a column a constraint refers to.
+fn drop_desk_users(conn: &mut Connection) -> Result<(), StoreError> {
+    if !column_exists(conn, "sessions", "user_id")? {
+        return Ok(());
+    }
+    conn.execute_batch("PRAGMA foreign_keys=OFF")?;
+    let result = rebuild_sessions(conn);
+    conn.execute_batch("PRAGMA foreign_keys=ON")?;
+    result
+}
+
+fn rebuild_sessions(conn: &mut Connection) -> Result<(), StoreError> {
+    let tx = conn.transaction()?;
+    tx.execute_batch(
+        r#"CREATE TABLE sessions_without_user(id TEXT PRIMARY KEY,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL);
+      INSERT INTO sessions_without_user(id,token,programmer_json,connected,updated_at) SELECT id,token,programmer_json,connected,updated_at FROM sessions;
+      DROP TABLE sessions;
+      ALTER TABLE sessions_without_user RENAME TO sessions;
+      DROP TABLE IF EXISTS users;"#,
+    )?;
+    tx.commit()?;
     Ok(())
 }
 

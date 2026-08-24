@@ -79,7 +79,6 @@ impl ServerProgrammingPorts<'_> {
     ) -> Result<light_application::ProgrammingCueRecordResult, String> {
         let context = ActionContext::operator(
             self.session().desk.id,
-            self.session().user.id.0,
             self.session().id.0,
             light_application::ActionSource::Osc,
         )

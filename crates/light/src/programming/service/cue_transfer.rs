@@ -4,7 +4,7 @@ use crate::programming::cue_transfer::{
     ProgrammingCueTransferPorts, ProgrammingCueTransferRequest, ProgrammingCueTransferResult,
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActiveShowService};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::{
     CueMoveCopyChoice, CueTransferOperation, ProgrammingChoiceOption, ProgrammingChoiceOptionId,
 };
@@ -245,7 +245,6 @@ fn transfer_identity(context: &ActionContext) -> Result<TransferIdentity, Action
 
 fn transfer_scope(context: &ActionContext) -> Result<CueTransferScope, ActionError> {
     Ok(CueTransferScope {
-        user_id: UserId(context.user_id.ok_or_else(unauthenticated)?),
         desk_id: context.desk_id,
         session_id: SessionId(context.session_id.ok_or_else(unauthenticated)?),
     })

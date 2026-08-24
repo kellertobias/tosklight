@@ -4,13 +4,13 @@ import { ProgrammerPreloadValuesSession } from "./session";
 import { ProgrammerPreloadValuesStore } from "./store";
 import {
 	FakeProgrammerPreloadValuesTransport,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	preloadFixtureValue,
 	preloadProjection,
 	preloadSnapshot,
 	SHOW_ID,
 	settlePreloadSession,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 function harness() {
@@ -20,7 +20,7 @@ function harness() {
 	const onError = vi.fn();
 	const session = new ProgrammerPreloadValuesSession({
 		showId: SHOW_ID,
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		authorityKey: "session-a",
 		store,
 		transport,
@@ -107,7 +107,7 @@ describe("ProgrammerPreloadValuesSession", () => {
 		current.session.activate();
 		await Promise.resolve();
 
-		current.store.reset(SHOW_ID, USER_ID, "session-b");
+		current.store.reset(SHOW_ID, SESSION_ID, "session-b");
 		snapshot.resolve(preloadSnapshot({ revision: 9 }));
 		await settlePreloadSession();
 

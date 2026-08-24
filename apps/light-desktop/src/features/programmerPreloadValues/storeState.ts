@@ -8,7 +8,7 @@ export type ProgrammerPreloadValuesStatus =
 
 export interface ProgrammerPreloadValuesState {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	eventSequence: number | null;
 	projection: ProgrammerPreloadValuesProjection | null;
 	pendingRequestIds: readonly string[];
@@ -31,7 +31,7 @@ const EMPTY_REQUEST_IDS = Object.freeze([]) as readonly string[];
 export function emptyProgrammerPreloadValuesState(): ProgrammerPreloadValuesState {
 	return {
 		showId: null,
-		userId: null,
+		sessionId: null,
 		eventSequence: null,
 		projection: null,
 		pendingRequestIds: EMPTY_REQUEST_IDS,

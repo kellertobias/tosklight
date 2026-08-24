@@ -23,7 +23,7 @@ describe("useShowObjects", () => {
 		} as unknown as ServerState;
 		const { result } = renderHook(() => useShowObjects(state));
 
-		await act(() => result.current(SHOW_ID, "user-1"));
+		await act(() => result.current(SHOW_ID));
 
 		const kinds = objects.mock.calls.map((call) => call[1]);
 		expect(kinds).toEqual([

@@ -101,7 +101,6 @@ function capture(
 				session_id: sessionId,
 				client_id: `client-${sessionId}`,
 				token: `token-${sessionId}`,
-				user: { id: "user-a", name: "Operator", enabled: true },
 				desk: {
 					id: deskId,
 					name: deskId,

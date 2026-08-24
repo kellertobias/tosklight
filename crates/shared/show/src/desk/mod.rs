@@ -1,15 +1,15 @@
 pub(super) mod control_desks;
 mod migration;
 mod screens;
+mod sessions;
 mod settings;
 mod show_library;
-mod users;
 
 use crate::{PlaybackSurfaceLayout, StoreError, connection::configure};
 use rusqlite::Connection;
 use std::path::Path;
 
-pub(crate) const DESK_SCHEMA_VERSION: i64 = 11;
+pub(crate) const DESK_SCHEMA_VERSION: i64 = 12;
 
 pub struct DeskStore {
     pub(crate) conn: Connection,
@@ -20,11 +20,7 @@ impl DeskStore {
         let mut conn = Connection::open(path)?;
         configure(&conn)?;
         migration::migrate_desk(&mut conn)?;
-        let store = Self { conn };
-        if store.users()?.is_empty() {
-            store.add_user("Operator")?;
-        }
-        Ok(store)
+        Ok(Self { conn })
     }
 }
 

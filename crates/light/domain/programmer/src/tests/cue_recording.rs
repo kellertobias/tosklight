@@ -18,7 +18,7 @@ fn fixture_set(
 fn current_capture_owns_only_normal_recordable_values_in_programmer_order() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     let fixtures = [FixtureId::new(), FixtureId::new()];
     let timing = NormalProgrammerValueTiming {
         fade: true,
@@ -71,7 +71,7 @@ fn current_capture_owns_only_normal_recordable_values_in_programmer_order() {
 fn current_capture_uses_pending_preload_only_in_capture_mode() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     let normal = FixtureId::new();
     let preload = FixtureId::new();
     assert!(registry.apply_normal_values(
@@ -107,7 +107,7 @@ fn current_capture_uses_pending_preload_only_in_capture_mode() {
 fn explicit_preload_capture_prefers_pending_then_reports_active_fallback() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     let fixture = FixtureId::new();
     assert!(registry.arm_preload(session, true));
     assert!(registry.apply_preload_values(
@@ -150,7 +150,7 @@ fn explicit_preload_capture_prefers_pending_then_reports_active_fallback() {
 fn empty_preload_capture_is_valid_and_missing_session_is_distinct() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
 
     let empty = registry
         .capture_cue_recording(session, CueRecordingSource::PreloadPendingOrActive)

@@ -38,12 +38,8 @@ describe("session handoff", () => {
 		expect(
 			publications
 				.filter((item) => item.type === "captured")
-				.map((item) => [item.session.user.id, item.session.desk.id]),
-		).toEqual([
-			["user-a", "desk-a"],
-			["user-a", "desk-b"],
-			["user-b", "desk-c"],
-		]);
+				.map((item) => item.session.desk.id),
+		).toEqual(["desk-a", "desk-b", "desk-c"]);
 		const stored = Array.from({ length: localStorage.length }, (_, index) => {
 			const key = localStorage.key(index) ?? "";
 			return `${key}:${localStorage.getItem(key) ?? ""}`;
@@ -72,14 +68,13 @@ describe("session handoff", () => {
 
 function session(
 	id: string,
-	userId: string,
+	sessionId: string,
 	deskId: string,
 ): SessionResponse {
 	return {
 		session_id: id,
 		client_id: `client-${id}`,
 		token: `token-${id}`,
-		user: { id: userId, name: userId, enabled: true },
 		desk: {
 			id: deskId,
 			name: deskId,

@@ -16,8 +16,8 @@ fn a_refresh_publishes_the_desks_selection_once_however_many_surfaces_are_connec
     let registry = ProgrammerRegistry::default();
     let main_window = SessionId::new();
     let second_screen = SessionId::new();
-    registry.start(main_window, UserId::new());
-    registry.start(second_screen, UserId::new());
+    registry.start(main_window);
+    registry.start(second_screen);
     // Both surfaces are the same desk, so both are already on its one command line.
     assert!(registry.attach_command_context(main_window, SessionId(Uuid::from_u128(1))));
     assert!(registry.attach_command_context(second_screen, SessionId(Uuid::from_u128(2))));
@@ -100,7 +100,7 @@ fn a_refresh_publishes_the_desks_selection_once_however_many_surfaces_are_connec
 fn a_refresh_that_changes_nothing_stays_quiet() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     let desk = desk_context(&registry);
     let first = FixtureId::new();
     let second = FixtureId::new();
@@ -142,7 +142,7 @@ fn a_refresh_publishes_pending_choice_invalidation_once_for_the_desk() {
     let main_window = SessionId::new();
     let second_screen = SessionId::new();
     for session in [main_window, second_screen] {
-        registry.start(session, UserId::new());
+        registry.start(session);
     }
     let desk = desk_context(&registry);
     registry.set_pending_command_choice(

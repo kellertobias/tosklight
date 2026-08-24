@@ -144,7 +144,6 @@ fn runtime_uses_shared_services_and_cannot_forge_action_context() {
     assert!(!contexts.is_empty());
     for (_, context) in contexts {
         assert_eq!(context.desk_id, Uuid::from_u128(1));
-        assert_eq!(context.user_id, Some(Uuid::from_u128(2)));
         assert_eq!(context.session_id, Some(Uuid::from_u128(3)));
         assert_eq!(context.source, ActionSource::Macro);
         assert_eq!(context.correlation_id, Uuid::from_u128(4));

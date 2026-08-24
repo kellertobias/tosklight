@@ -21,16 +21,14 @@ fn invalid_active_show_enters_recovery_instead_of_aborting_startup() {
 #[test]
 fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "test".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let first = light_core::FixtureId::new();
     let second = light_core::FixtureId::new();
     let third = light_core::FixtureId::new();
@@ -88,16 +86,14 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
 #[test]
 fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_to_right() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "test".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
 
     let show_path = data_dir.join("shows/mixed-selection.show");
@@ -188,16 +184,14 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
 #[test]
 fn set_group_requests_properties_only_for_the_originating_desk() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "test".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state
         .output
         .replace_snapshot(EngineSnapshot {
@@ -245,17 +239,15 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
 #[test]
 fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "test".into(),
         connected: true,
         desk: test_control_desk(),
     };
     state.sessions.insert_session(session.clone());
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let show_path = data_dir.join("shows/group-master-command.show");
     let show_id = initialise_show(&show_path, "Group Master Command").unwrap();
     let entry = ShowEntry {
@@ -360,17 +352,15 @@ fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment()
 #[test]
 fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "test".into(),
         connected: true,
         desk: test_control_desk(),
     };
     state.sessions.insert_session(session.clone());
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let show_path = data_dir.join("shows/assign-cuelist-command.show");
     let show_id = initialise_show(&show_path, "Assign Cuelist Command").unwrap();
     let entry = ShowEntry {
@@ -490,16 +480,14 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
 #[test]
 fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "test".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let show_path = data_dir.join("shows/record-group.show");
     let show_id = initialise_show(&show_path, "Record Group").unwrap();
     let entry = ShowEntry {
@@ -674,16 +662,14 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
 #[test]
 fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutation() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "spread-reject".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let first = light_core::FixtureId::new();
     let second = light_core::FixtureId::new();
     state

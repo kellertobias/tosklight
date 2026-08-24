@@ -5,7 +5,7 @@ import type { ShowObject } from "../showObjects/contracts";
 
 export interface PresetRecallScope {
 	showId: string;
-	userId: string;
+	sessionId: string;
 	deskId: string;
 }
 

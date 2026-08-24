@@ -831,7 +831,6 @@ fn reconcile_interaction(state: &AppState, session: &Session, before: &WsTracked
 fn interaction_context(session: &Session, request_id: &str) -> light_application::ActionContext {
     light_application::ActionContext::operator(
         session.desk.id,
-        session.user.id.0,
         session.id.0,
         light_application::ActionSource::UserInterface,
     )

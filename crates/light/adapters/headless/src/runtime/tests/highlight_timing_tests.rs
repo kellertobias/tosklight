@@ -9,16 +9,14 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
             task_receiver,
         ),
     );
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "timed-control-action".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
 
@@ -150,7 +148,6 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
         events[0].payload["changes"],
         serde_json::json!(["transient_control"])
     );
-    assert_eq!(events[0].payload["user_id"], serde_json::json!(user.id));
     drop(events);
 
     task_cancellation.cancel();
@@ -247,16 +244,14 @@ fn explicit_profile_preset_generation_writes_portable_show_objects() {
 #[test]
 fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "highlight-safety".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
     let fixture = schema_v2_direct_fixture().0;

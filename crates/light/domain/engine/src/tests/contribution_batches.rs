@@ -126,7 +126,7 @@ fn sampled_value_is_the_underlay_for_an_ordinary_programmer_fade() {
     let shared_clock: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared_clock);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, fixture_id) = animated_fixture();
     let engine = Engine::new(programmers.clone());
     engine
@@ -323,7 +323,7 @@ fn live_programmer_sample_does_not_replace_the_same_programmers_preload() {
     let shared_clock: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared_clock);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, fixture_id) = schema_v2_fixture(&[("tilt", false, false, false, false, false)]);
     programmers.set(
         session,
@@ -372,7 +372,7 @@ fn replacing_newer_live_programmer_keeps_older_preload_as_an_htp_competitor() {
     let shared_clock: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared_clock);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, fixture_id) =
         schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
     assert!(programmers.arm_preload(session, true));
@@ -421,7 +421,7 @@ fn transient_sample_replaces_only_the_named_transient_action() {
     let shared_clock: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared_clock);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, fixture_id) = animated_fixture();
     programmers
         .set_transient_action(
@@ -668,7 +668,7 @@ fn source_engine(started: DateTime<Utc>) -> (Engine, ProgrammerRegistry, Session
     let clock: SharedClock = Arc::new(ManualClock::new(started));
     let programmers = ProgrammerRegistry::with_clock(clock);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, fixture_id) = animated_fixture();
     let engine = Engine::new(programmers.clone());
     engine
@@ -687,7 +687,7 @@ fn grouped_source_engine(
 ) -> (Engine, ProgrammerRegistry, SessionId, FixtureId) {
     let programmers = ProgrammerRegistry::with_clock(clock);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, fixture_id) = animated_fixture();
     let groups = group_ids
         .iter()

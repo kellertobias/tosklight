@@ -3,7 +3,7 @@ use crate::{
     ActionEnvelope, ActionErrorKind, ActionSource, ActiveShowService, ActiveShowUnitOfWork,
     BackupIdentity, EventBus, EventFilter, EventReplay, ProgrammingService,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_engine::EngineSnapshot;
 use light_playback::{
     Cue, CueList, CueListMode, FlashReleaseMode, IntensityPriorityMode, PlaybackButtonAction,
@@ -148,9 +148,8 @@ impl TestRig {
         let events = EventBus::new(32);
         let programmers = ProgrammerRegistry::default();
         let session = SessionId::new();
-        let user = UserId::new();
         let desk = Uuid::from_u128(44);
-        programmers.start(session, user);
+        programmers.start(session);
         assert!(programmers.attach_command_context(session, SessionId(desk)));
         Self {
             service: ProgrammingService::new(
@@ -161,7 +160,7 @@ impl TestRig {
             active_show: ActiveShowService::new(events.clone()),
             events,
             ports: TestPorts::new(path, show_id),
-            context: ActionContext::operator(desk, user.0, session.0, ActionSource::Http),
+            context: ActionContext::operator(desk, session.0, ActionSource::Http),
             show_id,
             cue_list_id,
         }

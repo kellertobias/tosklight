@@ -89,7 +89,7 @@ function useServerFeatureTransports(state: ServerState) {
 	].join("|");
 	const programmingAuthorityKey = [
 		playbackAuthorityKey,
-		state.session?.user.id ?? "",
+		state.session?.session_id ?? "",
 	].join("|");
 	const showObjectsTransport = useMemo(
 		() =>

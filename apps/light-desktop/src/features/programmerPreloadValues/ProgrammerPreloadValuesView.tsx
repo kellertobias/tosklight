@@ -37,7 +37,7 @@ import {
 
 export interface ProgrammerPreloadValuesViewProviderProps {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	authorityKey?: string;
 	enabled?: boolean;
 	store: ProgrammerPreloadValuesStore;
@@ -71,7 +71,7 @@ const fallbackStore = new ProgrammerPreloadValuesStore();
 export function ProgrammerPreloadValuesViewProvider({
 	children,
 	showId,
-	userId,
+	sessionId,
 	authorityKey = "",
 	enabled = true,
 	store,
@@ -96,9 +96,9 @@ export function ProgrammerPreloadValuesViewProvider({
 		captureModeAuthority !== null &&
 		trustedCaptureAuthority === captureModeAuthority &&
 		Boolean(showId) &&
-		Boolean(userId) &&
+		Boolean(sessionId) &&
 		captureState.showId === showId &&
-		captureState.userId === userId &&
+		captureState.sessionId === sessionId &&
 		captureState.status === "ready" &&
 		!captureState.repairRequired &&
 		capturesProgrammerWrites(captureState.projection);
@@ -108,10 +108,10 @@ export function ProgrammerPreloadValuesViewProvider({
 	);
 	const session = useMemo(
 		() =>
-			showId && userId
+			showId && sessionId
 				? new ProgrammerPreloadValuesSession({
 						showId,
-						userId,
+						sessionId,
 						authorityKey,
 						store,
 						transport,
@@ -126,12 +126,12 @@ export function ProgrammerPreloadValuesViewProvider({
 			showId,
 			store,
 			transport,
-			userId,
+			sessionId,
 		],
 	);
 	const writer = useMemo(
 		() =>
-			showId && userId && session && applyAction && captureModeAuthority
+			showId && sessionId && session && applyAction && captureModeAuthority
 				? new ProgrammerPreloadValuesWriter({
 						scope: { showId },
 						store,
@@ -150,7 +150,7 @@ export function ProgrammerPreloadValuesViewProvider({
 			session,
 			showId,
 			store,
-			userId,
+			sessionId,
 		],
 	);
 	const authority = useMemo<ProgrammerPreloadValuesAuthority | null>(
@@ -165,8 +165,8 @@ export function ProgrammerPreloadValuesViewProvider({
 		[session, store],
 	);
 	useLayoutEffect(() => {
-		store.reset(showId, userId, authorityKey);
-	}, [authorityKey, showId, store, userId]);
+		store.reset(showId, sessionId, authorityKey);
+	}, [authorityKey, showId, store, sessionId]);
 	useLayoutEffect(() => {
 		setTrustedCaptureAuthority(captureModeAuthority);
 	}, [captureModeAuthority]);

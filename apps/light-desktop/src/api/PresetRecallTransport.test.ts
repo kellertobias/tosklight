@@ -8,7 +8,7 @@ import {
 } from "./presetRecallWire";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
-const USER_ID = "22222222-2222-4222-8222-222222222222";
+const SESSION_ID = "22222222-2222-4222-8222-222222222222";
 const DESK_ID = "33333333-3333-4333-8333-333333333333";
 const REQUEST_ID = "44444444-4444-4444-8444-444444444444";
 const CORRELATION_ID = "55555555-5555-4555-8555-555555555555";
@@ -281,7 +281,7 @@ describe("Preset recall v2 HTTP adapter", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 
 		await transport.recall(
-			{ showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID },
+			{ showId: SHOW_ID, sessionId: SESSION_ID, deskId: DESK_ID },
 			request(),
 		);
 
@@ -320,7 +320,7 @@ describe("Preset recall v2 HTTP adapter", () => {
 		});
 		await expect(
 			conflict.recall(
-				{ showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID },
+				{ showId: SHOW_ID, sessionId: SESSION_ID, deskId: DESK_ID },
 				request(),
 			),
 		).rejects.toMatchObject({
@@ -340,7 +340,7 @@ describe("Preset recall v2 HTTP adapter", () => {
 		});
 		await expect(
 			unavailable.recall(
-				{ showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID },
+				{ showId: SHOW_ID, sessionId: SESSION_ID, deskId: DESK_ID },
 				request(),
 			),
 		).rejects.toMatchObject({ status: 0, retryable: true });

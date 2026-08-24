@@ -51,13 +51,9 @@ function commandLineResponse(revision: number, text: string) {
 
 function session(): Session {
 	return {
-		session_id: "session",
+		session_id: "11111111-1111-4111-8111-111111111111",
 		client_id: "client",
 		token: "token",
-		user: {
-			id: "11111111-1111-4111-8111-111111111111",
-			name: "Operator",
-		},
 		desk: {
 			id: "22222222-2222-4222-8222-222222222222",
 		},

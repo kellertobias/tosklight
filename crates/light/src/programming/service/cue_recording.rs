@@ -6,7 +6,7 @@ use crate::{
     ProgrammingCueRecordResult, ProgrammingCueRecordingPorts, ProgrammingShowUndoObject,
     ProgrammingShowUndoOperation, ProgrammingShowUndoTarget,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::{
     CueRecordingCapture, CueRecordingCaptureError, CueRecordingCapturedSource, CueRecordingSource,
 };
@@ -19,7 +19,6 @@ use super::cue_recording_validation::{
 
 struct RecordingIdentity {
     session_id: SessionId,
-    user_id: UserId,
     desk_id: uuid::Uuid,
     request_id: String,
 }
@@ -109,7 +108,6 @@ impl ProgrammingService {
                 .collect();
             self.remember_show_mutation(
                 identity.session_id,
-                identity.user_id,
                 identity.desk_id,
                 ProgrammingShowUndoTarget {
                     show_id: projections.show_id,
@@ -127,19 +125,15 @@ impl ProgrammingService {
         envelope: &ActionEnvelope<ProgrammingCueRecordRequest>,
         identity: &RecordingIdentity,
     ) -> Result<(), ActionError> {
-        let lifecycle_before = self.active_lifecycle_programmer(identity.user_id);
+        let lifecycle_before = self.active_lifecycle_programmer();
         let before = Snapshot::read(&self.programmers, identity.desk_id, identity.session_id)?;
         if !self.programmers.clear_normal_values(identity.session_id) {
             return Ok(());
         }
         let after = Snapshot::read(&self.programmers, identity.desk_id, identity.session_id)?;
-        let values = self.values_change(
-            identity.user_id,
-            &before.values_content,
-            &after.values_content,
-        )?;
+        let values = self.values_change(&before.values_content, &after.values_content)?;
         self.publish_values(&envelope.context, values);
-        self.publish_lifecycle_for_context(&envelope.context, lifecycle_before);
+        self.publish_lifecycle(&envelope.context, lifecycle_before);
         Ok(())
     }
 
@@ -195,7 +189,7 @@ impl ProgrammingService {
         let Some(before) = before else {
             return Ok(());
         };
-        let lifecycle_before = self.active_lifecycle_programmer(identity.user_id);
+        let lifecycle_before = self.active_lifecycle_programmer();
         self.programmers.release_preload(identity.session_id);
         let after = Snapshot::read(
             &self.programmers,
@@ -203,7 +197,7 @@ impl ProgrammingService {
             identity.session_id,
         )?;
         self.publish_released_preload(&envelope.context, identity, &before, &after)?;
-        self.publish_lifecycle_for_context(&envelope.context, lifecycle_before);
+        self.publish_lifecycle(&envelope.context, lifecycle_before);
         Ok(())
     }
 
@@ -216,17 +210,15 @@ impl ProgrammingService {
     ) -> Result<(), ActionError> {
         self.publish_capture_mode(
             context,
-            self.capture_mode_change(identity.user_id, before.capture_mode, after.capture_mode),
+            self.capture_mode_change(before.capture_mode, after.capture_mode),
         );
         let values = self.preload_values_change(
-            identity.user_id,
             identity.session_id,
             before.preload_values_generation,
             after.preload_values_generation,
         )?;
         self.publish_preload_values(context, values);
         let queue = self.preload_playback_queue_change(
-            identity.user_id,
             identity.session_id,
             before.preload_playback_queue_generation,
             after.preload_playback_queue_generation,
@@ -241,7 +233,6 @@ impl ProgrammingService {
         request: &ProgrammingCueRecordRequest,
     ) -> Result<Option<ProgrammingCueRecordResult>, ActionError> {
         self.cue_recording_replay.lock().get(
-            identity.user_id,
             identity.desk_id,
             identity.session_id,
             &identity.request_id,
@@ -256,7 +247,6 @@ impl ProgrammingService {
         result: ProgrammingCueRecordResult,
     ) {
         self.cue_recording_replay.lock().insert(
-            identity.user_id,
             identity.desk_id,
             identity.session_id,
             identity.request_id,
@@ -337,12 +327,6 @@ fn recording_identity(
             "Cue recording requires an operator session",
         )
     })?;
-    let user_id = envelope.context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Cue recording requires an authenticated user",
-        )
-    })?;
     let request_id = envelope.context.request_id.as_deref().ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Invalid,
@@ -352,7 +336,6 @@ fn recording_identity(
     super::values_validation::validate_request_id(request_id)?;
     Ok(RecordingIdentity {
         session_id,
-        user_id,
         desk_id: envelope.context.desk_id,
         request_id: request_id.to_owned(),
     })

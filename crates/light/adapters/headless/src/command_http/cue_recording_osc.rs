@@ -157,12 +157,7 @@ fn set_target(
         }
     };
     let command = format!("{pending} PBK {page} . {slot}");
-    let context = ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        ActionSource::Osc,
-    );
+    let context = ActionContext::operator(session.desk.id, session.id.0, ActionSource::Osc);
     match execute_existing_command(
         state,
         session,
@@ -251,7 +246,6 @@ fn emit_result(
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "source":"osc",
             "target":playback_target_identity(address),
             "error":error,

@@ -131,7 +131,6 @@ export interface DesktopBridge {
 		paneId: string,
 		live3d: boolean,
 		geometry: StagePaneGeometry,
-		user: string,
 	): Promise<void>;
 	setStagePane(paneId: string, geometry: StagePaneGeometry): Promise<void>;
 	closeStagePane(paneId: string): Promise<void>;

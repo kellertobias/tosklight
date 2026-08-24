@@ -400,7 +400,6 @@ fn delta(value: f64) -> SpeedBpmDelta {
 fn context(desk: u128, session: u128, request: &str) -> ActionContext {
     ActionContext::operator(
         Uuid::from_u128(desk),
-        Uuid::from_u128(5),
         Uuid::from_u128(session),
         ActionSource::Http,
     )

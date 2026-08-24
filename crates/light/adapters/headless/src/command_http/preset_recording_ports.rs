@@ -30,13 +30,6 @@ pub(super) fn commit(
     context: &ActionContext,
     commit: &ProgrammingPresetCommit,
 ) -> Result<ProgrammingPresetCommitResult, ActionError> {
-    // Authentication still gates programming; which identity it is no longer selects a desk.
-    context.user_id.ok_or_else(|| {
-        ActionError::new(
-            light_application::ActionErrorKind::Unauthorized,
-            "Preset recording requires an authenticated user",
-        )
-    })?;
     let ports = ServerActiveShowPorts::show_objects_with_programming_owner(
         state.clone(),
         ProgrammingInstallOwner {

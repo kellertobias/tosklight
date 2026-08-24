@@ -65,7 +65,6 @@ struct SessionPersistenceQueue {
 
 pub(in crate::runtime) struct DeferredProgrammerPersistence {
     pub(in crate::runtime) id: SessionId,
-    pub(in crate::runtime) user_id: light_core::UserId,
     pub(in crate::runtime) token: String,
     pub(in crate::runtime) programmer: light_programmer::ProgrammerState,
     pub(in crate::runtime) connected: bool,
@@ -107,7 +106,6 @@ impl SessionPersistenceQueue {
                         };
                         let persisted = PersistedSession {
                             id: session.id,
-                            user_id: session.user_id,
                             token: session.token,
                             programmer_json,
                             connected: session.connected,

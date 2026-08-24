@@ -1,7 +1,6 @@
 #[tokio::test]
 async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     let scenario = CommandHttpScenario::new().await;
-    let user_id = scenario.session.user.id.0;
     let initial = scenario
         .priority_snapshot_for( Some(&scenario.token))
         .await;
@@ -28,8 +27,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
         .state
         .installation.add_desk("Priority peer")
         .unwrap();
-    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
-    assert_eq!(second_user, user_id);
+    let second_token = login_on_desk(&scenario, second_desk.id).await;
     let request = serde_json::json!({
         "request_id":"priority-http-1",
         "expected_revision":0,

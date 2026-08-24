@@ -12,7 +12,7 @@ import {
 
 export interface ProgrammerPreloadPlaybackQueueSessionOptions {
 	showId: string;
-	userId: string;
+	sessionId: string;
 	authorityKey: string;
 	store: ProgrammerPreloadPlaybackQueueStore;
 	transport: ProgrammerPreloadPlaybackQueueEventTransport | null;
@@ -23,7 +23,7 @@ export interface ProgrammerPreloadPlaybackQueueSessionOptions {
 /** A reference-counted exact-user authority that is dormant without a view. */
 export class ProgrammerPreloadPlaybackQueueSession {
 	private readonly eventScope: ProgrammerPreloadPlaybackQueueScope;
-	private readonly userId: string;
+	private readonly sessionId: string;
 	private readonly authorityKey: string;
 	private readonly store: ProgrammerPreloadPlaybackQueueStore;
 	private readonly transport: ProgrammerPreloadPlaybackQueueEventTransport | null;
@@ -43,7 +43,7 @@ export class ProgrammerPreloadPlaybackQueueSession {
 
 	constructor(options: ProgrammerPreloadPlaybackQueueSessionOptions) {
 		this.eventScope = { showId: options.showId };
-		this.userId = options.userId;
+		this.sessionId = options.sessionId;
 		this.authorityKey = options.authorityKey;
 		this.store = options.store;
 		this.transport = options.transport;
@@ -254,8 +254,8 @@ export class ProgrammerPreloadPlaybackQueueSession {
 	private ensureStoreScope() {
 		if (this.stopped) return false;
 		const state = this.store.getSnapshot();
-		if (state.showId === null && state.userId === null)
-			this.store.reset(this.eventScope.showId, this.userId, this.authorityKey);
+		if (state.showId === null && state.sessionId === null)
+			this.store.reset(this.eventScope.showId, this.sessionId, this.authorityKey);
 		const scoped = this.store.getSnapshot();
 		if (!this.matchesScope(scoped)) {
 			this.onError?.(this.scopeError("session"));
@@ -270,7 +270,7 @@ export class ProgrammerPreloadPlaybackQueueSession {
 	) {
 		return (
 			state.showId === this.eventScope.showId &&
-			state.userId === this.userId &&
+			state.sessionId === this.sessionId &&
 			state.authorityKey === this.authorityKey
 		);
 	}

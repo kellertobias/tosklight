@@ -1062,16 +1062,7 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
-    let user_id = state
-        .sessions
-        .sessions()
-        .into_iter()
-        .next()
-        .unwrap()
-        .user
-        .id
-        .0
-        .to_string();
+    let user_id = "desk".to_owned();
     let show_id = create_seeded_show(
         &state,
         &app,

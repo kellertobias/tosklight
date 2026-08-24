@@ -55,9 +55,7 @@ pub(super) fn controller_for_runtime_instance(
 
 impl DynamicsPorts for ServerDynamicsPorts<'_> {
     fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
-        if context.desk_id != self.session.desk.id
-            || context.session_id != Some(self.session.id.0)
-            || context.user_id != Some(self.session.user.id.0)
+        if context.desk_id != self.session.desk.id || context.session_id != Some(self.session.id.0)
         {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,

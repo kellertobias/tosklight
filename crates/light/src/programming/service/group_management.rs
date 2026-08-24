@@ -6,12 +6,11 @@ use crate::{
     GroupManagementPorts, GroupManagementProjection, GroupManagementRequest, GroupManagementResult,
     GroupManagementSelection, GroupPropertiesUpdate, ProgrammingInteractionChange,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::sync::Arc;
 
 struct ManagementIdentity {
     session_id: SessionId,
-    user_id: UserId,
     desk_id: uuid::Uuid,
     request_id: String,
 }
@@ -97,7 +96,6 @@ impl ProgrammingService {
         request: &GroupManagementRequest,
     ) -> Result<Option<GroupManagementResult>, ActionError> {
         self.group_management_replay.lock().get(
-            identity.user_id,
             identity.desk_id,
             identity.session_id,
             &identity.request_id,
@@ -112,7 +110,6 @@ impl ProgrammingService {
         result: GroupManagementResult,
     ) {
         self.group_management_replay.lock().insert(
-            identity.user_id,
             identity.desk_id,
             identity.session_id,
             identity.request_id,
@@ -131,12 +128,6 @@ fn management_identity(
             "Group management requires an operator session",
         )
     })?;
-    let user_id = envelope.context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Group management requires an authenticated user",
-        )
-    })?;
     let request_id = envelope.context.request_id.as_deref().ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Invalid,
@@ -146,7 +137,6 @@ fn management_identity(
     super::values_validation::validate_request_id(request_id)?;
     Ok(ManagementIdentity {
         session_id,
-        user_id,
         desk_id: envelope.context.desk_id,
         request_id: request_id.to_owned(),
     })

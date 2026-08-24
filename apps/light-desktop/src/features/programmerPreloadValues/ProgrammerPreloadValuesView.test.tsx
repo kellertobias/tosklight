@@ -22,7 +22,7 @@ import {
 	FakeProgrammerPreloadValuesTransport,
 	preloadSnapshot,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 function ProjectionProbe() {
@@ -44,7 +44,7 @@ function ActionProbe({
 
 function readyCaptureStore(active: boolean) {
 	const store = new ProgrammerCaptureModeStore();
-	store.reset(SHOW_ID, USER_ID, "session-a");
+	store.reset(SHOW_ID, SESSION_ID, "session-a");
 	store.installSnapshot(
 		captureModeSnapshot({
 			blind: active,
@@ -77,7 +77,7 @@ function providers({
 	return (
 		<ProgrammerCaptureModeViewProvider
 			showId={SHOW_ID}
-			userId={USER_ID}
+			sessionId={SESSION_ID}
 			authorityKey="session-a"
 			store={captureModeStore}
 			transport={null}
@@ -85,7 +85,7 @@ function providers({
 		>
 			<ProgrammerPreloadValuesViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				authorityKey="session-a"
 				enabled={enabled}
 				store={preloadStore}
@@ -132,7 +132,7 @@ describe("ProgrammerPreloadValuesViewProvider", () => {
 		render(
 			<ProgrammerCaptureModeViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				authorityKey="session-a"
 				store={captureModeStore}
 				transport={null}
@@ -140,7 +140,7 @@ describe("ProgrammerPreloadValuesViewProvider", () => {
 			>
 				<ProgrammerPreloadValuesViewProvider
 					showId={SHOW_ID}
-					userId={USER_ID}
+					sessionId={SESSION_ID}
 					authorityKey="session-a"
 					store={preloadStore}
 					transport={transport}

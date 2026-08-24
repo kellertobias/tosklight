@@ -1,9 +1,5 @@
 import type { LightApi } from "../../api/client/api";
-import type {
-	BootstrapSnapshot,
-	DeskUser,
-	SessionResponse,
-} from "../../api/types";
+import type { BootstrapSnapshot, SessionResponse } from "../../api/types";
 import type { FrontendWarmupTask } from "../frontendWarmup/coordinator";
 import {
 	frontendPerformanceDiagnostics,
@@ -18,13 +14,6 @@ import {
 } from "../session/ownership";
 import type { LoadShowObjects } from "./stateEventRouting";
 import type { ServerState } from "./useServerState";
-
-/** The desk's operator. There is one; this used to pick between several by remembered name. */
-function selectOperator(bootstrap: BootstrapSnapshot): DeskUser {
-	const operator = bootstrap.users.find((user) => user.enabled);
-	if (!operator) throw new Error("No enabled desk user is configured");
-	return operator;
-}
 
 export const SINGLE_CLIENT_MODE_STORAGE_KEY = "light.single-client-mode";
 
@@ -51,7 +40,6 @@ export async function removeDisconnectedOtherClients(
 
 async function restoreOrLogin(
 	api: LightApi,
-	user: DeskUser,
 	role: SessionRole,
 ): Promise<SessionResponse> {
 	if (!mayCreateSession(role)) {
@@ -61,7 +49,7 @@ async function restoreOrLogin(
 		api.runtime.restoreSession(restored);
 		return restored;
 	}
-	return api.runtime.login(user.name);
+	return api.runtime.login();
 }
 
 async function ensureActiveShow(
@@ -191,8 +179,7 @@ export async function bootstrapConnection(
 		return null;
 	}
 	state.setBootstrap(initial);
-	const user = selectOperator(initial);
-	const session = await restoreOrLogin(state.api, user, role);
+	const session = await restoreOrLogin(state.api, role);
 	const connectedBootstrap = await removeDisconnectedOtherClients(
 		state.api,
 		await state.api.runtime.bootstrap(),
@@ -219,7 +206,6 @@ export async function bootstrapConnection(
 	installForegroundResources(state, resources);
 	await loadShowObjects(
 		bootstrap.active_show_error ? null : (bootstrap.active_show?.id ?? null),
-		session.user.id,
 	);
 	restoreProgrammerState(state, resources.programming);
 	finishBootstrap();

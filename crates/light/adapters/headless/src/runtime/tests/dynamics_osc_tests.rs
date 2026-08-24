@@ -1,16 +1,14 @@
 #[test]
 fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "dynamics-osc".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
     let fixture = light_core::FixtureId::new();

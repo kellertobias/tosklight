@@ -4,14 +4,6 @@ use super::*;
 use light_wire::v2::attribute_configuration as attribute_wire;
 use light_wire::v2::runtime as wire;
 
-pub(super) fn user(user: DeskUser) -> wire::RuntimeDeskUser {
-    wire::RuntimeDeskUser {
-        id: user.id.0,
-        name: user.name,
-        enabled: user.enabled,
-    }
-}
-
 pub(super) fn desk(desk: ControlDesk) -> wire::RuntimeControlDesk {
     wire::RuntimeControlDesk {
         id: desk.id,

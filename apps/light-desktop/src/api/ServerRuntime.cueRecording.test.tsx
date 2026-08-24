@@ -25,7 +25,7 @@ import { LightClientRuntime } from "./client/runtime";
 import { ServerRuntime } from "./ServerRuntime";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const DESK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const CUE_LIST_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const CUE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
@@ -56,7 +56,7 @@ vi.mock("../features/server/useServerConnection", async () => {
 			setConnectionGeneration(value: number): void;
 		}) => {
 			useEffect(() => {
-				const user = { id: USER_ID, name: "Operator", enabled: true };
+				const user = { id: SESSION_ID, name: "Operator", enabled: true };
 				const desk = {
 					id: DESK_ID,
 					name: "Main",

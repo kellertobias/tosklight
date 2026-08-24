@@ -3,11 +3,10 @@ use super::*;
 #[test]
 fn capture_mode_is_exact_user_shared_and_runtime_revisioned() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first = SessionId::new();
     let peer = SessionId::new();
-    registry.start(first, user);
-    registry.start(peer, user);
+    registry.start(first);
+    registry.start(peer);
 
     assert_eq!(registry.capture_mode(first), Some(Default::default()));
     assert_eq!(registry.capture_mode_revision(), 0);
@@ -33,8 +32,7 @@ fn capture_mode_is_exact_user_shared_and_runtime_revisioned() {
 fn restored_capture_tuple_starts_with_a_fresh_public_revision() {
     let source = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
-    let mut state = source.start(session, user);
+    let mut state = source.start(session);
     state.blind = true;
     state.preview = true;
     state.preload_capture_programmer = false;
@@ -57,13 +55,12 @@ fn restored_capture_tuple_starts_with_a_fresh_public_revision() {
 fn a_new_programmer_after_explicit_clear_retains_the_live_revision() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
-    registry.start(session, user);
+    registry.start(session);
     registry.advance_capture_mode_revision();
     assert!(registry.clear(session));
 
     let restarted = SessionId::new();
-    registry.start(restarted, user);
+    registry.start(restarted);
 
     assert_eq!(registry.capture_mode_revision(), 1);
     assert_eq!(registry.capture_mode(restarted), Some(Default::default()));
@@ -73,8 +70,7 @@ fn a_new_programmer_after_explicit_clear_retains_the_live_revision() {
 fn clear_marks_normal_values_changed_without_resetting_public_revisions() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
-    registry.start(session, user);
+    registry.start(session);
     registry.set(
         session,
         FixtureId::new(),

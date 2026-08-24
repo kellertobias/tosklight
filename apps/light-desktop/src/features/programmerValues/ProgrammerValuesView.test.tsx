@@ -25,7 +25,7 @@ import {
 	fixtureValue,
 	groupValue,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -97,7 +97,7 @@ describe("ProgrammerValuesViewProvider", () => {
 		render(
 			<ProgrammerValuesViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				store={store}
 				transport={transport}
 				loadSnapshot={loadSnapshot}
@@ -124,14 +124,14 @@ describe("ProgrammerValuesViewProvider", () => {
 		const view = (enabled: boolean) => (
 			<ProgrammerCaptureModeViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				store={captureModeStore}
 				transport={captureModeTransport}
 				loadSnapshot={loadCaptureModeSnapshot}
 			>
 				<ProgrammerValuesViewProvider
 					showId={SHOW_ID}
-					userId={USER_ID}
+					sessionId={SESSION_ID}
 					store={store}
 					transport={transport}
 					loadSnapshot={loadSnapshot}
@@ -187,14 +187,14 @@ describe("ProgrammerValuesViewProvider", () => {
 			<StrictMode>
 				<ProgrammerCaptureModeViewProvider
 					showId={SHOW_ID}
-					userId={USER_ID}
+					sessionId={SESSION_ID}
 					store={captureModeStore}
 					transport={captureModeTransport}
 					loadSnapshot={async () => captureModeSnapshot()}
 				>
 					<ProgrammerValuesViewProvider
 						showId={SHOW_ID}
-						userId={USER_ID}
+						sessionId={SESSION_ID}
 						store={store}
 						transport={transport}
 						loadSnapshot={async () => valuesSnapshot()}
@@ -227,7 +227,7 @@ describe("ProgrammerValuesViewProvider", () => {
 		render(
 			<ProgrammerValuesViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				store={store}
 				transport={transport}
 				loadSnapshot={async () => valuesSnapshot()}
@@ -270,14 +270,14 @@ describe("ProgrammerValuesViewProvider", () => {
 		const tree = () => (
 			<ProgrammerCaptureModeViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				store={captureModeStore}
 				transport={captureModeTransport}
 				loadSnapshot={loadCaptureModeSnapshot}
 			>
 				<ProgrammerValuesViewProvider
 					showId={SHOW_ID}
-					userId={USER_ID}
+					sessionId={SESSION_ID}
 					store={store}
 					transport={transport}
 					loadSnapshot={loadSnapshot}
@@ -319,7 +319,7 @@ describe("ProgrammerValuesViewProvider", () => {
 		const view = (authorityKey: string) => (
 			<ProgrammerValuesViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				authorityKey={authorityKey}
 				store={store}
 				transport={transport}
@@ -347,7 +347,7 @@ describe("ProgrammerValuesViewProvider", () => {
 		const view = () => (
 			<ProgrammerValuesViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				authorityKey="stable-session"
 				store={store}
 				transport={transport}

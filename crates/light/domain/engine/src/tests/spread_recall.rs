@@ -35,7 +35,7 @@ fn assert_resolved_intensities(engine: &Engine, members: &[FixtureId], expected:
 fn live_group_spread_re_resolves_after_membership_add_remove_and_reorder() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     // The stored value keeps its control points; only membership changes between renders.
     programmers.set_group(
         session,
@@ -97,7 +97,7 @@ fn live_group_spread_re_resolves_after_membership_add_remove_and_reorder() {
 fn mapped_group_spread_uses_shared_ranks_and_reacts_to_stage_moves() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set_group(
         session,
         "mapped".into(),

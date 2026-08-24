@@ -151,41 +151,28 @@ fn resolve_osc_session(
 fn reuse_osc_session(state: &AppState, desk: &ControlDesk, mut session: Session) -> SessionId {
     session.desk = desk.clone();
     let context = programming_context(&session, light_application::ActionSource::Osc, None);
-    state
-        .programming
-        .run_lifecycle_transition(&context, session.user.id, || {
-            attach_session_command_context(state, &session);
-            state.sessions.insert_session(session.clone());
-        });
+    state.programming.run_lifecycle_transition(&context, || {
+        attach_session_command_context(state, &session);
+        state.sessions.insert_session(session.clone());
+    });
     session.id
 }
 
 fn create_osc_session(state: &AppState, desk: &ControlDesk) -> SessionId {
-    let Some(user) = state
-        .installation
-        .users()
-        .ok()
-        .and_then(|users| users.into_iter().find(|user| user.enabled))
-    else {
-        return SessionId::new();
-    };
     let id = SessionId::new();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id,
-        user: user.clone(),
         token: Uuid::new_v4().to_string(),
         connected: true,
         desk: desk.clone(),
     };
     let context = programming_context(&session, light_application::ActionSource::Osc, None);
-    state
-        .programming
-        .run_lifecycle_transition(&context, user.id, || {
-            state.programming.start(id, user.id);
-            attach_session_command_context(state, &session);
-            state.sessions.insert_session(session);
-        });
+    state.programming.run_lifecycle_transition(&context, || {
+        state.programming.start(id);
+        attach_session_command_context(state, &session);
+        state.sessions.insert_session(session);
+    });
     id
 }
 
@@ -214,9 +201,7 @@ pub(in crate::runtime) fn disconnect_orphaned_osc_session(state: &AppState, sess
         return;
     };
     let context = programming_context(&session, light_application::ActionSource::Osc, None);
-    state
-        .programming
-        .run_lifecycle_transition(&context, session.user.id, || {
-            state.programming.disconnect(session_id);
-        });
+    state.programming.run_lifecycle_transition(&context, || {
+        state.programming.disconnect(session_id);
+    });
 }

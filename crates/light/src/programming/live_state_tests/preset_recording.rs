@@ -134,7 +134,6 @@ struct PresetSetup {
     service: ProgrammingService,
     ports: Arc<PresetPorts>,
     show_id: ShowId,
-    user_id: UserId,
     session_id: SessionId,
     context: ActionContext,
 }
@@ -142,11 +141,10 @@ struct PresetSetup {
 impl PresetSetup {
     fn new() -> Self {
         let registry = ProgrammerRegistry::default();
-        let user_id = UserId::new();
         let session_id = SessionId::new();
         let desk_id = Uuid::new_v4();
         let show_id = ShowId::new();
-        registry.start(session_id, user_id);
+        registry.start(session_id);
         registry.attach_command_context(session_id, SessionId(desk_id));
         Self {
             service: ProgrammingService::new(
@@ -157,9 +155,8 @@ impl PresetSetup {
             registry,
             ports: Arc::new(PresetPorts::new(show_id)),
             show_id,
-            user_id,
             session_id,
-            context: ActionContext::operator(desk_id, user_id.0, session_id.0, ActionSource::Http),
+            context: ActionContext::operator(desk_id, session_id.0, ActionSource::Http),
         }
     }
 
@@ -470,8 +467,7 @@ fn preload_capture_is_rejected_before_commit() {
         ProgrammingPresetRevisionExpectation::Current,
     );
     // An identity from before the collapse records onto the desk rather than being turned away.
-    let mut legacy = setup.action("legacy", request.clone());
-    legacy.context.user_id = Some(Uuid::new_v4());
+    let legacy = setup.action("legacy", request.clone());
     setup
         .service
         .handle_preset_recording(legacy, setup.ports.as_ref())
@@ -502,7 +498,7 @@ fn replay_identity_isolated_by_user_desk_and_session() {
     );
     let peer_session = SessionId::new();
     let peer_desk = Uuid::new_v4();
-    setup.registry.start(peer_session, setup.user_id);
+    setup.registry.start(peer_session);
     setup
         .registry
         .attach_command_context(peer_session, SessionId(peer_desk));
@@ -519,13 +515,8 @@ fn replay_identity_isolated_by_user_desk_and_session() {
         )
         .unwrap();
     let peer = ActionEnvelope {
-        context: ActionContext::operator(
-            peer_desk,
-            setup.user_id.0,
-            peer_session.0,
-            ActionSource::Osc,
-        )
-        .with_request_id("shared-id"),
+        context: ActionContext::operator(peer_desk, peer_session.0, ActionSource::Osc)
+            .with_request_id("shared-id"),
         command: request.clone(),
     };
     assert!(
@@ -538,13 +529,8 @@ fn replay_identity_isolated_by_user_desk_and_session() {
     let mut changed_peer_request = request;
     changed_peer_request.name = "Changed peer reuse".into();
     let changed_peer = ActionEnvelope {
-        context: ActionContext::operator(
-            peer_desk,
-            setup.user_id.0,
-            peer_session.0,
-            ActionSource::Osc,
-        )
-        .with_request_id("shared-id"),
+        context: ActionContext::operator(peer_desk, peer_session.0, ActionSource::Osc)
+            .with_request_id("shared-id"),
         command: changed_peer_request,
     };
     assert_eq!(
@@ -556,10 +542,9 @@ fn replay_identity_isolated_by_user_desk_and_session() {
         ActionErrorKind::Conflict
     );
 
-    let other_user = UserId::new();
     let other_session = SessionId::new();
     let other_desk = Uuid::new_v4();
-    setup.registry.start(other_session, other_user);
+    setup.registry.start(other_session);
     setup.registry.set(
         other_session,
         FixtureId::new(),
@@ -567,13 +552,8 @@ fn replay_identity_isolated_by_user_desk_and_session() {
         AttributeValue::Normalized(0.4),
     );
     let other = ActionEnvelope {
-        context: ActionContext::operator(
-            other_desk,
-            other_user.0,
-            other_session.0,
-            ActionSource::Http,
-        )
-        .with_request_id("shared-id"),
+        context: ActionContext::operator(other_desk, other_session.0, ActionSource::Http)
+            .with_request_id("shared-id"),
         command: setup.request(
             PresetAddress::new(PresetFamily::Position, 9).unwrap(),
             PresetStoreMode::Overwrite,
@@ -626,7 +606,7 @@ fn same_user_two_desk_recordings_share_one_serial_order() {
     );
     let peer_session = SessionId::new();
     let peer_desk = Uuid::new_v4();
-    setup.registry.start(peer_session, setup.user_id);
+    setup.registry.start(peer_session);
     let (entered_tx, entered_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
     let ports = Arc::new(BlockingPorts {
@@ -647,12 +627,7 @@ fn same_user_two_desk_recordings_share_one_serial_order() {
         Arc::clone(&ports),
     );
     entered_rx.recv().unwrap();
-    let peer_context = ActionContext::operator(
-        peer_desk,
-        setup.user_id.0,
-        peer_session.0,
-        ActionSource::Osc,
-    );
+    let peer_context = ActionContext::operator(peer_desk, peer_session.0, ActionSource::Osc);
     let second = recording_thread(
         setup.service.clone(),
         peer_context,

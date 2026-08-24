@@ -8,7 +8,7 @@ import type { ProgrammerPreloadValuesProjection } from "../programmerPreloadValu
 
 export interface ProgrammerPreloadLifecycleScope {
 	showId: string;
-	userId: string;
+	sessionId: string;
 	deskId: string;
 }
 

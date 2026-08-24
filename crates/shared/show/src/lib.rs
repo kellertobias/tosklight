@@ -11,7 +11,7 @@ mod show_store;
 pub use desk::DeskStore;
 pub use error::StoreError;
 pub use model::{
-    ClientDesk, ControlDesk, DeskUser, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
+    ClientDesk, ControlDesk, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
     FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane, FixedScreenSide,
     FixedScreenStageRenderQuality, FixedScreenTextMode, PersistedSession, PlaybackSurfaceLayout,
     PlaybackSurfaceRow, ProgrammerControlSurfaceConfiguration, RevisionCopySource,

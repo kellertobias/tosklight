@@ -80,7 +80,6 @@ pub(super) fn record_external_change(state: &AppState, session: &Session, affect
     };
     let context = ActionContext::operator(
         session.desk.id,
-        session.user.id.0,
         session.id.0,
         light_application::ActionSource::Http,
     );
@@ -122,9 +121,7 @@ impl SpeedGroupPorts for ServerSpeedGroupPorts<'_> {
             return Ok(());
         };
         let authorized = self.session.is_some_and(|session| {
-            session.id.0 == session_id
-                && session.desk.id == context.desk_id
-                && Some(session.user.id.0) == context.user_id
+            session.id.0 == session_id && session.desk.id == context.desk_id
         });
         if !authorized {
             return Err(ActionError::new(

@@ -85,7 +85,6 @@ struct ValuesSetup {
     service: ProgrammingService,
     events: EventBus,
     session: SessionId,
-    user: UserId,
     context: ActionContext,
     fixtures: [FixtureId; 3],
     ports: ValuesPorts,
@@ -95,10 +94,9 @@ impl ValuesSetup {
     fn new() -> Self {
         let registry = ProgrammerRegistry::default();
         let session = SessionId::new();
-        let user = UserId::new();
         let desk = Uuid::new_v4();
         let fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
-        registry.start(session, user);
+        registry.start(session);
         registry.attach_command_context(session, SessionId(desk));
         let events = EventBus::new(32);
         let service = ProgrammingService::new(
@@ -111,8 +109,7 @@ impl ValuesSetup {
             service,
             events,
             session,
-            user,
-            context: ActionContext::operator(desk, user.0, session.0, ActionSource::Http),
+            context: ActionContext::operator(desk, session.0, ActionSource::Http),
             fixtures,
             ports: ValuesPorts {
                 environment: ProgrammingValuesEnvironment {
@@ -1130,16 +1127,11 @@ fn every_surface_programs_the_same_values() {
     let setup = ValuesSetup::new();
     let second_screen = SessionId::new();
     let screen_desk = Uuid::new_v4();
-    setup.registry.start(second_screen, setup.user);
+    setup.registry.start(second_screen);
     setup
         .registry
         .attach_command_context(second_screen, SessionId(screen_desk));
-    let screen_context = ActionContext::operator(
-        screen_desk,
-        setup.user.0,
-        second_screen.0,
-        ActionSource::Osc,
-    );
+    let screen_context = ActionContext::operator(screen_desk, second_screen.0, ActionSource::Osc);
     setup.handle(
         "actor-set",
         0,
@@ -1187,19 +1179,13 @@ fn every_surface_programs_the_same_values() {
 
     // A connection arriving under an identity from before the collapse joins the same Programmer
     // rather than opening a second one beside it.
-    let legacy_user = UserId::new();
     let legacy_session = SessionId::new();
     let legacy_desk = Uuid::new_v4();
-    setup.registry.start(legacy_session, legacy_user);
+    setup.registry.start(legacy_session);
     setup
         .registry
         .attach_command_context(legacy_session, SessionId(legacy_desk));
-    let legacy_context = ActionContext::operator(
-        legacy_desk,
-        legacy_user.0,
-        legacy_session.0,
-        ActionSource::Http,
-    );
+    let legacy_context = ActionContext::operator(legacy_desk, legacy_session.0, ActionSource::Http);
     setup
         .service
         .handle_values(
@@ -1232,5 +1218,4 @@ fn every_surface_programs_the_same_values() {
         2,
         "the desk holds every surface's values in one Programmer"
     );
-    assert_eq!(snapshot.projection.user_id, setup.user);
 }

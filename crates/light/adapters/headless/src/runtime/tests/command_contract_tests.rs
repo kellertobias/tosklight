@@ -9,18 +9,16 @@ struct CommandContractScenario {
 impl CommandContractScenario {
     fn new() -> Self {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let control_desk = state.installation.add_desk("Commands").unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "test".into(),
         connected: true,
         desk: control_desk,
     };
     state.sessions.insert_session(session.clone());
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let show_path = data_dir.join("shows/commands.show");
     let show_id = initialise_show(&show_path, "Commands").unwrap();
     let entry = ShowEntry {
@@ -498,11 +496,9 @@ fn command_show_object_backup_count(data_dir: &std::path::Path) -> usize {
 #[test]
 fn spd_grp_commands_preserve_precision_mapping_relative_changes_and_phase_links() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user,
         token: "speed-command".into(),
         connected: true,
         desk: test_control_desk(),

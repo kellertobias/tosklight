@@ -235,16 +235,14 @@ fn canonical_extension_surface_events_match_the_attached_hardware_desk_action_sh
 fn canonical_extension_programmer_highlight_and_speed_controls_use_server_authority() {
     let (state, data_dir) = test_state();
     let desk = state.installation.add_desk("Main").unwrap();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: light_core::SessionId::new(),
-        user: user.clone(),
         token: "extension-controls".into(),
         connected: true,
         desk: desk.clone(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let host = HostControlContext {
         extension_id: "de.tosklight.surface".into(),
@@ -440,16 +438,14 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
 async fn extension_programmer_keys_do_not_cross_an_active_show_transition() {
     let (state, data_dir) = test_state();
     let desk = state.installation.add_desk("Main").unwrap();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: light_core::SessionId::new(),
-        user: user.clone(),
         token: "extension-transition".into(),
         connected: true,
         desk: desk.clone(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let host = HostControlContext {
         extension_id: "de.tosklight.surface".into(),

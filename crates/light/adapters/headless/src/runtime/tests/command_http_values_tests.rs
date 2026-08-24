@@ -82,8 +82,7 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
         .state
         .installation.add_desk("Second capture desk")
         .unwrap();
-    let (second_token, second_user) =
-        login_on_desk(&scenario, "Operator", second_desk.id).await;
+    let second_token = login_on_desk(&scenario, second_desk.id).await;
     let second = scenario
         .capture_mode_snapshot_for( Some(&second_token))
         .await;
@@ -322,8 +321,7 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
         .installation
         .add_desk("Second desk")
         .unwrap();
-    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
-    assert_eq!(second_user, scenario.session.user.id.0);
+    let second_token = login_on_desk(&scenario, second_desk.id).await;
 
     let first = fixture_set_request("desk-one", 0, fixture.0, 0.4);
     assert_eq!(scenario.values_action(first).await.status(), StatusCode::OK);
@@ -353,16 +351,9 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
         1
     );
 
-    // A surface arriving under an identity from before the collapse writes into the same
-    // Programmer, so it continues the desk's revision rather than restarting one.
-    let legacy_user = scenario
-        .state
-        .installation
-        .add_user("Other values user")
-        .unwrap();
-    let (legacy_token, logged_in_user) =
-        login_on_desk(&scenario, "Other values user", scenario.session.desk.id).await;
-    assert_eq!(logged_in_user, legacy_user.id.0);
+    // A second surface writes into the same Programmer, so it continues the desk's revision
+    // rather than restarting one.
+    let legacy_token = login_on_desk(&scenario, scenario.session.desk.id).await;
     let legacy = fixture_set_request("legacy-user", 2, fixture.0, 0.9);
     let legacy = scenario
         .values_action_for( &legacy_token, legacy)
@@ -401,8 +392,7 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
         .state
         .installation.add_desk("Lifecycle peer")
         .unwrap();
-    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
-    assert_eq!(second_user, scenario.session.user.id.0);
+    let second_token = login_on_desk(&scenario, second_desk.id).await;
     let second_session = scenario
         .state
         .sessions.sessions().into_iter()
@@ -448,7 +438,6 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
         .unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    let user_id = scenario.session.user.id;
     assert_eq!(scenario.state.programming.normal_values_revision(), 2);
     assert_eq!(scenario.state.programming.capture_mode_revision(), 2);
     assert_eq!(scenario.state.programming.priority_revision(), 1);
@@ -500,7 +489,6 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
                 else {
                     panic!("replacement should upsert one new Programmer identity")
                 };
-                assert_eq!(programmer.user_id, user_id);
                 assert_ne!(programmer.programmer_id, old_programmer_id);
                 assert_eq!(programmer.sessions.len(), 2);
             }
@@ -510,7 +498,6 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
                 ),
             ) => {
                 priority_events += 1;
-                assert_eq!(projection.user_id, user_id);
                 assert_eq!(projection.revision, 1);
                 assert_eq!(projection.priority, 100);
             }
@@ -617,11 +604,7 @@ fn fixture_set_request(
     })
 }
 
-async fn login_on_desk(
-    scenario: &CommandHttpScenario,
-    username: &str,
-    desk_id: Uuid,
-) -> (String, Uuid) {
+async fn login_on_desk(scenario: &CommandHttpScenario, desk_id: Uuid) -> String {
     let response = scenario
         .app
         .clone()
@@ -629,18 +612,14 @@ async fn login_on_desk(
             Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    serde_json::json!({"username": username, "desk_id": desk_id}).to_string(),
+                    serde_json::json!({"desk_id": desk_id}).to_string(),
                 ))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    let response = json(response).await;
-    (
-        response["token"].as_str().unwrap().to_owned(),
-        Uuid::parse_str(response["user"]["id"].as_str().unwrap()).unwrap(),
-    )
+    json(response).await["token"].as_str().unwrap().to_owned()
 }
 
 fn assert_only_values_events(scenario: &CommandHttpScenario, expected: usize) {

@@ -21,7 +21,6 @@ fn one_external_action_publishes_one_full_deterministic_values_projection() {
     let setup = LiveSetup::new(8);
     let registry = setup.ports.registry.as_ref().unwrap();
     let session = SessionId(setup.context.session_id.unwrap());
-    let user_id = UserId(setup.context.user_id.unwrap());
     let fixture_a = FixtureId::new();
     let fixture_b = FixtureId::new();
     reset_projection_read_count();
@@ -75,7 +74,6 @@ fn one_external_action_publishes_one_full_deterministic_values_projection() {
         panic!("expected a typed Programmer values change")
     };
     let projection = &change.projection;
-    assert_eq!(projection.user_id, user_id);
     assert_eq!(projection.revision, 1);
     assert_eq!(projection.fixture_values.len(), 2);
     assert_eq!(change.delta.fixture_values, projection.fixture_values);
@@ -148,8 +146,6 @@ struct SharedUserSetup {
     registry: ProgrammerRegistry,
     service: ProgrammingService,
     events: EventBus,
-    user: UserId,
-    actor_session: SessionId,
     peer_session: SessionId,
     actor_context: ActionContext,
     peer_context: ActionContext,
@@ -158,13 +154,12 @@ struct SharedUserSetup {
 impl SharedUserSetup {
     fn new() -> Self {
         let registry = ProgrammerRegistry::default();
-        let user = UserId::new();
         let actor_session = SessionId::new();
         let peer_session = SessionId::new();
         let actor_desk = Uuid::new_v4();
         let peer_desk = Uuid::new_v4();
-        registry.start(actor_session, user);
-        registry.start(peer_session, user);
+        registry.start(actor_session);
+        registry.start(peer_session);
         registry.attach_command_context(actor_session, SessionId(actor_desk));
         registry.attach_command_context(peer_session, SessionId(peer_desk));
         let events = EventBus::new(16);
@@ -177,21 +172,9 @@ impl SharedUserSetup {
             registry,
             service,
             events,
-            user,
-            actor_session,
             peer_session,
-            actor_context: ActionContext::operator(
-                actor_desk,
-                user.0,
-                actor_session.0,
-                ActionSource::Http,
-            ),
-            peer_context: ActionContext::operator(
-                peer_desk,
-                user.0,
-                peer_session.0,
-                ActionSource::Osc,
-            ),
+            actor_context: ActionContext::operator(actor_desk, actor_session.0, ActionSource::Http),
+            peer_context: ActionContext::operator(peer_desk, peer_session.0, ActionSource::Osc),
         }
     }
 

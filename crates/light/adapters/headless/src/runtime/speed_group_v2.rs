@@ -54,12 +54,7 @@ async fn snapshot(
 }
 
 fn http_context(session: &Session) -> ActionContext {
-    ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        ActionSource::Http,
-    )
+    ActionContext::operator(session.desk.id, session.id.0, ActionSource::Http)
 }
 
 pub(super) fn application_action(

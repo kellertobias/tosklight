@@ -13,7 +13,7 @@ import {
 
 export interface ProgrammerValuesSessionOptions {
 	showId: string;
-	userId: string;
+	sessionId: string;
 	authorityKey?: string;
 	store: ProgrammerValuesStore;
 	transport: ProgrammerValuesEventTransport | null;
@@ -23,7 +23,7 @@ export interface ProgrammerValuesSessionOptions {
 
 export class ProgrammerValuesSession {
 	private readonly eventScope: ProgrammerValuesScope;
-	private readonly userId: string;
+	private readonly sessionId: string;
 	private readonly authorityKey: string;
 	private readonly store: ProgrammerValuesStore;
 	private readonly transport: ProgrammerValuesEventTransport | null;
@@ -44,7 +44,7 @@ export class ProgrammerValuesSession {
 
 	constructor(options: ProgrammerValuesSessionOptions) {
 		this.eventScope = { showId: options.showId };
-		this.userId = options.userId;
+		this.sessionId = options.sessionId;
 		this.authorityKey = options.authorityKey ?? "";
 		this.store = options.store;
 		this.transport = options.transport;
@@ -54,7 +54,7 @@ export class ProgrammerValuesSession {
 		this.hydrated =
 			this.store.matchesAuthority(
 				options.showId,
-				options.userId,
+				options.sessionId,
 				this.authorityKey,
 			) &&
 			state.projection !== null &&
@@ -295,12 +295,12 @@ export class ProgrammerValuesSession {
 	private ensureStoreScope() {
 		if (this.stopped) return false;
 		const state = this.store.getSnapshot();
-		if (state.showId === null && state.userId === null)
-			this.store.reset(this.eventScope.showId, this.userId, this.authorityKey);
+		if (state.showId === null && state.sessionId === null)
+			this.store.reset(this.eventScope.showId, this.sessionId, this.authorityKey);
 		const scoped = this.store.getSnapshot();
 		if (
 			scoped.showId !== this.eventScope.showId ||
-			scoped.userId !== this.userId
+			scoped.sessionId !== this.sessionId
 		) {
 			this.onError?.(this.scopeError("session"));
 			return false;

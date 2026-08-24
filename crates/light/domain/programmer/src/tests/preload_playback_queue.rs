@@ -34,7 +34,7 @@ fn captured_origin_round_trips_with_the_persisted_queue_action() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let desk_id = uuid::Uuid::new_v4();
-    registry.start(session, UserId::new());
+    registry.start(session);
 
     assert!(registry.queue_preload_playback_action_with_origin(
         session,
@@ -59,7 +59,7 @@ fn captured_origin_round_trips_with_the_persisted_queue_action() {
 fn append_retains_order_and_duplicates_and_advances_generation() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
 
     queue(&registry, session, 7);
     queue(&registry, session, 7);
@@ -79,7 +79,7 @@ fn append_retains_order_and_duplicates_and_advances_generation() {
 fn drain_clear_and_release_advance_only_when_queue_changes() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
 
     queue(&registry, session, 1);
     assert_eq!(registry.take_preload_playback_actions(session).len(), 1);
@@ -104,7 +104,7 @@ fn drain_clear_and_release_advance_only_when_queue_changes() {
 fn undo_redo_and_failed_transaction_track_exact_queue_state() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     queue(&registry, session, 4);
 
     assert!(registry.undo(session));

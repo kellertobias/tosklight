@@ -12,8 +12,8 @@ import type {
 	ProgrammerPriorityTransport,
 } from "./transport";
 
-export const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-export const OTHER_USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+export const SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+export const OTHER_SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 export const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 export function priorityProjection(

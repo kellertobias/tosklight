@@ -29,19 +29,17 @@ struct CueTransferScenario {
 impl CueTransferScenario {
     fn new() -> Self {
         let (state, data_dir) = test_state();
-        let user = state.installation.users().unwrap().remove(0);
         let desk = state
             .installation.add_desk("Cue transfer")
             .unwrap();
         let session = Session {
             capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
-            user: user.clone(),
             token: "cue-transfer".into(),
             connected: true,
             desk,
         };
-        state.programming.start(session.id, user.id);
+        state.programming.start(session.id);
         state.sessions.insert_session(session.clone());
         let fixtures = [
             light_core::FixtureId::new(),

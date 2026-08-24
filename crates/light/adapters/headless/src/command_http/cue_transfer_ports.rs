@@ -43,7 +43,7 @@ impl ServerProgrammingCueTransferPorts {
     }
 
     fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
-        let (Some(user_id), Some(session_id)) = (context.user_id, context.session_id) else {
+        let Some(session_id) = context.session_id else {
             return Err(unauthorized(
                 "Cue transfer requires an authenticated operator",
             ));
@@ -55,10 +55,7 @@ impl ServerProgrammingCueTransferPorts {
         if !live {
             return Err(unauthorized("Cue transfer session is no longer active"));
         }
-        if context.desk_id != self.session.desk.id
-            || user_id != self.session.user.id.0
-            || session_id != self.session.id.0
-        {
+        if context.desk_id != self.session.desk.id || session_id != self.session.id.0 {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
                 "Cue transfer authority does not match the authenticated session",

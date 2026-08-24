@@ -6,7 +6,7 @@ import {
 } from "./ProgrammerCaptureModeTransport";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const SCOPE = { showId: SHOW_ID };
 
@@ -192,7 +192,7 @@ describe("HttpProgrammerCaptureModeTransport", () => {
 		const { observer, transport } = harness();
 		transport.subscribe(SCOPE, null, observer);
 		const malformed = eventMessage();
-		(malformed.event as { desk_id: string | null }).desk_id = USER_ID;
+		(malformed.event as { desk_id: string | null }).desk_id = SESSION_ID;
 		FakeWebSocket.instances[0].emit("message", message(malformed));
 
 		expect(observer.message).not.toHaveBeenCalled();

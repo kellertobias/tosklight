@@ -24,7 +24,7 @@ import type { ProgrammerPreloadPlaybackQueueEventTransport } from "./transport";
 
 export interface ProgrammerPreloadPlaybackQueueViewProviderProps {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	authorityKey: string | null;
 	store: ProgrammerPreloadPlaybackQueueStore;
 	transport: ProgrammerPreloadPlaybackQueueEventTransport | null;
@@ -50,7 +50,7 @@ const fallbackStore = new ProgrammerPreloadPlaybackQueueStore();
 export function ProgrammerPreloadPlaybackQueueViewProvider({
 	children,
 	showId,
-	userId,
+	sessionId,
 	authorityKey,
 	store,
 	transport,
@@ -67,10 +67,10 @@ export function ProgrammerPreloadPlaybackQueueViewProvider({
 	);
 	const session = useMemo(
 		() =>
-			showId && userId && authorityKey
+			showId && sessionId && authorityKey
 				? new ProgrammerPreloadPlaybackQueueSession({
 						showId,
-						userId,
+						sessionId,
 						authorityKey,
 						store,
 						transport,
@@ -85,7 +85,7 @@ export function ProgrammerPreloadPlaybackQueueViewProvider({
 			showId,
 			store,
 			transport,
-			userId,
+			sessionId,
 		],
 	);
 	const authority = useMemo<ProgrammerPreloadPlaybackQueueAuthority | null>(
@@ -100,8 +100,8 @@ export function ProgrammerPreloadPlaybackQueueViewProvider({
 		[session, store],
 	);
 	useLayoutEffect(() => {
-		store.reset(showId, userId, authorityKey);
-	}, [authorityKey, showId, store, userId]);
+		store.reset(showId, sessionId, authorityKey);
+	}, [authorityKey, showId, store, sessionId]);
 	useStrictModeSafeStop(session);
 	return (
 		<StoreContext.Provider value={store}>

@@ -13,7 +13,7 @@ import { PresetRecallTransportError } from "./contracts";
 import { PresetRecallWriter } from "./writer";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
-const USER_ID = "22222222-2222-4222-8222-222222222222";
+const SESSION_ID = "22222222-2222-4222-8222-222222222222";
 const DESK_ID = "33333333-3333-4333-8333-333333333333";
 const FIXTURE_ID = "44444444-4444-4444-8444-444444444444";
 const CORRELATION_ID = "55555555-5555-4555-8555-555555555555";
@@ -35,7 +35,7 @@ function preset() {
 
 function valuesProjection(revision = 6, level = 0.25) {
 	return {
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		revision,
 		fixtureValues: [
 			{
@@ -54,7 +54,7 @@ function valuesProjection(revision = 6, level = 0.25) {
 
 function preloadValuesProjection(revision = 6, level = 0.8) {
 	return {
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		revision,
 		fixtureValues: [
 			{
@@ -134,10 +134,10 @@ function harness(
 	showStore.reset(SHOW_ID, "session-a");
 	showStore.setCollection(SHOW_ID, "preset", [preset()], 30, 12);
 	const valuesStore = new ProgrammerValuesStore();
-	valuesStore.reset(SHOW_ID, USER_ID, "session-a");
+	valuesStore.reset(SHOW_ID, SESSION_ID, "session-a");
 	valuesStore.installSnapshot({ cursor: 30, projection: valuesProjection() });
 	const preloadValuesStore = new ProgrammerPreloadValuesStore();
-	preloadValuesStore.reset(SHOW_ID, USER_ID, "session-a");
+	preloadValuesStore.reset(SHOW_ID, SESSION_ID, "session-a");
 	preloadValuesStore.installSnapshot({
 		cursor: 30,
 		projection: {
@@ -147,7 +147,7 @@ function harness(
 		},
 	});
 	const captureModeStore = new ProgrammerCaptureModeStore();
-	captureModeStore.reset(SHOW_ID, USER_ID, "session-a");
+	captureModeStore.reset(SHOW_ID, SESSION_ID, "session-a");
 	captureModeStore.installSnapshot({
 		cursor: 30,
 		projection: {
@@ -191,7 +191,7 @@ function harness(
 	}));
 	const onError = vi.fn();
 	const writer = new PresetRecallWriter({
-		scope: { showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID },
+		scope: { showId: SHOW_ID, sessionId: SESSION_ID, deskId: DESK_ID },
 		showStore,
 		valuesStore,
 		preloadValuesStore,
@@ -239,7 +239,7 @@ describe("PresetRecallWriter", () => {
 		const [scope, request] = setup.recall.mock.calls[0];
 		expect(scope).toEqual({
 			showId: SHOW_ID,
-			userId: USER_ID,
+			sessionId: SESSION_ID,
 			deskId: DESK_ID,
 		});
 		expect(request).toMatchObject({
@@ -559,7 +559,7 @@ describe("PresetRecallWriter", () => {
 		const recalled = setup.writer.recall(input);
 		await Promise.resolve();
 		const request = setup.recall.mock.calls[0][1];
-		setup.valuesStore.reset(SHOW_ID, USER_ID, "session-b");
+		setup.valuesStore.reset(SHOW_ID, SESSION_ID, "session-b");
 		pending.resolve(outcome(request));
 
 		await expect(recalled).resolves.toBeNull();

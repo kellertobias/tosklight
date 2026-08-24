@@ -7,7 +7,7 @@ import {
 	OTHER_ID,
 	outcome,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	values,
 } from "./writerTestHarness";
 
@@ -110,7 +110,7 @@ describe("ProgrammerPreloadLifecycleWriter recovery", () => {
 		const sessionRequest = sessionReplaced.apply.mock.calls[0][1];
 		sessionReplaced.localStore.reset(
 			SHOW_ID,
-			USER_ID,
+			SESSION_ID,
 			sessionReplaced.selectionStore.getSnapshot().deskId,
 			"session-b",
 		);

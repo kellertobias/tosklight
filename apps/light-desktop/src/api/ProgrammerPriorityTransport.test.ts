@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
 	CORRELATION_ID,
-	OTHER_USER_ID,
-	USER_ID,
+	OTHER_SESSION_ID,
+	SESSION_ID,
 } from "../features/programmerPriority/testFixtures";
 import type { ProgrammerPriorityTransportError } from "../features/programmerPriority/transport";
 import { HttpProgrammerPriorityTransport } from "./ProgrammerPriorityTransport";
 
-const SCOPE = { userId: USER_ID };
+const SCOPE = { sessionId: SESSION_ID };
 const REQUEST = {
 	requestId: "priority-request",
 	expectedRevision: 4,
@@ -89,7 +89,7 @@ function harness(fetch = vi.fn<typeof globalThis.fetch>()) {
 	const transport = new HttpProgrammerPriorityTransport({
 		baseUrl: "http://127.0.0.1:5000/",
 		sessionToken: "session-token",
-		authenticatedUserId: USER_ID,
+		authenticatedSessionId: SESSION_ID,
 		deskBoundaryToken: "desk-boundary",
 		fetch,
 		webSocket: FakeWebSocket as unknown as typeof WebSocket,
@@ -240,7 +240,7 @@ describe("HttpProgrammerPriorityTransport", () => {
 
 	it("rejects foreign snapshot, action, and subscription scopes before I/O", async () => {
 		const { fetch, observer, transport } = harness();
-		const foreign = { userId: OTHER_USER_ID };
+		const foreign = { sessionId: OTHER_SESSION_ID };
 
 		await expect(transport.loadSnapshot(foreign)).rejects.toThrow(
 			/authenticated user/,

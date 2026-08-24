@@ -11,7 +11,7 @@ import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState
 import { ServerRuntime } from "./ServerRuntime";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const DESK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 const boundaries = vi.hoisted(() => {
@@ -45,7 +45,7 @@ vi.mock("../features/server/useServerConnection", async () => {
 			setConnectionGeneration(value: number): void;
 		}) => {
 			useEffect(() => {
-				const user = { id: USER_ID, name: "Operator", enabled: true };
+				const user = { id: SESSION_ID, name: "Operator", enabled: true };
 				const desk = {
 					id: DESK_ID,
 					name: "Main",
@@ -169,7 +169,7 @@ function Harness({ showValues }: { showValues: boolean }) {
 
 function captureProjection(revision: number) {
 	return {
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		revision,
 		blind: true,
 		preview: false,
@@ -179,7 +179,7 @@ function captureProjection(revision: number) {
 
 function preloadProjection(revision: number) {
 	return {
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		revision,
 		fixtureValues: [],
 		groupValues: [],

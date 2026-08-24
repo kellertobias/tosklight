@@ -878,12 +878,8 @@ fn envelope_with_action(
     action: PlaybackAction,
     request_id: Option<&str>,
 ) -> ActionEnvelope<PlaybackCommand> {
-    let mut context = crate::ActionContext::operator(
-        Uuid::from_u128(1),
-        Uuid::from_u128(2),
-        Uuid::from_u128(3),
-        source,
-    );
+    let mut context =
+        crate::ActionContext::operator(Uuid::from_u128(1), Uuid::from_u128(3), source);
     context.request_id = request_id.map(str::to_owned);
     ActionEnvelope {
         context,

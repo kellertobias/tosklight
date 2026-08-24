@@ -23,12 +23,10 @@ async fn runtime_v2_readiness_and_bootstrap_expose_the_current_contract() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(bootstrap["api_version"], "v2");
     assert!(
-        bootstrap["users"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|user| { user["name"] == "Operator" && user["enabled"] == true })
+        bootstrap.get("users").is_none(),
+        "the desk has no users to discover"
     );
+    assert!(bootstrap["desks"].as_array().is_some());
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -55,7 +53,7 @@ async fn runtime_v2_session_tolerates_unknown_fields_and_can_close_itself() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let session = json(response).await;
-    assert_eq!(session["user"]["name"], "Operator");
+    assert!(session.get("user").is_none(), "a session names no user");
     assert!(session["client_id"].as_str().is_some());
     let session_id = session["session_id"].as_str().unwrap();
     let token = session["token"].as_str().unwrap();
@@ -82,7 +80,7 @@ async fn runtime_v2_session_rejects_a_malformed_known_field() {
         .oneshot(
             Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"username":7}"#))
+                .body(Body::from(r#"{"client_id":7}"#))
                 .unwrap(),
         )
         .await
@@ -90,7 +88,7 @@ async fn runtime_v2_session_rejects_a_malformed_known_field() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let message = String::from_utf8_lossy(&body);
-    assert!(message.contains("username") || message.contains("string"));
+    assert!(message.contains("client_id") || message.contains("UUID"));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

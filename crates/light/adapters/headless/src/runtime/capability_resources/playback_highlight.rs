@@ -147,7 +147,6 @@ impl HighlightResource {
     pub(in crate::runtime) fn apply_action_guarded(
         &self,
         desk_id: Uuid,
-        user_id: light_core::UserId,
         action: HighlightAction,
         selection: &light_programmer::ProgrammerSelection,
         fixtures: &[HighlightFixture],
@@ -156,7 +155,6 @@ impl HighlightResource {
     ) -> light_programmer::HighlightTransition {
         self.registry.action_guarded(
             desk_id,
-            user_id,
             action,
             selection,
             fixtures,
@@ -168,11 +166,10 @@ impl HighlightResource {
     pub(in crate::runtime) fn acknowledge_selection(
         &self,
         desk_id: Uuid,
-        user_id: light_core::UserId,
         selection: &light_programmer::ProgrammerSelection,
     ) {
         self.registry
-            .acknowledge_internal_selection(desk_id, user_id, selection);
+            .acknowledge_internal_selection(desk_id, selection);
     }
 
     pub(in crate::runtime) fn clear_all(&self) {
@@ -180,8 +177,8 @@ impl HighlightResource {
         self.patch_preview.lock().clear();
     }
 
-    pub(in crate::runtime) fn clear_context(&self, desk_id: Uuid, user_id: light_core::UserId) {
-        self.registry.clear_context(desk_id, user_id);
+    pub(in crate::runtime) fn clear_context(&self, desk_id: Uuid) {
+        self.registry.clear_context(desk_id);
     }
 
     pub(in crate::runtime) fn clear_patch_previews(&self) {
@@ -218,11 +215,10 @@ impl HighlightResource {
     pub(in crate::runtime) fn mark_explicit_fixture_attributes(
         &self,
         desk_id: Uuid,
-        user_id: light_core::UserId,
         touched: impl IntoIterator<Item = (light_core::FixtureId, light_core::AttributeKey)>,
     ) -> bool {
         self.registry
-            .mark_explicit_fixture_attributes(desk_id, user_id, touched)
+            .mark_explicit_fixture_attributes(desk_id, touched)
     }
 
     pub(in crate::runtime) fn include_patch_preview_layers(

@@ -204,7 +204,7 @@ pub(super) fn apply_highlight_selection_write(
         .ok_or_else(|| ApiError::not_found("programmer selection"))?;
     state
         .highlight
-        .acknowledge_selection(session.desk.id, session.user.id, &selection);
+        .acknowledge_selection(session.desk.id, &selection);
     persist_programmer(state, session)?;
     Ok(true)
 }
@@ -246,7 +246,6 @@ pub(super) fn reconcile_highlight_selection(
                 "highlight_rejected",
                 serde_json::json!({
                     "desk_id":session.desk.id,
-                    "user_id":session.user.id,
                     "source":source,
                     "error":error.message,
                 }),

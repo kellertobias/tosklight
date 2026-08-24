@@ -538,7 +538,7 @@ function QuickSetupShowDetails({ model }: { model: QuickSetupModel }) {
 				</strong>
 			</span>
 			<span>
-				Operator <strong>{session?.user.name ?? "—"}</strong>
+				Operator <strong>{session ? "connected" : "—"}</strong>
 			</span>
 			<div className="show-primary-actions">
 				<Button onClick={() => dialogs.setRevisionOpen(true)}>

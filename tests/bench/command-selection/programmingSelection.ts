@@ -250,7 +250,7 @@ function assertCurrentSession(api: ApiDriver, captured: Session) {
 		current.session_id !== captured.session_id ||
 		current.client_id !== captured.client_id ||
 		current.token !== captured.token ||
-		current.user.id !== captured.user.id ||
+		current.session_id !== captured.session_id ||
 		current.desk.id !== captured.desk.id
 	)
 		throw new Error("Programming selection scope changed during mutation");

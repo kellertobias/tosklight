@@ -1902,7 +1902,6 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
         })
         .cloned()
         .unwrap();
-    assert_eq!(legacy.payload["user_id"], session.user.id.0.to_string());
     assert_eq!(
         legacy.payload["changes"],
         serde_json::json!(["preload_playback_queue"])

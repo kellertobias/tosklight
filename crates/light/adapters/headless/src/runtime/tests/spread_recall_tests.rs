@@ -16,16 +16,14 @@ impl SpreadRecallRig {
     /// Default show with a persisted Group 1 whose ordered members are fresnels 1..=5.
     fn new(name: &str) -> Self {
         let (state, data_dir) = test_state();
-        let user = state.installation.users().unwrap().remove(0);
         let session = Session {
             capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
-            user: user.clone(),
             token: "spread-recall".into(),
             connected: true,
             desk: test_control_desk(),
         };
-        state.programming.start(session.id, user.id);
+        state.programming.start(session.id);
         attach_session_command_context(&state, &session);
         // Resolve command values instantly; the spread rule under test is fade-independent.
         state.installation.update_configuration(|configuration| configuration.programmer_fade_millis = 0);

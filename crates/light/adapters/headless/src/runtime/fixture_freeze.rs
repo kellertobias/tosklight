@@ -19,7 +19,7 @@ const FREEZE_HISTORY_LIMIT: usize = 100;
 
 #[derive(Clone, Default)]
 pub(super) struct FixtureFreezeHistory {
-    entries: Arc<Mutex<HashMap<(light_core::UserId, uuid::Uuid), Vec<FreezeHistoryEntry>>>>,
+    entries: Arc<Mutex<HashMap<uuid::Uuid, Vec<FreezeHistoryEntry>>>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -32,7 +32,7 @@ struct FreezeHistoryEntry {
 impl FixtureFreezeHistory {
     fn record(&self, session: &Session, entry: FreezeHistoryEntry) {
         let mut all = self.entries.lock();
-        let entries = all.entry((session.user.id, session.desk.id)).or_default();
+        let entries = all.entry(session.desk.id).or_default();
         entries.push(entry);
         if entries.len() > FREEZE_HISTORY_LIMIT {
             entries.remove(0);
@@ -42,14 +42,14 @@ impl FixtureFreezeHistory {
     fn next(&self, session: &Session, programmer_undo_depth: usize) -> Option<FreezeHistoryEntry> {
         self.entries
             .lock()
-            .get(&(session.user.id, session.desk.id))
+            .get(&session.desk.id)
             .and_then(|entries| entries.last())
             .filter(|entry| programmer_undo_depth <= entry.programmer_undo_depth)
             .cloned()
     }
 
     fn finish(&self, session: &Session, entry: &FreezeHistoryEntry) {
-        let key = (session.user.id, session.desk.id);
+        let key = session.desk.id;
         let mut all = self.entries.lock();
         let remove = all.get_mut(&key).is_some_and(|entries| {
             if entries.last().is_some_and(|latest| latest == entry) {

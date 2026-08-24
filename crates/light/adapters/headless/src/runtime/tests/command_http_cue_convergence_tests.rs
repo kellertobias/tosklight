@@ -924,12 +924,11 @@ async fn a_guest_runs_playback_while_the_programming_user_holds_a_record() {
     let guest = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: scenario.session.user.clone(),
         token: "guest-phone".into(),
         connected: true,
         desk: scenario.session.desk.clone(),
     };
-    scenario.state.programming.start(guest.id, guest.user.id);
+    scenario.state.programming.start(guest.id);
     scenario.state.sessions.insert_session(guest.clone());
     scenario.state.integrations.register_osc_subscriber(
         "guest-phone".into(),

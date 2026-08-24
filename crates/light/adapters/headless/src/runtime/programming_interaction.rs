@@ -18,7 +18,7 @@ pub(super) fn programming_context(
     source: ActionSource,
     request_id: Option<&str>,
 ) -> ActionContext {
-    let context = ActionContext::operator(session.desk.id, session.user.id.0, session.id.0, source);
+    let context = ActionContext::operator(session.desk.id, session.id.0, source);
     match request_id {
         Some(id) => context.with_request_id(id),
         None => context,
@@ -58,7 +58,7 @@ pub(super) fn run_programmer_lifecycle<T>(
     let ports = ServerProgrammingPorts::new(state, actor, "http_programmer_lifecycle", false);
     state
         .programming
-        .replace_user_programmer(context, &ports, target, operation)
+        .replace_desk_programmer(context, &ports, target, operation)
         .map_err(programming_action_error)
 }
 

@@ -6,7 +6,7 @@ use crate::{
     ActionError, ActionErrorKind, ProgrammingPreloadLifecycleRequest,
     ProgrammingPreloadLifecycleResult,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::{
     collections::{HashMap, VecDeque},
     mem::size_of,
@@ -14,14 +14,12 @@ use std::{
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ReplayKey {
-    user_id: UserId,
     desk_id: uuid::Uuid,
     session_id: SessionId,
     request_id: String,
 }
 
 pub(super) struct PreloadLifecycleReplayIdentity {
-    pub(super) user_id: UserId,
     pub(super) desk_id: uuid::Uuid,
     pub(super) session_id: SessionId,
     pub(super) request_id: String,
@@ -109,7 +107,6 @@ impl PreloadLifecycleReplayCache {
 
 fn key(identity: &PreloadLifecycleReplayIdentity) -> ReplayKey {
     ReplayKey {
-        user_id: identity.user_id,
         desk_id: identity.desk_id,
         session_id: identity.session_id,
         request_id: identity.request_id.clone(),
@@ -195,19 +192,18 @@ mod tests {
         ProgrammingPreloadLifecycleState, ProgrammingPreloadRevisionExpectation,
         ProgrammingPreloadRuntimeChange,
     };
-    use light_core::{ShowId, UserId};
+    use light_core::ShowId;
     use std::sync::Arc;
     use uuid::Uuid;
 
     #[test]
     fn byte_budget_evicts_deep_runtime_projection_strings() {
-        let user_id = UserId::new();
         let desk_id = Uuid::new_v4();
         let session_id = SessionId::new();
-        let first = result(user_id, desk_id, session_id, "first", 512 * 1024);
-        let second = result(user_id, desk_id, session_id, "second", 512 * 1024);
-        let first_key = replay_key(user_id, desk_id, session_id, "first");
-        let second_key = replay_key(user_id, desk_id, session_id, "second");
+        let first = result(desk_id, session_id, "first", 512 * 1024);
+        let second = result(desk_id, session_id, "second", 512 * 1024);
+        let first_key = replay_key(desk_id, session_id, "first");
+        let second_key = replay_key(desk_id, session_id, "second");
         let request = request();
         let budget = retained_entry_bytes(&first_key, &request, &first)
             + retained_entry_bytes(&second_key, &request, &second)
@@ -215,12 +211,12 @@ mod tests {
         let mut cache = PreloadLifecycleReplayCache::with_limits(10, budget);
 
         cache.insert(
-            identity(user_id, desk_id, session_id, "first"),
+            identity(desk_id, session_id, "first"),
             request.clone(),
             first,
         );
         cache.insert(
-            identity(user_id, desk_id, session_id, "second"),
+            identity(desk_id, session_id, "second"),
             request.clone(),
             second,
         );
@@ -229,13 +225,13 @@ mod tests {
         assert!(cache.retained_bytes <= budget);
         assert!(
             cache
-                .get(&identity(user_id, desk_id, session_id, "first"), &request)
+                .get(&identity(desk_id, session_id, "first"), &request)
                 .unwrap()
                 .is_none()
         );
         assert!(
             cache
-                .get(&identity(user_id, desk_id, session_id, "second"), &request)
+                .get(&identity(desk_id, session_id, "second"), &request)
                 .unwrap()
                 .is_some()
         );
@@ -243,12 +239,11 @@ mod tests {
 
     #[test]
     fn retained_size_includes_warning_vector_storage_and_fixed_allocation_headers() {
-        let user_id = UserId::new();
         let desk_id = Uuid::new_v4();
         let session_id = SessionId::new();
         let request = request();
-        let key = replay_key(user_id, desk_id, session_id, "warnings");
-        let mut outcome = result(user_id, desk_id, session_id, "warnings", 0);
+        let key = replay_key(desk_id, session_id, "warnings");
+        let mut outcome = result(desk_id, session_id, "warnings", 0);
         let baseline = retained_entry_bytes(&key, &request, &outcome);
         outcome.commit.as_mut().unwrap().warnings = Vec::with_capacity(32);
 
@@ -270,7 +265,6 @@ mod tests {
     }
 
     fn result(
-        user_id: UserId,
         desk_id: Uuid,
         session_id: SessionId,
         request_id: &str,
@@ -297,14 +291,13 @@ mod tests {
             event_sequence: 1,
         };
         ProgrammingPreloadLifecycleResult {
-            context: ActionContext::operator(desk_id, user_id.0, session_id.0, ActionSource::Http)
+            context: ActionContext::operator(desk_id, session_id.0, ActionSource::Http)
                 .with_request_id(request_id),
             request_id: request_id.into(),
             replayed: false,
             state: ProgrammingPreloadLifecycleState::Changed,
             active: false,
             capture_mode: Arc::new(ProgrammingCaptureModeProjection {
-                user_id,
                 revision: 1,
                 blind: false,
                 preview: false,
@@ -336,27 +329,19 @@ mod tests {
     }
 
     fn identity(
-        user_id: UserId,
         desk_id: Uuid,
         session_id: SessionId,
         request_id: &str,
     ) -> PreloadLifecycleReplayIdentity {
         PreloadLifecycleReplayIdentity {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.into(),
         }
     }
 
-    fn replay_key(
-        user_id: UserId,
-        desk_id: Uuid,
-        session_id: SessionId,
-        request_id: &str,
-    ) -> ReplayKey {
+    fn replay_key(desk_id: Uuid, session_id: SessionId, request_id: &str) -> ReplayKey {
         ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.into(),

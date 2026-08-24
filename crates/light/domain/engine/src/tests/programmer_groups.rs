@@ -5,8 +5,8 @@ fn group_ltp_uses_operator_edit_time_not_render_time() {
     let programmers = ProgrammerRegistry::default();
     let group_session = light_core::SessionId::new();
     let direct_session = light_core::SessionId::new();
-    programmers.start(group_session, light_core::UserId::new());
-    programmers.start(direct_session, light_core::UserId::new());
+    programmers.start(group_session);
+    programmers.start(direct_session);
     let (mut fixture, logical) = fixture();
     retarget_only_channel(&mut fixture, "pan");
     programmers.set_group(
@@ -56,8 +56,8 @@ fn programmer_intensity_is_ltp_however_many_surfaces_program_it() {
     let programmers = ProgrammerRegistry::default();
     let main_window = light_core::SessionId::new();
     let second_screen = light_core::SessionId::new();
-    programmers.start(main_window, light_core::UserId::new());
-    programmers.start(second_screen, light_core::UserId::new());
+    programmers.start(main_window);
+    programmers.start(second_screen);
     let (fixture, logical) = fixture();
     programmers.set_group(
         main_window,
@@ -162,7 +162,7 @@ fn empty_group_programming_becomes_effective_when_members_are_added() {
 fn a_live_group_selection_remains_live_across_membership_changes() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     programmers.select_expression(
         session,
         vec![],

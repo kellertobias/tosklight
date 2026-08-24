@@ -1,7 +1,6 @@
 use super::support::{fixture, no_groups, selection};
 use crate::SelectionExpression;
 use crate::highlight::{HighlightAction, HighlightMode, HighlightRegistry};
-use light_core::UserId;
 use uuid::Uuid;
 
 #[test]
@@ -38,7 +37,6 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
 
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
-    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2), fixture(3)];
     let ids = fixtures
         .iter()
@@ -50,7 +48,7 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
     let next = registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
     let write = next.working_selection.as_ref().unwrap();
     let stepped = selection(write.selected.clone(), write.expression.clone(), 2);
-    registry.acknowledge_internal_selection(desk, user, &stepped);
+    registry.acknowledge_internal_selection(desk, &stepped);
 
     let layers = registry.output_layers();
     assert_eq!(
@@ -69,7 +67,6 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
     );
     assert!(registry.mark_explicit_fixture_attributes(
         desk,
-        user,
         [
             (ids[0], AttributeKey::intensity()),
             (ids[1], AttributeKey("color".into()))
@@ -96,7 +93,7 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
     let next_again = registry.action(HighlightAction::Next, &stepped, &fixtures, &groups, false);
     let write = next_again.working_selection.as_ref().unwrap();
     let stepped_again = selection(write.selected.clone(), write.expression.clone(), 3);
-    registry.acknowledge_internal_selection(desk, user, &stepped_again);
+    registry.acknowledge_internal_selection(desk, &stepped_again);
     let all = registry.action(
         HighlightAction::All,
         &stepped_again,
@@ -122,7 +119,7 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
         all.working_selection.as_ref().unwrap().expression.clone(),
         4,
     );
-    registry.acknowledge_internal_selection(desk, user, &restored);
+    registry.acknowledge_internal_selection(desk, &restored);
     let off = registry.action(HighlightAction::Off, &restored, &fixtures, &groups, false);
     assert!(off.output_layers.is_empty());
     let reactivated = registry.action(HighlightAction::On, &restored, &fixtures, &groups, false);
@@ -141,7 +138,6 @@ fn an_explicitly_programmed_attribute_is_suppressed_on_the_desks_highlight() {
 
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
-    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2)];
     let ids = fixtures
         .iter()
@@ -153,7 +149,7 @@ fn an_explicitly_programmed_attribute_is_suppressed_on_the_desks_highlight() {
 
     // Authoring the attribute in the normal Programmer suppresses the temporary look for it.
     // There is one Highlight, so one surface saying so is the desk saying so.
-    registry.mark_explicit_fixture_attributes(desk, user, [(ids[0], AttributeKey::intensity())]);
+    registry.mark_explicit_fixture_attributes(desk, [(ids[0], AttributeKey::intensity())]);
     assert!(
         registry
             .output_layers()
@@ -172,7 +168,7 @@ fn an_explicitly_programmed_attribute_is_suppressed_on_the_desks_highlight() {
         next.working_selection.as_ref().unwrap().expression.clone(),
         2,
     );
-    registry.acknowledge_internal_selection(desk, user, &stepped);
+    registry.acknowledge_internal_selection(desk, &stepped);
     let focused = next.working_selection.as_ref().unwrap().selected.clone();
     for layer in registry.output_layers() {
         let expected = if focused.contains(&layer.fixture_id) {

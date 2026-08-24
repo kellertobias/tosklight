@@ -1,7 +1,7 @@
 use crate::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ApplicationCommand, CommandFamily,
 };
-use light_core::{FixtureId, UserId};
+use light_core::FixtureId;
 use light_programmer::{
     GroupDefinition, HighlightAction, HighlightFixture, HighlightOutputLayer, HighlightRegistry,
     HighlightSelectionWrite, HighlightState, HighlightTransition, ProgrammerSelection,
@@ -134,17 +134,13 @@ impl HighlightService {
         envelope: ActionEnvelope<HighlightCommand>,
         ports: &dyn HighlightPorts,
     ) -> Result<HighlightResult, ActionError> {
-        let user_id = required_user(&envelope.context)?;
+        required_session(&envelope.context)?;
         let environment = ports.environment(&envelope.context)?;
-        let transition =
-            self.transition(&envelope.context, user_id, &environment, &envelope.command);
+        let transition = self.transition(&envelope.context, &environment, &envelope.command);
         let selection_changed = if let Some(write) = transition.working_selection.as_ref() {
             let selection = ports.apply_selection(&envelope.context, write)?;
-            self.registry.acknowledge_internal_selection(
-                envelope.context.desk_id,
-                user_id,
-                &selection,
-            );
+            self.registry
+                .acknowledge_internal_selection(envelope.context.desk_id, &selection);
             true
         } else {
             false
@@ -177,7 +173,7 @@ impl HighlightService {
         context: &ActionContext,
         ports: &dyn HighlightPorts,
     ) -> Result<HighlightState, ActionError> {
-        required_user(context)?;
+        required_session(context)?;
         let environment = ports.environment(context)?;
         Ok(self
             .registry
@@ -193,14 +189,12 @@ impl HighlightService {
     fn transition(
         &self,
         context: &ActionContext,
-        user_id: UserId,
         environment: &HighlightEnvironment,
         command: &HighlightCommand,
     ) -> HighlightTransition {
         match command {
             HighlightCommand::Action { action, .. } => self.registry.action_guarded(
                 context.desk_id,
-                user_id,
                 *action,
                 &environment.selection,
                 &environment.fixtures,
@@ -217,13 +211,16 @@ impl HighlightService {
     }
 }
 
-fn required_user(context: &ActionContext) -> Result<UserId, ActionError> {
-    context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Highlight requires an authenticated user",
-        )
-    })
+/// Highlight is still gated: it runs as the desk's operator, not anonymously. What it needs is a
+/// live session, which is what a surface actually presents.
+fn required_session(context: &ActionContext) -> Result<(), ActionError> {
+    if context.session_id.is_some() {
+        return Ok(());
+    }
+    Err(ActionError::new(
+        ActionErrorKind::Unauthorized,
+        "Highlight requires an operator session",
+    ))
 }
 
 const fn publishes_programmer_change(command: &HighlightCommand) -> bool {

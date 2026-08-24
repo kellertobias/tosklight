@@ -69,13 +69,11 @@ fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
 #[test]
 fn osc_and_ui_share_the_desks_one_command_line() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let front = state.installation.add_desk("Front").unwrap();
     let wing = state.installation.add_desk("Wing").unwrap();
     let ui = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "front-ui".into(),
         connected: true,
         desk: front.clone(),
@@ -83,7 +81,6 @@ fn osc_and_ui_share_the_desks_one_command_line() {
     let second_front = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "front-second".into(),
         connected: true,
         desk: front.clone(),
@@ -91,13 +88,12 @@ fn osc_and_ui_share_the_desks_one_command_line() {
     let wing_ui = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user,
         token: "wing-ui".into(),
         connected: true,
         desk: wing,
     };
     for session in [&ui, &second_front, &wing_ui] {
-        state.programming.start(session.id, session.user.id);
+        state.programming.start(session.id);
         attach_session_command_context(&state, session);
         state.sessions.insert_session(session.clone());
     }
@@ -154,12 +150,10 @@ fn osc_and_ui_share_the_desks_one_command_line() {
 #[test]
 fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let front = state.installation.add_desk("Front").unwrap();
     let ui = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "front-ui".into(),
         connected: true,
         desk: front.clone(),
@@ -167,13 +161,12 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
     let second_ui = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user,
         token: "front-second".into(),
         connected: true,
         desk: front.clone(),
     };
     for session in [&ui, &second_ui] {
-        state.programming.start(session.id, session.user.id);
+        state.programming.start(session.id);
         attach_session_command_context(&state, session);
         state.sessions.insert_session(session.clone());
     }
@@ -299,7 +292,6 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
 #[test]
 fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let mut front = test_control_desk();
     front.id = Uuid::new_v4();
     let mut wing = test_control_desk();
@@ -307,7 +299,6 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
     let owner = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "owner".into(),
         connected: true,
         desk: front.clone(),
@@ -315,7 +306,6 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
     let same_desk_hardware = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "hardware".into(),
         connected: true,
         desk: front,
@@ -323,7 +313,6 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
     let different_desk = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user,
         token: "wing".into(),
         connected: true,
         desk: wing,

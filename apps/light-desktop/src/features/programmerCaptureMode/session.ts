@@ -12,7 +12,7 @@ import {
 
 export interface ProgrammerCaptureModeSessionOptions {
 	showId: string;
-	userId: string;
+	sessionId: string;
 	authorityKey?: string;
 	store: ProgrammerCaptureModeStore;
 	transport: ProgrammerCaptureModeEventTransport | null;
@@ -22,7 +22,7 @@ export interface ProgrammerCaptureModeSessionOptions {
 
 export class ProgrammerCaptureModeSession {
 	private readonly eventScope: ProgrammerCaptureModeScope;
-	private readonly userId: string;
+	private readonly sessionId: string;
 	private readonly authorityKey: string;
 	private readonly store: ProgrammerCaptureModeStore;
 	private readonly transport: ProgrammerCaptureModeEventTransport | null;
@@ -43,7 +43,7 @@ export class ProgrammerCaptureModeSession {
 
 	constructor(options: ProgrammerCaptureModeSessionOptions) {
 		this.eventScope = { showId: options.showId };
-		this.userId = options.userId;
+		this.sessionId = options.sessionId;
 		this.authorityKey = options.authorityKey ?? "";
 		this.store = options.store;
 		this.transport = options.transport;
@@ -272,12 +272,12 @@ export class ProgrammerCaptureModeSession {
 	private ensureStoreScope() {
 		if (this.stopped) return false;
 		const state = this.store.getSnapshot();
-		if (state.showId === null && state.userId === null)
-			this.store.reset(this.eventScope.showId, this.userId, this.authorityKey);
+		if (state.showId === null && state.sessionId === null)
+			this.store.reset(this.eventScope.showId, this.sessionId, this.authorityKey);
 		const scoped = this.store.getSnapshot();
 		if (
 			scoped.showId !== this.eventScope.showId ||
-			scoped.userId !== this.userId
+			scoped.sessionId !== this.sessionId
 		) {
 			this.onError?.(this.scopeError("session"));
 			return false;

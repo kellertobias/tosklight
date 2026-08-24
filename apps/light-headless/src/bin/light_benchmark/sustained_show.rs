@@ -6,9 +6,7 @@ use crate::light_benchmark::{
     },
 };
 use chrono::{TimeZone, Utc};
-use light_core::{
-    AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, SessionId, UserId,
-};
+use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, SessionId};
 use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAction};
 use light_fixture::{
     FixtureDefinition, PatchedFixture, PatchedHead, SplitPatch, read_fixture_package,
@@ -174,7 +172,7 @@ pub fn build(
     let clock = Arc::new(ManualClock::new(logical_start));
     let programmers = ProgrammerRegistry::with_clock(clock.clone());
     let session = SessionId(fixed_uuid(0x80, 1));
-    programmers.start(session, UserId(fixed_uuid(0x81, 1)));
+    programmers.start(session);
     let fixtures = patch_layout_fixtures(&layout.universes)?;
     let fixture_ids = fixtures
         .iter()

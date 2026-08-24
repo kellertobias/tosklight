@@ -2,7 +2,7 @@ use crate::alignment::ProgrammerAlignmentState;
 use crate::command_state::CommandLineState;
 use crate::selection::{ProgrammerSelection, SelectionContext};
 use crate::state::{ProgrammerOutputState, ProgrammerState};
-use light_core::{SessionId, SharedClock, SystemClock, UserId};
+use light_core::{SessionId, SharedClock, SystemClock};
 use parking_lot::{ReentrantMutex, RwLock};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -225,41 +225,15 @@ impl ProgrammerRegistry {
         self.states.read().contains_key(&self.key(session))
     }
 
-    /// The desk's Programmer identity for a session, given whatever identity it presented.
-    ///
-    /// Unlike `operated_desk_user` this always answers, because callers use it to key state
-    /// before they have established that the session exists at all; a session the desk does not
-    /// know simply reads the desk's identity and then fails its own existence check.
-    pub fn desk_user_for(&self, session: SessionId, presented: UserId) -> UserId {
-        self.user_id(session)
-            .unwrap_or(self.desk.normalize(presented))
-    }
-
-    /// The desk identity this session operates.
-    ///
-    /// `Some` whenever the desk knows the session. Callers should read and report this rather than
-    /// an identity a caller presented: one from before the collapse names no state, so keying on
-    /// it reads an empty Programmer at revision zero.
-    pub fn operated_desk_user(&self, session: SessionId) -> Option<UserId> {
-        self.user_id(session)
-    }
-
-    pub fn user_id(&self, session: SessionId) -> Option<UserId> {
-        self.states
-            .read()
-            .get(&self.key(session))
-            .map(|state| state.user_id)
-    }
-
     /// Reads only lightweight priority authority; retained Programmer values are never cloned.
     pub fn priority_state(
         &self,
         session: SessionId,
-    ) -> Option<(UserId, i16, chrono::DateTime<chrono::Utc>)> {
+    ) -> Option<(i16, chrono::DateTime<chrono::Utc>)> {
         let states = self.states.read();
         let state = states.get(&self.key(session))?;
         let changed_at = self.priority_changed_at.read().as_ref().copied()?;
-        Some((state.user_id, state.priority, changed_at))
+        Some((state.priority, changed_at))
     }
 
     pub fn normal_values_revision(&self) -> u64 {
@@ -480,16 +454,10 @@ impl ProgrammerRegistry {
             .collect()
     }
     pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
-        self.active_sessions_for_user(None)
+        self.connected_programmer_states()
     }
-    /// Every session operating the desk's one Programmer.
-    ///
-    /// The identity is normalised first: a caller authenticated under an identity from before the
-    /// collapse operates the same Programmer, so it must not read as having none.
-    pub fn active_for_user_sessions(&self, user_id: UserId) -> Vec<ProgrammerState> {
-        self.active_sessions_for_user(Some(self.desk.normalize(user_id)))
-    }
-    fn active_sessions_for_user(&self, user_id: Option<UserId>) -> Vec<ProgrammerState> {
+
+    fn connected_programmer_states(&self) -> Vec<ProgrammerState> {
         let states = self.states.read();
         let command_contexts = self.command_contexts.read();
         let command_states = self.command_states.read();
@@ -499,9 +467,6 @@ impl ProgrammerRegistry {
             .iter()
             .filter_map(|(session, key)| {
                 let source = states.get(key)?;
-                if user_id.is_some_and(|user_id| source.user_id != user_id) {
-                    return None;
-                }
                 let mut state = source.clone();
                 state.session_id = *session;
                 let command_context = command_contexts.get(session).unwrap_or(session);

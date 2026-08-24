@@ -1,7 +1,6 @@
 use super::support::{apply_write, fixture, no_groups, selection};
 use crate::highlight::{HighlightAction, HighlightMode, HighlightRegistry};
 use crate::{GroupDefinition, SelectionExpression};
-use light_core::UserId;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -9,7 +8,6 @@ use uuid::Uuid;
 fn active_prev_next_all_write_real_selection_and_wrap() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
-    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2), fixture(3), fixture(4)];
     let ids = fixtures
         .iter()
@@ -30,20 +28,20 @@ fn active_prev_next_all_write_real_selection_and_wrap() {
         next.working_selection.as_ref().unwrap().selected,
         vec![ids[0]]
     );
-    let mut actual = apply_write(&registry, desk, user, &next, 2).unwrap();
+    let mut actual = apply_write(&registry, desk, &next, 2).unwrap();
     for expected in [ids[1], ids[2], ids[3], ids[0]] {
         let next = registry.action(HighlightAction::Next, &actual, &fixtures, &groups, false);
         assert_eq!(
             next.working_selection.as_ref().unwrap().selected,
             vec![expected]
         );
-        actual = apply_write(&registry, desk, user, &next, actual.revision + 1).unwrap();
+        actual = apply_write(&registry, desk, &next, actual.revision + 1).unwrap();
     }
 
     let all = registry.action(HighlightAction::All, &actual, &fixtures, &groups, false);
     assert_eq!(all.state.mode, HighlightMode::Selection);
     assert_eq!(all.working_selection.as_ref().unwrap().selected, ids);
-    actual = apply_write(&registry, desk, user, &all, actual.revision + 1).unwrap();
+    actual = apply_write(&registry, desk, &all, actual.revision + 1).unwrap();
     let previous = registry.action(
         HighlightAction::Previous,
         &actual,
@@ -62,7 +60,6 @@ fn active_prev_next_all_write_real_selection_and_wrap() {
 fn active_step_keeps_its_frozen_basis_across_external_selection_revisions() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
-    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2), fixture(3)];
     let ids = fixtures
         .iter()
@@ -72,7 +69,7 @@ fn active_step_keeps_its_frozen_basis_across_external_selection_revisions() {
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
     registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
     let first = registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
-    let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
+    let stepped = apply_write(&registry, desk, &first, 2).unwrap();
 
     // Programmer values may change repeatedly while the selection revision is unchanged.
     let unchanged = registry.status(&stepped, &fixtures, &groups, false);
@@ -96,7 +93,6 @@ fn active_step_keeps_its_frozen_basis_across_external_selection_revisions() {
 fn active_all_restores_the_frozen_group_snapshot_after_membership_changes() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
-    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2), fixture(3), fixture(4)];
     let ids = fixtures
         .iter()
@@ -120,7 +116,7 @@ fn active_all_restores_the_frozen_group_snapshot_after_membership_changes() {
     );
     registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
     let first = registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
-    let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
+    let stepped = apply_write(&registry, desk, &first, 2).unwrap();
     groups.get_mut("1").unwrap().fixtures = vec![ids[3], ids[1]];
     let all = registry.action(HighlightAction::All, &stepped, &fixtures, &groups, false);
     assert_eq!(
@@ -137,7 +133,6 @@ fn active_all_restores_the_frozen_group_snapshot_after_membership_changes() {
 fn removed_items_keep_live_sequence_deterministic_and_high_active_when_empty() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
-    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2), fixture(3)];
     let ids = fixtures
         .iter()
@@ -147,7 +142,7 @@ fn removed_items_keep_live_sequence_deterministic_and_high_active_when_empty() {
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
     registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
     let first = registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
-    let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
+    let stepped = apply_write(&registry, desk, &first, 2).unwrap();
     let remaining = vec![fixtures[1].clone(), fixtures[2].clone()];
     let reconciled = registry.status(&stepped, &remaining, &groups, false);
     assert_eq!(
@@ -156,7 +151,7 @@ fn removed_items_keep_live_sequence_deterministic_and_high_active_when_empty() {
     );
     assert_eq!(reconciled.output_fixtures, vec![ids[1]]);
 
-    let corrected = apply_write(&registry, desk, user, &reconciled, 3).unwrap();
+    let corrected = apply_write(&registry, desk, &reconciled, 3).unwrap();
     let only_active = vec![fixtures[1].clone()];
     let inactive_removed = registry.status(&corrected, &only_active, &groups, false);
     assert_eq!(inactive_removed.state.remembered.len(), 1);

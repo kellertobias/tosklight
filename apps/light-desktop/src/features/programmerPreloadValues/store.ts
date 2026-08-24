@@ -42,10 +42,10 @@ export class ProgrammerPreloadValuesStore {
 
 	readonly getSnapshot = () => this.state;
 
-	reset(showId: string | null, userId: string | null, authorityKey = "") {
+	reset(showId: string | null, sessionId: string | null, authorityKey = "") {
 		if (
 			showId === this.state.showId &&
-			userId === this.state.userId &&
+			sessionId === this.state.sessionId &&
 			authorityKey === this.authorityKey
 		)
 			return;
@@ -53,7 +53,7 @@ export class ProgrammerPreloadValuesStore {
 		this.authoritative = null;
 		this.authorityKey = authorityKey;
 		this.operations.clear();
-		this.state = { ...emptyProgrammerPreloadValuesState(), showId, userId };
+		this.state = { ...emptyProgrammerPreloadValuesState(), showId, sessionId };
 		this.emit();
 	}
 

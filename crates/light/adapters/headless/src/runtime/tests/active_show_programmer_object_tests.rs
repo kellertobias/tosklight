@@ -557,16 +557,14 @@ struct ActiveObjectScenario {
 impl ActiveObjectScenario {
     fn new(name: &str, seed: impl FnOnce(&ShowStore)) -> Self {
         let (state, data_dir) = test_state();
-        let user = state.installation.users().unwrap().remove(0);
         let session = Session {
             capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
-            user: user.clone(),
             token: format!("{}-operator", name.replace(' ', "-")),
             connected: true,
             desk: test_control_desk(),
         };
-        state.programming.start(session.id, user.id);
+        state.programming.start(session.id);
         attach_session_command_context(&state, &session);
         state.sessions.insert_session(session.clone());
 

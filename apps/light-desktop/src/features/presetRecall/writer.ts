@@ -217,7 +217,7 @@ export class PresetRecallWriter implements PresetRecallActions {
 		const state = this.options.valuesStore.getSnapshot();
 		if (
 			state.showId !== this.options.scope.showId ||
-			state.userId !== this.options.scope.userId ||
+			state.sessionId !== this.options.scope.sessionId ||
 			state.status !== "ready" ||
 			state.repairRequired ||
 			state.pendingRequestIds.length > 0 ||
@@ -234,7 +234,7 @@ export class PresetRecallWriter implements PresetRecallActions {
 		const state = this.options.captureModeStore.getSnapshot();
 		if (
 			state.showId !== this.options.scope.showId ||
-			state.userId !== this.options.scope.userId ||
+			state.sessionId !== this.options.scope.sessionId ||
 			state.status !== "ready" ||
 			state.repairRequired ||
 			!state.projection ||
@@ -250,7 +250,7 @@ export class PresetRecallWriter implements PresetRecallActions {
 		const state = this.options.preloadValuesStore.getSnapshot();
 		if (
 			state.showId !== this.options.scope.showId ||
-			state.userId !== this.options.scope.userId ||
+			state.sessionId !== this.options.scope.sessionId ||
 			state.status !== "ready" ||
 			state.repairRequired ||
 			state.pendingRequestIds.length > 0 ||

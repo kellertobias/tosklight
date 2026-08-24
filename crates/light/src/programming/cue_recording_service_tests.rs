@@ -6,7 +6,7 @@ use crate::{
     PlaybackTargetProjection,
 };
 use chrono::Utc;
-use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, SessionId, ShowId, UserId};
+use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, SessionId, ShowId};
 use light_programmer::{CueRecordingCapturedSource, ProgrammerRegistry};
 use light_show::PortableShowRevision;
 use parking_lot::Mutex;
@@ -399,7 +399,7 @@ fn replay_scope_separates_desk_session_and_request() {
     assert_eq!(ports.commits.load(Ordering::Relaxed), 2);
 
     let peer_session = SessionId::new();
-    setup.registry.start(peer_session, setup.user);
+    setup.registry.start(peer_session);
     let mut peer_session_action = first.clone();
     peer_session_action.context.session_id = Some(peer_session.0);
     peer_session_action.context.desk_id = Uuid::new_v4();
@@ -409,9 +409,8 @@ fn replay_scope_separates_desk_session_and_request() {
         .unwrap();
     assert_eq!(ports.commits.load(Ordering::Relaxed), 3);
 
-    let other_user = UserId::new();
     let other_session = SessionId::new();
-    setup.registry.start(other_session, other_user);
+    setup.registry.start(other_session);
     setup.registry.set(
         other_session,
         FixtureId::new(),
@@ -419,7 +418,6 @@ fn replay_scope_separates_desk_session_and_request() {
         AttributeValue::Normalized(0.7),
     );
     let mut other_user_action = first.clone();
-    other_user_action.context.user_id = Some(other_user.0);
     other_user_action.context.session_id = Some(other_session.0);
     other_user_action.context.desk_id = Uuid::new_v4();
     setup
@@ -431,7 +429,6 @@ fn replay_scope_separates_desk_session_and_request() {
     // An identity from before the collapse records onto the desk rather than being turned away,
     // so replay scope still separates it by request id alone.
     let mut legacy = first;
-    legacy.context.user_id = Some(UserId::new().0);
     legacy.context.request_id = Some("legacy".into());
     setup
         .service
@@ -460,7 +457,6 @@ struct Setup {
     registry: ProgrammerRegistry,
     service: ProgrammingService,
     session: SessionId,
-    user: UserId,
     desk: Uuid,
     show_id: ShowId,
 }
@@ -469,22 +465,20 @@ impl Setup {
     fn normal() -> Self {
         let registry = ProgrammerRegistry::default();
         let session = SessionId::new();
-        let user = UserId::new();
-        registry.start(session, user);
+        registry.start(session);
         registry.set(
             session,
             FixtureId::new(),
             AttributeKey::intensity(),
             AttributeValue::Normalized(0.5),
         );
-        Self::from_registry(registry, session, user)
+        Self::from_registry(registry, session)
     }
 
     fn pending_preload() -> Self {
         let registry = ProgrammerRegistry::default();
         let session = SessionId::new();
-        let user = UserId::new();
-        registry.start(session, user);
+        registry.start(session);
         registry.arm_preload(session, true);
         registry.set(
             session,
@@ -492,7 +486,7 @@ impl Setup {
             AttributeKey::intensity(),
             AttributeValue::Normalized(0.6),
         );
-        Self::from_registry(registry, session, user)
+        Self::from_registry(registry, session)
     }
 
     fn active_preload() -> Self {
@@ -501,7 +495,7 @@ impl Setup {
         setup
     }
 
-    fn from_registry(registry: ProgrammerRegistry, session: SessionId, user: UserId) -> Self {
+    fn from_registry(registry: ProgrammerRegistry, session: SessionId) -> Self {
         Self {
             service: ProgrammingService::new(
                 registry.clone(),
@@ -510,7 +504,6 @@ impl Setup {
             ),
             registry,
             session,
-            user,
             desk: Uuid::new_v4(),
             show_id: ShowId::new(),
         }
@@ -524,7 +517,6 @@ impl Setup {
         ActionEnvelope {
             context: ActionContext::operator(
                 self.desk,
-                self.user.0,
                 self.session.0,
                 ActionSource::UserInterface,
             )

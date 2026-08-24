@@ -6,12 +6,12 @@ import {
 	AUTHORITY_A,
 	AUTHORITY_B,
 	FakeProgrammerPreloadPlaybackQueueTransport,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	queuedPlayback,
 	queueSnapshot,
 	SHOW_ID,
 	settleQueueSession,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 function deferred<T>() {
@@ -29,7 +29,7 @@ function harness() {
 	const onError = vi.fn();
 	const session = new ProgrammerPreloadPlaybackQueueSession({
 		showId: SHOW_ID,
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		authorityKey: AUTHORITY_A,
 		store,
 		transport,
@@ -102,12 +102,12 @@ describe("ProgrammerPreloadPlaybackQueueSession", () => {
 		current.session.activate();
 		await Promise.resolve();
 
-		current.store.reset(SHOW_ID, USER_ID, AUTHORITY_B);
+		current.store.reset(SHOW_ID, SESSION_ID, AUTHORITY_B);
 		const replacementTransport =
 			new FakeProgrammerPreloadPlaybackQueueTransport();
 		const replacement = new ProgrammerPreloadPlaybackQueueSession({
 			showId: SHOW_ID,
-			userId: USER_ID,
+			sessionId: SESSION_ID,
 			authorityKey: AUTHORITY_B,
 			store: current.store,
 			transport: replacementTransport,
@@ -135,10 +135,10 @@ describe("ProgrammerPreloadPlaybackQueueSession", () => {
 		current.session.activate();
 		await Promise.resolve();
 
-		current.store.reset("show-b", OTHER_USER_ID, AUTHORITY_B);
+		current.store.reset("show-b", OTHER_SESSION_ID, AUTHORITY_B);
 		const replacement = new ProgrammerPreloadPlaybackQueueSession({
 			showId: "show-b",
-			userId: OTHER_USER_ID,
+			sessionId: OTHER_SESSION_ID,
 			authorityKey: AUTHORITY_B,
 			store: current.store,
 			transport: null,
@@ -153,7 +153,7 @@ describe("ProgrammerPreloadPlaybackQueueSession", () => {
 
 		expect(current.store.getSnapshot()).toMatchObject({
 			showId: "show-b",
-			userId: OTHER_USER_ID,
+			sessionId: OTHER_SESSION_ID,
 			authorityKey: AUTHORITY_B,
 			eventSequence: 50,
 			projection: { revision: 7 },
@@ -166,7 +166,7 @@ describe("ProgrammerPreloadPlaybackQueueSession", () => {
 		await settleQueueSession();
 		const staleStream = current.transport.subscriptions[0];
 
-		current.store.reset(SHOW_ID, USER_ID, AUTHORITY_B);
+		current.store.reset(SHOW_ID, SESSION_ID, AUTHORITY_B);
 		staleStream.observer.message({
 			type: "event",
 			sequence: 11,

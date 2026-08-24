@@ -1,4 +1,4 @@
-use light_core::{Revision, SessionId, ShowId, UserId};
+use light_core::{Revision, SessionId, ShowId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -147,13 +147,6 @@ pub enum FixedScreenSide {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct DeskUser {
-    pub id: UserId,
-    pub name: String,
-    pub enabled: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PlaybackSurfaceRow {
     pub first_playback_slot: u8,
     pub has_fader: bool,
@@ -255,7 +248,6 @@ pub struct ShowRevision {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PersistedSession {
     pub id: SessionId,
-    pub user_id: UserId,
     pub token: String,
     pub programmer_json: String,
     pub connected: bool,

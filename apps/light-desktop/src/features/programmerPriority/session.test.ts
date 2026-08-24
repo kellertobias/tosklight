@@ -5,19 +5,19 @@ import { ProgrammerPriorityStore } from "./store";
 import {
 	deferred,
 	FakeProgrammerPriorityTransport,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	priorityProjection,
 	prioritySnapshot,
 	settlePrioritySession,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
-function harness(userId = USER_ID) {
+function harness(sessionId = SESSION_ID) {
 	const store = new ProgrammerPriorityStore();
 	const transport = new FakeProgrammerPriorityTransport();
 	const onError = vi.fn();
 	const session = new ProgrammerPrioritySession({
-		scope: { userId },
+		scope: { sessionId },
 		authorityKey: "session-a",
 		store,
 		transport,
@@ -38,11 +38,11 @@ describe("ProgrammerPrioritySession", () => {
 		await settlePrioritySession();
 		expect(current.transport.loadSnapshot).toHaveBeenCalledOnce();
 		expect(current.transport.loadSnapshot).toHaveBeenCalledWith({
-			userId: USER_ID,
+			sessionId: SESSION_ID,
 		});
 		expect(current.transport.subscriptions).toHaveLength(1);
 		expect(current.transport.subscriptions[0]).toMatchObject({
-			scope: { userId: USER_ID },
+			scope: { sessionId: SESSION_ID },
 			afterSequence: 10,
 		});
 
@@ -140,11 +140,11 @@ describe("ProgrammerPrioritySession", () => {
 			new ProgrammerPriorityStore(),
 			new ProgrammerPriorityStore(),
 		];
-		const users = [USER_ID, USER_ID, OTHER_USER_ID];
+		const users = [SESSION_ID, SESSION_ID, OTHER_SESSION_ID];
 		const sessions = stores.map(
 			(store, index) =>
 				new ProgrammerPrioritySession({
-					scope: { userId: users[index] ?? USER_ID },
+					scope: { sessionId: users[index] ?? SESSION_ID },
 					authorityKey: `desk-${index}`,
 					store,
 					transport,
@@ -153,9 +153,9 @@ describe("ProgrammerPrioritySession", () => {
 		for (const session of sessions) session.activate();
 		await settlePrioritySession();
 		expect(transport.subscriptions.map(({ scope }) => scope)).toEqual([
-			{ userId: USER_ID },
-			{ userId: USER_ID },
-			{ userId: OTHER_USER_ID },
+			{ sessionId: SESSION_ID },
+			{ sessionId: SESSION_ID },
+			{ sessionId: OTHER_SESSION_ID },
 		]);
 		const sameUserEvent = {
 			type: "event" as const,
@@ -172,7 +172,7 @@ describe("ProgrammerPrioritySession", () => {
 		expect(stores[0]?.getSnapshot().projection?.priority).toBe(55);
 		expect(stores[1]?.getSnapshot().projection?.priority).toBe(55);
 		expect(stores[2]?.getSnapshot()).toMatchObject({
-			userId: OTHER_USER_ID,
+			sessionId: OTHER_SESSION_ID,
 			projection: { priority: 0 },
 		});
 	});
@@ -183,7 +183,7 @@ describe("ProgrammerPrioritySession", () => {
 		const pending = deferred<ProgrammerPrioritySnapshot>();
 		transport.loadSnapshot.mockReturnValueOnce(pending.promise);
 		const session = new ProgrammerPrioritySession({
-			scope: { userId: USER_ID },
+			scope: { sessionId: SESSION_ID },
 			authorityKey: "session-a",
 			store,
 			transport,
@@ -192,12 +192,12 @@ describe("ProgrammerPrioritySession", () => {
 		await Promise.resolve();
 
 		session.stop();
-		store.reset(OTHER_USER_ID, "session-b");
+		store.reset(OTHER_SESSION_ID, "session-b");
 		pending.resolve(prioritySnapshot({ revision: 99 }));
 		await settlePrioritySession();
 
 		expect(store.getSnapshot()).toMatchObject({
-			userId: OTHER_USER_ID,
+			sessionId: OTHER_SESSION_ID,
 			authorityKey: "session-b",
 			projection: null,
 		});

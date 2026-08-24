@@ -41,11 +41,11 @@ impl DeskClient {
     ///
     /// Servers that predate the role fall back to a normal session; the renderer still never
     /// issues a mutating request, but it says so in diagnostics.
-    pub async fn open_session(&mut self, user: &str) -> Result<bool, ProviderError> {
+    pub async fn open_session(&mut self) -> Result<bool, ProviderError> {
         let response = self
             .http
             .post(format!("{}/api/v2/sessions", self.base))
-            .json(&serde_json::json!({"username": user, "role": "visualizer"}))
+            .json(&serde_json::json!({"role": "visualizer"}))
             .send()
             .await
             .map_err(|error| ProviderError::new("authentication", error.to_string(), true))?;

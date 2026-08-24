@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 	app: { state: null as unknown as typeof initialState, dispatch: vi.fn() },
 	server: {
 		bootstrap: { active_show: { id: "show" } },
-		session: { user: { id: "user" }, desk: { id: "control-desk-a" } },
+		session: { desk: { id: "control-desk-a" } },
 		deskLayout: null as null | {
 			revision: number;
 			body: { desks: typeof initialState.desks; activeDeskId: string };
@@ -74,12 +74,12 @@ describe("LayoutPersistence", () => {
 		vi.useRealTimers();
 	});
 
-	it("never saves the fallback layout before the server has resolved the current show and user layout", async () => {
+	it("never saves the fallback layout before the server has resolved the current show and desk layout", async () => {
 		const view = render(<LayoutPersistence />);
 		await act(async () => vi.advanceTimersByTimeAsync(700));
 		expect(mocks.server.saveDeskLayout).not.toHaveBeenCalled();
 
-		mocks.server.deskLayoutScope = "show:user";
+		mocks.server.deskLayoutScope = "show:desk";
 		view.rerender(<LayoutPersistence />);
 		await act(async () => vi.advanceTimersByTimeAsync(700));
 		expect(mocks.server.saveDeskLayout).not.toHaveBeenCalled();
@@ -95,7 +95,7 @@ describe("LayoutPersistence", () => {
 
 	it("hydrates a stored layout before allowing the hydrated state to be persisted", async () => {
 		const storedDesks = [{ id: "tour", name: "Tour", panes: [] }];
-		mocks.server.deskLayoutScope = "show:user";
+		mocks.server.deskLayoutScope = "show:desk";
 		mocks.server.deskLayout = {
 			revision: 7,
 			body: { desks: storedDesks, activeDeskId: "tour" },
@@ -134,7 +134,7 @@ describe("LayoutPersistence", () => {
 				},
 			}),
 		);
-		mocks.server.deskLayoutScope = "show:user";
+		mocks.server.deskLayoutScope = "show:desk";
 		const view = render(<LayoutPersistence />);
 
 		expect(mocks.app.dispatch).toHaveBeenCalledWith({
@@ -187,7 +187,7 @@ describe("LayoutPersistence", () => {
 			activeDeskId: "main",
 			desks: fixtureDesks,
 		};
-		mocks.server.deskLayoutScope = "show:user";
+		mocks.server.deskLayoutScope = "show:desk";
 		const view = render(<LayoutPersistence />);
 		await act(async () => vi.advanceTimersByTimeAsync(700));
 
@@ -229,7 +229,7 @@ describe("LayoutPersistence", () => {
 	});
 
 	it("strips compact modes from a server layout save triggered by another setting", async () => {
-		mocks.server.deskLayoutScope = "show:user";
+		mocks.server.deskLayoutScope = "show:desk";
 		mocks.app.state = {
 			...initialState,
 			fixtureSheetCompactMode: "icon-only",

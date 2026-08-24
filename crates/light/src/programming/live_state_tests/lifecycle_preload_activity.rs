@@ -4,15 +4,9 @@ use light_core::{AttributeKey, AttributeValue};
 #[test]
 fn preload_take_live_and_release_publish_one_boolean_transition_each() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
-    let context = ActionContext::operator(
-        Uuid::new_v4(),
-        user.0,
-        SessionId::new().0,
-        ActionSource::Http,
-    );
+    let context = ActionContext::operator(Uuid::new_v4(), SessionId::new().0, ActionSource::Http);
     let session = SessionId(context.session_id.unwrap());
-    registry.start(session, user);
+    registry.start(session);
     registry.attach_command_context(session, SessionId(context.desk_id));
     let events = EventBus::new(32);
     let service = ProgrammingService::new(

@@ -2,7 +2,7 @@ use crate::light_benchmark::arguments::{ProfileConfig, ProtocolSelection};
 use chrono::{TimeZone, Utc};
 use light_core::{
     AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, MergeMode, SessionId,
-    TimedValue, UserId,
+    TimedValue,
 };
 use light_dynamics::{
     ActivationBoundary, ActivationPolicy, DynamicDefinition, DynamicEvaluationContext,
@@ -93,7 +93,7 @@ impl BenchmarkScenario {
         let clock = Arc::new(ManualClock::new(logical_start));
         let programmers = ProgrammerRegistry::with_clock(clock.clone());
         let session = SessionId(fixed_uuid(0x20, 1));
-        programmers.start(session, UserId(fixed_uuid(0x21, 1)));
+        programmers.start(session);
 
         let fixture_footprint = SLOTS_PER_UNIVERSE / config.fixtures_per_universe;
         let fixture_count =

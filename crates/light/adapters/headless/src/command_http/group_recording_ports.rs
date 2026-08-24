@@ -30,13 +30,6 @@ pub(super) fn commit(
     context: &ActionContext,
     commit: &ProgrammingGroupCommit,
 ) -> Result<ProgrammingGroupCommitResult, ActionError> {
-    // Authentication still gates programming; which identity it is no longer selects a desk.
-    context.user_id.ok_or_else(|| {
-        ActionError::new(
-            light_application::ActionErrorKind::Unauthorized,
-            "Group recording requires an authenticated user",
-        )
-    })?;
     let owner = ProgrammingInstallOwner {
         gesture: if commit.finishes_actor_gesture() {
             ProgrammingOwnerGesturePolicy::Finish(commit.actor_session_id())

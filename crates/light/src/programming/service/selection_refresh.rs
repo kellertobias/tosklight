@@ -45,11 +45,6 @@ impl ProgrammingService {
                 events: Vec::new(),
             };
         };
-        let mut users = self
-            .programmers
-            .lifecycle_users_for_interaction(interaction);
-        users.sort_unstable_by_key(|user| user.0);
-        users.dedup();
         // A refresh already running inside the desk's interaction must not take its gate again.
         let desk_gates: &[uuid::Uuid] = if within_interaction {
             &[]
@@ -62,7 +57,6 @@ impl ProgrammingService {
                     context,
                     within_interaction,
                     interaction,
-                    &users,
                     operation,
                 )
             })
@@ -74,13 +68,9 @@ impl ProgrammingService {
         context: &ActionContext,
         within_interaction: bool,
         interaction: light_core::SessionId,
-        users: &[light_core::UserId],
         operation: impl FnOnce() -> T,
     ) -> ProgrammingSelectionRefreshResult<T> {
-        let lifecycle_before = users
-            .iter()
-            .map(|user| (*user, self.active_lifecycle_programmer(*user)))
-            .collect::<Vec<_>>();
+        let lifecycle_before = self.active_lifecycle_programmer();
         let before = self.programmers.interaction_context_version(interaction);
         let output = operation();
         let after = self.programmers.interaction_context_version(interaction);
@@ -104,9 +94,7 @@ impl ProgrammingService {
                     }]
                 })
                 .unwrap_or_default();
-        for (user, before) in lifecycle_before {
-            self.publish_lifecycle_for_user(context, user, before);
-        }
+        self.publish_lifecycle(context, lifecycle_before);
         ProgrammingSelectionRefreshResult { output, events }
     }
 }

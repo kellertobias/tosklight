@@ -218,13 +218,6 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
     let retained_screen = store.screen(screen.id).unwrap().unwrap();
     assert_eq!(retained_screen.id, screen.id);
     assert_eq!(retained_screen.name, screen.name);
-    assert!(
-        store
-            .users()
-            .unwrap()
-            .iter()
-            .any(|user| user.name == "Operator")
-    );
     assert_eq!(
         store.setting(&format!("desk_lock:{}", removed.id)).unwrap(),
         None
@@ -305,7 +298,7 @@ fn legacy_screens_migrate_to_desktop_content() {
         .conn
         .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, crate::desk::DESK_SCHEMA_VERSION);
     drop(store);
     let _ = fs::remove_file(path);
 }

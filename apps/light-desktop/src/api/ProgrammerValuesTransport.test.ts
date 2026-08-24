@@ -6,11 +6,11 @@ import {
 } from "./ProgrammerValuesTransport";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const OTHER_USER_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const OTHER_SESSION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const FIXTURE_ID = "11111111-1111-4111-8111-111111111111";
 const CORRELATION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const scope = { showId: SHOW_ID, userId: USER_ID };
+const scope = { showId: SHOW_ID, sessionId: SESSION_ID };
 
 class FakeWebSocket {
 	static readonly OPEN = 1;
@@ -240,7 +240,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 		fetchImplementation.mockResolvedValueOnce(
 			jsonResponse({
 				cursor: { sequence: 11 },
-				projection: { ...projection(), user_id: OTHER_USER_ID },
+				projection: { ...projection(), user_id: OTHER_SESSION_ID },
 			}),
 		);
 		await expect(transport.loadSnapshot(scope)).rejects.toThrow(/user_id/);
@@ -295,7 +295,7 @@ describe("HttpProgrammerValuesTransport events", () => {
 		const undecodable = event();
 		(
 			undecodable.event.payload.change as Record<string, unknown>
-		).user_id = OTHER_USER_ID;
+		).user_id = OTHER_SESSION_ID;
 		FakeWebSocket.instances[0].emit("message", message(undecodable));
 
 		expect(observer.message).not.toHaveBeenCalled();

@@ -54,7 +54,6 @@ fn timeline_schedules_before_using_shared_services_and_binds_trusted_context() {
     let contexts = backend.contexts();
     for (_, actual) in &contexts {
         assert_eq!(actual.desk_id, context.desk_id);
-        assert_eq!(actual.user_id, context.user_id);
         assert_eq!(actual.session_id, context.session_id);
         assert_eq!(actual.correlation_id, context.correlation_id);
         assert_ne!(actual.request_id.as_deref(), Some("forged"));

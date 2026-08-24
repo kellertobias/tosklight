@@ -16,7 +16,7 @@ export type ProgrammerPreloadPlaybackQueueStatus =
 
 export interface ProgrammerPreloadPlaybackQueueState {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	authorityKey: string | null;
 	eventSequence: number | null;
 	projection: ProgrammerPreloadPlaybackQueueProjection | null;
@@ -39,12 +39,12 @@ export class ProgrammerPreloadPlaybackQueueStore {
 
 	reset(
 		showId: string | null,
-		userId: string | null,
+		sessionId: string | null,
 		authorityKey: string | null,
 	) {
-		if (this.matchesScope(showId, userId, authorityKey)) return;
+		if (this.matchesScope(showId, sessionId, authorityKey)) return;
 		this.scope++;
-		this.state = { ...emptyState(), showId, userId, authorityKey };
+		this.state = { ...emptyState(), showId, sessionId, authorityKey };
 		this.emit();
 	}
 
@@ -123,12 +123,12 @@ export class ProgrammerPreloadPlaybackQueueStore {
 
 	private matchesScope(
 		showId: string | null,
-		userId: string | null,
+		sessionId: string | null,
 		authorityKey: string | null,
 	) {
 		return (
 			showId === this.state.showId &&
-			userId === this.state.userId &&
+			sessionId === this.state.sessionId &&
 			authorityKey === this.state.authorityKey
 		);
 	}
@@ -244,7 +244,7 @@ export class ProgrammerPreloadPlaybackQueueStore {
 function emptyState(): ProgrammerPreloadPlaybackQueueState {
 	return {
 		showId: null,
-		userId: null,
+		sessionId: null,
 		authorityKey: null,
 		eventSequence: null,
 		projection: null,

@@ -47,11 +47,16 @@ export interface StoredStageLayout {
 	};
 }
 
-export function deskLayoutScopeKey(
-	showId: string | null | undefined,
-	userId: string | null | undefined,
-) {
-	return showId && userId ? `${showId}:${userId}` : null;
+/**
+ * The id the desk's layout is stored under.
+ *
+ * A show written before the collapse stores it under the operator's identity instead. That layout
+ * is still loaded — it is the only one there — and keeps its own id when it is saved again.
+ */
+export const DESK_LAYOUT_ID = "desk";
+
+export function deskLayoutScopeKey(showId: string | null | undefined) {
+	return showId ? `${showId}:${DESK_LAYOUT_ID}` : null;
 }
 
 export function cueOnlyRestoration(cues: Cue[]): {

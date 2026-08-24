@@ -31,7 +31,6 @@ use viz_scene::{
 pub struct DeskConnection {
     pub host: String,
     pub port: u16,
-    pub user: String,
     /// Interface the receivers bind to. `None` binds every interface.
     pub bind_interface: Option<Ipv4Addr>,
     /// Bounded reconnect backoff.
@@ -59,7 +58,6 @@ impl Default for DeskConnection {
         Self {
             host: "127.0.0.1".into(),
             port: 5000,
-            user: "Operator".into(),
             bind_interface: None,
             retry: Duration::from_secs(2),
             input_overrides: Vec::new(),
@@ -744,7 +742,7 @@ async fn connect_once(
     let _ = outbox.send(Message::Connection(ConnectionState::Authenticating {
         endpoint: endpoint.clone(),
     }));
-    let read_only = client.open_session(&connection.user).await?;
+    let read_only = client.open_session().await?;
 
     let _ = outbox.send(Message::Connection(ConnectionState::LoadingScene {
         endpoint: endpoint.clone(),

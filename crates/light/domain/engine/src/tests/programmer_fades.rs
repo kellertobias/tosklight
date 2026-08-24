@@ -7,7 +7,7 @@ fn programmer_fade_starts_from_unowned_fixture_profile_default() {
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (mut fixture, logical) = fixture();
     fixture.definition.heads[0].parameters[0].default = 0.8;
     let engine = Engine::new(programmers.clone());
@@ -38,7 +38,7 @@ fn programmer_fade_starts_from_current_immediate_programmer_value() {
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     let engine = Engine::new(programmers.clone());
     engine.set_control_timing([120.0; 5], 1_000, 0, 0);
@@ -76,7 +76,7 @@ fn programmer_fade_starts_from_resolved_playback_underlay_and_release_reveals_it
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     let mut snapshot = mib_snapshot(vec![fixture], &[logical]);
     Arc::make_mut(&mut snapshot.cue_lists)[0].cues[0]
@@ -119,7 +119,7 @@ fn immediate_programmer_value_bypasses_non_zero_master_fade_without_zero_overrid
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     let engine = Engine::new(programmers.clone());
     engine.set_control_timing([120.0; 5], 5_000, 0, 0);
@@ -153,7 +153,7 @@ fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     let engine = Engine::new(programmers.clone());
     engine.set_control_timing([120.0; 5], 3_000, 0, 0);

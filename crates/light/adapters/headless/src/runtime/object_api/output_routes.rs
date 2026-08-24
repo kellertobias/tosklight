@@ -11,7 +11,6 @@ pub(in crate::runtime) fn output_route_action(
     light_application::ActionEnvelope {
         context: light_application::ActionContext::operator(
             session.desk.id,
-            session.user.id.0,
             session.id.0,
             light_application::ActionSource::Http,
         ),
@@ -35,7 +34,6 @@ pub(in crate::runtime) fn output_route_range_action(
     light_application::ActionEnvelope {
         context: light_application::ActionContext::operator(
             session.desk.id,
-            session.user.id.0,
             session.id.0,
             light_application::ActionSource::Http,
         ),

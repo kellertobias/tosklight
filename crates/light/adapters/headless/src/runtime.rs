@@ -84,7 +84,7 @@ use light_programmer::{
 #[cfg(test)]
 use light_show::ShowStore;
 use light_show::{
-    AtomicObjectDelete, ControlDesk, DeskStore, DeskUser, PersistedSession, RevisionCopySource,
+    AtomicObjectDelete, ControlDesk, DeskStore, PersistedSession, RevisionCopySource,
     ScreenConfiguration, ShowEntry, ShowRevision, initialise_show, validate_show_file,
 };
 use parking_lot::{Mutex, RwLock};

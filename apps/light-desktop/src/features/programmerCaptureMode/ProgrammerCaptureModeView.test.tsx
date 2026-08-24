@@ -17,9 +17,9 @@ import {
 	captureModeSnapshot,
 	FakeProgrammerCaptureModeTransport,
 	OTHER_SHOW_ID,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 function ProjectionProbe({ enabled }: { enabled: boolean }) {
@@ -70,7 +70,7 @@ describe("ProgrammerCaptureModeViewProvider", () => {
 		const provider = (child: ReactNode) => (
 			<ProgrammerCaptureModeViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				store={store}
 				transport={transport}
 				loadSnapshot={loadSnapshot}
@@ -108,7 +108,7 @@ describe("ProgrammerCaptureModeViewProvider", () => {
 		) => (
 			<ProgrammerCaptureModeViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				store={store}
 				transport={transport}
 				loadSnapshot={loadSnapshot}
@@ -166,10 +166,10 @@ describe("ProgrammerCaptureModeViewProvider", () => {
 			.mockReturnValueOnce(second.promise)
 			.mockReturnValueOnce(third.promise)
 			.mockReturnValueOnce(fourth.promise);
-		const provider = (showId: string, userId: string, authorityKey: string) => (
+		const provider = (showId: string, sessionId: string, authorityKey: string) => (
 			<ProgrammerCaptureModeViewProvider
 				showId={showId}
-				userId={userId}
+				sessionId={sessionId}
 				authorityKey={authorityKey}
 				store={store}
 				transport={transport}
@@ -178,27 +178,27 @@ describe("ProgrammerCaptureModeViewProvider", () => {
 				<ProjectionProbe enabled />
 			</ProgrammerCaptureModeViewProvider>
 		);
-		const rendered = render(provider(SHOW_ID, USER_ID, "server-a"));
+		const rendered = render(provider(SHOW_ID, SESSION_ID, "server-a"));
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledOnce());
 
-		rendered.rerender(provider(OTHER_SHOW_ID, USER_ID, "server-a"));
+		rendered.rerender(provider(OTHER_SHOW_ID, SESSION_ID, "server-a"));
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledTimes(2));
 		first.resolve(captureModeSnapshot({ revision: 99 }));
 		await act(async () => Promise.resolve());
 		expect(store.getSnapshot()).toMatchObject({
 			showId: OTHER_SHOW_ID,
-			userId: USER_ID,
+			sessionId: SESSION_ID,
 			projection: null,
 		});
 		second.resolve(captureModeSnapshot({ revision: 2 }));
 		await waitFor(() => expect(screen.getByText("2")).toBeInTheDocument());
 
-		rendered.rerender(provider(OTHER_SHOW_ID, OTHER_USER_ID, "server-a"));
+		rendered.rerender(provider(OTHER_SHOW_ID, OTHER_SESSION_ID, "server-a"));
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledTimes(3));
 		third.resolve(captureModeSnapshot({ revision: 3 }));
 		await waitFor(() => expect(screen.getByText("3")).toBeInTheDocument());
 
-		rendered.rerender(provider(OTHER_SHOW_ID, OTHER_USER_ID, "server-b"));
+		rendered.rerender(provider(OTHER_SHOW_ID, OTHER_SESSION_ID, "server-b"));
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledTimes(4));
 		fourth.resolve(captureModeSnapshot({ revision: 4 }));
 		await waitFor(() => expect(screen.getByText("4")).toBeInTheDocument());

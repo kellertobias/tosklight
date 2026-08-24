@@ -1,7 +1,7 @@
 use crate::{
     ActionError, ActionErrorKind, ProgrammingCueRecordRequest, ProgrammingCueRecordResult,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::collections::{HashMap, VecDeque};
 use std::mem::size_of;
 use uuid::Uuid;
@@ -11,7 +11,6 @@ const BYTE_LIMIT: usize = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ReplayKey {
-    user_id: UserId,
     desk_id: Uuid,
     session_id: SessionId,
     request_id: String,
@@ -31,22 +30,21 @@ pub(super) struct CueRecordingReplayCache {
 }
 
 impl CueRecordingReplayCache {
-    pub(super) fn invalidate_user(&mut self, user_id: UserId) {
-        self.entries.retain(|key, _| key.user_id != user_id);
-        self.order.retain(|key| key.user_id != user_id);
+    pub(super) fn invalidate(&mut self) {
+        // One desk, one Programmer: an invalidation clears the cache rather than one user's part.
+        self.entries.clear();
+        self.order.clear();
         self.recount_bytes();
     }
 
     pub(super) fn get(
         &self,
-        user_id: UserId,
         desk_id: Uuid,
         session_id: SessionId,
         request_id: &str,
         request: &ProgrammingCueRecordRequest,
     ) -> Result<Option<ProgrammingCueRecordResult>, ActionError> {
         let key = ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.to_owned(),
@@ -67,7 +65,6 @@ impl CueRecordingReplayCache {
 
     pub(super) fn insert(
         &mut self,
-        user_id: UserId,
         desk_id: Uuid,
         session_id: SessionId,
         request_id: String,
@@ -75,7 +72,6 @@ impl CueRecordingReplayCache {
         result: ProgrammingCueRecordResult,
     ) {
         let key = ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id,
@@ -119,8 +115,8 @@ impl CueRecordingReplayCache {
 }
 
 impl super::ProgrammingService {
-    pub(in crate::programming) fn invalidate_cue_recording_replay(&self, user_id: UserId) {
-        self.cue_recording_replay.lock().invalidate_user(user_id);
+    pub(in crate::programming) fn invalidate_cue_recording_replay(&self) {
+        self.cue_recording_replay.lock().invalidate();
     }
 }
 

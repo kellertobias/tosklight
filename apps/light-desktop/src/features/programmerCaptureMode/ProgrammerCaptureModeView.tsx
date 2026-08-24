@@ -27,7 +27,7 @@ import type { ProgrammerCaptureModeEventTransport } from "./transport";
 
 export interface ProgrammerCaptureModeViewProviderProps {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	authorityKey?: string;
 	store: ProgrammerCaptureModeStore;
 	transport: ProgrammerCaptureModeEventTransport | null;
@@ -52,7 +52,7 @@ const fallbackStore = new ProgrammerCaptureModeStore();
 export function ProgrammerCaptureModeViewProvider({
 	children,
 	showId,
-	userId,
+	sessionId,
 	authorityKey = "",
 	store,
 	transport,
@@ -65,10 +65,10 @@ export function ProgrammerCaptureModeViewProvider({
 	);
 	const session = useMemo(
 		() =>
-			showId && userId
+			showId && sessionId
 				? new ProgrammerCaptureModeSession({
 						showId,
-						userId,
+						sessionId,
 						authorityKey,
 						store,
 						transport,
@@ -83,7 +83,7 @@ export function ProgrammerCaptureModeViewProvider({
 			showId,
 			store,
 			transport,
-			userId,
+			sessionId,
 		],
 	);
 	const authority = useMemo<ProgrammerCaptureModeAuthority | null>(
@@ -98,8 +98,8 @@ export function ProgrammerCaptureModeViewProvider({
 		[session, store],
 	);
 	useLayoutEffect(() => {
-		store.reset(showId, userId, authorityKey);
-	}, [authorityKey, showId, store, userId]);
+		store.reset(showId, sessionId, authorityKey);
+	}, [authorityKey, showId, store, sessionId]);
 	useStrictModeSafeStop(session);
 	return (
 		<StoreContext.Provider value={store}>

@@ -2,7 +2,6 @@ use crate::*;
 use chrono::Utc;
 use light_core::{
     AttributeKey, AttributeValue, FixtureId, ManualClock, ProgrammerId, SessionId, SharedClock,
-    UserId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;

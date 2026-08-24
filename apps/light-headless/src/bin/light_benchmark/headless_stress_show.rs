@@ -6,7 +6,7 @@ use crate::light_benchmark::{
         patched_fixture, routes,
     },
 };
-use light_core::{AttributeKey, AttributeValue, FixtureId, ManualClock, SessionId, UserId};
+use light_core::{AttributeKey, AttributeValue, FixtureId, ManualClock, SessionId};
 use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAction};
 use light_programmer::ProgrammerRegistry;
 use std::{net::SocketAddr, path::Path, sync::Arc};
@@ -105,7 +105,7 @@ pub(super) fn build(
     let clock = Arc::new(ManualClock::new(logical_start));
     let programmers = ProgrammerRegistry::with_clock(clock.clone());
     let session = SessionId(fixed_uuid(0x90, 1));
-    programmers.start(session, UserId(fixed_uuid(0x91, 1)));
+    programmers.start(session);
     let group_ids = layout
         .fixtures
         .iter()

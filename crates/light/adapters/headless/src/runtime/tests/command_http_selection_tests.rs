@@ -412,12 +412,18 @@ async fn programming_selection_request_identity_scope_and_lock_are_enforced() {
 #[tokio::test]
 async fn accepted_selection_persistence_warning_is_replayed_without_duplicate_events() {
     let scenario = CommandHttpScenario::new().await;
-    let isolated = light_show::DeskStore::open(scenario.data_dir.join("isolated-desk.sqlite"))
-        .expect("isolated Desk store");
+    let isolated_path = scenario.data_dir.join("isolated-desk.sqlite");
+    let isolated = light_show::DeskStore::open(&isolated_path).expect("isolated Desk store");
     let isolated_desk = isolated
         .add_desk("Isolated")
         .expect("isolated control desk");
     scenario.state.installation.replace_desk_store(isolated);
+    // Persisting the Programmer must fail so the accepted action carries a warning. The desk store
+    // the session now writes to has no `sessions` table to write into.
+    rusqlite::Connection::open(&isolated_path)
+        .expect("isolated Desk database")
+        .execute_batch("DROP TABLE sessions")
+        .expect("remove the table the Programmer is persisted to");
     assert!(
         scenario
             .state

@@ -27,7 +27,7 @@ fn releasing_one_scoped_attribute_preserves_every_other_contribution() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.set(
         session,
         fixture,
@@ -65,9 +65,8 @@ fn releasing_one_scoped_attribute_preserves_every_other_contribution() {
 #[test]
 fn restoring_multiple_sessions_for_one_user_does_not_deadlock() {
     let source = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first = SessionId::new();
-    let mut first_state = source.start(first, user);
+    let mut first_state = source.start(first);
     first_state.connected = false;
     let mut second_state = first_state.clone();
     second_state.session_id = SessionId::new();
@@ -82,7 +81,7 @@ fn restoring_multiple_sessions_for_one_user_does_not_deadlock() {
         "persisted session aliases are disconnected after restart"
     );
     let current = SessionId::new();
-    restored.start(current, user);
+    restored.start(current);
     assert_eq!(restored.active_for_sessions().len(), 1);
 }
 #[test]
@@ -157,7 +156,7 @@ fn preload_clear_does_not_release_active_preload() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.set_modes(session, Some(true), None, None, None);
     registry.set(
         session,
@@ -183,7 +182,7 @@ fn preload_clear_does_not_release_active_preload() {
 fn preload_retains_multiple_group_scopes_with_edit_timestamps() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.set_modes(session, Some(true), None, None, None);
     registry.set_preload_group(
         session,
@@ -217,7 +216,7 @@ fn preload_go_restamps_every_programmer_value_and_release_is_idempotent() {
     let registry = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     assert!(registry.arm_preload(session, true));
     registry.set_faded_with_timing(
         session,
@@ -262,7 +261,7 @@ fn preload_go_captures_one_trigger_time_programmer_fade_for_all_static_values() 
     let registry = ProgrammerRegistry::with_clock(Arc::new(ManualClock::new(entered_at)));
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     assert!(registry.arm_preload(session, true));
     registry.set(
         session,
@@ -295,7 +294,7 @@ fn disabled_programmer_domain_stays_live_and_playback_verbs_retain_order() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     assert!(registry.arm_preload(session, false));
     registry.set(
         session,
@@ -341,7 +340,7 @@ fn disabled_programmer_domain_stays_live_and_playback_verbs_retain_order() {
 fn disconnect_keeps_programmer_until_explicit_clear() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.disconnect(session);
     assert!(!registry.get(session).unwrap().connected);
     assert!(registry.clear(session));
@@ -353,8 +352,8 @@ fn undo_history_and_console_modes_belong_to_the_one_desk() {
     let registry = ProgrammerRegistry::default();
     let first = SessionId::new();
     let second = SessionId::new();
-    registry.start(first, UserId::new());
-    registry.start(second, UserId::new());
+    registry.start(first);
+    registry.start(second);
     assert!(registry.set_command_line(first, "Fixture 1 At Full".into()));
     assert!(registry.set_modes(
         first,
@@ -381,7 +380,7 @@ fn multi_channel_action_is_one_atomic_undo_step() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.set_many(
         session,
         [

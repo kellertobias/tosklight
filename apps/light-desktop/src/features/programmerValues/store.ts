@@ -52,18 +52,18 @@ export class ProgrammerValuesStore {
 
 	readonly getSnapshot = () => this.state;
 
-	matchesAuthority(showId: string, userId: string, authorityKey: string) {
+	matchesAuthority(showId: string, sessionId: string, authorityKey: string) {
 		return (
 			this.state.showId === showId &&
-			this.state.userId === userId &&
+			this.state.sessionId === sessionId &&
 			this.authorityKey === authorityKey
 		);
 	}
 
-	reset(showId: string | null, userId: string | null, authorityKey = "") {
+	reset(showId: string | null, sessionId: string | null, authorityKey = "") {
 		if (
 			showId === this.state.showId &&
-			userId === this.state.userId &&
+			sessionId === this.state.sessionId &&
 			authorityKey === this.authorityKey
 		)
 			return;
@@ -71,7 +71,7 @@ export class ProgrammerValuesStore {
 		this.authoritative = null;
 		this.authorityKey = authorityKey;
 		this.operations.clear();
-		this.state = { ...emptyProgrammerValuesState(), showId, userId };
+		this.state = { ...emptyProgrammerValuesState(), showId, sessionId };
 		this.emit();
 	}
 

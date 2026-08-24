@@ -286,7 +286,6 @@ fn typed_commit_result(
 fn compatibility_context(session: &Session) -> light_application::ActionContext {
     light_application::ActionContext::operator(
         session.desk.id,
-        session.user.id.0,
         session.id.0,
         light_application::ActionSource::UserInterface,
     )

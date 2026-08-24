@@ -3,7 +3,7 @@ use crate::programming::cue_transfer::{
     CueTransferAuthority, ProgrammingCueTransferRequest, ProgrammingCueTransferResult,
 };
 use crate::{ActionError, ActionErrorKind};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::collections::{HashMap, VecDeque};
 use std::mem::size_of;
 use uuid::Uuid;
@@ -13,7 +13,6 @@ const BYTE_LIMIT: usize = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) struct CueTransferScope {
-    pub user_id: UserId,
     pub desk_id: Uuid,
     pub session_id: SessionId,
 }
@@ -90,9 +89,10 @@ impl CueTransferReplayCache {
         self.truncate();
     }
 
-    fn invalidate_user(&mut self, user_id: UserId) {
-        self.entries.retain(|key, _| key.scope.user_id != user_id);
-        self.order.retain(|key| key.scope.user_id != user_id);
+    fn invalidate(&mut self) {
+        // One desk, one Programmer: an invalidation clears the cache rather than one user's part.
+        self.entries.clear();
+        self.order.clear();
         self.recount();
     }
 
@@ -154,18 +154,16 @@ impl CueTransferChoiceCache {
         Ok(authority.clone())
     }
 
-    fn invalidate_user(&mut self, user_id: UserId) {
-        self.entries
-            .retain(|_, (scope, _)| scope.user_id != user_id);
-        self.order
-            .retain(|choice_id| self.entries.contains_key(choice_id));
+    fn invalidate(&mut self) {
+        self.entries.clear();
+        self.order.clear();
     }
 }
 
 impl ProgrammingService {
-    pub(in crate::programming) fn invalidate_cue_transfer_authority(&self, user_id: UserId) {
-        self.cue_transfer_choices.lock().invalidate_user(user_id);
-        self.cue_transfer_replay.lock().invalidate_user(user_id);
+    pub(in crate::programming) fn invalidate_cue_transfer_authority(&self) {
+        self.cue_transfer_choices.lock().invalidate();
+        self.cue_transfer_replay.lock().invalidate();
     }
 }
 

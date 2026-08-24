@@ -2,7 +2,7 @@ use super::*;
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use light_core::{
     ApplicationClock, AttributeKey, AttributeValue, FixtureId, ManualClock, MergeMode,
-    ProgrammerId, SessionId, SharedClock, TimedValue, UserId, Xyz,
+    ProgrammerId, SessionId, SharedClock, TimedValue, Xyz,
 };
 use light_fixture::{
     ByteOrder, ChannelBehavior, ChannelComponent, ChannelFunction, ChannelResolution, ColorSystem,
@@ -146,7 +146,7 @@ fn same_length_dynamic_programmer_edit_invalidates_flattened_projection() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     let engine = Engine::new(registry.clone());
     let mutation = |value| DynamicProgrammerValueMutation::Set {
         fixture_id: fixture,
@@ -175,10 +175,9 @@ fn shared_programmer_sessions_contribute_dynamic_values_once() {
     let registry = ProgrammerRegistry::default();
     let first_session = SessionId::new();
     let second_session = SessionId::new();
-    let user = UserId::new();
     let fixture = FixtureId::new();
-    registry.start(first_session, user);
-    registry.start(second_session, user);
+    registry.start(first_session);
+    registry.start(second_session);
     let engine = Engine::new(registry.clone());
 
     assert!(registry.apply_dynamic_values(

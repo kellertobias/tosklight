@@ -26,17 +26,9 @@ pub struct SessionResponse {
     pub role: Option<String>,
     #[serde(default)]
     pub desk: Option<serde_json::Value>,
-    /// Who the session belongs to. A preload is one operator's, so reading one needs this.
-    #[serde(default)]
-    pub user: Option<SessionUser>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SessionUser {
-    pub id: Uuid,
-}
-
-/// One operator's preload, as the desk projects it.
+/// The desk's preload, as it projects it.
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct PreloadProjection {
     #[serde(default)]

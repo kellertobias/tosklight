@@ -7,7 +7,7 @@ import type { CueTransferTransport } from "./contracts";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const DESK_ID = "22222222-2222-4222-8222-222222222222";
-const USER_ID = "33333333-3333-4333-8333-333333333333";
+const SESSION_ID = "33333333-3333-4333-8333-333333333333";
 let renders = 0;
 
 afterEach(cleanup);
@@ -36,7 +36,7 @@ describe("CueTransferProvider", () => {
 			<CueTransferProvider
 				showId={SHOW_ID}
 				deskId={DESK_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				authorityKey="server-a|session-a"
 				showStore={showStore}
 				programmingStore={programmingStore}

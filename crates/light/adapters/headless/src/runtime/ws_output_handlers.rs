@@ -32,7 +32,6 @@ pub(super) fn ws_speed_group_action(
     state.programming.run_desk_operation(session.desk.id, || {
         let context = light_application::ActionContext::operator(
             session.desk.id,
-            session.user.id.0,
             session.id.0,
             light_application::ActionSource::UserInterface,
         )
@@ -76,7 +75,6 @@ pub(super) fn ws_output_runtime_action(
         }
         let context = light_application::ActionContext::operator(
             session.desk.id,
-            session.user.id.0,
             session.id.0,
             light_application::ActionSource::UserInterface,
         )

@@ -10,8 +10,7 @@ fn priority_is_lightweight_revisioned_replay_safe_and_stable_across_unrelated_va
     let registry = ProgrammerRegistry::with_clock(clock.clone());
     let desk = Uuid::new_v4();
     let session = SessionId::new();
-    let user = UserId::new();
-    registry.start(session, user);
+    registry.start(session);
     let events = EventBus::new(8);
     let service = ProgrammingService::new(
         registry.clone(),
@@ -19,7 +18,7 @@ fn priority_is_lightweight_revisioned_replay_safe_and_stable_across_unrelated_va
         Arc::new(HighlightRegistry::default()),
     );
     let ports = LivePorts::default();
-    let context = ActionContext::operator(desk, user.0, session.0, ActionSource::Http);
+    let context = ActionContext::operator(desk, session.0, ActionSource::Http);
     crate::programming::values_projection::reset_projection_read_count();
 
     clock.advance_millis(1_000);
@@ -109,19 +108,17 @@ fn priority_is_lightweight_revisioned_replay_safe_and_stable_across_unrelated_va
 #[test]
 fn priority_is_the_desks_and_every_surface_reads_it() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first_session = SessionId::new();
     let second_session = SessionId::new();
-    registry.start(first_session, user);
-    registry.start(second_session, user);
+    registry.start(first_session);
+    registry.start(second_session);
     let service = ProgrammingService::new(
         registry,
         EventBus::new(8),
         Arc::new(HighlightRegistry::default()),
     );
     let ports = LivePorts::default();
-    let first =
-        ActionContext::operator(Uuid::new_v4(), user.0, first_session.0, ActionSource::Http);
+    let first = ActionContext::operator(Uuid::new_v4(), first_session.0, ActionSource::Http);
     service
         .handle_priority(
             ActionEnvelope {
@@ -134,8 +131,7 @@ fn priority_is_the_desks_and_every_surface_reads_it() {
             &ports,
         )
         .unwrap();
-    let peer =
-        ActionContext::operator(Uuid::new_v4(), user.0, second_session.0, ActionSource::Http);
+    let peer = ActionContext::operator(Uuid::new_v4(), second_session.0, ActionSource::Http);
     assert_eq!(
         service
             .priority_snapshot(&peer, &ports)
@@ -147,15 +143,9 @@ fn priority_is_the_desks_and_every_surface_reads_it() {
 
     // An identity from before the desk had only one reads the desk's priority rather than being
     // rejected as foreign, and is reported as the desk's Programmer.
-    let legacy = ActionContext::operator(
-        peer.desk_id,
-        UserId::new().0,
-        second_session.0,
-        ActionSource::Http,
-    );
+    let legacy = ActionContext::operator(peer.desk_id, second_session.0, ActionSource::Http);
     let snapshot = service.priority_snapshot(&legacy, &ports).unwrap();
     assert_eq!(snapshot.projection.priority, 80);
-    assert_eq!(snapshot.projection.user_id, user);
 
     // Authentication still gates the read.
     let system = ActionContext::system(peer.desk_id, ActionSource::System);

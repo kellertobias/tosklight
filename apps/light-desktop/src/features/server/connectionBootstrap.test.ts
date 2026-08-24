@@ -12,18 +12,15 @@ import {
 } from "./connectionBootstrap";
 import type { ServerState } from "./useServerState";
 
-const user = { id: "user-1", name: "Operator", enabled: true };
 const session = {
 	session_id: "session-1",
 	client_id: "current-client",
 	token: "token-1",
-	user,
 	desk: { id: "desk-1" },
-} as SessionResponse;
+} as unknown as SessionResponse;
 
 function bootstrap(): BootstrapSnapshot {
 	return {
-		users: [user],
 		active_show: { id: "show-1", name: "Show" },
 		active_programmers: [],
 	} as unknown as BootstrapSnapshot;
@@ -230,7 +227,7 @@ describe("connection bootstrap resources", () => {
 		expect(harness.clientMethods.screens).not.toHaveBeenCalled();
 		expect(harness.clientMethods.mediaServers).not.toHaveBeenCalled();
 		expect(harness.clientMethods.fixtureProfiles).not.toHaveBeenCalled();
-		expect(loadShowObjects).toHaveBeenCalledWith("show-1", "user-1");
+		expect(loadShowObjects).toHaveBeenCalledWith("show-1");
 	});
 
 	it("defers non-interactive resources into cancellable warm-up tasks", async () => {

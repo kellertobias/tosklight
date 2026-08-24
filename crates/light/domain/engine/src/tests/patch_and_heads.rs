@@ -54,7 +54,7 @@ fn visual_only_profile_renders_without_a_dmx_encoding_plan() {
 fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_not() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let (mut fixture, logical) = fixture();
     fixture.multipatch = vec![
         MultiPatchInstance {
@@ -123,7 +123,7 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
 fn logical_head_programmer_value_renders_to_physical_patch() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     programmers.set(
         session,
@@ -161,7 +161,7 @@ fn logical_head_programmer_value_renders_to_physical_patch() {
 fn parent_programmer_value_does_not_fan_out_to_child_heads() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let (fixture, _) = fixture();
     programmers.set(
         session,
@@ -186,7 +186,7 @@ fn parent_programmer_value_does_not_fan_out_to_child_heads() {
 fn master_only_group_fader_does_not_scale_child_heads() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let (mut fixture, child) = fixture();
     // A shared master head alongside the child cell: the child's dimmer takes slot 1, the
     // master's slot 2, which is what the byte assertions below read.

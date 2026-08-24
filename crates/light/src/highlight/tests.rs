@@ -81,12 +81,7 @@ impl HighlightPorts for RecordingPorts {
 }
 
 fn context(source: crate::ActionSource) -> ActionContext {
-    ActionContext::operator(
-        Uuid::from_u128(1),
-        Uuid::from_u128(2),
-        SessionId(Uuid::from_u128(3)).0,
-        source,
-    )
+    ActionContext::operator(Uuid::from_u128(1), SessionId(Uuid::from_u128(3)).0, source)
 }
 
 #[test]
@@ -194,8 +189,7 @@ fn a_second_surface_joins_the_desks_highlight_rather_than_being_refused() {
     // A second surface — even one arriving under an identity from before the collapse — is the
     // same operator at the same desk. Highlight is already on; asking again is not a conflict.
     ports.calls.lock().clear();
-    let mut second_surface = context(crate::ActionSource::Http);
-    second_surface.user_id = Some(Uuid::from_u128(20));
+    let second_surface = context(crate::ActionSource::Http);
     let state = service
         .handle(
             ActionEnvelope {

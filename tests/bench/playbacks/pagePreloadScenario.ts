@@ -499,11 +499,11 @@ export class BrowserPreload {
 		value: AttributeValue;
 	}) {
 		const session = this.session();
-		const scope = { showId: this.showId(), userId: session.user.id };
+		const scope = { showId: this.showId(), sessionId: session.session_id };
 		const transport = new HttpProgrammerPreloadValuesTransport({
 			baseUrl: this.api.baseUrl,
 			sessionToken: session.token,
-			authenticatedUserId: session.user.id,
+			authenticatedSessionId: session.session_id,
 		});
 		const [values, captureMode] = await Promise.all([
 			transport.loadSnapshot(scope),
@@ -531,7 +531,7 @@ export class BrowserPreload {
 		const snapshot = await new HttpProgrammerCaptureModeTransport({
 			baseUrl: this.api.baseUrl,
 			sessionToken: session.token,
-		}).loadSnapshot({ showId: this.showId(), userId: session.user.id });
+		}).loadSnapshot({ showId: this.showId(), sessionId: session.session_id });
 		return snapshot.projection.blind;
 	}
 

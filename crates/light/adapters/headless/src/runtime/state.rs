@@ -207,7 +207,6 @@ impl OutputControl {
 #[derive(Clone, Serialize)]
 pub(super) struct Session {
     pub(super) id: SessionId,
-    pub(super) user: DeskUser,
     pub(super) token: String,
     pub(super) connected: bool,
     pub(super) desk: ControlDesk,

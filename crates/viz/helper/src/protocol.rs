@@ -216,8 +216,6 @@ pub enum RenderQuality {
 pub struct DeskEndpoint {
     pub host: String,
     pub port: u16,
-    /// The user to join as, so the desk keeps one view per renderer rather than one for all.
-    pub user: String,
     /// Which renderer this is, for a desk driving more than one.
     pub target: String,
 }

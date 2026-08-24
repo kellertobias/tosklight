@@ -377,7 +377,6 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     let second_session_id =
         SessionId(Uuid::parse_str(second_login["session_id"].as_str().unwrap()).unwrap());
     let second_session = state.sessions.session(second_session_id).unwrap();
-    assert_eq!(second_session.user.id, first_session.user.id);
     assert_eq!(second_session.desk.id, first_session.desk.id);
 
     let fixtures = highlight_test_fixtures();

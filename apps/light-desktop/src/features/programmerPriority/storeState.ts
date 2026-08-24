@@ -4,7 +4,7 @@ export type ProgrammerPriorityStatus = "idle" | "loading" | "ready" | "error";
 export type ProgrammerPrioritySettlement = "settled" | "ignored" | "repair";
 
 export interface ProgrammerPriorityState {
-	userId: string | null;
+	sessionId: string | null;
 	authorityKey: string | null;
 	eventSequence: number | null;
 	authorityRevision: number | null;
@@ -17,7 +17,7 @@ export interface ProgrammerPriorityState {
 
 export function emptyProgrammerPriorityState(): ProgrammerPriorityState {
 	return {
-		userId: null,
+		sessionId: null,
 		authorityKey: null,
 		eventSequence: null,
 		authorityRevision: null,

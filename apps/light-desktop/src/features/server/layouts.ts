@@ -1,6 +1,6 @@
 import { ApiRequestError } from "../../api/ApiRequestError";
 import type { VersionedObject } from "../../api/types";
-import type { StoredDeskLayout } from "./contracts";
+import { DESK_LAYOUT_ID, type StoredDeskLayout } from "./contracts";
 import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
 
@@ -20,12 +20,15 @@ export function createLayoutActions(
 			try {
 				if (!bootstrap?.active_show || !session)
 					throw new Error("Open a show before saving a Desktop layout");
+				// A layout this show already holds keeps its own id, so a show written before the
+				// collapse is updated in place rather than left beside a second one.
+				const layoutId = deskLayout?.id ?? DESK_LAYOUT_ID;
 				const revision = deskLayout?.revision ?? 0;
 				let outcome;
 				try {
 					outcome = await api.showObjects.updateUserLayout(
 						bootstrap.active_show.id,
-						session.user.id,
+						layoutId,
 						layout,
 						revision,
 					);
@@ -35,11 +38,11 @@ export function createLayoutActions(
 					const current = await api.showObjects.objectOrNull<StoredDeskLayout>(
 						bootstrap.active_show.id,
 						"user_layout",
-						session.user.id,
+						layoutId,
 					);
 					outcome = await api.showObjects.updateUserLayout(
 						bootstrap.active_show.id,
-						session.user.id,
+						layoutId,
 						layout,
 						current?.revision ?? 0,
 					);

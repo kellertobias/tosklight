@@ -10,7 +10,6 @@ pub(super) fn publish_osc(state: &AppState, session: &Session, choice: &PendingC
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "pending_choice":wire_choice(choice.clone()),
             "source":"osc",
         }),
@@ -46,7 +45,6 @@ pub(super) fn publish_http(
             "request_id":request_id,
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "command":audit_command,
             "pending_choice":pending_choice,
             "source":"http",

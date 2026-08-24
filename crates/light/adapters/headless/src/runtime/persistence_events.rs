@@ -10,7 +10,6 @@ pub(super) fn persist_programmer(state: &AppState, session: &Session) -> Result<
         .installation
         .defer_session_save(DeferredProgrammerPersistence {
             id: session.id,
-            user_id: session.user.id,
             token: session.token.clone(),
             programmer,
             connected,

@@ -6,7 +6,7 @@ fn transient_control_action_is_not_serialized_and_reveals_latest_latched_value()
     let session = SessionId::new();
     let fixture = FixtureId::new();
     let attribute = AttributeKey("__fixture_control_channel.shared".into());
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.set(
         session,
         fixture,
@@ -51,7 +51,7 @@ fn stale_timed_release_does_not_clear_a_retriggered_action() {
     let session = SessionId::new();
     let fixture = FixtureId::new();
     let attribute = AttributeKey("__fixture_control_channel.shared".into());
-    registry.start(session, UserId::new());
+    registry.start(session);
     let first = registry
         .set_transient_action(
             session,
@@ -77,7 +77,7 @@ fn faded_batch_is_one_undo_step_and_respects_preload_capture() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.set(
         session,
         fixture,
@@ -252,7 +252,7 @@ fn update_content_captures_only_normal_programmer_edits_without_consuming_them()
     let session = SessionId::new();
     let fixture = FixtureId::new();
     let preload_fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, [fixture]);
     registry.set_faded_with_timing(
         session,
@@ -296,13 +296,12 @@ fn update_content_captures_only_normal_programmer_edits_without_consuming_them()
 #[test]
 fn update_capture_reads_the_desk_values_and_the_desk_selection() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first_session = SessionId::new();
     let second_session = SessionId::new();
     let first_fixture = FixtureId::new();
     let second_fixture = FixtureId::new();
-    registry.start(first_session, user);
-    registry.start(second_session, user);
+    registry.start(first_session);
+    registry.start(second_session);
     registry.select(second_session, [second_fixture]);
     // One desk, one selection: selecting on either surface replaces it for both.
     registry.select(first_session, [first_fixture]);
@@ -373,7 +372,7 @@ fn transaction_snapshot_restores_programmer_and_desk_interaction_exactly() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, [fixture]);
     registry.set(
         session,

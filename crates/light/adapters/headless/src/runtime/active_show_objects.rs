@@ -16,12 +16,7 @@ pub(super) fn operator_action_context(
     session: &Session,
     source: light_application::ActionSource,
 ) -> light_application::ActionContext {
-    light_application::ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        source,
-    )
+    light_application::ActionContext::operator(session.desk.id, session.id.0, source)
 }
 
 pub(super) fn put_active_show_object(

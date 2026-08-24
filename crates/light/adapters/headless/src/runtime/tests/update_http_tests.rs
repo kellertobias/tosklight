@@ -1,7 +1,6 @@
 #[tokio::test]
 async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let mut front = test_control_desk();
     front.id = Uuid::new_v4();
     let mut wing = test_control_desk();
@@ -9,7 +8,6 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     let writer = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "update-settings-writer".into(),
         connected: true,
         desk: front.clone(),
@@ -17,7 +15,6 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     let reader = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "update-settings-reader".into(),
         connected: true,
         desk: front.clone(),
@@ -25,13 +22,12 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     let other_desk = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user,
         token: "update-settings-other-desk".into(),
         connected: true,
         desk: wing.clone(),
     };
     for session in [&writer, &reader, &other_desk] {
-        state.programming.start(session.id, session.user.id);
+        state.programming.start(session.id);
         attach_session_command_context(&state, session);
         state.sessions.insert_session(session.clone());
     }
@@ -160,16 +156,14 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
 #[test]
 fn locked_desk_can_preview_update_but_cannot_apply_it() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "locked-update-preview".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
     let fixture = light_core::FixtureId::new();
@@ -240,16 +234,14 @@ fn locked_desk_can_preview_update_but_cannot_apply_it() {
 #[test]
 fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "hardware-update-target".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
     state

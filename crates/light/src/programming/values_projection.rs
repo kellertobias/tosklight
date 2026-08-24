@@ -1,7 +1,7 @@
 use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
+use light_core::SessionId;
 use light_core::{AttributeKey, FixtureId};
-use light_core::{SessionId, UserId};
 use light_dynamics::{DynamicAddressValue, DynamicSemanticValue};
 use light_programmer::{ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerRegistry};
 use std::sync::Arc;
@@ -20,7 +20,6 @@ thread_local! {
 /// transient control actions deliberately live outside this boundary.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingValuesProjection {
-    pub user_id: UserId,
     pub revision: u64,
     pub fixture_values: Vec<ProgrammerFixtureUpdate>,
     pub group_values: Vec<ProgrammerGroupUpdate>,
@@ -109,9 +108,8 @@ impl ProgrammingValuesContent {
         })
     }
 
-    pub(super) fn projection(self, user_id: UserId, revision: u64) -> ProgrammingValuesProjection {
+    pub(super) fn projection(self, revision: u64) -> ProgrammingValuesProjection {
         ProgrammingValuesProjection {
-            user_id,
             revision,
             fixture_values: self.fixture_values,
             group_values: self.group_values,
@@ -119,12 +117,7 @@ impl ProgrammingValuesContent {
         }
     }
 
-    pub(super) fn change(
-        self,
-        before: &Self,
-        user_id: UserId,
-        revision: u64,
-    ) -> ProgrammingValuesChange {
+    pub(super) fn change(self, before: &Self, revision: u64) -> ProgrammingValuesChange {
         #[cfg(test)]
         PROJECTION_READS.set(PROJECTION_READS.get() + 1);
         use std::collections::HashMap;
@@ -234,7 +227,7 @@ impl ProgrammingValuesContent {
                 Vec::new()
             },
         };
-        let projection = Arc::new(self.projection(user_id, revision));
+        let projection = Arc::new(self.projection(revision));
         ProgrammingValuesChange { projection, delta }
     }
 }
@@ -291,7 +284,7 @@ mod dynamic_delta_tests {
             ..Default::default()
         };
 
-        let change = after.change(&before, UserId(Uuid::from_u128(2)), 2);
+        let change = after.change(&before, 2);
 
         assert_eq!(change.delta.dynamic_values, vec![dynamic_value(second, 3)]);
         assert_eq!(
@@ -311,42 +304,30 @@ impl ProgrammingService {
         context: &ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingValuesSnapshot, ActionError> {
-        // The identity must be there; which identity it is no longer selects anything.
-        let (session, _) = values_identity(context)?;
+        let session = values_identity(context)?;
         self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize(context)?;
             // Reading the cursor first permits a duplicate after repair, but cannot skip a
             // mutation, because that transition uses this same gate.
             let event_sequence = self.events.latest_sequence();
             let content = ProgrammingValuesContent::read(&self.programmers, session)?;
-            // Report the Programmer the session operates, not the name it asked under.
-            let user_id = self
-                .programmers
-                .operated_desk_user(session)
-                .ok_or_else(programmer_values_unavailable)?;
             let revision = self.programmers.normal_values_revision();
             Ok(ProgrammingValuesSnapshot {
                 event_sequence,
-                projection: content.projection(user_id, revision),
+                projection: content.projection(revision),
             })
         })
     }
 }
 
-fn values_identity(context: &ActionContext) -> Result<(SessionId, UserId), ActionError> {
+fn values_identity(context: &ActionContext) -> Result<SessionId, ActionError> {
     let session = context.session_id.map(SessionId).ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "Programmer value snapshots require an operator session",
         )
     })?;
-    let user_id = context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Programmer value snapshots require an authenticated user",
-        )
-    })?;
-    Ok((session, user_id))
+    Ok(session)
 }
 
 fn programmer_values_unavailable() -> ActionError {

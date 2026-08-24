@@ -4,7 +4,7 @@ use super::*;
 fn hazardous_fixture_defaults_to_immediate_safe_on_control_loss() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let (mut fixture, logical) = fixture();
     fixture.definition.hazardous = true;
     fixture
@@ -146,7 +146,7 @@ fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, logical) = moving_fixture(1, true, 1_000);
     let engine = Engine::new(programmers.clone());
     engine
@@ -185,7 +185,7 @@ fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
     );
 
     clock.set(started + ChronoDuration::milliseconds(5_500));
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set(
         session,
         logical,

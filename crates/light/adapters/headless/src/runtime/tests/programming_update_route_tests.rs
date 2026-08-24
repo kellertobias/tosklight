@@ -14,18 +14,16 @@ struct UpdateRouteScenario {
 impl UpdateRouteScenario {
     fn new() -> Self {
         let (state, data_dir) = test_state();
-        let user = state.installation.users().unwrap().remove(0);
         let mut desk = test_control_desk();
         desk.id = Uuid::new_v4();
         let session = Session {
             capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
-            user: user.clone(),
             token: "programming-update-v2".into(),
             connected: true,
             desk,
         };
-        state.programming.start(session.id, user.id);
+        state.programming.start(session.id);
         attach_session_command_context(&state, &session);
         state.sessions.insert_session(session.clone());
 

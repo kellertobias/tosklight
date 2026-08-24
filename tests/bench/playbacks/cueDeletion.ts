@@ -502,7 +502,7 @@ function actionHeaders(session: Session, showId: string, revision: number) {
 }
 
 function captureSession(session: Session): Session {
-	return { ...session, user: { ...session.user }, desk: { ...session.desk } };
+	return { ...session, desk: { ...session.desk } };
 }
 
 function assertCurrentSession(
@@ -516,7 +516,7 @@ function assertCurrentSession(
 		current.session_id !== expected.session_id ||
 		current.client_id !== expected.client_id ||
 		current.token !== expected.token ||
-		!sameId(current.user.id, expected.user.id) ||
+		!sameId(current.session_id, expected.session_id) ||
 		!sameId(current.desk.id, expected.desk.id)
 	)
 		throw new Error(`Cue deletion session changed ${phase}`);

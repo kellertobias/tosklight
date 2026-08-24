@@ -256,7 +256,6 @@ pub(super) fn ws_programmer_control_action(
                     "programmer_changed",
                     serde_json::json!({
                         "session_id":task_session.id,
-                        "user_id":task_session.user.id,
                         "desk_id":task_session.desk.id,
                         "command":"programmer.control_action",
                         "changes":["transient_control"],
