@@ -679,7 +679,7 @@ impl Running {
     /// channel the message did.
     fn adopt(
         &mut self,
-        _handle: SharedSurfaceHandle,
+        #[cfg_attr(target_os = "macos", allow(unused_variables))] handle: SharedSurfaceHandle,
         width: u32,
         height: u32,
     ) -> Result<(), String> {

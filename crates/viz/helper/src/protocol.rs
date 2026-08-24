@@ -514,7 +514,6 @@ mod tests {
                 desk: Some(DeskEndpoint {
                     host: "127.0.0.1".to_owned(),
                     port: 5000,
-                    user: "Operator".to_owned(),
                     target: "stage-pane".to_owned(),
                 }),
                 surface_service: Some("de.tokenet.tosklight.stage-pane.test".to_owned()),
