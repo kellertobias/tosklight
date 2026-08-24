@@ -6,7 +6,6 @@ async fn preload_values_snapshot_is_exact_user_owned_and_empty_before_capture() 
     assert_eq!(response.headers()[header::ETAG], "\"0\"");
     let snapshot: light_wire::v2::preload_values::ProgrammingPreloadValuesSnapshot =
         serde_json::from_value(json(response).await).unwrap();
-    assert_eq!(snapshot.projection.user_id, scenario.session.user.id.0);
     assert_eq!(snapshot.projection.revision, 0);
     assert!(snapshot.projection.fixture_values.is_empty());
     assert!(snapshot.projection.group_values.is_empty());
@@ -192,12 +191,14 @@ async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
     let legacy = json(legacy).await;
-    assert_eq!(
-        legacy["projection"]["user_id"],
-        scenario.session.user.id.0.to_string(),
-        "the desk reports its own Programmer, not the name the caller asked under"
+    assert!(
+        legacy["projection"].get("user_id").is_none(),
+        "the projection is the desk's own Programmer and names nobody"
     );
-    assert_eq!(legacy["projection"]["revision"], 2);
+    assert_eq!(
+        legacy["projection"]["revision"], 2,
+        "a URL naming an identity from before the collapse still advances the one Programmer"
+    );
     assert_eq!(
         legacy["projection"]["fixture_values"][0]["value"]["value"],
         0.9

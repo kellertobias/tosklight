@@ -8,9 +8,8 @@ import {
 export function decodeProgrammerPreloadValuesProjection(
 	value: unknown,
 	path: string,
-	expectedUserId: string,
 ): ProgrammerPreloadValuesProjection {
-	return decodeProgrammerValuesProjection(value, path, expectedUserId);
+	return decodeProgrammerValuesProjection(value, path);
 }
 
 export const programmerPreloadValuesUuidAt = programmerValuesUuidAt;

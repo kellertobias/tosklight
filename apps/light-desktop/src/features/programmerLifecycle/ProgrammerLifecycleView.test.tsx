@@ -23,9 +23,7 @@ function OperatorRowProbe({ onRender }: { onRender: () => void }) {
 	onRender();
 	const selectRow = useCallback(
 		(state: ReturnType<ProgrammerLifecycleStore["getSnapshot"]>) =>
-			state.projection?.programmers.find(
-				(row) => row.userId === "operator-a",
-			) ?? null,
+			state.projection?.programmers[0] ?? null,
 		[],
 	);
 	const row = useProgrammerLifecycleSelector(selectRow);

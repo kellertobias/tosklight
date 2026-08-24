@@ -39,7 +39,7 @@ function harness(
 	const applyAction =
 		vi.fn<
 			(
-				scope: { showId: string; userId: string },
+				scope: { showId: string },
 				request: ProgrammerPreloadValuesActionRequest,
 			) => Promise<ProgrammerPreloadValuesActionOutcome>
 		>();
@@ -49,7 +49,7 @@ function harness(
 	);
 	const onError = vi.fn();
 	const writer = new ProgrammerPreloadValuesWriter({
-		scope: { showId: SHOW_ID, userId: USER_ID },
+		scope: { showId: SHOW_ID },
 		store,
 		captureModeStore,
 		applyAction,
@@ -385,25 +385,6 @@ describe("ProgrammerPreloadValuesWriter preconditions and recovery", () => {
 		await expect(queued).resolves.toBeNull();
 		expect(applyAction).toHaveBeenCalledOnce();
 		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
-	});
-
-	it("rejects a foreign-user action outcome and repairs both authorities", async () => {
-		const { store, applyAction, repair, repairCaptureMode, writer } = harness();
-		applyAction.mockResolvedValueOnce(
-			changed(
-				"foreign",
-				preloadProjection({ userId: OTHER_USER_ID, revision: 2 }),
-			),
-		);
-
-		await expect(
-			writer.setFixtureValue(fixtureInput("foreign", 0.8)),
-		).resolves.toBeNull();
-
-		expect(repair).toHaveBeenCalledOnce();
-		expect(repairCaptureMode).toHaveBeenCalledOnce();
-		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
-		expect(fixtureLevel(store)).toBe(0.25);
 	});
 
 	it("drops a late response after either scoped authority is replaced", async () => {

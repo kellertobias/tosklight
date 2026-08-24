@@ -63,7 +63,6 @@ pub struct ProgrammingPreloadGroupValue {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProgrammingPreloadValuesProjection {
-    pub user_id: Uuid,
     #[ts(type = "number")]
     pub revision: u64,
     pub fixture_values: Vec<ProgrammingPreloadFixtureValue>,

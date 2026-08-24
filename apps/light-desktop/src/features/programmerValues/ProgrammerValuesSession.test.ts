@@ -62,7 +62,7 @@ describe("ProgrammerValuesSession activation", () => {
 
 		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
 		expect(transport.subscriptions[0]).toMatchObject({
-			scope: { showId: SHOW_ID, userId: USER_ID },
+			scope: { showId: SHOW_ID },
 			after: 10,
 		});
 
@@ -113,55 +113,12 @@ describe("ProgrammerValuesSession activation", () => {
 		expect(harness.store.getSnapshot()).toMatchObject({
 			status: "ready",
 			eventSequence: 10,
-			projection: { userId: USER_ID, revision: 1 },
+			projection: { revision: 1 },
 		});
 	});
 });
 
 describe("ProgrammerValuesSession authority and repair", () => {
-	it("repairs a foreign-user event instead of silently accepting the stream", async () => {
-		const harness = createHarness();
-		const transport = harness.transport as FakeProgrammerValuesTransport;
-		harness.session.activate();
-		await settleProgrammerValuesSession();
-		harness.loadSnapshot.mockResolvedValueOnce(
-			valuesSnapshot({ cursor: 20, revision: 1 }),
-		);
-
-		transport.emit({
-			type: "event",
-			sequence: 20,
-			correlationId: "osc-other-user",
-			projection: valuesProjection({
-				userId: OTHER_USER_ID,
-				revision: 9,
-			}),
-		});
-
-		await settleProgrammerValuesSession();
-		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
-		expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(20);
-		expect(harness.onError).toHaveBeenCalledWith(
-			expect.objectContaining({
-				message: expect.stringContaining("event user"),
-			}),
-		);
-
-		transport.emit({
-			type: "event",
-			sequence: 21,
-			correlationId: "osc-same-user",
-			projection: valuesProjection({
-				revision: 2,
-				fixtureValues: [fixtureValue(0.75)],
-			}),
-		});
-		expect(harness.store.getSnapshot()).toMatchObject({
-			eventSequence: 21,
-			projection: { revision: 2 },
-		});
-	});
-
 	it("repairs a stream gap from an authoritative snapshot", async () => {
 		const harness = createHarness();
 		const transport = harness.transport as FakeProgrammerValuesTransport;
@@ -216,7 +173,6 @@ describe("ProgrammerValuesSession authority and repair", () => {
 			sequence: 19,
 			correlationId: "coalesced-write",
 			change: {
-				userId: USER_ID,
 				revision: 3,
 				fixtureValues: [],
 				removedFixtureValues: [],

@@ -159,7 +159,6 @@ mod tests {
             status: ProgrammingPreloadLifecycleState::NoChange,
             active: false,
             capture_mode: ProgrammingCaptureModeProjection {
-                user_id: Uuid::from_u128(2),
                 revision: 0,
                 blind: false,
                 preview: false,

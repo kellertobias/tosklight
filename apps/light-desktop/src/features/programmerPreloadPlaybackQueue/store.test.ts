@@ -52,16 +52,13 @@ describe("ProgrammerPreloadPlaybackQueueStore", () => {
 		expect(store.getSnapshot().repairRequired).toBe(true);
 	});
 
-	it("rejects foreign-user authority", () => {
+	it("rejects an authority with a malformed revision", () => {
 		const store = hydratedStore();
 		expect(() =>
-			store.applyProjection(
-				queueProjection({ userId: "operator-b", revision: 3 }),
-				11,
-			),
-		).toThrow(/active user/);
+			store.applyProjection(queueProjection({ revision: -1 }), 11),
+		).toThrow(/revision/);
 		expect(store.getSnapshot()).toMatchObject({
-			projection: { userId: USER_ID, revision: 2 },
+			projection: { revision: 2 },
 			repairRequired: true,
 		});
 	});

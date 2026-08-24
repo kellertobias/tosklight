@@ -153,8 +153,6 @@ export class ProgrammerPreloadPlaybackQueueStore {
 	private canonicalForCurrentUser(
 		projection: ProgrammerPreloadPlaybackQueueProjection,
 	) {
-		if (projection.userId !== this.state.userId)
-			throw protocolError("authority does not match the active user", null);
 		return canonicalPreloadPlaybackQueueProjection(projection);
 	}
 

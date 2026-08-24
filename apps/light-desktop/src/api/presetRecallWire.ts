@@ -64,7 +64,6 @@ export function encodePresetRecallRequest(
 
 export function decodePresetRecallOutcome(
 	value: unknown,
-	expectedUserId: string,
 	expectedRequest: PresetRecallRequest,
 ): PresetRecallOutcome {
 	const response = recordAt(value, "$");
@@ -81,7 +80,6 @@ export function decodePresetRecallOutcome(
 	assertIsolatedValuesFields(response, target);
 	const projection = optionalProjection(
 		response,
-		expectedUserId,
 		expectedRequest,
 		status,
 		target,
@@ -202,7 +200,6 @@ function assertDispositionCounts(
 
 function optionalProjection(
 	response: Record<string, unknown>,
-	expectedUserId: string,
 	request: PresetRecallRequest,
 	status: "changed" | "no_change",
 	target: "programmer" | "preload",
@@ -217,16 +214,8 @@ function optionalProjection(
 		);
 	const projection =
 		target === "preload"
-			? decodeProgrammerPreloadValuesProjection(
-					response[key],
-					`$.${key}`,
-					expectedUserId,
-				)
-			: decodeProgrammerValuesProjection(
-					response[key],
-					`$.${key}`,
-					expectedUserId,
-				);
+			? decodeProgrammerPreloadValuesProjection(response[key], `$.${key}`)
+			: decodeProgrammerValuesProjection(response[key], `$.${key}`);
 	const expectedRevision =
 		target === "preload"
 			? (request.expectedPreloadValuesRevision ?? -1) + 1

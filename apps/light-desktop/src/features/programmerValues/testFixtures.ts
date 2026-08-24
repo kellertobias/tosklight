@@ -83,7 +83,6 @@ export function valuesProjection(
 	} = {},
 ): ProgrammerValuesProjection {
 	return {
-		userId: options.userId ?? USER_ID,
 		revision: options.revision ?? 1,
 		fixtureValues: options.fixtureValues ?? [fixtureValue()],
 		groupValues: options.groupValues ?? [],
@@ -106,7 +105,6 @@ export function valuesChange(
 	projection: ProgrammerValuesProjection,
 ): ProgrammerValuesChange {
 	return {
-		userId: projection.userId,
 		revision: projection.revision,
 		fixtureValues: projection.fixtureValues,
 		removedFixtureValues: [],

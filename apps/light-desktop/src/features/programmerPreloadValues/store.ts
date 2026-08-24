@@ -73,8 +73,7 @@ export class ProgrammerPreloadValuesStore {
 		snapshot: ProgrammerPreloadValuesSnapshot,
 		expectedScope = this.scope,
 	) {
-		if (!this.canAccept(snapshot.projection.userId, expectedScope))
-			return false;
+		if (!this.canAccept(expectedScope)) return false;
 		try {
 			assertPreloadCursor(snapshot.cursor);
 			if (
@@ -136,7 +135,6 @@ export class ProgrammerPreloadValuesStore {
 	): ProgrammerPreloadValuesSettlement {
 		if (!this.hasOperation(requestId, expectedScope)) return "ignored";
 		try {
-			if (!this.matchesUser(projection.userId)) return "ignored";
 			assertPreloadCursor(sequence);
 			const incoming = canonicalPreloadProjection(projection);
 			const decision = this.chooseAuthority(incoming, sequence);
@@ -179,7 +177,6 @@ export class ProgrammerPreloadValuesStore {
 		let nextAuthority = this.authoritative;
 		try {
 			if (projection) {
-				if (!this.matchesUser(projection.userId)) return false;
 				const incoming = canonicalPreloadProjection(projection);
 				nextAuthority = choosePreloadRevision(
 					this.authoritative,
@@ -252,7 +249,7 @@ export class ProgrammerPreloadValuesStore {
 		expectedScope: number,
 		updateStatus: boolean,
 	) {
-		if (!this.canAccept(projection.userId, expectedScope)) return false;
+		if (!this.canAccept(expectedScope)) return false;
 		try {
 			assertPreloadCursor(sequence);
 			const incoming = canonicalPreloadProjection(projection);
@@ -296,7 +293,6 @@ export class ProgrammerPreloadValuesStore {
 			if (Object.is(reduced, current)) return current;
 			return canonicalPreloadProjection({
 				...reduced,
-				userId: current.userId,
 				revision: current.revision,
 			});
 		};
@@ -341,12 +337,8 @@ export class ProgrammerPreloadValuesStore {
 		return this.isScopeCurrent(expectedScope) && this.operations.has(requestId);
 	}
 
-	private canAccept(userId: string, expectedScope: number) {
-		return this.isScopeCurrent(expectedScope) && this.matchesUser(userId);
-	}
-
-	private matchesUser(userId: string) {
-		return Boolean(this.state.showId) && userId === this.state.userId;
+	private canAccept(expectedScope: number) {
+		return this.isScopeCurrent(expectedScope) && Boolean(this.state.showId);
 	}
 
 	private publishSessionState(

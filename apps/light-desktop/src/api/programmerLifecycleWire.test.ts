@@ -12,7 +12,6 @@ const CORRELATION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 function programmer() {
 	return {
 		programmer_id: PROGRAMMER_ID,
-		user_id: USER_ID,
 		connected: true,
 		selected_fixture_count: 2,
 		normal_value_count: 3,
@@ -56,7 +55,6 @@ describe("Programmer lifecycle wire decoding", () => {
 				programmers: [
 					{
 						programmerId: PROGRAMMER_ID,
-						userId: USER_ID,
 						connected: true,
 						selectedFixtureCount: 2,
 						normalValueCount: 3,
@@ -113,7 +111,7 @@ describe("Programmer lifecycle wire decoding", () => {
 				revision: 4,
 				delta: {
 					type: "upsert",
-					programmer: { programmerId: PROGRAMMER_ID, userId: USER_ID },
+					programmer: { programmerId: PROGRAMMER_ID },
 				},
 			},
 		});

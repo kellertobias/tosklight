@@ -30,7 +30,7 @@ function harness(captureReady = true) {
 	const applyAction =
 		vi.fn<
 			(
-				scope: { showId: string; userId: string },
+				scope: { showId: string },
 				request: ProgrammerValuesActionRequest,
 			) => Promise<ProgrammerValuesActionOutcome>
 		>();
@@ -40,7 +40,7 @@ function harness(captureReady = true) {
 	);
 	const onError = vi.fn();
 	const writer = new ProgrammerValuesWriter({
-		scope: { showId: SHOW_ID, userId: USER_ID },
+		scope: { showId: SHOW_ID },
 		store,
 		captureModeStore,
 		applyAction,

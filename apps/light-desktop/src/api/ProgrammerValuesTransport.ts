@@ -75,10 +75,7 @@ export class HttpProgrammerValuesTransport
 			`${this.valuesPath(scope)}/snapshot`,
 			{ headers: this.headers() },
 		);
-		return decodeProgrammerValuesSnapshot(
-			await this.responseValue(response),
-			scope.userId,
-		);
+		return decodeProgrammerValuesSnapshot(await this.responseValue(response));
 	}
 
 	async applyAction(
@@ -98,7 +95,6 @@ export class HttpProgrammerValuesTransport
 		);
 		return decodeProgrammerValuesActionOutcome(
 			await this.responseValue(response),
-			scope.userId,
 			request.requestId,
 		);
 	}
@@ -116,10 +112,10 @@ export class HttpProgrammerValuesTransport
 		);
 		let explicitlyClosed = false;
 		socket.addEventListener("open", () =>
-			socket.send(JSON.stringify(subscription(scope.userId, afterSequence))),
+			socket.send(JSON.stringify(subscription(afterSequence))),
 		);
 		socket.addEventListener("message", (event) =>
-			this.deliverEvent(event, scope.userId, observer),
+			this.deliverEvent(event, observer),
 		);
 		socket.addEventListener("error", () =>
 			observer.error(new Error("Programmer values event connection failed")),
@@ -147,13 +143,12 @@ export class HttpProgrammerValuesTransport
 
 	private deliverEvent(
 		event: MessageEvent,
-		userId: string,
 		observer: ProgrammerValuesEventObserver,
 	) {
 		let value: unknown;
 		try {
 			value = JSON.parse(String(event.data));
-			observer.message(decodeProgrammerValuesEventMessage(value, userId));
+			observer.message(decodeProgrammerValuesEventMessage(value));
 		} catch (reason) {
 			const error =
 				reason instanceof Error ? reason : new Error(String(reason));
@@ -223,10 +218,7 @@ export class HttpProgrammerValuesTransport
 	}
 }
 
-function subscription(
-	userId: string,
-	afterSequence: number | null,
-): EventClientMessage {
+function subscription(afterSequence: number | null): EventClientMessage {
 	return {
 		type: "subscribe",
 		filter: {
@@ -244,7 +236,6 @@ function subscription(
 
 function validateScope(scope: ProgrammerValuesScope) {
 	programmerValuesUuidAt(scope.showId, "$.scope.showId");
-	programmerValuesUuidAt(scope.userId, "$.scope.userId");
 }
 
 function validateSequence(value: number | null, label: string) {

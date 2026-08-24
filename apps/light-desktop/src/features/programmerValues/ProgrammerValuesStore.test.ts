@@ -59,7 +59,7 @@ function fixtureLevel(store: ProgrammerValuesStore) {
 }
 
 describe("ProgrammerValuesStore authority", () => {
-	it("isolates all authority and pending work by show and user", () => {
+	it("isolates all authority and pending work by scope", () => {
 		const store = readyStore();
 		const oldScope = store.captureScope();
 		expect(store.beginOptimistic("request-a", setFixtureLevel(0.8))).toBe(true);
@@ -73,27 +73,9 @@ describe("ProgrammerValuesStore authority", () => {
 			pendingRequestIds: [],
 			status: "idle",
 		});
-		expect(store.installSnapshot(valuesSnapshot())).toBe(false);
 		expect(
-			store.installSnapshot(valuesSnapshot({ userId: OTHER_USER_ID }), {
-				expectedScope: oldScope,
-			}),
+			store.installSnapshot(valuesSnapshot(), { expectedScope: oldScope }),
 		).toBe(false);
-	});
-
-	it("ignores authority for another user in the same show", () => {
-		const store = readyStore();
-		const listener = vi.fn();
-		store.subscribe(listener);
-
-		expect(
-			store.applyProjection(
-				valuesProjection({ userId: OTHER_USER_ID, revision: 9 }),
-				20,
-			),
-		).toBe(false);
-		expect(listener).not.toHaveBeenCalled();
-		expect(store.getSnapshot().eventSequence).toBe(10);
 	});
 
 	it("merges contiguous address deltas and removes released values", () => {
@@ -110,7 +92,6 @@ describe("ProgrammerValuesStore authority", () => {
 		expect(
 			store.applyChange(
 				{
-					userId: USER_ID,
 					revision: 2,
 					fixtureValues: [
 						fixtureValue(0.8, { fixtureId: FIXTURE_2, programmerOrder: 3 }),
@@ -141,7 +122,6 @@ describe("ProgrammerValuesStore authority", () => {
 		expect(() =>
 			store.applyChange(
 				{
-					userId: USER_ID,
 					revision: 3,
 					fixtureValues: [],
 					removedFixtureValues: [],
@@ -166,7 +146,6 @@ describe("ProgrammerValuesStore authority", () => {
 		expect(
 			store.applyChange(
 				{
-					userId: USER_ID,
 					revision: 2,
 					fixtureValues: [fixtureValue(0.9)],
 					removedFixtureValues: [],
@@ -274,7 +253,6 @@ describe("ProgrammerValuesStore authority", () => {
 		expect(
 			store.applyChange(
 				{
-					userId: USER_ID,
 					revision: 2,
 					fixtureValues: [],
 					removedFixtureValues: [],

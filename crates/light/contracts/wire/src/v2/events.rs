@@ -521,7 +521,6 @@ mod capture_mode_tests {
         let payload = EventPayload::ProgrammingCaptureModeChanged {
             change: ProgrammingCaptureModeChange {
                 projection: ProgrammingCaptureModeProjection {
-                    user_id: Uuid::from_u128(1),
                     revision: 4,
                     blind: true,
                     preview: false,
@@ -534,7 +533,6 @@ mod capture_mode_tests {
             "type": "programming_capture_mode_changed",
             "change": {
                 "projection": {
-                    "user_id": Uuid::from_u128(1),
                     "revision": 4,
                     "blind": true,
                     "preview": false,

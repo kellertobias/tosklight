@@ -115,11 +115,7 @@ export class ProgrammingApiClient {
 			{ type: "programming_values", request: wireRequest },
 			wireRequest.request_id,
 		);
-		return decodeProgrammerValuesActionOutcome(
-			value,
-			userId,
-			request.requestId,
-		);
+		return decodeProgrammerValuesActionOutcome(value, request.requestId);
 	}
 
 	async programmerPriorityLiveAction(
@@ -150,7 +146,7 @@ export class ProgrammingApiClient {
 			},
 			request.requestId,
 		);
-		return decodePresetRecallOutcome(value, scope.userId, request);
+		return decodePresetRecallOutcome(value, request);
 	}
 
 	async programmerPreloadLifecycleLiveAction(
@@ -162,7 +158,7 @@ export class ProgrammingApiClient {
 			{ type: "programmer_preload_lifecycle", request: wireRequest },
 			wireRequest.request_id,
 		);
-		return decodeProgrammerPreloadLifecycleOutcome(value, userId, request);
+		return decodeProgrammerPreloadLifecycleOutcome(value, request);
 	}
 
 	async programmerPreloadValuesLiveAction(
@@ -176,7 +172,6 @@ export class ProgrammingApiClient {
 		);
 		return decodeProgrammerPreloadValuesActionOutcome(
 			value,
-			userId,
 			request.requestId,
 		);
 	}

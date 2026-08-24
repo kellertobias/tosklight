@@ -4,7 +4,6 @@ import { Button } from "@tosklight/ui";
 interface ProgrammerListProps {
 	programmers: readonly ProgrammerLifecycleRow[];
 	loading: boolean;
-	currentUserId: string | null;
 	currentUserName: string | null;
 	onClear(sessionId: string): void;
 }
@@ -12,7 +11,6 @@ interface ProgrammerListProps {
 export function ProgrammerList({
 	programmers,
 	loading,
-	currentUserId,
 	currentUserName,
 	onClear,
 }: ProgrammerListProps) {
@@ -26,7 +24,6 @@ export function ProgrammerList({
 					<ProgrammerRow
 						key={programmer.programmerId}
 						programmer={programmer}
-						currentUser={programmer.userId === currentUserId}
 						currentUserName={currentUserName}
 						onClear={onClear}
 					/>
@@ -44,18 +41,15 @@ export function ProgrammerList({
 
 function ProgrammerRow({
 	programmer,
-	currentUser,
 	currentUserName,
 	onClear,
 }: {
 	programmer: ProgrammerLifecycleRow;
-	currentUser: boolean;
 	currentUserName: string | null;
 	onClear(sessionId: string): void;
 }) {
-	const userLabel = currentUser
-		? `${currentUserName ?? "User"} · Current user`
-		: `User ${programmer.userId.slice(0, 8)}`;
+	// There is one Programmer, and it is this desk's.
+	const userLabel = `${currentUserName ?? "Operator"} · This desk`;
 	const sessionSummary = `${programmer.sessions.length} session${programmer.sessions.length === 1 ? "" : "s"}`;
 	const fixtureSummary = `${programmer.selectedFixtureCount} selected fixture${programmer.selectedFixtureCount === 1 ? "" : "s"}`;
 	const clearSession = programmer.sessions[0]?.sessionId;
@@ -70,7 +64,7 @@ function ProgrammerRow({
 			</span>
 			<Button
 				className="danger"
-				aria-label={`Clear programmer ${programmer.userId}`}
+				aria-label="Clear programmer"
 				disabled={!clearSession}
 				onClick={() => clearSession && onClear(clearSession)}
 			>

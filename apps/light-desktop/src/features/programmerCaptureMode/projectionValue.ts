@@ -5,10 +5,6 @@ export function canonicalCaptureModeProjection(
 	projection: ProgrammerCaptureModeProjection,
 ): ProgrammerCaptureModeProjection {
 	assertRevision(projection.revision);
-	if (!projection.userId)
-		throw new ProgrammerCaptureModeProtocolError(
-			"Programmer capture mode projection is missing its user",
-		);
 	assertBoolean(projection.blind, "blind");
 	assertBoolean(projection.preview, "preview");
 	assertBoolean(
@@ -16,7 +12,6 @@ export function canonicalCaptureModeProjection(
 		"Preload Programmer capture",
 	);
 	return Object.freeze({
-		userId: projection.userId,
 		revision: projection.revision,
 		blind: projection.blind,
 		preview: projection.preview,
@@ -29,7 +24,6 @@ export function sameCaptureModeProjection(
 	right: ProgrammerCaptureModeProjection,
 ) {
 	return (
-		left.userId === right.userId &&
 		left.revision === right.revision &&
 		left.blind === right.blind &&
 		left.preview === right.preview &&

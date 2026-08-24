@@ -302,10 +302,6 @@ describe("Programmer values acceptance intents", () => {
 				),
 			},
 		],
-		[
-			"user",
-			{ values: valuesSnapshot("99999999-9999-4999-8999-999999999999") },
-		],
 	] as const)("rejects a foreign %s authority before mutation", async (_scope, options) => {
 		const fetchMock = programmerFetch(noChangeOutcome(), 200, options);
 		await expect(
@@ -314,7 +310,7 @@ describe("Programmer values acceptance intents", () => {
 				{ surface: "api", showId: SHOW_ID },
 				dependencies(fetchMock as typeof fetch),
 			),
-		).rejects.toThrow(/foreign|requested user/);
+		).rejects.toThrow(/foreign/);
 		expect(actionCalls(fetchMock)).toHaveLength(0);
 	});
 
@@ -432,9 +428,8 @@ function actionBodies(fetchMock: ReturnType<typeof programmerFetch>) {
 	);
 }
 
-function valuesProjection(revision: number, userId = USER_ID) {
+function valuesProjection(revision: number) {
 	return {
-		user_id: userId,
 		revision,
 		fixture_values: [],
 		group_values: [],
@@ -442,15 +437,14 @@ function valuesProjection(revision: number, userId = USER_ID) {
 	};
 }
 
-function valuesSnapshot(userId = USER_ID) {
-	return { cursor: { sequence: 18 }, projection: valuesProjection(7, userId) };
+function valuesSnapshot() {
+	return { cursor: { sequence: 18 }, projection: valuesProjection(7) };
 }
 
 function captureModeSnapshot(preload = false) {
 	return {
 		cursor: { sequence: 17 },
 		projection: {
-			user_id: USER_ID,
 			revision: 3,
 			blind: preload,
 			preview: false,

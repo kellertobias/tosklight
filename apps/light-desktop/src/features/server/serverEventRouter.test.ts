@@ -125,7 +125,6 @@ function event(
 		return {
 			type: "programming_values_changed",
 			change: {
-				user_id: session.user.id,
 				revision,
 				fixture_values: [],
 				removed_fixture_values: [],

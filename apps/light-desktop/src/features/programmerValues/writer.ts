@@ -370,9 +370,7 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 		const captureModeState = this.options.captureModeStore.getSnapshot();
 		if (
 			state.showId !== this.options.scope.showId ||
-			state.userId !== this.options.scope.userId ||
-			captureModeState.showId !== this.options.scope.showId ||
-			captureModeState.userId !== this.options.scope.userId
+			captureModeState.showId !== this.options.scope.showId
 		)
 			return false;
 		this.storeScope ??= this.options.store.captureScope();

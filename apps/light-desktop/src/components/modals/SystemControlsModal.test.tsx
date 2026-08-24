@@ -43,7 +43,6 @@ const lifecycle = vi.hoisted(() => ({
 		programmers: [
 			{
 				programmerId: "programmer-1",
-				userId: "operator",
 				connected: true,
 				selectedFixtureCount: 1,
 				normalValueCount: 3,
@@ -92,7 +91,6 @@ interface ProgrammerProjection {
 	revision: number;
 	programmers: Array<{
 		programmerId: string;
-		userId: string;
 		connected: boolean;
 		selectedFixtureCount: number;
 		normalValueCount: number;
@@ -319,7 +317,6 @@ afterEach(() => {
 		programmers: [
 			{
 				programmerId: "programmer-1",
-				userId: "operator",
 				connected: true,
 				selectedFixtureCount: 1,
 				normalValueCount: 3,
@@ -349,7 +346,7 @@ describe("SystemControlsModal", () => {
 
 		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
 		expect(screen.getByRole("button", { name: "All Off" })).toBeInTheDocument();
-		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();
+		expect(screen.getByText("Operator · This desk")).toBeInTheDocument();
 		expect(screen.getAllByRole("dialog")).toHaveLength(1);
 	});
 
@@ -400,10 +397,10 @@ describe("SystemControlsModal", () => {
 		expect(screen.getByText("Virtual Cuelist")).toBeInTheDocument();
 		expect(screen.getByText("Circle · Dynamic 7")).toBeInTheDocument();
 		expect(
-			screen.queryByText("Operator · Current user"),
+			screen.queryByText("Operator · This desk"),
 		).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
-		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();
+		expect(screen.getByText("Operator · This desk")).toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: "Close" }),
 		).not.toBeInTheDocument();
@@ -433,7 +430,7 @@ describe("SystemControlsModal", () => {
 		);
 		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
 		fireEvent.click(
-			screen.getByRole("button", { name: "Clear programmer operator" }),
+			screen.getAllByRole("button", { name: "Clear programmer" })[0],
 		);
 
 		expect(release).toHaveBeenNthCalledWith(1, mapped);
@@ -444,13 +441,12 @@ describe("SystemControlsModal", () => {
 		expect(clearProgrammer).toHaveBeenCalledWith("session-1");
 	});
 
-	it("groups same-user desks and uses safe lifecycle counts for foreign users", () => {
+	it("groups the desk's sessions and uses safe lifecycle counts", () => {
 		lifecycle.projection?.programmers[0].sessions.push({
 			sessionId: "session-2",
 		});
 		lifecycle.projection?.programmers.push({
 			programmerId: "programmer-2",
-			userId: "other-user",
 			connected: true,
 			selectedFixtureCount: 0,
 			normalValueCount: 3,
@@ -472,7 +468,7 @@ describe("SystemControlsModal", () => {
 			),
 		).toBeInTheDocument();
 		fireEvent.click(
-			screen.getByRole("button", { name: "Clear programmer other-user" }),
+			screen.getAllByRole("button", { name: "Clear programmer" })[1],
 		);
 		expect(clearProgrammer).toHaveBeenCalledWith("session-3");
 	});

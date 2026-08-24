@@ -141,7 +141,6 @@ function harness(
 	preloadValuesStore.installSnapshot({
 		cursor: 30,
 		projection: {
-			userId: USER_ID,
 			revision: 5,
 			fixtureValues: [],
 			groupValues: [],
@@ -152,7 +151,6 @@ function harness(
 	captureModeStore.installSnapshot({
 		cursor: 30,
 		projection: {
-			userId: USER_ID,
 			revision: 3,
 			blind: false,
 			preview: false,
@@ -392,7 +390,6 @@ describe("PresetRecallWriter", () => {
 		});
 		setup.captureModeStore.applyProjection(
 			{
-				userId: USER_ID,
 				revision: 4,
 				blind: true,
 				preview: false,
@@ -526,7 +523,6 @@ describe("PresetRecallWriter", () => {
 		const redirected = harness();
 		redirected.captureModeStore.applyProjection(
 			{
-				userId: USER_ID,
 				revision: 4,
 				blind: true,
 				preview: false,

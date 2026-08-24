@@ -40,7 +40,6 @@ const ACTION_SOURCES = [
 
 export function decodeProgrammerPreloadPlaybackQueueSnapshot(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerPreloadPlaybackQueueSnapshot {
 	const snapshot = exactRecordAt(value, "$", ["cursor", "projection"]);
 	return {
@@ -48,16 +47,13 @@ export function decodeProgrammerPreloadPlaybackQueueSnapshot(
 		projection: decodeProgrammerPreloadPlaybackQueueProjection(
 			snapshot.projection,
 			"$.projection",
-			expectedUserId,
 		),
 	};
 }
 
 export function decodeProgrammerPreloadPlaybackQueueEventMessage(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerPreloadPlaybackQueueEventMessage {
-	programmerPreloadValuesUuidAt(expectedUserId, "$.requested_user_id");
 	const message = recordAt(value, "$");
 	const type = enumAt(message.type, "$.type", [
 		"ready",
@@ -76,31 +72,15 @@ export function decodeProgrammerPreloadPlaybackQueueEventMessage(
 	}
 	if (type === "gap") return decodeGap(message);
 	exactRecordAt(message, "$", ["type", "event"]);
-	return decodeEvent(message.event, expectedUserId);
+	return decodeEvent(message.event);
 }
 
 export function decodeProgrammerPreloadPlaybackQueueProjection(
 	value: unknown,
 	path: string,
-	expectedUserId: string,
 ): ProgrammerPreloadPlaybackQueueProjection {
-	const projection = exactRecordAt(value, path, [
-		"user_id",
-		"revision",
-		"actions",
-	]);
-	const userId = programmerPreloadValuesUuidAt(
-		projection.user_id,
-		`${path}.user_id`,
-	);
-	if (userId.toLowerCase() !== expectedUserId.toLowerCase())
-		throw new WireValidationError(
-			`${path}.user_id`,
-			`requested user ${expectedUserId}`,
-			userId,
-		);
+	const projection = exactRecordAt(value, path, ["revision", "actions"]);
 	return {
-		userId,
 		revision: integerAt(projection.revision, `${path}.revision`),
 		actions: arrayAt(projection.actions, `${path}.actions`).map(
 			(entry, index) => decodeEntry(entry, `${path}.actions[${index}]`),
@@ -138,7 +118,6 @@ function decodeEntry(value: unknown, path: string) {
 
 function decodeEvent(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerPreloadPlaybackQueueEventMessage {
 	const event = exactRecordAt(value, "$.event", [
 		"sequence",
@@ -153,7 +132,7 @@ function decodeEvent(
 		"payload",
 	]);
 	const sequence = integerAt(event.sequence, "$.event.sequence");
-	validateEnvelope(event, expectedUserId);
+	validateEnvelope(event);
 	const payload = exactRecordAt(event.payload, "$.event.payload", [
 		"type",
 		"change",
@@ -171,15 +150,11 @@ function decodeEvent(
 		projection: decodeProgrammerPreloadPlaybackQueueProjection(
 			change.projection,
 			"$.event.payload.change.projection",
-			expectedUserId,
 		),
 	};
 }
 
-function validateEnvelope(
-	event: Record<string, unknown>,
-	expectedUserId: string,
-) {
+function validateEnvelope(event: Record<string, unknown>) {
 	stringAt(event.occurred_at, "$.event.occurred_at");
 	if (!("desk_id" in event) || event.desk_id !== null)
 		throw new WireValidationError("$.event.desk_id", "null", event.desk_id);
@@ -191,12 +166,12 @@ function validateEnvelope(
 		);
 	enumAt(event.class, "$.event.class", ["projection"]);
 	enumAt(event.delivery, "$.event.delivery", ["replaceable"]);
-	validateObject(event.object, expectedUserId);
+	validateObject(event.object);
 	validateRelatedObjects(event.related_objects);
 	validateSource(event.source);
 }
 
-function validateObject(value: unknown, expectedUserId: string) {
+function validateObject(value: unknown) {
 	const object = exactRecordAt(value, "$.event.object", ["capability", "id"]);
 	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
 	const expected = "programming-preload-playback-queue";

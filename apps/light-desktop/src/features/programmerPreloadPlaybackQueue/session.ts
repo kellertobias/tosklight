@@ -23,6 +23,7 @@ export interface ProgrammerPreloadPlaybackQueueSessionOptions {
 /** A reference-counted exact-user authority that is dormant without a view. */
 export class ProgrammerPreloadPlaybackQueueSession {
 	private readonly eventScope: ProgrammerPreloadPlaybackQueueScope;
+	private readonly userId: string;
 	private readonly authorityKey: string;
 	private readonly store: ProgrammerPreloadPlaybackQueueStore;
 	private readonly transport: ProgrammerPreloadPlaybackQueueEventTransport | null;
@@ -41,7 +42,8 @@ export class ProgrammerPreloadPlaybackQueueSession {
 		null;
 
 	constructor(options: ProgrammerPreloadPlaybackQueueSessionOptions) {
-		this.eventScope = { showId: options.showId, userId: options.userId };
+		this.eventScope = { showId: options.showId };
+		this.userId = options.userId;
 		this.authorityKey = options.authorityKey;
 		this.store = options.store;
 		this.transport = options.transport;
@@ -253,11 +255,7 @@ export class ProgrammerPreloadPlaybackQueueSession {
 		if (this.stopped) return false;
 		const state = this.store.getSnapshot();
 		if (state.showId === null && state.userId === null)
-			this.store.reset(
-				this.eventScope.showId,
-				this.eventScope.userId,
-				this.authorityKey,
-			);
+			this.store.reset(this.eventScope.showId, this.userId, this.authorityKey);
 		const scoped = this.store.getSnapshot();
 		if (!this.matchesScope(scoped)) {
 			this.onError?.(this.scopeError("session"));
@@ -272,7 +270,7 @@ export class ProgrammerPreloadPlaybackQueueSession {
 	) {
 		return (
 			state.showId === this.eventScope.showId &&
-			state.userId === this.eventScope.userId &&
+			state.userId === this.userId &&
 			state.authorityKey === this.authorityKey
 		);
 	}

@@ -174,7 +174,6 @@ pub(super) fn capture_mode_projection(
     projection: &application::ProgrammingCaptureModeProjection,
 ) -> wire::ProgrammingCaptureModeProjection {
     wire::ProgrammingCaptureModeProjection {
-        user_id: projection.user_id.0,
         revision: projection.revision,
         blind: projection.blind,
         preview: projection.preview,
@@ -211,7 +210,6 @@ pub(in crate::runtime) fn values_change(
     dynamic_definitions.sort_by_key(|definition| (definition.id, definition.revision));
     dynamic_definitions.dedup_by_key(|definition| (definition.id, definition.revision));
     wire::ProgrammingValuesChange {
-        user_id: change.projection.user_id.0,
         revision: change.projection.revision,
         fixture_values: change
             .delta
@@ -275,7 +273,6 @@ pub(super) fn values_projection(
     dynamic_definitions.sort_by_key(|definition| (definition.id, definition.revision));
     dynamic_definitions.dedup_by_key(|definition| (definition.id, definition.revision));
     wire::ProgrammingValuesProjection {
-        user_id: projection.user_id.0,
         revision: projection.revision,
         fixture_values: projection
             .fixture_values

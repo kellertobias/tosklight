@@ -16,7 +16,6 @@ pub struct ProgrammingLifecycleSession {
 #[serde(deny_unknown_fields)]
 pub struct ProgrammingLifecycleProgrammer {
     pub programmer_id: Uuid,
-    pub user_id: Uuid,
     pub connected: bool,
     #[ts(type = "number")]
     pub selected_fixture_count: u64,
@@ -72,7 +71,6 @@ mod tests {
             "revision": 1,
             "programmers": [{
                 "programmer_id": Uuid::from_u128(1),
-                "user_id": Uuid::from_u128(2),
                 "connected": true,
                 "selected_fixture_count": 1,
                 "normal_value_count": 1,
@@ -92,7 +90,6 @@ mod tests {
     fn lifecycle_programmer_requires_preload_active_and_rejects_extra_details() {
         let exact = serde_json::json!({
             "programmer_id": Uuid::from_u128(1),
-            "user_id": Uuid::from_u128(2),
             "connected": true,
             "selected_fixture_count": 0,
             "normal_value_count": 0,

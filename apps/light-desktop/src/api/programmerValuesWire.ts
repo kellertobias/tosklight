@@ -50,7 +50,6 @@ export interface ProgrammerValuesErrorResponse {
 
 export function decodeProgrammerValuesSnapshot(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerValuesSnapshot {
 	const snapshot = exactRecordAt(value, "$", ["cursor", "projection"]);
 	return {
@@ -58,14 +57,12 @@ export function decodeProgrammerValuesSnapshot(
 		projection: decodeProgrammerValuesProjection(
 			snapshot.projection,
 			"$.projection",
-			expectedUserId,
 		),
 	};
 }
 
 export function decodeProgrammerValuesActionOutcome(
 	value: unknown,
-	expectedUserId: string,
 	expectedRequestId?: string,
 ): ProgrammerValuesActionOutcome {
 	const response = recordAt(value, "$");
@@ -100,7 +97,6 @@ export function decodeProgrammerValuesActionOutcome(
 	const projection = decodeProgrammerValuesProjection(
 		response.projection,
 		"$.projection",
-		expectedUserId,
 	);
 	if (projection.revision !== base.revision)
 		throw new WireValidationError(

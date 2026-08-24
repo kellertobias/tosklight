@@ -195,17 +195,17 @@ describe("ProgrammerCaptureModeViewProvider", () => {
 
 		rendered.rerender(provider(OTHER_SHOW_ID, OTHER_USER_ID, "server-a"));
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledTimes(3));
-		third.resolve(captureModeSnapshot({ userId: OTHER_USER_ID, revision: 3 }));
+		third.resolve(captureModeSnapshot({ revision: 3 }));
 		await waitFor(() => expect(screen.getByText("3")).toBeInTheDocument());
 
 		rendered.rerender(provider(OTHER_SHOW_ID, OTHER_USER_ID, "server-b"));
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledTimes(4));
-		fourth.resolve(captureModeSnapshot({ userId: OTHER_USER_ID, revision: 4 }));
+		fourth.resolve(captureModeSnapshot({ revision: 4 }));
 		await waitFor(() => expect(screen.getByText("4")).toBeInTheDocument());
 		expect(transport.subscriptions.map(({ scope }) => scope)).toEqual([
-			{ showId: OTHER_SHOW_ID, userId: USER_ID },
-			{ showId: OTHER_SHOW_ID, userId: OTHER_USER_ID },
-			{ showId: OTHER_SHOW_ID, userId: OTHER_USER_ID },
+			{ showId: OTHER_SHOW_ID },
+			{ showId: OTHER_SHOW_ID },
+			{ showId: OTHER_SHOW_ID },
 		]);
 	});
 });

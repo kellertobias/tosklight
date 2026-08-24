@@ -133,7 +133,7 @@ export function ProgrammerPreloadValuesViewProvider({
 		() =>
 			showId && userId && session && applyAction && captureModeAuthority
 				? new ProgrammerPreloadValuesWriter({
-						scope: { showId, userId },
+						scope: { showId },
 						store,
 						captureModeStore: captureModeAuthority.store,
 						applyAction,

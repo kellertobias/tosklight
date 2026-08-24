@@ -91,8 +91,7 @@ export class ProgrammerValuesStore {
 		snapshot: ProgrammerValuesSnapshot,
 		expectedScope = this.scope,
 	) {
-		if (!this.canAccept(snapshot.projection.userId, expectedScope))
-			return false;
+		if (!this.canAccept(expectedScope)) return false;
 		try {
 			assertCursor(snapshot.cursor);
 			if (
@@ -128,7 +127,7 @@ export class ProgrammerValuesStore {
 		sequence: number,
 		expectedScope = this.scope,
 	) {
-		if (!this.canAccept(change.userId, expectedScope)) return false;
+		if (!this.canAccept(expectedScope)) return false;
 		if (!this.authoritative)
 			return this.rejectProtocol(
 				new ProgrammerValuesProtocolError(
@@ -175,7 +174,6 @@ export class ProgrammerValuesStore {
 			);
 			return this.install(
 				{
-					userId: change.userId,
 					revision: change.revision,
 					fixtureValues,
 					groupValues,
@@ -222,7 +220,6 @@ export class ProgrammerValuesStore {
 	): ProgrammerValuesSettlement {
 		if (!this.hasOperation(requestId, expectedScope)) return "ignored";
 		try {
-			if (!this.matchesUser(projection.userId)) return "ignored";
 			assertCursor(sequence);
 			const incoming = canonicalProjection(projection);
 			const decision = this.chooseAuthority(incoming, sequence);
@@ -265,7 +262,6 @@ export class ProgrammerValuesStore {
 		let nextAuthority = this.authoritative;
 		try {
 			if (projection) {
-				if (!this.matchesUser(projection.userId)) return false;
 				const incoming = canonicalProjection(projection);
 				nextAuthority = chooseProgrammerValuesRevision(
 					this.authoritative,
@@ -345,7 +341,7 @@ export class ProgrammerValuesStore {
 		expectedScope: number,
 		updateStatus: boolean,
 	) {
-		if (!this.canAccept(projection.userId, expectedScope)) return false;
+		if (!this.canAccept(expectedScope)) return false;
 		try {
 			assertCursor(sequence);
 			const incoming = canonicalProjection(projection);
@@ -389,7 +385,6 @@ export class ProgrammerValuesStore {
 			if (Object.is(reduced, current)) return current;
 			return canonicalProjection({
 				...reduced,
-				userId: current.userId,
 				revision: current.revision,
 			});
 		};
@@ -434,12 +429,8 @@ export class ProgrammerValuesStore {
 		return this.isScopeCurrent(expectedScope) && this.operations.has(requestId);
 	}
 
-	private canAccept(userId: string, expectedScope: number) {
-		return this.isScopeCurrent(expectedScope) && this.matchesUser(userId);
-	}
-
-	private matchesUser(userId: string) {
-		return Boolean(this.state.showId) && userId === this.state.userId;
+	private canAccept(expectedScope: number) {
+		return this.isScopeCurrent(expectedScope) && Boolean(this.state.showId);
 	}
 
 	private publishSessionState(

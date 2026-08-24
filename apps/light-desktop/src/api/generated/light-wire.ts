@@ -188,7 +188,7 @@ export type FileOperationKind = "create_file" | "create_folder" | "rename" | "co
 export type FileConflictChoice = "replace" | "keep_both" | "skip";
 export type FileOperationRequest = { request_id: string, operation: FileOperationKind, sources: Array<string>, destination: string | null, destination_root_id: string | null, name: string | null, replace: boolean, conflict: FileConflictChoice | null, apply_to_all: boolean, };
 export type ProgrammingLifecycleSession = { session_id: string, };
-export type ProgrammingLifecycleProgrammer = { programmer_id: string, user_id: string, connected: boolean, selected_fixture_count: number, normal_value_count: number,
+export type ProgrammingLifecycleProgrammer = { programmer_id: string, connected: boolean, selected_fixture_count: number, normal_value_count: number,
 /**
  * Aggregate activity signal only; active Preload values and identities remain private.
  */
@@ -211,10 +211,10 @@ export type ProgrammingFixtureValue = { fixture_id: string, attribute: string, v
 export type ProgrammingGroupValue = { group_id: string, attribute: string, value: ProgrammingAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 export type ProgrammingDynamicSemanticValue = { "type": "static", value: ProgrammingAttributeValue, timing: DynamicValueTimingProjection, } | { "type": "dynamic_on", instance_link: string, dynamic: DynamicReferenceProjection, lane_id: string, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, } | { "type": "dynamic_off", instance_link: string, timing: DynamicValueTimingProjection, } | { "type": "fix_at", value: number, timing: DynamicValueTimingProjection, } | { "type": "release" };
 export type ProgrammingDynamicValue = { fixture_id: string, attribute: string, value: ProgrammingDynamicSemanticValue, programmer_order: number, changed_at_millis: number, };
-export type ProgrammingCaptureModeProjection = { user_id: string, revision: number, blind: boolean, preview: boolean, preload_capture_programmer: boolean, };
+export type ProgrammingCaptureModeProjection = { revision: number, blind: boolean, preview: boolean, preload_capture_programmer: boolean, };
 export type ProgrammingCaptureModeChange = { projection: ProgrammingCaptureModeProjection, };
 export type ProgrammingCaptureModeSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingCaptureModeProjection, };
-export type ProgrammingValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, group_values: Array<ProgrammingGroupValue>,
+export type ProgrammingValuesProjection = { revision: number, fixture_values: Array<ProgrammingFixtureValue>, group_values: Array<ProgrammingGroupValue>,
 /**
  * Embedded Dynamic fallbacks deduplicated across every Dynamic-controlled address.
  */
@@ -222,7 +222,7 @@ dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<
 export type ProgrammingFixtureValueAddress = { fixture_id: string, attribute: string, };
 export type ProgrammingDynamicValueAddress = { fixture_id: string, attribute: string, instance_link?: string | null, };
 export type ProgrammingGroupValueAddress = { group_id: string, attribute: string, };
-export type ProgrammingValuesChange = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, removed_fixture_values: Array<ProgrammingFixtureValueAddress>, group_values: Array<ProgrammingGroupValue>, removed_group_values: Array<ProgrammingGroupValueAddress>, dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, removed_dynamic_values: Array<ProgrammingDynamicValueAddress>, };
+export type ProgrammingValuesChange = { revision: number, fixture_values: Array<ProgrammingFixtureValue>, removed_fixture_values: Array<ProgrammingFixtureValueAddress>, group_values: Array<ProgrammingGroupValue>, removed_group_values: Array<ProgrammingGroupValueAddress>, dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, removed_dynamic_values: Array<ProgrammingDynamicValueAddress>, };
 export type ProgrammingValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingValuesProjection, };
 export type ProgrammingPickerColor = { hue: number, saturation: number, };
 export type ProgrammingValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
@@ -248,7 +248,7 @@ export type ProgrammingPreloadColorXyz = { x: number, y: number, z: number, };
 export type ProgrammingPreloadAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingPreloadColorXyz } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
 export type ProgrammingPreloadFixtureValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 export type ProgrammingPreloadGroupValue = { group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-export type ProgrammingPreloadValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingPreloadFixtureValue>, group_values: Array<ProgrammingPreloadGroupValue>, dynamic_values: Array<ProgrammingDynamicValue>, };
+export type ProgrammingPreloadValuesProjection = { revision: number, fixture_values: Array<ProgrammingPreloadFixtureValue>, group_values: Array<ProgrammingPreloadGroupValue>, dynamic_values: Array<ProgrammingDynamicValue>, };
 export type ProgrammingPreloadValuesChange = { projection: ProgrammingPreloadValuesProjection, };
 export type ProgrammingPreloadValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingPreloadValuesProjection, };
 export type ProgrammingPreloadValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
@@ -263,7 +263,7 @@ export type ProgrammingPreloadValuesErrorResponse = { kind: ProgrammingPreloadVa
 export type ProgrammingPreloadPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off" | "dynamic_pause" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | { "fader": { value_permyriad: number, } };
 export type ProgrammingPreloadPlaybackSurface = "physical" | "virtual" | "osc" | "matter";
 export type ProgrammingPreloadPlaybackQueueItem = { playback_number: number, page?: number | null, action: ProgrammingPreloadPlaybackAction, surface: ProgrammingPreloadPlaybackSurface, };
-export type ProgrammingPreloadPlaybackQueueProjection = { user_id: string, revision: number, actions: Array<ProgrammingPreloadPlaybackQueueItem>, };
+export type ProgrammingPreloadPlaybackQueueProjection = { revision: number, actions: Array<ProgrammingPreloadPlaybackQueueItem>, };
 export type ProgrammingPreloadPlaybackQueueChange = { projection: ProgrammingPreloadPlaybackQueueProjection, };
 export type ProgrammingPreloadPlaybackQueueSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingPreloadPlaybackQueueProjection, };
 export type ProgrammingPreloadLifecycleAction = { "type": "enter", } | { "type": "go", show_id: string, expected_show_revision: number, expected_playback_event_sequence: number, } | { "type": "clear_pending", } | { "type": "release", };

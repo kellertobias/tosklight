@@ -15,9 +15,7 @@ import { WireValidationError } from "./wireValidation";
 
 export function decodeProgrammerValuesEventMessage(
 	value: unknown,
-	expectedUserId: string,
 ): ProgrammerValuesEventMessage {
-	programmerValuesUuidAt(expectedUserId, "$.requested_user_id");
 	const message = recordAt(value, "$");
 	const type = enumAt(message.type, "$.type", [
 		"ready",
@@ -31,7 +29,7 @@ export function decodeProgrammerValuesEventMessage(
 	if (type === "error") return decodeErrorMessage(message);
 	if (type === "gap") return decodeGap(message);
 	exactRecordAt(message, "$", ["type", "event"]);
-	return decodeValuesEvent(recordAt(message.event, "$.event"), expectedUserId);
+	return decodeValuesEvent(recordAt(message.event, "$.event"));
 }
 
 function decodeCursorMessage(
@@ -51,7 +49,6 @@ function decodeErrorMessage(
 
 function decodeValuesEvent(
 	event: Record<string, unknown>,
-	expectedUserId: string,
 ): ProgrammerValuesEventMessage {
 	exactRecordAt(event, "$.event", [
 		"sequence",
@@ -66,11 +63,10 @@ function decodeValuesEvent(
 		"payload",
 	]);
 	const sequence = integerAt(event.sequence, "$.event.sequence");
-	validateValuesEnvelope(event, expectedUserId);
+	validateValuesEnvelope(event);
 	const change = decodeChange(event.payload);
 	const decoded = decodeProgrammerValuesProjection(
 		{
-			user_id: change.user_id,
 			revision: change.revision,
 			fixture_values: change.fixture_values,
 			group_values: change.group_values,
@@ -78,7 +74,6 @@ function decodeValuesEvent(
 			dynamic_values: change.dynamic_values,
 		},
 		"$.event.payload.change",
-		expectedUserId,
 	);
 	return {
 		type: "event",
@@ -132,7 +127,6 @@ function decodeChange(value: unknown) {
 	const payload = exactRecordAt(value, "$.event.payload", ["type", "change"]);
 	enumAt(payload.type, "$.event.payload.type", ["programming_values_changed"]);
 	return exactRecordAt(payload.change, "$.event.payload.change", [
-		"user_id",
 		"revision",
 		"fixture_values",
 		"removed_fixture_values",
@@ -144,16 +138,13 @@ function decodeChange(value: unknown) {
 	]);
 }
 
-function validateValuesEnvelope(
-	event: Record<string, unknown>,
-	expectedUserId: string,
-) {
+function validateValuesEnvelope(event: Record<string, unknown>) {
 	stringAt(event.occurred_at, "$.event.occurred_at");
 	if (!("desk_id" in event) || event.desk_id !== null)
 		throw new WireValidationError("$.event.desk_id", "null", event.desk_id);
 	enumAt(event.class, "$.event.class", ["projection"]);
 	enumAt(event.delivery, "$.event.delivery", ["lossless"]);
-	validateObject(event.object, expectedUserId);
+	validateObject(event.object);
 	assertNoRelatedObjects(event);
 	validateSource(event.source);
 }
@@ -189,7 +180,7 @@ function decodeGroupAddresses(value: unknown, path: string) {
 	});
 }
 
-function validateObject(value: unknown, expectedUserId: string) {
+function validateObject(value: unknown) {
 	const object = exactRecordAt(value, "$.event.object", ["capability", "id"]);
 	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
 	const expectedObject = "programming-values";

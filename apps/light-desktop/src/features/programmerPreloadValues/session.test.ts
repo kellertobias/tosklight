@@ -48,19 +48,19 @@ describe("ProgrammerPreloadValuesSession", () => {
 		expect(current.transport.subscriptions).toHaveLength(0);
 	});
 
-	it("hydrates and subscribes only to the exact current user", async () => {
+	it("hydrates and subscribes to the Preload projection", async () => {
 		const current = harness();
 		const release = current.session.activate();
 		await settlePreloadSession();
 
 		expect(current.loadSnapshot).toHaveBeenCalledOnce();
 		expect(current.transport.subscriptions[0]).toMatchObject({
-			scope: { showId: SHOW_ID, userId: USER_ID },
+			scope: { showId: SHOW_ID },
 			after: 10,
 		});
 		expect(current.store.getSnapshot()).toMatchObject({
 			status: "ready",
-			projection: { userId: USER_ID, revision: 1 },
+			projection: { revision: 1 },
 		});
 
 		release();
@@ -99,57 +99,6 @@ describe("ProgrammerPreloadValuesSession", () => {
 		});
 	});
 
-	it("rejects a foreign-user event and repairs exact-user authority", async () => {
-		const current = harness();
-		current.session.activate();
-		await settlePreloadSession();
-		current.loadSnapshot.mockResolvedValueOnce(
-			preloadSnapshot({ cursor: 20, revision: 2 }),
-		);
-
-		current.transport.emit({
-			type: "event",
-			sequence: 19,
-			correlationId: "foreign",
-			projection: preloadProjection({
-				userId: OTHER_USER_ID,
-				revision: 9,
-			}),
-		});
-		await settlePreloadSession();
-
-		expect(current.onError).toHaveBeenCalledWith(
-			expect.objectContaining({
-				message: expect.stringContaining("event user"),
-			}),
-		);
-		expect(current.store.getSnapshot()).toMatchObject({
-			projection: { userId: USER_ID, revision: 2 },
-			repairRequired: false,
-		});
-	});
-
-	it("rejects a foreign-user snapshot without opening a socket", async () => {
-		const current = harness();
-		current.loadSnapshot.mockResolvedValueOnce(
-			preloadSnapshot({ userId: OTHER_USER_ID }),
-		);
-
-		current.session.activate();
-		await settlePreloadSession();
-
-		expect(current.transport.subscriptions).toHaveLength(0);
-		expect(current.store.getSnapshot()).toMatchObject({
-			projection: null,
-			status: "error",
-		});
-		expect(current.onError).toHaveBeenCalledWith(
-			expect.objectContaining({
-				message: expect.stringContaining("snapshot user"),
-			}),
-		);
-		current.session.stop();
-	});
 
 	it("drops a late snapshot after server/session scope replacement", async () => {
 		const current = harness();

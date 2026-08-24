@@ -59,8 +59,7 @@ export class ProgrammerCaptureModeStore {
 		snapshot: ProgrammerCaptureModeSnapshot,
 		expectedScope = this.scope,
 	) {
-		if (!this.canAccept(snapshot.projection.userId, expectedScope))
-			return false;
+		if (!this.canAccept(expectedScope)) return false;
 		try {
 			assertCaptureModeCursor(snapshot.cursor);
 			if (
@@ -124,7 +123,7 @@ export class ProgrammerCaptureModeStore {
 		sequence: number,
 		expectedScope: number,
 	) {
-		if (!this.canAccept(projection.userId, expectedScope)) return false;
+		if (!this.canAccept(expectedScope)) return false;
 		try {
 			assertCaptureModeCursor(sequence);
 			const incoming = canonicalCaptureModeProjection(projection);
@@ -210,12 +209,8 @@ export class ProgrammerCaptureModeStore {
 		return true;
 	}
 
-	private canAccept(userId: string, expectedScope: number) {
-		return (
-			this.isScopeCurrent(expectedScope) &&
-			Boolean(this.state.showId) &&
-			userId === this.state.userId
-		);
+	private canAccept(expectedScope: number) {
+		return this.isScopeCurrent(expectedScope) && Boolean(this.state.showId);
 	}
 
 	private matchesScope(

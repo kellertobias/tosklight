@@ -109,7 +109,7 @@ export function ProgrammerValuesViewProvider({
 		() =>
 			showId && userId && session && applyAction && captureModeAuthority
 				? new ProgrammerValuesWriter({
-						scope: { showId, userId },
+						scope: { showId },
 						store,
 						captureModeStore: captureModeAuthority.store,
 						applyAction,

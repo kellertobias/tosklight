@@ -4,7 +4,6 @@ use super::events::EventSnapshotCursor;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -45,7 +44,6 @@ pub struct ProgrammingPreloadPlaybackQueueItem {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingPreloadPlaybackQueueProjection {
-    pub user_id: Uuid,
     #[ts(type = "number")]
     pub revision: u64,
     pub actions: Vec<ProgrammingPreloadPlaybackQueueItem>,
@@ -75,7 +73,6 @@ mod tests {
             surface: ProgrammingPreloadPlaybackSurface::Osc,
         };
         let projection = ProgrammingPreloadPlaybackQueueProjection {
-            user_id: Uuid::from_u128(1),
             revision: 2,
             actions: vec![action, action],
         };

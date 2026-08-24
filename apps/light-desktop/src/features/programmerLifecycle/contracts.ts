@@ -2,10 +2,9 @@ export interface ProgrammerLifecycleSessionProjection {
 	sessionId: string;
 }
 
-/** Lightweight installation-wide Programmer activity for one user. */
+/** Lightweight installation-wide Programmer activity. */
 export interface ProgrammerLifecycleRow {
 	programmerId: string;
-	userId: string;
 	connected: boolean;
 	selectedFixtureCount: number;
 	normalValueCount: number;

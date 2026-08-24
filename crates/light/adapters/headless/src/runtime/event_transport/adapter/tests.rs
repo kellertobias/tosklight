@@ -177,7 +177,6 @@ fn highlight_event_carries_the_authoritative_state_and_output_route() {
         panic!("expected a highlight payload");
     };
     assert_eq!(change.revision, 19);
-    assert_eq!(change.user_id, user_id);
     assert_eq!(change.action.as_deref(), Some("next"));
     assert_eq!(change.source.as_deref(), Some("osc"));
     assert!(change.state.active);
@@ -541,7 +540,6 @@ fn programming_values_keep_the_full_projection_and_action_identity() {
     let wire::EventPayload::ProgrammingValuesChanged { change } = event.payload else {
         panic!("expected a Programmer values payload")
     };
-    assert_eq!(change.user_id, user_id.0);
     assert_eq!(change.revision, 7);
     let value = &change.group_values[0];
     assert_eq!(value.group_id, "2.1");
@@ -589,7 +587,6 @@ fn programming_capture_mode_keeps_its_projection_and_action_identity() {
     let wire::EventPayload::ProgrammingCaptureModeChanged { change } = event.payload else {
         panic!("expected a Programmer capture-mode payload")
     };
-    assert_eq!(change.projection.user_id, user_id.0);
     assert_eq!(change.projection.revision, 4);
     assert!(change.projection.blind);
     assert!(!change.projection.preview);

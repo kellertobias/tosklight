@@ -24,7 +24,7 @@ async fn preload_playback_queue_snapshot_is_exact_user_authenticated_and_narrow(
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[header::ETAG], "\"0\"");
     let snapshot = json(response).await;
-    assert_eq!(snapshot["projection"]["user_id"], scenario.session.user.id.0.to_string());
+    assert!(snapshot["projection"].get("user_id").is_none());
     assert_eq!(snapshot["projection"]["revision"], 0);
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([{
         "playback_number": 7,

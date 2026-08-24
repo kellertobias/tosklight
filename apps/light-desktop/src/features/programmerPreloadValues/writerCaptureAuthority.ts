@@ -19,10 +19,7 @@ export class ProgrammerPreloadCaptureAuthority {
 
 	claimScope() {
 		const state = this.options.store.getSnapshot();
-		if (
-			state.showId !== this.options.scope.showId ||
-			state.userId !== this.options.scope.userId
-		)
+		if (state.showId !== this.options.scope.showId)
 			return false;
 		this.storeScope ??= this.options.store.captureScope();
 		return true;

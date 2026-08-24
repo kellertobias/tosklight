@@ -69,7 +69,6 @@ export function encodeProgrammerPreloadLifecycleRequest(
 
 export function decodeProgrammerPreloadLifecycleOutcome(
 	value: unknown,
-	expectedUserId: string,
 	request: ProgrammerPreloadLifecycleRequest,
 ): ProgrammerPreloadLifecycleOutcome {
 	const candidate = recordAt(value, "$");
@@ -95,7 +94,6 @@ export function decodeProgrammerPreloadLifecycleOutcome(
 	const captureMode = decodeCaptureModeProjection(
 		response.capture_mode,
 		"$.capture_mode",
-		expectedUserId,
 	);
 	const outcome: ProgrammerPreloadLifecycleOutcome = {
 		requestId,
@@ -118,7 +116,6 @@ export function decodeProgrammerPreloadLifecycleOutcome(
 				: decodeProgrammerPreloadValuesProjection(
 						response.values_projection,
 						"$.values_projection",
-						expectedUserId,
 					),
 		valuesEventSequence: optionalInteger(response, "values_event_sequence"),
 		queueRevision: integerAt(response.queue_revision, "$.queue_revision"),
@@ -128,7 +125,6 @@ export function decodeProgrammerPreloadLifecycleOutcome(
 				: decodeProgrammerPreloadPlaybackQueueProjection(
 						response.queue_projection,
 						"$.queue_projection",
-						expectedUserId,
 					),
 		queueEventSequence: optionalInteger(response, "queue_event_sequence"),
 		interactionEventSequence: optionalInteger(

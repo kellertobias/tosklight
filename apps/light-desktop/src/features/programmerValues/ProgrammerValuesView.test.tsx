@@ -152,10 +152,7 @@ describe("ProgrammerValuesViewProvider", () => {
 			expect(captureModeTransport.subscriptions).toHaveLength(1),
 		);
 		await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
-		expect(transport.subscriptions[0].scope).toEqual({
-			showId: SHOW_ID,
-			userId: USER_ID,
-		});
+		expect(transport.subscriptions[0].scope).toEqual({ showId: SHOW_ID });
 
 		rendered.rerender(view(false));
 		await waitFor(() =>

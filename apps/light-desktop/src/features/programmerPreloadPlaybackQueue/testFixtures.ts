@@ -33,7 +33,6 @@ export function queueProjection(
 	overrides: Partial<ProgrammerPreloadPlaybackQueueProjection> = {},
 ): ProgrammerPreloadPlaybackQueueProjection {
 	return {
-		userId: USER_ID,
 		revision: 2,
 		actions: [queuedPlayback()],
 		...overrides,
@@ -51,7 +50,6 @@ export function queueSnapshot(
 	return {
 		cursor: overrides.cursor ?? 10,
 		projection: queueProjection({
-			userId: overrides.userId ?? USER_ID,
 			revision: overrides.revision ?? 2,
 			actions: overrides.actions ?? [queuedPlayback()],
 		}),

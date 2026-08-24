@@ -440,7 +440,6 @@ async fn lifecycle_aggregate_delivers_foreign_safe_rows_through_the_wire_adapter
     else {
         panic!("expected the foreign safe row")
     };
-    assert_eq!(programmer.user_id, foreign_user.0);
     assert_eq!(programmer.normal_value_count, 2);
     assert_eq!(programmer.selected_fixture_count, 3);
     assert!(programmer.preload_active);
@@ -475,7 +474,6 @@ async fn broad_subscription_delivers_the_desks_programmer_values() {
     let wire::EventPayload::ProgrammingValuesChanged { change } = event.payload else {
         panic!("expected a Programmer values payload")
     };
-    assert_eq!(change.user_id, user_id);
     assert_eq!(change.revision, 2);
 }
 
@@ -508,7 +506,6 @@ async fn broad_subscription_delivers_the_desks_capture_mode() {
     let wire::EventPayload::ProgrammingCaptureModeChanged { change } = event.payload else {
         panic!("expected a Programmer capture-mode payload")
     };
-    assert_eq!(change.projection.user_id, user_id);
     assert_eq!(change.projection.revision, 2);
 }
 
@@ -541,7 +538,6 @@ async fn broad_subscription_delivers_the_desks_preload_values() {
     let wire::EventPayload::ProgrammingPreloadValuesChanged { change } = event.payload else {
         panic!("expected a Preload values payload")
     };
-    assert_eq!(change.projection.user_id, user_id);
     assert_eq!(change.projection.revision, 2);
 }
 
@@ -578,7 +574,6 @@ async fn broad_subscription_delivers_the_desks_preload_playback_queue() {
     else {
         panic!("expected a Preload playback queue payload")
     };
-    assert_eq!(change.projection.user_id, user_id);
     assert_eq!(change.projection.revision, 2);
     assert_eq!(change.projection.actions[0].page, Some(3));
 }

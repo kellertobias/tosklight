@@ -23,7 +23,6 @@ export function lifecycleRow(
 ): ProgrammerLifecycleRow {
 	return {
 		programmerId: PROGRAMMER_A,
-		userId: USER_A,
 		connected: true,
 		selectedFixtureCount: 2,
 		normalValueCount: 3,
@@ -38,7 +37,6 @@ export function otherLifecycleRow(
 ) {
 	return lifecycleRow({
 		programmerId: PROGRAMMER_B,
-		userId: USER_B,
 		normalValueCount: 1,
 		sessions: [],
 		...overrides,

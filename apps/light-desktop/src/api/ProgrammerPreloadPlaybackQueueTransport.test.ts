@@ -5,7 +5,7 @@ import { HttpProgrammerPreloadPlaybackQueueTransport } from "./ProgrammerPreload
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const OTHER_USER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const scope = { showId: SHOW_ID, userId: USER_ID };
+const scope = { showId: SHOW_ID };
 
 class FakeWebSocket {
 	static readonly OPEN = 1;
@@ -41,7 +41,6 @@ class FakeWebSocket {
 
 function projection() {
 	return {
-		user_id: USER_ID,
 		revision: 2,
 		actions: [{ playback_number: 4, page: 5, action: "go", surface: "osc" }],
 	};
@@ -90,7 +89,7 @@ function harness(fetch = vi.fn<typeof globalThis.fetch>()) {
 }
 
 describe("HttpProgrammerPreloadPlaybackQueueTransport", () => {
-	it("stays dormant until an exact-user snapshot is requested", async () => {
+	it("stays dormant until a snapshot is requested", async () => {
 		const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
 			new Response(
 				JSON.stringify({
@@ -106,7 +105,6 @@ describe("HttpProgrammerPreloadPlaybackQueueTransport", () => {
 		await expect(transport.loadSnapshot(scope)).resolves.toMatchObject({
 			cursor: 11,
 			projection: {
-				userId: USER_ID,
 				revision: 2,
 				actions: [{ playbackNumber: 4, page: 5 }],
 			},
@@ -120,23 +118,23 @@ describe("HttpProgrammerPreloadPlaybackQueueTransport", () => {
 		expect(headers.get("x-light-desk-token")).toBe("desk-boundary");
 	});
 
-	it("rejects a foreign scope before any network request", async () => {
+	it("rejects a malformed scope before any network request", async () => {
 		const { fetch, transport } = harness();
 		await expect(
-			transport.loadSnapshot({ showId: SHOW_ID, userId: OTHER_USER }),
-		).rejects.toThrow(/authenticated user/);
+			transport.loadSnapshot({ showId: "not-a-show" }),
+		).rejects.toThrow(/UUID/);
 		expect(fetch).not.toHaveBeenCalled();
 		expect(() =>
-			transport.subscribe({ showId: SHOW_ID, userId: OTHER_USER }, null, {
+			transport.subscribe({ showId: "not-a-show" }, null, {
 				message: vi.fn(),
 				error: vi.fn(),
 				closed: vi.fn(),
 			}),
-		).toThrow(/authenticated user/);
+		).toThrow(/UUID/);
 		expect(FakeWebSocket.instances).toHaveLength(0);
 	});
 
-	it("subscribes only to the exact queue object and repairs", () => {
+	it("subscribes to the queue object and repairs", () => {
 		const { observer, transport } = harness();
 		const stream = transport.subscribe(scope, 8, observer);
 		const socket = FakeWebSocket.instances[0];

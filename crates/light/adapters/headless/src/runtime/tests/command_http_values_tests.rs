@@ -14,7 +14,6 @@ async fn programmer_values_snapshot_returns_authenticated_projection_and_safe_cu
         serde_json::from_value(json(response).await).unwrap();
 
     assert_eq!(snapshot.cursor.sequence, expected_cursor);
-    assert_eq!(snapshot.projection.user_id, scenario.session.user.id.0);
     assert_eq!(snapshot.projection.revision, 1);
     assert!(snapshot.projection.fixture_values.is_empty());
     assert_eq!(snapshot.projection.group_values.len(), 1);
@@ -74,7 +73,6 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
         snapshot.cursor.sequence,
         scenario.state.events.latest_sequence()
     );
-    assert_eq!(snapshot.projection.user_id, scenario.session.user.id.0);
     assert_eq!(snapshot.projection.revision, 1);
     assert!(snapshot.projection.blind);
     assert!(!snapshot.projection.preview);
@@ -371,10 +369,9 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
     let legacy = json(legacy).await;
-    assert_eq!(
-        legacy["projection"]["user_id"],
-        scenario.session.user.id.0.to_string(),
-        "the desk reports its own Programmer, not the name the caller asked under"
+    assert!(
+        legacy["projection"].get("user_id").is_none(),
+        "the projection is the desk's own Programmer and names nobody"
     );
     assert_eq!(
         legacy["projection"]["group_values"].as_array().unwrap().len(),

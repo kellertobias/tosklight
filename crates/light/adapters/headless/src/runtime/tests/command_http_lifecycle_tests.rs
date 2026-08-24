@@ -15,7 +15,7 @@ async fn lifecycle_snapshot_is_authenticated_cursor_bound_and_content_safe() {
     let rows = snapshot["projection"]["programmers"].as_array().unwrap();
     assert_eq!(rows.len(), 1);
     let row = &rows[0];
-    assert_eq!(row["user_id"], scenario.session.user.id.0.to_string());
+    assert!(row.get("user_id").is_none(), "the one Programmer does not name a user");
     assert_eq!(row["normal_value_count"], 0);
     assert_eq!(row["preload_active"], false);
     assert_eq!(row["sessions"].as_array().unwrap().len(), 1);

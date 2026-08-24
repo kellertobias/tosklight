@@ -10,10 +10,6 @@ export function canonicalPreloadProjection(
 	projection: ProgrammerPreloadValuesProjection,
 ): ProgrammerPreloadValuesProjection {
 	assertNonNegativeInteger(projection.revision, "revision");
-	if (!projection.userId)
-		throw new ProgrammerPreloadValuesProtocolError(
-			"Preload Programmer values projection is missing its user",
-		);
 	const fixtureValues = projection.fixtureValues.map(canonicalFixtureValue);
 	const groupValues = projection.groupValues.map(canonicalGroupValue);
 	assertUnique(
@@ -31,7 +27,6 @@ export function canonicalPreloadProjection(
 	fixtureValues.sort(compareFixtureValues);
 	groupValues.sort(compareGroupValues);
 	return Object.freeze({
-		userId: projection.userId,
 		revision: projection.revision,
 		fixtureValues: Object.freeze(fixtureValues),
 		groupValues: Object.freeze(groupValues),

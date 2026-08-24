@@ -30,7 +30,7 @@
       ]
     },
     "ProgrammingCaptureModeProjection": {
-      "description": "Authoritative capture routing for one user's Programmer.",
+      "description": "Authoritative capture routing for the Programmer.",
       "type": "object",
       "properties": {
         "blind": {
@@ -46,15 +46,10 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "additionalProperties": false,
       "required": [
-        "user_id",
         "revision",
         "blind",
         "preview",

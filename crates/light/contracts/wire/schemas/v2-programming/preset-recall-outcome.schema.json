@@ -1946,15 +1946,10 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "additionalProperties": false,
       "required": [
-        "user_id",
         "revision",
         "fixture_values",
         "group_values",
@@ -1962,7 +1957,7 @@
       ]
     },
     "ProgrammingValuesProjection": {
-      "description": "Full retained projection of one user's normal, recordable Programmer values.",
+      "description": "Full retained projection of the Programmer's normal, recordable values.",
       "type": "object",
       "properties": {
         "dynamic_definitions": {
@@ -1994,14 +1989,9 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "required": [
-        "user_id",
         "revision",
         "fixture_values",
         "group_values",

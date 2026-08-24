@@ -301,11 +301,6 @@ export class ProgrammerPreloadValuesWriter
 			throw this.protocolError("response capture-mode revision does not match");
 		if (
 			outcome.status === "changed" &&
-			outcome.projection.userId !== this.options.scope.userId
-		)
-			throw this.protocolError("response user does not match the active view");
-		if (
-			outcome.status === "changed" &&
 			outcome.projection.revision !== outcome.preloadRevision
 		)
 			throw this.protocolError("response revisions do not match");
@@ -340,9 +335,7 @@ export class ProgrammerPreloadValuesWriter
 		const captureState = this.options.captureModeStore.getSnapshot();
 		if (
 			state.showId !== this.options.scope.showId ||
-			state.userId !== this.options.scope.userId ||
-			captureState.showId !== this.options.scope.showId ||
-			captureState.userId !== this.options.scope.userId
+			captureState.showId !== this.options.scope.showId
 		)
 			return false;
 		this.storeScope ??= this.options.store.captureScope();

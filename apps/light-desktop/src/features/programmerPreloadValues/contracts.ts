@@ -22,9 +22,8 @@ export interface ProgrammerPreloadGroupValue
 	programmerOrder: number;
 }
 
-/** Pending Preload Programmer values owned by exactly one user. */
+/** The Programmer's pending Preload values. */
 export interface ProgrammerPreloadValuesProjection {
-	userId: string;
 	revision: number;
 	fixtureValues: readonly ProgrammerPreloadFixtureValue[];
 	groupValues: readonly ProgrammerPreloadGroupValue[];
@@ -54,7 +53,6 @@ export type ProgrammerPreloadValuesEventMessage =
 
 export interface ProgrammerPreloadValuesScope {
 	showId: string;
-	userId: string;
 }
 
 export type ProgrammerPreloadValuesMutation =

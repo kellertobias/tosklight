@@ -21,7 +21,6 @@ export function lifecycleProjectionFromCanonicalRows(
 	assertNonNegativeInteger(revision, "revision");
 	const ordered = [...programmers];
 	assertUnique(ordered, (row) => row.programmerId, "Programmer ID");
-	assertUnique(ordered, (row) => row.userId, "user ID");
 	ordered.sort(compareRows);
 	return Object.freeze({
 		revision,
@@ -57,7 +56,6 @@ export function assertLifecycleCursor(cursor: number) {
 
 function canonicalRow(row: ProgrammerLifecycleRow): ProgrammerLifecycleRow {
 	assertIdentifier(row.programmerId, "Programmer ID");
-	assertIdentifier(row.userId, "user ID");
 	if (typeof row.connected !== "boolean")
 		throw protocolError("connected must be a boolean");
 	if (typeof row.preloadActive !== "boolean")
@@ -104,10 +102,7 @@ function compareRows(
 	left: ProgrammerLifecycleRow,
 	right: ProgrammerLifecycleRow,
 ) {
-	return (
-		left.userId.localeCompare(right.userId) ||
-		left.programmerId.localeCompare(right.programmerId)
-	);
+	return left.programmerId.localeCompare(right.programmerId);
 }
 
 function compareSessions(

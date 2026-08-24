@@ -13,9 +13,8 @@ const OTHER_USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const FIXTURE_ID = "11111111-1111-4111-8111-111111111111";
 const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-function projection(userId = USER_ID, revision = 7) {
+function projection(revision = 7) {
 	return {
-		user_id: userId,
 		revision,
 		fixture_values: [
 			{
@@ -78,16 +77,13 @@ function valuesEvent() {
 }
 
 describe("Programmer values wire projection", () => {
-	it("decodes an exact-user snapshot without legacy bootstrap fields", () => {
+	it("decodes a snapshot without legacy bootstrap fields", () => {
 		expect(
 			decodeProgrammerValuesSnapshot(
-				{ cursor: { sequence: 18 }, projection: projection() },
-				USER_ID,
-			),
+				{ cursor: { sequence: 18 }, projection: projection() }),
 		).toEqual({
 			cursor: 18,
 			projection: {
-				userId: USER_ID,
 				revision: 7,
 				fixtureValues: [
 					{
@@ -116,9 +112,7 @@ describe("Programmer values wire projection", () => {
 		(candidate.fixture_values[0] as { value: unknown }).value = value;
 		expect(
 			decodeProgrammerValuesSnapshot(
-				{ cursor: { sequence: 1 }, projection: candidate },
-				USER_ID,
-			).projection.fixtureValues[0].value,
+				{ cursor: { sequence: 1 }, projection: candidate }).projection.fixtureValues[0].value,
 		).toEqual(value);
 	});
 
@@ -134,9 +128,7 @@ describe("Programmer values wire projection", () => {
 		});
 		expect(
 			decodeProgrammerValuesSnapshot(
-				{ cursor: { sequence: 1 }, projection: candidate },
-				USER_ID,
-			).projection.dynamicValues,
+				{ cursor: { sequence: 1 }, projection: candidate }).projection.dynamicValues,
 		).toEqual([
 			{
 				fixtureId: FIXTURE_ID,
@@ -149,9 +141,7 @@ describe("Programmer values wire projection", () => {
 		(dynamicValues[0] as { value: { extra?: boolean } }).value.extra = true;
 		expect(() =>
 			decodeProgrammerValuesSnapshot(
-				{ cursor: { sequence: 1 }, projection: candidate },
-				USER_ID,
-			),
+				{ cursor: { sequence: 1 }, projection: candidate }),
 		).toThrow(/declared wire field/);
 	});
 
@@ -186,19 +176,17 @@ describe("Programmer values wire projection", () => {
 
 		expect(
 			decodeProgrammerValuesSnapshot(
-				{ cursor: { sequence: 1 }, projection: candidate },
-				USER_ID,
-			),
-		).toMatchObject({ projection: { userId: USER_ID, revision: 7 } });
+				{ cursor: { sequence: 1 }, projection: candidate }),
+		).toMatchObject({ projection: { revision: 7 } });
 	});
 
-	it("rejects foreign users and invalid attribute values", () => {
+	it("rejects an undeclared field and invalid attribute values", () => {
 		expect(() =>
-			decodeProgrammerValuesSnapshot(
-				{ cursor: { sequence: 1 }, projection: projection(OTHER_USER_ID) },
-				USER_ID,
-			),
-		).toThrow(/requested user/);
+			decodeProgrammerValuesSnapshot({
+				cursor: { sequence: 1 },
+				projection: { ...projection(), user_id: OTHER_USER_ID },
+			}),
+		).toThrow(/user_id/);
 		const candidate = projection();
 		(candidate.fixture_values[0] as { value: unknown }).value = {
 			kind: "normalized",
@@ -206,9 +194,7 @@ describe("Programmer values wire projection", () => {
 		};
 		expect(() =>
 			decodeProgrammerValuesSnapshot(
-				{ cursor: { sequence: 1 }, projection: candidate },
-				USER_ID,
-			),
+				{ cursor: { sequence: 1 }, projection: candidate }),
 		).toThrow(WireValidationError);
 	});
 
@@ -218,19 +204,19 @@ describe("Programmer values wire projection", () => {
 			projection: projection(),
 			extra: true,
 		};
-		expect(() => decodeProgrammerValuesSnapshot(snapshot, USER_ID)).toThrow(
+		expect(() => decodeProgrammerValuesSnapshot(snapshot)).toThrow(
 			/declared wire field/,
 		);
 		delete (snapshot as { extra?: boolean }).extra;
 		(
 			snapshot.projection as ReturnType<typeof projection> & { extra?: boolean }
 		).extra = true;
-		expect(() => decodeProgrammerValuesSnapshot(snapshot, USER_ID)).toThrow(
+		expect(() => decodeProgrammerValuesSnapshot(snapshot)).toThrow(
 			/declared wire field/,
 		);
 		delete (snapshot.projection as { extra?: boolean }).extra;
 		(snapshot.projection.fixture_values[0] as { extra?: boolean }).extra = true;
-		expect(() => decodeProgrammerValuesSnapshot(snapshot, USER_ID)).toThrow(
+		expect(() => decodeProgrammerValuesSnapshot(snapshot)).toThrow(
 			/declared wire field/,
 		);
 	});
@@ -271,16 +257,14 @@ describe("Programmer values mutation wire boundary", () => {
 		expect(
 			decodeProgrammerValuesActionOutcome(
 				changedOutcome(),
-				USER_ID,
-				"request-1",
-			),
+				"request-1"),
 		).toMatchObject({
 			status: "changed",
 			requestId: "request-1",
 			revision: 7,
 			captureModeRevision: 4,
 			eventSequence: 19,
-			projection: { userId: USER_ID, revision: 7 },
+			projection: { revision: 7 },
 		});
 		const noChange = {
 			...changedOutcome(),
@@ -290,7 +274,7 @@ describe("Programmer values mutation wire boundary", () => {
 		delete (noChange as Partial<ReturnType<typeof changedOutcome>>)
 			.event_sequence;
 		expect(
-			decodeProgrammerValuesActionOutcome(noChange, USER_ID, "request-1"),
+			decodeProgrammerValuesActionOutcome(noChange, "request-1"),
 		).toEqual({
 			status: "no_change",
 			requestId: "request-1",
@@ -302,27 +286,26 @@ describe("Programmer values mutation wire boundary", () => {
 		});
 	});
 
-	it("rejects mismatched requests, foreign projections, and materialized no-ops", () => {
+	it("rejects mismatched requests, undeclared projection fields, and materialized no-ops", () => {
 		expect(() =>
 			decodeProgrammerValuesActionOutcome(
 				changedOutcome(),
-				USER_ID,
-				"another-request",
-			),
+				"another-request"),
 		).toThrow(/another-request/);
-		const foreign = changedOutcome();
-		foreign.projection = projection(OTHER_USER_ID);
+		const undeclared = changedOutcome();
+		undeclared.projection = {
+			...projection(),
+			user_id: OTHER_USER_ID,
+		} as typeof undeclared.projection;
 		expect(() =>
-			decodeProgrammerValuesActionOutcome(foreign, USER_ID, "request-1"),
-		).toThrow(/requested user/);
+			decodeProgrammerValuesActionOutcome(undeclared, "request-1"),
+		).toThrow(/user_id/);
 		const materializedNoOp = changedOutcome();
 		materializedNoOp.status = "no_change";
 		expect(() =>
 			decodeProgrammerValuesActionOutcome(
 				materializedNoOp,
-				USER_ID,
-				"request-1",
-			),
+				"request-1"),
 		).toThrow(/no projection/);
 	});
 
@@ -404,9 +387,7 @@ describe("Programmer values mutation wire boundary", () => {
 		expect(() =>
 			decodeProgrammerValuesActionOutcome(
 				{ ...changedOutcome(), extra: true },
-				USER_ID,
-				"request-1",
-			),
+				"request-1"),
 		).toThrow(/declared wire field/);
 		expect(() =>
 			decodeProgrammerValuesErrorResponse({
@@ -420,12 +401,12 @@ describe("Programmer values mutation wire boundary", () => {
 });
 
 describe("Programmer values event wire boundary", () => {
-	it("decodes only the exact lossless user delta", () => {
-		expect(decodeProgrammerValuesEventMessage(valuesEvent(), USER_ID)).toEqual({
+	it("decodes the lossless delta", () => {
+		expect(decodeProgrammerValuesEventMessage(valuesEvent())).toEqual({
 			type: "event",
 			sequence: 19,
 			correlationId: CORRELATION_ID,
-			change: expect.objectContaining({ userId: USER_ID, revision: 7 }),
+			change: expect.objectContaining({ revision: 7 }),
 		});
 	});
 
@@ -436,7 +417,7 @@ describe("Programmer values event wire boundary", () => {
 			attribute: "intensity",
 			instance_link: CORRELATION_ID,
 		});
-		const decoded = decodeProgrammerValuesEventMessage(event, USER_ID);
+		const decoded = decodeProgrammerValuesEventMessage(event);
 		expect(
 			decoded.type === "event" && "change" in decoded
 				? decoded.change.removedDynamicValues
@@ -458,9 +439,10 @@ describe("Programmer values event wire boundary", () => {
 			},
 		],
 		[
-			"foreign projection",
+			"change carrying an undeclared field",
 			(event: ReturnType<typeof valuesEvent>) => {
-				event.event.payload.change.user_id = OTHER_USER_ID;
+				(event.event.payload.change as Record<string, unknown>).user_id =
+					OTHER_USER_ID;
 			},
 		],
 		[
@@ -478,7 +460,7 @@ describe("Programmer values event wire boundary", () => {
 	])("rejects a %s", (_label, mutate) => {
 		const event = valuesEvent();
 		mutate(event);
-		expect(() => decodeProgrammerValuesEventMessage(event, USER_ID)).toThrow(
+		expect(() => decodeProgrammerValuesEventMessage(event)).toThrow(
 			WireValidationError,
 		);
 	});
@@ -486,7 +468,7 @@ describe("Programmer values event wire boundary", () => {
 	it("rejects undeclared message, envelope, and payload fields", () => {
 		const messageExtra = { ...valuesEvent(), extra: true };
 		expect(() =>
-			decodeProgrammerValuesEventMessage(messageExtra, USER_ID),
+			decodeProgrammerValuesEventMessage(messageExtra),
 		).toThrow(/declared wire field/);
 
 		const envelopeExtra = valuesEvent();
@@ -494,7 +476,7 @@ describe("Programmer values event wire boundary", () => {
 			envelopeExtra.event as typeof envelopeExtra.event & { extra?: boolean }
 		).extra = true;
 		expect(() =>
-			decodeProgrammerValuesEventMessage(envelopeExtra, USER_ID),
+			decodeProgrammerValuesEventMessage(envelopeExtra),
 		).toThrow(/declared wire field/);
 
 		const payloadExtra = valuesEvent();
@@ -504,7 +486,7 @@ describe("Programmer values event wire boundary", () => {
 			}
 		).extra = true;
 		expect(() =>
-			decodeProgrammerValuesEventMessage(payloadExtra, USER_ID),
+			decodeProgrammerValuesEventMessage(payloadExtra),
 		).toThrow(/declared wire field/);
 	});
 });

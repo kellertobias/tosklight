@@ -11,10 +11,6 @@ export function canonicalProjection(
 	projection: ProgrammerValuesProjection,
 ): ProgrammerValuesProjection {
 	assertRevision(projection.revision);
-	if (!projection.userId)
-		throw new ProgrammerValuesProtocolError(
-			"Programmer values projection is missing its user",
-		);
 	const fixtureValues = projection.fixtureValues.map(canonicalFixtureValue);
 	const groupValues = projection.groupValues.map(canonicalGroupValue);
 	const dynamicValues = (projection.dynamicValues ?? []).map((entry) =>
@@ -42,7 +38,6 @@ export function canonicalProjection(
 	groupValues.sort(compareGroupValues);
 	dynamicValues.sort(compareDynamicValues);
 	return Object.freeze({
-		userId: projection.userId,
 		revision: projection.revision,
 		fixtureValues: Object.freeze(fixtureValues),
 		groupValues: Object.freeze(groupValues),
