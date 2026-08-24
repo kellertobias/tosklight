@@ -19,15 +19,11 @@ import {
 import type { LoadShowObjects } from "./stateEventRouting";
 import type { ServerState } from "./useServerState";
 
+/** The desk's operator. There is one; this used to pick between several by remembered name. */
 function selectOperator(bootstrap: BootstrapSnapshot): DeskUser {
-	const users = bootstrap.users.filter((user) => user.enabled);
-	if (!users.length) throw new Error("No enabled desk user is configured");
-	const remembered = localStorage.getItem("light.operator");
-	return (
-		users.find((user) => user.name === remembered) ??
-		users.find((user) => user.name === "Operator") ??
-		users[0]
-	);
+	const operator = bootstrap.users.find((user) => user.enabled);
+	if (!operator) throw new Error("No enabled desk user is configured");
+	return operator;
 }
 
 export const SINGLE_CLIENT_MODE_STORAGE_KEY = "light.single-client-mode";
@@ -204,7 +200,6 @@ export async function bootstrapConnection(
 	);
 	state.setBootstrap(connectedBootstrap);
 	const deskLock = await state.api.desk.deskLock();
-	localStorage.setItem("light.operator", user.name);
 	const bootstrap = await ensureActiveShow(
 		state,
 		connectedBootstrap,

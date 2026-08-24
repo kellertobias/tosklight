@@ -20,7 +20,6 @@ export function createSystemActions(
 	model: ServerController,
 ): Pick<
 	ServerCapabilities,
-	| "switchUser"
 	| "exportPaperwork"
 	| "shutdownServer"
 	| "clearProgrammer"
@@ -39,10 +38,6 @@ export function createSystemActions(
 		setSelectedGroupId,
 	} = model;
 	return {
-		switchUser: (name) => {
-			localStorage.setItem("light.operator", name);
-			location.reload();
-		},
 		exportPaperwork: async () => {
 			try {
 				const showId = bootstrap?.active_show?.id;

@@ -76,7 +76,6 @@ export interface ServerCoreContext
 	) => Promise<void>;
 	selectControlDesk: (id: string) => void;
 	removeClient: (deskId: string, clientId: string) => Promise<boolean>;
-	switchUser: (name: string) => void;
 	exportPaperwork: () => void;
 	shutdownServer: () => Promise<boolean>;
 	clearProgrammer: (sessionId: string) => Promise<void>;
