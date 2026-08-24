@@ -586,7 +586,7 @@ export class BrowserPlaybacks {
 		);
 		if (button < 0)
 			throw new Error(`Playback ${number} has no configured ${action} button`);
-		const alias = this.session().desk.osc_alias;
+		const alias = "desk";
 		const address =
 			typeof target !== "number" && target.kind === "current_page"
 				? `/light/${alias}/page-playback/${target.slot}/button/${button + 1}`

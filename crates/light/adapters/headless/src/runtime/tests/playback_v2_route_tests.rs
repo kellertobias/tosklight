@@ -128,8 +128,8 @@ async fn v2_context_headers_default_to_the_one_control_desk() {
     // An installation from before the collapse holds several desk records. A session gets the
     // desk whichever one it asks for, and the snapshot reports that one.
     let (main_state, main_data_dir) = test_state();
-    let wing = main_state.installation.add_desk("A wing", "wing").unwrap();
-    let main = main_state.installation.add_desk("Z main", "main").unwrap();
+    let wing = main_state.installation.add_desk("A wing").unwrap();
+    let main = main_state.installation.add_desk("Z main").unwrap();
     let main_app = router(main_state.clone());
     let main_token = login_playback_user_on_desk(&main_app, "Operator", main.id).await;
     let resolved_desk = session_desk_id(&main_state, &main_token);
@@ -832,10 +832,7 @@ async fn v2_shared_virtual_exclusion_configuration_applies_across_desks() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
-    let second_desk = state
-        .installation
-        .add_desk("Playback v2 wing", "playback-v2-wing")
-        .unwrap();
+    let second_desk = state.installation.add_desk("Playback v2 wing").unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_virtual_exclusion_test_state(&state);
@@ -1008,7 +1005,7 @@ async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
         "playback-selection-test".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: session.desk.osc_alias.clone(),
+            path: "desk".to_owned(),
             target: source,
             command_source: source,
             session_id: session.id,
@@ -1472,10 +1469,7 @@ async fn v2_group_runtime_is_the_desks_and_rejects_a_stale_show() {
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
     let first_desk = session_desk_id(&state, &first_token);
-    let second_desk = state
-        .installation
-        .add_desk("Group runtime wing", "group-runtime-wing")
-        .unwrap();
+    let second_desk = state.installation.add_desk("Group runtime wing").unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_group_runtime_test_state(&state);
@@ -1876,7 +1870,7 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
     request["surface"] = "physical".into();
     let first = json(post_action(&app, Some(&token), session.desk.id, request.clone()).await).await;
     assert_eq!(first["outcome"]["status"], "captured");
-    let events = preload_queue_events(&state, session.user.id.0);
+    let events = preload_queue_events(&state);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].desk_id, None);
     assert_eq!(
@@ -1915,7 +1909,7 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
     );
     let replay = json(post_action(&app, Some(&token), session.desk.id, request).await).await;
     assert_eq!(replay["replayed"], true);
-    assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 1);
+    assert_eq!(preload_queue_events(&state).len(), 1);
 
     let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
     assert_eq!(snapshot["projection"]["revision"], 1);
@@ -1941,7 +1935,7 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
     .await;
     assert_ne!(setting_value(&state, &active_key), "active-sentinel");
     assert_eq!(setting_value(&state, &output_key), "output-sentinel");
-    assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 2);
+    assert_eq!(preload_queue_events(&state).len(), 2);
     let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
     assert_eq!(snapshot["projection"]["revision"], 2);
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
@@ -2087,10 +2081,7 @@ async fn same_user_preload_commit_keeps_captured_originating_desk_with_show_scop
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
     let first_session = session_for_token(&state, &first_token);
-    let second_desk = state
-        .installation
-        .add_desk("Preload origin wing", "preload-origin-wing")
-        .unwrap();
+    let second_desk = state.installation.add_desk("Preload origin wing").unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_virtual_exclusion_test_state(&state);
@@ -2244,14 +2235,14 @@ async fn failed_preload_go_rolls_back_queue_generation_and_emits_no_projection()
     capture["surface"] = "physical".into();
     let response = post_action(&app, Some(&token), session.desk.id, capture).await;
     assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 1);
+    assert_eq!(preload_queue_events(&state).len(), 1);
     state
         .output
         .replace_snapshot(EngineSnapshot::default())
         .unwrap();
 
     assert_preload_key(&app, &token, session.desk.id, "failed-queue-go", "rejected").await;
-    assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 1);
+    assert_eq!(preload_queue_events(&state).len(), 1);
     let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
     assert_eq!(snapshot["projection"]["revision"], 1);
     assert_eq!(
@@ -2410,10 +2401,7 @@ async fn preload_queue_snapshot(app: &Router, token: Option<&str>, user_id: Uuid
         .unwrap()
 }
 
-fn preload_queue_events(
-    state: &AppState,
-    user_id: Uuid,
-) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
+fn preload_queue_events(state: &AppState) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
     let filter = light_application::EventFilter::default()
         .with_object(light_application::EventObject::programming_preload_playback_queue());
     let light_application::EventReplay::Events(events) = state.events.replay(0, &filter) else {

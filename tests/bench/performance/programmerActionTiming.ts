@@ -155,7 +155,7 @@ export class BrowserProgrammerActionTiming {
 		key: string,
 		requiresOutputFrame: boolean,
 	): Promise<ProgrammerActionTimingRecord> {
-		const alias = this.api.session?.desk.osc_alias;
+		const alias = "desk";
 		if (!alias) throw new Error("OSC timing requires an authenticated desk");
 		const timing = await this.expectAction(
 			{
@@ -179,7 +179,7 @@ export class BrowserProgrammerActionTiming {
 	}
 
 	async expectDirectOscCommandEdit(): Promise<ProgrammerActionTimingRecord> {
-		const alias = this.api.session?.desk.osc_alias;
+		const alias = "desk";
 		if (!alias) throw new Error("OSC timing requires an authenticated desk");
 		const endpoint = await this.bench.osc();
 		const clientId = `latency-direct-${crypto.randomUUID()}`;

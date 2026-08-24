@@ -297,7 +297,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
 			expect(competingClaim.status()).toBe(409);
 			const hardware = await bench.osc();
 			try {
-				const alias = api.session!.desk.osc_alias;
+				const alias = "desk";
 				await hardware.subscribe(`file-manager-${crypto.randomUUID()}`, alias);
 				await hardware.send(`/light/${alias}/programmer/enter`, [true]);
 				await expect

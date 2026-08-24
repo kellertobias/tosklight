@@ -52,7 +52,7 @@ async fn lifecycle_tracks_every_surface_of_the_one_programmer_and_removes_it_onc
     let second_desk = scenario
         .state
         .installation
-        .add_desk("Lifecycle second", "lifecycle-second")
+        .add_desk("Lifecycle second")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);

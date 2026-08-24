@@ -1079,22 +1079,14 @@ export function ScreenSettingsCard({
 }
 
 export function DefaultScreenSettings({
-	deskAlias,
 	keyboardShortcuts,
-	onAlias,
-	onTextFocus,
-	onTextBlur,
 	onKeyboardShortcuts,
 	onConfigurePlaybacks,
 	onChooseDefault,
 	singleClientMode,
 	onSingleClientMode,
 }: {
-	deskAlias: string;
 	keyboardShortcuts: boolean;
-	onAlias: (alias: string) => void;
-	onTextFocus: (field: "name" | "osc_alias") => void;
-	onTextBlur: (field: "name" | "osc_alias") => void;
 	onKeyboardShortcuts: (enabled: boolean) => void;
 	onConfigurePlaybacks: () => void;
 	onChooseDefault: () => void;
@@ -1110,13 +1102,6 @@ export function DefaultScreenSettings({
 				</div>
 			</header>
 			<div className="default-screen-compact-row">
-				<TextField
-					label="OSC alias"
-					value={deskAlias}
-					onFocus={() => onTextFocus("osc_alias")}
-					onBlur={() => onTextBlur("osc_alias")}
-					onChange={(event) => onAlias(event.target.value)}
-				/>
 				<SwitchField
 					label="Enable software keyboard shortcuts"
 					offLabel="Disabled"

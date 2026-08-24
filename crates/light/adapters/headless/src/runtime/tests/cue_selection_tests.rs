@@ -65,8 +65,8 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
     let (state, data_dir) = test_state();
     let (user, first_desk, second_desk) = {
         let user = state.installation.users().unwrap().remove(0);
-        let first = state.installation.add_desk("Front", "front").unwrap();
-        let second = state.installation.add_desk("Wing", "wing").unwrap();
+        let first = state.installation.add_desk("Front").unwrap();
+        let second = state.installation.add_desk("Wing").unwrap();
         (user, first, second)
     };
     let show_id = light_core::ShowId::new();

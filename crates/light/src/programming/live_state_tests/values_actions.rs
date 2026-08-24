@@ -172,7 +172,7 @@ impl ValuesSetup {
             .unwrap()
     }
 
-    fn values_events(&self, desk_id: Uuid, user_id: UserId) -> Vec<Arc<crate::EventEnvelope>> {
+    fn values_events(&self, desk_id: Uuid) -> Vec<Arc<crate::EventEnvelope>> {
         let filter = EventFilter::for_desk(desk_id).with_object(EventObject::programming_values());
         let EventReplay::Events(events) = self.events.replay(0, &filter) else {
             panic!("values events should remain replayable")
@@ -452,7 +452,7 @@ fn concurrent_capture_transition_and_normal_write_have_one_serial_order() {
     };
     assert_eq!(capture_events.len(), 1);
 
-    let value_events = setup.values_events(setup.context.desk_id, setup.user);
+    let value_events = setup.values_events(setup.context.desk_id);
     match values {
         Ok(result) => {
             assert!(matches!(
@@ -551,7 +551,7 @@ fn values_batch_is_one_persisted_projection_event_and_undo_checkpoint() {
     assert_eq!(projection.fixture_values[1].fade_millis, Some(1_500));
     assert_eq!(projection.fixture_values[1].delay_millis, Some(250));
     assert_eq!(result.interaction_event_sequence, None);
-    let events = setup.values_events(setup.context.desk_id, setup.user);
+    let events = setup.values_events(setup.context.desk_id);
     assert_eq!(events.len(), 1);
     let ApplicationEvent::Programming(ProgrammingEvent::ValuesChanged(change)) = &events[0].payload
     else {
@@ -902,10 +902,7 @@ fn exact_and_interaction_only_actions_do_not_materialize_values() {
         ProgrammingValuesOutcome::NoChange { revision: 1 }
     );
     assert_eq!(interaction_only.interaction_event_sequence, Some(3));
-    assert_eq!(
-        setup.values_events(setup.context.desk_id, setup.user).len(),
-        1
-    );
+    assert_eq!(setup.values_events(setup.context.desk_id).len(), 1);
     assert_eq!(super::super::values_projection::projection_read_count(), 0);
 }
 
@@ -1125,10 +1122,7 @@ fn release_and_clear_preserve_preload_transient_selection_and_modes() {
     assert!(state.preview);
     assert_eq!(state.preload_group_pending.len(), 1);
     assert_eq!(state.transient_values.len(), 1);
-    assert_eq!(
-        setup.values_events(setup.context.desk_id, setup.user).len(),
-        5
-    );
+    assert_eq!(setup.values_events(setup.context.desk_id).len(), 5);
 }
 
 #[test]
@@ -1188,11 +1182,8 @@ fn every_surface_programs_the_same_values() {
         assert_eq!(snapshot.projection.fixture_values.len(), 1);
         assert_eq!(snapshot.projection.group_values.len(), 1);
     }
-    assert_eq!(
-        setup.values_events(setup.context.desk_id, setup.user).len(),
-        2
-    );
-    assert_eq!(setup.values_events(screen_desk, setup.user).len(), 2);
+    assert_eq!(setup.values_events(setup.context.desk_id).len(), 2);
+    assert_eq!(setup.values_events(screen_desk).len(), 2);
 
     // A connection arriving under an identity from before the collapse joins the same Programmer
     // rather than opening a second one beside it.

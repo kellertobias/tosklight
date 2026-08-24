@@ -60,7 +60,6 @@ vi.mock("../features/server/useServerConnection", async () => {
 				const desk = {
 					id: DESK_ID,
 					name: "Main",
-					osc_alias: "main",
 					columns: 1,
 					rows: 1,
 					buttons: 1,

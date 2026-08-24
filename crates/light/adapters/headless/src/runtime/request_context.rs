@@ -83,10 +83,8 @@ impl DeskContext {
                     });
                 }
                 desks
-                    .iter()
-                    .find(|desk| desk.osc_alias.eq_ignore_ascii_case("main"))
-                    .cloned()
-                    .or_else(|| desks.into_iter().next())
+                    .into_iter()
+                    .next()
                     .ok_or_else(|| ApiError::not_found("control desk"))
             }
         }

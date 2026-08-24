@@ -10,7 +10,6 @@ type ClientSummary = {
 	desk: {
 		id: string;
 		name: string;
-		osc_alias: string;
 		columns: number;
 		rows: number;
 		buttons: number;

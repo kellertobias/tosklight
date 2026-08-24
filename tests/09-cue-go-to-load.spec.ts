@@ -180,7 +180,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 		await loadCanonicalCopy(api, bench, "cue-go-to-load-osc", "compact-rig");
 		await installTwinPlaybacks(api);
 		const hardware = await bench.osc();
-		const alias = api.session!.desk.osc_alias;
+		const alias = "desk";
 		try {
 			await hardware.subscribe(`cue-load-${crypto.randomUUID()}`, alias);
 			await hardware.send(`/light/${alias}/page-playback/2/select`, [true]);

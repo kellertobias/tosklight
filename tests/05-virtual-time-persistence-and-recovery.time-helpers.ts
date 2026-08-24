@@ -18,7 +18,7 @@ export async function assertZeroTicks(
 ): Promise<void> {
 	const before = behaviorTimestamps(await programmer(api));
 	const osc = await bench.osc();
-	const deskAlias = api.session!.desk.osc_alias;
+	const deskAlias = "desk";
 	const pageFeedback = `/light/${deskAlias}/feedback/page`;
 	const clientId = `time-001-${crypto.randomUUID()}`;
 	try {
@@ -94,7 +94,7 @@ export async function connectHardware(
 	state.hardwareClientId = `${prefix}-${crypto.randomUUID()}`;
 	await state.hardware.subscribe(
 		state.hardwareClientId,
-		api.session!.desk.osc_alias,
+		"desk",
 	);
 	await expect
 		.poll(

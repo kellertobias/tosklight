@@ -30,7 +30,6 @@ pub enum ControlDeskConfigurationAction {
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ControlDeskConfigurationPatch {
     pub name: Option<String>,
-    pub osc_alias: Option<String>,
     pub columns: Option<u8>,
     pub rows: Option<u8>,
     pub buttons: Option<u8>,

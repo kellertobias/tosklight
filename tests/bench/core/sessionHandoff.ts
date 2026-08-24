@@ -238,7 +238,6 @@ function decodeSession(value: unknown): SessionResponse {
 		desk: {
 			id: stringAt(desk, "id"),
 			name: stringAt(desk, "name"),
-			osc_alias: stringAt(desk, "osc_alias"),
 			columns: numberAt(desk, "columns"),
 			rows: numberAt(desk, "rows"),
 			buttons: numberAt(desk, "buttons"),

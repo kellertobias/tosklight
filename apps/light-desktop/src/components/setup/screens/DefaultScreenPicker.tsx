@@ -57,7 +57,7 @@ function DefaultScreenClientGroup({
 									: "Last connected unknown"}
 							</small>
 							<small>
-								Screen {client.desk.name} · /{client.desk.osc_alias}/ ·{" "}
+								Screen {client.desk.name} ·{" "}
 								{client.desk.columns}×{client.desk.rows} · {client.desk.buttons}{" "}
 								buttons
 							</small>

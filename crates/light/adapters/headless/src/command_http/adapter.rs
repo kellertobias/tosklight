@@ -594,17 +594,17 @@ pub(super) fn run_snapshot(
 pub(crate) fn route_osc_command_key_outcome(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     action: &str,
     request_id: Option<&str>,
 ) -> Option<bool> {
-    route_osc_command_gesture_outcome(state, session, desk_alias, action, request_id, None)
+    route_osc_command_gesture_outcome(state, session, path, action, request_id, None)
 }
 
 pub(crate) fn route_osc_command_gesture_outcome(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     action: &str,
     request_id: Option<&str>,
     gesture: Option<CommandGesture>,
@@ -636,7 +636,7 @@ pub(crate) fn route_osc_command_gesture_outcome(
     Some(
         match run_service_with_source(state, session, context, command, "osc") {
             Ok(result) => {
-                publish_osc_result(state, session, desk_alias, &result);
+                publish_osc_result(state, session, path, &result);
                 true
             }
             Err(error) => {

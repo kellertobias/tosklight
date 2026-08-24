@@ -527,13 +527,13 @@
             "null"
           ]
         },
-        "desk_alias": {
+        "desk_id": {
           "type": [
             "string",
             "null"
           ]
         },
-        "desk_id": {
+        "path": {
           "type": [
             "string",
             "null"
@@ -564,7 +564,7 @@
         "value",
         "session_id",
         "desk_id",
-        "desk_alias"
+        "path"
       ]
     },
     "DynamicActivationBoundaryProjection": {

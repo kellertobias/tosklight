@@ -12,7 +12,7 @@ test("ENCODER-DISPLAY-001 @supplemental-ui › six stable slots mirror physical 
   });
   await desk.open(api.baseUrl);
   const hardware = await bench.osc();
-  await hardware.subscribe(`encoder-display-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
+  await hardware.subscribe(`encoder-display-${crypto.randomUUID()}`, "desk");
   try {
     await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
     await page.getByRole("button", { name: "Position" }).click();
@@ -75,7 +75,7 @@ test("ENCODER-DISPLAY-001 @supplemental-ui › six stable slots mirror physical 
     expect(boxes.every((box, index) => index === 0 || box.left >= boxes[index - 1].right)).toBe(true);
 
     const beforeText = await cards.nth(0).locator("strong").first().textContent();
-    await hardware.send(`/light/${api.session!.desk.osc_alias}/encode/1`, ["up"]);
+    await hardware.send(`/light/desk/encode/1`, ["up"]);
     await expect.poll(async () => cards.nth(0).locator("strong").first().textContent()).not.toBe(beforeText);
 
     await expect(cards).toHaveCount(6);

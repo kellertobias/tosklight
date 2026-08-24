@@ -9,7 +9,7 @@ use super::super::{AppState, Session};
 pub(super) fn publish_osc_result(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     result: &ProgrammingResult,
 ) {
     if result.replayed {
@@ -17,7 +17,7 @@ pub(super) fn publish_osc_result(
     }
     match &result.outcome {
         ProgrammingOutcome::Accepted { action, .. } => {
-            publish_osc_accepted(state, session, desk_alias, result, *action)
+            publish_osc_accepted(state, session, path, result, *action)
         }
         ProgrammingOutcome::ChoiceRequired { pending_choice }
             if result.interaction_event_sequence.is_some() =>
@@ -49,12 +49,12 @@ fn publish_osc_error(state: &AppState, session: &Session, result: &ProgrammingRe
 fn publish_osc_accepted(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     result: &ProgrammingResult,
     action: ProgrammingAction,
 ) {
     if action == ProgrammingAction::Executed {
-        publish_osc_applied(state, session, desk_alias, result);
+        publish_osc_applied(state, session, path, result);
     }
     super::super::emit(
         state,
@@ -75,7 +75,7 @@ fn publish_osc_accepted(
 fn publish_osc_applied(
     state: &AppState,
     session: &Session,
-    desk_alias: &str,
+    path: &str,
     result: &ProgrammingResult,
 ) {
     let (command, _) =
@@ -87,7 +87,7 @@ fn publish_osc_applied(
             "desk_id":session.desk.id,
             "session_id":session.id,
             "user_id":session.user.id,
-            "desk_alias":desk_alias,
+            "path":path,
             "command":command,
             "source":"osc",
         }),

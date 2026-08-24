@@ -145,7 +145,7 @@ fn send_button_feedback(
             .unwrap_or((0.18, 0.20, 0.23));
         let prefix = format!(
             "/light/{}/feedback/page-playback/{slot}/button/{button}",
-            subscriber.desk_alias
+            subscriber.path
         );
         send_osc(
             state,
@@ -273,7 +273,7 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_numbe
     });
     let prefix = format!(
         "/light/{}/feedback/page-playback/{slot}",
-        feedback.subscriber.desk_alias
+        feedback.subscriber.path
     );
     if let Some(binding) = binding {
         send_osc(
@@ -366,7 +366,7 @@ pub(super) fn send_playback_osc_feedback(feedback: OscPlaybackFeedback<'_>) {
             feedback.subscriber.target,
             format!(
                 "/light/{}/feedback/speed-group/{}",
-                feedback.subscriber.desk_alias,
+                feedback.subscriber.path,
                 index + 1
             ),
             speed_group_osc_feedback(speed_group),

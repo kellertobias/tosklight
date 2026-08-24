@@ -278,7 +278,7 @@ export class BrowserVirtualPlaybacks {
 	): Promise<void> {
 		if (cells.length < 2)
 			throw new Error("A Virtual Playback exclusion zone needs two cells");
-		const alias = this.api.session?.desk.osc_alias;
+		const alias = "desk";
 		if (!alias)
 			throw new Error("Attached Shift proof requires a desk OSC alias");
 		await this.hardware.connect();

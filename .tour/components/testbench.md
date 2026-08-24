@@ -48,7 +48,7 @@ oracle, each on its own fresh show. That is how surface parity is proven rather 
 | --- | --- |
 | `lightBench.ts` | Per-worker temp data dir, free TCP/UDP port allocation, spawns `light-headless`, `restart()`, graceful shutdown via `POST /api/v2/shutdown`, abrupt SIGKILL, Art-Net and sACN receivers, OSC hardware factory, virtual clock cursor, `createTwelveDimmerShow()`, failure artifacts |
 | `api.ts` | `ApiDriver`: login, revision and ETag validation, `getCommandLine`, `replaceCommandLine`, `sendCommandKey`, `executeCommandLine`, typed `command<T>()` over the versioned command WebSocket |
-| `desk.ts` | `DeskDriver`: browser desk facade. `open(baseUrl)` waits out the connection cover and banner and pins the desk alias. Also the recording and narration overlay |
+| `desk.ts` | `DeskDriver`: browser desk facade. `open(baseUrl)` waits out the connection cover and banner and pins the desk. Also the recording and narration overlay |
 | `protocols.ts` | `DmxReceiver` (`bind()`, `nextAfter(mark, "artnet"\|"sacn", universe)`), `OscHardware` (`connect`, `subscribe`, `send`, `mark()`, `expectAfter`), `encodeOscMessage` |
 | `fixtures.ts` | Playwright `test.extend` providing `bench`, `baseURL`, `show`, `api`, `desk` |
 
@@ -78,7 +78,7 @@ type ProgrammerSurface =
 - `executeProgrammerCommand(surface, command, { reset, expectedCommandLine, expectedCompletion })`
   resets with ESC, types, then ENTER.
 - The OSC surface is real OSC: `withOscProgrammer` owns the subscribe and unsubscribe lifecycle
-  against `session.desk.osc_alias`, `tapOscKey` sends explicit `true` then `false` phases, and each
+  against the desk-button OSC path, `tapOscKey` sends explicit `true` then `false` phases, and each
   phase waits for the command-line feedback message after a receiver mark. No sleeps. Action names
   come from `oscProgrammerActionForKey` in `packages/light-controls/src/programmerKeypad.ts`, the same mapping the
   app uses.

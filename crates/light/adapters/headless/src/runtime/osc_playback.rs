@@ -229,7 +229,7 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
         .active_show
         .current()
         .clone()
-        .and_then(|show| osc_control_desk(state, parts[1]).map(|desk| (show, desk)))
+        .and_then(|show| osc_control_desk(state).map(|desk| (show, desk)))
     else {
         return true;
     };
@@ -310,7 +310,7 @@ pub(super) fn osc_playback_session(
         // The alias no longer names which desk this is — there is one. It names the path the
         // surface connected on, and therefore what it may do. A message must still arrive on the
         // path its sender subscribed to, so a guest cannot reach the desk-button routes.
-        if !subscriber.desk_alias.eq_ignore_ascii_case(action_alias) {
+        if !subscriber.path.eq_ignore_ascii_case(action_alias) {
             return Err(());
         }
         let session = state
@@ -349,7 +349,7 @@ fn osc_playback_context(
         .or_else(|| {
             subscribed
                 .as_ref()
-                .map(|subscriber| subscriber.desk_alias.clone())
+                .map(|subscriber| subscriber.path.clone())
         })
         .unwrap_or_else(|| "main".into());
     let action_desk = subscribed
@@ -360,7 +360,7 @@ fn osc_playback_context(
                 .session(subscriber.session_id)
                 .map(|session| session.desk.clone())
         })
-        .or_else(|| osc_control_desk(state, &action_alias));
+        .or_else(|| osc_control_desk(state));
     let session = osc_playback_session(state, source, &action_alias, action_desk.as_ref())?;
     Ok((source_socket, action_desk, session))
 }
@@ -643,7 +643,6 @@ mod playback_address_tests {
         ControlDesk {
             id: uuid::Uuid::nil(),
             name: "Desk".into(),
-            osc_alias: "main".into(),
             columns: 2,
             rows: 2,
             buttons: 3,

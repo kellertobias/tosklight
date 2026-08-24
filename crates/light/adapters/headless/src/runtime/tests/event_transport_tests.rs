@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use uuid::Uuid;
+
 use chrono::{Duration as ChronoDuration, Utc};
 use light_application::{
     ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
@@ -596,7 +598,6 @@ fn event_session(desk_id: Uuid, user_id: Uuid) -> Session {
         desk: light_show::ControlDesk {
             id: desk_id,
             name: "Event desk".into(),
-            osc_alias: "events".into(),
             columns: 1,
             rows: 1,
             buttons: 1,

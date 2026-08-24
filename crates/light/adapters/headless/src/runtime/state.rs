@@ -120,7 +120,7 @@ pub(super) struct MvrExportPreview {
 
 #[derive(Clone)]
 pub(super) struct OscSubscriber {
-    pub(super) desk_alias: String,
+    pub(super) path: String,
     /// What this surface may do to the desk, decided by the path it connected on.
     pub(super) capability: light_core::SurfaceCapability,
     pub(super) target: SocketAddr,

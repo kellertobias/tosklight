@@ -199,7 +199,7 @@ export class BrowserAttachedEncoders {
 		) => Promise<void>,
 	): Promise<void> {
 		const hardware = await this.bench.osc();
-		const alias = this.api.session?.desk.osc_alias;
+		const alias = "desk";
 		if (!alias) throw new Error("Attached encoder scenario requires a desk alias");
 		const clientId = `attached-encoder-${crypto.randomUUID()}`;
 		try {

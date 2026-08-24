@@ -184,6 +184,6 @@ export class BrowserDeskLock {
 			{ username: "Operator", desk_id: deskId },
 			false,
 		);
-		return session.desk.osc_alias;
+		return "desk";
 	}
 }

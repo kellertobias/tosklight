@@ -214,7 +214,6 @@ export interface DeskLockState {
 export interface ControlDesk {
 	id: string;
 	name: string;
-	osc_alias: string;
 	columns: number;
 	rows: number;
 	buttons: number;

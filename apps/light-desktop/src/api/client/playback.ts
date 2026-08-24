@@ -316,7 +316,6 @@ function controlDeskPatch(
 		before === after ? null : after;
 	return {
 		name: changed(current?.name, next.name),
-		osc_alias: changed(current?.osc_alias, next.osc_alias),
 		columns: changed(current?.columns, next.columns),
 		rows: changed(current?.rows, next.rows),
 		buttons: changed(current?.buttons, next.buttons),

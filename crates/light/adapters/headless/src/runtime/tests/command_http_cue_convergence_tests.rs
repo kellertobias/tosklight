@@ -56,12 +56,12 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
     );
 
     let source: SocketAddr = "127.0.0.1:9026".parse().unwrap();
-    let osc_alias = scenario.session.desk.osc_alias.clone();
+    let path = "desk".to_owned();
     scenario.state.integrations.register_osc_subscriber(
         "cue-record-keys".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: osc_alias.clone(),
+            path: path.clone(),
             target: source,
             command_source: source,
             session_id: scenario.session.id,
@@ -76,7 +76,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
     for action in [
         "record", "cue", "cue", "digit-3", "digit-4", "cue", "digit-1", "enter",
     ] {
-        let address = format!("/light/{osc_alias}/programmer/{action}");
+        let address = format!("/light/{path}/programmer/{action}");
         handle_programmer_osc(
             &scenario.state,
             &address,
@@ -153,7 +153,7 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
         "cue-record-touch".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: scenario.session.desk.osc_alias.clone(),
+            path: "desk".to_owned(),
             target: source,
             command_source: source,
             session_id: scenario.session.id,
@@ -285,7 +285,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         "set-playback-touch".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: scenario.session.desk.osc_alias.clone(),
+            path: "desk".to_owned(),
             target: source,
             command_source: source,
             session_id: scenario.session.id,
@@ -304,7 +304,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         .set_command_line(scenario.session.id, "ASSIGN CUELIST 41 AT".into());
     let current_address = format!(
         "/light/{}/page-playback/7/button/1",
-        scenario.session.desk.osc_alias
+        "desk"
     );
     assert!(handle_playback_osc(
         &scenario.state,
@@ -500,7 +500,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         "off-playback-touch".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: scenario.session.desk.osc_alias.clone(),
+            path: "desk".to_owned(),
             target: source,
             command_source: source,
             session_id: scenario.session.id,
@@ -539,7 +539,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         .set_command_line(scenario.session.id, "OFF".into());
     let current_address = format!(
         "/light/{}/page-playback/7/button/1",
-        scenario.session.desk.osc_alias
+        "desk"
     );
     assert!(handle_playback_osc(
         &scenario.state,
@@ -638,7 +638,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         &scenario.state,
         &format!(
             "/light/{}/page-playback/7/label",
-            scenario.session.desk.osc_alias
+            "desk"
         ),
         &[OscArgument::Bool(true)],
         Some("127.0.0.1:9030"),
@@ -653,7 +653,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         &scenario.state,
         &format!(
             "/light/{}/page-playback/7/label",
-            scenario.session.desk.osc_alias
+            "desk"
         ),
         &[OscArgument::Bool(true)],
         Some("127.0.0.1:9030"),
@@ -704,7 +704,7 @@ async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
         "unsupported-playback-touch".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: scenario.session.desk.osc_alias.clone(),
+            path: "desk".to_owned(),
             target: source,
             command_source: source,
             session_id: scenario.session.id,
@@ -907,7 +907,7 @@ async fn a_guest_runs_playback_while_the_programming_user_holds_a_record() {
         "operator-wing".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: scenario.session.desk.osc_alias.clone(),
+            path: "desk".to_owned(),
             target: desk_source,
             command_source: desk_source,
             session_id: scenario.session.id,
@@ -935,7 +935,7 @@ async fn a_guest_runs_playback_while_the_programming_user_holds_a_record() {
         "guest-phone".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::PlaybackOnly,
-            desk_alias: "remote".into(),
+            path: "remote".into(),
             target: guest_source,
             command_source: guest_source,
             session_id: guest.id,

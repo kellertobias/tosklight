@@ -7,24 +7,22 @@ use uuid::Uuid;
 
 impl DeskStore {
     pub fn desks(&self) -> Result<Vec<ControlDesk>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,osc_alias,columns_count,rows_count,buttons_count,playback_layout_json FROM control_desks ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare("SELECT id,name,columns_count,rows_count,buttons_count,playback_layout_json FROM control_desks ORDER BY name COLLATE NOCASE")?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get(1)?,
-                row.get(2)?,
+                row.get::<_, u8>(2)?,
                 row.get::<_, u8>(3)?,
                 row.get::<_, u8>(4)?,
-                row.get::<_, u8>(5)?,
-                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(5)?,
             ))
         })?;
         rows.map(|row| {
-            let (id, name, osc_alias, columns, rows, buttons, playback_layout) = row?;
+            let (id, name, columns, rows, buttons, playback_layout) = row?;
             Ok(ControlDesk {
                 id: Uuid::parse_str(&id)?,
                 name,
-                osc_alias,
                 columns,
                 rows,
                 buttons,
@@ -38,13 +36,6 @@ impl DeskStore {
 
     pub fn control_desk(&self, id: Uuid) -> Result<Option<ControlDesk>, StoreError> {
         Ok(self.desks()?.into_iter().find(|desk| desk.id == id))
-    }
-
-    pub fn control_desk_by_alias(&self, alias: &str) -> Result<Option<ControlDesk>, StoreError> {
-        Ok(self
-            .desks()?
-            .into_iter()
-            .find(|desk| desk.osc_alias.eq_ignore_ascii_case(alias)))
     }
 
     /// Every window that has connected, each shown against the desk it operates.
@@ -104,10 +95,7 @@ impl DeskStore {
             return Ok(desk);
         }
         let suffix = client_id.simple().to_string();
-        self.add_desk(
-            &format!("Desk {}", &suffix[..6]),
-            &format!("desk-{}", &suffix[..8]),
-        )
+        self.add_desk(&format!("Desk {}", &suffix[..6]))
     }
 
     pub fn touch_client(&self, client_id: Uuid) -> Result<(), StoreError> {
@@ -170,48 +158,29 @@ impl DeskStore {
         Ok(true)
     }
 
-    pub fn add_desk(&self, name: &str, alias: &str) -> Result<ControlDesk, StoreError> {
-        let alias = alias.trim().to_ascii_lowercase();
-        if alias.is_empty()
-            || alias.len() > 40
-            || !alias
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        {
-            return Err(StoreError::Invalid(
-                "OSC alias must contain only letters, numbers, dash, or underscore".into(),
-            ));
-        }
+    pub fn add_desk(&self, name: &str) -> Result<ControlDesk, StoreError> {
         let desk = ControlDesk {
             id: Uuid::new_v4(),
             name: name.trim().to_owned(),
-            osc_alias: alias,
             columns: 8,
             rows: 1,
             buttons: 3,
             playback_layout: None,
         };
-        self.conn.execute("INSERT INTO control_desks(id,name,osc_alias,columns_count,rows_count,buttons_count) VALUES (?1,?2,?3,?4,?5,?6)",params![desk.id.to_string(),desk.name,desk.osc_alias,desk.columns,desk.rows,desk.buttons])?;
+        self.conn.execute("INSERT INTO control_desks(id,name,columns_count,rows_count,buttons_count) VALUES (?1,?2,?3,?4,?5)",params![desk.id.to_string(),desk.name,desk.columns,desk.rows,desk.buttons])?;
         Ok(desk)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn update_desk(
         &self,
         id: Uuid,
         name: &str,
-        alias: &str,
         columns: u8,
         rows: u8,
         buttons: u8,
         playback_layout: Option<PlaybackSurfaceLayout>,
     ) -> Result<ControlDesk, StoreError> {
-        let alias = alias.trim().to_ascii_lowercase();
         if name.trim().is_empty()
-            || alias.is_empty()
-            || !alias
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
             || !(1..=32).contains(&columns)
             || !(1..=127).contains(&rows)
             || buttons > 3
@@ -229,7 +198,7 @@ impl DeskStore {
         if let Some(layout) = &playback_layout {
             validate_playback_surface(layout)?;
         }
-        if self.conn.execute("UPDATE control_desks SET name=?1,osc_alias=?2,columns_count=?3,rows_count=?4,buttons_count=?5,playback_layout_json=?6 WHERE id=?7",params![name.trim(),alias,columns,rows,buttons,playback_layout.as_ref().map(serde_json::to_string).transpose()?,id.to_string()])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
+        if self.conn.execute("UPDATE control_desks SET name=?1,columns_count=?2,rows_count=?3,buttons_count=?4,playback_layout_json=?5 WHERE id=?6",params![name.trim(),columns,rows,buttons,playback_layout.as_ref().map(serde_json::to_string).transpose()?,id.to_string()])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
         self.control_desk(id)?
             .ok_or_else(|| StoreError::Invalid("control desk update failed".into()))
     }

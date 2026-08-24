@@ -15,9 +15,10 @@ One ToskLight application instance plus the OSC hardware attached to it. A desk 
 show, installation settings (output routes, network, screens, users), and one shared
 [command line](glossary:command-line).
 
-Identified by a **desk alias**. Two desks with different aliases are isolated even on the same
-machine and show — separate command lines, selections, and page state. A desk plus its attached
-hardware controller is *one* desk, not two.
+There is one desk. A desk plus its attached hardware controller is *one* desk, not two, and an
+OSC surface no longer names which desk it reaches: the **path** it connects on says what it may
+do. `/light/desk/...` is a desk button with the full command set; `/light/remote/...` is a
+playback-only guest.
 
 Desk data lives in `<data-dir>/desk.sqlite` and never travels with the show.
 
@@ -424,8 +425,8 @@ is shared by the desk.
 
 ## Shared command line
 
-The one authoritative command line shared by the Tauri app and attached OSC hardware for a desk.
-Different desk aliases remain isolated.
+The one authoritative command line shared by the Tauri app and attached OSC hardware. A
+playback-only guest on `/light/remote/...` never reaches it.
 
 ## Semantic attribute value
 

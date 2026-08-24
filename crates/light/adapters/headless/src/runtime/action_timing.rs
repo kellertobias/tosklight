@@ -49,7 +49,7 @@ struct CausalOrigin {
 
 #[derive(Clone)]
 pub(super) struct OscActionFeedback {
-    pub(super) desk_alias: String,
+    pub(super) path: String,
     pub(super) target: SocketAddr,
 }
 
@@ -454,7 +454,7 @@ mod tests {
             "encoder-1",
             60,
             OscActionFeedback {
-                desk_alias: "main".into(),
+                path: "main".into(),
                 target: "127.0.0.1:9000".parse().unwrap(),
             },
         );

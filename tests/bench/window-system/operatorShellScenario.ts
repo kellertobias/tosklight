@@ -70,20 +70,19 @@ export class BrowserOperatorShell {
 			bootstrap.desks.find((candidate: any) => candidate.id === physicalDesk.id),
 		).toMatchObject({
 			id: physicalDesk.id,
-			osc_alias: physicalDesk.osc_alias,
 		});
 		const hardware = await this.bench.osc();
 		const clientId = `manual-019-${crypto.randomUUID()}`;
 		try {
-			await hardware.subscribe(clientId, physicalDesk.osc_alias);
+			await hardware.subscribe(clientId, "desk");
 			const mark = hardware.mark();
 			await hardware.send(
-				`/light/${physicalDesk.osc_alias}/programmer/digit-1`,
+				`/light/desk/programmer/digit-1`,
 				[true],
 			);
 			await hardware.expectAfter(
 				mark,
-				`/light/${physicalDesk.osc_alias}/feedback/command-line`,
+				`/light/desk/feedback/command-line`,
 			);
 		} finally {
 			await hardware

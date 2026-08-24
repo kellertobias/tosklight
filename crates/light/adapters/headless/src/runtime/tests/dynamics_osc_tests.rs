@@ -24,7 +24,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
     let target: SocketAddr = "127.0.0.1:19122".parse().unwrap();
     let subscriber = OscSubscriber {
         capability: light_core::SurfaceCapability::Programming,
-        desk_alias: session.desk.osc_alias.clone(),
+        path: "desk".to_owned(),
         target,
         command_source: source,
         session_id: session.id,
@@ -38,7 +38,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
     state
         .integrations
         .register_osc_subscriber("dynamics-osc".into(), subscriber.clone());
-    let address = format!("/light/{}/dynamic/12/toggle", session.desk.osc_alias);
+    let address = format!("/light/{}/dynamic/12/toggle", "desk");
     handle_dynamics_osc(
         &state,
         &address,
@@ -55,7 +55,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
             &state,
             &format!(
                 "/light/{}/dynamic/instance/{instance_id}/{field}",
-                session.desk.osc_alias
+                "desk"
             ),
             &[OscArgument::Float(value)],
             Some(&source.to_string()),
@@ -70,7 +70,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
 
     send_programmer_osc_feedback(&state, &subscriber, &session.desk, 1, &[], &HashMap::new());
     let feedback = state.integrations.captured_osc_feedback();
-    let prefix = format!("/light/{}/feedback/dynamic", session.desk.osc_alias);
+    let prefix = format!("/light/{}/feedback/dynamic", "desk");
     assert!(feedback.iter().any(|(sent_to, address, arguments)| {
         *sent_to == target
             && address == &format!("{prefix}/runtime/{instance_id}/winning-controller")
@@ -89,7 +89,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
 
     let rejected_address = format!(
         "/light/{}/dynamic/instance/not-a-uuid/size",
-        session.desk.osc_alias
+        "desk"
     );
     handle_dynamics_osc(
         &state,
@@ -108,7 +108,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
                 ]
     }));
 
-    let off_address = format!("/light/{}/dynamic/12/off", session.desk.osc_alias);
+    let off_address = format!("/light/{}/dynamic/12/off", "desk");
     handle_dynamics_osc(
         &state,
         &off_address,

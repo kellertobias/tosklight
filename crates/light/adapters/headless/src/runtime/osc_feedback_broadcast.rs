@@ -34,10 +34,7 @@ pub(super) fn send_osc_feedback(state: &AppState, _full: bool) {
     let highlight_fixtures = highlight_fixture_summaries(&snapshot.fixtures);
     let groups = highlight_groups(&snapshot);
     for subscriber in subscribers {
-        let Ok(Some(desk)) = state
-            .installation
-            .control_desk_by_alias(&subscriber.desk_alias)
-        else {
+        let Some(desk) = osc_control_desk(state) else {
             continue;
         };
         let page = state.installation.desk_page(desk.id, show.id).unwrap_or(1);

@@ -18,7 +18,6 @@ mod tests {
             desk: ControlDesk {
                 id: desk_id,
                 name: "Standalone desk".into(),
-                osc_alias: "standalone".into(),
                 columns: 8,
                 rows: 1,
                 buttons: 3,
@@ -206,7 +205,7 @@ mod tests {
             "standalone".into(),
             OscSubscriber {
                 capability: light_core::SurfaceCapability::Programming,
-                desk_alias: "main".into(),
+                path: "main".into(),
                 target: source,
                 command_source: source,
                 session_id,

@@ -9,8 +9,8 @@ pub(super) struct MappedControlOrigin {
 pub(super) fn mapped_control_origin(state: &AppState, event: &ControlEvent) -> MappedControlOrigin {
     let (source, desk, surface) = match event {
         ControlEvent::Osc { address, .. } => {
-            let alias = address.trim_matches('/').split('/').nth(1);
-            let desk = alias.and_then(|alias| osc_control_desk(state, alias));
+            let path = address.trim_matches('/').split('/').nth(1);
+            let desk = path.and_then(|_| osc_control_desk(state));
             (
                 light_application::ActionSource::Osc,
                 desk,

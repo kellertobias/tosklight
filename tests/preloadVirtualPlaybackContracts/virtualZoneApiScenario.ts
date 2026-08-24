@@ -230,13 +230,13 @@ async function verifyFirstDeskPageAndOsc({
 
 	const firstHardware = await bench.osc();
 	try {
-		await firstHardware.subscribe("vpb-007-first", desk.osc_alias);
+		await firstHardware.subscribe("vpb-007-first", "desk");
 		await firstHardware.send(
-			`/light/${desk.osc_alias}/virtual-playback/1/1001/button/1`,
+			`/light/desk/virtual-playback/1/1001/button/1`,
 			[true],
 		);
 		await firstHardware.send(
-			`/light/${desk.osc_alias}/virtual-playback/1/1002/button/1`,
+			`/light/desk/virtual-playback/1/1002/button/1`,
 			[true],
 		);
 		await expect
@@ -285,13 +285,13 @@ async function verifySecondDeskSharesShowZones(
 		await virtualAction(api, 2, number, "off");
 	const secondHardware = await bench.osc();
 	try {
-		await secondHardware.subscribe("vpb-007-second", second.desk.osc_alias);
+		await secondHardware.subscribe("vpb-007-second", "desk");
 		await secondHardware.send(
-			`/light/${second.desk.osc_alias}/virtual-playback/1/1001/button/1`,
+			`/light/desk/virtual-playback/1/1001/button/1`,
 			[true],
 		);
 		await secondHardware.send(
-			`/light/${second.desk.osc_alias}/virtual-playback/1/1002/button/1`,
+			`/light/desk/virtual-playback/1/1002/button/1`,
 			[true],
 		);
 		await expect

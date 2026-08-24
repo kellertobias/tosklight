@@ -131,7 +131,7 @@ export function simulatedHardware(
 				).hardware_connected,
 		},
 		2_000,
-		api.session?.desk.osc_alias,
+		"desk",
 	);
 }
 

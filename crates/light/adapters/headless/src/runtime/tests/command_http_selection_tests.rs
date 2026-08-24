@@ -415,7 +415,7 @@ async fn accepted_selection_persistence_warning_is_replayed_without_duplicate_ev
     let isolated = light_show::DeskStore::open(scenario.data_dir.join("isolated-desk.sqlite"))
         .expect("isolated Desk store");
     let isolated_desk = isolated
-        .add_desk("Isolated", "isolated")
+        .add_desk("Isolated")
         .expect("isolated control desk");
     scenario.state.installation.replace_desk_store(isolated);
     assert!(

@@ -526,7 +526,7 @@ fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Se
         let same_desk = scenario
             .state
             .installation
-            .add_desk("Same user wing", "same-user-wing")
+            .add_desk("Same user wing")
             .unwrap();
         let other_user = scenario
             .state
@@ -536,7 +536,7 @@ fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Se
         let other_desk = scenario
             .state
             .installation
-            .add_desk("Other user wing", "other-user-wing")
+            .add_desk("Other user wing")
             .unwrap();
         (same_desk, other_user, other_desk)
     };
@@ -611,7 +611,7 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
         "group-record".into(),
         OscSubscriber {
             capability: light_core::SurfaceCapability::Programming,
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: source,
             command_source: source,
             session_id: scenario.session.id,

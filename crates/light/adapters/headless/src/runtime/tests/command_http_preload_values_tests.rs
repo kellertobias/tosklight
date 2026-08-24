@@ -144,7 +144,7 @@ async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
     let second_desk = scenario
         .state
         .installation
-        .add_desk("Second Preload desk", "second-preload-values")
+        .add_desk("Second Preload desk")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -375,14 +375,10 @@ fn assert_preload_values_changed(
 }
 
 fn assert_only_preload_values_events(scenario: &CommandHttpScenario, expected: usize) {
-    assert_preload_values_event_count(scenario, scenario.session.user.id.0, expected);
+    assert_preload_values_event_count(scenario, expected);
 }
 
-fn assert_preload_values_event_count(
-    scenario: &CommandHttpScenario,
-    user_id: Uuid,
-    expected: usize,
-) {
+fn assert_preload_values_event_count(scenario: &CommandHttpScenario, expected: usize) {
     let filter = light_application::EventFilter::default().with_object(
         light_application::EventObject::programming_preload_values(),
     );

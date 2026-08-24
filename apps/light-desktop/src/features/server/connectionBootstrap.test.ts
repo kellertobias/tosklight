@@ -18,7 +18,7 @@ const session = {
 	client_id: "current-client",
 	token: "token-1",
 	user,
-	desk: { id: "desk-1", osc_alias: "main" },
+	desk: { id: "desk-1" },
 } as SessionResponse;
 
 function bootstrap(): BootstrapSnapshot {

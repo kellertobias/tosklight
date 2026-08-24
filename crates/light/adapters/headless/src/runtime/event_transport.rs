@@ -18,7 +18,6 @@ use light_wire::v2::events as wire;
 use light_wire::v2::live_action::LiveActionFrame;
 use light_wire::v2::runtime::RuntimeSessionRole;
 use serde::Serialize;
-use uuid::Uuid;
 
 const DEFAULT_CAPACITY: usize = 256;
 const MAX_CAPACITY: usize = 1_024;

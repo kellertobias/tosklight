@@ -123,7 +123,7 @@ test("CLOCK-002 @ui › larger clock seconds stay inside the unchanged clock lay
 	const hardware = await bench.osc();
 	const clientId = `clock-layout-${crypto.randomUUID()}`;
 	try {
-		await hardware.subscribe(clientId, api.session!.desk.osc_alias);
+		await hardware.subscribe(clientId, "desk");
 		await expect
 			.poll(
 				async () =>

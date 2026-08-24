@@ -212,7 +212,7 @@ export class BrowserRoutedSelection {
 		targets: readonly SelectionTarget[],
 	) {
 		if (!this.api.session) throw new Error("API session is not initialized");
-		const alias = this.api.session.desk.osc_alias;
+		const alias = "desk";
 		const authority = await this.transportAuthority();
 		const commandLine = (await this.api.getCommandLine()).commandLine;
 		if (!commandLine.pristine)

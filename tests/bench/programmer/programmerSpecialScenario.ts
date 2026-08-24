@@ -384,7 +384,7 @@ export class BrowserProgrammerSpecials {
 		if (!this.hardware.connected)
 			throw new Error("Hardware Color range requires hardware.connect() first");
 		const contract = this.requiredColorContract();
-		const alias = this.session().desk.osc_alias;
+		const alias = "desk";
 		const dialog = await this.openDialog("Color");
 		try {
 			await this.hardware.send(`/light/${alias}/programmer/shift`, [true]);

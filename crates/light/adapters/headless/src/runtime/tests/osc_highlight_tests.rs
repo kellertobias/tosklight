@@ -1,23 +1,23 @@
 const HIGHLIGHT_OSC_CLIENT: &str = "authenticated-highlight-hardware";
 const HIGHLIGHT_OSC_SOURCE: &str = "127.0.0.1:19031";
 
-fn highlight_subscription(session: &Session) -> ControlEvent {
+fn highlight_subscription() -> ControlEvent {
     ControlEvent::Osc {
         address: "/light/subscribe".into(),
         arguments: vec![
             OscArgument::String(HIGHLIGHT_OSC_CLIENT.into()),
-            OscArgument::String(session.desk.osc_alias.clone()),
+            OscArgument::String("desk".to_owned()),
             OscArgument::Int(19032),
         ],
         source: Some(HIGHLIGHT_OSC_SOURCE.into()),
     }
 }
 
-fn send_highlight_osc(state: &AppState, session: &Session, action: &str) {
+fn send_highlight_osc(state: &AppState, action: &str) {
     handle_control_event(
         state,
         ControlEvent::Osc {
-            address: format!("/light/{}/highlight/{action}", session.desk.osc_alias),
+            address: format!("/light/desk/highlight/{action}"),
             arguments: vec![OscArgument::Bool(true)],
             source: Some(HIGHLIGHT_OSC_SOURCE.into()),
         },
@@ -29,7 +29,7 @@ fn verify_cross_surface_highlight_dedupe(
     session: &Session,
     fixture_ids: &[light_core::FixtureId],
 ) {
-    send_highlight_osc(state, session, "on");
+    send_highlight_osc(state, "on");
     assert_eq!(
         state
             .output.highlighted_fixtures()
@@ -56,7 +56,7 @@ fn verify_cross_surface_highlight_dedupe(
         .unwrap();
     apply_highlight_selection_write(state, session, software.working_selection.as_ref()).unwrap();
     assert_eq!(software.state.active_index, Some(0));
-    send_highlight_osc(state, session, "next");
+    send_highlight_osc(state, "next");
     let selection = state.programming.selection(session.id).unwrap();
     let after_echo = state.highlight.transition(
         session.desk.id,
@@ -97,8 +97,8 @@ fn verify_highlight_alias_dedupe(
             .unwrap();
     }
     let before_aliases = state.events.latest_sequence();
-    send_highlight_osc(state, session, "previous");
-    send_highlight_osc(state, session, "prev");
+    send_highlight_osc(state, "previous");
+    send_highlight_osc(state, "prev");
     let selection = state.programming.selection(session.id).unwrap();
     let after_aliases = state.highlight.transition(
         session.desk.id,
@@ -133,9 +133,9 @@ fn verify_highlight_alias_dedupe(
     );
 }
 
-fn verify_highlight_osc_feedback(state: &AppState, session: &Session) {
+fn verify_highlight_osc_feedback(state: &AppState) {
     let feedback = state.integrations.captured_osc_feedback();
-    let prefix = format!("/light/{}/feedback/highlight", session.desk.osc_alias);
+    let prefix = "/light/desk/feedback/highlight".to_owned();
     for (suffix, arguments) in [
         ("active", vec![OscArgument::Bool(true)]),
         ("output", vec![OscArgument::Bool(true)]),
@@ -171,7 +171,7 @@ fn verify_highlight_reconnect(
         .integrations
         .osc_subscriber(HIGHLIGHT_OSC_CLIENT)
         .is_none());
-    handle_control_event(state, highlight_subscription(session));
+    handle_control_event(state, highlight_subscription());
     assert_eq!(
         state
             .integrations
@@ -197,8 +197,8 @@ fn verify_highlight_reconnect(
     assert_eq!(reconnected.state.remembered.len(), 3);
     assert!(reconnected.state.output_enabled);
 
-    send_highlight_osc(state, session, "capture");
-    send_highlight_osc(state, session, "reset");
+    send_highlight_osc(state, "capture");
+    send_highlight_osc(state, "reset");
     let selection = state.programming.selection(session.id).unwrap();
     let unchanged = state.highlight.transition(
         session.desk.id,
@@ -210,7 +210,7 @@ fn verify_highlight_reconnect(
         false,
     );
     assert_eq!(unchanged.state.active_index, Some(1));
-    send_highlight_osc(state, session, "all");
+    send_highlight_osc(state, "all");
     assert_eq!(state.programming.get(session.id).unwrap().selected, fixture_ids);
     let selection = state.programming.selection(session.id).unwrap();
     let restored = state.highlight.transition(
@@ -246,7 +246,7 @@ async fn authenticated_osc_highlight_adapter_feedback_dedupe_and_reconnect_are_a
         .unwrap();
     state.programming.select(session.id, fixture_ids.clone());
     enable_highlight_test_feedback(&state);
-    handle_control_event(&state, highlight_subscription(&session));
+    handle_control_event(&state, highlight_subscription());
     assert_eq!(
         state
             .integrations
@@ -257,7 +257,7 @@ async fn authenticated_osc_highlight_adapter_feedback_dedupe_and_reconnect_are_a
     );
     verify_cross_surface_highlight_dedupe(&state, &session, &fixture_ids);
     verify_highlight_alias_dedupe(&state, &session, &fixture_ids);
-    verify_highlight_osc_feedback(&state, &session);
+    verify_highlight_osc_feedback(&state);
     verify_highlight_reconnect(&state, &session, &fixture_ids);
     let _ = std::fs::remove_dir_all(data_dir);
 }

@@ -57,11 +57,11 @@ fn canonical_extension_highlight_feedback_tracks_active_navigation_state() {
 #[test]
 fn canonical_extension_controls_use_authoritative_output_and_playback_services() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.add_desk("Main", "main").unwrap();
+    let desk = state.installation.add_desk("Main").unwrap();
     let host = HostControlContext {
         extension_id: "de.tosklight.surface".into(),
         extension_instance_id: "main-surface".into(),
-        desk_id: desk.osc_alias.clone(),
+        desk_id: desk.id.to_string(),
         source: "native_extension",
     };
 
@@ -169,11 +169,11 @@ fn canonical_extension_controls_use_authoritative_output_and_playback_services()
 #[test]
 fn canonical_extension_surface_events_match_the_attached_hardware_desk_action_shape() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.add_desk("Main", "main").unwrap();
+    let desk = state.installation.add_desk("Main").unwrap();
     let host = HostControlContext {
         extension_id: "de.tosklight.surface".into(),
         extension_instance_id: "main-surface".into(),
-        desk_id: desk.osc_alias.clone(),
+        desk_id: desk.id.to_string(),
         source: "native_extension",
     };
     let apply = |input_id, control, intent| {
@@ -222,7 +222,7 @@ fn canonical_extension_surface_events_match_the_attached_hardware_desk_action_sh
     assert_eq!(events[1].payload["control"], "encode/2");
     assert_eq!(events[1].payload["value"], "up");
     for event in events {
-        assert_eq!(event.payload["desk_alias"], "main");
+        assert_eq!(event.payload["path"], "desk");
         assert_eq!(event.payload["desk_id"], serde_json::json!(desk.id));
         assert_eq!(event.payload["source"], "extension");
         assert!(
@@ -236,7 +236,7 @@ fn canonical_extension_surface_events_match_the_attached_hardware_desk_action_sh
 #[test]
 fn canonical_extension_programmer_highlight_and_speed_controls_use_server_authority() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.add_desk("Main", "main").unwrap();
+    let desk = state.installation.add_desk("Main").unwrap();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
@@ -251,7 +251,7 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
     let host = HostControlContext {
         extension_id: "de.tosklight.surface".into(),
         extension_instance_id: "main-surface".into(),
-        desk_id: desk.osc_alias.clone(),
+        desk_id: desk.id.to_string(),
         source: "native_extension",
     };
     let apply = |input_id, control, intent| {
@@ -441,7 +441,7 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
 #[tokio::test]
 async fn extension_programmer_keys_do_not_cross_an_active_show_transition() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.add_desk("Main", "main").unwrap();
+    let desk = state.installation.add_desk("Main").unwrap();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
@@ -456,7 +456,7 @@ async fn extension_programmer_keys_do_not_cross_an_active_show_transition() {
     let host = HostControlContext {
         extension_id: "de.tosklight.surface".into(),
         extension_instance_id: "main-surface".into(),
-        desk_id: desk.osc_alias,
+        desk_id: desk.id.to_string(),
         source: "native_extension",
     };
     let transition = state.active_show.acquire().await;
@@ -533,8 +533,8 @@ fn extension_timecode_uses_the_exact_selected_authoritative_source() {
 #[test]
 fn extension_feedback_context_isolates_desks_and_carries_show_generation() {
     let (state, data_dir) = test_state();
-    let front = state.installation.add_desk("Front", "front").unwrap();
-    let wing = state.installation.add_desk("Wing", "wing").unwrap();
+    let front = state.installation.add_desk("Front").unwrap();
+    let wing = state.installation.add_desk("Wing").unwrap();
     let show = ShowEntry {
         id: light_core::ShowId::new(),
         name: "Feedback show".into(),
@@ -546,8 +546,8 @@ fn extension_feedback_context_isolates_desks_and_carries_show_generation() {
     state.active_show.replace_current(Some(show.clone()));
     let context = |desk: &ControlDesk| HostControlContext {
         extension_id: "de.tosklight.surface".into(),
-        extension_instance_id: format!("{}-surface", desk.osc_alias),
-        desk_id: desk.osc_alias.clone(),
+        extension_instance_id: format!("{}-surface", desk.id),
+        desk_id: desk.id.to_string(),
         source: "native_extension",
     };
 

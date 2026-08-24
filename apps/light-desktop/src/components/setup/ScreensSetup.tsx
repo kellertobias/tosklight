@@ -241,11 +241,7 @@ export function ScreensSetup({
 			/>
 			<div className="screens-setup-list">
 				<DefaultScreenSettings
-					deskAlias={defaultScreen.draft?.osc_alias ?? ""}
 					keyboardShortcuts={state.regularNumberShortcuts}
-					onAlias={(alias) => defaultScreen.updateText("osc_alias", alias)}
-					onTextFocus={defaultScreen.beginTextEdit}
-					onTextBlur={defaultScreen.endTextEdit}
 					onKeyboardShortcuts={defaultScreen.updateKeyboardShortcuts}
 					onConfigurePlaybacks={() => setDefaultPlaybackModalOpen(true)}
 					onChooseDefault={() => setDefaultScreenPickerOpen(true)}

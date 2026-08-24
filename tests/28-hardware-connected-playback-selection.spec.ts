@@ -88,7 +88,7 @@ test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection
     await expect(page.locator(".playback-fader-bank")).toBeVisible();
 
     await selectPlayback(api, 41);
-    await hardware.send(`/light/${api.session!.desk.osc_alias}/page-playback/2/button/1`, [true]);
+    await hardware.send(`/light/desk/page-playback/2/button/1`, [true]);
     await expect.poll(async () => (await playbackState(api)).selected_playback).toBe(43);
   } finally {
     await disconnectHardware(hardware);
@@ -271,7 +271,7 @@ async function connectHardware(api: ApiDriver, bench: any) {
 	const hardware = await bench.osc();
 	await hardware.subscribe(
 		`playback-select-${crypto.randomUUID()}`,
-		api.session!.desk.osc_alias,
+		"desk",
 	);
 	await expect
 		.poll(

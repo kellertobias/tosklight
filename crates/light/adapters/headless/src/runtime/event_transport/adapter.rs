@@ -534,7 +534,7 @@ fn wire_operator_notification(
                 request_id: notification.request_id.clone(),
                 session_id: notification.session_id.clone(),
                 desk_id: notification.desk_id.clone(),
-                desk_alias: notification.desk_alias.clone(),
+                path: notification.path.clone(),
             },
         },
         App::FileInput {

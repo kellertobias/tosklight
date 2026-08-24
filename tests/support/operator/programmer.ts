@@ -81,7 +81,7 @@ export async function withOscProgrammer<T>(
 	if (!api.session) throw new Error("OSC programmer surface requires an API session");
 	const hardware = await bench.osc();
 	const clientId = `operator-programmer-${crypto.randomUUID()}`;
-	await hardware.subscribe(clientId, api.session.desk.osc_alias);
+	await hardware.subscribe(clientId, "desk");
 	try {
 		return await action({ via: "osc", api, hardware });
 	} finally {
@@ -179,7 +179,7 @@ async function tapOscKey(
 ): Promise<void> {
 	if (!surface.api.session) throw new Error("OSC programmer surface lost its API session");
 	const action = oscProgrammerActionForKey(key);
-	const alias = surface.api.session.desk.osc_alias;
+	const alias = "desk";
 	const address = `/light/${alias}/programmer/${action}`;
 	await sendOscPhase(surface.hardware, alias, address, true);
 	await sendOscPhase(surface.hardware, alias, address, false);

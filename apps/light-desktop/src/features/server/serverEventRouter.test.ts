@@ -17,7 +17,7 @@ import type { ServerState } from "./useServerState";
 const session = {
 	session_id: "session-1",
 	user: { id: "user-1", name: "Operator", enabled: true },
-	desk: { id: "desk-1", osc_alias: "main" },
+	desk: { id: "desk-1" },
 } as SessionResponse;
 
 function event(
@@ -38,7 +38,7 @@ function event(
 					request_id: (payload.request_id as string | undefined) ?? null,
 					session_id: (payload.session_id as string | undefined) ?? null,
 					desk_id: (payload.desk_id as string | undefined) ?? null,
-					desk_alias: (payload.desk_alias as string | undefined) ?? null,
+					path: (payload.path as string | undefined) ?? null,
 				},
 			},
 		};
@@ -380,7 +380,7 @@ describe("server event routing", () => {
 		release();
 	});
 
-	it("routes encoder and navigation controls only for the matching OSC desk", () => {
+	it("routes encoder and navigation controls for this session, whatever path they arrived on", () => {
 		const received: Array<{ control: string; value: string }> = [];
 		const listener = ((incoming: CustomEvent) => {
 			received.push(incoming.detail);
@@ -388,20 +388,19 @@ describe("server event routing", () => {
 		window.addEventListener("light:encoder-action", listener);
 		try {
 			for (const payload of [
-				{ control: "nav", value: "down", desk_alias: "other" },
 				{
 					control: "nav",
 					value: "down",
-					desk_alias: "main",
+					path: "desk",
 					session_id: "another-session",
 					desk_id: "another-desk",
 				},
-				{ control: "nav", value: "down", desk_alias: "main" },
+				{ control: "nav", value: "down", path: "desk" },
 				{
 					control: "encode/2",
 					value: "press",
 					request_id: "hardware-encoder-2",
-					desk_alias: "main",
+					path: "main",
 				},
 			])
 				routeOperatorEvent(
@@ -410,12 +409,12 @@ describe("server event routing", () => {
 					{} as ServerState,
 				);
 			expect(received).toEqual([
-				{ control: "nav", value: "down", desk_alias: "main" },
+				{ control: "nav", value: "down", path: "desk" },
 				{
 					control: "encode/2",
 					value: "press",
 					request_id: "hardware-encoder-2",
-					desk_alias: "main",
+					path: "main",
 				},
 			]);
 		} finally {
@@ -457,7 +456,7 @@ describe("server event routing", () => {
 				event("desk_action", {
 					control: "nav",
 					value: "page-up",
-					desk_alias: session.desk.osc_alias,
+					path: "desk",
 				}),
 				session,
 				{} as ServerState,

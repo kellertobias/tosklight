@@ -284,7 +284,7 @@ function session(deskId = DESK_ID): Session {
 		client_id: "client",
 		token: "token",
 		user: { id: USER_ID, name: "Operator" },
-		desk: { id: deskId, osc_alias: "main" },
+		desk: { id: deskId },
 	};
 }
 

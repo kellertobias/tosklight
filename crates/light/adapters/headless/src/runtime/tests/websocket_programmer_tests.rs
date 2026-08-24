@@ -100,7 +100,7 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
         "home",
         state.output.frame_rate_hz(),
         OscActionFeedback {
-            desk_alias: "main".into(),
+            path: "main".into(),
             target: "127.0.0.1:9010".parse().unwrap(),
         },
     );

@@ -385,7 +385,7 @@ pub struct DeskActionNotification {
     pub request_id: Option<String>,
     pub session_id: Option<String>,
     pub desk_id: Option<String>,
-    pub desk_alias: Option<String>,
+    pub path: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

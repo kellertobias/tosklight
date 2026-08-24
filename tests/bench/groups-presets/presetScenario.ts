@@ -430,7 +430,7 @@ export class BrowserPresets {
 	private async sendOsc(keys: string[]) {
 		if (!this.hardware.connected)
 			throw new Error("Preset OSC route requires hardware.connect()");
-		const alias = this.session().desk.osc_alias;
+		const alias = "desk";
 		for (const key of keys) {
 			const mark = this.hardware.mark();
 			await this.hardware.send(`/light/${alias}/programmer/${key}`, [true]);
