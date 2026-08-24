@@ -12,12 +12,11 @@ impl ProgrammingService {
         context: &crate::ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPrioritySnapshot, ActionError> {
-        let (session, user_id) = priority_identity(context)?;
-        // Whatever identity arrived, this session operates the desk's one Programmer.
-        let user_id = self.programmers.desk_user_for(session, user_id);
-        self.with_user_and_desk_gate(context.desk_id, user_id, || {
+        // The identity must be there; which identity it is no longer selects anything.
+        let (session, _) = priority_identity(context)?;
+        self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize(context)?;
-            let user_id = self.operated_priority_owner(session, user_id)?;
+            let user_id = self.operated_priority_owner(session)?;
             let event_sequence = self.events.latest_sequence();
             let revision = self.programmers.priority_revision();
             Ok(ProgrammingPrioritySnapshot {
@@ -32,12 +31,11 @@ impl ProgrammingService {
         action: ActionEnvelope<ProgrammingPriorityRequest>,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPriorityResult, ActionError> {
-        let (session, user_id, request_id) = priority_context(&action)?;
-        // Whatever identity arrived, this session operates the desk's one Programmer.
-        let user_id = self.programmers.desk_user_for(session, user_id);
-        self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
+        // The identity must be there; which identity it is no longer selects anything.
+        let (session, _, request_id) = priority_context(&action)?;
+        self.with_programmer_and_desk_gate(action.context.desk_id, || {
             ports.authorize_programming_change(&action.context)?;
-            let user_id = self.operated_priority_owner(session, user_id)?;
+            let user_id = self.operated_priority_owner(session)?;
             if let Some(cached) = self.priority_replay.lock().get(
                 user_id,
                 action.context.desk_id,
@@ -93,17 +91,10 @@ impl ProgrammingService {
         })
     }
 
-    /// The desk identity this session operates, given whatever identity it presented.
-    ///
-    /// Returned rather than merely checked: the presented identity may be a legacy one, which
-    /// names no revision and no priority. Callers must key desk state on what comes back.
-    fn operated_priority_owner(
-        &self,
-        session: SessionId,
-        user_id: UserId,
-    ) -> Result<UserId, ActionError> {
+    /// The desk identity this session operates.
+    fn operated_priority_owner(&self, session: SessionId) -> Result<UserId, ActionError> {
         self.programmers
-            .operated_desk_user(session, user_id)
+            .operated_desk_user(session)
             .ok_or_else(priority_unavailable)
     }
 

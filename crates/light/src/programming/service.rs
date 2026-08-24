@@ -189,7 +189,7 @@ impl ProgrammingService {
     ) -> Result<ProgrammingResult, ActionError> {
         let session = required_session(&action)?;
         let user_id = context_user(&action.context)?;
-        self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
+        self.with_programmer_and_desk_gate(action.context.desk_id, || {
             self.handle_locked(&action, session, user_id, ports)
         })
     }
@@ -221,7 +221,7 @@ impl ProgrammingService {
                 "Programming sequence must retain one desk, user, and session context",
             ));
         }
-        self.with_user_and_desk_gate(first.context.desk_id, user_id, || {
+        self.with_programmer_and_desk_gate(first.context.desk_id, || {
             let mut results = Vec::with_capacity(actions.len());
             for action in actions {
                 if !before_each() {

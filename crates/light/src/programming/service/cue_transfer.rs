@@ -43,7 +43,7 @@ impl ProgrammingService {
         ports: &P,
     ) -> Result<ProgrammingCueTransferResult, ActionError> {
         let identity = transfer_identity(&envelope.context)?;
-        self.with_user_and_desk_gate(identity.scope.desk_id, identity.scope.user_id, || {
+        self.with_programmer_and_desk_gate(identity.scope.desk_id, || {
             self.handle_transfer_locked(envelope, active_show, ports, identity)
         })
     }

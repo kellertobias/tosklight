@@ -48,7 +48,6 @@ const mocks = vi.hoisted(() => ({
     loadFromVisualizer: vi.fn(),
     initializeEmptyShow: vi.fn(),
     saveScreen: vi.fn(),
-    createUser: vi.fn(),
     changeUser: vi.fn(),
     shutdownServer: vi.fn(),
     previewMvr: vi.fn(),

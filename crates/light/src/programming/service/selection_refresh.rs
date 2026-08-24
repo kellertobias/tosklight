@@ -56,7 +56,7 @@ impl ProgrammingService {
         } else {
             std::slice::from_ref(&interaction.0)
         };
-        self.programmers.with_users_serialized(users.clone(), || {
+        self.programmers.serialized(|| {
             self.with_desk_gates(desk_gates, || {
                 self.run_locked_selection_refresh(
                     context,

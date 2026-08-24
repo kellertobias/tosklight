@@ -114,7 +114,7 @@ pub enum CommandLineReplaceError {
 
 impl ProgrammerRegistry {
     pub fn interaction_version(&self, session: SessionId) -> Option<ProgrammerInteractionVersion> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.interaction_version_while_gated(session)
     }
@@ -145,7 +145,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn interaction_state(&self, session: SessionId) -> Option<ProgrammerInteractionState> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.interaction_state_while_gated(session)
     }
@@ -208,7 +208,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn set_command_line(&self, session: SessionId, command_line: String) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.update_command_line(session, |current| {
             let pristine = command_line.trim().is_empty()
@@ -239,7 +239,7 @@ impl ProgrammerRegistry {
         expected_revision: u64,
         text: String,
     ) -> Result<CommandLineState, CommandLineReplaceError> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return Err(CommandLineReplaceError::UnknownSession);
@@ -273,7 +273,7 @@ impl ProgrammerRegistry {
     where
         F: FnOnce(&CommandLineState) -> (String, CommandTarget, bool),
     {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return None;
@@ -312,7 +312,7 @@ impl ProgrammerRegistry {
         final_text: Option<&str>,
         pending_choice: Option<PendingCommandChoice>,
     ) -> Option<CommandLineState> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return None;
@@ -382,7 +382,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn set_command_target(&self, session: SessionId, target: String) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let Ok(target) = CommandTarget::try_from(target.as_str()) else {
             return false;

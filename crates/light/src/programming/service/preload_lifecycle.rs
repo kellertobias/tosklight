@@ -26,7 +26,7 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPreloadLifecyclePorts,
     ) -> Result<ProgrammingPreloadLifecycleResult, ActionError> {
         let identity = lifecycle_identity(&action)?;
-        self.with_user_and_desk_gate(action.context.desk_id, identity.user_id, || {
+        self.with_programmer_and_desk_gate(action.context.desk_id, || {
             self.apply_preload_lifecycle(action, ports, identity)
         })
     }

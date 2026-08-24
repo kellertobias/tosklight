@@ -70,7 +70,6 @@ export type SoundObservation = { captured_at_millis: number, source_available: b
 export type DeskLockConfigurationUpdateRequest = { request_id: string, message: string, wallpaper?: string | null, unlock_mode: DeskUnlockMode, pin?: string | null, };
 export type DeskUnlockMode = "button" | "pin";
 export type DeskUnlockRequest = { pin?: string | null, };
-export type UserCreateRequest = { request_id: string, name: string, enabled: boolean, };
 export type DiscoveredRole = "desk" | "editor";
 export type DiscoveredPeer = { role: DiscoveredRole,
 /**

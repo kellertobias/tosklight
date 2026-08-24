@@ -24,12 +24,11 @@ impl ProgrammingService {
         action: ActionEnvelope<ProgrammingValuesRequest>,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingValuesResult, ActionError> {
-        let (session, user_id, request_id, expected_revision) = values_context(&action)?;
-        // Whatever identity arrived, this session operates the desk's one Programmer.
-        let user_id = self.programmers.desk_user_for(session, user_id);
-        self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
+        // The identity must be there; which identity it is no longer selects anything.
+        let (session, _, request_id, expected_revision) = values_context(&action)?;
+        self.with_programmer_and_desk_gate(action.context.desk_id, || {
             ports.authorize_programming_change(&action.context)?;
-            let user_id = self.operated_values_owner(session, user_id)?;
+            let user_id = self.operated_values_owner(session)?;
             let fingerprint = values_request_fingerprint(expected_revision, &action.command);
             if let Some(cached) = self.cached_values(
                 user_id,
@@ -319,20 +318,14 @@ impl ProgrammingService {
         }
     }
 
-    /// The Programmer this session operates, given whatever identity it presented.
-    fn operated_values_owner(
-        &self,
-        session: SessionId,
-        user_id: UserId,
-    ) -> Result<UserId, ActionError> {
-        self.programmers
-            .operated_desk_user(session, user_id)
-            .ok_or_else(|| {
-                ActionError::new(
-                    ActionErrorKind::NotFound,
-                    "Programmer values are unavailable",
-                )
-            })
+    /// The Programmer this session operates.
+    fn operated_values_owner(&self, session: SessionId) -> Result<UserId, ActionError> {
+        self.programmers.operated_desk_user(session).ok_or_else(|| {
+            ActionError::new(
+                ActionErrorKind::NotFound,
+                "Programmer values are unavailable",
+            )
+        })
     }
 
     fn assert_values_revision(&self, expected: u64) -> Result<(), ActionError> {

@@ -26,21 +26,16 @@ impl ProgrammingCaptureModeProjection {
     pub(super) fn read(
         programmers: &ProgrammerRegistry,
         session: SessionId,
-        user_id: UserId,
     ) -> Result<Self, ActionError> {
         let mode = programmers
             .capture_mode(session)
             .ok_or_else(capture_mode_unavailable)?;
-        // Report the desk's Programmer, not the identity the caller happened to present: a legacy
-        // identity names no capture mode and no revision.
-        let user_id = programmers
-            .operated_desk_user(session, user_id)
-            .ok_or_else(|| {
-                ActionError::new(
-                    ActionErrorKind::Forbidden,
-                    "the session does not operate this desk",
-                )
-            })?;
+        let user_id = programmers.operated_desk_user(session).ok_or_else(|| {
+            ActionError::new(
+                ActionErrorKind::Forbidden,
+                "the session does not operate this desk",
+            )
+        })?;
         Ok(Self::from_mode(
             user_id,
             programmers.capture_mode_revision(),
@@ -82,16 +77,14 @@ impl ProgrammingService {
         context: &ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingCaptureModeSnapshot, ActionError> {
-        let (session, user_id) = capture_identity(context)?;
-        // Whatever identity arrived, this session operates the desk's one Programmer.
-        let user_id = self.programmers.desk_user_for(session, user_id);
-        self.with_user_and_desk_gate(context.desk_id, user_id, || {
+        // The identity must be there; which identity it is no longer selects anything.
+        let (session, _) = capture_identity(context)?;
+        self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize(context)?;
             // A cursor captured before the immutable projection can permit a duplicate after
-            // repair, but cannot miss a same-user transition serialized by this user gate.
+            // repair, but cannot miss a transition serialized by this gate.
             let event_sequence = self.events.latest_sequence();
-            let projection =
-                ProgrammingCaptureModeProjection::read(&self.programmers, session, user_id)?;
+            let projection = ProgrammingCaptureModeProjection::read(&self.programmers, session)?;
             Ok(ProgrammingCaptureModeSnapshot {
                 event_sequence,
                 projection,

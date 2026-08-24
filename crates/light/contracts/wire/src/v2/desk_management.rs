@@ -365,18 +365,6 @@ pub struct DeskUnlockRequest {
     pub pin: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct UserCreateRequest {
-    pub request_id: String,
-    pub name: String,
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-}
-
-fn default_true() -> bool {
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

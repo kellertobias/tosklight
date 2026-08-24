@@ -80,7 +80,7 @@ impl ProgrammerRegistry {
     /// Show-object redo is deliberately unsupported: replaying a historical whole-object body
     /// after newer edits would violate the active show's revision boundary.
     pub fn clear_redo(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -92,7 +92,7 @@ impl ProgrammerRegistry {
     }
 
     pub fn undo(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let (selected, expression, values_changed, preload_values_changed, queue_changed) = {
             let mut states = self.states.write();
@@ -142,7 +142,7 @@ impl ProgrammerRegistry {
         true
     }
     pub fn redo(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let (selected, expression, values_changed, preload_values_changed, queue_changed) = {
             let mut states = self.states.write();

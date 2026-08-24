@@ -35,11 +35,8 @@ async fn values_action_from_screen(
     expected_revision: u64,
     fixture: Uuid,
 ) -> Response {
-    let mut request = Request::post(format!(
-        "/api/v2/users/{}/programmer-values/actions",
-        scenario.session.user.id.0
-    ))
-    .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+    let mut request = Request::post("/api/v2/programmer/values/actions")
+        .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
     .header(header::CONTENT_TYPE, "application/json");
     if let Some(screen_id) = screen_id {
         request = request.header("x-tosk-screen", screen_id.to_string());
@@ -106,11 +103,8 @@ async fn a_not_editable_screen_still_reads_the_desk_and_operates_playback() {
         .app
         .clone()
         .oneshot(
-            Request::get(format!(
-                "/api/v2/users/{}/programmer-values/snapshot",
-                scenario.session.user.id.0
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+            Request::get("/api/v2/programmer/values/snapshot")
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
             .header("x-tosk-screen", read_only.to_string())
             .body(Body::empty())
             .unwrap(),
@@ -247,7 +241,7 @@ async fn an_unrecognised_command_is_refused_from_a_not_editable_screen() {
 }
 
 #[tokio::test]
-async fn the_programmer_answers_on_canonical_routes_and_on_the_ones_that_named_a_user() {
+async fn the_programmer_answers_on_its_canonical_routes_and_the_named_user_ones_are_gone() {
     let scenario = CommandHttpScenario::new().await;
     let fixture = scenario.install_direct_fixture();
     let user = scenario.session.user.id.0;
@@ -269,30 +263,34 @@ async fn the_programmer_answers_on_canonical_routes_and_on_the_ones_that_named_a
         .unwrap();
     assert_eq!(canonical.status(), StatusCode::OK);
 
-    // The route as it was named when a desk could hold several Programmers reaches the same one,
-    // and continues its revision rather than starting again.
-    let compatibility = scenario
+    let snapshot = scenario
         .app
         .clone()
         .oneshot(
-            Request::post(format!("/api/v2/users/{user}/programmer-values/actions"))
+            Request::get("/api/v2/programmer/values/snapshot")
                 .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    fixture_set_request("compatibility", 1, fixture.0, 0.9).to_string(),
-                ))
+                .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(compatibility.status(), StatusCode::OK);
+    assert_eq!(snapshot.status(), StatusCode::OK);
+    let snapshot = json(snapshot).await;
+    assert_eq!(snapshot["projection"]["revision"], 1);
+    assert_eq!(
+        snapshot["projection"]["fixture_values"][0]["value"]["value"],
+        0.4
+    );
 
-    // Both routes read back the same Programmer.
+    // The routes that named whose Programmer it was are retired. They answered the one Programmer
+    // for as long as saved configuration might still have carried an identity; nothing does.
     for path in [
-        "/api/v2/programmer/values/snapshot".to_owned(),
         format!("/api/v2/users/{user}/programmer-values/snapshot"),
+        format!("/api/v2/users/{user}/programmer-capture-mode/snapshot"),
+        format!("/api/v2/users/{user}/programmer-priority/snapshot"),
+        format!("/api/v2/users/{user}/programmer-preload-values/snapshot"),
     ] {
-        let snapshot = scenario
+        let retired = scenario
             .app
             .clone()
             .oneshot(
@@ -303,30 +301,8 @@ async fn the_programmer_answers_on_canonical_routes_and_on_the_ones_that_named_a
             )
             .await
             .unwrap();
-        assert_eq!(snapshot.status(), StatusCode::OK, "{path}");
-        let snapshot = json(snapshot).await;
-        assert_eq!(snapshot["projection"]["revision"], 2, "{path}");
-        assert_eq!(
-            snapshot["projection"]["fixture_values"][0]["value"]["value"],
-            0.9,
-            "{path}"
-        );
+        assert_eq!(retired.status(), StatusCode::NOT_FOUND, "{path}");
     }
-
-    // A compatibility route still refuses an identity that is not a UUID: a malformed one is a
-    // client bug, not an older client.
-    let malformed = scenario
-        .app
-        .clone()
-        .oneshot(
-            Request::get("/api/v2/users/not-a-uuid/programmer-values/snapshot")
-                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

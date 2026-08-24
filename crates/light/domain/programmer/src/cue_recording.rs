@@ -90,7 +90,7 @@ impl ProgrammerRegistry {
         session: SessionId,
         source: CueRecordingSource,
     ) -> Result<CueRecordingCapture, CueRecordingCaptureError> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let key = self.key(session);
         let states = self.states.read();

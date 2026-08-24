@@ -23,7 +23,7 @@ impl ProgrammingService {
         ports: &dyn GroupManagementPorts,
     ) -> Result<GroupManagementResult, ActionError> {
         let identity = management_identity(&envelope)?;
-        self.with_user_and_desk_gate(envelope.context.desk_id, identity.user_id, || {
+        self.with_programmer_and_desk_gate(envelope.context.desk_id, || {
             self.apply_group_management(envelope, ports, identity)
         })
     }

@@ -21,8 +21,8 @@ fn rejected_transaction_rolls_back_before_another_connections_mutation_can_run()
     );
     registry.set_command_line(transaction_session, "FIXTURE 1".into());
 
-    let transaction_gate = registry.mutation_gate(transaction_session);
-    let concurrent_gate = registry.mutation_gate(concurrent_session);
+    let transaction_gate = registry.mutation_gate();
+    let concurrent_gate = registry.mutation_gate();
     assert!(Arc::ptr_eq(&transaction_gate, &concurrent_gate));
 
     let (transaction_entered_tx, transaction_entered_rx) = mpsc::channel();
@@ -281,14 +281,14 @@ fn projected_reads_cannot_mix_old_state_with_a_staged_commit() {
 #[test]
 fn unknown_sessions_share_one_fallback_gate_without_growing_the_user_registry() {
     let registry = ProgrammerRegistry::default();
-    let first = registry.mutation_gate(SessionId::new());
+    let first = registry.mutation_gate();
     for _ in 0..1_000 {
         let session = SessionId::new();
         assert!(!registry.clear(session));
-        assert!(Arc::ptr_eq(&first, &registry.mutation_gate(session)));
+        assert!(Arc::ptr_eq(&first, &registry.mutation_gate()));
     }
     // One desk, one gate: it exists from construction rather than appearing per user.
-    let _ = registry.mutation_gate(SessionId::new());
+    let _ = registry.mutation_gate();
 }
 
 #[test]
@@ -300,11 +300,11 @@ fn reset_preserves_the_per_user_gate_across_session_aliases() {
     registry.start(first_session, user);
     registry.start(alias_session, user);
 
-    let before = registry.mutation_gate(alias_session);
+    let before = registry.mutation_gate();
     registry.reset_all();
 
     let restored_session = SessionId::new();
     registry.start(restored_session, user);
-    let after = registry.mutation_gate(restored_session);
+    let after = registry.mutation_gate();
     assert!(Arc::ptr_eq(&before, &after));
 }

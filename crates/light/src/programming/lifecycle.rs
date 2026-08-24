@@ -80,9 +80,8 @@ impl ProgrammingService {
         operation: impl FnOnce() -> ProgrammingLifecycleCompletion<T>,
     ) -> Result<ProgrammingLifecycleResult<T>, ActionError> {
         ports.authorize_programming_change(actor_context)?;
-        let user_id = target.user_id;
         let desk_ids = target.desk_ids.clone();
-        self.programmers.with_user_serialized(user_id, || {
+        self.programmers.serialized(|| {
             self.with_desk_gates(&desk_ids, || {
                 self.replace_user_programmer_locked(actor_context, target, operation)
             })

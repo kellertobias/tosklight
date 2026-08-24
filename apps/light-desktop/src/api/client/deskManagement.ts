@@ -9,7 +9,6 @@ import type {
 	SoundToLightConfiguration,
 	SpeedGroupLiveActionRequest,
 	SpeedGroupSettingsUpdateRequest,
-	UserCreateRequest,
 } from "../generated/light-wire";
 import {
 	decodeSpeedGroupActionOutcome,
@@ -19,7 +18,6 @@ import type {
 	CommandHistoryEntry,
 	DeskConfiguration,
 	DeskLockState,
-	DeskUser,
 	MatterBridgeStatus,
 	OutputHealth,
 	PoolPresentationConfiguration,
@@ -286,19 +284,6 @@ export class DeskManagementApiClient {
 
 	commandHistory(): Promise<CommandHistoryEntry[]> {
 		return this.transport.request("/api/v2/command-history");
-	}
-
-	async createUser(name: string): Promise<DeskUser> {
-		const request: UserCreateRequest = {
-			request_id: crypto.randomUUID(),
-			name,
-			enabled: true,
-		};
-		const response = await this.transport.request<{ user: DeskUser }>(
-			"/api/v2/users/create",
-			jsonRequest("POST", request),
-		);
-		return response.user;
 	}
 
 	auditEvents(after = 0) {

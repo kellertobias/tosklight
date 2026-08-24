@@ -134,14 +134,12 @@ impl CommandHttpScenario {
     }
 
     async fn values_snapshot(&self) -> Response {
-        self.values_snapshot_for(self.session.user.id.0, Some(&self.token))
+        self.values_snapshot_for( Some(&self.token))
             .await
     }
 
-    async fn values_snapshot_for(&self, user_id: Uuid, token: Option<&str>) -> Response {
-        let mut request = Request::get(format!(
-            "/api/v2/users/{user_id}/programmer-values/snapshot"
-        ));
+    async fn values_snapshot_for(&self, token: Option<&str>) -> Response {
+        let mut request = Request::get("/api/v2/programmer/values/snapshot");
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -153,14 +151,12 @@ impl CommandHttpScenario {
     }
 
     async fn capture_mode_snapshot(&self) -> Response {
-        self.capture_mode_snapshot_for(self.session.user.id.0, Some(&self.token))
+        self.capture_mode_snapshot_for( Some(&self.token))
             .await
     }
 
-    async fn capture_mode_snapshot_for(&self, user_id: Uuid, token: Option<&str>) -> Response {
-        let mut request = Request::get(format!(
-            "/api/v2/users/{user_id}/programmer-capture-mode/snapshot"
-        ));
+    async fn capture_mode_snapshot_for(&self, token: Option<&str>) -> Response {
+        let mut request = Request::get("/api/v2/programmer/capture-mode/snapshot");
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -184,22 +180,19 @@ impl CommandHttpScenario {
     }
 
     async fn values_action(&self, input: serde_json::Value) -> Response {
-        self.values_action_for(self.session.user.id.0, &self.token, input)
+        self.values_action_for( &self.token, input)
             .await
     }
 
     async fn values_action_for(
         &self,
-        user_id: Uuid,
         token: &str,
         input: serde_json::Value,
     ) -> Response {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/users/{user_id}/programmer-values/actions"
-                ))
+                Request::post("/api/v2/programmer/values/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(input.to_string()))
@@ -209,10 +202,8 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
-    async fn priority_snapshot_for(&self, user_id: Uuid, token: Option<&str>) -> Response {
-        let mut request = Request::get(format!(
-            "/api/v2/users/{user_id}/programmer-priority/snapshot"
-        ));
+    async fn priority_snapshot_for(&self, token: Option<&str>) -> Response {
+        let mut request = Request::get("/api/v2/programmer/priority/snapshot");
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -225,16 +216,13 @@ impl CommandHttpScenario {
 
     async fn priority_action_for(
         &self,
-        user_id: Uuid,
         token: &str,
         input: serde_json::Value,
     ) -> Response {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/users/{user_id}/programmer-priority/actions"
-                ))
+                Request::post("/api/v2/programmer/priority/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(input.to_string()))
@@ -268,14 +256,12 @@ impl CommandHttpScenario {
     }
 
     async fn preload_values_snapshot(&self) -> Response {
-        self.preload_values_snapshot_for(self.session.user.id.0, Some(&self.token))
+        self.preload_values_snapshot_for( Some(&self.token))
             .await
     }
 
-    async fn preload_values_snapshot_for(&self, user_id: Uuid, token: Option<&str>) -> Response {
-        let mut request = Request::get(format!(
-            "/api/v2/users/{user_id}/programmer-preload-values/snapshot"
-        ));
+    async fn preload_values_snapshot_for(&self, token: Option<&str>) -> Response {
+        let mut request = Request::get("/api/v2/programmer/preload-values/snapshot");
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -287,18 +273,15 @@ impl CommandHttpScenario {
     }
 
     async fn preload_playback_queue_snapshot(&self) -> Response {
-        self.preload_playback_queue_snapshot_for(self.session.user.id.0, Some(&self.token))
+        self.preload_playback_queue_snapshot_for( Some(&self.token))
             .await
     }
 
     async fn preload_playback_queue_snapshot_for(
         &self,
-        user_id: Uuid,
         token: Option<&str>,
     ) -> Response {
-        let mut request = Request::get(format!(
-            "/api/v2/users/{user_id}/programmer-preload-playback-queue/snapshot"
-        ));
+        let mut request = Request::get("/api/v2/programmer/preload-playback-queue/snapshot");
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -310,22 +293,19 @@ impl CommandHttpScenario {
     }
 
     async fn preload_values_action(&self, input: serde_json::Value) -> Response {
-        self.preload_values_action_for(self.session.user.id.0, &self.token, input)
+        self.preload_values_action_for( &self.token, input)
             .await
     }
 
     async fn preload_values_action_for(
         &self,
-        user_id: Uuid,
         token: &str,
         input: serde_json::Value,
     ) -> Response {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/users/{user_id}/programmer-preload-values/actions"
-                ))
+                Request::post("/api/v2/programmer/preload-values/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(input.to_string()))
@@ -336,22 +316,19 @@ impl CommandHttpScenario {
     }
 
     async fn preload_lifecycle_action(&self, input: serde_json::Value) -> Response {
-        self.preload_lifecycle_action_for(self.session.user.id.0, &self.token, input)
+        self.preload_lifecycle_action_for( &self.token, input)
             .await
     }
 
     async fn preload_lifecycle_action_for(
         &self,
-        user_id: Uuid,
         token: &str,
         input: serde_json::Value,
     ) -> Response {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/users/{user_id}/programmer-preload/actions"
-                ))
+                Request::post("/api/v2/programmer/preload/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(input.to_string()))

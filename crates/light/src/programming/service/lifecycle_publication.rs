@@ -21,7 +21,7 @@ impl ProgrammingService {
         user_id: UserId,
         operation: impl FnOnce() -> T,
     ) -> T {
-        self.programmers.with_user_serialized(user_id, || {
+        self.programmers.serialized(|| {
             let before = self.active_lifecycle_programmer(user_id);
             let output = operation();
             self.publish_lifecycle_for_user(context, user_id, before);

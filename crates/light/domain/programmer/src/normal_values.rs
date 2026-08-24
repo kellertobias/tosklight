@@ -69,7 +69,7 @@ impl ProgrammerRegistry {
         mutations: &[NormalProgrammerValueMutation],
         undo_group: Option<&str>,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();
@@ -109,7 +109,7 @@ impl ProgrammerRegistry {
     /// Clear only recordable fixture and Group values. Preload and transient actions are not part
     /// of this boundary and remain untouched.
     pub fn clear_normal_values(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();
@@ -146,7 +146,7 @@ impl ProgrammerRegistry {
         mutations: &[NormalProgrammerValueMutation],
         active_context: String,
     ) -> Option<NormalPresetRecallTransition> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();

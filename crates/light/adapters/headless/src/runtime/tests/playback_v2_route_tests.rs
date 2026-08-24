@@ -1911,7 +1911,7 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
     assert_eq!(replay["replayed"], true);
     assert_eq!(preload_queue_events(&state).len(), 1);
 
-    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token)).await).await;
     assert_eq!(snapshot["projection"]["revision"], 1);
     assert_eq!(
         snapshot["projection"]["actions"],
@@ -1936,7 +1936,7 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
     assert_ne!(setting_value(&state, &active_key), "active-sentinel");
     assert_eq!(setting_value(&state, &output_key), "output-sentinel");
     assert_eq!(preload_queue_events(&state).len(), 2);
-    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token)).await).await;
     assert_eq!(snapshot["projection"]["revision"], 2);
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(data_dir);
@@ -1989,7 +1989,7 @@ async fn all_no_op_preload_batch_drains_without_runtime_event_or_persistence() {
 
     assert!(playback_event_objects(&state, cursor).is_empty());
     assert_runtime_sentinels(&state, &active_key, &output_key);
-    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token)).await).await;
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -2070,7 +2070,7 @@ async fn transient_preload_cancellation_drains_without_runtime_event_or_persiste
             .count(),
         exclusion_count
     );
-    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token)).await).await;
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -2203,7 +2203,7 @@ async fn preload_hidden_addressed_change_emits_one_equal_projection_event() {
     .await;
 
     assert_eq!(playback_event_objects(&state, cursor), vec![1]);
-    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token)).await).await;
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -2243,7 +2243,7 @@ async fn failed_preload_go_rolls_back_queue_generation_and_emits_no_projection()
 
     assert_preload_key(&app, &token, session.desk.id, "failed-queue-go", "rejected").await;
     assert_eq!(preload_queue_events(&state).len(), 1);
-    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token)).await).await;
     assert_eq!(snapshot["projection"]["revision"], 1);
     assert_eq!(
         snapshot["projection"]["actions"].as_array().unwrap().len(),
@@ -2388,10 +2388,8 @@ async fn assert_preload_key(
     response
 }
 
-async fn preload_queue_snapshot(app: &Router, token: Option<&str>, user_id: Uuid) -> Response {
-    let mut request = Request::get(format!(
-        "/api/v2/users/{user_id}/programmer-preload-playback-queue/snapshot"
-    ));
+async fn preload_queue_snapshot(app: &Router, token: Option<&str>) -> Response {
+    let mut request = Request::get("/api/v2/programmer/preload-playback-queue/snapshot");
     if let Some(token) = token {
         request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }

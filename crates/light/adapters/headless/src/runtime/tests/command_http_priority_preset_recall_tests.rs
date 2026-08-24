@@ -3,7 +3,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     let scenario = CommandHttpScenario::new().await;
     let user_id = scenario.session.user.id.0;
     let initial = scenario
-        .priority_snapshot_for(user_id, Some(&scenario.token))
+        .priority_snapshot_for( Some(&scenario.token))
         .await;
     assert_eq!(initial.status(), StatusCode::OK);
     assert_eq!(initial.headers()[header::ETAG], "\"0\"");
@@ -14,13 +14,13 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     // A URL naming an identity from before the collapse reads the desk's own Programmer.
     assert_eq!(
         scenario
-            .priority_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
+            .priority_snapshot_for( Some(&scenario.token))
             .await
             .status(),
         StatusCode::OK
     );
     assert_eq!(
-        scenario.priority_snapshot_for(user_id, None).await.status(),
+        scenario.priority_snapshot_for( None).await.status(),
         StatusCode::UNAUTHORIZED
     );
 
@@ -39,7 +39,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     let activation = scenario.state.active_show.acquire().await;
     let response = tokio::time::timeout(
         std::time::Duration::from_secs(1),
-        scenario.priority_action_for(user_id, &scenario.token, request.clone()),
+        scenario.priority_action_for( &scenario.token, request.clone()),
     )
     .await
     .expect("user-owned priority must remain available while the active Show changes");
@@ -60,7 +60,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     );
 
     let peer = scenario
-        .priority_snapshot_for(second_user, Some(&second_token))
+        .priority_snapshot_for( Some(&second_token))
         .await;
     let peer: light_wire::v2::programmer_priority::ProgrammerPrioritySnapshot =
         serde_json::from_value(json(peer).await).unwrap();
@@ -69,7 +69,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     let event_count = priority_event_count(&scenario.state);
     assert_eq!(event_count, 1);
     let replay = scenario
-        .priority_action_for(user_id, &scenario.token, request)
+        .priority_action_for( &scenario.token, request)
         .await;
     let replay: light_wire::v2::programmer_priority::ProgrammerPriorityActionOutcome =
         serde_json::from_value(json(replay).await).unwrap();
@@ -81,15 +81,12 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     );
 
     let no_change = scenario
-        .priority_action_for(
-            user_id,
-            &second_token,
+        .priority_action_for(            &second_token,
             serde_json::json!({
                 "request_id":"priority-http-no-change",
                 "expected_revision":1,
                 "priority":75,
-            }),
-        )
+            }))
         .await;
     let no_change: light_wire::v2::programmer_priority::ProgrammerPriorityActionOutcome =
         serde_json::from_value(json(no_change).await).unwrap();
@@ -100,15 +97,12 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     assert_eq!(priority_event_count(&scenario.state), event_count);
 
     let conflict = scenario
-        .priority_action_for(
-            user_id,
-            &scenario.token,
+        .priority_action_for(            &scenario.token,
             serde_json::json!({
                 "request_id":"priority-http-conflict",
                 "expected_revision":0,
                 "priority":30,
-            }),
-        )
+            }))
         .await;
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
     assert_eq!(json(conflict).await["current_revision"], 1);
@@ -117,15 +111,12 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
     // A URL naming an identity from before the collapse sets the desk's own priority, and is
     // held to the desk's revision like any other surface.
     let legacy = scenario
-        .priority_action_for(
-            Uuid::new_v4(),
-            &scenario.token,
+        .priority_action_for(            &scenario.token,
             serde_json::json!({
                 "request_id":"priority-http-legacy",
                 "expected_revision":1,
                 "priority":20,
-            }),
-        )
+            }))
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
     assert_eq!(json(legacy).await["projection"]["priority"], 20);

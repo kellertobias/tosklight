@@ -58,7 +58,7 @@ impl ProgrammerRegistry {
         if mutations.is_empty() {
             return false;
         }
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();
@@ -115,7 +115,7 @@ impl ProgrammerRegistry {
         if fixtures.is_empty() && groups.is_empty() {
             return false;
         }
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();

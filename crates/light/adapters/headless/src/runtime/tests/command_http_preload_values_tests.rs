@@ -12,11 +12,11 @@ async fn preload_values_snapshot_is_exact_user_owned_and_empty_before_capture() 
 
     // A URL naming an identity from before the collapse reads the desk's own Programmer.
     let legacy = scenario
-        .preload_values_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
+        .preload_values_snapshot_for( Some(&scenario.token))
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
     let missing = scenario
-        .preload_values_snapshot_for(scenario.session.user.id.0, None)
+        .preload_values_snapshot_for( None)
         .await;
     assert_eq!(missing.status(), StatusCode::UNAUTHORIZED);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -149,11 +149,8 @@ async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
     assert_eq!(second_user, scenario.session.user.id.0);
 
     let peer = scenario
-        .preload_values_action_for(
-            second_user,
-            &second_token,
-            preload_fixture_request("peer-preload", 0, 1, fixture.0, 0.4),
-        )
+        .preload_values_action_for(            &second_token,
+            preload_fixture_request("peer-preload", 0, 1, fixture.0, 0.4))
         .await;
     assert_eq!(peer.status(), StatusCode::OK);
     let peer = json(peer).await;
@@ -183,11 +180,8 @@ async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
     .await;
     assert_eq!(logged_in_user, legacy_user.id.0);
     let legacy = scenario
-        .preload_values_action_for(
-            legacy_user.id.0,
-            &legacy_token,
-            preload_fixture_request("legacy-preload", 1, 1, fixture.0, 0.9),
-        )
+        .preload_values_action_for(            &legacy_token,
+            preload_fixture_request("legacy-preload", 1, 1, fixture.0, 0.9))
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
     let legacy = json(legacy).await;
@@ -214,11 +208,8 @@ async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
 
     // A stale revision is still refused, which is what protects concurrent surfaces.
     let stale = scenario
-        .preload_values_action_for(
-            scenario.session.user.id.0,
-            &scenario.token,
-            preload_fixture_request("stale-preload", 1, 1, fixture.0, 0.8),
-        )
+        .preload_values_action_for(            &scenario.token,
+            preload_fixture_request("stale-preload", 1, 1, fixture.0, 0.8))
         .await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     let _ = std::fs::remove_dir_all(scenario.data_dir);

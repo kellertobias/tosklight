@@ -12,7 +12,7 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_with_fade(session, fixture_id, attribute, value, false);
     }
@@ -25,7 +25,7 @@ impl ProgrammerRegistry {
         session: SessionId,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_many_with_checkpoint(session, assignments, true, ProgrammerValueTiming::default());
     }
@@ -38,7 +38,7 @@ impl ProgrammerRegistry {
         fade_millis: Option<u64>,
         delay_millis: Option<u64>,
     ) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_many_with_checkpoint(
             session,
@@ -60,7 +60,7 @@ impl ProgrammerRegistry {
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
         delay_millis: Option<u64>,
     ) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_many_with_checkpoint(
             session,
@@ -82,7 +82,7 @@ impl ProgrammerRegistry {
         session: SessionId,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_many_with_checkpoint(
             session,
@@ -100,7 +100,7 @@ impl ProgrammerRegistry {
         source: String,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) -> Option<u64> {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let assignments = assignments.into_iter().collect::<Vec<_>>();
         if assignments.is_empty() {
@@ -143,7 +143,7 @@ impl ProgrammerRegistry {
         source: &str,
         generation: Option<u64>,
     ) -> bool {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -240,7 +240,7 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_with_fade(session, fixture_id, attribute, value, true);
     }
@@ -253,7 +253,7 @@ impl ProgrammerRegistry {
         fade_millis: Option<u64>,
         delay_millis: Option<u64>,
     ) {
-        let mutation_gate = self.mutation_gate(session);
+        let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.set_with_timing(
             session,
