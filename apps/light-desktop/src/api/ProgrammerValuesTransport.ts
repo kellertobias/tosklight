@@ -233,7 +233,7 @@ function subscription(
 			capabilities: ["programmer"],
 			classes: ["projection"],
 			objects: [
-				{ capability: "programmer", id: `programming-values:${userId}` },
+				{ capability: "programmer", id: "programming-values" },
 			],
 		},
 		after_sequence: afterSequence,

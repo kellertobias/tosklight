@@ -35,7 +35,7 @@ function event(userId = USER_ID) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-preload-playback-queue:${userId}`,
+				id: "programming-preload-playback-queue",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "osc" },
@@ -125,7 +125,7 @@ describe("Preload playback queue wire decoding", () => {
 
 	it("rejects the wrong object, delivery, and missing correlation", () => {
 		const wrongObject = event();
-		wrongObject.event.object.id = `programming-preload-values:${USER_ID}`;
+		wrongObject.event.object.id = "programming-preload-values";
 		expect(() =>
 			decodeProgrammerPreloadPlaybackQueueEventMessage(wrongObject, USER_ID),
 		).toThrow(/playback-queue/);

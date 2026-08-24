@@ -134,7 +134,7 @@ function validateCaptureModeEnvelope(
 function validateCaptureModeObject(value: unknown, expectedUserId: string) {
 	const object = recordAt(value, "$.event.object");
 	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
-	const expectedObject = `programming-capture-mode:${expectedUserId}`;
+	const expectedObject = "programming-capture-mode";
 	const objectId = stringAt(object.id, "$.event.object.id");
 	if (objectId.toLowerCase() !== expectedObject.toLowerCase())
 		throw new WireValidationError(

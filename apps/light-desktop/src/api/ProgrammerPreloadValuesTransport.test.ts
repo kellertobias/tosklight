@@ -87,7 +87,7 @@ function preloadEvent(userId = USER_ID) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-preload-values:${userId}`,
+				id: "programming-preload-values",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -288,7 +288,7 @@ describe("HttpProgrammerPreloadValuesTransport events", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-preload-values:${USER_ID}`,
+						id: "programming-preload-values",
 					},
 				],
 			},

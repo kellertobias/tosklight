@@ -40,7 +40,7 @@ function event(change: unknown, overrides: Record<string, unknown> = {}) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-priority:${USER_ID}`,
+				id: "programming-priority",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -232,11 +232,11 @@ describe("Programmer priority wire", () => {
 		["desk-scoped", { desk_id: USER_ID }],
 		["lossless", { delivery: "lossless" }],
 		[
-			"foreign object",
+			"another Programmer object",
 			{
 				object: {
 					capability: "programmer",
-					id: `programming-priority:${OTHER_USER_ID}`,
+					id: "programming-values",
 				},
 			},
 		],

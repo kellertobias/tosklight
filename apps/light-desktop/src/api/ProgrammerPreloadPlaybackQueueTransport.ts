@@ -221,7 +221,7 @@ function subscription(
 			objects: [
 				{
 					capability: "programmer",
-					id: `programming-preload-playback-queue:${userId}`,
+					id: "programming-preload-playback-queue",
 				},
 			],
 		},

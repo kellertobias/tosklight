@@ -230,7 +230,7 @@ function captureModeSubscription(
 			objects: [
 				{
 					capability: "programmer",
-					id: `programming-capture-mode:${userId}`,
+					id: "programming-capture-mode",
 				},
 			],
 		},

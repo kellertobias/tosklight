@@ -110,7 +110,7 @@ function validateEnvelope(
 function validateObject(value: unknown, expectedUserId: string) {
 	const object = exactRecordAt(value, "$.event.object", ["capability", "id"]);
 	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
-	const expectedObject = `programming-preload-values:${expectedUserId}`;
+	const expectedObject = "programming-preload-values";
 	const objectId = stringAt(object.id, "$.event.object.id");
 	if (objectId.toLowerCase() !== expectedObject.toLowerCase())
 		throw new WireValidationError(

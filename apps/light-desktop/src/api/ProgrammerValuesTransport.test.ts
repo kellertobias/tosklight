@@ -87,7 +87,7 @@ function event(userId = USER_ID) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-values:${userId}`,
+				id: "programming-values",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -272,7 +272,7 @@ describe("HttpProgrammerValuesTransport events", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-values:${USER_ID}`,
+						id: "programming-values",
 					},
 				],
 			},

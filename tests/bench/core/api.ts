@@ -15,7 +15,7 @@ import type { PatchSnapshot as LegacyPatchSnapshot } from "../../../apps/light-d
 import { decodePatchSnapshot } from "../../../apps/light-desktop/src/api/patchWire";
 import { projectionToPatchedFixture } from "../../../apps/light-desktop/src/features/patch/model";
 
-export interface Session { session_id: string; client_id: string; token: string; user: { id: string; name: string }; desk: { id: string } }
+export interface Session { session_id: string; client_id: string; token: string; user: { id: string; name: string }; desk: { id: string; name: string } }
 export interface CommandResponse<T = unknown> { protocol_version: number; request_id: string; ok: boolean; revision: number; payload?: T; error?: string }
 export interface FixtureLibrarySnapshot {
   definitions: unknown[];

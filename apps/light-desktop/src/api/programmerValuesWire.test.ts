@@ -58,7 +58,7 @@ function valuesEvent() {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-values:${USER_ID}`,
+				id: "programming-values",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -452,9 +452,9 @@ describe("Programmer values event wire boundary", () => {
 
 	it.each([
 		[
-			"foreign route",
+			"another Programmer object",
 			(event: ReturnType<typeof valuesEvent>) => {
-				event.event.object.id = `programming-values:${OTHER_USER_ID}`;
+				event.event.object.id = "programming-priority";
 			},
 		],
 		[

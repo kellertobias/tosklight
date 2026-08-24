@@ -133,7 +133,7 @@ describe("Programmer lifecycle wire decoding", () => {
 			type: "remove",
 			programmer_id: PROGRAMMER_ID,
 		});
-		wrongObject.event.object.id = `programming-values:${USER_ID}`;
+		wrongObject.event.object.id = "programming-values";
 		expect(() => decodeProgrammerLifecycleEventMessage(wrongObject)).toThrow(
 			/programming-lifecycle/,
 		);

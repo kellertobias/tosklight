@@ -72,7 +72,7 @@ function preloadEvent(userId = USER_ID) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-preload-values:${userId}`,
+				id: "programming-preload-values",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -351,9 +351,9 @@ describe("Preload Programmer values event wire", () => {
 		});
 	});
 
-	it("rejects foreign object and projection users", () => {
+	it("rejects another Programmer object and a foreign projection user", () => {
 		const foreignObject = preloadEvent();
-		foreignObject.event.object.id = `programming-preload-values:${OTHER_USER_ID}`;
+		foreignObject.event.object.id = "programming-values";
 		expect(() =>
 			decodeProgrammerPreloadValuesEventMessage(foreignObject, USER_ID),
 		).toThrow(WireValidationError);

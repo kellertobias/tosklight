@@ -30,7 +30,7 @@ function captureEvent(overrides: Record<string, unknown> = {}) {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-capture-mode:${USER_ID}`,
+				id: "programming-capture-mode",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "osc" },
@@ -138,7 +138,7 @@ describe("Programmer capture-mode wire", () => {
 		const wrongObject = captureEvent({
 			object: {
 				capability: "programmer",
-				id: `programming-values:${USER_ID}`,
+				id: "programming-values",
 			},
 		});
 		expect(() =>

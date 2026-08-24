@@ -234,7 +234,7 @@ function changeAt(
 function eventObjectAt(value: unknown, expectedUserId: string) {
 	const object = exactRecordAt(value, "$.event.object", ["capability", "id"]);
 	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
-	const expected = `programming-priority:${expectedUserId}`;
+	const expected = "programming-priority";
 	const id = stringAt(object.id, "$.event.object.id");
 	if (id.toLowerCase() !== expected.toLowerCase())
 		throw mismatch("$.event.object.id", expected, id);

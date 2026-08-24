@@ -1079,6 +1079,10 @@ export function ScreenSettingsCard({
 }
 
 export function DefaultScreenSettings({
+	deskName,
+	onDeskName,
+	onTextFocus,
+	onTextBlur,
 	keyboardShortcuts,
 	onKeyboardShortcuts,
 	onConfigurePlaybacks,
@@ -1086,6 +1090,10 @@ export function DefaultScreenSettings({
 	singleClientMode,
 	onSingleClientMode,
 }: {
+	deskName: string;
+	onDeskName: (name: string) => void;
+	onTextFocus: (field: "name") => void;
+	onTextBlur: (field: "name") => void;
 	keyboardShortcuts: boolean;
 	onKeyboardShortcuts: (enabled: boolean) => void;
 	onConfigurePlaybacks: () => void;
@@ -1102,6 +1110,13 @@ export function DefaultScreenSettings({
 				</div>
 			</header>
 			<div className="default-screen-compact-row">
+				<TextField
+					label="Desk name"
+					value={deskName}
+					onFocus={() => onTextFocus("name")}
+					onBlur={() => onTextBlur("name")}
+					onChange={(event) => onDeskName(event.target.value)}
+				/>
 				<SwitchField
 					label="Enable software keyboard shortcuts"
 					offLabel="Disabled"

@@ -66,7 +66,7 @@ function eventMessage() {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-priority:${USER_ID}`,
+				id: "programming-priority",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -219,7 +219,7 @@ describe("HttpProgrammerPriorityTransport", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-priority:${USER_ID}`,
+						id: "programming-priority",
 					},
 				],
 			},
@@ -256,13 +256,13 @@ describe("HttpProgrammerPriorityTransport", () => {
 		expect(FakeWebSocket.instances).toHaveLength(0);
 	});
 
-	it("rejects foreign socket traffic and suppresses explicit close callbacks", () => {
+	it("rejects another object's socket traffic and suppresses explicit close callbacks", () => {
 		const { observer, transport } = harness();
 		const stream = transport.subscribe(SCOPE, null, observer);
 		const socket = FakeWebSocket.instances[0];
 		if (!socket) throw new Error("missing socket");
 		const foreign = eventMessage();
-		foreign.event.object.id = `programming-priority:${OTHER_USER_ID}`;
+		foreign.event.object.id = "programming-values";
 		socket.emit("message", message(foreign));
 
 		expect(observer.message).not.toHaveBeenCalled();

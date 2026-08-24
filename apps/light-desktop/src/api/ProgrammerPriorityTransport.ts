@@ -225,7 +225,7 @@ function prioritySubscription(
 			objects: [
 				{
 					capability: "programmer",
-					id: `programming-priority:${userId}`,
+					id: "programming-priority",
 				},
 			],
 		},

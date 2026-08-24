@@ -62,7 +62,7 @@ function eventMessage() {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-capture-mode:${USER_ID}`,
+				id: "programming-capture-mode",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "http" },
@@ -169,7 +169,7 @@ describe("HttpProgrammerCaptureModeTransport", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-capture-mode:${USER_ID}`,
+						id: "programming-capture-mode",
 					},
 				],
 			},

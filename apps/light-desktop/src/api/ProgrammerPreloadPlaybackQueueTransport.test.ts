@@ -57,7 +57,7 @@ function eventMessage() {
 			class: "projection",
 			object: {
 				capability: "programmer",
-				id: `programming-preload-playback-queue:${USER_ID}`,
+				id: "programming-preload-playback-queue",
 			},
 			related_objects: [],
 			source: { kind: "action", source: "osc" },
@@ -150,7 +150,7 @@ describe("HttpProgrammerPreloadPlaybackQueueTransport", () => {
 				objects: [
 					{
 						capability: "programmer",
-						id: `programming-preload-playback-queue:${USER_ID}`,
+						id: "programming-preload-playback-queue",
 					},
 				],
 			},

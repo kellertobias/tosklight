@@ -106,19 +106,19 @@ export class BrowserDeskLock {
 		await this.switchSetupSection(navigation, "Screens & playback");
 		await expect(undo).toBeDisabled();
 
-		const alias = defaultScreen.getByLabel("OSC alias");
-		const originalAlias = await alias.inputValue();
-		await alias.fill(`${originalAlias}-undo`);
+		const deskName = defaultScreen.getByLabel("Desk name");
+		const originalName = await deskName.inputValue();
+		await deskName.fill(`${originalName}-undo`);
 		await expect(undo).toBeEnabled();
 		await expect
-			.poll(() => this.currentDeskAlias())
-			.toBe(`${originalAlias}-undo`);
+			.poll(() => this.currentDeskName())
+			.toBe(`${originalName}-undo`);
 		await this.switchSetupSection(navigation, "Network & Inputs");
 		await this.switchSetupSection(navigation, "Screens & playback");
 		await undo.click();
-		await expect(alias).toHaveValue(originalAlias);
+		await expect(deskName).toHaveValue(originalName);
 		await expect(undo).toBeDisabled();
-		await expect.poll(() => this.currentDeskAlias()).toBe(originalAlias);
+		await expect.poll(() => this.currentDeskName()).toBe(originalName);
 
 		const shortcuts = defaultScreen.getByRole("switch", {
 			name: "Enable software keyboard shortcuts",
@@ -175,7 +175,7 @@ export class BrowserDeskLock {
 		await navigation.getByRole("button", { name, exact: true }).click();
 	}
 
-	private async currentDeskAlias(): Promise<string> {
+	private async currentDeskName(): Promise<string> {
 		const deskId = this.api.session?.desk.id;
 		if (!deskId) throw new Error("Desk Lock requires an authenticated desk");
 		const session = await this.api.request<Session>(
@@ -184,6 +184,6 @@ export class BrowserDeskLock {
 			{ username: "Operator", desk_id: deskId },
 			false,
 		);
-		return "desk";
+		return session.desk.name;
 	}
 }
