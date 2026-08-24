@@ -107,4 +107,4 @@ Every normal feedback cycle includes:
 | `/light/{desk}/feedback/highlight/fixture/number` | Active stepped fixture/head number, or `0` in complete-selection state. |
 | `/light/{desk}/feedback/highlight/fixture/name` | Active stepped fixture/head name, or an empty string in complete-selection state. |
 
-Refresh all of these fields after reconnect instead of applying an old local index. An external authoritative selection event immediately replaces the old step basis and feedback with the resulting complete selection. An action rejected because another user owns live Highlight output leaves the authoritative state unchanged.
+Refresh all of these fields after reconnect instead of applying an old local index. An external authoritative selection event immediately replaces the old step basis and feedback with the resulting complete selection. A refused Highlight action leaves the authoritative state unchanged.

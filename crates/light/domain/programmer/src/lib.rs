@@ -62,9 +62,9 @@ pub use groups::{
     merge_ordered_group_membership, resolve_group, resolve_group_spatial,
 };
 pub use highlight::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightOutputLayer,
-    HighlightOutputRole, HighlightRegistry, HighlightSelectionWrite, HighlightState,
-    HighlightTransition, OSC_REPEAT_GUARD, is_duplicate_osc_action,
+    HighlightAction, HighlightFixture, HighlightMode, HighlightOutputLayer, HighlightOutputRole,
+    HighlightRegistry, HighlightSelectionWrite, HighlightState, HighlightTransition,
+    OSC_REPEAT_GUARD, is_duplicate_osc_action,
 };
 pub use lifecycle_projection::{ProgrammerLifecycleSession, ProgrammerLifecycleSummary};
 pub use normal_values::{

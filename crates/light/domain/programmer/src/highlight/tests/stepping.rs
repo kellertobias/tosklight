@@ -18,18 +18,13 @@ fn active_prev_next_all_write_real_selection_and_wrap() {
     let groups = no_groups();
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
 
-    let inactive_next = registry
-        .action(HighlightAction::Next, &complete, &fixtures, &groups, false)
-        .unwrap();
+    let inactive_next =
+        registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
     assert!(inactive_next.working_selection.is_none());
     assert!(!inactive_next.state.can_next && !inactive_next.state.can_previous);
-    registry
-        .action(HighlightAction::On, &complete, &fixtures, &groups, false)
-        .unwrap();
+    registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
 
-    let next = registry
-        .action(HighlightAction::Next, &complete, &fixtures, &groups, false)
-        .unwrap();
+    let next = registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
     assert!(next.state.active);
     assert_eq!(
         next.working_selection.as_ref().unwrap().selected,
@@ -37,9 +32,7 @@ fn active_prev_next_all_write_real_selection_and_wrap() {
     );
     let mut actual = apply_write(&registry, desk, user, &next, 2).unwrap();
     for expected in [ids[1], ids[2], ids[3], ids[0]] {
-        let next = registry
-            .action(HighlightAction::Next, &actual, &fixtures, &groups, false)
-            .unwrap();
+        let next = registry.action(HighlightAction::Next, &actual, &fixtures, &groups, false);
         assert_eq!(
             next.working_selection.as_ref().unwrap().selected,
             vec![expected]
@@ -47,21 +40,17 @@ fn active_prev_next_all_write_real_selection_and_wrap() {
         actual = apply_write(&registry, desk, user, &next, actual.revision + 1).unwrap();
     }
 
-    let all = registry
-        .action(HighlightAction::All, &actual, &fixtures, &groups, false)
-        .unwrap();
+    let all = registry.action(HighlightAction::All, &actual, &fixtures, &groups, false);
     assert_eq!(all.state.mode, HighlightMode::Selection);
     assert_eq!(all.working_selection.as_ref().unwrap().selected, ids);
     actual = apply_write(&registry, desk, user, &all, actual.revision + 1).unwrap();
-    let previous = registry
-        .action(
-            HighlightAction::Previous,
-            &actual,
-            &fixtures,
-            &groups,
-            false,
-        )
-        .unwrap();
+    let previous = registry.action(
+        HighlightAction::Previous,
+        &actual,
+        &fixtures,
+        &groups,
+        false,
+    );
     assert_eq!(
         previous.working_selection.as_ref().unwrap().selected,
         vec![ids[3]]
@@ -81,12 +70,8 @@ fn active_step_keeps_its_frozen_basis_across_external_selection_revisions() {
         .collect::<Vec<_>>();
     let groups = no_groups();
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
-    registry
-        .action(HighlightAction::On, &complete, &fixtures, &groups, false)
-        .unwrap();
-    let first = registry
-        .action(HighlightAction::Next, &complete, &fixtures, &groups, false)
-        .unwrap();
+    registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
+    let first = registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
     let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
 
     // Programmer values may change repeatedly while the selection revision is unchanged.
@@ -97,15 +82,13 @@ fn active_step_keeps_its_frozen_basis_across_external_selection_revisions() {
     let external_same = selection(stepped.selected.clone(), stepped.expression.clone(), 3);
     let frozen = registry.status(&external_same, &fixtures, &groups, false);
     assert_eq!(frozen.state.mode, HighlightMode::Step);
-    let next = registry
-        .action(
-            HighlightAction::Next,
-            &external_same,
-            &fixtures,
-            &groups,
-            false,
-        )
-        .unwrap();
+    let next = registry.action(
+        HighlightAction::Next,
+        &external_same,
+        &fixtures,
+        &groups,
+        false,
+    );
     assert_eq!(next.working_selection.unwrap().selected, vec![ids[1]]);
 }
 
@@ -135,17 +118,11 @@ fn active_all_restores_the_frozen_group_snapshot_after_membership_changes() {
         }),
         1,
     );
-    registry
-        .action(HighlightAction::On, &complete, &fixtures, &groups, false)
-        .unwrap();
-    let first = registry
-        .action(HighlightAction::Next, &complete, &fixtures, &groups, false)
-        .unwrap();
+    registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
+    let first = registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
     let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
     groups.get_mut("1").unwrap().fixtures = vec![ids[3], ids[1]];
-    let all = registry
-        .action(HighlightAction::All, &stepped, &fixtures, &groups, false)
-        .unwrap();
+    let all = registry.action(HighlightAction::All, &stepped, &fixtures, &groups, false);
     assert_eq!(
         all.working_selection.as_ref().unwrap().selected,
         ids[..3].to_vec()
@@ -168,12 +145,8 @@ fn removed_items_keep_live_sequence_deterministic_and_high_active_when_empty() {
         .collect::<Vec<_>>();
     let groups = no_groups();
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
-    registry
-        .action(HighlightAction::On, &complete, &fixtures, &groups, false)
-        .unwrap();
-    let first = registry
-        .action(HighlightAction::Next, &complete, &fixtures, &groups, false)
-        .unwrap();
+    registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
+    let first = registry.action(HighlightAction::Next, &complete, &fixtures, &groups, false);
     let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
     let remaining = vec![fixtures[1].clone(), fixtures[2].clone()];
     let reconciled = registry.status(&stepped, &remaining, &groups, false);
@@ -188,15 +161,13 @@ fn removed_items_keep_live_sequence_deterministic_and_high_active_when_empty() {
     let inactive_removed = registry.status(&corrected, &only_active, &groups, false);
     assert_eq!(inactive_removed.state.remembered.len(), 1);
     assert!(inactive_removed.working_selection.is_none());
-    let wrapped = registry
-        .action(
-            HighlightAction::Next,
-            &corrected,
-            &only_active,
-            &groups,
-            false,
-        )
-        .unwrap();
+    let wrapped = registry.action(
+        HighlightAction::Next,
+        &corrected,
+        &only_active,
+        &groups,
+        false,
+    );
     assert_eq!(wrapped.working_selection.unwrap().selected, vec![ids[1]]);
 
     let none = registry.status(&corrected, &[], &groups, false);

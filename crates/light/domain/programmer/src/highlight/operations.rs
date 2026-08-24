@@ -1,6 +1,6 @@
 use super::model::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightOutputLayer,
-    HighlightOutputRole, HighlightSelectionWrite, HighlightState,
+    HighlightAction, HighlightFixture, HighlightMode, HighlightOutputLayer, HighlightOutputRole,
+    HighlightSelectionWrite, HighlightState,
 };
 use super::selection::resolve_remembered;
 use super::state::OperatorState;
@@ -18,27 +18,24 @@ pub(super) fn apply_action(
     operator: &mut OperatorState,
     action: HighlightAction,
     context: &ActionContext<'_>,
-) -> Result<Option<HighlightSelectionWrite>, HighlightError> {
+) -> Option<HighlightSelectionWrite> {
     match action {
-        HighlightAction::On => enable_highlight(operator, context)?,
+        HighlightAction::On => enable_highlight(operator, context),
         HighlightAction::Off => disable_highlight(operator),
         HighlightAction::Toggle if operator.active => {
             disable_highlight(operator);
         }
-        HighlightAction::Toggle => enable_highlight(operator, context)?,
+        HighlightAction::Toggle => enable_highlight(operator, context),
         HighlightAction::Next | HighlightAction::Previous if operator.active => {
-            return Ok(Some(step_selection(operator, action, context)));
+            return Some(step_selection(operator, action, context));
         }
-        HighlightAction::All if operator.active => return Ok(restore_selection(operator, context)),
+        HighlightAction::All if operator.active => return restore_selection(operator, context),
         HighlightAction::Next | HighlightAction::Previous | HighlightAction::All => {}
     }
-    Ok(None)
+    None
 }
 
-fn enable_highlight(
-    operator: &mut OperatorState,
-    context: &ActionContext<'_>,
-) -> Result<(), HighlightError> {
+fn enable_highlight(operator: &mut OperatorState, context: &ActionContext<'_>) {
     if !operator.active {
         operator.explicit_attributes.clear();
     }
@@ -49,7 +46,6 @@ fn enable_highlight(
     } else {
         operator.output_enabled = true;
     }
-    Ok(())
 }
 
 fn disable_highlight(operator: &mut OperatorState) {

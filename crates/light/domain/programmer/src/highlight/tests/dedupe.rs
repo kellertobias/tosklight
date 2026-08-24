@@ -17,31 +17,25 @@ fn authoritative_repeat_guard_prevents_cross_surface_double_steps() {
         .collect::<Vec<_>>();
     let groups = no_groups();
     let complete = selection(ids, Some(SelectionExpression::Static), 1);
-    registry
-        .action(HighlightAction::On, &complete, &fixtures, &groups, false)
-        .unwrap();
-    let software = registry
-        .action_guarded(
-            desk,
-            user,
-            HighlightAction::Next,
-            &complete,
-            &fixtures,
-            &groups,
-            false,
-        )
-        .unwrap();
-    let simultaneous_hardware = registry
-        .action_guarded(
-            desk,
-            user,
-            HighlightAction::Next,
-            &complete,
-            &fixtures,
-            &groups,
-            false,
-        )
-        .unwrap();
+    registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
+    let software = registry.action_guarded(
+        desk,
+        user,
+        HighlightAction::Next,
+        &complete,
+        &fixtures,
+        &groups,
+        false,
+    );
+    let simultaneous_hardware = registry.action_guarded(
+        desk,
+        user,
+        HighlightAction::Next,
+        &complete,
+        &fixtures,
+        &groups,
+        false,
+    );
     assert_eq!(software.state.active_index, Some(0));
     assert_eq!(simultaneous_hardware.state.active_index, Some(0));
 }

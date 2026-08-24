@@ -51,8 +51,7 @@ fn verify_cross_surface_highlight_dedupe(
             &fixtures,
             &groups,
             false,
-        )
-        .unwrap();
+        );
     apply_highlight_selection_write(state, session, software.working_selection.as_ref()).unwrap();
     assert_eq!(software.state.active_index, Some(0));
     send_highlight_osc(state, "next");
@@ -84,8 +83,7 @@ fn verify_highlight_alias_dedupe(
                 &fixtures,
                 &groups,
                 false,
-            )
-            .unwrap();
+            );
         apply_highlight_selection_write(state, session, transition.working_selection.as_ref())
             .unwrap();
     }

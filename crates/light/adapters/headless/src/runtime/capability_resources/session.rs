@@ -156,17 +156,6 @@ impl SessionResource {
             .any(|session_id| clients.get(session_id) == Some(&client_id))
     }
 
-    pub(in crate::runtime) fn desk_in_use(&self, desk_id: Uuid) -> bool {
-        self.sessions
-            .read()
-            .values()
-            .any(|session| session.desk.id == desk_id)
-    }
-
-    pub(in crate::runtime) fn client_or_desk_in_use(&self, client_id: Uuid, desk_id: Uuid) -> bool {
-        self.client_connected(client_id) || self.desk_in_use(desk_id)
-    }
-
     /// Whether any surface is still standing at the desk.
     ///
     /// This used to ask whether another session of the same user on the same desk remained, from

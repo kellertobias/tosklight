@@ -37,7 +37,7 @@ pub struct ProgrammerRegistry {
     pub(crate) preload_values_generations: crate::desk_stamp::DeskStamp,
     /// Monotonic public projection revision for pending Preload values.
     pub(crate) preload_values_revisions: crate::desk_stamp::DeskStamp,
-    /// Cheap per-user stamp for the ordered pending Preload playback queue.
+    /// Cheap write stamp for the ordered pending Preload playback queue.
     pub(crate) preload_playback_queue_generations: crate::desk_stamp::DeskStamp,
     /// Monotonic public projection revision for the pending Preload playback queue.
     pub(crate) preload_playback_queue_revisions: crate::desk_stamp::DeskStamp,
@@ -45,7 +45,7 @@ pub struct ProgrammerRegistry {
     /// advance it; the Programming application boundary advances it once per semantic tuple
     /// transition after all nested mutations and reconciliation have completed.
     pub(crate) capture_mode_revisions: crate::desk_stamp::DeskStamp,
-    /// Monotonic public revision for the lightweight per-user Programmer priority authority.
+    /// Monotonic public revision for the lightweight Programmer priority authority.
     /// Priority changes intentionally do not advance the normal-values generation because that
     /// projection excludes interaction metadata.
     pub(crate) priority_revisions: crate::desk_stamp::DeskStamp,

@@ -1,5 +1,5 @@
 use super::model::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightOutputLayer, HighlightTransition,
+    HighlightAction, HighlightFixture, HighlightOutputLayer, HighlightTransition,
     is_duplicate_osc_action,
 };
 use super::operations::{
@@ -35,7 +35,7 @@ impl HighlightRegistry {
         valid_fixtures: &[HighlightFixture],
         groups: &HashMap<String, GroupDefinition>,
         capture_only: bool,
-    ) -> Result<HighlightTransition, HighlightError> {
+    ) -> HighlightTransition {
         let received_at = Instant::now();
         let key = (desk_id, user_id);
         let mut recent_actions = self.recent_actions.lock();
@@ -47,7 +47,7 @@ impl HighlightRegistry {
             received_at,
         ) {
             drop(recent_actions);
-            return Ok(self.status(current_selection, valid_fixtures, groups, capture_only));
+            return self.status(current_selection, valid_fixtures, groups, capture_only);
         }
         let transition = self.action(
             action,
@@ -55,9 +55,9 @@ impl HighlightRegistry {
             valid_fixtures,
             groups,
             capture_only,
-        )?;
+        );
         recent_actions.insert(key, (action.osc_dedupe_key(), received_at));
-        Ok(transition)
+        transition
     }
 
     pub fn action(
@@ -67,8 +67,8 @@ impl HighlightRegistry {
         valid_fixtures: &[HighlightFixture],
         groups: &HashMap<String, GroupDefinition>,
         capture_only: bool,
-    ) -> Result<HighlightTransition, HighlightError> {
-        // Stage the whole transition so an ownership failure cannot partially toggle HIGH or move
+    ) -> HighlightTransition {
+        // Stage the whole transition so a failure part-way cannot partially toggle HIGH or move
         // the programmer selection.
         let mut live_runtime = self.runtime.lock();
         let mut runtime = live_runtime.clone();
@@ -82,14 +82,14 @@ impl HighlightRegistry {
         };
         reconcile_capture_mode(&mut operator, &context);
         operator.message = None;
-        if let Some(action_selection) = apply_action(&mut operator, action, &context)? {
+        if let Some(action_selection) = apply_action(&mut operator, action, &context) {
             working_selection = Some(action_selection);
         }
         let transition =
             build_transition(&operator, valid_fixtures, capture_only, working_selection);
         runtime.operator = operator;
         *live_runtime = runtime;
-        Ok(transition)
+        transition
     }
 
     pub fn status(

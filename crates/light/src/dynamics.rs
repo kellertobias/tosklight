@@ -418,12 +418,6 @@ impl DynamicsService {
         let state = self.programmers.get(identity.session).ok_or_else(|| {
             ActionError::new(ActionErrorKind::NotFound, "Programmer is unavailable")
         })?;
-        if state.user_id != identity.user {
-            return Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session belongs to another user",
-            ));
-        }
         let controller_id = Uuid::new_v4();
         let now_millis = ports.now_millis();
         let controller = DynamicController {

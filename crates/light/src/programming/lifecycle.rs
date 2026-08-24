@@ -175,12 +175,10 @@ impl ProgrammingService {
         &self,
         target: &ProgrammingLifecycleTarget,
     ) -> Result<(), ActionError> {
+        // The desk has one Programmer, so a session it knows operates that one. This used to
+        // compare the presented identity as well, which could only ever compare it against itself.
         match self.programmers.user_id(target.current_session_id) {
-            Some(user_id) if user_id == target.user_id => Ok(()),
-            Some(_) => Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the target Programmer session belongs to another user",
-            )),
+            Some(_) => Ok(()),
             None => Err(lifecycle_target_unavailable()),
         }
     }

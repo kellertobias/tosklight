@@ -4,7 +4,7 @@ use light_programmer::{
 };
 use std::sync::Arc;
 
-/// One connected session reduced to lifecycle information safe for cross-user views.
+/// One connected session reduced to lifecycle information safe for any surface to see.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProgrammingLifecycleSession {
     pub session_id: SessionId,

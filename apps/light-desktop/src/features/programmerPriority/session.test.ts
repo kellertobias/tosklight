@@ -133,7 +133,7 @@ describe("ProgrammerPrioritySession", () => {
 		});
 	});
 
-	it("converges the same user on two desks while another user stays isolated", async () => {
+	it("converges two surfaces on one authority and leaves a re-scoped store alone", async () => {
 		const transport = new FakeProgrammerPriorityTransport();
 		const stores = [
 			new ProgrammerPriorityStore(),

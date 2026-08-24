@@ -137,7 +137,7 @@ impl HighlightResource {
         fixtures: &[HighlightFixture],
         groups: &HashMap<String, light_programmer::GroupDefinition>,
         output_suppressed: bool,
-    ) -> Result<light_programmer::HighlightTransition, light_programmer::HighlightError> {
+    ) -> light_programmer::HighlightTransition {
         self.registry
             .action(action, selection, fixtures, groups, output_suppressed)
     }
@@ -153,7 +153,7 @@ impl HighlightResource {
         fixtures: &[HighlightFixture],
         groups: &HashMap<String, light_programmer::GroupDefinition>,
         output_suppressed: bool,
-    ) -> Result<light_programmer::HighlightTransition, light_programmer::HighlightError> {
+    ) -> light_programmer::HighlightTransition {
         self.registry.action_guarded(
             desk_id,
             user_id,
@@ -178,10 +178,6 @@ impl HighlightResource {
     pub(in crate::runtime) fn clear_all(&self) {
         self.registry.clear_all();
         self.patch_preview.lock().clear();
-    }
-
-    pub(in crate::runtime) fn clear_desk(&self, desk_id: Uuid) {
-        self.registry.clear_desk(desk_id);
     }
 
     pub(in crate::runtime) fn clear_context(&self, desk_id: Uuid, user_id: light_core::UserId) {

@@ -274,8 +274,7 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
             &summaries,
             &HashMap::new(),
             false,
-        )
-        .unwrap();
+        );
     assert_eq!(
         stepped
             .state

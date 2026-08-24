@@ -30,13 +30,6 @@ enum UpdateCapture {
 }
 
 impl UpdateCapture {
-    fn user_id(&self) -> UserId {
-        match self {
-            Self::Values(capture) => capture.user_id,
-            Self::Selection(capture) => capture.user_id,
-        }
-    }
-
     fn content(&self) -> ProgrammerUpdateContent {
         match self {
             Self::Values(capture) => capture.content(),
@@ -70,9 +63,6 @@ impl ProgrammingService {
                 .programmers
                 .capture_update_menu(identity.session_id)
                 .map_err(capture_error)?;
-            if capture.user_id != identity.user_id {
-                return Err(foreign_capture());
-            }
             let values_fingerprint = fingerprint(&capture.values)?;
             let selection_fingerprint = fingerprint(&capture.selected_fixtures)?;
             let ProgrammerUpdateMenuCapture {
@@ -121,7 +111,6 @@ impl ProgrammingService {
             ports.authorize_programming_update(&envelope.context)?;
             self.bind_update_owner(&mut identity)?;
             let capture = self.capture_update(identity.session_id, &envelope.command.target)?;
-            ensure_capture_owner(&capture, identity.user_id)?;
             let programmer_revision = capture.fingerprint()?;
             let content = capture.content();
             active_show.preview_programming_update(
@@ -208,7 +197,6 @@ impl ProgrammingService {
         command: &ProgrammingUpdateCommand,
     ) -> Result<ProgrammerUpdateContent, ActionError> {
         let capture = self.capture_update(identity.session_id, &command.target)?;
-        ensure_capture_owner(&capture, identity.user_id)?;
         let fingerprint = capture.fingerprint()?;
         if command
             .expected_programmer_revision
@@ -372,25 +360,10 @@ fn capture_error(error: ProgrammerUpdateCaptureError) -> ActionError {
     }
 }
 
-fn ensure_capture_owner(capture: &UpdateCapture, user_id: UserId) -> Result<(), ActionError> {
-    if capture.user_id() == user_id {
-        Ok(())
-    } else {
-        Err(foreign_capture())
-    }
-}
-
 fn fingerprint(value: &impl serde::Serialize) -> Result<String, ActionError> {
     let bytes = serde_json::to_vec(value)
         .map_err(|error| invalid(format!("could not fingerprint Programmer: {error}")))?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
-}
-
-fn foreign_capture() -> ActionError {
-    ActionError::new(
-        ActionErrorKind::Forbidden,
-        "the captured Programmer belongs to another user",
-    )
 }
 
 fn missing_programmer() -> ActionError {
