@@ -231,7 +231,6 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
                 HighlightChange {
                     revision,
                     desk_id: self.session.desk.id,
-                    user_id: self.session.user.id.0,
                     action,
                     source,
                     state: state.clone(),

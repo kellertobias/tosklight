@@ -115,7 +115,6 @@ function event(
 			change: {
 				revision,
 				desk_id: payload.desk_id as string,
-				user_id: payload.user_id as string,
 				action: null,
 				source: null,
 				state: payload.state as never,

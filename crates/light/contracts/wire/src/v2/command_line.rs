@@ -323,7 +323,6 @@ pub enum CommandHttpSource {
 pub struct CommandLineChangedEvent {
     pub desk_id: Uuid,
     pub session_id: Uuid,
-    pub user_id: Uuid,
     pub text: String,
     pub target: CommandTarget,
     pub pristine: bool,

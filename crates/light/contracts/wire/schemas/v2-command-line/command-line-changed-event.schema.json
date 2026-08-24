@@ -37,16 +37,11 @@
     },
     "text": {
       "type": "string"
-    },
-    "user_id": {
-      "type": "string",
-      "format": "uuid"
     }
   },
   "required": [
     "desk_id",
     "session_id",
-    "user_id",
     "text",
     "target",
     "pristine",

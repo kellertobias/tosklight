@@ -403,7 +403,7 @@ async fn undo_run_line(
         .macros
         .execution(session.desk.id, execution_id)
         .ok_or_else(|| ApiError::not_found("Macro execution does not exist"))?;
-    if execution.user_id != session.user.id.0 || execution.session_id != session.id.0 {
+    if execution.session_id != session.id.0 {
         return Err(ApiError::forbidden(
             "Run-line Undo belongs to the initiating operator session",
         ));
@@ -1522,7 +1522,6 @@ pub(super) fn execution_wire(
         macro_name: snapshot.macro_name,
         source_revision: snapshot.source_revision,
         desk_id: snapshot.desk_id,
-        user_id: snapshot.user_id,
         session_id: snapshot.session_id,
         state: match snapshot.state {
             light_application::CommandMacroExecutionState::Queued => {

@@ -235,7 +235,6 @@ pub struct MacroExecutionSnapshot {
     #[ts(type = "number")]
     pub source_revision: u64,
     pub desk_id: Uuid,
-    pub user_id: Uuid,
     pub session_id: Uuid,
     pub state: MacroExecutionState,
     #[serde(default, skip_serializing_if = "Option::is_none")]

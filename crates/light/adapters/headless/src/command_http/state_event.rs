@@ -27,7 +27,6 @@ pub(super) fn publish_command_line_change(
     let event = CommandLineChangedEvent {
         desk_id: session.desk.id,
         session_id: session.id.0,
-        user_id: session.user.id.0,
         text: retained_text_if_sensitive(after, retained_text, sensitive),
         target: wire_target(after.target),
         pristine: after.pristine,

@@ -270,7 +270,6 @@ export function decodeCommandLineChangedEvent(
 	const event = objectAt(value, "$");
 	uuidAt(event.desk_id, "$.desk_id");
 	uuidAt(event.session_id, "$.session_id");
-	uuidAt(event.user_id, "$.user_id");
 	stringAt(event.text, "$.text");
 	enumAt(event.target, "$.target", COMMAND_TARGETS);
 	booleanAt(event.pristine, "$.pristine");

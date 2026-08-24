@@ -134,13 +134,11 @@ fn highlight_event_carries_the_authoritative_state_and_output_route() {
     let bus = EventBus::new(4);
     let context = context(ActionSource::Osc);
     let desk_id = Uuid::from_u128(8);
-    let user_id = Uuid::from_u128(9);
     let event = bus.publish(EventDraft::highlight_changed(
         &context,
         HighlightChange {
             revision: 19,
             desk_id,
-            user_id,
             action: Some("next".into()),
             source: Some("osc".into()),
             state: light_programmer::HighlightState {
@@ -620,7 +618,6 @@ fn macro_execution_change_is_a_typed_lossless_desk_delivery() {
             macro_name: "Blackout".into(),
             source_revision: 2,
             desk_id,
-            user_id: Uuid::from_u128(74),
             session_id: Uuid::from_u128(75),
             state: application::CommandMacroExecutionState::Succeeded,
             line: Some(2),

@@ -73,7 +73,6 @@ function macro(executionId: string): MacroExecution {
 		macro_name: "Reset",
 		source_revision: 2,
 		desk_id: "desk",
-		user_id: "user",
 		session_id: "session",
 		state: "running",
 		trigger: { type: "pool" },
