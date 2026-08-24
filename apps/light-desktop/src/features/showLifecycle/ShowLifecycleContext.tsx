@@ -45,7 +45,6 @@ export interface ShowLifecycleActions {
 	) => Promise<MvrApplyResult>;
 	previewMvrExport: (showId: string) => Promise<MvrExportPreview>;
 	downloadMvr: (show: ShowEntry) => Promise<void>;
-	switchUser: (name: string) => void;
 	shutdownServer: () => Promise<boolean>;
 }
 
