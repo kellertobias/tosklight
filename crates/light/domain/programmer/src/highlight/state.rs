@@ -23,14 +23,11 @@ pub(super) struct OperatorState {
 ///
 /// One desk, one Highlight. It used to be keyed by desk and user, from when a desk could hold
 /// several of each: two operators could then own Highlight output separately, and one would be
-/// refused while the other held it. There is nobody to be refused any more — every surface is
-/// looking at the same lamp — so the state is a single value and the owner is a name to show,
-/// not a claim to enforce.
+/// refused while the other held it. There is nobody to be refused and nobody to attribute it to
+/// any more — every surface is looking at the same lamp.
 #[derive(Clone, Default)]
 pub(super) struct HighlightRuntime {
     pub(super) operator: OperatorState,
-    /// The identity Highlight output is currently attributed to, for the operator-facing label.
-    pub(super) output_owner: Option<UserId>,
 }
 
 pub(super) type RecentHighlightActions = HashMap<OperatorKey, (&'static str, Instant)>;

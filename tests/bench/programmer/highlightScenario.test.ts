@@ -134,7 +134,6 @@ function highlightState(active: boolean): HighlightState {
 		active_fixture: null,
 		can_previous: false,
 		can_next: false,
-		owner_user_id: null,
 	};
 }
 

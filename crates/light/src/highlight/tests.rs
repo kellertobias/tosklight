@@ -15,7 +15,6 @@ impl RecordingPorts {
     fn with_selection(fixtures: Vec<FixtureId>) -> Self {
         Self {
             environment: Mutex::new(Some(HighlightEnvironment {
-                user_name: Some("Operator".into()),
                 selection: ProgrammerSelection {
                     selected: fixtures,
                     expression: None,

@@ -19,7 +19,6 @@ const offState: HighlightState = {
 	active_fixture: null,
 	can_previous: false,
 	can_next: false,
-	owner_user_id: null,
 };
 
 const fixtures = [
@@ -147,7 +146,6 @@ describe("HighlightControls keypad actions", () => {
 			active_fixture: fixtures[2],
 			can_previous: true,
 			can_next: true,
-			owner_user_id: "operator-a",
 		};
 		const { rerender } = render(<HighlightControls />);
 
@@ -198,7 +196,7 @@ describe("HighlightControls keypad actions", () => {
 	});
 });
 
-describe("HighlightControls shortcuts and ownership", () => {
+describe("HighlightControls shortcuts", () => {
 	it("binds Alt+H, Alt+A, and Alt+Left/Right while removing Alt+C", async () => {
 		server.highlight = {
 			...offState,
@@ -206,7 +204,6 @@ describe("HighlightControls shortcuts and ownership", () => {
 			remembered: fixtures,
 			can_previous: true,
 			can_next: true,
-			owner_user_id: "operator-a",
 		};
 		render(<HighlightControls />);
 
@@ -256,8 +253,6 @@ describe("HighlightControls shortcuts and ownership", () => {
 			active_fixture: fixtures[0],
 			can_previous: true,
 			can_next: true,
-			owner_user_id: "operator-b",
-			owner_user_name: "Focus operator",
 			message: "Blind mode",
 		};
 		server.highlightError = "Highlight is controlled by Focus operator.";
@@ -278,33 +273,6 @@ describe("HighlightControls shortcuts and ownership", () => {
 			screen.getByRole("button", { name: "Dismiss Highlight error" }),
 		);
 		expect(server.dismissHighlightError).toHaveBeenCalledOnce();
-	});
-
-	it("blocks every live desk action while another operator owns Highlight", () => {
-		server.highlight = {
-			...offState,
-			remembered: fixtures,
-			can_previous: true,
-			can_next: true,
-			owner_user_id: "operator-b",
-			owner_user_name: "Focus operator",
-		};
-		render(<HighlightControls />);
-
-		expect(
-			screen.getByRole("button", {
-				name: "Highlight is controlled by Focus operator",
-			}),
-		).toBeDisabled();
-		expect(
-			screen.getByRole("button", { name: "Previous selection item" }),
-		).toBeDisabled();
-		expect(
-			screen.getByRole("button", { name: "Next selection item" }),
-		).toBeDisabled();
-		expect(
-			screen.getByRole("button", { name: "Restore complete selection" }),
-		).toBeDisabled();
 	});
 });
 

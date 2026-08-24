@@ -75,7 +75,7 @@ export interface ServerCoreContext
 		desk: import("../../api/types").ControlDesk,
 	) => Promise<void>;
 	selectControlDesk: (id: string) => void;
-	removeClient: (deskId: string) => Promise<boolean>;
+	removeClient: (deskId: string, clientId: string) => Promise<boolean>;
 	switchUser: (name: string) => void;
 	exportPaperwork: () => void;
 	shutdownServer: () => Promise<boolean>;

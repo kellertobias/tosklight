@@ -30,9 +30,9 @@ export function createSessionActions(
 			localStorage.setItem("light.control-desk", id);
 			window.location.reload();
 		},
-		removeClient: async (deskId) => {
+		removeClient: async (deskId, clientId) => {
 			try {
-				await api.playback.removeClient(deskId);
+				await api.playback.removeClient(deskId, clientId);
 				setBootstrap(await api.runtime.bootstrap());
 				setError(null);
 				return true;

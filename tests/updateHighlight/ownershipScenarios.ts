@@ -43,13 +43,13 @@ test("HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface sha
 	expect(held).toMatchObject({ active: true, output_enabled: true });
 	expect(held.remembered).toHaveLength(1);
 
-	// There is no second operator to be refused: every surface reads the same Highlight.
+	// There is no second operator to be refused: every surface reads the same Highlight, and none
+	// of them is told who owns it, because nobody does.
 	for (const surface of [secondScreen, wing]) {
-		expect(await highlightState(surface)).toMatchObject({
-			active: true,
-			output_enabled: true,
-			owner_user_name: held.owner_user_name,
-		});
+		const shared = await highlightState(surface);
+		expect(shared).toMatchObject({ active: true, output_enabled: true });
+		expect(shared).not.toHaveProperty("owner_user_id");
+		expect(shared).not.toHaveProperty("owner_user_name");
 	}
 
 	// And every surface may step it, because it is the desk's Highlight and the desk's selection.

@@ -87,7 +87,6 @@ const stepState = (active: boolean): HighlightState => ({
 	active_fixture: { fixture_id: "left", number: 100, name: "Pixel Bar · Left" },
 	can_previous: true,
 	can_next: true,
-	owner_user_id: "operator-a",
 });
 
 const patchFixtures = vi.hoisted(() => ({

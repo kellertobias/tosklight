@@ -126,8 +126,6 @@ export interface HighlightState {
 	active_fixture: HighlightFixtureSummary | null;
 	can_previous: boolean;
 	can_next: boolean;
-	owner_user_id: string | null;
-	owner_user_name?: string | null;
 	message?: string | null;
 }
 

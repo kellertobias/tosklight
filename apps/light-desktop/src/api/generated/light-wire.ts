@@ -39,7 +39,7 @@ export type CommandOperationResponse = { request_id: string, command_line: Comma
 export type CommandErrorResponse = { error: string, };
 export type CommandLineChangedEvent = { desk_id: string, session_id: string, user_id: string, text: string, target: CommandTarget, pristine: boolean, revision: number, source: CommandHttpSource, request_id?: string | null, redacted?: boolean, };
 export type ControlDeskConfigurationActionRequest = { request_id: string, action: ControlDeskConfigurationAction, };
-export type ControlDeskConfigurationAction = { "type": "update", patch: ControlDeskConfigurationPatch, } | { "type": "set_page", page: number, existing_only: boolean, } | { "type": "remove_client" };
+export type ControlDeskConfigurationAction = { "type": "update", patch: ControlDeskConfigurationPatch, } | { "type": "set_page", page: number, existing_only: boolean, } | { "type": "remove_client", client_id: string, };
 export type ControlDeskConfigurationPatch = { name: string | null, columns: number | null, rows: number | null, buttons: number | null, playback_layout: RuntimePlaybackSurfaceLayout | null, };
 export type ControlDeskConfigurationActionOutcome = { request_id: string, replayed: boolean, desk: RuntimeControlDesk, removed: boolean, page: number | null, event_sequence: number | null, page_creation_event_sequence: number | null, };
 export type ConfigurationUpdateRequest = { request_id: string, patch: ConfigurationPatch, };
@@ -814,7 +814,7 @@ export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, s
 export type RuntimeClientSummary = { client_id: string, name: string, connected: boolean, last_connected_at: string | null, desk: RuntimeControlDesk, can_remove: boolean, };
 export type RuntimeAttributeDescriptor = { id: string, label: string, family: string, value_type: string, default_unit: string | null, display_unit: string | null, physical_unit: string | null, normalized_min: number | null, normalized_max: number | null, domain_min: number | null, domain_max: number | null, cyclic: boolean, recordable: boolean, encoder_group: AttributeEncoderGroup, encoder_page: number, encoder_slot: number, built_in: boolean, retired: boolean, activation_group_id: string | null, push_turn_of: string | null, };
 export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };
-export type RuntimeHighlightState = { active: boolean, mode: string, output_enabled: boolean, capture_only: boolean, remembered: Array<RuntimeHighlightFixture>, active_index: number | null, active_fixture: RuntimeHighlightFixture | null, can_previous: boolean, can_next: boolean, owner_user_id: string | null, owner_user_name: string | null, message: string | null, };
+export type RuntimeHighlightState = { active: boolean, mode: string, output_enabled: boolean, capture_only: boolean, remembered: Array<RuntimeHighlightFixture>, active_index: number | null, active_fixture: RuntimeHighlightFixture | null, can_previous: boolean, can_next: boolean, message: string | null, };
 export type RuntimeBootstrapHighlightState = { session_id: string, desk_id: string, user_id: string, state: RuntimeHighlightState, };
 export type RuntimeBootstrapSnapshot = { api_version: string, attribute_registry: Array<RuntimeAttributeDescriptor>, users: Array<RuntimeDeskUser>, desks: Array<RuntimeControlDesk>, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
 /**

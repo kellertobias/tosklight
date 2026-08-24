@@ -22,5 +22,5 @@ export interface ScreensContextValue extends ScreenCapabilities {
 	session: SessionResponse | null;
 	updateControlDesk: (desk: ControlDesk) => Promise<void>;
 	selectControlDesk: (id: string) => void;
-	removeClient: (deskId: string) => Promise<boolean>;
+	removeClient: (deskId: string, clientId: string) => Promise<boolean>;
 }

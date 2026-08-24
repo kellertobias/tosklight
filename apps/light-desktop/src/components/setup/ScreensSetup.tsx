@@ -20,7 +20,7 @@ import {
 	createScreenConfiguration,
 	playbackLayoutLegacyFields,
 } from "./screenConfiguration";
-import { DefaultScreenPicker } from "./screens/DefaultScreenPicker";
+import { KnownClientsModal } from "./screens/DefaultScreenPicker";
 import {
 	DefaultScreenSettings,
 	ScreenSettingsCard,
@@ -30,7 +30,7 @@ import {
 	useDefaultScreenDraft,
 } from "./screens/useDefaultScreenDraft";
 
-export { DefaultScreenPicker } from "./screens/DefaultScreenPicker";
+export { KnownClientsModal } from "./screens/DefaultScreenPicker";
 export { ScreenSettingsCard } from "./screens/ScreenSettingsCards";
 
 function ScreensSetupHeader({
@@ -287,12 +287,12 @@ export function ScreensSetup({
 					))}
 			</div>
 			{defaultScreenPickerOpen && (
-				<DefaultScreenPicker
+				<KnownClientsModal
 					clients={server.bootstrap?.clients ?? []}
 					currentClientId={server.session?.client_id}
-					currentDeskId={server.session?.desk.id}
-					onSelect={server.selectControlDesk}
-					onRemove={server.removeClient}
+					onRemove={(client) =>
+						server.removeClient(client.desk.id, client.client_id)
+					}
 					onRemoveAll={async () => {
 						const candidates = (server.bootstrap?.clients ?? []).filter(
 							(client) =>
@@ -301,7 +301,9 @@ export function ScreensSetup({
 								client.can_remove,
 						);
 						const results = await Promise.all(
-							candidates.map((client) => server.removeClient(client.desk.id)),
+							candidates.map((client) =>
+								server.removeClient(client.desk.id, client.client_id),
+							),
 						);
 						return results.every(Boolean);
 					}}

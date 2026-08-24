@@ -476,10 +476,7 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     let summaries = highlight_fixture_summaries(&state.output.snapshot().fixtures);
     let selection = light_programmer::ProgrammerSelection::default();
     let cleared = state.highlight.transition(
-        first_session.desk.id,
-        first_session.user.id,
-        Some(&first_session.user.name),
-        &selection,
+                &selection,
         &summaries,
         &HashMap::new(),
         false,

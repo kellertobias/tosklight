@@ -143,7 +143,6 @@ function selectionHarness(options: HarnessOptions = {}) {
 			active_fixture: null,
 			can_previous: true,
 			can_next: true,
-			owner_user_id: null,
 		};
 	});
 	const fetchMock = vi.fn(

@@ -1134,7 +1134,7 @@ export function DefaultScreenSettings({
 				/>
 				<div className="screen-settings-actions default-screen-bottom-actions">
 					<Button onClick={onConfigurePlaybacks}>Configure Playbacks</Button>
-					<Button onClick={onChooseDefault}>Choose default screen</Button>
+					<Button onClick={onChooseDefault}>Known windows</Button>
 				</div>
 			</div>
 		</article>

@@ -252,11 +252,19 @@ impl InstallationResource {
         self.desk.lock().touch_client(client_id)
     }
 
-    pub(in crate::runtime) fn remove_client_desk(
+    pub(in crate::runtime) fn remove_client(
+        &self,
+        client_id: Uuid,
+    ) -> Result<bool, light_show::StoreError> {
+        self.desk.lock().remove_client(client_id)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn remove_desk(
         &self,
         desk_id: Uuid,
     ) -> Result<bool, light_show::StoreError> {
-        self.desk.lock().remove_client_desk(desk_id)
+        self.desk.lock().remove_desk(desk_id)
     }
 
     #[cfg(test)]

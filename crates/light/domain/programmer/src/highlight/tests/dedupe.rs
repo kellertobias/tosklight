@@ -18,22 +18,12 @@ fn authoritative_repeat_guard_prevents_cross_surface_double_steps() {
     let groups = no_groups();
     let complete = selection(ids, Some(SelectionExpression::Static), 1);
     registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::On,
-            &complete,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::On, &complete, &fixtures, &groups, false)
         .unwrap();
     let software = registry
         .action_guarded(
             desk,
             user,
-            None,
             HighlightAction::Next,
             &complete,
             &fixtures,
@@ -45,7 +35,6 @@ fn authoritative_repeat_guard_prevents_cross_surface_double_steps() {
         .action_guarded(
             desk,
             user,
-            None,
             HighlightAction::Next,
             &complete,
             &fixtures,

@@ -13,7 +13,6 @@ function highlight(overrides: Partial<HighlightState> = {}): HighlightState {
 		active_fixture: null,
 		can_previous: false,
 		can_next: false,
-		owner_user_id: "user-1",
 		...overrides,
 	};
 }

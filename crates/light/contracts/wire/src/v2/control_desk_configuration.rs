@@ -4,6 +4,7 @@ use super::runtime::{RuntimeControlDesk, RuntimePlaybackSurfaceLayout};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ControlDeskConfigurationActionRequest {
@@ -24,7 +25,9 @@ pub enum ControlDeskConfigurationAction {
         #[serde(default)]
         existing_only: bool,
     },
-    RemoveClient,
+    RemoveClient {
+        client_id: Uuid,
+    },
 }
 
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

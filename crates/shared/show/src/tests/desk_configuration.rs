@@ -136,30 +136,24 @@ fn client_history_migrates_unknown_rows_reuses_identity_and_recreates_removed_de
     let history = reopened.client_desks().unwrap();
     assert_eq!(history.len(), 1);
     assert!(history[0].last_connected_at.as_deref() >= Some(first_connected_at.as_str()));
-    assert!(reopened.remove_client_desk(legacy_id).unwrap());
-
-    let recreated = reopened
-        .resolve_client_desk(client_id, Some(legacy_id))
-        .unwrap();
-    assert_ne!(recreated.id, legacy_id);
-    assert_eq!(
-        (recreated.columns, recreated.rows, recreated.buttons),
-        (8, 1, 3)
-    );
-    assert_eq!(recreated.playback_layout, None);
+    // Forgetting the window leaves the desk it stood at. Connecting again is the same desk.
+    assert!(reopened.remove_client(client_id).unwrap());
+    let reconnected = reopened.resolve_client_desk(client_id, None).unwrap();
+    assert_eq!(reconnected.id, legacy_id);
     assert_eq!(reopened.client_desks().unwrap().len(), 1);
     drop(reopened);
     let _ = fs::remove_file(path);
 }
 
 #[test]
-fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
-    let path = temporary("client-removal");
-    let mut store = DeskStore::open(&path).unwrap();
+fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
+    let path = temporary("desk-collapse");
+    let store = DeskStore::open(&path).unwrap();
     // Two desk records, as an installation from before the collapse holds. Connecting clients no
     // longer produce them — a client is its own record now — so they are made directly.
-    let removed = store.add_desk("Removed wing").unwrap();
-    let retained = store.add_desk("Retained wing").unwrap();
+    // The collapse keeps the first desk by name, which is the one clients already resolve to.
+    let retained = store.add_desk("A kept desk").unwrap();
+    let removed = store.add_desk("Z superseded wing").unwrap();
     let show_id = ShowId::new();
     store.set_desk_page(removed.id, show_id, 17).unwrap();
     store
@@ -213,7 +207,9 @@ fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
     };
     store.put_screen(screen.clone()).unwrap();
 
-    assert!(store.remove_client_desk(removed.id).unwrap());
+    // Reopening runs the collapse: the first desk by name is the one clients resolve to.
+    drop(store);
+    let store = DeskStore::open(&path).unwrap();
     assert!(store.control_desk(removed.id).unwrap().is_none());
     assert_eq!(
         store.control_desk(retained.id).unwrap(),
@@ -710,42 +706,38 @@ fn fixed_screen_content_rejects_invalid_display_settings_without_resolving_refer
 }
 
 #[test]
-fn selected_playback_is_persisted_per_desk_and_show() {
+fn selected_playback_is_persisted_per_show_and_survives_reopening() {
     let path = temporary("selected-playback");
     let first_show = ShowId::new();
     let second_show = ShowId::new();
-    let (first_desk, second_desk) = {
+    let desk_id = {
         let store = DeskStore::open(&path).unwrap();
-        let first = store.add_desk("Front").unwrap();
-        let second = store.add_desk("Backup").unwrap();
+        let desk = store.add_desk("Front").unwrap();
         store
-            .set_selected_playback(first.id, first_show, Some(17))
+            .set_selected_playback(desk.id, first_show, Some(17))
             .unwrap();
         store
-            .set_selected_playback(second.id, first_show, Some(23))
+            .set_selected_playback(desk.id, second_show, Some(23))
             .unwrap();
-        (first.id, second.id)
+        desk.id
     };
     let store = DeskStore::open(&path).unwrap();
     assert_eq!(
-        store.selected_playback(first_desk, first_show).unwrap(),
+        store.selected_playback(desk_id, first_show).unwrap(),
         Some(17)
     );
     assert_eq!(
-        store.selected_playback(second_desk, first_show).unwrap(),
+        store.selected_playback(desk_id, second_show).unwrap(),
         Some(23)
     );
     assert_eq!(
-        store.selected_playback(first_desk, second_show).unwrap(),
+        store.selected_playback(desk_id, ShowId::new()).unwrap(),
         None
     );
     store
-        .set_selected_playback(first_desk, first_show, None)
+        .set_selected_playback(desk_id, first_show, None)
         .unwrap();
-    assert_eq!(
-        store.selected_playback(first_desk, first_show).unwrap(),
-        None
-    );
+    assert_eq!(store.selected_playback(desk_id, first_show).unwrap(), None);
     drop(store);
     let _ = fs::remove_file(path);
 }

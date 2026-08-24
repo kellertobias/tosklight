@@ -42,10 +42,6 @@ export function createHighlightActions(
 				} catch {
 					// The server may already have returned a plain operator-facing message.
 				}
-				if (/409|ownership|owned by|another (?:user|operator)/i.test(message)) {
-					const owner = highlight?.owner_user_name?.trim();
-					message = `Highlight is controlled by ${owner || "another operator"}. ${message}`;
-				}
 				highlightErrorSticky.current = true;
 				setHighlightError(message);
 				return false;

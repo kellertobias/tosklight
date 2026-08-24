@@ -596,7 +596,7 @@ fn restored_exclusions_replay_each_activation_against_show_owned_zones() {
         if !configured_desk_activates_last {
             assert!(
                 state
-                    .installation.remove_client_desk(unconfigured.id)
+                    .installation.remove_desk(unconfigured.id)
                     .unwrap()
             );
         }

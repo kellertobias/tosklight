@@ -1,4 +1,4 @@
-mod control_desks;
+pub(super) mod control_desks;
 mod migration;
 mod screens;
 mod settings;

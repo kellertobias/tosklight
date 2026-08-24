@@ -61,7 +61,6 @@ impl ApplicationCommand for HighlightCommand {
 
 #[derive(Clone, Debug)]
 pub struct HighlightEnvironment {
-    pub user_name: Option<String>,
     pub selection: ProgrammerSelection,
     pub fixtures: Vec<HighlightFixture>,
     pub groups: HashMap<String, GroupDefinition>,
@@ -179,14 +178,11 @@ impl HighlightService {
         context: &ActionContext,
         ports: &dyn HighlightPorts,
     ) -> Result<HighlightState, ActionError> {
-        let user_id = required_user(context)?;
+        required_user(context)?;
         let environment = ports.environment(context)?;
         Ok(self
             .registry
             .status(
-                context.desk_id,
-                user_id,
-                environment.user_name.as_deref(),
                 &environment.selection,
                 &environment.fixtures,
                 &environment.groups,
@@ -208,7 +204,6 @@ impl HighlightService {
                 .action_guarded(
                     context.desk_id,
                     user_id,
-                    environment.user_name.as_deref(),
                     *action,
                     &environment.selection,
                     &environment.fixtures,
@@ -218,9 +213,6 @@ impl HighlightService {
                 .map_err(highlight_error),
             HighlightCommand::Status | HighlightCommand::Reconcile { .. } => {
                 Ok(self.registry.status(
-                    context.desk_id,
-                    user_id,
-                    environment.user_name.as_deref(),
                     &environment.selection,
                     &environment.fixtures,
                     &environment.groups,

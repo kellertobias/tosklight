@@ -153,8 +153,6 @@ fn highlight_event_carries_the_authoritative_state_and_output_route() {
                 active_fixture: None,
                 can_previous: false,
                 can_next: true,
-                owner_user_id: Some(UserId(user_id)),
-                owner_user_name: Some("Operator".into()),
                 message: None,
             },
         },

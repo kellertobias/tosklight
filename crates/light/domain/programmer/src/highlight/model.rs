@@ -93,8 +93,6 @@ pub struct HighlightState {
     pub active_fixture: Option<HighlightFixture>,
     pub can_previous: bool,
     pub can_next: bool,
-    pub owner_user_id: Option<UserId>,
-    pub owner_user_name: Option<String>,
     pub message: Option<String>,
 }
 

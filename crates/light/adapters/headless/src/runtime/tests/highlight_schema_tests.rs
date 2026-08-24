@@ -269,10 +269,7 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
     };
     let stepped = registry
         .action(
-            Uuid::new_v4(),
-            light_core::UserId::new(),
-            None,
-            HighlightAction::Next,
+                        HighlightAction::Next,
             &selection,
             &summaries,
             &HashMap::new(),

@@ -3,26 +3,27 @@ import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useState } from "react";
 import type { ClientSummary } from "../../../api/types";
 
-function defaultScreenGroupId(heading: string) {
+/** Every window shares the one desk, so a window is named by its own identity. */
+function windowLabel(client: ClientSummary) {
+	return `Window ${client.client_id.slice(0, 8)}`;
+}
+
+function knownClientGroupId(heading: string) {
 	return `client-group-${heading.replaceAll(" ", "-").toLowerCase()}`;
 }
 
-function DefaultScreenClientGroup({
+function KnownClientGroup({
 	heading,
 	clients,
 	currentClientId,
-	currentDeskId,
-	onSelect,
 	onRemove,
 }: {
 	heading: string;
 	clients: ClientSummary[];
 	currentClientId?: string;
-	currentDeskId?: string;
-	onSelect: (id: string) => void;
 	onRemove: (client: ClientSummary) => void;
 }) {
-	const headingId = defaultScreenGroupId(heading);
+	const headingId = knownClientGroupId(heading);
 	return (
 		<section
 			className="default-screen-client-group"
@@ -31,21 +32,17 @@ function DefaultScreenClientGroup({
 			<h3 id={headingId}>{heading}</h3>
 			{clients.map((client) => {
 				const currentClient = client.client_id === currentClientId;
-				const currentDefault = client.desk.id === currentDeskId;
 				const removeTitle = currentClient
-					? "The current client cannot remove itself"
+					? "This window cannot remove itself"
 					: client.connected
-						? "Disconnect this client before removing it"
-						: !client.can_remove
-							? "This screen configuration is in use by an active session"
-							: undefined;
+						? "Disconnect this window before removing it"
+						: undefined;
 				return (
 					<article key={client.client_id}>
 						<div className="default-screen-client-details">
 							<div className="default-screen-client-title">
-								<b>{client.name}</b>
-								{currentClient && <strong>Current client</strong>}
-								{currentDefault && <strong>Current default screen</strong>}
+								<b>{windowLabel(client)}</b>
+								{currentClient && <strong>This window</strong>}
 							</div>
 							<small>
 								Client identity <code>{client.client_id}</code>
@@ -56,22 +53,8 @@ function DefaultScreenClientGroup({
 									? `Last connected ${new Date(client.last_connected_at).toLocaleString()}`
 									: "Last connected unknown"}
 							</small>
-							<small>
-								Screen {client.desk.name} ·{" "}
-								{client.desk.columns}×{client.desk.rows} · {client.desk.buttons}{" "}
-								buttons
-							</small>
 						</div>
 						<div className="default-screen-client-actions">
-							<Button
-								disabled={currentDefault}
-								variant={currentDefault ? "success" : "secondary"}
-								onClick={() => onSelect(client.desk.id)}
-							>
-								{currentDefault
-									? "Current default screen"
-									: "Use as default screen"}
-							</Button>
 							<Button
 								variant="danger"
 								disabled={
@@ -80,7 +63,7 @@ function DefaultScreenClientGroup({
 								title={removeTitle}
 								onClick={() => onRemove(client)}
 							>
-								Remove client
+								Forget window
 							</Button>
 						</div>
 					</article>
@@ -108,25 +91,25 @@ function RemoveClientConfirmation({
 					className="nested-modal default-screen-remove-confirm"
 					role="alertdialog"
 					aria-modal="true"
-					aria-label={`Remove client ${client.name}?`}
+					aria-label={`Forget ${windowLabel(client)}?`}
 				>
-					<ModalTitleBar title={`Remove client ${client.name}?`} />
+					<ModalTitleBar title={`Forget ${windowLabel(client)}?`} />
 					<p>
-						Remove {client.name} and its client registration, default-screen
-						configuration, per-show page and playback selection, desk lock,
-						Update defaults.
+						Remove this window's registration. It is only a record that the
+						window has connected before.
 					</p>
 					<p>
-						Portable shows, Virtual Playback assignments and exclusion zones,
-						users, optional screens, other clients, and installation-wide
-						configuration will not change.
+						The desk itself is untouched: its page, playback selection, desk
+						lock, Update defaults, screens, shows, and installation-wide
+						configuration all stay as they are. The window can connect again at
+						any time.
 					</p>
 					<div className="modal-actions">
 						<Button disabled={removing} onClick={onCancel}>
 							Cancel
 						</Button>
 						<Button variant="danger" disabled={removing} onClick={onConfirm}>
-							{removing ? "Removing…" : "Remove client"}
+							{removing ? "Forgetting…" : "Forget window"}
 						</Button>
 					</div>
 				</section>
@@ -135,20 +118,16 @@ function RemoveClientConfirmation({
 	);
 }
 
-export function DefaultScreenPicker({
+export function KnownClientsModal({
 	clients,
 	currentClientId,
-	currentDeskId,
-	onSelect,
 	onRemove,
 	onRemoveAll,
 	onClose,
 }: {
 	clients: ClientSummary[];
 	currentClientId?: string;
-	currentDeskId?: string;
-	onSelect: (id: string) => void;
-	onRemove: (deskId: string) => Promise<boolean>;
+	onRemove: (client: ClientSummary) => Promise<boolean>;
 	onRemoveAll: () => Promise<boolean>;
 	onClose: () => void;
 }) {
@@ -164,16 +143,15 @@ export function DefaultScreenPicker({
 			(right.last_connected_at ?? "").localeCompare(
 				left.last_connected_at ?? "",
 			) ||
-			left.name.localeCompare(right.name) ||
 			left.client_id.localeCompare(right.client_id),
 	);
 	const groups = [
 		{
-			heading: "Connected clients",
+			heading: "Connected windows",
 			clients: sorted.filter((client) => client.connected),
 		},
 		{
-			heading: "Disconnected clients",
+			heading: "Disconnected windows",
 			clients: sorted.filter((client) => !client.connected),
 		},
 	].filter((group) => group.clients.length > 0);
@@ -189,39 +167,37 @@ export function DefaultScreenPicker({
 					className="nested-modal default-screen-picker"
 					role="dialog"
 					aria-modal="true"
-					aria-label="Choose default screen"
+					aria-label="Known windows"
 				>
 					<ModalTitleBar
-						title="Choose default screen"
+						title="Known windows"
 						groups={[
 							{
 								id: "client-cleanup",
 								actions: [
 									{
-										id: "remove-all-other-clients",
-										label: "Remove all other clients",
+										id: "forget-other-windows",
+										label: "Forget other windows",
 										variant: "danger",
 										onPress: () => setRemoveAllOpen(true),
 									},
 								],
 							},
 						]}
-						closeLabel="Close default screen chooser"
+						closeLabel="Close known windows"
 						onClose={onClose}
 					/>
 					<p>
-						Choose which known client configuration this app should use as its
-						default screen.
+						Every window operates the one desk. This is which windows have
+						connected to it; forget a disconnected one to drop its record.
 					</p>
 					<WindowScrollArea className="default-screen-client-list">
 						{groups.map((group) => (
-							<DefaultScreenClientGroup
+							<KnownClientGroup
 								key={group.heading}
 								heading={group.heading}
 								clients={group.clients}
 								currentClientId={currentClientId}
-								currentDeskId={currentDeskId}
-								onSelect={onSelect}
 								onRemove={(client) => {
 									setRemoveError(null);
 									setRemoveCandidate(client);
@@ -243,12 +219,12 @@ export function DefaultScreenPicker({
 						onConfirm={() => {
 							setRemoving(true);
 							setRemoveError(null);
-							void onRemove(removeCandidate.desk.id).then((removed) => {
+							void onRemove(removeCandidate).then((removed) => {
 								setRemoving(false);
 								setRemoveCandidate(null);
 								if (!removed) {
 									setRemoveError(
-										`${removeCandidate.name} could not be removed. It may have reconnected; disconnect it and try again.`,
+										`${windowLabel(removeCandidate)} could not be forgotten. It may have reconnected; disconnect it and try again.`,
 									);
 								}
 							});
@@ -262,16 +238,16 @@ export function DefaultScreenPicker({
 								className="nested-modal default-screen-remove-confirm"
 								role="alertdialog"
 								aria-modal="true"
-								aria-label="Remove all other clients?"
+								aria-label="Forget other windows?"
 							>
-								<ModalTitleBar title="Remove all other clients?" />
+								<ModalTitleBar title="Forget other windows?" />
 								<p>
-									Remove every eligible disconnected client configuration. The
-									current client and connected clients remain protected.
+									Forget every disconnected window. This window and connected
+									windows are left alone.
 								</p>
 								<p>
-									Portable shows, users, optional screens, and installation-wide
-									configuration will not change.
+									The desk, its configuration, shows, screens, and
+									installation-wide settings will not change.
 								</p>
 								<div className="modal-actions">
 									<Button
@@ -296,7 +272,7 @@ export function DefaultScreenPicker({
 											});
 										}}
 									>
-										{removing ? "Removing…" : "Remove all other clients"}
+										{removing ? "Forgetting…" : "Forget other windows"}
 									</Button>
 								</div>
 							</section>

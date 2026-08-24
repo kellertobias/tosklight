@@ -106,7 +106,8 @@ impl DeskStore {
         Ok(())
     }
 
-    pub fn remove_client_desk(&mut self, desk_id: Uuid) -> Result<bool, StoreError> {
+    /// Remove a control desk and the state that belongs only to it.
+    pub fn remove_desk(&mut self, desk_id: Uuid) -> Result<bool, StoreError> {
         let transaction = self.conn.transaction()?;
         let exists = transaction
             .query_row(
@@ -119,43 +120,22 @@ impl DeskStore {
         if !exists {
             return Ok(false);
         }
-        let desk_key = desk_id.to_string();
-        transaction.execute(
-            "DELETE FROM settings WHERE key=?1",
-            [format!("desk_lock:{desk_key}")],
-        )?;
-        let settings = {
-            let mut statement = transaction.prepare(
-                "SELECT key,value FROM settings WHERE key='server_configuration' OR key LIKE 'virtual_playback_exclusion_zones:%'",
-            )?;
-            statement
-                .query_map([], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                })?
-                .collect::<Result<Vec<_>, _>>()?
-        };
-        for (key, encoded) in settings {
-            let mut value: serde_json::Value = serde_json::from_str(&encoded)?;
-            let changed = if key == "server_configuration" {
-                value
-                    .get_mut("update_settings_by_desk")
-                    .and_then(serde_json::Value::as_object_mut)
-                    .is_some_and(|entries| entries.remove(&desk_key).is_some())
-            } else {
-                value
-                    .as_object_mut()
-                    .is_some_and(|entries| entries.remove(&desk_key).is_some())
-            };
-            if changed {
-                transaction.execute(
-                    "UPDATE settings SET value=?1 WHERE key=?2",
-                    params![serde_json::to_string(&value)?, key],
-                )?;
-            }
-        }
-        transaction.execute("DELETE FROM control_desks WHERE id=?1", [desk_key])?;
+        delete_desks(&transaction, std::slice::from_ref(&desk_id.to_string()))?;
         transaction.commit()?;
         Ok(true)
+    }
+
+    /// Forget one window that has connected.
+    ///
+    /// A client used to be a desk, so removing it removed the desk and everything scoped to it.
+    /// A client is a window on the one desk now, so forgetting it removes only its registration —
+    /// the desk, its lock, its per-show page and playback selection all belong to the desk and
+    /// outlive any single window.
+    pub fn remove_client(&mut self, client_id: Uuid) -> Result<bool, StoreError> {
+        Ok(self.conn.execute(
+            "DELETE FROM desk_clients WHERE client_id=?1",
+            [client_id.to_string()],
+        )? == 1)
     }
 
     pub fn add_desk(&self, name: &str) -> Result<ControlDesk, StoreError> {
@@ -256,4 +236,59 @@ impl DeskStore {
         }
         Ok(())
     }
+}
+
+/// Delete control desks and the state keyed only by them.
+///
+/// The desk's own rows cascade or are deleted here; the two settings documents that key entries
+/// by desk are rewritten so a removed desk leaves nothing addressing it behind.
+pub(super) fn delete_desks(
+    transaction: &rusqlite::Transaction<'_>,
+    desk_ids: &[String],
+) -> Result<(), StoreError> {
+    for desk_id in desk_ids {
+        transaction.execute("DELETE FROM control_desk_pages WHERE desk_id=?1", [desk_id])?;
+        transaction.execute(
+            "DELETE FROM control_desk_selections WHERE desk_id=?1",
+            [desk_id],
+        )?;
+        transaction.execute(
+            "DELETE FROM settings WHERE key=?1",
+            [format!("desk_lock:{desk_id}")],
+        )?;
+        transaction.execute("DELETE FROM control_desks WHERE id=?1", [desk_id])?;
+    }
+    let entries = {
+        let mut statement = transaction.prepare(
+            "SELECT key,value FROM settings WHERE key='server_configuration' OR key LIKE 'virtual_playback_exclusion_zones:%'",
+        )?;
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    for (key, encoded) in entries {
+        let mut value: serde_json::Value = serde_json::from_str(&encoded)?;
+        let mut changed = false;
+        for desk_id in desk_ids {
+            changed |= if key == "server_configuration" {
+                value
+                    .get_mut("update_settings_by_desk")
+                    .and_then(serde_json::Value::as_object_mut)
+                    .is_some_and(|entries| entries.remove(desk_id).is_some())
+            } else {
+                value
+                    .as_object_mut()
+                    .is_some_and(|entries| entries.remove(desk_id).is_some())
+            };
+        }
+        if changed {
+            transaction.execute(
+                "UPDATE settings SET value=?1 WHERE key=?2",
+                params![serde_json::to_string(&value)?, key],
+            )?;
+        }
+    }
+    Ok(())
 }
