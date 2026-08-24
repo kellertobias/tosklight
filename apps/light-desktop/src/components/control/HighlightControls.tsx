@@ -7,7 +7,6 @@ import type {
 	HighlightState,
 	PatchedFixture,
 } from "../../api/types";
-import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import {
 	useHighlightActions,
 	useHighlightErrorMessage,
@@ -106,10 +105,7 @@ function useHighlightPatchedFixtures(state: HighlightState | null) {
 	return usePatchFixturesById(fixtureIds, enabled);
 }
 
-function useHighlightInvocation(
-	state: HighlightState | null,
-	ownedByOther: boolean,
-) {
+function useHighlightInvocation(state: HighlightState | null) {
 	const highlightError = useHighlightErrorMessage();
 	const highlightActions = useHighlightActions();
 	const [pending, setPending] = useState<HighlightAction | null>(null);
@@ -117,13 +113,12 @@ function useHighlightInvocation(
 	const allowed = useCallback(
 		(action: HighlightAction) => {
 			if (pendingRef.current || !state) return false;
-			if (ownedByOther && !state.capture_only) return false;
 			if (action === "next") return state.active && state.can_next;
 			if (action === "previous") return state.active && state.can_previous;
 			if (action === "all") return state.active;
 			return true;
 		},
-		[ownedByOther, state],
+		[state],
 	);
 
 	const invoke = useCallback(
@@ -199,27 +194,20 @@ function useHighlightKeyboardShortcuts({
 
 function HighlightButtons({
 	state,
-	ownedByOther,
-	ownerLabel,
 	allowed,
 	invoke,
 	shiftArmed,
 	clearLatchedShift,
 }: {
 	state: HighlightState | null;
-	ownedByOther: boolean;
-	ownerLabel: string;
 	allowed: (action: HighlightAction) => boolean;
 	invoke: (action: HighlightAction) => Promise<void>;
 	shiftArmed: boolean;
 	clearLatchedShift: () => void;
 }) {
-	const toggleLabel =
-		ownedByOther && !state?.capture_only
-			? `Highlight is controlled by ${ownerLabel}`
-			: state?.active
-				? "Turn Highlight off"
-				: "Turn Highlight on";
+	const toggleLabel = state?.active
+		? "Turn Highlight off"
+		: "Turn Highlight on";
 	return (
 		<>
 			<Button
@@ -280,18 +268,11 @@ function HighlightButtons({
 export function HighlightControls() {
 	const state = useHighlightSnapshot();
 	const app = useOptionalApp();
-	const session = useSessionSnapshot();
 	const patch = useHighlightPatchedFixtures(state);
-	const ownedByOther = Boolean(
-		state?.owner_user_id &&
-			session?.user.id &&
-			state.owner_user_id !== session.user.id,
-	);
-	const ownerLabel = state?.owner_user_name?.trim() || "another operator";
 	const outputSuppressed = Boolean(
 		state?.capture_only || (state?.active && !state.output_enabled),
 	);
-	const highlight = useHighlightInvocation(state, ownedByOther);
+	const highlight = useHighlightInvocation(state);
 	const clearLatchedShift = useCallback(() => {
 		if (app?.state.shiftArmed)
 			app.dispatch({ type: "SET_SHIFT_ARMED", value: false });
@@ -324,8 +305,6 @@ export function HighlightControls() {
 		>
 			<HighlightButtons
 				state={state}
-				ownedByOther={ownedByOther}
-				ownerLabel={ownerLabel}
 				allowed={highlight.allowed}
 				invoke={highlight.invoke}
 				shiftArmed={shiftArmed}

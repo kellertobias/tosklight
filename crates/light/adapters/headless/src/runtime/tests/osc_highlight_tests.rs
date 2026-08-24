@@ -46,7 +46,6 @@ fn verify_cross_surface_highlight_dedupe(
         .apply_action_guarded(
             session.desk.id,
             session.user.id,
-            Some(&session.user.name),
             HighlightAction::Next,
             &selection,
             &fixtures,
@@ -59,10 +58,7 @@ fn verify_cross_surface_highlight_dedupe(
     send_highlight_osc(state, "next");
     let selection = state.programming.selection(session.id).unwrap();
     let after_echo = state.highlight.transition(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        &selection,
+                &selection,
         &fixtures,
         &groups,
         false,
@@ -83,10 +79,7 @@ fn verify_highlight_alias_dedupe(
         let transition = state
             .highlight
             .apply_action(
-                session.desk.id,
-                session.user.id,
-                Some(&session.user.name),
-                HighlightAction::Next,
+                                HighlightAction::Next,
                 &selection,
                 &fixtures,
                 &groups,
@@ -101,10 +94,7 @@ fn verify_highlight_alias_dedupe(
     send_highlight_osc(state, "prev");
     let selection = state.programming.selection(session.id).unwrap();
     let after_aliases = state.highlight.transition(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        &selection,
+                &selection,
         &fixtures,
         &groups,
         false,
@@ -185,10 +175,7 @@ fn verify_highlight_reconnect(
     let groups = highlight_groups(&snapshot);
     let selection = state.programming.selection(session.id).unwrap();
     let reconnected = state.highlight.transition(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        &selection,
+                &selection,
         &fixtures,
         &groups,
         false,
@@ -201,10 +188,7 @@ fn verify_highlight_reconnect(
     send_highlight_osc(state, "reset");
     let selection = state.programming.selection(session.id).unwrap();
     let unchanged = state.highlight.transition(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        &selection,
+                &selection,
         &fixtures,
         &groups,
         false,
@@ -214,10 +198,7 @@ fn verify_highlight_reconnect(
     assert_eq!(state.programming.get(session.id).unwrap().selected, fixture_ids);
     let selection = state.programming.selection(session.id).unwrap();
     let restored = state.highlight.transition(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        &selection,
+                &selection,
         &fixtures,
         &groups,
         false,

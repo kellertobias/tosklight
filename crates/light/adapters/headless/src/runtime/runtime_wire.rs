@@ -127,8 +127,6 @@ pub(super) fn highlight(state: HighlightState) -> wire::RuntimeHighlightState {
         active_fixture: state.active_fixture.map(highlight_fixture),
         can_previous: state.can_previous,
         can_next: state.can_next,
-        owner_user_id: state.owner_user_id.map(|id| id.0),
-        owner_user_name: state.owner_user_name,
         message: state.message,
     }
 }

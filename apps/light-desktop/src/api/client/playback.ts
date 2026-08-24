@@ -196,8 +196,11 @@ export class PlaybackApiClient {
 		return outcome.desk as ControlDesk;
 	}
 
-	async removeClient(deskId: string): Promise<void> {
-		await this.controlDeskAction(deskId, { type: "remove_client" });
+	async removeClient(deskId: string, clientId: string): Promise<void> {
+		await this.controlDeskAction(deskId, {
+			type: "remove_client",
+			client_id: clientId,
+		});
 	}
 
 	private screenAction(

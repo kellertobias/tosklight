@@ -220,9 +220,6 @@ pub(super) fn current_highlight_transition(
     let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
     let groups = highlight_groups(&snapshot);
     Some(state.highlight.transition(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
         &selection,
         &fixtures,
         &groups,

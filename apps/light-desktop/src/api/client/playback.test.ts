@@ -14,6 +14,7 @@ import type { LiveClientTransport } from "./transport";
 const REQUEST_ID = "playback-request-1";
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const SCREEN_ID = "22222222-2222-4222-8222-222222222222";
+const CLIENT_ID = "33333333-3333-4333-8333-333333333333";
 
 const screen: ScreenConfiguration = {
 	id: SCREEN_ID,
@@ -355,13 +356,13 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			page_creation_event_sequence: null,
 		});
 
-		await client.removeClient(DESK_ID);
+		await client.removeClient(DESK_ID, CLIENT_ID);
 
 		expect(request).toHaveBeenCalledWith(
 			`/api/v2/control-desks/${DESK_ID}/actions`,
 			expect.objectContaining({
 				method: "POST",
-				body: expect.stringContaining('"type":"remove_client"'),
+				body: expect.stringContaining(`"client_id":"${CLIENT_ID}"`),
 			}),
 		);
 	});

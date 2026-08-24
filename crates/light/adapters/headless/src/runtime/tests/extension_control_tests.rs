@@ -18,8 +18,6 @@ fn canonical_extension_highlight_feedback_tracks_active_navigation_state() {
         active_fixture: None,
         can_previous: true,
         can_next: true,
-        owner_user_id: None,
-        owner_user_name: None,
         message: None,
     };
     for (action, expected_enabled, expected_selected, expected_lamp) in [

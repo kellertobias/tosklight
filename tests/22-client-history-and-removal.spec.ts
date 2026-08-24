@@ -71,20 +71,43 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
 			.getByRole("button", { name: "Screens & playback", exact: true })
 			.click();
 		await page
-			.getByRole("button", { name: "Choose default screen", exact: true })
+			.getByRole("button", { name: "Known windows", exact: true })
 			.click();
-		const chooser = page.getByRole("dialog", { name: "Choose default screen" });
+		const chooser = page.getByRole("dialog", { name: "Known windows" });
 		await expect(
-			chooser.getByRole("heading", { name: "Connected clients", exact: true }),
+			chooser.getByRole("heading", { name: "Connected windows", exact: true }),
 		).toBeVisible();
-		// A client is a window, not a desk. Every window that has connected to the desk is offered
-		// here, because they are all screens of the same desk.
+		// A client is a window, not a desk, so the list identifies windows rather than desk
+		// configurations to choose between. This window is marked, and single-client mode — on by
+		// default — has already dropped the disconnected one.
+		await expect(chooser.getByText("This window")).toHaveCount(1);
 		await expect(
 			chooser.getByRole("article").filter({ hasText: clientB }),
-		).toHaveCount(1);
+		).toHaveCount(0);
 		await chooser
-			.getByRole("button", { name: "Close default screen chooser" })
+			.getByRole("button", { name: "Close known windows" })
 			.click();
+
+		// Forgetting a disconnected window drops its record and nothing else. Every window shares
+		// the one desk, so this must not take the desk — and with it the page, playback selection
+		// and desk lock — away from the windows still standing at it.
+		const clientC = crypto.randomUUID();
+		const sessionC = await createSession(bench.baseUrl, clientC);
+		const clientCApi = new ApiDriver(bench.baseUrl);
+		clientCApi.session = sessionC;
+		await clientCApi.request(
+			"DELETE",
+			`/api/v2/sessions/${sessionC.session_id}`,
+		);
+		const deskId = api.session!.desk.id;
+		await removeClient(api, deskId, clientC);
+		clients = await clientSummaries(api);
+		expect(clients.some((client) => client.client_id === clientC)).toBe(false);
+		expect(clients.some((client) => client.desk.id === deskId)).toBe(true);
+		expect(
+			clients.find((client) => client.client_id === api.session!.client_id)
+				?.connected,
+		).toBe(true);
 	});
 });
 
@@ -120,11 +143,12 @@ async function clientSummaries(api: ApiDriver): Promise<ClientSummary[]> {
 async function removeClient(
 	api: ApiDriver,
 	deskId: string,
+	clientId: string,
 	requestId = crypto.randomUUID(),
 ) {
 	return api.request<any>("POST", `/api/v2/control-desks/${deskId}/actions`, {
 		request_id: requestId,
-		action: { type: "remove_client" },
+		action: { type: "remove_client", client_id: clientId },
 	});
 }
 

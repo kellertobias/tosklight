@@ -10,7 +10,7 @@ import type { ClientSummary, ScreenConfiguration } from "../../api/types";
 import { ScreensProvider } from "../../features/screens/ScreensContext";
 import type { ScreensContextValue } from "../../features/screens/types";
 import {
-	DefaultScreenPicker,
+	KnownClientsModal,
 	ProgrammerControlSurfaceSettings,
 	ScreenSettingsCard,
 } from "./ScreensSetup";
@@ -572,7 +572,7 @@ describe("additional screen settings", () => {
 	});
 });
 
-describe("default screen picker", () => {
+describe("known windows", () => {
 	const client = (
 		id: string,
 		name: string,
@@ -586,20 +586,19 @@ describe("default screen picker", () => {
 		last_connected_at: last,
 		can_remove: canRemove,
 		desk: {
-			id: `desk-${id}`,
-			name: `${name} screen`,
+			id: "the-one-desk",
+			name: "Front of house",
 			columns: 8,
 			rows: 2,
 			buttons: 3,
 		},
 	});
 
-	it("groups and sorts authoritative presence while identifying current client and default separately", () => {
-		const select = vi.fn();
+	it("groups and sorts authoritative presence and names this window", () => {
 		const close = vi.fn();
 		const remove = vi.fn(async () => true);
 		render(
-			<DefaultScreenPicker
+			<KnownClientsModal
 				clients={[
 					client(
 						"connected-old",
@@ -614,7 +613,6 @@ describe("default screen picker", () => {
 						"Historical new",
 						false,
 						"2026-07-17T10:00:00Z",
-						false,
 					),
 					client(
 						"connected-new",
@@ -625,8 +623,6 @@ describe("default screen picker", () => {
 					),
 				]}
 				currentClientId="connected-old"
-				currentDeskId="desk-historical-new"
-				onSelect={select}
 				onRemove={remove}
 				onRemoveAll={vi.fn(async () => true)}
 				onClose={close}
@@ -634,79 +630,74 @@ describe("default screen picker", () => {
 		);
 
 		expect(
-			screen.getByRole("heading", { name: "Choose default screen" }),
+			screen.getByRole("heading", { name: "Known windows" }),
 		).toBeInTheDocument();
 		const rows = screen.getAllByRole("article");
+		// Every window shares the one desk, so each is named by its own identity.
 		expect(rows.map((row) => row.querySelector("b")?.textContent)).toEqual([
-			"Connected new",
-			"Connected old",
-			"Historical new",
-			"Unknown",
+			"Window connecte",
+			"Window connecte",
+			"Window historic",
+			"Window unknown",
 		]);
-		expect(screen.getByText("Current client")).toBeInTheDocument();
-		expect(screen.getAllByText("Current default screen")).toHaveLength(2);
+		expect(screen.getByText("This window")).toBeInTheDocument();
+		expect(screen.queryByText(/default screen/i)).toBeNull();
 		expect(screen.getByText(/Last connected unknown/)).toBeInTheDocument();
 		expect(
 			screen
-				.getAllByRole("button", { name: "Remove client" })
+				.getAllByRole("button", { name: "Forget window" })
 				.filter((button) => !button.hasAttribute("disabled")),
-		).toHaveLength(1);
+		).toHaveLength(2);
 		fireEvent.click(
-			screen.getAllByRole("button", { name: "Use as default screen" })[0],
-		);
-		expect(select).toHaveBeenCalled();
-		fireEvent.click(
-			screen.getByRole("button", { name: "Close default screen chooser" }),
+			screen.getByRole("button", { name: "Close known windows" }),
 		);
 		expect(close).toHaveBeenCalledOnce();
 	});
 
-	it("requires named confirmation and reports a reconnect race without removing other state claims", async () => {
+	it("requires named confirmation and reports a reconnect race", async () => {
 		const remove = vi.fn(async () => false);
 		render(
-			<DefaultScreenPicker
+			<KnownClientsModal
 				clients={[client("old", "Old wing", false, "2026-07-01T10:00:00Z")]}
 				currentClientId="current"
-				currentDeskId="desk-current"
-				onSelect={vi.fn()}
 				onRemove={remove}
 				onRemoveAll={vi.fn(async () => true)}
 				onClose={vi.fn()}
 			/>,
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Remove client" }));
+		fireEvent.click(screen.getByRole("button", { name: "Forget window" }));
 		const confirmation = screen.getByRole("alertdialog", {
-			name: "Remove client Old wing?",
+			name: "Forget Window old?",
 		});
 		expect(confirmation).toHaveTextContent(
-			"per-show page and playback selection, desk lock, Update defaults",
+			"only a record that the window has connected before",
 		);
-		expect(confirmation).toHaveTextContent(
-			"Portable shows, Virtual Playback assignments and exclusion zones, users, optional screens, other clients, and installation-wide configuration will not change",
-		);
+		expect(confirmation).toHaveTextContent("The desk itself is untouched");
 		const confirmRemove = screen
-			.getAllByRole("button", { name: "Remove client" })
+			.getAllByRole("button", { name: "Forget window" })
 			.at(-1);
 		expect(confirmRemove).toBeDefined();
 		if (confirmRemove) fireEvent.click(confirmRemove);
-		await waitFor(() => expect(remove).toHaveBeenCalledWith("desk-old"));
+		await waitFor(() =>
+			expect(remove).toHaveBeenCalledWith(
+				expect.objectContaining({ client_id: "old" }),
+			),
+		);
 		expect(await screen.findByRole("alert")).toHaveTextContent(
 			"may have reconnected",
 		);
 	});
 
-	it("requires confirmation before removing all eligible other clients", async () => {
+	it("requires confirmation before forgetting every other window", async () => {
 		const removeAll = vi.fn(async () => true);
 		render(
-			<DefaultScreenPicker
+			<KnownClientsModal
 				clients={[
 					client("current", "Current", true, "2026-07-18T10:00:00Z", false),
 					client("connected", "Connected", true, "2026-07-18T09:00:00Z", false),
 					client("old", "Old wing", false, "2026-07-01T10:00:00Z"),
 				]}
 				currentClientId="current"
-				currentDeskId="desk-current"
-				onSelect={vi.fn()}
 				onRemove={vi.fn(async () => true)}
 				onRemoveAll={removeAll}
 				onClose={vi.fn()}
@@ -714,25 +705,23 @@ describe("default screen picker", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Remove all other clients" }),
+			screen.getByRole("button", { name: "Forget other windows" }),
 		);
 		const confirmation = screen.getByRole("alertdialog", {
-			name: "Remove all other clients?",
+			name: "Forget other windows?",
 		});
 		expect(confirmation).toHaveTextContent(
-			"current client and connected clients remain protected",
+			"This window and connected windows are left alone",
 		);
 		expect(removeAll).not.toHaveBeenCalled();
 		const confirmRemoveAll = screen
-			.getAllByRole("button", { name: "Remove all other clients" })
+			.getAllByRole("button", { name: "Forget other windows" })
 			.at(-1);
 		expect(confirmRemoveAll).toBeDefined();
 		if (confirmRemoveAll) fireEvent.click(confirmRemoveAll);
 		await waitFor(() => expect(removeAll).toHaveBeenCalledOnce());
 		expect(
-			screen.queryByRole("alertdialog", {
-				name: "Remove all other clients?",
-			}),
+			screen.queryByRole("alertdialog", { name: "Forget other windows?" }),
 		).toBeNull();
 	});
 });

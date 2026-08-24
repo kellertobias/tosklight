@@ -68,7 +68,6 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
             .ok_or_else(|| not_found("programmer selection"))?;
         let snapshot = self.state.output.snapshot();
         Ok(HighlightEnvironment {
-            user_name: Some(self.session.user.name.clone()),
             selection,
             fixtures: highlight_fixture_summaries(&snapshot.fixtures),
             groups: highlight_groups(&snapshot),

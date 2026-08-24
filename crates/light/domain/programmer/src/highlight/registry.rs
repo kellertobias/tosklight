@@ -30,7 +30,6 @@ impl HighlightRegistry {
         &self,
         desk_id: Uuid,
         user_id: UserId,
-        user_name: Option<&str>,
         action: HighlightAction,
         current_selection: &ProgrammerSelection,
         valid_fixtures: &[HighlightFixture],
@@ -48,20 +47,9 @@ impl HighlightRegistry {
             received_at,
         ) {
             drop(recent_actions);
-            return Ok(self.status(
-                desk_id,
-                user_id,
-                user_name,
-                current_selection,
-                valid_fixtures,
-                groups,
-                capture_only,
-            ));
+            return Ok(self.status(current_selection, valid_fixtures, groups, capture_only));
         }
         let transition = self.action(
-            desk_id,
-            user_id,
-            user_name,
             action,
             current_selection,
             valid_fixtures,
@@ -72,12 +60,8 @@ impl HighlightRegistry {
         Ok(transition)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn action(
         &self,
-        desk_id: Uuid,
-        user_id: UserId,
-        user_name: Option<&str>,
         action: HighlightAction,
         current_selection: &ProgrammerSelection,
         valid_fixtures: &[HighlightFixture],
@@ -92,38 +76,24 @@ impl HighlightRegistry {
         let mut working_selection =
             synchronize_actual_selection(&mut operator, current_selection, valid_fixtures, groups);
         let context = ActionContext {
-            user_id,
             valid_fixtures,
             groups,
             capture_only,
         };
-        reconcile_capture_mode(&mut runtime, &mut operator, &context);
+        reconcile_capture_mode(&mut operator, &context);
         operator.message = None;
-        if let Some(action_selection) = apply_action(&mut runtime, &mut operator, action, &context)?
-        {
+        if let Some(action_selection) = apply_action(&mut operator, action, &context)? {
             working_selection = Some(action_selection);
         }
-        let transition = build_transition(
-            &runtime,
-            &operator,
-            user_id,
-            user_name,
-            valid_fixtures,
-            capture_only,
-            working_selection,
-            desk_id,
-        );
+        let transition =
+            build_transition(&operator, valid_fixtures, capture_only, working_selection);
         runtime.operator = operator;
         *live_runtime = runtime;
         Ok(transition)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn status(
         &self,
-        desk_id: Uuid,
-        user_id: UserId,
-        user_name: Option<&str>,
         current_selection: &ProgrammerSelection,
         valid_fixtures: &[HighlightFixture],
         groups: &HashMap<String, GroupDefinition>,
@@ -134,23 +104,14 @@ impl HighlightRegistry {
         let working_selection =
             synchronize_actual_selection(&mut operator, current_selection, valid_fixtures, groups);
         let context = ActionContext {
-            user_id,
             valid_fixtures,
             groups,
             capture_only,
         };
-        reconcile_capture_mode(&mut runtime, &mut operator, &context);
-        restore_live_output(&mut runtime, &mut operator, &context);
-        let transition = build_transition(
-            &runtime,
-            &operator,
-            user_id,
-            user_name,
-            valid_fixtures,
-            capture_only,
-            working_selection,
-            desk_id,
-        );
+        reconcile_capture_mode(&mut operator, &context);
+        restore_live_output(&mut operator, &context);
+        let transition =
+            build_transition(&operator, valid_fixtures, capture_only, working_selection);
         runtime.operator = operator;
         transition
     }
@@ -232,7 +193,6 @@ impl HighlightRegistry {
     fn clear_all_but_repeat_guard(&self) {
         let mut runtime = self.runtime.lock();
         runtime.operator = OperatorState::default();
-        runtime.output_owner = None;
     }
 
     /// Compatibility projection containing only full Highlight identities. New output adapters
@@ -257,29 +217,14 @@ impl HighlightRegistry {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn build_transition(
-    runtime: &HighlightRuntime,
     operator: &super::state::OperatorState,
-    user_id: UserId,
-    user_name: Option<&str>,
     valid_fixtures: &[HighlightFixture],
     capture_only: bool,
     working_selection: Option<super::model::HighlightSelectionWrite>,
-    desk_id: Uuid,
 ) -> HighlightTransition {
-    let _ = desk_id;
-    let owner = runtime.output_owner;
     HighlightTransition {
-        state: response(
-            operator,
-            valid_fixtures,
-            capture_only,
-            owner,
-            (owner == Some(user_id))
-                .then(|| user_name.map(str::to_owned))
-                .flatten(),
-        ),
+        state: response(operator, valid_fixtures, capture_only),
         output_fixtures: output_fixture_ids(operator),
         output_layers: output_layers(operator),
         working_selection,

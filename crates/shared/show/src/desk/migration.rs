@@ -110,6 +110,33 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
     tx.commit()?;
     drop_desk_osc_alias(conn)?;
+    collapse_control_desks(conn)?;
+    Ok(())
+}
+
+/// Leave one control desk behind.
+///
+/// Opening a second window used to create a second control desk, so an installation from before
+/// the collapse holds one row per window that ever connected. Every client resolves to the first
+/// desk by name now, which leaves the rest addressing nothing while still appearing wherever the
+/// operator is shown their desks. The kept desk is the one clients already resolve to, so nothing
+/// an operator is looking at moves; the others take their own page, playback selection, lock and
+/// per-desk settings with them.
+fn collapse_control_desks(conn: &mut Connection) -> Result<(), StoreError> {
+    let superseded = {
+        let mut statement =
+            conn.prepare("SELECT id FROM control_desks ORDER BY name COLLATE NOCASE, id")?;
+        statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .skip(1)
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    if superseded.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.transaction()?;
+    super::control_desks::delete_desks(&tx, &superseded)?;
+    tx.commit()?;
     Ok(())
 }
 

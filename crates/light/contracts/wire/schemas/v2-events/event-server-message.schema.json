@@ -6622,19 +6622,6 @@
         "output_enabled": {
           "type": "boolean"
         },
-        "owner_user_id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "uuid"
-        },
-        "owner_user_name": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "remembered": {
           "type": "array",
           "items": {
@@ -6652,8 +6639,6 @@
         "active_fixture",
         "can_previous",
         "can_next",
-        "owner_user_id",
-        "owner_user_name",
         "message"
       ]
     },

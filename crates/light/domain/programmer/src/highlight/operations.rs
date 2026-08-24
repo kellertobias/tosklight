@@ -3,31 +3,29 @@ use super::model::{
     HighlightOutputRole, HighlightSelectionWrite, HighlightState,
 };
 use super::selection::resolve_remembered;
-use super::state::{HighlightRuntime, OperatorState};
+use super::state::OperatorState;
 use crate::{GroupDefinition, SelectionExpression};
-use light_core::{FixtureId, UserId};
+use light_core::FixtureId;
 use std::collections::HashMap;
 
 pub(super) struct ActionContext<'a> {
-    pub(super) user_id: UserId,
     pub(super) valid_fixtures: &'a [HighlightFixture],
     pub(super) groups: &'a HashMap<String, GroupDefinition>,
     pub(super) capture_only: bool,
 }
 
 pub(super) fn apply_action(
-    runtime: &mut HighlightRuntime,
     operator: &mut OperatorState,
     action: HighlightAction,
     context: &ActionContext<'_>,
 ) -> Result<Option<HighlightSelectionWrite>, HighlightError> {
     match action {
-        HighlightAction::On => enable_highlight(runtime, operator, context)?,
-        HighlightAction::Off => disable_highlight(runtime, operator),
+        HighlightAction::On => enable_highlight(operator, context)?,
+        HighlightAction::Off => disable_highlight(operator),
         HighlightAction::Toggle if operator.active => {
-            disable_highlight(runtime, operator);
+            disable_highlight(operator);
         }
-        HighlightAction::Toggle => enable_highlight(runtime, operator, context)?,
+        HighlightAction::Toggle => enable_highlight(operator, context)?,
         HighlightAction::Next | HighlightAction::Previous if operator.active => {
             return Ok(Some(step_selection(operator, action, context)));
         }
@@ -37,16 +35,7 @@ pub(super) fn apply_action(
     Ok(None)
 }
 
-/// Attribute Highlight output to the surface that turned it on.
-///
-/// Never refuses. Every surface is the same operator standing at the same desk, so taking
-/// Highlight from a second screen is not a conflict — it is the same hand.
-fn acquire_output_owner(runtime: &mut HighlightRuntime, user_id: UserId) {
-    runtime.output_owner = Some(user_id);
-}
-
 fn enable_highlight(
-    runtime: &mut HighlightRuntime,
     operator: &mut OperatorState,
     context: &ActionContext<'_>,
 ) -> Result<(), HighlightError> {
@@ -58,18 +47,16 @@ fn enable_highlight(
         operator.output_enabled = false;
         operator.message = Some(blind_message().into());
     } else {
-        acquire_output_owner(runtime, context.user_id);
         operator.output_enabled = true;
     }
     Ok(())
 }
 
-fn disable_highlight(runtime: &mut HighlightRuntime, operator: &mut OperatorState) {
+fn disable_highlight(operator: &mut OperatorState) {
     operator.active = false;
     operator.output_enabled = false;
     operator.explicit_attributes.clear();
     operator.observed_selection_revision = None;
-    runtime.output_owner = None;
 }
 
 fn step_selection(
@@ -153,28 +140,18 @@ fn static_selection(selected: Vec<FixtureId>) -> HighlightSelectionWrite {
     }
 }
 
-pub(super) fn reconcile_capture_mode(
-    runtime: &mut HighlightRuntime,
-    operator: &mut OperatorState,
-    context: &ActionContext<'_>,
-) {
+pub(super) fn reconcile_capture_mode(operator: &mut OperatorState, context: &ActionContext<'_>) {
     if context.capture_only && operator.output_enabled {
         operator.output_enabled = false;
-        runtime.output_owner = None;
         operator.message = Some(blind_message().into());
     }
 }
 
-pub(super) fn restore_live_output(
-    runtime: &mut HighlightRuntime,
-    operator: &mut OperatorState,
-    context: &ActionContext<'_>,
-) {
+pub(super) fn restore_live_output(operator: &mut OperatorState, context: &ActionContext<'_>) {
     if !operator.active || context.capture_only || operator.output_enabled {
         return;
     }
     // Nothing to contend with: leaving Blind hands live output back to the desk.
-    runtime.output_owner = Some(context.user_id);
     operator.output_enabled = true;
     operator.message = None;
 }
@@ -222,8 +199,6 @@ pub(super) fn response(
     operator: &OperatorState,
     fixtures: &[HighlightFixture],
     capture_only: bool,
-    owner_user_id: Option<UserId>,
-    owner_user_name: Option<String>,
 ) -> HighlightState {
     let by_id = fixtures
         .iter()
@@ -250,8 +225,6 @@ pub(super) fn response(
         active_fixture,
         can_previous: can_step,
         can_next: can_step,
-        owner_user_id,
-        owner_user_name,
         message: operator.message.clone(),
     }
 }

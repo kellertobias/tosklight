@@ -148,14 +148,15 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         .map(|entry| {
             let client_id = entry.client_id.unwrap_or(entry.desk.id);
             let connected = state.sessions.client_connected(client_id);
-            let desk_in_use = state.sessions.desk_in_use(entry.desk.id);
             wire::RuntimeClientSummary {
                 client_id,
                 name: entry.desk.name.clone(),
                 connected,
                 last_connected_at: entry.last_connected_at,
                 desk: runtime_wire::desk(entry.desk),
-                can_remove: !connected && !desk_in_use,
+                // The desk outlives any one window, so somebody else standing at it does not
+                // pin this record. A window is removable once it is no longer connected.
+                can_remove: !connected,
             }
         })
         .collect::<Vec<_>>();
@@ -195,7 +196,6 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
                 state,
                 &session,
                 light_application::HighlightEnvironment {
-                    user_name: Some(session.user.name.clone()),
                     selection,
                     fixtures: highlight_fixtures.clone(),
                     groups: highlight_groups.clone(),

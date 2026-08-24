@@ -466,10 +466,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
     };
     registry
         .action(
-            desk,
-            user,
-            None,
-            HighlightAction::On,
+                        HighlightAction::On,
             &complete,
             &fixtures,
             &HashMap::new(),
@@ -478,10 +475,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
         .unwrap();
     let first = registry
         .action(
-            desk,
-            user,
-            None,
-            HighlightAction::Next,
+                        HighlightAction::Next,
             &complete,
             &fixtures,
             &HashMap::new(),
@@ -501,10 +495,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
     registry.acknowledge_internal_selection(desk, user, &stepped);
     let second = registry
         .action(
-            desk,
-            user,
-            None,
-            HighlightAction::Next,
+                        HighlightAction::Next,
             &stepped,
             &fixtures,
             &HashMap::new(),

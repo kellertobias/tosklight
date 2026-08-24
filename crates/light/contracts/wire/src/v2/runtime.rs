@@ -173,8 +173,6 @@ pub struct RuntimeHighlightState {
     pub active_fixture: Option<RuntimeHighlightFixture>,
     pub can_previous: bool,
     pub can_next: bool,
-    pub owner_user_id: Option<Uuid>,
-    pub owner_user_name: Option<String>,
     pub message: Option<String>,
 }
 

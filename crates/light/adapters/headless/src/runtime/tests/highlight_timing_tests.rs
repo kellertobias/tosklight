@@ -274,10 +274,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     state
         .highlight
         .apply_action(
-            session.desk.id,
-            user.id,
-            Some(&user.name),
-            HighlightAction::On,
+                        HighlightAction::On,
             &selection,
             &fixtures,
             &groups,
@@ -312,10 +309,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     state
         .highlight
         .apply_action(
-            session.desk.id,
-            user.id,
-            Some(&user.name),
-            HighlightAction::On,
+                        HighlightAction::On,
             &selection,
             &fixtures,
             &groups,
@@ -396,10 +390,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     assert!(preload.ok, "{:?}", preload.error);
     assert!(state.output.highlighted_fixtures().is_empty());
     let state_after_preload = state.highlight.transition(
-        session.desk.id,
-        user.id,
-        Some(&user.name),
-        &selection,
+                &selection,
         &fixtures,
         &groups,
         true,

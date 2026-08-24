@@ -7,8 +7,6 @@ use uuid::Uuid;
 #[test]
 fn high_freezes_the_non_empty_selection_captured_on_activation() {
     let registry = HighlightRegistry::default();
-    let desk = Uuid::new_v4();
-    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2)];
     let groups = no_groups();
     let original = selection(
@@ -17,16 +15,7 @@ fn high_freezes_the_non_empty_selection_captured_on_activation() {
         1,
     );
     let on = registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::On,
-            &original,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::On, &original, &fixtures, &groups, false)
         .unwrap();
     assert!(on.state.active);
     assert!(on.state.output_enabled);
@@ -37,7 +26,7 @@ fn high_freezes_the_non_empty_selection_captured_on_activation() {
         Some(SelectionExpression::Static),
         2,
     );
-    let followed = registry.status(desk, user, None, &selected, &fixtures, &groups, false);
+    let followed = registry.status(&selected, &fixtures, &groups, false);
     assert!(followed.state.active);
     assert_eq!(followed.state.mode, HighlightMode::Selection);
     assert_eq!(followed.output_fixtures, vec![fixtures[0].fixture_id]);
@@ -60,28 +49,10 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
     let groups = no_groups();
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
     registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::On,
-            &complete,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::On, &complete, &fixtures, &groups, false)
         .unwrap();
     let next = registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::Next,
-            &complete,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::Next, &complete, &fixtures, &groups, false)
         .unwrap();
     let write = next.working_selection.as_ref().unwrap();
     let stepped = selection(write.selected.clone(), write.expression.clone(), 2);
@@ -129,25 +100,13 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
     );
 
     let next_again = registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::Next,
-            &stepped,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::Next, &stepped, &fixtures, &groups, false)
         .unwrap();
     let write = next_again.working_selection.as_ref().unwrap();
     let stepped_again = selection(write.selected.clone(), write.expression.clone(), 3);
     registry.acknowledge_internal_selection(desk, user, &stepped_again);
     let all = registry
         .action(
-            desk,
-            user,
-            None,
             HighlightAction::All,
             &stepped_again,
             &fixtures,
@@ -175,29 +134,11 @@ fn next_projects_high_and_low_layers_and_explicit_attributes_survive_navigation(
     );
     registry.acknowledge_internal_selection(desk, user, &restored);
     let off = registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::Off,
-            &restored,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::Off, &restored, &fixtures, &groups, false)
         .unwrap();
     assert!(off.output_layers.is_empty());
     let reactivated = registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::On,
-            &restored,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::On, &restored, &fixtures, &groups, false)
         .unwrap();
     assert!(
         reactivated
@@ -223,16 +164,7 @@ fn an_explicitly_programmed_attribute_is_suppressed_on_the_desks_highlight() {
     let groups = no_groups();
     let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
     registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::On,
-            &complete,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::On, &complete, &fixtures, &groups, false)
         .unwrap();
 
     // Authoring the attribute in the normal Programmer suppresses the temporary look for it.
@@ -251,16 +183,7 @@ fn an_explicitly_programmed_attribute_is_suppressed_on_the_desks_highlight() {
     // Stepping focuses one fixture: it stays Highlight and the rest fall to Low Light. With one
     // Highlight there is no second operator's un-stepped layer covering them.
     let next = registry
-        .action(
-            desk,
-            user,
-            None,
-            HighlightAction::Next,
-            &complete,
-            &fixtures,
-            &groups,
-            false,
-        )
+        .action(HighlightAction::Next, &complete, &fixtures, &groups, false)
         .unwrap();
     let stepped = selection(
         next.working_selection.as_ref().unwrap().selected.clone(),

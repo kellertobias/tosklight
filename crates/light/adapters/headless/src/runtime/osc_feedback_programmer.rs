@@ -101,7 +101,6 @@ fn send_highlight_feedback(
         state,
         &session,
         light_application::HighlightEnvironment {
-            user_name: Some(session.user.name.clone()),
             selection,
             fixtures: fixtures.to_vec(),
             groups: groups.clone(),

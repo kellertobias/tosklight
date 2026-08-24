@@ -120,48 +120,26 @@ impl HighlightResource {
     #[cfg(test)]
     pub(in crate::runtime) fn transition(
         &self,
-        desk_id: Uuid,
-        user_id: light_core::UserId,
-        user_name: Option<&str>,
         selection: &light_programmer::ProgrammerSelection,
         fixtures: &[HighlightFixture],
         groups: &HashMap<String, light_programmer::GroupDefinition>,
         output_suppressed: bool,
     ) -> light_programmer::HighlightTransition {
-        self.registry.status(
-            desk_id,
-            user_id,
-            user_name,
-            selection,
-            fixtures,
-            groups,
-            output_suppressed,
-        )
+        self.registry
+            .status(selection, fixtures, groups, output_suppressed)
     }
 
     #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
     pub(in crate::runtime) fn apply_action(
         &self,
-        desk_id: Uuid,
-        user_id: light_core::UserId,
-        user_name: Option<&str>,
         action: HighlightAction,
         selection: &light_programmer::ProgrammerSelection,
         fixtures: &[HighlightFixture],
         groups: &HashMap<String, light_programmer::GroupDefinition>,
         output_suppressed: bool,
     ) -> Result<light_programmer::HighlightTransition, light_programmer::HighlightError> {
-        self.registry.action(
-            desk_id,
-            user_id,
-            user_name,
-            action,
-            selection,
-            fixtures,
-            groups,
-            output_suppressed,
-        )
+        self.registry
+            .action(action, selection, fixtures, groups, output_suppressed)
     }
 
     #[cfg(test)]
@@ -170,7 +148,6 @@ impl HighlightResource {
         &self,
         desk_id: Uuid,
         user_id: light_core::UserId,
-        user_name: Option<&str>,
         action: HighlightAction,
         selection: &light_programmer::ProgrammerSelection,
         fixtures: &[HighlightFixture],
@@ -180,7 +157,6 @@ impl HighlightResource {
         self.registry.action_guarded(
             desk_id,
             user_id,
-            user_name,
             action,
             selection,
             fixtures,

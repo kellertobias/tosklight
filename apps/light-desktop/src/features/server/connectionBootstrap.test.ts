@@ -189,7 +189,10 @@ describe("connection bootstrap resources", () => {
 			),
 		).resolves.toBe(refreshed);
 		expect(harness.clientMethods.removeClient).toHaveBeenCalledOnce();
-		expect(harness.clientMethods.removeClient).toHaveBeenCalledWith("desk-old");
+		expect(harness.clientMethods.removeClient).toHaveBeenCalledWith(
+			"desk-old",
+			"old-client",
+		);
 
 		localStorage.setItem(SINGLE_CLIENT_MODE_STORAGE_KEY, "false");
 		harness.clientMethods.removeClient.mockClear();

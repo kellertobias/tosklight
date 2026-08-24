@@ -23,7 +23,7 @@ async fn apply_action(
     if session.desk.id != desk_id
         && !matches!(
             request.action,
-            wire::ControlDeskConfigurationAction::RemoveClient
+            wire::ControlDeskConfigurationAction::RemoveClient { .. }
         )
     {
         return Err(ApiError::forbidden(
@@ -66,8 +66,8 @@ async fn execute_action(
             page,
             existing_only,
         } => set_playback_page(state, session, page, existing_only).await,
-        wire::ControlDeskConfigurationAction::RemoveClient => {
-            remove_historical_client(state, session, desk_id)
+        wire::ControlDeskConfigurationAction::RemoveClient { client_id } => {
+            remove_historical_client(state, session, client_id)
         }
     }
 }
@@ -168,33 +168,27 @@ async fn set_playback_page(
 fn remove_historical_client(
     state: &AppState,
     session: &Session,
-    desk_id: Uuid,
+    client_id: Uuid,
 ) -> Result<wire::ControlDeskConfigurationActionOutcome, ApiError> {
     let target = state
         .installation
         .client_desks()
         .map_err(ApiError::store)?
         .into_iter()
-        .find(|entry| entry.desk.id == desk_id)
+        .find(|entry| entry.client_id == Some(client_id))
         .ok_or_else(|| ApiError::not_found("client"))?;
-    let target_client_id = target.client_id.unwrap_or(target.desk.id);
-    ensure_client_is_removable(state, session, desk_id, target_client_id)?;
+    ensure_client_is_removable(state, session, client_id)?;
     if !state
         .installation
-        .remove_client_desk(desk_id)
+        .remove_client(client_id)
         .map_err(ApiError::store)?
     {
         return Err(ApiError::not_found("client"));
     }
-    state.installation.update_configuration(|configuration| {
-        configuration.update_settings_by_desk.remove(&desk_id);
-    });
-    state.highlight.clear_desk(desk_id);
-    sync_highlight_output(state);
     emit(
         state,
         "client_removed",
-        serde_json::json!({"client_id":target_client_id,"desk_id":desk_id}),
+        serde_json::json!({"client_id":client_id,"desk_id":target.desk.id}),
     );
     Ok(removed_outcome(target.desk))
 }
@@ -202,19 +196,16 @@ fn remove_historical_client(
 fn ensure_client_is_removable(
     state: &AppState,
     session: &Session,
-    desk_id: Uuid,
     target_client_id: Uuid,
 ) -> Result<(), ApiError> {
-    let caller_client_id = state.sessions.client_id(session.id);
-    if caller_client_id == Some(target_client_id) || session.desk.id == desk_id {
+    if state.sessions.client_id(session.id) == Some(target_client_id) {
         return Err(ApiError::conflict(
             "the current client cannot remove itself",
         ));
     }
-    if state
-        .sessions
-        .client_or_desk_in_use(target_client_id, desk_id)
-    {
+    // A window is removable while it is not connected. The desk it operated stays: every window
+    // shares the one desk, so somebody else standing at it is not a reason to keep this record.
+    if state.sessions.client_connected(target_client_id) {
         return Err(ApiError::conflict(
             "an actively connected client cannot be removed",
         ));

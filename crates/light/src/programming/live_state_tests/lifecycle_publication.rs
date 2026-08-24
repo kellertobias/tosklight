@@ -257,9 +257,6 @@ fn count_changes_publish_after_authoritative_events_while_same_count_and_replay_
     service
         .run_external_interaction(&context, &ports, || {
             highlight.action(
-                context.desk_id,
-                user,
-                None,
                 light_programmer::HighlightAction::On,
                 &selection,
                 &[light_programmer::HighlightFixture {

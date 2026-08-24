@@ -49,7 +49,7 @@ export async function removeDisconnectedOtherClients(
 			client.can_remove,
 	);
 	for (const client of removable)
-		await api.playback.removeClient(client.desk.id);
+		await api.playback.removeClient(client.desk.id, client.client_id);
 	return removable.length ? api.runtime.bootstrap() : bootstrap;
 }
 
