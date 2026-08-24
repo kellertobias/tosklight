@@ -74,7 +74,6 @@ async fn macro_playback_http_and_ui_ws_actions_converge_on_one_execution_service
     assert_eq!(first.len(), 1);
     assert_eq!(first[0].macro_id, macro_id);
     assert_eq!(first[0].desk_id, session.desk.id);
-    assert_eq!(first[0].user_id, session.user.id.0);
     assert_eq!(first[0].session_id, session.id.0);
     assert_eq!(
         first[0].trigger,

@@ -10,19 +10,12 @@ export type LoadShowObjects = (
 	userId: string | null,
 ) => Promise<void>;
 
-function installHighlight(
-	event: RuntimeCapabilityEvent,
-	session: SessionResponse,
-	state: ServerState,
-) {
+function installHighlight(event: RuntimeCapabilityEvent, state: ServerState) {
 	if (event.type !== "highlight_changed") return;
 	const { change } = event;
-	if (
-		change.desk_id !== session.desk.id ||
-		change.user_id !== session.user.id ||
-		!["selection", "step"].includes(change.state.mode)
-	)
-		return;
+	// One desk, one Highlight. The desk and user this arrived under used to decide whether it was
+	// ours; every surface reads the same Highlight now, so only the mode still narrows it.
+	if (!["selection", "step"].includes(change.state.mode)) return;
 	state.highlightEpoch.current += 1;
 	state.setHighlight(change.state as HighlightState);
 	if (!state.highlightErrorSticky.current) state.setHighlightError(null);
@@ -197,7 +190,7 @@ export function createStateEventRouter(
 ) {
 	return (event: RuntimeCapabilityEvent) => {
 		const state = getState();
-		installHighlight(event, session, state);
+		installHighlight(event, state);
 		refreshConfiguration(event, state);
 		installHardwareConnection(event, state);
 		refreshScreens(event, state);

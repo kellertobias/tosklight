@@ -180,7 +180,6 @@ pub struct RuntimeHighlightState {
 pub struct RuntimeBootstrapHighlightState {
     pub session_id: Uuid,
     pub desk_id: Uuid,
-    pub user_id: Uuid,
     pub state: RuntimeHighlightState,
 }
 

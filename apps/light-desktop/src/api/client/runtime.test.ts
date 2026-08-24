@@ -150,7 +150,6 @@ describe("LightClientRuntime", () => {
 				macro_name: "Blackout",
 				source_revision: 2,
 				desk_id: "desk-a",
-				user_id: "user-a",
 				session_id: "session-a",
 				state: "succeeded",
 				trigger: { type: "pool" },
@@ -229,7 +228,6 @@ describe("LightClientRuntime", () => {
 			change: {
 				revision: 9,
 				desk_id: "desk-a",
-				user_id: "user-a",
 				action: "on",
 				source: null,
 				state,

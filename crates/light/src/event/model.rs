@@ -203,7 +203,6 @@ pub struct DynamicRuntimeChange {
 pub struct HighlightChange {
     pub revision: u64,
     pub desk_id: Uuid,
-    pub user_id: Uuid,
     pub action: Option<String>,
     pub source: Option<String>,
     pub state: HighlightState,

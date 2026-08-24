@@ -257,7 +257,6 @@ fn wire_payload(
                     change: wire::HighlightChange {
                         revision: change.revision,
                         desk_id: change.desk_id,
-                        user_id: change.user_id,
                         action: change.action.clone(),
                         source: change.source.clone(),
                         state: super::super::runtime_wire::highlight(change.state.clone()),

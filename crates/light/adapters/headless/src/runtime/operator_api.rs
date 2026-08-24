@@ -206,7 +206,6 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
             Some(wire::RuntimeBootstrapHighlightState {
                 session_id: session.id.0,
                 desk_id: session.desk.id,
-                user_id: session.user.id.0,
                 state: runtime_wire::highlight(highlight),
             })
         })

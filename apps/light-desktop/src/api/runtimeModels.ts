@@ -19,7 +19,6 @@ export interface MacroExecution {
 	macro_name: string;
 	source_revision: number;
 	desk_id: string;
-	user_id: string;
 	session_id: string;
 	state: MacroExecutionState;
 	line?: number | null;

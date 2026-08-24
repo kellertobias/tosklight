@@ -2971,16 +2971,11 @@
         },
         "state": {
           "$ref": "#/$defs/RuntimeHighlightState"
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "required": [
         "revision",
         "desk_id",
-        "user_id",
         "action",
         "source",
         "state"
@@ -3061,10 +3056,6 @@
         },
         "trigger": {
           "$ref": "#/$defs/MacroTrigger"
-        },
-        "user_id": {
-          "type": "string",
-          "format": "uuid"
         }
       },
       "required": [
@@ -3074,7 +3065,6 @@
         "macro_name",
         "source_revision",
         "desk_id",
-        "user_id",
         "session_id",
         "state",
         "trigger",

@@ -59,7 +59,6 @@ pub struct CommandMacroExecutionSnapshot {
     pub macro_name: String,
     pub source_revision: u64,
     pub desk_id: Uuid,
-    pub user_id: Uuid,
     pub session_id: Uuid,
     pub state: CommandMacroExecutionState,
     pub line: Option<u32>,
@@ -214,7 +213,8 @@ impl CommandMacroExecutionService {
             .definition
             .validate()
             .map_err(CommandMacroExecutionError::new)?;
-        let user_id = request
+        // Still a precondition: a Macro runs as the desk's operator, not anonymously.
+        request
             .context
             .user_id
             .ok_or_else(|| CommandMacroExecutionError::new("Macro execution requires a user"))?;
@@ -231,7 +231,6 @@ impl CommandMacroExecutionService {
             macro_name: request.definition.name.clone(),
             source_revision: request.source_revision,
             desk_id: request.context.desk_id,
-            user_id,
             session_id,
             state: CommandMacroExecutionState::Queued,
             line: None,
