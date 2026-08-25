@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # Wrap the winit Media server in a Finder-launchable macOS application bundle.
+#
+# The bundle is an accessory application: `LSUIElement` keeps it out of the Dock and gives it no
+# application menu, because it has no main window to switch to. Its presence is the menu bar item
+# the runtime creates, and its outputs are full-screen surfaces on the monitors an operator
+# assigned. An accessory application may still own those windows.
 set -euo pipefail
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
@@ -48,6 +53,7 @@ cat >"$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>10.13</string>
+  <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSLocalNetworkUsageDescription</key><string>ToskLight Media receives Art-Net, sACN, and CITP and serves its administration interface on the local network.</string>
 </dict></plist>

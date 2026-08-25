@@ -64,6 +64,9 @@ authors = ["Light contributors"]
 rustc-hash = "2"
 png = "0.18"
 muda = "0.19"
+# The menu bar / notification-area icon the Media Server runs as. Same maintainers and release
+# cadence as `muda`, which it builds its menu with.
+tray-icon = "0.24"
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }
 anyhow = "1.0"
 arc-swap = "1.7"

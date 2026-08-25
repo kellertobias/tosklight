@@ -679,6 +679,12 @@ build_media() {
   echo "Building the Media Server..."
   cargo build --release --manifest-path "$ROOT/Cargo.toml" -p media-server
   echo "Media Server built: $TARGET_DIR/release/media-server"
+  # The same bundle the release builds, so the product an operator develops against is the product
+  # that ships: with its icon, and as the accessory application its menu bar item belongs to.
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    bash "$ROOT/tools/bundle-media-macos.sh" \
+      "$TARGET_DIR/release/media-server" "$TARGET_DIR/release/bundle/macos"
+  fi
 }
 
 # Where a development Media Server keeps its configuration and library.
@@ -725,13 +731,26 @@ JSON
 open_media() {
   require_built_file "$TARGET_DIR/release/media-server" "npm run build:media:open"
   seed_media_configuration
-  local data_dir
+  local data_dir executable
   data_dir="$(media_data_dir)"
-  echo "Opening the Media Server. Close its output window to stop it."
+  executable="$(media_executable)"
+  echo "Opening the Media Server. Quit it from its menu bar item."
   echo "Configuration: $data_dir/media-server.json"
   MEDIA_CONFIG="$data_dir/media-server.json" \
   MEDIA_LOG="${MEDIA_LOG:-info}" \
-    "$TARGET_DIR/release/media-server" "$@"
+    "$executable" "$@"
+}
+
+# On macOS the executable has to be launched from inside the bundle to be an application at all:
+# outside one it has no icon, and `LSUIElement` never applies, so there is no menu bar item to quit
+# it from. Everywhere else the bare binary is the product.
+media_executable() {
+  local bundled="$TARGET_DIR/release/bundle/macos/ToskLight Media.app/Contents/MacOS/ToskLight Media"
+  if [[ "$(uname -s)" == "Darwin" && -x "$bundled" ]]; then
+    printf '%s\n' "$bundled"
+  else
+    printf '%s\n' "$TARGET_DIR/release/media-server"
+  fi
 }
 
 build_media_and_open() {
