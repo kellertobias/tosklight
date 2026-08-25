@@ -148,7 +148,7 @@ impl CueTransferChoiceCache {
         if owner != scope {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
-                "Cue transfer choice belongs to another operator context",
+                "Cue transfer choice belongs to a different transfer scope",
             ));
         }
         Ok(authority.clone())

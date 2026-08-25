@@ -94,7 +94,7 @@ impl DeskStore {
     /// installation from before the collapse holds a row per window that ever connected. The
     /// window is remembered in its own record instead, so a window is still known without a desk
     /// appearing behind it, and a desk record from before the collapse is honoured rather than
-    /// discarded — saved screen configuration keeps working.
+    /// discarded, so saved screen configuration keeps working.
     pub fn resolve_client_desk(&self, client_id: Uuid) -> Result<ControlDesk, StoreError> {
         let now = Utc::now().to_rfc3339();
         self.conn.execute(

@@ -1,6 +1,6 @@
 use super::DESK_SCHEMA_VERSION;
 use crate::{StoreError, connection::set_schema_version};
-use rusqlite::{Connection, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction};
 
 pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction()?;
@@ -109,8 +109,59 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
     tx.commit()?;
     drop_desk_osc_alias(conn)?;
+    // Before the desks: collapsing them deletes each superseded desk's own lock setting, and a
+    // desk that was locked must not come back unlocked because its row was the one superseded.
+    collapse_desk_locks(conn)?;
     collapse_control_desks(conn)?;
     drop_desk_users(conn)?;
+    Ok(())
+}
+
+/// Fold the per-desk Desk Locks into the desk's one lock.
+///
+/// A lock used to be stored under `desk_lock:<desk id>`, one per control desk. There is one desk
+/// and one lock. A desk that was locked must not come back unlocked, so any locked one carries
+/// over; the rest are equivalent, and an installation that already holds the singleton keeps it.
+///
+/// This ran on every read until now, which made a migration look like a read path.
+fn collapse_desk_locks(conn: &mut Connection) -> Result<(), StoreError> {
+    let legacy = {
+        let mut statement =
+            conn.prepare("SELECT key,value FROM settings WHERE key LIKE 'desk_lock:%'")?;
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    if legacy.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.transaction()?;
+    let already_collapsed = tx
+        .query_row("SELECT 1 FROM settings WHERE key='desk_lock'", [], |_| {
+            Ok(())
+        })
+        .optional()?
+        .is_some();
+    if !already_collapsed {
+        // A locked desk wins. `"locked":true` is the serialized shape of the flag, read without
+        // depending on the rest of the configuration this store does not own.
+        let kept = legacy
+            .iter()
+            .find(|(_, value)| value.contains("\"locked\":true"))
+            .or_else(|| legacy.first());
+        if let Some((_, value)) = kept {
+            tx.execute(
+                "INSERT INTO settings(key,value) VALUES('desk_lock',?1)",
+                [value],
+            )?;
+        }
+    }
+    for (key, _) in &legacy {
+        tx.execute("DELETE FROM settings WHERE key=?1", [key])?;
+    }
+    tx.commit()?;
     Ok(())
 }
 

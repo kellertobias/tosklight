@@ -9,7 +9,7 @@ use crate::{PlaybackSurfaceLayout, StoreError, connection::configure};
 use rusqlite::Connection;
 use std::path::Path;
 
-pub(crate) const DESK_SCHEMA_VERSION: i64 = 12;
+pub(crate) const DESK_SCHEMA_VERSION: i64 = 13;
 
 pub struct DeskStore {
     pub(crate) conn: Connection,

@@ -420,7 +420,7 @@ fn execute_with_policy(
     };
     match policy {
         ExistingCommandPolicy::Compatibility => {
-            // Cross-user reconciliation must not run while one user's mutation gate is held.
+            // Reconciliation must not run while the desk's mutation gate is held.
             let outcome = super::super::execute_programmer_command_effect_from(
                 state, session, command, context,
             )?;
