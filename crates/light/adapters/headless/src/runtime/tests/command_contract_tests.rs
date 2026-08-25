@@ -9,7 +9,7 @@ struct CommandContractScenario {
 impl CommandContractScenario {
     fn new() -> Self {
     let (state, data_dir) = test_state();
-    let control_desk = state.installation.add_desk("Commands").unwrap();
+    let control_desk = state.installation.desk().unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),

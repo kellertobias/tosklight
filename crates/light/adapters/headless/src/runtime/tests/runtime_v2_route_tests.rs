@@ -26,7 +26,7 @@ async fn runtime_v2_readiness_and_bootstrap_expose_the_current_contract() {
         bootstrap.get("users").is_none(),
         "the desk has no users to discover"
     );
-    assert!(bootstrap["desks"].as_array().is_some());
+    assert!(bootstrap["desk"]["id"].as_str().is_some());
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

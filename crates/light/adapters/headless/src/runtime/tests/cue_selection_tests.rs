@@ -63,8 +63,8 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
 #[test]
 fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
     let (state, data_dir) = test_state();
-    let first_desk = state.installation.add_desk("Front").unwrap();
-    let second_desk = state.installation.add_desk("Wing").unwrap();
+    let first_desk = state.installation.desk().unwrap();
+    let second_desk = state.installation.desk().unwrap();
     let show_id = light_core::ShowId::new();
     state.active_show.replace_current(Some(ShowEntry {
         id: show_id,

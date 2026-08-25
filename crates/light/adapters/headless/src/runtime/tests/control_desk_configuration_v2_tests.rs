@@ -6,12 +6,7 @@ use super::*;
 async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
     let scenario = TopologyScenario::new("Control desk configuration v2").await;
     let desk_id = scenario_desk_id(&scenario);
-    let original = scenario
-        .state
-        .installation
-        .control_desk(desk_id)
-        .unwrap()
-        .unwrap();
+    let original = scenario.state.installation.desk().unwrap();
     let update = serde_json::json!({
         "request_id":"desk-update",
         "future_request_field":true,

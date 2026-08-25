@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn desk_lock_is_persisted_installation_wide_and_enforced_by_the_server() {
     let (state, data_dir) = test_state();
-    let second = state.installation.add_desk("Second").unwrap();
+    let second = state.installation.desk().unwrap();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let desk_id = state.sessions.sessions().into_iter().find(|session| session.token == token).unwrap().desk.id;

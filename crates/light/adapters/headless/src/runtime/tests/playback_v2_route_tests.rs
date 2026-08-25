@@ -125,13 +125,11 @@ async fn v2_context_headers_default_to_the_one_control_desk() {
         single_desk.to_string()
     );
 
-    // An installation from before the collapse holds several desk records. A session gets the
-    // desk whichever one it asks for, and the snapshot reports that one.
+    // A session that asks for a desk by an id from before the collapse gets the desk, and the
+    // snapshot reports that one.
     let (main_state, main_data_dir) = test_state();
-    let wing = main_state.installation.add_desk("A wing").unwrap();
-    let main = main_state.installation.add_desk("Z main").unwrap();
     let main_app = router(main_state.clone());
-    let main_token = login_playback_user_on_desk(&main_app, "Operator", main.id).await;
+    let main_token = login_playback_user_on_desk(&main_app, "Operator", Uuid::new_v4()).await;
     let resolved_desk = session_desk_id(&main_state, &main_token);
     open_playback_test_show(&main_app, &main_token).await;
     let defaulted = main_app
@@ -148,10 +146,6 @@ async fn v2_context_headers_default_to_the_one_control_desk() {
     assert_eq!(
         json(defaulted).await["desk"]["desk_id"],
         resolved_desk.to_string()
-    );
-    assert_ne!(
-        wing.id, main.id,
-        "the legacy records are still distinct rows"
     );
     let _ = std::fs::remove_dir_all(single_data_dir);
     let _ = std::fs::remove_dir_all(main_data_dir);
@@ -222,19 +216,6 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(json(denied).await["kind"], "unauthorized");
 
-    let wrong_desk = post_action(
-        &app,
-        Some(&token),
-        Uuid::new_v4(),
-        action_request(
-            "wrong-desk",
-            1,
-            serde_json::json!({"type":"go","pressed":true}),
-        ),
-    )
-    .await;
-    assert_eq!(wrong_desk.status(), StatusCode::NOT_FOUND);
-
     let request = action_request(
         "go-playback-1",
         1,
@@ -279,6 +260,21 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
         events[0].correlation_id.unwrap().to_string(),
         first["correlation_id"]
     );
+
+    // A header naming a desk id from before the collapse reaches the desk rather than being
+    // refused as another desk's.
+    let legacy_desk_header = post_action(
+        &app,
+        Some(&token),
+        Uuid::new_v4(),
+        action_request(
+            "legacy-desk-header",
+            1,
+            serde_json::json!({"type":"go","pressed":true}),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_desk_header.status(), StatusCode::OK);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -832,7 +828,7 @@ async fn v2_shared_virtual_exclusion_configuration_applies_across_desks() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
-    let second_desk = state.installation.add_desk("Playback v2 wing").unwrap();
+    let second_desk = state.installation.desk().unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_virtual_exclusion_test_state(&state);
@@ -1291,14 +1287,15 @@ async fn v2_group_snapshot_is_exact_and_rejects_foreign_or_invalid_identity() {
     assert!(!snapshot.to_string().contains("side"));
     assert!(!snapshot.to_string().contains("cue_list"));
 
-    let denied = post_playback_snapshot(
+    // A header naming a desk id from before the collapse reaches the desk.
+    let legacy_desk_header = post_playback_snapshot(
         &app,
         Some(&token),
         Uuid::new_v4(),
         serde_json::json!({"identities":[{"kind":"group","group_id":"front"}]}),
     )
     .await;
-    assert_eq!(denied.status(), StatusCode::NOT_FOUND);
+    assert_eq!(legacy_desk_header.status(), StatusCode::OK);
 
     for group_id in [String::new(), "front\n".into(), "x".repeat(257)] {
         let rejected = post_playback_snapshot(
@@ -1469,7 +1466,7 @@ async fn v2_group_runtime_is_the_desks_and_rejects_a_stale_show() {
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
     let first_desk = session_desk_id(&state, &first_token);
-    let second_desk = state.installation.add_desk("Group runtime wing").unwrap();
+    let second_desk = state.installation.desk().unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_group_runtime_test_state(&state);
@@ -2080,7 +2077,7 @@ async fn same_user_preload_commit_keeps_captured_originating_desk_with_show_scop
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
     let first_session = session_for_token(&state, &first_token);
-    let second_desk = state.installation.add_desk("Preload origin wing").unwrap();
+    let second_desk = state.installation.desk().unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_virtual_exclusion_test_state(&state);

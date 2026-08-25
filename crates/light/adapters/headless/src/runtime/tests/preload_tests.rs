@@ -367,7 +367,7 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
 fn committed_preload_publishes_the_exact_typed_playback_change() {
     let (state, data_dir) = test_state();
     let desk = state
-        .installation.add_desk("Preload exclusions")
+        .installation.desk()
         .unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
@@ -631,7 +631,7 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
 fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
     let (state, data_dir) = test_state();
     let desk = state
-        .installation.add_desk("Explicit Preload page")
+        .installation.desk()
         .unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,

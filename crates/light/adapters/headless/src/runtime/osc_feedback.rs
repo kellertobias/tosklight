@@ -218,5 +218,5 @@ pub(super) fn osc_surface_capability(path: &str) -> light_core::SurfaceCapabilit
 /// before the collapse is not foreign — there is nothing left for it to be foreign to — so it
 /// connects rather than being refused and left silently unable to reach anything.
 pub(super) fn osc_control_desk(state: &AppState) -> Option<ControlDesk> {
-    state.installation.desks().ok()?.into_iter().next()
+    state.installation.desk().ok()
 }

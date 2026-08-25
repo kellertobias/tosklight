@@ -379,17 +379,18 @@ async fn programming_selection_request_identity_scope_and_lock_are_enforced() {
         .await;
     assert_eq!(reused.status(), StatusCode::CONFLICT);
 
-    let wrong_desk = scenario
+    // A header naming a desk id from before the collapse reaches the desk.
+    let legacy_desk_header = scenario
         .selection_action_for(
             Uuid::new_v4(),
             serde_json::json!({
-                "request_id": "selection-wrong-desk",
+                "request_id": "selection-legacy-desk-header",
                 "action": "apply_rule",
                 "rule": { "type": "all" },
             }),
         )
         .await;
-    assert_eq!(wrong_desk.status(), StatusCode::NOT_FOUND);
+    assert_eq!(legacy_desk_header.status(), StatusCode::OK);
 
     write_desk_lock(&scenario.state,
         &DeskLockConfiguration {
@@ -415,7 +416,7 @@ async fn accepted_selection_persistence_warning_is_replayed_without_duplicate_ev
     let isolated_path = scenario.data_dir.join("isolated-desk.sqlite");
     let isolated = light_show::DeskStore::open(&isolated_path).expect("isolated Desk store");
     let isolated_desk = isolated
-        .add_desk("Isolated")
+        .desk()
         .expect("isolated control desk");
     scenario.state.installation.replace_desk_store(isolated);
     // Persisting the Programmer must fail so the accepted action carries a warning. The desk store

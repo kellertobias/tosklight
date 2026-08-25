@@ -143,7 +143,7 @@ async fn preload_values_are_the_desks_whichever_surface_prepares_them() {
     let second_desk = scenario
         .state
         .installation
-        .add_desk("Second Preload desk")
+        .desk()
         .unwrap();
     let second_token = login_on_desk(&scenario, second_desk.id).await;
 

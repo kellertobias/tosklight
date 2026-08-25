@@ -262,11 +262,8 @@ pub(super) fn feedback_context(
     }
 }
 
-fn extension_desk(state: &AppState, context: &HostControlContext) -> Option<ControlDesk> {
-    uuid::Uuid::parse_str(&context.desk_id)
-        .ok()
-        .and_then(|id| state.installation.control_desk(id).ok().flatten())
-        .or_else(|| state.installation.desks().ok()?.into_iter().next())
+fn extension_desk(state: &AppState, _context: &HostControlContext) -> Option<ControlDesk> {
+    state.installation.desk().ok()
 }
 
 fn apply_playback_feedback(
@@ -549,11 +546,10 @@ pub(super) fn apply_bound_control(
     host: &HostControlContext,
     bound: &BoundControlInput,
 ) -> Result<(), PortError> {
-    let desk = uuid::Uuid::parse_str(&host.desk_id)
-        .ok()
-        .and_then(|id| state.installation.control_desk(id).ok().flatten())
-        .or_else(|| state.installation.desks().ok()?.into_iter().next())
-        .ok_or_else(|| PortError::new(format!("logical desk `{}` is unavailable", host.desk_id)))?;
+    let desk = state
+        .installation
+        .desk()
+        .map_err(|error| PortError::new(format!("the desk is unavailable: {error}")))?;
     let session = state
         .sessions
         .sessions()

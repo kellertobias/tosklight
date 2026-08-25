@@ -326,16 +326,8 @@ async fn topology_route_defaults_to_the_active_show_without_a_guard() {
 async fn same_user_two_desks_and_another_user_share_the_active_show() {
     let scenario = TopologyScenario::new("Playback topology shared show").await;
     let (same_user_desk, other_user_desk) = {
-        let same = scenario
-            .state
-            .installation
-            .add_desk("Topology wing")
-            .unwrap();
-        let other = scenario
-            .state
-            .installation
-            .add_desk("Topology guest desk")
-            .unwrap();
+        let same = scenario.state.installation.desk().unwrap();
+        let other = scenario.state.installation.desk().unwrap();
         (same, other)
     };
     let same_user = login_on_desk(&scenario.app, Some(same_user_desk.id), None).await;

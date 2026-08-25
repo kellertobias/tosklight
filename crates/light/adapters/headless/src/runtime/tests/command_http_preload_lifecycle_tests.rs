@@ -126,7 +126,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
 
     let second_desk = scenario
         .state
-        .installation.add_desk("Preload lifecycle peer")
+        .installation.desk()
         .unwrap();
     let second_token = login_on_desk(&scenario, second_desk.id).await;
     // The peer is a surface of the same desk, so it must satisfy the desk's current selection
@@ -427,7 +427,7 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
 
     let other_desk = scenario
         .state
-        .installation.add_desk("Preload cursor other")
+        .installation.desk()
         .unwrap();
     let other_token = login_on_desk(&scenario, other_desk.id).await;
     assert_eq!(

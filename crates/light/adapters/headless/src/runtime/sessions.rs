@@ -74,23 +74,10 @@ pub(super) async fn create_session(
     request: Result<TolerantJson<wire::RuntimeSessionCreateRequest>, JsonRejection>,
 ) -> Result<Json<wire::RuntimeSessionResponse>, ApiError> {
     let TolerantJson(input) = request.map_err(|error| ApiError::bad_request(error.body_text()))?;
-    let client_id = input
-        .client_id
-        .or_else(|| {
-            input.desk_id.and_then(|desk_id| {
-                state
-                    .installation
-                    .client_desks()
-                    .ok()?
-                    .into_iter()
-                    .find(|entry| entry.desk.id == desk_id)?
-                    .client_id
-            })
-        })
-        .unwrap_or_else(Uuid::new_v4);
+    let client_id = input.client_id.unwrap_or_else(Uuid::new_v4);
     let desk = state
         .installation
-        .resolve_client_desk(client_id, input.desk_id)
+        .resolve_client_desk(client_id)
         .map_err(ApiError::store)?;
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,

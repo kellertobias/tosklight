@@ -137,7 +137,7 @@ async fn v2_speed_groups_are_revisioned_shared_strict_and_replay_before_desk_loc
     assert!(no_change.get("event_sequence").is_none());
     assert_eq!(persistence_attempts(&state), attempts + 1);
 
-    let wing = state.installation.add_desk("Wing").unwrap();
+    let wing = state.installation.desk().unwrap();
     let wing_token = login_for_speed_desk(&app, "Operator", wing.id).await;
     let wing_snapshot = speed_group_snapshot(&app, &wing_token, wing.id).await;
     assert_eq!(wing_snapshot["projection"]["revision"], 1);

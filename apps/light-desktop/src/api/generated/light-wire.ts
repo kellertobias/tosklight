@@ -794,7 +794,7 @@ replayed: boolean,
  */
 changed: boolean, };
 export type StageLayoutErrorResponse = { error: string, retryable: boolean, };
-export type RuntimeSessionCreateRequest = { desk_id: string | null, client_id: string | null,
+export type RuntimeSessionCreateRequest = { client_id: string | null,
 /**
  * Absent means the historical operator session. A `visualizer` session is read-only: it
  * never starts a programmer, claims the command line, or changes desk selection, and the
@@ -814,7 +814,7 @@ export type RuntimeAttributeDescriptor = { id: string, label: string, family: st
 export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };
 export type RuntimeHighlightState = { active: boolean, mode: string, output_enabled: boolean, capture_only: boolean, remembered: Array<RuntimeHighlightFixture>, active_index: number | null, active_fixture: RuntimeHighlightFixture | null, can_previous: boolean, can_next: boolean, message: string | null, };
 export type RuntimeBootstrapHighlightState = { session_id: string, desk_id: string, state: RuntimeHighlightState, };
-export type RuntimeBootstrapSnapshot = { api_version: string, attribute_registry: Array<RuntimeAttributeDescriptor>, desks: Array<RuntimeControlDesk>, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
+export type RuntimeBootstrapSnapshot = { api_version: string, attribute_registry: Array<RuntimeAttributeDescriptor>, desk: RuntimeControlDesk | null, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
 /**
  * Retained as an empty compatibility collection until the facade is removed.
  */

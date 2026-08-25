@@ -324,7 +324,7 @@ async fn sound_to_light_is_authoritative_per_speed_group_on_the_one_desk() {
 
     // A session logging in on a legacy desk record operates the same desk, so its observation is
     // the same authority's rather than a contending one's.
-    let other_desk = state.installation.add_desk("Other").unwrap();
+    let other_desk = state.installation.desk().unwrap();
     let other_token = login_to_speed_group_desk(&app, other_desk.id).await;
     let same_authority = post_sound_observation(&app, &other_token, &observation).await;
     assert_eq!(same_authority.status(), StatusCode::OK);

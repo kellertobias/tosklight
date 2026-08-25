@@ -52,7 +52,7 @@ async fn lifecycle_tracks_every_surface_of_the_one_programmer_and_removes_it_onc
     let second_desk = scenario
         .state
         .installation
-        .add_desk("Lifecycle second")
+        .desk()
         .unwrap();
     let second_token = login_on_desk(&scenario, second_desk.id).await;
     let second_session = scenario

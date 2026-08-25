@@ -148,14 +148,16 @@ async fn command_line_v2_is_revisioned_desk_scoped_and_idempotent() {
         StatusCode::OK,
         "read-only repair remains available while the desk is locked"
     );
+    // There is one desk, so a header naming an id from before the collapse reaches it rather
+    // than being refused.
     assert_eq!(
         scenario
             .interaction_snapshot_for(Uuid::new_v4())
             .await
             .status(),
-        StatusCode::NOT_FOUND
+        StatusCode::OK
     );
-    let wrong_desk = scenario
+    let legacy_desk_header = scenario
         .app
         .clone()
         .oneshot(
@@ -170,6 +172,6 @@ async fn command_line_v2_is_revisioned_desk_scoped_and_idempotent() {
         )
         .await
         .unwrap();
-    assert_eq!(wrong_desk.status(), StatusCode::NOT_FOUND);
+    assert_eq!(legacy_desk_header.status(), StatusCode::OK);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

@@ -126,7 +126,7 @@ export interface HighlightState {
 export interface BootstrapSnapshot {
 	api_version: string;
 	attribute_registry: AttributeDescriptor[];
-	desks: ControlDesk[];
+	desk: ControlDesk | null;
 	clients: ClientSummary[];
 	active_show: ShowEntry | null;
 	active_programmers: ProgrammerState[];

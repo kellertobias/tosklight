@@ -77,11 +77,7 @@ fn update_control_desk(
     desk_id: Uuid,
     patch: wire::ControlDeskConfigurationPatch,
 ) -> Result<wire::ControlDeskConfigurationActionOutcome, ApiError> {
-    let current = state
-        .installation
-        .control_desk(desk_id)
-        .map_err(ApiError::store)?
-        .ok_or_else(|| ApiError::not_found("control desk"))?;
+    let current = state.installation.desk().map_err(ApiError::store)?;
     let layout = patch
         .playback_layout
         .map(domain_layout)
@@ -152,11 +148,7 @@ async fn set_playback_page(
         serde_json::json!({"desk_id":session.desk.id,"show_id":show.id,"page":page}),
     );
     send_osc_feedback(state, false);
-    let desk = state
-        .installation
-        .control_desk(session.desk.id)
-        .map_err(ApiError::store)?
-        .ok_or_else(|| ApiError::not_found("control desk"))?;
+    let desk = state.installation.desk().map_err(ApiError::store)?;
     Ok(outcome(
         desk,
         Some(page),

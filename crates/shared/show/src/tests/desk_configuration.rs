@@ -97,7 +97,7 @@ fn screen_playback_range_must_fit_page_slots() {
 fn control_desks_keep_a_page_per_show() {
     let path = temporary("control-desks");
     let desk = DeskStore::open(&path).unwrap();
-    let control = desk.add_desk("Front").unwrap();
+    let control = desk.desk().unwrap();
     let first = ShowId::new();
     let second = ShowId::new();
     desk.set_desk_page(control.id, first, 12).unwrap();
@@ -114,15 +114,13 @@ fn client_history_migrates_unknown_rows_reuses_identity_and_recreates_removed_de
     let client_id = Uuid::new_v4();
     let (legacy_id, first_connected_at) = {
         let store = DeskStore::open(&path).unwrap();
-        let legacy = store.add_desk("Legacy wing").unwrap();
+        let legacy = store.desk().unwrap();
         let before = store.client_desks().unwrap();
         assert_eq!(before.len(), 1);
         assert_eq!(before[0].client_id, None);
         assert_eq!(before[0].last_connected_at, None);
 
-        let resolved = store
-            .resolve_client_desk(client_id, Some(legacy.id))
-            .unwrap();
+        let resolved = store.resolve_client_desk(client_id).unwrap();
         assert_eq!(resolved.id, legacy.id);
         let connected = store.client_desks().unwrap();
         assert_eq!(connected.len(), 1);
@@ -131,14 +129,14 @@ fn client_history_migrates_unknown_rows_reuses_identity_and_recreates_removed_de
     };
 
     let mut reopened = DeskStore::open(&path).unwrap();
-    let same = reopened.resolve_client_desk(client_id, None).unwrap();
+    let same = reopened.resolve_client_desk(client_id).unwrap();
     assert_eq!(same.id, legacy_id);
     let history = reopened.client_desks().unwrap();
     assert_eq!(history.len(), 1);
     assert!(history[0].last_connected_at.as_deref() >= Some(first_connected_at.as_str()));
     // Forgetting the window leaves the desk it stood at. Connecting again is the same desk.
     assert!(reopened.remove_client(client_id).unwrap());
-    let reconnected = reopened.resolve_client_desk(client_id, None).unwrap();
+    let reconnected = reopened.resolve_client_desk(client_id).unwrap();
     assert_eq!(reconnected.id, legacy_id);
     assert_eq!(reopened.client_desks().unwrap().len(), 1);
     drop(reopened);
@@ -152,8 +150,8 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
     // Two desk records, as an installation from before the collapse holds. Connecting clients no
     // longer produce them — a client is its own record now — so they are made directly.
     // The collapse keeps the first desk by name, which is the one clients already resolve to.
-    let retained = store.add_desk("A kept desk").unwrap();
-    let removed = store.add_desk("Z superseded wing").unwrap();
+    let retained = store.insert_legacy_desk("A kept desk").unwrap();
+    let removed = store.insert_legacy_desk("Z superseded wing").unwrap();
     let show_id = ShowId::new();
     store.set_desk_page(removed.id, show_id, 17).unwrap();
     store
@@ -210,11 +208,7 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
     // Reopening runs the collapse: the first desk by name is the one clients resolve to.
     drop(store);
     let store = DeskStore::open(&path).unwrap();
-    assert!(store.control_desk(removed.id).unwrap().is_none());
-    assert_eq!(
-        store.control_desk(retained.id).unwrap(),
-        Some(retained.clone())
-    );
+    assert_eq!(store.desk().unwrap(), retained.clone());
     let retained_screen = store.screen(screen.id).unwrap().unwrap();
     assert_eq!(retained_screen.id, screen.id);
     assert_eq!(retained_screen.name, screen.name);
@@ -705,7 +699,7 @@ fn selected_playback_is_persisted_per_show_and_survives_reopening() {
     let second_show = ShowId::new();
     let desk_id = {
         let store = DeskStore::open(&path).unwrap();
-        let desk = store.add_desk("Front").unwrap();
+        let desk = store.desk().unwrap();
         store
             .set_selected_playback(desk.id, first_show, Some(17))
             .unwrap();
@@ -772,18 +766,14 @@ fn a_desk_saved_with_an_osc_alias_keeps_its_configuration_without_one() {
     }
 
     let store = DeskStore::open(&path).unwrap();
-    let desks = store.desks().unwrap();
-    assert_eq!(desks.len(), 1, "the saved desk survives losing its alias");
-    assert_eq!(desks[0].id, desk_id);
-    assert_eq!(desks[0].name, "Front of house");
-    assert_eq!(desks[0].columns, 12);
-    assert_eq!(desks[0].rows, 2);
+    let desk = store.desk().unwrap();
+    assert_eq!(desk.id, desk_id, "the saved desk survives losing its alias");
+    assert_eq!(desk.name, "Front of house");
+    assert_eq!(desk.columns, 12);
+    assert_eq!(desk.rows, 2);
     let clients = store.client_desks().unwrap();
     assert_eq!(clients.len(), 1);
     assert_eq!(clients[0].client_id, Some(client_id));
-    // A second desk can now be added without inventing an alias for it.
-    store.add_desk("Wing").unwrap();
-    assert_eq!(store.desks().unwrap().len(), 2);
     drop(store);
     let _ = fs::remove_file(path);
 }
