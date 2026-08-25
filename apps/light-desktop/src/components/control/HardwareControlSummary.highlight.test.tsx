@@ -9,7 +9,7 @@ const server = {
 		speed_groups_bpm: [120, 90, 60, 30, 15],
 	},
 	playbacks: { active_page: 1, pages: [] },
-	highlightError: "Highlight is controlled by another operator.",
+	highlightError: "Highlight is unavailable.",
 	dismissHighlightError: vi.fn(),
 	setControlTiming: vi.fn(),
 	setPlaybackPage: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock("../../features/playbackTopology/PlaybackTopologyView", () => ({
 
 afterEach(() => {
 	cleanup();
-	server.highlightError = "Highlight is controlled by another operator.";
+	server.highlightError = "Highlight is unavailable.";
 	server.dismissHighlightError.mockReset();
 });
 

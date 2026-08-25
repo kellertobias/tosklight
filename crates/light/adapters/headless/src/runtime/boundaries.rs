@@ -52,36 +52,20 @@ pub(super) async fn desk_boundary(
 
 /// The one Desk Lock. There is one desk, so there is one lock over every screen and every
 /// attached control surface.
+///
+/// A lock used to be stored per desk under `desk_lock:<id>`. Those keys are folded into this one
+/// when the installation is opened, so reading and writing the lock is one setting and nothing
+/// else — see `collapse_desk_locks`.
 pub(super) const DESK_LOCK_KEY: &str = "desk_lock";
-/// The prefix locks were stored under while a desk could be one of several.
-const LEGACY_DESK_LOCK_PREFIX: &str = "desk_lock:";
 
 pub(super) fn read_desk_lock(state: &AppState) -> DeskLockConfiguration {
-    if let Some(configuration) = state
+    state
         .installation
         .setting(DESK_LOCK_KEY)
         .ok()
         .flatten()
         .and_then(|value| serde_json::from_str::<DeskLockConfiguration>(&value).ok())
-    {
-        return configuration;
-    }
-    // An installation written before the collapse holds a lock per desk. A desk that was locked
-    // must not come back unlocked, so any locked one carries over; the rest are equivalent.
-    legacy_desk_locks(state)
-        .into_iter()
-        .find(|configuration| configuration.locked)
         .unwrap_or_default()
-}
-
-fn legacy_desk_locks(state: &AppState) -> Vec<DeskLockConfiguration> {
-    state
-        .installation
-        .settings_with_prefix(LEGACY_DESK_LOCK_PREFIX)
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|(_, value)| serde_json::from_str::<DeskLockConfiguration>(&value).ok())
-        .collect()
 }
 
 pub(super) fn write_desk_lock(
@@ -93,17 +77,7 @@ pub(super) fn write_desk_lock(
     state
         .installation
         .set_setting(DESK_LOCK_KEY, &value)
-        .map_err(ApiError::store)?;
-    // The per-desk keys can no longer be reached, and leaving them would let a stale one
-    // reappear if the singleton were ever cleared.
-    for (key, _) in state
-        .installation
-        .settings_with_prefix(LEGACY_DESK_LOCK_PREFIX)
-        .unwrap_or_default()
-    {
-        let _ = state.installation.remove_setting(&key);
-    }
-    Ok(())
+        .map_err(ApiError::store)
 }
 
 pub(super) fn desk_lock_response(configuration: DeskLockConfiguration) -> DeskLockResponse {
