@@ -48,7 +48,7 @@ async fn bootstrap_does_not_relock_the_desk_store() {
 }
 
 #[tokio::test]
-async fn unauthenticated_bootstrap_keeps_login_discovery_but_omits_programmers() {
+async fn unauthenticated_bootstrap_keeps_desk_discovery_but_omits_programmers() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let discovery = app
@@ -62,9 +62,8 @@ async fn unauthenticated_bootstrap_keeps_login_discovery_but_omits_programmers()
         .unwrap();
     assert_eq!(discovery.status(), StatusCode::OK);
     let discovery = json(discovery).await;
-    assert!(discovery["users"].as_array().unwrap().iter().any(|user| {
-        user["name"] == "Operator" && user["enabled"] == true
-    }));
+    assert!(discovery.get("users").is_none());
+    assert!(discovery["desks"].as_array().is_some());
     assert_eq!(discovery["active_programmers"], serde_json::json!([]));
 
     let (_, session_id) = login(&app, "Operator").await;
@@ -116,9 +115,6 @@ async fn programmer_list_returns_every_session_of_the_one_programmer() {
     let app = router(state.clone());
     let (operator_token, first_operator) = login(&app, "Operator").await;
     let (_, second_operator) = login(&app, "Operator").await;
-    state
-        .installation.add_user("Foreign operator")
-        .unwrap();
     let (foreign_token, foreign_session) = login(&app, "Foreign operator").await;
     let first_operator = SessionId(Uuid::parse_str(&first_operator).unwrap());
     let second_operator = SessionId(Uuid::parse_str(&second_operator).unwrap());
@@ -141,7 +137,6 @@ async fn programmer_list_returns_every_session_of_the_one_programmer() {
     // Three sessions, one Programmer: every session of the desk is listed on its one row.
     let operator_rows = authenticated_programmer_rows(&app, &operator_token).await;
     assert_eq!(operator_rows.len(), 3);
-    let operator_user = state.sessions.session(first_operator).unwrap().user.id;
     let mut operator_sessions = operator_rows
         .iter()
         .map(|row| row["session_id"].as_str().unwrap())
@@ -155,21 +150,21 @@ async fn programmer_list_returns_every_session_of_the_one_programmer() {
     expected_sessions.sort_unstable();
     assert_eq!(operator_sessions, expected_sessions);
     assert!(operator_rows.iter().all(|row| {
-        row["user_id"] == operator_user.0.to_string()
-            && row["values"].as_array().unwrap().iter().any(|value| {
-                value["fixture_id"] == operator_fixture.0.to_string()
-            })
-            && row["values"].as_array().unwrap().iter().any(|value| {
-                value["fixture_id"] == foreign_fixture.0.to_string()
-            })
+        row["values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value["fixture_id"] == operator_fixture.0.to_string())
+            && row["values"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value["fixture_id"] == foreign_fixture.0.to_string())
     }));
 
-    // A session that logged in under a legacy identity reads the same Programmer, values and all.
+    // Another session reads the same Programmer, values and all.
     let legacy_rows = authenticated_programmer_rows(&app, &foreign_token).await;
     assert_eq!(legacy_rows.len(), 3);
-    assert!(legacy_rows.iter().all(|row| {
-        row["user_id"] == operator_user.0.to_string()
-    }));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

@@ -12,12 +12,12 @@ import type {
 import { ProgrammerPreloadValuesStore } from "./store";
 import {
 	FIXTURE_1,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	preloadFixtureValue,
 	preloadProjection,
 	preloadSnapshot,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 import { ProgrammerPreloadValuesWriter } from "./writer";
 
@@ -25,10 +25,10 @@ function harness(
 	options: { captureReady?: boolean; captureActive?: boolean } = {},
 ) {
 	const store = new ProgrammerPreloadValuesStore();
-	store.reset(SHOW_ID, USER_ID, "session-a");
+	store.reset(SHOW_ID, SESSION_ID, "session-a");
 	store.installSnapshot(preloadSnapshot());
 	const captureModeStore = new ProgrammerCaptureModeStore();
-	captureModeStore.reset(SHOW_ID, USER_ID, "session-a");
+	captureModeStore.reset(SHOW_ID, SESSION_ID, "session-a");
 	if (options.captureReady !== false)
 		captureModeStore.installSnapshot(
 			captureModeSnapshot({
@@ -394,8 +394,8 @@ describe("ProgrammerPreloadValuesWriter preconditions and recovery", () => {
 		const pending = writer.setFixtureValue(fixtureInput("late", 0.8));
 		await Promise.resolve();
 
-		store.reset(SHOW_ID, USER_ID, "session-b");
-		captureModeStore.reset(SHOW_ID, USER_ID, "session-b");
+		store.reset(SHOW_ID, SESSION_ID, "session-b");
+		captureModeStore.reset(SHOW_ID, SESSION_ID, "session-b");
 		response.resolve(noChange("late", 2));
 
 		await expect(pending).resolves.toBeNull();

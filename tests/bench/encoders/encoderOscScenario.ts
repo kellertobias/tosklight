@@ -40,7 +40,7 @@ export class BrowserOscEncoderRoute {
 		});
 		const scope = {
 			showId: await this.activeShowId(),
-			userId: session.user.id,
+			sessionId: session.session_id,
 		};
 		let revision = (await values.loadSnapshot(scope)).projection.revision;
 		for (let index = 0; index < steps; index += 1) {

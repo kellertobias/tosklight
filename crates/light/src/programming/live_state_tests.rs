@@ -4,7 +4,7 @@ use crate::{
     EventFilter, EventObject, EventReplay, ProgrammingEvent, SubscriptionDelivery,
     SubscriptionOptions,
 };
-use light_core::{FixtureId, SessionId, UserId};
+use light_core::{FixtureId, SessionId};
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
 use light_programmer::{
     HighlightRegistry, ProgrammerAlignmentMode, ProgrammerRegistry, ProgrammerSelection,
@@ -116,8 +116,7 @@ impl LiveSetup {
         let registry = ProgrammerRegistry::default();
         let desk = Uuid::new_v4();
         let session = SessionId::new();
-        let user = UserId::new();
-        registry.start(session, user);
+        registry.start(session);
         assert!(registry.attach_command_context(session, SessionId(desk)));
         let events = EventBus::new(retention);
         let highlight = Arc::new(HighlightRegistry::default());
@@ -127,7 +126,7 @@ impl LiveSetup {
             events,
             highlight,
             service,
-            context: ActionContext::operator(desk, user.0, session.0, ActionSource::UserInterface),
+            context: ActionContext::operator(desk, session.0, ActionSource::UserInterface),
             ports: LivePorts {
                 registry: Some(registry),
                 ..LivePorts::default()
@@ -414,12 +413,8 @@ fn external_interaction_tolerates_a_session_without_a_live_programmer() {
     // state to reconcile, no spurious Programmer change is published. Playback GO/release over the
     // compatibility routes depends on this tolerance.
     let setup = LiveSetup::new(8);
-    let context = ActionContext::operator(
-        setup.context.desk_id,
-        setup.context.user_id.unwrap(),
-        Uuid::new_v4(),
-        ActionSource::Http,
-    );
+    let context =
+        ActionContext::operator(setup.context.desk_id, Uuid::new_v4(), ActionSource::Http);
     let ran = AtomicBool::new(false);
 
     let result = setup

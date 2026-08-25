@@ -315,16 +315,14 @@ fn preload_batch_keeps_dynamic_controls_and_quantized_fader_in_operator_order() 
 #[test]
 fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "atomic-preload".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state
         .output
         .replace_snapshot(preload_atomicity_test_snapshot())
@@ -368,19 +366,17 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
 #[test]
 fn committed_preload_publishes_the_exact_typed_playback_change() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let desk = state
         .installation.add_desk("Preload exclusions")
         .unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "typed-preload".into(),
         connected: true,
         desk,
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let mut snapshot = preload_atomicity_test_snapshot();
     let mut virtual_one = snapshot.playbacks[0].clone();
     virtual_one.number = 1_001;
@@ -565,16 +561,14 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
 #[test]
 fn committed_preload_publishes_auto_off_before_the_activating_playback() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "preload-auto-off".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state
         .output.replace_snapshot(preload_auto_off_test_snapshot())
         .unwrap();
@@ -636,19 +630,17 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
 #[test]
 fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let desk = state
         .installation.add_desk("Explicit Preload page")
         .unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "explicit-preload-page".into(),
         connected: true,
         desk,
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let mut snapshot = preload_atomicity_test_snapshot();
     std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
         number: 2,

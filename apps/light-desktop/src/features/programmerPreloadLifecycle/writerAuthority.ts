@@ -103,7 +103,7 @@ function readyCapture(
 	if (
 		!options.captureModeStore.isScopeCurrent(scope) ||
 		state.showId !== options.scope.showId ||
-		state.userId !== options.scope.userId ||
+		state.sessionId !== options.scope.sessionId ||
 		state.status !== "ready" ||
 		state.repairRequired ||
 		!state.projection
@@ -120,7 +120,7 @@ function readyValues(
 	if (
 		!options.valuesStore.isScopeCurrent(scope) ||
 		state.showId !== options.scope.showId ||
-		state.userId !== options.scope.userId ||
+		state.sessionId !== options.scope.sessionId ||
 		state.status !== "ready" ||
 		state.repairRequired ||
 		!state.projection
@@ -137,7 +137,7 @@ function readyQueue(
 	if (
 		!options.queueStore.isScopeCurrent(scope) ||
 		state.showId !== options.scope.showId ||
-		state.userId !== options.scope.userId ||
+		state.sessionId !== options.scope.sessionId ||
 		state.status !== "ready" ||
 		state.repairRequired ||
 		!state.projection

@@ -4,18 +4,18 @@ import { ProgrammerPreloadValuesStore } from "./store";
 import {
 	FIXTURE_1,
 	FIXTURE_2,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	preloadFixtureValue,
 	preloadProjection,
 	preloadSnapshot,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 import { ProgrammerPreloadValuesProtocolError } from "./transport";
 
 function readyStore(projection = preloadProjection()) {
 	const store = new ProgrammerPreloadValuesStore();
-	store.reset(SHOW_ID, USER_ID, "session-a");
+	store.reset(SHOW_ID, SESSION_ID, "session-a");
 	store.installSnapshot({ cursor: 10, projection });
 	return store;
 }
@@ -44,7 +44,7 @@ describe("ProgrammerPreloadValuesStore authority", () => {
 		const oldScope = store.captureScope();
 		store.beginOptimistic("pending", setFixtureLevel(0.8), oldScope);
 
-		store.reset(SHOW_ID, USER_ID, "session-b");
+		store.reset(SHOW_ID, SESSION_ID, "session-b");
 
 		expect(store.getSnapshot()).toMatchObject({
 			projection: null,
@@ -91,7 +91,7 @@ describe("ProgrammerPreloadValuesStore authority", () => {
 
 	it("rejects duplicate addresses as a repairable protocol error", () => {
 		const store = new ProgrammerPreloadValuesStore();
-		store.reset(SHOW_ID, USER_ID);
+		store.reset(SHOW_ID, SESSION_ID);
 
 		expect(() =>
 			store.installSnapshot(

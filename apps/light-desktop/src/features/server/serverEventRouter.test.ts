@@ -16,7 +16,6 @@ import type { ServerState } from "./useServerState";
 
 const session = {
 	session_id: "session-1",
-	user: { id: "user-1", name: "Operator", enabled: true },
 	desk: { id: "desk-1" },
 } as SessionResponse;
 
@@ -677,7 +676,7 @@ describe("broad state hydration boundaries", () => {
 		harness.api.runtime.bootstrap.mockResolvedValueOnce(bootstrap("show-b"));
 		harness.route(event("show_opened", { show_id: "show-b" }, 1));
 		await vi.waitFor(() =>
-			expect(harness.loadShowObjects).toHaveBeenCalledWith("show-b", "user-1"),
+			expect(harness.loadShowObjects).toHaveBeenCalledWith("show-b"),
 		);
 		expect(harness.loadShowObjects).toHaveBeenCalledOnce();
 		expect(harness.state.beginDeskLoading).toHaveBeenCalledWith(
@@ -755,8 +754,6 @@ describe("broad state hydration boundaries", () => {
 			active_fixture: null,
 			can_previous: false,
 			can_next: false,
-			owner_user_id: session.user.id,
-			owner_user_name: session.user.name,
 			message: null,
 		};
 		harness.route(
@@ -764,7 +761,6 @@ describe("broad state hydration boundaries", () => {
 				"highlight_changed",
 				{
 					desk_id: session.desk.id,
-					user_id: session.user.id,
 					state,
 				},
 				8,

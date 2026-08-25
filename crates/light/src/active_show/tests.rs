@@ -883,7 +883,6 @@ impl TestRig {
         ActionEnvelope {
             context: ActionContext::operator(
                 Uuid::from_u128(1),
-                Uuid::from_u128(2),
                 Uuid::from_u128(3),
                 ActionSource::Http,
             ),
@@ -904,7 +903,6 @@ impl TestRig {
         ActionEnvelope {
             context: ActionContext::operator(
                 Uuid::from_u128(1),
-                Uuid::from_u128(2),
                 Uuid::from_u128(3),
                 ActionSource::Http,
             ),
@@ -937,7 +935,6 @@ impl TestRig {
         ActionEnvelope {
             context: ActionContext::operator(
                 Uuid::from_u128(1),
-                Uuid::from_u128(2),
                 Uuid::from_u128(3),
                 ActionSource::Http,
             ),
@@ -957,7 +954,6 @@ impl TestRig {
         ActionEnvelope {
             context: ActionContext::operator(
                 Uuid::from_u128(1),
-                Uuid::from_u128(2),
                 Uuid::from_u128(3),
                 ActionSource::Http,
             ),

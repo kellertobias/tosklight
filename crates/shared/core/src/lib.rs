@@ -49,7 +49,6 @@ macro_rules! id {
     };
 }
 
-id!(UserId);
 id!(SessionId);
 id!(ShowId);
 id!(FixtureId);

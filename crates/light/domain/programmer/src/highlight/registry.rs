@@ -9,7 +9,7 @@ use super::operations::{
 use super::selection::synchronize_actual_selection;
 use super::state::{HighlightRuntime, OperatorState, RecentHighlightActions};
 use crate::{GroupDefinition, ProgrammerSelection};
-use light_core::{AttributeKey, FixtureId, UserId};
+use light_core::{AttributeKey, FixtureId};
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
@@ -29,7 +29,6 @@ impl HighlightRegistry {
     pub fn action_guarded(
         &self,
         desk_id: Uuid,
-        user_id: UserId,
         action: HighlightAction,
         current_selection: &ProgrammerSelection,
         valid_fixtures: &[HighlightFixture],
@@ -37,7 +36,7 @@ impl HighlightRegistry {
         capture_only: bool,
     ) -> HighlightTransition {
         let received_at = Instant::now();
-        let key = (desk_id, user_id);
+        let key = desk_id;
         let mut recent_actions = self.recent_actions.lock();
         if is_duplicate_osc_action(
             recent_actions
@@ -120,13 +119,8 @@ impl HighlightRegistry {
     /// PREV/NEXT/ALL transitions. The next status call therefore does not mistake it for an
     /// external operator selection. While HIGH remains active, later external revisions are
     /// observed without replacing the frozen activation basis.
-    pub fn acknowledge_internal_selection(
-        &self,
-        desk_id: Uuid,
-        user_id: UserId,
-        selection: &ProgrammerSelection,
-    ) {
-        let _ = (desk_id, user_id);
+    pub fn acknowledge_internal_selection(&self, desk_id: Uuid, selection: &ProgrammerSelection) {
+        let _ = desk_id;
         self.runtime.lock().operator.observed_selection_revision = Some(selection.revision);
     }
 
@@ -135,10 +129,9 @@ impl HighlightRegistry {
     pub fn mark_explicit_fixture_attributes(
         &self,
         desk_id: Uuid,
-        user_id: UserId,
         touched: impl IntoIterator<Item = (FixtureId, AttributeKey)>,
     ) -> bool {
-        let _ = (desk_id, user_id);
+        let _ = desk_id;
         let mut runtime = self.runtime.lock();
         let operator = &mut runtime.operator;
         if !operator.active {
@@ -162,23 +155,9 @@ impl HighlightRegistry {
         changed
     }
 
-    pub fn clear_desk(&self, desk_id: Uuid) {
+    pub fn clear_context(&self, desk_id: Uuid) {
         self.clear_all_but_repeat_guard();
-        self.recent_actions
-            .lock()
-            .retain(|(desk, _), _| *desk != desk_id);
-    }
-
-    pub fn clear_context(&self, desk_id: Uuid, user_id: UserId) {
-        self.clear_all_but_repeat_guard();
-        self.recent_actions.lock().remove(&(desk_id, user_id));
-    }
-
-    pub fn clear_user(&self, user_id: UserId) {
-        self.clear_all_but_repeat_guard();
-        self.recent_actions
-            .lock()
-            .retain(|(_, user), _| *user != user_id);
+        self.recent_actions.lock().remove(&desk_id);
     }
 
     pub fn clear_all(&self) {

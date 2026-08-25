@@ -3,9 +3,7 @@ use crate::groups::GroupProgrammerValues;
 use crate::preload::PreloadPlaybackAction;
 use crate::selection::SelectionExpression;
 use chrono::{DateTime, Utc};
-use light_core::{
-    AttributeKey, AttributeValue, FixtureId, ProgrammerId, SessionId, TimedValue, UserId,
-};
+use light_core::{AttributeKey, AttributeValue, FixtureId, ProgrammerId, SessionId, TimedValue};
 use light_dynamics::DynamicAddressValue;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -52,7 +50,6 @@ pub struct ProgrammerSnapshot {
 pub struct ProgrammerState {
     pub id: ProgrammerId,
     pub session_id: SessionId,
-    pub user_id: UserId,
     pub priority: i16,
     pub selected: Vec<FixtureId>,
     #[serde(default)]

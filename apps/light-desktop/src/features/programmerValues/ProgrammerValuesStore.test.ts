@@ -13,9 +13,9 @@ import {
 	fixtureValue,
 	groupValue,
 	OTHER_SHOW_ID,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -23,7 +23,7 @@ import { ProgrammerValuesProtocolError } from "./transport";
 
 function readyStore(projection = valuesProjection()) {
 	const store = new ProgrammerValuesStore();
-	store.reset(SHOW_ID, USER_ID);
+	store.reset(SHOW_ID, SESSION_ID);
 	store.installSnapshot({ cursor: 10, projection });
 	return store;
 }
@@ -64,11 +64,11 @@ describe("ProgrammerValuesStore authority", () => {
 		const oldScope = store.captureScope();
 		expect(store.beginOptimistic("request-a", setFixtureLevel(0.8))).toBe(true);
 
-		store.reset(OTHER_SHOW_ID, OTHER_USER_ID);
+		store.reset(OTHER_SHOW_ID, OTHER_SESSION_ID);
 
 		expect(store.getSnapshot()).toMatchObject({
 			showId: OTHER_SHOW_ID,
-			userId: OTHER_USER_ID,
+			sessionId: OTHER_SESSION_ID,
 			projection: null,
 			pendingRequestIds: [],
 			status: "idle",
@@ -195,7 +195,7 @@ describe("ProgrammerValuesStore authority", () => {
 
 	it("rejects duplicate addresses as a repairable protocol error", () => {
 		const store = new ProgrammerValuesStore();
-		store.reset(SHOW_ID, USER_ID);
+		store.reset(SHOW_ID, SESSION_ID);
 
 		expect(() =>
 			store.installSnapshot(
@@ -226,7 +226,7 @@ describe("ProgrammerValuesStore authority", () => {
 		expect(store.getSnapshot().projection?.dynamicValues).toHaveLength(2);
 
 		const duplicateStore = new ProgrammerValuesStore();
-		duplicateStore.reset(SHOW_ID, USER_ID);
+		duplicateStore.reset(SHOW_ID, SESSION_ID);
 		expect(() =>
 			duplicateStore.installSnapshot(
 				valuesSnapshot({
@@ -352,12 +352,12 @@ describe("ProgrammerValuesStore optimism", () => {
 		const store = readyStore();
 		const scope = store.captureScope();
 		store.beginOptimistic("request-a", setFixtureLevel(0.8), scope);
-		store.reset(SHOW_ID, OTHER_USER_ID);
+		store.reset(SHOW_ID, OTHER_SESSION_ID);
 
 		expect(
 			store.commit(
 				"request-a",
-				valuesProjection({ userId: USER_ID, revision: 2 }),
+				valuesProjection({ sessionId: SESSION_ID, revision: 2 }),
 				scope,
 			),
 		).toBe(false);
@@ -365,15 +365,15 @@ describe("ProgrammerValuesStore optimism", () => {
 
 	it("invalidates authority when the server session changes in-place", () => {
 		const store = new ProgrammerValuesStore();
-		store.reset(SHOW_ID, USER_ID, "session-a");
+		store.reset(SHOW_ID, SESSION_ID, "session-a");
 		store.installSnapshot(valuesSnapshot());
 		const oldScope = store.captureScope();
 
-		store.reset(SHOW_ID, USER_ID, "session-b");
+		store.reset(SHOW_ID, SESSION_ID, "session-b");
 
 		expect(store.getSnapshot()).toMatchObject({
 			showId: SHOW_ID,
-			userId: USER_ID,
+			sessionId: SESSION_ID,
 			projection: null,
 			status: "idle",
 		});

@@ -890,7 +890,7 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
 }
 
 #[test]
-fn replay_identity_isolated_by_user_desk_and_session() {
+fn replay_identity_isolated_by_desk_and_session() {
     let rig = TestRig::new();
     rig.seed(
         "playback_page",
@@ -906,24 +906,15 @@ fn replay_identity_isolated_by_user_desk_and_session() {
         expected_playback_object_id: None,
     };
     let show_revision = rig.show_revision();
-    for (user, desk, session) in [(2, 1, 3), (20, 1, 3), (2, 10, 3), (2, 1, 30)] {
+    for (desk, session) in [(1, 3), (10, 3), (1, 30)] {
         let result = rig
-            .handle_as(
-                "shared-id",
-                show_revision,
-                action.clone(),
-                user,
-                desk,
-                session,
-            )
+            .handle_as("shared-id", show_revision, action.clone(), desk, session)
             .unwrap();
         assert!(!result.replayed);
     }
     assert_eq!(
         rig.steps(),
         [
-            "authorize",
-            "begin",
             "authorize",
             "begin",
             "authorize",
@@ -945,12 +936,8 @@ fn request_actor_session_and_exact_show_revision_are_required_before_opening_sho
         expected_playback_revision: 0,
         expected_playback_object_id: None,
     };
-    let operator = ActionContext::operator(
-        Uuid::from_u128(1),
-        Uuid::from_u128(2),
-        Uuid::from_u128(3),
-        ActionSource::Http,
-    );
+    let operator =
+        ActionContext::operator(Uuid::from_u128(1), Uuid::from_u128(3), ActionSource::Http);
     let missing_request = rig
         .handle_context(operator.clone(), action.clone())
         .unwrap_err();
@@ -1049,7 +1036,7 @@ impl TestRig {
         show_revision: u64,
         action: PlaybackTopologyAction,
     ) -> Result<PlaybackTopologyResult, ActionError> {
-        self.handle_as(request_id, show_revision, action, 2, 1, 3)
+        self.handle_as(request_id, show_revision, action, 1, 3)
     }
 
     fn handle_as(
@@ -1057,14 +1044,12 @@ impl TestRig {
         request_id: &str,
         show_revision: u64,
         action: PlaybackTopologyAction,
-        user: u128,
         desk: u128,
         session: u128,
     ) -> Result<PlaybackTopologyResult, ActionError> {
         self.handle_context(
             ActionContext::operator(
                 Uuid::from_u128(desk),
-                Uuid::from_u128(user),
                 Uuid::from_u128(session),
                 ActionSource::Http,
             )

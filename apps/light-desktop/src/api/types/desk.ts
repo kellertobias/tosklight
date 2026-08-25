@@ -1,9 +1,3 @@
-export interface DeskUser {
-	id: string;
-	name: string;
-	enabled: boolean;
-}
-
 export interface ShowEntry {
 	id: string;
 	name: string;
@@ -132,7 +126,6 @@ export interface HighlightState {
 export interface BootstrapSnapshot {
 	api_version: string;
 	attribute_registry: AttributeDescriptor[];
-	users: DeskUser[];
 	desks: ControlDesk[];
 	clients: ClientSummary[];
 	active_show: ShowEntry | null;
@@ -189,7 +182,6 @@ export interface SessionResponse {
 	session_id: string;
 	client_id: string;
 	token: string;
-	user: DeskUser;
 	desk: ControlDesk;
 }
 

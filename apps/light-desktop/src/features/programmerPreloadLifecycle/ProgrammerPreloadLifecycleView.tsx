@@ -39,7 +39,7 @@ import { ProgrammerPreloadLifecycleWriter } from "./writer";
 
 interface ProgrammerPreloadLifecycleProviderProps {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	deskId: string | null;
 	authorityKey: string;
 	lifecycleAuthorityKey: string | null;
@@ -70,7 +70,7 @@ const fallbackStore = new ProgrammerPreloadLifecycleStore();
 export function ProgrammerPreloadLifecycleProvider({
 	children,
 	showId,
-	userId,
+	sessionId,
 	deskId,
 	authorityKey,
 	lifecycleAuthorityKey,
@@ -86,8 +86,8 @@ export function ProgrammerPreloadLifecycleProvider({
 	const lifecycle = useProgrammerLifecycleAuthority();
 	const runtime = usePlaybackRuntimeAuthority();
 	const scope = useMemo<ProgrammerPreloadLifecycleScope | null>(
-		() => (showId && userId && deskId ? { showId, userId, deskId } : null),
-		[deskId, showId, userId],
+		() => (showId && sessionId && deskId ? { showId, sessionId, deskId } : null),
+		[deskId, showId, sessionId],
 	);
 	const controller = useMemo(
 		() =>
@@ -109,7 +109,7 @@ export function ProgrammerPreloadLifecycleProvider({
 							readPreloadActive: () =>
 								readPreloadActive(
 									lifecycle.store.getSnapshot(),
-									scope.userId,
+									scope.sessionId,
 									lifecycleAuthorityKey,
 								),
 							transport,
@@ -142,8 +142,8 @@ export function ProgrammerPreloadLifecycleProvider({
 		],
 	);
 	useLayoutEffect(() => {
-		store.reset(showId, userId, deskId, authorityKey);
-	}, [authorityKey, deskId, showId, store, userId]);
+		store.reset(showId, sessionId, deskId, authorityKey);
+	}, [authorityKey, deskId, showId, store, sessionId]);
 	useStrictModeSafeStop(controller);
 	return (
 		<StoreContext.Provider value={store}>
@@ -169,7 +169,7 @@ export function useProgrammerPreloadLifecycleView(
 		store.getSnapshot,
 	);
 	const showId = local.showId;
-	const userId = local.userId;
+	const sessionId = local.sessionId;
 	const deskId = local.deskId;
 	const captureMode = useProgrammerCaptureModeAuthority();
 	const values = useProgrammerPreloadValuesAuthority();
@@ -180,8 +180,8 @@ export function useProgrammerPreloadLifecycleView(
 		captureMode?.store,
 		useCallback(
 			(state: ProgrammerCaptureModeState) =>
-				captureBlindForScope(state, showId, userId),
-			[showId, userId],
+				captureBlindForScope(state, showId, sessionId),
+			[showId, sessionId],
 		),
 		null,
 	);
@@ -189,8 +189,8 @@ export function useProgrammerPreloadLifecycleView(
 		values?.store,
 		useCallback(
 			(state: ProgrammerPreloadValuesState) =>
-				exactUserAuthorityReady(state, showId, userId),
-			[showId, userId],
+				exactUserAuthorityReady(state, showId, sessionId),
+			[showId, sessionId],
 		),
 		false,
 	);
@@ -198,8 +198,8 @@ export function useProgrammerPreloadLifecycleView(
 		queue?.store,
 		useCallback(
 			(state: ProgrammerPreloadPlaybackQueueState) =>
-				exactUserAuthorityReady(state, showId, userId),
-			[showId, userId],
+				exactUserAuthorityReady(state, showId, sessionId),
+			[showId, sessionId],
 		),
 		false,
 	);
@@ -218,8 +218,8 @@ export function useProgrammerPreloadLifecycleView(
 	const lifecycleRow = useProgrammerLifecycleSelector(
 		useCallback(
 			(state: ProgrammerLifecycleState) =>
-				selectLifecycleRow(state, userId, lifecycleAuthorityKey),
-			[lifecycleAuthorityKey, userId],
+				selectLifecycleRow(state, sessionId, lifecycleAuthorityKey),
+			[lifecycleAuthorityKey, sessionId],
 		),
 		equalLifecycleSelection,
 		enabled,
@@ -287,7 +287,7 @@ function useAuthoritySelection<T, Value>(
 
 function selectLifecycleRow(
 	state: ProgrammerLifecycleState,
-	userId: string | null,
+	sessionId: string | null,
 	lifecycleAuthorityKey: string | null,
 ) {
 	const row = state.projection?.programmers[0];
@@ -304,9 +304,9 @@ function selectLifecycleRow(
 function captureBlindForScope(
 	state: ProgrammerCaptureModeState,
 	showId: string | null,
-	userId: string | null,
+	sessionId: string | null,
 ) {
-	return exactUserAuthorityReady(state, showId, userId)
+	return exactUserAuthorityReady(state, showId, sessionId)
 		? (state.projection?.blind ?? null)
 		: null;
 }
@@ -314,11 +314,11 @@ function captureBlindForScope(
 function exactUserAuthorityReady(
 	state: ProgrammerCaptureModeState | ProgrammerPreloadValuesState | ProgrammerPreloadPlaybackQueueState,
 	showId: string | null,
-	userId: string | null,
+	sessionId: string | null,
 ) {
 	return Boolean(
 		state.showId === showId &&
-			state.userId === userId &&
+			state.sessionId === sessionId &&
 			state.status === "ready" &&
 			!state.repairRequired &&
 			state.projection,
@@ -334,7 +334,7 @@ function equalLifecycleSelection(
 
 function readPreloadActive(
 	state: ProgrammerLifecycleState,
-	userId: string,
+	sessionId: string,
 	lifecycleAuthorityKey: string | null,
 ) {
 	if (

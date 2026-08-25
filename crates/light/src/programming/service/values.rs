@@ -5,7 +5,7 @@ use crate::{
     ProgrammingValuesCommand, ProgrammingValuesEnvironment, ProgrammingValuesOutcome,
     ProgrammingValuesRequest, ProgrammingValuesResult,
 };
-use light_core::{AttributeValue, SessionId, UserId};
+use light_core::{AttributeValue, SessionId};
 use light_programmer::{
     NormalProgrammerValueMutation, NormalProgrammerValueTiming, ProgrammerAlignmentBase,
     ProgrammerAlignmentPlan,
@@ -24,19 +24,13 @@ impl ProgrammingService {
         action: ActionEnvelope<ProgrammingValuesRequest>,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingValuesResult, ActionError> {
-        // The identity must be there; which identity it is no longer selects anything.
-        let (session, _, request_id, expected_revision) = values_context(&action)?;
+        let (session, request_id, expected_revision) = values_context(&action)?;
         self.with_programmer_and_desk_gate(action.context.desk_id, || {
             ports.authorize_programming_change(&action.context)?;
-            let user_id = self.operated_values_owner(session)?;
             let fingerprint = values_request_fingerprint(expected_revision, &action.command);
-            if let Some(cached) = self.cached_values(
-                user_id,
-                action.context.desk_id,
-                session,
-                &request_id,
-                fingerprint,
-            )? {
+            if let Some(cached) =
+                self.cached_values(action.context.desk_id, session, &request_id, fingerprint)?
+            {
                 return Ok(cached);
             }
             self.assert_values_revision(expected_revision)?;
@@ -48,12 +42,10 @@ impl ProgrammingService {
                 &action,
                 ports,
                 session,
-                user_id,
                 expected_revision,
                 capture_mode_revision,
             )?;
             self.remember_values(
-                user_id,
                 action.context.desk_id,
                 session,
                 request_id,
@@ -69,11 +61,10 @@ impl ProgrammingService {
         action: &ActionEnvelope<ProgrammingValuesRequest>,
         ports: &dyn ProgrammingPorts,
         session: SessionId,
-        user_id: UserId,
         revision_before: u64,
         capture_mode_revision: u64,
     ) -> Result<ProgrammingValuesResult, ActionError> {
-        let lifecycle_before = self.active_lifecycle_programmer(user_id);
+        let lifecycle_before = self.active_lifecycle_programmer();
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         let environment = (!action.command.command.is_clear())
             .then(|| ports.values_environment(&action.context))
@@ -179,10 +170,10 @@ impl ProgrammingService {
             &before,
             &after,
         );
-        let values = self.values_change(user_id, &before.values_content, &after.values_content)?;
+        let values = self.values_change(&before.values_content, &after.values_content)?;
         let interaction_event_sequence = self.publish_interaction(&action.context, interaction);
         let outcome = self.values_outcome(&action.context, values, revision_before);
-        self.publish_lifecycle_for_context(&action.context, lifecycle_before);
+        self.publish_lifecycle(&action.context, lifecycle_before);
         Ok(ProgrammingValuesResult {
             context: action.context.clone(),
             outcome,
@@ -318,16 +309,6 @@ impl ProgrammingService {
         }
     }
 
-    /// The Programmer this session operates.
-    fn operated_values_owner(&self, session: SessionId) -> Result<UserId, ActionError> {
-        self.programmers.operated_desk_user(session).ok_or_else(|| {
-            ActionError::new(
-                ActionErrorKind::NotFound,
-                "Programmer values are unavailable",
-            )
-        })
-    }
-
     fn assert_values_revision(&self, expected: u64) -> Result<(), ActionError> {
         let actual = self.programmers.normal_values_revision();
         if expected == actual {
@@ -379,7 +360,6 @@ impl ProgrammingService {
 
     fn cached_values(
         &self,
-        user_id: UserId,
         desk_id: uuid::Uuid,
         session_id: SessionId,
         request_id: &str,
@@ -387,26 +367,20 @@ impl ProgrammingService {
     ) -> Result<Option<ProgrammingValuesResult>, ActionError> {
         self.values_replay
             .lock()
-            .get(user_id, desk_id, session_id, request_id, fingerprint)
+            .get(desk_id, session_id, request_id, fingerprint)
     }
 
     fn remember_values(
         &self,
-        user_id: UserId,
         desk_id: uuid::Uuid,
         session_id: SessionId,
         request_id: String,
         fingerprint: RequestFingerprint,
         result: ProgrammingValuesResult,
     ) {
-        self.values_replay.lock().insert(
-            user_id,
-            desk_id,
-            session_id,
-            request_id,
-            fingerprint,
-            result,
-        );
+        self.values_replay
+            .lock()
+            .insert(desk_id, session_id, request_id, fingerprint, result);
     }
 }
 
@@ -753,17 +727,11 @@ fn push_intent_value(
 
 fn values_context(
     action: &ActionEnvelope<ProgrammingValuesRequest>,
-) -> Result<(SessionId, UserId, String, u64), ActionError> {
+) -> Result<(SessionId, String, u64), ActionError> {
     let session = action.context.session_id.map(SessionId).ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "Programmer values actions require an operator session",
-        )
-    })?;
-    let user_id = action.context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Programmer values actions require an authenticated user",
         )
     })?;
     let request_id = action.context.request_id.as_deref().ok_or_else(|| {
@@ -779,7 +747,7 @@ fn values_context(
             "Programmer values actions require an expected revision",
         )
     })?;
-    Ok((session, user_id, request_id.to_owned(), expected_revision))
+    Ok((session, request_id.to_owned(), expected_revision))
 }
 
 fn domain_mutation(mutation: &ProgrammingValueMutation) -> NormalProgrammerValueMutation {

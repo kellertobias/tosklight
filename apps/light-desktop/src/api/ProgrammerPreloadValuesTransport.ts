@@ -24,7 +24,7 @@ import { programmerPreloadValuesUuidAt } from "./programmerPreloadValuesWireProj
 export interface HttpProgrammerPreloadValuesTransportOptions {
 	baseUrl: string;
 	sessionToken: string;
-	authenticatedUserId: string;
+	authenticatedSessionId: string;
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
 	webSocket?: typeof globalThis.WebSocket;
@@ -175,8 +175,8 @@ export class HttpProgrammerPreloadValuesTransport
 	private validateScope(scope: ProgrammerPreloadValuesScope) {
 		programmerPreloadValuesUuidAt(scope.showId, "$.scope.showId");
 		programmerPreloadValuesUuidAt(
-			this.options.authenticatedUserId,
-			"$.authenticatedUserId",
+			this.options.authenticatedSessionId,
+			"$.authenticatedSessionId",
 		);
 	}
 

@@ -27,24 +27,19 @@ pub(super) async fn clear_programmer(
     let actor = authenticate(&state, &headers)?;
     let _activation = state.active_show.acquire().await;
     let session_id = SessionId(id);
-    let Some(programmer) = state.programming.get(session_id) else {
+    if state.programming.get(session_id).is_none() {
         return Ok(StatusCode::NOT_FOUND);
-    };
-    let user_id = programmer.user_id;
-    let connected = state
-        .sessions
-        .sessions()
-        .into_iter()
-        .filter(|candidate| candidate.user.id == user_id)
-        .collect::<Vec<_>>();
+    }
+    // Every connected surface operates the desk's one Programmer, so every one of them is a
+    // candidate to carry it after the replacement.
+    let connected = state.sessions.sessions();
     let target = light_application::ProgrammingLifecycleTarget::new(
-        user_id,
         session_id,
         connected.iter().map(|session| session.desk.id).collect(),
     );
     let context = programming_context(&actor, light_application::ActionSource::Http, None);
     let lifecycle = run_programmer_lifecycle(&state, &actor, &context, target, || {
-        replace_programmer_authority(&state, session_id, user_id, &connected)
+        replace_programmer_authority(&state, session_id, &connected)
     })?;
     let status = lifecycle.output?;
     if status != StatusCode::NO_CONTENT {
@@ -61,7 +56,6 @@ pub(super) async fn clear_programmer(
 fn replace_programmer_authority(
     state: &AppState,
     session_id: SessionId,
-    user_id: light_core::UserId,
     connected: &[Session],
 ) -> light_application::ProgrammingLifecycleCompletion<Result<StatusCode, ApiError>> {
     let mut replacement_session_id = None;
@@ -74,7 +68,7 @@ fn replace_programmer_authority(
             return Ok(StatusCode::INTERNAL_SERVER_ERROR);
         }
         for session in connected {
-            state.programming.start(session.id, user_id);
+            state.programming.start(session.id);
             replacement_session_id.get_or_insert(session.id);
             attach_session_command_context(state, session);
             persist_programmer(state, session)?;
@@ -93,7 +87,6 @@ pub(super) async fn update_master(
     let _activation = state.active_show.acquire().await;
     let context = light_application::ActionContext::operator(
         session.desk.id,
-        session.user.id.0,
         session.id.0,
         light_application::ActionSource::Http,
     );

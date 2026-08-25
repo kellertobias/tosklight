@@ -1,4 +1,4 @@
-use super::{ProgrammingService, context_session, context_user};
+use super::{ProgrammingService, context_session};
 use crate::{ActionContext, ActionError, ActionErrorKind, ProgrammingPorts};
 use light_core::{AttributeKey, AttributeValue, SessionId};
 use light_programmer::{
@@ -15,7 +15,6 @@ impl ProgrammingService {
         mode: Option<ProgrammerAlignmentMode>,
     ) -> Result<Option<ProgrammerAlignmentState>, ActionError> {
         let session = context_session(context)?;
-        context_user(context)?;
         self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize_programming_change(context)?;
             if !self.programmers.knows_session(session) {

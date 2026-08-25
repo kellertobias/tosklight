@@ -1,6 +1,6 @@
 use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::{
     PreloadPlaybackAction, PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface,
     ProgrammerRegistry,
@@ -51,7 +51,6 @@ pub struct ProgrammingPreloadPlaybackQueueItem {
 /// Exact-user authority for the ordered playback actions queued by Preload capture.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammingPreloadPlaybackQueueProjection {
-    pub user_id: UserId,
     pub revision: u64,
     pub actions: Vec<ProgrammingPreloadPlaybackQueueItem>,
 }
@@ -94,13 +93,8 @@ impl ProgrammingPreloadPlaybackQueueContent {
         Ok(Self { actions })
     }
 
-    pub(super) fn projection(
-        self,
-        user_id: UserId,
-        revision: u64,
-    ) -> ProgrammingPreloadPlaybackQueueProjection {
+    pub(super) fn projection(self, revision: u64) -> ProgrammingPreloadPlaybackQueueProjection {
         ProgrammingPreloadPlaybackQueueProjection {
-            user_id,
             revision,
             actions: self.actions,
         }
@@ -123,36 +117,27 @@ impl ProgrammingService {
         context: &ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPreloadPlaybackQueueSnapshot, ActionError> {
-        let (session, user_id) = queue_identity(context)?;
-        // Whatever identity arrived, this session operates the desk's one Programmer.
-        let user_id = self.programmers.desk_user_for(session, user_id);
+        let session = queue_identity(context)?;
         self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize(context)?;
             let event_sequence = self.events.latest_sequence();
             let content = ProgrammingPreloadPlaybackQueueContent::read(&self.programmers, session)?;
             Ok(ProgrammingPreloadPlaybackQueueSnapshot {
                 event_sequence,
-                projection: content
-                    .projection(user_id, self.programmers.preload_playback_queue_revision()),
+                projection: content.projection(self.programmers.preload_playback_queue_revision()),
             })
         })
     }
 }
 
-fn queue_identity(context: &ActionContext) -> Result<(SessionId, UserId), ActionError> {
+fn queue_identity(context: &ActionContext) -> Result<SessionId, ActionError> {
     let session = context.session_id.map(SessionId).ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "Preload playback queue snapshots require an operator session",
         )
     })?;
-    let user_id = context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Preload playback queue snapshots require an authenticated user",
-        )
-    })?;
-    Ok((session, user_id))
+    Ok(session)
 }
 
 fn queue_item(action: &PreloadPlaybackAction) -> ProgrammingPreloadPlaybackQueueItem {

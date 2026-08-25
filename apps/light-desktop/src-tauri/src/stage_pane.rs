@@ -172,7 +172,6 @@ impl StagePanes {
         surface_size: (u32, u32),
         pane_rect: PaneRect,
         scale: f32,
-        user: String,
     ) -> Result<(), String>
     where
         T: raw_window_handle::HasWindowHandle
@@ -196,7 +195,6 @@ impl StagePanes {
             surface_size,
             pane_rect,
             scale,
-            user,
             format!("stage-pane:{key}"),
         ) {
             if let Ok(mut panes) = self.panes.lock()
@@ -279,7 +277,6 @@ impl StagePane {
         surface_size: (u32, u32),
         pane: PaneRect,
         scale: f32,
-        user: String,
         target: String,
     ) -> Result<(), String>
     where
@@ -390,7 +387,6 @@ impl StagePane {
             desk: Some(DeskEndpoint {
                 host: crate::server::address().ip().to_string(),
                 port: crate::server::address().port(),
-                user,
                 // Named so a desk driving more than one renderer keeps a view per renderer, and so
                 // this pane's camera is not the standalone visualizer's.
                 target,
@@ -683,7 +679,7 @@ impl Running {
     /// channel the message did.
     fn adopt(
         &mut self,
-        handle: SharedSurfaceHandle,
+        #[cfg_attr(target_os = "macos", allow(unused_variables))] handle: SharedSurfaceHandle,
         width: u32,
         height: u32,
     ) -> Result<(), String> {
@@ -971,7 +967,6 @@ pub(crate) fn open_stage_pane(
     pane_id: String,
     live_3d: bool,
     geometry: PaneGeometry,
-    user: String,
 ) -> Result<(), String> {
     if live_3d && visualizer.is_open()? {
         return Err(
@@ -987,7 +982,6 @@ pub(crate) fn open_stage_pane(
         (geometry.surface_width, geometry.surface_height),
         geometry.rect(),
         geometry.scale,
-        user,
     )
 }
 

@@ -18,7 +18,6 @@ pub enum Row {
     Source,
     Server,
     Port,
-    User,
     Quality,
     Focus,
     Appearance,
@@ -97,7 +96,6 @@ impl Row {
             Self::Source => "Source",
             Self::Server => "Server",
             Self::Port => "Port",
-            Self::User => "Desk user",
             Self::Quality => "Render quality",
             Self::Focus => "Focus",
             Self::Appearance => "Appearance",
@@ -126,10 +124,7 @@ impl Row {
     }
 
     fn is_text(self) -> bool {
-        matches!(
-            self,
-            Self::Server | Self::Port | Self::User | Self::BlenderPath
-        )
+        matches!(self, Self::Server | Self::Port | Self::BlenderPath)
     }
 
     /// The `0..=1` fraction to draw as a bar beside the value, for rows that have one.
@@ -183,7 +178,6 @@ pub struct QuickSettings {
     pub tab: QuickSettingsTab,
     pub editing: bool,
     pub staged: StagedConnection,
-    pub staged_user: String,
     /// The Blender the operator named, empty to let the application find one. Unlike the
     /// connection fields this applies as it is typed: it changes nothing that is running.
     pub staged_blender: String,
@@ -211,7 +205,6 @@ impl QuickSettings {
             tab: QuickSettingsTab::Rendering,
             editing: false,
             staged: StagedConnection::from_preferences(preferences),
-            staged_user: preferences.user.clone(),
             staged_blender: preferences.blender.clone(),
             message: String::new(),
             input_universe: 1,
@@ -228,7 +221,6 @@ impl QuickSettings {
         if self.open {
             // Re-stage from the live connection so cancelling can never disturb it.
             self.staged = StagedConnection::from_preferences(preferences);
-            self.staged_user = preferences.user.clone();
             self.staged_blender = preferences.blender.clone();
             // Looking for Blender walks the search path, so it happens when the panel opens and
             // not on every frame it is drawn on. An operator who installs Blender while the panel
@@ -245,7 +237,6 @@ impl QuickSettings {
             return;
         }
         self.staged = StagedConnection::from_preferences(preferences);
-        self.staged_user = preferences.user.clone();
         self.staged_blender = preferences.blender.clone();
     }
 
@@ -256,7 +247,6 @@ impl QuickSettings {
                 Row::Source,
                 Row::Server,
                 Row::Port,
-                Row::User,
                 Row::InputUniverse,
                 Row::InputProtocol,
                 Row::Connect,
@@ -554,7 +544,6 @@ impl QuickSettings {
             }
             Row::Connect => match self.staged.validate() {
                 Ok((host, port)) => {
-                    preferences.user = self.staged_user.trim().to_owned();
                     if self.staged.source != preferences.source {
                         preferences.source = self.staged.source;
                         preferences.host = host.clone();
@@ -573,7 +562,6 @@ impl QuickSettings {
             },
             Row::Cancel => {
                 self.staged = StagedConnection::from_preferences(preferences);
-                self.staged_user = preferences.user.clone();
                 self.open = false;
                 self.message.clear();
                 QuickSettingsOutcome::Close
@@ -607,7 +595,6 @@ impl QuickSettings {
             Row::Port if character.is_ascii_digit() => {
                 self.staged.port_text.push(character);
             }
-            Row::User => self.staged_user.push(character),
             Row::BlenderPath => self.staged_blender.push(character),
             _ => {}
         }
@@ -624,9 +611,6 @@ impl QuickSettings {
             }
             Row::Port => {
                 self.staged.port_text.pop();
-            }
-            Row::User => {
-                self.staged_user.pop();
             }
             Row::BlenderPath => {
                 self.staged_blender.pop();
@@ -661,7 +645,6 @@ impl QuickSettings {
             }
             Row::Server => self.staged.host.clone(),
             Row::Port => self.staged.port_text.clone(),
-            Row::User => self.staged_user.clone(),
             Row::Quality => preferences.quality_label(),
             Row::Focus => "Frame rig".into(),
             Row::Appearance => preferences.theme.label().to_owned(),

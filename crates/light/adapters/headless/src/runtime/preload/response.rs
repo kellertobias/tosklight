@@ -32,7 +32,6 @@ pub(super) fn preload_commit_response(
         "programmer_changed",
         serde_json::json!({
             "session_id":session.id,
-            "user_id":session.user.id,
             "preload_committed_at":committed_at,
             "changes":if executed.is_empty() { Vec::<&str>::new() } else { vec!["preload_playback_queue"] },
         }),

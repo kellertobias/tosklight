@@ -3,7 +3,7 @@ import type { ProgrammerPreloadPlaybackQueueProtocolError } from "../features/pr
 import { HttpProgrammerPreloadPlaybackQueueTransport } from "./ProgrammerPreloadPlaybackQueueTransport";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const OTHER_USER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const scope = { showId: SHOW_ID };
 
@@ -80,7 +80,7 @@ function harness(fetch = vi.fn<typeof globalThis.fetch>()) {
 	const transport = new HttpProgrammerPreloadPlaybackQueueTransport({
 		baseUrl: "http://127.0.0.1:5000/",
 		sessionToken: "session-token",
-		authenticatedUserId: USER_ID,
+		authenticatedSessionId: SESSION_ID,
 		deskBoundaryToken: "desk-boundary",
 		fetch,
 		webSocket: FakeWebSocket as unknown as typeof WebSocket,

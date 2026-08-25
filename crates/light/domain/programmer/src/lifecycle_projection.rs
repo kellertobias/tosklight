@@ -1,5 +1,5 @@
 use crate::{ProgrammerRegistry, ProgrammerState};
-use light_core::{ProgrammerId, SessionId, UserId};
+use light_core::{ProgrammerId, SessionId};
 use std::collections::{HashMap, HashSet};
 
 /// One currently connected control session without its private interaction content.
@@ -8,14 +8,13 @@ pub struct ProgrammerLifecycleSession {
     pub session_id: SessionId,
 }
 
-/// Lightweight ownership and activity summary for one retained user Programmer.
+/// Lightweight activity summary for the desk's retained Programmer.
 ///
 /// Values, selected fixture identities, commands, modes, priority, Highlight, transient values,
 /// Preload details, and Undo/Redo snapshots deliberately remain outside this boundary.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammerLifecycleSummary {
     pub programmer_id: ProgrammerId,
-    pub user_id: UserId,
     pub connected: bool,
     pub connected_sessions: Vec<ProgrammerLifecycleSession>,
     pub selected_fixture_count: u64,
@@ -26,22 +25,17 @@ pub struct ProgrammerLifecycleSummary {
 }
 
 impl ProgrammerRegistry {
-    /// Read one retained user authority without cloning its complete Programmer state.
-    /// The lifecycle of the desk's one Programmer, whatever identity the caller names.
-    ///
-    /// An identity from before the collapse describes the same Programmer, so it must not read as
-    /// an absent one — a lifecycle transition published under it would otherwise be silent.
-    pub fn programmer_lifecycle(&self, user_id: UserId) -> Option<ProgrammerLifecycleSummary> {
-        let user_id = self.desk.normalize(user_id);
-        self.serialized(|| self.lifecycle_for_user(user_id))
+    /// The lifecycle of the desk's one Programmer, without cloning its complete state.
+    pub fn programmer_lifecycle(&self) -> Option<ProgrammerLifecycleSummary> {
+        self.serialized(|| self.lifecycle_for_desk())
     }
 
-    /// Read only connected Programmer authorities in deterministic user/Programmer order.
+    /// Read only connected Programmer authorities in deterministic Programmer order.
     pub fn active_programmer_lifecycles(&self) -> Vec<ProgrammerLifecycleSummary> {
         self.read_active_programmer_lifecycles(std::convert::identity)
     }
 
-    /// Assemble a safe installation snapshot while every current user mutation gate is held.
+    /// Assemble a safe installation snapshot while the desk's mutation gate is held.
     ///
     /// The reader should stay small: this boundary exists so an application cursor/revision can
     /// be paired with the exact summaries without a completed mutation slipping between them.
@@ -52,26 +46,9 @@ impl ProgrammerRegistry {
         self.with_all_mutation_gates(|| reader(self.lifecycle_summaries(true)))
     }
 
-    /// Resolve connected user authorities sharing one desk interaction context.
-    pub fn lifecycle_users_for_interaction(&self, context: SessionId) -> Vec<UserId> {
+    fn lifecycle_for_desk(&self) -> Option<ProgrammerLifecycleSummary> {
         let states = self.states.read();
-        let sessions = self.sessions.read();
-        let command_contexts = self.command_contexts.read();
-        let mut users = sessions
-            .iter()
-            .filter(|(session, _)| {
-                command_contexts.get(session).copied().unwrap_or(**session) == context
-            })
-            .filter_map(|(_, key)| states.get(key).map(|state| state.user_id))
-            .collect::<Vec<_>>();
-        users.sort_unstable_by_key(|user| user.0);
-        users.dedup();
-        users
-    }
-
-    fn lifecycle_for_user(&self, user_id: UserId) -> Option<ProgrammerLifecycleSummary> {
-        let states = self.states.read();
-        let (key, state) = states.iter().find(|(_, state)| state.user_id == user_id)?;
+        let (key, state) = states.iter().next()?;
         let sessions = self.sessions.read();
         let command_contexts = self.command_contexts.read();
         let selections = self.selection_contexts.read();
@@ -97,7 +74,7 @@ impl ProgrammerRegistry {
                 lifecycle_summary(*key, state, &sessions, &command_contexts, &selections)
             })
             .collect::<Vec<_>>();
-        summaries.sort_unstable_by_key(|summary| (summary.user_id.0, summary.programmer_id.0));
+        summaries.sort_unstable_by_key(|summary| summary.programmer_id.0);
         summaries
     }
 }
@@ -111,7 +88,6 @@ fn lifecycle_summary(
 ) -> ProgrammerLifecycleSummary {
     ProgrammerLifecycleSummary {
         programmer_id: state.id,
-        user_id: state.user_id,
         connected: sessions.values().any(|bound| *bound == key),
         connected_sessions: connected_sessions(key, sessions),
         selected_fixture_count: selected_fixture_count(key, sessions, command_contexts, selections),
@@ -192,11 +168,10 @@ mod tests {
     #[test]
     fn a_second_surface_replaces_the_shared_selection_rather_than_adding_its_own() {
         let registry = ProgrammerRegistry::default();
-        let user = UserId(Uuid::from_u128(10));
         let first = SessionId(Uuid::from_u128(11));
         let second = SessionId(Uuid::from_u128(12));
-        registry.start(first, user);
-        registry.start(second, user);
+        registry.start(first);
+        registry.start(second);
         registry.select(first, [FixtureId(Uuid::from_u128(31))]);
         registry.select(
             second,
@@ -207,7 +182,7 @@ mod tests {
         );
         assert!(registry.apply_normal_values(first, &normal_values()));
 
-        let summary = registry.programmer_lifecycle(user).unwrap();
+        let summary = registry.programmer_lifecycle().unwrap();
         assert_eq!(summary.normal_value_count, 2);
         assert_eq!(
             summary.selected_fixture_count, 2,
@@ -220,29 +195,28 @@ mod tests {
     #[test]
     fn attached_surfaces_count_one_shared_desk_selection_once() {
         let registry = ProgrammerRegistry::default();
-        let user = UserId(Uuid::from_u128(10));
         let application = SessionId(Uuid::from_u128(11));
         let osc = SessionId(Uuid::from_u128(12));
         let desk = SessionId(Uuid::from_u128(21));
-        registry.start(application, user);
-        registry.start(osc, user);
+        registry.start(application);
+        registry.start(osc);
         assert!(registry.attach_command_context(application, desk));
         assert!(registry.attach_command_context(osc, desk));
         registry.select(application, [FixtureId(Uuid::from_u128(31))]);
 
-        let summary = registry.programmer_lifecycle(user).unwrap();
+        let summary = registry.programmer_lifecycle().unwrap();
 
         assert_eq!(summary.connected_sessions.len(), 2);
         assert_eq!(summary.selected_fixture_count, 1);
     }
 
     #[test]
-    /// Whatever identities connections arrive holding, the desk projects one Programmer. There is
-    /// no second authority to order against a first.
-    fn every_connected_identity_projects_the_one_desk_programmer() {
+    /// However many surfaces connect, the desk projects one Programmer. There is no second
+    /// authority to order against a first.
+    fn every_connected_surface_projects_the_one_desk_programmer() {
         let registry = ProgrammerRegistry::default();
-        registry.start(SessionId(Uuid::from_u128(2)), UserId(Uuid::from_u128(20)));
-        registry.start(SessionId(Uuid::from_u128(3)), UserId(Uuid::from_u128(10)));
+        registry.start(SessionId(Uuid::from_u128(2)));
+        registry.start(SessionId(Uuid::from_u128(3)));
 
         let summaries = registry.active_programmer_lifecycles();
         assert_eq!(summaries.len(), 1);
@@ -252,12 +226,11 @@ mod tests {
     #[test]
     fn direct_summary_retains_disconnected_authority_while_active_view_removes_it() {
         let registry = ProgrammerRegistry::default();
-        let user = UserId(Uuid::from_u128(10));
         let session = SessionId(Uuid::from_u128(11));
-        registry.start(session, user);
+        registry.start(session);
         registry.disconnect(session);
 
-        let retained = registry.programmer_lifecycle(user).unwrap();
+        let retained = registry.programmer_lifecycle().unwrap();
         assert!(!retained.connected);
         assert!(retained.connected_sessions.is_empty());
         assert!(registry.active_programmer_lifecycles().is_empty());
@@ -266,13 +239,12 @@ mod tests {
     #[test]
     fn session_identity_is_the_selection_context_fallback() {
         let registry = ProgrammerRegistry::default();
-        let user = UserId(Uuid::from_u128(10));
         let session = SessionId(Uuid::from_u128(11));
-        registry.start(session, user);
+        registry.start(session);
         registry.select(session, [FixtureId(Uuid::from_u128(12))]);
         registry.command_contexts.write().remove(&session);
 
-        let summary = registry.programmer_lifecycle(user).unwrap();
+        let summary = registry.programmer_lifecycle().unwrap();
 
         assert_eq!(summary.selected_fixture_count, 1);
     }
@@ -280,9 +252,8 @@ mod tests {
     #[test]
     fn summary_does_not_materialize_state_or_history() {
         let registry = ProgrammerRegistry::default();
-        let user = UserId(Uuid::from_u128(10));
         let session = SessionId(Uuid::from_u128(11));
-        registry.start(session, user);
+        registry.start(session);
         let snapshot = Arc::new(ProgrammerSnapshot::default());
         registry
             .states
@@ -293,7 +264,7 @@ mod tests {
             .push(Arc::clone(&snapshot));
         let before = Arc::strong_count(&snapshot);
 
-        let summary = registry.programmer_lifecycle(user).unwrap();
+        let summary = registry.programmer_lifecycle().unwrap();
 
         assert_eq!(Arc::strong_count(&snapshot), before);
         assert_eq!(summary.normal_value_count, 0);
@@ -302,14 +273,13 @@ mod tests {
     #[test]
     fn preload_active_counts_only_retained_active_fixture_or_group_values() {
         let registry = ProgrammerRegistry::default();
-        let user = UserId(Uuid::from_u128(10));
         let session = SessionId(Uuid::from_u128(11));
-        registry.start(session, user);
+        registry.start(session);
 
-        assert!(!preload_active(&registry, user));
+        assert!(!preload_active(&registry));
         assert!(registry.arm_preload(session, true));
         registry.select(session, [FixtureId(Uuid::from_u128(12))]);
-        assert!(!preload_active(&registry, user));
+        assert!(!preload_active(&registry));
 
         registry.set(
             session,
@@ -317,11 +287,11 @@ mod tests {
             AttributeKey::intensity(),
             AttributeValue::Normalized(0.5),
         );
-        assert!(!preload_active(&registry, user));
+        assert!(!preload_active(&registry));
         assert!(registry.activate_preload(session));
-        assert!(preload_active(&registry, user));
+        assert!(preload_active(&registry));
         assert!(registry.release_preload(session));
-        assert!(!preload_active(&registry, user));
+        assert!(!preload_active(&registry));
 
         assert!(registry.queue_preload_playback_action(
             session,
@@ -330,7 +300,7 @@ mod tests {
             PreloadPlaybackQueueAction::Go,
             PreloadPlaybackQueueSurface::Physical,
         ));
-        assert!(!preload_active(&registry, user));
+        assert!(!preload_active(&registry));
         assert_eq!(registry.take_preload_playback_actions(session).len(), 1);
 
         registry.set(
@@ -339,22 +309,22 @@ mod tests {
             AttributeKey::intensity(),
             AttributeValue::Normalized(0.7),
         );
-        assert!(!preload_active(&registry, user));
+        assert!(!preload_active(&registry));
         assert!(registry.set_preload_group(
             session,
             "7".into(),
             AttributeKey::intensity(),
             AttributeValue::Normalized(0.8),
         ));
-        assert!(!preload_active(&registry, user));
+        assert!(!preload_active(&registry));
         assert!(registry.activate_preload(session));
-        assert!(preload_active(&registry, user));
+        assert!(preload_active(&registry));
         assert!(registry.release_preload(session));
-        assert!(!preload_active(&registry, user));
+        assert!(!preload_active(&registry));
     }
 
-    fn preload_active(registry: &ProgrammerRegistry, user: UserId) -> bool {
-        registry.programmer_lifecycle(user).unwrap().preload_active
+    fn preload_active(registry: &ProgrammerRegistry) -> bool {
+        registry.programmer_lifecycle().unwrap().preload_active
     }
 
     fn normal_values() -> Vec<NormalProgrammerValueMutation> {

@@ -82,12 +82,12 @@ export class LightClientRuntime {
 		return { outputRoutes: snapshot.output_routes };
 	}
 
-	async login(username: string): Promise<SessionResponse> {
+	async login(): Promise<SessionResponse> {
 		const storage = browserStorage();
 		const clientId = this.clientId(storage);
 		const session = await this.request<SessionResponse>(
 			"/api/v2/sessions",
-			this.sessionRequest(username, clientId, storage),
+			this.sessionRequest(clientId, storage),
 			false,
 		);
 		this.installSession(session, storage);
@@ -173,16 +173,11 @@ export class LightClientRuntime {
 		return created;
 	}
 
-	private sessionRequest(
-		username: string,
-		clientId: string,
-		storage: Storage | null,
-	): RequestInit {
+	private sessionRequest(clientId: string, storage: Storage | null): RequestInit {
 		return {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({
-				username,
 				client_id: clientId,
 				desk_id: storage?.getItem("light.control-desk") ?? null,
 			}),

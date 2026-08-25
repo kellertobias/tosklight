@@ -91,7 +91,7 @@ export class HttpPresetRecallTransport implements PresetRecallTransport {
 
 function validateScope(scope: PresetRecallScope) {
 	programmerValuesUuidAt(scope.showId, "$.scope.showId");
-	programmerValuesUuidAt(scope.userId, "$.scope.userId");
+	programmerValuesUuidAt(scope.sessionId, "$.scope.sessionId");
 	programmerValuesUuidAt(scope.deskId, "$.scope.deskId");
 }
 

@@ -364,7 +364,6 @@ function session(): SessionResponse {
 		session_id: "session-a",
 		client_id: "client-a",
 		token: "token-a",
-		user: { id: "user-a", name: "Operator", enabled: true },
 		desk: {
 			id: "desk-a",
 			name: "Main",

@@ -23,12 +23,12 @@ export function ServerVisualizationRuntimeBoundary({
 		sessionId ?? "",
 		state.session?.client_id ?? "",
 		state.session?.desk.id ?? "",
-		state.session?.user.id ?? "",
+		state.session?.session_id ?? "",
 	].join("|");
 	const desktopAuthorityKey = [
 		serverUrl,
 		state.session?.desk.id ?? "",
-		state.session?.user.id ?? "",
+		state.session?.session_id ?? "",
 	].join("|");
 	const transport = useMemo(
 		() =>

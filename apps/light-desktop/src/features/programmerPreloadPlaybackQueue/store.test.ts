@@ -6,12 +6,12 @@ import {
 	queueProjection,
 	queueSnapshot,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 function hydratedStore() {
 	const store = new ProgrammerPreloadPlaybackQueueStore();
-	store.reset(SHOW_ID, USER_ID, AUTHORITY_A);
+	store.reset(SHOW_ID, SESSION_ID, AUTHORITY_A);
 	store.installSnapshot(queueSnapshot());
 	return store;
 }
@@ -24,7 +24,7 @@ describe("ProgrammerPreloadPlaybackQueueStore", () => {
 			queuedPlayback({ playbackNumber: 9, action: "back", surface: "osc" }),
 		];
 		const store = new ProgrammerPreloadPlaybackQueueStore();
-		store.reset(SHOW_ID, USER_ID, AUTHORITY_A);
+		store.reset(SHOW_ID, SESSION_ID, AUTHORITY_A);
 
 		store.installSnapshot(queueSnapshot({ actions }));
 

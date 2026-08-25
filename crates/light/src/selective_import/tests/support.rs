@@ -861,7 +861,6 @@ fn document(path: &PathBuf) -> PortableShowDocument {
 pub(super) fn context() -> ActionContext {
     ActionContext::operator(
         Uuid::from_u128(1),
-        Uuid::from_u128(2),
         Uuid::from_u128(3),
         ActionSource::UserInterface,
     )

@@ -163,12 +163,7 @@ fn patch_action(
 }
 
 fn http_context(session: &Session) -> ActionContext {
-    ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        ActionSource::Http,
-    )
+    ActionContext::operator(session.desk.id, session.id.0, ActionSource::Http)
 }
 
 fn json_with_etag<T: serde::Serialize>(revision: u64, body: T) -> Response {

@@ -54,8 +54,7 @@ async fn lifecycle_tracks_every_surface_of_the_one_programmer_and_removes_it_onc
         .installation
         .add_desk("Lifecycle second")
         .unwrap();
-    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
-    assert_eq!(second_user, scenario.session.user.id.0);
+    let second_token = login_on_desk(&scenario, second_desk.id).await;
     let second_session = scenario
         .state
         .sessions
@@ -64,13 +63,7 @@ async fn lifecycle_tracks_every_surface_of_the_one_programmer_and_removes_it_onc
         .find(|session| session.token == second_token)
         .unwrap()
         .id;
-    scenario
-        .state
-        .installation
-        .add_user("Lifecycle other")
-        .unwrap();
-    let (other_token, _) =
-        login_on_desk(&scenario, "Lifecycle other", scenario.session.desk.id).await;
+    let other_token = login_on_desk(&scenario, scenario.session.desk.id).await;
 
     let snapshot = json(scenario.lifecycle_snapshot(Some(&other_token)).await).await;
     assert_eq!(snapshot["projection"]["revision"], 3);

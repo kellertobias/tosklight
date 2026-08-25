@@ -620,7 +620,6 @@ mod tests {
             Row::Source
             | Row::Server
             | Row::Port
-            | Row::User
             | Row::InputUniverse
             | Row::InputProtocol
             | Row::Connect => QuickSettingsTab::Source,
@@ -740,7 +739,6 @@ mod tests {
                     Row::Source,
                     Row::Server,
                     Row::Port,
-                    Row::User,
                     Row::InputUniverse,
                     Row::InputProtocol,
                     Row::Connect,
@@ -789,7 +787,7 @@ mod tests {
         }
         seen.sort_by_key(|row| format!("{row:?}"));
         seen.dedup();
-        assert_eq!(seen.len(), 26, "a setting was duplicated between tabs");
+        assert_eq!(seen.len(), 25, "a setting was duplicated between tabs");
 
         settings.selected = select(&mut settings, Row::Exposure);
         let exposure = preferences.exposure;

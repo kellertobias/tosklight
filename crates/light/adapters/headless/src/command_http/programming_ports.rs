@@ -401,8 +401,7 @@ pub(super) fn clear_command_line(
 impl ProgrammingPorts for ServerProgrammingPorts<'_> {
     fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
         let identity_matches = context.desk_id == self.session.desk.id
-            && context.session_id == Some(self.session.id.0)
-            && context.user_id == Some(self.session.user.id.0);
+            && context.session_id == Some(self.session.id.0);
         if !identity_matches {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
@@ -524,11 +523,11 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         context: &ActionContext,
         touched: &[(light_core::FixtureId, light_core::AttributeKey)],
     ) {
-        if self.state.highlight.mark_explicit_fixture_attributes(
-            context.desk_id,
-            self.session.user.id,
-            touched.iter().cloned(),
-        ) {
+        if self
+            .state
+            .highlight
+            .mark_explicit_fixture_attributes(context.desk_id, touched.iter().cloned())
+        {
             self.state
                 .output
                 .set_highlight_layers(self.state.highlight.output_layers());

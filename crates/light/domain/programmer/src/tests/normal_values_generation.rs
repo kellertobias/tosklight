@@ -4,9 +4,8 @@ use super::*;
 fn dirty_generation_tracks_only_normal_recordable_values() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let fixture = FixtureId::new();
-    registry.start(session, user);
+    registry.start(session);
 
     assert_eq!(registry.normal_values_generation(session), Some(0));
     assert_eq!(registry.normal_values_revision(), 0);
@@ -75,7 +74,7 @@ fn rejected_transactions_do_not_dirty_the_live_generation() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
 
     let rejected = registry.with_transaction(session, || {
         registry.set(
@@ -120,7 +119,7 @@ fn rejected_transactions_do_not_dirty_pending_preload_values_generation() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     assert!(registry.arm_preload(session, true));
     let mutation = [PreloadProgrammerValueMutation::SetFixture {
         fixture_id: fixture,

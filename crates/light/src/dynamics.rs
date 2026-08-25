@@ -6,7 +6,7 @@ mod helpers;
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use conversion::{factor_rational, runtime_error};
 use helpers::*;
-use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, UserId};
+use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId};
 use light_dynamics::{
     DynamicController, DynamicControllerSource, DynamicDefinition, DynamicDefinitionSnapshot,
     DynamicInstanceOverrides, DynamicReference, DynamicRuntimeError, DynamicSemanticValue,

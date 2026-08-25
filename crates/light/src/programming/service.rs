@@ -5,7 +5,7 @@ use super::{
     operation::DeskOperationGates,
 };
 use crate::{ActionEnvelope, ActionError, EventBus};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::command_line::{
     CommandGesture, CommandGestureIntent, CommandImmediateAction, CommandKeyIntent,
     command_gesture_intent, command_key_intent,
@@ -102,7 +102,7 @@ use preset_recording_replay::PresetRecordingReplayCache;
 use priority_replay::PriorityReplayCache;
 use state::{interaction_change, reconciliation};
 use support::{
-    ReplayCache, Snapshot, accepted, command_line, context_session, context_user, replace_error,
+    ReplayCache, Snapshot, accepted, command_line, context_session, replace_error,
     required_session, unknown_programmer, validate_command,
 };
 use update_replay::UpdateReplayCache;
@@ -188,9 +188,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingResult, ActionError> {
         let session = required_session(&action)?;
-        let user_id = context_user(&action.context)?;
         self.with_programmer_and_desk_gate(action.context.desk_id, || {
-            self.handle_locked(&action, session, user_id, ports)
+            self.handle_locked(&action, session, ports)
         })
     }
 
@@ -210,15 +209,13 @@ impl ProgrammingService {
             )
         })?;
         let session = required_session(first)?;
-        let user_id = context_user(&first.context)?;
         if actions.iter().any(|action| {
             action.context.desk_id != first.context.desk_id
                 || action.context.session_id != first.context.session_id
-                || action.context.user_id != first.context.user_id
         }) {
             return Err(ActionError::new(
                 crate::ActionErrorKind::Invalid,
-                "Programming sequence must retain one desk, user, and session context",
+                "Programming sequence must retain one desk and session context",
             ));
         }
         self.with_programmer_and_desk_gate(first.context.desk_id, || {
@@ -227,7 +224,7 @@ impl ProgrammingService {
                 if !before_each() {
                     return Ok((results, true));
                 }
-                let result = self.handle_locked(action, session, user_id, ports)?;
+                let result = self.handle_locked(action, session, ports)?;
                 let accepted = matches!(result.outcome, ProgrammingOutcome::Accepted { .. });
                 results.push(result);
                 if !accepted {
@@ -242,7 +239,6 @@ impl ProgrammingService {
         &self,
         action: &ActionEnvelope<ProgrammingCommand>,
         session: SessionId,
-        user_id: UserId,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingResult, ActionError> {
         ports.authorize_command(&action.context, action.command.command_line())?;
@@ -250,8 +246,8 @@ impl ProgrammingService {
             cached.command_line = command_line(&self.programmers, session)?;
             return Ok(cached);
         }
-        let lifecycle_before = self.active_lifecycle_programmer(user_id);
-        let mut applied = self.apply(action, session, user_id, ports)?;
+        let lifecycle_before = self.active_lifecycle_programmer();
+        let mut applied = self.apply(action, session, ports)?;
         applied.result.interaction_event_sequence =
             self.publish_interaction(&action.context, applied.interaction);
         applied.result.capture_mode_event_sequence =
@@ -261,7 +257,7 @@ impl ProgrammingService {
             self.publish_preload_values(&action.context, applied.preload_values);
         applied.result.preload_playback_queue_event_sequence =
             self.publish_preload_playback_queue(&action.context, applied.preload_playback_queue);
-        self.publish_lifecycle_for_context(&action.context, lifecycle_before);
+        self.publish_lifecycle(&action.context, lifecycle_before);
         self.remember(action, session, &applied.result);
         Ok(applied.result)
     }
@@ -270,7 +266,6 @@ impl ProgrammingService {
         &self,
         action: &ActionEnvelope<ProgrammingCommand>,
         session: SessionId,
-        user_id: UserId,
         ports: &dyn ProgrammingPorts,
     ) -> Result<AppliedProgramming, ActionError> {
         let tracks_values = !matches!(
@@ -352,24 +347,21 @@ impl ProgrammingService {
             None
         };
         let values = if tracks_values {
-            self.values_change(user_id, &before.values_content, &after.values_content)?
+            self.values_change(&before.values_content, &after.values_content)?
         } else {
             None
         };
         let preload_values = self.preload_values_change(
-            user_id,
             session,
             before.preload_values_generation,
             after.preload_values_generation,
         )?;
         let preload_playback_queue = self.preload_playback_queue_change(
-            user_id,
             session,
             before.preload_playback_queue_generation,
             after.preload_playback_queue_generation,
         )?;
-        let capture_mode =
-            self.capture_mode_change(user_id, before.capture_mode, after.capture_mode);
+        let capture_mode = self.capture_mode_change(before.capture_mode, after.capture_mode);
         Ok(AppliedProgramming {
             result: before.result(action.context.clone(), outcome, after, selection),
             interaction,

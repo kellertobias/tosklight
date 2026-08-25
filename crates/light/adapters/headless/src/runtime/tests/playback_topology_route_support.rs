@@ -121,7 +121,6 @@ pub(super) async fn post_topology(
 
 pub(super) async fn login_on_desk(
     app: &Router,
-    username: &str,
     desk_id: Option<Uuid>,
     desk_boundary: Option<&str>,
 ) -> serde_json::Value {
@@ -135,7 +134,7 @@ pub(super) async fn login_on_desk(
         .oneshot(
             request
                 .body(Body::from(
-                    serde_json::json!({"username":username,"desk_id":desk_id}).to_string(),
+                    serde_json::json!({"desk_id":desk_id}).to_string(),
                 ))
                 .unwrap(),
         )

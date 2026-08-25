@@ -16,12 +16,12 @@ export function useProgrammerPreloadLifecycleBoundaries(state: ServerState) {
 				? new HttpProgrammerPreloadLifecycleTransport({
 						baseUrl: configuredServerUrl(),
 						sessionToken: state.session.token,
-						authenticatedUserId: state.session.user.id,
+						authenticatedSessionId: state.session.session_id,
 						authenticatedDeskId: state.session.desk.id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
 						applyAction: (scope, request) =>
 							state.api.programming.programmerPreloadLifecycleLiveAction(
-								scope.userId,
+								scope.sessionId,
 								request,
 							),
 					})
@@ -33,7 +33,7 @@ export function useProgrammerPreloadLifecycleBoundaries(state: ServerState) {
 		programmerPreloadLifecycleAuthorityKey: [
 			configuredServerUrl(),
 			state.bootstrap?.active_show?.id ?? "",
-			state.session?.user.id ?? "",
+			state.session?.session_id ?? "",
 			state.session?.desk.id ?? "",
 		].join("|"),
 		reportProgrammerPreloadLifecycleMutationError: errors.reportMutation,

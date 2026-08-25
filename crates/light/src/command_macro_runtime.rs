@@ -214,10 +214,6 @@ impl CommandMacroExecutionService {
             .validate()
             .map_err(CommandMacroExecutionError::new)?;
         // Still a precondition: a Macro runs as the desk's operator, not anonymously.
-        request
-            .context
-            .user_id
-            .ok_or_else(|| CommandMacroExecutionError::new("Macro execution requires a user"))?;
         let session_id = request.context.session_id.ok_or_else(|| {
             CommandMacroExecutionError::new("Macro execution requires an operator session")
         })?;
@@ -635,7 +631,6 @@ mod tests {
             source_revision: 4,
             context: ActionContext::operator(
                 Uuid::from_u128(1),
-                Uuid::from_u128(2),
                 Uuid::from_u128(3),
                 ActionSource::UserInterface,
             ),

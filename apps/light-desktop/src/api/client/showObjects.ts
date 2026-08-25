@@ -217,7 +217,7 @@ export class ShowObjectsApiClient {
 
 	updateUserLayout(
 		showId: string,
-		userId: string,
+		sessionId: string,
 		patch: {
 			desks: unknown[];
 			activeDeskId: string;
@@ -233,7 +233,7 @@ export class ShowObjectsApiClient {
 				: { window_settings: patch.windowSettings }),
 		};
 		return this.showObjectAction(
-			`/api/v2/user-layouts/${encodeURIComponent(userId)}/update`,
+			`/api/v2/user-layouts/${encodeURIComponent(sessionId)}/update`,
 			showId,
 			{
 				type: "update",

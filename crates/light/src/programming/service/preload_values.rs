@@ -5,7 +5,7 @@ use crate::{
     ProgrammingPreloadValuesOutcome, ProgrammingPreloadValuesRequest,
     ProgrammingPreloadValuesResult, ProgrammingValueMutation,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::{PreloadProgrammerValueMutation, PreloadProgrammerValueTiming};
 use std::{borrow::Cow, sync::Arc};
 
@@ -20,16 +20,13 @@ impl ProgrammingService {
         action: ActionEnvelope<ProgrammingPreloadValuesRequest>,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPreloadValuesResult, ActionError> {
-        let (session, user_id, request_id, expected_revision) = preload_values_context(&action)?;
-        // Whatever identity arrived, this session operates the desk's one Programmer.
-        let user_id = self.programmers.desk_user_for(session, user_id);
+        let (session, request_id, expected_revision) = preload_values_context(&action)?;
         self.with_programmer_and_desk_gate(action.context.desk_id, || {
             ports.authorize_programming_change(&action.context)?;
             self.assert_preload_values_owner(session)?;
             let fingerprint = preload_request_fingerprint(expected_revision, &action.command);
             let replay_identity = PreloadReplayIdentity {
                 desk_id: action.context.desk_id,
-                user_id,
                 session_id: session,
                 request_id,
             };
@@ -49,7 +46,6 @@ impl ProgrammingService {
                 &action,
                 ports,
                 session,
-                user_id,
                 expected_revision,
                 capture_mode_revision,
             )?;
@@ -65,7 +61,6 @@ impl ProgrammingService {
         action: &ActionEnvelope<ProgrammingPreloadValuesRequest>,
         ports: &dyn ProgrammingPorts,
         session: SessionId,
-        user_id: UserId,
         revision_before: u64,
         capture_mode_revision: u64,
     ) -> Result<ProgrammingPreloadValuesResult, ActionError> {
@@ -139,7 +134,6 @@ impl ProgrammingService {
             &after,
         );
         let values = self.preload_values_change(
-            user_id,
             session,
             before.preload_values_generation,
             after.preload_values_generation,
@@ -284,17 +278,11 @@ fn preload_mutation(mutation: ProgrammingValueMutation) -> ProgrammingPreloadVal
 
 fn preload_values_context(
     action: &ActionEnvelope<ProgrammingPreloadValuesRequest>,
-) -> Result<(SessionId, UserId, String, u64), ActionError> {
+) -> Result<(SessionId, String, u64), ActionError> {
     let session = action.context.session_id.map(SessionId).ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "Preload values actions require an operator session",
-        )
-    })?;
-    let user_id = action.context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Preload values actions require an authenticated user",
         )
     })?;
     let request_id = action.context.request_id.as_deref().ok_or_else(|| {
@@ -310,7 +298,7 @@ fn preload_values_context(
             "Preload values actions require an expected revision",
         )
     })?;
-    Ok((session, user_id, request_id.to_owned(), expected_revision))
+    Ok((session, request_id.to_owned(), expected_revision))
 }
 
 fn domain_mutation(mutation: &ProgrammingPreloadValueMutation) -> PreloadProgrammerValueMutation {

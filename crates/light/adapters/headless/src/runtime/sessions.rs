@@ -88,12 +88,6 @@ pub(super) async fn create_session(
             })
         })
         .unwrap_or_else(Uuid::new_v4);
-    let user = state
-        .installation
-        .find_user(&input.username)
-        .map_err(ApiError::store)?
-        .filter(|u| u.enabled)
-        .ok_or_else(|| ApiError::not_found("enabled user"))?;
     let desk = state
         .installation
         .resolve_client_desk(client_id, input.desk_id)
@@ -101,7 +95,6 @@ pub(super) async fn create_session(
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: Uuid::new_v4().to_string(),
         connected: true,
         desk: desk.clone(),
@@ -116,28 +109,25 @@ pub(super) async fn create_session(
         state.sessions.insert_session(session.clone());
     } else {
         let context = programming_context(&session, light_application::ActionSource::Http, None);
-        state.programming.run_lifecycle_transition(
-            &context,
-            user.id,
-            || -> Result<(), ApiError> {
-                state.programming.start(session.id, user.id);
+        state
+            .programming
+            .run_lifecycle_transition(&context, || -> Result<(), ApiError> {
+                state.programming.start(session.id);
                 attach_session_command_context(&state, &session);
                 state.sessions.insert_session(session.clone());
                 persist_programmer(&state, &session)
-            },
-        )?;
+            })?;
     }
     emit(
         &state,
         "session_started",
-        serde_json::json!({"session_id":session.id,"user":user.name,"role":role}),
+        serde_json::json!({"session_id":session.id,"role":role}),
     );
     Ok(Json(wire::RuntimeSessionResponse {
         role,
         session_id: session.id.0,
         client_id,
         token: session.token,
-        user: runtime_wire::user(user),
         desk: runtime_wire::desk(desk),
     }))
 }
@@ -181,9 +171,7 @@ pub(super) async fn close_session(
     }
     // Highlight is the desk's, so it is released when the last surface leaves, not the first.
     if !state.sessions.any_surface_connected() {
-        state
-            .highlight
-            .clear_context(session.desk.id, session.user.id);
+        state.highlight.clear_context(session.desk.id);
         sync_highlight_output(&state);
     }
     state.highlight.remove_patch_preview(id);
@@ -191,11 +179,9 @@ pub(super) async fn close_session(
     file_manager::release_session_input(&state, &session, "session_closed");
     persist_programmer(&state, &session)?;
     let context = programming_context(&session, light_application::ActionSource::Http, None);
-    state
-        .programming
-        .run_lifecycle_transition(&context, session.user.id, || {
-            state.programming.disconnect(id);
-        });
+    state.programming.run_lifecycle_transition(&context, || {
+        state.programming.disconnect(id);
+    });
     emit(
         &state,
         "session_disconnected",

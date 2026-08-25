@@ -143,7 +143,6 @@ function apiDriver(): ApiDriver {
 		session_id: "session-a",
 		client_id: "client-a",
 		token: "token-a",
-		user: { id: "user-a", name: "Operator" },
 		desk: { id: "desk-a" },
 	};
 	return api;

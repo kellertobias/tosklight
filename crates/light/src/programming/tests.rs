@@ -1,6 +1,6 @@
 use super::*;
 use crate::{ActionContext, ActionEnvelope, ActionErrorKind, ActionSource};
-use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, UserId};
+use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId};
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
 use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
@@ -94,9 +94,8 @@ impl Harness {
     fn new(source: ActionSource) -> Self {
         let registry = ProgrammerRegistry::default();
         let session = SessionId::new();
-        let user = UserId::new();
         let desk = Uuid::new_v4();
-        registry.start(session, user);
+        registry.start(session);
         assert!(registry.attach_command_context(session, SessionId(desk)));
         Self {
             service: ProgrammingService::new(
@@ -105,7 +104,7 @@ impl Harness {
                 Arc::new(HighlightRegistry::default()),
             ),
             registry,
-            context: ActionContext::operator(desk, user.0, session.0, source),
+            context: ActionContext::operator(desk, session.0, source),
             ports: TestPorts::default(),
         }
     }

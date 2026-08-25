@@ -184,12 +184,7 @@ fn respond(request_id: String, result: ProgrammingResult) -> Result<Response, Ap
 }
 
 pub(super) fn http_context(session: &Session, request_id: Option<&str>) -> ActionContext {
-    let context = ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        ActionSource::Http,
-    );
+    let context = ActionContext::operator(session.desk.id, session.id.0, ActionSource::Http);
     request_id.map_or(context.clone(), |id| context.with_request_id(id))
 }
 

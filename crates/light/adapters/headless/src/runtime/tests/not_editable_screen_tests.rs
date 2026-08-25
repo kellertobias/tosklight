@@ -244,7 +244,6 @@ async fn an_unrecognised_command_is_refused_from_a_not_editable_screen() {
 async fn the_programmer_answers_on_its_canonical_routes_and_the_named_user_ones_are_gone() {
     let scenario = CommandHttpScenario::new().await;
     let fixture = scenario.install_direct_fixture();
-    let user = scenario.session.user.id.0;
 
     // The canonical route names no identity, because the desk has one Programmer.
     let canonical = scenario
@@ -284,11 +283,12 @@ async fn the_programmer_answers_on_its_canonical_routes_and_the_named_user_ones_
 
     // The routes that named whose Programmer it was are retired. They answered the one Programmer
     // for as long as saved configuration might still have carried an identity; nothing does.
+    let retired_user = Uuid::new_v4();
     for path in [
-        format!("/api/v2/users/{user}/programmer-values/snapshot"),
-        format!("/api/v2/users/{user}/programmer-capture-mode/snapshot"),
-        format!("/api/v2/users/{user}/programmer-priority/snapshot"),
-        format!("/api/v2/users/{user}/programmer-preload-values/snapshot"),
+        format!("/api/v2/users/{retired_user}/programmer-values/snapshot"),
+        format!("/api/v2/users/{retired_user}/programmer-capture-mode/snapshot"),
+        format!("/api/v2/users/{retired_user}/programmer-priority/snapshot"),
+        format!("/api/v2/users/{retired_user}/programmer-preload-values/snapshot"),
     ] {
         let retired = scenario
             .app

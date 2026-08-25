@@ -4,14 +4,12 @@ import { Button } from "@tosklight/ui";
 interface ProgrammerListProps {
 	programmers: readonly ProgrammerLifecycleRow[];
 	loading: boolean;
-	currentUserName: string | null;
 	onClear(sessionId: string): void;
 }
 
 export function ProgrammerList({
 	programmers,
 	loading,
-	currentUserName,
 	onClear,
 }: ProgrammerListProps) {
 	return (
@@ -24,7 +22,6 @@ export function ProgrammerList({
 					<ProgrammerRow
 						key={programmer.programmerId}
 						programmer={programmer}
-						currentUserName={currentUserName}
 						onClear={onClear}
 					/>
 				))}
@@ -41,22 +38,20 @@ export function ProgrammerList({
 
 function ProgrammerRow({
 	programmer,
-	currentUserName,
 	onClear,
 }: {
 	programmer: ProgrammerLifecycleRow;
-	currentUserName: string | null;
 	onClear(sessionId: string): void;
 }) {
 	// There is one Programmer, and it is this desk's.
-	const userLabel = `${currentUserName ?? "Operator"} · This desk`;
+	const deskLabel = "Operator · This desk";
 	const sessionSummary = `${programmer.sessions.length} session${programmer.sessions.length === 1 ? "" : "s"}`;
 	const fixtureSummary = `${programmer.selectedFixtureCount} selected fixture${programmer.selectedFixtureCount === 1 ? "" : "s"}`;
 	const clearSession = programmer.sessions[0]?.sessionId;
 	return (
 		<article>
 			<span>
-				<b>{userLabel}</b>
+				<b>{deskLabel}</b>
 				<small>
 					{fixtureSummary} · {programmer.normalValueCount} values · {sessionSummary} ·{" "}
 					{programmer.connected ? "Connected" : "Disconnected"}

@@ -6,11 +6,11 @@ import {
 } from "./ProgrammerPreloadValuesTransport";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const OTHER_USER_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const OTHER_SESSION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const FIXTURE_ID = "11111111-1111-4111-8111-111111111111";
 const CORRELATION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const scope = { showId: SHOW_ID, userId: USER_ID };
+const scope = { showId: SHOW_ID, sessionId: SESSION_ID };
 const foreignScope = { showId: "not-a-show" };
 
 class FakeWebSocket {
@@ -136,7 +136,7 @@ function createHarness(fetchImplementation = vi.fn()) {
 	const transport = new HttpProgrammerPreloadValuesTransport({
 		baseUrl: "http://127.0.0.1:5000/",
 		sessionToken: "session-token",
-		authenticatedUserId: USER_ID,
+		authenticatedSessionId: SESSION_ID,
 		deskBoundaryToken: "desk-boundary",
 		fetch: fetchImplementation as typeof fetch,
 		webSocket: FakeWebSocket as unknown as typeof WebSocket,
@@ -238,14 +238,14 @@ describe("HttpProgrammerPreloadValuesTransport HTTP", () => {
 		fetchImplementation.mockResolvedValueOnce(
 			jsonResponse({
 				cursor: { sequence: 11 },
-				projection: { ...projection(), user_id: OTHER_USER_ID },
+				projection: { ...projection(), user_id: OTHER_SESSION_ID },
 			}),
 		);
 		await expect(transport.loadSnapshot(scope)).rejects.toThrow(/user_id/);
 		fetchImplementation.mockResolvedValueOnce(
 			jsonResponse({
 				...changedOutcome(),
-				projection: { ...projection(), user_id: OTHER_USER_ID },
+				projection: { ...projection(), user_id: OTHER_SESSION_ID },
 			}),
 		);
 		await expect(transport.applyAction(scope, request())).rejects.toThrow(
@@ -312,7 +312,7 @@ describe("HttpProgrammerPreloadValuesTransport events", () => {
 		const undecodable = preloadEvent();
 		(
 			undecodable.event.payload.change.projection as Record<string, unknown>
-		).user_id = OTHER_USER_ID;
+		).user_id = OTHER_SESSION_ID;
 		FakeWebSocket.instances[0]?.emit("message", message(undecodable));
 
 		expect(observer.message).not.toHaveBeenCalled();

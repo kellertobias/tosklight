@@ -7,11 +7,11 @@ import { HttpProgrammerPreloadLifecycleTransport } from "./ProgrammerPreloadLife
 import { WireValidationError } from "./wireValidation";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
-const USER_ID = "22222222-2222-4222-8222-222222222222";
+const SESSION_ID = "22222222-2222-4222-8222-222222222222";
 const DESK_ID = "33333333-3333-4333-8333-333333333333";
 const OTHER_ID = "44444444-4444-4444-8444-444444444444";
 const CORRELATION_ID = "55555555-5555-4555-8555-555555555555";
-const SCOPE = { showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID };
+const SCOPE = { showId: SHOW_ID, sessionId: SESSION_ID, deskId: DESK_ID };
 
 function request(
 	overrides: Partial<ProgrammerPreloadLifecycleRequest> = {},
@@ -51,7 +51,7 @@ function harness(fetch = vi.fn<typeof globalThis.fetch>()) {
 	const transport = new HttpProgrammerPreloadLifecycleTransport({
 		baseUrl: "http://desk.local/",
 		sessionToken: "session-token",
-		authenticatedUserId: USER_ID,
+		authenticatedSessionId: SESSION_ID,
 		authenticatedDeskId: DESK_ID,
 		deskBoundaryToken: "desk-boundary",
 		fetch,
@@ -96,7 +96,7 @@ describe("HttpProgrammerPreloadLifecycleTransport", () => {
 	});
 
 	it.each([
-		["user", { ...SCOPE, userId: OTHER_ID }],
+		["user", { ...SCOPE, sessionId: OTHER_ID }],
 		["desk", { ...SCOPE, deskId: OTHER_ID }],
 	] as const)("rejects a foreign authenticated %s before fetch", async (_label, scope) => {
 		const { fetch, transport } = harness();

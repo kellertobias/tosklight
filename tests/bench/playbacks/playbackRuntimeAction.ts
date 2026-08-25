@@ -217,7 +217,7 @@ function capturedSessionKey(session: Session) {
 		session.session_id,
 		session.client_id,
 		session.token,
-		session.user.id,
+		session.session_id,
 		session.desk.id,
 	].join("|");
 }

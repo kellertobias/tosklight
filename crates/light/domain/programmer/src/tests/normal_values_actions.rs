@@ -32,7 +32,6 @@ fn group_set(
 fn normal_batch_uses_one_checkpoint_and_skips_exact_writes() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let fixture_a = FixtureId::new();
     let fixture_b = FixtureId::new();
     let faded = NormalProgrammerValueTiming {
@@ -40,7 +39,7 @@ fn normal_batch_uses_one_checkpoint_and_skips_exact_writes() {
         fade_millis: Some(1_000),
         delay_millis: Some(250),
     };
-    registry.start(session, user);
+    registry.start(session);
 
     let initial = [
         fixture_set(fixture_a, "intensity", 0.25, Default::default()),
@@ -103,7 +102,7 @@ fn duplicate_fixture_addresses_are_collapsed_to_the_last_batch_mutation() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
 
     assert!(registry.apply_normal_values(
         session,
@@ -133,9 +132,8 @@ fn duplicate_fixture_addresses_are_collapsed_to_the_last_batch_mutation() {
 fn continuous_value_samples_share_one_undo_checkpoint() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let fixture = FixtureId::new();
-    registry.start(session, user);
+    registry.start(session);
 
     assert!(registry.apply_normal_values_grouped(
         session,
@@ -167,11 +165,10 @@ fn continuous_value_samples_share_one_undo_checkpoint() {
 fn normal_actions_bypass_preload_and_clear_preserves_transient_state() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let normal_fixture = FixtureId::new();
     let preload_fixture = FixtureId::new();
     let transient_fixture = FixtureId::new();
-    registry.start(session, user);
+    registry.start(session);
     assert!(registry.arm_preload(session, true));
     registry.set(
         session,

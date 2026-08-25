@@ -1,7 +1,6 @@
 use crate::{
     ActionError, ActionErrorKind, ProgrammingPresetRecordRequest, ProgrammingPresetRecordResult,
 };
-use light_core::UserId;
 use std::collections::{HashMap, VecDeque};
 use std::mem::size_of;
 
@@ -10,7 +9,6 @@ const BYTE_LIMIT: usize = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ReplayKey {
-    user_id: UserId,
     desk_id: uuid::Uuid,
     session_id: light_core::SessionId,
     request_id: String,
@@ -30,9 +28,10 @@ pub(super) struct PresetRecordingReplayCache {
 }
 
 impl PresetRecordingReplayCache {
-    pub(super) fn invalidate_user(&mut self, user_id: UserId) {
-        self.entries.retain(|key, _| key.user_id != user_id);
-        self.order.retain(|key| key.user_id != user_id);
+    pub(super) fn invalidate(&mut self) {
+        // One desk, one Programmer: an invalidation clears the cache rather than one user's part.
+        self.entries.clear();
+        self.order.clear();
         self.retained_bytes = self
             .entries
             .values()
@@ -42,14 +41,12 @@ impl PresetRecordingReplayCache {
 
     pub(super) fn get(
         &self,
-        user_id: UserId,
         desk_id: uuid::Uuid,
         session_id: light_core::SessionId,
         request_id: &str,
         request: &ProgrammingPresetRecordRequest,
     ) -> Result<Option<ProgrammingPresetRecordResult>, ActionError> {
         let key = ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.to_owned(),
@@ -70,7 +67,6 @@ impl PresetRecordingReplayCache {
 
     pub(super) fn insert(
         &mut self,
-        user_id: UserId,
         desk_id: uuid::Uuid,
         session_id: light_core::SessionId,
         request_id: String,
@@ -78,7 +74,6 @@ impl PresetRecordingReplayCache {
         result: ProgrammingPresetRecordResult,
     ) {
         let key = ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id,
@@ -114,8 +109,8 @@ impl PresetRecordingReplayCache {
 }
 
 impl super::ProgrammingService {
-    pub(in crate::programming) fn invalidate_preset_recording_replay(&self, user_id: UserId) {
-        self.preset_recording_replay.lock().invalidate_user(user_id);
+    pub(in crate::programming) fn invalidate_preset_recording_replay(&self) {
+        self.preset_recording_replay.lock().invalidate();
     }
 }
 

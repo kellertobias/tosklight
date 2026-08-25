@@ -17,7 +17,7 @@ export type ProgrammerCaptureModeStatus =
 
 export interface ProgrammerCaptureModeState {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	eventSequence: number | null;
 	projection: ProgrammerCaptureModeProjection | null;
 	status: ProgrammerCaptureModeStatus;
@@ -39,12 +39,12 @@ export class ProgrammerCaptureModeStore {
 
 	readonly getSnapshot = () => this.state;
 
-	reset(showId: string | null, userId: string | null, authorityKey = "") {
-		if (this.matchesScope(showId, userId, authorityKey)) return;
+	reset(showId: string | null, sessionId: string | null, authorityKey = "") {
+		if (this.matchesScope(showId, sessionId, authorityKey)) return;
 		this.scope++;
 		this.authoritative = null;
 		this.authorityKey = authorityKey;
-		this.state = { ...emptyCaptureModeState(), showId, userId };
+		this.state = { ...emptyCaptureModeState(), showId, sessionId };
 		this.emit();
 	}
 
@@ -215,12 +215,12 @@ export class ProgrammerCaptureModeStore {
 
 	private matchesScope(
 		showId: string | null,
-		userId: string | null,
+		sessionId: string | null,
 		authorityKey: string,
 	) {
 		return (
 			showId === this.state.showId &&
-			userId === this.state.userId &&
+			sessionId === this.state.sessionId &&
 			authorityKey === this.authorityKey
 		);
 	}
@@ -248,7 +248,7 @@ export class ProgrammerCaptureModeStore {
 function emptyCaptureModeState(): ProgrammerCaptureModeState {
 	return {
 		showId: null,
-		userId: null,
+		sessionId: null,
 		eventSequence: null,
 		projection: null,
 		status: "idle",

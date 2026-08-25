@@ -133,7 +133,6 @@ pub(super) fn ws_programmer_execute(
     let context = context.cloned().unwrap_or_else(|| {
         light_application::ActionContext::operator(
             session.desk.id,
-            session.user.id.0,
             session.id.0,
             light_application::ActionSource::UserInterface,
         )

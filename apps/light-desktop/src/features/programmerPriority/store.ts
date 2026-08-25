@@ -45,16 +45,16 @@ export class ProgrammerPriorityStore {
 
 	readonly getSnapshot = () => this.state;
 
-	reset(userId: string | null, authorityKey = "") {
+	reset(sessionId: string | null, authorityKey = "") {
 		if (
-			userId === this.state.userId &&
+			sessionId === this.state.sessionId &&
 			authorityKey === this.state.authorityKey
 		)
 			return;
 		this.scope++;
 		this.authoritative = null;
 		this.operations.clear();
-		this.state = { ...emptyProgrammerPriorityState(), userId, authorityKey };
+		this.state = { ...emptyProgrammerPriorityState(), sessionId, authorityKey };
 		this.emit();
 	}
 

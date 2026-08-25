@@ -5,6 +5,7 @@ import type {
 	PatchLayer,
 } from "../../api/types";
 import {
+	DESK_LAYOUT_ID,
 	deskLayoutScopeKey,
 	type StoredDeskLayout,
 	type StoredStageLayout,
@@ -29,14 +30,14 @@ export function useShowObjects(state: ServerState) {
 		promise: Promise<void>;
 	} | null>(null);
 	return useCallback(
-		(showId: string | null, userId: string | null) => {
-			const requestScope = `${showId ?? ""}\u0000${userId ?? ""}`;
+		(showId: string | null) => {
+			const requestScope = showId ?? "";
 			if (inFlight.current?.scope === requestScope)
 				return inFlight.current.promise;
 			const promise = (async () => {
 				const request = ++showObjectsRequest.current;
 				showObjectsStore.reset(showId);
-				const scope = deskLayoutScopeKey(showId, userId);
+				const scope = deskLayoutScopeKey(showId);
 				setDeskLayoutScope((loaded) => (loaded === scope ? loaded : null));
 				if (!showId) {
 					if (request !== showObjectsRequest.current) return;
@@ -52,12 +53,7 @@ export function useShowObjects(state: ServerState) {
 					await Promise.all([
 						api.showObjects.objects<CueList>(showId, "cue_list"),
 						api.showObjects.objects<OutputRoute>(showId, "route"),
-						userId
-							? api.showObjects.objects<StoredDeskLayout>(
-									showId,
-									"user_layout",
-								)
-							: Promise.resolve([]),
+						api.showObjects.objects<StoredDeskLayout>(showId, "user_layout"),
 						api.showObjects.objects<StoredStageLayout>(showId, "stage_layout"),
 						api.showObjects.objects<PatchLayer>(showId, "patch_layer"),
 						api.showObjects.objects<Record<string, unknown>>(
@@ -68,7 +64,14 @@ export function useShowObjects(state: ServerState) {
 				if (request !== showObjectsRequest.current) return;
 				setCueObjects(cues);
 				setOutputRoutes(routes);
-				setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
+				// A show written before the collapse stores the layout under the operator's
+				// identity. There is only one either way, so the desk's own id wins and anything
+				// else is the layout this show already had.
+				setDeskLayout(
+					layouts.find((item) => item.id === DESK_LAYOUT_ID) ??
+						layouts[0] ??
+						null,
+				);
 				setDeskLayoutScope(scope);
 				setStageLayout(
 					stageLayouts.find((item) => item.id === "main") ?? null,
@@ -152,10 +155,7 @@ export function useServerRefresh(
 		setFixtureProfiles(fixtureProfiles);
 		setFixtureProfileWarnings(fixtureProfileWarnings);
 		if (mediaServers) setMediaServers(mediaServers.fixtures);
-		await loadShowObjects(
-			bootstrap.active_show?.id ?? null,
-			api.runtime.currentSession?.user.id ?? null,
-		);
+		await loadShowObjects(bootstrap.active_show?.id ?? null);
 	}, [
 		api,
 		loadShowObjects,

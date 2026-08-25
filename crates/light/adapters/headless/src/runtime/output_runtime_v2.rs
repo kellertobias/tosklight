@@ -81,12 +81,7 @@ fn parse_identity(value: &str) -> Result<OutputRuntimeIdentity, super::ApiError>
 }
 
 fn http_context(session: &Session) -> ActionContext {
-    ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        ActionSource::Http,
-    )
+    ActionContext::operator(session.desk.id, session.id.0, ActionSource::Http)
 }
 
 fn wire_snapshot(snapshot: OutputRuntimeSnapshot) -> wire::OutputRuntimeSnapshot {

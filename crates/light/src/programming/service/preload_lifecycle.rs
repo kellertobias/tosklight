@@ -40,7 +40,6 @@ impl ProgrammingService {
         ports.authorize_preload_lifecycle(&action.context)?;
         self.assert_preload_owner(identity.session_id)?;
         let replay_identity = PreloadLifecycleReplayIdentity {
-            user_id: identity.user_id,
             desk_id: action.context.desk_id,
             session_id: identity.session_id,
             request_id: identity.request_id.clone(),
@@ -69,7 +68,7 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPreloadLifecyclePorts,
         identity: &LifecycleIdentity,
     ) -> Result<ProgrammingPreloadLifecycleResult, ActionError> {
-        let lifecycle_before = self.active_lifecycle_programmer(identity.user_id);
+        let lifecycle_before = self.active_lifecycle_programmer();
         let before = Snapshot::read(
             &self.programmers,
             action.context.desk_id,
@@ -91,7 +90,7 @@ impl ProgrammingService {
             identity.session_id,
         )?;
         let result = self.finish_preload_lifecycle(action, identity, before, after, mutation)?;
-        self.publish_lifecycle_for_context(&action.context, lifecycle_before);
+        self.publish_lifecycle(&action.context, lifecycle_before);
         Ok(result)
     }
 
@@ -157,16 +156,13 @@ impl ProgrammingService {
             &before,
             &after,
         );
-        let capture =
-            self.capture_mode_change(identity.user_id, before.capture_mode, after.capture_mode);
+        let capture = self.capture_mode_change(before.capture_mode, after.capture_mode);
         let values = self.preload_values_change(
-            identity.user_id,
             identity.session_id,
             before.preload_values_generation,
             after.preload_values_generation,
         )?;
         let queue = self.preload_playback_queue_change(
-            identity.user_id,
             identity.session_id,
             before.preload_playback_queue_generation,
             after.preload_playback_queue_generation,
@@ -215,7 +211,7 @@ impl ProgrammingService {
     fn finish_capture(
         &self,
         context: &crate::ActionContext,
-        identity: &LifecycleIdentity,
+        _identity: &LifecycleIdentity,
         mode: light_programmer::ProgrammerCaptureMode,
         change: Option<crate::ProgrammingCaptureModeChange>,
     ) -> Result<(Arc<ProgrammingCaptureModeProjection>, Option<u64>), ActionError> {
@@ -226,11 +222,7 @@ impl ProgrammingService {
         }
         let revision = self.programmers.capture_mode_revision();
         Ok((
-            Arc::new(ProgrammingCaptureModeProjection::from_mode(
-                identity.user_id,
-                revision,
-                mode,
-            )),
+            Arc::new(ProgrammingCaptureModeProjection::from_mode(revision, mode)),
             None,
         ))
     }

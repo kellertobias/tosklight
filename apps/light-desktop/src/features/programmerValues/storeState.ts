@@ -4,7 +4,7 @@ export type ProgrammerValuesStatus = "idle" | "loading" | "ready" | "error";
 
 export interface ProgrammerValuesState {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	eventSequence: number | null;
 	projection: ProgrammerValuesProjection | null;
 	pendingRequestIds: readonly string[];
@@ -24,7 +24,7 @@ const EMPTY_REQUEST_IDS = Object.freeze([]) as readonly string[];
 export function emptyProgrammerValuesState(): ProgrammerValuesState {
 	return {
 		showId: null,
-		userId: null,
+		sessionId: null,
 		eventSequence: null,
 		projection: null,
 		pendingRequestIds: EMPTY_REQUEST_IDS,

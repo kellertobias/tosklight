@@ -24,7 +24,7 @@ import {
 	fixtureValue,
 	groupValue,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -72,21 +72,21 @@ function Providers({
 	return (
 		<ProgrammerCaptureModeViewProvider
 			showId={SHOW_ID}
-			userId={USER_ID}
+			sessionId={SESSION_ID}
 			store={state.captureStore}
 			transport={state.captureTransport}
 			loadSnapshot={state.loadCapture}
 		>
 			<ProgrammerValuesViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				store={state.valuesStore}
 				transport={state.valuesTransport}
 				loadSnapshot={state.loadValues}
 			>
 				<ProgrammerPreloadValuesViewProvider
 					showId={SHOW_ID}
-					userId={USER_ID}
+					sessionId={SESSION_ID}
 					store={state.preloadStore}
 					transport={state.preloadTransport}
 					loadSnapshot={state.loadPreload}

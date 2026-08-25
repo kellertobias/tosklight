@@ -167,7 +167,6 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
                 publication: HighlightActionPublication::Standard,
             } if context.source == ActionSource::Osc => serde_json::json!({
                 "desk_id":self.session.desk.id,
-                "user_id":self.session.user.id,
                 "action":action,
                 "source":"osc",
                 "state":state,
@@ -177,7 +176,6 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
                 publication: HighlightActionPublication::Standard,
             } if context.source == ActionSource::Extension => serde_json::json!({
                 "desk_id":self.session.desk.id,
-                "user_id":self.session.user.id,
                 "action":action,
                 "source":"extension",
                 "state":state,
@@ -187,7 +185,6 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
                 publication: HighlightActionPublication::Standard,
             } => serde_json::json!({
                 "desk_id":self.session.desk.id,
-                "user_id":self.session.user.id,
                 "action":action,
                 "state":state,
             }),
@@ -196,12 +193,10 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
                 ..
             } => serde_json::json!({
                 "desk_id":self.session.desk.id,
-                "user_id":self.session.user.id,
                 "state":state,
             }),
             HighlightCommand::Reconcile { source } => serde_json::json!({
                 "desk_id":self.session.desk.id,
-                "user_id":self.session.user.id,
                 "source":source,
                 "state":state,
             }),

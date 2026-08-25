@@ -44,7 +44,7 @@ export async function recallPreset(
 	validateIntent(intent);
 	const session = intentSession(api);
 	const fetch = intentFetch(dependencies);
-	const scope = { showId: intent.showId, userId: session.user.id };
+	const scope = { showId: intent.showId, sessionId: session.session_id };
 	const address = {
 		family: intent.preset.family,
 		number: intent.preset.number,
@@ -80,7 +80,7 @@ export async function recallPreset(
 	return presetRecall(api, session.token, fetch).recall(
 		{
 			showId: intent.showId,
-			userId: session.user.id,
+			sessionId: session.session_id,
 			deskId: session.desk.id,
 		},
 		request,
@@ -95,7 +95,7 @@ function programmerPreloadValues(
 	return new HttpProgrammerPreloadValuesTransport({
 		baseUrl: api.baseUrl,
 		sessionToken,
-		authenticatedUserId: intentSession(api).user.id,
+		authenticatedSessionId: intentSession(api).session_id,
 		fetch,
 	});
 }

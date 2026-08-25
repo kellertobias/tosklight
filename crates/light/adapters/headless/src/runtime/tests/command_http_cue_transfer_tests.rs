@@ -390,7 +390,7 @@ async fn cue_transfer_route_rejects_forged_scope_and_reports_both_revision_autho
         StatusCode::BAD_REQUEST
     );
     let mut forged = request.clone();
-    forged["user_id"] = serde_json::json!(scenario.session.user.id.0);
+    forged["user_id"] = serde_json::json!(Uuid::new_v4());
     assert_eq!(
         scenario
             .transfer(
@@ -484,18 +484,9 @@ fn assert_exact_cue_transfer_authority(scenario: &CueTransferRouteScenario) {
     );
     let valid = light_application::ActionContext::operator(
         scenario.session.desk.id,
-        scenario.session.user.id.0,
         scenario.session.id.0,
-        light_application::ActionSource::Http,
-    );
+        light_application::ActionSource::Http);
     for (forged, expected) in [
-        (
-            light_application::ActionContext {
-                user_id: Some(Uuid::new_v4()),
-                ..valid.clone()
-            },
-            light_application::ActionErrorKind::Forbidden,
-        ),
         (
             light_application::ActionContext {
                 session_id: Some(Uuid::new_v4()),

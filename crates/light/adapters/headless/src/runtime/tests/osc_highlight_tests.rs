@@ -45,7 +45,6 @@ fn verify_cross_surface_highlight_dedupe(
         .highlight
         .apply_action_guarded(
             session.desk.id,
-            session.user.id,
             HighlightAction::Next,
             &selection,
             &fixtures,

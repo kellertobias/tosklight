@@ -57,9 +57,8 @@ impl RecallSetup {
         let clock = Arc::new(ManualClock::new(started_at));
         let registry = ProgrammerRegistry::with_clock(clock.clone());
         let session = SessionId::new();
-        let user = UserId::new();
         let fixtures = [FixtureId::new(), FixtureId::new()];
-        registry.start(session, user);
+        registry.start(session);
         let selection_revision = registry.select(session, [fixtures[1], fixtures[0]]);
         let events = EventBus::new(16);
         let service = ProgrammingService::new(
@@ -129,7 +128,7 @@ impl RecallSetup {
             registry,
             service,
             events,
-            context: ActionContext::operator(Uuid::new_v4(), user.0, session.0, ActionSource::Http),
+            context: ActionContext::operator(Uuid::new_v4(), session.0, ActionSource::Http),
             ports: RecallPorts {
                 environment,
                 environment_reads: Mutex::new(0),
@@ -634,28 +633,25 @@ fn stale_preload_revision_is_rejected_before_resolving_or_mutating_the_preset() 
 #[test]
 fn a_preset_recall_reaches_every_surface_of_the_desk() {
     let setup = RecallSetup::new();
-    let user = UserId(setup.context.user_id.unwrap());
     let second_screen = SessionId::new();
-    let legacy_user = UserId::new();
     let legacy_session = SessionId::new();
-    setup.registry.start(second_screen, user);
+    setup.registry.start(second_screen);
     // A connection arriving under an identity from before the collapse joins the same Programmer.
-    setup.registry.start(legacy_session, legacy_user);
+    setup.registry.start(legacy_session);
 
     setup.apply("recall-shared", setup.request.clone());
 
-    for (desk, identity, session) in [
-        (Uuid::new_v4(), user, second_screen),
-        (Uuid::new_v4(), legacy_user, legacy_session),
+    for (desk, session) in [
+        (Uuid::new_v4(), second_screen),
+        (Uuid::new_v4(), legacy_session),
     ] {
-        let context = ActionContext::operator(desk, identity.0, session.0, ActionSource::Http);
+        let context = ActionContext::operator(desk, session.0, ActionSource::Http);
         let snapshot = setup
             .service
             .values_snapshot(&context, &LivePorts::default())
             .unwrap();
         assert_eq!(snapshot.projection.revision, 1);
         assert_eq!(snapshot.projection.fixture_values.len(), 3);
-        assert_eq!(snapshot.projection.user_id, user);
     }
 
     // Authentication still gates a recall. A system context operates no surface.

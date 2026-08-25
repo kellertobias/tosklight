@@ -358,7 +358,6 @@ function SystemControlsContent({
 				<ProgrammerList
 					programmers={model.programmers}
 					loading={model.lifecycle === null}
-					currentUserName={model.session?.user.name ?? null}
 					onClear={(sessionId) =>
 						void model.programmerActions?.clearProgrammer(sessionId)
 					}

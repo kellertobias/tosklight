@@ -13,7 +13,7 @@ import {
 	OTHER_ID,
 	queue,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	values,
 } from "./writerTestHarness";
 
@@ -44,15 +44,15 @@ vi.mock("../playbackRuntime/PlaybackRuntimeView", () => ({
 }));
 
 const LIFECYCLE_KEY = "server|connection|session|client";
-const PRELOAD_KEY = `${LIFECYCLE_KEY}|${USER_ID}|desk`;
+const PRELOAD_KEY = `${LIFECYCLE_KEY}|${SESSION_ID}|desk`;
 let renderCount = 0;
 
 function lifecycleRow(
-	userId = USER_ID,
+	sessionId = SESSION_ID,
 	preloadActive = false,
 ): ProgrammerLifecycleRow & { preloadActive: boolean } {
 	return {
-		programmerId: userId === USER_ID ? USER_ID : OTHER_ID,
+		programmerId: sessionId === SESSION_ID ? SESSION_ID : OTHER_ID,
 		connected: true,
 		selectedFixtureCount: 1,
 		normalValueCount: 2,
@@ -143,7 +143,7 @@ function tree(setup: ReturnType<typeof viewHarness>, props: TreeProps) {
 		>
 			<ProgrammerPreloadLifecycleProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				deskId={setup.selectionStore.getSnapshot().deskId}
 				authorityKey={PRELOAD_KEY}
 				lifecycleAuthorityKey={

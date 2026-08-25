@@ -29,7 +29,7 @@ import {
 
 export interface ProgrammerValuesViewProviderProps {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	authorityKey?: string;
 	store: ProgrammerValuesStore;
 	transport: ProgrammerValuesEventTransport | null;
@@ -56,7 +56,7 @@ const fallbackStore = new ProgrammerValuesStore();
 export function ProgrammerValuesViewProvider({
 	children,
 	showId,
-	userId,
+	sessionId,
 	authorityKey = "",
 	store,
 	transport,
@@ -84,10 +84,10 @@ export function ProgrammerValuesViewProvider({
 	);
 	const session = useMemo(
 		() =>
-			showId && userId
+			showId && sessionId
 				? new ProgrammerValuesSession({
 						showId,
-						userId,
+						sessionId,
 						authorityKey,
 						store,
 						transport,
@@ -102,12 +102,12 @@ export function ProgrammerValuesViewProvider({
 			showId,
 			store,
 			transport,
-			userId,
+			sessionId,
 		],
 	);
 	const writer = useMemo(
 		() =>
-			showId && userId && session && applyAction && captureModeAuthority
+			showId && sessionId && session && applyAction && captureModeAuthority
 				? new ProgrammerValuesWriter({
 						scope: { showId },
 						store,
@@ -126,7 +126,7 @@ export function ProgrammerValuesViewProvider({
 			session,
 			showId,
 			store,
-			userId,
+			sessionId,
 		],
 	);
 	const authority = useMemo<ProgrammerValuesAuthority | null>(
@@ -141,8 +141,8 @@ export function ProgrammerValuesViewProvider({
 		[session, store],
 	);
 	useLayoutEffect(() => {
-		store.reset(showId, userId, authorityKey);
-	}, [authorityKey, showId, store, userId]);
+		store.reset(showId, sessionId, authorityKey);
+	}, [authorityKey, showId, store, sessionId]);
 	useStrictModeSafeStop(writer);
 	useStrictModeSafeStop(session);
 	return (

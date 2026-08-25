@@ -86,7 +86,7 @@ impl ServerPlaybackPorts<'_> {
         emit(
             self.state,
             "programmer_changed",
-            serde_json::json!({"session_id":session.id,"user_id":session.user.id,"preload_playback_action":pending.legacy_name(),"playback_number":number,"surface":surface_name(surface),"page":page,"changes":["preload_playback_queue"]}),
+            serde_json::json!({"session_id":session.id,"preload_playback_action":pending.legacy_name(),"playback_number":number,"surface":surface_name(surface),"page":page,"changes":["preload_playback_queue"]}),
         );
         Ok(())
     }

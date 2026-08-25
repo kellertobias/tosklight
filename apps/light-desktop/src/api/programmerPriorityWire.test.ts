@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ProgrammerPriorityActionRequest } from "../features/programmerPriority/contracts";
 import {
 	CORRELATION_ID,
-	USER_ID,
+	SESSION_ID,
 } from "../features/programmerPriority/testFixtures";
 import {
 	decodeProgrammerPriorityActionOutcome,
@@ -82,7 +82,7 @@ describe("Programmer priority wire", () => {
 	});
 
 	it.each([
-		["an undeclared user", { user_id: USER_ID }],
+		["an undeclared user", { user_id: SESSION_ID }],
 		["negative revision", { revision: -1 }],
 		["fractional priority", { priority: 2.5 }],
 		["priority overflow", { priority: -32_769 }],
@@ -138,7 +138,7 @@ describe("Programmer priority wire", () => {
 	it.each([
 		["wrong request", { request_id: "another-request" }],
 		["wrong revision", { projection: projection({ revision: 8 }) }],
-		["an undeclared projection field", { projection: projection({ user_id: USER_ID }) }],
+		["an undeclared projection field", { projection: projection({ user_id: SESSION_ID }) }],
 		["missing correlation", { correlation_id: undefined }],
 		["unknown field", { values: [] }],
 	])("rejects an outcome with %s", (_label, replacement) => {
@@ -212,7 +212,7 @@ describe("Programmer priority wire", () => {
 	});
 
 	it.each([
-		["desk-scoped", { desk_id: USER_ID }],
+		["desk-scoped", { desk_id: SESSION_ID }],
 		["lossless", { delivery: "lossless" }],
 		[
 			"another Programmer object",

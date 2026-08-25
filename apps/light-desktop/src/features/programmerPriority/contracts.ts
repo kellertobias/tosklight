@@ -1,5 +1,5 @@
 export interface ProgrammerPriorityScope {
-	userId: string;
+	sessionId: string;
 }
 
 /** The Programmer's priority metadata; normal Programmer values never enter this slice. */

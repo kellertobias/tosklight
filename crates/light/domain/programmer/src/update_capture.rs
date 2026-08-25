@@ -2,7 +2,7 @@ use crate::{
     ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerRegistry, ProgrammerUpdateContent,
     SelectionExpression, SelectionReference,
 };
-use light_core::{FixtureId, SessionId, UserId};
+use light_core::{FixtureId, SessionId};
 use light_dynamics::DynamicAddressValue;
 use serde::Serialize;
 use std::cmp::Ordering;
@@ -28,7 +28,6 @@ impl ProgrammerUpdateValue {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProgrammerUpdateValuesCapture {
-    pub user_id: UserId,
     pub revision: u64,
     pub values: Vec<ProgrammerUpdateValue>,
 }
@@ -61,14 +60,12 @@ impl ProgrammerUpdateValuesCapture {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ProgrammerUpdateSelectionCapture {
-    pub user_id: UserId,
     pub revision: u64,
     pub fixtures: Vec<FixtureId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProgrammerUpdateMenuCapture {
-    pub user_id: UserId,
     pub values_revision: u64,
     pub selection_revision: u64,
     pub values: Vec<ProgrammerUpdateValue>,
@@ -92,7 +89,6 @@ impl ProgrammerRegistry {
         let state = states
             .get(&self.key(session))
             .ok_or(ProgrammerUpdateCaptureError::MissingSession)?;
-        let user_id = state.user_id;
         let content = state.update_content_with_selection(&[]);
         let mut values = content
             .fixture_values
@@ -113,7 +109,6 @@ impl ProgrammerRegistry {
             .collect::<Vec<_>>();
         values.sort_by(compare_values);
         Ok(ProgrammerUpdateValuesCapture {
-            user_id,
             revision: self.normal_values_revision(),
             values,
         })
@@ -125,14 +120,12 @@ impl ProgrammerRegistry {
         session: SessionId,
     ) -> Result<ProgrammerUpdateSelectionCapture, ProgrammerUpdateCaptureError> {
         let states = self.states.read();
-        let state = states
+        states
             .get(&self.key(session))
             .ok_or(ProgrammerUpdateCaptureError::MissingSession)?;
-        let user_id = state.user_id;
         let selections = self.selection_contexts.read();
         let selection = selections.get(&self.command_context(session));
         Ok(ProgrammerUpdateSelectionCapture {
-            user_id,
             revision: selection.map_or(0, |selection| selection.revision),
             fixtures: selection.map_or_else(Vec::new, |selection| selection.selected.clone()),
         })
@@ -148,7 +141,6 @@ impl ProgrammerRegistry {
         let state = states
             .get(&self.key(session))
             .ok_or(ProgrammerUpdateCaptureError::MissingSession)?;
-        let user_id = state.user_id;
         let mut values = update_values(state.update_content_with_selection(&[]));
         values.sort_by(compare_values);
         let selections = self.selection_contexts.read();
@@ -160,7 +152,6 @@ impl ProgrammerRegistry {
         );
         group_ids.sort();
         Ok(ProgrammerUpdateMenuCapture {
-            user_id,
             values_revision: self.normal_values_revision(),
             selection_revision: selection.map_or(0, |value| value.revision),
             values,

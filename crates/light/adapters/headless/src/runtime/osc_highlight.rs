@@ -98,7 +98,6 @@ fn emit_highlight_osc_rejection(
         "highlight_rejected",
         serde_json::json!({
             "desk_id":session.desk.id,
-            "user_id":session.user.id,
             "action":action,
             "source":"osc",
             "error":error,

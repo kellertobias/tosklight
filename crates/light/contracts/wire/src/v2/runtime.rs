@@ -7,7 +7,6 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeSessionCreateRequest {
-    pub username: String,
     #[serde(default)]
     pub desk_id: Option<Uuid>,
     #[serde(default)]
@@ -31,13 +30,6 @@ impl RuntimeSessionRole {
     pub fn is_read_only(self) -> bool {
         matches!(self, Self::Visualizer)
     }
-}
-
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
-pub struct RuntimeDeskUser {
-    pub id: Uuid,
-    pub name: String,
-    pub enabled: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -71,7 +63,6 @@ pub struct RuntimeSessionResponse {
     pub session_id: Uuid,
     pub client_id: Uuid,
     pub token: String,
-    pub user: RuntimeDeskUser,
     pub desk: RuntimeControlDesk,
 }
 
@@ -187,7 +178,6 @@ pub struct RuntimeBootstrapHighlightState {
 pub struct RuntimeBootstrapSnapshot {
     pub api_version: String,
     pub attribute_registry: Vec<RuntimeAttributeDescriptor>,
-    pub users: Vec<RuntimeDeskUser>,
     pub desks: Vec<RuntimeControlDesk>,
     pub clients: Vec<RuntimeClientSummary>,
     pub active_show: Option<RuntimeShowEntry>,
@@ -301,18 +291,20 @@ mod tests {
 
     #[test]
     fn session_request_accepts_unknown_fields_and_validates_known_fields() {
+        // A client from before the collapse still sends `username`. It named the one operator
+        // there has ever been, so it is ignored rather than rejected.
         let request: RuntimeSessionCreateRequest = serde_json::from_value(serde_json::json!({
             "username": "Operator",
             "future_client_hint": true
         }))
         .unwrap();
-        assert_eq!(request.username, "Operator");
         assert_eq!(request.desk_id, None);
+        assert_eq!(request.role, None);
 
         let error = serde_json::from_value::<RuntimeSessionCreateRequest>(serde_json::json!({
-            "username": 7
+            "client_id": 7
         }))
         .unwrap_err();
-        assert!(error.to_string().contains("string"));
+        assert!(error.to_string().contains("UUID"));
     }
 }

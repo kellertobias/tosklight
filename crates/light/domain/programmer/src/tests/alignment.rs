@@ -44,7 +44,7 @@ fn activation_freezes_selection_and_cumulative_delta_is_value_neutral_until_appl
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, fixtures);
     let undo_depth = registry.undo_depth(session);
     let generation = registry.normal_values_generation(session);
@@ -80,7 +80,7 @@ fn binding_skips_unsupported_fixtures_and_weights_the_supported_ordered_subset()
     let session = SessionId::new();
     let supported = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
     let unsupported = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(
         session,
         [supported[0], unsupported, supported[1], supported[2]],
@@ -120,7 +120,7 @@ fn mode_switch_reanchors_from_current_values_without_rollback() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, fixtures);
     registry
         .activate_alignment(session, ProgrammerAlignmentMode::Left)
@@ -162,7 +162,7 @@ fn clamp_wrap_different_attribute_and_off_are_explicit() {
     let fixture = FixtureId::new();
     let pan = AttributeKey("pan".into());
     let tilt = AttributeKey("tilt".into());
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, [fixture]);
     registry
         .activate_alignment(session, ProgrammerAlignmentMode::Left)
@@ -186,12 +186,11 @@ fn clamp_wrap_different_attribute_and_off_are_explicit() {
 #[test]
 fn alignment_belongs_to_the_desk_is_transactional_and_stays_runtime_only() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(first, user);
-    registry.start(second, user);
+    registry.start(first);
+    registry.start(second);
     registry.select(first, [fixture]);
     registry
         .activate_alignment(first, ProgrammerAlignmentMode::Left)

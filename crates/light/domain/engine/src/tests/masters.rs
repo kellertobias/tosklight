@@ -49,7 +49,7 @@ fn portable_group_master_seed_uses_lowest_physical_assignment_before_virtual() {
 fn grand_master_and_blackout_affect_intensity() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     programmers.set(
         session,
@@ -100,7 +100,7 @@ fn grand_master_and_blackout_affect_intensity() {
 fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (mut fixture, logical) = fixture();
     fixture.freeze = FixtureFreezeState {
         targets: HashMap::from([(
@@ -168,7 +168,7 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
 fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (mut fixture, logical) = fixture();
     fixture.freeze = FixtureFreezeState {
         targets: HashMap::from([(
@@ -230,7 +230,7 @@ fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed()
 fn patch_master_opt_outs_are_independent_and_blackout_remains_authoritative() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (mut participating, participating_id) = fixture();
     let (mut ignores_grand, ignores_grand_id) = fixture();
     let (mut ignores_groups, ignores_groups_id) = fixture();
@@ -293,7 +293,7 @@ fn patch_master_opt_outs_are_independent_and_blackout_remains_authoritative() {
 fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let mut fixtures = Vec::new();
     let mut logical_ids = Vec::new();
     for address in 1..=6 {
@@ -397,7 +397,7 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
 fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     programmers.set(
         session,
@@ -454,7 +454,7 @@ fn group_master_transition_advances_on_render_without_scheduler_updates() {
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     programmers.set(
         session,
@@ -501,7 +501,7 @@ fn group_master_transition_advances_on_render_without_scheduler_updates() {
 fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let (fixture, logical) = fixture();
     programmers.set(
         session,
@@ -544,7 +544,7 @@ fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
 fn logical_head_master_does_not_limit_sibling_heads() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     let physical = FixtureId::new();
     let first = FixtureId::new();
     let second = FixtureId::new();

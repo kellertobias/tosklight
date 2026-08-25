@@ -20,9 +20,8 @@ fn pending_batch_has_one_checkpoint_timestamp_generation_and_operator_order() {
     let clock = Arc::new(ManualClock::new(entered_at));
     let registry = ProgrammerRegistry::with_clock(clock.clone());
     let session = SessionId::new();
-    let user = UserId::new();
     let fixtures = [FixtureId::new(), FixtureId::new()];
-    registry.start(session, user);
+    registry.start(session);
     assert!(registry.arm_preload(session, true));
     let undo_before = registry.get(session).unwrap().undo.len();
     let timing = PreloadProgrammerValueTiming {
@@ -70,9 +69,8 @@ fn pending_batch_has_one_checkpoint_timestamp_generation_and_operator_order() {
 fn pending_mutations_require_capture_and_lifecycle_changes_advance_generation() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let fixture = FixtureId::new();
-    registry.start(session, user);
+    registry.start(session);
     let set = vec![fixture_set(fixture, "intensity", 0.5, Default::default())];
 
     assert!(!registry.apply_preload_values(session, &set));
@@ -114,8 +112,7 @@ fn maximum_pending_fixture_batch_is_applied_and_released_in_one_pass() {
     const MUTATION_LIMIT: usize = 10_000;
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
-    registry.start(session, user);
+    registry.start(session);
     assert!(registry.arm_preload(session, true));
     let fixtures = (0..MUTATION_LIMIT)
         .map(|_| FixtureId::new())

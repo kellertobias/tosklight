@@ -6,8 +6,7 @@ import {
 } from "./ProgrammerLifecycleTransport";
 
 const PROGRAMMER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const SESSION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 class FakeWebSocket {
 	static readonly OPEN = 1;

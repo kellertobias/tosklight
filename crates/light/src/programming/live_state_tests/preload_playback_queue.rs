@@ -48,7 +48,6 @@ struct QueueSetup {
     registry: ProgrammerRegistry,
     service: ProgrammingService,
     events: EventBus,
-    user: UserId,
     first: SessionId,
     second: SessionId,
     first_context: ActionContext,
@@ -59,13 +58,12 @@ struct QueueSetup {
 impl QueueSetup {
     fn new() -> Self {
         let registry = ProgrammerRegistry::default();
-        let user = UserId::new();
         let first = SessionId::new();
         let second = SessionId::new();
         let first_desk = Uuid::new_v4();
         let second_desk = Uuid::new_v4();
-        registry.start(first, user);
-        registry.start(second, user);
+        registry.start(first);
+        registry.start(second);
         registry.attach_command_context(first, SessionId(first_desk));
         registry.attach_command_context(second, SessionId(second_desk));
         let events = EventBus::new(64);
@@ -78,16 +76,10 @@ impl QueueSetup {
             registry: registry.clone(),
             service,
             events,
-            user,
             first,
             second,
-            first_context: ActionContext::operator(first_desk, user.0, first.0, ActionSource::Http),
-            second_context: ActionContext::operator(
-                second_desk,
-                user.0,
-                second.0,
-                ActionSource::Osc,
-            ),
+            first_context: ActionContext::operator(first_desk, first.0, ActionSource::Http),
+            second_context: ActionContext::operator(second_desk, second.0, ActionSource::Osc),
             ports: QueuePorts { registry },
         }
     }
@@ -135,7 +127,6 @@ fn snapshot_is_authenticated_and_preserves_ordered_duplicates() {
         .service
         .preload_playback_queue_snapshot(&setup.first_context, &setup.ports)
         .unwrap();
-    assert_eq!(snapshot.projection.user_id, setup.user);
     assert_eq!(snapshot.projection.revision, 2);
     assert_eq!(
         snapshot
@@ -159,7 +150,6 @@ fn snapshot_is_authenticated_and_preserves_ordered_duplicates() {
     // An identity from before the collapse reads the desk's queue rather than being turned away.
     let legacy = ActionContext::operator(
         setup.first_context.desk_id,
-        UserId::new().0,
         setup.first.0,
         ActionSource::Http,
     );
@@ -230,22 +220,17 @@ fn same_user_session_lifecycle_does_not_publish_queue_events() {
     let setup = QueueSetup::new();
     setup.queue(&setup.first_context, 5);
     let third = SessionId::new();
-    let third_context =
-        ActionContext::operator(Uuid::new_v4(), setup.user.0, third.0, ActionSource::Http);
+    let third_context = ActionContext::operator(Uuid::new_v4(), third.0, ActionSource::Http);
 
-    setup
-        .service
-        .run_lifecycle_transition(&third_context, setup.user, || {
-            setup.registry.start(third, setup.user);
-            setup
-                .registry
-                .attach_command_context(third, SessionId(third_context.desk_id));
-        });
-    setup
-        .service
-        .run_lifecycle_transition(&third_context, setup.user, || {
-            setup.registry.disconnect(third);
-        });
+    setup.service.run_lifecycle_transition(&third_context, || {
+        setup.registry.start(third);
+        setup
+            .registry
+            .attach_command_context(third, SessionId(third_context.desk_id));
+    });
+    setup.service.run_lifecycle_transition(&third_context, || {
+        setup.registry.disconnect(third);
+    });
 
     assert_eq!(setup.queue_events().len(), 1);
     assert_eq!(
@@ -304,18 +289,17 @@ fn clear_release_undo_redo_and_replacement_each_publish_one_final_projection() {
 
     let replacement = setup
         .service
-        .replace_user_programmer(
+        .replace_desk_programmer(
             &setup.first_context,
             &setup.ports,
             ProgrammingLifecycleTarget::new(
-                setup.user,
                 setup.first,
                 vec![setup.first_context.desk_id, setup.second_context.desk_id],
             ),
             || {
                 setup.registry.clear(setup.first);
-                setup.registry.start(setup.first, setup.user);
-                setup.registry.start(setup.second, setup.user);
+                setup.registry.start(setup.first);
+                setup.registry.start(setup.second);
                 ProgrammingLifecycleCompletion::new((), Some(setup.first))
             },
         )

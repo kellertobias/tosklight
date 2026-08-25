@@ -90,7 +90,7 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
 fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
-    programmers.start(session, light_core::UserId::new());
+    programmers.start(session);
     programmers.set_group(
         session,
         "look".into(),

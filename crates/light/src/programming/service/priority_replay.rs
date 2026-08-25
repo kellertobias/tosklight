@@ -1,12 +1,11 @@
 use crate::{ActionError, ActionErrorKind, ProgrammingPriorityRequest, ProgrammingPriorityResult};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::collections::{HashMap, VecDeque};
 
 const ENTRY_LIMIT: usize = 2_048;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ReplayKey {
-    user_id: UserId,
     desk_id: uuid::Uuid,
     session_id: SessionId,
     request_id: String,
@@ -24,21 +23,20 @@ pub(super) struct PriorityReplayCache {
 }
 
 impl PriorityReplayCache {
-    pub(super) fn invalidate_user(&mut self, user_id: UserId) {
-        self.entries.retain(|key, _| key.user_id != user_id);
-        self.order.retain(|key| key.user_id != user_id);
+    pub(super) fn invalidate(&mut self) {
+        // One desk, one Programmer: an invalidation clears the cache rather than one user's part.
+        self.entries.clear();
+        self.order.clear();
     }
 
     pub(super) fn get(
         &self,
-        user_id: UserId,
         desk_id: uuid::Uuid,
         session_id: SessionId,
         request_id: &str,
         request: &ProgrammingPriorityRequest,
     ) -> Result<Option<ProgrammingPriorityResult>, ActionError> {
         let key = ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.to_owned(),
@@ -59,7 +57,6 @@ impl PriorityReplayCache {
 
     pub(super) fn insert(
         &mut self,
-        user_id: UserId,
         desk_id: uuid::Uuid,
         session_id: SessionId,
         request_id: String,
@@ -67,7 +64,6 @@ impl PriorityReplayCache {
         result: ProgrammingPriorityResult,
     ) {
         let key = ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id,
@@ -85,7 +81,7 @@ impl PriorityReplayCache {
 }
 
 impl super::ProgrammingService {
-    pub(in crate::programming) fn invalidate_priority_replay(&self, user_id: UserId) {
-        self.priority_replay.lock().invalidate_user(user_id);
+    pub(in crate::programming) fn invalidate_priority_replay(&self) {
+        self.priority_replay.lock().invalidate();
     }
 }

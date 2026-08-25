@@ -81,7 +81,7 @@ vi.mock(
 		useProgrammerCaptureModeView: (enabled = true) =>
 			enabled
 				? {
-						userId: "operator",
+						sessionId: "operator",
 						revision: 1,
 						blind: false,
 						preview: false,

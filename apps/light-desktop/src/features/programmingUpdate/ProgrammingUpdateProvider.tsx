@@ -17,7 +17,7 @@ import { ProgrammingUpdateWriter } from "./writer";
 interface ProgrammingUpdateProviderProps {
 	showId: string | null;
 	deskId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	initialShowRevision: number | null;
 	authorityKey: string;
 	store: ShowObjectsStore;
@@ -37,7 +37,7 @@ export function ProgrammingUpdateProvider({
 	children,
 	showId,
 	deskId,
-	userId,
+	sessionId,
 	initialShowRevision,
 	authorityKey,
 	store,
@@ -46,13 +46,13 @@ export function ProgrammingUpdateProvider({
 }: PropsWithChildren<ProgrammingUpdateProviderProps>) {
 	const scope = useMemo<ProgrammingUpdateScope | null>(
 		() =>
-			showId && deskId && userId
-				? { showId, deskId, userId, initialShowRevision }
+			showId && deskId && sessionId
+				? { showId, deskId, sessionId, initialShowRevision }
 				: null,
-		[deskId, initialShowRevision, showId, userId],
+		[deskId, initialShowRevision, showId, sessionId],
 	);
 	const scopeKey = scope
-		? [authorityKey, scope.showId, scope.deskId, scope.userId].join("|")
+		? [authorityKey, scope.showId, scope.deskId, scope.sessionId].join("|")
 		: authorityKey;
 	const writer = useMemo(
 		() =>

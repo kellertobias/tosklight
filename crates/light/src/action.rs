@@ -35,7 +35,6 @@ pub enum ActionSource {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ActionContext {
     pub desk_id: Uuid,
-    pub user_id: Option<Uuid>,
     pub session_id: Option<Uuid>,
     pub source: ActionSource,
     pub correlation_id: Uuid,
@@ -44,10 +43,9 @@ pub struct ActionContext {
 }
 
 impl ActionContext {
-    pub fn operator(desk_id: Uuid, user_id: Uuid, session_id: Uuid, source: ActionSource) -> Self {
+    pub fn operator(desk_id: Uuid, session_id: Uuid, source: ActionSource) -> Self {
         Self {
             desk_id,
-            user_id: Some(user_id),
             session_id: Some(session_id),
             source,
             correlation_id: Uuid::new_v4(),
@@ -59,7 +57,6 @@ impl ActionContext {
     pub fn system(desk_id: Uuid, source: ActionSource) -> Self {
         Self {
             desk_id,
-            user_id: None,
             session_id: None,
             source,
             correlation_id: Uuid::new_v4(),
@@ -183,14 +180,9 @@ mod tests {
 
     #[test]
     fn bounded_commands_keep_context_and_typed_outcomes() {
-        let context = ActionContext::operator(
-            Uuid::nil(),
-            Uuid::from_u128(1),
-            Uuid::from_u128(2),
-            ActionSource::Osc,
-        )
-        .with_request_id("osc-1")
-        .with_expected_revision(7);
+        let context = ActionContext::operator(Uuid::nil(), Uuid::from_u128(2), ActionSource::Osc)
+            .with_request_id("osc-1")
+            .with_expected_revision(7);
         let action = ActionEnvelope {
             context: context.clone(),
             command: PlaybackGo,

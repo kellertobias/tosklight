@@ -16,7 +16,7 @@ import { programmerValuesUuidAt } from "./programmerValuesWireProjection";
 export interface HttpProgrammerPreloadLifecycleTransportOptions {
 	baseUrl: string;
 	sessionToken: string;
-	authenticatedUserId: string;
+	authenticatedSessionId: string;
 	authenticatedDeskId: string;
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
@@ -37,8 +37,8 @@ export class HttpProgrammerPreloadLifecycleTransport
 		this.fetchImplementation =
 			options.fetch ?? globalThis.fetch.bind(globalThis);
 		programmerValuesUuidAt(
-			options.authenticatedUserId,
-			"$.authenticatedUserId",
+			options.authenticatedSessionId,
+			"$.authenticatedSessionId",
 		);
 		programmerValuesUuidAt(options.authenticatedDeskId, "$.authenticatedDeskId");
 	}
@@ -49,7 +49,7 @@ export class HttpProgrammerPreloadLifecycleTransport
 	) {
 		validateScope(
 			scope,
-			this.options.authenticatedUserId,
+			this.options.authenticatedSessionId,
 			this.options.authenticatedDeskId,
 		);
 		if (this.options.applyAction)
@@ -112,13 +112,13 @@ export class HttpProgrammerPreloadLifecycleTransport
 
 function validateScope(
 	scope: ProgrammerPreloadLifecycleScope,
-	authenticatedUserId: string,
+	authenticatedSessionId: string,
 	authenticatedDeskId: string,
 ) {
 	programmerValuesUuidAt(scope.showId, "$.scope.showId");
-	const userId = programmerValuesUuidAt(scope.userId, "$.scope.userId");
+	const sessionId = programmerValuesUuidAt(scope.sessionId, "$.scope.sessionId");
 	const deskId = programmerValuesUuidAt(scope.deskId, "$.scope.deskId");
-	if (userId.toLowerCase() !== authenticatedUserId.toLowerCase())
+	if (sessionId.toLowerCase() !== authenticatedSessionId.toLowerCase())
 		throw new ProgrammerPreloadLifecycleTransportError(
 			"Preload lifecycle scope does not match the authenticated user",
 			"forbidden",

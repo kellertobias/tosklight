@@ -6,12 +6,11 @@ use crate::{
     ProgrammingPresetRevisionExpectation, ProgrammingShowUndoObject, ProgrammingShowUndoOperation,
     ProgrammingShowUndoTarget,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::sync::Arc;
 
 struct RecordingIdentity {
     session_id: SessionId,
-    user_id: UserId,
     desk_id: uuid::Uuid,
     request_id: String,
 }
@@ -67,7 +66,6 @@ impl ProgrammingService {
             let projection = result.outcome.projection();
             self.remember_show_mutation(
                 identity.session_id,
-                identity.user_id,
                 identity.desk_id,
                 ProgrammingShowUndoTarget {
                     show_id: projection.show_id,
@@ -150,7 +148,6 @@ impl ProgrammingService {
         request: &ProgrammingPresetRecordRequest,
     ) -> Result<Option<ProgrammingPresetRecordResult>, ActionError> {
         self.preset_recording_replay.lock().get(
-            identity.user_id,
             identity.desk_id,
             identity.session_id,
             &identity.request_id,
@@ -165,7 +162,6 @@ impl ProgrammingService {
         result: ProgrammingPresetRecordResult,
     ) {
         self.preset_recording_replay.lock().insert(
-            identity.user_id,
             identity.desk_id,
             identity.session_id,
             identity.request_id,
@@ -184,12 +180,6 @@ fn recording_identity(
             "Preset recording requires an operator session",
         )
     })?;
-    let user_id = envelope.context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Preset recording requires an authenticated user",
-        )
-    })?;
     let request_id = envelope.context.request_id.as_deref().ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Invalid,
@@ -199,7 +189,6 @@ fn recording_identity(
     super::values_validation::validate_request_id(request_id)?;
     Ok(RecordingIdentity {
         session_id,
-        user_id,
         desk_id: envelope.context.desk_id,
         request_id: request_id.to_owned(),
     })

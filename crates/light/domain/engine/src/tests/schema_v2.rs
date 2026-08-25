@@ -54,7 +54,7 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
     };
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set(
         session,
         fixture_id,
@@ -163,7 +163,7 @@ fn physical_axis_inversion_is_independent_for_root_and_multipatch() {
     }];
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set(
         session,
         fixture_id,
@@ -266,7 +266,7 @@ fn patch_and_profile_axis_inversion_compose_exactly_once() {
     }];
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set(
         session,
         fixture_id,
@@ -315,7 +315,7 @@ fn patch_axis_inversion_preserves_exact_msb_first_encoding_at_every_resolution()
 
         let programmers = ProgrammerRegistry::default();
         let session = SessionId::new();
-        programmers.start(session, UserId::new());
+        programmers.start(session);
         programmers.set(
             session,
             fixture_id,
@@ -344,7 +344,7 @@ fn borrowed_profile_lookup_matches_owned_hold_last_resolution() {
     ]);
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set(
         session,
         fixture_id,
@@ -521,7 +521,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
     };
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set(
         session,
         physical,
@@ -554,7 +554,7 @@ fn schema_v2_snap_bypasses_programmer_fades_but_keeps_non_snap_timing() {
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (fixture, fixture_id) = schema_v2_fixture(&[
         ("pan", true, false, false, false, false),
         ("tilt", false, false, false, false, false),
@@ -627,7 +627,7 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
 
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (mut fixture, fixture_id) = schema_v2_fixture(&[
         ("pan", true, false, false, false, false),
         ("tilt", false, false, false, false, false),
@@ -746,7 +746,7 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
 fn inverted_intensity_masters_and_blackout_move_to_physical_off() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (mut fixture, fixture_id) =
         schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
     fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
@@ -820,7 +820,7 @@ fn virtual_dimmer_intensity_multiplies_reacting_channels_one_way() {
 
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set(
         session,
         fixture_id,

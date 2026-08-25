@@ -197,7 +197,7 @@ async function applyProgrammerValues(
 	validateIntent(intent);
 	const session = intentSession(api);
 	const fetch = intentFetch(dependencies);
-	const scope = { showId: intent.showId, userId: session.user.id };
+	const scope = { showId: intent.showId, sessionId: session.session_id };
 	const transport = valuesTransport(api, session, fetch);
 	const [playback, values, captureMode] = await Promise.all([
 		loadPlaybackAuthority(api, session, intent.showId, fetch),
@@ -293,7 +293,7 @@ function assertCurrentSession(api: ApiDriver, captured: Session) {
 		current.session_id !== captured.session_id ||
 		current.client_id !== captured.client_id ||
 		current.token !== captured.token ||
-		current.user.id !== captured.user.id ||
+		current.session_id !== captured.session_id ||
 		current.desk.id !== captured.desk.id
 	)
 		throw new Error("Programmer values scope changed before mutation");

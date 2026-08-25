@@ -12,8 +12,8 @@ import type {
 } from "./transport";
 
 export const SHOW_ID = "show-a";
-export const USER_ID = "operator-a";
-export const OTHER_USER_ID = "operator-b";
+export const SESSION_ID = "operator-a";
+export const OTHER_SESSION_ID = "operator-b";
 export const AUTHORITY_A = "server-a/session-a";
 export const AUTHORITY_B = "server-b/session-b";
 
@@ -42,7 +42,7 @@ export function queueProjection(
 export function queueSnapshot(
 	overrides: {
 		cursor?: number;
-		userId?: string;
+		sessionId?: string;
 		revision?: number;
 		actions?: readonly ProgrammerPreloadPlaybackQueueEntry[];
 	} = {},

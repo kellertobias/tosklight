@@ -2870,8 +2870,8 @@ async function setProgrammerFixtureValues(
 	api: ApiDriver,
 	values: Record<string, number>,
 ) {
-	const userId = api.session?.user.id;
-	if (!userId)
+	const sessionId = api.session?.session_id;
+	if (!sessionId)
 		throw new Error("The product demo requires an authenticated user");
 	const [capture, programmerValues] = await Promise.all([
 		api.request<any>(
@@ -3037,8 +3037,8 @@ async function preloadProgrammerAttributeLook(
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
 ) {
-	const userId = api.session?.user.id;
-	if (!userId)
+	const sessionId = api.session?.session_id;
+	if (!sessionId)
 		throw new Error("The product demo requires an authenticated user");
 	const snapshot = await api.request<any>(
 		"GET",
@@ -4152,8 +4152,8 @@ async function clearProgrammer(
 }
 
 async function preloadState(api: ApiDriver) {
-	const userId = api.session?.user.id;
-	if (!userId)
+	const sessionId = api.session?.session_id;
+	if (!sessionId)
 		throw new Error("The product demo requires an authenticated user");
 	const [capture, values, playback] = await Promise.all([
 		api.request<any>(

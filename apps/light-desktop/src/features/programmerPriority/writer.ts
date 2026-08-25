@@ -194,7 +194,7 @@ export class ProgrammerPriorityWriter implements ProgrammerPriorityActions {
 
 	private claimScope() {
 		const state = this.options.store.getSnapshot();
-		if (state.userId !== this.options.scope.userId) return false;
+		if (state.sessionId !== this.options.scope.sessionId) return false;
 		this.storeScope ??= this.options.store.captureScope();
 		return this.options.store.isScopeCurrent(this.expectedStoreScope());
 	}

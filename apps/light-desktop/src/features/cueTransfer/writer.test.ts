@@ -17,7 +17,7 @@ import { CueTransferWriter } from "./writer";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const DESK_ID = "22222222-2222-4222-8222-222222222222";
-const USER_ID = "33333333-3333-4333-8333-333333333333";
+const SESSION_ID = "33333333-3333-4333-8333-333333333333";
 const CHOICE_ID = "44444444-4444-4444-8444-444444444444";
 const SOURCE_LIST_ID = "55555555-5555-4555-8555-555555555555";
 const DESTINATION_LIST_ID = "66666666-6666-4666-8666-666666666666";
@@ -170,7 +170,7 @@ function setup(
 		...repairOverrides,
 	};
 	const writer = new CueTransferWriter({
-		scope: { showId: SHOW_ID, deskId: DESK_ID, userId: USER_ID },
+		scope: { showId: SHOW_ID, deskId: DESK_ID, sessionId: SESSION_ID },
 		showStore,
 		programmingStore,
 		transport: { apply },

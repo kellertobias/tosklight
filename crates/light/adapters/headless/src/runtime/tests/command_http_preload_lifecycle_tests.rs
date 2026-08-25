@@ -90,7 +90,6 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     });
     let (show_id, show_revision, fixture) =
         install_lifecycle_show(&scenario, "Typed Preload lifecycle").await;
-    let user_id = scenario.session.user.id.0;
     let enter = lifecycle_request(
         "preload-enter-http",
         0,
@@ -129,8 +128,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
         .state
         .installation.add_desk("Preload lifecycle peer")
         .unwrap();
-    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
-    assert_eq!(second_user, user_id);
+    let second_token = login_on_desk(&scenario, second_desk.id).await;
     // The peer is a surface of the same desk, so it must satisfy the desk's current selection
     // revision rather than one of its own.
     let peer_enter = lifecycle_request(
@@ -427,17 +425,11 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
     assert_eq!(stale_show["current_revision"], show_revision);
     assert!(stale_show.get("current_related_revision").is_none());
 
-    let other_user = scenario
-        .state
-        .installation.add_user("Preload cursor other")
-        .unwrap();
     let other_desk = scenario
         .state
         .installation.add_desk("Preload cursor other")
         .unwrap();
-    let (other_token, logged_user) =
-        login_on_desk(&scenario, "Preload cursor other", other_desk.id).await;
-    assert_eq!(logged_user, other_user.id.0);
+    let other_token = login_on_desk(&scenario, other_desk.id).await;
     assert_eq!(
         scenario
             .playback_action_for(
@@ -488,7 +480,6 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
         );
         let change = light_application::ProgrammingPriorityChange::Upsert {
             projection: light_application::ProgrammingPriorityProjection {
-                user_id: light_core::UserId::new(),
                 revision,
                 priority: 100,
                 changed_at: chrono::Utc::now(),

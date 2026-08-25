@@ -8,7 +8,6 @@ pub struct RendererSettings {
     pub source: String,
     pub host: String,
     pub port: u16,
-    pub user: String,
     pub quality: Option<String>,
     pub fog: f32,
     pub persistence: f32,
@@ -62,7 +61,6 @@ pub enum RendererSettingChange {
     Source(String),
     Host(String),
     Port(u16),
-    User(String),
     Quality(Option<String>),
     Fog(f32),
     Persistence(f32),
@@ -90,7 +88,6 @@ impl Default for RendererSettings {
             source: "lighting_desk".into(),
             host: "127.0.0.1".into(),
             port: 5000,
-            user: "Operator".into(),
             quality: None,
             fog: 0.15,
             persistence: 0.0,
@@ -131,7 +128,6 @@ impl RendererSettings {
                 }
                 "host" => settings.host = value.into(),
                 "port" => settings.port = value.parse().unwrap_or(settings.port),
-                "user" => settings.user = value.into(),
                 "quality" => settings.quality = (value != "follow").then(|| value.into()),
                 "fog" => adopt_f32(value, &mut settings.fog),
                 "persistence" => adopt_f32(value, &mut settings.persistence),
@@ -211,7 +207,6 @@ impl RendererSettings {
         line!("source", self.source);
         line!("host", self.host);
         line!("port", self.port);
-        line!("user", self.user);
         line!("quality", self.quality.as_deref().unwrap_or("follow"));
         line!("fog", self.fog);
         line!("persistence", self.persistence);
@@ -258,7 +253,6 @@ impl RendererSettings {
         field!(source, Source);
         field!(host, Host);
         field!(port, Port);
-        field!(user, User);
         field!(quality, Quality);
         field!(fog, Fog);
         field!(persistence, Persistence);
@@ -287,7 +281,6 @@ impl RendererSettings {
                 RendererSettingChange::Source(value) => self.source = value.clone(),
                 RendererSettingChange::Host(value) => self.host = value.clone(),
                 RendererSettingChange::Port(value) => self.port = *value,
-                RendererSettingChange::User(value) => self.user = value.clone(),
                 RendererSettingChange::Quality(value) => self.quality = value.clone(),
                 RendererSettingChange::Fog(value) => self.fog = *value,
                 RendererSettingChange::Persistence(value) => self.persistence = *value,
@@ -330,7 +323,6 @@ impl RendererSettingChange {
             Self::Source(_) => "source",
             Self::Host(_) => "host",
             Self::Port(_) => "port",
-            Self::User(_) => "user",
             Self::Quality(_) => "quality",
             Self::Fog(_) => "fog",
             Self::Persistence(_) => "persistence",
@@ -388,7 +380,8 @@ mod tests {
 
     #[test]
     fn settings_round_trip_the_persistence_contract() {
-        let source = "source lighting_desk\nhost desk.local\nport 5001\nuser Tobias\nquality ultra\nfog 0.08\npersistence 0.12\npersistence_falloff 4\nambient 0.09\nexposure 1.2\nlaser_brightness 1.5\nlamp_fog_cloudiness 0.2\nlamp_fog_turbulence 0.3\nlaser_fog_cloudiness 0.4\nlaser_fog_turbulence 0.5\ncrowd_amount 0.75\ntheme dark_on_light\nbackground 0.1,0.2,0.3\nlabels false\nshow_selection true\nfloor_grid false\nblender /Applications/Blender.app\ninput 2 sacn\n";
+        let source = "source lighting_desk\nhost desk.local\nport 5001\
+quality ultra\nfog 0.08\npersistence 0.12\npersistence_falloff 4\nambient 0.09\nexposure 1.2\nlaser_brightness 1.5\nlamp_fog_cloudiness 0.2\nlamp_fog_turbulence 0.3\nlaser_fog_cloudiness 0.4\nlaser_fog_turbulence 0.5\ncrowd_amount 0.75\ntheme dark_on_light\nbackground 0.1,0.2,0.3\nlabels false\nshow_selection true\nfloor_grid false\nblender /Applications/Blender.app\ninput 2 sacn\n";
         let settings = RendererSettings::from_file(source);
         settings.validate().unwrap();
         assert_eq!(RendererSettings::from_file(&settings.to_file()), settings);

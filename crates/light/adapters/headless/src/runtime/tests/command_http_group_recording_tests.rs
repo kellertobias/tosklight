@@ -269,7 +269,6 @@ fn highlight_reconciliations(scenario: &CommandHttpScenario, source: &str) -> us
         .filter(|event| {
             event.kind == "highlight_changed"
                 && event.payload["desk_id"] == scenario.session.desk.id.to_string()
-                && event.payload["user_id"] == scenario.session.user.id.0.to_string()
                 && event.payload["source"] == source
         })
         .count()
@@ -484,7 +483,7 @@ async fn group_recording_captures_the_desks_one_selection_from_any_surface() {
 }
 
 #[tokio::test]
-async fn group_recording_port_rejects_forged_user_session_and_desk_contexts() {
+async fn group_recording_port_rejects_forged_session_and_desk_contexts() {
     let scenario = CommandHttpScenario::new().await;
     let ports = command_http::ServerProgrammingPorts::new(
         &scenario.state,
@@ -494,15 +493,9 @@ async fn group_recording_port_rejects_forged_user_session_and_desk_contexts() {
     );
     let valid = light_application::ActionContext::operator(
         scenario.session.desk.id,
-        scenario.session.user.id.0,
         scenario.session.id.0,
-        light_application::ActionSource::Http,
-    );
+        light_application::ActionSource::Http);
     for forged in [
-        light_application::ActionContext {
-            user_id: Some(Uuid::new_v4()),
-            ..valid.clone()
-        },
         light_application::ActionContext {
             session_id: Some(Uuid::new_v4()),
             ..valid.clone()
@@ -522,28 +515,22 @@ async fn group_recording_port_rejects_forged_user_session_and_desk_contexts() {
 }
 
 fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Session) {
-    let (same_desk, other_user, other_desk) = {
+    let (same_desk, other_desk) = {
         let same_desk = scenario
             .state
             .installation
             .add_desk("Same user wing")
-            .unwrap();
-        let other_user = scenario
-            .state
-            .installation
-            .add_user("Other Group operator")
             .unwrap();
         let other_desk = scenario
             .state
             .installation
             .add_desk("Other user wing")
             .unwrap();
-        (same_desk, other_user, other_desk)
+        (same_desk, other_desk)
     };
     let same_user = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: scenario.session.user.clone(),
         token: "same-user-group-record".into(),
         connected: true,
         desk: same_desk,
@@ -551,7 +538,6 @@ fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Se
     let other_user = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: other_user,
         token: "other-user-group-record".into(),
         connected: true,
         desk: other_desk,
@@ -560,7 +546,7 @@ fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Se
         scenario
             .state
             .programming
-            .start(session.id, session.user.id);
+            .start(session.id);
         attach_session_command_context(&scenario.state, session);
         scenario
             .state

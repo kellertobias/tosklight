@@ -60,18 +60,16 @@ fn session_lifecycle_is_one_delta_per_change_to_the_desks_one_programmer() {
         events.clone(),
         Arc::new(HighlightRegistry::default()),
     );
-    let operator = UserId::new();
-    let legacy_user = UserId::new();
-    let first = lifecycle_context(operator);
-    let second = lifecycle_context(operator);
+    let first = lifecycle_context();
+    let second = lifecycle_context();
     // A surface arriving under an identity from before the collapse joins the same Programmer.
-    let third = lifecycle_context(legacy_user);
+    let third = lifecycle_context();
 
-    start_session(&service, &registry, &first, operator);
-    start_session(&service, &registry, &second, operator);
-    start_session(&service, &registry, &third, legacy_user);
-    disconnect_session(&service, &registry, &second, operator);
-    disconnect_session(&service, &registry, &first, operator);
+    start_session(&service, &registry, &first);
+    start_session(&service, &registry, &second);
+    start_session(&service, &registry, &third);
+    disconnect_session(&service, &registry, &second);
+    disconnect_session(&service, &registry, &first);
 
     let published = lifecycle_events(&events);
     assert_eq!(published.len(), 5);
@@ -107,7 +105,6 @@ fn session_lifecycle_is_one_delta_per_change_to_the_desks_one_programmer() {
     assert_eq!(snapshot.projection.revision, 5);
     assert_eq!(snapshot.projection.programmers.len(), 1);
     let row = &snapshot.projection.programmers[0];
-    assert_eq!(row.user_id, operator, "every surface is the one Programmer");
     assert_eq!(row.normal_value_count, 0);
     assert_eq!(row.sessions.len(), 1);
 
@@ -133,11 +130,10 @@ fn the_desks_programmer_is_removed_when_its_last_surface_disconnects() {
         events.clone(),
         Arc::new(HighlightRegistry::default()),
     );
-    let operator = UserId::new();
-    let only = lifecycle_context(operator);
+    let only = lifecycle_context();
 
-    start_session(&service, &registry, &only, operator);
-    disconnect_session(&service, &registry, &only, operator);
+    start_session(&service, &registry, &only);
+    disconnect_session(&service, &registry, &only);
 
     let published = lifecycle_events(&events);
     assert_eq!(published.len(), 2);
@@ -150,10 +146,9 @@ fn the_desks_programmer_is_removed_when_its_last_surface_disconnects() {
 #[test]
 fn count_changes_publish_after_authoritative_events_while_same_count_and_replay_stay_quiet() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
-    let context = lifecycle_context(user);
+    let context = lifecycle_context();
     let session = SessionId(context.session_id.unwrap());
-    registry.start(session, user);
+    registry.start(session);
     registry.attach_command_context(session, SessionId(context.desk_id));
     let events = EventBus::new(32);
     let highlight = Arc::new(HighlightRegistry::default());
@@ -283,9 +278,8 @@ fn lifecycle_snapshot_cursor_repairs_a_retention_gap() {
     );
     let mut contexts = Vec::new();
     for _ in 0..3 {
-        let user = UserId::new();
-        let context = lifecycle_context(user);
-        start_session(&service, &registry, &context, user);
+        let context = lifecycle_context();
+        start_session(&service, &registry, &context);
         contexts.push(context);
     }
     let subscription = events.subscribe(
@@ -311,33 +305,26 @@ fn lifecycle_snapshot_cursor_repairs_a_retention_gap() {
         .repair_from_snapshot(snapshot.event_sequence)
         .unwrap();
 
-    let next_user = UserId::new();
-    let next = lifecycle_context(next_user);
-    start_session(&service, &registry, &next, next_user);
+    let next = lifecycle_context();
+    start_session(&service, &registry, &next);
     let Some(SubscriptionDelivery::Event(event)) = subscription.try_next() else {
         panic!("delivery should resume after the lifecycle snapshot cursor")
     };
     assert_eq!(event.sequence, 4);
 }
 
-fn lifecycle_context(user: UserId) -> ActionContext {
-    ActionContext::operator(
-        Uuid::new_v4(),
-        user.0,
-        SessionId::new().0,
-        ActionSource::Http,
-    )
+fn lifecycle_context() -> ActionContext {
+    ActionContext::operator(Uuid::new_v4(), SessionId::new().0, ActionSource::Http)
 }
 
 fn start_session(
     service: &ProgrammingService,
     registry: &ProgrammerRegistry,
     context: &ActionContext,
-    user: UserId,
 ) {
     let session = SessionId(context.session_id.unwrap());
-    service.run_lifecycle_transition(context, user, || {
-        registry.start(session, user);
+    service.run_lifecycle_transition(context, || {
+        registry.start(session);
         registry.attach_command_context(session, SessionId(context.desk_id));
     });
 }
@@ -346,9 +333,8 @@ fn disconnect_session(
     service: &ProgrammingService,
     registry: &ProgrammerRegistry,
     context: &ActionContext,
-    user: UserId,
 ) {
-    service.run_lifecycle_transition(context, user, || {
+    service.run_lifecycle_transition(context, || {
         registry.disconnect(SessionId(context.session_id.unwrap()));
     });
 }

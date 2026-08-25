@@ -162,11 +162,9 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
 #[tokio::test]
 async fn command_history_is_desk_scoped_bounded_newest_first_and_redacted() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "history-token".into(),
         connected: true,
         desk: test_control_desk(),
@@ -174,7 +172,6 @@ async fn command_history_is_desk_scoped_bounded_newest_first_and_redacted() {
     let other = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user,
         token: "other-history-token".into(),
         connected: true,
         desk: ControlDesk {

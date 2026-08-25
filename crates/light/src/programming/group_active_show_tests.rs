@@ -1,6 +1,6 @@
 use super::*;
 use crate::{ProgrammingGroupRecordOperation, ProgrammingGroupRecordRequest};
-use light_core::{AttributeKey, AttributeValue, SessionId, UserId};
+use light_core::{AttributeKey, AttributeValue, SessionId};
 use light_programmer::{DerivedGroup, ProgrammerRegistry, SelectionExpression, SelectionRule};
 use light_show::ShowStore;
 use serde_json::{Value, json};
@@ -288,7 +288,7 @@ fn recording(
 ) -> ProgrammingGroupCommit {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select_expression(
         session,
         fixtures.into_iter().collect(),

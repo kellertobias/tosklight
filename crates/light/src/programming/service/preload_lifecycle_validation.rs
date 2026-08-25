@@ -3,11 +3,10 @@ use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPreloadLifecycleAction,
     ProgrammingPreloadLifecycleRequest, ProgrammingPreloadRevisionExpectation,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 
 pub(super) struct LifecycleIdentity {
     pub(super) session_id: SessionId,
-    pub(super) user_id: UserId,
     pub(super) request_id: String,
 }
 
@@ -107,10 +106,6 @@ pub(super) fn lifecycle_identity(
         .session_id
         .map(SessionId)
         .ok_or_else(|| unauthorized("Preload lifecycle actions require an operator session"))?;
-    let user_id =
-        action.context.user_id.map(UserId).ok_or_else(|| {
-            unauthorized("Preload lifecycle actions require an authenticated user")
-        })?;
     let request_id = action.context.request_id.as_deref().ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Invalid,
@@ -120,7 +115,6 @@ pub(super) fn lifecycle_identity(
     validate_request_id(request_id)?;
     Ok(LifecycleIdentity {
         session_id,
-        user_id,
         request_id: request_id.to_owned(),
     })
 }

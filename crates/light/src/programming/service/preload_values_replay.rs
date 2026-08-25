@@ -5,20 +5,18 @@ use super::values_replay_memory::{
     ENTRY_CONTAINER_OVERHEAD, ReplayLimits, preload_result_retained_bytes,
 };
 use crate::{ActionError, ActionErrorKind};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::collections::{HashMap, VecDeque};
 use std::mem::size_of;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ReplayKey {
-    user_id: UserId,
     desk_id: uuid::Uuid,
     session_id: SessionId,
     request_id: String,
 }
 
 pub(super) struct PreloadReplayIdentity {
-    pub(super) user_id: UserId,
     pub(super) desk_id: uuid::Uuid,
     pub(super) session_id: SessionId,
     pub(super) request_id: String,
@@ -27,7 +25,6 @@ pub(super) struct PreloadReplayIdentity {
 impl From<&PreloadReplayIdentity> for ReplayKey {
     fn from(identity: &PreloadReplayIdentity) -> Self {
         Self {
-            user_id: identity.user_id,
             desk_id: identity.desk_id,
             session_id: identity.session_id,
             request_id: identity.request_id.clone(),
@@ -50,9 +47,10 @@ pub(super) struct PreloadValuesReplayCache {
 }
 
 impl PreloadValuesReplayCache {
-    pub(super) fn invalidate_user(&mut self, user_id: UserId) {
-        self.entries.retain(|key, _| key.user_id != user_id);
-        self.order.retain(|key| key.user_id != user_id);
+    pub(super) fn invalidate(&mut self) {
+        // One desk, one Programmer: an invalidation clears the cache rather than one user's part.
+        self.entries.clear();
+        self.order.clear();
         self.retained_bytes = self
             .entries
             .values()
@@ -134,8 +132,8 @@ fn retained_entry_bytes(key: &ReplayKey, result: &ProgrammingPreloadValuesResult
 }
 
 impl ProgrammingService {
-    pub(in crate::programming) fn invalidate_preload_values_replay(&self, user_id: UserId) {
-        self.preload_values_replay.lock().invalidate_user(user_id);
+    pub(in crate::programming) fn invalidate_preload_values_replay(&self) {
+        self.preload_values_replay.lock().invalidate();
     }
 }
 
@@ -153,19 +151,18 @@ mod tests {
 
     #[test]
     fn byte_budget_evicts_oldest_large_projection() {
-        let user_id = UserId::new();
         let desk_id = Uuid::new_v4();
         let session_id = SessionId::new();
-        let first = result(user_id, desk_id, session_id, "first", 4_096);
-        let second = result(user_id, desk_id, session_id, "second", 4_096);
-        let first_key = key(user_id, desk_id, session_id, "first");
-        let second_key = key(user_id, desk_id, session_id, "second");
+        let first = result(desk_id, session_id, "first", 4_096);
+        let second = result(desk_id, session_id, "second", 4_096);
+        let first_key = key(desk_id, session_id, "first");
+        let second_key = key(desk_id, session_id, "second");
         let budget = retained_entry_bytes(&first_key, &first)
             + retained_entry_bytes(&second_key, &second)
             - 1;
         let mut cache = PreloadValuesReplayCache::with_limits(10, budget);
-        let first_identity = identity(user_id, desk_id, session_id, "first");
-        let second_identity = identity(user_id, desk_id, session_id, "second");
+        let first_identity = identity(desk_id, session_id, "first");
+        let second_identity = identity(desk_id, session_id, "second");
 
         cache.insert(first_identity, [1; 32], first);
         cache.insert(second_identity, [2; 32], second);
@@ -174,35 +171,28 @@ mod tests {
         assert!(cache.retained_bytes <= budget);
         assert!(
             cache
-                .get(&identity(user_id, desk_id, session_id, "first"), [1; 32])
+                .get(&identity(desk_id, session_id, "first"), [1; 32])
                 .unwrap()
                 .is_none()
         );
         assert!(
             cache
-                .get(&identity(user_id, desk_id, session_id, "second"), [2; 32])
+                .get(&identity(desk_id, session_id, "second"), [2; 32])
                 .unwrap()
                 .is_some()
         );
     }
 
-    fn key(user_id: UserId, desk_id: Uuid, session_id: SessionId, request_id: &str) -> ReplayKey {
+    fn key(desk_id: Uuid, session_id: SessionId, request_id: &str) -> ReplayKey {
         ReplayKey {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.into(),
         }
     }
 
-    fn identity(
-        user_id: UserId,
-        desk_id: Uuid,
-        session_id: SessionId,
-        request_id: &str,
-    ) -> PreloadReplayIdentity {
+    fn identity(desk_id: Uuid, session_id: SessionId, request_id: &str) -> PreloadReplayIdentity {
         PreloadReplayIdentity {
-            user_id,
             desk_id,
             session_id,
             request_id: request_id.into(),
@@ -210,7 +200,6 @@ mod tests {
     }
 
     fn result(
-        user_id: UserId,
         desk_id: Uuid,
         session_id: SessionId,
         request_id: &str,
@@ -218,7 +207,6 @@ mod tests {
     ) -> ProgrammingPreloadValuesResult {
         let projection = ProgrammingPreloadValuesProjection {
             dynamic_values: Vec::new(),
-            user_id,
             revision: 1,
             fixture_values: Vec::new(),
             group_values: vec![PreloadProgrammerGroupValue {
@@ -232,7 +220,7 @@ mod tests {
             }],
         };
         ProgrammingPreloadValuesResult {
-            context: ActionContext::operator(desk_id, user_id.0, session_id.0, ActionSource::Http)
+            context: ActionContext::operator(desk_id, session_id.0, ActionSource::Http)
                 .with_request_id(request_id)
                 .with_expected_revision(0),
             outcome: ProgrammingPreloadValuesOutcome::Changed {

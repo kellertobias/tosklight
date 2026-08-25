@@ -216,8 +216,6 @@ pub enum RenderQuality {
 pub struct DeskEndpoint {
     pub host: String,
     pub port: u16,
-    /// The user to join as, so the desk keeps one view per renderer rather than one for all.
-    pub user: String,
     /// Which renderer this is, for a desk driving more than one.
     pub target: String,
 }
@@ -516,7 +514,6 @@ mod tests {
                 desk: Some(DeskEndpoint {
                     host: "127.0.0.1".to_owned(),
                     port: 5000,
-                    user: "Operator".to_owned(),
                     target: "stage-pane".to_owned(),
                 }),
                 surface_service: Some("de.tokenet.tosklight.stage-pane.test".to_owned()),

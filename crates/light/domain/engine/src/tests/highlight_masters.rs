@@ -95,7 +95,7 @@ fn highlight_scenario() -> HighlightScenario {
     );
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     programmers.set(
         session,
         physical,

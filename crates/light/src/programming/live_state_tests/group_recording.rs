@@ -188,7 +188,6 @@ struct GroupSetup {
     service: ProgrammingService,
     ports: Arc<GroupPorts>,
     show_id: ShowId,
-    user_id: UserId,
     session_id: SessionId,
     context: ActionContext,
 }
@@ -196,11 +195,10 @@ struct GroupSetup {
 impl GroupSetup {
     fn new() -> Self {
         let registry = ProgrammerRegistry::default();
-        let user_id = UserId::new();
         let session_id = SessionId::new();
         let desk_id = Uuid::new_v4();
         let show_id = ShowId::new();
-        registry.start(session_id, user_id);
+        registry.start(session_id);
         registry.attach_command_context(session_id, SessionId(desk_id));
         let events = EventBus::default();
         Self {
@@ -213,9 +211,8 @@ impl GroupSetup {
             registry,
             events,
             show_id,
-            user_id,
             session_id,
-            context: ActionContext::operator(desk_id, user_id.0, session_id.0, ActionSource::Http),
+            context: ActionContext::operator(desk_id, session_id.0, ActionSource::Http),
         }
     }
 
@@ -536,7 +533,7 @@ fn every_surface_records_the_desks_one_selection() {
     let setup = GroupSetup::new();
     let peer_session = SessionId::new();
     let peer_desk = Uuid::new_v4();
-    setup.registry.start(peer_session, setup.user_id);
+    setup.registry.start(peer_session);
     setup
         .registry
         .attach_command_context(peer_session, SessionId(peer_desk));
@@ -555,13 +552,8 @@ fn every_surface_records_the_desks_one_selection() {
         .handle_group_recording(setup.action("shared-id", actor), setup.ports.as_ref())
         .unwrap();
 
-    let peer_context = ActionContext::operator(
-        peer_desk,
-        setup.user_id.0,
-        peer_session.0,
-        ActionSource::Http,
-    )
-    .with_request_id("shared-id");
+    let peer_context = ActionContext::operator(peer_desk, peer_session.0, ActionSource::Http)
+        .with_request_id("shared-id");
     setup
         .service
         .handle_group_recording(
@@ -590,7 +582,7 @@ fn revision_conflict_and_request_reuse_are_rejected() {
     let setup = GroupSetup::new();
     setup.registry.select(setup.session_id, [FixtureId::new()]);
     // An identity from before the collapse records onto the desk rather than being turned away.
-    let mut legacy = setup.action(
+    let legacy = setup.action(
         "legacy",
         setup.request(
             "legacy",
@@ -598,7 +590,6 @@ fn revision_conflict_and_request_reuse_are_rejected() {
             ProgrammingGroupRevisionExpectation::Current,
         ),
     );
-    legacy.context.user_id = Some(UserId::new().0);
     setup
         .service
         .handle_group_recording(legacy, setup.ports.as_ref())

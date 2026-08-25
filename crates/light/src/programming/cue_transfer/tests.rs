@@ -4,7 +4,7 @@ use crate::{
     ActiveShowService, ActiveShowUnitOfWork, ApplicationEvent, BackupIdentity, EventBus,
     EventFilter, EventReplay, ProgrammingService, ShowEvent,
 };
-use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, SessionId, ShowId, UserId};
+use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, SessionId, ShowId};
 use light_engine::EngineSnapshot;
 use light_playback::{
     Cue, CueChange, CueList, CueListMode, FlashReleaseMode, GroupCueChange, IntensityPriorityMode,
@@ -265,16 +265,15 @@ fn identical_request_replays_without_a_second_commit_or_event() {
     let rig = TestRig::standard();
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let desk = Uuid::from_u128(90);
-    registry.start(session, user);
+    registry.start(session);
     assert!(registry.attach_command_context(session, SessionId(desk)));
     let service = ProgrammingService::new(
         registry.clone(),
         rig.events.clone(),
         Arc::new(HighlightRegistry::default()),
     );
-    let context = ActionContext::operator(desk, user.0, session.0, ActionSource::Http);
+    let context = ActionContext::operator(desk, session.0, ActionSource::Http);
     let choice = service
         .prepare_cue_transfer_choice_within_interaction(
             &context,
@@ -382,13 +381,8 @@ impl TestRig {
     }
 
     fn context(&self) -> ActionContext {
-        ActionContext::operator(
-            Uuid::from_u128(1),
-            Uuid::from_u128(2),
-            Uuid::from_u128(3),
-            ActionSource::Http,
-        )
-        .with_request_id("cue-transfer-test")
+        ActionContext::operator(Uuid::from_u128(1), Uuid::from_u128(3), ActionSource::Http)
+            .with_request_id("cue-transfer-test")
     }
 
     fn request(

@@ -156,7 +156,7 @@ export class ProgrammingUpdateTransportError extends Error {
 export interface ProgrammingUpdateScope {
 	showId: string;
 	deskId: string;
-	userId: string;
+	sessionId: string;
 	initialShowRevision: number | null;
 }
 

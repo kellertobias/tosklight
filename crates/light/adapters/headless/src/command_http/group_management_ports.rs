@@ -28,13 +28,6 @@ impl GroupManagementPorts for ServerProgrammingPorts<'_> {
                 "Group management requires an operator session",
             )
         })?;
-        // Authentication still gates programming; which identity it is no longer selects a desk.
-        context.user_id.ok_or_else(|| {
-            ActionError::new(
-                ActionErrorKind::Unauthorized,
-                "Group management requires an authenticated user",
-            )
-        })?;
         let owner = ProgrammingInstallOwner {
             gesture: ProgrammingOwnerGesturePolicy::Preserve,
             highlight: ProgrammingOwnerHighlightPolicy::Reconcile,

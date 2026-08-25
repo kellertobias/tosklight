@@ -9,7 +9,6 @@ fn external_mode_changes_publish_one_exact_user_projection() {
     let setup = LiveSetup::new(8);
     let registry = setup.ports.registry.as_ref().unwrap();
     let session = SessionId(setup.context.session_id.unwrap());
-    let user = UserId(setup.context.user_id.unwrap());
     reset_projection_read_count();
 
     let result = setup
@@ -45,7 +44,6 @@ fn external_mode_changes_publish_one_exact_user_projection() {
     else {
         panic!("expected a typed capture-mode event")
     };
-    assert_eq!(change.projection.user_id, user);
     assert_eq!(change.projection.revision, 1);
     assert_eq!(
         change.projection.mode(),
@@ -114,17 +112,12 @@ fn typed_preload_handle_publishes_capture_mode_and_reconciles_exact_tuple() {
 fn capture_mode_is_the_desks_and_every_surface_reads_it() {
     let setup = LiveSetup::new(8);
     let registry = setup.ports.registry.as_ref().unwrap();
-    let user = UserId(setup.context.user_id.unwrap());
     let second_screen = SessionId::new();
     let screen_desk = Uuid::new_v4();
-    registry.start(second_screen, user);
+    registry.start(second_screen);
     registry.attach_command_context(second_screen, SessionId(screen_desk));
-    let screen_context = ActionContext::operator(
-        screen_desk,
-        user.0,
-        second_screen.0,
-        ActionSource::UserInterface,
-    );
+    let screen_context =
+        ActionContext::operator(screen_desk, second_screen.0, ActionSource::UserInterface);
     setup.handle(ProgrammingCommand::Preload {
         capture_programmer: false,
     });
@@ -134,21 +127,17 @@ fn capture_mode_is_the_desks_and_every_surface_reads_it() {
         .capture_mode_snapshot(&screen_context, &setup.ports)
         .unwrap();
     assert_eq!(snapshot.event_sequence, 1);
-    assert_eq!(snapshot.projection.user_id, user);
     assert_eq!(snapshot.projection.revision, 1);
     assert!(snapshot.projection.blind);
     assert!(!snapshot.projection.preload_capture_programmer);
 
     // An identity from before the desk had only one is not foreign: there is nothing left for it
     // to be foreign to, so it reads the desk's own capture mode.
-    let legacy = UserId::new();
-    let legacy_context =
-        ActionContext::operator(screen_desk, legacy.0, second_screen.0, ActionSource::Http);
+    let legacy_context = ActionContext::operator(screen_desk, second_screen.0, ActionSource::Http);
     let through_legacy_identity = setup
         .service
         .capture_mode_snapshot(&legacy_context, &setup.ports)
         .unwrap();
-    assert_eq!(through_legacy_identity.projection.user_id, user);
     assert!(through_legacy_identity.projection.blind);
 
     // Authentication still gates the read. A system context operates no surface.

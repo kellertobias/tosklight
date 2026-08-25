@@ -9,7 +9,7 @@ import {
 	lifecycleWriterHarness,
 	outcome,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 } from "./writerTestHarness";
 
 function controllerHarness(
@@ -20,7 +20,7 @@ function controllerHarness(
 	const refreshAuthority = vi.fn(async () => undefined);
 	const onError = vi.fn();
 	const controller = new ProgrammerPreloadLifecycleController({
-		scope: { showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID },
+		scope: { showId: SHOW_ID, sessionId: SESSION_ID, deskId: DESK_ID },
 		writer: setup.writer,
 		runtime: { store: setup.runtimeStore, activateDesk, refreshAuthority },
 		onError,

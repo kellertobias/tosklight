@@ -27,7 +27,7 @@ export function useCueTransferBoundaries(state: ServerState) {
 		state.connectionGeneration,
 		state.session?.session_id ?? "",
 		state.session?.client_id ?? "",
-		state.session?.user.id ?? "",
+		state.session?.session_id ?? "",
 		state.session?.desk.id ?? "",
 		state.bootstrap?.active_show?.id ?? "",
 	].join("|");

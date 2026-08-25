@@ -16,11 +16,11 @@ export function useProgrammerPriorityBoundaries(state: ServerState) {
 				? new HttpProgrammerPriorityTransport({
 						baseUrl: configuredServerUrl(),
 						sessionToken: state.session.token,
-						authenticatedUserId: state.session.user.id,
+						authenticatedSessionId: state.session.session_id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
 						applyAction: (scope, request) =>
 							state.api.programming.programmerPriorityLiveAction(
-								scope.userId,
+								scope.sessionId,
 								request,
 							),
 					})
@@ -29,7 +29,7 @@ export function useProgrammerPriorityBoundaries(state: ServerState) {
 	);
 	const authorityKey = [
 		configuredServerUrl(),
-		state.session?.user.id ?? "",
+		state.session?.session_id ?? "",
 	].join("|");
 	return {
 		programmerPriorityTransport: transport,

@@ -114,14 +114,10 @@ pub(super) fn playback_command() -> PlaybackCommand {
 }
 
 pub(super) fn trusted_context() -> ActionContext {
-    let mut context = ActionContext::operator(
-        Uuid::from_u128(1),
-        Uuid::from_u128(2),
-        Uuid::from_u128(3),
-        ActionSource::Http,
-    )
-    .with_request_id("forged")
-    .with_expected_revision(999);
+    let mut context =
+        ActionContext::operator(Uuid::from_u128(1), Uuid::from_u128(3), ActionSource::Http)
+            .with_request_id("forged")
+            .with_expected_revision(999);
     context.correlation_id = Uuid::from_u128(4);
     context
 }

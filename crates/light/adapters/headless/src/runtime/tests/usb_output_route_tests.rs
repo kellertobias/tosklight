@@ -3,16 +3,14 @@ use super::*;
 #[tokio::test]
 async fn usb_endpoint_api_authenticates_replays_guards_revision_and_persists() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "usb-endpoint-writer".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let app = router(state.clone());
     let unauthorized = app
@@ -104,16 +102,14 @@ async fn malformed_endpoint_setting_is_reported_and_requires_explicit_reset() {
         .installation
         .set_setting(crate::runtime::usb_output::USB_ENDPOINTS_SETTING, "{broken")
         .unwrap();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user,
         token: "usb-recovery".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, session.user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let app = router(state.clone());
     let snapshot = app

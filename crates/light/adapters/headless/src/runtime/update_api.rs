@@ -4,10 +4,10 @@ pub(super) async fn list_programmers(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<light_programmer::ProgrammerState>>, ApiError> {
-    let actor = authenticate(&state, &headers)?;
-    // Filter session ownership before cloning any complete compatibility row. New clients use
-    // narrow scoped projections; this endpoint remains only for authenticated migration callers.
-    let programmers = state.programming.active_for_user_sessions(actor.user.id);
+    authenticate(&state, &headers)?;
+    // Every connected surface operates the desk's one Programmer. New clients use narrow scoped
+    // projections; this endpoint remains only for authenticated migration callers.
+    let programmers = state.programming.active_for_sessions();
     Ok(Json(programmers))
 }
 

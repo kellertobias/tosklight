@@ -135,13 +135,13 @@ export function plannedDemoLayout() {
 }
 
 export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
-	const userId = api.session?.user.id;
-	if (!userId)
+	const sessionId = api.session?.session_id;
+	if (!sessionId)
 		throw new Error(
 			"Plan 76 desktop generation requires an authenticated user",
 		);
 	const existing = (await api.showObjects<any>(showId, "user_layout")).find(
-		(layout) => layout.id === userId,
+		(layout) => layout.id === sessionId,
 	);
 	const body = plannedDemoLayout();
 	const visibleBusking = existing?.body.desks?.find(
@@ -166,7 +166,7 @@ export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
 	await api.seedShowObject(
 		showId,
 		"user_layout",
-		userId,
+		sessionId,
 		body,
 		existing?.revision ?? 0,
 	);
@@ -177,18 +177,18 @@ export async function installPlannedDemoGroupProgrammingLayout(
 	api: ApiDriver,
 	showId: string,
 ) {
-	const userId = api.session?.user.id;
-	if (!userId)
+	const sessionId = api.session?.session_id;
+	if (!sessionId)
 		throw new Error("Group Programming desktop requires an authenticated user");
 	const existing = (await api.showObjects<any>(showId, "user_layout")).find(
-		(layout) => layout.id === userId,
+		(layout) => layout.id === sessionId,
 	);
 	const body = plannedDemoLayout();
 	body.activeDeskId = "group-programming";
 	await api.seedShowObject(
 		showId,
 		"user_layout",
-		userId,
+		sessionId,
 		body,
 		existing?.revision ?? 0,
 	);

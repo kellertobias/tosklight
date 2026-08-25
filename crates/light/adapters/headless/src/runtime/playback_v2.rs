@@ -338,12 +338,7 @@ fn json_values<T: serde::Serialize>(values: &[T]) -> Result<Vec<serde_json::Valu
 }
 
 fn http_context(session: &Session) -> ActionContext {
-    ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        ActionSource::Http,
-    )
+    ActionContext::operator(session.desk.id, session.id.0, ActionSource::Http)
 }
 
 struct PlaybackHttpError {

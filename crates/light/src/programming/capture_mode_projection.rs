@@ -1,13 +1,12 @@
 use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::{ProgrammerCaptureMode, ProgrammerRegistry};
 use std::sync::Arc;
 
 /// Authoritative user-owned capture mode shared by every desk session for one user.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammingCaptureModeProjection {
-    pub user_id: UserId,
     pub revision: u64,
     pub blind: bool,
     pub preview: bool,
@@ -30,26 +29,11 @@ impl ProgrammingCaptureModeProjection {
         let mode = programmers
             .capture_mode(session)
             .ok_or_else(capture_mode_unavailable)?;
-        let user_id = programmers.operated_desk_user(session).ok_or_else(|| {
-            ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the session does not operate this desk",
-            )
-        })?;
-        Ok(Self::from_mode(
-            user_id,
-            programmers.capture_mode_revision(),
-            mode,
-        ))
+        Ok(Self::from_mode(programmers.capture_mode_revision(), mode))
     }
 
-    pub(super) const fn from_mode(
-        user_id: UserId,
-        revision: u64,
-        mode: ProgrammerCaptureMode,
-    ) -> Self {
+    pub(super) const fn from_mode(revision: u64, mode: ProgrammerCaptureMode) -> Self {
         Self {
-            user_id,
             revision,
             blind: mode.blind,
             preview: mode.preview,
@@ -77,8 +61,7 @@ impl ProgrammingService {
         context: &ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingCaptureModeSnapshot, ActionError> {
-        // The identity must be there; which identity it is no longer selects anything.
-        let (session, _) = capture_identity(context)?;
+        let session = capture_identity(context)?;
         self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize(context)?;
             // A cursor captured before the immutable projection can permit a duplicate after
@@ -93,20 +76,14 @@ impl ProgrammingService {
     }
 }
 
-fn capture_identity(context: &ActionContext) -> Result<(SessionId, UserId), ActionError> {
+fn capture_identity(context: &ActionContext) -> Result<SessionId, ActionError> {
     let session = context.session_id.map(SessionId).ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "Programmer capture-mode snapshots require an operator session",
         )
     })?;
-    let user_id = context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Programmer capture-mode snapshots require an authenticated user",
-        )
-    })?;
-    Ok((session, user_id))
+    Ok(session)
 }
 
 fn capture_mode_unavailable() -> ActionError {

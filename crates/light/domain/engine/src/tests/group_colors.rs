@@ -41,7 +41,7 @@ fn group_color_engine(programmers: ProgrammerRegistry) -> (Engine, FixtureId) {
 fn group_color_is_structurally_above_playback_and_sampled_dynamics_below_programmer() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let (engine, fixture_id) = group_color_engine(programmers.clone());
     let group_color = Xyz {
         x: 0.1,

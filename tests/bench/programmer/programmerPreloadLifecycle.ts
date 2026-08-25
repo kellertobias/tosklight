@@ -84,7 +84,7 @@ async function applyProgrammerPreloadAction(
 	const fetch = intentFetch(dependencies);
 	const scope = {
 		showId: intent.showId,
-		userId: session.user.id,
+		sessionId: session.session_id,
 		deskId: session.desk.id,
 	};
 	const authority = await loadAuthority(api, session, intent.showId, action, fetch);
@@ -114,7 +114,7 @@ async function loadAuthority(
 	action: IntentAction,
 	fetch: typeof globalThis.fetch,
 ): Promise<LifecycleAuthority> {
-	const scope = { showId, userId: session.user.id };
+	const scope = { showId, sessionId: session.session_id };
 	const playback =
 		action.type === "go"
 			? loadPlaybackAuthority(api, session, showId, fetch)
@@ -176,7 +176,7 @@ function preloadValues(
 	return new HttpProgrammerPreloadValuesTransport({
 		baseUrl: api.baseUrl,
 		sessionToken: session.token,
-		authenticatedUserId: session.user.id,
+		authenticatedSessionId: session.session_id,
 		authenticatedDeskId: session.desk.id,
 		fetch,
 	});
@@ -190,7 +190,7 @@ function preloadQueue(
 	return new HttpProgrammerPreloadPlaybackQueueTransport({
 		baseUrl: api.baseUrl,
 		sessionToken: session.token,
-		authenticatedUserId: session.user.id,
+		authenticatedSessionId: session.session_id,
 		fetch,
 	});
 }
@@ -203,7 +203,7 @@ function lifecycleTransport(
 	return new HttpProgrammerPreloadLifecycleTransport({
 		baseUrl: api.baseUrl,
 		sessionToken: session.token,
-		authenticatedUserId: session.user.id,
+		authenticatedSessionId: session.session_id,
 		authenticatedDeskId: session.desk.id,
 		fetch,
 	});

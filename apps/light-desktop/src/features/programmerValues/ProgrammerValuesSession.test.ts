@@ -5,10 +5,10 @@ import { ProgrammerValuesStore } from "./store";
 import {
 	FakeProgrammerValuesTransport,
 	fixtureValue,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	settleProgrammerValuesSession,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -25,7 +25,7 @@ function createHarness(
 	const onError = vi.fn();
 	const session = new ProgrammerValuesSession({
 		showId: SHOW_ID,
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		store,
 		transport,
 		loadSnapshot,

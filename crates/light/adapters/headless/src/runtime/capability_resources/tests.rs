@@ -8,11 +8,6 @@ mod tests {
         Session {
             capability: light_core::SurfaceCapability::Programming,
             id: SessionId::new(),
-            user: DeskUser {
-                id: light_core::UserId(Uuid::new_v4()),
-                name: "Standalone operator".into(),
-                enabled: true,
-            },
             token: token.into(),
             connected: true,
             desk: ControlDesk {
@@ -367,10 +362,9 @@ mod tests {
         );
         let resource = ProgrammingResource::new(programmers, service);
         let session_id = SessionId(Uuid::from_u128(31));
-        let user_id = light_core::UserId(Uuid::from_u128(32));
         let fixture_id = light_core::FixtureId(Uuid::from_u128(33));
 
-        resource.start(session_id, user_id);
+        resource.start(session_id);
         resource.select(session_id, [fixture_id]);
         assert_eq!(
             resource

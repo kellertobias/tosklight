@@ -11,7 +11,7 @@ import {
 	fixtureValue,
 	groupValue,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	valuesProjection,
 } from "../../../features/programmerValues/testFixtures";
 import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
@@ -71,7 +71,7 @@ function provider(
 	return (
 		<ProgrammerValuesViewProvider
 			showId={SHOW_ID}
-			userId={USER_ID}
+			sessionId={SESSION_ID}
 			store={store}
 			transport={transport}
 			loadSnapshot={loadSnapshot}

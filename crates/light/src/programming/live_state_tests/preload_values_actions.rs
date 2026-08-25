@@ -49,7 +49,6 @@ struct PreloadValuesSetup {
     service: ProgrammingService,
     events: EventBus,
     session: SessionId,
-    user: UserId,
     context: ActionContext,
     fixtures: [FixtureId; 3],
     ports: PreloadValuesPorts,
@@ -59,10 +58,9 @@ impl PreloadValuesSetup {
     fn new() -> Self {
         let registry = ProgrammerRegistry::default();
         let session = SessionId::new();
-        let user = UserId::new();
         let desk = Uuid::new_v4();
         let fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
-        registry.start(session, user);
+        registry.start(session);
         registry.attach_command_context(session, SessionId(desk));
         let events = EventBus::new(64);
         let service = ProgrammingService::new(
@@ -75,8 +73,7 @@ impl PreloadValuesSetup {
             service,
             events,
             session,
-            user,
-            context: ActionContext::operator(desk, user.0, session.0, ActionSource::Http),
+            context: ActionContext::operator(desk, session.0, ActionSource::Http),
             fixtures,
             ports: PreloadValuesPorts {
                 environment: ProgrammingValuesEnvironment {
@@ -440,12 +437,11 @@ fn every_surface_shares_the_desks_pending_values() {
     let capture_revision = setup.enter_capture();
     let peer_session = SessionId::new();
     let peer_desk = Uuid::new_v4();
-    setup.registry.start(peer_session, setup.user);
+    setup.registry.start(peer_session);
     setup
         .registry
         .attach_command_context(peer_session, SessionId(peer_desk));
-    let peer_context =
-        ActionContext::operator(peer_desk, setup.user.0, peer_session.0, ActionSource::Http);
+    let peer_context = ActionContext::operator(peer_desk, peer_session.0, ActionSource::Http);
     setup
         .service
         .handle_preload_values(
@@ -472,12 +468,7 @@ fn every_surface_shares_the_desks_pending_values() {
     assert_eq!(peer.projection.group_values.len(), 1);
 
     // An identity from before the collapse reads the desk's pending values, not an empty set.
-    let legacy = ActionContext::operator(
-        peer_desk,
-        Uuid::new_v4(),
-        peer_session.0,
-        ActionSource::Http,
-    );
+    let legacy = ActionContext::operator(peer_desk, peer_session.0, ActionSource::Http);
     let through_legacy = setup
         .service
         .preload_values_snapshot(&legacy, &setup.ports)
@@ -597,11 +588,10 @@ fn legacy_clear_go_release_undo_and_lifecycle_publish_pending_transitions_once()
             );
         })
         .unwrap();
-    let target =
-        ProgrammingLifecycleTarget::new(setup.user, setup.session, vec![setup.context.desk_id]);
+    let target = ProgrammingLifecycleTarget::new(setup.session, vec![setup.context.desk_id]);
     let lifecycle = setup
         .service
-        .replace_user_programmer(&setup.context, &setup.ports, target, || {
+        .replace_desk_programmer(&setup.context, &setup.ports, target, || {
             setup.registry.clear(setup.session);
             ProgrammingLifecycleCompletion::new((), None)
         })

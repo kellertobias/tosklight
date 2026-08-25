@@ -5,7 +5,7 @@ fn selection_revision_identifies_operations_but_ignores_value_changes() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
 
     registry.select(session, [fixture]);
     let first = registry.selection(session).unwrap();
@@ -31,7 +31,7 @@ fn selection_revision_identifies_operations_but_ignores_value_changes() {
 fn persisted_programmer_omits_live_undo_and_redo_history() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.select(session, [FixtureId::new()]);
 
     let encoded = serde_json::to_value(registry.get(session).unwrap()).unwrap();
@@ -45,11 +45,10 @@ fn persisted_programmer_omits_live_undo_and_redo_history() {
 
 #[test]
 fn restored_session_aliases_are_retained_but_not_reported_as_live_connections() {
-    let user = UserId::new();
     let old_session = SessionId::new();
     let old_fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
     let source = ProgrammerRegistry::default();
-    source.start(old_session, user);
+    source.start(old_session);
     source.select(old_session, old_fixtures);
     let mut persisted = source.get(old_session).unwrap();
     persisted.connected = false;
@@ -67,9 +66,9 @@ fn restored_session_aliases_are_retained_but_not_reported_as_live_connections() 
 
     let current_session = SessionId::new();
     let current_fixtures = [FixtureId::new(), FixtureId::new()];
-    restored.start(current_session, user);
+    restored.start(current_session);
     restored.select(current_session, current_fixtures);
-    let lifecycle = restored.programmer_lifecycle(user).unwrap();
+    let lifecycle = restored.programmer_lifecycle().unwrap();
     assert_eq!(lifecycle.connected_sessions.len(), 1);
     assert_eq!(lifecycle.connected_sessions[0].session_id, current_session);
     assert_eq!(lifecycle.selected_fixture_count, 2);
@@ -81,7 +80,7 @@ fn revisioned_selection_replacement_cannot_overwrite_a_concurrent_change() {
     let session = SessionId::new();
     let first = FixtureId::new();
     let second = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     let expected = registry.selection(session).unwrap().revision;
 
     let accepted = registry
@@ -111,7 +110,7 @@ fn selection_projection_versions_the_gesture_boundary() {
     let session = SessionId::new();
     let first = FixtureId::new();
     let second = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
 
     assert!(registry.apply_selection_gesture(
         session,
@@ -150,8 +149,8 @@ fn a_connection_presenting_another_identity_joins_the_one_desk_programmer() {
     let first = SessionId::new();
     let second = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(first, UserId::new());
-    registry.start(second, UserId::new());
+    registry.start(first);
+    registry.start(second);
     registry.select(first, [fixture]);
     registry.set(
         first,
@@ -167,9 +166,9 @@ fn a_connection_presenting_another_identity_joins_the_one_desk_programmer() {
         AttributeValue::Normalized(1.0)
     );
     assert_eq!(
-        registry.get(first).unwrap().user_id,
-        registry.get(second).unwrap().user_id,
-        "both connections operate the same authority"
+        registry.get(first).unwrap().id,
+        registry.get(second).unwrap().id,
+        "both connections operate the same Programmer"
     );
 
     registry.set_group(
@@ -192,13 +191,12 @@ fn a_connection_presenting_another_identity_joins_the_one_desk_programmer() {
 /// command line, because the operator typing on either is typing on the desk.
 fn sessions_share_values_selection_and_one_command_line() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(first, user);
+    registry.start(first);
     registry.select(first, [fixture]);
-    registry.start(second, user);
+    registry.start(second);
     assert_eq!(registry.active().len(), 1);
     assert_eq!(registry.get(second).unwrap().selected, vec![fixture]);
     assert!(registry.set_command_line(first, "GROUP 1 +".into()));
@@ -223,26 +221,24 @@ fn sessions_share_values_selection_and_one_command_line() {
 /// The compatibility projection keyed by identity still answers, and now answers with every
 /// connection: a foreign identity is no longer foreign, so nothing is filtered out of the desk.
 #[test]
-fn the_identity_projection_returns_every_connection_to_the_one_desk() {
+fn the_projection_returns_every_connection_to_the_one_desk() {
     let registry = ProgrammerRegistry::default();
     let first = SessionId::new();
     let second = SessionId::new();
-    let arriving_as_someone_else = SessionId::new();
-    registry.start(first, UserId::new());
-    registry.start(second, UserId::new());
-    registry.start(arriving_as_someone_else, UserId::new());
-    let desk_user = registry.get(first).unwrap().user_id;
+    let third = SessionId::new();
+    registry.start(first);
+    registry.start(second);
+    registry.start(third);
     registry.set(
-        arriving_as_someone_else,
+        third,
         FixtureId::new(),
         AttributeKey::intensity(),
         AttributeValue::Normalized(0.5),
     );
 
-    let rows = registry.active_for_user_sessions(desk_user);
+    let rows = registry.active_for_sessions();
 
     assert_eq!(rows.len(), 3);
-    assert!(rows.iter().all(|row| row.user_id == desk_user));
     assert!(
         rows.iter().all(|row| row.values.len() == 1),
         "every connection observes the value any of them set"
@@ -255,16 +251,15 @@ fn the_identity_projection_returns_every_connection_to_the_one_desk() {
 /// working and simply lands where every other surface already is.
 fn every_surface_shares_the_desk_values_selection_and_command_interactions() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
     let hardware = SessionId::new();
     let saved_context = SessionId::new();
     let fixture = FixtureId::new();
 
-    registry.start(first, user);
-    registry.start(second, user);
-    registry.start(hardware, user);
+    registry.start(first);
+    registry.start(second);
+    registry.start(hardware);
     assert!(registry.attach_command_context(hardware, saved_context));
 
     registry.select(first, [fixture]);
@@ -292,13 +287,12 @@ fn every_surface_shares_the_desk_values_selection_and_command_interactions() {
 #[test]
 fn one_command_line_is_shared_by_every_surface_and_rejects_stale_replacements() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first = SessionId::new();
     let second = SessionId::new();
     let third = SessionId::new();
-    registry.start(first, user);
-    registry.start(second, user);
-    registry.start(third, user);
+    registry.start(first);
+    registry.start(second);
+    registry.start(third);
 
     let initial = registry.command_line_state(first).unwrap();
     assert_eq!(initial.visible_text(), "FIXTURE");
@@ -350,12 +344,11 @@ fn one_command_line_is_shared_by_every_surface_and_rejects_stale_replacements() 
 #[test]
 fn pending_command_choices_are_revisioned_shared_by_every_surface_and_cleared_by_edits() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first = SessionId::new();
     let peer = SessionId::new();
     let other = SessionId::new();
     for session in [first, peer, other] {
-        registry.start(session, user);
+        registry.start(session);
     }
     let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
     let edited = registry
@@ -410,7 +403,7 @@ fn pending_command_choices_are_revisioned_shared_by_every_surface_and_cleared_by
 fn concurrent_command_line_replacements_have_one_cas_winner() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
     let mut workers = Vec::new();
     for command in ["FIXTURE 1", "GROUP 1"] {
@@ -478,16 +471,15 @@ fn ordered_selection_sources_remove_and_readd_left_to_right_and_stay_live() {
 #[test]
 fn ordinary_selection_gestures_accumulate_across_the_desk_until_a_value_lands() {
     let registry = ProgrammerRegistry::default();
-    let user = UserId::new();
     let first = SessionId::new();
     let second_surface = SessionId::new();
     let third_surface = SessionId::new();
     let first_fixture = FixtureId::new();
     let second_fixture = FixtureId::new();
     let third_fixture = FixtureId::new();
-    registry.start(first, user);
-    registry.start(second_surface, user);
-    registry.start(third_surface, user);
+    registry.start(first);
+    registry.start(second_surface);
+    registry.start(third_surface);
 
     assert!(registry.apply_selection_gesture(
         first,

@@ -69,16 +69,14 @@ fn update_undo_snapshot(
 #[test]
 fn command_line_update_all_adds_new_group_content_without_using_a_desk_default() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "update-enter-default".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
 
@@ -132,7 +130,6 @@ fn command_line_update_all_adds_new_group_content_without_using_a_desk_default()
 #[test]
 fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_targets() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let desk = state
         .installation
         .add_desk("Manual Update")
@@ -140,12 +137,11 @@ fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "manual-update-grammar".into(),
         connected: true,
         desk,
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
 
@@ -276,16 +272,14 @@ fn touched_update_target_rejects_a_changed_playback_context_but_explicit_cue_rem
 #[test]
 fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "update-confirmation".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
 

@@ -18,7 +18,7 @@ import { CueTransferWriter } from "./writer";
 interface CueTransferProviderProps {
 	showId: string | null;
 	deskId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	authorityKey: string;
 	showStore: ShowObjectsStore;
 	programmingStore: ProgrammingInteractionStore;
@@ -34,7 +34,7 @@ export function CueTransferProvider({
 	children,
 	showId,
 	deskId,
-	userId,
+	sessionId,
 	authorityKey,
 	showStore,
 	programmingStore,
@@ -43,8 +43,8 @@ export function CueTransferProvider({
 	onError,
 }: PropsWithChildren<CueTransferProviderProps>) {
 	const scope = useMemo<CueTransferScope | null>(
-		() => (showId && deskId && userId ? { showId, deskId, userId } : null),
-		[deskId, showId, userId],
+		() => (showId && deskId && sessionId ? { showId, deskId, sessionId } : null),
+		[deskId, showId, sessionId],
 	);
 	const writer = useMemo(
 		() =>

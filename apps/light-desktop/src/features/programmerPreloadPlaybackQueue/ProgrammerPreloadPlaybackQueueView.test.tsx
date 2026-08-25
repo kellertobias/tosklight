@@ -13,7 +13,7 @@ import {
 	queueProjection,
 	queueSnapshot,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 function StaticProbe() {
@@ -42,7 +42,7 @@ describe("ProgrammerPreloadPlaybackQueueViewProvider", () => {
 		render(
 			<ProgrammerPreloadPlaybackQueueViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				authorityKey={AUTHORITY_A}
 				store={store}
 				transport={transport}
@@ -65,7 +65,7 @@ describe("ProgrammerPreloadPlaybackQueueViewProvider", () => {
 		render(
 			<ProgrammerPreloadPlaybackQueueViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				authorityKey={AUTHORITY_A}
 				store={store}
 				transport={transport}

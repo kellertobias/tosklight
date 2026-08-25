@@ -44,9 +44,7 @@ pub struct Options {
     /// provider protocol as a desk, but must neither open another planning window nor inherit a
     /// stored desk source.
     pub planning_server_requested: bool,
-    pub user: String,
     /// Set when this launch named the desk user, so stored preferences do not override it.
-    pub user_requested: bool,
     /// Which renderer this window is, for a desk driving more than one. The desk keeps one view
     /// per target, so two windows can be told to show two different things.
     pub target: String,
@@ -200,8 +198,6 @@ impl Default for Options {
             port: DEFAULT_DESK_PORT,
             desk_requested: false,
             planning_server_requested: false,
-            user: "Operator".to_owned(),
-            user_requested: false,
             target: "main".to_owned(),
             source: ProviderKind::LightingDesk,
             demo: false,
@@ -239,7 +235,6 @@ impl Options {
             "  --server <host>   Lighting-desk host or IP address (default 127.0.0.1)\n",
             "  --planning-server <host>  Existing Viz editor scene source\n",
             "  --port <1-65535>  Lighting-desk API port (default 5000)\n",
-            "  --user <name>     Desk user for the read-only visualizer session\n",
             "  --target <name>   Which renderer the desk addresses (default main)\n",
             "  --demo            Open the same canonical Demo Show shipped with Desk and Editor\n",
             "  --verify          Open the window, present one frame, and exit\n",
@@ -397,12 +392,6 @@ impl Options {
                     options.desk_requested = true;
                     options.planning_server_requested = true;
                 }
-                "--user" => {
-                    options.user = arguments
-                        .next()
-                        .ok_or_else(|| "--user needs a desk user name".to_owned())?;
-                    options.user_requested = true;
-                }
                 "--target" => {
                     options.target = arguments
                         .next()
@@ -498,7 +487,6 @@ pub struct Preferences {
     pub source: ProviderKind,
     pub host: String,
     pub port: u16,
-    pub user: String,
     /// `None` follows the source's quality; `Some` overrides it locally.
     pub quality_override: Option<RenderQuality>,
     pub atmosphere: AtmospherePreference,
@@ -546,7 +534,6 @@ impl Preferences {
             source: options.source,
             host: options.host.clone(),
             port: options.port,
-            user: options.user.clone(),
             quality_override: options.quality,
             atmosphere: match options.fog {
                 Some(amount) => AtmospherePreference { amount },
@@ -608,7 +595,6 @@ impl Preferences {
         text.push_str(&format!("source {}\n", self.source.wire()));
         text.push_str(&format!("host {}\n", self.host));
         text.push_str(&format!("port {}\n", self.port));
-        text.push_str(&format!("user {}\n", self.user));
         text.push_str(&format!(
             "quality {}\n",
             match self.quality_override {
@@ -676,7 +662,6 @@ impl Preferences {
             source: self.source.wire().into(),
             host: self.host.clone(),
             port: self.port,
-            user: self.user.clone(),
             quality: self.quality_override.map(|quality| quality.wire().into()),
             fog: self.atmosphere.amount,
             persistence: self.persistence.decay_seconds,
@@ -741,7 +726,6 @@ impl Preferences {
                         self.port = port;
                     }
                 }
-                "user" if !options.user_requested => self.user = value.to_owned(),
                 "quality" if options.quality.is_none() => {
                     self.quality_override = RenderQuality::from_wire(value);
                 }
@@ -1017,7 +1001,6 @@ mod preference_tests {
         let mut written = Preferences::from_options(&options);
         written.host = "10.0.0.9".into();
         written.port = 5310;
-        written.user = "Board Op".into();
         written.quality_override = Some(RenderQuality::High);
         written.atmosphere.amount = 0.24;
         written.persistence.decay_seconds = 0.06;
@@ -1044,7 +1027,6 @@ mod preference_tests {
 
         assert_eq!(read.host, "10.0.0.9");
         assert_eq!(read.port, 5310);
-        assert_eq!(read.user, "Board Op");
         assert_eq!(read.quality_override, Some(RenderQuality::High));
         assert!((read.atmosphere.amount - 0.24).abs() < 1e-6);
         assert!((read.persistence.decay_seconds - 0.06).abs() < 1e-6);

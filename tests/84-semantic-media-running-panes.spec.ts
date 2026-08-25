@@ -114,7 +114,7 @@ function runningMacro() {
 		source_revision: 3,
 		desk_id: "desk",
 		user_id: "operator",
-		session_id: "session",
+		session_id: "11111111-1111-4111-8111-111111111111",
 		state: "running" as const,
 		line: 1,
 		command: "CLEAR",

@@ -4,9 +4,8 @@ use super::*;
 fn narrow_capture_filters_every_family_and_strips_timing() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let fixture = FixtureId::new();
-    registry.start(session, user);
+    registry.start(session);
     for (attribute, value) in family_values() {
         registry.set_faded_with_timing(session, fixture, attribute, value, Some(1_000), Some(250));
     }
@@ -57,10 +56,9 @@ fn narrow_capture_filters_every_family_and_strips_timing() {
 fn narrow_capture_ignores_preload_and_transient_values() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let normal = FixtureId::new();
     let hidden = FixtureId::new();
-    registry.start(session, user);
+    registry.start(session);
     registry.set(
         session,
         normal,

@@ -12,7 +12,6 @@ const SESSION = {
 	session_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 	client_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
 	token: "session-token",
-	user: { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
 	desk: { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" },
 };
 

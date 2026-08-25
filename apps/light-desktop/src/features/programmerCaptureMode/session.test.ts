@@ -6,10 +6,10 @@ import {
 	captureModeProjection,
 	captureModeSnapshot,
 	FakeProgrammerCaptureModeTransport,
-	OTHER_USER_ID,
+	OTHER_SESSION_ID,
 	SHOW_ID,
 	settleCaptureModeSession,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 function createHarness() {
@@ -19,7 +19,7 @@ function createHarness() {
 	const onError = vi.fn();
 	const session = new ProgrammerCaptureModeSession({
 		showId: SHOW_ID,
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		store,
 		transport,
 		loadSnapshot,
@@ -180,7 +180,7 @@ describe("ProgrammerCaptureModeSession", () => {
 		const pending = deferred<ProgrammerCaptureModeSnapshot>();
 		const session = new ProgrammerCaptureModeSession({
 			showId: SHOW_ID,
-			userId: USER_ID,
+			sessionId: SESSION_ID,
 			store,
 			transport: null,
 			loadSnapshot: () => pending.promise,
@@ -189,13 +189,13 @@ describe("ProgrammerCaptureModeSession", () => {
 		await Promise.resolve();
 
 		session.stop();
-		store.reset("replacement-show", OTHER_USER_ID, "server-b");
+		store.reset("replacement-show", OTHER_SESSION_ID, "server-b");
 		pending.resolve(captureModeSnapshot({ revision: 99 }));
 		await settleCaptureModeSession();
 
 		expect(store.getSnapshot()).toMatchObject({
 			showId: "replacement-show",
-			userId: OTHER_USER_ID,
+			sessionId: OTHER_SESSION_ID,
 			projection: null,
 		});
 	});

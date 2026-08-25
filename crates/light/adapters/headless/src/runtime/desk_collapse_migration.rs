@@ -73,7 +73,6 @@ struct CollapseReport<'a> {
 #[derive(Serialize)]
 struct ReportedProgrammer<'a> {
     session_id: uuid::Uuid,
-    user_id: uuid::Uuid,
     updated_at: &'a str,
     /// What this Programmer held, so a listed-only entry still says whether it mattered.
     held: Held,
@@ -136,7 +135,6 @@ fn reported<'a>(session: &'a PersistedSession, whole: bool) -> ReportedProgramme
     let held = Held::read(&programmer);
     ReportedProgrammer {
         session_id: session.id.0,
-        user_id: session.user_id.0,
         updated_at: &session.updated_at,
         held,
         programmer: whole.then_some(programmer),
@@ -189,25 +187,19 @@ pub(super) fn write_collapse_report(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use light_core::{SessionId, UserId};
+    use light_core::SessionId;
 
-    fn session(id: u128, user: u128, updated_at: &str) -> PersistedSession {
-        programmed_session(id, user, updated_at, 1)
+    fn session(id: u128, updated_at: &str) -> PersistedSession {
+        programmed_session(id, updated_at, 1)
     }
 
     /// A persisted session holding `values` retained fixture values.
-    fn programmed_session(
-        id: u128,
-        user: u128,
-        updated_at: &str,
-        values: usize,
-    ) -> PersistedSession {
+    fn programmed_session(id: u128, updated_at: &str, values: usize) -> PersistedSession {
         let held = (0..values)
             .map(|index| serde_json::json!({ "fixture_id": index }))
             .collect::<Vec<_>>();
         PersistedSession {
             id: SessionId(uuid::Uuid::from_u128(id)),
-            user_id: UserId(uuid::Uuid::from_u128(user)),
             token: format!("token-{id}"),
             programmer_json: serde_json::json!({
                 "session_id": uuid::Uuid::from_u128(id),
@@ -228,7 +220,7 @@ mod tests {
 
     #[test]
     fn a_desk_with_one_programmer_keeps_it_and_supersedes_nothing() {
-        let only = session(1, 10, "2026-08-01T00:00:00Z");
+        let only = session(1, "2026-08-01T00:00:00Z");
         let collapse = DeskCollapse::decide(vec![only.clone()]);
         assert!(!collapse.superseded_anything());
         assert_eq!(collapse.canonical.unwrap().id, only.id);
@@ -237,21 +229,18 @@ mod tests {
     #[test]
     fn the_programmer_touched_most_recently_is_the_one_the_desk_keeps() {
         let collapse = DeskCollapse::decide(vec![
-            session(1, 10, "2026-08-01T00:00:00Z"),
-            session(2, 20, "2026-08-03T00:00:00Z"),
-            session(3, 30, "2026-08-02T00:00:00Z"),
+            session(1, "2026-08-01T00:00:00Z"),
+            session(2, "2026-08-03T00:00:00Z"),
+            session(3, "2026-08-02T00:00:00Z"),
         ]);
-        assert_eq!(
-            collapse.canonical.unwrap().user_id.0,
-            uuid::Uuid::from_u128(20)
-        );
+        assert_eq!(collapse.canonical.unwrap().id.0, uuid::Uuid::from_u128(2));
         assert_eq!(
             collapse
                 .superseded
                 .iter()
-                .map(|session| session.user_id.0)
+                .map(|session| session.id.0)
                 .collect::<Vec<_>>(),
-            vec![uuid::Uuid::from_u128(30), uuid::Uuid::from_u128(10)],
+            vec![uuid::Uuid::from_u128(3), uuid::Uuid::from_u128(1)],
             "superseded Programmers are reported newest first"
         );
     }
@@ -260,8 +249,8 @@ mod tests {
     fn the_same_database_always_collapses_the_same_way() {
         let tied = || {
             vec![
-                session(2, 20, "2026-08-03T00:00:00Z"),
-                session(1, 10, "2026-08-03T00:00:00Z"),
+                session(2, "2026-08-03T00:00:00Z"),
+                session(1, "2026-08-03T00:00:00Z"),
             ]
         };
         let first = DeskCollapse::decide(tied());
@@ -279,8 +268,8 @@ mod tests {
     fn a_superseded_programmer_is_written_out_where_it_can_be_recovered() {
         let directory = scratch_directory();
         let collapse = DeskCollapse::decide(vec![
-            session(1, 10, "2026-08-01T00:00:00Z"),
-            session(2, 20, "2026-08-03T00:00:00Z"),
+            session(1, "2026-08-01T00:00:00Z"),
+            session(2, "2026-08-03T00:00:00Z"),
         ]);
 
         let path = write_collapse_report(&directory, &collapse, "2026-08-23T12:00:00Z").unwrap();
@@ -288,8 +277,8 @@ mod tests {
         let written: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
-            written["kept"]["user_id"],
-            uuid::Uuid::from_u128(20).to_string()
+            written["kept"]["session_id"],
+            uuid::Uuid::from_u128(2).to_string()
         );
         assert_eq!(written["superseded"].as_array().unwrap().len(), 1);
         assert_eq!(
@@ -315,16 +304,11 @@ mod tests {
         let directory = scratch_directory();
         let mut sessions = (0..60)
             .map(|index| {
-                programmed_session(
-                    index + 1,
-                    10,
-                    &format!("2026-08-01T00:{:02}:00Z", index),
-                    40,
-                )
+                programmed_session(index + 1, &format!("2026-08-01T00:{:02}:00Z", index), 40)
             })
             .collect::<Vec<_>>();
         // An empty Programmer has nothing to recover, so it is listed rather than copied.
-        sessions.push(programmed_session(999, 10, "2026-08-01T00:00:30Z", 0));
+        sessions.push(programmed_session(999, "2026-08-01T00:00:30Z", 0));
         let collapse = DeskCollapse::decide(sessions);
 
         let path = write_collapse_report(&directory, &collapse, "2026-08-23T12:00:00Z").unwrap();
@@ -385,8 +369,8 @@ mod tests {
         let stored = store.put_screen(screen.clone()).unwrap();
 
         let collapse = DeskCollapse::decide(vec![
-            session(1, 10, "2026-08-01T00:00:00Z"),
-            session(2, 20, "2026-08-03T00:00:00Z"),
+            session(1, "2026-08-01T00:00:00Z"),
+            session(2, "2026-08-03T00:00:00Z"),
         ]);
         write_collapse_report(&directory, &collapse, "2026-08-23T12:00:00Z").unwrap();
 

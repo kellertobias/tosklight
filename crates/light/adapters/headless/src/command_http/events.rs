@@ -38,7 +38,6 @@ fn publish_osc_error(state: &AppState, session: &Session, result: &ProgrammingRe
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "command":command,
             "error":if sensitive { "Sensitive input omitted" } else { error },
             "source":"osc",
@@ -62,7 +61,6 @@ fn publish_osc_accepted(
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "command":action_name(action),
             "source":"osc",
             "command_line":result.command_line.visible_text(),
@@ -86,7 +84,6 @@ fn publish_osc_applied(
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "path":path,
             "command":command,
             "source":"osc",
@@ -185,7 +182,6 @@ fn publish_accepted_event(
                 "request_id":request_id,
                 "desk_id":session.desk.id,
                 "session_id":session.id,
-                "user_id":session.user.id,
                 "command":"programmer.execute",
                 "source":source,
             }),
@@ -215,7 +211,6 @@ fn publish_key_phase_if_needed(
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "key":"SHIFT",
             "phase":if action == ProgrammingAction::ShiftPressed { "press" } else { "release" },
             "source":source,
@@ -239,7 +234,6 @@ fn publish_programmer_changed(
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "command":action_name(action),
             "source":source,
             "request_id":request_id,
@@ -268,7 +262,6 @@ fn publish_rejection_event(
             "request_id":request_id,
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "command":audit_command,
             "error":if sensitive { "Sensitive input omitted" } else { error },
             "source":source,
@@ -294,7 +287,6 @@ pub(super) fn persist_with_warning(
         serde_json::json!({
             "desk_id":session.desk.id,
             "session_id":session.id,
-            "user_id":session.user.id,
             "request_id":request_id,
             "operation":operation,
             "source":source,

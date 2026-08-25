@@ -6,36 +6,33 @@ use super::{
     ProgrammingPriorityChange, ProgrammingService, ProgrammingValuesChange,
 };
 use crate::{ActionContext, ActionError, ActionErrorKind};
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use light_programmer::ProgrammerCaptureMode;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Explicit target identity for replacing one user's live Programmer authority.
+/// The session whose live Programmer authority is being replaced.
 ///
-/// The acting identity remains in `ActionContext`; it is deliberately not inferred from this
-/// target. Desk IDs identify every live interaction scope that must be excluded after the target
-/// user gate has been acquired.
+/// Desk IDs identify every live interaction scope that must be excluded after the desk's gate has
+/// been acquired.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammingLifecycleTarget {
-    pub user_id: UserId,
     pub current_session_id: SessionId,
     desk_ids: Vec<Uuid>,
 }
 
 impl ProgrammingLifecycleTarget {
-    pub fn new(user_id: UserId, current_session_id: SessionId, mut desk_ids: Vec<Uuid>) -> Self {
+    pub fn new(current_session_id: SessionId, mut desk_ids: Vec<Uuid>) -> Self {
         desk_ids.sort_unstable();
         desk_ids.dedup();
         Self {
-            user_id,
             current_session_id,
             desk_ids,
         }
     }
 }
 
-/// Adapter completion for a target-user lifecycle mutation.
+/// Adapter completion for a lifecycle mutation.
 #[derive(Debug)]
 pub struct ProgrammingLifecycleCompletion<T> {
     pub output: T,
@@ -51,7 +48,7 @@ impl<T> ProgrammingLifecycleCompletion<T> {
     }
 }
 
-/// Result of replacing a Programmer authority and publishing its user-owned projections.
+/// Result of replacing the Programmer authority and publishing its projections.
 #[derive(Debug)]
 pub struct ProgrammingLifecycleResult<T> {
     pub output: T,
@@ -68,11 +65,11 @@ pub struct ProgrammingLifecycleResult<T> {
 }
 
 impl ProgrammingService {
-    /// Replace one explicitly targeted user's Programmer while authorizing a separate actor.
+    /// Replace the desk's Programmer.
     ///
     /// Server adapters must acquire their show-activation guard before entering this boundary.
-    /// Lock order within it is target user followed by the target user's sorted live desk gates.
-    pub fn replace_user_programmer<T>(
+    /// Lock order within it is the Programmer gate followed by the sorted live desk gates.
+    pub fn replace_desk_programmer<T>(
         &self,
         actor_context: &ActionContext,
         ports: &dyn ProgrammingPorts,
@@ -83,19 +80,19 @@ impl ProgrammingService {
         let desk_ids = target.desk_ids.clone();
         self.programmers.serialized(|| {
             self.with_desk_gates(&desk_ids, || {
-                self.replace_user_programmer_locked(actor_context, target, operation)
+                self.replace_desk_programmer_locked(actor_context, target, operation)
             })
         })
     }
 
-    fn replace_user_programmer_locked<T>(
+    fn replace_desk_programmer_locked<T>(
         &self,
         actor_context: &ActionContext,
         target: ProgrammingLifecycleTarget,
         operation: impl FnOnce() -> ProgrammingLifecycleCompletion<T>,
     ) -> Result<ProgrammingLifecycleResult<T>, ActionError> {
         self.assert_lifecycle_target(&target)?;
-        let lifecycle_before = self.active_lifecycle_programmer(target.user_id);
+        let lifecycle_before = self.active_lifecycle_programmer();
         let before_values =
             ProgrammingValuesContent::read(&self.programmers, target.current_session_id)?;
         let before_mode = self
@@ -104,7 +101,6 @@ impl ProgrammingService {
             .ok_or_else(lifecycle_target_unavailable)?;
         let before_priority = self.priority_projection(
             target.current_session_id,
-            target.user_id,
             self.programmers.priority_revision(),
         )?;
         let before_preload_values =
@@ -114,36 +110,32 @@ impl ProgrammingService {
             target.current_session_id,
         )?;
         let completion = operation();
-        self.invalidate_values_replay(target.user_id);
-        self.invalidate_preload_values_replay(target.user_id);
-        self.invalidate_priority_replay(target.user_id);
-        self.invalidate_cue_recording_replay(target.user_id);
-        self.invalidate_cue_deletion_replay(target.user_id);
-        self.invalidate_cue_transfer_authority(target.user_id);
-        self.invalidate_group_management_replay(target.user_id);
-        self.invalidate_group_recording_replay(target.user_id);
-        self.invalidate_preset_recording_replay(target.user_id);
-        self.invalidate_update_replay(target.user_id);
+        self.invalidate_values_replay();
+        self.invalidate_preload_values_replay();
+        self.invalidate_priority_replay();
+        self.invalidate_cue_recording_replay();
+        self.invalidate_cue_deletion_replay();
+        self.invalidate_cue_transfer_authority();
+        self.invalidate_group_management_replay();
+        self.invalidate_group_recording_replay();
+        self.invalidate_preset_recording_replay();
+        self.invalidate_update_replay();
         let after_values = self.lifecycle_values(completion.replacement_session_id)?;
         let after_preload_values =
             self.lifecycle_preload_values(completion.replacement_session_id)?;
         let after_preload_playback_queue =
             self.lifecycle_preload_playback_queue(completion.replacement_session_id)?;
         let after_mode = self.lifecycle_mode(completion.replacement_session_id)?;
-        let values = self.lifecycle_values_change(target.user_id, before_values, after_values);
-        let preload_values = self.lifecycle_preload_values_change(
-            target.user_id,
-            before_preload_values,
-            after_preload_values,
-        );
-        let capture_mode = self.capture_mode_change(target.user_id, before_mode, after_mode);
+        let values = self.lifecycle_values_change(before_values, after_values);
+        let preload_values =
+            self.lifecycle_preload_values_change(before_preload_values, after_preload_values);
+        let capture_mode = self.capture_mode_change(before_mode, after_mode);
         let priority = self.lifecycle_priority_change(
             &target,
             completion.replacement_session_id,
             before_priority,
         )?;
         let preload_playback_queue = self.lifecycle_preload_playback_queue_change(
-            target.user_id,
             before_preload_playback_queue,
             after_preload_playback_queue,
         );
@@ -155,7 +147,7 @@ impl ProgrammingService {
             self.publish_preload_values(actor_context, preload_values);
         let preload_playback_queue_event_sequence =
             self.publish_preload_playback_queue(actor_context, preload_playback_queue);
-        self.publish_lifecycle_for_user(actor_context, target.user_id, lifecycle_before);
+        self.publish_lifecycle(actor_context, lifecycle_before);
         Ok(ProgrammingLifecycleResult {
             output: completion.output,
             values_revision: self.programmers.normal_values_revision(),
@@ -175,11 +167,11 @@ impl ProgrammingService {
         &self,
         target: &ProgrammingLifecycleTarget,
     ) -> Result<(), ActionError> {
-        // The desk has one Programmer, so a session it knows operates that one. This used to
-        // compare the presented identity as well, which could only ever compare it against itself.
-        match self.programmers.user_id(target.current_session_id) {
-            Some(_) => Ok(()),
-            None => Err(lifecycle_target_unavailable()),
+        // The desk has one Programmer, so a session it knows operates that one.
+        if self.programmers.knows_session(target.current_session_id) {
+            Ok(())
+        } else {
+            Err(lifecycle_target_unavailable())
         }
     }
 
@@ -232,7 +224,7 @@ impl ProgrammingService {
 
     fn lifecycle_priority_change(
         &self,
-        target: &ProgrammingLifecycleTarget,
+        _target: &ProgrammingLifecycleTarget,
         replacement: Option<SessionId>,
         before: super::ProgrammingPriorityProjection,
     ) -> Result<Option<ProgrammingPriorityChange>, ActionError> {
@@ -241,10 +233,7 @@ impl ProgrammingService {
             if revision <= before.revision {
                 revision = self.programmers.advance_priority_revision();
             }
-            return Ok(Some(ProgrammingPriorityChange::Remove {
-                user_id: target.user_id,
-                revision,
-            }));
+            return Ok(Some(ProgrammingPriorityChange::Remove { revision }));
         };
         if !self.programmers.knows_session(session) {
             return Err(ActionError::new(
@@ -253,7 +242,7 @@ impl ProgrammingService {
             ));
         }
         let mut revision = self.programmers.priority_revision();
-        let mut after = self.priority_projection(session, target.user_id, revision)?;
+        let mut after = self.priority_projection(session, revision)?;
         if after != before && revision <= before.revision {
             revision = self.programmers.advance_priority_revision();
             after.revision = revision;
@@ -263,7 +252,6 @@ impl ProgrammingService {
 
     fn lifecycle_values_change(
         &self,
-        user_id: UserId,
         before: ProgrammingValuesContent,
         after: ProgrammingValuesContent,
     ) -> Option<ProgrammingValuesChange> {
@@ -271,12 +259,11 @@ impl ProgrammingService {
             return None;
         }
         let revision = self.programmers.advance_normal_values_revision();
-        Some(after.change(&before, user_id, revision))
+        Some(after.change(&before, revision))
     }
 
     fn lifecycle_preload_values_change(
         &self,
-        user_id: UserId,
         before: ProgrammingPreloadValuesContent,
         after: ProgrammingPreloadValuesContent,
     ) -> Option<ProgrammingPreloadValuesChange> {
@@ -285,13 +272,12 @@ impl ProgrammingService {
         }
         let revision = self.programmers.advance_preload_values_revision();
         Some(ProgrammingPreloadValuesChange {
-            projection: Arc::new(after.projection(user_id, revision)),
+            projection: Arc::new(after.projection(revision)),
         })
     }
 
     fn lifecycle_preload_playback_queue_change(
         &self,
-        user_id: UserId,
         before: ProgrammingPreloadPlaybackQueueContent,
         after: ProgrammingPreloadPlaybackQueueContent,
     ) -> Option<ProgrammingPreloadPlaybackQueueChange> {
@@ -300,7 +286,7 @@ impl ProgrammingService {
         }
         let revision = self.programmers.advance_preload_playback_queue_revision();
         Some(ProgrammingPreloadPlaybackQueueChange {
-            projection: Arc::new(after.projection(user_id, revision)),
+            projection: Arc::new(after.projection(revision)),
         })
     }
 }

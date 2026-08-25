@@ -437,13 +437,8 @@ impl TestRig {
     }
 
     fn context(&self) -> ActionContext {
-        ActionContext::operator(
-            Uuid::from_u128(1),
-            Uuid::from_u128(2),
-            Uuid::from_u128(3),
-            ActionSource::Http,
-        )
-        .with_request_id("cue-test")
+        ActionContext::operator(Uuid::from_u128(1), Uuid::from_u128(3), ActionSource::Http)
+            .with_request_id("cue-test")
     }
 
     fn seed(&self, kind: &str, id: &str, body: Value) {

@@ -21,7 +21,7 @@ import type { ProgrammerPriorityTransport } from "./transport";
 import { ProgrammerPriorityWriter } from "./writer";
 
 export interface ProgrammerPriorityProviderProps {
-	userId: string | null;
+	sessionId: string | null;
 	authorityKey: string;
 	store: ProgrammerPriorityStore;
 	transport: ProgrammerPriorityTransport | null;
@@ -62,7 +62,7 @@ const DISABLED_VIEW: ProgrammerPriorityView = {
 
 export function ProgrammerPriorityProvider({
 	children,
-	userId,
+	sessionId,
 	authorityKey,
 	store,
 	transport,
@@ -70,8 +70,8 @@ export function ProgrammerPriorityProvider({
 	onMutationError,
 }: PropsWithChildren<ProgrammerPriorityProviderProps>) {
 	const scope = useMemo<ProgrammerPriorityScope | null>(
-		() => (userId ? { userId } : null),
-		[userId],
+		() => (sessionId ? { sessionId } : null),
+		[sessionId],
 	);
 	const session = useMemo(
 		() =>
@@ -104,8 +104,8 @@ export function ProgrammerPriorityProvider({
 		[session, store],
 	);
 	useLayoutEffect(() => {
-		store.reset(userId, authorityKey);
-	}, [authorityKey, store, userId]);
+		store.reset(sessionId, authorityKey);
+	}, [authorityKey, store, sessionId]);
 	useStrictModeSafeStop(session);
 	useStrictModeSafeStop(writer);
 	return (

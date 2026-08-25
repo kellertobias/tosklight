@@ -9,7 +9,7 @@ import {
 	deferred,
 	priorityProjection,
 	prioritySnapshot,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 import type { ProgrammerPriorityTransport } from "./transport";
 import { ProgrammerPriorityTransportError } from "./transport";
@@ -17,7 +17,7 @@ import { ProgrammerPriorityWriter } from "./writer";
 
 function harness() {
 	const store = new ProgrammerPriorityStore();
-	store.reset(USER_ID, "session-a");
+	store.reset(SESSION_ID, "session-a");
 	store.installSnapshot(prioritySnapshot());
 	const applyAction = vi.fn<ProgrammerPriorityTransport["applyAction"]>();
 	const repair = vi.fn(async (_error: Error) => undefined);
@@ -28,7 +28,7 @@ function harness() {
 		subscribe: vi.fn(),
 	};
 	const writer = new ProgrammerPriorityWriter({
-		scope: { userId: USER_ID },
+		scope: { sessionId: SESSION_ID },
 		store,
 		transport,
 		repair,
@@ -215,7 +215,7 @@ describe("ProgrammerPriorityWriter", () => {
 		await Promise.resolve();
 		const lateRequest = applyAction.mock.calls[1]?.[1];
 		if (!lateRequest) throw new Error("missing late request");
-		store.reset(USER_ID, "session-b");
+		store.reset(SESSION_ID, "session-b");
 		replacement.resolve(changed(lateRequest, 13));
 		await expect(late).resolves.toBeNull();
 		expect(store.getSnapshot()).toMatchObject({

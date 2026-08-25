@@ -25,7 +25,7 @@ import { programmingUuidAt } from "./programmingWireProjection";
 export interface HttpProgrammerPriorityTransportOptions {
 	baseUrl: string;
 	sessionToken: string;
-	authenticatedUserId: string;
+	authenticatedSessionId: string;
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
 	webSocket?: typeof globalThis.WebSocket;
@@ -43,7 +43,7 @@ export class HttpProgrammerPriorityTransport
 	constructor(
 		private readonly options: HttpProgrammerPriorityTransportOptions,
 	) {
-		programmingUuidAt(options.authenticatedUserId, "$.authenticatedUserId");
+		programmingUuidAt(options.authenticatedSessionId, "$.authenticatedSessionId");
 		this.baseUrl = options.baseUrl.replace(/\/$/, "");
 		this.fetchImplementation =
 			options.fetch ?? globalThis.fetch.bind(globalThis);
@@ -92,7 +92,7 @@ export class HttpProgrammerPriorityTransport
 			this.protocols(),
 		);
 		const lifecycle = { explicitlyClosed: false };
-		bindSocket(socket, scope.userId, afterSequence, observer, lifecycle);
+		bindSocket(socket, scope.sessionId, afterSequence, observer, lifecycle);
 		return eventStream(socket, this.WebSocketImplementation.OPEN, lifecycle);
 	}
 
@@ -108,8 +108,8 @@ export class HttpProgrammerPriorityTransport
 	}
 
 	private validateScope(scope: ProgrammerPriorityScope) {
-		const userId = programmingUuidAt(scope.userId, "$.scope.userId");
-		if (userId.toLowerCase() !== this.options.authenticatedUserId.toLowerCase())
+		const sessionId = programmingUuidAt(scope.sessionId, "$.scope.sessionId");
+		if (sessionId.toLowerCase() !== this.options.authenticatedSessionId.toLowerCase())
 			throw new ProgrammerPriorityProtocolError(
 				"Programmer priority scope does not match the authenticated user",
 			);
@@ -157,13 +157,13 @@ interface SocketLifecycle {
 
 function bindSocket(
 	socket: WebSocket,
-	userId: string,
+	sessionId: string,
 	afterSequence: number | null,
 	observer: ProgrammerPriorityEventObserver,
 	lifecycle: SocketLifecycle,
 ) {
 	socket.addEventListener("open", () =>
-		socket.send(JSON.stringify(prioritySubscription(userId, afterSequence))),
+		socket.send(JSON.stringify(prioritySubscription(sessionId, afterSequence))),
 	);
 	socket.addEventListener("message", (event) =>
 		deliverEvent(event, observer),
@@ -209,7 +209,7 @@ function deliverEvent(
 }
 
 function prioritySubscription(
-	userId: string,
+	sessionId: string,
 	afterSequence: number | null,
 ): EventClientMessage {
 	return {

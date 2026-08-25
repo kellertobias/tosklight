@@ -110,9 +110,8 @@ impl ProgrammingResource {
     pub(in crate::runtime) fn start(
         &self,
         session_id: SessionId,
-        user_id: light_core::UserId,
     ) -> light_programmer::ProgrammerState {
-        self.programmers.start(session_id, user_id)
+        self.programmers.start(session_id)
     }
 
     #[cfg(test)]
@@ -146,16 +145,8 @@ impl ProgrammingResource {
         self.programmers.active()
     }
 
-    #[cfg(test)]
     pub(in crate::runtime) fn active_for_sessions(&self) -> Vec<light_programmer::ProgrammerState> {
         self.programmers.active_for_sessions()
-    }
-
-    pub(in crate::runtime) fn active_for_user_sessions(
-        &self,
-        user_id: light_core::UserId,
-    ) -> Vec<light_programmer::ProgrammerState> {
-        self.programmers.active_for_user_sessions(user_id)
     }
 
     pub(in crate::runtime) fn select(
@@ -802,11 +793,9 @@ impl ProgrammingResource {
     pub(in crate::runtime) fn run_lifecycle_transition<T>(
         &self,
         context: &light_application::ActionContext,
-        user_id: light_core::UserId,
         operation: impl FnOnce() -> T,
     ) -> T {
-        self.service
-            .run_lifecycle_transition(context, user_id, operation)
+        self.service.run_lifecycle_transition(context, operation)
     }
 
     pub(in crate::runtime) fn handle_cue_deletion<
@@ -933,7 +922,7 @@ impl ProgrammingResource {
             .run_selection_refresh_within_interaction(context, operation)
     }
 
-    pub(in crate::runtime) fn replace_user_programmer<T>(
+    pub(in crate::runtime) fn replace_desk_programmer<T>(
         &self,
         context: &light_application::ActionContext,
         ports: &dyn light_application::ProgrammingPorts,
@@ -942,7 +931,7 @@ impl ProgrammingResource {
     ) -> Result<light_application::ProgrammingLifecycleResult<T>, light_application::ActionError>
     {
         self.service
-            .replace_user_programmer(context, ports, target, operation)
+            .replace_desk_programmer(context, ports, target, operation)
     }
 
     pub(in crate::runtime) fn update_within_interaction<

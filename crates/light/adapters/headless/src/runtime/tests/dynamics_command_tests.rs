@@ -2,16 +2,14 @@
 fn fix_at_command_uses_first_class_fat_timing_and_the_final_contribution_path() {
     let clock = Arc::new(ManualClock::new(fixed_test_time()));
     let (state, data_dir) = test_state_with_clock(clock.clone());
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "fix-at-command".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let fixture = light_core::FixtureId::new();
     state.programming.select(session.id, [fixture]);
@@ -89,16 +87,14 @@ fn fix_at_command_uses_first_class_fat_timing_and_the_final_contribution_path() 
 #[test]
 fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tracks() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "release-command".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let fixture = light_core::FixtureId::new();
     state.programming.select(session.id, [fixture]);
@@ -177,16 +173,14 @@ fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tra
 #[test]
 fn fix_at_command_accepts_a_named_preset_batch_with_timing() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "fix-at-preset".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let fixture = light_core::FixtureId::new();
     state.programming.select(session.id, [fixture]);
@@ -250,16 +244,14 @@ fn fix_at_command_accepts_a_named_preset_batch_with_timing() {
 #[test]
 fn preload_dynamic_start_stays_projected_until_go_then_installs_and_persists_runtime() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "preload-dynamic".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let fixture = light_core::FixtureId::new();
     state.programming.select(session.id, [fixture]);
     let dynamic_id = uuid::Uuid::new_v4();
@@ -334,16 +326,14 @@ fn preload_dynamic_start_stays_projected_until_go_then_installs_and_persists_run
 #[test]
 fn grouped_dynamic_starts_share_one_programmer_undo_checkpoint() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "grouped-dynamic-starts".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];
     let dynamic_id = uuid::Uuid::new_v4();
     let mut snapshot = light_engine::EngineSnapshot::default();
@@ -385,16 +375,14 @@ fn grouped_dynamic_starts_share_one_programmer_undo_checkpoint() {
 fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
     let clock = Arc::new(ManualClock::new(fixed_test_time()));
     let (state, data_dir) = test_state_with_clock(clock);
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "dynamic-restart".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let fixture = light_core::FixtureId::new();
     state.programming.select(session.id, [fixture]);
@@ -649,16 +637,14 @@ fn malformed_show_runtime_is_cleared_without_discarding_valid_dynamic_definition
 #[test]
 fn websocket_dynamic_toggle_matches_the_authoritative_target_scope() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "dynamic-toggle".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let fixture_a = light_core::FixtureId::new();
     let fixture_b = light_core::FixtureId::new();
@@ -730,16 +716,14 @@ fn websocket_dynamic_toggle_matches_the_authoritative_target_scope() {
 #[tokio::test]
 async fn production_dynamic_action_waits_for_active_show_contention() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "dynamic-contention".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     state.sessions.insert_session(session.clone());
     let fixture = light_core::FixtureId::new();
     let dynamic_id = uuid::Uuid::new_v4();
@@ -866,16 +850,14 @@ async fn production_dynamic_action_waits_for_active_show_contention() {
 #[test]
 fn live_and_preload_visualization_resolve_different_dynamic_layers_authoritatively() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "dynamic-visualization".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let fixture = light_core::FixtureId::new();
     state.programming.select(session.id, [fixture]);
     let dynamic_id = uuid::Uuid::new_v4();
@@ -955,16 +937,14 @@ fn dynamic_command_line_routes_start_parameters_and_off_through_one_controller()
     state.installation.update_configuration(|configuration| {
         configuration.command_line_at_uses_programmer_fade = true;
     });
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "dynamic-command".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let fixture = light_core::FixtureId::new();
     state.programming.select(session.id, [fixture]);
     let dynamic_id = uuid::Uuid::new_v4();
@@ -1108,16 +1088,14 @@ fn dynamic_command_line_routes_start_parameters_and_off_through_one_controller()
 #[test]
 fn ambiguous_targetless_dynamic_command_retains_typed_exact_instance_choice() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "dynamic-instance-choice".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let first_fixture = light_core::FixtureId::new();
     let second_fixture = light_core::FixtureId::new();
     let dynamic_id = uuid::Uuid::new_v4();
@@ -1215,16 +1193,14 @@ fn ambiguous_targetless_dynamic_command_retains_typed_exact_instance_choice() {
 #[test]
 fn preload_controller_edit_updates_projection_without_touching_live_runtime() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "preload-dynamic-edit".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let fixture = light_core::FixtureId::new();
     state.programming.select(session.id, [fixture]);
     let dynamic_id = uuid::Uuid::new_v4();
@@ -1290,16 +1266,14 @@ fn preload_controller_edit_updates_projection_without_touching_live_runtime() {
 #[test]
 fn target_bound_dynamic_command_uses_its_stored_targets_over_the_current_selection() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "target-bound-dynamic-command".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     let selected_fixture = light_core::FixtureId::new();
     let stored_target = light_core::FixtureId::new();
     state.programming.select(session.id, [selected_fixture]);

@@ -63,12 +63,8 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
 #[test]
 fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
     let (state, data_dir) = test_state();
-    let (user, first_desk, second_desk) = {
-        let user = state.installation.users().unwrap().remove(0);
-        let first = state.installation.add_desk("Front").unwrap();
-        let second = state.installation.add_desk("Wing").unwrap();
-        (user, first, second)
-    };
+    let first_desk = state.installation.add_desk("Front").unwrap();
+    let second_desk = state.installation.add_desk("Wing").unwrap();
     let show_id = light_core::ShowId::new();
     state.active_show.replace_current(Some(ShowEntry {
         id: show_id,
@@ -112,7 +108,6 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
     let first = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "first".into(),
         connected: true,
         desk: first_desk,
@@ -120,7 +115,6 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
     let second = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user,
         token: "second".into(),
         connected: true,
         desk: second_desk,
@@ -456,7 +450,6 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
 
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
-    let user = light_core::UserId::new();
     let fixtures = highlight_fixture_summaries(&[fixture]);
     let complete = light_programmer::ProgrammerSelection {
         selected: expanded,
@@ -490,7 +483,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
         revision: 2,
         gesture_open: false,
     };
-    registry.acknowledge_internal_selection(desk, user, &stepped);
+    registry.acknowledge_internal_selection(desk, &stepped);
     let second = registry
         .action(
                         HighlightAction::Next,
@@ -515,16 +508,14 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
 #[test]
 fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
     let (state, data_dir) = test_state();
-    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: user.clone(),
         token: "multi-head-selection".into(),
         connected: true,
         desk: test_control_desk(),
     };
-    state.programming.start(session.id, user.id);
+    state.programming.start(session.id);
     attach_session_command_context(&state, &session);
     state.sessions.insert_session(session.clone());
     let (fixture, children) = highlight_multi_head_fixture();

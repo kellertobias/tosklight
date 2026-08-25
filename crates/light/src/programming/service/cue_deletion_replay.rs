@@ -2,7 +2,7 @@ use super::ProgrammingService;
 use crate::{
     ActionError, ActionErrorKind, ProgrammingCueDeletionRequest, ProgrammingCueDeletionResult,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 use std::collections::{HashMap, VecDeque};
 use std::mem::size_of;
 use uuid::Uuid;
@@ -12,7 +12,6 @@ const BYTE_LIMIT: usize = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) struct CueDeletionScope {
-    pub user_id: UserId,
     pub desk_id: Uuid,
     pub session_id: SessionId,
 }
@@ -91,9 +90,10 @@ impl CueDeletionReplayCache {
         self.truncate();
     }
 
-    fn invalidate_user(&mut self, user_id: UserId) {
-        self.entries.retain(|key, _| key.scope.user_id != user_id);
-        self.order.retain(|key| key.scope.user_id != user_id);
+    fn invalidate(&mut self) {
+        // One desk, one Programmer: an invalidation clears the cache rather than one user's part.
+        self.entries.clear();
+        self.order.clear();
         self.retained_bytes = self
             .entries
             .values()
@@ -116,8 +116,8 @@ impl CueDeletionReplayCache {
 }
 
 impl ProgrammingService {
-    pub(in crate::programming) fn invalidate_cue_deletion_replay(&self, user_id: UserId) {
-        self.cue_deletion_replay.lock().invalidate_user(user_id);
+    pub(in crate::programming) fn invalidate_cue_deletion_replay(&self) {
+        self.cue_deletion_replay.lock().invalidate();
     }
 }
 

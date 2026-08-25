@@ -510,12 +510,7 @@ async fn user_layout_action(
     {
         return Ok(Json(outcome));
     }
-    validate_printable_id("user layout id", &object_id)?;
-    if object_id != session.user.id.0.to_string() {
-        return Err(ApiError::forbidden(
-            "a user layout can only be updated by its owning user",
-        ));
-    }
+    validate_printable_id("desk layout id", &object_id)?;
     let _activation = state.active_show.acquire().await;
     let wire::UserLayoutAction::Update {
         expected_revision,

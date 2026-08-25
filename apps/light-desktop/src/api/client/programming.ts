@@ -107,7 +107,7 @@ export class ProgrammingApiClient {
 	}
 
 	async programmerValuesLiveAction(
-		userId: string,
+		sessionId: string,
 		request: ProgrammerValuesActionRequest,
 	): Promise<ProgrammerValuesActionOutcome> {
 		const wireRequest = encodeProgrammerValuesActionRequest(request);
@@ -119,7 +119,7 @@ export class ProgrammingApiClient {
 	}
 
 	async programmerPriorityLiveAction(
-		userId: string,
+		sessionId: string,
 		request: ProgrammerPriorityActionRequest,
 	): Promise<ProgrammerPriorityActionOutcome> {
 		const wireRequest = encodeProgrammerPriorityActionRequest(request);
@@ -150,7 +150,7 @@ export class ProgrammingApiClient {
 	}
 
 	async programmerPreloadLifecycleLiveAction(
-		userId: string,
+		sessionId: string,
 		request: ProgrammerPreloadLifecycleRequest,
 	): Promise<ProgrammerPreloadLifecycleOutcome> {
 		const wireRequest = encodeProgrammerPreloadLifecycleRequest(request);
@@ -162,7 +162,7 @@ export class ProgrammingApiClient {
 	}
 
 	async programmerPreloadValuesLiveAction(
-		userId: string,
+		sessionId: string,
 		request: ProgrammerPreloadValuesActionRequest,
 	): Promise<ProgrammerPreloadValuesActionOutcome> {
 		const wireRequest = encodeProgrammerPreloadValuesActionRequest(request);

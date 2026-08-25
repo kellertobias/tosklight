@@ -242,14 +242,13 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
     let same_user_session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: session.user.clone(),
         token: "same-user".into(),
         connected: true,
         desk: session.desk.clone(),
     };
     state
         .programming
-        .start(same_user_session.id, same_user_session.user.id);
+        .start(same_user_session.id);
     let same_user_update = dispatch_live_action(
         &state,
         &same_user_session,
@@ -271,18 +270,16 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
     );
     assert!(same_user_update.ok, "one user owns authority across their sessions");
 
-    let other_user = state.installation.add_user("Other operator").unwrap();
     let other_session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: other_user,
         token: "other-user".into(),
         connected: true,
         desk: test_control_desk(),
     };
     state
         .programming
-        .start(other_session.id, other_session.user.id);
+        .start(other_session.id);
     let competing_update = dispatch_live_action(
         &state,
         &other_session,

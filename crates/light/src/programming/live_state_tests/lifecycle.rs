@@ -42,33 +42,21 @@ impl ProgrammingPorts for LifecyclePorts {
 #[test]
 fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_replay() {
     let registry = ProgrammerRegistry::default();
-    let target_user = UserId::new();
     let first_session = SessionId::new();
     let second_session = SessionId::new();
     let first_desk = Uuid::new_v4();
     let second_desk = Uuid::new_v4();
-    registry.start(first_session, target_user);
-    registry.start(second_session, target_user);
+    registry.start(first_session);
+    registry.start(second_session);
     registry.attach_command_context(first_session, SessionId(first_desk));
     registry.attach_command_context(second_session, SessionId(second_desk));
 
-    let actor_user = UserId::new();
     let actor_session = SessionId::new();
     let actor_desk = Uuid::new_v4();
-    registry.start(actor_session, actor_user);
+    registry.start(actor_session);
     registry.attach_command_context(actor_session, SessionId(actor_desk));
-    let target_context = ActionContext::operator(
-        first_desk,
-        target_user.0,
-        first_session.0,
-        ActionSource::Http,
-    );
-    let actor_context = ActionContext::operator(
-        actor_desk,
-        actor_user.0,
-        actor_session.0,
-        ActionSource::Http,
-    );
+    let target_context = ActionContext::operator(first_desk, first_session.0, ActionSource::Http);
+    let actor_context = ActionContext::operator(actor_desk, actor_session.0, ActionSource::Http);
     let fixture = FixtureId::new();
     let events = EventBus::new(16);
     let service = ProgrammingService::new(
@@ -102,18 +90,14 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
     let cursor = events.latest_sequence();
 
     let result = service
-        .replace_user_programmer(
+        .replace_desk_programmer(
             &actor_context,
             &ports,
-            ProgrammingLifecycleTarget::new(
-                target_user,
-                first_session,
-                vec![second_desk, first_desk],
-            ),
+            ProgrammingLifecycleTarget::new(first_session, vec![second_desk, first_desk]),
             || {
                 assert!(registry.clear(first_session));
-                registry.start(first_session, target_user);
-                registry.start(second_session, target_user);
+                registry.start(first_session);
+                registry.start(second_session);
                 ProgrammingLifecycleCompletion::new((), Some(second_session))
             },
         )
@@ -164,13 +148,11 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
     let ProgrammingPriorityChange::Upsert { projection } = priority[0] else {
         panic!("replacement should publish the new priority authority")
     };
-    assert_eq!(projection.user_id, target_user);
     assert_eq!(projection.revision, 1);
     assert_eq!(projection.priority, 100);
     let ProgrammingLifecycleDelta::Upsert { programmer } = &lifecycle[0].delta else {
         panic!("replacement should upsert the new Programmer identity")
     };
-    assert_eq!(programmer.user_id, target_user);
     assert_ne!(programmer.programmer_id, old_programmer_id);
     assert_eq!(
         programmer.programmer_id,
@@ -185,20 +167,14 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
 #[test]
 fn target_user_removal_publishes_one_exact_priority_tombstone() {
     let registry = ProgrammerRegistry::default();
-    let target_user = UserId::new();
     let target_session = SessionId::new();
     let target_desk = Uuid::new_v4();
-    registry.start(target_session, target_user);
+    registry.start(target_session);
     registry.attach_command_context(target_session, SessionId(target_desk));
-    let actor_user = UserId::new();
     let actor_session = SessionId::new();
-    let actor_context = ActionContext::operator(
-        Uuid::new_v4(),
-        actor_user.0,
-        actor_session.0,
-        ActionSource::Http,
-    );
-    registry.start(actor_session, actor_user);
+    let actor_context =
+        ActionContext::operator(Uuid::new_v4(), actor_session.0, ActionSource::Http);
+    registry.start(actor_session);
     let events = EventBus::new(8);
     let service = ProgrammingService::new(
         registry.clone(),
@@ -210,10 +186,10 @@ fn target_user_removal_publishes_one_exact_priority_tombstone() {
     };
 
     let result = service
-        .replace_user_programmer(
+        .replace_desk_programmer(
             &actor_context,
             &ports,
-            ProgrammingLifecycleTarget::new(target_user, target_session, vec![target_desk]),
+            ProgrammingLifecycleTarget::new(target_session, vec![target_desk]),
             || {
                 assert!(registry.clear(target_session));
                 ProgrammingLifecycleCompletion::new((), None)
@@ -231,10 +207,10 @@ fn target_user_removal_publishes_one_exact_priority_tombstone() {
     };
     assert_eq!(events.len(), 1);
     let ApplicationEvent::Programming(ProgrammingEvent::PriorityChanged(
-        ProgrammingPriorityChange::Remove { user_id, revision },
+        ProgrammingPriorityChange::Remove { revision },
     )) = &events[0].payload
     else {
         panic!("removal should publish an exact priority tombstone")
     };
-    assert_eq!((*user_id, *revision), (target_user, 1));
+    assert_eq!(*revision, 1);
 }

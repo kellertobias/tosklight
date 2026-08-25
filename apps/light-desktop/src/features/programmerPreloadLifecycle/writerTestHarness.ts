@@ -20,7 +20,7 @@ import { ProgrammerPreloadLifecycleStore } from "./store";
 import { ProgrammerPreloadLifecycleWriter } from "./writer";
 
 export { SHOW_ID };
-export const USER_ID = "33333333-3333-4333-8333-333333333333";
+export const SESSION_ID = "33333333-3333-4333-8333-333333333333";
 export const DESK_ID = deskProjection().desk_id;
 export const OTHER_ID = "99999999-9999-4999-8999-999999999999";
 const FIXTURE_ID = "44444444-4444-4444-8444-444444444444";
@@ -39,7 +39,7 @@ export function deferred<T>() {
 
 export function captureMode(revision = 1, blind = false) {
 	return {
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		revision,
 		blind,
 		preview: false,
@@ -49,7 +49,7 @@ export function captureMode(revision = 1, blind = false) {
 
 export function values(revision = 1, empty = false) {
 	return {
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		revision,
 		fixtureValues: empty
 			? []
@@ -70,7 +70,7 @@ export function values(revision = 1, empty = false) {
 
 export function queue(revision = 2, empty = false) {
 	return {
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		revision,
 		actions: empty
 			? []
@@ -88,7 +88,7 @@ export function queue(revision = 2, empty = false) {
 export function lifecycleRow(preloadActive = false) {
 	return {
 		programmerId: PROGRAMMER_ID,
-		userId: USER_ID,
+		sessionId: SESSION_ID,
 		connected: true,
 		selectedFixtureCount: 1,
 		normalValueCount: 1,
@@ -154,18 +154,18 @@ export function lifecycleWriterHarness(
 	options: { blind?: boolean; active?: boolean | null } = {},
 ) {
 	const localStore = new ProgrammerPreloadLifecycleStore();
-	localStore.reset(SHOW_ID, USER_ID, DESK_ID, "session-a");
+	localStore.reset(SHOW_ID, SESSION_ID, DESK_ID, "session-a");
 	const captureModeStore = new ProgrammerCaptureModeStore();
-	captureModeStore.reset(SHOW_ID, USER_ID, "session-a");
+	captureModeStore.reset(SHOW_ID, SESSION_ID, "session-a");
 	captureModeStore.installSnapshot({
 		cursor: 10,
 		projection: captureMode(1, options.blind ?? false),
 	});
 	const valuesStore = new ProgrammerPreloadValuesStore();
-	valuesStore.reset(SHOW_ID, USER_ID, "session-a");
+	valuesStore.reset(SHOW_ID, SESSION_ID, "session-a");
 	valuesStore.installSnapshot({ cursor: 11, projection: values() });
 	const queueStore = new ProgrammerPreloadPlaybackQueueStore();
-	queueStore.reset(SHOW_ID, USER_ID, "session-a");
+	queueStore.reset(SHOW_ID, SESSION_ID, "session-a");
 	queueStore.installSnapshot({ cursor: 12, projection: queue() });
 	const selectionStore = new ProgrammingInteractionStore();
 	selectionStore.reset(SHOW_ID, DESK_ID, "session-a");
@@ -233,7 +233,7 @@ export function lifecycleWriterHarness(
 	};
 	const onError = vi.fn();
 	const writer = new ProgrammerPreloadLifecycleWriter({
-		scope: { showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID },
+		scope: { showId: SHOW_ID, sessionId: SESSION_ID, deskId: DESK_ID },
 		store: localStore,
 		captureModeStore,
 		valuesStore,

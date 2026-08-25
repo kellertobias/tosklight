@@ -3,12 +3,12 @@ import { ProgrammerPriorityStore } from "./store";
 import {
 	priorityProjection,
 	prioritySnapshot,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 function readyStore() {
 	const store = new ProgrammerPriorityStore();
-	store.reset(USER_ID, "session-a");
+	store.reset(SESSION_ID, "session-a");
 	store.installSnapshot(prioritySnapshot());
 	return store;
 }
@@ -16,14 +16,14 @@ function readyStore() {
 describe("ProgrammerPriorityStore", () => {
 	it("installs immutable authority and rejects stale scopes", () => {
 		const store = new ProgrammerPriorityStore();
-		store.reset(USER_ID, "session-a");
+		store.reset(SESSION_ID, "session-a");
 		const scope = store.captureScope();
 		const projection = priorityProjection();
 
 		expect(store.installSnapshot({ cursor: 10, projection }, scope)).toBe(true);
 		expect(store.getSnapshot().projection).not.toBe(projection);
 		expect(Object.isFrozen(store.getSnapshot().projection)).toBe(true);
-		store.reset(USER_ID, "session-b");
+		store.reset(SESSION_ID, "session-b");
 		expect(store.installSnapshot(prioritySnapshot(), scope)).toBe(false);
 		expect(store.getSnapshot().projection).toBeNull();
 	});

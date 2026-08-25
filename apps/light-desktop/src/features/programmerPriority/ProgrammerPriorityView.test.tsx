@@ -21,7 +21,7 @@ import {
 	FakeProgrammerPriorityTransport,
 	priorityProjection,
 	settlePrioritySession,
-	USER_ID,
+	SESSION_ID,
 } from "./testFixtures";
 
 afterEach(cleanup);
@@ -69,7 +69,7 @@ function provider(
 ) {
 	return (
 		<ProgrammerPriorityProvider
-			userId={USER_ID}
+			sessionId={SESSION_ID}
 			authorityKey={authorityKey}
 			store={store}
 			transport={transport}

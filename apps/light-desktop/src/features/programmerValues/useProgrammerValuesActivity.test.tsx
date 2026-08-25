@@ -24,7 +24,7 @@ import {
 	fixtureValue,
 	groupValue,
 	SHOW_ID,
-	USER_ID,
+	SESSION_ID,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -73,7 +73,7 @@ function providers(harness: Harness, children: ReactNode) {
 	return (
 		<ProgrammerCaptureModeViewProvider
 			showId={SHOW_ID}
-			userId={USER_ID}
+			sessionId={SESSION_ID}
 			authorityKey="session-a"
 			store={harness.captureStore}
 			transport={harness.captureTransport}
@@ -81,7 +81,7 @@ function providers(harness: Harness, children: ReactNode) {
 		>
 			<ProgrammerValuesViewProvider
 				showId={SHOW_ID}
-				userId={USER_ID}
+				sessionId={SESSION_ID}
 				authorityKey="session-a"
 				store={harness.valuesStore}
 				transport={harness.valuesTransport}
@@ -89,7 +89,7 @@ function providers(harness: Harness, children: ReactNode) {
 			>
 				<ProgrammerPreloadValuesViewProvider
 					showId={SHOW_ID}
-					userId={USER_ID}
+					sessionId={SESSION_ID}
 					authorityKey="session-a"
 					store={harness.preloadStore}
 					transport={harness.preloadTransport}

@@ -8,8 +8,8 @@ import {
 } from "./programmerValuesWire";
 import { WireValidationError } from "./wireValidation";
 
-const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const OTHER_USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const OTHER_SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const FIXTURE_ID = "11111111-1111-4111-8111-111111111111";
 const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
@@ -184,7 +184,7 @@ describe("Programmer values wire projection", () => {
 		expect(() =>
 			decodeProgrammerValuesSnapshot({
 				cursor: { sequence: 1 },
-				projection: { ...projection(), user_id: OTHER_USER_ID },
+				projection: { ...projection(), user_id: OTHER_SESSION_ID },
 			}),
 		).toThrow(/user_id/);
 		const candidate = projection();
@@ -295,7 +295,7 @@ describe("Programmer values mutation wire boundary", () => {
 		const undeclared = changedOutcome();
 		undeclared.projection = {
 			...projection(),
-			user_id: OTHER_USER_ID,
+			user_id: OTHER_SESSION_ID,
 		} as typeof undeclared.projection;
 		expect(() =>
 			decodeProgrammerValuesActionOutcome(undeclared, "request-1"),
@@ -442,7 +442,7 @@ describe("Programmer values event wire boundary", () => {
 			"change carrying an undeclared field",
 			(event: ReturnType<typeof valuesEvent>) => {
 				(event.event.payload.change as Record<string, unknown>).user_id =
-					OTHER_USER_ID;
+					OTHER_SESSION_ID;
 			},
 		],
 		[

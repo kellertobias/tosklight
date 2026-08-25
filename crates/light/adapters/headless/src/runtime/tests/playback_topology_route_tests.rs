@@ -325,25 +325,11 @@ async fn topology_route_defaults_to_the_active_show_without_a_guard() {
 #[tokio::test]
 async fn same_user_two_desks_and_another_user_share_the_active_show() {
     let scenario = TopologyScenario::new("Playback topology shared show").await;
-    let primary_user_id = scenario
-        .state
-        .sessions
-        .sessions()
-        .into_iter()
-        .find(|session| session.token == scenario.token)
-        .unwrap()
-        .user
-        .id;
     let (same_user_desk, other_user_desk) = {
         let same = scenario
             .state
             .installation
             .add_desk("Topology wing")
-            .unwrap();
-        scenario
-            .state
-            .installation
-            .add_user("Topology guest")
             .unwrap();
         let other = scenario
             .state
@@ -352,16 +338,8 @@ async fn same_user_two_desks_and_another_user_share_the_active_show() {
             .unwrap();
         (same, other)
     };
-    let same_user = login_on_desk(&scenario.app, "Operator", Some(same_user_desk.id), None).await;
-    let other_user = login_on_desk(
-        &scenario.app,
-        "Topology guest",
-        Some(other_user_desk.id),
-        None,
-    )
-    .await;
-    assert_eq!(same_user["user"]["id"], primary_user_id.0.to_string());
-    assert_ne!(other_user["user"]["id"], primary_user_id.0.to_string());
+    let same_user = login_on_desk(&scenario.app, Some(same_user_desk.id), None).await;
+    let other_user = login_on_desk(&scenario.app, Some(other_user_desk.id), None).await;
     let cursor = scenario.state.events.latest_sequence();
 
     for (token, request_id) in [
@@ -395,7 +373,7 @@ async fn configured_desk_boundary_rejects_missing_or_foreign_credentials() {
     let (mut state, data_dir) = test_state();
     state.installation.set_desk_token("topology-boundary");
     let app = router(state.clone());
-    let session = login_on_desk(&app, "Operator", None, Some("topology-boundary")).await;
+    let session = login_on_desk(&app, None, Some("topology-boundary")).await;
     let token = session["token"].as_str().unwrap();
     let show = create_show_with_boundary(&app, token, "Boundary show", "topology-boundary").await;
     let show_id = show["id"].as_str().unwrap();

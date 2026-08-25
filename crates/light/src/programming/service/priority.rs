@@ -4,7 +4,7 @@ use crate::{
     ProgrammingPriorityChange, ProgrammingPriorityProjection, ProgrammingPriorityRequest,
     ProgrammingPriorityResult, ProgrammingPriorityRevisionExpectation, ProgrammingPrioritySnapshot,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 
 impl ProgrammingService {
     pub fn priority_snapshot(
@@ -12,16 +12,14 @@ impl ProgrammingService {
         context: &crate::ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPrioritySnapshot, ActionError> {
-        // The identity must be there; which identity it is no longer selects anything.
-        let (session, _) = priority_identity(context)?;
+        let session = priority_identity(context)?;
         self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize(context)?;
-            let user_id = self.operated_priority_owner(session)?;
             let event_sequence = self.events.latest_sequence();
             let revision = self.programmers.priority_revision();
             Ok(ProgrammingPrioritySnapshot {
                 event_sequence,
-                projection: self.priority_projection(session, user_id, revision)?,
+                projection: self.priority_projection(session, revision)?,
             })
         })
     }
@@ -31,13 +29,10 @@ impl ProgrammingService {
         action: ActionEnvelope<ProgrammingPriorityRequest>,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingPriorityResult, ActionError> {
-        // The identity must be there; which identity it is no longer selects anything.
-        let (session, _, request_id) = priority_context(&action)?;
+        let (session, request_id) = priority_context(&action)?;
         self.with_programmer_and_desk_gate(action.context.desk_id, || {
             ports.authorize_programming_change(&action.context)?;
-            let user_id = self.operated_priority_owner(session)?;
             if let Some(cached) = self.priority_replay.lock().get(
-                user_id,
                 action.context.desk_id,
                 session,
                 &request_id,
@@ -56,7 +51,7 @@ impl ProgrammingService {
             } else {
                 revision_before
             };
-            let projection = self.priority_projection(session, user_id, revision)?;
+            let projection = self.priority_projection(session, revision)?;
             let warning = changed
                 .then(|| ports.persist(&action.context, "programmer.priority"))
                 .flatten();
@@ -80,7 +75,6 @@ impl ProgrammingService {
                 warning,
             };
             self.priority_replay.lock().insert(
-                user_id,
                 action.context.desk_id,
                 session,
                 request_id,
@@ -89,13 +83,6 @@ impl ProgrammingService {
             );
             Ok(result)
         })
-    }
-
-    /// The desk identity this session operates.
-    fn operated_priority_owner(&self, session: SessionId) -> Result<UserId, ActionError> {
-        self.programmers
-            .operated_desk_user(session)
-            .ok_or_else(priority_unavailable)
     }
 
     fn assert_priority_revision(
@@ -121,21 +108,13 @@ impl ProgrammingService {
     pub(in crate::programming) fn priority_projection(
         &self,
         session: SessionId,
-        user_id: UserId,
         revision: u64,
     ) -> Result<ProgrammingPriorityProjection, ActionError> {
-        let (owner, priority, changed_at) = self
+        let (priority, changed_at) = self
             .programmers
             .priority_state(session)
             .ok_or_else(priority_unavailable)?;
-        if self.programmers.desk().normalize(user_id) != owner {
-            return Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the Programmer session does not belong to the authenticated user",
-            ));
-        }
         Ok(ProgrammingPriorityProjection {
-            user_id,
             revision,
             priority,
             changed_at,
@@ -145,17 +124,11 @@ impl ProgrammingService {
 
 fn priority_context(
     action: &ActionEnvelope<ProgrammingPriorityRequest>,
-) -> Result<(SessionId, UserId, String), ActionError> {
+) -> Result<(SessionId, String), ActionError> {
     let session = action.context.session_id.map(SessionId).ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "Programmer priority actions require an operator session",
-        )
-    })?;
-    let user_id = action.context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Programmer priority actions require an authenticated user",
         )
     })?;
     let request_id = action.context.request_id.as_deref().ok_or_else(|| {
@@ -165,23 +138,17 @@ fn priority_context(
         )
     })?;
     super::values_validation::validate_request_id(request_id)?;
-    Ok((session, user_id, request_id.to_owned()))
+    Ok((session, request_id.to_owned()))
 }
 
-fn priority_identity(context: &crate::ActionContext) -> Result<(SessionId, UserId), ActionError> {
+fn priority_identity(context: &crate::ActionContext) -> Result<SessionId, ActionError> {
     let session = context.session_id.map(SessionId).ok_or_else(|| {
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "Programmer priority snapshots require an operator session",
         )
     })?;
-    let user_id = context.user_id.map(UserId).ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Unauthorized,
-            "Programmer priority snapshots require an authenticated user",
-        )
-    })?;
-    Ok((session, user_id))
+    Ok(session)
 }
 
 fn priority_unavailable() -> ActionError {

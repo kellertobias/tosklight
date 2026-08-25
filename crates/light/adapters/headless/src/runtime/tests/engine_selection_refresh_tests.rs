@@ -224,7 +224,6 @@ async fn nested_record_group_refreshes_the_desk_once_without_relocking_it() {
             .filter(|event| {
                 event.kind == "highlight_changed"
                     && event.payload["desk_id"] == scenario.actor.desk.id.to_string()
-                    && event.payload["user_id"] == scenario.actor.user.id.0.to_string()
                     && event.payload["source"] == "programmer_selection"
             })
             .count(),
@@ -316,17 +315,11 @@ impl ActiveGroupScenario {
 }
 
 fn two_desk_sessions(state: &AppState) -> (Session, Session) {
-    let (actor_user, peer_user, actor_desk, peer_desk) = {
-        let actor_user = state.installation.users().unwrap().remove(0);
-        let peer_user = state.installation.add_user("Peer operator").unwrap();
-        let actor_desk = state.installation.add_desk("Front").unwrap();
-        let peer_desk = state.installation.add_desk("Wing").unwrap();
-        (actor_user, peer_user, actor_desk, peer_desk)
-    };
+    let actor_desk = state.installation.add_desk("Front").unwrap();
+    let peer_desk = state.installation.add_desk("Wing").unwrap();
     let actor = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: actor_user,
         token: "group-refresh-actor".into(),
         connected: true,
         desk: actor_desk,
@@ -334,13 +327,12 @@ fn two_desk_sessions(state: &AppState) -> (Session, Session) {
     let peer = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
-        user: peer_user,
         token: "group-refresh-peer".into(),
         connected: true,
         desk: peer_desk,
     };
     for session in [&actor, &peer] {
-        state.programming.start(session.id, session.user.id);
+        state.programming.start(session.id);
         attach_session_command_context(state, session);
         state.sessions.insert_session(session.clone());
     }

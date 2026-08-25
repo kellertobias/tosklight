@@ -12,7 +12,7 @@ export interface ProgrammerPreloadLifecyclePending {
 
 export interface ProgrammerPreloadLifecycleState {
 	showId: string | null;
-	userId: string | null;
+	sessionId: string | null;
 	deskId: string | null;
 	authorityKey: string;
 	pending: ProgrammerPreloadLifecyclePending | null;
@@ -33,13 +33,13 @@ export class ProgrammerPreloadLifecycleStore {
 
 	reset(
 		showId: string | null,
-		userId: string | null,
+		sessionId: string | null,
 		deskId: string | null,
 		authorityKey: string,
 	) {
 		if (
 			showId === this.state.showId &&
-			userId === this.state.userId &&
+			sessionId === this.state.sessionId &&
 			deskId === this.state.deskId &&
 			authorityKey === this.state.authorityKey
 		)
@@ -48,7 +48,7 @@ export class ProgrammerPreloadLifecycleStore {
 		this.state = {
 			...emptyState(),
 			showId,
-			userId,
+			sessionId,
 			deskId,
 			authorityKey,
 		};
@@ -114,7 +114,7 @@ export class ProgrammerPreloadLifecycleStore {
 function emptyState(): ProgrammerPreloadLifecycleState {
 	return {
 		showId: null,
-		userId: null,
+		sessionId: null,
 		deskId: null,
 		authorityKey: "",
 		pending: null,

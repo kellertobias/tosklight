@@ -73,7 +73,7 @@ export function LayoutPersistence() {
 	const saveDeskLayout = useRef(
 		connection?.saveDeskLayout ?? (async () => undefined),
 	);
-	const scope = deskLayoutScopeKey(activeShowId ?? undefined, session?.user.id);
+	const scope = deskLayoutScopeKey(activeShowId ?? undefined);
 	const compactScope = compactStorageScope(activeShowId, session?.desk.id);
 	const portableDesksSignature = JSON.stringify(
 		desksWithoutFixtureSheetCompactModes(state.desks),

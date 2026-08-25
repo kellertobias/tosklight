@@ -1,4 +1,4 @@
-use light_core::{ProgrammerId, SessionId, UserId};
+use light_core::{ProgrammerId, SessionId};
 use light_programmer::{
     ProgrammerLifecycleSession, ProgrammerLifecycleSummary, ProgrammerRegistry,
 };
@@ -14,7 +14,6 @@ pub struct ProgrammingLifecycleSession {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammingLifecycleProgrammer {
     pub programmer_id: ProgrammerId,
-    pub user_id: UserId,
     pub connected: bool,
     pub selected_fixture_count: u64,
     pub normal_value_count: u64,
@@ -98,7 +97,6 @@ impl From<ProgrammerLifecycleSummary> for ProgrammingLifecycleProgrammer {
     fn from(summary: ProgrammerLifecycleSummary) -> Self {
         Self {
             programmer_id: summary.programmer_id,
-            user_id: summary.user_id,
             connected: summary.connected,
             selected_fixture_count: summary.selected_fixture_count,
             normal_value_count: summary.normal_value_count,
@@ -119,7 +117,7 @@ mod tests {
         ApplicationEvent, DeliveryPolicy, EventCapability, EventDraft, EventSource,
         ProgrammingEvent,
     };
-    use light_core::{SessionId, UserId};
+    use light_core::SessionId;
     use uuid::Uuid;
 
     #[test]
@@ -128,10 +126,10 @@ mod tests {
         let first = SessionId(Uuid::from_u128(1));
         let second = SessionId(Uuid::from_u128(2));
         let third = SessionId(Uuid::from_u128(3));
-        // Three surfaces arriving under three identities are one Programmer.
-        let desk_user = registry.start(first, UserId(Uuid::from_u128(30))).user_id;
-        registry.start(second, UserId(Uuid::from_u128(20)));
-        registry.start(third, UserId(Uuid::from_u128(10)));
+        // Three surfaces are one Programmer.
+        registry.start(first);
+        registry.start(second);
+        registry.start(third);
         registry.set_preload_group(
             third,
             "7".into(),
@@ -144,7 +142,6 @@ mod tests {
 
         assert_eq!(projection.revision, 7);
         assert_eq!(projection.programmers.len(), 1);
-        assert_eq!(projection.programmers[0].user_id, desk_user);
         assert!(projection.programmers[0].preload_active);
         assert!(projection.programmers[0].connected);
     }
@@ -153,7 +150,7 @@ mod tests {
     fn a_desk_with_every_surface_disconnected_projects_no_programmer() {
         let registry = ProgrammerRegistry::default();
         let session = SessionId(Uuid::from_u128(1));
-        registry.start(session, UserId(Uuid::from_u128(30)));
+        registry.start(session);
         registry.disconnect(session);
 
         let projection = ProgrammingLifecycleProjection::active(&registry, 7);
@@ -166,7 +163,6 @@ mod tests {
         let programmer_id = ProgrammerId(Uuid::from_u128(1));
         let programmer = ProgrammingLifecycleProgrammer {
             programmer_id,
-            user_id: UserId(Uuid::from_u128(2)),
             connected: true,
             selected_fixture_count: 0,
             normal_value_count: 0,

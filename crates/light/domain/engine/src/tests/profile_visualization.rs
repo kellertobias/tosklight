@@ -47,7 +47,7 @@ fn profile_visualization_uses_the_exact_calibrated_and_mastered_channel_result()
 fn calibrated_visual_engine() -> (Engine, FixtureId) {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
-    programmers.start(session, UserId::new());
+    programmers.start(session);
     let fixture_id = FixtureId::new();
     let fixture = calibrated_visual_fixture(fixture_id);
     programmers.set(

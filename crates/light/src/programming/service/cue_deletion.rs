@@ -6,7 +6,7 @@ use crate::{
     ProgrammingCueDeletionAddress, ProgrammingCueDeletionPorts, ProgrammingCueDeletionRequest,
     ProgrammingCueDeletionResult,
 };
-use light_core::{SessionId, UserId};
+use light_core::SessionId;
 
 struct CueDeletionIdentity {
     scope: CueDeletionScope,
@@ -174,11 +174,9 @@ fn deletion_identity(context: &ActionContext) -> Result<CueDeletionIdentity, Act
             "request_id must contain 1-128 printable bytes",
         ));
     }
-    let user_id = context.user_id.ok_or_else(unauthenticated)?;
     let session_id = context.session_id.ok_or_else(unauthenticated)?;
     Ok(CueDeletionIdentity {
         scope: CueDeletionScope {
-            user_id: UserId(user_id),
             desk_id: context.desk_id,
             session_id: SessionId(session_id),
         },

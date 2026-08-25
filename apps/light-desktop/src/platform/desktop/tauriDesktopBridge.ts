@@ -143,8 +143,8 @@ export const tauriDesktopBridge: DesktopBridge = {
 		const api = await coreApi();
 		return api.invoke<boolean>("stage_pane_available");
 	},
-	openStagePane: (paneId, live3d, geometry, user) =>
-		invoke("open_stage_pane", { paneId, live3d, geometry, user }),
+	openStagePane: (paneId, live3d, geometry) =>
+		invoke("open_stage_pane", { paneId, live3d, geometry }),
 	setStagePane: (paneId, geometry) =>
 		invoke("set_stage_pane", { paneId, geometry }),
 	closeStagePane: (paneId) => invoke("close_stage_pane", { paneId }),

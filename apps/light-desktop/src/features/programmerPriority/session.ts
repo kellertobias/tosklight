@@ -248,14 +248,14 @@ export class ProgrammerPrioritySession {
 	private ensureStoreScope() {
 		if (this.stopped) return false;
 		const state = this.options.store.getSnapshot();
-		if (state.userId === null)
+		if (state.sessionId === null)
 			this.options.store.reset(
-				this.options.scope.userId,
+				this.options.scope.sessionId,
 				this.options.authorityKey,
 			);
 		const scoped = this.options.store.getSnapshot();
 		if (
-			scoped.userId !== this.options.scope.userId ||
+			scoped.sessionId !== this.options.scope.sessionId ||
 			scoped.authorityKey !== this.options.authorityKey
 		) {
 			this.options.onError?.(this.scopeError("session"));

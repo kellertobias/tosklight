@@ -5,10 +5,7 @@ import type {
 } from "../../api/types";
 import type { ServerState } from "./useServerState";
 
-export type LoadShowObjects = (
-	showId: string | null,
-	userId: string | null,
-) => Promise<void>;
+export type LoadShowObjects = (showId: string | null) => Promise<void>;
 
 function installHighlight(event: RuntimeCapabilityEvent, state: ServerState) {
 	if (event.type !== "highlight_changed") return;
@@ -102,7 +99,7 @@ function refreshBootstrap(
 					}
 					current.setSelectedFixtures(own.selected ?? []);
 				}
-				if (showChanged) await loadShowObjects(nextShowId, session.user.id);
+				if (showChanged) await loadShowObjects(nextShowId);
 			} finally {
 				if (loadingOperation != null) {
 					getState().finishDeskLoading(loadingOperation);

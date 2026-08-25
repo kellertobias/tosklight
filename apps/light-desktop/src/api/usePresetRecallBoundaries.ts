@@ -28,7 +28,7 @@ export function usePresetRecallBoundaries(state: ServerState) {
 			state.connectionGeneration,
 			state.session?.session_id ?? "",
 			state.session?.client_id ?? "",
-			state.session?.user.id ?? "",
+			state.session?.session_id ?? "",
 			state.session?.desk.id ?? "",
 		].join("|"),
 		reportPresetRecallError: errors.reportMutation,

@@ -8,8 +8,8 @@ import {
 } from "./programmerPreloadValuesWire";
 import { WireValidationError } from "./wireValidation";
 
-const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const OTHER_USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const OTHER_SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const FIXTURE_ID = "11111111-1111-4111-8111-111111111111";
 const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
@@ -124,7 +124,7 @@ describe("Preload Programmer values snapshot wire", () => {
 
 	it("rejects a snapshot carrying an undeclared field", () => {
 		const candidate = snapshot();
-		(candidate.projection as Record<string, unknown>).user_id = OTHER_USER_ID;
+		(candidate.projection as Record<string, unknown>).user_id = OTHER_SESSION_ID;
 		expect(() => decodeProgrammerPreloadValuesSnapshot(candidate)).toThrow(
 			/user_id/,
 		);
@@ -286,7 +286,7 @@ describe("Preload Programmer values mutation wire", () => {
 
 	it("rejects an undeclared action projection field, materialized no-op, and extras", () => {
 		const undeclared = changedOutcome();
-		(undeclared.projection as Record<string, unknown>).user_id = OTHER_USER_ID;
+		(undeclared.projection as Record<string, unknown>).user_id = OTHER_SESSION_ID;
 		expect(() =>
 			decodeProgrammerPreloadValuesActionOutcome(undeclared, "request-1"),
 		).toThrow(/user_id/);
@@ -353,7 +353,7 @@ describe("Preload Programmer values event wire", () => {
 				string,
 				unknown
 			>
-		).user_id = OTHER_USER_ID;
+		).user_id = OTHER_SESSION_ID;
 		expect(() =>
 			decodeProgrammerPreloadValuesEventMessage(foreignProjection),
 		).toThrow(WireValidationError);

@@ -135,17 +135,6 @@ impl InstallationResource {
     /// Create a user record.
     ///
     /// Nothing in the desk does this any more: there is one programming user, and a surface that
-    /// may not program is a Not Editable screen or an OSC remote-control route rather than a
-    /// second person. It remains for tests that build a database from before the collapse and
-    /// check that a session logging in on one still joins the desk.
-    #[cfg(test)]
-    pub(in crate::runtime) fn add_user(
-        &self,
-        name: &str,
-    ) -> Result<DeskUser, light_show::StoreError> {
-        self.desk.lock().add_user(name)
-    }
-
     pub(in crate::runtime) fn settings_with_prefix(
         &self,
         prefix: &str,
@@ -168,17 +157,6 @@ impl InstallationResource {
         self.desk.lock().set_setting(key, value)
     }
 
-    pub(in crate::runtime) fn users(&self) -> Result<Vec<DeskUser>, light_show::StoreError> {
-        self.desk.lock().users()
-    }
-
-    pub(in crate::runtime) fn find_user(
-        &self,
-        name: &str,
-    ) -> Result<Option<DeskUser>, light_show::StoreError> {
-        self.desk.lock().find_user(name)
-    }
-
     pub(in crate::runtime) fn defer_session_save(
         &self,
         session: DeferredProgrammerPersistence,
@@ -192,7 +170,6 @@ impl InstallationResource {
                 .lock()
                 .save_session(&PersistedSession {
                     id: session.id,
-                    user_id: session.user_id,
                     token: session.token,
                     programmer_json,
                     connected: session.connected,
@@ -383,10 +360,9 @@ impl InstallationResource {
 
     pub(in crate::runtime) fn bootstrap_desk_data(
         &self,
-    ) -> (Vec<DeskUser>, Vec<ControlDesk>, Vec<light_show::ClientDesk>) {
+    ) -> (Vec<ControlDesk>, Vec<light_show::ClientDesk>) {
         let desk = self.desk.lock();
         (
-            desk.users().unwrap_or_default(),
             desk.desks().unwrap_or_default(),
             desk.client_desks().unwrap_or_default(),
         )

@@ -16,8 +16,8 @@ import type {
 
 export const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const OTHER_SHOW_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-export const USER_ID = "operator-a";
-export const OTHER_USER_ID = "operator-b";
+export const SESSION_ID = "operator-a";
+export const OTHER_SESSION_ID = "operator-b";
 export const FIXTURE_1 = "11111111-1111-4111-8111-111111111111";
 export const FIXTURE_2 = "22222222-2222-4222-8222-222222222222";
 export const DYNAMIC_INSTANCE_1 = "33333333-3333-4333-8333-333333333333";
@@ -75,7 +75,7 @@ export function groupValue(
 
 export function valuesProjection(
 	options: {
-		userId?: string;
+		sessionId?: string;
 		revision?: number;
 		fixtureValues?: readonly ProgrammerFixtureValue[];
 		groupValues?: readonly ProgrammerGroupValue[];

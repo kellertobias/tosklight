@@ -1,7 +1,6 @@
 use super::support::{fixture, no_groups, selection};
 use crate::SelectionExpression;
 use crate::highlight::{HighlightAction, HighlightRegistry, is_duplicate_osc_action};
-use light_core::UserId;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -9,7 +8,6 @@ use uuid::Uuid;
 fn authoritative_repeat_guard_prevents_cross_surface_double_steps() {
     let registry = HighlightRegistry::default();
     let desk = Uuid::new_v4();
-    let user = UserId::new();
     let fixtures = vec![fixture(1), fixture(2), fixture(3)];
     let ids = fixtures
         .iter()
@@ -20,7 +18,6 @@ fn authoritative_repeat_guard_prevents_cross_surface_double_steps() {
     registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
     let software = registry.action_guarded(
         desk,
-        user,
         HighlightAction::Next,
         &complete,
         &fixtures,
@@ -29,7 +26,6 @@ fn authoritative_repeat_guard_prevents_cross_surface_double_steps() {
     );
     let simultaneous_hardware = registry.action_guarded(
         desk,
-        user,
         HighlightAction::Next,
         &complete,
         &fixtures,

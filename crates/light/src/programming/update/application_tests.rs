@@ -5,7 +5,7 @@ use crate::{
     EventBus, ExecutionPolicy, ProgrammingExecution, ProgrammingLifecycleCompletion,
     ProgrammingLifecycleTarget, ProgrammingPorts, ProgrammingReconciliation, ProgrammingService,
 };
-use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, SessionId, ShowId, UserId};
+use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, SessionId, ShowId};
 use light_engine::EngineSnapshot;
 use light_playback::{
     Cue, CueChange, CueList, CueListMode, IntensityPriorityMode, RestartMode, WrapMode,
@@ -103,7 +103,7 @@ fn every_surface_previews_the_desks_one_selection() {
     let rig = TestRig::new();
     let second_screen = SessionId::new();
     let screen_desk = Uuid::from_u128(22);
-    rig.registry.start(second_screen, rig.user);
+    rig.registry.start(second_screen);
     assert!(
         rig.registry
             .attach_command_context(second_screen, SessionId(screen_desk))
@@ -118,13 +118,7 @@ fn every_surface_previews_the_desks_one_selection() {
 
     let from_main = rig.preview(group_request(), "first-group").unwrap();
     let from_screen = rig
-        .preview_as(
-            group_request(),
-            "second-group",
-            screen_desk,
-            second_screen,
-            rig.user,
-        )
+        .preview_as(group_request(), "second-group", screen_desk, second_screen)
         .unwrap();
 
     for preview in [&from_main, &from_screen] {
@@ -158,14 +152,8 @@ fn an_identity_from_before_the_collapse_operates_the_desk() {
     rig.registry.select(rig.session, [fixture]);
     rig.seed("group", "front", group_body());
     let preview = rig
-        .preview_as(
-            group_request(),
-            "legacy",
-            rig.desk,
-            rig.session,
-            UserId::new(),
-        )
-        .expect("a legacy identity is the desk's own, not a foreign one");
+        .preview_as(group_request(), "legacy", rig.desk, rig.session)
+        .expect("every surface previews against the desk's own Programmer");
 
     assert!(matches!(
         preview.preview.items[0].address,
@@ -214,15 +202,15 @@ fn lifecycle_replacement_invalidates_update_replay() {
     rig.apply(command.clone(), "before-replacement").unwrap();
 
     let lifecycle_ports = LifecyclePorts;
-    let actor = ActionContext::operator(rig.desk, rig.user.0, rig.session.0, ActionSource::Http);
+    let actor = ActionContext::operator(rig.desk, rig.session.0, ActionSource::Http);
     rig.service
-        .replace_user_programmer(
+        .replace_desk_programmer(
             &actor,
             &lifecycle_ports,
-            ProgrammingLifecycleTarget::new(rig.user, rig.session, vec![rig.desk]),
+            ProgrammingLifecycleTarget::new(rig.session, vec![rig.desk]),
             || {
                 assert!(rig.registry.clear(rig.session));
-                rig.registry.start(rig.session, rig.user);
+                rig.registry.start(rig.session);
                 assert!(
                     rig.registry
                         .attach_command_context(rig.session, SessionId(rig.desk))
@@ -647,7 +635,6 @@ struct TestRig {
     registry: ProgrammerRegistry,
     ports: TestPorts,
     show_id: ShowId,
-    user: UserId,
     desk: Uuid,
     session: SessionId,
 }
@@ -658,10 +645,9 @@ impl TestRig {
         let (store, show_id) = ShowStore::create(&path, "Update test").unwrap();
         drop(store);
         let registry = ProgrammerRegistry::default();
-        let user = UserId::new();
         let desk = Uuid::from_u128(11);
         let session = SessionId::new();
-        registry.start(session, user);
+        registry.start(session);
         assert!(registry.attach_command_context(session, SessionId(desk)));
         let events = EventBus::new(16);
         Self {
@@ -679,7 +665,6 @@ impl TestRig {
                 active_contexts: Arc::default(),
             },
             show_id,
-            user,
             desk,
             session,
         }
@@ -699,7 +684,7 @@ impl TestRig {
         request_id: &str,
     ) -> Result<ProgrammingUpdatePreviewResult, ActionError> {
         request.show_id = self.show_id;
-        self.preview_as(request, request_id, self.desk, self.session, self.user)
+        self.preview_as(request, request_id, self.desk, self.session)
     }
 
     fn preview_as(
@@ -708,12 +693,11 @@ impl TestRig {
         request_id: &str,
         desk: Uuid,
         session: SessionId,
-        user: UserId,
     ) -> Result<ProgrammingUpdatePreviewResult, ActionError> {
         request.show_id = self.show_id;
         self.service.preview_update(
             ActionEnvelope {
-                context: ActionContext::operator(desk, user.0, session.0, ActionSource::Http)
+                context: ActionContext::operator(desk, session.0, ActionSource::Http)
                     .with_request_id(request_id),
                 command: request,
             },
@@ -729,13 +713,8 @@ impl TestRig {
     ) -> Result<ProgrammingUpdateResult, ActionError> {
         self.service.handle_update(
             ActionEnvelope {
-                context: ActionContext::operator(
-                    self.desk,
-                    self.user.0,
-                    self.session.0,
-                    ActionSource::Http,
-                )
-                .with_request_id(request_id),
+                context: ActionContext::operator(self.desk, self.session.0, ActionSource::Http)
+                    .with_request_id(request_id),
                 command,
             },
             &self.active_show,
@@ -750,13 +729,8 @@ impl TestRig {
     ) -> Result<ProgrammingUpdateTargetsResult, ActionError> {
         self.service.update_targets(
             ActionEnvelope {
-                context: ActionContext::operator(
-                    self.desk,
-                    self.user.0,
-                    self.session.0,
-                    ActionSource::Http,
-                )
-                .with_request_id(request_id),
+                context: ActionContext::operator(self.desk, self.session.0, ActionSource::Http)
+                    .with_request_id(request_id),
                 command: ProgrammingUpdateTargetsRequest {
                     show_id: self.show_id,
                     filter,

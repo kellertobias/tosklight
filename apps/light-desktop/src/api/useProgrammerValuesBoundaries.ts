@@ -11,14 +11,14 @@ import { HttpProgrammerValuesTransport } from "./ProgrammerValuesTransport";
 function useProgrammerScope(state: ServerState) {
 	return useMemo(() => {
 		const showId = state.bootstrap?.active_show?.id;
-		const userId = state.session?.user.id;
-		return showId && userId ? { showId, userId } : null;
-	}, [state.bootstrap?.active_show?.id, state.session?.user.id]);
+		const sessionId = state.session?.session_id;
+		return showId && sessionId ? { showId, sessionId } : null;
+	}, [state.bootstrap?.active_show?.id, state.session?.session_id]);
 }
 
 export function useProgrammerValuesBoundaries(state: ServerState) {
 	const sessionToken = state.session?.token ?? null;
-	const sessionUserId = state.session?.user.id ?? null;
+	const sessionUserId = state.session?.session_id ?? null;
 	const valuesErrors = useMemo(
 		() => createFeatureErrorGroup(state.setError),
 		[state.setError],
@@ -64,7 +64,7 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 						baseUrl: configuredServerUrl(),
 						sessionToken,
 						deskBoundaryToken: browserDeskBoundaryToken(),
-						authenticatedUserId: sessionUserId,
+						authenticatedSessionId: sessionUserId,
 					})
 				: null,
 		[sessionToken, sessionUserId],
@@ -76,14 +76,14 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 						baseUrl: configuredServerUrl(),
 						sessionToken,
 						deskBoundaryToken: browserDeskBoundaryToken(),
-						authenticatedUserId: sessionUserId,
+						authenticatedSessionId: sessionUserId,
 					})
 				: null,
 		[sessionToken, sessionUserId],
 	);
 	const programmerScope = useProgrammerScope(state);
 	const authorityKey = programmerScope
-		? `${configuredServerUrl()}|${programmerScope.showId}|${programmerScope.userId}`
+		? `${configuredServerUrl()}|${programmerScope.showId}|${programmerScope.sessionId}`
 		: "";
 	const loadProgrammerValuesSnapshot = useCallback(() => {
 		if (!programmerValuesTransport || !programmerScope)
@@ -115,7 +115,7 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 			if (!sessionToken)
 				throw new Error("Programmer values session is unavailable");
 			return state.api.programming.programmerValuesLiveAction(
-				scope.userId,
+				scope.sessionId,
 				request,
 			);
 		},
@@ -131,7 +131,7 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 			if (!sessionToken)
 				throw new Error("Programmer Preload values session is unavailable");
 			return state.api.programming.programmerPreloadValuesLiveAction(
-				scope.userId,
+				scope.sessionId,
 				request,
 			);
 		},

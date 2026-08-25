@@ -13,7 +13,7 @@ impl CaptureScenario {
         let clock = Arc::new(ManualClock::new(captured_at));
         let registry = ProgrammerRegistry::with_clock(clock);
         let session = SessionId::new();
-        registry.start(session, UserId::new());
+        registry.start(session);
         Self {
             registry,
             session,

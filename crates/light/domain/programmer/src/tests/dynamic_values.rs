@@ -18,11 +18,10 @@ fn set(
 fn dynamic_tracks_are_independent_atomic_and_undoable() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
-    let user = UserId::new();
     let fixture = FixtureId::new();
     let first = Uuid::new_v4();
     let second = Uuid::new_v4();
-    registry.start(session, user);
+    registry.start(session);
 
     let mutations = [
         set(
@@ -83,7 +82,7 @@ fn preload_go_moves_dynamic_values_atomically_and_recording_selects_the_right_la
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
     let fixture = FixtureId::new();
-    registry.start(session, UserId::new());
+    registry.start(session);
     assert!(registry.apply_dynamic_values(
         session,
         &[set(
@@ -143,7 +142,7 @@ fn release_is_one_recordable_undoable_instruction_without_removing_instance_trac
     let fixture = FixtureId::new();
     let intensity = AttributeKey::intensity();
     let controller = Uuid::new_v4();
-    registry.start(session, UserId::new());
+    registry.start(session);
     registry.set_faded(
         session,
         fixture,

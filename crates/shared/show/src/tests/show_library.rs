@@ -8,24 +8,22 @@ use std::fs;
 #[test]
 fn desk_sessions_survive_reopen() {
     let path = temporary("desk");
-    let (user, session) = {
+    let session = {
         let desk = DeskStore::open(&path).unwrap();
-        let user = desk.users().unwrap().remove(0);
         let session = PersistedSession {
             id: SessionId::new(),
-            user_id: user.id,
             token: "token".into(),
             programmer_json: "{}".into(),
             connected: false,
             updated_at: Utc::now().to_rfc3339(),
         };
         desk.save_session(&session).unwrap();
-        (user, session)
+        session
     };
     let desk = DeskStore::open(&path).unwrap();
     let loaded = desk.persisted_sessions().unwrap();
     assert_eq!(loaded[0].id, session.id);
-    assert_eq!(loaded[0].user_id, user.id);
+    assert_eq!(loaded[0].token, session.token);
     let _ = fs::remove_file(path);
 }
 
@@ -151,20 +149,5 @@ fn desk_schema_six_migrates_existing_shows_without_copy_provenance() {
         .unwrap();
     assert_eq!(version, crate::desk::DESK_SCHEMA_VERSION);
     drop(desk);
-    let _ = fs::remove_file(path);
-}
-
-#[test]
-fn desk_always_retains_an_enabled_login_user() {
-    let path = temporary("users");
-    let desk = DeskStore::open(&path).unwrap();
-    let operator = desk.users().unwrap().remove(0);
-    assert!(desk.update_user(operator.id, "Operator", false).is_err());
-    assert!(desk.delete_user(operator.id).is_err());
-    let second = desk.add_user("Programmer").unwrap();
-    desk.update_user(operator.id, "Operator", false).unwrap();
-    assert!(!desk.user(operator.id).unwrap().unwrap().enabled);
-    assert!(desk.delete_user(operator.id).unwrap());
-    assert_eq!(desk.users().unwrap(), vec![second]);
     let _ = fs::remove_file(path);
 }

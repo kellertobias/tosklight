@@ -702,7 +702,6 @@ fn patch_revision_is_revalidated_after_slow_profile_resolution() {
         pause.wait_until_started();
         let context = crate::ActionContext::operator(
             Uuid::from_u128(1),
-            Uuid::from_u128(2),
             Uuid::from_u128(4),
             crate::ActionSource::System,
         );
@@ -1318,7 +1317,6 @@ fn group_mutation(
     crate::ActionEnvelope {
         context: crate::ActionContext::operator(
             Uuid::from_u128(1),
-            Uuid::from_u128(2),
             Uuid::from_u128(5),
             crate::ActionSource::System,
         ),
