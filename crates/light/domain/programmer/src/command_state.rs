@@ -123,23 +123,14 @@ impl ProgrammerRegistry {
         &self,
         session: SessionId,
     ) -> Option<ProgrammerInteractionVersion> {
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return None;
         }
-        let context = self.command_context(session);
+        let _context = self.command_context(session);
         let capture_mode = self.capture_mode(session)?;
         Some(ProgrammerInteractionVersion {
-            command_line: self
-                .command_states
-                .read()
-                .get(&context)
-                .cloned()
-                .unwrap_or_default(),
-            selection_revision: self
-                .selection_contexts
-                .read()
-                .get(&context)
-                .map_or(0, |selection| selection.revision),
+            command_line: self.command_state.read().clone(),
+            selection_revision: self.selection_context.read().revision,
             capture_mode,
         })
     }
@@ -153,58 +144,41 @@ impl ProgrammerRegistry {
     /// Read cheap change metadata for a desk context while application-owned gates are held.
     pub fn interaction_context_version(
         &self,
-        context: SessionId,
+        _context: SessionId,
     ) -> ProgrammerInteractionContextVersion {
         ProgrammerInteractionContextVersion {
-            command_line: self
-                .command_states
-                .read()
-                .get(&context)
-                .cloned()
-                .unwrap_or_default(),
-            selection_revision: self
-                .selection_contexts
-                .read()
-                .get(&context)
-                .map_or(0, |selection| selection.revision),
+            command_line: self.command_state.read().clone(),
+            selection_revision: self.selection_context.read().revision,
         }
     }
 
     /// Materialize ordered selection authority only after its revision changed.
-    pub fn interaction_selection_for_context(&self, context: SessionId) -> ProgrammerSelection {
-        self.interaction_selection(context)
+    pub fn interaction_selection_for_context(&self, _context: SessionId) -> ProgrammerSelection {
+        self.interaction_selection()
     }
 
     fn interaction_state_while_gated(
         &self,
         session: SessionId,
     ) -> Option<ProgrammerInteractionState> {
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return None;
         }
-        let context = self.command_context(session);
+        let _context = self.command_context(session);
         Some(ProgrammerInteractionState {
-            command_line: self
-                .command_states
-                .read()
-                .get(&context)
-                .cloned()
-                .unwrap_or_default(),
-            selection: self.interaction_selection(context),
+            command_line: self.command_state.read().clone(),
+            selection: self.interaction_selection(),
         })
     }
 
-    fn interaction_selection(&self, context: SessionId) -> ProgrammerSelection {
-        self.selection_contexts
-            .read()
-            .get(&context)
-            .map(|selection| ProgrammerSelection {
-                selected: selection.selected.clone(),
-                expression: selection.expression.clone(),
-                revision: selection.revision,
-                gesture_open: selection.gesture_open,
-            })
-            .unwrap_or_default()
+    fn interaction_selection(&self) -> ProgrammerSelection {
+        let selection = self.selection_context.read();
+        ProgrammerSelection {
+            selected: selection.selected.clone(),
+            expression: selection.expression.clone(),
+            revision: selection.revision,
+            gesture_open: selection.gesture_open,
+        }
     }
 
     pub fn set_command_line(&self, session: SessionId, command_line: String) -> bool {
@@ -221,16 +195,10 @@ impl ProgrammerRegistry {
     }
 
     pub fn command_line_state(&self, session: SessionId) -> Option<CommandLineState> {
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return None;
         }
-        Some(
-            self.command_states
-                .read()
-                .get(&self.command_context(session))
-                .cloned()
-                .unwrap_or_default(),
-        )
+        Some(self.command_state.read().clone())
     }
 
     pub fn replace_command_line(
@@ -241,12 +209,12 @@ impl ProgrammerRegistry {
     ) -> Result<CommandLineState, CommandLineReplaceError> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return Err(CommandLineReplaceError::UnknownSession);
         }
-        let context = self.command_context(session);
-        let mut commands = self.command_states.write();
-        let current = commands.entry(context).or_default();
+        let _context = self.command_context(session);
+        let mut commands = self.command_state.write();
+        let current = &mut *commands;
         if current.revision != expected_revision {
             return Err(CommandLineReplaceError::RevisionConflict {
                 expected: expected_revision,
@@ -275,12 +243,12 @@ impl ProgrammerRegistry {
     {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return None;
         }
-        let context = self.command_context(session);
-        let mut commands = self.command_states.write();
-        let current = commands.entry(context).or_default();
+        let _context = self.command_context(session);
+        let mut commands = self.command_state.write();
+        let current = &mut *commands;
         let (text, target, pristine) = update(current);
         let text = canonical_command_text(text, pristine);
         if current.text != text || current.target != target || current.pristine != pristine {
@@ -314,12 +282,12 @@ impl ProgrammerRegistry {
     ) -> Option<CommandLineState> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return None;
         }
-        let context = self.command_context(session);
-        let mut commands = self.command_states.write();
-        let current = commands.entry(context).or_default();
+        let _context = self.command_context(session);
+        let mut commands = self.command_state.write();
+        let current = &mut *commands;
         let (text, pristine) = final_text.map_or_else(
             || (current.text.clone(), current.pristine),
             |text| {
@@ -343,8 +311,8 @@ impl ProgrammerRegistry {
         Some(result)
     }
 
-    fn touch(&self, session: SessionId) {
-        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+    fn touch(&self, _session: SessionId) {
+        if let Some(state) = self.state.write().as_mut() {
             state.last_activity = self.clock.now();
         }
     }
@@ -355,11 +323,13 @@ impl ProgrammerRegistry {
             .unwrap_or_else(|| CommandTarget::Fixture.as_str().to_owned())
     }
 
+    /// Whether the desk holds a pending command choice raised somewhere other than `excluded`.
+    ///
+    /// There is one command line, so this is the desk's own choice unless the excluded context is
+    /// the desk's.
     pub fn has_pending_command_choices_except_context(&self, excluded: Option<SessionId>) -> bool {
-        self.command_states
-            .read()
-            .iter()
-            .any(|(context, state)| Some(*context) != excluded && state.pending_choice.is_some())
+        self.desk.settled_command_context() != excluded
+            && self.command_state.read().pending_choice.is_some()
     }
 
     pub fn clear_pending_command_choices_except_context(
@@ -367,17 +337,13 @@ impl ProgrammerRegistry {
         excluded: Option<SessionId>,
     ) -> usize {
         self.with_all_mutation_gates(|| {
-            self.command_states
-                .write()
-                .iter_mut()
-                .filter(|(context, state)| {
-                    Some(**context) != excluded && state.pending_choice.is_some()
-                })
-                .map(|(_, state)| {
-                    state.pending_choice = None;
-                    state.revision += 1;
-                })
-                .count()
+            if !self.has_pending_command_choices_except_context(excluded) {
+                return 0;
+            }
+            let mut command = self.command_state.write();
+            command.pending_choice = None;
+            command.revision += 1;
+            1
         })
     }
 

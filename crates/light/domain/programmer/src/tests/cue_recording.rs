@@ -132,9 +132,9 @@ fn explicit_preload_capture_prefers_pending_then_reports_active_fallback() {
 
     assert!(registry.activate_preload(session));
     registry
-        .states
+        .state
         .write()
-        .get_mut(&session)
+        .as_mut()
         .unwrap()
         .preload_group_pending
         .insert("legacy-empty".into(), Default::default());

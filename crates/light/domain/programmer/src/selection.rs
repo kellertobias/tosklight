@@ -154,15 +154,11 @@ impl ProgrammerRegistry {
     ) -> Result<ProgrammerSelection, SelectionReplaceError> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return Err(SelectionReplaceError::UnknownSession);
         }
-        let context = self.command_context(session);
-        let actual_revision = self
-            .selection_contexts
-            .read()
-            .get(&context)
-            .map_or(0, |selection| selection.revision);
+        let _context = self.command_context(session);
+        let actual_revision = self.selection_context.read().revision;
         if actual_revision != expected_revision {
             return Err(SelectionReplaceError::RevisionConflict {
                 expected: expected_revision,
@@ -174,7 +170,7 @@ impl ProgrammerRegistry {
             .into_iter()
             .filter(|fixture| seen.insert(*fixture))
             .collect::<Vec<_>>();
-        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+        if let Some(state) = self.state.write().as_mut() {
             state.checkpoint();
             state.selected = selected.clone();
             state.selection_expression = Some(expression.clone());
@@ -186,19 +182,20 @@ impl ProgrammerRegistry {
             revision: self.next_selection_revision(),
             gesture_open: false,
         };
-        self.selection_contexts.write().insert(
-            context,
-            SelectionContext {
-                selected: selection.selected.clone(),
-                expression: selection.expression.clone(),
-                revision: selection.revision,
-                gesture_open: false,
-            },
-        );
+        *self.selection_context.write() = SelectionContext {
+            selected: selection.selected.clone(),
+            expression: selection.expression.clone(),
+            revision: selection.revision,
+            gesture_open: false,
+        };
         Ok(selection)
     }
 
-    pub fn select(&self, session: SessionId, fixtures: impl IntoIterator<Item = FixtureId>) -> u64 {
+    pub fn select(
+        &self,
+        _session: SessionId,
+        fixtures: impl IntoIterator<Item = FixtureId>,
+    ) -> u64 {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let mut seen = HashSet::new();
@@ -207,7 +204,7 @@ impl ProgrammerRegistry {
             .filter(|fixture| seen.insert(*fixture))
             .collect::<Vec<_>>();
         let expression = Some(SelectionExpression::Static);
-        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+        if let Some(state) = self.state.write().as_mut() {
             state.checkpoint();
             // Keep a serializable projection for legacy persistence. Reads are projected from the
             // desk-local selection context below.
@@ -216,41 +213,35 @@ impl ProgrammerRegistry {
             state.last_activity = self.clock.now();
         }
         let revision = self.next_selection_revision();
-        self.selection_contexts.write().insert(
-            self.command_context(session),
-            SelectionContext {
-                selected,
-                expression,
-                revision,
-                gesture_open: false,
-            },
-        );
+        *self.selection_context.write() = SelectionContext {
+            selected,
+            expression,
+            revision,
+            gesture_open: false,
+        };
         revision
     }
     pub fn select_expression(
         &self,
-        session: SessionId,
+        _session: SessionId,
         fixtures: Vec<FixtureId>,
         expression: SelectionExpression,
     ) -> u64 {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+        if let Some(state) = self.state.write().as_mut() {
             state.checkpoint();
             state.selected = fixtures.clone();
             state.selection_expression = Some(expression.clone());
             state.last_activity = self.clock.now();
         }
         let revision = self.next_selection_revision();
-        self.selection_contexts.write().insert(
-            self.command_context(session),
-            SelectionContext {
-                selected: fixtures,
-                expression: Some(expression),
-                revision,
-                gesture_open: false,
-            },
-        );
+        *self.selection_context.write() = SelectionContext {
+            selected: fixtures,
+            expression: Some(expression),
+            revision,
+            gesture_open: false,
+        };
         revision
     }
 
@@ -264,14 +255,13 @@ impl ProgrammerRegistry {
     ) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return false;
         }
-        let context = self.command_context(session);
+        let _context = self.command_context(session);
         let revision = self.next_selection_revision();
         let (selected, expression) = {
-            let mut selections = self.selection_contexts.write();
-            let selection = selections.entry(context).or_default();
+            let mut selection = self.selection_context.write();
             let mut items = if selection.gesture_open {
                 match selection.expression.clone() {
                     Some(SelectionExpression::Sources { items }) => items,
@@ -289,7 +279,7 @@ impl ProgrammerRegistry {
             selection.gesture_open = true;
             (selected, expression)
         };
-        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+        if let Some(state) = self.state.write().as_mut() {
             state.checkpoint();
             state.selected = selected;
             state.selection_expression = Some(expression);
@@ -300,25 +290,24 @@ impl ProgrammerRegistry {
 
     pub fn refresh_live_selections(&self, groups: &HashMap<String, GroupDefinition>) {
         self.with_all_mutation_gates(|| {
-            for selection in self.selection_contexts.write().values_mut() {
-                let resolved = match selection.expression.clone() {
-                    Some(SelectionExpression::LiveGroup { group_id, rule }) => {
-                        resolve_group(&group_id, groups)
-                            .ok()
-                            .map(|fixtures| apply_selection_rule(&fixtures, &rule))
-                    }
-                    Some(
-                        SelectionExpression::PlaybackContents { items }
-                        | SelectionExpression::Sources { items },
-                    ) => Some(resolve_selection_references(&items, groups)),
-                    _ => None,
-                };
-                if let Some(resolved) = resolved
-                    && selection.selected != resolved
-                {
-                    selection.selected = resolved;
-                    selection.revision = self.next_selection_revision();
+            let selection = &mut *self.selection_context.write();
+            let resolved = match selection.expression.clone() {
+                Some(SelectionExpression::LiveGroup { group_id, rule }) => {
+                    resolve_group(&group_id, groups)
+                        .ok()
+                        .map(|fixtures| apply_selection_rule(&fixtures, &rule))
                 }
+                Some(
+                    SelectionExpression::PlaybackContents { items }
+                    | SelectionExpression::Sources { items },
+                ) => Some(resolve_selection_references(&items, groups)),
+                _ => None,
+            };
+            if let Some(resolved) = resolved
+                && selection.selected != resolved
+            {
+                selection.selected = resolved;
+                selection.revision = self.next_selection_revision();
             }
         });
     }

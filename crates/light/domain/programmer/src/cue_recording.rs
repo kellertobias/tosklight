@@ -92,10 +92,12 @@ impl ProgrammerRegistry {
     ) -> Result<CueRecordingCapture, CueRecordingCaptureError> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let key = self.key(session);
-        let states = self.states.read();
+        if !self.knows_session(session) {
+            return Err(CueRecordingCaptureError::MissingSession);
+        }
+        let states = self.state.read();
         let state = states
-            .get(&key)
+            .as_ref()
             .ok_or(CueRecordingCaptureError::MissingSession)?;
         Ok(capture(state, source))
     }

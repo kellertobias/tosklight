@@ -12,7 +12,7 @@
     "apps/viz-editor/src/MediaWorkspace.tsx": 1238,
     "apps/viz-renderer/src/app.rs": 1336,
     "apps/viz-renderer/src/settings.rs": 1212,
-    "crates/light/adapters/headless/src/runtime/extensions_runtime.rs": 1227,
+    "crates/light/adapters/headless/src/runtime/extensions_runtime.rs": 1223,
     "crates/light/adapters/headless/src/runtime/macros_v2.rs": 1685,
     "crates/light/adapters/headless/src/runtime/timecode_v2.rs": 1264,
     "crates/media/adapters/http/src/routes/outputs.rs": 2124,

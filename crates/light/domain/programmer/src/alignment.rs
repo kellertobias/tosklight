@@ -86,7 +86,7 @@ impl ProgrammerRegistry {
     ) -> Result<ProgrammerAlignmentState, ProgrammerAlignmentError> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return Err(ProgrammerAlignmentError::UnknownSession);
         }
         let fixtures = self
@@ -103,19 +103,15 @@ impl ProgrammerRegistry {
             binding: None,
             input_position: 0.0,
         };
-        self.alignment_contexts
-            .write()
-            .insert(self.command_context(session), state.clone());
+        *self.alignment_context.write() = Some(state.clone());
         Ok(state)
     }
 
     pub fn alignment(&self, session: SessionId) -> Option<ProgrammerAlignmentState> {
-        self.sessions.read().contains_key(&session).then(|| {
-            self.alignment_contexts
-                .read()
-                .get(&self.command_context(session))
-                .cloned()
-        })?
+        self.sessions
+            .read()
+            .contains(&session)
+            .then(|| self.alignment_context.read().clone())?
     }
 
     /// Re-anchor an active mode from values resolved at the mode-switch instant.
@@ -130,12 +126,11 @@ impl ProgrammerRegistry {
     ) -> Result<ProgrammerAlignmentState, ProgrammerAlignmentError> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let context = self.command_context(session);
+        let _context = self.command_context(session);
         let current = self
-            .alignment_contexts
+            .alignment_context
             .read()
-            .get(&context)
-            .cloned()
+            .clone()
             .ok_or(ProgrammerAlignmentError::NotActive)?;
         let binding = match current.binding.as_ref() {
             Some(binding) => {
@@ -156,9 +151,7 @@ impl ProgrammerRegistry {
             binding,
             input_position: current.input_position,
         };
-        self.alignment_contexts
-            .write()
-            .insert(context, state.clone());
+        *self.alignment_context.write() = Some(state.clone());
         Ok(state)
     }
 
@@ -192,14 +185,14 @@ impl ProgrammerRegistry {
     ) -> Result<ProgrammerAlignmentState, ProgrammerAlignmentError> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return Err(ProgrammerAlignmentError::UnknownSession);
         }
-        let context = self.command_context(session);
+        let _context = self.command_context(session);
         let actual = self
-            .alignment_contexts
+            .alignment_context
             .read()
-            .get(&context)
+            .as_ref()
             .map(|state| state.revision)
             .ok_or(ProgrammerAlignmentError::NotActive)?;
         if actual != plan.expected_revision {
@@ -209,19 +202,14 @@ impl ProgrammerRegistry {
             });
         }
         plan.next_state.revision = self.next_alignment_revision();
-        self.alignment_contexts
-            .write()
-            .insert(context, plan.next_state.clone());
+        *self.alignment_context.write() = Some(plan.next_state.clone());
         Ok(plan.next_state)
     }
 
-    pub fn deactivate_alignment(&self, session: SessionId) -> bool {
+    pub fn deactivate_alignment(&self, _session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        self.alignment_contexts
-            .write()
-            .remove(&self.command_context(session))
-            .is_some()
+        self.alignment_context.write().take().is_some()
     }
 
     /// Deactivate only when an already-bound Align context is about to receive another logical
@@ -234,14 +222,14 @@ impl ProgrammerRegistry {
     ) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let context = self.command_context(session);
+        let _context = self.command_context(session);
         let different = self
-            .alignment_contexts
+            .alignment_context
             .read()
-            .get(&context)
+            .as_ref()
             .and_then(|state| state.binding.as_ref())
             .is_some_and(|binding| binding.attribute != *attribute);
-        different && self.alignment_contexts.write().remove(&context).is_some()
+        different && self.alignment_context.write().take().is_some()
     }
 
     pub(crate) fn next_alignment_revision(&self) -> u64 {

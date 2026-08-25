@@ -1,6 +1,6 @@
-use crate::{ProgrammerRegistry, ProgrammerState};
+use crate::ProgrammerRegistry;
 use light_core::{ProgrammerId, SessionId};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 /// One currently connected control session without its private interaction content.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,99 +47,46 @@ impl ProgrammerRegistry {
     }
 
     fn lifecycle_for_desk(&self) -> Option<ProgrammerLifecycleSummary> {
-        let states = self.states.read();
-        let (key, state) = states.iter().next()?;
+        let state = self.state.read();
+        let state = state.as_ref()?;
         let sessions = self.sessions.read();
-        let command_contexts = self.command_contexts.read();
-        let selections = self.selection_contexts.read();
-        Some(lifecycle_summary(
-            *key,
-            state,
-            &sessions,
-            &command_contexts,
-            &selections,
-        ))
+        Some(ProgrammerLifecycleSummary {
+            programmer_id: state.id,
+            connected: !sessions.is_empty(),
+            connected_sessions: connected_sessions(&sessions),
+            // One desk, one selection: every connected surface shares it, so it counts once.
+            selected_fixture_count: collection_len(self.selection_context.read().selected.len()),
+            normal_value_count: value_count(
+                state
+                    .values
+                    .len()
+                    .saturating_add(state.dynamic_values.len()),
+                &state.group_values,
+            ),
+            preload_active: !state.preload_active.is_empty()
+                || !state.preload_dynamic_active.is_empty()
+                || !state.preload_group_active.is_empty()
+                || state.preload_playback_active,
+        })
     }
 
     fn lifecycle_summaries(&self, connected_only: bool) -> Vec<ProgrammerLifecycleSummary> {
-        let states = self.states.read();
-        let sessions = self.sessions.read();
-        let command_contexts = self.command_contexts.read();
-        let selections = self.selection_contexts.read();
-        let connected_keys = sessions.values().copied().collect::<HashSet<_>>();
-        let mut summaries = states
-            .iter()
-            .filter(|(key, _)| !connected_only || connected_keys.contains(key))
-            .map(|(key, state)| {
-                lifecycle_summary(*key, state, &sessions, &command_contexts, &selections)
-            })
-            .collect::<Vec<_>>();
-        summaries.sort_unstable_by_key(|summary| summary.programmer_id.0);
-        summaries
+        if connected_only && self.sessions.read().is_empty() {
+            return Vec::new();
+        }
+        self.lifecycle_for_desk().into_iter().collect()
     }
 }
 
-fn lifecycle_summary(
-    key: SessionId,
-    state: &ProgrammerState,
-    sessions: &HashMap<SessionId, SessionId>,
-    command_contexts: &HashMap<SessionId, SessionId>,
-    selections: &HashMap<SessionId, crate::selection::SelectionContext>,
-) -> ProgrammerLifecycleSummary {
-    ProgrammerLifecycleSummary {
-        programmer_id: state.id,
-        connected: sessions.values().any(|bound| *bound == key),
-        connected_sessions: connected_sessions(key, sessions),
-        selected_fixture_count: selected_fixture_count(key, sessions, command_contexts, selections),
-        normal_value_count: value_count(
-            state
-                .values
-                .len()
-                .saturating_add(state.dynamic_values.len()),
-            &state.group_values,
-        ),
-        preload_active: !state.preload_active.is_empty()
-            || !state.preload_dynamic_active.is_empty()
-            || !state.preload_group_active.is_empty()
-            || state.preload_playback_active,
-    }
-}
-
-fn connected_sessions(
-    key: SessionId,
-    sessions: &HashMap<SessionId, SessionId>,
-) -> Vec<ProgrammerLifecycleSession> {
+fn connected_sessions(sessions: &HashSet<SessionId>) -> Vec<ProgrammerLifecycleSession> {
     let mut connected = sessions
         .iter()
-        .filter_map(|(session, bound)| {
-            (*bound == key).then_some(ProgrammerLifecycleSession {
-                session_id: *session,
-            })
+        .map(|session| ProgrammerLifecycleSession {
+            session_id: *session,
         })
         .collect::<Vec<_>>();
     connected.sort_unstable_by_key(|session| session.session_id.0);
     connected
-}
-
-fn selected_fixture_count(
-    key: SessionId,
-    sessions: &HashMap<SessionId, SessionId>,
-    command_contexts: &HashMap<SessionId, SessionId>,
-    selections: &HashMap<SessionId, crate::selection::SelectionContext>,
-) -> u64 {
-    sessions
-        .iter()
-        .filter(|(_, bound)| **bound == key)
-        .map(|(session, _)| command_contexts.get(session).copied().unwrap_or(*session))
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .fold(0, |count, context| {
-            count.saturating_add(
-                selections
-                    .get(&context)
-                    .map_or(0, |selection| collection_len(selection.selected.len())),
-            )
-        })
 }
 
 fn value_count(fixture_values: usize, group_values: &crate::groups::GroupProgrammerValues) -> u64 {
@@ -237,15 +184,17 @@ mod tests {
     }
 
     #[test]
-    fn session_identity_is_the_selection_context_fallback() {
+    fn the_desks_one_selection_is_counted_once() {
         let registry = ProgrammerRegistry::default();
-        let session = SessionId(Uuid::from_u128(11));
-        registry.start(session);
-        registry.select(session, [FixtureId(Uuid::from_u128(12))]);
-        registry.command_contexts.write().remove(&session);
+        let first = SessionId(Uuid::from_u128(11));
+        let second = SessionId(Uuid::from_u128(12));
+        registry.start(first);
+        registry.start(second);
+        registry.select(first, [FixtureId(Uuid::from_u128(13))]);
 
         let summary = registry.programmer_lifecycle().unwrap();
 
+        assert_eq!(summary.connected_sessions.len(), 2);
         assert_eq!(summary.selected_fixture_count, 1);
     }
 
@@ -256,9 +205,9 @@ mod tests {
         registry.start(session);
         let snapshot = Arc::new(ProgrammerSnapshot::default());
         registry
-            .states
+            .state
             .write()
-            .get_mut(&session)
+            .as_mut()
             .unwrap()
             .undo
             .push(Arc::clone(&snapshot));

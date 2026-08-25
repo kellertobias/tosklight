@@ -34,9 +34,9 @@ impl ProgrammerRegistry {
     pub fn capture_mode(&self, session: SessionId) -> Option<ProgrammerCaptureMode> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let state_key = self.key(session);
-        let state = self.states.read();
-        let state = state.get(&state_key)?;
+        let _state_key = session;
+        let state = self.state.read();
+        let state = state.as_ref()?;
         Some(ProgrammerCaptureMode {
             blind: state.blind,
             preview: state.preview,

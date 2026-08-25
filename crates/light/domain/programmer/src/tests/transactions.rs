@@ -250,17 +250,17 @@ fn projected_reads_cannot_mix_old_state_with_a_staged_commit() {
     staged.set_command_line(session, "GROUP 2".into());
 
     // Block the reader on its second projection lock after it has acquired the state lock.
-    let command_guard = registry.command_states.write();
+    let command_guard = registry.command_state.write();
     let reader_registry = Arc::clone(&registry);
     let reader = thread::spawn(move || reader_registry.get(session).unwrap());
     for _ in 0..100 {
-        if registry.states.try_write().is_none() {
+        if registry.state.try_write().is_none() {
             break;
         }
         thread::sleep(Duration::from_millis(1));
     }
     assert!(
-        registry.states.try_write().is_none(),
+        registry.state.try_write().is_none(),
         "the reader never acquired the state projection lock"
     );
 

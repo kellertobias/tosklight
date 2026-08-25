@@ -83,11 +83,11 @@ impl ProgrammerRegistry {
     /// Captures only normal recordable values in global Programmer order.
     pub fn capture_update_values(
         &self,
-        session: SessionId,
+        _session: SessionId,
     ) -> Result<ProgrammerUpdateValuesCapture, ProgrammerUpdateCaptureError> {
-        let states = self.states.read();
+        let states = self.state.read();
         let state = states
-            .get(&self.key(session))
+            .as_ref()
             .ok_or(ProgrammerUpdateCaptureError::MissingSession)?;
         let content = state.update_content_with_selection(&[]);
         let mut values = content
@@ -117,17 +117,16 @@ impl ProgrammerRegistry {
     /// Captures the exact ordered desk-local selection without shared Programmer state.
     pub fn capture_update_selection(
         &self,
-        session: SessionId,
+        _session: SessionId,
     ) -> Result<ProgrammerUpdateSelectionCapture, ProgrammerUpdateCaptureError> {
-        let states = self.states.read();
+        let states = self.state.read();
         states
-            .get(&self.key(session))
+            .as_ref()
             .ok_or(ProgrammerUpdateCaptureError::MissingSession)?;
-        let selections = self.selection_contexts.read();
-        let selection = selections.get(&self.command_context(session));
+        let selection = self.selection_context.read();
         Ok(ProgrammerUpdateSelectionCapture {
-            revision: selection.map_or(0, |selection| selection.revision),
-            fixtures: selection.map_or_else(Vec::new, |selection| selection.selected.clone()),
+            revision: selection.revision,
+            fixtures: selection.selected.clone(),
         })
     }
 
@@ -135,25 +134,21 @@ impl ProgrammerRegistry {
     /// state or mixing another desk's selection into this desk's Group candidates.
     pub fn capture_update_menu(
         &self,
-        session: SessionId,
+        _session: SessionId,
     ) -> Result<ProgrammerUpdateMenuCapture, ProgrammerUpdateCaptureError> {
-        let states = self.states.read();
+        let states = self.state.read();
         let state = states
-            .get(&self.key(session))
+            .as_ref()
             .ok_or(ProgrammerUpdateCaptureError::MissingSession)?;
         let mut values = update_values(state.update_content_with_selection(&[]));
         values.sort_by(compare_values);
-        let selections = self.selection_contexts.read();
-        let selection = selections.get(&self.command_context(session));
-        let selected_fixtures = selection.map_or_else(Vec::new, |value| value.selected.clone());
-        let mut group_ids = referenced_groups(
-            &values,
-            selection.and_then(|value| value.expression.as_ref()),
-        );
+        let selection = self.selection_context.read();
+        let selected_fixtures = selection.selected.clone();
+        let mut group_ids = referenced_groups(&values, selection.expression.as_ref());
         group_ids.sort();
         Ok(ProgrammerUpdateMenuCapture {
             values_revision: self.normal_values_revision(),
-            selection_revision: selection.map_or(0, |value| value.revision),
+            selection_revision: selection.revision,
             values,
             selected_fixtures,
             active_preset_id: state

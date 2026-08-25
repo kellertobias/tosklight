@@ -80,8 +80,8 @@ impl ProgrammerRegistry {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         if !state.blind || !state.preload_capture_programmer {
@@ -114,11 +114,10 @@ impl ProgrammerRegistry {
 
     pub fn preload_pending_values(
         &self,
-        session: SessionId,
+        _session: SessionId,
     ) -> Option<PreloadProgrammerValuesContent> {
-        let key = self.key(session);
-        let states = self.states.read();
-        Some(content(states.get(&key)?))
+        let state = self.state.read();
+        Some(content(state.as_ref()?))
     }
 }
 
