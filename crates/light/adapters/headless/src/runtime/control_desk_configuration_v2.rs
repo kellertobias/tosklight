@@ -7,33 +7,21 @@ use light_wire::v2::control_desk_configuration as wire;
 const REQUEST_CACHE_ENTRY_LIMIT: usize = 1_024;
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route(
-        "/api/v2/control-desks/{desk_id}/actions",
-        post(apply_action),
-    )
+    // The desk is the operand, and there is one. The path carried its id while it could be one
+    // of several, which is also why the action below had to compare a caller's desk against it.
+    Router::new().route("/api/v2/control-desk/actions", post(apply_action))
 }
 
 async fn apply_action(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
     headers: HeaderMap,
     TolerantJson(request): TolerantJson<wire::ControlDeskConfigurationActionRequest>,
 ) -> Result<Json<wire::ControlDeskConfigurationActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    if session.desk.id != desk_id
-        && !matches!(
-            request.action,
-            wire::ControlDeskConfigurationAction::RemoveClient { .. }
-        )
-    {
-        return Err(ApiError::forbidden(
-            "session is not authorized for this desk",
-        ));
-    }
+    let desk_id = session.desk.id;
     show_objects_v2::validate_request_id(&request.request_id)?;
     let key = ReplayKey {
         session_id: session.id.0,
-        desk_id,
         request_id: request.request_id.clone(),
     };
     if let Some(outcome) = state
@@ -248,7 +236,6 @@ fn domain_layout(
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) struct ReplayKey {
     session_id: Uuid,
-    desk_id: Uuid,
     request_id: String,
 }
 

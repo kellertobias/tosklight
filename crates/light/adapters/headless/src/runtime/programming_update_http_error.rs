@@ -53,17 +53,6 @@ impl ProgrammingUpdateHttpError {
         )
     }
 
-    pub(super) fn forbidden(message: impl Into<String>) -> Self {
-        Self::new(
-            StatusCode::FORBIDDEN,
-            ProgrammingUpdateErrorKind::Forbidden,
-            message,
-            None,
-            None,
-            false,
-        )
-    }
-
     pub(super) fn conflict(message: impl Into<String>) -> Self {
         Self::new(
             StatusCode::CONFLICT,

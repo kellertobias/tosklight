@@ -263,24 +263,23 @@ describe("Programming Update v2 HTTP adapter", () => {
 		}
 	});
 
-	it("loads and saves settings only for the exact desk scope", async () => {
-		const projection = { desk_id: DESK_ID, settings: settings() };
+	it("loads and saves the desk's settings on a path that names no desk", async () => {
+		const projection = { settings: settings() };
 		const fetch = vi
 			.fn<typeof globalThis.fetch>()
 			.mockResolvedValueOnce(response(projection))
 			.mockResolvedValueOnce(response(projection));
 		const { transport } = harness(fetch);
 
-		await expect(transport.loadSettings(DESK_ID)).resolves.toEqual(projection);
-		await expect(transport.saveSettings(DESK_ID, settings())).resolves.toEqual(
+		await expect(transport.loadSettings()).resolves.toEqual(projection);
+		await expect(transport.saveSettings(settings())).resolves.toEqual(
 			projection,
 		);
 		const [getUrl, getInit] = fetch.mock.calls[0];
 		const [putUrl, putInit] = fetch.mock.calls[1];
 		expect(getUrl).toBe(putUrl);
-		expect(String(getUrl)).toContain(
-			`/desks/${DESK_ID}/programming-update/settings`,
-		);
+		expect(String(getUrl)).toContain("/programming-update/settings");
+		expect(String(getUrl)).not.toContain("/desks/");
 		expect(getInit?.method).toBeUndefined();
 		expect(putInit?.method).toBe("POST");
 		expect(JSON.parse(String(putInit?.body))).toMatchObject({
@@ -288,11 +287,12 @@ describe("Programming Update v2 HTTP adapter", () => {
 			settings: settings(),
 		});
 
+		// The projection names no desk. A response that still carries one is not the contract.
 		const foreignFetch = vi
 			.fn<typeof globalThis.fetch>()
-			.mockResolvedValue(response({ ...projection, desk_id: SHOW_ID }));
+			.mockResolvedValue(response({ ...projection, desk_id: DESK_ID }));
 		await expect(
-			harness(foreignFetch).transport.loadSettings(DESK_ID),
+			harness(foreignFetch).transport.loadSettings(),
 		).rejects.toBeInstanceOf(WireValidationError);
 	});
 

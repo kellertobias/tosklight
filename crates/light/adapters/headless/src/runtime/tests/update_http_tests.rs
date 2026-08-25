@@ -1,32 +1,22 @@
 #[tokio::test]
-async fn update_settings_endpoint_persists_and_reloads_per_desk() {
+async fn update_settings_endpoint_persists_and_survives_a_reload() {
     let (state, data_dir) = test_state();
-    let mut front = test_control_desk();
-    front.id = Uuid::new_v4();
-    let mut wing = test_control_desk();
-    wing.id = Uuid::new_v4();
+    let desk = state.installation.desk().unwrap();
     let writer = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         token: "update-settings-writer".into(),
         connected: true,
-        desk: front.clone(),
+        desk: desk.clone(),
     };
     let reader = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
         token: "update-settings-reader".into(),
         connected: true,
-        desk: front.clone(),
+        desk: desk.clone(),
     };
-    let other_desk = Session {
-        capability: light_core::SurfaceCapability::Programming,
-        id: SessionId::new(),
-        token: "update-settings-other-desk".into(),
-        connected: true,
-        desk: wing.clone(),
-    };
-    for session in [&writer, &reader, &other_desk] {
+    for session in [&writer, &reader] {
         state.programming.start(session.id);
         attach_session_command_context(&state, session);
         state.sessions.insert_session(session.clone());
@@ -43,10 +33,7 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     let saved = app
         .clone()
         .oneshot(
-            Request::post(format!(
-                "/api/v2/desks/{}/programming-update/settings",
-                front.id
-            ))
+            Request::post("/api/v2/programming-update/settings")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {}", writer.token))
                 .body(Body::from(
@@ -79,21 +66,12 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     );
 
     let persisted = state
-        .installation.setting("server_configuration")
+        .installation
+        .setting("server_configuration")
         .unwrap()
         .unwrap();
     let reloaded_configuration: DeskConfiguration = serde_json::from_str(&persisted).unwrap();
-    assert_eq!(
-        reloaded_configuration
-            .update_settings_by_desk
-            .get(&front.id),
-        Some(&expected)
-    );
-    assert!(
-        !reloaded_configuration
-            .update_settings_by_desk
-            .contains_key(&wing.id)
-    );
+    assert_eq!(reloaded_configuration.update_settings, expected);
 
     // Rebuild the HTTP surface around configuration decoded from the persisted desk setting,
     // matching the configuration boundary used by a process restart.
@@ -102,22 +80,18 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
         .installation
         .replace_configuration(reloaded_configuration);
     let reloaded_app = router(reloaded_state);
-    let same_desk = reloaded_app
-        .clone()
+    let reloaded = reloaded_app
         .oneshot(
-            Request::get(format!(
-                "/api/v2/desks/{}/programming-update/settings",
-                front.id
-            ))
+            Request::get("/api/v2/programming-update/settings")
                 .header(header::AUTHORIZATION, format!("Bearer {}", reader.token))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(same_desk.status(), StatusCode::OK);
+    assert_eq!(reloaded.status(), StatusCode::OK);
     assert_eq!(
-        json(same_desk).await["settings"],
+        json(reloaded).await["settings"],
         serde_json::json!({
             "cue_mode":"existing_only",
             "preset_mode":"add_new",
@@ -125,32 +99,46 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
             "show_update_modal_on_touch":false
         })
     );
-    let isolated = reloaded_app
-        .oneshot(
-            Request::get(format!(
-                "/api/v2/desks/{}/programming-update/settings",
-                wing.id
-            ))
-                .header(
-                    header::AUTHORIZATION,
-                    format!("Bearer {}", other_desk.token),
-                )
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(isolated.status(), StatusCode::OK);
-    assert_eq!(
-        json(isolated).await["settings"],
-        serde_json::json!({
-            "cue_mode":"existing_in_current_cue",
-            "preset_mode":"update_existing",
-            "group_mode":"update_existing",
-            "show_update_modal_on_touch":true
-        })
-    );
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+/// Update settings written before the desk collapse are stored one per control desk. The desk keeps
+/// what it had rather than waking up on defaults.
+#[test]
+fn per_desk_update_settings_migrate_to_the_desks_own() {
+    let desk_id = Uuid::new_v4();
+    let stored = serde_json::json!({
+        "cue_mode": "existing_only",
+        "preset_mode": "add_new",
+        "group_mode": "add_new",
+        "other_target_modes": {},
+        "show_update_modal_on_touch": false
+    });
+    let mut value = serde_json::to_value(DeskConfiguration::default()).unwrap();
+    value.as_object_mut().unwrap().insert(
+        "update_settings_by_desk".into(),
+        serde_json::json!({ desk_id.to_string(): stored }),
+    );
+    let mut configuration: DeskConfiguration = serde_json::from_value(value).unwrap();
+
+    configuration.migrate_update_settings(desk_id);
+
+    assert_eq!(
+        configuration.update_settings,
+        update::UpdateSettings {
+            cue_mode: update::CueUpdateMode::ExistingOnly,
+            preset_mode: update::ExistingContentMode::AddNew,
+            group_mode: update::ExistingContentMode::AddNew,
+            other_target_modes: HashMap::new(),
+            show_update_modal_on_touch: false,
+        }
+    );
+    assert!(
+        !serde_json::to_string(&configuration)
+            .unwrap()
+            .contains("update_settings_by_desk"),
+        "the map is not written back"
+    );
 }
 
 #[test]

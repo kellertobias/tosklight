@@ -121,7 +121,7 @@ export class BrowserPages {
 			const session = this.session();
 			await this.api.request(
 				"POST",
-				`/api/v2/control-desks/${session.desk.id}/actions`,
+				`/api/v2/control-desk/actions`,
 				{
 					request_id: crypto.randomUUID(),
 					action: { type: "set_page", page: number, existing_only: true },

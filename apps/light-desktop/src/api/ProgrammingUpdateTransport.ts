@@ -118,23 +118,18 @@ export class HttpProgrammingUpdateTransport
 		return programmingUpdateActionOutcome(decoded);
 	}
 
-	async loadSettings(deskId: string) {
-		validateScopeId(deskId, "desk_id");
-		const result = await this.request(this.settingsPath(deskId), {
+	async loadSettings() {
+		const result = await this.request(this.settingsPath(), {
 			headers: this.headers(),
 		});
 		return programmingUpdateSettingsProjection(
-			decodeProgrammingUpdateSettingsProjection(result.value, deskId),
+			decodeProgrammingUpdateSettingsProjection(result.value),
 		);
 	}
 
-	async saveSettings(
-		deskId: string,
-		settings: import("./types").UpdateSettings,
-	) {
-		validateScopeId(deskId, "desk_id");
+	async saveSettings(settings: import("./types").UpdateSettings) {
 		const body = encodeProgrammingUpdateSettings(wireSettings(settings));
-		const result = await this.request(this.settingsPath(deskId), {
+		const result = await this.request(this.settingsPath(), {
 			method: "POST",
 			headers: this.headers(true),
 			body: JSON.stringify({
@@ -142,15 +137,9 @@ export class HttpProgrammingUpdateTransport
 				settings: body,
 			}),
 		});
-		const outcome = result.value as {
-			desk_id: unknown;
-			settings: unknown;
-		};
+		const outcome = result.value as { settings: unknown };
 		return programmingUpdateSettingsProjection(
-			decodeProgrammingUpdateSettingsProjection(
-				{ desk_id: outcome.desk_id, settings: outcome.settings },
-				deskId,
-			),
+			decodeProgrammingUpdateSettingsProjection({ settings: outcome.settings }),
 		);
 	}
 
@@ -195,9 +184,8 @@ export class HttpProgrammingUpdateTransport
 		return headers;
 	}
 
-	private settingsPath(deskId: string) {
-		const scope = `${this.baseUrl}/api/v2/desks/${encodeURIComponent(deskId)}`;
-		return `${scope}/programming-update/settings`;
+	private settingsPath() {
+		return `${this.baseUrl}/api/v2/programming-update/settings`;
 	}
 }
 

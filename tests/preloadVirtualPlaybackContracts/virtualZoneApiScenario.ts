@@ -202,7 +202,7 @@ async function verifyFirstDeskPageAndOsc({
 	bench,
 }: VirtualZoneApiContext) {
 	const desk = api.session!.desk;
-	await api.request("POST", `/api/v2/control-desks/${desk.id}/actions`, {
+	await api.request("POST", `/api/v2/control-desk/actions`, {
 		request_id: crypto.randomUUID(),
 		action: { type: "set_page", page: 2, existing_only: false },
 	});
@@ -221,7 +221,7 @@ async function verifyFirstDeskPageAndOsc({
 	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
 		enabled: false,
 	});
-	await api.request("POST", `/api/v2/control-desks/${desk.id}/actions`, {
+	await api.request("POST", `/api/v2/control-desk/actions`, {
 		request_id: crypto.randomUUID(),
 		action: { type: "set_page", page: 1, existing_only: false },
 	});
@@ -270,7 +270,7 @@ async function verifySecondDeskSharesShowZones(
 		false,
 	);
 	api.session = second;
-	await api.request("POST", `/api/v2/control-desks/${second.desk.id}/actions`, {
+	await api.request("POST", `/api/v2/control-desk/actions`, {
 		request_id: crypto.randomUUID(),
 		action: { type: "set_page", page: 2, existing_only: false },
 	});

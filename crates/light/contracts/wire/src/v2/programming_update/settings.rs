@@ -2,7 +2,6 @@ use super::{ProgrammingUpdateCueMode, ProgrammingUpdateExistingContentMode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -16,7 +15,6 @@ pub struct ProgrammingUpdateSettings {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProgrammingUpdateSettingsProjection {
-    pub desk_id: Uuid,
     pub settings: ProgrammingUpdateSettings,
 }
 
@@ -30,6 +28,5 @@ pub struct ProgrammingUpdateSettingsUpdateRequest {
 pub struct ProgrammingUpdateSettingsUpdateOutcome {
     pub request_id: String,
     pub replayed: bool,
-    pub desk_id: Uuid,
     pub settings: ProgrammingUpdateSettings,
 }

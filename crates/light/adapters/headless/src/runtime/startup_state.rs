@@ -274,6 +274,7 @@ pub(super) fn load_configuration(
     }
     configuration.migrate_speed_group_sources();
     configuration.migrate_highlight_look();
+    configuration.migrate_update_settings(desk.desk()?.id);
     configuration.osc_bind = osc_bind_override
         .or(configuration.osc_bind)
         .or(Some(SocketAddr::from(([127, 0, 0, 1], 9000))));

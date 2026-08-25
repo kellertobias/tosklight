@@ -317,7 +317,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.setPlaybackPage(DESK_ID, 2, { existingOnly: true });
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desks/${DESK_ID}/actions`,
+			`/api/v2/control-desk/actions`,
 			expect.objectContaining({
 				method: "POST",
 				body: expect.stringContaining('"existing_only":true'),
@@ -338,7 +338,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.setPlaybackPage(DESK_ID, 2);
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desks/${DESK_ID}/actions`,
+			`/api/v2/control-desk/actions`,
 			expect.objectContaining({
 				body: expect.stringContaining('"existing_only":false'),
 			}),
@@ -359,7 +359,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.removeClient(DESK_ID, CLIENT_ID);
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desks/${DESK_ID}/actions`,
+			`/api/v2/control-desk/actions`,
 			expect.objectContaining({
 				method: "POST",
 				body: expect.stringContaining(`"client_id":"${CLIENT_ID}"`),

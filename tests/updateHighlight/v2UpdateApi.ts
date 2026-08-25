@@ -22,7 +22,7 @@ export async function programmingUpdateSettings(api: ApiDriver) {
 	const deskId = requiredDeskId(api);
 	const response = await api.request<{ settings: unknown }>(
 		"GET",
-		`/api/v2/desks/${deskId}/programming-update/settings`,
+		`/api/v2/programming-update/settings`,
 	);
 	return response.settings;
 }

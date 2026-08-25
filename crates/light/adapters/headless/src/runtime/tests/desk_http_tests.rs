@@ -4,13 +4,12 @@ async fn desk_lock_is_persisted_installation_wide_and_enforced_by_the_server() {
     let second = state.installation.desk().unwrap();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
-    let desk_id = state.sessions.sessions().into_iter().find(|session| session.token == token).unwrap().desk.id;
-    let configure = app.clone().oneshot(Request::post(format!("/api/v2/control-desks/{desk_id}/desk-lock/update")).header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"request_id":"desk-lock-configure","message":"Call the operator","wallpaper":null,"unlock_mode":"pin","pin":"1234"}"#)).unwrap()).await.unwrap();
+    let configure = app.clone().oneshot(Request::post("/api/v2/desk-lock/update").header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"request_id":"desk-lock-configure","message":"Call the operator","wallpaper":null,"unlock_mode":"pin","pin":"1234"}"#)).unwrap()).await.unwrap();
     assert_eq!(configure.status(), StatusCode::OK);
     let lock = app
         .clone()
         .oneshot(
-            Request::get(format!("/api/v2/control-desks/{desk_id}/desk-lock/lock"))
+            Request::get("/api/v2/desk-lock/lock")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from("{}"))
@@ -42,7 +41,7 @@ async fn desk_lock_is_persisted_installation_wide_and_enforced_by_the_server() {
     let wrong = app
         .clone()
         .oneshot(
-            Request::post(format!("/api/v2/control-desks/{desk_id}/desk-lock/unlock"))
+            Request::post("/api/v2/desk-lock/unlock")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"pin":"9999"}"#))
@@ -85,7 +84,7 @@ async fn desk_lock_is_persisted_installation_wide_and_enforced_by_the_server() {
 
     let unlock = app
         .oneshot(
-            Request::post(format!("/api/v2/control-desks/{desk_id}/desk-lock/unlock"))
+            Request::post("/api/v2/desk-lock/unlock")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"pin":"1234"}"#))

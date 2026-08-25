@@ -304,8 +304,13 @@ pub(super) struct DeskConfiguration {
     pub(super) matter_enabled: bool,
     /// Pool colors are a desk presentation preference, never portable show content.
     pub(super) pool_presentation: PoolPresentationConfiguration,
-    /// Workflow defaults belong to a concrete desk rather than to portable show data.
-    pub(super) update_settings_by_desk: HashMap<Uuid, update::UpdateSettings>,
+    /// Workflow defaults belong to the desk rather than to portable show data.
+    #[serde(default)]
+    pub(super) update_settings: update::UpdateSettings,
+    /// What an installation written before the desk collapse holds instead: one entry per control
+    /// desk. Read-only, and folded into `update_settings` by `migrate_update_settings`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    update_settings_by_desk: HashMap<Uuid, update::UpdateSettings>,
     pub(super) file_manager_system_picker_fallback: bool,
     pub(super) file_manager_roots: Vec<file_manager::ConfiguredRoot>,
     /// What each connected visualizer is being told to look at, by target name. An installation
@@ -372,6 +377,7 @@ impl Default for DeskConfiguration {
             highlight_legacy_overrides_acknowledged: false,
             matter_enabled: false,
             pool_presentation: PoolPresentationConfiguration::default(),
+            update_settings: update::UpdateSettings::default(),
             update_settings_by_desk: HashMap::new(),
             file_manager_system_picker_fallback: false,
             file_manager_roots: Vec::new(),
@@ -405,6 +411,27 @@ impl DeskConfiguration {
             self.speed_group_sound_to_light[index].enabled =
                 self.speed_group_sources[index] == SpeedGroupSource::SoundToLight;
         }
+    }
+
+    /// Fold the per-desk Update settings into the desk's own.
+    ///
+    /// They were stored one per control desk. There is one desk, so the map holds one entry that
+    /// is the desk's; a map with several is from before the collapse, and the entry the surviving
+    /// desk kept is the one to carry over. Anything explicitly set beats the default.
+    pub(super) fn migrate_update_settings(&mut self, desk_id: Uuid) {
+        if self.update_settings_by_desk.is_empty() {
+            return;
+        }
+        let stored = self
+            .update_settings_by_desk
+            .remove(&desk_id)
+            .or_else(|| self.update_settings_by_desk.values().next().cloned());
+        if let Some(stored) = stored
+            && self.update_settings == update::UpdateSettings::default()
+        {
+            self.update_settings = stored;
+        }
+        self.update_settings_by_desk.clear();
     }
 
     /// An installation whose Highlight Look was only ever flagged for review, without an operator

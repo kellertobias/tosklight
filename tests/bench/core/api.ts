@@ -357,7 +357,7 @@ export class ApiDriver {
             : method === "PUT"
               ? "POST"
               : method,
-        path: `/api/v2/control-desks/${this.session.desk.id}/desk-lock${
+        path: `/api/v2/desk-lock${
           method === "PUT" ? "/update" : suffix
         }`,
         body:

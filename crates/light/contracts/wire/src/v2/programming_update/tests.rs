@@ -202,10 +202,7 @@ fn settings_exclude_legacy_other_target_modes() {
         group_mode: ProgrammingUpdateExistingContentMode::AddNew,
         show_update_modal_on_touch: true,
     };
-    let projection = ProgrammingUpdateSettingsProjection {
-        desk_id: Uuid::from_u128(9),
-        settings,
-    };
+    let projection = ProgrammingUpdateSettingsProjection { settings };
     let encoded = serde_json::to_value(projection).unwrap();
     assert!(encoded["settings"].get("other_target_modes").is_none());
 

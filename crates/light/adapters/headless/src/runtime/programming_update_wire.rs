@@ -76,11 +76,9 @@ pub(super) fn action_request(
 }
 
 pub(super) fn wire_settings(
-    desk_id: uuid::Uuid,
     settings: &application::UpdateSettings,
 ) -> wire::ProgrammingUpdateSettingsProjection {
     wire::ProgrammingUpdateSettingsProjection {
-        desk_id,
         settings: wire::ProgrammingUpdateSettings {
             cue_mode: wire_cue_mode(settings.cue_mode),
             preset_mode: wire_existing_mode(settings.preset_mode),

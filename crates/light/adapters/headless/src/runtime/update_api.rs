@@ -11,14 +11,8 @@ pub(super) async fn list_programmers(
     Ok(Json(programmers))
 }
 
-pub(super) fn update_settings_for(state: &AppState, desk_id: Uuid) -> update::UpdateSettings {
-    state
-        .installation
-        .configuration()
-        .update_settings_by_desk
-        .get(&desk_id)
-        .cloned()
-        .unwrap_or_default()
+pub(super) fn update_settings(state: &AppState) -> update::UpdateSettings {
+    state.installation.configuration().update_settings
 }
 
 pub(super) fn command_line_arms_update(command_line: &str) -> bool {
