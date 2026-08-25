@@ -87,7 +87,7 @@ export class LightClientRuntime {
 		const clientId = this.clientId(storage);
 		const session = await this.request<SessionResponse>(
 			"/api/v2/sessions",
-			this.sessionRequest(clientId, storage),
+			this.sessionRequest(clientId),
 			false,
 		);
 		this.installSession(session, storage);
@@ -173,14 +173,11 @@ export class LightClientRuntime {
 		return created;
 	}
 
-	private sessionRequest(clientId: string, storage: Storage | null): RequestInit {
+	private sessionRequest(clientId: string): RequestInit {
 		return {
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({
-				client_id: clientId,
-				desk_id: storage?.getItem("light.control-desk") ?? null,
-			}),
+			body: JSON.stringify({ client_id: clientId }),
 		};
 	}
 
