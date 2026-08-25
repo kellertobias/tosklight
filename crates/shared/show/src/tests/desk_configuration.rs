@@ -158,7 +158,10 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
         .set_selected_playback(removed.id, show_id, Some(23))
         .unwrap();
     store
-        .set_setting(&format!("desk_lock:{}", removed.id), "locked")
+        .set_setting(
+            &format!("desk_lock:{}", removed.id),
+            r#"{"locked":false,"message":"wing"}"#,
+        )
         .unwrap();
     store
         .set_setting(
@@ -215,6 +218,11 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
     assert_eq!(
         store.setting(&format!("desk_lock:{}", removed.id)).unwrap(),
         None
+    );
+    assert_eq!(
+        store.setting("desk_lock").unwrap().as_deref(),
+        Some(r#"{"locked":false,"message":"wing"}"#),
+        "the only per-desk lock becomes the desk's one lock"
     );
     let configuration: serde_json::Value =
         serde_json::from_str(&store.setting("server_configuration").unwrap().unwrap()).unwrap();
@@ -774,6 +782,67 @@ fn a_desk_saved_with_an_osc_alias_keeps_its_configuration_without_one() {
     let clients = store.client_desks().unwrap();
     assert_eq!(clients.len(), 1);
     assert_eq!(clients[0].client_id, Some(client_id));
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn a_locked_desk_lock_survives_the_collapse_into_one_lock() {
+    let path = temporary("desk-lock-collapse");
+    {
+        let store = DeskStore::open(&path).unwrap();
+        store
+            .set_setting(
+                &format!("desk_lock:{}", Uuid::new_v4()),
+                r#"{"locked":false,"message":"unlocked wing"}"#,
+            )
+            .unwrap();
+        store
+            .set_setting(
+                &format!("desk_lock:{}", Uuid::new_v4()),
+                r#"{"locked":true,"message":"front of house"}"#,
+            )
+            .unwrap();
+    }
+
+    let store = DeskStore::open(&path).unwrap();
+
+    // A desk that was locked must not come back unlocked.
+    assert_eq!(
+        store.setting("desk_lock").unwrap().as_deref(),
+        Some(r#"{"locked":true,"message":"front of house"}"#)
+    );
+    assert!(
+        store.settings_with_prefix("desk_lock:").unwrap().is_empty(),
+        "the per-desk keys are gone, so a stale one cannot reappear"
+    );
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn an_installation_that_already_holds_one_lock_keeps_it() {
+    let path = temporary("desk-lock-kept");
+    {
+        let store = DeskStore::open(&path).unwrap();
+        store
+            .set_setting("desk_lock", r#"{"locked":true,"message":"kept"}"#)
+            .unwrap();
+        store
+            .set_setting(
+                &format!("desk_lock:{}", Uuid::new_v4()),
+                r#"{"locked":false,"message":"superseded"}"#,
+            )
+            .unwrap();
+    }
+
+    let store = DeskStore::open(&path).unwrap();
+
+    assert_eq!(
+        store.setting("desk_lock").unwrap().as_deref(),
+        Some(r#"{"locked":true,"message":"kept"}"#)
+    );
+    assert!(store.settings_with_prefix("desk_lock:").unwrap().is_empty());
     drop(store);
     let _ = fs::remove_file(path);
 }
