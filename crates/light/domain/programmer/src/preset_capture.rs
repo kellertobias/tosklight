@@ -14,9 +14,9 @@ impl ProgrammerRegistry {
         address: PresetAddress,
         name: String,
     ) -> Option<Preset> {
-        let key = self.key(session);
-        let states = self.states.read();
-        let state = states.get(&key)?;
+        let _key = session;
+        let states = self.state.read();
+        let state = states.as_ref()?;
         let mut preset = Preset {
             name,
             family: address.family,

@@ -21,11 +21,11 @@ pub struct PreloadPlaybackAction {
 impl ProgrammerRegistry {
     /// Reads only whether retained active Preload values exist; no Programmer projection is
     /// cloned or serialized.
-    pub fn has_active_preload(&self, session: SessionId) -> Option<bool> {
+    pub fn has_active_preload(&self, _session: SessionId) -> Option<bool> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let states = self.states.read();
-        let state = states.get(&self.key(session))?;
+        let states = self.state.read();
+        let state = states.as_ref()?;
         Some(
             !state.preload_active.is_empty()
                 || !state.preload_dynamic_active.is_empty()
@@ -62,15 +62,15 @@ impl ProgrammerRegistry {
 
     fn activate_preload_at_with_timing(
         &self,
-        session: SessionId,
+        _session: SessionId,
         committed_at: DateTime<Utc>,
         programmer_fade_millis: Option<u64>,
     ) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let pending_values_changed = {
-            let mut states = self.states.write();
-            let Some(state) = states.get_mut(&self.key(session)) else {
+            let mut states = self.state.write();
+            let Some(state) = states.as_mut() else {
                 return false;
             };
             let pending_values_changed = !state.preload_pending.is_empty()
@@ -160,7 +160,7 @@ impl ProgrammerRegistry {
 
     pub fn queue_preload_playback_action_with_origin(
         &self,
-        session: SessionId,
+        _session: SessionId,
         playback_number: u16,
         page: Option<u8>,
         action: PreloadPlaybackQueueAction,
@@ -169,8 +169,8 @@ impl ProgrammerRegistry {
     ) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         state.checkpoint();
@@ -190,19 +190,19 @@ impl ProgrammerRegistry {
     /// Clone only the ordered queued playback actions, without materializing a Programmer state.
     pub fn preload_playback_actions(
         &self,
-        session: SessionId,
+        _session: SessionId,
     ) -> Option<Vec<PreloadPlaybackAction>> {
-        self.states
+        self.state
             .read()
-            .get(&self.key(session))
+            .as_ref()
             .map(|state| state.preload_playback_pending.clone())
     }
 
-    pub fn take_preload_playback_actions(&self, session: SessionId) -> Vec<PreloadPlaybackAction> {
+    pub fn take_preload_playback_actions(&self, _session: SessionId) -> Vec<PreloadPlaybackAction> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return Vec::new();
         };
         let drained = std::mem::take(&mut state.preload_playback_pending);
@@ -212,12 +212,12 @@ impl ProgrammerRegistry {
         }
         drained
     }
-    pub fn clear_preload_pending(&self, session: SessionId) -> bool {
+    pub fn clear_preload_pending(&self, _session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let (pending_values_changed, queue_changed) = {
-            let mut states = self.states.write();
-            let Some(state) = states.get_mut(&self.key(session)) else {
+            let mut states = self.state.write();
+            let Some(state) = states.as_mut() else {
                 return false;
             };
             let pending_values_changed = !state.preload_pending.is_empty()
@@ -242,11 +242,11 @@ impl ProgrammerRegistry {
         }
         true
     }
-    pub fn release_preload(&self, session: SessionId) -> bool {
+    pub fn release_preload(&self, _session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         let pending_values_changed = !state.preload_pending.is_empty()
@@ -292,15 +292,15 @@ impl ProgrammerRegistry {
     }
     pub fn set_preload_group(
         &self,
-        session: SessionId,
+        _session: SessionId,
         group_id: String,
         attribute: AttributeKey,
         value: AttributeValue,
     ) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         state.checkpoint();
@@ -326,11 +326,11 @@ impl ProgrammerRegistry {
         true
     }
 
-    pub fn arm_preload(&self, session: SessionId, capture_programmer: bool) -> bool {
+    pub fn arm_preload(&self, _session: SessionId, capture_programmer: bool) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         state.checkpoint();

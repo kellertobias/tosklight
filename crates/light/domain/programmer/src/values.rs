@@ -96,7 +96,7 @@ impl ProgrammerRegistry {
     /// a timed release avoid clearing a newer retrigger of the same action.
     pub fn set_transient_action(
         &self,
-        session: SessionId,
+        _session: SessionId,
         source: String,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) -> Option<u64> {
@@ -108,8 +108,8 @@ impl ProgrammerRegistry {
         }
         let generation = self.next_programmer_order();
         let changed_at = self.clock.now();
-        let mut states = self.states.write();
-        let state = states.get_mut(&self.key(session))?;
+        let mut states = self.state.write();
+        let state = states.as_mut()?;
         Arc::make_mut(&mut state.transient_values).retain(|action| action.source != source);
         let values = assignments
             .into_iter()
@@ -139,14 +139,14 @@ impl ProgrammerRegistry {
     /// `None` to release whichever generation is currently active.
     pub fn release_transient_action(
         &self,
-        session: SessionId,
+        _session: SessionId,
         source: &str,
         generation: Option<u64>,
     ) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         let before = state.transient_values.len();
@@ -174,8 +174,8 @@ impl ProgrammerRegistry {
         }
         self.close_selection_gesture(session);
         let changed_user = {
-            let mut states = self.states.write();
-            let Some(state) = states.get_mut(&self.key(session)) else {
+            let mut states = self.state.write();
+            let Some(state) = states.as_mut() else {
                 return;
             };
             if checkpoint {
@@ -297,8 +297,8 @@ impl ProgrammerRegistry {
     ) {
         self.close_selection_gesture(session);
         let changed_user = {
-            let mut states = self.states.write();
-            let Some(state) = states.get_mut(&self.key(session)) else {
+            let mut states = self.state.write();
+            let Some(state) = states.as_mut() else {
                 return;
             };
             state.checkpoint();

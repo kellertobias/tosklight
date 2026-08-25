@@ -68,22 +68,19 @@ impl ProgrammerState {
 }
 
 impl ProgrammerRegistry {
-    pub fn undo_depth(&self, session: SessionId) -> Option<usize> {
-        self.states
-            .read()
-            .get(&self.key(session))
-            .map(|state| state.undo.len())
+    pub fn undo_depth(&self, _session: SessionId) -> Option<usize> {
+        self.state.read().as_ref().map(|state| state.undo.len())
     }
 
     /// A show mutation inserted into the unified operator history invalidates snapshot redo.
     ///
     /// Show-object redo is deliberately unsupported: replaying a historical whole-object body
     /// after newer edits would violate the active show's revision boundary.
-    pub fn clear_redo(&self, session: SessionId) -> bool {
+    pub fn clear_redo(&self, _session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         let changed = !state.redo.is_empty();
@@ -91,12 +88,12 @@ impl ProgrammerRegistry {
         changed
     }
 
-    pub fn undo(&self, session: SessionId) -> bool {
+    pub fn undo(&self, _session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let (selected, expression, values_changed, preload_values_changed, queue_changed) = {
-            let mut states = self.states.write();
-            let Some(state) = states.get_mut(&self.key(session)) else {
+            let mut states = self.state.write();
+            let Some(state) = states.as_mut() else {
                 return false;
             };
             let Some(previous) = state.undo.pop() else {
@@ -121,15 +118,12 @@ impl ProgrammerRegistry {
                 queue_changed,
             )
         };
-        self.selection_contexts.write().insert(
-            self.command_context(session),
-            SelectionContext {
-                selected,
-                expression,
-                revision: self.next_selection_revision(),
-                gesture_open: false,
-            },
-        );
+        *self.selection_context.write() = SelectionContext {
+            selected,
+            expression,
+            revision: self.next_selection_revision(),
+            gesture_open: false,
+        };
         if values_changed {
             self.mark_normal_values_changed();
         }
@@ -141,12 +135,12 @@ impl ProgrammerRegistry {
         }
         true
     }
-    pub fn redo(&self, session: SessionId) -> bool {
+    pub fn redo(&self, _session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         let (selected, expression, values_changed, preload_values_changed, queue_changed) = {
-            let mut states = self.states.write();
-            let Some(state) = states.get_mut(&self.key(session)) else {
+            let mut states = self.state.write();
+            let Some(state) = states.as_mut() else {
                 return false;
             };
             let Some(next) = state.redo.pop() else {
@@ -169,15 +163,12 @@ impl ProgrammerRegistry {
                 queue_changed,
             )
         };
-        self.selection_contexts.write().insert(
-            self.command_context(session),
-            SelectionContext {
-                selected,
-                expression,
-                revision: self.next_selection_revision(),
-                gesture_open: false,
-            },
-        );
+        *self.selection_context.write() = SelectionContext {
+            selected,
+            expression,
+            revision: self.next_selection_revision(),
+            gesture_open: false,
+        };
         if values_changed {
             self.mark_normal_values_changed();
         }

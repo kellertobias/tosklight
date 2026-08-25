@@ -61,8 +61,8 @@ impl ProgrammerRegistry {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         let preload = state.blind && state.preload_capture_programmer;
@@ -118,8 +118,8 @@ impl ProgrammerRegistry {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         let preload = state.blind && state.preload_capture_programmer;

@@ -62,7 +62,10 @@ impl FromRequestParts<AppState> for ShowContext {
 }
 
 /// The control desk against which a context-sensitive HTTP operation is resolved.
-pub(super) struct DeskContext(Option<Uuid>);
+///
+/// It used to carry the id the `X-Tosk-Desk` header named. There is one desk, so the header is
+/// still parsed — a malformed one is a client bug — and then says nothing about which desk.
+pub(super) struct DeskContext;
 
 impl DeskContext {
     /// There is one desk. `X-Tosk-Desk` used to pick between several; a header naming one from
@@ -79,10 +82,8 @@ impl FromRequestParts<AppState> for DeskContext {
         parts: &mut Parts,
         _state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        Ok(Self(optional_uuid_header(
-            &parts.headers,
-            DESK_CONTEXT_HEADER,
-        )?))
+        optional_uuid_header(&parts.headers, DESK_CONTEXT_HEADER)?;
+        Ok(Self)
     }
 }
 

@@ -4,22 +4,20 @@ use crate::selection::SelectionContext;
 use crate::{ProgrammerAlignmentState, ProgrammerRegistry, ProgrammerState};
 use light_core::SessionId;
 use parking_lot::{ReentrantMutex, RwLock};
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Opaque in-memory checkpoint used to roll back one application command that failed validation.
 /// Persistence and transports never serialize this value.
 #[derive(Clone)]
 pub struct ProgrammerTransactionSnapshot {
-    state_key: SessionId,
     state: ProgrammerState,
     normal_values_generation: u64,
     preload_values_generation: u64,
     preload_playback_queue_generation: u64,
     priority_changed_at: chrono::DateTime<chrono::Utc>,
-    interaction_context: SessionId,
-    selection: Option<SelectionContext>,
-    command_line: Option<CommandLineState>,
+    selection: SelectionContext,
+    command_line: CommandLineState,
     alignment: Option<ProgrammerAlignmentState>,
 }
 
@@ -112,19 +110,18 @@ impl ProgrammerRegistry {
         let staged = self
             .detached_session(session)
             .ok_or_else(|| E::from("programmer does not exist".to_owned()))?;
-        let staged_state_key = staged.key(session);
         let command_history = squash_command_history.then(|| {
-            let states = staged.states.read();
-            let state = states
-                .get(&staged_state_key)
+            let state = staged.state.read();
+            let state = state
+                .as_ref()
                 .expect("a detached session retains its staged Programmer state");
             (state.undo.clone(), Arc::new(state.snapshot()))
         });
         let result = transaction(&staged)?;
         if let Some((undo_before, command_checkpoint)) = command_history {
-            let mut states = staged.states.write();
-            let state = states
-                .get_mut(&staged_state_key)
+            let mut staged_state = staged.state.write();
+            let state = staged_state
+                .as_mut()
                 .ok_or_else(|| E::from("programmer does not exist".to_owned()))?;
             let history_changed = state.undo.len() != undo_before.len()
                 || state
@@ -146,9 +143,7 @@ impl ProgrammerRegistry {
     }
 
     pub(crate) fn detached_session(&self, session: SessionId) -> Option<ProgrammerRegistry> {
-        let state_key = self.key(session);
-        let context = self.command_context(session);
-        let state = self.states.read().get(&state_key)?.clone();
+        let state = self.state.read().as_ref()?.clone();
         let normal_values_generation = self.normal_values_generations.get();
         let normal_values_revision = self.normal_values_revisions.get();
         let preload_values_generation = self.preload_values_generations.get();
@@ -161,28 +156,15 @@ impl ProgrammerRegistry {
             .priority_changed_at
             .read()
             .unwrap_or(state.last_activity);
-        let selection = self.selection_contexts.read().get(&context).cloned();
-        let command = self.command_states.read().get(&context).cloned();
-        let alignment = self.alignment_contexts.read().get(&context).cloned();
+        let selection = self.selection_context.read().clone();
+        let command = self.command_state.read().clone();
+        let alignment = self.alignment_context.read().clone();
         Some(ProgrammerRegistry {
-            states: Arc::new(RwLock::new(HashMap::from([(state_key, state)]))),
-            sessions: Arc::new(RwLock::new(HashMap::from([(session, state_key)]))),
-            command_contexts: Arc::new(RwLock::new(HashMap::from([(session, context)]))),
-            command_states: Arc::new(RwLock::new(
-                command
-                    .map(|command| HashMap::from([(context, command)]))
-                    .unwrap_or_default(),
-            )),
-            selection_contexts: Arc::new(RwLock::new(
-                selection
-                    .map(|selection| HashMap::from([(context, selection)]))
-                    .unwrap_or_default(),
-            )),
-            alignment_contexts: Arc::new(RwLock::new(
-                alignment
-                    .map(|alignment| HashMap::from([(context, alignment)]))
-                    .unwrap_or_default(),
-            )),
+            state: Arc::new(RwLock::new(Some(state))),
+            sessions: Arc::new(RwLock::new(HashSet::from([session]))),
+            command_state: Arc::new(RwLock::new(command)),
+            selection_context: Arc::new(RwLock::new(selection)),
+            alignment_context: Arc::new(RwLock::new(alignment)),
             selection_revision: Arc::clone(&self.selection_revision),
             alignment_revision: Arc::clone(&self.alignment_revision),
             programmer_order: Arc::clone(&self.programmer_order),
@@ -216,13 +198,10 @@ impl ProgrammerRegistry {
         session: SessionId,
         staged: &ProgrammerRegistry,
     ) -> bool {
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return false;
         }
-        let live_state_key = self.key(session);
-        let staged_state_key = staged.key(session);
-        let context = self.command_context(session);
-        let Some(state) = staged.states.read().get(&staged_state_key).cloned() else {
+        let Some(state) = staged.state.read().as_ref().cloned() else {
             return false;
         };
         let staged_values_generation = staged.normal_values_generations.get();
@@ -233,46 +212,25 @@ impl ProgrammerRegistry {
             .priority_changed_at
             .read()
             .unwrap_or(state.last_activity);
-        let selection = staged.selection_contexts.read().get(&context).cloned();
-        let command = staged.command_states.read().get(&context).cloned();
-        let alignment = staged.alignment_contexts.read().get(&context).cloned();
+        let selection = staged.selection_context.read().clone();
+        let command = staged.command_state.read().clone();
+        let alignment = staged.alignment_context.read().clone();
 
         // Populate every replacement before releasing any write guard. A reader that needs more
         // than one projection either sees the complete previous set or waits and sees the complete
         // replacement set.
-        let mut states = self.states.write();
-        let mut commands = self.command_states.write();
-        let mut selections = self.selection_contexts.write();
-        let mut alignments = self.alignment_contexts.write();
-        states.insert(live_state_key, state);
-        match command {
-            Some(command) => {
-                commands.insert(context, command);
-            }
-            None => {
-                commands.remove(&context);
-            }
-        }
-        match selection {
-            Some(selection) => {
-                selections.insert(context, selection);
-            }
-            None => {
-                selections.remove(&context);
-            }
-        }
-        match alignment {
-            Some(alignment) => {
-                alignments.insert(context, alignment);
-            }
-            None => {
-                alignments.remove(&context);
-            }
-        }
-        drop(alignments);
-        drop(selections);
-        drop(commands);
-        drop(states);
+        let mut live_state = self.state.write();
+        let mut live_command = self.command_state.write();
+        let mut live_selection = self.selection_context.write();
+        let mut live_alignment = self.alignment_context.write();
+        *live_state = Some(state);
+        *live_command = command;
+        *live_selection = selection;
+        *live_alignment = alignment;
+        drop(live_alignment);
+        drop(live_selection);
+        drop(live_command);
+        drop(live_state);
         self.normal_values_generations.set(staged_values_generation);
         self.preload_values_generations
             .set(staged_preload_values_generation);
@@ -289,12 +247,10 @@ impl ProgrammerRegistry {
     ) -> Option<ProgrammerTransactionSnapshot> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if !self.sessions.read().contains_key(&session) {
+        if !self.sessions.read().contains(&session) {
             return None;
         }
-        let state_key = self.key(session);
-        let interaction_context = self.command_context(session);
-        let state = self.states.read().get(&state_key)?.clone();
+        let state = self.state.read().as_ref()?.clone();
         let normal_values_generation = self.normal_values_generations.get();
         let preload_values_generation = self.preload_values_generations.get();
         let preload_playback_queue_generation = self.preload_playback_queue_generations.get();
@@ -304,29 +260,15 @@ impl ProgrammerRegistry {
             .as_ref()
             .copied()
             .unwrap_or(state.last_activity);
-        let selection = self
-            .selection_contexts
-            .read()
-            .get(&interaction_context)
-            .cloned();
-        let command_line = self
-            .command_states
-            .read()
-            .get(&interaction_context)
-            .cloned();
-        let alignment = self
-            .alignment_contexts
-            .read()
-            .get(&interaction_context)
-            .cloned();
+        let selection = self.selection_context.read().clone();
+        let command_line = self.command_state.read().clone();
+        let alignment = self.alignment_context.read().clone();
         Some(ProgrammerTransactionSnapshot {
-            state_key,
             state,
             normal_values_generation,
             preload_values_generation,
             preload_playback_queue_generation,
             priority_changed_at,
-            interaction_context,
             selection,
             command_line,
             alignment,
@@ -337,9 +279,7 @@ impl ProgrammerRegistry {
     pub fn restore_transaction_snapshot(&self, snapshot: ProgrammerTransactionSnapshot) {
         let mutation_gate = std::sync::Arc::clone(&self.mutation_gate);
         let _mutation_guard = mutation_gate.lock();
-        self.states
-            .write()
-            .insert(snapshot.state_key, snapshot.state);
+        *self.state.write() = Some(snapshot.state);
         self.normal_values_generations
             .set(snapshot.normal_values_generation);
         self.preload_values_generations
@@ -347,34 +287,8 @@ impl ProgrammerRegistry {
         self.preload_playback_queue_generations
             .set(snapshot.preload_playback_queue_generation);
         *self.priority_changed_at.write() = Some(snapshot.priority_changed_at);
-        let mut selections = self.selection_contexts.write();
-        match snapshot.selection {
-            Some(selection) => {
-                selections.insert(snapshot.interaction_context, selection);
-            }
-            None => {
-                selections.remove(&snapshot.interaction_context);
-            }
-        }
-        drop(selections);
-        let mut commands = self.command_states.write();
-        match snapshot.command_line {
-            Some(command_line) => {
-                commands.insert(snapshot.interaction_context, command_line);
-            }
-            None => {
-                commands.remove(&snapshot.interaction_context);
-            }
-        }
-        drop(commands);
-        let mut alignments = self.alignment_contexts.write();
-        match snapshot.alignment {
-            Some(alignment) => {
-                alignments.insert(snapshot.interaction_context, alignment);
-            }
-            None => {
-                alignments.remove(&snapshot.interaction_context);
-            }
-        }
+        *self.selection_context.write() = snapshot.selection;
+        *self.command_state.write() = snapshot.command_line;
+        *self.alignment_context.write() = snapshot.alignment;
     }
 }

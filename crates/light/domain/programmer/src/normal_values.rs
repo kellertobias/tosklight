@@ -72,8 +72,8 @@ impl ProgrammerRegistry {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         let fixture_index = FixtureValueIndex::new(&state.values);
@@ -112,8 +112,8 @@ impl ProgrammerRegistry {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         if state.values.is_empty()
@@ -149,8 +149,8 @@ impl ProgrammerRegistry {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
-        let mut states = self.states.write();
-        let state = states.get_mut(&self.key(session))?;
+        let mut states = self.state.write();
+        let state = states.as_mut()?;
         let fixture_index = FixtureValueIndex::new(&state.values);
         let changed = mutations
             .iter()

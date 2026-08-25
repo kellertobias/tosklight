@@ -15,39 +15,17 @@ impl ProgrammerRegistry {
             .get_or_insert_with(|| self.clock.now());
         // One desk, one Programmer. A session joins the Programmer the desk already has rather
         // than opening a second one beside it.
-        let existing = self.states.read().keys().next().copied();
-        if let Some(key) = existing {
-            self.sessions.write().insert(session_id, key);
-            let desk_context = self.desk.command_context(session_id);
-            self.command_contexts
-                .write()
-                .entry(session_id)
-                .or_insert(desk_context);
-            let command_context = self.command_context(session_id);
-            self.command_states
-                .write()
-                .entry(command_context)
-                .or_default();
-            self.selection_contexts
-                .write()
-                .entry(command_context)
-                .or_default();
-            let mut states = self.states.write();
-            let state = states.get_mut(&key).expect("programmer disappeared");
+        self.sessions.write().insert(session_id);
+        let _command_context = self.command_context(session_id);
+        if let Some(state) = self.state.write().as_mut() {
             state.connected = true;
             state.last_activity = self.clock.now();
             let mut projected = state.clone();
             projected.session_id = session_id;
-            projected.command_line = self
-                .command_states
-                .read()
-                .get(&command_context)
-                .map(|command| command.legacy_text().to_owned())
-                .unwrap_or_default();
-            self.project_selection(&mut projected, command_context);
+            projected.command_line = self.command_state.read().legacy_text().to_owned();
+            self.project_selection(&mut projected);
             return projected;
         }
-        self.sessions.write().insert(session_id, session_id);
         let state = ProgrammerState {
             id: ProgrammerId::new(),
             session_id,
@@ -81,21 +59,7 @@ impl ProgrammerRegistry {
             redo: vec![],
             active_value_undo_group: None,
         };
-        self.states.write().insert(session_id, state.clone());
-        let desk_context = self.desk.command_context(session_id);
-        self.command_contexts
-            .write()
-            .entry(session_id)
-            .or_insert(desk_context);
-        let command_context = self.command_context(session_id);
-        self.command_states
-            .write()
-            .entry(command_context)
-            .or_default();
-        self.selection_contexts
-            .write()
-            .entry(command_context)
-            .or_default();
+        *self.state.write() = Some(state.clone());
         state
     }
     /// Hydrate one persisted session while constructing a fresh runtime.
@@ -128,19 +92,13 @@ impl ProgrammerRegistry {
         self.programmer_order
             .fetch_max(restored_order, Ordering::Relaxed);
         let session_id = state.session_id;
-        self.selection_contexts.write().insert(
-            session_id,
-            SelectionContext {
-                selected: state.selected.clone(),
-                expression: state.selection_expression.clone(),
-                revision: self.next_selection_revision(),
-                gesture_open: false,
-            },
-        );
-        self.command_contexts
-            .write()
-            .entry(session_id)
-            .or_insert(session_id);
+        *self.selection_context.write() = SelectionContext {
+            selected: state.selected.clone(),
+            expression: state.selection_expression.clone(),
+            revision: self.next_selection_revision(),
+            gesture_open: false,
+        };
+        self.desk.command_context(session_id);
         let target = if state.command_line.trim().eq_ignore_ascii_case("GROUP") {
             CommandTarget::Group
         } else {
@@ -151,38 +109,24 @@ impl ProgrammerRegistry {
                 .command_line
                 .trim()
                 .eq_ignore_ascii_case(target.as_str());
-        self.command_states.write().insert(
-            session_id,
-            CommandLineState {
-                text: canonical_command_text(state.command_line.clone(), pristine),
-                target,
-                pristine,
-                revision: 0,
-                pending_choice: None,
-            },
-        );
+        *self.command_state.write() = CommandLineState {
+            text: canonical_command_text(state.command_line.clone(), pristine),
+            target,
+            pristine,
+            revision: 0,
+            pending_choice: None,
+        };
         // Persisted session ids retain their durable interaction snapshots, but they are not live
         // connections after a process restart. Only `start` may add a session to `self.sessions`;
         // otherwise every historical browser session is projected as connected and its desk-local
         // selection is added to lifecycle counts (and formerly duplicated output-side work).
-        let existing = self.states.read().keys().next().copied();
-        if let Some(existing) = existing {
-            let mut shared = state;
+        let existing_session = self.state.read().as_ref().map(|state| state.session_id);
+        let mut shared = state;
+        if let Some(existing) = existing_session {
             shared.session_id = existing;
-            shared.command_line.clear();
-            self.states.write().insert(existing, shared);
-        } else {
-            let mut shared = state;
-            shared.command_line.clear();
-            self.states.write().insert(session_id, shared);
         }
-    }
-    pub(crate) fn key(&self, session: SessionId) -> SessionId {
-        self.sessions
-            .read()
-            .get(&session)
-            .copied()
-            .unwrap_or(session)
+        shared.command_line.clear();
+        *self.state.write() = Some(shared);
     }
     /// The interaction context this session operates.
     ///
@@ -190,31 +134,21 @@ impl ProgrammerRegistry {
     /// the command line, command target, selection gesture and Align state it holds, so the answer
     /// does not depend on which connection is asking.
     pub(crate) fn command_context(&self, session: SessionId) -> SessionId {
-        self.command_contexts
-            .read()
-            .get(&session)
-            .copied()
-            .unwrap_or_else(|| self.desk.command_context(session))
+        self.desk.command_context(session)
     }
 
-    pub(crate) fn project_selection(&self, state: &mut ProgrammerState, context: SessionId) {
-        let selections = self.selection_contexts.read();
-        let selection = selections.get(&context);
-        state.selected = selection
-            .map(|selection| selection.selected.clone())
-            .unwrap_or_default();
-        state.selection_expression = selection.and_then(|selection| selection.expression.clone());
+    pub(crate) fn project_selection(&self, state: &mut ProgrammerState) {
+        let selection = self.selection_context.read();
+        state.selected = selection.selected.clone();
+        state.selection_expression = selection.expression.clone();
     }
 
-    pub(crate) fn close_selection_gesture(&self, session: SessionId) -> bool {
-        if let Some(selection) = self
-            .selection_contexts
-            .write()
-            .get_mut(&self.command_context(session))
-            && selection.gesture_open
-        {
+    pub(crate) fn close_selection_gesture(&self, _session: SessionId) -> bool {
+        let revision = self.next_selection_revision();
+        let mut selection = self.selection_context.write();
+        if selection.gesture_open {
             selection.gesture_open = false;
-            selection.revision = self.next_selection_revision();
+            selection.revision = revision;
             return true;
         }
         false
@@ -236,6 +170,6 @@ impl ProgrammerRegistry {
     /// hardware configuration and existing clients still make it against a desk that no longer has
     /// contexts to choose between.
     pub fn attach_command_context(&self, session: SessionId, _context: SessionId) -> bool {
-        self.sessions.read().contains_key(&session)
+        self.sessions.read().contains(&session)
     }
 }

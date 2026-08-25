@@ -4,7 +4,7 @@ use crate::selection::{ProgrammerSelection, SelectionContext};
 use crate::state::{ProgrammerOutputState, ProgrammerState};
 use light_core::{SessionId, SharedClock, SystemClock};
 use parking_lot::{ReentrantMutex, RwLock};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -17,12 +17,17 @@ pub type ActiveDynamicSessionSource = (
 
 #[derive(Clone)]
 pub struct ProgrammerRegistry {
-    pub(crate) states: Arc<RwLock<HashMap<SessionId, ProgrammerState>>>,
-    pub(crate) sessions: Arc<RwLock<HashMap<SessionId, SessionId>>>,
-    pub(crate) command_contexts: Arc<RwLock<HashMap<SessionId, SessionId>>>,
-    pub(crate) command_states: Arc<RwLock<HashMap<SessionId, CommandLineState>>>,
-    pub(crate) selection_contexts: Arc<RwLock<HashMap<SessionId, SelectionContext>>>,
-    pub(crate) alignment_contexts: Arc<RwLock<HashMap<SessionId, ProgrammerAlignmentState>>>,
+    /// The desk's one Programmer. `None` until a surface has connected.
+    ///
+    /// These were maps keyed by the session that connected, from when a desk could hold a
+    /// Programmer per operator. Every one of them held a single entry.
+    pub(crate) state: Arc<RwLock<Option<ProgrammerState>>>,
+    /// Every window currently connected to it. Legitimately plural: a desk drives its main
+    /// window, its optional screens, its OSC clients and its attached hardware at once.
+    pub(crate) sessions: Arc<RwLock<HashSet<SessionId>>>,
+    pub(crate) command_state: Arc<RwLock<CommandLineState>>,
+    pub(crate) selection_context: Arc<RwLock<SelectionContext>>,
+    pub(crate) alignment_context: Arc<RwLock<Option<ProgrammerAlignmentState>>>,
     pub(crate) selection_revision: Arc<AtomicU64>,
     pub(crate) alignment_revision: Arc<AtomicU64>,
     pub(crate) programmer_order: Arc<AtomicU64>,
@@ -70,12 +75,11 @@ impl Default for ProgrammerRegistry {
 impl ProgrammerRegistry {
     pub fn with_clock(clock: SharedClock) -> Self {
         Self {
-            states: Arc::default(),
+            state: Arc::default(),
             sessions: Arc::default(),
-            command_contexts: Arc::default(),
-            command_states: Arc::default(),
-            selection_contexts: Arc::default(),
-            alignment_contexts: Arc::default(),
+            command_state: Arc::default(),
+            selection_context: Arc::default(),
+            alignment_context: Arc::default(),
             selection_revision: Arc::default(),
             alignment_revision: Arc::default(),
             programmer_order: Arc::default(),
@@ -144,11 +148,11 @@ impl ProgrammerRegistry {
     ///
     /// `None` means the session is absent, `Some(false)` is an exact semantic no-op, and
     /// `Some(true)` means the priority and the priority stamped onto retained values changed.
-    pub fn update_priority(&self, session: SessionId, priority: i16) -> Option<bool> {
+    pub fn update_priority(&self, _session: SessionId, priority: i16) -> Option<bool> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let state = states.get_mut(&self.key(session))?;
+        let mut states = self.state.write();
+        let state = states.as_mut()?;
         if state.priority == priority {
             return Some(false);
         }
@@ -182,13 +186,12 @@ impl ProgrammerRegistry {
     /// revisions so an old client cursor can never become current again.
     pub fn reset_all(&self) {
         self.with_all_mutation_gates(|| {
-            self.states.write().clear();
+            *self.state.write() = None;
             self.sessions.write().clear();
             self.desk.release();
-            self.command_contexts.write().clear();
-            self.command_states.write().clear();
-            self.selection_contexts.write().clear();
-            self.alignment_contexts.write().clear();
+            *self.command_state.write() = CommandLineState::default();
+            *self.selection_context.write() = SelectionContext::default();
+            *self.alignment_context.write() = None;
             self.selection_revision.store(0, Ordering::Relaxed);
             self.alignment_revision.store(0, Ordering::Relaxed);
             self.programmer_order.store(0, Ordering::Relaxed);
@@ -204,9 +207,9 @@ impl ProgrammerRegistry {
         });
     }
 
-    pub fn normal_values_generation(&self, session: SessionId) -> Option<u64> {
+    pub fn normal_values_generation(&self, _session: SessionId) -> Option<u64> {
         // Present only when the desk knows the session; the stamp itself is the desk's.
-        self.states.read().get(&self.key(session))?;
+        self.state.read().as_ref()?;
         Some(self.normal_values_generation_for_user())
     }
 
@@ -221,17 +224,17 @@ impl ProgrammerRegistry {
     /// the question could only ever answer yes — leaving an unreachable "belongs to another user"
     /// error behind every call. What is left is the half that can still be false: the desk may
     /// not know the session at all.
-    pub fn knows_session(&self, session: SessionId) -> bool {
-        self.states.read().contains_key(&self.key(session))
+    pub fn knows_session(&self, _session: SessionId) -> bool {
+        self.state.read().is_some()
     }
 
     /// Reads only lightweight priority authority; retained Programmer values are never cloned.
     pub fn priority_state(
         &self,
-        session: SessionId,
+        _session: SessionId,
     ) -> Option<(i16, chrono::DateTime<chrono::Utc>)> {
-        let states = self.states.read();
-        let state = states.get(&self.key(session))?;
+        let states = self.state.read();
+        let state = states.as_ref()?;
         let changed_at = self.priority_changed_at.read().as_ref().copied()?;
         Some((state.priority, changed_at))
     }
@@ -252,9 +255,9 @@ impl ProgrammerRegistry {
         self.priority_revisions.advance()
     }
 
-    pub fn preload_values_generation(&self, session: SessionId) -> Option<u64> {
+    pub fn preload_values_generation(&self, _session: SessionId) -> Option<u64> {
         // Present only when the desk knows the session; the stamp itself is the desk's.
-        self.states.read().get(&self.key(session))?;
+        self.state.read().as_ref()?;
         Some(self.preload_values_generation_for_user())
     }
 
@@ -270,9 +273,9 @@ impl ProgrammerRegistry {
         self.preload_values_revisions.advance()
     }
 
-    pub fn preload_playback_queue_generation(&self, session: SessionId) -> Option<u64> {
+    pub fn preload_playback_queue_generation(&self, _session: SessionId) -> Option<u64> {
         // Present only when the desk knows the session; the stamp itself is the desk's.
-        self.states.read().get(&self.key(session))?;
+        self.state.read().as_ref()?;
         Some(self.preload_playback_queue_generation_for_user())
     }
 
@@ -318,7 +321,7 @@ impl ProgrammerRegistry {
 
     pub fn set_modes(
         &self,
-        session: SessionId,
+        _session: SessionId,
         blind: Option<bool>,
         preview: Option<bool>,
         highlight: Option<bool>,
@@ -326,8 +329,8 @@ impl ProgrammerRegistry {
     ) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         state.checkpoint();
@@ -350,8 +353,8 @@ impl ProgrammerRegistry {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
             return false;
         };
         let normal_values_changed = !state.values.is_empty()
@@ -373,27 +376,25 @@ impl ProgrammerRegistry {
     pub fn disconnect(&self, session: SessionId) {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let key = self.key(session);
         self.sessions.write().remove(&session);
-        let still_connected = self.sessions.read().values().any(|bound| *bound == key);
-        if let Some(state) = self.states.write().get_mut(&key) {
+        let still_connected = !self.sessions.read().is_empty();
+        if let Some(state) = self.state.write().as_mut() {
             state.connected = still_connected;
         }
     }
-    pub fn connect(&self, session: SessionId) {
+    pub fn connect(&self, _session: SessionId) {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+        if let Some(state) = self.state.write().as_mut() {
             state.connected = true;
             state.last_activity = self.clock.now();
         }
     }
-    pub fn clear(&self, session: SessionId) -> bool {
+    pub fn clear(&self, _session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        let key = self.key(session);
-        self.sessions.write().retain(|_, bound| *bound != key);
-        let Some(state) = self.states.write().remove(&key) else {
+        self.sessions.write().clear();
+        let Some(state) = self.state.write().take() else {
             return false;
         };
         if !state.values.is_empty()
@@ -415,13 +416,14 @@ impl ProgrammerRegistry {
         *self.priority_changed_at.write() = None;
         true
     }
+    /// The desk's Programmer, as a collection because output and projection callers iterate.
     pub fn active(&self) -> Vec<ProgrammerState> {
-        self.states.read().values().cloned().collect()
+        self.state.read().iter().cloned().collect()
     }
     pub fn active_output_states(&self) -> Vec<ProgrammerOutputState> {
-        self.states
+        self.state
             .read()
-            .values()
+            .iter()
             // Reference counts, not copies. A render reads this every frame and the operator's
             // programming can be the whole show.
             .map(|state| ProgrammerOutputState {
@@ -436,13 +438,12 @@ impl ProgrammerRegistry {
             .collect()
     }
     pub fn active_dynamic_sources_for_sessions(&self) -> Vec<ActiveDynamicSessionSource> {
-        let states = self.states.read();
-        let sessions = self.sessions.read();
-        let mut active_programmers = HashSet::new();
-        sessions
-            .values()
-            .filter(|key| active_programmers.insert(**key))
-            .filter_map(|key| states.get(key))
+        if self.sessions.read().is_empty() {
+            return Vec::new();
+        }
+        self.state
+            .read()
+            .iter()
             .map(|state| {
                 (
                     state.id.0,
@@ -453,72 +454,52 @@ impl ProgrammerRegistry {
             })
             .collect()
     }
-    pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
-        self.connected_programmer_states()
-    }
 
-    fn connected_programmer_states(&self) -> Vec<ProgrammerState> {
-        let states = self.states.read();
-        let command_contexts = self.command_contexts.read();
-        let command_states = self.command_states.read();
-        let selection_contexts = self.selection_contexts.read();
+    /// The desk's Programmer as each connected surface sees it.
+    ///
+    /// One Programmer, one command line and one selection; the rows differ only in the session
+    /// each is reported under, which is what a compatibility caller keys on.
+    pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
+        let Some(source) = self.state.read().clone() else {
+            return Vec::new();
+        };
+        let command_line = self.command_state.read().legacy_text().to_owned();
+        let selection = self.selection_context.read().clone();
         self.sessions
             .read()
             .iter()
-            .filter_map(|(session, key)| {
-                let source = states.get(key)?;
+            .map(|session| {
                 let mut state = source.clone();
                 state.session_id = *session;
-                let command_context = command_contexts.get(session).unwrap_or(session);
-                state.command_line = command_states
-                    .get(command_context)
-                    .map(|command| command.legacy_text().to_owned())
-                    .unwrap_or_default();
-                if let Some(selection) = selection_contexts.get(command_context) {
-                    state.selected = selection.selected.clone();
-                    state.selection_expression = selection.expression.clone();
-                } else {
-                    state.selected.clear();
-                    state.selection_expression = None;
-                }
-                Some(state)
+                state.command_line = command_line.clone();
+                state.selected = selection.selected.clone();
+                state.selection_expression = selection.expression.clone();
+                state
             })
             .collect()
     }
+
     pub fn get(&self, session: SessionId) -> Option<ProgrammerState> {
-        let state_key = self.key(session);
-        let command_context = self.command_context(session);
         // Staged publication acquires these write locks in the same order. Holding all three read
         // guards while building a projection guarantees an old or new result, never a torn mix.
-        let states = self.states.read();
-        let command_states = self.command_states.read();
-        let selection_contexts = self.selection_contexts.read();
-        let mut state = states.get(&state_key).cloned()?;
+        let stored = self.state.read();
+        let command = self.command_state.read();
+        let selection = self.selection_context.read();
+        let mut state = stored.clone()?;
         state.session_id = session;
-        state.command_line = command_states
-            .get(&command_context)
-            .map(|command| command.legacy_text().to_owned())
-            .unwrap_or_default();
-        if let Some(selection) = selection_contexts.get(&command_context) {
-            state.selected = selection.selected.clone();
-            state.selection_expression = selection.expression.clone();
-        } else {
-            state.selected.clear();
-            state.selection_expression = None;
-        }
+        state.command_line = command.legacy_text().to_owned();
+        state.selected = selection.selected.clone();
+        state.selection_expression = selection.expression.clone();
         Some(state)
     }
 
-    pub fn selection(&self, session: SessionId) -> Option<ProgrammerSelection> {
-        let context = self.command_context(session);
-        self.selection_contexts
-            .read()
-            .get(&context)
-            .map(|selection| ProgrammerSelection {
-                selected: selection.selected.clone(),
-                expression: selection.expression.clone(),
-                revision: selection.revision,
-                gesture_open: selection.gesture_open,
-            })
+    pub fn selection(&self, _session: SessionId) -> Option<ProgrammerSelection> {
+        let selection = self.selection_context.read();
+        Some(ProgrammerSelection {
+            selected: selection.selected.clone(),
+            expression: selection.expression.clone(),
+            revision: selection.revision,
+            gesture_open: selection.gesture_open,
+        })
     }
 }
