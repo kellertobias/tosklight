@@ -141,11 +141,8 @@ export function decodeProgrammingUpdateActionOutcome(
 
 export function decodeProgrammingUpdateSettingsProjection(
 	value: unknown,
-	expectedDeskId: string,
 ): ProgrammingUpdateSettingsProjection {
-	scopedUuidAt(expectedDeskId, "$expected.desk_id");
-	const projection = exactRecordAt(value, "$", ["desk_id", "settings"]);
-	assertScopeUuid(projection.desk_id, expectedDeskId, "$.desk_id");
+	const projection = exactRecordAt(value, "$", ["settings"]);
 	decodeSettings(projection.settings, "$.settings");
 	return value as ProgrammingUpdateSettingsProjection;
 }

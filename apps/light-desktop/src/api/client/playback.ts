@@ -250,7 +250,7 @@ export class PlaybackApiClient {
 			request_id: crypto.randomUUID(),
 			action,
 		};
-		return this.transport.request(`/api/v2/control-desks/${deskId}/actions`, {
+		return this.transport.request(`/api/v2/control-desk/actions`, {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(request),

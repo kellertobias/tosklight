@@ -30,19 +30,12 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v2/output-runtime/global-master/actions",
             post(output_master_action),
         )
-        .route("/api/v2/control-desks/{desk_id}/desk-lock", get(desk_lock))
-        .route(
-            "/api/v2/control-desks/{desk_id}/desk-lock/update",
-            post(update_desk_lock),
-        )
-        .route(
-            "/api/v2/control-desks/{desk_id}/desk-lock/lock",
-            get(lock_desk),
-        )
-        .route(
-            "/api/v2/control-desks/{desk_id}/desk-lock/unlock",
-            post(unlock_desk),
-        )
+        // The Desk Lock is the desk's, and the desk is the only one. These carried a desk id
+        // while it could be one of several; a path segment that names nothing is not an operand.
+        .route("/api/v2/desk-lock", get(desk_lock))
+        .route("/api/v2/desk-lock/update", post(update_desk_lock))
+        .route("/api/v2/desk-lock/lock", get(lock_desk))
+        .route("/api/v2/desk-lock/unlock", post(unlock_desk))
         .route("/api/v2/command-history", get(command_history))
         .route("/api/v2/audit", get(audit_events))
         .route("/api/v2/programmers", get(list_programmers))
@@ -290,20 +283,18 @@ async fn output_master_action(
 
 async fn desk_lock(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
-    authenticated_desk(&state, &headers, desk_id)?;
+    authenticate(&state, &headers)?;
     boundaries::desk_lock(State(state), headers).await
 }
 
 async fn update_desk_lock(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
     headers: HeaderMap,
     request: Result<TolerantJson<wire::DeskLockConfigurationUpdateRequest>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let session = authenticated_desk(&state, &headers, desk_id)?;
+    let session = authenticate(&state, &headers)?;
     let TolerantJson(request) =
         request.map_err(|error| ApiError::bad_request(error.body_text()))?;
     show_objects_v2::validate_request_id(&request.request_id)?;
@@ -344,20 +335,18 @@ async fn update_desk_lock(
 
 async fn lock_desk(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
-    authenticated_desk(&state, &headers, desk_id)?;
+    authenticate(&state, &headers)?;
     boundaries::lock_desk(State(state), headers).await
 }
 
 async fn unlock_desk(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
     headers: HeaderMap,
     request: Result<TolerantJson<wire::DeskUnlockRequest>, JsonRejection>,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
-    authenticated_desk(&state, &headers, desk_id)?;
+    authenticate(&state, &headers)?;
     let TolerantJson(request) =
         request.map_err(|error| ApiError::bad_request(error.body_text()))?;
     boundaries::unlock_desk(
@@ -396,20 +385,6 @@ async fn clear_programmer(
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
     event_ws::clear_programmer(State(state), Path(id), headers).await
-}
-
-fn authenticated_desk(
-    state: &AppState,
-    headers: &HeaderMap,
-    desk_id: Uuid,
-) -> Result<Session, ApiError> {
-    let session = authenticate(state, headers)?;
-    if session.desk.id != desk_id {
-        return Err(ApiError::forbidden(
-            "session is not authorized for this desk",
-        ));
-    }
-    Ok(session)
 }
 
 fn patched_configuration(

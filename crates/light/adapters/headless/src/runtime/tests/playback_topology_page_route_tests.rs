@@ -210,7 +210,7 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
     let show_id = scenario_show_id(&scenario);
     let cursor = scenario.state.events.latest_sequence();
 
-    let response = put_desk_page(&scenario, desk_id, 2, Some(true)).await;
+    let response = put_desk_page(&scenario, 2, Some(true)).await;
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
@@ -253,7 +253,7 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
     let revision = scenario.show_revision();
     let cursor = scenario.state.events.latest_sequence();
 
-    let strict = put_desk_page(&scenario, desk_id, 2, Some(true)).await;
+    let strict = put_desk_page(&scenario, 2, Some(true)).await;
 
     assert_eq!(strict.status(), StatusCode::BAD_REQUEST);
     assert_eq!(scenario.show_revision(), revision);
@@ -277,7 +277,7 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
     };
     assert!(strict_view_events.is_empty());
 
-    let legacy = put_desk_page(&scenario, desk_id, 2, None).await;
+    let legacy = put_desk_page(&scenario, 2, None).await;
 
     assert_eq!(legacy.status(), StatusCode::OK);
     let legacy = json(legacy).await;
@@ -344,7 +344,6 @@ async fn page_route_rejects_unauthenticated_unsafe_and_canonical_collision_reque
 
 async fn put_desk_page(
     scenario: &TopologyScenario,
-    desk_id: Uuid,
     page: u8,
     existing_only: Option<bool>,
 ) -> Response {
@@ -356,7 +355,7 @@ async fn put_desk_page(
         .app
         .clone()
         .oneshot(
-            Request::post(format!("/api/v2/control-desks/{desk_id}/actions"))
+            Request::post("/api/v2/control-desk/actions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
                 .body(Body::from(body.to_string()))

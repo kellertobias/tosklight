@@ -1081,14 +1081,11 @@ fn group_and_preset_updates_each_install_the_exact_committed_revision() {
         .state
         .installation
         .update_configuration(|configuration| {
-            configuration.update_settings_by_desk.insert(
-                scenario.session.desk.id,
-                update::UpdateSettings {
-                    group_mode: update::ExistingContentMode::AddNew,
-                    preset_mode: update::ExistingContentMode::AddNew,
-                    ..Default::default()
-                },
-            );
+            configuration.update_settings = update::UpdateSettings {
+                group_mode: update::ExistingContentMode::AddNew,
+                preset_mode: update::ExistingContentMode::AddNew,
+                ..Default::default()
+            };
         });
     scenario
         .state

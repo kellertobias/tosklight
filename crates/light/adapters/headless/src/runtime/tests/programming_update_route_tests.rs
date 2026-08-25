@@ -122,16 +122,13 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
         .state
         .installation
         .update_configuration(|configuration| {
-            configuration.update_settings_by_desk.insert(
-                scenario.session.desk.id,
-                update::UpdateSettings {
-                    other_target_modes: HashMap::from([(
-                        "future".into(),
-                        update::ExistingContentMode::AddNew,
-                    )]),
-                    ..Default::default()
-                },
-            );
+            configuration.update_settings = update::UpdateSettings {
+                other_target_modes: HashMap::from([(
+                    "future".into(),
+                    update::ExistingContentMode::AddNew,
+                )]),
+                ..Default::default()
+            };
         });
     write_desk_lock(
         &scenario.state,
@@ -197,10 +194,7 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
     assert_eq!(json(blocked_action).await["kind"], "conflict");
     assert_eq!(scenario.state.events.latest_sequence(), cursor);
 
-    let settings_path = format!(
-        "/api/v2/desks/{}/programming-update/settings",
-        scenario.session.desk.id
-    );
+    let settings_path = "/api/v2/programming-update/settings".to_owned();
     let settings = scenario
         .app
         .clone()
@@ -226,26 +220,26 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
     assert_eq!(blocked.status(), StatusCode::CONFLICT);
     let blocked = json(blocked).await;
     assert_eq!(blocked["kind"], "conflict", "{blocked}");
-    let foreign = format!(
-        "/api/v2/desks/{}/programming-update/settings",
-        Uuid::new_v4()
-    );
-    let foreign = scenario
+    // The route named a desk while there could be several. A caller still sending one addresses
+    // nothing, and the settings it would have scoped are the desk's own.
+    let retired = scenario
         .app
         .clone()
         .oneshot(
-            Request::get(foreign)
-                .header(
-                    header::AUTHORIZATION,
-                    format!("Bearer {}", scenario.session.token),
-                )
-                .body(Body::empty())
-                .unwrap(),
+            Request::get(format!(
+                "/api/v2/desks/{}/programming-update/settings",
+                Uuid::new_v4()
+            ))
+            .header(
+                header::AUTHORIZATION,
+                format!("Bearer {}", scenario.session.token),
+            )
+            .body(Body::empty())
+            .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
-    assert_eq!(json(foreign).await["kind"], "forbidden");
+    assert_eq!(retired.status(), StatusCode::NOT_FOUND);
 
     write_desk_lock(&scenario.state, &DeskLockConfiguration::default()).unwrap();
     let saved = put_settings_request(&scenario, &settings_path).await;
@@ -256,7 +250,7 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
             .state
             .installation
             .configuration()
-            .update_settings_by_desk[&scenario.session.desk.id]
+            .update_settings
             .other_target_modes["future"],
         update::ExistingContentMode::AddNew
     );

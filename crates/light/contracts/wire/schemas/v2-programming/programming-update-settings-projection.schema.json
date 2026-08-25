@@ -3,17 +3,12 @@
   "title": "ProgrammingUpdateSettingsProjection",
   "type": "object",
   "properties": {
-    "desk_id": {
-      "type": "string",
-      "format": "uuid"
-    },
     "settings": {
       "$ref": "#/$defs/ProgrammingUpdateSettings"
     }
   },
   "additionalProperties": false,
   "required": [
-    "desk_id",
     "settings"
   ],
   "$defs": {

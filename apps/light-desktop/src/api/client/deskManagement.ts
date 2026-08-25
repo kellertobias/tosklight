@@ -305,7 +305,7 @@ export class DeskManagementApiClient {
 	private deskLockPath() {
 		const deskId = this.transport.currentDeskId();
 		if (!deskId) throw new Error("A desk session is required");
-		return `/api/v2/control-desks/${deskId}/desk-lock`;
+		return `/api/v2/desk-lock`;
 	}
 }
 

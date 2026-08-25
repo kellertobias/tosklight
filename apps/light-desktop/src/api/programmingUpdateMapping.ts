@@ -138,10 +138,7 @@ export function programmingUpdateActionOutcome(
 export function programmingUpdateSettingsProjection(
 	projection: WireSettingsProjection,
 ): ProgrammingUpdateSettingsProjection {
-	return {
-		desk_id: projection.desk_id,
-		settings: { ...projection.settings },
-	};
+	return { settings: { ...projection.settings } };
 }
 
 function wireTarget(value: ProgrammingUpdateTarget): WireTarget {

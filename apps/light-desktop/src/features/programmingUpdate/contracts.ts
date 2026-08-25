@@ -116,7 +116,6 @@ export interface ProgrammingUpdateActionOutcome {
 }
 
 export interface ProgrammingUpdateSettingsProjection {
-	desk_id: string;
 	settings: UpdateSettings;
 }
 
@@ -134,9 +133,8 @@ export interface ProgrammingUpdateTransport {
 		expectedShowRevision: number,
 		request: ProgrammingUpdateActionRequest,
 	): Promise<ProgrammingUpdateActionOutcome>;
-	loadSettings(deskId: string): Promise<ProgrammingUpdateSettingsProjection>;
+	loadSettings(): Promise<ProgrammingUpdateSettingsProjection>;
 	saveSettings(
-		deskId: string,
 		settings: UpdateSettings,
 	): Promise<ProgrammingUpdateSettingsProjection>;
 }

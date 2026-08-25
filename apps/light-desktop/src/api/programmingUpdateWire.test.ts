@@ -283,22 +283,14 @@ describe("Programming Update v2 wire", () => {
 
 	it("strictly decodes settings and typed errors", () => {
 		expect(
-			decodeProgrammingUpdateSettingsProjection(
-				{
-					desk_id: DESK_ID,
-					settings: settings(),
-				},
-				DESK_ID,
-			),
-		).toMatchObject({ desk_id: DESK_ID });
+			decodeProgrammingUpdateSettingsProjection({ settings: settings() }),
+		).toMatchObject({ settings: settings() });
+		// The settings are the desk's, and the projection names no desk.
 		expect(() =>
-			decodeProgrammingUpdateSettingsProjection(
-				{
-					desk_id: SHOW_ID,
-					settings: settings(),
-				},
-				DESK_ID,
-			),
+			decodeProgrammingUpdateSettingsProjection({
+				desk_id: DESK_ID,
+				settings: settings(),
+			}),
 		).toThrow(WireValidationError);
 
 		expect(

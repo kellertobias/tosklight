@@ -130,15 +130,7 @@ fn is_v2_desk_lock_route(path: &str) -> bool {
     let parts = path.trim_matches('/').split('/').collect::<Vec<_>>();
     matches!(
         parts.as_slice(),
-        ["api", "v2", "control-desks", _, "desk-lock"]
-            | [
-                "api",
-                "v2",
-                "control-desks",
-                _,
-                "desk-lock",
-                "update" | "lock" | "unlock"
-            ]
+        ["api", "v2", "desk-lock"] | ["api", "v2", "desk-lock", "update" | "lock" | "unlock"]
     )
 }
 
@@ -151,10 +143,6 @@ fn is_output_runtime_action_route(method: &Method, path: &str) -> bool {
     matches!(
         (method, parts.as_slice()),
         (&Method::POST, ["api", "v2", "output-runtime", _])
-            | (
-                &Method::POST,
-                ["api", "v2", "desks", _, "output-runtime", _]
-            )
     )
 }
 
@@ -163,7 +151,6 @@ fn is_speed_group_action_route(method: &Method, path: &str) -> bool {
     matches!(
         (method, parts.as_slice()),
         (&Method::POST, ["api", "v2", "speed-groups"])
-            | (&Method::POST, ["api", "v2", "desks", _, "speed-groups"])
     )
 }
 
@@ -177,11 +164,8 @@ fn is_programming_update_route(method: &Method, path: &str) -> bool {
                 "api",
                 "v2",
                 "programming-update",
-                "preview" | "targets" | "actions"
+                "preview" | "targets" | "actions" | "settings"
             ]
-        ) | (
-            &Method::POST,
-            ["api", "v2", "desks", _, "programming-update", "settings"]
         )
     )
 }

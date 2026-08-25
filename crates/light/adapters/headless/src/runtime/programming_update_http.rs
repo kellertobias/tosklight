@@ -4,12 +4,12 @@ use super::{
     AppState, ServerProgrammingUpdatePorts, Session, ShowContext, authenticate, emit,
     parse_if_match, persist_server_configuration,
     programming_update_http_error::ProgrammingUpdateHttpError, programming_update_wire,
-    programming_update_wire_output, read_desk_lock, update_settings_for,
+    programming_update_wire_output, read_desk_lock, update_settings,
 };
 use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -27,8 +27,10 @@ pub(super) fn router() -> Router<AppState> {
         .route("/api/v2/programming-update/preview", post(preview))
         .route("/api/v2/programming-update/targets", post(targets))
         .route("/api/v2/programming-update/actions", post(apply_action))
+        // Workflow defaults are the desk's, and there is one desk. The path carried its id while
+        // it could be one of several.
         .route(
-            "/api/v2/desks/{desk_id}/programming-update/settings",
+            "/api/v2/programming-update/settings",
             get(settings).post(put_settings),
         )
 }
@@ -126,23 +128,20 @@ async fn apply_action(
 
 async fn settings(
     State(state): State<AppState>,
-    Path(desk_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
-    let session = authenticate_update(&state, &headers)?;
-    let desk_id = exact_desk(&session, &desk_id)?;
-    let settings = update_settings_for(&state, desk_id);
-    Ok(Json(programming_update_wire::wire_settings(desk_id, &settings)).into_response())
+    authenticate_update(&state, &headers)?;
+    let settings = update_settings(&state);
+    Ok(Json(programming_update_wire::wire_settings(&settings)).into_response())
 }
 
 async fn put_settings(
     State(state): State<AppState>,
-    Path(desk_id): Path<String>,
     headers: HeaderMap,
     request: Result<TolerantJson<ProgrammingUpdateSettingsUpdateRequest>, JsonRejection>,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
-    let desk_id = exact_desk(&session, &desk_id)?;
+    let desk_id = session.desk.id;
     let TolerantJson(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
     validate_request_id(&request.request_id)?;
     let fingerprint = serde_json::to_value(&request)
@@ -164,30 +163,27 @@ async fn put_settings(
         if read_desk_lock(&state).locked {
             return Err(ProgrammingUpdateHttpError::conflict("desk is locked"));
         }
-        let current = update_settings_for(&state, desk_id);
+        let current = update_settings(&state);
         let mut settings = current.clone();
         programming_update_wire::apply_settings(&mut settings, request.settings);
         if settings != current {
-            let previous = state.installation.update_configuration(|configuration| {
-                configuration
-                    .update_settings_by_desk
-                    .insert(desk_id, settings.clone())
+            state.installation.update_configuration(|configuration| {
+                configuration.update_settings = settings.clone();
             });
             if let Err(error) = persist_server_configuration(&state) {
-                restore_settings(&state, desk_id, previous);
+                restore_settings(&state, current);
                 return Err(ProgrammingUpdateHttpError::api(error));
             }
             emit(
                 &state,
                 "update_settings_changed",
-                serde_json::json!({"desk_id":desk_id,"settings":settings}),
+                serde_json::json!({"settings":settings}),
             );
         }
         Ok(ProgrammingUpdateSettingsUpdateOutcome {
             request_id: request.request_id.clone(),
             replayed: false,
-            desk_id,
-            settings: programming_update_wire::wire_settings(desk_id, &settings).settings,
+            settings: programming_update_wire::wire_settings(&settings).settings,
         })
     })?;
     let value = serde_json::to_value(&outcome)
@@ -201,17 +197,10 @@ async fn put_settings(
 
 fn restore_settings(
     state: &AppState,
-    desk_id: Uuid,
-    previous: Option<light_application::programming_update::UpdateSettings>,
+    previous: light_application::programming_update::UpdateSettings,
 ) {
     state.installation.update_configuration(|configuration| {
-        if let Some(previous) = previous {
-            configuration
-                .update_settings_by_desk
-                .insert(desk_id, previous);
-        } else {
-            configuration.update_settings_by_desk.remove(&desk_id);
-        }
+        configuration.update_settings = previous;
     });
 }
 
@@ -246,16 +235,6 @@ fn authenticate_update(
     headers: &HeaderMap,
 ) -> Result<Session, ProgrammingUpdateHttpError> {
     authenticate(state, headers).map_err(ProgrammingUpdateHttpError::api)
-}
-
-fn exact_desk(session: &Session, value: &str) -> Result<Uuid, ProgrammingUpdateHttpError> {
-    let desk_id = parse_non_nil_uuid(value, "desk_id")?;
-    if desk_id != session.desk.id {
-        return Err(ProgrammingUpdateHttpError::forbidden(
-            "settings scope does not match the authenticated desk",
-        ));
-    }
-    Ok(desk_id)
 }
 
 fn parse_non_nil_uuid(value: &str, name: &str) -> Result<Uuid, ProgrammingUpdateHttpError> {

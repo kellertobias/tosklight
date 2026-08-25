@@ -65,9 +65,7 @@ export class ProgrammingUpdateWriter implements ProgrammingUpdateCapability {
 	async loadSettings() {
 		const query = this.beginQuery("settings");
 		try {
-			const response = await this.options.transport.loadSettings(
-				this.options.scope.deskId,
-			);
+			const response = await this.options.transport.loadSettings();
 			return this.isQueryCurrent(query) ? response.settings : null;
 		} catch (reason) {
 			return this.finishQueryError(query, reason);
@@ -78,10 +76,7 @@ export class ProgrammingUpdateWriter implements ProgrammingUpdateCapability {
 		const query = this.beginQuery("settings");
 		try {
 			const response = await this.retry(() =>
-				this.options.transport.saveSettings(
-					this.options.scope.deskId,
-					settings,
-				),
+				this.options.transport.saveSettings(settings),
 			);
 			return this.isQueryCurrent(query) ? response.settings : null;
 		} catch (reason) {
