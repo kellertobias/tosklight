@@ -43,7 +43,10 @@ fn application_icon() -> Option<Icon> {
     .ok()
 }
 
-/// Whether this configuration needs a window at all.
+/// Whether this configuration asks for output windows.
+///
+/// It no longer decides whether the event loop runs — the menu bar item does, so the loop runs
+/// whenever a desktop is reachable. It decides whether an empty output list means failure.
 pub fn needs_a_window(configuration: &MediaConfiguration) -> bool {
     configuration
         .outputs
@@ -103,6 +106,8 @@ pub fn run_event_loop(
         administration_endpoint,
         windows: Vec::new(),
         worker: None,
+        expects_outputs: needs_a_window(configuration),
+        tray: None,
     };
     let result = event_loop.run_app(&mut host);
     host.stop_worker();
@@ -193,6 +198,12 @@ struct PresentationHost {
     /// Main-thread references ensure the final native-window drop happens on the Cocoa thread.
     windows: Vec<Arc<Window>>,
     worker: Option<PresentationWorker>,
+    /// Whether this configuration asked for output windows at all. A server with none is a normal
+    /// state — it still runs, and it still has a menu bar item — so an empty output list only
+    /// means failure when outputs were expected.
+    expects_outputs: bool,
+    /// The menu bar item, held for as long as the loop runs. Dropping it removes the icon.
+    tray: Option<crate::tray::Tray>,
 }
 
 enum RenderCommand {
@@ -843,6 +854,11 @@ pub(crate) fn with_reports(
 
 impl ApplicationHandler for PresentationHost {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // The status item cannot be created before the application has finished launching, which
+        // is exactly what reaching this callback means.
+        if self.tray.is_none() {
+            self.tray = crate::tray::show(&self.shutdown);
+        }
         let monitors = media_render::monitors(event_loop.available_monitors())
             .into_iter()
             .map(|(index, name, handle)| {
@@ -868,8 +884,11 @@ impl ApplicationHandler for PresentationHost {
             self.pending.push(configuration);
         }
         if self.outputs.is_empty() {
-            tracing::error!("no output could be opened; stopping");
-            event_loop.exit();
+            if self.expects_outputs {
+                tracing::error!("no output could be opened; stopping");
+                event_loop.exit();
+            }
+            // Nothing to present. The server keeps serving, and the menu bar item keeps saying so.
             return;
         }
         self.start_worker();
@@ -931,7 +950,7 @@ mod tests {
     }
 
     #[test]
-    fn an_all_off_screen_configuration_never_builds_an_event_loop() {
+    fn an_all_off_screen_configuration_asks_for_no_output_window() {
         let configuration = MediaConfiguration::default();
         assert!(matches!(
             configuration.outputs[0].target,
@@ -941,7 +960,7 @@ mod tests {
     }
 
     #[test]
-    fn a_monitor_bound_output_needs_the_platform_event_loop() {
+    fn a_monitor_bound_output_asks_for_an_output_window() {
         let configuration = MediaConfiguration {
             outputs: vec![monitor_output()],
             ..Default::default()

@@ -27,6 +27,7 @@ mod shutdown;
 mod standby;
 mod startup;
 mod text_sources;
+mod tray;
 
 pub use dmx::SharedState;
 pub use layer_sources::LayerSources;
@@ -51,6 +52,11 @@ pub const CHECK_CONFIGURATION_ARGUMENT: &str = "--check-configuration";
 /// The argument that fills each output with a flat diagnostic colour, so an operator can confirm
 /// an output is on the monitor they meant, at the size they meant, the right way up.
 pub const TEST_PATTERN_ARGUMENT: &str = "--test-pattern";
+
+/// The argument that runs the server without any desktop presence: no event loop, no menu bar
+/// item, no outputs. For a machine that has no window server to talk to, or a service manager that
+/// wants a plain process.
+pub const HEADLESS_ARGUMENT: &str = "--headless";
 
 /// Plays one `.toskclip` on layer one of every output. A development affordance for exercising
 /// the whole path — import, residency, session, upload, composite — without a desk or a catalog.
@@ -178,7 +184,10 @@ fn run_inner() -> anyhow::Result<()> {
         apply,
         previews: Some(previews.clone()),
     };
-    if !presentation::needs_a_window(&configuration) {
+    // What decides this is whether a desktop is reachable, not whether an output is configured.
+    // The Media Server is an application with a menu bar item; a server with nothing assigned to a
+    // monitor is still that application, and an operator has to be able to see and stop it.
+    if !desktop_is_available(&arguments) {
         return runtime.block_on(serve_with(services));
     }
 
@@ -343,6 +352,25 @@ fn start_audio(
 const IMPORT_CONCURRENCY: usize = 2;
 
 /// The diagnostics an operator asked for on the command line.
+/// Whether this process can own a desktop presence.
+///
+/// Asked for explicitly, or on a Unix desktop that names no display server, the answer is no and
+/// the server runs as a plain process. macOS and Windows always have one when a user launches the
+/// application; a daemon on either that does not gets `--headless`.
+fn desktop_is_available(arguments: &[String]) -> bool {
+    if arguments
+        .iter()
+        .any(|argument| argument == HEADLESS_ARGUMENT)
+    {
+        return false;
+    }
+    if cfg!(all(unix, not(target_os = "macos"))) {
+        return std::env::var_os("DISPLAY").is_some()
+            || std::env::var_os("WAYLAND_DISPLAY").is_some();
+    }
+    true
+}
+
 fn diagnostics_asked_for(arguments: &[String]) -> Diagnostics {
     Diagnostics {
         test_pattern: arguments
@@ -894,6 +922,37 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod desktop_presence_tests {
+    use super::*;
+
+    #[test]
+    fn asking_for_headless_runs_without_a_desktop_presence() {
+        let arguments = vec!["media-server".to_owned(), HEADLESS_ARGUMENT.to_owned()];
+
+        assert!(!desktop_is_available(&arguments));
+    }
+
+    #[test]
+    fn a_desktop_platform_runs_the_event_loop_for_its_menu_bar_item() {
+        // Not conditioned on the outputs: a server with nothing assigned to a monitor is still an
+        // application, and an operator still has to be able to see and stop it.
+        let arguments = vec!["media-server".to_owned()];
+
+        let available = desktop_is_available(&arguments);
+
+        if cfg!(all(unix, not(target_os = "macos"))) {
+            assert_eq!(
+                available,
+                std::env::var_os("DISPLAY").is_some()
+                    || std::env::var_os("WAYLAND_DISPLAY").is_some(),
+                "a Unix desktop is only available when a display server is named"
+            );
+        } else {
+            assert!(available);
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
