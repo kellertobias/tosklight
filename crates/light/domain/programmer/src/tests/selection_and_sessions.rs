@@ -522,3 +522,59 @@ fn ordinary_selection_gestures_accumulate_across_the_desk_until_a_value_lands() 
     assert_eq!(registry.get(first).unwrap().selected, vec![third_fixture]);
     assert_eq!(registry.get(third_surface).unwrap().values.len(), 1);
 }
+
+#[test]
+/// A session that never started a Programmer does not operate one.
+///
+/// The desk has a single Programmer, which makes it tempting to answer "is there one?" when asked
+/// "does this session operate one?". Adapters filter on this to tell an operating surface from a
+/// watching one — an OSC surface picks the session it attaches to that way — so a session that
+/// only ever watched must not look like an operator, and neither must a session the desk has never
+/// seen.
+fn a_session_that_never_started_a_programmer_does_not_operate_one() {
+    let registry = ProgrammerRegistry::default();
+    let operator = SessionId::new();
+    let watching = SessionId::new();
+    let unknown = SessionId::new();
+
+    assert!(!registry.knows_session(operator), "nothing has connected");
+    registry.start(operator);
+
+    assert!(registry.knows_session(operator));
+    assert!(registry.get(operator).is_some());
+    for session in [watching, unknown] {
+        assert!(!registry.knows_session(session));
+        assert!(registry.get(session).is_none());
+    }
+
+    // A second surface that starts joins the same Programmer and operates it too.
+    registry.start(watching);
+    assert!(registry.knows_session(watching));
+    assert_eq!(
+        registry.get(watching).unwrap().id,
+        registry.get(operator).unwrap().id
+    );
+
+    // Leaving stops it operating the Programmer, which the desk keeps.
+    registry.disconnect(watching);
+    assert!(!registry.knows_session(watching));
+    assert!(registry.knows_session(operator));
+}
+
+#[test]
+/// A Programmer restored after a restart is operated by the session it was persisted under, which
+/// never called `start` in this process.
+fn a_restored_programmer_is_operated_by_the_session_it_was_persisted_under() {
+    let registry = ProgrammerRegistry::default();
+    let persisted = SessionId::new();
+    let started = registry.start(persisted);
+    registry.disconnect(persisted);
+    let stored = registry.get(persisted).expect("the desk retains it");
+
+    let restored = ProgrammerRegistry::default();
+    restored.restore(stored);
+
+    assert!(restored.knows_session(persisted));
+    assert_eq!(restored.get(persisted).unwrap().id, started.id);
+    assert!(!restored.knows_session(SessionId::new()));
+}

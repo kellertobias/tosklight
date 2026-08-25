@@ -224,8 +224,25 @@ impl ProgrammerRegistry {
     /// the question could only ever answer yes — leaving an unreachable "belongs to another user"
     /// error behind every call. What is left is the half that can still be false: the desk may
     /// not know the session at all.
-    pub fn knows_session(&self, _session: SessionId) -> bool {
-        self.state.read().is_some()
+    /// Whether this session operates the desk's Programmer.
+    ///
+    /// There is one Programmer, but not every session reaches it: a read-only visualizer connects
+    /// without starting one, and a session the desk has never seen names nothing. Adapters filter
+    /// on this to tell an operating surface from a watching one — an OSC surface picks the session
+    /// it attaches to that way — so it has to stay a real question. Answering "yes, there is a
+    /// Programmer" makes every connected session look like an operator.
+    ///
+    /// `sessions` first, then `state`: the order `start` and `disconnect` take them.
+    pub fn knows_session(&self, session: SessionId) -> bool {
+        if self.sessions.read().contains(&session) {
+            return self.state.read().is_some();
+        }
+        // A Programmer restored after a restart carries the session it was persisted under. That
+        // session operates it without having connected again.
+        self.state
+            .read()
+            .as_ref()
+            .is_some_and(|state| state.session_id == session)
     }
 
     /// Reads only lightweight priority authority; retained Programmer values are never cloned.
@@ -480,6 +497,9 @@ impl ProgrammerRegistry {
     }
 
     pub fn get(&self, session: SessionId) -> Option<ProgrammerState> {
+        if !self.knows_session(session) {
+            return None;
+        }
         // Staged publication acquires these write locks in the same order. Holding all three read
         // guards while building a projection guarantees an old or new result, never a torn mix.
         let stored = self.state.read();
