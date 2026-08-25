@@ -65,29 +65,10 @@ impl FromRequestParts<AppState> for ShowContext {
 pub(super) struct DeskContext(Option<Uuid>);
 
 impl DeskContext {
+    /// There is one desk. `X-Tosk-Desk` used to pick between several; a header naming one from
+    /// before the collapse reaches the desk rather than a missing one.
     fn resolve(&self, state: &AppState) -> Result<ControlDesk, ApiError> {
-        match self.0 {
-            Some(id) => state
-                .installation
-                .control_desk(id)
-                .map_err(ApiError::store)?
-                .ok_or_else(|| ApiError::not_found("X-Tosk-Desk control desk")),
-            None => {
-                let mut desks = state.installation.desks().map_err(ApiError::store)?;
-                if desks.len() > 1 {
-                    desks.sort_by(|left, right| {
-                        left.name
-                            .to_ascii_lowercase()
-                            .cmp(&right.name.to_ascii_lowercase())
-                            .then_with(|| left.id.cmp(&right.id))
-                    });
-                }
-                desks
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| ApiError::not_found("control desk"))
-            }
-        }
+        state.installation.desk().map_err(ApiError::store)
     }
 }
 

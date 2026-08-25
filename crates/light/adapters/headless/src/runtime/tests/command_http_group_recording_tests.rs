@@ -519,12 +519,12 @@ fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Se
         let same_desk = scenario
             .state
             .installation
-            .add_desk("Same user wing")
+            .desk()
             .unwrap();
         let other_desk = scenario
             .state
             .installation
-            .add_desk("Other user wing")
+            .desk()
             .unwrap();
         (same_desk, other_desk)
     };

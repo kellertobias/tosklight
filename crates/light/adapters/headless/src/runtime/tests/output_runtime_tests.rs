@@ -396,7 +396,7 @@ async fn v2_output_is_the_desks_and_enforces_the_desk_lock() {
     let front = authenticate_token(&state, &front_token).unwrap();
     let show = create_show(&app, &front_token, "Shared output").await;
     open_show_for_output_test(&app, &front_token, &show).await;
-    let wing = state.installation.add_desk("Wing").unwrap();
+    let wing = state.installation.desk().unwrap();
     let wing_token = login_for_desk(&app, "Operator", wing.id).await;
     let initial = output_snapshot(&app, &wing_token, wing.id).await;
 

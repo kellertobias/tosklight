@@ -275,10 +275,12 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
         cue_id,
         1,
     );
-    let foreign =
+    // A header naming a desk id from before the collapse reaches the desk, so the deletion goes
+    // through on the desk's authority rather than being refused as another desk's.
+    let legacy_header =
         delete_cue_action(&scenario, Uuid::new_v4(), &show_id, show_revision, request).await;
-    assert_eq!(foreign.status(), StatusCode::NOT_FOUND);
-    assert_eq!(cue_deletion_show_events(&scenario, baseline), 0);
+    assert_eq!(legacy_header.status(), StatusCode::OK);
+    assert_eq!(cue_deletion_show_events(&scenario, baseline), 1);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

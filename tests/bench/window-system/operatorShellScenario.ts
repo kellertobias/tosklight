@@ -66,11 +66,7 @@ export class BrowserOperatorShell {
 			session_id: sessionId,
 			desk: physicalDesk,
 		});
-		expect(
-			bootstrap.desks.find((candidate: any) => candidate.id === physicalDesk.id),
-		).toMatchObject({
-			id: physicalDesk.id,
-		});
+		expect(bootstrap.desk).toMatchObject({ id: physicalDesk.id });
 		const hardware = await this.bench.osc();
 		const clientId = `manual-019-${crypto.randomUUID()}`;
 		try {

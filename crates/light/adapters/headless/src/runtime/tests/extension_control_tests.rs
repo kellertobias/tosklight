@@ -55,7 +55,7 @@ fn canonical_extension_highlight_feedback_tracks_active_navigation_state() {
 #[test]
 fn canonical_extension_controls_use_authoritative_output_and_playback_services() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.add_desk("Main").unwrap();
+    let desk = state.installation.desk().unwrap();
     let host = HostControlContext {
         extension_id: "de.tosklight.surface".into(),
         extension_instance_id: "main-surface".into(),
@@ -167,7 +167,7 @@ fn canonical_extension_controls_use_authoritative_output_and_playback_services()
 #[test]
 fn canonical_extension_surface_events_match_the_attached_hardware_desk_action_shape() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.add_desk("Main").unwrap();
+    let desk = state.installation.desk().unwrap();
     let host = HostControlContext {
         extension_id: "de.tosklight.surface".into(),
         extension_instance_id: "main-surface".into(),
@@ -234,7 +234,7 @@ fn canonical_extension_surface_events_match_the_attached_hardware_desk_action_sh
 #[test]
 fn canonical_extension_programmer_highlight_and_speed_controls_use_server_authority() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.add_desk("Main").unwrap();
+    let desk = state.installation.desk().unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: light_core::SessionId::new(),
@@ -437,7 +437,7 @@ fn canonical_extension_programmer_highlight_and_speed_controls_use_server_author
 #[tokio::test]
 async fn extension_programmer_keys_do_not_cross_an_active_show_transition() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.add_desk("Main").unwrap();
+    let desk = state.installation.desk().unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: light_core::SessionId::new(),
@@ -525,10 +525,9 @@ fn extension_timecode_uses_the_exact_selected_authoritative_source() {
 }
 
 #[test]
-fn extension_feedback_context_isolates_desks_and_carries_show_generation() {
+fn extension_feedback_context_reaches_the_desk_and_carries_show_generation() {
     let (state, data_dir) = test_state();
-    let front = state.installation.add_desk("Front").unwrap();
-    let wing = state.installation.add_desk("Wing").unwrap();
+    let desk = state.installation.desk().unwrap();
     let show = ShowEntry {
         id: light_core::ShowId::new(),
         name: "Feedback show".into(),
@@ -538,20 +537,21 @@ fn extension_feedback_context_isolates_desks_and_carries_show_generation() {
         revision_copy: None,
     };
     state.active_show.replace_current(Some(show.clone()));
-    let context = |desk: &ControlDesk| HostControlContext {
+    let context = |named: uuid::Uuid| HostControlContext {
         extension_id: "de.tosklight.surface".into(),
-        extension_instance_id: format!("{}-surface", desk.id),
-        desk_id: desk.id.to_string(),
+        extension_instance_id: format!("{named}-surface"),
+        desk_id: named.to_string(),
         source: "native_extension",
     };
 
-    let front_context = extensions_runtime::feedback_context(Some(&state), &context(&front));
-    let wing_context = extensions_runtime::feedback_context(Some(&state), &context(&wing));
-    assert_eq!(front_context.desk_id, front.id.to_string());
-    assert_eq!(wing_context.desk_id, wing.id.to_string());
-    assert_ne!(front_context.desk_id, wing_context.desk_id);
+    // A saved extension configuration naming a desk from before the collapse reaches this desk
+    // rather than a missing one.
+    let own = extensions_runtime::feedback_context(Some(&state), &context(desk.id));
+    let legacy = extensions_runtime::feedback_context(Some(&state), &context(uuid::Uuid::new_v4()));
+    assert_eq!(own.desk_id, desk.id.to_string());
+    assert_eq!(legacy.desk_id, desk.id.to_string());
     let show_id = show.id.0.to_string();
-    for feedback in [front_context, wing_context] {
+    for feedback in [own, legacy] {
         assert_eq!(feedback.show_id.as_deref(), Some(show_id.as_str()));
         assert_eq!(feedback.show_generation, 19);
     }

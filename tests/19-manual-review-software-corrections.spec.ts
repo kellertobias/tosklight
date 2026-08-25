@@ -82,9 +82,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 
     const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     expect(api.session).toMatchObject({ session_id: sessionId, desk: physicalDesk });
-    expect(bootstrap.desks.find((candidate: any) => candidate.id === physicalDesk.id)).toMatchObject({
-      id: physicalDesk.id,
-    });
+    expect(bootstrap.desk).toMatchObject({ id: physicalDesk.id });
 
     await desk.recordStep("OSC DESK IDENTITY", "The label-only Desktop edit leaves the physical desk session and OSC alias untouched; an external key still routes into that same desk.");
     const hardware = await bench.osc();

@@ -63,7 +63,7 @@ async fn unauthenticated_bootstrap_keeps_desk_discovery_but_omits_programmers() 
     assert_eq!(discovery.status(), StatusCode::OK);
     let discovery = json(discovery).await;
     assert!(discovery.get("users").is_none());
-    assert!(discovery["desks"].as_array().is_some());
+    assert!(discovery["desk"]["id"].as_str().is_some());
     assert_eq!(discovery["active_programmers"], serde_json::json!([]));
 
     let (_, session_id) = login(&app, "Operator").await;

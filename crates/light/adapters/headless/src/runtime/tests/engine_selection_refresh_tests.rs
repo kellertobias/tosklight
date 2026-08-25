@@ -315,8 +315,8 @@ impl ActiveGroupScenario {
 }
 
 fn two_desk_sessions(state: &AppState) -> (Session, Session) {
-    let actor_desk = state.installation.add_desk("Front").unwrap();
-    let peer_desk = state.installation.add_desk("Wing").unwrap();
+    let actor_desk = state.installation.desk().unwrap();
+    let peer_desk = state.installation.desk().unwrap();
     let actor = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),

@@ -80,7 +80,7 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
 
     let second_desk = scenario
         .state
-        .installation.add_desk("Second capture desk")
+        .installation.desk()
         .unwrap();
     let second_token = login_on_desk(&scenario, second_desk.id).await;
     let second = scenario
@@ -319,7 +319,7 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
     let second_desk = scenario
         .state
         .installation
-        .add_desk("Second desk")
+        .desk()
         .unwrap();
     let second_token = login_on_desk(&scenario, second_desk.id).await;
 
@@ -390,7 +390,7 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     let fixture = scenario.install_direct_fixture();
     let second_desk = scenario
         .state
-        .installation.add_desk("Lifecycle peer")
+        .installation.desk()
         .unwrap();
     let second_token = login_on_desk(&scenario, second_desk.id).await;
     let second_session = scenario

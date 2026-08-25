@@ -392,7 +392,7 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
 #[tokio::test]
 async fn selection_is_the_desks_and_a_locked_desk_is_rejected() {
     let (scenario, _show_id) = cue_navigation_scenario().await;
-    let second_desk = scenario.state.installation.add_desk("Wing").unwrap();
+    let second_desk = scenario.state.installation.desk().unwrap();
     select_playback(&scenario, scenario.session.desk.id, Some(2));
     select_playback(&scenario, second_desk.id, Some(1));
 

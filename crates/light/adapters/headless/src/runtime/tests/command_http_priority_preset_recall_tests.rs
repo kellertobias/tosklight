@@ -25,7 +25,7 @@ async fn priority_snapshot_and_action_are_desk_shared_sparse_and_replay_safe() {
 
     let second_desk = scenario
         .state
-        .installation.add_desk("Priority peer")
+        .installation.desk()
         .unwrap();
     let second_token = login_on_desk(&scenario, second_desk.id).await;
     let request = serde_json::json!({

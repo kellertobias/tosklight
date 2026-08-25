@@ -69,8 +69,8 @@ fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
 #[test]
 fn osc_and_ui_share_the_desks_one_command_line() {
     let (state, data_dir) = test_state();
-    let front = state.installation.add_desk("Front").unwrap();
-    let wing = state.installation.add_desk("Wing").unwrap();
+    let front = state.installation.desk().unwrap();
+    let wing = state.installation.desk().unwrap();
     let ui = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
@@ -150,7 +150,7 @@ fn osc_and_ui_share_the_desks_one_command_line() {
 #[test]
 fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once() {
     let (state, data_dir) = test_state();
-    let front = state.installation.add_desk("Front").unwrap();
+    let front = state.installation.desk().unwrap();
     let ui = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
@@ -394,7 +394,7 @@ fn competing_file_input_context_claims_are_atomic() {
 fn synthetic_osc_sessions_publish_start_and_removal_on_unsubscribe_and_timeout() {
     let (state, data_dir) = test_state();
     state
-        .installation.add_desk("OSC lifecycle main")
+        .installation.desk()
         .unwrap();
     let subscribe = |client: &str| {
         assert!(handle_subscription_osc(
@@ -465,10 +465,10 @@ fn synthetic_osc_sessions_publish_start_and_removal_on_unsubscribe_and_timeout()
 fn synthetic_osc_resubscribe_reuses_an_orphan_session_without_transient_lifecycle_rows() {
     let (state, data_dir) = test_state();
     state
-        .installation.add_desk("OSC lifecycle main")
+        .installation.desk()
         .unwrap();
     state
-        .installation.add_desk("OSC lifecycle second")
+        .installation.desk()
         .unwrap();
     let subscribe = |desk: &str| {
         assert!(handle_subscription_osc(
@@ -537,7 +537,7 @@ fn press_osc(state: &AppState, address: &str, source: &str) {
 #[test]
 fn a_desk_button_surface_types_on_the_command_line_and_a_remote_one_cannot() {
     let (state, data_dir) = test_state();
-    state.installation.add_desk("Capability").unwrap();
+    state.installation.desk().unwrap();
     let desk_source = "127.0.0.1:19010";
     let remote_source = "127.0.0.1:19020";
     let desk_session = subscribe_osc_surface(&state, "desk-wing", "desk", desk_source);
@@ -571,7 +571,7 @@ fn a_desk_button_surface_types_on_the_command_line_and_a_remote_one_cannot() {
 #[test]
 fn a_remote_surface_cannot_record_update_or_assign() {
     let (state, data_dir) = test_state();
-    state.installation.add_desk("Capability").unwrap();
+    state.installation.desk().unwrap();
     let desk_source = "127.0.0.1:19010";
     let remote_source = "127.0.0.1:19020";
     let desk_session = subscribe_osc_surface(&state, "desk-wing", "desk", desk_source);
@@ -606,7 +606,7 @@ fn a_remote_surface_cannot_record_update_or_assign() {
 #[test]
 fn a_legacy_alias_still_connects_as_a_desk_button_surface() {
     let (state, data_dir) = test_state();
-    state.installation.add_desk("Capability").unwrap();
+    state.installation.desk().unwrap();
     // Saved hardware configuration naming an alias from before the two paths existed keeps the
     // full command set rather than being silently downgraded or refused.
     let source = "127.0.0.1:19010";

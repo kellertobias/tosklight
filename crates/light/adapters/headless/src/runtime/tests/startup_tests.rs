@@ -368,7 +368,7 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
             restored_exclusion_active(2, cue_list_id, activated_at),
         ]))
         .unwrap();
-    let desk = state.installation.add_desk("Restored").unwrap();
+    let desk = state.installation.desk().unwrap();
     state.installation.set_desk_page(desk.id, show.id, 1).unwrap();
     let stored = test_virtual_playback_exclusion_store(vec![
         VirtualPlaybackExclusionZone {
@@ -566,22 +566,19 @@ fn restored_exclusions_replay_each_activation_against_show_owned_zones() {
         state
             .output.replace_snapshot(restored_exclusion_snapshot(cue_list_id))
             .unwrap();
-        let configured = state
-            .installation.add_desk("Configured restart desk")
+        let configured = state.installation.desk().unwrap();
+        // The desk, and an origin naming a desk this installation does not have — as a restored
+        // activation stored before the collapse carries.
+        let unconfigured = uuid::Uuid::new_v4();
+        state
+            .installation
+            .set_desk_page(configured.id, show.id, 1)
             .unwrap();
-        let unconfigured = state
-            .installation.add_desk("Unconfigured restart desk")
-            .unwrap();
-        for desk in [&configured, &unconfigured] {
-            state
-                .installation.set_desk_page(desk.id, show.id, 1)
-                .unwrap();
-        }
         store_restart_zone(&state, &show, configured.id);
         let (first, second) = if configured_desk_activates_last {
-            ((2, unconfigured.id), (1, configured.id))
+            ((2, unconfigured), (1, configured.id))
         } else {
-            ((1, configured.id), (2, unconfigured.id))
+            ((1, configured.id), (2, unconfigured))
         };
         state
             .output.execute_playback(EnginePlaybackCommand::RestoreActive(vec![
@@ -590,13 +587,6 @@ fn restored_exclusions_replay_each_activation_against_show_owned_zones() {
             ]))
             .unwrap();
         persist_active_playbacks(&state).unwrap();
-        if !configured_desk_activates_last {
-            assert!(
-                state
-                    .installation.remove_desk(unconfigured.id)
-                    .unwrap()
-            );
-        }
 
         let outcome = normalize_restored_virtual_playback_exclusions(&state).unwrap();
 
@@ -657,7 +647,7 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
         .output.replace_snapshot(restored_exclusion_snapshot(cue_list_id))
         .unwrap();
     let desk = state
-        .installation.add_desk("Timed Preload desk")
+        .installation.desk()
         .unwrap();
     state
         .installation.set_desk_page(desk.id, show.id, 1)

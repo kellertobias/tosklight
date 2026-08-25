@@ -142,7 +142,7 @@ pub(super) async fn bootstrap_v2(
 }
 
 fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
-    let (desks, client_desks) = state.installation.bootstrap_desk_data();
+    let (desk, client_desks) = state.installation.bootstrap_desk_data();
     let mut clients = client_desks
         .into_iter()
         .map(|entry| {
@@ -218,7 +218,7 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         .into_iter()
         .map(runtime_wire::attribute)
         .collect(),
-        desks: desks.into_iter().map(runtime_wire::desk).collect(),
+        desk: desk.map(runtime_wire::desk),
         clients,
         active_show: state.active_show.current().clone().map(runtime_wire::show),
         // Bootstrap is intentionally available before login so a client can discover the desk.

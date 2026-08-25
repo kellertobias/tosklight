@@ -5,10 +5,28 @@ use light_core::ShowId;
 use rusqlite::{OptionalExtension, params};
 use uuid::Uuid;
 
+/// The name a desk is created under when an installation has none.
+///
+/// Deliberately fixed. A desk used to be named after the client that first connected, which is how
+/// an installation ended up with a row per window.
+const DESK_NAME: &str = "Desk";
+
 impl DeskStore {
-    pub fn desks(&self) -> Result<Vec<ControlDesk>, StoreError> {
+    /// The desk. There is one; it is created on first read if the installation has none.
+    pub fn desk(&self) -> Result<ControlDesk, StoreError> {
+        if let Some(desk) = self.stored_desk()? {
+            return Ok(desk);
+        }
+        self.create_desk()
+    }
+
+    /// The desk, if this installation has stored one yet.
+    ///
+    /// Separate from [`Self::desk`] so a read can stay a read: answering what an installation holds
+    /// must not write a row into it.
+    fn stored_desk(&self) -> Result<Option<ControlDesk>, StoreError> {
         let mut statement = self.conn.prepare("SELECT id,name,columns_count,rows_count,buttons_count,playback_layout_json FROM control_desks ORDER BY name COLLATE NOCASE")?;
-        let rows = statement.query_map([], |row| {
+        let mut rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get(1)?,
@@ -18,24 +36,20 @@ impl DeskStore {
                 row.get::<_, Option<String>>(5)?,
             ))
         })?;
-        rows.map(|row| {
-            let (id, name, columns, rows, buttons, playback_layout) = row?;
-            Ok(ControlDesk {
-                id: Uuid::parse_str(&id)?,
-                name,
-                columns,
-                rows,
-                buttons,
-                playback_layout: playback_layout
-                    .map(|value| serde_json::from_str(&value))
-                    .transpose()?,
-            })
-        })
-        .collect()
-    }
-
-    pub fn control_desk(&self, id: Uuid) -> Result<Option<ControlDesk>, StoreError> {
-        Ok(self.desks()?.into_iter().find(|desk| desk.id == id))
+        let Some(row) = rows.next() else {
+            return Ok(None);
+        };
+        let (id, name, columns, rows, buttons, playback_layout) = row?;
+        Ok(Some(ControlDesk {
+            id: Uuid::parse_str(&id)?,
+            name,
+            columns,
+            rows,
+            buttons,
+            playback_layout: playback_layout
+                .map(|value| serde_json::from_str(&value))
+                .transpose()?,
+        }))
     }
 
     /// Every window that has connected, each shown against the desk it operates.
@@ -45,7 +59,7 @@ impl DeskStore {
     /// each other's events away. They are separate records now: one desk, and however many
     /// clients have connected to it.
     pub fn client_desks(&self) -> Result<Vec<ClientDesk>, StoreError> {
-        let Some(desk) = self.desks()?.into_iter().next() else {
+        let Some(desk) = self.stored_desk()? else {
             return Ok(Vec::new());
         };
         let mut statement = self
@@ -74,28 +88,21 @@ impl DeskStore {
             .collect()
     }
 
-    /// The desk a connecting client operates.
+    /// Register a connecting window and answer with the desk it operates.
     ///
-    /// There is one. This used to create a control desk per client; the client is remembered in
-    /// its own record instead, so a window is still known without a desk appearing behind it. A
-    /// desk record from before the collapse is honoured rather than discarded, so saved screen
-    /// configuration and OSC aliases keep working.
-    pub fn resolve_client_desk(
-        &self,
-        client_id: Uuid,
-        _remembered_desk_id: Option<Uuid>,
-    ) -> Result<ControlDesk, StoreError> {
+    /// There is one desk. This used to create a control desk per client, which is why an
+    /// installation from before the collapse holds a row per window that ever connected. The
+    /// window is remembered in its own record instead, so a window is still known without a desk
+    /// appearing behind it, and a desk record from before the collapse is honoured rather than
+    /// discarded — saved screen configuration keeps working.
+    pub fn resolve_client_desk(&self, client_id: Uuid) -> Result<ControlDesk, StoreError> {
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
             "INSERT INTO desk_clients(client_id,last_connected_at) VALUES(?1,?2) \
              ON CONFLICT(client_id) DO UPDATE SET last_connected_at=excluded.last_connected_at",
             params![client_id.to_string(), now],
         )?;
-        if let Some(desk) = self.desks()?.into_iter().next() {
-            return Ok(desk);
-        }
-        let suffix = client_id.simple().to_string();
-        self.add_desk(&format!("Desk {}", &suffix[..6]))
+        self.desk()
     }
 
     pub fn touch_client(&self, client_id: Uuid) -> Result<(), StoreError> {
@@ -104,25 +111,6 @@ impl DeskStore {
             params![Utc::now().to_rfc3339(), client_id.to_string()],
         )?;
         Ok(())
-    }
-
-    /// Remove a control desk and the state that belongs only to it.
-    pub fn remove_desk(&mut self, desk_id: Uuid) -> Result<bool, StoreError> {
-        let transaction = self.conn.transaction()?;
-        let exists = transaction
-            .query_row(
-                "SELECT 1 FROM control_desks WHERE id=?1",
-                [desk_id.to_string()],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some();
-        if !exists {
-            return Ok(false);
-        }
-        delete_desks(&transaction, std::slice::from_ref(&desk_id.to_string()))?;
-        transaction.commit()?;
-        Ok(true)
     }
 
     /// Forget one window that has connected.
@@ -138,7 +126,20 @@ impl DeskStore {
         )? == 1)
     }
 
-    pub fn add_desk(&self, name: &str) -> Result<ControlDesk, StoreError> {
+    /// Write a second desk row, as an installation from before the collapse holds.
+    ///
+    /// Test-only on purpose: nothing in the desk may create a second one, and the migration that
+    /// collapses them still has to be exercised against a database that has them.
+    #[cfg(test)]
+    pub(crate) fn insert_legacy_desk(&self, name: &str) -> Result<ControlDesk, StoreError> {
+        self.insert_desk(name)
+    }
+
+    fn create_desk(&self) -> Result<ControlDesk, StoreError> {
+        self.insert_desk(DESK_NAME)
+    }
+
+    fn insert_desk(&self, name: &str) -> Result<ControlDesk, StoreError> {
         let desk = ControlDesk {
             id: Uuid::new_v4(),
             name: name.trim().to_owned(),
@@ -169,18 +170,13 @@ impl DeskStore {
                 "invalid control desk configuration".into(),
             ));
         }
-        let playback_layout = playback_layout.or_else(|| {
-            self.control_desk(id)
-                .ok()
-                .flatten()
-                .and_then(|desk| desk.playback_layout)
-        });
+        let playback_layout =
+            playback_layout.or_else(|| self.desk().ok().and_then(|desk| desk.playback_layout));
         if let Some(layout) = &playback_layout {
             validate_playback_surface(layout)?;
         }
         if self.conn.execute("UPDATE control_desks SET name=?1,columns_count=?2,rows_count=?3,buttons_count=?4,playback_layout_json=?5 WHERE id=?6",params![name.trim(),columns,rows,buttons,playback_layout.as_ref().map(serde_json::to_string).transpose()?,id.to_string()])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
-        self.control_desk(id)?
-            .ok_or_else(|| StoreError::Invalid("control desk update failed".into()))
+        self.desk()
     }
 
     pub fn desk_page(&self, desk: Uuid, show: ShowId) -> Result<u8, StoreError> {

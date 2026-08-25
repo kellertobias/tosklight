@@ -195,15 +195,9 @@ impl InstallationResource {
         self.desk.lock().delete_session(id)
     }
 
-    pub(in crate::runtime) fn desks(&self) -> Result<Vec<ControlDesk>, light_show::StoreError> {
-        self.desk.lock().desks()
-    }
-
-    pub(in crate::runtime) fn control_desk(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<ControlDesk>, light_show::StoreError> {
-        self.desk.lock().control_desk(id)
+    /// The desk. There is one; a caller naming an id from before the collapse still reaches it.
+    pub(in crate::runtime) fn desk(&self) -> Result<ControlDesk, light_show::StoreError> {
+        self.desk.lock().desk()
     }
 
     pub(in crate::runtime) fn client_desks(
@@ -215,11 +209,8 @@ impl InstallationResource {
     pub(in crate::runtime) fn resolve_client_desk(
         &self,
         client_id: Uuid,
-        remembered_desk_id: Option<Uuid>,
     ) -> Result<ControlDesk, light_show::StoreError> {
-        self.desk
-            .lock()
-            .resolve_client_desk(client_id, remembered_desk_id)
+        self.desk.lock().resolve_client_desk(client_id)
     }
 
     pub(in crate::runtime) fn touch_client(
@@ -234,22 +225,6 @@ impl InstallationResource {
         client_id: Uuid,
     ) -> Result<bool, light_show::StoreError> {
         self.desk.lock().remove_client(client_id)
-    }
-
-    #[cfg(test)]
-    pub(in crate::runtime) fn remove_desk(
-        &self,
-        desk_id: Uuid,
-    ) -> Result<bool, light_show::StoreError> {
-        self.desk.lock().remove_desk(desk_id)
-    }
-
-    #[cfg(test)]
-    pub(in crate::runtime) fn add_desk(
-        &self,
-        name: &str,
-    ) -> Result<ControlDesk, light_show::StoreError> {
-        self.desk.lock().add_desk(name)
     }
 
     pub(in crate::runtime) fn update_desk(
@@ -360,12 +335,9 @@ impl InstallationResource {
 
     pub(in crate::runtime) fn bootstrap_desk_data(
         &self,
-    ) -> (Vec<ControlDesk>, Vec<light_show::ClientDesk>) {
+    ) -> (Option<ControlDesk>, Vec<light_show::ClientDesk>) {
         let desk = self.desk.lock();
-        (
-            desk.desks().unwrap_or_default(),
-            desk.client_desks().unwrap_or_default(),
-        )
+        (desk.desk().ok(), desk.client_desks().unwrap_or_default())
     }
 
     #[cfg(test)]

@@ -30,7 +30,7 @@ impl CueTransferScenario {
     fn new() -> Self {
         let (state, data_dir) = test_state();
         let desk = state
-            .installation.add_desk("Cue transfer")
+            .installation.desk()
             .unwrap();
         let session = Session {
             capability: light_core::SurfaceCapability::Programming,

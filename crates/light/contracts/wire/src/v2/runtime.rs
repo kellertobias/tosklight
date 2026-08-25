@@ -8,8 +8,6 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeSessionCreateRequest {
     #[serde(default)]
-    pub desk_id: Option<Uuid>,
-    #[serde(default)]
     pub client_id: Option<Uuid>,
     /// Absent means the historical operator session. A `visualizer` session is read-only: it
     /// never starts a programmer, claims the command line, or changes desk selection, and the
@@ -178,7 +176,7 @@ pub struct RuntimeBootstrapHighlightState {
 pub struct RuntimeBootstrapSnapshot {
     pub api_version: String,
     pub attribute_registry: Vec<RuntimeAttributeDescriptor>,
-    pub desks: Vec<RuntimeControlDesk>,
+    pub desk: Option<RuntimeControlDesk>,
     pub clients: Vec<RuntimeClientSummary>,
     pub active_show: Option<RuntimeShowEntry>,
     /// Retained as an empty compatibility collection until the facade is removed.
@@ -291,14 +289,16 @@ mod tests {
 
     #[test]
     fn session_request_accepts_unknown_fields_and_validates_known_fields() {
-        // A client from before the collapse still sends `username`. It named the one operator
-        // there has ever been, so it is ignored rather than rejected.
+        // A client from before the collapse still sends `username` and `desk_id`. They named the
+        // one operator and the one desk there has ever been, so they are ignored rather than
+        // rejected.
         let request: RuntimeSessionCreateRequest = serde_json::from_value(serde_json::json!({
             "username": "Operator",
+            "desk_id": "11111111-1111-4111-8111-111111111111",
             "future_client_hint": true
         }))
         .unwrap();
-        assert_eq!(request.desk_id, None);
+        assert_eq!(request.client_id, None);
         assert_eq!(request.role, None);
 
         let error = serde_json::from_value::<RuntimeSessionCreateRequest>(serde_json::json!({

@@ -87,7 +87,7 @@ async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
         "Virtual Playback exclusion-zone revision conflict: expected 0, actual 1"
     );
 
-    let second_desk = state.installation.add_desk("Zone wing").unwrap();
+    let second_desk = state.installation.desk().unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     let second = put_zones(&app, &second_token, show_id, "save-second-zones", 1).await;
     assert_eq!(second.status(), StatusCode::OK);
