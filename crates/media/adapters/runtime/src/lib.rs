@@ -79,6 +79,11 @@ pub fn run() -> anyhow::Result<()> {
 fn run_inner() -> anyhow::Result<()> {
     let logging = install_logging();
     let arguments: Vec<String> = std::env::args().collect();
+
+    if !arguments_ask_to_run(&arguments)? {
+        return Ok(());
+    }
+
     let configuration = prepare_configuration()?;
 
     if arguments
@@ -370,6 +375,74 @@ fn desktop_is_available(arguments: &[String]) -> bool {
     }
     true
 }
+
+/// What the command line asked for, before any of it is acted on.
+enum Understanding {
+    /// Every argument is one this server acts on.
+    Run,
+    /// Usage was asked for.
+    Explain,
+    /// An argument nobody here recognises. Named so the message can say which.
+    Reject(String),
+}
+
+/// Answer the command line before anything is read or bound, and say whether to carry on.
+///
+/// An unrecognised argument used to fall through to a normal startup, so `--help` began a server
+/// that took the Art-Net port with it and, having no window, left nothing on screen to say so.
+fn arguments_ask_to_run(arguments: &[String]) -> anyhow::Result<bool> {
+    match arguments_are_understood(arguments) {
+        Understanding::Run => Ok(true),
+        Understanding::Explain => {
+            println!("{USAGE}");
+            Ok(false)
+        }
+        Understanding::Reject(argument) => {
+            anyhow::bail!("{argument} is not an argument this server understands.\n\n{USAGE}")
+        }
+    }
+}
+
+/// Decide what to do with the command line.
+///
+/// Unknown arguments are refused rather than ignored, because the alternative response to a typo
+/// is starting a server that holds the Art-Net port for as long as nobody notices it.
+fn arguments_are_understood(arguments: &[String]) -> Understanding {
+    let mut remaining = arguments.iter().skip(1); // The executable's own path.
+    while let Some(argument) = remaining.next() {
+        match argument.as_str() {
+            "--help" | "-h" => return Understanding::Explain,
+            CHECK_CONFIGURATION_ARGUMENT | TEST_PATTERN_ARGUMENT | HEADLESS_ARGUMENT => {}
+            // The one argument that carries a value; the value is not an argument itself.
+            PLAY_ARGUMENT => {
+                if remaining.next().is_none() {
+                    return Understanding::Reject(format!("{PLAY_ARGUMENT} without a file"));
+                }
+            }
+            other => return Understanding::Reject(other.to_owned()),
+        }
+    }
+    Understanding::Run
+}
+
+/// What `--help` prints. Written out rather than generated: there are five arguments, and a
+/// dependency on an argument parser would be the larger thing to keep in sync.
+const USAGE: &str = concat!(
+    "ToskLight Media\n",
+    "\n",
+    "Runs the media server. With no arguments it serves, opens the outputs its configuration\n",
+    "assigns to monitors, and shows an icon in the menu bar or notification area.\n",
+    "\n",
+    "  --headless             Serve without any desktop presence: no event loop, no menu bar\n",
+    "                         item, no output windows. For a machine with no window server.\n",
+    "  --check-configuration  Read, migrate, and validate the configuration, then exit.\n",
+    "  --test-pattern         Fill each output with a flat colour, to confirm it is on the\n",
+    "                         monitor you meant, at the size you meant, the right way up.\n",
+    "  --play <file>          Play one file directly, instead of what the layers resolve to.\n",
+    "  -h, --help             Print this and exit.\n",
+    "\n",
+    "The configuration file is named by MEDIA_CONFIG; MEDIA_LOG sets the logging level.",
+);
 
 fn diagnostics_asked_for(arguments: &[String]) -> Diagnostics {
     Diagnostics {
@@ -925,6 +998,70 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
 #[cfg(test)]
 mod desktop_presence_tests {
     use super::*;
+
+    #[test]
+    fn asking_for_usage_does_not_start_a_server() {
+        for asked in ["--help", "-h"] {
+            let arguments = vec!["media-server".to_owned(), asked.to_owned()];
+
+            assert!(matches!(
+                arguments_are_understood(&arguments),
+                Understanding::Explain
+            ));
+        }
+    }
+
+    #[test]
+    fn an_unknown_argument_is_refused_rather_than_ignored() {
+        // Ignoring it starts a server that holds the Art-Net port until somebody goes looking.
+        let arguments = vec!["media-server".to_owned(), "--headles".to_owned()];
+
+        let understanding = arguments_are_understood(&arguments);
+
+        assert!(matches!(understanding, Understanding::Reject(named) if named == "--headles"));
+    }
+
+    #[test]
+    fn the_file_after_play_is_not_read_as_an_argument() {
+        let arguments = vec![
+            "media-server".to_owned(),
+            PLAY_ARGUMENT.to_owned(),
+            "--not-an-argument.mp4".to_owned(),
+            HEADLESS_ARGUMENT.to_owned(),
+        ];
+
+        assert!(matches!(
+            arguments_are_understood(&arguments),
+            Understanding::Run
+        ));
+    }
+
+    #[test]
+    fn play_without_a_file_is_refused() {
+        let arguments = vec!["media-server".to_owned(), PLAY_ARGUMENT.to_owned()];
+
+        assert!(matches!(
+            arguments_are_understood(&arguments),
+            Understanding::Reject(_)
+        ));
+    }
+
+    #[test]
+    fn every_documented_argument_is_one_the_server_acts_on() {
+        // Usage that names an argument the parser refuses would be worse than no usage at all.
+        for argument in [
+            HEADLESS_ARGUMENT,
+            CHECK_CONFIGURATION_ARGUMENT,
+            TEST_PATTERN_ARGUMENT,
+        ] {
+            assert!(USAGE.contains(argument), "{argument} is undocumented");
+            assert!(matches!(
+                arguments_are_understood(&["media-server".to_owned(), argument.to_owned()]),
+                Understanding::Run
+            ));
+        }
+        assert!(USAGE.contains(PLAY_ARGUMENT));
+    }
 
     #[test]
     fn asking_for_headless_runs_without_a_desktop_presence() {
