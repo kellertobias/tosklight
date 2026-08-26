@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **190 root cases across 77 files**.
+Default catalog: **191 root cases across 78 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -203,6 +203,7 @@ Default catalog: **190 root cases across 77 files**.
 | 89-internal-audio-player.spec.ts | AUDIO-LIBRARY-001 @api the Internal Audio Player reports its library to the Media pane | repository contract | @api | internal-audio-player | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 90-desk-setup-defaults.spec.ts | TL-165 @ui › Desk Setup defaults save immediately and keep the requested layout | docs/help/10-Desk/10-Show-Setup/index.md | @ui | desk-setup-defaults | standard failure evidence | parallel | pending-semantic-migration |
 | 90-desk-setup-defaults.spec.ts | TL-251 @ui › setup navigation exposes a finger-sized scrollbar when touch scrolling is enabled | docs/help/10-Desk/10-Show-Setup/index.md | @ui | desk-setup-defaults | standard failure evidence | parallel | pending-semantic-migration |
+| 91-performance-harness-contract.spec.ts | PERF-HARNESS @api the routes the performance harness calls still answer | repository contract | @api | performance-harness-contract | standard failure evidence | parallel | reviewed-low-level-boundary |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 

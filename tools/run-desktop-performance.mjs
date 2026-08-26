@@ -112,10 +112,9 @@ async function runCase(performanceCase, executionMode) {
 	try {
 		await waitForReadiness(child, port);
 		const api = apiClient(port);
-		// A desk admits the operators it was seeded with and no one else, so the measurement
-		// signs in as one of them rather than inventing a name.
+		// A v2 session is a client on a desk, not a named operator: the desk resolves which desk
+		// the client belongs to and the request carries no user at all.
 		const session = await api.request("POST", "/api/v2/sessions", {
-			username: await enabledUser(api),
 			desk_id: null,
 		});
 		api.session = session;
@@ -183,13 +182,6 @@ function applicationInvocation(application, executionMode) {
 	);
 	const cpu = affinity.stdout?.match(/:\s*(\d+)/u)?.[1] ?? "0";
 	return { command: "taskset", arguments: ["--cpu-list", cpu, application] };
-}
-
-async function enabledUser(api) {
-	const bootstrap = await api.request("GET", "/api/v2/bootstrap");
-	const user = (bootstrap.users ?? []).find((candidate) => candidate.enabled);
-	if (!user) throw new Error("the released Desk has no enabled user to measure as");
-	return user.name;
 }
 
 async function prepareDemo(api) {
