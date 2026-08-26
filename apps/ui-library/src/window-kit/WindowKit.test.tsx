@@ -4,6 +4,7 @@ import {
 	render as rtlRender,
 	screen,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModalProvider } from "../modals/ModalStack";
@@ -230,6 +231,144 @@ describe("window kit", () => {
 			expect.arrayContaining([{ id: "row-0" }]),
 		);
 		expect(visibleRows.mock.lastCall?.[0].length).toBeLessThan(40);
+	});
+	it("leaves a scrolled virtualized list where the operator put it", () => {
+		// jsdom implements no layout, so it ships no scrollIntoView to spy on.
+		const scrollIntoView = vi.fn();
+		(Element.prototype as { scrollIntoView?: unknown }).scrollIntoView =
+			scrollIntoView;
+		try {
+			render(
+				<div className="ui-window-scroller">
+					<DataTable
+						rows={Array.from({ length: 200 }, (_, index) => ({
+							id: `row-${index}`,
+						}))}
+						columns={[{ id: "name", header: "Name", render: (row) => row.id }]}
+						rowKey={(row) => row.id}
+						activeIndex={5}
+						virtualize
+						rowHeight={32}
+					/>
+				</div>,
+			);
+			const scroller = document.querySelector(
+				".ui-window-scroller",
+			) as HTMLElement;
+			// jsdom lays nothing out, so the scroller is given the metrics of a ten-row window
+			// over two hundred rows. Without them every row measures as unmounted and the
+			// re-assert this test is about could never fire.
+			Object.defineProperty(scroller, "clientHeight", { value: 320 });
+			Object.defineProperty(scroller, "scrollHeight", { value: 200 * 32 });
+			// The table only re-asserts the active row once it holds focus, which is how an
+			// operator leaves it after selecting a fixture.
+			fireEvent.focus(screen.getAllByRole("row")[1], { bubbles: true });
+			scrollIntoView.mockClear();
+
+			// A short wheel gesture: far enough to republish the mounted row window, near
+			// enough that the active row is still mounted and can be dragged back into view.
+			scroller.scrollTop = 200;
+			fireEvent.scroll(scroller);
+
+			// The viewport changed, but nothing asked to be scrolled back into view.
+			expect(scrollIntoView).not.toHaveBeenCalled();
+			expect(scroller.scrollTop).toBe(200);
+		} finally {
+			(Element.prototype as { scrollIntoView?: unknown }).scrollIntoView =
+				undefined;
+		}
+	});
+	it("queues no mount scroll when StrictMode double-invokes the effects", () => {
+		// jsdom implements no layout, so it ships no scrollIntoView to spy on.
+		const scrollIntoView = vi.fn();
+		(Element.prototype as { scrollIntoView?: unknown }).scrollIntoView =
+			scrollIntoView;
+		try {
+			render(
+				<StrictMode>
+					<div className="ui-window-scroller">
+						<DataTable
+							rows={Array.from({ length: 200 }, (_, index) => ({
+								id: `row-${index}`,
+							}))}
+							columns={[{ id: "name", header: "Name", render: (row) => row.id }]}
+							rowKey={(row) => row.id}
+							activeIndex={5}
+							virtualize
+							rowHeight={32}
+						/>
+					</div>
+				</StrictMode>,
+			);
+			const scroller = document.querySelector(
+				".ui-window-scroller",
+			) as HTMLElement;
+			Object.defineProperty(scroller, "clientHeight", { value: 320 });
+			Object.defineProperty(scroller, "scrollHeight", { value: 200 * 32 });
+			fireEvent.focus(screen.getAllByRole("row")[1], { bubbles: true });
+			scrollIntoView.mockClear();
+
+			scroller.scrollTop = 200;
+			fireEvent.scroll(scroller);
+
+			// A remount must not look like a move: the row the table opened on is where the
+			// operator already is.
+			expect(scrollIntoView).not.toHaveBeenCalled();
+			expect(scroller.scrollTop).toBe(200);
+		} finally {
+			(Element.prototype as { scrollIntoView?: unknown }).scrollIntoView =
+				undefined;
+		}
+	});
+	it("still scrolls to a keyboard-selected row that the viewport has to mount", () => {
+		// jsdom implements no layout, so it ships no scrollIntoView to spy on.
+		const scrollIntoView = vi.fn();
+		(Element.prototype as { scrollIntoView?: unknown }).scrollIntoView =
+			scrollIntoView;
+		try {
+			const rows = Array.from({ length: 200 }, (_, index) => ({
+				id: `row-${index}`,
+			}));
+			const table = (activeIndex: number) => (
+				<div className="ui-window-scroller">
+					<DataTable
+						rows={rows}
+						columns={[{ id: "name", header: "Name", render: (row) => row.id }]}
+						rowKey={(row) => row.id}
+						activeIndex={activeIndex}
+						virtualize
+						rowHeight={32}
+					/>
+				</div>
+			);
+			const view = render(table(0));
+			fireEvent.focus(screen.getAllByRole("row")[1], { bubbles: true });
+			scrollIntoView.mockClear();
+
+			// Moving the active row to one that is already mounted scrolls to it directly.
+			view.rerender(table(3));
+			expect(scrollIntoView).toHaveBeenCalled();
+			scrollIntoView.mockClear();
+
+			const scroller = document.querySelector(
+				".ui-window-scroller",
+			) as HTMLElement;
+			Object.defineProperty(scroller, "clientHeight", { value: 320 });
+			Object.defineProperty(scroller, "scrollHeight", { value: 200 * 32 });
+
+			// Moving far down the list picks a row the viewport has not mounted, so the move
+			// cannot be honoured in the render that requested it.
+			view.rerender(table(150));
+			expect(scrollIntoView).not.toHaveBeenCalled();
+
+			// The request stands. The viewport change that mounts the row honours it.
+			scroller.scrollTop = 150 * 32;
+			fireEvent.scroll(scroller);
+			expect(scrollIntoView).toHaveBeenCalled();
+		} finally {
+			(Element.prototype as { scrollIntoView?: unknown }).scrollIntoView =
+				undefined;
+		}
 	});
 	it("stabilizes table width from declared pixel column minima", () => {
 		render(

@@ -841,13 +841,36 @@ function useDataTableWindow({
 			observer?.disconnect();
 		};
 	}, [rowCount, rowHeight, total, usesViewport]);
+	// The row a move asked for, held until it has actually been scrolled to. A virtualized
+	// row is often unmounted at the moment the move happens, so the request has to outlive
+	// the render that could not honour it.
+	const pendingActiveRow = useRef<number | null>(null);
+	const previousActiveRow = useRef(activeIndex);
+	useLayoutEffect(() => {
+		// Only a move asks to be scrolled to. The active row a table simply opens with is
+		// where the operator already is, so mounting must not queue a scroll that a later
+		// focus would then honour out of nowhere. Comparing against the previous row keeps
+		// this idempotent, so a repeated effect run cannot invent a move that never happened.
+		if (previousActiveRow.current !== activeIndex) {
+			pendingActiveRow.current = activeIndex ?? null;
+			previousActiveRow.current = activeIndex;
+		}
+	}, [activeIndex]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: viewport changes mount the virtualized active row before it can be scrolled into view.
 	useLayoutEffect(() => {
-		if (!usesViewport || !tableFocused.current || activeIndex == null) return;
+		if (!usesViewport || !tableFocused.current) return;
+		const wanted = pendingActiveRow.current;
+		if (wanted == null) return;
 		const row = host.current?.querySelector<HTMLElement>(
-			`[data-table-index="${activeIndex}"]`,
+			`[data-table-index="${wanted}"]`,
 		);
-		row?.scrollIntoView({ block: "nearest" });
+		// Still unmounted: leave the request standing so the viewport change that mounts it
+		// can honour it.
+		if (!row) return;
+		// Honour a move exactly once. Re-running on every viewport change would re-assert the
+		// active row while the operator is scrolling, dragging the list back under them.
+		pendingActiveRow.current = null;
+		row.scrollIntoView({ block: "nearest" });
 	}, [activeIndex, usesViewport, viewport]);
 	return {
 		host,
