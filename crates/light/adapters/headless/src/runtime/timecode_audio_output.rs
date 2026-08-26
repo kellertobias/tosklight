@@ -462,7 +462,7 @@ fn apply_native(
             timecode_id,
             linear,
         }) => {
-            timecode_voice(voices, timecode_id)?.volume = linear as f32;
+            timecode_voice(voices, timecode_id)?.volume = audio_gain(linear as f32);
         }
         NativeCommand::Transport(TimecodeAudioCommand::Prepare { .. }) => unreachable!(),
         NativeCommand::PrepareInternal {
@@ -509,7 +509,7 @@ fn apply_native(
             internal_voice(voices, fixture_id)?.looping = enabled;
         }
         NativeCommand::InternalVolume { fixture_id, linear } => {
-            internal_voice(voices, fixture_id)?.volume = linear.clamp(0.0, 1.0);
+            internal_voice(voices, fixture_id)?.volume = audio_gain(linear);
         }
         NativeCommand::InternalSeek {
             fixture_id,
@@ -637,6 +637,35 @@ pub(in crate::runtime) struct DecodedWav {
 struct DeviceVoices {
     timecodes: BTreeMap<TimecodeId, Voice>,
     internal: HashMap<FixtureId, Voice>,
+}
+
+/// Attenuation of the quietest audible control position, in decibels.
+///
+/// A desk fader is read as a perceptual scale, so the control range maps onto a decibel taper and
+/// this bound decides where the bottom of that taper sits.
+const AUDIO_MINIMUM_DECIBELS: f32 = -60.0;
+
+/// Converts an operator's 0-1 volume control into the gain applied to samples.
+///
+/// Loudness is perceived logarithmically, so a linear gain crowds every useful level into the top
+/// of the control: half travel sounds far louder than half volume, and the bottom half barely
+/// changes anything. The control is therefore a decibel taper - full travel is unity gain, the
+/// bottom of the travel is silence, and each equal step of the control is an equal change in
+/// perceived loudness.
+fn audio_gain(control: f32) -> f32 {
+    if !control.is_finite() {
+        return 0.0;
+    }
+    let control = control.clamp(0.0, 1.0);
+    // Silence has no decibel value, so the closed bottom of the control is an exact zero.
+    if control <= 0.0 {
+        return 0.0;
+    }
+    if control >= 1.0 {
+        return 1.0;
+    }
+    let decibels = AUDIO_MINIMUM_DECIBELS * (1.0 - control);
+    10.0_f32.powf(decibels / 20.0)
 }
 
 struct Voice {
@@ -802,6 +831,53 @@ mod tests {
 
     fn fixture(value: u128) -> FixtureId {
         FixtureId(uuid::Uuid::from_u128(value))
+    }
+
+    #[test]
+    fn the_volume_control_closes_to_silence_and_opens_to_unity_gain() {
+        assert_eq!(audio_gain(0.0), 0.0);
+        assert_eq!(audio_gain(1.0), 1.0);
+        assert_eq!(audio_gain(-0.5), 0.0);
+        assert_eq!(audio_gain(2.0), 1.0);
+        assert_eq!(audio_gain(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn equal_control_steps_are_equal_decibel_steps() {
+        // A perceptual taper keeps the ratio between equally spaced control positions constant.
+        let quarter = audio_gain(0.25);
+        let half = audio_gain(0.5);
+        let three_quarters = audio_gain(0.75);
+        let first = half / quarter;
+        let second = three_quarters / half;
+        assert!(
+            (first - second).abs() < 1e-4,
+            "equal control travel must be an equal loudness change: {first} vs {second}"
+        );
+    }
+
+    #[test]
+    fn half_travel_is_thirty_decibels_down_rather_than_half_the_amplitude() {
+        let half = audio_gain(0.5);
+        // -30 dB, not the 0.5 a linear control would have produced.
+        assert!(
+            (half - 0.031_623).abs() < 1e-4,
+            "half control travel should sit near -30 dB, got {half}"
+        );
+        assert!(half < 0.5);
+    }
+
+    #[test]
+    fn the_control_rises_without_reversing() {
+        let mut previous = audio_gain(0.0);
+        for step in 1..=100 {
+            let gain = audio_gain(step as f32 / 100.0);
+            assert!(
+                gain > previous,
+                "gain must increase with the control at step {step}: {gain} <= {previous}"
+            );
+            previous = gain;
+        }
     }
 
     #[test]
