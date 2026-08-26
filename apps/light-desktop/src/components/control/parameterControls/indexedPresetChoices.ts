@@ -180,3 +180,54 @@ function fixtureLabel(fixture: PatchedFixture, fixtureId: string) {
 		fixture.name || fixture.definition.name || fixture.definition.model;
 	return `Fixture ${number}${name ? ` ${name}` : ""}`;
 }
+
+/**
+ * The label of the function a raw value currently sits in, when that function names a position.
+ *
+ * A wheel, a shutter, or any other stepped control reads as a position, not a proportion: an
+ * operator needs "Shutter open", not the 13% that raw 32 happens to be. A value that lands in a
+ * continuous range has no position to name, so it keeps its percentage.
+ */
+export function indexedFunctionLabel(
+	fixtures: readonly PatchedFixture[],
+	selectedFixtureIds: readonly string[],
+	attribute: string,
+	normalizedFor: (fixtureId: string) => number | undefined,
+): string | undefined {
+	const selected = new Set(selectedFixtureIds);
+	const labels = new Set<string>();
+	let sawChannel = false;
+	for (const fixture of fixtures) {
+		const profile = fixture.definition.profile_snapshot;
+		const mode = profile?.modes.find(
+			(candidate) => candidate.id === fixture.definition.mode_id,
+		);
+		if (!profile || !mode) continue;
+		for (const channel of mode.channels) {
+			if (channel.attribute !== attribute) continue;
+			const owner = profileHeadOwner(fixture, mode, channel.head_id);
+			if (!owner || (!selected.has(fixture.fixture_id) && !selected.has(owner)))
+				continue;
+			const normalized = normalizedFor(owner) ?? normalizedFor(fixture.fixture_id);
+			if (normalized == null) continue;
+			sawChannel = true;
+			// Function ranges are written against the coarse byte, whatever the channel's own
+			// resolution is, so the value is read back in that same space.
+			const raw = Math.max(0, Math.min(255, Math.round(normalized * 255)));
+			const active = channel.functions.find(
+				(candidate) =>
+					candidate.attribute === attribute &&
+					raw >= candidate.dmx_from &&
+					raw <= candidate.dmx_to,
+			);
+			const behavior = active?.behavior;
+			// A continuous range is a proportion, so one fixture in one leaves the whole
+			// selection reading as a percentage rather than half naming a position.
+			if (!behavior || behavior.type === "continuous") return undefined;
+			if (behavior.type === "control") return undefined;
+			labels.add(behavior.label || active.name);
+		}
+	}
+	if (!sawChannel || !labels.size) return undefined;
+	return labels.size === 1 ? [...labels][0] : "Mixed";
+}

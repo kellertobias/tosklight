@@ -5,6 +5,7 @@ import {
 	formatNormalizedValue,
 	normalizedProgrammerTarget,
 } from "./model";
+import { indexedFunctionLabel } from "./indexedPresetChoices";
 import { formatPositionAxis, formatPositionMovement } from "./positionMovement";
 import type { ParameterProjection } from "./useParameterProjection";
 
@@ -107,22 +108,39 @@ export function normalizedParameterDisplay(
 			return formatPositionAxis(value, projection.tiltRepresentation);
 		return value;
 	};
+	/// The value a fixture currently shows for this attribute: its Programmer target when it has
+	/// one, otherwise the live resolved value.
+	const valueFor = (fixtureId: string) =>
+		normalizedProgrammerTarget(
+			fixtureEntry(projection, fixtureId, attribute)?.value,
+		) ?? projection.normalizedByFixture.get(fixtureId)?.get(attribute);
 	if (projection.selectedGroupId) {
 		const target = normalizedParameterTarget(projection, attribute);
-		return target == null
-			? undefined
-			: (formatMediaAddresses([target]) ??
-					format(formatNormalizedValue(target)));
+		if (target == null) return undefined;
+		return (
+			formatMediaAddresses([target]) ??
+			indexedFunctionLabel(
+				projection.selectedFixtures,
+				projection.selectedFixtureIds,
+				attribute,
+				() => target,
+			) ??
+			format(formatNormalizedValue(target))
+		);
 	}
 	const values = projection.selectedFixtureIds.flatMap((fixtureId) => {
-		const target = normalizedProgrammerTarget(
-			fixtureEntry(projection, fixtureId, attribute)?.value,
-		);
-		const value =
-			target ?? projection.normalizedByFixture.get(fixtureId)?.get(attribute);
+		const value = valueFor(fixtureId);
 		return value == null ? [] : [value];
 	});
-	const range = formatMediaAddresses(values) ?? formatNormalizedRange(values);
+	const range =
+		formatMediaAddresses(values) ??
+		indexedFunctionLabel(
+			projection.selectedFixtures,
+			projection.selectedFixtureIds,
+			attribute,
+			valueFor,
+		) ??
+		formatNormalizedRange(values);
 	return range == null ? undefined : format(range);
 }
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PatchedFixture } from "../../../api/types";
-import { indexedPresetChoices } from "./indexedPresetChoices";
+import {
+	indexedFunctionLabel,
+	indexedPresetChoices,
+} from "./indexedPresetChoices";
 
 describe("indexedPresetChoices", () => {
 	it("merges compatible semantics despite different authored raw values", () => {
@@ -108,3 +111,105 @@ function fixture(
 		},
 	} as unknown as PatchedFixture;
 }
+
+describe("indexedFunctionLabel", () => {
+	/** A shutter shaped like the shipped Robe profile, whose default raw 32 is Shutter open. */
+	function shutterFixture(fixtureId: string) {
+		const headId = `${fixtureId}-head`;
+		const modeId = `${fixtureId}-mode`;
+		const ranges: Array<[number, number, string, "fixed" | "continuous"]> = [
+			[0, 31, "Shutter closed", "fixed"],
+			[32, 63, "Shutter open", "fixed"],
+			[64, 95, "Strobe effect from slow to fast", "continuous"],
+		];
+		return {
+			fixture_id: fixtureId,
+			fixture_number: 1,
+			name: fixtureId,
+			logical_heads: [],
+			definition: {
+				name: "Moving light",
+				mode_id: modeId,
+				profile_snapshot: {
+					revision: 1,
+					modes: [
+						{
+							id: modeId,
+							heads: [{ id: headId, master_shared: true }],
+							channels: [
+								{
+									id: `${fixtureId}-shutter`,
+									head_id: headId,
+									attribute: "shutter",
+									functions: ranges.map(([from, to, label, type]) => ({
+										id: `${fixtureId}-${from}`,
+										name: label,
+										dmx_from: from,
+										dmx_to: to,
+										attribute: "shutter",
+										priority: 0,
+										behavior:
+											type === "fixed"
+												? {
+														type: "fixed",
+														semantic_id: label
+															.toLowerCase()
+															.replace(/\s+/gu, "-"),
+														label,
+														raw_value: from,
+													}
+												: {
+														type: "continuous",
+														physical_min: 0,
+														physical_max: 1,
+														unit: null,
+													},
+									})),
+								},
+							],
+							control_actions: [],
+						},
+					],
+				},
+			},
+		} as unknown as PatchedFixture;
+	}
+
+	it("names the position a stepped value sits in instead of the percentage it happens to be", () => {
+		const fixtures = [shutterFixture("fixture-1")];
+		// Raw 32 is the shipped shutter default, which reads as 13% of the channel.
+		expect(
+			indexedFunctionLabel(fixtures, ["fixture-1"], "shutter", () => 32 / 255),
+		).toBe("Shutter open");
+		expect(
+			indexedFunctionLabel(fixtures, ["fixture-1"], "shutter", () => 0),
+		).toBe("Shutter closed");
+	});
+
+	it("leaves a continuous range reading as a proportion", () => {
+		const fixtures = [shutterFixture("fixture-1")];
+		// Inside the strobe sweep there is no position to name.
+		expect(
+			indexedFunctionLabel(fixtures, ["fixture-1"], "shutter", () => 80 / 255),
+		).toBeUndefined();
+	});
+
+	it("reports a split selection rather than naming one fixture's position for all", () => {
+		const fixtures = [shutterFixture("fixture-1"), shutterFixture("fixture-2")];
+		expect(
+			indexedFunctionLabel(fixtures, ["fixture-1", "fixture-2"], "shutter", (id) =>
+				id === "fixture-1" ? 32 / 255 : 0,
+			),
+		).toBe("Mixed");
+	});
+
+	it("says nothing about an attribute the selection does not carry", () => {
+		const fixtures = [shutterFixture("fixture-1")];
+		expect(
+			indexedFunctionLabel(fixtures, ["fixture-1"], "intensity", () => 0.5),
+		).toBeUndefined();
+		expect(
+			indexedFunctionLabel(fixtures, ["fixture-9"], "shutter", () => 0.5),
+		).toBeUndefined();
+	});
+});
