@@ -279,9 +279,13 @@
 	height: calc(100% - 10px);
 }
 
-.timecode-waveform line {
+.timecode-waveform-envelope {
+	fill: #4dc6d9;
 	stroke: #4dc6d9;
-	stroke-width: 1.4;
+	/* The envelope is drawn in viewBox units stretched to the lane, so the hairline outline keeps
+	   a quiet passage visible instead of collapsing it to nothing. */
+	stroke-width: 0.5;
+	vector-effect: non-scaling-stroke;
 	opacity: 0.62;
 }
 

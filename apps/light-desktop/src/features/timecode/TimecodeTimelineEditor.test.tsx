@@ -723,9 +723,17 @@ describe("TimecodeTimelineEditor", () => {
 			screen.getByRole("button", { name: "Delete Keyframe" }),
 		).toBeEnabled();
 		expect(screen.queryByText(/inspect, copy, move, or delete/)).toBeNull();
-		expect(
-			screen.getByLabelText("Linked audio waveform").querySelectorAll("line"),
-		).toHaveLength(3);
+		// The envelope is one path, so a high-resolution waveform stays a single element.
+		const waveform = screen.getByLabelText("Linked audio waveform");
+		expect(waveform.querySelectorAll("path")).toHaveLength(1);
+		const envelope = waveform.querySelector("path")?.getAttribute("d") ?? "";
+		// Traced along the top of every peak and back along the bottom of every peak.
+		expect(envelope.split(" L ")).toHaveLength(6);
+		expect(envelope.startsWith("M 0 ")).toBe(true);
+		expect(envelope.endsWith(" Z")).toBe(true);
+		// The loudest bucket reaches the full excursion above and below the centre line.
+		expect(envelope).toContain("1 2 ");
+		expect(envelope).toContain("1 46 ");
 		expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
 		expect(screen.queryByLabelText("Speed Group")).toBeNull();
