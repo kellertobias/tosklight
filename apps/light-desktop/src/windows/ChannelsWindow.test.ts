@@ -5,6 +5,7 @@ import {
 	channelFixtureLabel,
 	channelPatchUnavailableReason,
 	channelProjection,
+	fixtureHasDimmer,
 } from "./ChannelsWindow";
 
 function fixture(
@@ -39,6 +40,23 @@ function fixture(
 			],
 		} as unknown as PatchedFixture["definition"],
 	} as PatchedFixture;
+}
+
+/**
+ * A head with no intensity channel of its own that reacts to virtual intensity. The resolved
+ * definition the desk hands the client already carries the synthesized intensity parameter, so
+ * the builder mirrors that rather than the raw profile channels.
+ */
+function virtualDimmerFixture(
+	number: number,
+	attributes: string[],
+): PatchedFixture {
+	const built = fixture(number, ["intensity", ...attributes]);
+	const parameters = built.definition.heads[0].parameters as Array<{
+		virtual_dimmer: boolean;
+	}>;
+	parameters[0].virtual_dimmer = true;
+	return built;
 }
 
 describe("Channel projection", () => {
@@ -92,7 +110,10 @@ describe("Channel projection", () => {
 
 	it("groups all channels under each fixture in fixture-ID order", () => {
 		const channels = channelProjection(
-			[fixture(20, ["color.red"]), fixture(2, ["pan", "intensity"])],
+			[
+				virtualDimmerFixture(20, ["color.red"]),
+				fixture(2, ["pan", "intensity"]),
+			],
 			null,
 			"all",
 			[
@@ -111,8 +132,38 @@ describe("Channel projection", () => {
 		).toEqual([
 			["Wash 2", "pan", "Pan"],
 			["Wash 2", "intensity", "Intensity"],
+			["Wash 20", "intensity", "Intensity"],
 			["Wash 20", "color.red", "Red"],
 		]);
+	});
+
+	it("leaves a fixture with neither a dimmer nor a virtual dimmer off the bank", () => {
+		const truss = fixture(2, []);
+		const deck = fixture(3, ["position.pan"]);
+
+		expect(fixtureHasDimmer(truss)).toBe(false);
+		expect(fixtureHasDimmer(deck)).toBe(false);
+		expect(channelProjection([truss, deck], null)).toEqual([]);
+		expect(channelProjection([truss, deck], null, "all")).toEqual([]);
+	});
+
+	it("keeps a virtual dimmer on the bank and numbers around what it drops", () => {
+		const channels = channelProjection(
+			[
+				fixture(1, ["intensity"]),
+				// A stage element sits between two levellable fixtures.
+				fixture(2, []),
+				virtualDimmerFixture(3, ["color.red"]),
+			],
+			null,
+		);
+
+		expect(channels.map((channel) => [channel.number, channel.fixtureId])).toEqual(
+			[
+				[1, "1"],
+				[2, "3"],
+			],
+		);
 	});
 });
 

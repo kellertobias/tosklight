@@ -75,13 +75,53 @@ const mocks = vi.hoisted(() => {
 					fixture_id: "22222222-2222-4222-8222-222222222222",
 					fixture_number: 1,
 					logical_heads: [],
-					definition: { name: "Fixture 1", model: "Fixture 1", heads: [] },
+					definition: {
+						name: "Fixture 1",
+						model: "Fixture 1",
+						// A levellable fixture: Channels only banks fixtures that own an intensity.
+						heads: [
+							{
+							index: 0,
+							name: "Main",
+							shared: false,
+							parameters: [
+								{
+									attribute: "intensity",
+									components: [],
+									default: 0,
+									virtual_dimmer: false,
+									capabilities: [],
+								},
+							],
+						},
+						],
+					},
 				},
 				{
 					fixture_id: "33333333-3333-4333-8333-333333333333",
 					fixture_number: 2,
 					logical_heads: [],
-					definition: { name: "Fixture 2", model: "Fixture 2", heads: [] },
+					definition: {
+						name: "Fixture 2",
+						model: "Fixture 2",
+						// A levellable fixture: Channels only banks fixtures that own an intensity.
+						heads: [
+							{
+							index: 0,
+							name: "Main",
+							shared: false,
+							parameters: [
+								{
+									attribute: "intensity",
+									components: [],
+									default: 0,
+									virtual_dimmer: false,
+									capabilities: [],
+								},
+							],
+						},
+						],
+					},
 				},
 			],
 		},

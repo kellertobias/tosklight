@@ -280,6 +280,22 @@ function useChannelVisualization(active: boolean) {
 	});
 }
 
+/**
+ * Whether the intensity bank can level this fixture at all.
+ *
+ * Channels is a bank of intensity faders, so a fixture belongs on it only when it owns an
+ * intensity parameter. That single check covers a physical dimmer channel and a virtual dimmer
+ * alike, because the resolved definition synthesizes an intensity parameter for a head that
+ * reacts to virtual intensity without owning an intensity channel of its own. A stage element
+ * such as a truss or a deck owns neither, so it keeps its place in Fixtures and Stage while
+ * staying off a bank that could never move it.
+ */
+export function fixtureHasDimmer(fixture: PatchedFixture): boolean {
+	return fixture.definition.heads.some((head) =>
+		head.parameters.some((parameter) => parameter.attribute === "intensity"),
+	);
+}
+
 export function channelProjection(
 	fixtures: readonly PatchedFixture[],
 	visualization: VisualizationSnapshot | null,
@@ -290,6 +306,7 @@ export function channelProjection(
 		attributeRegistry.map((descriptor) => [descriptor.id, descriptor.label]),
 	);
 	return [...fixtures]
+		.filter(fixtureHasDimmer)
 		.sort(compareFixtureIds)
 		.flatMap((fixture) => {
 			const allAttributes = fixture.definition.heads.flatMap((head) =>
@@ -298,7 +315,7 @@ export function channelProjection(
 			const attributes =
 				displayMode === "intensity"
 					? ["intensity"]
-					: [...new Set(allAttributes.length ? allAttributes : ["intensity"])];
+					: [...new Set(allAttributes)];
 			return attributes.map((attribute) => ({
 				number: 0,
 				fixture,
