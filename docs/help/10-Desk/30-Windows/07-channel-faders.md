@@ -2,7 +2,7 @@
 
 Channels presents patched fixtures as a two-row bank of 20 intensity faders per page.
 
-Use the previous, page-range, and next controls to navigate. The page picker provides at least eight pages and grows when the patch needs more. Each populated channel shows its sequential channel number, fixture definition name, and current resolved intensity. A disabled fader replaces its attribute label with the current reason: an empty position, Patch loading or repair, Programmer/Preload loading, unavailable control authority, or an inactive pane. Enabled faders immediately return to their ordinary attribute label.
+Use the previous, page-range, and next controls to navigate. The page picker provides at least eight pages and grows when the patch needs more. Each populated channel shows its Fixture ID, the fixture's name, and the current resolved intensity. The name is the one the operator gave the fixture, falling back to the profile name and then to **Fixture _ID_**. A disabled fader replaces its attribute label with the current reason: an empty position, Patch loading or repair, Programmer/Preload loading, unavailable control authority, or an inactive pane. Enabled faders immediately return to their ordinary attribute label.
 
 Touching a populated channel selects its fixture. Moving its fader writes that fixture's intensity into the current user's programmer; it does not record a Cue or change the fixture patch. Clear or record the programmer deliberately after using the bank.
 

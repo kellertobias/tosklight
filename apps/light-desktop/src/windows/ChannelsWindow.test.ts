@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { PatchedFixture } from "../api/types";
 import {
 	channelFaderDisabledReason,
+	channelFixtureLabel,
 	channelPatchUnavailableReason,
 	channelProjection,
 } from "./ChannelsWindow";
 
-function fixture(number: number, attributes: string[]): PatchedFixture {
+function fixture(
+	number: number,
+	attributes: string[],
+	name?: string | null,
+): PatchedFixture {
 	return {
 		fixture_id: `fixture-${number}`,
 		fixture_number: number,
+		name: name ?? `Wash ${number}`,
 		virtual_fixture_number: null,
 		universe: 1,
 		address: number,
@@ -36,22 +42,52 @@ function fixture(number: number, attributes: string[]): PatchedFixture {
 }
 
 describe("Channel projection", () => {
-	it("orders intensity faders by fixture ID and labels them as fixtures", () => {
+	it("orders intensity faders by fixture ID and labels them with the fixture name", () => {
 		const channels = channelProjection(
 			[fixture(20, ["intensity"]), fixture(2, ["intensity"])],
 			null,
 		);
 
 		expect(
-			channels.map(({ fixtureLabel, attributeLabel, level }) => ({
+			channels.map(({ fixtureLabel, fixtureId, attributeLabel, level }) => ({
 				fixtureLabel,
+				fixtureId,
 				attributeLabel,
 				level,
 			})),
 		).toEqual([
-			{ fixtureLabel: "2", attributeLabel: "Intensity", level: 25 },
-			{ fixtureLabel: "20", attributeLabel: "Intensity", level: 25 },
+			{
+				fixtureLabel: "Wash 2",
+				fixtureId: "2",
+				attributeLabel: "Intensity",
+				level: 25,
+			},
+			{
+				fixtureLabel: "Wash 20",
+				fixtureId: "20",
+				attributeLabel: "Intensity",
+				level: 25,
+			},
 		]);
+	});
+
+	it("falls back to the profile name, then the Fixture ID, for an unnamed fixture", () => {
+		const unnamed = fixture(7, ["intensity"], "");
+		(unnamed.definition as { name: string }).name = "";
+		expect(channelFixtureLabel(unnamed)).toBe("Fixture 7");
+
+		const profileNamed = fixture(8, ["intensity"], "   ");
+		(profileNamed.definition as { name: string }).name = "Generic Dimmer";
+		expect(channelFixtureLabel(profileNamed)).toBe("Generic Dimmer");
+	});
+
+	it("uses the virtual Fixture ID as the last-resort label", () => {
+		const virtual = {
+			...fixture(0, ["intensity"], ""),
+			virtual_fixture_number: 1,
+		} as PatchedFixture;
+		(virtual.definition as { name: string }).name = "";
+		expect(channelFixtureLabel(virtual)).toBe("Fixture 0.1");
 	});
 
 	it("groups all channels under each fixture in fixture-ID order", () => {
@@ -73,9 +109,9 @@ describe("Channel projection", () => {
 				channel.attributeLabel,
 			]),
 		).toEqual([
-			["2", "pan", "Pan"],
-			["2", "intensity", "Intensity"],
-			["20", "color.red", "Red"],
+			["Wash 2", "pan", "Pan"],
+			["Wash 2", "intensity", "Intensity"],
+			["Wash 20", "color.red", "Red"],
 		]);
 	});
 });

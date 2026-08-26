@@ -38,10 +38,27 @@ const ROWS = 2;
 export interface Channel {
 	number: number;
 	fixture: PatchedFixture;
+	/** The fixture's operator-facing name, which is what identifies it on the bank. */
 	fixtureLabel: string;
+	/** The addressable Fixture ID, kept beside the name for command-line addressing. */
+	fixtureId: string;
 	attribute: string;
 	attributeLabel: string;
 	level: number;
+}
+
+/**
+ * The name an operator gave the fixture, falling back to the profile name.
+ *
+ * An unnamed fixture still has to be identifiable, so the Fixture ID is the last resort rather
+ * than the default label.
+ */
+export function channelFixtureLabel(fixture: PatchedFixture): string {
+	return (
+		fixture.name?.trim() ||
+		fixture.definition.name?.trim() ||
+		`Fixture ${fixtureDisplayId(fixture)}`
+	);
 }
 
 export function ChannelsWindow({
@@ -285,7 +302,8 @@ export function channelProjection(
 			return attributes.map((attribute) => ({
 				number: 0,
 				fixture,
-				fixtureLabel: String(fixtureDisplayId(fixture)),
+				fixtureLabel: channelFixtureLabel(fixture),
+				fixtureId: String(fixtureDisplayId(fixture)),
 				attribute,
 				attributeLabel: labels.get(attribute) ?? attributeFallbackLabel(attribute),
 				level: Math.round(
@@ -405,10 +423,16 @@ function ChannelFaderBank({
 								: `empty-${number}`
 						}
 						onClick={() => channel && onSelect(channel.fixture.fixture_id)}
+						aria-label={
+							channel
+								? `Channel ${number}: Fixture ${channel.fixtureId} ${channel.fixtureLabel} ${channel.attributeLabel}`
+								: `Channel ${number}: empty`
+						}
 					>
+						{channel && <small className="channel-fader-id">{channel.fixtureId}</small>}
 						<VerticalTouchFader
 							disabled={disabledReason !== null}
-							label={channel ? `Fixture ${channel.fixtureLabel}` : "Empty"}
+							label={channel ? channel.fixtureLabel : "Empty"}
 							mode={disabledReason ?? channel?.attributeLabel ?? "Unpatched"}
 							value={channel?.level ?? 0}
 							display={channel ? `${channel.level}%` : "—"}

@@ -69,12 +69,24 @@
 	overflow: auto;
 }
 .channel-fader {
+	position: relative;
 	min-width: 0;
 	min-height: 0;
 	overflow: hidden;
 	border: 1px solid var(--line);
 	border-radius: 8px;
 	background: var(--panel2);
+}
+/* The name identifies the fixture; the Fixture ID stays visible for command-line addressing. */
+.channel-fader-id {
+	position: absolute;
+	z-index: 1;
+	top: 3px;
+	right: 5px;
+	color: var(--muted);
+	font-size: 9px;
+	font-variant-numeric: tabular-nums;
+	pointer-events: none;
 }
 .channel-fader > .vertical-touch-fader {
 	width: 100%;
