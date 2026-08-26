@@ -27,6 +27,7 @@ mod shutdown;
 mod standby;
 mod startup;
 mod text_sources;
+#[cfg(feature = "tray")]
 mod tray;
 
 pub use dmx::SharedState;

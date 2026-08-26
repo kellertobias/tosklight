@@ -107,6 +107,7 @@ pub fn run_event_loop(
         windows: Vec::new(),
         worker: None,
         expects_outputs: needs_a_window(configuration),
+        #[cfg(feature = "tray")]
         tray: None,
     };
     let result = event_loop.run_app(&mut host);
@@ -203,6 +204,9 @@ struct PresentationHost {
     /// means failure when outputs were expected.
     expects_outputs: bool,
     /// The menu bar item, held for as long as the loop runs. Dropping it removes the icon.
+    ///
+    /// A build without the tray feature has no desktop to draw on, so it carries no field.
+    #[cfg(feature = "tray")]
     tray: Option<crate::tray::Tray>,
 }
 
@@ -856,6 +860,7 @@ impl ApplicationHandler for PresentationHost {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // The status item cannot be created before the application has finished launching, which
         // is exactly what reaching this callback means.
+        #[cfg(feature = "tray")]
         if self.tray.is_none() {
             self.tray = crate::tray::show(&self.shutdown);
         }

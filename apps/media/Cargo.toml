@@ -10,7 +10,13 @@ authors.workspace = true
 # HTTP bootstrap, and asset embedding. Reusable behavior belongs in `crates/media`.
 [dependencies]
 anyhow.workspace = true
-media-runtime = { path = "../../crates/media/adapters/runtime" }
+media-runtime = { path = "../../crates/media/adapters/runtime", default-features = false }
 
 [lints]
 workspace = true
+
+# Building with --no-default-features drops the desktop tray, which is how the ARM64 server
+# bundle is produced without a GTK toolchain.
+[features]
+default = ["tray"]
+tray = ["media-runtime/tray"]

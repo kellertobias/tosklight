@@ -22,15 +22,22 @@ media-net = { path = "../net" }
 media-playback = { path = "../playback" }
 media-render = { path = "../render" }
 media-text = { path = "../text" }
-muda.workspace = true
+muda = { workspace = true, optional = true }
 png.workspace = true
 jpeg-encoder = "0.6"
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-tray-icon.workspace = true
+tray-icon = { workspace = true, optional = true }
 winit.workspace = true
+
+# The desktop presence is a menu bar item on macOS and a notification-area item on Windows. A
+# server bundle has neither, and on Linux the tray pulls the whole GTK stack in behind it, so a
+# headless target builds without it rather than linking a desktop it will never draw on.
+[features]
+default = ["tray"]
+tray = ["dep:muda", "dep:tray-icon"]
 
 [lints]
 workspace = true
