@@ -69,6 +69,8 @@ pub(super) fn output_health(health: OutputHealth) -> wire::RuntimeOutputHealth {
             .to_vec(),
         recent_frame_rate_bucket_counts: health.recent_frame_rate_bucket_counts.to_vec(),
         recent_send_errors: health.recent_send_errors,
+        frame_rate_band_bounds_hz: light_output::OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ.to_vec(),
+        frame_rate_band_counts: health.frame_rate_band_counts.clone(),
     }
 }
 

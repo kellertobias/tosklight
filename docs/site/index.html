@@ -20,6 +20,7 @@
         --accent: #ffb020;
         --healthy: #39d98a;
         --warning: #ffd166;
+        --caution: #ff9f45;
         --degraded: #ff6b6b;
       }
       * { box-sizing: border-box; }
@@ -279,6 +280,7 @@
       }
       .performance-row-healthy > * { background: rgb(57 217 138 / 0.12); }
       .performance-row-warning > * { background: rgb(255 209 102 / 0.16); }
+      .performance-row-caution > * { background: rgb(255 159 69 / 0.16); }
       .performance-row-degraded > * { background: rgb(255 107 107 / 0.15); }
       .performance-row-unknown > * { background: rgb(154 165 184 / 0.1); }
       .performance-legend,
@@ -288,8 +290,19 @@
       .performance-details { margin: 0.35rem 0 0; }
       .legend-healthy { color: var(--healthy); }
       .legend-warning { color: var(--warning); }
+      .legend-caution { color: var(--caution); }
       .legend-degraded { color: var(--degraded); }
       .legend-unknown { color: var(--muted); }
+      /* Every delivered frame is counted into a rate band; the bar is coloured by that rate. */
+      .performance-histogram { display: flex; align-items: flex-end; gap: 1px; height: 54px; min-width: 220px; padding: 2px; border: 1px solid var(--line); border-radius: 3px; background: rgb(0 0 0 / 0.25); }
+      .performance-histogram-bar { flex: 1; min-width: 2px; height: var(--bar-height, 0%); min-height: 1px; border-radius: 1px 1px 0 0; background: var(--tone, var(--muted)); }
+      .performance-histogram-empty { color: var(--muted); }
+      .performance-tone-failing { --tone: var(--degraded); }
+      .performance-tone-struggling { --tone: var(--caution); }
+      .performance-tone-holding { --tone: var(--warning); }
+      .performance-tone-comfortable { --tone: var(--healthy); }
+      .performance-tone-spare { --tone: #72c7ff; }
+      td[class*="performance-tone-"] strong { color: var(--tone); }
       .specs {
         display: grid;
         gap: 1rem;

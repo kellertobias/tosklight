@@ -24,8 +24,8 @@ pub use external::{
 };
 pub use frame::{DMX_SLOTS, DmxFrame};
 pub use health::{
-    OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ, OUTPUT_RECENT_WINDOW,
-    OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS, OutputHealth,
+    OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ, OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ, OUTPUT_RECENT_WINDOW,
+    OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS, OutputHealth, frame_rate_band,
 };
 pub use route::{DeliveryMode, OutputRoute, OutputRouteTarget, Protocol};
 pub use scheduler::{run_scheduler, run_scheduler_dynamic, run_scheduler_dynamic_wakeable};

@@ -304,7 +304,7 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Tauri Desk under Xvfb/u);
 	assert.match(page, /WebKit Fixture Sheet/u);
 	assert.match(page, /Bundled Light server/u);
-	assert.match(page, /60 Hz scheduler/u);
+	assert.match(page, /40 Hz scheduler/u);
 	assert.match(page, /Node and Xvfb are excluded/u);
 	assert.match(page, /Playwright is not launched/u);
 	assert.match(page, /Application process breakdown/u);
@@ -322,27 +322,28 @@ test("compact landing summary includes only measured runs and explains row color
 	assert.equal(summary.match(/class="performance-row /gu)?.length, 3);
 	assert.match(
 		summary,
-		/<th>Test set<\/th><th>Load<\/th><th>Statistics<\/th>/u,
+		/<th>Test set<\/th><th>Load<\/th><th>Frame rate<\/th><th>Frame times<\/th><th>CPU and RAM<\/th>/u,
 	);
 	assert.match(summary, /37,720 parameters \/ 2,000 fixtures/u);
 	assert.match(summary, /unrestricted<br>74 DMX universes/u);
-	assert.match(summary, /<strong>6,480 dyn\. attr\.<\/strong>/u);
+	assert.match(summary, /6,480 dyn\. attr\./u);
 	assert.match(summary, /20 master lanes/u);
 	assert.match(summary, /<strong>44 Hz p95<\/strong>/u);
+	// The frame-time column carries the histogram and the window length it covers.
+	assert.match(summary, /Frame times not measured<\/small><small>over 15\.04 s<\/small>/u);
 	assert.match(
 		summary,
-		/<strong>1 \/ 15\.04 s<\/strong><small>one-second windows<br>below 44 Hz<br>total test time/u,
-	);
-	assert.match(
-		summary,
-		/97% max<\/strong><small>83% avg Desk app CPU<br>0\.68 GiB max RAM/u,
+		/97% max<\/strong><small>83% avg · 97% max Desk app CPU<br>0\.68 GiB max RAM/u,
 	);
 	assert.match(summary, /real WebKit Fixture Sheet/u);
 	assert.match(summary, /Playwright is not launched/u);
 	assert.match(summary, /58 \/ 59\.5 \/ 60 Hz<br>min \/ avg \/ max/u);
 	assert.match(summary, /100% means one fully used core/u);
-	assert.match(summary, /performance-row-warning/u);
-	assert.match(summary, /Yellow<\/span>: warning/u);
+	// Every one of these runs holds its floor at the 40 Hz target: the slowest second of the
+	// hardest row is 42 Hz, so all three grade healthy rather than one being a warning.
+	assert.equal(summary.match(/performance-row-healthy/gu)?.length, 3);
+	assert.doesNotMatch(summary, /performance-row-warning|performance-row-degraded/u);
+	assert.match(summary, /Yellow<\/span>: slowest above 30 Hz/u);
 	assert.ok(
 		summary.indexOf("Demo show") < summary.indexOf("37,720 parameters"),
 	);
@@ -387,7 +388,8 @@ test("a scenario that stalled below 40 Hz is never presented as healthy", () => 
 		},
 	];
 	const summary = renderCompactPerformanceSummary(stalled);
-	assert.match(summary, /class="performance-row performance-row-warning"/u);
+	// A slowest second of 12 Hz clears none of the floors, whatever the p95 looks like.
+	assert.match(summary, /class="performance-row performance-row-degraded"/u);
 	assert.doesNotMatch(summary, /performance-row-healthy/u);
 });
 
@@ -522,10 +524,40 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(landingPage, /class="performance-compact"/u);
 		assert.match(landingPage, /37,720 parameters \/ 2,000 fixtures/u);
 		assert.match(landingPage, /6,480 dyn\. attr\./u);
-		assert.match(landingPage, /Yellow<\/span>: warning/u);
+		assert.match(landingPage, /Yellow<\/span>: slowest above 30 Hz/u);
 		assert.match(landingPage, /table-layout: fixed/u);
 		assert.doesNotMatch(landingPage, /min-width: 58rem/u);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}
+});
+
+test("the frame-time histogram counts every frame and colours each band by its rate", () => {
+	const measured = measuredStatus("healthy");
+	const scenario = measured.benchmark_scenarios[0];
+	scenario.frame_rate_band_bounds_hz = [10, 30, 38, 44, 60, 120];
+	// One frame under 10 Hz, then bands rising to the fastest.
+	scenario.frame_rate_band_counts = [1, 2, 4, 8, 16, 32];
+	const summary = renderCompactPerformanceSummary(measured);
+
+	assert.match(summary, /Frame time distribution across 63 frames/u);
+	// Each band is drawn once, coloured by where its rates sit.
+	assert.match(summary, /performance-tone-failing[^>]*--bar-height:3%/u);
+	assert.match(summary, /performance-tone-spare[^>]*--bar-height:100%/u);
+	// The band a bar covers and its share are readable without a legend.
+	assert.match(summary, /title="10–30 Hz: 2 frames \(3\.2%\)"/u);
+});
+
+test("a run without measured frame times says so instead of drawing an empty chart", () => {
+	const summary = renderCompactPerformanceSummary(measuredStatus("healthy"));
+	assert.match(summary, /Frame times not measured/u);
+	assert.doesNotMatch(summary, /performance-histogram-bar/u);
+});
+
+test("the headline CPU number is the p95 busiest second when one was measured", () => {
+	const measured = measuredStatus("healthy");
+	measured.benchmark_scenarios[0].resources.application_cpu_p95_percent = 64;
+	const summary = renderCompactPerformanceSummary(measured);
+
+	assert.match(summary, /<strong>64% p95<\/strong>/u);
 });

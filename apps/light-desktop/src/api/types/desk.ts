@@ -32,6 +32,8 @@ export interface OutputHealth {
 	recent_frame_rate_bucket_bounds_hz: number[];
 	recent_frame_rate_bucket_counts: number[];
 	recent_send_errors: number;
+	frame_rate_band_bounds_hz: number[];
+	frame_rate_band_counts: number[];
 }
 
 export interface ProgrammerState {

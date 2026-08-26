@@ -808,7 +808,15 @@ export type RuntimeControlDesk = { id: string, name: string, columns: number, ro
 export type RuntimeSessionResponse = { role: RuntimeSessionRole, session_id: string, client_id: string, token: string, desk: RuntimeControlDesk, };
 export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
 export type RuntimeShowEntry = { id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
-export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, recent_window_seconds: number, recent_frame_hz_minimum: number, recent_frame_hz_maximum: number, recent_frame_hz_average: number, recent_frame_rate_bucket_bounds_hz: Array<number>, recent_frame_rate_bucket_counts: number[], recent_send_errors: number, };
+export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, recent_window_seconds: number, recent_frame_hz_minimum: number, recent_frame_hz_maximum: number, recent_frame_hz_average: number, recent_frame_rate_bucket_bounds_hz: Array<number>, recent_frame_rate_bucket_counts: number[], recent_send_errors: number,
+/**
+ * Inclusive upper bounds, in hertz, of the frame-rate bands below.
+ */
+frame_rate_band_bounds_hz: Array<number>,
+/**
+ * Frames delivered in each band since show start.
+ */
+frame_rate_band_counts: number[], };
 export type RuntimeClientSummary = { client_id: string, name: string, connected: boolean, last_connected_at: string | null, desk: RuntimeControlDesk, can_remove: boolean, };
 export type RuntimeAttributeDescriptor = { id: string, label: string, family: string, value_type: string, default_unit: string | null, display_unit: string | null, physical_unit: string | null, normalized_min: number | null, normalized_max: number | null, domain_min: number | null, domain_max: number | null, cyclic: boolean, recordable: boolean, encoder_group: AttributeEncoderGroup, encoder_page: number, encoder_slot: number, built_in: boolean, retired: boolean, activation_group_id: string | null, push_turn_of: string | null, };
 export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };

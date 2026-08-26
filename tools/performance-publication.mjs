@@ -122,14 +122,52 @@ function compactDuration(value_) {
  */
 const MINIMUM_GREEN_HZ = 40;
 
+/**
+ * How a run is graded, worst second first then typical second.
+ *
+ * A desk is judged by the second the operator saw drop, so every grade names a floor the slowest
+ * second has to clear before the mean is even considered. A comfortable average does not undo a
+ * visible stall.
+ */
+const CADENCE_GRADES = [
+	{ status: "healthy", minimumHz: 38, meanHz: 39 },
+	{ status: "warning", minimumHz: 30, meanHz: 35 },
+	{ status: "caution", minimumHz: 26, meanHz: 30 },
+];
+
 function compactScenarioStatus(scenario, thresholds) {
-	const cadence = scenario.p95_one_second_completed_hz;
-	if (!Number.isFinite(cadence)) return "unknown";
-	if (cadence < thresholds.red_below_hz) return "degraded";
-	if (cadence < thresholds.yellow_below_hz) return "warning";
 	const worst = scenario.minimum_one_second_completed_hz;
-	if (Number.isFinite(worst) && worst < MINIMUM_GREEN_HZ) return "warning";
-	return "healthy";
+	const mean = scenario.average_completed_hz;
+	if (!Number.isFinite(worst) || !Number.isFinite(mean)) {
+		// A legacy run without a measured floor is graded on what it does report.
+		const cadence = scenario.p95_one_second_completed_hz;
+		if (!Number.isFinite(cadence)) return "unknown";
+		if (cadence < (thresholds?.red_below_hz ?? 30)) return "degraded";
+		if (cadence < (thresholds?.yellow_below_hz ?? 38)) return "warning";
+		return "healthy";
+	}
+	for (const grade of CADENCE_GRADES)
+		if (worst > grade.minimumHz && mean > grade.meanHz) return grade.status;
+	return "degraded";
+}
+
+/**
+ * The colour a frame rate is drawn in, as an operator reads it.
+ *
+ * Below 30 Hz the desk is failing, to 38 Hz it is struggling, to 44 Hz it is holding, to 60 Hz it
+ * is comfortable, and above that it has room to spare.
+ */
+const CADENCE_BANDS = [
+	{ belowHz: 30, tone: "failing" },
+	{ belowHz: 38, tone: "struggling" },
+	{ belowHz: 44, tone: "holding" },
+	{ belowHz: 60, tone: "comfortable" },
+];
+
+export function cadenceTone(frameHz) {
+	if (!Number.isFinite(frameHz)) return "unknown";
+	for (const band of CADENCE_BANDS) if (frameHz < band.belowHz) return band.tone;
+	return "spare";
 }
 
 function compactScenarioRows(performance) {
@@ -187,6 +225,37 @@ function compactScenarioRows(performance) {
 		}));
 }
 
+/**
+ * The frame-time histogram of one run, drawn as one bar per rate band.
+ *
+ * Every delivered frame is counted, so the shape says how often the desk missed its budget rather
+ * than only how often a whole second did. Each bar is coloured by the rate it represents.
+ */
+function cadenceHistogram(scenario) {
+	const counts = scenario.frame_rate_band_counts ?? [];
+	const bounds = scenario.frame_rate_band_bounds_hz ?? [];
+	const total = counts.reduce((sum, count) => sum + count, 0);
+	if (!total || counts.length !== bounds.length)
+		return `<small class="performance-histogram-empty">Frame times not measured</small>`;
+	const tallest = Math.max(...counts);
+	const bars = counts
+		.map((count, index) => {
+			const upper = bounds[index];
+			const lower = index === 0 ? 0 : bounds[index - 1];
+			// A band is named by the rates it holds, and coloured by where those rates sit.
+			const tone = cadenceTone(index === 0 ? lower : (lower + upper) / 2);
+			const height = tallest ? Math.round((count / tallest) * 100) : 0;
+			const share = ((count / total) * 100).toFixed(1);
+			return (
+				`<span class="performance-histogram-bar performance-tone-${tone}"` +
+				` style="--bar-height:${height}%"` +
+				` title="${compactNumber(lower)}–${compactNumber(upper)} Hz: ${compactNumber(count)} frames (${share}%)"></span>`
+			);
+		})
+		.join("");
+	return `<div class="performance-histogram" role="img" aria-label="Frame time distribution across ${compactNumber(total)} frames">${bars}</div>`;
+}
+
 function compactCpu(resources) {
 	const maximum =
 		resources?.application_cpu_max_percent ?? resources?.application_cpu_max;
@@ -199,9 +268,17 @@ function compactCpu(resources) {
 	const ram =
 		resources?.application_peak_resident_bytes ??
 		resources?.peak_resident_bytes;
+	// The headline is the p95 busiest second, which describes the load the desk actually carries
+	// rather than the single worst spike a run happened to catch.
+	const headline = Number.isFinite(resources?.application_cpu_p95_percent)
+		? resources.application_cpu_p95_percent
+		: maximum;
+	const headlineLabel = Number.isFinite(resources?.application_cpu_p95_percent)
+		? "p95"
+		: "max";
 	return (
-		`<strong>${compactNumber(maximum)}% max</strong>` +
-		`<small>${compactNumber(average)}% avg Desk app CPU<br>${bytes(ram)} max RAM</small>`
+		`<strong>${compactNumber(headline)}% ${headlineLabel}</strong>` +
+		`<small>${compactNumber(average)}% avg · ${compactNumber(maximum)}% max Desk app CPU<br>${bytes(ram)} max RAM</small>`
 	);
 }
 
@@ -224,9 +301,10 @@ function compactScenarioRow(scenario) {
 				? `${compactNumber(legacyAttributes)} Dynamic lane attribute${legacyAttributes === 1 ? "" : "s"}`
 				: "Dynamic workload unavailable";
 	const maximum = compactNumber(scenario.maximum_one_second_completed_hz);
-	const target = compactNumber(scenario.below_target_hz ?? 44);
-	const below = scenario.windows_below_target ?? scenario.windows_below_minimum;
 	const elapsed = scenario.measurement_seconds;
+	const parameters = Number.isFinite(scenario.parameter_count)
+		? `${compactNumber(scenario.parameter_count)} param.`
+		: "Not measured";
 	const critical =
 		scenario.thresholds?.critical_below_hz != null &&
 		scenario.p95_one_second_completed_hz < scenario.thresholds.critical_below_hz
@@ -240,11 +318,11 @@ function compactScenarioRow(scenario) {
 		`<tr class="performance-row performance-row-${escapePerformanceText(scenario.compact_status)}">` +
 		`<th scope="row"><strong>${escapePerformanceText(scenario.case_name ?? `${compactNumber(scenario.fixture_count)} fixtures`)}</strong>` +
 		`<small>${mode}<br>${compactNumber(scenario.universes)} DMX universes</small></th>` +
-		`<td><strong>${dynamics}</strong><small>${escapePerformanceText(dynamicsDetail)}</small></td>` +
-		`<td><strong>${compactNumber(scenario.p95_one_second_completed_hz)} Hz p95</strong>` +
+		`<td><strong>${parameters}</strong><small>${dynamics}<br>${escapePerformanceText(dynamicsDetail)}</small></td>` +
+		`<td class="performance-tone-${cadenceTone(scenario.p95_one_second_completed_hz)}">` +
+		`<strong>${compactNumber(scenario.p95_one_second_completed_hz)} Hz p95</strong>` +
 		`<small>${compactNumber(scenario.minimum_one_second_completed_hz)} / ${compactNumber(scenario.average_completed_hz)} / ${maximum} Hz<br>min / avg / max</small>${critical}</td>` +
-		`<td><strong>${compactNumber(below)} / ${compactDuration(elapsed)} s</strong>` +
-		`<small>one-second windows<br>below ${target} Hz<br>total test time</small></td>` +
+		`<td>${cadenceHistogram(scenario)}<small>over ${compactDuration(elapsed)} s</small></td>` +
 		`<td>${compactCpu(scenario.resources)}</td></tr>`
 	);
 }
@@ -256,7 +334,7 @@ function scenarioTable(performance) {
 		scenarios,
 		html: scenarios.length
 			? `<div class="performance-table-scroll"><table class="performance-compact"><thead><tr>` +
-				`<th>Test set</th><th>Load</th><th>Statistics</th><th>Below target</th><th>CPU</th>` +
+				`<th>Test set</th><th>Load</th><th>Frame rate</th><th>Frame times</th><th>CPU and RAM</th>` +
 				`</tr></thead><tbody>${rows}</tbody></table></div>`
 			: `<p class="performance-empty">No measured output-cadence run is available for this release.</p>`,
 	};
@@ -301,13 +379,13 @@ function renderTestSetup(scenarios) {
 		return `<p>These legacy results were produced by the released Linux engine benchmark. The next publication uses the released Desk application setup shown on the main page.</p>`;
 	}
 	return (
-		`<p>Each row is a 15-second timed run of the released Linux Desk bundle. The workflow repeats every show once with the complete application tree locked to one CPU core and once without that limit. The output scheduler always requests 60 Hz; the counter records one-second windows that fall below 44 Hz.</p>` +
+		`<p>Each row is a 60-second timed run of the released Linux Desk bundle. Every show runs unrestricted; the demo show runs a second time with the complete application tree locked to one CPU core, which is the case that says whether a modest machine still carries a real show. The output scheduler requests 40 Hz throughout, so the rows compare directly. The frame rate column reports the p95 slowest second beside the slowest, mean, and fastest; the histogram counts every delivered frame by the rate it was delivered at.</p>` +
 		`<figure class="test-setup"><div class="test-flow" role="img" aria-label="Released Linux bundle starts the Tauri Desk under Xvfb. Its real WebKit Fixture Sheet connects to the bundled Light server, which runs the 60 hertz output scheduler.">` +
 		`<div><strong>Released Linux bundle</strong><small>exact published AppImage</small></div><span aria-hidden="true">→</span>` +
-		`<div><strong>Tauri Desk under Xvfb</strong><small>one core or unrestricted</small></div><span aria-hidden="true">→</span>` +
+		`<div><strong>Tauri Desk under Xvfb</strong><small>unrestricted, and one core for the demo show</small></div><span aria-hidden="true">→</span>` +
 		`<div><strong>WebKit Fixture Sheet</strong><small>real production UI, kept active</small></div><span aria-hidden="true">→</span>` +
 		`<div><strong>Bundled Light server</strong><small>show, Dynamics, and DMX output</small></div><span aria-hidden="true">→</span>` +
-		`<div><strong>60 Hz scheduler</strong><small>cadence diagnostics</small></div></div>` +
+		`<div><strong>40 Hz scheduler</strong><small>cadence diagnostics</small></div></div>` +
 		`<figcaption>The API coordinator loads each real show and confirms the Fixture Sheet remains responsive. Linux process sampling measures the Desk application tree and separates its Light server from the Tauri/WebKit processes. Node and Xvfb are excluded. Playwright is not launched.</figcaption></figure>`
 	);
 }
@@ -319,7 +397,7 @@ function renderDetailedScenarioEvidence(performance) {
 		? `<h3>Application process breakdown</h3><div class="table-scroll"><table><thead><tr><th>Test set</th><th>Mode</th><th>Process scope</th><th>Average CPU</th><th>Maximum CPU</th><th>Maximum RAM</th></tr></thead><tbody>${componentRows}</tbody></table></div>`
 		: "";
 	return (
-		`${html}<p class="performance-legend">This is the same measured-scenario table shown on the main GitHub Pages page. Rows use their scenario-specific p95 thresholds; every run requests 60 Hz and “below target” counts one-second windows below 44 Hz.</p>` +
+		`${html}<p class="performance-legend">This is the same measured-scenario table shown on the main GitHub Pages page. A row is graded by its slowest second first and then its mean; every run requests 40 Hz.</p>` +
 		`<h2>How the test runs</h2>${renderTestSetup(scenarios)}${components}`
 	);
 }
@@ -328,10 +406,11 @@ export function renderCompactPerformanceSummary(performance) {
 	const { html } = scenarioTable(performance);
 	return (
 		`<div class="performance-summary">${html}` +
-		`<p class="performance-legend">Rows use the scenario-specific p95 thresholds. <span class="legend-healthy">Green</span>: target met · ` +
-		`<span class="legend-warning">Yellow</span>: warning · ` +
-		`<span class="legend-degraded">Red</span>: below the scenario floor · ` +
-		`<span class="legend-unknown">Gray</span>: incomplete evidence. Every run requests 60 Hz; “below target” always counts one-second windows below 44 Hz.</p>` +
+		`<p class="performance-legend">A row is graded by its slowest second first, then its mean. <span class="legend-healthy">Green</span>: slowest above 38 Hz and mean above 39 Hz · ` +
+		`<span class="legend-warning">Yellow</span>: slowest above 30 Hz and mean above 35 Hz · ` +
+		`<span class="legend-caution">Orange</span>: slowest above 26 Hz and mean above 30 Hz · ` +
+		`<span class="legend-degraded">Red</span>: below that · ` +
+		`<span class="legend-unknown">Gray</span>: incomplete evidence. Every run requests 40 Hz.</p>` +
 		`<p class="performance-legend">CPU and RAM cover the released Desk application tree during the timed window: the Tauri host, its real WebKit Fixture Sheet, and the bundled Light server. The detailed report separates the server and desktop/WebView processes. Node, Xvfb, and Playwright are excluded; Playwright is not launched. CPU is expressed per logical core and bounded by the application affinity; 100% means one fully used core.</p>` +
 		`<p class="performance-details"><a href="performance/">Detailed tests, run information, and raw report →</a></p></div>`
 	);
@@ -502,9 +581,15 @@ export function renderPerformancePage(performance) {
 	return (
 		`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">` +
 		`<title>ToskLight release performance</title><style>body{font:16px system-ui;max-width:1500px;margin:3rem auto;padding:0 1rem;background:#101318;color:#eef2f6}` +
-		`a{color:#72c7ff}.table-scroll,.performance-table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #44505c;padding:.7rem;text-align:left;vertical-align:top}.performance-compact td strong,.performance-compact th strong{display:block}.performance-compact td small,.performance-compact th small{display:block;margin-top:.25rem;color:#aab4bf;font-size:.72rem;line-height:1.3}.performance-row-healthy{background:#123326}.performance-row-warning{background:#3a3014}.performance-row-degraded{background:#3b1d20}.performance-row-unknown{background:#252b32}.performance-legend{color:#c5ced8}` +
+		`a{color:#72c7ff}.table-scroll,.performance-table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #44505c;padding:.7rem;text-align:left;vertical-align:top}.performance-compact td strong,.performance-compact th strong{display:block}.performance-compact td small,.performance-compact th small{display:block;margin-top:.25rem;color:#aab4bf;font-size:.72rem;line-height:1.3}.performance-row-healthy{background:#123326}.performance-row-warning{background:#3a3014}.performance-row-caution{background:#3a2414}.performance-row-degraded{background:#3b1d20}.performance-row-unknown{background:#252b32}.performance-legend{color:#c5ced8}` +
+		`.performance-histogram{display:flex;align-items:flex-end;gap:1px;height:54px;min-width:220px;padding:2px;border:1px solid #44505c;border-radius:3px;background:#181d23}` +
+		`.performance-histogram-bar{flex:1;min-width:2px;height:var(--bar-height,0%);min-height:1px;border-radius:1px 1px 0 0;background:#6b7784}` +
+		`.performance-histogram-empty{color:#9aa5b8}` +
+		`.performance-tone-failing{--tone:#ff6b6b}.performance-tone-struggling{--tone:#ff9f45}.performance-tone-holding{--tone:#ffd166}.performance-tone-comfortable{--tone:#39d98a}.performance-tone-spare{--tone:#72c7ff}` +
+		`.performance-histogram-bar[class*="performance-tone-"]{background:var(--tone)}` +
+		`td[class*="performance-tone-"] strong{color:var(--tone)}` +
 		`.test-setup{margin:1.25rem 0 2rem}.test-flow{display:grid;grid-template-columns:repeat(9,auto);align-items:stretch;gap:.6rem}.test-flow div{border:1px solid #526170;border-radius:.5rem;padding:.8rem;background:#1a2027;min-width:0}.test-flow strong,.test-flow small{display:block}.test-flow small,.test-setup figcaption{color:#aab4bf}.test-flow span{align-self:center;color:#72c7ff;font-size:1.4rem}.test-setup figcaption{margin-top:.8rem;line-height:1.5}@media(max-width:900px){.test-flow{display:flex;flex-direction:column}.test-flow span{transform:rotate(90deg);align-self:flex-start;margin-left:1rem}}` +
-		`code{background:#20262d;padding:.15rem .35rem}.healthy{color:#39d98a}.warning{color:#ffd166}.degraded{color:#ff6b6b}.unknown{color:#9aa5b8}</style><main><p><a href="../">← ToskLight</a></p>` +
+		`code{background:#20262d;padding:.15rem .35rem}.healthy{color:#39d98a}.warning{color:#ffd166}.caution{color:#ff9f45}.degraded{color:#ff6b6b}.unknown{color:#9aa5b8}</style><main><p><a href="../">← ToskLight</a></p>` +
 		`<h1>Release performance</h1><p><strong class="${escapePerformanceText(performance.status)}">${escapePerformanceText(performance.status.toUpperCase())}</strong> — ${escapePerformanceText(performance.summary)}</p>` +
 		`<h2>Evidence</h2><table><tbody>` +
 		row("Release version", performance.release?.version) +

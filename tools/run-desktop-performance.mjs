@@ -12,7 +12,11 @@ import {
 import { createLargeStageDynamicsPlan } from "./stage-dynamics-scene.mjs";
 import { createPerformanceFixtureInputs } from "./stage-large-scene.mjs";
 
-const DURATION_SECONDS = 15;
+// Each case is measured over a full minute: a desk is judged by how it holds up over a show, not
+// over a moment, and a short window hides the occasional slow frame entirely.
+const DURATION_SECONDS = 60;
+// Every case requests the same rate, so results are comparable across shows and across releases.
+const REQUESTED_RATE_HZ = 40;
 const LINUX_PROCESS_OPTIONS = {
 	ticksPerSecond: linuxConfiguration("CLK_TCK", 100),
 	pageSize: linuxConfiguration("PAGESIZE", 4096),
@@ -32,8 +36,12 @@ if (process.platform !== "linux")
 	);
 await mkdir(path.resolve(options["output-dir"]), { recursive: true });
 const results = [];
-for (const executionMode of ["one_core", "unrestricted"])
-	for (const performanceCase of CASES)
+// Every show is measured unrestricted. The demo show is measured a second time locked to one
+// core, which is the case that says whether a modest machine can still run a real show.
+for (const performanceCase of CASES)
+	for (const executionMode of performanceCase.demo
+		? ["unrestricted", "one_core"]
+		: ["unrestricted"])
 		results.push(await runCase(performanceCase, executionMode));
 await writeFile(
 	path.resolve(options["output-dir"], "desktop-scenarios.json"),
@@ -147,8 +155,8 @@ async function runCase(performanceCase, executionMode) {
 			universes: prepared.universes,
 			animated_attribute_count: prepared.animatedAttributes,
 			master_lane_count: prepared.masterLanes,
-			requested_rate_hz: 60,
-			below_target_hz: 44,
+			requested_rate_hz: REQUESTED_RATE_HZ,
+			below_target_hz: 38,
 			measurement_seconds: DURATION_SECONDS,
 			measurement_surface: "released-tauri-desk-fixture-sheet",
 			...measured,
@@ -304,7 +312,7 @@ function summarizePatch(patch, plan) {
 async function configureScheduler(api) {
 	await api.request("POST", "/api/v2/configuration/update", {
 		request_id: crypto.randomUUID(),
-		patch: { frame_rate_hz: 60 },
+		patch: { frame_rate_hz: REQUESTED_RATE_HZ },
 	});
 }
 
@@ -312,6 +320,7 @@ async function measureWindow(api, rootPid, executionMode) {
 	const rates = [];
 	const resources = [];
 	let diagnostics = await api.request("GET", "/api/v2/diagnostics/performance");
+	const openingBands = diagnostics.output.frame_rate_band_counts ?? [];
 	let processes = await readLinuxProcessTree(rootPid);
 	for (let second = 0; second < DURATION_SECONDS; second++) {
 		const started = performance.now();
@@ -346,6 +355,11 @@ async function measureWindow(api, rootPid, executionMode) {
 		processes = nextProcesses;
 	}
 	const sorted = [...rates].sort((left, right) => left - right);
+	// The band counts run from show start, so the window's histogram is the difference between
+	// the reading taken before the first second and the reading taken after the last.
+	const bandCounts = (openingBands ?? []).map((count, index) =>
+		Math.max(0, (diagnostics.output.frame_rate_band_counts?.[index] ?? 0) - count),
+	);
 	const cpu = resources.map((sample) =>
 		executionMode === "one_core"
 			? Math.min(100, sample.application.cpuPercent)
@@ -364,15 +378,22 @@ async function measureWindow(api, rootPid, executionMode) {
 			...resources.map((sample) => sample[name].residentBytes),
 		),
 	});
+	const cpuSorted = [...cpu].sort((left, right) => left - right);
 	return {
 		minimum_one_second_completed_hz: sorted[0],
 		average_completed_hz: average(rates),
-		p95_one_second_completed_hz: percentile(sorted, 95),
+		// The p95 of a frame rate is its slow tail: the rate 95% of windows stayed at or above.
+		// Taking the fast end instead would let a show that averages 60 Hz claim a p95 of 80.
+		p95_one_second_completed_hz: percentile(sorted, 5),
 		maximum_one_second_completed_hz: sorted.at(-1),
-		windows_below_target: rates.filter((rate) => rate < 44).length,
+		frame_rate_band_bounds_hz: diagnostics.output.frame_rate_band_bounds_hz ?? [],
+		frame_rate_band_counts: bandCounts,
+		windows_below_target: rates.filter((rate) => rate < 38).length,
 		resources: {
 			application_cpu_average_percent: average(cpu),
 			application_cpu_max_percent: Math.max(...cpu),
+			// The headline CPU number is the p95 busiest second, not the single worst spike.
+			application_cpu_p95_percent: percentile(cpuSorted, 95),
 			application_peak_resident_bytes: Math.max(
 				...resources.map((sample) => sample.application.residentBytes),
 			),

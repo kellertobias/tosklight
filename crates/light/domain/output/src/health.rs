@@ -41,6 +41,29 @@ pub const OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ: [f32; 5] = [20.0, 30.0, 38.0, 40.0
 /// Span of the rolling window behind every `recent_*` reading.
 pub const OUTPUT_RECENT_WINDOW: Duration = Duration::from_secs(60);
 
+/// Inclusive upper bounds, in hertz, of the bands a delivered frame is counted into.
+///
+/// A frame's rate is the reciprocal of the time it took, so these bands are the frame-time budgets
+/// an operator judges a desk by, read from the rate end: the first band holds every frame slower
+/// than 10 Hz and the last holds every frame at or above the fastest band's floor. Counts run
+/// from show start, so a measurement window is the difference between two readings.
+pub const OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ: [f32; 34] = [
+    10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 43.0, 46.0, 49.0, 52.0, 55.0, 58.0, 61.0, 64.0, 67.0,
+    70.0, 73.0, 76.0, 79.0, 82.0, 85.0, 88.0, 91.0, 94.0, 97.0, 100.0, 103.0, 106.0, 109.0, 112.0,
+    115.0, 118.0, 120.0,
+];
+
+/// The band a delivered frame's measured rate belongs to.
+///
+/// Anything slower than the first bound lands in the first band and anything at or above the last
+/// bound lands in the last, so no frame is lost off either end of the histogram.
+pub fn frame_rate_band(frame_hz: f32) -> usize {
+    OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ
+        .iter()
+        .position(|bound| frame_hz < *bound)
+        .unwrap_or(OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ.len() - 1)
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct OutputHealth {
     pub frames_sent: u64,
@@ -65,6 +88,10 @@ pub struct OutputHealth {
     pub recent_frame_rate_bucket_counts: [u64; OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ.len()],
     /// Send errors observed in the last [`OUTPUT_RECENT_WINDOW`].
     pub recent_send_errors: u64,
+    /// Frames delivered in each [`OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ`] band since show start.
+    ///
+    /// Empty until the first frame is measured, then one entry per band.
+    pub frame_rate_band_counts: Vec<u64>,
     #[serde(skip)]
     window: RecentOutputWindow,
 }
@@ -79,7 +106,12 @@ impl OutputHealth {
         if let Some(previous) = self.window.last_frame_at {
             let elapsed = at.saturating_duration_since(previous).as_secs_f64();
             if elapsed > 0.0 {
-                self.window.frames.push_back((at, (1.0 / elapsed) as f32));
+                let frame_hz = (1.0 / elapsed) as f32;
+                self.window.frames.push_back((at, frame_hz));
+                if self.frame_rate_band_counts.is_empty() {
+                    self.frame_rate_band_counts = vec![0; OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ.len()];
+                }
+                self.frame_rate_band_counts[frame_rate_band(frame_hz)] += 1;
             }
         }
         self.window.last_frame_at = Some(at);
@@ -210,6 +242,41 @@ mod tests {
     }
 
     #[test]
+    fn every_delivered_frame_lands_in_exactly_one_rate_band() {
+        let mut health = OutputHealth::default();
+        let start = origin();
+        health.record_frame(start);
+        // 40 Hz, 25 Hz and 2 Hz: one in the 40-43 band, one in the 25-30 band, one below 10.
+        health.record_frame(start + Duration::from_millis(25));
+        health.record_frame(start + Duration::from_millis(65));
+        health.record_frame(start + Duration::from_millis(565));
+
+        let counts = &health.frame_rate_band_counts;
+        assert_eq!(counts.len(), OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ.len());
+        assert_eq!(counts.iter().sum::<u64>(), 3, "no frame is lost");
+        assert_eq!(counts[frame_rate_band(40.0)], 1);
+        assert_eq!(counts[frame_rate_band(25.0)], 1);
+        assert_eq!(counts[frame_rate_band(2.0)], 1);
+    }
+
+    #[test]
+    fn a_rate_off_either_end_still_lands_in_a_band() {
+        assert_eq!(frame_rate_band(0.5), 0, "slower than the first bound");
+        assert_eq!(
+            frame_rate_band(500.0),
+            OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ.len() - 1,
+            "faster than the last bound"
+        );
+        // The bands are ordered, so a faster frame never lands in an earlier band.
+        let mut previous = 0;
+        for rate in 1..600 {
+            let band = frame_rate_band(rate as f32 / 4.0);
+            assert!(band >= previous);
+            previous = band;
+        }
+    }
+
+    #[test]
     fn opening_a_show_restarts_the_totals_but_keeps_the_configured_rate() {
         let mut health = OutputHealth {
             frame_hz: 44.0,
@@ -225,5 +292,6 @@ mod tests {
         assert_eq!(health.send_errors, 0);
         assert_eq!(health.frames_sent, 0);
         assert_eq!(health.recent_send_errors, 0);
+        assert!(health.frame_rate_band_counts.is_empty());
     }
 }

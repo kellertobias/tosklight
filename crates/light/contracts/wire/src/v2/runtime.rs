@@ -117,6 +117,11 @@ pub struct RuntimeOutputHealth {
     pub recent_frame_rate_bucket_counts: Vec<u64>,
     #[ts(type = "number")]
     pub recent_send_errors: u64,
+    /// Inclusive upper bounds, in hertz, of the frame-rate bands below.
+    pub frame_rate_band_bounds_hz: Vec<f32>,
+    /// Frames delivered in each band since show start.
+    #[ts(type = "number[]")]
+    pub frame_rate_band_counts: Vec<u64>,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

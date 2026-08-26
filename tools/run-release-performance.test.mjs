@@ -561,7 +561,9 @@ test("scheduled publication separates release delivery from performance and Page
 		/--desktop-scenarios "\$out\/desktop-scenarios\.json"/u,
 	);
 	assert.match(performance, /tools\/run-release-performance\.mjs/u);
-	assert.match(desktopHarness, /const DURATION_SECONDS = 15/u);
+	// A minute per case, and one requested rate for every case so the rows compare.
+	assert.match(desktopHarness, /const DURATION_SECONDS = 60/u);
+	assert.match(desktopHarness, /const REQUESTED_RATE_HZ = 40/u);
 	assert.match(desktopHarness, /fixture-sheet-heartbeat/u);
 	assert.match(desktopHarness, /released-tauri-desk-fixture-sheet/u);
 	assert.match(desktopHarness, /taskset/u);
