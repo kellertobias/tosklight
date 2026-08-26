@@ -285,17 +285,68 @@ function layerModels(input: BuildMediaPaneModelInput): MediaPaneLayer[] {
 	});
 }
 
+/// The folder part of an indexed audio path, without its numeric address prefix.
+///
+/// A library folder is named by its address alone, so stripping it leaves nothing and the slot
+/// keeps its own "Folder N" label rather than repeating the number.
+function audioFolderName(relativePath: string): string {
+	const folder = relativePath.split("/")[0] ?? relativePath;
+	const stripped = folder.replace(/^\s*0*\d+\s*[-_. ]*/u, "");
+	return stripped;
+}
+
+/// The file part of an indexed audio path, without its numeric address prefix.
+///
+/// A library entry is addressed by the number leading its name, which the operator does not need
+/// to read twice because the slot already shows it.
+function audioFileName(relativePath: string): string {
+	const parts = relativePath.split("/");
+	const file = parts[parts.length - 1] ?? relativePath;
+	return file.replace(/^\s*0*\d+\s*[-_. ]*/u, "") || file;
+}
+
 function libraryModel(input: BuildMediaPaneModelInput) {
 	const sourceFilter = input.sourceFilter ?? "media";
 	const draftFolder = Number(input.draftFolderId);
-	const advertisedFolders = new Map(
-		input.inspection.folders.map((folder) => [folder.id, folder]),
-	);
-	const advertisedFiles = new Map(
-		input.inspection.files
-			.filter((file) => file.folder_id === draftFolder)
-			.map((file) => [file.id, file]),
-	);
+	// An Internal Audio Player advertises nothing over CITP; its addressable folders and files
+	// come from the library the desk indexed for it.
+	const audioLibrary = isAudioPlayer(input.selectedServer)
+		? (input.selectedServer?.audio?.library ?? [])
+		: null;
+	const advertisedFolders = audioLibrary
+		? new Map(
+				audioLibrary.map((entry) => [
+					entry.folder,
+					{
+						id: entry.folder,
+						name: audioFolderName(entry.name),
+						element_count: audioLibrary.filter(
+							(item) => item.folder === entry.folder,
+						).length,
+					},
+				]),
+			)
+		: new Map(input.inspection.folders.map((folder) => [folder.id, folder]));
+	const advertisedFiles = audioLibrary
+		? new Map(
+				audioLibrary
+					.filter((entry) => entry.folder === draftFolder)
+					.map((entry) => [
+						entry.file,
+						{
+							folder_id: entry.folder,
+							id: entry.file,
+							name: audioFileName(entry.name),
+							width: 0,
+							height: 0,
+						},
+					]),
+			)
+		: new Map(
+				input.inspection.files
+					.filter((file) => file.folder_id === draftFolder)
+					.map((file) => [file.id, file]),
+			);
 	const [firstFolder, lastFolder] =
 		input.selectedServer && input.selectedLayerId === "master"
 			? [1, 1]
@@ -316,7 +367,9 @@ function libraryModel(input: BuildMediaPaneModelInput) {
 					name: folder?.name || `Folder ${id}`,
 					detail: folder
 						? `${folder.element_count} files`
-						: "Configurable slot · not advertised",
+						: audioLibrary
+							? "Empty audio folder"
+							: "Configurable slot · not advertised",
 				};
 			},
 		),
@@ -334,8 +387,12 @@ function libraryModel(input: BuildMediaPaneModelInput) {
 				kind: "file" as const,
 				name: file?.name || "Empty",
 				detail: file
-					? `${file.width}×${file.height}`
-					: `${slotType} slot · not advertised`,
+					? audioLibrary
+						? "Audio file"
+						: `${file.width}×${file.height}`
+					: audioLibrary
+						? "Empty audio slot"
+						: `${slotType} slot · not advertised`,
 				thumbnailSrc: input.thumbnailUrls[`${draftFolder}:${id}`],
 				empty: !file,
 			};

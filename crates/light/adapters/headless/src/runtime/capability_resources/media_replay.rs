@@ -27,6 +27,13 @@ impl InternalAudioResource {
         self.runtime.lock().player(fixture)
     }
 
+    pub(in crate::runtime) fn library_entries(
+        &self,
+        fixture: &light_fixture::PatchedFixture,
+    ) -> Vec<crate::runtime::internal_audio::AudioLibraryListing> {
+        self.runtime.lock().library_entries(fixture)
+    }
+
     pub(in crate::runtime) fn replace_library_roots(
         &self,
         roots: &std::collections::BTreeMap<String, String>,

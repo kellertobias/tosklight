@@ -1054,3 +1054,98 @@ describe("Media pane disconnected configuration", () => {
 		});
 	});
 });
+
+describe("Internal Audio Player library", () => {
+	const player = {
+		fixture_id: "player-1",
+		fixture_number: 1001,
+		name: "ToskLight Audio Player",
+		kind: "audio_player" as const,
+		endpoint: null,
+		layers: [{ fixture_id: "voice-1", head_index: 0 }],
+		status: { online: true, last_success: null, last_error: null },
+		audio: {
+			folder: 1,
+			file: 3,
+			volume_percent: 50,
+			transport: "stop" as const,
+			repeat: false,
+			source: "001/003.Intro.wav",
+			library: [
+				{ folder: 1, file: 1, name: "001/001.Walk in.wav" },
+				{ folder: 1, file: 3, name: "001/003.Intro.wav" },
+				{ folder: 2, file: 1, name: "002/001.Encore.wav" },
+			],
+		},
+	};
+
+	function playerInput(patch: Partial<BuildMediaPaneModelInput> = {}) {
+		return input({
+			servers: [player],
+			selectedServer: player,
+			selectedServerId: player.fixture_id,
+			selectedLayerId: "voice-1",
+			draftFolderId: "1",
+			...patch,
+		});
+	}
+
+	it("browses the indexed library instead of an empty CITP advertisement", () => {
+		const model = buildMediaPaneModel(playerInput());
+
+		// The player advertises nothing over CITP, so the old build showed every slot as Empty.
+		const named = model.libraryFiles.filter((file) => !file.empty);
+		expect(named.map((file) => [file.id, file.name])).toEqual([
+			["1", "Walk in.wav"],
+			["3", "Intro.wav"],
+		]);
+		expect(named[0]?.detail).toBe("Audio file");
+	});
+
+	it("shows each library folder with the number of files it holds", () => {
+		const model = buildMediaPaneModel(playerInput());
+		const folders = new Map(
+			model.libraryFolders.map((folder) => [folder.id, folder]),
+		);
+
+		expect(folders.get("1")?.detail).toBe("2 files");
+		expect(folders.get("2")?.detail).toBe("1 files");
+		// A library folder is named by its address alone, so the slot keeps its own label.
+		expect(folders.get("1")?.name).toBe("Folder 1");
+	});
+
+	it("follows the browsed folder rather than always listing the first", () => {
+		const model = buildMediaPaneModel(playerInput({ draftFolderId: "2" }));
+
+		expect(
+			model.libraryFiles.filter((file) => !file.empty).map((file) => file.name),
+		).toEqual(["Encore.wav"]);
+	});
+
+	it("leaves a CITP media server reading its advertised library", () => {
+		const server = {
+			fixture_id: "server-1",
+			fixture_number: 1,
+			name: "Media master",
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "10.0.0.9",
+				port: 4011,
+			},
+			layers: [{ fixture_id: "layer-1", head_index: 0 }],
+			status: { online: true, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				draftFolderId: "1",
+			}),
+		);
+
+		expect(model.libraryFiles.every((file) => file.empty)).toBe(true);
+		expect(model.libraryFiles[0]?.detail).toContain("not advertised");
+	});
+});

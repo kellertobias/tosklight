@@ -79,7 +79,9 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
         ("audio.file", Media, 2, 2),
         ("audio.transport", Media, 2, 3),
         ("audio.repeat", Media, 2, 4),
-        ("audio.volume", Media, 2, 5),
+        // Audio Volume is a level, so it sits with the other levels on Intensity rather than
+        // among the media addressing attributes, and shares the slot its canonical form uses.
+        ("audio.volume", Intensity, 1, 5),
         ("media.position.x", Position, 1, 5),
         ("media.position.y", Position, 1, 6),
         ("media.scale.x", Media, 3, 3),

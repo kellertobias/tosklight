@@ -527,6 +527,11 @@ export interface MediaServerFixture {
 		transport: "play" | "pause" | "stop";
 		repeat: boolean;
 		source: string | null;
+		/**
+		 * Everything the bound library holds. A CITP server advertises its library over the
+		 * protocol; an Internal Audio Player has no such conversation, so the pane browses this.
+		 */
+		library?: Array<{ folder: number; file: number; name: string }>;
 	} | null;
 }
 

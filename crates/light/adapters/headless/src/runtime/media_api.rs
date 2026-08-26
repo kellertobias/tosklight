@@ -304,6 +304,20 @@ pub(super) async fn media_servers(
                         "transport": player.transport,
                         "repeat": player.repeat,
                         "source": player.source,
+                        // A CITP server advertises its library; an Internal Audio Player has no
+                        // such conversation, so the pane browses the indexed library instead.
+                        "library": state
+                            .internal_audio
+                            .library_entries(fixture)
+                            .into_iter()
+                            .map(|entry| {
+                                serde_json::json!({
+                                    "folder": entry.folder,
+                                    "file": entry.file,
+                                    "name": entry.relative_path,
+                                })
+                            })
+                            .collect::<Vec<_>>(),
                     },
                 });
             }

@@ -26,6 +26,8 @@ export function fixtureTypeIconAsset(type: string) {
 	if (/venue|scenery|scenic/.test(value)) return icon("venue");
 	if (/fog|haze/.test(value)) return icon("hazer");
 	if (/fan|blower/.test(value)) return icon("blower");
+	// Audio comes before the media rule so an audio player is not read as a video source.
+	if (/audio|sound/.test(value)) return icon("audio-player");
 	if (/media|video|projector/.test(value)) return icon("projector");
 	if (/pixel|wall|matrix/.test(value)) return icon("led-wall");
 	if (/strip|batten/.test(value)) return icon("strip-light");

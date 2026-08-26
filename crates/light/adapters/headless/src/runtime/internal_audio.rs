@@ -245,6 +245,14 @@ struct PlayerState {
     transport_changed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// One addressable entry of an Internal Audio Player library.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::runtime) struct AudioLibraryListing {
+    pub folder: u8,
+    pub file: u8,
+    pub relative_path: String,
+}
+
 /// What the desk currently plays on one Internal Audio Player voice.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::runtime) struct PlayerSnapshot {
@@ -383,6 +391,36 @@ impl InternalAudioRuntime {
             source,
             diagnostic: self.diagnostics.get(&fixture.fixture_id).cloned(),
         }
+    }
+
+    /// Everything the library bound to one player holds, in folder then file order.
+    ///
+    /// The Media pane browses a CITP server by asking it what it advertises. An Internal Audio
+    /// Player has no such conversation, so its addressable folders and files come from the
+    /// indexed library instead.
+    pub(in crate::runtime) fn library_entries(
+        &self,
+        fixture: &PatchedFixture,
+    ) -> Vec<AudioLibraryListing> {
+        let library_name = fixture
+            .internal_bindings
+            .library
+            .as_deref()
+            .unwrap_or("default");
+        self.libraries
+            .get(library_name)
+            .map(|library| {
+                library
+                    .entries
+                    .values()
+                    .map(|entry| AudioLibraryListing {
+                        folder: entry.folder,
+                        file: entry.file,
+                        relative_path: entry.relative_path.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn reconcile_fixture(
