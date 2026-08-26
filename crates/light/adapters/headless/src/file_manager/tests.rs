@@ -47,10 +47,44 @@ fn directory_listing_skips_an_entry_that_disappears_after_enumeration() {
     fs::remove_file(&transient).unwrap();
 
     assert!(
-        directory_entry_info(&fs::canonicalize(&root).unwrap(), item, true)
-            .unwrap()
-            .is_none()
+        directory_entry_info(
+            &fs::canonicalize(&root).unwrap(),
+            &fs::canonicalize(&root).unwrap(),
+            item,
+            true,
+            false
+        )
+        .unwrap()
+        .is_none()
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_listed_symlink_that_leaves_the_root_is_still_rejected() {
+    let root = temporary_root();
+    let outside = std::env::temp_dir().join(format!("tosklight-outside-{}", std::process::id()));
+    fs::create_dir_all(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+    let item = fs::read_dir(&root)
+        .unwrap()
+        .map(Result::unwrap)
+        .find(|item| item.file_name() == "escape")
+        .unwrap();
+
+    assert!(
+        directory_entry_info(
+            &fs::canonicalize(&root).unwrap(),
+            &fs::canonicalize(&root).unwrap(),
+            item,
+            true,
+            false
+        )
+        .is_err(),
+        "a link out of the root must not be listed even though ordinary entries skip resolution"
+    );
+    fs::remove_dir_all(&outside).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
 

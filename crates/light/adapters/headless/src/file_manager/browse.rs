@@ -114,6 +114,13 @@ fn directory_entries(
     directory: &FsPath,
     include_hidden: bool,
 ) -> Result<Vec<EntryInfo>, ApiError> {
+    // Extended-attribute support belongs to the filesystem holding the directory, not to each
+    // file in it. Probing once keeps a large directory from paying a syscall per entry before
+    // the browser can show anything.
+    let notes_supported = support::native_notes_supported(directory);
+    // Resolving the directory once gives every ordinary entry a canonical path by name, so the
+    // listing no longer resolves each entry separately to prove it stays inside the root.
+    let canonical_directory = fs::canonicalize(directory).map_err(ApiError::io)?;
     let mut entries = Vec::new();
     for item in fs::read_dir(directory).map_err(ApiError::io)? {
         let item = match item {
@@ -121,7 +128,13 @@ fn directory_entries(
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => return Err(ApiError::io(error)),
         };
-        if let Some(entry) = directory_entry_info(canonical_root, item, include_hidden)? {
+        if let Some(entry) = directory_entry_info(
+            canonical_root,
+            &canonical_directory,
+            item,
+            include_hidden,
+            notes_supported,
+        )? {
             entries.push(entry);
         }
     }
@@ -130,13 +143,27 @@ fn directory_entries(
 
 pub(super) fn directory_entry_info(
     canonical_root: &FsPath,
+    canonical_directory: &FsPath,
     item: fs::DirEntry,
     include_hidden: bool,
+    notes_supported: bool,
 ) -> Result<Option<EntryInfo>, ApiError> {
-    let path = match fs::canonicalize(item.path()) {
-        Ok(path) => path,
+    // A link can point anywhere, so it is still resolved and checked against the root. An
+    // ordinary entry of an already-canonical directory cannot escape, and resolving every one of
+    // them is what made a large directory slow to open.
+    let symlink = match item.file_type() {
+        Ok(kind) => kind.is_symlink(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(ApiError::io(error)),
+    };
+    let path = if symlink {
+        match fs::canonicalize(item.path()) {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(ApiError::io(error)),
+        }
+    } else {
+        canonical_directory.join(item.file_name())
     };
     if path != canonical_root && !path.starts_with(canonical_root) {
         return Err(ApiError::bad_request("path escapes the configured root"));
@@ -156,6 +183,7 @@ pub(super) fn directory_entry_info(
         item.file_name().to_string_lossy().into_owned(),
         &metadata,
         hidden,
+        notes_supported,
     )))
 }
 
@@ -179,7 +207,14 @@ pub(super) async fn metadata(
     let hidden = support::is_hidden(path.file_name().unwrap_or_else(|| path.as_os_str()), &value);
     Ok(Json(MetadataInfo {
         root_id,
-        entry: entry_info(&canonical_root, &path, name, &value, hidden),
+        entry: entry_info(
+            &canonical_root,
+            &path,
+            name,
+            &value,
+            hidden,
+            support::native_notes_supported(&path),
+        ),
         capabilities: filesystem_capabilities(&root.path),
     }))
 }
@@ -190,6 +225,7 @@ fn entry_info(
     name: String,
     metadata: &fs::Metadata,
     hidden: bool,
+    notes_supported: bool,
 ) -> EntryInfo {
     EntryInfo {
         name,
@@ -201,19 +237,44 @@ fn entry_info(
         hidden,
         writable: !metadata.permissions().readonly(),
         mime: mime_for(path),
-        note_supported: support::native_notes_supported(path),
+        note_supported: notes_supported,
         trash_supported: support::trash_supported(),
     }
 }
 
+/// How long a probed filesystem capability set is reused for the same root.
+///
+/// The browser re-reads the root list every few seconds. Probing a root touches the filesystem,
+/// which is slow when the root is a network share or a sleeping disk, so an answer is reused
+/// rather than re-probed on every poll. A mount that changes what it supports is picked up on the
+/// next expiry.
+const CAPABILITY_CACHE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(30);
+
+type CapabilityCache =
+    std::collections::HashMap<std::path::PathBuf, (std::time::Instant, FileSystemCapabilities)>;
+
 fn filesystem_capabilities(path: &FsPath) -> FileSystemCapabilities {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<CapabilityCache>> =
+        std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(CapabilityCache::new()));
+    let now = std::time::Instant::now();
+    if let Ok(entries) = cache.lock()
+        && let Some((probed_at, capabilities)) = entries.get(path)
+        && now.duration_since(*probed_at) < CAPABILITY_CACHE_LIFETIME
+    {
+        return capabilities.clone();
+    }
     let native = support::capabilities(path);
-    FileSystemCapabilities {
+    let capabilities = FileSystemCapabilities {
         created_time: native.created_time,
         hidden_attributes: native.hidden_attributes,
         native_notes: native.native_notes,
         trash: native.trash,
         range_streaming: true,
         thumbnails: true,
+    };
+    if let Ok(mut entries) = cache.lock() {
+        entries.insert(path.to_path_buf(), (now, capabilities.clone()));
     }
+    capabilities
 }

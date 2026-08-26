@@ -141,7 +141,17 @@ fn alternate_data_stream(path: &Path) -> PathBuf {
     PathBuf::from(format!("{}:ToskLight.Note", path.display()))
 }
 
+/// Whether this host can move a file to its trash.
+///
+/// This describes the host, not any particular file, but a directory listing asks it once per
+/// entry. Probing scans PATH on Linux and Windows, so the answer is resolved once and reused
+/// rather than repeated for every file in a large directory.
 pub(crate) fn trash_supported() -> bool {
+    static SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SUPPORTED.get_or_init(probe_trash_supported)
+}
+
+fn probe_trash_supported() -> bool {
     #[cfg(target_os = "macos")]
     {
         Path::new("/usr/bin/trash").is_file()
