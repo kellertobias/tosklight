@@ -191,7 +191,7 @@ export function FixtureSheetWindow({
 	);
 }
 
-function useFixtureSheetBenchmarkReady({
+export function useFixtureSheetBenchmarkReady({
 	active,
 	rows,
 	activeValuesLoading,
@@ -259,6 +259,12 @@ function useFixtureSheetBenchmarkReady({
 			});
 		setReady(true);
 	}, [active, activeValuesLoading, config, desktop, groupRuntimeLoading, rows]);
+	// Each beat reads the rows of the moment. Depending on `rows` instead would tie the
+	// interval's life to the data's identity: live values give the Sheet a new rows array
+	// every couple of seconds, which tore the interval down before it could fire and made a
+	// perfectly healthy Sheet look like it had stopped.
+	const latestRows = useRef(rows);
+	latestRows.current = rows;
 	useEffect(() => {
 		if (
 			!ready ||
@@ -268,13 +274,18 @@ function useFixtureSheetBenchmarkReady({
 			groupRuntimeLoading
 		)
 			return;
-		const fixtureRecords = new Set(rows.map((row) => row.parentFixtureId)).size;
-		if (
-			config.expectedFixtureRecords != null &&
-			fixtureRecords !== config.expectedFixtureRecords
-		)
-			return;
 		const heartbeat = window.setInterval(() => {
+			const current = latestRows.current;
+			const fixtureRecords = new Set(
+				current.map((row) => row.parentFixtureId),
+			).size;
+			// A row count that has not settled yet skips this beat rather than ending the
+			// heartbeat, so a transient mismatch cannot silence the Sheet for good.
+			if (
+				config.expectedFixtureRecords != null &&
+				fixtureRecords !== config.expectedFixtureRecords
+			)
+				return;
 			void desktop
 				.appendPackagedStageBenchmarkSample({
 					schemaVersion: 1,
@@ -282,21 +293,13 @@ function useFixtureSheetBenchmarkReady({
 					measurementSurface: "packaged-tauri-webview-fixture-sheet",
 					profile: config.profile,
 					fixtureRecords,
-					rowCount: rows.length,
+					rowCount: current.length,
 					recordedAt: new Date().toISOString(),
 				})
 				.catch(() => undefined);
 		}, 1_000);
 		return () => window.clearInterval(heartbeat);
-	}, [
-		active,
-		activeValuesLoading,
-		config,
-		desktop,
-		groupRuntimeLoading,
-		ready,
-		rows,
-	]);
+	}, [active, activeValuesLoading, config, desktop, groupRuntimeLoading, ready]);
 }
 
 function useVisibleFixtureIds() {
