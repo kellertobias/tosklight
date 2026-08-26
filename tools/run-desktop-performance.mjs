@@ -139,8 +139,12 @@ async function runCase(performanceCase, executionMode) {
 				? Math.max(300_000, performanceCase.fixtureRecords * 500)
 				: 60_000,
 		);
+		const measurementStartedAt = Date.now();
 		const measured = await measureWindow(api, child.pid, executionMode);
-		await requireFixtureSheetActive(reportPath, sheetRecords, executionMode);
+		await requireFixtureSheetActive(reportPath, sheetRecords, executionMode, {
+			startedAt: measurementStartedAt,
+			endedAt: Date.now(),
+		});
 		return {
 			case_id: performanceCase.caseId,
 			case_name: performanceCase.demo
@@ -497,7 +501,12 @@ async function sheetReadyCounts(reportPath) {
 	];
 }
 
-async function requireFixtureSheetActive(reportPath, expected, executionMode) {
+async function requireFixtureSheetActive(
+	reportPath,
+	expected,
+	executionMode,
+	measurement,
+) {
 	const records = (await readFile(reportPath, "utf8"))
 		.trim()
 		.split("\n")
@@ -509,20 +518,37 @@ async function requireFixtureSheetActive(reportPath, expected, executionMode) {
 				return [];
 			}
 		});
-	const heartbeat = records
+	const beats = records
 		.filter(
 			(record) =>
 				record.kind === "fixture-sheet-heartbeat" &&
 				(expected === null || record.fixtureRecords === expected),
 		)
-		.at(-1);
+		.map((record) => Date.parse(record.recordedAt))
+		.filter((at) => Number.isFinite(at))
+		.sort((left, right) => left - right);
 	// The Sheet beats once a second, and a desk deliberately confined to one core delivers
-	// those beats less punctually. Late is what this case is measuring; silent is the fault.
-	const tolerance = executionMode === "one_core" ? 10_000 : 2_500;
-	if (!heartbeat || Date.now() - Date.parse(heartbeat.recordedAt) > tolerance)
-		throw new Error(
-			"Fixture Sheet did not remain active through the timed measurement window",
-		);
+	// those beats less punctually. Late is what this case is measuring; silent is the fault,
+	// so this tolerates ordinary scheduling noise and only calls a long silence a death.
+	const tolerance = executionMode === "one_core" ? 30_000 : 10_000;
+	// Judge continuity across the window rather than how recent the final beat happens to be.
+	// A last-beat check reads one instant: it failed a run whose Sheet had beaten steadily
+	// for a minute but hiccupped at the very end, and passed one that fell silent in the
+	// middle and recovered just in time.
+	const covering = beats.filter(
+		(at) =>
+			at >= measurement.startedAt - tolerance &&
+			at <= measurement.endedAt + tolerance,
+	);
+	const edges = [measurement.startedAt, ...covering, measurement.endedAt];
+	let widestSilence = 0;
+	for (let index = 1; index < edges.length; index += 1)
+		widestSilence = Math.max(widestSilence, edges[index] - edges[index - 1]);
+	if (covering.length && widestSilence <= tolerance) return;
+	const seconds = (value) => `${(value / 1_000).toFixed(1)}s`;
+	throw new Error(
+		`Fixture Sheet did not remain active through the timed measurement window: ${covering.length} beats across ${seconds(measurement.endedAt - measurement.startedAt)}, widest silence ${seconds(widestSilence)}, tolerated ${seconds(tolerance)}`,
+	);
 }
 
 function assertRunning(child) {
