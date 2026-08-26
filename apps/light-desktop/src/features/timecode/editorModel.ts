@@ -801,3 +801,42 @@ function clampFrame(frame: number, duration: number): number {
 function padAddress(value: number): string {
 	return String(value).padStart(3, "0");
 }
+
+/// Stores the lane-owned start of a Cue that waits for a manual GO.
+///
+/// A placed transition replaces any earlier one for the same Cue, so the clip keeps exactly one
+/// answer for where that Cue begins.
+export function withPlacedCueStart(
+	definition: TimecodeDefinition,
+	laneId: string,
+	clipId: string,
+	cueId: string,
+	offsetFrame: number,
+): TimecodeDefinition {
+	return {
+		...definition,
+		lanes: definition.lanes.map((lane) =>
+			lane.id !== laneId || lane.content.kind !== "cue_list"
+				? lane
+				: {
+						...lane,
+						content: {
+							...lane.content,
+							clips: lane.content.clips.map((clip) =>
+								clip.id !== clipId
+									? clip
+									: {
+											...clip,
+											cue_starts: [
+												...(clip.cue_starts ?? []).filter(
+													(placed) => placed.cue_id !== cueId,
+												),
+												{ cue_id: cueId, offset_frame: offsetFrame },
+											],
+										},
+							),
+						},
+					},
+		),
+	};
+}

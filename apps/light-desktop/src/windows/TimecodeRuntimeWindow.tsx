@@ -52,6 +52,7 @@ import {
 	useCueLists,
 	usePlaybackDefinitions,
 } from "../features/showObjects/ShowObjectsState";
+import type { ShowObject } from "../features/showObjects/contracts";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import {
 	parseMarkerCsv,
@@ -72,6 +73,46 @@ import "./TimecodeRuntimeWindow.css";
 const FPS = 44;
 const TIMECODE_POOL_SIZE = 100;
 const AUDIO_PLAYER_PROFILE_ID = "358171f4-c3a7-4d75-b256-b9cf30afd4ab";
+
+/// The Cuelists the timeline offers, each carrying the playback number it is addressed by.
+function useTimelineCueLists(
+	cueLists: readonly ShowObject<"cue_list">[],
+	active: boolean,
+): TimecodeCueListOption[] {
+	const numbers = useCueListPlaybackNumbers(active);
+	return useMemo(
+		() =>
+			cueLists.map((cueList) => ({
+				id: cueList.body.id,
+				name: cueList.body.name,
+				number: numbers.get(cueList.body.id),
+				cues: cueList.body.cues,
+				objectId: cueList.id,
+				revision: cueList.revision,
+				body: cueList.body,
+			})),
+		[cueLists, numbers],
+	);
+}
+
+/// The playback number each Cuelist is addressed by, when it has one.
+///
+/// A Cuelist carries no number of its own; the number belongs to the playback that targets it, so
+/// a Cuelist in several playbacks is named by the lowest.
+function useCueListPlaybackNumbers(active: boolean): Map<string, number> {
+	const playbacks = usePlaybackDefinitions(active);
+	return useMemo(() => {
+		const numbers = new Map<string, number>();
+		for (const playback of playbacks) {
+			const target = playback.body.target;
+			if (target.type !== "cue_list") continue;
+			const existing = numbers.get(target.cue_list_id);
+			if (existing === undefined || playback.body.number < existing)
+				numbers.set(target.cue_list_id, playback.body.number);
+		}
+		return numbers;
+	}, [playbacks]);
+}
 
 export function TimecodeRuntimeWindow({
 	active = true,
@@ -103,34 +144,7 @@ export function TimecodeRuntimeWindow({
 		[patchedFixtures],
 	);
 	useShowObjectView("cue_list", active);
-	const playbacks = usePlaybackDefinitions(active);
-	// A Cuelist is addressed by its playback number on the desk, so a clip carries that number
-	// beside its name. The number lives on the playback that targets the Cuelist, not on the
-	// Cuelist itself.
-	const cueListNumbers = useMemo(() => {
-		const numbers = new Map<string, number>();
-		for (const playback of playbacks) {
-			const target = playback.body.target;
-			if (target.type !== "cue_list") continue;
-			const existing = numbers.get(target.cue_list_id);
-			if (existing === undefined || playback.body.number < existing)
-				numbers.set(target.cue_list_id, playback.body.number);
-		}
-		return numbers;
-	}, [playbacks]);
-	const timelineCueLists = useMemo(
-		() =>
-			cueLists.map((cueList) => ({
-				id: cueList.body.id,
-				name: cueList.body.name,
-				number: cueListNumbers.get(cueList.body.id),
-				cues: cueList.body.cues,
-				objectId: cueList.id,
-				revision: cueList.revision,
-				body: cueList.body,
-			})),
-		[cueLists, cueListNumbers],
-	);
+	const timelineCueLists = useTimelineCueLists(cueLists, active);
 	const fallback = useMemo(
 		() =>
 			new TimecodesApiClient(createLightApi().runtime.capabilityTransport()),

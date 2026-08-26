@@ -108,3 +108,14 @@ export function parseTimelineFrame(value: string, fps: number): number | null {
 	if (minute > 59 || second > 59 || frame >= fps) return null;
 	return (Number(hours) * 60 * 60 + minute * 60 + second) * fps + frame;
 }
+
+/// The easing curves a Timecode keyframe may be given, in the order they are offered.
+export const TIMECODE_EASINGS: Array<{
+	value: "linear" | "ease_in" | "ease_out" | "ease_in_out";
+	label: string;
+}> = [
+	{ value: "linear", label: "Linear" },
+	{ value: "ease_in", label: "Ease in" },
+	{ value: "ease_out", label: "Ease out" },
+	{ value: "ease_in_out", label: "Ease in/out" },
+];

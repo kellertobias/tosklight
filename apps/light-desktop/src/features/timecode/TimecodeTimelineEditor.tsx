@@ -44,14 +44,20 @@ import {
 	moveTimelineItem,
 	reorderTimelineLane,
 	sameSelection,
-	scaleCueListTimings,
 	type TimecodeEditorSelection,
 	timelineItems,
+	withPlacedCueStart,
 } from "./editorModel";
 import {
 	CueListClipContents,
 	CueListClipStatus,
 } from "./TimecodeCueClipContents";
+import {
+	KeyframeActionStrip,
+	scaleClipCueTimings,
+	useCueEncoderContext,
+	useSelectedCue,
+} from "./TimecodeKeyframeActions";
 import { CueListChooser } from "./TimecodeCueListChooser";
 import { MarkerActionStrip } from "./TimecodeMarkerActions";
 import {
@@ -788,16 +794,6 @@ export function speedGroupLinePoints(
 
 const TARGET_MAX_PIXELS_PER_FRAME = 17.5;
 const FALLBACK_VIEWPORT_WIDTH = 720;
-const TIMECODE_EASINGS: Array<{
-	value: "linear" | "ease_in" | "ease_out" | "ease_in_out";
-	label: string;
-}> = [
-	{ value: "linear", label: "Linear" },
-	{ value: "ease_in", label: "Ease in" },
-	{ value: "ease_out", label: "Ease out" },
-	{ value: "ease_in_out", label: "Ease in/out" },
-];
-
 function clampIndex(value: number, length: number): number {
 	return Math.max(0, Math.min(Math.max(0, length - 1), Math.round(value)));
 }
@@ -940,16 +936,7 @@ export const TimecodeTimelineEditor = forwardRef<
 ) {
 	type Selection = TimecodeEditorSelection | null;
 	const [selection, setSelection] = useState<Selection>(null);
-	// A Cue inside the selected Cuelist clip. The encoders and the Prev/Next Cue buttons act on
-	// it, and it clears whenever the selected clip changes.
-	const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
-	const selectedClipKey =
-		selection?.kind === "clip" ? `${selection.laneId}:${selection.itemId}` : null;
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the Cue belongs to one clip, so it
-	// is cleared by the clip identity rather than by the selection object.
-	useEffect(() => {
-		setSelectedCueId(null);
-	}, [selectedClipKey]);
+	const [selectedCueId, setSelectedCueId] = useSelectedCue(selection);
 	const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
 	const [speedGroup, setSpeedGroup] = useState("A");
 	const [speedGroupChooserOpen, setSpeedGroupChooserOpen] = useState(false);
@@ -1026,26 +1013,15 @@ export const TimecodeTimelineEditor = forwardRef<
 		onBeginGesture,
 		onEndGesture,
 		setSelection,
-		onScaleCueTimings: (selection, ratio) => {
-			const lane = definition.lanes.find((item) => item.id === selection.laneId);
-			if (lane?.content.kind !== "cue_list") return;
-			const content = lane.content;
-			const clip = content.clips.find((item) => item.id === selection.itemId);
-			const option = cueLists.find((item) => item.id === content.cue_list_id);
-			if (!clip || !option?.body || !onSaveCueList) return;
-			const scaled = scaleCueListTimings(
-				option.body,
-				clip.start_cue_id,
-				clip.end_cue_id,
+		onScaleCueTimings: (selection, ratio) =>
+			scaleClipCueTimings({
+				definition,
+				cueLists,
+				selection,
 				ratio,
-			);
-			if (scaled === option.body) return;
-			void onSaveCueList(option.id, scaled).catch((reason: unknown) =>
-				onCueTimingError?.(
-					`Could not scale the Cue timings: ${String(reason)}`,
-				),
-			);
-		},
+				onSaveCueList,
+				onCueTimingError,
+			}),
 	});
 	const laneReorder = useLaneReorder({
 		definition,
@@ -1142,31 +1118,15 @@ export const TimecodeTimelineEditor = forwardRef<
 	}, [availableSpeedGroups, speedGroup]);
 	// A selected Cuelist clip takes the encoder deck over, so the four Cue timings and the Cue
 	// itself sit on the encoders instead of the keyframe slots.
-	const cueContext = useMemo(() => {
-		const clipCues = cueRangeOfSelectedClip(activeLane, selection, cueLists);
-		if (!clipCues.length || activeLane?.content.kind !== "cue_list")
-			return undefined;
-		const content = activeLane.content;
-		const option = cueLists.find((item) => item.id === content.cue_list_id);
-		if (!option?.body || !option.objectId || !onSaveCueList || !timingDefaults)
-			return undefined;
-		return {
-			cues: clipCues,
-			selectedCueId,
-			cueListId: option.objectId,
-			cueList: option.body,
-			timingDefaults,
-			setSelectedCueId,
-			saveCueList: onSaveCueList,
-		};
-	}, [
+	const cueContext = useCueEncoderContext({
 		activeLane,
-		cueLists,
-		onSaveCueList,
-		selectedCueId,
 		selection,
+		cueLists,
+		selectedCueId,
+		setSelectedCueId,
 		timingDefaults,
-	]);
+		onSaveCueList,
+	});
 	useTimecodeEncoderSlots({
 		definition,
 		cueContext,
@@ -1201,32 +1161,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		cueId: string,
 		offsetFrame: number,
 	) =>
-		onCommit({
-			...definition,
-			lanes: definition.lanes.map((lane) =>
-				lane.id !== laneId || lane.content.kind !== "cue_list"
-					? lane
-					: {
-							...lane,
-							content: {
-								...lane.content,
-								clips: lane.content.clips.map((clip) =>
-									clip.id !== clipId
-										? clip
-										: {
-												...clip,
-												cue_starts: [
-													...(clip.cue_starts ?? []).filter(
-														(placed) => placed.cue_id !== cueId,
-													),
-													{ cue_id: cueId, offset_frame: offsetFrame },
-												],
-											},
-								),
-							},
-						},
-			),
-		});
+		onCommit(withPlacedCueStart(definition, laneId, clipId, cueId, offsetFrame));
 
 	return (
 		<section
@@ -1331,361 +1266,6 @@ export const TimecodeTimelineEditor = forwardRef<
 });
 
 /// Replaces the easing curve of one audio-volume keyframe.
-function laneWithVolumeCurve(
-	definition: TimecodeDefinition,
-	laneId: string,
-	keyframeId: string,
-	curve: string,
-): TimecodeDefinition {
-	return {
-		...definition,
-		lanes: definition.lanes.map((candidate) =>
-			candidate.id !== laneId || candidate.content.kind !== "audio_volume"
-				? candidate
-				: {
-						...candidate,
-						content: {
-							...candidate.content,
-							keyframes: candidate.content.keyframes.map((keyframe) =>
-								keyframe.id === keyframeId
-									? { ...keyframe, curve: curve as typeof keyframe.curve }
-									: keyframe,
-							),
-						},
-					},
-		),
-	};
-}
-
-/// The Cues a selected Cuelist clip covers, from its start Cue to its end Cue.
-export function cueRangeOfSelectedClip(
-	lane: TimecodeDefinition["lanes"][number] | undefined,
-	selection: TimecodeEditorSelection | null,
-	cueLists: readonly TimecodeCueListOption[],
-): readonly { id?: string; number: string; name: string }[] {
-	if (lane?.content.kind !== "cue_list" || selection?.kind !== "clip") return [];
-	const content = lane.content;
-	const clip = content.clips.find((item) => item.id === selection.itemId);
-	const option = cueLists.find((item) => item.id === content.cue_list_id);
-	if (!clip || !option) return [];
-	const start = option.cues.findIndex((cue) => cue.id === clip.start_cue_id);
-	const end = option.cues.findIndex((cue) => cue.id === clip.end_cue_id);
-	if (start < 0 || end < start) return [];
-	return option.cues.slice(start, end + 1);
-}
-
-function KeyframeActionStrip({
-	definition,
-	selection,
-	laneId,
-	frame,
-	fps,
-	items,
-	cueLists,
-	selectedCueId,
-	onSelectCue,
-	onSelection,
-	onInsert,
-	onCommit,
-	onAddClip,
-}: {
-	definition: TimecodeDefinition;
-	selection: TimecodeEditorSelection | null;
-	laneId: string | null;
-	frame: number;
-	fps: number;
-	items: readonly TimelineItem[];
-	cueLists: readonly TimecodeCueListOption[];
-	selectedCueId: string | null;
-	onSelectCue(cueId: string | null): void;
-	onSelection(item: TimelineItem): void;
-	onInsert(): void;
-	onCommit(definition: TimecodeDefinition): void;
-	onAddClip(): void;
-}) {
-	if (selection?.kind === "marker")
-		return (
-			<MarkerActionStrip
-				{...{
-					definition,
-					selection,
-					frame,
-					fps,
-					items,
-					onSelection,
-					onCommit,
-				}}
-			/>
-		);
-	const lane = definition.lanes.find((candidate) => candidate.id === laneId);
-	const laneItems = items.filter((item) => item.laneId === laneId);
-	const selectedIndex = laneItems.findIndex((item) =>
-		sameSelection(item.selection, selection),
-	);
-	const selectedVolume =
-		selection?.kind === "volume" && lane?.content.kind === "audio_volume"
-			? lane.content.keyframes.find(
-					(keyframe) => keyframe.id === selection.itemId,
-				)
-			: undefined;
-	const selectedSpeed =
-		selection?.kind === "speed" && lane?.content.kind === "speed_group"
-			? lane.content.keyframes.find(
-					(keyframe) => keyframe.id === selection.itemId,
-				)
-			: undefined;
-	const move = (delta: number) => {
-		if (!laneItems.length) return;
-		const index =
-			selectedIndex < 0
-				? delta < 0
-					? laneItems.length - 1
-					: 0
-				: Math.max(0, Math.min(laneItems.length - 1, selectedIndex + delta));
-		const item = laneItems[index];
-		if (item) onSelection(item);
-	};
-	const updateEasing = (curve: string) => {
-		if (!selectedVolume || selection?.kind !== "volume" || !lane) return;
-		onCommit(laneWithVolumeCurve(definition, lane.id, selectedVolume.id, curve));
-	};
-	const updateValue = (value: number) => {
-		if (!lane || !selection) return;
-		onCommit(laneWithKeyframeValue(definition, lane.id, selection, value));
-	};
-	const canInsert =
-		lane?.content.kind === "audio_volume" ||
-		lane?.content.kind === "speed_group";
-	const selectedCueListId =
-		lane?.content.kind === "cue_list" ? lane.content.cue_list_id : null;
-	const canAddClip =
-		lane?.content.kind === "audio_player" ||
-		(selectedCueListId !== null &&
-			Boolean(
-				cueLists.find((candidate) => candidate.id === selectedCueListId)?.cues
-					.length,
-			));
-	const canDelete = selection?.kind === "volume" || selection?.kind === "speed";
-	// The Cues a selected Cuelist clip spans, in running order.
-	const clipCues = cueRangeOfSelectedClip(lane, selection, cueLists);
-	const stepCue = (delta: number) => {
-		if (!clipCues.length) return;
-		const current = clipCues.findIndex((cue) => cue.id === selectedCueId);
-		const index =
-			current < 0
-				? delta < 0
-					? clipCues.length - 1
-					: 0
-				: wrappedIndex(current + delta, clipCues.length);
-		onSelectCue(clipCues[index]?.id ?? null);
-	};
-	return (
-		<div
-			className="timecode-keyframe-actions"
-			role="group"
-			aria-label="Selected lane and keyframe actions"
-		>
-			<div className="timecode-keyframe-actions-title">
-				<strong>{lane?.name ?? "Select a lane"}</strong>
-			</div>
-			<Button
-				className="timecode-keyframe-action"
-				aria-label="Prev Keyframe"
-				size="compact"
-				disabled={!laneItems.length}
-				onClick={() => move(-1)}
-			>
-				<span>
-					Prev
-					<br />
-					Keyframe
-				</span>
-			</Button>
-			{canInsert && (
-				<Button
-					className="timecode-keyframe-action"
-					aria-label="Insert Keyframe"
-					size="compact"
-					onClick={onInsert}
-					title={`Insert keyframe at ${formatFrame(frame, fps)}`}
-				>
-					<span>
-						Insert
-						<br />
-						Keyframe
-					</span>
-				</Button>
-			)}
-			<Button
-				className="timecode-keyframe-action"
-				aria-label="Delete Keyframe"
-				size="compact"
-				disabled={!canDelete}
-				onClick={() => {
-					if (selection) onCommit(deleteTimelineItem(definition, selection));
-				}}
-			>
-				<span>
-					Delete
-					<br />
-					Keyframe
-				</span>
-			</Button>
-			{/* A Cuelist clip holds Cue sub-clips, so the strip steps through Cues the same way
-			    it steps through clips. */}
-			{lane?.content.kind === "cue_list" && (
-				<>
-					<Button
-						className="timecode-keyframe-action"
-						aria-label="Prev Cue"
-						size="compact"
-						disabled={!clipCues.length}
-						onClick={() => stepCue(-1)}
-					>
-						<span>
-							Prev
-							<br />
-							Cue
-						</span>
-					</Button>
-					<Button
-						className="timecode-keyframe-action"
-						aria-label="Next Cue"
-						size="compact"
-						disabled={!clipCues.length}
-						onClick={() => stepCue(1)}
-					>
-						<span>
-							Next
-							<br />
-							Cue
-						</span>
-					</Button>
-				</>
-			)}
-			{lane?.content.kind === "cue_list" ||
-			lane?.content.kind === "audio_player" ? (
-				<Button size="compact" disabled={!canAddClip} onClick={onAddClip}>
-					Add clip at {formatFrame(frame, fps)}
-				</Button>
-			) : null}
-			{selectedSpeed && (
-				<KeyframeValueNumber
-					label="BPM"
-					value={selectedSpeed.bpm}
-					minimum={SPEED_GROUP_MIN_BPM}
-					maximum={SPEED_GROUP_MAX_BPM}
-					step={0.1}
-					unit=" BPM"
-					onChange={updateValue}
-				/>
-			)}
-			{selectedVolume && (
-				<KeyframeValueSlider
-					label="Volume"
-					value={Math.round(selectedVolume.value * 100)}
-					minimum={0}
-					maximum={100}
-					unit="%"
-					onChange={updateValue}
-				/>
-			)}
-			{selectedVolume && (
-				<SelectField
-					label="Easing"
-					value={selectedVolume.curve}
-					onChange={updateEasing}
-					options={TIMECODE_EASINGS}
-				/>
-			)}
-			<Button
-				className="timecode-keyframe-action timecode-next-keyframe"
-				aria-label="Next Keyframe"
-				size="compact"
-				disabled={!laneItems.length}
-				onClick={() => move(1)}
-			>
-				<span>
-					Next
-					<br />
-					Keyframe
-				</span>
-			</Button>
-		</div>
-	);
-}
-
-function KeyframeValueNumber({
-	label,
-	value,
-	minimum,
-	maximum,
-	step = 1,
-	unit,
-	onChange,
-}: {
-	label: string;
-	value: number;
-	minimum: number;
-	maximum: number;
-	step?: number;
-	unit: string;
-	onChange(value: number): void;
-}) {
-	return (
-		<NumberField
-			className="timecode-keyframe-value-number"
-			label={label}
-			aria-label={`${label} value`}
-			keyboardLabel={label}
-			value={value}
-			min={minimum}
-			max={maximum}
-			step={step}
-			allowDecimal={step < 1}
-			unit={unit}
-			onChange={(event) => {
-				const next = Number(event.currentTarget.value);
-				if (Number.isFinite(next)) onChange(next);
-			}}
-		/>
-	);
-}
-
-function KeyframeValueSlider({
-	label,
-	value,
-	minimum,
-	maximum,
-	step = 1,
-	unit,
-	onChange,
-}: {
-	label: string;
-	value: number;
-	minimum: number;
-	maximum: number;
-	step?: number;
-	unit: string;
-	onChange(value: number): void;
-}) {
-	return (
-		<label className="timecode-keyframe-value-control">
-			<span>{label}</span>
-			<Input
-				type="range"
-				aria-label={`${label} value`}
-				min={minimum}
-				max={maximum}
-				step={step}
-				value={value}
-				onChange={(event) => onChange(Number(event.currentTarget.value))}
-			/>
-			<output>{`${Number.isInteger(value) ? value : value.toFixed(1)}${unit}`}</output>
-		</label>
-	);
-}
-
 
 interface SelectionInspectorProps {
 	definition: TimecodeDefinition;

@@ -1,3 +1,4 @@
+use super::media_audio_player::audio_player_projection;
 use super::*;
 use light_wire::v2::output_control::{
     DiscoveredMediaAddressUpdateRequest, DiscoveredMediaOutput, DiscoveredMediaServer,
@@ -282,44 +283,7 @@ pub(super) async fn media_servers(
                 fixture.definition.manufacturer, fixture.definition.model
             );
             if is_audio_player_fixture(fixture) {
-                let player = state.internal_audio.player(fixture);
-                return serde_json::json!({
-                    "fixture_id": fixture.fixture_id,
-                    "fixture_number": fixture.fixture_number,
-                    "name": name,
-                    "kind": "audio_player",
-                    "endpoint": serde_json::Value::Null,
-                    "native_action": serde_json::Value::Null,
-                    "layers": media_layers(fixture),
-                    "master_attributes": master_head_attributes(fixture),
-                    "status": {
-                        "online": player.diagnostic.is_none(),
-                        "last_success": serde_json::Value::Null,
-                        "last_error": player.diagnostic,
-                    },
-                    "audio": {
-                        "folder": player.folder,
-                        "file": player.file,
-                        "volume_percent": player.volume_percent,
-                        "transport": player.transport,
-                        "repeat": player.repeat,
-                        "source": player.source,
-                        // A CITP server advertises its library; an Internal Audio Player has no
-                        // such conversation, so the pane browses the indexed library instead.
-                        "library": state
-                            .internal_audio
-                            .library_entries(fixture)
-                            .into_iter()
-                            .map(|entry| {
-                                serde_json::json!({
-                                    "folder": entry.folder,
-                                    "file": entry.file,
-                                    "name": entry.relative_path,
-                                })
-                            })
-                            .collect::<Vec<_>>(),
-                    },
-                });
+                return audio_player_projection(&state, fixture, &name);
             }
             let endpoint = fixture
                 .direct_control

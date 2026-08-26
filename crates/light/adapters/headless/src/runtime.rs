@@ -144,6 +144,7 @@ mod lifecycle;
 mod live_action_http;
 pub(crate) mod macros_v2;
 mod media_api;
+mod media_audio_player;
 mod media_fixture_heads;
 mod mvr_apply;
 mod mvr_apply_store;
@@ -224,6 +225,7 @@ mod timecode_audio_output;
 mod timecode_audio_output;
 mod timecode_v2;
 mod timecode_v2_clips;
+mod timecode_waveform;
 mod update_api;
 
 pub(crate) use capabilities::active_show::repository::ActiveShowRepository;
