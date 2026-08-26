@@ -21,7 +21,10 @@ export type MediaPreviewState = {
 			kind: "offline";
 			imageSrc?: string;
 			capturedAt?: string;
+			/** Short operator-facing reason. Never the raw CITP protocol text. */
 			detail: string;
+			/** The underlying protocol error, for diagnostics rather than the pane headline. */
+			diagnostic?: string;
 	  }
 	| {
 			kind: "failed_source";

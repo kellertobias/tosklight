@@ -158,7 +158,7 @@ export function PreviewStateMessage({ preview }: { preview: MediaPreviewState })
 			);
 		case "offline":
 			return (
-				<span className="danger">
+				<span className="danger" title={preview.diagnostic ?? undefined}>
 					Offline
 					{preview.imageSrc ? " · showing last preview" : " · black output"} ·{" "}
 					{preview.detail}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	type BuildMediaPaneModelInput,
 	buildMediaPaneModel,
+	mediaOfflineReason,
 } from "./buildMediaPaneModel";
 import { EMPTY_MEDIA_INSPECTION } from "./useMediaPaneData";
 
@@ -141,6 +142,60 @@ describe("Media pane disconnected configuration", () => {
 			kind: "offline",
 			detail: expect.stringContaining("No CITP Media Server is available"),
 		});
+	});
+
+	it("keeps the raw CITP protocol text out of the Offline message", () => {
+		const server = {
+			fixture_id: "server-1",
+			fixture_number: 1001,
+			name: "Media master",
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "10.0.0.9",
+				port: 4011,
+			},
+			layers: [{ fixture_id: "layer-1", head_index: 0 }],
+			status: {
+				online: false,
+				last_success: null,
+				last_error: "CITP I/O error: Connection refused (os error 61)",
+			},
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+			}),
+		);
+
+		expect(model.preview).toMatchObject({
+			kind: "offline",
+			detail: "Connection refused",
+			diagnostic: "CITP I/O error: Connection refused (os error 61)",
+		});
+		const offline = model.preview as Extract<
+			typeof model.preview,
+			{ kind: "offline" }
+		>;
+		expect(offline.detail).not.toContain("CITP");
+		expect(offline.detail).not.toContain("os error");
+	});
+
+	it.each([
+		["CITP operation timed out", "Not responding"],
+		["CITP I/O error: Connection refused (os error 61)", "Connection refused"],
+		["CITP I/O error: No route to host", "Connection refused"],
+		["invalid CITP packet: truncated header", "Unexpected reply"],
+		["media server rejected GetElementLibraryInformation", "Request rejected"],
+		["something nobody anticipated", "Not responding"],
+	])("condenses %s", (diagnostic, expected) => {
+		expect(mediaOfflineReason(diagnostic)).toBe(expected);
+	});
+
+	it("reports a missing diagnostic as not responding", () => {
+		expect(mediaOfflineReason(null)).toBe("Not responding");
 	});
 
 	it("reconciles advertised names without removing unadvertised slots", () => {

@@ -139,6 +139,23 @@ function serverChoices(input: BuildMediaPaneModelInput) {
 	];
 }
 
+/**
+ * Condenses a media-server failure into something an operator can act on.
+ *
+ * The raw CITP text ("CITP I/O error: Connection refused (os error 61)") says nothing useful on a
+ * dark stage, so the pane headline states the situation and the protocol text stays available as
+ * the element's title and in Show Patch > Media Servers.
+ */
+export function mediaOfflineReason(diagnostic: string | null): string {
+	if (!diagnostic) return "Not responding";
+	if (/timed out/iu.test(diagnostic)) return "Not responding";
+	if (/refused|unreachable|no route|reset|broken pipe|closed/iu.test(diagnostic))
+		return "Connection refused";
+	if (/invalid CITP packet/iu.test(diagnostic)) return "Unexpected reply";
+	if (/rejected/iu.test(diagnostic)) return "Request rejected";
+	return "Not responding";
+}
+
 function previewState(input: BuildMediaPaneModelInput): MediaPreviewState {
 	if (!input.selectedServer)
 		return {
@@ -158,14 +175,15 @@ function previewState(input: BuildMediaPaneModelInput): MediaPreviewState {
 			detail:
 				"No CITP Media Server is available. Configure one in Show Patch > Media Servers.",
 		};
-	if (input.inspectionError || !input.selectedServer.status.online)
+	if (input.inspectionError || !input.selectedServer.status.online) {
+		const diagnostic =
+			input.inspectionError ?? input.selectedServer.status.last_error ?? null;
 		return {
 			kind: "offline",
-			detail:
-				input.inspectionError ??
-				input.selectedServer.status.last_error ??
-				"Server offline",
+			detail: mediaOfflineReason(diagnostic),
+			...(diagnostic ? { diagnostic } : {}),
 		};
+	}
 	const source = input.inspection.preview_sources.find(
 		(candidate) => candidate.layer == null,
 	);
