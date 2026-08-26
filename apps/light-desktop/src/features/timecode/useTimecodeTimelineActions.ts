@@ -4,12 +4,16 @@ import {
 	useRef,
 } from "react";
 import type { CueList } from "../../api/types";
-import type { TimecodeDefinition } from "../../api/types/timecode";
+import type {
+	TimecodeCueListClip,
+	TimecodeDefinition,
+} from "../../api/types/timecode";
 import {
 	automatedCueClipLength,
 	type CueClipTimingDefaults,
 } from "./cueClipTiming";
 import {
+	cueListClipScale,
 	moveTimelineItem,
 	resizeTimelineClip,
 	snapTimelineFrame,
@@ -97,6 +101,8 @@ interface DragState {
 	startFrame: number;
 	clipEdge?: "start" | "end";
 	startVolume?: number;
+	/// The clip as it stood when the edge drag began, so the scale factor is measured against it.
+	originalClip?: TimecodeCueListClip;
 }
 
 export function useTimelineDrag({
@@ -106,6 +112,7 @@ export function useTimelineDrag({
 	onBeginGesture,
 	onEndGesture,
 	setSelection,
+	onScaleCueTimings,
 }: {
 	definition: TimecodeDefinition;
 	pixelsPerFrame: number;
@@ -113,6 +120,12 @@ export function useTimelineDrag({
 	onBeginGesture(): void;
 	onEndGesture(): void;
 	setSelection(value: TimecodeEditorSelection): void;
+	/// Called once when an edge drag ends, with the factor the clip was scaled by, so the Cue
+	/// timings the clip drives can be scaled with it.
+	onScaleCueTimings?(
+		selection: TimecodeEditorSelection & { kind: "clip" },
+		ratio: number,
+	): void;
 }) {
 	const drag = useRef<DragState | null>(null);
 	const latest = useRef(definition);
@@ -163,10 +176,27 @@ export function useTimelineDrag({
 			else onPreview(next);
 		};
 		const up = () => {
-			if (drag.current) {
-				drag.current = null;
-				onEndGesture();
+			const active = drag.current;
+			if (!active) return;
+			drag.current = null;
+			// Cue timings are owned by the Cuelist, not the timeline, so they are scaled once at
+			// the end of the gesture rather than rewritten on every pointer move.
+			if (active.clipEdge && active.selection.kind === "clip") {
+				const clip = cueListClipOf(latest.current, active.selection);
+				if (clip && active.originalClip) {
+					const ratio = cueListClipScale(
+						active.originalClip,
+						clip.start_frame,
+						clip.end_frame,
+					);
+					if (ratio !== 1)
+						onScaleCueTimings?.(
+							active.selection as TimecodeEditorSelection & { kind: "clip" },
+							ratio,
+						);
+				}
 			}
+			onEndGesture();
 		};
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", up);
@@ -194,9 +224,21 @@ export function useTimelineDrag({
 			startFrame,
 			clipEdge,
 			startVolume,
+			originalClip: clipEdge ? cueListClipOf(definition, selection) : undefined,
 		};
 		event.currentTarget.setPointerCapture?.(event.pointerId);
 	};
+}
+
+/// The Cuelist clip a selection points at, when the selection is one.
+function cueListClipOf(
+	definition: TimecodeDefinition,
+	selection: TimecodeEditorSelection,
+): TimecodeCueListClip | undefined {
+	if (selection.kind !== "clip") return undefined;
+	const lane = definition.lanes.find((item) => item.id === selection.laneId);
+	if (lane?.content.kind !== "cue_list") return undefined;
+	return lane.content.clips.find((clip) => clip.id === selection.itemId);
 }
 
 function setVolumeValue(

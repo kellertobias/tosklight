@@ -44,6 +44,7 @@ import {
 	moveTimelineItem,
 	reorderTimelineLane,
 	sameSelection,
+	scaleCueListTimings,
 	type TimecodeEditorSelection,
 	timelineItems,
 } from "./editorModel";
@@ -638,6 +639,7 @@ function TimelineItemButton({
 		? Math.max(44, (item.endFrame - item.frame) * pixelsPerFrame)
 		: undefined;
 	const markerColor = marker ? markerColorOption(item.color) : null;
+	const isCueListClip = item.kind === "clip" && item.endFrame !== undefined;
 	return (
 		<Button
 			className={`${marker ? "timecode-timeline-marker" : `timecode-timeline-item item-${item.kind}`} ${sameSelection(selection, item.selection) ? "selected" : ""}`}
@@ -663,12 +665,30 @@ function TimelineItemButton({
 					onSelect(item.selection);
 					return;
 				}
+				// A Cuelist clip is dragged by its handle alone, because the body of the clip
+				// belongs to the Cue sub-clips the operator edits inside it.
+				if (isCueListClip) {
+					onSelect(item.selection);
+					return;
+				}
 				startDrag(event, item.selection, item.frame, undefined, startVolume);
 			}}
 			aria-disabled={marker && markersLocked ? true : undefined}
 			title={`${item.label} · ${formatFrame(item.frame, fps)}`}
 		>
 			{clipStatus && <CueListClipStatus status={clipStatus} />}
+			{isCueListClip && (
+				<span
+					className="timecode-clip-handle"
+					onPointerDown={(event) => {
+						event.stopPropagation();
+						startDrag(event, item.selection, item.frame, undefined, startVolume);
+					}}
+				>
+					<b>{item.label}</b>
+					{cueList?.number !== undefined && <small>{cueList.number}</small>}
+				</span>
+			)}
 			{item.kind === "clip" && cueList?.body && cueClip && timingDefaults && (
 				<CueListClipContents
 					cueList={{ ...cueList, body: cueList.body }}
@@ -685,6 +705,7 @@ function TimelineItemButton({
 					<span
 						className="timecode-clip-edge start"
 						aria-hidden="true"
+						title="Scale the clip and every Cue timing in it"
 						onPointerDown={(event) => {
 							event.stopPropagation();
 							startDrag(event, item.selection, item.frame, "start");
@@ -693,6 +714,7 @@ function TimelineItemButton({
 					<span
 						className="timecode-clip-edge end"
 						aria-hidden="true"
+						title="Scale the clip and every Cue timing in it"
 						onPointerDown={(event) => {
 							event.stopPropagation();
 							startDrag(
@@ -710,10 +732,10 @@ function TimelineItemButton({
 					<span className="timecode-timeline-marker-line" aria-hidden="true" />
 					<span className="timecode-timeline-marker-label">{item.label}</span>
 				</>
-			) : (
+			) : isCueListClip ? null : (
 				(item.valueLabel ?? item.label)
 			)}
-			{!marker && <small>{formatFrame(item.frame, fps)}</small>}
+			{!marker && !isCueListClip && <small>{formatFrame(item.frame, fps)}</small>}
 		</Button>
 	);
 }
@@ -918,6 +940,16 @@ export const TimecodeTimelineEditor = forwardRef<
 ) {
 	type Selection = TimecodeEditorSelection | null;
 	const [selection, setSelection] = useState<Selection>(null);
+	// A Cue inside the selected Cuelist clip. The encoders and the Prev/Next Cue buttons act on
+	// it, and it clears whenever the selected clip changes.
+	const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
+	const selectedClipKey =
+		selection?.kind === "clip" ? `${selection.laneId}:${selection.itemId}` : null;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the Cue belongs to one clip, so it
+	// is cleared by the clip identity rather than by the selection object.
+	useEffect(() => {
+		setSelectedCueId(null);
+	}, [selectedClipKey]);
 	const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
 	const [speedGroup, setSpeedGroup] = useState("A");
 	const [speedGroupChooserOpen, setSpeedGroupChooserOpen] = useState(false);
@@ -994,6 +1026,26 @@ export const TimecodeTimelineEditor = forwardRef<
 		onBeginGesture,
 		onEndGesture,
 		setSelection,
+		onScaleCueTimings: (selection, ratio) => {
+			const lane = definition.lanes.find((item) => item.id === selection.laneId);
+			if (lane?.content.kind !== "cue_list") return;
+			const content = lane.content;
+			const clip = content.clips.find((item) => item.id === selection.itemId);
+			const option = cueLists.find((item) => item.id === content.cue_list_id);
+			if (!clip || !option?.body || !onSaveCueList) return;
+			const scaled = scaleCueListTimings(
+				option.body,
+				clip.start_cue_id,
+				clip.end_cue_id,
+				ratio,
+			);
+			if (scaled === option.body) return;
+			void onSaveCueList(option.id, scaled).catch((reason: unknown) =>
+				onCueTimingError?.(
+					`Could not scale the Cue timings: ${String(reason)}`,
+				),
+			);
+		},
 	});
 	const laneReorder = useLaneReorder({
 		definition,
@@ -1088,8 +1140,36 @@ export const TimecodeTimelineEditor = forwardRef<
 		if (!availableSpeedGroups.includes(speedGroup as never))
 			setSpeedGroup(availableSpeedGroups[0] ?? "");
 	}, [availableSpeedGroups, speedGroup]);
+	// A selected Cuelist clip takes the encoder deck over, so the four Cue timings and the Cue
+	// itself sit on the encoders instead of the keyframe slots.
+	const cueContext = useMemo(() => {
+		const clipCues = cueRangeOfSelectedClip(activeLane, selection, cueLists);
+		if (!clipCues.length || activeLane?.content.kind !== "cue_list")
+			return undefined;
+		const content = activeLane.content;
+		const option = cueLists.find((item) => item.id === content.cue_list_id);
+		if (!option?.body || !option.objectId || !onSaveCueList || !timingDefaults)
+			return undefined;
+		return {
+			cues: clipCues,
+			selectedCueId,
+			cueListId: option.objectId,
+			cueList: option.body,
+			timingDefaults,
+			setSelectedCueId,
+			saveCueList: onSaveCueList,
+		};
+	}, [
+		activeLane,
+		cueLists,
+		onSaveCueList,
+		selectedCueId,
+		selection,
+		timingDefaults,
+	]);
 	useTimecodeEncoderSlots({
 		definition,
+		cueContext,
 		items,
 		keyframeItems,
 		selection,
@@ -1211,6 +1291,8 @@ export const TimecodeTimelineEditor = forwardRef<
 				fps={fps}
 				items={items}
 				cueLists={cueLists}
+				selectedCueId={selectedCueId}
+				onSelectCue={setSelectedCueId}
 				onSelection={(item) => setSelection(item.selection)}
 				onInsert={() => {
 					if (activeLaneId) addKeyframe(activeLaneId, frame);
@@ -1275,6 +1357,23 @@ function laneWithVolumeCurve(
 	};
 }
 
+/// The Cues a selected Cuelist clip covers, from its start Cue to its end Cue.
+export function cueRangeOfSelectedClip(
+	lane: TimecodeDefinition["lanes"][number] | undefined,
+	selection: TimecodeEditorSelection | null,
+	cueLists: readonly TimecodeCueListOption[],
+): readonly { id?: string; number: string; name: string }[] {
+	if (lane?.content.kind !== "cue_list" || selection?.kind !== "clip") return [];
+	const content = lane.content;
+	const clip = content.clips.find((item) => item.id === selection.itemId);
+	const option = cueLists.find((item) => item.id === content.cue_list_id);
+	if (!clip || !option) return [];
+	const start = option.cues.findIndex((cue) => cue.id === clip.start_cue_id);
+	const end = option.cues.findIndex((cue) => cue.id === clip.end_cue_id);
+	if (start < 0 || end < start) return [];
+	return option.cues.slice(start, end + 1);
+}
+
 function KeyframeActionStrip({
 	definition,
 	selection,
@@ -1283,6 +1382,8 @@ function KeyframeActionStrip({
 	fps,
 	items,
 	cueLists,
+	selectedCueId,
+	onSelectCue,
 	onSelection,
 	onInsert,
 	onCommit,
@@ -1295,6 +1396,8 @@ function KeyframeActionStrip({
 	fps: number;
 	items: readonly TimelineItem[];
 	cueLists: readonly TimecodeCueListOption[];
+	selectedCueId: string | null;
+	onSelectCue(cueId: string | null): void;
 	onSelection(item: TimelineItem): void;
 	onInsert(): void;
 	onCommit(definition: TimecodeDefinition): void;
@@ -1363,6 +1466,19 @@ function KeyframeActionStrip({
 					.length,
 			));
 	const canDelete = selection?.kind === "volume" || selection?.kind === "speed";
+	// The Cues a selected Cuelist clip spans, in running order.
+	const clipCues = cueRangeOfSelectedClip(lane, selection, cueLists);
+	const stepCue = (delta: number) => {
+		if (!clipCues.length) return;
+		const current = clipCues.findIndex((cue) => cue.id === selectedCueId);
+		const index =
+			current < 0
+				? delta < 0
+					? clipCues.length - 1
+					: 0
+				: wrappedIndex(current + delta, clipCues.length);
+		onSelectCue(clipCues[index]?.id ?? null);
+	};
 	return (
 		<div
 			className="timecode-keyframe-actions"
@@ -1415,6 +1531,38 @@ function KeyframeActionStrip({
 					Keyframe
 				</span>
 			</Button>
+			{/* A Cuelist clip holds Cue sub-clips, so the strip steps through Cues the same way
+			    it steps through clips. */}
+			{lane?.content.kind === "cue_list" && (
+				<>
+					<Button
+						className="timecode-keyframe-action"
+						aria-label="Prev Cue"
+						size="compact"
+						disabled={!clipCues.length}
+						onClick={() => stepCue(-1)}
+					>
+						<span>
+							Prev
+							<br />
+							Cue
+						</span>
+					</Button>
+					<Button
+						className="timecode-keyframe-action"
+						aria-label="Next Cue"
+						size="compact"
+						disabled={!clipCues.length}
+						onClick={() => stepCue(1)}
+					>
+						<span>
+							Next
+							<br />
+							Cue
+						</span>
+					</Button>
+				</>
+			)}
 			{lane?.content.kind === "cue_list" ||
 			lane?.content.kind === "audio_player" ? (
 				<Button size="compact" disabled={!canAddClip} onClick={onAddClip}>

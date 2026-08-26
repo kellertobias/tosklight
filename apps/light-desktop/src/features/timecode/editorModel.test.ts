@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	copyTimelineItem,
+	cueListClipScale,
 	deleteTimelineItem,
 	moveTimelineItem,
 	parseMarkerCsv,
 	reconcileAutomaticAudioLane,
 	reorderTimelineLane,
+	resizeTimelineClip,
+	scaleCueListTimings,
 	snapTimelineFrame,
 	timelineItems,
 } from "./editorModel";
@@ -284,5 +287,153 @@ describe("Timecode editor model", () => {
 				}
 			).clips,
 		).toHaveLength(1);
+	});
+});
+
+describe("Scaling a Cuelist clip", () => {
+	const cueList = {
+		id: "list-1",
+		name: "Opening",
+		mode: "sequence" as const,
+		priority: 1,
+		looped: false,
+		cues: [
+			{
+				id: "cue-1",
+				number: "1",
+				name: "First",
+				delay_millis: 1_000,
+				fade_millis: 2_000,
+				out_delay_millis: 500,
+				out_fade_millis: 4_000,
+				values: [],
+			},
+			{
+				id: "cue-2",
+				number: "2",
+				name: "Second",
+				delay_millis: 3_000,
+				fade_millis: 1_000,
+				values: [],
+			},
+			{
+				id: "cue-3",
+				number: "3",
+				name: "Outside the clip",
+				delay_millis: 900,
+				fade_millis: 900,
+				values: [],
+			},
+		],
+	} as unknown as Parameters<typeof scaleCueListTimings>[0];
+
+	it("measures the factor an edge drag applies", () => {
+		expect(
+			cueListClipScale({ start_frame: 100, end_frame: 200 }, 100, 400),
+		).toBe(3);
+		expect(cueListClipScale({ start_frame: 0, end_frame: 100 }, 50, 100)).toBe(
+			0.5,
+		);
+	});
+
+	it("stretches every Cue timing the clip drives and leaves the rest alone", () => {
+		const scaled = scaleCueListTimings(cueList, "cue-1", "cue-2", 2);
+
+		expect(scaled.cues[0]).toMatchObject({
+			delay_millis: 2_000,
+			fade_millis: 4_000,
+			out_delay_millis: 1_000,
+			out_fade_millis: 8_000,
+		});
+		expect(scaled.cues[1]).toMatchObject({
+			delay_millis: 6_000,
+			fade_millis: 2_000,
+		});
+		// A Cue outside the clip's range keeps its own timing.
+		expect(scaled.cues[2]).toMatchObject({
+			delay_millis: 900,
+			fade_millis: 900,
+		});
+	});
+
+	it("leaves an inherited timing inherited rather than writing a scaled value", () => {
+		const scaled = scaleCueListTimings(cueList, "cue-1", "cue-2", 2);
+
+		expect(scaled.cues[1].out_delay_millis).toBeUndefined();
+		expect(scaled.cues[1].out_fade_millis).toBeUndefined();
+	});
+
+	it("is a no-op for a scale that changes nothing or cannot be applied", () => {
+		expect(scaleCueListTimings(cueList, "cue-1", "cue-2", 1)).toBe(cueList);
+		expect(scaleCueListTimings(cueList, "cue-1", "cue-2", 0)).toBe(cueList);
+		expect(scaleCueListTimings(cueList, "missing", "cue-2", 2)).toBe(cueList);
+	});
+});
+
+describe("Resizing a Cuelist clip", () => {
+	const clipDefinition = {
+		id: "00000000-0000-0000-0000-0000000000a1",
+		number: 2,
+		name: "Cued",
+		duration_frame: 880,
+		transport_offset_frame: 0,
+		auto_start: false,
+		markers: [],
+		lanes: [
+			{
+				id: "lane-cues",
+				name: "Opening",
+				content: {
+					kind: "cue_list" as const,
+					cue_list_id: "list-1",
+					clips: [
+						{
+							id: "clip-1",
+							start_frame: 100,
+							end_frame: 200,
+							start_cue_id: "cue-1",
+							end_cue_id: "cue-2",
+							start_behavior: "state" as const,
+							end_behavior: "release" as const,
+							cue_starts: [{ cue_id: "cue-2", offset_frame: 50 }],
+						},
+					],
+				},
+			},
+		],
+	} as unknown as TimecodeDefinition;
+
+	it("keeps a placed transition where it sits inside the clip", () => {
+		const resized = resizeTimelineClip(
+			clipDefinition,
+			{ kind: "clip", laneId: "lane-cues", itemId: "clip-1" },
+			"end",
+			400,
+		);
+		const lane = resized.lanes[0].content;
+		if (lane.kind !== "cue_list") throw new Error("expected the Cuelist lane");
+
+		expect(lane.clips[0]).toMatchObject({ start_frame: 100, end_frame: 400 });
+		// Half way through a 100-frame clip stays half way through a 300-frame clip.
+		expect(lane.clips[0].cue_starts).toEqual([
+			{ cue_id: "cue-2", offset_frame: 150 },
+		]);
+	});
+
+	it("never leaves a transition outside the clip it belongs to", () => {
+		const resized = resizeTimelineClip(
+			clipDefinition,
+			{ kind: "clip", laneId: "lane-cues", itemId: "clip-1" },
+			"end",
+			120,
+		);
+		const lane = resized.lanes[0].content;
+		if (lane.kind !== "cue_list") throw new Error("expected the Cuelist lane");
+		const length = lane.clips[0].end_frame - lane.clips[0].start_frame;
+
+		for (const start of lane.clips[0].cue_starts) {
+			expect(start.offset_frame).toBeGreaterThanOrEqual(0);
+			expect(start.offset_frame).toBeLessThanOrEqual(length);
+		}
 	});
 });

@@ -48,7 +48,10 @@ import {
 	type SaveCueListTopology,
 	useCueListTopologyWriter,
 } from "../features/playbackTopology/useCueListTopologyWriter";
-import { useCueLists } from "../features/showObjects/ShowObjectsState";
+import {
+	useCueLists,
+	usePlaybackDefinitions,
+} from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import {
 	parseMarkerCsv,
@@ -100,17 +103,33 @@ export function TimecodeRuntimeWindow({
 		[patchedFixtures],
 	);
 	useShowObjectView("cue_list", active);
+	const playbacks = usePlaybackDefinitions(active);
+	// A Cuelist is addressed by its playback number on the desk, so a clip carries that number
+	// beside its name. The number lives on the playback that targets the Cuelist, not on the
+	// Cuelist itself.
+	const cueListNumbers = useMemo(() => {
+		const numbers = new Map<string, number>();
+		for (const playback of playbacks) {
+			const target = playback.body.target;
+			if (target.type !== "cue_list") continue;
+			const existing = numbers.get(target.cue_list_id);
+			if (existing === undefined || playback.body.number < existing)
+				numbers.set(target.cue_list_id, playback.body.number);
+		}
+		return numbers;
+	}, [playbacks]);
 	const timelineCueLists = useMemo(
 		() =>
 			cueLists.map((cueList) => ({
 				id: cueList.body.id,
 				name: cueList.body.name,
+				number: cueListNumbers.get(cueList.body.id),
 				cues: cueList.body.cues,
 				objectId: cueList.id,
 				revision: cueList.revision,
 				body: cueList.body,
 			})),
-		[cueLists],
+		[cueLists, cueListNumbers],
 	);
 	const fallback = useMemo(
 		() =>

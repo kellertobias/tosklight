@@ -399,7 +399,8 @@ describe("TimecodeEditor title and settings", () => {
 		);
 		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
 		const handle = screen.getByRole("slider", {
-			name: "Cue 1 In fade end",
+			// Each handle is named for what it sets: the boundary sets the delay, the far edge the fade.
+			name: "Cue 1 In fade",
 		});
 		fireEvent.pointerDown(handle, { pointerId: 30, clientX: 100 });
 		fireEvent.pointerMove(window, {
@@ -419,7 +420,8 @@ describe("TimecodeEditor title and settings", () => {
 			),
 		);
 		expect(
-			screen.getByRole("slider", { name: "Cue 1 In fade end" }),
+			screen.getByRole("slider", { // Each handle is named for what it sets: the boundary sets the delay, the far edge the fade.
+			name: "Cue 1 In fade" }),
 		).toHaveAttribute("aria-valuenow", "132");
 	});
 });

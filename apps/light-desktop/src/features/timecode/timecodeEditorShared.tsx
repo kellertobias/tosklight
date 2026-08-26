@@ -44,6 +44,9 @@ export function timelineFrameX(frame: number, pixelsPerFrame: number): number {
 export interface TimecodeCueListOption {
 	id: string;
 	name: string;
+	/// The playback number the Cuelist is assigned to, when it has one. A Cuelist that is not in
+	/// the playback pool is identified by name alone.
+	number?: number;
 	cues: readonly { id?: string; number: string; name: string }[];
 	objectId?: string;
 	revision?: number;

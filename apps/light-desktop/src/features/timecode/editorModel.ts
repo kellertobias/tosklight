@@ -1,4 +1,6 @@
+import type { CueList } from "../../api/types";
 import type {
+	TimecodeCueListClip,
 	TimecodeDefinition,
 	TimecodeMarker,
 } from "../../api/types/timecode";
@@ -326,15 +328,7 @@ export function resizeTimelineClip(
 							.map((clip) =>
 								clip.id !== selection.itemId
 									? clip
-									: edge === "start"
-										? {
-												...clip,
-												start_frame: bounds.start,
-											}
-										: {
-												...clip,
-												end_frame: bounds.end,
-											},
+									: scaledCueListClip(clip, bounds),
 							)
 							.sort(byStartFrame),
 					},
@@ -376,6 +370,75 @@ export function resizeTimelineClip(
 				};
 			}
 			return lane;
+		}),
+	};
+}
+
+/// Scales a Cuelist clip and everything it positions inside itself.
+///
+/// Dragging an edge of the clip handle stretches or compresses the whole thing, so a placed
+/// transition keeps its position relative to the clip rather than staying at a fixed frame and
+/// drifting out of the clip it belongs to.
+function scaledCueListClip(
+	clip: TimecodeCueListClip,
+	bounds: { start: number; end: number },
+): TimecodeCueListClip {
+	const previousLength = Math.max(1, clip.end_frame - clip.start_frame);
+	const nextLength = Math.max(1, bounds.end - bounds.start);
+	const ratio = nextLength / previousLength;
+	return {
+		...clip,
+		start_frame: bounds.start,
+		end_frame: bounds.end,
+		cue_starts: clip.cue_starts.map((start) => ({
+			...start,
+			offset_frame: Math.max(
+				0,
+				Math.min(nextLength, Math.round(start.offset_frame * ratio)),
+			),
+		})),
+	};
+}
+
+/// The factor an edge drag applies to every timing inside a Cuelist clip.
+export function cueListClipScale(
+	clip: { start_frame: number; end_frame: number },
+	nextStartFrame: number,
+	nextEndFrame: number,
+): number {
+	const previousLength = Math.max(1, clip.end_frame - clip.start_frame);
+	const nextLength = Math.max(1, nextEndFrame - nextStartFrame);
+	return nextLength / previousLength;
+}
+
+/// Applies a clip scale to every Cue timing the clip drives.
+///
+/// A clip that is stretched to twice its length must play the same way over twice the time, so
+/// each delay and fade in its Cue range scales with it. Timings the Cue inherits from desk
+/// defaults are left inherited rather than being written out at a scaled value.
+export function scaleCueListTimings(
+	cueList: CueList,
+	startCueId: string,
+	endCueId: string,
+	ratio: number,
+): CueList {
+	if (!Number.isFinite(ratio) || ratio <= 0 || ratio === 1) return cueList;
+	const startIndex = cueList.cues.findIndex((cue) => cue.id === startCueId);
+	const endIndex = cueList.cues.findIndex((cue) => cue.id === endCueId);
+	if (startIndex < 0 || endIndex < startIndex) return cueList;
+	const scale = (value: number | undefined) =>
+		value === undefined ? undefined : Math.max(0, Math.round(value * ratio));
+	return {
+		...cueList,
+		cues: cueList.cues.map((cue, index) => {
+			if (index < startIndex || index > endIndex) return cue;
+			return {
+				...cue,
+				delay_millis: scale(cue.delay_millis) ?? cue.delay_millis,
+				fade_millis: scale(cue.fade_millis) ?? cue.fade_millis,
+				out_delay_millis: scale(cue.out_delay_millis),
+				out_fade_millis: scale(cue.out_fade_millis),
+			};
 		}),
 	};
 }

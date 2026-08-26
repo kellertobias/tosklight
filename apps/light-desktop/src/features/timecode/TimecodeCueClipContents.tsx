@@ -267,11 +267,15 @@ function CueTimingRow({
 					pixelsPerFrame={pixelsPerFrame}
 				/>
 			)}
-			{(["in", "out"] as const).map((kind) => (
-				<CueFadeRange
+			{/* Each Cue is two bands stacked inside the clip: the out timing above the in timing.
+			    Each band is its delay followed by its fade, so the pair steps down and to the
+			    right like the Tetris zig-zag the operator reads as one Cue. */}
+			{(["out", "in"] as const).map((kind) => (
+				<CueBand
 					key={kind}
 					cueNumber={String(row.cue.number)}
 					kind={kind}
+					startFrame={row.startFrame}
 					range={kind === "in" ? row.inFade : row.outFade}
 					position={position}
 					disabled={saving || Boolean(row.diagnostic)}
@@ -425,9 +429,14 @@ function CueTransitionHandle({
 	);
 }
 
-function CueFadeRange({
+/// One band of a Cue sub-clip: the wait before the fade, then the fade itself.
+///
+/// The delay block ends where the fade block begins, so the boundary between them is the single
+/// handle that sets the delay, and the far edge of the fade sets its duration.
+function CueBand({
 	cueNumber,
 	kind,
+	startFrame,
 	range,
 	position,
 	disabled,
@@ -435,37 +444,46 @@ function CueFadeRange({
 }: {
 	cueNumber: string;
 	kind: CueFadeKind;
+	startFrame: number;
 	range: { startFrame: number; endFrame: number };
 	position(frame: number): number;
 	disabled: boolean;
 	onBegin(event: ReactPointerEvent, edge: CueFadeEdge): void;
 }) {
 	const label = kind === "in" ? "In fade" : "Out fade";
+	const delayLabel = kind === "in" ? "In delay" : "Out delay";
+	const delayLeft = position(startFrame);
+	const fadeLeft = position(range.startFrame);
+	const fadeRight = position(range.endFrame);
 	return (
-		<span
-			className={`timecode-cue-fade-range ${kind}`}
-			style={{
-				left: position(range.startFrame),
-				width: Math.max(
-					2,
-					position(range.endFrame) - position(range.startFrame),
-				),
-			}}
-			title={`Cue ${cueNumber} ${label}`}
-		>
-			{(["start", "end"] as const).map((edge) => (
-				<span
-					key={edge}
-					className={`timecode-cue-fade-handle ${edge}`}
-					role="slider"
-					tabIndex={disabled ? -1 : 0}
-					aria-label={`Cue ${cueNumber} ${label} ${edge}`}
-					aria-valuemin={0}
-					aria-valuenow={edge === "start" ? range.startFrame : range.endFrame}
-					aria-disabled={disabled || undefined}
-					onPointerDown={(event) => onBegin(event, edge)}
-				/>
-			))}
-		</span>
+		<>
+			<span
+				className={`timecode-cue-delay-range ${kind}`}
+				style={{ left: delayLeft, width: Math.max(0, fadeLeft - delayLeft) }}
+				title={`Cue ${cueNumber} ${delayLabel}`}
+			/>
+			<span
+				className={`timecode-cue-fade-range ${kind}`}
+				style={{
+					left: fadeLeft,
+					width: Math.max(2, fadeRight - fadeLeft),
+				}}
+				title={`Cue ${cueNumber} ${label}`}
+			>
+				{(["start", "end"] as const).map((edge) => (
+					<span
+						key={edge}
+						className={`timecode-cue-fade-handle ${edge}`}
+						role="slider"
+						tabIndex={disabled ? -1 : 0}
+						aria-label={`Cue ${cueNumber} ${edge === "start" ? delayLabel : label}`}
+						aria-valuemin={0}
+						aria-valuenow={edge === "start" ? range.startFrame : range.endFrame}
+						aria-disabled={disabled || undefined}
+						onPointerDown={(event) => onBegin(event, edge)}
+					/>
+				))}
+			</span>
+		</>
 	);
 }

@@ -579,6 +579,7 @@
 	font-variant-numeric: tabular-nums;
 }
 .timecode-timeline-item.item-clip {
+	--timecode-clip-handle-height: 33%;
 	top: 3px;
 	height: calc(100% - 6px);
 	min-height: 0;
@@ -655,21 +656,76 @@
 	content: attr(title);
 	white-space: nowrap;
 }
-.timecode-cue-fade-range {
+/* A Cue occupies the lower two thirds of the clip, under the drag handle, as two stacked bands:
+   the out timing above the in timing. Each band is a muted delay block followed by its fade. */
+.timecode-cue-fade-range,
+.timecode-cue-delay-range {
 	position: absolute;
 	z-index: 3;
-	height: calc(50% - 5px);
-	min-width: 2px;
+	height: calc(((100% - var(--timecode-clip-handle-height)) / 2) - 4px);
 	border-radius: 2px;
 	pointer-events: none;
 }
-.timecode-cue-fade-range.in {
-	top: 3px;
-	background: #58d4ef;
+.timecode-cue-fade-range {
+	min-width: 2px;
 }
 .timecode-cue-fade-range.out {
-	bottom: 3px;
+	top: calc(var(--timecode-clip-handle-height) + 2px);
 	background: #f39a4a;
+}
+.timecode-cue-fade-range.in {
+	bottom: 2px;
+	background: #58d4ef;
+}
+/* A delay is a wait, so it reads as a hollow lead-in to the solid fade block it precedes. */
+.timecode-cue-delay-range.out {
+	top: calc(var(--timecode-clip-handle-height) + 2px);
+	border: 1px dashed rgb(243 154 74 / 62%);
+	background: rgb(243 154 74 / 14%);
+}
+.timecode-cue-delay-range.in {
+	bottom: 2px;
+	border: 1px dashed rgb(88 212 239 / 62%);
+	background: rgb(88 212 239 / 14%);
+}
+
+/* The first third of a Cuelist clip drags the whole clip; its edges scale it. */
+.timecode-clip-handle {
+	position: absolute;
+	z-index: 6;
+	top: 0;
+	right: 0;
+	left: 0;
+	display: flex;
+	height: var(--timecode-clip-handle-height);
+	align-items: center;
+	justify-content: space-between;
+	overflow: hidden;
+	padding: 0 0.35rem;
+	gap: 0.35rem;
+	border-bottom: 1px solid rgb(255 255 255 / 18%);
+	background: rgb(255 255 255 / 8%);
+	cursor: grab;
+	touch-action: none;
+	pointer-events: auto;
+}
+.timecode-clip-handle:active {
+	cursor: grabbing;
+}
+.timecode-clip-handle > b {
+	overflow: hidden;
+	font-size: 0.66rem;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.timecode-clip-handle > small {
+	flex: none;
+	padding: 0 0.22rem;
+	border-radius: 0.16rem;
+	background: rgb(0 0 0 / 38%);
+	font-size: 0.62rem;
+	font-variant-numeric: tabular-nums;
 }
 .timecode-cue-fade-handle {
 	position: absolute;
@@ -761,13 +817,16 @@
 	white-space: nowrap;
 	pointer-events: none;
 }
+/* The scale grips belong to the handle, so the Cue bands below it stay reachable. */
 .timecode-clip-edge {
 	position: absolute;
+	z-index: 7;
 	top: 0;
-	bottom: 0;
+	height: var(--timecode-clip-handle-height, 100%);
 	width: 0.7rem;
 	background: rgb(255 255 255 / 16%);
 	cursor: ew-resize;
+	touch-action: none;
 }
 .timecode-clip-edge.start {
 	left: 0;

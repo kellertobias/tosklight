@@ -40,6 +40,7 @@ vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 }));
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	useCueLists: () => [],
+	usePlaybackDefinitions: () => [],
 }));
 vi.mock("../features/showObjects/ShowObjectsView", () => ({
 	useShowObjectView: vi.fn(),

@@ -1,5 +1,7 @@
 import { useEffect } from "react";
+import type { Cue, CueList } from "../../api/types";
 import type { TimecodeDefinition } from "../../api/types/timecode";
+import type { CueClipTimingDefaults } from "./cueClipTiming";
 import {
 	SPEED_GROUP_MAX_BPM,
 	SPEED_GROUP_MIN_BPM,
@@ -17,8 +19,22 @@ import { publishTimecodeEncoderDeck } from "./timecodeEncoderBridge";
 
 type Lane = TimecodeDefinition["lanes"][number];
 
+/// Everything the encoder deck needs to edit the Cue timings a selected Cuelist clip drives.
+export interface CueEncoderContext {
+	/// The Cues the clip spans, in running order.
+	cues: readonly { id?: string; number: string; name: string }[];
+	selectedCueId: string | null;
+	/// The Cuelist body the Cues live in, and the object id to save it under.
+	cueListId: string;
+	cueList: CueList;
+	timingDefaults: CueClipTimingDefaults;
+	setSelectedCueId(cueId: string | null): void;
+	saveCueList(cueListId: string, body: CueList): Promise<CueList>;
+}
+
 interface EncoderSlotOptions {
 	definition: TimecodeDefinition;
+	cueContext?: CueEncoderContext;
 	items: readonly TimelineItem[];
 	keyframeItems: readonly TimelineItem[];
 	selection: TimecodeEditorSelection | null;
@@ -41,6 +57,19 @@ interface EncoderSlotOptions {
 	onScrub(frame: number): void;
 	onCommit(value: TimecodeDefinition): void;
 }
+
+/// The longest Cue delay or fade an encoder will write, so a slip cannot store an absurd wait.
+const MAXIMUM_CUE_TIMING_MILLIS = 10 * 60 * 1_000;
+
+type CueCoreTiming = Pick<
+	Cue,
+	| "delay_millis"
+	| "fade_millis"
+	| "out_delay_millis"
+	| "out_fade_millis"
+	| "out_delay_link"
+	| "out_fade_link"
+>;
 
 function clampIndex(value: number, length: number): number {
 	if (length <= 0) return 0;
@@ -229,6 +258,92 @@ function markerSlots(
 	];
 }
 
+/// The four timings of one Cue, in the order an operator reaches for them.
+///
+/// A Cue is a wait then a fade on the way in, and the same on the way out, so the deck reads
+/// left to right as in delay, in fade, out delay, out fade, with the Cue itself chosen beside
+/// them.
+function cueSlots(context: CueEncoderContext) {
+	const index = context.cues.findIndex(
+		(cue) => cue.id === context.selectedCueId,
+	);
+	const selected = index < 0 ? undefined : context.cues[index];
+	const cue = selected?.id
+		? context.cueList.cues.find((item) => item.id === selected.id)
+		: undefined;
+	const inFade = cue ? cue.fade_millis || context.timingDefaults.sequenceFadeMillis : 0;
+	const write = (patch: Partial<CueCoreTiming>) => {
+		if (!cue?.id) return;
+		void context.saveCueList(context.cueListId, {
+			...context.cueList,
+			cues: context.cueList.cues.map((item) =>
+				item.id === cue.id ? { ...item, ...patch } : item,
+			),
+		});
+	};
+	const timing = (
+		id: string,
+		label: string,
+		millis: number,
+		apply: (value: number) => void,
+	) => ({
+		id,
+		label,
+		display: cue ? `${(millis / 1_000).toFixed(2)} s` : "—",
+		value: millis,
+		minimum: 0,
+		maximum: MAXIMUM_CUE_TIMING_MILLIS,
+		fineStep: 10,
+		coarseStep: 250,
+		disabled: !cue,
+		set: (requested: number) =>
+			apply(
+				Math.max(0, Math.min(MAXIMUM_CUE_TIMING_MILLIS, Math.round(requested))),
+			),
+	});
+	return [
+		timing("timecode-cue-in-delay", "In delay", cue?.delay_millis ?? 0, (value) =>
+			write({ delay_millis: value }),
+		),
+		timing("timecode-cue-in-fade", "In fade", cue?.fade_millis ?? 0, (value) =>
+			write({ fade_millis: value }),
+		),
+		timing(
+			"timecode-cue-out-delay",
+			"Out delay",
+			cue?.out_delay_link === "in_fade"
+				? inFade
+				: (cue?.out_delay_millis ?? cue?.delay_millis ?? 0),
+			(value) => write({ out_delay_millis: value, out_delay_link: undefined }),
+		),
+		timing(
+			"timecode-cue-out-fade",
+			"Out fade",
+			cue?.out_fade_link === "release"
+				? context.timingDefaults.releaseFadeMillis
+				: (cue?.out_fade_millis ?? inFade),
+			(value) => write({ out_fade_millis: value, out_fade_link: undefined }),
+		),
+		{
+			id: "timecode-cue-selection",
+			label: "Selected Cue",
+			display: selected
+				? `${selected.number} · ${index + 1} / ${context.cues.length}`
+				: "—",
+			value: Math.max(0, index),
+			minimum: 0,
+			maximum: Math.max(0, context.cues.length - 1),
+			fineStep: 1,
+			coarseStep: 1,
+			disabled: !context.cues.length,
+			set: (requested: number) => {
+				const next = context.cues[clampIndex(requested, context.cues.length)];
+				context.setSelectedCueId(next?.id ?? null);
+			},
+		},
+	];
+}
+
 function keyframeSlots(options: EncoderSlotOptions) {
 	const {
 		activeKeyframe,
@@ -288,17 +403,22 @@ function keyframeSlots(options: EncoderSlotOptions) {
 export function useTimecodeEncoderSlots(options: EncoderSlotOptions) {
 	useEffect(() => {
 		const shared = sharedSlots(options);
+		const cue = options.cueContext;
 		publishTimecodeEncoderDeck(options.encoderOwner, {
 			timeline: [...navigationSlots(options), ...shared],
 			keyframe: [
-				...(options.activeMarker
-					? markerSlots(options, options.activeMarker)
-					: keyframeSlots(options)),
+				...(cue
+					? cueSlots(cue)
+					: options.activeMarker
+						? markerSlots(options, options.activeMarker)
+						: keyframeSlots(options)),
 				...shared,
 			],
-			selectionLabel: options.activeMarker
-				? "Selected Marker"
-				: "Selected Keyframe",
+			selectionLabel: cue
+				? "Selected Cue"
+				: options.activeMarker
+					? "Selected Marker"
+					: "Selected Keyframe",
 		});
 	});
 }

@@ -960,7 +960,17 @@ describe("TimecodeTimelineEditor", () => {
 		const view = render(<Harness />);
 		const editor = within(view.container);
 		const clip = editor.getByTitle(/Opening · state start/);
-		fireEvent.pointerDown(clip, { pointerId: 1, clientX: 72 });
+		// The clip is dragged by its handle; its body belongs to the Cue sub-clips.
+		const handle = clip.querySelector<HTMLElement>(".timecode-clip-handle");
+		expect(handle).toBeTruthy();
+		fireEvent.pointerDown(clip, { pointerId: 9, clientX: 72 });
+		fireEvent.pointerMove(window, { clientX: 128 });
+		fireEvent.pointerUp(window);
+		expect(latest.current.lanes[0].content).toMatchObject({
+			kind: "cue_list",
+			clips: [expect.objectContaining({ start_frame: 44, end_frame: 132 })],
+		});
+		fireEvent.pointerDown(handle as HTMLElement, { pointerId: 1, clientX: 72 });
 		fireEvent.pointerMove(window, { clientX: 128 });
 		fireEvent.pointerUp(window);
 		let cueLane = latest.current.lanes[0].content;
@@ -1125,12 +1135,31 @@ describe("TimecodeTimelineEditor", () => {
 		expect(view.getByTitle("Cue 2 start · 00:00:03.00")).toBeTruthy();
 		expect(view.getByTitle("Cue 1 In fade")).toBeTruthy();
 		expect(view.getByTitle("Cue 1 Out fade")).toBeTruthy();
+		// Each Cue is two bands: the out timing above the in timing, each a delay then a fade.
+		expect(view.getByTitle("Cue 1 In delay")).toBeTruthy();
+		expect(view.getByTitle("Cue 1 Out delay")).toBeTruthy();
+		const bands = view.container.querySelectorAll(
+			".timecode-cue-delay-range, .timecode-cue-fade-range",
+		);
+		expect(bands.length).toBeGreaterThanOrEqual(4);
+		// A Cuelist clip carries its own drag handle with the Cuelist identity in it.
+		const clipHandle = view.container.querySelector(".timecode-clip-handle");
+		expect(clipHandle).toBeTruthy();
+		// Selecting the clip puts Cue stepping in the action strip.
+		fireEvent.pointerDown(clipHandle as HTMLElement, {
+			pointerId: 21,
+			clientX: 10,
+		});
+		fireEvent.pointerUp(window);
+		expect(view.getByRole("button", { name: "Prev Cue" })).toBeEnabled();
+		expect(view.getByRole("button", { name: "Next Cue" })).toBeEnabled();
 		const canvas = view.container.querySelector<HTMLElement>(
 			".timecode-timeline-canvas",
 		);
 		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
 		const handle = view.getByRole("slider", {
-			name: "Cue 1 In fade start",
+			// The boundary between the in-delay block and the in-fade block sets the delay.
+			name: "Cue 1 In delay",
 		});
 		fireEvent.pointerDown(handle, { pointerId: 20, clientX: 100 });
 		fireEvent.pointerMove(window, {
