@@ -61,6 +61,14 @@ pub(super) fn output_health(health: OutputHealth) -> wire::RuntimeOutputHealth {
             .to_vec(),
         tick_duration_bucket_counts: health.tick_duration_bucket_counts.to_vec(),
         scheduler_utilization: health.scheduler_utilization,
+        recent_window_seconds: light_output::OUTPUT_RECENT_WINDOW.as_secs() as u32,
+        recent_frame_hz_minimum: health.recent_frame_hz_minimum,
+        recent_frame_hz_maximum: health.recent_frame_hz_maximum,
+        recent_frame_hz_average: health.recent_frame_hz_average,
+        recent_frame_rate_bucket_bounds_hz: light_output::OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ
+            .to_vec(),
+        recent_frame_rate_bucket_counts: health.recent_frame_rate_bucket_counts.to_vec(),
+        recent_send_errors: health.recent_send_errors,
     }
 }
 

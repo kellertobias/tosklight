@@ -65,10 +65,23 @@ impl OutputResource {
     }
 
     pub(in crate::runtime) fn record_output_health(&self, packets_sent: u64, send_errors: u64) {
+        let now = std::time::Instant::now();
         let mut health = self.health.lock().expect("output health mutex poisoned");
         health.frames_sent += 1;
         health.packets_sent += packets_sent;
         health.send_errors += send_errors;
+        health.record_frame(now);
+        for _ in 0..send_errors {
+            health.record_send_error(now);
+        }
+    }
+
+    /// Restarts the counters an operator reads as "since show start".
+    pub(in crate::runtime) fn reset_show_output_health(&self) {
+        self.health
+            .lock()
+            .expect("output health mutex poisoned")
+            .reset_for_new_show();
     }
 
     pub(in crate::runtime) async fn run_output_scheduler<F, Fut>(

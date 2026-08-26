@@ -1,6 +1,7 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import type {
 	DmxSnapshot,
+	OutputHealth,
 	OutputRoute,
 	OutputRouteRangeIntent,
 	VersionedObject,
@@ -12,6 +13,7 @@ import type {
  */
 export interface DmxDiagnostics {
 	readDmx: () => Promise<DmxSnapshot>;
+	readOutputHealth: () => Promise<OutputHealth>;
 	setDmxOverride: (
 		universe: number,
 		address: number,

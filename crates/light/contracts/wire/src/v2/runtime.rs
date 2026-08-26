@@ -108,6 +108,15 @@ pub struct RuntimeOutputHealth {
     #[ts(type = "number[]")]
     pub tick_duration_bucket_counts: Vec<u64>,
     pub scheduler_utilization: f32,
+    pub recent_window_seconds: u32,
+    pub recent_frame_hz_minimum: f32,
+    pub recent_frame_hz_maximum: f32,
+    pub recent_frame_hz_average: f32,
+    pub recent_frame_rate_bucket_bounds_hz: Vec<f32>,
+    #[ts(type = "number[]")]
+    pub recent_frame_rate_bucket_counts: Vec<u64>,
+    #[ts(type = "number")]
+    pub recent_send_errors: u64,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

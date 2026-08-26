@@ -303,6 +303,7 @@ function useProviderActionSources(
 	const dmxDiagnostics = useMemo(
 		() => ({
 			readDmx: value.readDmx,
+			readOutputHealth: value.readOutputHealth,
 			setDmxOverride: value.setDmxOverride,
 			outputRoutes: value.outputRoutes,
 			saveOutputRoute: value.saveOutputRoute,
@@ -311,6 +312,7 @@ function useProviderActionSources(
 		}),
 		[
 			value.readDmx,
+			value.readOutputHealth,
 			value.setDmxOverride,
 			value.outputRoutes,
 			value.saveOutputRoute,

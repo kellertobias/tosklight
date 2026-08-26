@@ -7,6 +7,7 @@ export function createOutputActions(
 ): Pick<
 	ServerCapabilities,
 	| "readDmx"
+	| "readOutputHealth"
 	| "readVisualization"
 	| "setDmxOverride"
 	| "saveOutputRoute"
@@ -16,6 +17,7 @@ export function createOutputActions(
 	const { api, setError, bootstrap, setOutputRoutes } = model;
 	return {
 		readDmx: () => api.mediaOutput.dmx(),
+		readOutputHealth: () => api.runtime.outputHealth(),
 		readVisualization: (preload = false) =>
 			api.mediaOutput.visualization(preload),
 		setDmxOverride: async (universe, address, rawValue) => {

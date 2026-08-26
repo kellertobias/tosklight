@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useRef, useState } from "react";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
 import { StoryShowObjectsProvider } from "../../../ui-library/storybook/providers/StoryShowObjectsProvider";
+import { dmxOutputHealth } from "../../../ui-library/storybook/fixtures/dmx";
 import type { AttributeConfigurationSnapshot } from "../api/client/attributeConfiguration";
 import type {
 	DeskConfiguration,
@@ -238,6 +239,7 @@ export const marketingOutputRoutes = [
 
 const marketingDmxDiagnostics: DmxDiagnostics = {
 	readDmx: async () => ({ revision: 1, universes: [], overrides: [] }),
+	readOutputHealth: async () => dmxOutputHealth,
 	setDmxOverride: async () => undefined,
 	outputRoutes: marketingOutputRoutes,
 	saveOutputRoute: async () => true,

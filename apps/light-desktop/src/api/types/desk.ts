@@ -25,6 +25,13 @@ export interface OutputHealth {
 	last_tick_micros: number;
 	maximum_tick_micros: number;
 	scheduler_utilization: number;
+	recent_window_seconds: number;
+	recent_frame_hz_minimum: number;
+	recent_frame_hz_maximum: number;
+	recent_frame_hz_average: number;
+	recent_frame_rate_bucket_bounds_hz: number[];
+	recent_frame_rate_bucket_counts: number[];
+	recent_send_errors: number;
 }
 
 export interface ProgrammerState {

@@ -169,4 +169,11 @@ export const dmxOutputHealth: OutputHealth = {
 	last_tick_micros: 510,
 	maximum_tick_micros: 820,
 	scheduler_utilization: 0.08,
+	recent_window_seconds: 60,
+	recent_frame_hz_minimum: 37.4,
+	recent_frame_hz_maximum: 44.2,
+	recent_frame_hz_average: 43.8,
+	recent_frame_rate_bucket_bounds_hz: [20, 30, 38, 40, 44],
+	recent_frame_rate_bucket_counts: [0, 0, 1, 3, 12],
+	recent_send_errors: 0,
 };

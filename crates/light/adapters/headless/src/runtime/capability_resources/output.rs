@@ -187,10 +187,10 @@ impl OutputResource {
     }
 
     pub(in crate::runtime) fn health_snapshot(&self) -> OutputHealth {
-        self.health
-            .lock()
-            .expect("output health mutex poisoned")
-            .clone()
+        let mut health = self.health.lock().expect("output health mutex poisoned");
+        // An output that stalled must report the stall, not the last healthy window it filled.
+        health.refresh_recent(std::time::Instant::now());
+        health.clone()
     }
 
     pub(in crate::runtime) fn latest_visualization_frame(

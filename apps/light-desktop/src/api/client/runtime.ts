@@ -5,9 +5,11 @@ import type {
 	LiveAction,
 	LiveActionFrame,
 	RuntimeDiagnosticsSnapshot,
+	RuntimePerformanceDiagnosticsSnapshot,
 } from "../generated/light-wire";
 import type {
 	BootstrapSnapshot,
+	OutputHealth,
 	RuntimeDiagnostics,
 	SessionResponse,
 } from "../types";
@@ -72,6 +74,19 @@ export class LightClientRuntime {
 
 	bootstrap(): Promise<BootstrapSnapshot> {
 		return this.request("/api/v2/bootstrap", {}, false);
+	}
+
+	/**
+	 * Live output health.
+	 *
+	 * The bootstrap snapshot carries `output_health`, but it is refetched only when a show opens,
+	 * so a surface that reports live output cadence must read this instead.
+	 */
+	async outputHealth(): Promise<OutputHealth> {
+		const snapshot = await this.request<RuntimePerformanceDiagnosticsSnapshot>(
+			"/api/v2/diagnostics/performance",
+		);
+		return snapshot.output as OutputHealth;
 	}
 
 	/** Authenticated, current runtime diagnostics for operator-facing desk health. */

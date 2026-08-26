@@ -1269,6 +1269,73 @@ button {
 	display: block;
 	color: var(--green);
 }
+.dmx-content > aside section > b {
+	display: block;
+	margin-bottom: 7px;
+	color: var(--muted);
+	font-weight: 500;
+}
+.dmx-output-rate dl,
+.dmx-output-errors dl {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+}
+.dmx-output-rate dl {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.dmx-output-rate dt,
+.dmx-output-errors dt {
+	color: var(--muted);
+	font-size: 11px;
+}
+.dmx-output-rate dd,
+.dmx-output-errors dd {
+	margin: 0;
+	color: var(--green);
+	font-variant-numeric: tabular-nums;
+}
+.dmx-output-errors dl {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.dmx-output-histogram ul {
+	display: grid;
+	gap: 5px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.dmx-output-histogram li {
+	display: grid;
+	grid-template-columns: 54px minmax(0, 1fr) 40px;
+	align-items: center;
+	gap: 7px;
+}
+.dmx-output-histogram small {
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+}
+.dmx-output-histogram i {
+	position: relative;
+	display: block;
+	height: 10px;
+	border: 1px solid var(--line);
+	border-radius: 3px;
+	background: #080b0e;
+}
+.dmx-output-histogram i:after {
+	content: "";
+	position: absolute;
+	inset: 1px auto 1px 1px;
+	width: var(--dmx-histogram-fill, 0%);
+	border-radius: 2px;
+	background: var(--cyan);
+}
+.dmx-output-histogram span {
+	color: var(--green);
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
 .dmx-inspector {
 	position: fixed;
 	z-index: 100;

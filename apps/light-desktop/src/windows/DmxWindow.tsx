@@ -22,6 +22,46 @@ import { TouchValueButton } from "@tosklight/ui/faders";
 import { channelSplit, derivePrimarySlots } from "../components/setup/fixtureProfileModel";
 import { usePollingResource } from "../hooks/usePollingResource";
 
+function hz(value: number | undefined): string {
+  return value === undefined || !Number.isFinite(value) || value <= 0 ? "—" : value.toFixed(1);
+}
+
+function OutputSummary({ health }: { health: OutputHealth | null }) {
+  const seconds = health?.recent_window_seconds ?? 60;
+  const bounds = health?.recent_frame_rate_bucket_bounds_hz ?? [];
+  const counts = health?.recent_frame_rate_bucket_counts ?? [];
+  const busiest = Math.max(1, ...counts);
+  return <>
+    <b>Output summary</b>
+    <section className="dmx-output-rate">
+      <b>Frame rate · last {seconds} s</b>
+      <dl>
+        <div><dt>Min</dt><dd>{hz(health?.recent_frame_hz_minimum)} Hz</dd></div>
+        <div><dt>Avg</dt><dd>{hz(health?.recent_frame_hz_average)} Hz</dd></div>
+        <div><dt>Max</dt><dd>{hz(health?.recent_frame_hz_maximum)} Hz</dd></div>
+      </dl>
+    </section>
+    <section className="dmx-output-histogram">
+      <b>Frames below rate · last {seconds} s</b>
+      {bounds.length ? <ul>{bounds.map((bound, index) => {
+        const count = counts[index] ?? 0;
+        return <li key={bound}>
+          <small>&lt; {bound} Hz</small>
+          <i aria-hidden="true" style={{ "--dmx-histogram-fill": `${Math.round((count / busiest) * 100)}%` } as CSSProperties}/>
+          <span>{count}</span>
+        </li>;
+      })}</ul> : <p>No output frames recorded yet.</p>}
+    </section>
+    <section className="dmx-output-errors">
+      <b>Errors</b>
+      <dl>
+        <div><dt>Last {seconds} s</dt><dd>{health?.recent_send_errors ?? 0}</dd></div>
+        <div><dt>Since show start</dt><dd>{health?.send_errors ?? 0}</dd></div>
+      </dl>
+    </section>
+  </>;
+}
+
 interface Slot { universe: number; address: number; value: number }
 export interface DmxSelection { universe: number; address: number }
 export interface DmxFixtureChannel {
@@ -133,10 +173,11 @@ export function dmxChannelsPerRow(width: number, size: "small" | "large") {
 
 export function DmxWindow({ active = true, compact }: WindowProps) {
   const dmx = useDmxDiagnostics();
-  const outputHealth = useOutputHealth();
+  const bootstrapHealth = useOutputHealth();
   const connectionStatus = useConnectionStatus();
   const { state, dispatch } = useApp();
   const [snapshot, setSnapshot] = useState<DmxSnapshot | null>(null);
+  const [liveHealth, setLiveHealth] = useState<OutputHealth | null>(null);
 
   usePollingResource({
     enabled: active && connectionStatus === "connected",
@@ -147,6 +188,15 @@ export function DmxWindow({ active = true, compact }: WindowProps) {
     onValue: setSnapshot,
   });
 
+  // The bootstrap copy of output health is refetched only when a show opens, so the summary polls
+  // the runtime for the live counters instead of reporting the state at show-open time forever.
+  usePollingResource({
+    enabled: active && connectionStatus === "connected" && Boolean(dmx?.readOutputHealth),
+    intervalMillis: 1_000,
+    load: dmx?.readOutputHealth ?? (async () => null),
+    onValue: setLiveHealth,
+  });
+
   const patchedFixtures = usePatchedFixturesView(active);
 
   return <DmxWindowView
@@ -154,7 +204,7 @@ export function DmxWindow({ active = true, compact }: WindowProps) {
     dotSize={state.dmxDotSize}
     onDotSizeChange={(value) => dispatch({ type: "SET_DMX_DOT_SIZE", value })}
     onSetDmxOverride={(universe, address, value) => dmx?.setDmxOverride(universe, address, value)}
-    outputHealth={outputHealth}
+    outputHealth={liveHealth ?? bootstrapHealth}
     outputRoutes={dmx?.outputRoutes ?? []}
     patchedFixtures={patchedFixtures}
     snapshot={snapshot}
@@ -240,6 +290,6 @@ export function DmxWindowView({
           return <Button key={address} aria-label={`Universe ${universe}, address ${address}, value ${value}`} className={`${value > 210 ? "high" : value > 90 ? "mid" : value > 20 ? "low" : ""} ${slot?.universe === universe && slot.address === address ? "selected" : ""}`} onClick={() => setSlot({ universe, address, value })}/>;
         })}</div></div>)}
       </section>;
-    })}{view === "sources" && <div className="dmx-detail-list"><h2>Diagnostic overrides</h2>{snapshot?.overrides.length ? snapshot.overrides.map((item) => <article key={`${item.universe}-${item.address}`}><b>Universe {item.universe} · Address {item.address}</b><span>{item.value}</span><Button onClick={() => void onSetDmxOverride(item.universe, item.address, null)}>Release</Button></article>) : <div className="empty-window-message">No raw DMX overrides are active.</div>}</div>}</main></WindowScrollArea><aside className="dmx-info-pane">{slot ? <><header className="dmx-info-header"><b>Selected channel</b><Button size="compact" onClick={() => setSlot(null)}>Deselect</Button></header><section className="dmx-address-card"><strong>Universe {slot.universe} · Channel {slot.address}</strong><small>DMX address {slot.address} · 0x{slot.address.toString(16).toUpperCase().padStart(3, "0")}</small><div className="dmx-dip-switches" aria-label={`DIP switches for DMX address ${slot.address}`}>{dipWeights.map((weight) => <span className={slot.address & weight ? "on" : ""} key={weight}><i aria-hidden="true"/><small>{weight}</small></span>)}</div></section><section className="dmx-fixture-card"><b>Fixture</b>{selectedFixtureChannel ? <dl><dt>Fixture ID</dt><dd>{selectedFixtureChannel.fixture.fixture_number ?? selectedFixtureChannel.fixture.fixture_id}</dd><dt>Name</dt><dd>{selectedFixtureChannel.fixture.name || selectedFixtureChannel.fixture.definition.name || "—"}</dd><dt>Type</dt><dd>{selectedFixtureChannel.fixture.definition.device_type || "—"}</dd><dt>Patch owner</dt><dd>{selectedFixtureChannel.patchOwner.name}</dd><dt>Patch range</dt><dd>{selectedFixtureChannel.patchRange.universe}.{selectedFixtureChannel.patchRange.start}–{selectedFixtureChannel.patchRange.end}</dd><dt>Split</dt><dd>{selectedFixtureChannel.split}</dd><dt>Fixture channel</dt><dd>{selectedFixtureChannel.fixtureChannel} of {selectedFixtureChannel.splitFootprint}</dd><dt>Attribute</dt><dd>{selectedFixtureChannel.attribute}{selectedFixtureChannel.component ? ` · ${selectedFixtureChannel.component}` : ""}</dd></dl> : <p>Fixture: Empty</p>}</section><div className="dmx-raw-value"><TouchValueButton label="Raw value" value={slot.value} maximum={255} display={String(Math.round(slot.value))} onChange={(value) => override(Math.round(value))}/></div><Button fullWidth onClick={() => override(null)}>Release override</Button></> : <><b>Output summary</b><section>Frame rate <span>{outputHealth?.frame_hz.toFixed(1) ?? "—"} Hz</span></section><section>Packets <span>{outputHealth?.packets_sent ?? 0}</span></section><section>Errors <span>{outputHealth?.send_errors ?? 0}</span></section></>}</aside></div>
+    })}{view === "sources" && <div className="dmx-detail-list"><h2>Diagnostic overrides</h2>{snapshot?.overrides.length ? snapshot.overrides.map((item) => <article key={`${item.universe}-${item.address}`}><b>Universe {item.universe} · Address {item.address}</b><span>{item.value}</span><Button onClick={() => void onSetDmxOverride(item.universe, item.address, null)}>Release</Button></article>) : <div className="empty-window-message">No raw DMX overrides are active.</div>}</div>}</main></WindowScrollArea><aside className="dmx-info-pane">{slot ? <><header className="dmx-info-header"><b>Selected channel</b><Button size="compact" onClick={() => setSlot(null)}>Deselect</Button></header><section className="dmx-address-card"><strong>Universe {slot.universe} · Channel {slot.address}</strong><small>DMX address {slot.address} · 0x{slot.address.toString(16).toUpperCase().padStart(3, "0")}</small><div className="dmx-dip-switches" aria-label={`DIP switches for DMX address ${slot.address}`}>{dipWeights.map((weight) => <span className={slot.address & weight ? "on" : ""} key={weight}><i aria-hidden="true"/><small>{weight}</small></span>)}</div></section><section className="dmx-fixture-card"><b>Fixture</b>{selectedFixtureChannel ? <dl><dt>Fixture ID</dt><dd>{selectedFixtureChannel.fixture.fixture_number ?? selectedFixtureChannel.fixture.fixture_id}</dd><dt>Name</dt><dd>{selectedFixtureChannel.fixture.name || selectedFixtureChannel.fixture.definition.name || "—"}</dd><dt>Type</dt><dd>{selectedFixtureChannel.fixture.definition.device_type || "—"}</dd><dt>Patch owner</dt><dd>{selectedFixtureChannel.patchOwner.name}</dd><dt>Patch range</dt><dd>{selectedFixtureChannel.patchRange.universe}.{selectedFixtureChannel.patchRange.start}–{selectedFixtureChannel.patchRange.end}</dd><dt>Split</dt><dd>{selectedFixtureChannel.split}</dd><dt>Fixture channel</dt><dd>{selectedFixtureChannel.fixtureChannel} of {selectedFixtureChannel.splitFootprint}</dd><dt>Attribute</dt><dd>{selectedFixtureChannel.attribute}{selectedFixtureChannel.component ? ` · ${selectedFixtureChannel.component}` : ""}</dd></dl> : <p>Fixture: Empty</p>}</section><div className="dmx-raw-value"><TouchValueButton label="Raw value" value={slot.value} maximum={255} display={String(Math.round(slot.value))} onChange={(value) => override(Math.round(value))}/></div><Button fullWidth onClick={() => override(null)}>Release override</Button></> : <OutputSummary health={outputHealth}/>}</aside></div>
   </div>;
 }

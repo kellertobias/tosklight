@@ -2,11 +2,13 @@ import type {
 	DmxSnapshot,
 	OutputRoute,
 	OutputRouteRangeIntent,
+	OutputHealth,
 	VisualizationSnapshot,
 } from "../../api/types";
 
 export interface ServerPlaybackContext {
 	readDmx: () => Promise<DmxSnapshot>;
+	readOutputHealth: () => Promise<OutputHealth>;
 	readVisualization: (preload?: boolean) => Promise<VisualizationSnapshot>;
 	setDmxOverride: (
 		universe: number,

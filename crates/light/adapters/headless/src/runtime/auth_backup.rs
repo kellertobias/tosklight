@@ -101,6 +101,8 @@ pub(super) async fn activate_prepared_show(
     // transient overlay before any transition so it cannot reappear in the newly loaded show.
     state.highlight.clear_all();
     state.output.clear_highlighted_fixtures();
+    // Output health counters an operator reads as "since show start" belong to the loaded show.
+    state.output.reset_show_output_health();
     let media_fixture_ids = prepared
         .snapshot()
         .fixtures

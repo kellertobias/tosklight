@@ -156,14 +156,19 @@ async fn run_scheduler_dynamic_inner<F, Fut>(
 }
 
 fn record_tick_result(health: &Mutex<OutputHealth>, current_rate: u16, result: io::Result<u64>) {
+    let now = Instant::now();
     let mut current = health.lock().expect("output health mutex poisoned");
+    current.frame_hz = f32::from(current_rate);
     match result {
         Ok(packets) => {
             current.frames_sent += 1;
             current.packets_sent += packets;
-            current.frame_hz = f32::from(current_rate);
+            current.record_frame(now);
         }
-        Err(_) => current.send_errors += 1,
+        Err(_) => {
+            current.send_errors += 1;
+            current.record_send_error(now);
+        }
     }
 }
 

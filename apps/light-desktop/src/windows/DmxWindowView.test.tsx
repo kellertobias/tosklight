@@ -92,8 +92,21 @@ describe("DMX application view", () => {
     const { container } = renderView();
     expect(container.querySelectorAll(".dmx-universe")).toHaveLength(4);
     expect(container.querySelectorAll(".dmx-universe button")).toHaveLength(2_048);
-    expect(screen.getByText("44.0 Hz")).toBeInTheDocument();
-    expect(screen.getByText("170824")).toBeInTheDocument();
+    expect(screen.getByText("43.8 Hz")).toBeInTheDocument();
+    expect(screen.getByText("37.4 Hz")).toBeInTheDocument();
+    expect(screen.getByText("44.2 Hz")).toBeInTheDocument();
+    expect(screen.queryByText("170824")).toBeNull();
+    const histogram = container.querySelector(".dmx-output-histogram")!;
+    expect([...histogram.querySelectorAll("li")].map((row) => row.textContent)).toEqual([
+      "< 20 Hz0",
+      "< 30 Hz0",
+      "< 38 Hz1",
+      "< 40 Hz3",
+      "< 44 Hz12",
+    ]);
+    const errors = container.querySelector(".dmx-output-errors")!;
+    expect(errors.textContent).toContain("Last 60 s");
+    expect(errors.textContent).toContain("Since show start");
     expect(container.querySelector(".ui-data-table")).not.toBeInTheDocument();
     expect(container.querySelector(".ui-selection-tree")).not.toBeInTheDocument();
   });

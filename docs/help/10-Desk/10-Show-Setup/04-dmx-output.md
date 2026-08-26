@@ -34,4 +34,4 @@ For backward compatibility, a historical route with an explicit destination migr
 
 The Universe view shows the value for every DMX slot and identifies the patched fixture channel. Select a channel to see its fixture, attribute, DIP-switch address, and raw value. Diagnostic overrides write raw output outside normal programming; release every override after testing.
 
-Before a show, confirm frame rate, packets sent, send errors, bind interface, route enablement, delivery mode, resolved socket destination, universe mapping, and representative fixture movement. Output is not proved merely because the programmer shows a value.
+Before a show, confirm the measured frame rate over the last 60 seconds, the frames delivered below rate, send errors, bind interface, route enablement, delivery mode, resolved socket destination, universe mapping, and representative fixture movement. Output is not proved merely because the programmer shows a value.
