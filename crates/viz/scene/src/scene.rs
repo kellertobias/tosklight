@@ -870,6 +870,56 @@ mod tests {
     }
 
     #[test]
+    fn a_wide_rig_still_leaves_the_house_view_standing_on_the_floor() {
+        // Framing pads the rig outward on every axis by a share of its widest span, so a wide
+        // rig with fixtures standing on the deck pushes the underside of the bounds metres below
+        // the floor. The house view must not sink with it.
+        let mut scene = Scene::default();
+        for step in 0..9_u8 {
+            let x = -20.0 + f32::from(step) * 5.0;
+            scene.fixtures.push(rigged_spot(Vec3::new(x, 0.4, -4.0)));
+            scene.fixtures.push(rigged_spot(Vec3::new(x, 6.0, -4.0)));
+        }
+        scene.recompute_bounds();
+        let framing = scene.framing_bounds();
+        assert!(
+            framing.min.y < -1.65,
+            "this rig pads the bounds below standing height: {framing:?}"
+        );
+
+        let camera = crate::Camera::audience(framing);
+        assert!(
+            camera.position.y > 1.0,
+            "the audience stands in the room, not under it: {}",
+            camera.position.y
+        );
+        assert!(
+            (camera.target - camera.position).normalize().y > 0.0,
+            "and looks up at the rig"
+        );
+    }
+
+    fn rigged_spot(position: Vec3) -> FixtureInstance {
+        FixtureInstance {
+            instance_id: Uuid::nil(),
+            fixture_id: Uuid::nil(),
+            name: "Spot".into(),
+            number: Some(1),
+            position,
+            rotation_degrees: Vec3::ZERO,
+            bracket_degrees: 0.0,
+            shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
+            body: FixtureBody::default(),
+            patched: true,
+            address: None,
+            model: None,
+            fallback: None,
+        }
+    }
+
+    #[test]
     fn framing_ignores_a_floor_far_wider_than_the_rig() {
         let mut scene = Scene::default();
         scene.fixtures.push(FixtureInstance {

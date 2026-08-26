@@ -394,6 +394,8 @@ impl Default for Camera {
 /// it looks like from the seats, not from a bounding box.
 const AUDIENCE_EYE_METRES: f32 = 1.65;
 const AUDIENCE_DISTANCE_METRES: f32 = 7.0;
+/// The floor an audience stands on: the origin of the visualizer's vertical axis.
+const AUDIENCE_FLOOR_METRES: f32 = 0.0;
 
 /// How much of the frame the floor in front of the stage may take, from the bottom.
 ///
@@ -405,14 +407,26 @@ const AUDIENCE_FLOOR_SHARE: f32 = 0.15;
 impl Camera {
     /// The house view: standing in the audience, looking at the stage.
     pub fn audience(bounds: Aabb) -> Self {
-        let centre = bounds.centre();
         let fov_degrees = 45.0_f32;
         // Seven metres in front of the downstage edge, at standing eye height, on the centre line.
         let front = if bounds.is_empty() { 0.0 } else { bounds.max.z };
-        let floor = if bounds.is_empty() { 0.0 } else { bounds.min.y };
+        let centre_x = if bounds.is_empty() {
+            0.0
+        } else {
+            bounds.centre().x
+        };
+        /*
+         * Standing height is measured from the floor of the room, which is the origin of the
+         * vertical axis, not from the underside of the framing bounds.
+         *
+         * Framing bounds are padded outward on every axis to keep the rig off the edges of the
+         * frame, so their underside sits below the floor by however much padding the rig earned —
+         * metres, for a big one. Standing on that put the camera underground, looking up at the
+         * floor it should have been standing on.
+         */
         let position = Vec3::new(
-            centre.x,
-            floor + AUDIENCE_EYE_METRES,
+            centre_x,
+            AUDIENCE_FLOOR_METRES + AUDIENCE_EYE_METRES,
             front + AUDIENCE_DISTANCE_METRES,
         );
 
@@ -668,6 +682,77 @@ impl ViewConfiguration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Framing bounds as `Scene::framing_bounds` builds them: the rig, padded outward on every
+    /// axis, which is what puts their underside below the floor.
+    fn framed_rig(width: f32, lowest: f32, highest: f32) -> Aabb {
+        let mut rig = Aabb::empty();
+        rig.expand(Vec3::new(-width * 0.5, lowest, -5.0));
+        rig.expand(Vec3::new(width * 0.5, highest, 5.0));
+        let padding = (rig.extent().max_element() * 0.12).max(1.0);
+        let (min, max) = (
+            rig.min - Vec3::splat(padding),
+            rig.max + Vec3::splat(padding),
+        );
+        rig.expand(min);
+        rig.expand(max);
+        rig
+    }
+
+    #[test]
+    fn the_house_view_stands_on_the_floor_however_large_the_rig_is() {
+        // A big rig earns metres of framing padding below it; the audience does not sink with it.
+        for width in [8.0, 20.0, 40.0, 120.0] {
+            let camera = Camera::audience(framed_rig(width, 1.0, 8.0));
+            assert!(
+                (camera.position.y - (AUDIENCE_FLOOR_METRES + AUDIENCE_EYE_METRES)).abs() < 1e-4,
+                "a {width} m rig put the eye at {}",
+                camera.position.y
+            );
+            assert!(
+                camera.position.y > 0.0,
+                "the camera is never under the floor"
+            );
+        }
+    }
+
+    #[test]
+    fn the_house_view_looks_slightly_up_rather_than_down_at_the_floor() {
+        let camera = Camera::audience(framed_rig(20.0, 1.0, 8.0));
+        let aim = (camera.target - camera.position).normalize();
+
+        assert!(
+            aim.y > 0.0,
+            "an audience looks up at the rig, not down at the carpet: {}",
+            aim.y
+        );
+        // A few degrees, which is what an audience does without noticing.
+        let degrees = aim.y.asin().to_degrees();
+        assert!(
+            (1.0..8.0).contains(&degrees),
+            "unexpected upward aim of {degrees} degrees"
+        );
+    }
+
+    #[test]
+    fn the_house_view_stands_in_front_of_the_rig_on_its_centre_line() {
+        let camera = Camera::audience(framed_rig(20.0, 1.0, 8.0));
+
+        assert!((camera.position.x).abs() < 1e-4, "on the centre line");
+        // +Z points at the audience, so standing in front means a larger Z than the rig's front.
+        assert!(camera.position.z > 5.0, "in front of the downstage edge");
+        assert!(camera.target.z < camera.position.z, "aimed at the stage");
+    }
+
+    #[test]
+    fn an_empty_scene_still_produces_a_camera_that_can_be_looked_through() {
+        let camera = Camera::audience(Aabb::empty());
+
+        // An empty bound centres on infinity, which would otherwise reach the matrices as NaN.
+        assert!(camera.position.is_finite(), "{:?}", camera.position);
+        assert!(camera.target.is_finite(), "{:?}", camera.target);
+        assert!(camera.position.y > 0.0);
+    }
 
     #[test]
     fn every_named_mode_round_trips_through_its_wire_value() {
