@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **187 root cases across 75 files**.
+Default catalog: **190 root cases across 77 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -198,6 +198,9 @@ Default catalog: **187 root cases across 75 files**.
 | 85-semantic-macros-timecode.spec.ts | TIMECODE-003 @api › transport routes address one authoritative runtime | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 85-semantic-macros-timecode.spec.ts | TIMECODE-001 @ui › title actions, Settings autosave, Add menu, CSV, and zoom geometry match the operator contract | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | 87-channel-disabled-reasons.spec.ts | TL-166 @ui › empty faders explain their state while available faders stay clear | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |
+| 87-channel-disabled-reasons.spec.ts | TL-373 @ui › channel faders are labelled with the fixture name, not the Fixture ID | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |
+| 88-dmx-output-health.spec.ts | DMX-HEALTH-001 @ui the DMX output summary reports live measured output health | repository contract | @ui | dmx-output-health | standard failure evidence | parallel | pending-semantic-migration |
+| 89-internal-audio-player.spec.ts | AUDIO-LIBRARY-001 @api the Internal Audio Player reports its library to the Media pane | repository contract | @api | internal-audio-player | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 90-desk-setup-defaults.spec.ts | TL-165 @ui › Desk Setup defaults save immediately and keep the requested layout | docs/help/10-Desk/10-Show-Setup/index.md | @ui | desk-setup-defaults | standard failure evidence | parallel | pending-semantic-migration |
 | 90-desk-setup-defaults.spec.ts | TL-251 @ui › setup navigation exposes a finger-sized scrollbar when touch scrolling is enabled | docs/help/10-Desk/10-Show-Setup/index.md | @ui | desk-setup-defaults | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
