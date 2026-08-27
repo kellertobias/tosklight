@@ -135,3 +135,23 @@ SVG remains the source for both on-screen and printable plans. HTML retains the 
 PDF or PNG output rasterizes that SVG at the requested output size rather than maintaining a
 separate bitmap asset. Plan composition uses world depth and explicit opaque/empty regions, so its
 occlusion does not depend on package file order or incidental 3D material names.
+
+## Cut planes
+
+Seen from the side, a stage with curtains both sides is a wall: the near one hides the rig the
+drawing is about. Each CAD viewport therefore carries a pair of cut planes, set beside its view
+selector, that limit how far into the drawing it looks.
+
+Give a **From** and a **To** depth in metres. Either may be left empty, which is what "everything
+upstage of the house curtain" means: a near limit and no far one. The axis being cut is the one
+the view looks along, so a top-down plan cuts by **Height** and the four elevations cut by
+**Depth**. The control shows the drawing's own near and far ends as placeholders, and **Show all**
+returns the whole drawing.
+
+An element has thickness, so a plane passing through one still shows it; only an element lying
+wholly beyond the cut is dropped. A pair given the wrong way round reads as the same slice. What
+the cut takes away is also unselectable, since you cannot pick what the drawing does not show.
+
+A print page added from a viewport takes that viewport's cut planes with it, so a PDF prints the
+slice you composed rather than the whole rig. A viewport saved before cut planes existed has none,
+which means the whole drawing.

@@ -12,6 +12,7 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Intensity | P1/E2 | **Shutter / Strobe** (`shutter`) | — |
 | Intensity | P1/E3 | **Mask Opacity** (`media.mask.opacity`) | — |
 | Intensity | P1/E4 | **Volume** (`volume`) | — |
+| Intensity | P1/E5 | **Audio Volume** (`audio.volume`) | — |
 | Color | P1/E1 | **Red** (`color.red`) | — |
 | Color | P1/E2 | **Green** (`color.green`) | — |
 | Color | P1/E3 | **Blue** (`color.blue`) | — |
@@ -39,6 +40,12 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Position | P2/E5 | **Camera Pitch** (`camera.pitch`) | — |
 | Position | P2/E6 | **Camera Roll** (`camera.roll`) | — |
 | Position | P3/E1 | **Camera Zoom** (`camera.zoom`) | — |
+| Position | P4/E1 | **Point X** (`point.position.x`) | — |
+| Position | P4/E2 | **Point Y** (`point.position.y`) | — |
+| Position | P4/E3 | **Point Z** (`point.position.z`) | — |
+| Position | P4/E4 | **Point Rot X** (`point.rotation.x`) | — |
+| Position | P4/E5 | **Point Rot Y** (`point.rotation.y`) | — |
+| Position | P4/E6 | **Point Rot Z** (`point.rotation.z`) | — |
 | Beam | P1/E1 | **Gobo 1** (`gobo.1`) | — |
 | Beam | P1/E2 | **Gobo 1 Rotation** (`gobo.1.rotation`) | — |
 | Beam | P1/E3 | **Gobo 2** (`gobo.2`) | — |
@@ -78,7 +85,6 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Media | P2/E2 | **Audio File** (`audio.file`) | — |
 | Media | P2/E3 | **Audio Transport** (`audio.transport`) | — |
 | Media | P2/E4 | **Audio Repeat** (`audio.repeat`) | — |
-| Media | P2/E5 | **Audio Volume** (`audio.volume`) | — |
 | Media | P3/E3 | **Scale X** (`media.scale.x`) | — |
 | Media | P3/E4 | **Scale Y** (`media.scale.y`) | — |
 | Media | P4/E1 | **Media Effect 1** (`media.effect.1`) | — |
@@ -99,6 +105,7 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | **Color Wheel 2** | **Color Wheel 2** (`color.wheel.2`)<br>**Color Wheel 2 Rotation** (`color.wheel.2.rotation`) |
 | **Position** | **Pan** (`pan`)<br>**Tilt** (`tilt`)<br>**Head Rotation** (`position.rotation`) |
 | **Camera** | **Camera X** (`camera.position.x`)<br>**Camera Y** (`camera.position.y`)<br>**Camera Z** (`camera.position.z`)<br>**Camera Yaw** (`camera.yaw`)<br>**Camera Pitch** (`camera.pitch`)<br>**Camera Roll** (`camera.roll`)<br>**Camera Zoom** (`camera.zoom`) |
+| **3D Point** | **Point X** (`point.position.x`)<br>**Point Y** (`point.position.y`)<br>**Point Z** (`point.position.z`)<br>**Point Rot X** (`point.rotation.x`)<br>**Point Rot Y** (`point.rotation.y`)<br>**Point Rot Z** (`point.rotation.z`) |
 | **Gobo 1** | **Gobo 1** (`gobo.1`)<br>**Gobo 1 Rotation** (`gobo.1.rotation`) |
 | **Gobo 2** | **Gobo 2** (`gobo.2`)<br>**Gobo 2 Rotation** (`gobo.2.rotation`) |
 | **Media Source** | **Media Folder** (`media.folder`)<br>**Media File** (`media.file`) |
