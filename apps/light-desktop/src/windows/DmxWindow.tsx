@@ -42,11 +42,16 @@ function OutputSummary({ health }: { health: OutputHealth | null }) {
       </dl>
     </section>
     <section className="dmx-output-histogram">
-      <b>Frames below rate · last {seconds} s</b>
-      {bounds.length ? <ul>{bounds.map((bound, index) => {
+      <b>Frames at rate · last {seconds} s</b>
+      {/* One band below the lowest bound, then one at-or-above band per bound, which is how an
+          operator reads cadence: how many frames made 40 Hz, not how many fell short of it. */}
+      {bounds.length ? <ul>{["below", ...bounds].map((bound, index) => {
         const count = counts[index] ?? 0;
-        return <li key={bound}>
-          <small>&lt; {bound} Hz</small>
+        const label = index === 0
+          ? <>&lt; {bounds[0]} Hz</>
+          : <>&gt; {bound} Hz</>;
+        return <li key={index === 0 ? "below" : bound}>
+          <small>{label}</small>
           <i aria-hidden="true" style={{ "--dmx-histogram-fill": `${Math.round((count / busiest) * 100)}%` } as CSSProperties}/>
           <span>{count}</span>
         </li>;

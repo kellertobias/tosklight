@@ -989,7 +989,7 @@ function useTimecodeAddAction({
 /// Markers are aligned against the waveform, so it has to carry the same detail as the one the
 /// desk serves for an already-linked file (`AUDIO_WAVEFORM_BUCKETS`); otherwise the lane loses
 /// resolution until the show is reopened.
-const IMPORTED_WAVEFORM_BUCKETS = 4_096;
+const IMPORTED_WAVEFORM_BUCKETS = 98_304;
 
 async function decodeAudioPeaks(
 	file: File,

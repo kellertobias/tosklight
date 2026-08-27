@@ -274,9 +274,11 @@
 
 .timecode-waveform {
 	position: absolute;
-	inset: 5px 0;
+	/* The envelope stands on the lane floor, so the surface it is drawn on has to be the lane
+	   itself. Insetting it lifted the whole waveform above the lane it belongs to. */
+	inset: 0;
 	width: 100%;
-	height: calc(100% - 10px);
+	height: 100%;
 }
 
 .timecode-waveform-envelope {

@@ -492,6 +492,11 @@
 	height: 100%;
 	overflow: auto;
 	scrollbar-width: none;
+	/* A desk surface stops where its content stops. WebKit rubber-bands a scroller past its own
+	   end and then springs back, which on a fixture list reads as being able to scroll past the
+	   last fixture into nothing; this also stops a scroll that reached the end from chaining into
+	   whatever pane sits behind it. */
+	overscroll-behavior: none;
 }
 
 .ui-window-scroll-area.empty .ui-window-scroller {

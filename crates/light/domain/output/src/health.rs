@@ -32,11 +32,19 @@ pub const OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS: [u64; 20] = [
     9_007_199_254_740_991,
 ];
 
-/// Exclusive frame-rate bounds an operator watches for dropped output cadence.
+/// Frame-rate thresholds an operator watches for dropped output cadence.
 ///
-/// Each bucket counts the frames delivered slower than its bound, so the counts are cumulative
-/// and the last bucket contains every frame that missed the slowest supported desk rate.
-pub const OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ: [f32; 5] = [20.0, 30.0, 38.0, 40.0, 44.0];
+/// An operator judging cadence asks "how many frames made 40 Hz?", not "how many fell short of
+/// it", so the counts read upward from each bound. There is one more bucket than there are
+/// bounds: the first holds every frame slower than the lowest bound, and each bound after it
+/// holds every frame at or above that bound. The counts are therefore cumulative from the top,
+/// and the last bucket is the fastest band the desk is asked about.
+pub const OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ: [f32; 9] =
+    [20.0, 30.0, 38.0, 40.0, 44.0, 48.0, 52.0, 56.0, 60.0];
+
+/// Buckets reported for [`OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ`]: the below-lowest band plus one
+/// at-or-above band per bound.
+pub const OUTPUT_FRAME_RATE_BUCKET_COUNT: usize = OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ.len() + 1;
 
 /// Span of the rolling window behind every `recent_*` reading.
 pub const OUTPUT_RECENT_WINDOW: Duration = Duration::from_secs(60);
@@ -83,9 +91,10 @@ pub struct OutputHealth {
     pub recent_frame_hz_maximum: f32,
     /// Mean measured frame rate over the last [`OUTPUT_RECENT_WINDOW`].
     pub recent_frame_hz_average: f32,
-    /// Frames in the last [`OUTPUT_RECENT_WINDOW`] delivered below each
-    /// [`OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ`] bound.
-    pub recent_frame_rate_bucket_counts: [u64; OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ.len()],
+    /// Frames in the last [`OUTPUT_RECENT_WINDOW`] by [`OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ`]
+    /// band: index zero is slower than the lowest bound, and index `n + 1` is at or above
+    /// bound `n`.
+    pub recent_frame_rate_bucket_counts: [u64; OUTPUT_FRAME_RATE_BUCKET_COUNT],
     /// Send errors observed in the last [`OUTPUT_RECENT_WINDOW`].
     pub recent_send_errors: u64,
     /// Frames delivered in each [`OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ`] band since show start.
@@ -131,7 +140,7 @@ impl OutputHealth {
     pub fn refresh_recent(&mut self, now: Instant) {
         self.window.discard_before(now);
         self.recent_send_errors = self.window.send_errors.len() as u64;
-        self.recent_frame_rate_bucket_counts = [0; OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ.len()];
+        self.recent_frame_rate_bucket_counts = [0; OUTPUT_FRAME_RATE_BUCKET_COUNT];
         if self.window.frames.is_empty() {
             self.recent_frame_hz_minimum = 0.0;
             self.recent_frame_hz_maximum = 0.0;
@@ -145,9 +154,12 @@ impl OutputHealth {
             minimum = minimum.min(*frame_hz);
             maximum = maximum.max(*frame_hz);
             total += f64::from(*frame_hz);
+            if *frame_hz < OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ[0] {
+                self.recent_frame_rate_bucket_counts[0] += 1;
+            }
             for (bucket, bound) in OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ.iter().enumerate() {
-                if *frame_hz < *bound {
-                    self.recent_frame_rate_bucket_counts[bucket] += 1;
+                if *frame_hz >= *bound {
+                    self.recent_frame_rate_bucket_counts[bucket + 1] += 1;
                 }
             }
         }
@@ -213,15 +225,40 @@ mod tests {
     }
 
     #[test]
-    fn slow_frames_fall_into_every_bucket_they_are_below() {
+    fn a_frame_counts_into_every_band_it_reaches() {
         let mut health = OutputHealth::default();
         let start = origin();
         health.record_frame(start);
-        // 25 Hz: below 30, 38, 40 and 44, but not below 20.
+        // 25 Hz: at or above 20 and nothing faster, and not slower than the lowest bound.
         health.record_frame(start + Duration::from_millis(40));
         health.refresh_recent(start + Duration::from_millis(40));
 
-        assert_eq!(health.recent_frame_rate_bucket_counts, [0, 1, 1, 1, 1]);
+        assert_eq!(
+            health.recent_frame_rate_bucket_counts,
+            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
+
+        // 62 Hz reaches every band, including the fastest.
+        let mut fast = OutputHealth::default();
+        fast.record_frame(start);
+        fast.record_frame(start + Duration::from_micros(16_129));
+        fast.refresh_recent(start + Duration::from_micros(16_129));
+
+        assert_eq!(
+            fast.recent_frame_rate_bucket_counts,
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        );
+
+        // 12 Hz reaches none of them, so only the below-lowest band counts it.
+        let mut slow = OutputHealth::default();
+        slow.record_frame(start);
+        slow.record_frame(start + Duration::from_millis(83));
+        slow.refresh_recent(start + Duration::from_millis(83));
+
+        assert_eq!(
+            slow.recent_frame_rate_bucket_counts,
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
     }
 
     #[test]
@@ -238,7 +275,10 @@ mod tests {
 
         assert_eq!(health.recent_send_errors, 0);
         assert_eq!(health.recent_frame_hz_average, 0.0);
-        assert_eq!(health.recent_frame_rate_bucket_counts, [0; 5]);
+        assert_eq!(
+            health.recent_frame_rate_bucket_counts,
+            [0; OUTPUT_FRAME_RATE_BUCKET_COUNT]
+        );
     }
 
     #[test]

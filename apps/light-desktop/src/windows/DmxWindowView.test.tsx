@@ -98,11 +98,16 @@ describe("DMX application view", () => {
     expect(screen.queryByText("170824")).toBeNull();
     const histogram = container.querySelector(".dmx-output-histogram")!;
     expect([...histogram.querySelectorAll("li")].map((row) => row.textContent)).toEqual([
-      "< 20 Hz0",
-      "< 30 Hz0",
-      "< 38 Hz1",
-      "< 40 Hz3",
-      "< 44 Hz12",
+      "< 20 Hz2",
+      "> 20 Hz118",
+      "> 30 Hz116",
+      "> 38 Hz113",
+      "> 40 Hz101",
+      "> 44 Hz74",
+      "> 48 Hz41",
+      "> 52 Hz12",
+      "> 56 Hz3",
+      "> 60 Hz0",
     ]);
     const errors = container.querySelector(".dmx-output-errors")!;
     expect(errors.textContent).toContain("Last 60 s");

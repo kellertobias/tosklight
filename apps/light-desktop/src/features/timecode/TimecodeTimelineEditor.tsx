@@ -50,6 +50,7 @@ import {
 	withPlacedCueStart,
 } from "./editorModel";
 import { type ClipFadeKind, CueListClipBody } from "./TimecodeClipBody";
+import { LaneLabel, Waveform } from "./TimecodeLaneParts";
 import {
 	CueListClipContents,
 	CueListClipStatus,
@@ -542,20 +543,13 @@ function EditorLane(
 						/>
 					</svg>
 				)}
-			<div className="timecode-editor-lane-label">
-				<Button
-					className="timecode-lane-select"
-					aria-label={`${lane.name} · ${lane.content.kind.replaceAll("_", " ")}. Drag to reorder lane`}
-					onPointerDown={(event) => props.startLaneDrag(event, lane.id)}
-					onClick={() => {
-						if (!props.consumeLaneDragClick(lane.id))
-							props.onSelectLane(lane.id);
-					}}
-				>
-					<strong>{lane.name}</strong>
-					<span>{lane.content.kind.replaceAll("_", " ")}</span>
-				</Button>
-			</div>
+			<LaneLabel
+				lane={lane}
+				audioFileName={props.definition.audio?.file_name}
+				startLaneDrag={props.startLaneDrag}
+				consumeLaneDragClick={props.consumeLaneDragClick}
+				onSelectLane={props.onSelectLane}
+			/>
 			{props.items
 				.filter((item) => item.laneId === lane.id)
 				.map((item) => (
@@ -1880,32 +1874,6 @@ function Ruler({
 				))}
 			</div>
 		</>
-	);
-}
-
-function Waveform({ peaks }: { peaks: readonly number[] }) {
-	// The waveform is the surface markers get aligned against, so it is drawn at high resolution.
-	// One element per bucket would be thousands of nodes; the envelope is a single filled path
-	// traced out along the top and back along the bottom instead.
-	const outline = useMemo(() => {
-		if (!peaks.length) return "";
-		const points: string[] = [];
-		for (let index = 0; index < peaks.length; index += 1) {
-			points.push(`${index} ${24 - peaks[index] * 22}`);
-		}
-		for (let index = peaks.length - 1; index >= 0; index -= 1) {
-			points.push(`${index} ${24 + peaks[index] * 22}`);
-		}
-		return `M ${points.join(" L ")} Z`;
-	}, [peaks]);
-	return (
-		<svg
-			viewBox={`0 0 ${Math.max(peaks.length, 1)} 48`}
-			preserveAspectRatio="none"
-			aria-hidden="true"
-		>
-			<path className="timecode-waveform-envelope" d={outline} />
-		</svg>
 	);
 }
 

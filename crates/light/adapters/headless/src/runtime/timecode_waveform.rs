@@ -20,11 +20,13 @@ impl light_application::AssetChunkSink for WaveformSink {
 /// Waveform buckets returned when the caller does not ask for a resolution.
 ///
 /// Markers are aligned against this waveform, so it carries far more detail than a lane-width
-/// overview would need; the lane stretches one fetched waveform across every zoom level.
-pub(super) const AUDIO_WAVEFORM_BUCKETS: usize = 4_096;
+/// overview would need; the lane stretches one fetched waveform across every zoom level. At a
+/// deep zoom a coarse envelope reads as straight lines between distant peaks, so the resolution
+/// is set for the zoomed-in lane rather than for the whole track at once.
+pub(super) const AUDIO_WAVEFORM_BUCKETS: usize = 98_304;
 
 /// Upper bound on requested waveform buckets, so one request cannot pin the runtime.
-pub(super) const AUDIO_WAVEFORM_BUCKETS_MAXIMUM: usize = 16_384;
+pub(super) const AUDIO_WAVEFORM_BUCKETS_MAXIMUM: usize = 196_608;
 
 #[derive(Deserialize)]
 pub(super) struct AudioWaveformQuery {
@@ -173,8 +175,9 @@ mod waveform_tests {
         let peaks = pcm_waveform_peaks(&wav, AUDIO_WAVEFORM_BUCKETS).unwrap();
 
         assert_eq!(peaks.len(), AUDIO_WAVEFORM_BUCKETS);
-        // The previous fixed 220 buckets left roughly a quarter-second per bucket at this length.
-        assert!(AUDIO_WAVEFORM_BUCKETS > 220 * 10);
+        // The previous fixed 220 buckets left roughly a quarter-second per bucket at this length,
+        // and the 4096 that replaced them still smeared a zoomed-in lane into straight lines.
+        assert!(AUDIO_WAVEFORM_BUCKETS >= 4_096 * 20);
         assert!(peaks.iter().all(|peak| (0.0..=1.0).contains(peak)));
     }
 
