@@ -55,6 +55,7 @@ const SETTINGS_STORY_BY_SECTION = {
 	"sound-output": "settings-outputs",
 	network: "settings-network-and-inputs",
 	dmx: "settings-dmx-input",
+	"pixel-map": "settings-pixel-map",
 	logs: "settings-logs",
 } as const;
 

@@ -238,6 +238,7 @@ export const MEDIA_SETTINGS_SECTIONS = [
 	{ id: "sound-output", label: "Sound" },
 	{ id: "network", label: "Network" },
 	{ id: "dmx", label: "DMX" },
+	{ id: "pixel-map", label: "Pixel Map" },
 	{ id: "logs", label: "Logs" },
 ] as const;
 

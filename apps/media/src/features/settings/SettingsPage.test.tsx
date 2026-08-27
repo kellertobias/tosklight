@@ -17,7 +17,7 @@ describe("the settings page", () => {
 		renderSettings();
 
 		const tabs = screen.getByRole("tablist");
-		expect(tabs).toHaveTextContent("LibrariesPictureSoundNetworkDMXLogs");
+		expect(tabs).toHaveTextContent("LibrariesPictureSoundNetworkDMXPixel MapLogs");
 		expect(tabs).not.toHaveTextContent("Audio");
 		expect(await screen.findByLabelText("Art-Net")).toBeVisible();
 		expect(

@@ -429,6 +429,66 @@ body {
 	border-radius: 8px;
 }
 
+/* A proportional stand-in for the canvas, with the zones and screens drawn on it. */
+.media-pixel-canvas {
+	position: relative;
+	width: 100%;
+	background:
+		repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%) 0 0 / 24px 24px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.media-pixel-region {
+	position: absolute;
+	border: 1px dashed var(--accent, #58d4ef);
+	background: rgb(88 212 239 / 8%);
+	pointer-events: none;
+}
+
+.media-pixel-zone {
+	position: absolute;
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: 1px solid var(--accent, #58d4ef);
+	background: rgb(88 212 239 / 22%);
+	color: inherit;
+	font: inherit;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.media-pixel-zone[aria-pressed="true"] {
+	border-width: 2px;
+	background: rgb(88 212 239 / 40%);
+}
+
+/* A zone that is not being sent is drawn, but plainly not live. */
+.media-pixel-zone[data-enabled="false"] {
+	border-style: dashed;
+	opacity: 0.5;
+}
+
+.media-pixel-zone-editor,
+.media-pixel-route,
+.media-pixel-region-editor {
+	display: grid;
+	gap: 0.6rem;
+	padding: 0.75rem;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.media-settings-problems {
+	display: grid;
+	gap: 0.3rem;
+	margin: 0;
+	padding-left: 1.1rem;
+	color: var(--warning, #f39a4a);
+}
+
 .media-settings-group {
 	display: grid;
 	gap: 0.75rem;
