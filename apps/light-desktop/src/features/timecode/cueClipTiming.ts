@@ -17,6 +17,10 @@ export interface CueClipTimingRow {
 	cue: Cue;
 	startFrame: number;
 	inFade: CueClipTimingRange;
+	/// The frame the Cue hands over to the next one, which is where its out timing is measured
+	/// from. The desk releases an outgoing Cue when the incoming Cue is triggered, so the out
+	/// delay waits from the handover rather than from this Cue's own start.
+	handoverFrame: number;
 	outFade: CueClipTimingRange;
 	diagnostic?: string;
 	/// Set for a Cue whose start the Timecode lane owns because it waits for a manual GO.
@@ -65,7 +69,7 @@ export function cueClipTimingRows(
 		if (!current.id || visited.has(current.id)) break;
 		visited.add(current.id);
 		const currentStart = scheduled.get(current.id) ?? clip.start_frame;
-		const currentRow = timingRow(current, currentStart, defaults);
+		const currentRow = { inFade: inFadeRange(current, currentStart, defaults) };
 		let next: Cue | undefined = range[range.indexOf(current) + 1];
 		let nextStart: number;
 		if (current.trigger.type === "link") {
@@ -86,7 +90,7 @@ export function cueClipTimingRows(
 				break;
 			}
 			nextStart =
-				Math.max(currentRow.inFade.endFrame, currentRow.outFade.endFrame) +
+				currentRow.inFade.endFrame +
 				millisToTimecodeFrames(Number(current.trigger.delay_millis ?? 0));
 		} else {
 			if (!next) break;
@@ -99,9 +103,7 @@ export function cueClipTimingRows(
 			else if (next.trigger.type === "wait")
 				nextStart = currentStart + incomingDelay;
 			else if (next.trigger.type === "follow")
-				nextStart =
-					Math.max(currentRow.inFade.endFrame, currentRow.outFade.endFrame) +
-					incomingDelay;
+				nextStart = currentRow.inFade.endFrame + incomingDelay;
 			else {
 				const manualId = next.id;
 				const placed = clip.cue_starts?.find(
@@ -110,7 +112,7 @@ export function cueClipTimingRows(
 				transitions.set(manualId ?? "", placed ? "placed" : "default");
 				nextStart = placed
 					? clip.start_frame + Math.round(placed.offset_frame)
-					: Math.max(currentRow.inFade.endFrame, currentRow.outFade.endFrame);
+					: currentRow.inFade.endFrame;
 			}
 		}
 		if (!next) break;
@@ -122,36 +124,27 @@ export function cueClipTimingRows(
 		current = next;
 	}
 
-	const rows: CueClipTimingRow[] = [];
-	for (const cue of range) {
-		const previous = rows.at(-1);
-		const startFrame =
+	const starts: number[] = [];
+	for (const [index, cue] of range.entries()) {
+		const previous = range[index - 1];
+		const previousStart = starts[index - 1];
+		starts.push(
 			(cue.id ? scheduled.get(cue.id) : undefined) ??
-			Math.max(
-				previous?.inFade.endFrame ?? clip.start_frame,
-				previous?.outFade.endFrame ?? clip.start_frame,
-			);
-		const inFadeMillis = effectiveInFadeMillis(cue, defaults);
-		const inStart = startFrame + millisToTimecodeFrames(cue.delay_millis);
-		const outStart =
-			startFrame +
-			millisToTimecodeFrames(effectiveOutDelayMillis(cue, inFadeMillis));
-		const row: CueClipTimingRow = {
-			cue,
+				(previous && previousStart !== undefined
+					? inFadeRange(previous, previousStart, defaults).endFrame
+					: clip.start_frame),
+		);
+	}
+
+	const rows: CueClipTimingRow[] = [];
+	for (const [index, cue] of range.entries()) {
+		const startFrame = starts[index] ?? clip.start_frame;
+		// A Cue holds until the next one takes over, and the last one holds to the end of the clip.
+		const handoverFrame = Math.max(
 			startFrame,
-			inFade: {
-				startFrame: inStart,
-				endFrame: inStart + millisToTimecodeFrames(inFadeMillis),
-			},
-			outFade: {
-				startFrame: outStart,
-				endFrame:
-					outStart +
-					millisToTimecodeFrames(
-						effectiveOutFadeMillis(cue, inFadeMillis, defaults),
-					),
-			},
-		};
+			starts[index + 1] ?? clip.end_frame,
+		);
+		const row = timingRow(cue, startFrame, handoverFrame, defaults);
 		const transition = cue.id ? transitions.get(cue.id) : undefined;
 		if (transition) row.transition = transition;
 		if (!cue.id) row.diagnostic = `Cue ${cue.number} has no stable identity.`;
@@ -160,10 +153,7 @@ export function cueClipTimingRows(
 			row.diagnostic = `Cue ${cue.number} is not reached by this clip's Cue order.`;
 		else if (startFrame < clip.start_frame || startFrame > clip.end_frame)
 			row.diagnostic = `Cue ${cue.number} starts outside this clip.`;
-		else if (
-			row.inFade.endFrame > clip.end_frame ||
-			row.outFade.endFrame > clip.end_frame
-		)
+		else if (row.inFade.endFrame > clip.end_frame)
 			row.diagnostic = `Cue ${cue.number} timing extends outside this clip.`;
 		rows.push(row);
 	}
@@ -182,8 +172,14 @@ export function cueWithDraggedFade(
 		return { error: "Timing position is invalid." };
 	const target = Math.round(targetFrame);
 	const range = kind === "in" ? row.inFade : row.outFade;
-	if (target < row.startFrame)
-		return { error: `Cue ${cue.number} timing cannot start before the Cue.` };
+	const anchor = kind === "in" ? row.startFrame : row.handoverFrame;
+	if (target < anchor)
+		return {
+			error:
+				kind === "in"
+					? `Cue ${cue.number} timing cannot start before the Cue.`
+					: `Cue ${cue.number} release cannot start before the Cue hands over.`,
+		};
 	if (target > clip.end_frame)
 		return { error: `Cue ${cue.number} timing must remain inside the clip.` };
 	if (edge === "start" && target > range.endFrame)
@@ -192,9 +188,7 @@ export function cueWithDraggedFade(
 		return { error: `Cue ${cue.number} fade end cannot cross its fade start.` };
 
 	const delayFrames =
-		edge === "start"
-			? target - row.startFrame
-			: range.startFrame - row.startFrame;
+		edge === "start" ? target - anchor : range.startFrame - anchor;
 	const fadeFrames =
 		edge === "start" ? range.endFrame - target : target - range.startFrame;
 	const delayMillis = timecodeFramesToMillis(delayFrames);
@@ -215,23 +209,34 @@ export function cueWithDraggedFade(
 	};
 }
 
-function timingRow(
+function inFadeRange(
 	cue: Cue,
 	startFrame: number,
 	defaults: CueClipTimingDefaults,
+): CueClipTimingRange {
+	const inStart = startFrame + millisToTimecodeFrames(cue.delay_millis);
+	return {
+		startFrame: inStart,
+		endFrame:
+			inStart + millisToTimecodeFrames(effectiveInFadeMillis(cue, defaults)),
+	};
+}
+
+function timingRow(
+	cue: Cue,
+	startFrame: number,
+	handoverFrame: number,
+	defaults: CueClipTimingDefaults,
 ): CueClipTimingRow {
 	const inFadeMillis = effectiveInFadeMillis(cue, defaults);
-	const inStart = startFrame + millisToTimecodeFrames(cue.delay_millis);
 	const outStart =
-		startFrame +
+		handoverFrame +
 		millisToTimecodeFrames(effectiveOutDelayMillis(cue, inFadeMillis));
 	return {
 		cue,
 		startFrame,
-		inFade: {
-			startFrame: inStart,
-			endFrame: inStart + millisToTimecodeFrames(inFadeMillis),
-		},
+		inFade: inFadeRange(cue, startFrame, defaults),
+		handoverFrame,
 		outFade: {
 			startFrame: outStart,
 			endFrame:
@@ -288,9 +293,10 @@ export function automatedCueClipLength(
 		rows.some((row) => row.diagnostic || row.transition === "default")
 	)
 		return null;
+	// The last Cue releases when the clip ends, so the clip is as long as its content: the point
+	// every Cue in the range has finished fading in.
 	const last = rows.reduce(
-		(latest, row) =>
-			Math.max(latest, row.inFade.endFrame, row.outFade.endFrame),
+		(latest, row) => Math.max(latest, row.inFade.endFrame),
 		startFrame,
 	);
 	return Math.max(1, last - startFrame);

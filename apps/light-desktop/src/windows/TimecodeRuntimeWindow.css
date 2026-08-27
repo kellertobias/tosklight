@@ -658,6 +658,7 @@
 }
 /* A Cue occupies the lower two thirds of the clip, under the drag handle, as two stacked bands:
    the out timing above the in timing. Each band is a muted delay block followed by its fade. */
+.timecode-cue-content-range,
 .timecode-cue-fade-range,
 .timecode-cue-delay-range {
 	position: absolute;
@@ -687,6 +688,20 @@
 	bottom: 2px;
 	border: 1px dashed rgb(88 212 239 / 62%);
 	background: rgb(88 212 239 / 14%);
+}
+
+/* Content is the Cue simply being held, so it reads as a flat rail joining its own timing to the
+   next Cue's rather than as a block competing with them. */
+.timecode-cue-content-range {
+	z-index: 2;
+}
+.timecode-cue-content-range.out {
+	top: calc(var(--timecode-clip-handle-height) + 2px);
+	background: rgb(243 154 74 / 22%);
+}
+.timecode-cue-content-range.in {
+	bottom: 2px;
+	background: rgb(88 212 239 / 22%);
 }
 
 /* The first third of a Cuelist clip drags the whole clip; its edges scale it. */

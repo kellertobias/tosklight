@@ -268,14 +268,19 @@ function CueTimingRow({
 				/>
 			)}
 			{/* Each Cue is two bands stacked inside the clip: the out timing above the in timing.
-			    Each band is its delay followed by its fade, so the pair steps down and to the
-			    right like the Tetris zig-zag the operator reads as one Cue. */}
+			    Neither band is allowed a hole, so the lower one reads in delay, in fade, then the
+			    content it holds, and the upper one reads that content, out delay, out fade. */}
 			{(["out", "in"] as const).map((kind) => (
 				<CueBand
 					key={kind}
 					cueNumber={String(row.cue.number)}
 					kind={kind}
-					startFrame={row.startFrame}
+					anchorFrame={kind === "in" ? row.startFrame : row.handoverFrame}
+					contentFrames={
+						kind === "in"
+							? [row.inFade.endFrame, row.handoverFrame]
+							: [row.startFrame, row.handoverFrame]
+					}
 					range={kind === "in" ? row.inFade : row.outFade}
 					position={position}
 					disabled={saving || Boolean(row.diagnostic)}
@@ -436,7 +441,8 @@ function CueTransitionHandle({
 function CueBand({
 	cueNumber,
 	kind,
-	startFrame,
+	anchorFrame,
+	contentFrames,
 	range,
 	position,
 	disabled,
@@ -444,7 +450,8 @@ function CueBand({
 }: {
 	cueNumber: string;
 	kind: CueFadeKind;
-	startFrame: number;
+	anchorFrame: number;
+	contentFrames: readonly [number, number];
 	range: { startFrame: number; endFrame: number };
 	position(frame: number): number;
 	disabled: boolean;
@@ -452,11 +459,21 @@ function CueBand({
 }) {
 	const label = kind === "in" ? "In fade" : "Out fade";
 	const delayLabel = kind === "in" ? "In delay" : "Out delay";
-	const delayLeft = position(startFrame);
+	const delayLeft = position(anchorFrame);
 	const fadeLeft = position(range.startFrame);
 	const fadeRight = position(range.endFrame);
+	const contentLeft = position(contentFrames[0]);
+	const contentRight = position(contentFrames[1]);
 	return (
 		<>
+			<span
+				className={`timecode-cue-content-range ${kind}`}
+				style={{
+					left: contentLeft,
+					width: Math.max(0, contentRight - contentLeft),
+				}}
+				title={`Cue ${cueNumber} content`}
+			/>
 			<span
 				className={`timecode-cue-delay-range ${kind}`}
 				style={{ left: delayLeft, width: Math.max(0, fadeLeft - delayLeft) }}
