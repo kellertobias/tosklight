@@ -9,7 +9,10 @@ use std::collections::HashSet;
 use media_domain::PresentationMode;
 use media_domain::personality::StartAddressError;
 
-use super::{DmxProtocol, MediaConfiguration, OutputConfiguration, migration::MigrationError};
+use super::{
+    DmxProtocol, MediaConfiguration, OutputConfiguration, PixelOutputMode,
+    migration::MigrationError, zone_last_address,
+};
 
 /// Why a configuration cannot be used.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -54,6 +57,46 @@ pub enum ConfigurationError {
         universe: u16,
         start_address: u16,
     },
+    #[error("output '{output}' has two pixel zones with the identity {id}")]
+    DuplicateZoneId { output: String, id: String },
+    #[error(
+        "pixel zone '{zone}' on output '{output}' has no pixels; give it at least one column and one row"
+    )]
+    EmptyZone { output: String, zone: String },
+    #[error("pixel zone '{zone}' on output '{output}' has no colour channels to send")]
+    EmptyLayout { output: String, zone: String },
+    #[error(
+        "pixel zone '{zone}' on output '{output}' needs {footprint} slots from address {start_address}, which runs past the end of universe {universe}"
+    )]
+    ZoneOverrunsUniverse {
+        output: String,
+        zone: String,
+        universe: u16,
+        start_address: u16,
+        footprint: usize,
+    },
+    #[error(
+        "pixel zones '{first}' and '{second}' on output '{output}' both use universe {universe} around address {address}"
+    )]
+    OverlappingZones {
+        output: String,
+        first: String,
+        second: String,
+        universe: u16,
+        address: u16,
+    },
+    #[error(
+        "pixel zone '{zone}' on output '{output}' sends universe {universe}, which no enabled output route carries"
+    )]
+    UnroutedZone {
+        output: String,
+        zone: String,
+        universe: u16,
+    },
+    #[error("output '{output}' has two display regions with the identity {id}")]
+    DuplicateRegionId { output: String, id: String },
+    #[error("display region '{region}' on output '{output}' covers none of the canvas")]
+    EmptyRegion { output: String, region: String },
 }
 
 pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), ConfigurationError> {
@@ -74,9 +117,134 @@ pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), Configu
             });
         }
         validate_output(output)?;
+        validate_pixel_map(output)?;
     }
 
     validate_patch_overlap(&configuration.outputs)
+}
+
+/// Everything a pixel map has to satisfy before the sampler is allowed to run against it.
+fn validate_pixel_map(output: &OutputConfiguration) -> Result<(), ConfigurationError> {
+    let name = output.name.to_string();
+    let map = &output.pixel_map;
+
+    let mut seen = HashSet::new();
+    for zone in &map.zones {
+        if !seen.insert(zone.id.clone()) {
+            return Err(ConfigurationError::DuplicateZoneId {
+                output: name,
+                id: zone.id.clone(),
+            });
+        }
+        if zone.pixel_count() == 0 {
+            return Err(ConfigurationError::EmptyZone {
+                output: name,
+                zone: zone.name.clone(),
+            });
+        }
+        if zone.layout.footprint() == 0 {
+            return Err(ConfigurationError::EmptyLayout {
+                output: name,
+                zone: zone.name.clone(),
+            });
+        }
+        if zone_last_address(zone).is_none() {
+            return Err(ConfigurationError::ZoneOverrunsUniverse {
+                output: name,
+                zone: zone.name.clone(),
+                universe: zone.universe,
+                start_address: zone.start_address,
+                footprint: zone.footprint(),
+            });
+        }
+    }
+
+    validate_zone_overlap(&name, output)?;
+    validate_zone_routes(&name, output)?;
+
+    let mut regions = HashSet::new();
+    for region in &map.regions {
+        if !regions.insert(region.id.clone()) {
+            return Err(ConfigurationError::DuplicateRegionId {
+                output: name,
+                id: region.id.clone(),
+            });
+        }
+        if region.source.width() <= 0.0 || region.source.height() <= 0.0 {
+            return Err(ConfigurationError::EmptyRegion {
+                output: name,
+                region: region.name.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Two zones may share a universe, but not a slot within it.
+fn validate_zone_overlap(
+    output_name: &str,
+    output: &OutputConfiguration,
+) -> Result<(), ConfigurationError> {
+    let enabled: Vec<_> = output
+        .pixel_map
+        .zones
+        .iter()
+        .filter(|zone| zone.enabled)
+        .collect();
+    for (index, zone) in enabled.iter().enumerate() {
+        let Some(last) = zone_last_address(zone) else {
+            continue;
+        };
+        for other in enabled.iter().skip(index + 1) {
+            let Some(other_last) = zone_last_address(other) else {
+                continue;
+            };
+            if zone.universe != other.universe {
+                continue;
+            }
+            let overlaps = zone.start_address <= other_last && other.start_address <= last;
+            if overlaps {
+                return Err(ConfigurationError::OverlappingZones {
+                    output: output_name.to_string(),
+                    first: zone.name.clone(),
+                    second: other.name.clone(),
+                    universe: zone.universe,
+                    address: zone.start_address.max(other.start_address),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A zone sending directly needs somewhere for its universe to go.
+///
+/// A zone handed to the desk does not: the desk owns the sending, so a missing route there is not
+/// a mistake to stop startup over.
+fn validate_zone_routes(
+    output_name: &str,
+    output: &OutputConfiguration,
+) -> Result<(), ConfigurationError> {
+    if output.pixel_map.mode != PixelOutputMode::Direct {
+        return Ok(());
+    }
+    let carried: HashSet<u16> = output
+        .pixel_map
+        .routes
+        .iter()
+        .filter(|route| route.enabled)
+        .map(|route| route.universe)
+        .collect();
+    for zone in output.pixel_map.zones.iter().filter(|zone| zone.enabled) {
+        if !carried.contains(&zone.universe) {
+            return Err(ConfigurationError::UnroutedZone {
+                output: output_name.to_string(),
+                zone: zone.name.clone(),
+                universe: zone.universe,
+            });
+        }
+    }
+    Ok(())
 }
 
 fn validate_output(output: &OutputConfiguration) -> Result<(), ConfigurationError> {
@@ -305,6 +473,164 @@ mod tests {
                 universe: 0,
                 range: "1 through 63999",
             }
+        );
+    }
+}
+
+#[cfg(test)]
+mod pixel_map_tests {
+    use super::*;
+    use crate::configuration::pixel_map::tests::zone;
+    use crate::configuration::{PixelMapConfiguration, PixelOutputRoute};
+    use media_domain::display_region::DisplayRegion;
+    use media_domain::pixel_map::CanvasPoint;
+
+    fn route(universe: u16) -> PixelOutputRoute {
+        PixelOutputRoute {
+            id: format!("route-{universe}"),
+            name: format!("Universe {universe}"),
+            protocol: DmxProtocol::default(),
+            universe,
+            destination: None,
+            enabled: true,
+        }
+    }
+
+    fn output_with(map: PixelMapConfiguration) -> OutputConfiguration {
+        OutputConfiguration {
+            pixel_map: map,
+            ..OutputConfiguration::new("Main")
+        }
+    }
+
+    #[test]
+    fn a_sound_pixel_map_passes() {
+        let map = PixelMapConfiguration {
+            zones: vec![zone("left", 1, 1, 10), zone("right", 1, 31, 10)],
+            routes: vec![route(1)],
+            ..PixelMapConfiguration::default()
+        };
+        assert_eq!(validate_pixel_map(&output_with(map)), Ok(()));
+    }
+
+    #[test]
+    fn two_zones_may_share_a_universe_but_not_a_slot() {
+        let map = PixelMapConfiguration {
+            // The first zone ends at slot 30; the second starts inside it.
+            zones: vec![zone("left", 1, 1, 10), zone("right", 1, 30, 10)],
+            routes: vec![route(1)],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::OverlappingZones { universe: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn a_zone_may_not_run_past_the_end_of_its_universe() {
+        let map = PixelMapConfiguration {
+            zones: vec![zone("strip", 1, 500, 10)],
+            routes: vec![route(1)],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::ZoneOverrunsUniverse { footprint: 30, .. })
+        ));
+    }
+
+    #[test]
+    fn a_zone_with_no_pixels_is_refused() {
+        let mut empty = zone("strip", 1, 1, 0);
+        empty.rows = 0;
+        let map = PixelMapConfiguration {
+            zones: vec![empty],
+            routes: vec![route(1)],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::EmptyZone { .. })
+        ));
+    }
+
+    #[test]
+    fn a_zone_sending_directly_needs_a_route_for_its_universe() {
+        let map = PixelMapConfiguration {
+            zones: vec![zone("strip", 4, 1, 10)],
+            routes: vec![route(1)],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::UnroutedZone { universe: 4, .. })
+        ));
+    }
+
+    #[test]
+    fn a_zone_handed_to_the_desk_needs_no_route_of_its_own() {
+        let map = PixelMapConfiguration {
+            mode: PixelOutputMode::DeskMerge,
+            zones: vec![zone("strip", 4, 1, 10)],
+            routes: Vec::new(),
+            ..PixelMapConfiguration::default()
+        };
+        assert_eq!(validate_pixel_map(&output_with(map)), Ok(()));
+    }
+
+    #[test]
+    fn a_disabled_route_carries_nothing() {
+        let mut dark = route(1);
+        dark.enabled = false;
+        let map = PixelMapConfiguration {
+            zones: vec![zone("strip", 1, 1, 10)],
+            routes: vec![dark],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::UnroutedZone { universe: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn two_zones_may_not_share_an_identity() {
+        let map = PixelMapConfiguration {
+            zones: vec![zone("strip", 1, 1, 10), zone("strip", 1, 100, 10)],
+            routes: vec![route(1)],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::DuplicateZoneId { .. })
+        ));
+    }
+
+    #[test]
+    fn a_region_covering_none_of_the_canvas_is_refused() {
+        let flat = DisplayRegion {
+            source: media_domain::display_region::CanvasRect::new(
+                CanvasPoint::new(0.5, 0.0),
+                CanvasPoint::new(0.5, 1.0),
+            ),
+            ..DisplayRegion::whole("flat", "Flat")
+        };
+        let map = PixelMapConfiguration {
+            regions: vec![flat],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::EmptyRegion { .. })
+        ));
+    }
+
+    #[test]
+    fn an_output_that_maps_nothing_is_valid() {
+        assert_eq!(
+            validate_pixel_map(&OutputConfiguration::new("Main")),
+            Ok(())
         );
     }
 }

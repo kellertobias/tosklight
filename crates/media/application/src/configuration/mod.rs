@@ -8,6 +8,7 @@ mod legacy_text;
 mod migration;
 mod network;
 mod output;
+mod pixel_map;
 mod service;
 mod validate;
 
@@ -23,6 +24,7 @@ pub use network::{
 pub use output::{
     CitpIdentity, DmxProtocol, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
+pub use pixel_map::{PixelMapConfiguration, PixelOutputMode, PixelOutputRoute, zone_last_address};
 pub use service::{
     AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, MAXIMUM_UTC_OFFSET_MINUTES,
     PlaybackConfiguration, TargetCodec, TimeConfiguration,

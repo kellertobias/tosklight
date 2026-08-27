@@ -112,6 +112,10 @@ pub struct OutputConfiguration {
     /// The diagnostic overlay the legacy application drew when no DMX source was active.
     #[serde(default = "enabled_by_default")]
     pub status_overlay: bool,
+    /// What this output maps onto a rig, and how its canvas is divided across screens. Absent in
+    /// every configuration written before pixel mapping existed, which means neither.
+    #[serde(default)]
+    pub pixel_map: super::PixelMapConfiguration,
 }
 
 const fn enabled_by_default() -> bool {
@@ -146,6 +150,7 @@ impl OutputConfiguration {
             citp: CitpIdentity::default(),
             tempo_source: TempoSource::default(),
             status_overlay: enabled_by_default(),
+            pixel_map: super::PixelMapConfiguration::default(),
         }
     }
 }
