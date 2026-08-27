@@ -83,10 +83,11 @@ describe("stepping an indexed attribute", () => {
 	});
 
 	it("offers no wheel when two selected fixtures lay the channel out differently", () => {
-		const first = fixtures("gobo.1", [slotFunction("gobo.1", "Open", 0, 127)])[0];
-		const second = fixtures("gobo.1", [slotFunction("gobo.1", "Open", 0, 63)])[0];
-		second.fixture_id = "f2";
-		expect(attributeBands([first, second], ["f1", "f2"], "gobo.1")).toBeNull();
+		const wide = fixtures("gobo.1", [slotFunction("gobo.1", "Open", 0, 127)]);
+		const narrow = fixtures("gobo.1", [slotFunction("gobo.1", "Open", 0, 63)], "f2");
+		expect(
+			attributeBands([...wide, ...narrow], ["f1", "f2"], "gobo.1"),
+		).toBeNull();
 	});
 });
 
@@ -120,11 +121,11 @@ function slotFunction(attribute: string, label: string, from: number, to: number
 }
 
 /// One selected fixture whose mode holds a single channel of the given shape.
-function fixtures(attribute: string, functions: unknown[]) {
+function fixtures(attribute: string, functions: unknown[], fixtureId = "f1") {
 	const head = { id: "head", master_shared: true };
 	return [
 		{
-			fixture_id: "f1",
+			fixture_id: fixtureId,
 			logical_heads: [],
 			definition: {
 				mode_id: "mode",
@@ -139,5 +140,5 @@ function fixtures(attribute: string, functions: unknown[]) {
 				},
 			},
 		},
-	] as never[];
+	] as unknown as Parameters<typeof attributeBands>[0];
 }
