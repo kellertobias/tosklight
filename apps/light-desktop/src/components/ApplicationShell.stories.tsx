@@ -197,6 +197,7 @@ function ParameterFamiliesExample({
 		encoderSlots: attributes[family],
 		encoderPageCount: 1,
 		attributeLabels: new Map<string, string>(),
+		attributeUnits: new Map<string, string | null>(),
 		normalized,
 		normalizedByFixture: new Map<string, Map<string, number>>(),
 		discrete: new Map<string, string>(),
