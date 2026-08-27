@@ -222,6 +222,13 @@ pub struct PatchedFixture {
     pub location: FixtureLocation,
     #[serde(default)]
     pub rotation: FixtureVector,
+    /// The 3D Point this fixture is slaved to, if any.
+    ///
+    /// The fixture keeps its own patched location and rotation. Those describe where it sits when
+    /// the point rests at its own origin; moving or rotating the point carries the fixture with
+    /// it. An absent master leaves the fixture placed against the stage, exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_master: Option<Uuid>,
     #[serde(default)]
     pub logical_heads: Vec<PatchedHead>,
     /// Additional physical instances controlled and selected as this fixture.

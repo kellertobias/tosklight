@@ -53,6 +53,10 @@ pub struct PatchedFixturePatch {
     pub location: FixtureLocation,
     #[serde(default)]
     pub rotation: FixtureVector,
+    /// The 3D Point this fixture is slaved to. Absent in every show written before points
+    /// existed, which reads back as a fixture placed against the stage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_master: Option<Uuid>,
     #[serde(default)]
     pub logical_heads: Vec<PatchedHead>,
     #[serde(default)]
@@ -104,6 +108,7 @@ impl PatchedFixturePatch {
             internal_bindings: fixture.internal_bindings.clone(),
             location: fixture.location,
             rotation: fixture.rotation,
+            position_master: fixture.position_master,
             logical_heads: fixture.logical_heads.clone(),
             multipatch: fixture.multipatch.clone(),
             group_masters_enabled: fixture.group_masters_enabled,

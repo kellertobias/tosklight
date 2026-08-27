@@ -185,6 +185,14 @@
         "name": {
           "type": "string"
         },
+        "position_master": {
+          "description": "The 3D Point this fixture is slaved to. Omitted by a client that does not use points, and\nby every request written before they existed.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
         "profile_id": {
           "type": "string",
           "format": "uuid"

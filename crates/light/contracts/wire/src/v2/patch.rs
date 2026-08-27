@@ -274,6 +274,10 @@ pub struct PatchFixtureInput {
     pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
     pub rotation: PatchFixtureRotation,
+    /// The 3D Point this fixture is slaved to. Omitted by a client that does not use points, and
+    /// by every request written before they existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_master: Option<Uuid>,
     pub multipatch: Vec<PatchMultiPatchInput>,
     #[serde(default = "default_true")]
     pub group_masters_enabled: bool,

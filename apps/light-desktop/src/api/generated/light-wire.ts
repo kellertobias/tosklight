@@ -650,7 +650,12 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
 /**
  * Canonical split assignments. An unpatched split has two `null` address fields.
  */
-split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean,
+split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation,
+/**
+ * The 3D Point this fixture is slaved to. Omitted by a client that does not use points, and
+ * by every request written before they existed.
+ */
+position_master?: string | null, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean,
 /**
  * Degrees the mounting bracket is set to, positive nose-down. A mechanical setting the desk
  * cannot drive, recorded so the visualizer draws the rig as it actually hangs.

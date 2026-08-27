@@ -331,6 +331,7 @@ fn application_fixture(
                 .map(application_split)
                 .collect(),
             layer_id: input.layer_id,
+            position_master: input.position_master,
             direct_control: input
                 .direct_control
                 .map(application_direct_control)

@@ -240,6 +240,7 @@ fn with_fixtures(
             address: None,
             split_patches: vec![],
             layer_id: "default".into(),
+            position_master: None,
             direct_control: None,
             internal_bindings: Default::default(),
             location: Default::default(),

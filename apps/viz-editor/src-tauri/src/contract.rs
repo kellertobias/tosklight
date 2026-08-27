@@ -594,6 +594,8 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                 address: dto.split_patches.first().and_then(|split| split.address),
                 split_patches: dto.split_patches.iter().map(SplitPatch::from).collect(),
                 layer_id: dto.layer_id,
+                // The CAD editor places a rig against the stage; points are a desk-side relation.
+                position_master: None,
                 // An unparseable address drops the endpoint rather than failing the whole patch;
                 // direct control is an optional extra, not the fixture's identity.
                 direct_control: dto.direct_control.and_then(|value| {
