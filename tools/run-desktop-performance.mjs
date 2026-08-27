@@ -559,10 +559,10 @@ async function requireFixtureSheetActive(
 			return `${(at / 1_000).toFixed(1)}s/${record.fixtureRecords}r`;
 		})
 		.join(" ");
+	// One line: a multi-line failure is easy to lose to log grouping and truncation, and this
+	// message is the only evidence a CI-only measurement leaves behind.
 	throw new Error(
-		`Fixture Sheet did not remain active through the timed measurement window: ${covering.length} beats across ${seconds(measurement.endedAt - measurement.startedAt)}, widest silence ${seconds(widestSilence)}, tolerated ${seconds(tolerance)}\n` +
-			`  expected fixture records: ${expected === null ? "any" : expected}\n` +
-			`  every heartbeat in the report (offset from window start / fixture records): ${all.length ? timeline : "none"}`,
+		`Fixture Sheet did not remain active through the timed measurement window: ${covering.length} beats across ${seconds(measurement.endedAt - measurement.startedAt)}, widest silence ${seconds(widestSilence)}, tolerated ${seconds(tolerance)}; expected fixture records ${expected === null ? "any" : expected}; beats (offset/records) ${all.length ? timeline : "none"}`,
 	);
 }
 
