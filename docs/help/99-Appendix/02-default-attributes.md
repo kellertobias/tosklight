@@ -13,6 +13,8 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Intensity | P1/E3 | **Mask Opacity** (`media.mask.opacity`) | — |
 | Intensity | P1/E4 | **Volume** (`volume`) | — |
 | Intensity | P1/E5 | **Audio Volume** (`audio.volume`) | — |
+| Intensity | P2/E1 | **Plate Pixel Master** (`fixture.plate_pixel_master`) | — |
+| Intensity | P2/E2 | **Plate Background Master** (`fixture.plate_background_master`) | — |
 | Color | P1/E1 | **Red** (`color.red`) | — |
 | Color | P1/E2 | **Green** (`color.green`) | — |
 | Color | P1/E3 | **Blue** (`color.blue`) | — |
@@ -27,6 +29,9 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Color | P2/E6 | **Color Wheel 2** (`color.wheel.2`) | — |
 | Color | P3/E1 | **Color Wheel 1 Rotation** (`color.wheel.1.rotation`) | **Color Wheel 1** (`color.wheel.1`) |
 | Color | P3/E2 | **Color Wheel 2 Rotation** (`color.wheel.2.rotation`) | **Color Wheel 2** (`color.wheel.2`) |
+| Color | P4/E1 | **Colour Macros** (`fixture.colour_macros`) | — |
+| Color | P4/E2 | **Colour Mix Control** (`fixture.colour_mix_control`) | — |
+| Color | P4/E3 | **Tint** (`fixture.tint`) | — |
 | Position | P1/E1 | **Pan** (`pan`) | — |
 | Position | P1/E2 | **Tilt** (`tilt`) | — |
 | Position | P1/E3 | **Position Movement** (`position.movement`) | — |
@@ -46,6 +51,11 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Position | P4/E4 | **Point Rot X** (`point.rotation.x`) | — |
 | Position | P4/E5 | **Point Rot Y** (`point.rotation.y`) | — |
 | Position | P4/E6 | **Point Rot Z** (`point.rotation.z`) | — |
+| Position | P5/E1 | **Pan / Tilt Speed** (`fixture.pan_tilt_speed`) | — |
+| Position | P5/E2 | **Pan / Tilt Speed or Time** (`fixture.pan_tilt_speed_time`) | — |
+| Position | P5/E3 | **Pan / Tilt Time** (`fixture.pan_tilt_time`) | — |
+| Position | P5/E4 | **M-Speed** (`fixture.mspeed`) | — |
+| Position | P5/E5 | **Blackout While Moving** (`fixture.blackout_move`) | — |
 | Beam | P1/E1 | **Gobo 1** (`gobo.1`) | — |
 | Beam | P1/E2 | **Gobo 1 Rotation** (`gobo.1.rotation`) | — |
 | Beam | P1/E3 | **Gobo 2** (`gobo.2`) | — |
@@ -56,6 +66,21 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Beam | P2/E2 | **Prism 1 Rotation** (`prism.1.rotation`) | **Prism 1** (`prism.1`) |
 | Beam | P2/E3 | **Prism 2 Rotation** (`prism.2.rotation`) | **Prism 2** (`prism.2`) |
 | Beam | P2/E4 | **Animation Rotation 1** (`animation.1.rotation`) | **Animation Wheel 1** (`animation.1`) |
+| Beam | P4/E1 | **Effect Animations** (`fixture.effect_animations`) | — |
+| Beam | P4/E2 | **Effect Wheel Position** (`fixture.effect_wheel_position`) | — |
+| Beam | P4/E3 | **Effect Wheel Rotation** (`fixture.effect_wheel_rotation`) | — |
+| Beam | P4/E4 | **Effects Movement** (`fixture.effects_movement`) | — |
+| Beam | P4/E5 | **Effects Speed** (`fixture.effects_speed`) | — |
+| Beam | P4/E6 | **Effect Crossfade** (`fixture.fx_crossfade`) | — |
+| Beam | P5/E1 | **Beam Effect** (`fixture.beam_fx_select`) | — |
+| Beam | P5/E2 | **Beam Effect Movement** (`fixture.beam_fx_movement`) | — |
+| Beam | P5/E3 | **Beam Rate** (`fixture.beam_rate`) | — |
+| Beam | P5/E4 | **Beam Duration** (`fixture.beam_duration`) | — |
+| Beam | P5/E5 | **Beam Time** (`fixture.beam_time`) | — |
+| Beam | P5/E6 | **Plate Effect** (`fixture.plate_fx_select`) | — |
+| Beam | P6/E1 | **Plate Effect Movement** (`fixture.plate_fx_movement`) | — |
+| Beam | P6/E2 | **Plate Flash Rate** (`fixture.plate_flash_rate`) | — |
+| Beam | P6/E3 | **Plate Flash Duration** (`fixture.plate_flash_duration`) | — |
 | Shapers | P1/E1 | **Iris** (`iris`) | — |
 | Shapers | P1/E2 | **Blade 1 Position** (`shaper.blade.1.position`) | — |
 | Shapers | P1/E3 | **Blade 1 Angle** (`shaper.blade.1.angle`) | — |
@@ -66,6 +91,15 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Shapers | P2/E2 | **Blade 3 Angle** (`shaper.blade.3.angle`) | — |
 | Shapers | P2/E3 | **Blade 4 Position** (`shaper.blade.4.position`) | — |
 | Shapers | P2/E4 | **Blade 4 Angle** (`shaper.blade.4.angle`) | — |
+| Shapers | P3/E1 | **Blade 1** (`fixture.blade_1`) | — |
+| Shapers | P3/E2 | **Blade 2** (`fixture.blade_2`) | — |
+| Shapers | P3/E3 | **Blade 3** (`fixture.blade_3`) | — |
+| Shapers | P3/E4 | **Blade 4** (`fixture.blade_4`) | — |
+| Shapers | P3/E5 | **Framing Macro** (`fixture.framing_macro`) | — |
+| Shapers | P3/E6 | **Framing Macro Speed** (`fixture.framing_macro_speed`) | — |
+| Shapers | P4/E1 | **Barndoor Macros** (`fixture.barndoor_macros`) | — |
+| Shapers | P4/E2 | **Barndoor Macro Speed** (`fixture.barndoor_macro_speed`) | — |
+| Shapers | P4/E3 | **Barndoor Module Rotation** (`fixture.barndoor_module_rotation`) | — |
 | Focus | P1/E1 | **Focus** (`focus`) | — |
 | Focus | P1/E2 | **Zoom** (`zoom`) | — |
 | Focus | P1/E3 | **Softness** (`softness`) | — |
@@ -75,6 +109,19 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Control | P1/E4 | **Playback BPM** (`media.playback_bpm`) | — |
 | Control | P1/E5 | **Scaling Mode** (`media.scaling_mode`) | — |
 | Control | P1/E6 | **Blur** (`media.playback.blur`) | — |
+| Control | P2/E1 | **Fixture Control** (`fixture.control`) | — |
+| Control | P2/E2 | **Special Control** (`fixture.special_control`) | — |
+| Control | P2/E3 | **Function** (`fixture.function`) | — |
+| Control | P2/E4 | **Plus 7 Control** (`fixture.plus_7_control`) | — |
+| Control | P2/E5 | **Programs** (`fixture.programs`) | — |
+| Control | P2/E6 | **Fan Control** (`fixture.fan_control`) | — |
+| Control | P3/E1 | **Auto Program Speed** (`fixture.auto_speed`) | — |
+| Control | P3/E2 | **Lamp Control** (`fixture.lamp_control`) | — |
+| Control | P3/E3 | **Power / Special Functions** (`fixture.power_special_functions`) | — |
+| Control | P3/E4 | **Reset** (`fixture.reset`) | — |
+| Control | P3/E5 | **Unused 4** (`fixture.unused_4`) | — |
+| Control | P3/E6 | **Unused 7** (`fixture.unused_7`) | — |
+| Control | P4/E1 | **Unused 8** (`fixture.unused_8`) | — |
 | Media | P1/E1 | **Media Folder** (`media.folder`) | — |
 | Media | P1/E2 | **Media File** (`media.file`) | — |
 | Media | P1/E3 | **Mask Folder** (`media.mask.folder`) | — |
@@ -148,3 +195,47 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | **Media Effect 2** | **Media Effect 2** (`media.effect.2`) |
 | **Media Effect 3** | **Media Effect 3** (`media.effect.3`) |
 | **Media Effect 4** | **Media Effect 4** (`media.effect.4`) |
+| **Fixture Control** | **Fixture Control** (`fixture.control`) |
+| **Special Control** | **Special Control** (`fixture.special_control`) |
+| **Function** | **Function** (`fixture.function`) |
+| **Plus 7 Control** | **Plus 7 Control** (`fixture.plus_7_control`) |
+| **Programs** | **Programs** (`fixture.programs`) |
+| **Fan Control** | **Fan Control** (`fixture.fan_control`) |
+| **Auto Program Speed** | **Auto Program Speed** (`fixture.auto_speed`) |
+| **Unused 4** | **Unused 4** (`fixture.unused_4`) |
+| **Unused 7** | **Unused 7** (`fixture.unused_7`) |
+| **Unused 8** | **Unused 8** (`fixture.unused_8`) |
+| **Pan / Tilt Speed** | **Pan / Tilt Speed** (`fixture.pan_tilt_speed`) |
+| **Pan / Tilt Speed or Time** | **Pan / Tilt Speed or Time** (`fixture.pan_tilt_speed_time`) |
+| **Pan / Tilt Time** | **Pan / Tilt Time** (`fixture.pan_tilt_time`) |
+| **M-Speed** | **M-Speed** (`fixture.mspeed`) |
+| **Blackout While Moving** | **Blackout While Moving** (`fixture.blackout_move`) |
+| **Colour Macros** | **Colour Macros** (`fixture.colour_macros`) |
+| **Colour Mix Control** | **Colour Mix Control** (`fixture.colour_mix_control`) |
+| **Tint** | **Tint** (`fixture.tint`) |
+| **Blade 1** | **Blade 1** (`fixture.blade_1`) |
+| **Blade 2** | **Blade 2** (`fixture.blade_2`) |
+| **Blade 3** | **Blade 3** (`fixture.blade_3`) |
+| **Blade 4** | **Blade 4** (`fixture.blade_4`) |
+| **Framing Macro** | **Framing Macro** (`fixture.framing_macro`) |
+| **Framing Macro Speed** | **Framing Macro Speed** (`fixture.framing_macro_speed`) |
+| **Barndoor Macros** | **Barndoor Macros** (`fixture.barndoor_macros`) |
+| **Barndoor Macro Speed** | **Barndoor Macro Speed** (`fixture.barndoor_macro_speed`) |
+| **Barndoor Module Rotation** | **Barndoor Module Rotation** (`fixture.barndoor_module_rotation`) |
+| **Effect Animations** | **Effect Animations** (`fixture.effect_animations`) |
+| **Effect Wheel Position** | **Effect Wheel Position** (`fixture.effect_wheel_position`) |
+| **Effect Wheel Rotation** | **Effect Wheel Rotation** (`fixture.effect_wheel_rotation`) |
+| **Effects Movement** | **Effects Movement** (`fixture.effects_movement`) |
+| **Effects Speed** | **Effects Speed** (`fixture.effects_speed`) |
+| **Effect Crossfade** | **Effect Crossfade** (`fixture.fx_crossfade`) |
+| **Beam Effect** | **Beam Effect** (`fixture.beam_fx_select`) |
+| **Beam Effect Movement** | **Beam Effect Movement** (`fixture.beam_fx_movement`) |
+| **Beam Rate** | **Beam Rate** (`fixture.beam_rate`) |
+| **Beam Duration** | **Beam Duration** (`fixture.beam_duration`) |
+| **Beam Time** | **Beam Time** (`fixture.beam_time`) |
+| **Plate Effect** | **Plate Effect** (`fixture.plate_fx_select`) |
+| **Plate Effect Movement** | **Plate Effect Movement** (`fixture.plate_fx_movement`) |
+| **Plate Flash Rate** | **Plate Flash Rate** (`fixture.plate_flash_rate`) |
+| **Plate Flash Duration** | **Plate Flash Duration** (`fixture.plate_flash_duration`) |
+| **Plate Pixel Master** | **Plate Pixel Master** (`fixture.plate_pixel_master`) |
+| **Plate Background Master** | **Plate Background Master** (`fixture.plate_background_master`) |
