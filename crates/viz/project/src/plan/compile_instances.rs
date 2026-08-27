@@ -39,7 +39,6 @@ pub(super) fn compile_instances(
             instance_optics.output = output;
         }
         let fixture_index = scene.fixtures.len() as u32;
-        let missing_optics = mode.geometry.emitters.is_empty();
         scene.fixtures.push(FixtureInstance {
             instance_id: instance.instance_id,
             fixture_id: fixture.fixture_id,
@@ -47,6 +46,7 @@ pub(super) fn compile_instances(
             number: fixture.number,
             position: instance.position,
             rotation_degrees: instance.rotation_degrees,
+            position_master: None,
             bracket_degrees: instance.bracket_angle,
             shaper_degrees: instance.shaper_angle,
             installed_colour: crate::installed_appearance_linear_rgb(
@@ -65,7 +65,7 @@ pub(super) fn compile_instances(
                 .find_map(|(_, address)| *address)
                 .or_else(|| shared_addresses.values().copied().min()),
             model,
-            fallback: missing_optics.then(|| {
+            fallback: mode.geometry.emitters.is_empty().then(|| {
                 FallbackReason::new(
                     "fixture optics",
                     format!(

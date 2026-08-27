@@ -73,6 +73,7 @@ pub(super) fn fixture(profile: &FixtureProfile) -> PatchedFixture {
             address: Some(101),
         }],
         layer_id: "overhead".into(),
+        position_master: None,
         direct_control: Some(DirectControlEndpoint {
             protocol: DirectControlProtocol::Citp,
             ip_address: "192.0.2.25".parse().unwrap(),

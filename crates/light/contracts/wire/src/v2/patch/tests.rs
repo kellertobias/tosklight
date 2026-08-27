@@ -308,6 +308,7 @@ fn fixture_input() -> PatchFixtureInput {
             y: 0.0,
             z: 0.0,
         },
+        position_master: None,
         multipatch: Vec::new(),
         group_masters_enabled: true,
         grand_master_enabled: true,

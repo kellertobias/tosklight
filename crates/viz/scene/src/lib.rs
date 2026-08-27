@@ -17,6 +17,7 @@ mod atmosphere;
 mod diagnostics;
 mod model;
 mod persistence;
+mod points;
 mod provider;
 mod renderer_settings;
 mod scene;
@@ -33,6 +34,7 @@ pub use model::{FixtureModel, ModelError, ModelPart, ModelPartKind, read_glb, re
 pub use persistence::{
     DEFAULT_DECAY_SECONDS, DEFAULT_FALLOFF, DEFAULT_THRESHOLD, PersistencePreference,
 };
+pub use points::{PointPose, slaved_to_point};
 pub use provider::{
     ProviderCapabilities, ProviderError, ProviderEvent, ProviderKind, SceneProvider,
 };

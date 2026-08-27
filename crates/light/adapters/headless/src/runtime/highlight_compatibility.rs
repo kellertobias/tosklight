@@ -170,6 +170,7 @@ mod tests {
                 address: Some(fixture_number as u16),
                 split_patches: Vec::new(),
                 layer_id: "default".into(),
+                position_master: None,
                 direct_control: None,
                 internal_bindings: Default::default(),
                 location: Default::default(),

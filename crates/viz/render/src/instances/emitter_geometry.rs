@@ -90,7 +90,14 @@ pub fn semantic_lights(scene: &Scene, values: &SceneValues) -> Vec<SemanticLight
         let installed_colour = Vec3::from(fixture.installed_colour);
         let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
         let optics = resolve_optics(emitter, value);
-        let mut pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom);
+        let mut pose = emitter_pose(
+            fixture,
+            emitter,
+            pan,
+            tilt,
+            value.zoom,
+            &values.position_points,
+        );
         pose.half_angle = optics.half_angle;
         let cells = cell_states(emitter, value, installed_colour);
         let aperture = aperture_size(emitter);

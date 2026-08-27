@@ -278,6 +278,7 @@ mod tests {
             number: Some(1),
             position: glam::Vec3::new(0.0, 5.0, 0.0),
             rotation_degrees: glam::Vec3::ZERO,
+            position_master: None,
             bracket_degrees: 0.0,
             shaper_degrees: None,
             installed_colour: [1.0; 3],

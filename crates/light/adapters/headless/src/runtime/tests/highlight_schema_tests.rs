@@ -102,6 +102,7 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
             address: Some(1),
             split_patches: vec![],
             layer_id: "default".into(),
+            position_master: None,
             direct_control: None,
         internal_bindings: Default::default(),
             location: Default::default(),

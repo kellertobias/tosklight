@@ -406,6 +406,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         &head_angles,
         style,
         &values.selected_fixtures,
+        &values.position_points,
     );
     push_emitters(&mut frame, scene, values, &head_angles, style);
     effects::push_effects(&mut frame, scene, values, style);
@@ -516,6 +517,7 @@ fn push_model(
     model_index: u32,
     model: &viz_scene::FixtureModel,
     head_angles: &[(f32, f32)],
+    points: &[viz_scene::PointPose],
 ) {
     let (pan, tilt) = scene
         .emitters
@@ -529,7 +531,8 @@ fn push_model(
     // never mixes lamps drawn at different scales. The scene plan puts the emitter through the
     // same call, so the beam keeps leaving the lens whatever the profile says the lamp measures.
     let scale = model.scale_to(fixture.body.size);
-    let base = Mat4::from_rotation_translation(fixture.orientation(), fixture.position)
+    let (fixture_position, fixture_orientation) = fixture.placed_by(points);
+    let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position)
         * Mat4::from_scale(Vec3::splat(scale));
 
     // The yoke turns about the axis the fixture hangs on; the head turns about its own
@@ -584,9 +587,11 @@ fn push_bodies(
     head_angles: &[(f32, f32)],
     style: &FrameStyle,
     selection: &std::collections::HashSet<viz_scene::uuid::Uuid>,
+    points: &[viz_scene::PointPose],
 ) {
     for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
-        let base = Mat4::from_rotation_translation(fixture.orientation(), fixture.position);
+        let (fixture_position, fixture_orientation) = fixture.placed_by(points);
+        let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
         let size = fixture.body.size;
         let selected = selection.contains(&fixture.fixture_id);
         // A view that draws no models draws the outline of a box the size of the fixture, standing
@@ -616,6 +621,7 @@ fn push_bodies(
                 model_index,
                 model,
                 head_angles,
+                points,
             );
             if selected {
                 push_selection_cage(frame, base, size, style.selected_ink);
@@ -727,8 +733,9 @@ pub fn emitter_pose(
     pan_degrees: f32,
     tilt_degrees: f32,
     zoom: f32,
+    points: &[viz_scene::PointPose],
 ) -> EmitterPose {
-    let mount = fixture.orientation();
+    let (fixture_position, mount) = fixture.placed_by(points);
     let pan = Quat::from_rotation_y(pan_degrees.to_radians());
     let tilt = Quat::from_rotation_x(tilt_degrees.to_radians());
     let local = euler_degrees(emitter.local_orientation_degrees);
@@ -737,7 +744,7 @@ pub fn emitter_pose(
     // turns about. A pivot of zero is a fixture that tilts about its hanging point, which is what
     // an emitter with nothing better to go on gets.
     let pivot = emitter.tilt_pivot;
-    let origin = fixture.position + mount * (pan * (pivot + tilt * (emitter.local_origin - pivot)));
+    let origin = fixture_position + mount * (pan * (pivot + tilt * (emitter.local_origin - pivot)));
     // Emitters aim along local `-Y`, matching a lantern hung pointing down at rest.
     let direction = (orientation * Vec3::NEG_Y).normalize_or(Vec3::NEG_Y);
     EmitterPose {
@@ -821,7 +828,14 @@ fn push_emitters(
         let installed_colour = Vec3::from(fixture.installed_colour);
         let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
         let optics = resolve_optics(emitter, value);
-        let mut pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom);
+        let mut pose = emitter_pose(
+            fixture,
+            emitter,
+            pan,
+            tilt,
+            value.zoom,
+            &values.position_points,
+        );
         pose.half_angle = optics.half_angle;
         // What an observer still has, not what the desk is sending this instant. For most heads
         // the two agree; for a strobe or a laser they are the whole point of the difference.

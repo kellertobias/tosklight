@@ -35,13 +35,16 @@ pub struct Pick {
 /// Resolve what `ray` points at. `reach` is how far ahead to fall back to when the ray leaves the
 /// scene entirely — normally the camera's own orbit distance, so an empty click keeps the feel of
 /// the view the operator already has.
-pub fn pick(scene: &Scene, ray: &Ray, reach: f32) -> Pick {
+pub fn pick(scene: &Scene, ray: &Ray, reach: f32, points: &[viz_scene::PointPose]) -> Pick {
     let mut nearest: Option<Pick> = None;
     let mut nearest_distance = f32::INFINITY;
 
     for (index, fixture) in scene.fixtures.iter().enumerate() {
         let half = (fixture.body.size * 0.5).max(Vec3::splat(MINIMUM_HALF_EXTENT));
-        let Some(distance) = box_hit(ray, fixture.position, half, fixture.orientation()) else {
+        // Hit the fixture where it is drawn. A fixture slaved to a 3D Point that moved is no
+        // longer where the rig put it, and an operator must be able to click the thing they see.
+        let (position, orientation) = fixture.placed_by(points);
+        let Some(distance) = box_hit(ray, position, half, orientation) else {
             continue;
         };
         if distance < nearest_distance {
@@ -50,7 +53,7 @@ pub fn pick(scene: &Scene, ray: &Ray, reach: f32) -> Pick {
             // about a fixture wants the fixture, not a point on its casing.
             nearest = Some(Pick {
                 element: PickedElement::Fixture(index),
-                point: fixture.position,
+                point: position,
             });
         }
     }
@@ -151,6 +154,7 @@ mod tests {
             number: Some(1),
             position,
             rotation_degrees: Vec3::ZERO,
+            position_master: None,
             bracket_degrees: 0.0,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
@@ -214,7 +218,7 @@ mod tests {
                 .project(position, 1600.0, 900.0)
                 .expect("the fixture is in frame");
             let ray = resolved.ray_through(x, y, 1600.0, 900.0);
-            let pick = pick(&scene, &ray, control.distance);
+            let pick = pick(&scene, &ray, control.distance, &[]);
             assert_eq!(
                 pick.element,
                 PickedElement::Fixture(*expected),
@@ -237,7 +241,10 @@ mod tests {
             origin: Vec3::new(0.0, 2.0, 20.0),
             direction: Vec3::NEG_Z,
         };
-        assert_eq!(pick(&scene, &ray, 20.0).element, PickedElement::Fixture(0));
+        assert_eq!(
+            pick(&scene, &ray, 20.0, &[]).element,
+            PickedElement::Fixture(0)
+        );
     }
 
     /// Clicking past the rig still has to give a usable pivot, or the drag would do nothing.
@@ -248,7 +255,7 @@ mod tests {
             origin: Vec3::new(0.0, 6.0, 14.0),
             direction: Vec3::new(0.0, -0.6, -0.8).normalize(),
         };
-        let pick = pick(&scene, &ray, 14.0);
+        let pick = pick(&scene, &ray, 14.0, &[]);
         assert!(matches!(
             pick.element,
             PickedElement::Scenery(_) | PickedElement::Nothing
@@ -268,7 +275,7 @@ mod tests {
             origin: Vec3::new(0.0, 2.0, 10.0),
             direction: Vec3::new(0.0, 0.7, -0.7).normalize(),
         };
-        let pick = pick(&scene, &ray, 12.0);
+        let pick = pick(&scene, &ray, 12.0, &[]);
         assert_eq!(pick.element, PickedElement::Nothing);
         assert!((pick.point - ray.origin).length() <= 12.0 + 1e-3);
     }

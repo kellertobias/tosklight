@@ -353,7 +353,7 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MultiPatchInstance {
     pub id: Uuid,
     #[serde(default)]

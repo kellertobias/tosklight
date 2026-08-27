@@ -66,6 +66,7 @@ pub(super) fn push_plot(
     // A selected fixture is the exception, and the only one. Selection is the question an operator
     // asks the plan most often — which of these am I about to change — so it is the one thing
     // allowed to stand out.
+    let points = &values.position_points;
     let fallback = EmitterValues::default();
     let mut makes_light = vec![false; scene.fixtures.len()];
     for emitter in &scene.emitters {
@@ -91,7 +92,8 @@ pub(super) fn push_plot(
             .iter()
             .find(|binding| binding.fixture_id == fixture.fixture_id);
         let packaged = plan.and_then(|binding| binding.artwork[style.projection_view.index()]);
-        let transform = Mat4::from_rotation_translation(fixture.orientation(), fixture.position);
+        let (fixture_position, fixture_orientation) = fixture.placed_by(points);
+        let transform = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
         if let Some(artwork) = packaged {
             frame
                 .mesh(MeshKind::PlanArtwork(artwork))
@@ -122,9 +124,9 @@ pub(super) fn push_plot(
             } else {
                 push_box_outline(
                     frame,
-                    fixture.position,
+                    fixture_position,
                     fixture.body.size,
-                    fixture.orientation(),
+                    fixture_orientation,
                     ink,
                     opacity,
                 );
@@ -145,7 +147,7 @@ pub(super) fn push_plot(
             continue;
         }
         let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
-        let pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom);
+        let pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom, points);
         // Every beam on a plan is the same colour, so the eye reads them as beams rather than
         // trying to read a colour off a line. The lamp's real colour is shown beside the symbol.
         push_aim_line(frame, pose.origin, pose, intensity, style.beam_ink);

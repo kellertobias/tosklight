@@ -121,6 +121,7 @@ fn tilt_turns_the_head_about_its_trunnions_and_leaves_the_base_alone() {
             0,
             &model,
             &[(pan, tilt)],
+            &[],
         );
         let take = |part_index: u32| {
             frame
@@ -239,6 +240,7 @@ fn fixture() -> FixtureInstance {
         number: None,
         position: Vec3::new(0.0, 6.0, 0.0),
         rotation_degrees: Vec3::ZERO,
+        position_master: None,
         bracket_degrees: 0.0,
         shaper_degrees: None,
         installed_colour: [1.0; 3],
@@ -398,13 +400,13 @@ fn emitter() -> EmitterInstance {
 
 #[test]
 fn a_centred_moving_head_aims_straight_down() {
-    let pose = emitter_pose(&fixture(), &emitter(), 0.0, 0.0, 0.5);
+    let pose = emitter_pose(&fixture(), &emitter(), 0.0, 0.0, 0.5, &[]);
     assert!((pose.direction - Vec3::NEG_Y).length() < 1e-5);
 }
 
 #[test]
 fn tilting_forward_swings_the_beam_towards_the_audience() {
-    let pose = emitter_pose(&fixture(), &emitter(), 0.0, -90.0, 0.5);
+    let pose = emitter_pose(&fixture(), &emitter(), 0.0, -90.0, 0.5, &[]);
     assert!(
         pose.direction.z > 0.9,
         "unexpected aim {:?}",
@@ -458,7 +460,7 @@ fn a_round_source_is_drawn_as_a_thin_lens_standing_across_the_aim() {
         scale.z < scale.x * 0.5,
         "a lens is glass in a housing, not a ball: {scale:?}"
     );
-    let pose = emitter_pose(&scene.fixtures[0], &scene.emitters[0], 0.0, 0.0, 0.5);
+    let pose = emitter_pose(&scene.fixtures[0], &scene.emitters[0], 0.0, 0.0, 0.5, &[]);
     let facing = rotation * Vec3::Z;
     assert!(
         facing.dot(pose.direction) > 0.999,

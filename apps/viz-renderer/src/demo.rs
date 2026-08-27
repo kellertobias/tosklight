@@ -222,6 +222,7 @@ fn push_demo_laser(scene: &mut Scene) {
         // laser aimed flatter throws the top of every figure out of the room, which is truthful
         // and useless to look at.
         rotation_degrees: Vec3::new(48.0, 0.0, 0.0),
+        position_master: None,
         bracket_degrees: 0.0,
         shaper_degrees: None,
         installed_colour: [1.0; 3],
@@ -283,6 +284,7 @@ fn push_demo_effect(scene: &mut Scene) {
         number: Some((fixture_index + 1) as u32),
         position: Vec3::new(2.8, 0.18, -2.2),
         rotation_degrees: Vec3::ZERO,
+        position_master: None,
         bracket_degrees: 0.0,
         shaper_degrees: None,
         installed_colour: [1.0; 3],
@@ -332,6 +334,7 @@ fn push_demo_hazer(scene: &mut Scene) {
         number: Some((hazer + 1) as u32),
         position: Vec3::new(-7.5, 0.3, -5.5),
         rotation_degrees: Vec3::ZERO,
+        position_master: None,
         bracket_degrees: 0.0,
         shaper_degrees: None,
         installed_colour: [1.0; 3],
@@ -456,9 +459,6 @@ pub(crate) fn build_scene() -> Scene {
                 name: format!("Moving head {}.{}", truss + 1, slot + 1),
                 number: Some((index + 1) as u32),
                 position: Vec3::new(x, height, depth),
-                rotation_degrees: Vec3::ZERO,
-                bracket_degrees: 0.0,
-                shaper_degrees: None,
                 installed_colour: [1.0; 3],
                 installed_shaper_angles_degrees: [0.0; 4],
                 body: FixtureBody {
@@ -466,9 +466,7 @@ pub(crate) fn build_scene() -> Scene {
                     kind: BodyKind::MovingHead,
                 },
                 patched: true,
-                address: None,
-                model: None,
-                fallback: None,
+                ..FixtureInstance::default()
             });
             scene.emitters.push(EmitterInstance {
                 fixture_index: index as u32,
@@ -518,9 +516,6 @@ pub(crate) fn build_scene() -> Scene {
             name: format!("Pixel bar {}", slot + 1),
             number: Some((index + 1) as u32),
             position: Vec3::new(x, 0.35, -6.2),
-            rotation_degrees: Vec3::ZERO,
-            bracket_degrees: 0.0,
-            shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody {
@@ -528,9 +523,7 @@ pub(crate) fn build_scene() -> Scene {
                 kind: BodyKind::Bar,
             },
             patched: true,
-            address: None,
-            model: None,
-            fallback: None,
+            ..FixtureInstance::default()
         });
         scene.emitters.push(EmitterInstance {
             fixture_index: index as u32,

@@ -57,8 +57,8 @@ pub(super) fn push_effects(
     for ((emitter_index, source_index, fixture, source, _), drawn) in
         sources.into_iter().zip(allocations)
     {
-        let orientation = fixture.orientation();
-        let origin = fixture.position + orientation * Vec3::from(source.origin);
+        let (position, orientation) = fixture.placed_by(&values.position_points);
+        let origin = position + orientation * Vec3::from(source.origin);
         let direction = (orientation * Vec3::from(source.direction)).normalize_or_zero();
         let base_seed = hash64(
             fixture.instance_id.as_bytes(),

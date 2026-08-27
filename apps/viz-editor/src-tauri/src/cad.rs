@@ -1294,12 +1294,7 @@ mod tests {
                                 y: 2_000,
                                 z: 3_000,
                             },
-                            rotation: FixtureVector::default(),
-                            invert_pan: false,
-                            invert_tilt: false,
-                            bracket_angle: 0.0,
-                            shaper_angle: None,
-                            installed_appearance: Default::default(),
+                            ..Default::default()
                         })
                         .collect()
                 } else {
@@ -1324,6 +1319,7 @@ mod tests {
                             address: Some(index as u16 + 1),
                         }],
                         layer_id: "default".into(),
+                        position_master: None,
                         direct_control: None,
                         internal_bindings: Default::default(),
                         location: FixtureLocation {

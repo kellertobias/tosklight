@@ -137,6 +137,7 @@ fn media_fixture() -> (PatchedFixture, FixtureId) {
             virtual_fixture_number: None,
             name: "Media layer".into(),
             layer_id: "default".into(),
+            position_master: None,
             definition: profile.resolved_definition(mode_id).unwrap(),
             universe: Some(1),
             address: Some(1),

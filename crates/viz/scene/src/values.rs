@@ -36,6 +36,12 @@ pub struct SceneValues {
     /// losing its input leaves this value intact so the external Visualizer can hold its pose.
     #[serde(default)]
     pub external_camera: Option<ExternalCameraState>,
+    /// Live poses of the show's 3D Points, keyed by fixture id.
+    ///
+    /// A point carries no DMX, so a renderer cannot read it out of the universes the way it reads
+    /// a lantern. The desk states the poses here instead.
+    #[serde(default)]
+    pub position_points: Vec<crate::PointPose>,
     /// Which fixtures the operator has selected.
     ///
     /// Live state rather than scene structure, which is why it sits here: a selection changes
@@ -653,6 +659,7 @@ mod tests {
             number: None,
             position: Vec3::ZERO,
             rotation_degrees: Vec3::ZERO,
+            position_master: None,
             bracket_degrees: 0.0,
             shaper_degrees: None,
             installed_colour: [1.0; 3],

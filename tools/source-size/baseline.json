@@ -6,7 +6,7 @@
     "apps/light-desktop/src/components/control/PlaybackConfigurationTabs.tsx": 1257,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx": 1938,
     "apps/media/src/features/layers/MediaPanePage.tsx": 2143,
-    "apps/viz-editor/src-tauri/src/cad.rs": 1601,
+    "apps/viz-editor/src-tauri/src/cad.rs": 1597,
     "apps/viz-editor/src/cad/CadViewport.tsx": 1498,
     "apps/viz-editor/src/MediaWorkspace.tsx": 1238,
     "apps/viz-renderer/src/app.rs": 1336,
@@ -17,7 +17,7 @@
     "crates/media/adapters/http/src/wire/output.rs": 1236,
     "crates/media/adapters/library/src/storage.rs": 1221,
     "crates/media/domain/src/layer.rs": 1763,
-    "crates/viz/project/src/decode.rs": 1262,
+    "crates/viz/project/src/decode.rs": 1260,
     "crates/viz/project/src/plan.rs": 1418
   },
   "functions": {
@@ -81,7 +81,6 @@
     "apps/viz-editor/src/MediaWorkspace.tsx::javascript:function:MediaWorkspace:ffd720049fd9:1": 405,
     "apps/viz-editor/src/RendererSettingsWorkspace.tsx::javascript:function:RendererSettingsWorkspace:3c41215921fc:1": 290,
     "apps/viz-renderer/src/app/draw.rs::rust:function:draw_session:93a254bed8dc:1": 172,
-    "apps/viz-renderer/src/demo.rs::rust:function:build_scene:e587130a57f5:1": 157,
     "apps/viz-renderer/src/embedded.rs::rust:function:run:acf29d5ab127:1": 156,
     "apps/viz-renderer/src/physics.rs::rust:function:run:962689db0059:1": 203,
     "apps/viz-renderer/src/ui/quick_settings.rs::rust:function:adjust:4bba6c4637c2:1": 194,

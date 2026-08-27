@@ -45,38 +45,17 @@ pub fn rotation_to_world(x: f32, y: f32, z: f32) -> Vec3 {
     Vec3::new(x, z, y)
 }
 
-/// The live transform a 3D Point is contributing, in renderer world space.
-///
-/// A point rests at its patched origin, so an untouched point carries a zero offset and no
-/// rotation and leaves everything slaved to it exactly where the rig put it.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct MasterTransform {
-    /// Where the point itself sits when the show is loaded.
-    pub origin: Vec3,
-    /// How far the operator has since moved it.
-    pub offset: Vec3,
-    /// How far the operator has since turned it, in degrees about its own origin.
-    pub rotation_degrees: Vec3,
-}
-
 /// Carry one placement with the 3D Point it is slaved to.
 ///
-/// The slave keeps the placement the rig gave it. The point turns it about the point's own
-/// origin and then moves it, so a fixture hung two metres stage-left of a truss point stays two
-/// metres stage-left of it however the truss is flown or angled. Rotating first and translating
-/// second is what makes the offset read as "where it sits on the point" rather than "where it
-/// sits on the stage".
-pub fn slave_to_master(placement: Placement, master: MasterTransform) -> Placement {
-    let turn = glam::Quat::from_euler(
-        glam::EulerRot::YXZ,
-        master.rotation_degrees.y.to_radians(),
-        master.rotation_degrees.x.to_radians(),
-        master.rotation_degrees.z.to_radians(),
-    );
+/// The maths is [`viz_scene::slaved_to_point`]: the desk and the renderer must agree exactly on
+/// where a slaved lantern is, so there is one implementation and this is a placement-shaped view
+/// of it.
+pub fn slave_to_master(placement: Placement, pose: &viz_scene::PointPose) -> Placement {
+    let (position, rotation_degrees) =
+        viz_scene::slaved_to_point(placement.position, placement.rotation_degrees, pose);
     Placement {
-        position: master.origin + turn * (placement.position - master.origin) + master.offset,
-        // The fixture turns with the point it hangs on, so its own aim rides on top.
-        rotation_degrees: placement.rotation_degrees + master.rotation_degrees,
+        position,
+        rotation_degrees,
         source: placement.source,
     }
 }
@@ -153,71 +132,6 @@ mod tests {
             crowd_width_metres: None,
             crowd_depth_metres: None,
         }
-    }
-
-    fn placed(position: Vec3) -> Placement {
-        Placement {
-            position,
-            rotation_degrees: Vec3::ZERO,
-            source: PlacementSource::PatchLocation,
-        }
-    }
-
-    #[test]
-    fn an_untouched_point_leaves_everything_slaved_to_it_where_the_rig_put_it() {
-        let rigged = placed(Vec3::new(2.0, 6.0, -1.0));
-        let master = MasterTransform {
-            origin: Vec3::new(0.0, 6.0, 0.0),
-            ..MasterTransform::default()
-        };
-        assert_eq!(slave_to_master(rigged, master), rigged);
-    }
-
-    #[test]
-    fn moving_a_point_carries_its_slaves_the_same_distance() {
-        let rigged = placed(Vec3::new(2.0, 6.0, -1.0));
-        let master = MasterTransform {
-            origin: Vec3::new(0.0, 6.0, 0.0),
-            offset: Vec3::new(0.0, -1.5, 0.0),
-            rotation_degrees: Vec3::ZERO,
-        };
-        let moved = slave_to_master(rigged, master);
-        // Flying the truss down a metre and a half takes the lantern with it and changes nothing
-        // about where it sits along the truss.
-        assert!((moved.position - Vec3::new(2.0, 4.5, -1.0)).length() < 1e-4);
-    }
-
-    #[test]
-    fn turning_a_point_swings_its_slaves_about_the_point_rather_than_the_stage() {
-        // Two metres stage-right of a point that is not at the origin.
-        let rigged = placed(Vec3::new(4.0, 6.0, 0.0));
-        let master = MasterTransform {
-            origin: Vec3::new(2.0, 6.0, 0.0),
-            offset: Vec3::ZERO,
-            rotation_degrees: Vec3::new(0.0, 90.0, 0.0),
-        };
-        let turned = slave_to_master(rigged, master);
-        // A quarter turn about the point puts it two metres towards the audience of the point,
-        // still two metres away from it. Had it turned about the stage origin it would have
-        // landed four metres out instead.
-        assert!((turned.position - Vec3::new(2.0, 6.0, -2.0)).length() < 1e-4);
-        assert!((turned.position - master.origin).length() - 2.0 < 1e-4);
-        // The lantern is turned by the truss, so its own aim rides on top.
-        assert_eq!(turned.rotation_degrees, Vec3::new(0.0, 90.0, 0.0));
-    }
-
-    #[test]
-    fn a_point_turns_its_slaves_before_it_moves_them() {
-        let rigged = placed(Vec3::new(4.0, 6.0, 0.0));
-        let master = MasterTransform {
-            origin: Vec3::new(2.0, 6.0, 0.0),
-            offset: Vec3::new(0.0, 0.0, -3.0),
-            rotation_degrees: Vec3::new(0.0, 90.0, 0.0),
-        };
-        // Turning first keeps the offset reading as "where it sits on the point": the swing
-        // happens about the point, and only then does the whole assembly move upstage.
-        let moved = slave_to_master(rigged, master);
-        assert!((moved.position - Vec3::new(2.0, 6.0, -5.0)).length() < 1e-4);
     }
 
     #[test]

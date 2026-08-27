@@ -244,7 +244,7 @@ pub struct GoboArtwork {
 
 /// One physical fixture instance. Multi-patch instances of one logical fixture each appear here
 /// with their own transform while sharing `fixture_id`.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct FixtureInstance {
     pub instance_id: Uuid,
     pub fixture_id: Uuid,
@@ -268,6 +268,10 @@ pub struct FixtureInstance {
     /// canonical shaper role. A renderer must not infer support from arbitrary model node names.
     pub installed_shaper_angles_degrees: [f32; 4],
     pub body: FixtureBody,
+    /// The 3D Point this instance is slaved to, if any. Its live pose arrives with the values
+    /// rather than the scene, because an operator moves a point far more often than they repatch.
+    #[serde(default)]
+    pub position_master: Option<Uuid>,
     /// `false` while the fixture is part of the show but has no DMX address.
     pub patched: bool,
     /// Logical universe and start address of the first patched split, for the Stage label.
@@ -310,6 +314,27 @@ impl FixtureInstance {
     /// angled down in its clamp points where both of those say, in that order.
     pub fn orientation(&self) -> Quat {
         euler_degrees(self.rotation_degrees) * self.bracket_rotation()
+    }
+
+    /// Where this instance actually stands, once the 3D Point it is slaved to has been applied.
+    ///
+    /// Every draw path asks this rather than reading `position` and `orientation` directly, so a
+    /// slaved lantern's body, its yoke and its beam can never disagree about where it is.
+    pub fn placed_by(&self, points: &[crate::PointPose]) -> (Vec3, Quat) {
+        let Some(master) = self.position_master else {
+            return (self.position, self.orientation());
+        };
+        let Some(pose) = points.iter().find(|pose| pose.fixture_id == master) else {
+            // The point is gone or has not reported yet: stand where the rig put it rather than
+            // guessing at an offset.
+            return (self.position, self.orientation());
+        };
+        let (position, rotation_degrees) =
+            crate::slaved_to_point(self.position, self.rotation_degrees, pose);
+        (
+            position,
+            euler_degrees(rotation_degrees) * self.bracket_rotation(),
+        )
     }
 
     /// The bracket's own rotation, about the fixture's transverse axis.
@@ -816,6 +841,7 @@ mod tests {
             number: None,
             position: Vec3::ZERO,
             rotation_degrees: Vec3::new(0.0, 90.0, 0.0),
+            position_master: None,
             bracket_degrees: 0.0,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
@@ -852,6 +878,7 @@ mod tests {
             number: None,
             position: Vec3::ZERO,
             rotation_degrees: Vec3::new(12.0, 34.0, 56.0),
+            position_master: None,
             bracket_degrees: 0.0,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
@@ -907,6 +934,7 @@ mod tests {
             number: Some(1),
             position,
             rotation_degrees: Vec3::ZERO,
+            position_master: None,
             bracket_degrees: 0.0,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
@@ -920,6 +948,42 @@ mod tests {
     }
 
     #[test]
+    fn a_slaved_fixture_stands_where_its_point_puts_it() {
+        let master = Uuid::from_u128(7);
+        let mut spot = rigged_spot(Vec3::new(4.0, 6.0, 0.0));
+        spot.position_master = Some(master);
+        let pose = crate::PointPose {
+            fixture_id: master,
+            origin_metres: [2.0, 6.0, 0.0],
+            offset_metres: [0.0, -1.0, 0.0],
+            rotation_degrees: [0.0, 90.0, 0.0],
+        };
+        let (position, _) = spot.placed_by(&[pose]);
+        // Swung a quarter turn about the point, then flown down a metre with it.
+        assert!((position - Vec3::new(2.0, 5.0, -2.0)).length() < 1e-4);
+    }
+
+    #[test]
+    fn an_unslaved_fixture_ignores_every_point_in_the_show() {
+        let spot = rigged_spot(Vec3::new(4.0, 6.0, 0.0));
+        let pose = crate::PointPose {
+            fixture_id: Uuid::from_u128(7),
+            origin_metres: [2.0, 6.0, 0.0],
+            offset_metres: [0.0, -1.0, 0.0],
+            rotation_degrees: [0.0, 90.0, 0.0],
+        };
+        assert_eq!(spot.placed_by(&[pose]).0, Vec3::new(4.0, 6.0, 0.0));
+    }
+
+    #[test]
+    fn a_slave_whose_point_has_not_reported_stands_where_the_rig_put_it() {
+        let mut spot = rigged_spot(Vec3::new(4.0, 6.0, 0.0));
+        spot.position_master = Some(Uuid::from_u128(7));
+        // A point that is gone, or that has not sent a pose yet, must not guess an offset.
+        assert_eq!(spot.placed_by(&[]).0, Vec3::new(4.0, 6.0, 0.0));
+    }
+
+    #[test]
     fn framing_ignores_a_floor_far_wider_than_the_rig() {
         let mut scene = Scene::default();
         scene.fixtures.push(FixtureInstance {
@@ -929,6 +993,7 @@ mod tests {
             number: Some(1),
             position: Vec3::new(0.0, 5.0, 0.0),
             rotation_degrees: Vec3::ZERO,
+            position_master: None,
             bracket_degrees: 0.0,
             shaper_degrees: None,
             installed_colour: [1.0; 3],

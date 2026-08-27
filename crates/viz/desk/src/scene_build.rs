@@ -126,6 +126,15 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     }
 
     let mut plan = viz_project::compile(&fixtures);
+    let masters: std::collections::HashMap<_, _> = models
+        .patch
+        .fixtures
+        .iter()
+        .filter_map(|fixture| Some((fixture.fixture_id, fixture.position_master?)))
+        .collect();
+    for instance in &mut plan.scene.fixtures {
+        instance.position_master = masters.get(&instance.fixture_id).copied();
+    }
     plan.warnings.extend(warnings);
     if !placements.is_empty() {
         plan.warnings.push(placement_summary(&placements));

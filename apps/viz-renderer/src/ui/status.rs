@@ -622,7 +622,17 @@ pub fn build_fixture_labels(
     }
 
     build_perspective_fixture_labels(
-        overlay, scene, camera, width, height, scale, line, label_ink, theme, &lit,
+        overlay,
+        scene,
+        camera,
+        width,
+        height,
+        scale,
+        line,
+        label_ink,
+        theme,
+        &lit,
+        &values.position_points,
     );
 }
 
@@ -638,6 +648,7 @@ fn build_perspective_fixture_labels(
     label_ink: [f32; 4],
     theme: Theme,
     lit: &[Option<(f32, [f32; 3])>],
+    points: &[viz_scene::PointPose],
 ) {
     // A 3D picture with overlapping labels is unreadable, so a label is dropped when it would collide
     // with one already placed. Near fixtures win deterministically, which prevents a label behind
@@ -676,11 +687,13 @@ fn build_perspective_fixture_labels(
             continue;
         }
         let fixture = &scene.fixtures[index];
-        let Some((x, y)) = camera.project(fixture.position, width, height) else {
+        // Label the fixture where it is drawn, so a label follows a fixture its 3D Point moved.
+        let (position, _) = fixture.placed_by(points);
+        let Some((x, y)) = camera.project(position, width, height) else {
             continue;
         };
         let ray = camera.ray_through(x, y, width, height);
-        if viz_render::pick(scene, &ray, camera.position.distance(fixture.position)).element
+        if viz_render::pick(scene, &ray, camera.position.distance(position), points).element
             != viz_render::PickedElement::Fixture(index)
         {
             continue;
@@ -853,6 +866,7 @@ mod fixture_label_tests {
             number: Some(number),
             position,
             rotation_degrees: Vec3::ZERO,
+            position_master: None,
             bracket_degrees: 0.0,
             shaper_degrees: None,
             installed_colour: [1.0; 3],

@@ -143,6 +143,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
             fixtures: vec![light_fixture::PatchedFixture {
                 name: "Media Server".into(),
                 layer_id: "default".into(),
+                position_master: None,
                 fixture_id,
                 fixture_number: Some(1001),
                 virtual_fixture_number: None,

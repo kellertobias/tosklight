@@ -313,6 +313,7 @@ pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) ->
         virtual_fixture_number: None,
         name: "Cell".into(),
         layer_id: "default".into(),
+        position_master: None,
         definition: FixtureDefinition {
             schema_version: 1,
             id: FixtureId::new(),

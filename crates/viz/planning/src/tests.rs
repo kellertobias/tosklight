@@ -71,6 +71,7 @@ fn document(name: &str) -> (PlanningDocument, PathBuf) {
                         address: Some(1),
                     }],
                     layer_id: "default".into(),
+                    position_master: None,
                     direct_control: None,
                     internal_bindings: Default::default(),
                     location: FixtureLocation {
@@ -669,6 +670,7 @@ fn preview_document_with(
                         address: Some(1),
                     }],
                     layer_id: "default".into(),
+                    position_master: None,
                     direct_control: None,
                     internal_bindings: Default::default(),
                     location: FixtureLocation { x: 0, y: 0, z: 0 },

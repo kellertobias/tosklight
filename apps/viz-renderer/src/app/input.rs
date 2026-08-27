@@ -177,7 +177,12 @@ impl Application {
             session.scene.framing_bounds(),
         );
         let ray = camera.ray_through(self.cursor.0 as f32, self.cursor.1 as f32, width, height);
-        let pick = viz_render::pick(&session.scene, &ray, self.camera.distance.max(1.0));
+        let pick = viz_render::pick(
+            &session.scene,
+            &ray,
+            self.camera.distance.max(1.0),
+            &session.values.position_points,
+        );
         self.selected = match pick.element {
             viz_render::PickedElement::Fixture(index) => session
                 .scene

@@ -23,6 +23,5 @@ pub use provider::{DeskConnection, DeskProvider};
 pub use routes::{default_mappings, mappings};
 pub use scene_build::{DeskReadModels, build};
 pub use transform::{
-    MasterTransform, Placement, PlacementSource, resolve, rotation_to_world, slave_to_master,
-    to_world,
+    Placement, PlacementSource, resolve, rotation_to_world, slave_to_master, to_world,
 };

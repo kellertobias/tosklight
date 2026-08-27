@@ -154,6 +154,7 @@ pub(super) fn patched(
         address: Some(address),
         split_patches: Vec::new(),
         layer_id: "default".into(),
+        position_master: None,
         direct_control: None,
         internal_bindings: Default::default(),
         location,

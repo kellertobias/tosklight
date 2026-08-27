@@ -2,6 +2,7 @@ fn operational_fixture(fixture_id: light_core::FixtureId) -> light_fixture::Patc
     light_fixture::PatchedFixture {
         name: "Media Server".into(),
         layer_id: "default".into(),
+        position_master: None,
         fixture_id,
         fixture_number: None,
         virtual_fixture_number: None,

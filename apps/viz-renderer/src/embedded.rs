@@ -597,7 +597,7 @@ impl PaneState {
         // else needs to.
         let ray = camera.ray_through(x * width, y * height, width, height);
         let reach = (self.view.camera.position - self.view.camera.target).length();
-        match viz_render::pick(&self.scene, &ray, reach).element {
+        match viz_render::pick(&self.scene, &ray, reach, &self.values.position_points).element {
             viz_render::PickedElement::Fixture(index) => self
                 .scene
                 .fixtures

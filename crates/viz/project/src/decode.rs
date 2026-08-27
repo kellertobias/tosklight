@@ -797,9 +797,7 @@ mod tests {
             installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody::default(),
             patched: true,
-            address: None,
-            model: None,
-            fallback: None,
+            ..FixtureInstance::default()
         });
         for kind in kinds {
             scene.emitters.push(emitter(*kind));

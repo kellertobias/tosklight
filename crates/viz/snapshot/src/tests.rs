@@ -17,6 +17,7 @@ fn rig() -> (Scene, SceneValues) {
         number: Some(12),
         position: Vec3::new(1.0, 6.0, -2.0),
         rotation_degrees: Vec3::ZERO,
+        position_master: None,
         bracket_degrees: 0.0,
         shaper_degrees: None,
         installed_colour: [1.0; 3],

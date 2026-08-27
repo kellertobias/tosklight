@@ -149,6 +149,9 @@ pub struct PatchFixture {
     pub location: Location,
     #[serde(default)]
     pub rotation: Rotation,
+    /// The 3D Point this fixture is slaved to. Absent for a fixture placed against the stage.
+    #[serde(default)]
+    pub position_master: Option<Uuid>,
     #[serde(default)]
     pub multipatch: Vec<MultiPatch>,
     #[serde(default)]
