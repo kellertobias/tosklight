@@ -39,6 +39,7 @@ test("only code files in production source roots are scanned", () => {
 		"apps/light-desktop/docs/example.tsx",
 		"apps/light-desktop/experiments/panel.tsx",
 		"docs/generated.ts",
+		"apps/light-desktop/src/api/generated/light-wire.ts",
 		"experiments/dynamics-editor/app.js",
 		"tests/large.spec.ts",
 		"tools/check-source-size.mjs",

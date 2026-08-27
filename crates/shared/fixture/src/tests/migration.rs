@@ -80,6 +80,7 @@ fn a_flat_layout_becomes_a_portable_profile_with_explicit_split_assignments() {
         address: Some(101),
         split_patches: vec![],
         layer_id: default_patch_layer(),
+        note: None,
         position_master: None,
         direct_control: None,
         internal_bindings: Default::default(),

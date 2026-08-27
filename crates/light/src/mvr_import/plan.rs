@@ -308,6 +308,7 @@ fn patched_fixture(
         split_patches: Vec::new(),
         layer_id: source.layer.clone().unwrap_or_else(|| "default".into()),
         // An imported rig is placed against the stage; nothing in MVR describes a 3D Point.
+        note: None,
         position_master: None,
         direct_control: None,
         internal_bindings: Default::default(),

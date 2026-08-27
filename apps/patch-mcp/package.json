@@ -1,0 +1,20 @@
+{
+	"name": "@tosklight/patch-mcp",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"bin": {
+		"tosklight-patch-mcp": "./src/main.ts"
+	},
+	"exports": {
+		".": "./src/server.ts",
+		"./desk": "./src/desk.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit --pretty false",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.30.0"
+	}
+}

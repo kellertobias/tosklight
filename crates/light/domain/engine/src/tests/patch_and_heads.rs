@@ -19,6 +19,7 @@ fn visual_only_profile_renders_without_a_dmx_encoding_plan() {
         address: None,
         split_patches: vec![],
         layer_id: "default".into(),
+        note: None,
         position_master: None,
         direct_control: None,
         internal_bindings: Default::default(),

@@ -53,6 +53,10 @@ pub struct PatchedFixturePatch {
     pub location: FixtureLocation,
     #[serde(default)]
     pub rotation: FixtureVector,
+    /// An operator's own note against this fixture. Absent in every show written before it
+    /// existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     /// The 3D Point this fixture is slaved to. Absent in every show written before points
     /// existed, which reads back as a fixture placed against the stage.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -108,6 +112,7 @@ impl PatchedFixturePatch {
             internal_bindings: fixture.internal_bindings.clone(),
             location: fixture.location,
             rotation: fixture.rotation,
+            note: fixture.note.clone(),
             position_master: fixture.position_master,
             logical_heads: fixture.logical_heads.clone(),
             multipatch: fixture.multipatch.clone(),

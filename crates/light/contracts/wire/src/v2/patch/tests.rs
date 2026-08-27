@@ -5,6 +5,19 @@ const PROFILE_ID: Uuid = Uuid::from_u128(2);
 const MODE_ID: Uuid = Uuid::from_u128(3);
 
 #[test]
+fn a_projected_fixture_carries_its_note_and_its_position_master() {
+    // These are set through the patch input, and a client that cannot read them back could not
+    // tell a slaved fixture from a loose one or show an operator their own note. Both were
+    // accepted and silently dropped on the way out until this pinned them.
+    let mut input = fixture_input();
+    input.note = Some("circuit 12".into());
+    input.position_master = Some(Uuid::from_u128(11));
+    let projection = projection_from(input.clone());
+    assert_eq!(projection.note.as_deref(), Some("circuit 12"));
+    assert_eq!(projection.position_master, Some(Uuid::from_u128(11)));
+}
+
+#[test]
 fn request_contains_references_and_patch_owned_state_only() {
     let request = PatchFixturesRequest {
         request_id: "patch-1".into(),
@@ -308,6 +321,7 @@ fn fixture_input() -> PatchFixtureInput {
             y: 0.0,
             z: 0.0,
         },
+        note: None,
         position_master: None,
         multipatch: Vec::new(),
         group_masters_enabled: true,
@@ -324,7 +338,10 @@ fn fixture_input() -> PatchFixtureInput {
 }
 
 fn fixture_projection() -> PatchFixtureProjection {
-    let input = fixture_input();
+    projection_from(fixture_input())
+}
+
+fn projection_from(input: PatchFixtureInput) -> PatchFixtureProjection {
     PatchFixtureProjection {
         fixture_id: input.fixture_id,
         fixture_revision: 1,
@@ -340,6 +357,8 @@ fn fixture_projection() -> PatchFixtureProjection {
         internal_bindings: input.internal_bindings,
         location: input.location,
         rotation: input.rotation,
+        note: input.note,
+        position_master: input.position_master,
         logical_heads: Vec::new(),
         multipatch: Vec::new(),
         group_masters_enabled: input.group_masters_enabled,

@@ -6,8 +6,11 @@ export const LIMITS = Object.freeze({
 });
 
 const SOURCE_ROOT = /^(?:apps|crates|packages)\//u;
+// `generated` joins these because a generator's output is not something anyone can choose to
+// write more briefly: the file is as long as the contract it mirrors, and the only way to shrink
+// it would be to say less in the contract.
 const EXCLUDED_DIRECTORY =
-	/(?:^|\/)(?:artifacts|assets|docs|experiments)(?:\/|$)/u;
+	/(?:^|\/)(?:artifacts|assets|docs|experiments|generated)(?:\/|$)/u;
 const SOURCE_EXTENSION = /\.(?:js|py|rs|ts|tsx)$/iu;
 const TEST_DIRECTORY =
 	/(^|\/)(?:__tests__|e2e|stories|testing|[a-z0-9_]*tests)(?:\/|$)/u;

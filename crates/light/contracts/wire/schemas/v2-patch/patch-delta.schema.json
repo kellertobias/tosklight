@@ -245,6 +245,21 @@
         "name": {
           "type": "string"
         },
+        "note": {
+          "description": "An operator's own note against this fixture.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "position_master": {
+          "description": "The 3D Point this fixture is slaved to. A client that cannot read this back could not tell\na slaved fixture from a loose one.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
         "profile_id": {
           "type": "string",
           "format": "uuid"

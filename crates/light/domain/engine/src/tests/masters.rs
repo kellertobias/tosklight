@@ -605,6 +605,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         virtual_fixture_number: None,
         name: "Two cell".into(),
         layer_id: "default".into(),
+        note: None,
         position_master: None,
         definition: profile.resolved_definition(mode_id).unwrap(),
         universe: Some(1),

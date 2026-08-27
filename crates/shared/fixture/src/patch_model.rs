@@ -222,6 +222,11 @@ pub struct PatchedFixture {
     pub location: FixtureLocation,
     #[serde(default)]
     pub rotation: FixtureVector,
+    /// A free note an operator keeps against this fixture: a circuit, a colour call, whatever the
+    /// paperwork needs. Distinct from the profile's own notes, which every fixture of that type
+    /// shares. Absent in every show written before this existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     /// The 3D Point this fixture is slaved to, if any.
     ///
     /// The fixture keeps its own patched location and rotation. Those describe where it sits when

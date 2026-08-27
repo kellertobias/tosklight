@@ -497,6 +497,7 @@ fn fixture_candidate(
                 address: Some(address),
             }],
             layer_id: "default".into(),
+            note: None,
             position_master: None,
             direct_control: None,
             internal_bindings: Default::default(),

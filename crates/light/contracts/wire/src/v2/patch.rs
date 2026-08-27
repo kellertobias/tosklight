@@ -274,6 +274,9 @@ pub struct PatchFixtureInput {
     pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
     pub rotation: PatchFixtureRotation,
+    /// An operator's own note against this fixture, distinct from the profile's shared notes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     /// The 3D Point this fixture is slaved to. Omitted by a client that does not use points, and
     /// by every request written before they existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -444,6 +447,13 @@ pub struct PatchFixtureProjection {
     pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
     pub rotation: PatchFixtureRotation,
+    /// An operator's own note against this fixture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The 3D Point this fixture is slaved to. A client that cannot read this back could not tell
+    /// a slaved fixture from a loose one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_master: Option<Uuid>,
     pub logical_heads: Vec<PatchLogicalHeadProjection>,
     pub multipatch: Vec<PatchMultiPatchProjection>,
     pub group_masters_enabled: bool,

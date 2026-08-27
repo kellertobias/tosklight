@@ -322,6 +322,7 @@ fn into_runtime_fixture(
         address: patch.address,
         split_patches: patch.split_patches,
         layer_id: patch.layer_id,
+        note: patch.note,
         position_master: patch.position_master,
         direct_control: patch.direct_control,
         internal_bindings: patch.internal_bindings,

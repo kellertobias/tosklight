@@ -1255,7 +1255,6 @@ mod tests {
             "each direction contains representative opaque model surfaces"
         );
     }
-
     fn transform_session() -> (Session, PathBuf, [Uuid; 2]) {
         let path = std::env::temp_dir().join(format!("cad-transform-{}.show", Uuid::new_v4()));
         let document = PlanningDocument::create(&path, "CAD transform test").unwrap();
@@ -1319,6 +1318,7 @@ mod tests {
                             address: Some(index as u16 + 1),
                         }],
                         layer_id: "default".into(),
+                        note: None,
                         position_master: None,
                         direct_control: None,
                         internal_bindings: Default::default(),

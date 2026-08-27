@@ -331,6 +331,7 @@ fn application_fixture(
                 .map(application_split)
                 .collect(),
             layer_id: input.layer_id,
+            note: input.note,
             position_master: input.position_master,
             direct_control: input
                 .direct_control
@@ -510,6 +511,8 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
         },
         location: wire_location(patch.location),
         rotation: wire_rotation(patch.rotation),
+        note: patch.note.clone(),
+        position_master: patch.position_master,
         logical_heads: patch
             .logical_heads
             .iter()

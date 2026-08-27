@@ -29,6 +29,7 @@ fn template_fixture(
     light_fixture::PatchedFixture {
         name: name.clone(),
         layer_id: "default".into(),
+        note: None,
         position_master: None,
         fixture_id: light_core::FixtureId::new(),
         fixture_number: None,

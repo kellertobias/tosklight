@@ -156,6 +156,7 @@ fn patched_mvr_fixture(
             address: address.1,
             split_patches: Vec::new(),
             layer_id: source.layer.clone().unwrap_or_else(|| "default".into()),
+            note: None,
             position_master: None,
             direct_control: None,
             internal_bindings: Default::default(),

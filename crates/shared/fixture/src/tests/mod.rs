@@ -73,6 +73,7 @@ fn schema_v2_two_split_fixture() -> PatchedFixture {
             },
         ],
         layer_id: default_patch_layer(),
+        note: None,
         position_master: None,
         direct_control: None,
         internal_bindings: Default::default(),

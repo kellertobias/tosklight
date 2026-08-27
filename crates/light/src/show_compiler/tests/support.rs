@@ -63,6 +63,7 @@ pub(super) fn portable_fixture_with_policy(
         address: Some(1),
         split_patches: Vec::new(),
         layer_id: "default".into(),
+        note: None,
         position_master: None,
         direct_control: None,
         internal_bindings: Default::default(),

@@ -652,6 +652,10 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
  */
 split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation,
 /**
+ * An operator's own note against this fixture, distinct from the profile's shared notes.
+ */
+note?: string | null,
+/**
  * The 3D Point this fixture is slaved to. Omitted by a client that does not use points, and
  * by every request written before they existed.
  */
@@ -722,7 +726,16 @@ export type PatchMultiPatchProjection = { id: string, name: string, split_patche
 export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
 export type PatchFixtureFreezeFamily = "intensity" | "color" | "position" | "beam";
 export type PatchFixtureFreezeTargetProjection = { fixture_id: string, full: boolean, families: Array<PatchFixtureFreezeFamily>, };
-export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, freeze_targets: Array<PatchFixtureFreezeTargetProjection>, };
+export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation,
+/**
+ * An operator's own note against this fixture.
+ */
+note?: string | null,
+/**
+ * The 3D Point this fixture is slaved to. A client that cannot read this back could not tell
+ * a slaved fixture from a loose one.
+ */
+position_master?: string | null, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, freeze_targets: Array<PatchFixtureFreezeTargetProjection>, };
 export type PatchModeSplitProjection = { split: number, footprint: number, };
 export type PatchModeProjection = { mode_id: string, name: string, splits: Array<PatchModeSplitProjection>, };
 export type PatchProfileRevisionProjection = { profile_id: string, profile_revision: number, content_digest: string, manufacturer: string, name: string, fixture_type: string, patch_policy: PatchProfilePolicy,

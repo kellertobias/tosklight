@@ -185,6 +185,13 @@
         "name": {
           "type": "string"
         },
+        "note": {
+          "description": "An operator's own note against this fixture, distinct from the profile's shared notes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "position_master": {
           "description": "The 3D Point this fixture is slaved to. Omitted by a client that does not use points, and\nby every request written before they existed.",
           "type": [

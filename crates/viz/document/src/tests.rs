@@ -83,6 +83,7 @@ fn patch_one(show_id: ShowId, profile: PatchedFixtureProfileReference) -> PatchF
                     address: Some(1),
                 }],
                 layer_id: "default".into(),
+                note: None,
                 position_master: None,
                 direct_control: None,
                 internal_bindings: Default::default(),
