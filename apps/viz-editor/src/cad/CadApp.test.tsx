@@ -281,6 +281,35 @@ describe("the CAD planning window", () => {
 		);
 	});
 
+	it("shows project paperwork and print pages on separate sidebar tabs", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		fireEvent.click(screen.getByRole("button", { name: "Print" }));
+
+		// Pages first: the paperwork must not be taking room from the page list. "Add New Page"
+		// is a toolbar control and stays put, so the sidebar's own Export button is the tell.
+		expect(screen.getByRole("button", { name: "Export to PDF" })).toBeVisible();
+		expect(
+			screen.queryByRole("textbox", { name: "Lighting designer" }),
+		).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("tab", { name: "Project" }));
+		expect(
+			screen.getByRole("textbox", { name: "Lighting designer" }),
+		).toBeVisible();
+		// ...and the page list is not competing for the same shallow window.
+		expect(
+			screen.queryByRole("button", { name: "Export to PDF" }),
+		).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("tab", { name: "Pages" }));
+		expect(screen.getByRole("button", { name: "Export to PDF" })).toBeVisible();
+	});
+
 	it("keeps the CAD window mounted while editing and saving project information", async () => {
 		render(
 			<ModalProvider>
@@ -289,6 +318,9 @@ describe("the CAD planning window", () => {
 		);
 		await screen.findByTestId("cad-canvas");
 		fireEvent.click(screen.getByRole("button", { name: "Print" }));
+		// Project paperwork now has its own sidebar tab, so a shallow window can show all of
+		// it without competing with the page list.
+		fireEvent.click(screen.getByRole("tab", { name: "Project" }));
 
 		const lightingDesigner = screen.getByRole("textbox", {
 			name: "Lighting designer",

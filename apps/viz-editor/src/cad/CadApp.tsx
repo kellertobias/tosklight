@@ -4,6 +4,7 @@ import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
 import { beginWindowDrag, WindowControls } from "../WindowChrome";
+import { CadProjectPanel } from "./CadProjectPanel";
 import { CadViewport } from "./CadViewport";
 import {
 	buildCadPdf,
@@ -73,6 +74,7 @@ export function CadApp() {
 		showDate: "",
 	});
 	const [savingPaperwork, setSavingPaperwork] = useState(false);
+	const [sidebarTab, setSidebarTab] = useState<"print" | "project">("print");
 	const sceneRef = useRef<CadSceneSnapshot | null>(null);
 	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
 
@@ -455,108 +457,36 @@ export function CadApp() {
 				{printMode ? (
 					<aside className="cad-print-sidebar" aria-label="Print pages">
 						<header>
-							<h2>Prints</h2>
-							<span>A4 pages</span>
+							<h2>{sidebarTab === "project" ? "Project" : "Prints"}</h2>
+							<span>
+								{sidebarTab === "project" ? "Printed on every page" : "A4 pages"}
+							</span>
 						</header>
-						<section
-							className="cad-print-project-info"
-							aria-label="Project information"
-						>
-							<h3>Project information</h3>
-							<label>
-								Project
-								<input
-									value={paperwork.project}
-									onChange={(event) =>
-										changePaperwork("project", event.currentTarget.value)
-									}
-								/>
-							</label>
-							<label>
-								Lighting designer
-								<input
-									value={paperwork.lightingDesigner}
-									onChange={(event) =>
-										changePaperwork(
-											"lightingDesigner",
-											event.currentTarget.value,
-										)
-									}
-								/>
-							</label>
-							<label>
-								Venue
-								<input
-									value={paperwork.venue}
-									onChange={(event) =>
-										changePaperwork("venue", event.currentTarget.value)
-									}
-								/>
-							</label>
-							<label>
-								Contact email
-								<input
-									type="email"
-									value={paperwork.contactEmail}
-									onChange={(event) =>
-										changePaperwork("contactEmail", event.currentTarget.value)
-									}
-								/>
-							</label>
-							<label>
-								Contact phone
-								<input
-									type="tel"
-									value={paperwork.contactPhone}
-									onChange={(event) =>
-										changePaperwork("contactPhone", event.currentTarget.value)
-									}
-								/>
-							</label>
-							<label>
-								Show date
-								<input
-									type="date"
-									value={paperwork.showDate}
-									onChange={(event) =>
-										changePaperwork("showDate", event.currentTarget.value)
-									}
-								/>
-							</label>
-							<label>
-								Show version
-								<input
-									value={paperwork.showVersion}
-									onChange={(event) =>
-										changePaperwork("showVersion", event.currentTarget.value)
-									}
-								/>
-							</label>
-							<dl>
-								<div>
-									<dt>Show name</dt>
-									<dd>{documentInfo?.name || "—"}</dd>
-								</div>
-								<div>
-									<dt>Last saved</dt>
-									<dd>{formatLastSaved(documentInfo?.lastSavedAt)}</dd>
-								</div>
-								<div>
-									<dt>Fixtures</dt>
-									<dd>{documentInfo?.fixtureCount ?? 0}</dd>
-								</div>
-								<div>
-									<dt>Universes used</dt>
-									<dd>{documentInfo?.universeCount ?? 0}</dd>
-								</div>
-							</dl>
-							<Button
-								disabled={savingPaperwork}
-								onClick={() => void savePaperwork()}
-							>
-								{savingPaperwork ? "Saving…" : "Save project info"}
-							</Button>
-						</section>
+						<div className="cad-print-tabs" role="tablist">
+							{(["print", "project"] as const).map((tab) => (
+								<button
+									key={tab}
+									type="button"
+									role="tab"
+									aria-selected={sidebarTab === tab}
+									className={sidebarTab === tab ? "is-selected" : ""}
+									onClick={() => setSidebarTab(tab)}
+								>
+									{tab === "print" ? "Pages" : "Project"}
+								</button>
+							))}
+						</div>
+						{sidebarTab === "project" ? (
+							<CadProjectPanel
+								paperwork={paperwork}
+								documentInfo={documentInfo}
+								saving={savingPaperwork}
+								onChange={changePaperwork}
+								onSave={() => void savePaperwork()}
+							/>
+						) : null}
+						{sidebarTab === "print" ? (
+							<>
 						<div className="cad-print-list">
 							{printPages.length ? (
 								printPages.map((page, index) => (
@@ -650,13 +580,17 @@ export function CadApp() {
 									);
 								})()
 							: null}
-						<Button
-							className="cad-export-pdf"
-							disabled={exporting || !printPages.some((page) => page.included)}
-							onClick={() => void exportPdf()}
-						>
-							{exporting ? "Exporting…" : "Export to PDF"}
-						</Button>
+								<Button
+									className="cad-export-pdf"
+									disabled={
+										exporting || !printPages.some((page) => page.included)
+									}
+									onClick={() => void exportPdf()}
+								>
+									{exporting ? "Exporting…" : "Export to PDF"}
+								</Button>
+							</>
+						) : null}
 					</aside>
 				) : null}
 			</div>
@@ -937,10 +871,6 @@ function printInfo(
 		fixtureCount: summary?.fixtureCount ?? 0,
 		universeCount: summary?.universeCount ?? 0,
 	};
-}
-
-function formatLastSaved(seconds?: number) {
-	return seconds ? new Date(seconds * 1000).toLocaleString() : "—";
 }
 
 function restoreSettings(): CadSettings {
