@@ -1767,9 +1767,6 @@
 	padding-top: 14px;
 	border-top: 1px solid var(--line);
 }
-[role="dialog"][aria-label="Change user"] > .show-library {
-	margin-bottom: 4px;
-}
 .setup-show-file-manager {
 	margin-top: 18px;
 	padding-top: 14px;

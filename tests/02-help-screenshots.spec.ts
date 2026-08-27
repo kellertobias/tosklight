@@ -138,7 +138,6 @@ const workflowScreenshots = [
   "mvr-export.png",
   "mvr-new-show.png",
   "patch-add-fixture.png",
-  "show-change-user.png",
   "show-load-revisions.png",
   "show-menu.png",
   "show-patch.png",
@@ -223,9 +222,6 @@ async function captureWorkflowReference(page: Page) {
   await page.getByRole("button", { name: "Load", exact: true }).click();
   await page.getByRole("dialog", { name: "Load show" }).screenshot({ path: workflowShot("show-load-revisions.png") });
   await closeNested(".load-show-modal");
-  await page.getByRole("button", { name: /Change User/ }).click();
-  await page.getByRole("dialog", { name: "Change user" }).screenshot({ path: workflowShot("show-change-user.png") });
-  await closeNested('[role="dialog"][aria-label="Change user"]');
   await page.getByRole("button", { name: "New Show", exact: true }).click();
   await page.getByRole("button", { name: "Load from MVR", exact: true }).click();
   await page.getByRole("dialog", { name: "MVR import and export" }).screenshot({ path: workflowShot("mvr-new-show.png") });
