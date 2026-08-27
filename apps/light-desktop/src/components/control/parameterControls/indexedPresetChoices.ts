@@ -129,7 +129,7 @@ function appendChoice(
 	existing.disabled ||= next.disabled;
 }
 
-function profileHeadOwner(
+export function profileHeadOwner(
 	fixture: PatchedFixture,
 	mode: FixtureMode,
 	headId: string,

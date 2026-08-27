@@ -1,4 +1,5 @@
 import type { PatchedFixture } from "../../../api/types";
+import { profileHeadOwner } from "./indexedPresetChoices";
 
 /**
  * One stretch of a channel that means one thing.
@@ -43,7 +44,6 @@ export function attributeBands(
 	const selected = new Set(selectedFixtureIds);
 	let agreed: AttributeBand[] | undefined;
 	for (const fixture of fixtures) {
-		if (!selected.has(fixture.fixture_id)) continue;
 		const profile = fixture.definition.profile_snapshot;
 		const mode = profile?.modes.find(
 			(candidate) => candidate.id === fixture.definition.mode_id,
@@ -51,6 +51,11 @@ export function attributeBands(
 		if (!mode) continue;
 		for (const channel of mode.channels) {
 			if (channel.attribute !== attribute) continue;
+			// A head of a multi-head fixture is selected under its own identity, so a channel
+			// counts when either the fixture or the head that owns it is in the selection.
+			const owner = profileHeadOwner(fixture, mode, channel.head_id);
+			if (!owner || (!selected.has(fixture.fixture_id) && !selected.has(owner)))
+				continue;
 			const here = channelBands(channel.functions, attribute);
 			if (!here.length) return null;
 			if (!agreed) agreed = here;

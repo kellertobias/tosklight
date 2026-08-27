@@ -1,4 +1,5 @@
 import type { PatchedFixture } from "../../../api/types";
+import { profileHeadOwner } from "./indexedPresetChoices";
 
 /**
  * The scale an attribute is read and typed in.
@@ -147,7 +148,6 @@ export function selectedChannelUnit(
 		| { unit: string | null; minimum: number | null; maximum: number | null }
 		| undefined;
 	for (const fixture of fixtures) {
-		if (!selected.has(fixture.fixture_id)) continue;
 		const profile = fixture.definition.profile_snapshot;
 		const mode = profile?.modes.find(
 			(candidate) => candidate.id === fixture.definition.mode_id,
@@ -155,6 +155,9 @@ export function selectedChannelUnit(
 		if (!mode) continue;
 		for (const channel of mode.channels) {
 			if (channel.attribute !== attribute) continue;
+			const owner = profileHeadOwner(fixture, mode, channel.head_id);
+			if (!owner || (!selected.has(fixture.fixture_id) && !selected.has(owner)))
+				continue;
 			const here = {
 				unit: channel.unit,
 				minimum: channel.physical_min,
