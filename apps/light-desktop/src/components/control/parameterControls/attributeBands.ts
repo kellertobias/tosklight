@@ -57,7 +57,9 @@ export function attributeBands(
 			if (!owner || (!selected.has(fixture.fixture_id) && !selected.has(owner)))
 				continue;
 			const here = channelBands(channel.functions, attribute);
-			if (!here.length) return null;
+			// A channel that is one continuous sweep end to end has nothing to step between, so it
+			// is not a wheel: it keeps the plain movement its own units give it.
+			if (!here.some((band) => band.kind === "slot")) return null;
 			if (!agreed) agreed = here;
 			else if (!sameBands(agreed, here)) return null;
 		}

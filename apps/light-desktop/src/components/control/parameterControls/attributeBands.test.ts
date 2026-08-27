@@ -65,4 +65,13 @@ describe("stepping an indexed attribute", () => {
 		expect(bandLabel(wheel, 25 / 255)).toBe("Gobo 2");
 		expect(bandLabel(wheel, 80 / 255)).toBeUndefined();
 	});
+
+	it("does not step a plain continuous channel as if it were a wheel", () => {
+		// Pan is one continuous function end to end. Treating that single band as a ranged area
+		// would move it in coarse raw jumps instead of the small ones its own units ask for.
+		const sweep: AttributeBand[] = [
+			{ from: 0, to: 255, kind: "range", label: "", rawValue: 0 },
+		];
+		expect(bandLabel(sweep, 0.5)).toBeUndefined();
+	});
 });
