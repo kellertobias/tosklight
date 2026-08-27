@@ -1,5 +1,5 @@
 import { Button } from "@tosklight/ui";
-import type { CSSProperties } from "react";
+import type { CSSProperties, RefObject } from "react";
 import type { CueList } from "../../api/types";
 import type { timelineItems } from "./editorModel";
 
@@ -119,3 +119,26 @@ export const TIMECODE_EASINGS: Array<{
 	{ value: "ease_out", label: "Ease out" },
 	{ value: "ease_in_out", label: "Ease in/out" },
 ];
+
+/**
+ * Moves the zoomed window, rather than only the number describing it.
+ *
+ * Setting the state alone would leave the timeline where it was, which is what an encoder driving
+ * the window has to avoid.
+ */
+export function timelineScroller(
+	scrollRef: RefObject<HTMLDivElement | null>,
+	setScrollLeft: (value: number) => void,
+) {
+	return (next: number) => {
+		if (scrollRef.current) scrollRef.current.scrollLeft = next;
+		setScrollLeft(next);
+	};
+}
+
+/** A pending overview-window resize, held while the operator is still dragging it. */
+export interface OverviewResize {
+	zoom: number;
+	startFraction: number;
+	revision: number;
+}

@@ -67,6 +67,8 @@ import {
 	markerColorOption,
 	parseTimelineFrame,
 	TIMECODE_LANE_HEADER_WIDTH,
+	timelineScroller,
+	type OverviewResize,
 	TIMECODE_MARKER_COLORS,
 	type TimecodeAudioPlayerOption,
 	type TimecodeCueListOption,
@@ -944,24 +946,21 @@ export const TimecodeTimelineEditor = forwardRef<
 	const [cueListId, setCueListId] = useState(cueLists[0]?.id ?? "");
 	const [scrollLeft, setScrollLeft] = useState(0);
 	const [zoom, setZoom] = useState(1);
-	const [overviewResize, setOverviewResize] = useState<{
-		zoom: number;
-		startFraction: number;
-		revision: number;
-	} | null>(null);
+	const [overviewResize, setOverviewResize] =
+		useState<OverviewResize | null>(null);
 	const viewportId = useId();
 	const scrollRef = useRef<HTMLDivElement>(null);
+	const scrollTimelineTo = timelineScroller(scrollRef, setScrollLeft);
 	const viewportWidth = useTimelineViewportWidth(scrollRef);
 	const duration = Math.max(1, definition.duration_frame ?? fps * 60);
-	const timelineViewportWidth = Math.max(
-		1,
-		viewportWidth - TIMECODE_LANE_HEADER_WIDTH,
+	const timelineViewportWidth = Math.max(1, viewportWidth - TIMECODE_LANE_HEADER_WIDTH);
+	const { maximumZoom, fitPixelsPerFrame } = timelineZoomGeometry(
+		duration,
+		timelineViewportWidth,
 	);
-	const geometry = timelineZoomGeometry(duration, timelineViewportWidth);
-	const maximumZoom = geometry.maximumZoom;
 	const pixelsPerFrame = Math.min(
 		TARGET_MAX_PIXELS_PER_FRAME,
-		geometry.fitPixelsPerFrame * zoom,
+		fitPixelsPerFrame * zoom,
 	);
 	const width = Math.max(timelineViewportWidth, duration * pixelsPerFrame);
 	const totalTimelineWidth = width + TIMECODE_LANE_HEADER_WIDTH;
@@ -1089,10 +1088,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		);
 		const nextZoom = Math.max(
 			1,
-			Math.min(
-				maximumZoom,
-				requestedPixelsPerFrame / geometry.fitPixelsPerFrame,
-			),
+			Math.min(maximumZoom, requestedPixelsPerFrame / fitPixelsPerFrame),
 		);
 		setOverviewResize((current) => ({
 			zoom: nextZoom,
@@ -1150,12 +1146,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		timelineWidth: width,
 		encoderOwner,
 		setZoom,
-		// The encoder moves the window itself, not just the number that describes it: setting the
-		// state alone would leave the timeline where it was.
-		setScrollLeft: (next: number) => {
-			if (scrollRef.current) scrollRef.current.scrollLeft = next;
-			setScrollLeft(next);
-		},
+		setScrollLeft: scrollTimelineTo,
 		setSelection,
 		setSelectedLaneId,
 		onScrub,
