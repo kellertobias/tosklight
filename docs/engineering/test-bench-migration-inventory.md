@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **194 root cases across 80 files**.
+Default catalog: **195 root cases across 80 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -202,6 +202,7 @@ Default catalog: **194 root cases across 80 files**.
 | 87-channel-disabled-reasons.spec.ts | TL-392 @ui › a stage element with no dimmer never reaches the fader bank | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |
 | 88-dmx-output-health.spec.ts | DMX-HEALTH-001 @ui the DMX output summary reports live measured output health | repository contract | @ui | dmx-output-health | standard failure evidence | parallel | pending-semantic-migration |
 | 89-internal-audio-player.spec.ts | AUDIO-LIBRARY-001 @api the Internal Audio Player reports its library to the Media pane | repository contract | @api | internal-audio-player | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 89-internal-audio-player.spec.ts | AUDIO-CONTROLS-001 @api the Media pane offers an Audio Player play mode and volume | repository contract | @api | internal-audio-player | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 90-desk-setup-defaults.spec.ts | TL-165 @ui › Desk Setup defaults save immediately and keep the requested layout | docs/help/10-Desk/10-Show-Setup/index.md | @ui | desk-setup-defaults | standard failure evidence | parallel | pending-semantic-migration |
 | 90-desk-setup-defaults.spec.ts | TL-251 @ui › setup navigation exposes a finger-sized scrollbar when touch scrolling is enabled | docs/help/10-Desk/10-Show-Setup/index.md | @ui | desk-setup-defaults | standard failure evidence | parallel | pending-semantic-migration |
 | 91-performance-harness-contract.spec.ts | PERF-HARNESS @api the routes the performance harness calls still answer | repository contract | @api | performance-harness-contract | standard failure evidence | parallel | reviewed-low-level-boundary |

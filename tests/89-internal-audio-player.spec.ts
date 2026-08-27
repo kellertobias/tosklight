@@ -49,6 +49,45 @@ test("AUDIO-LIBRARY-001 @api the Internal Audio Player reports its library to th
 	}
 });
 
+/**
+ * The Audio Player is a media source like any other, so the Media pane's own playback controls
+ * have to work on it: play mode to start and stop it, volume to set its level. Nothing about it
+ * being audio makes those different controls.
+ */
+test("AUDIO-CONTROLS-001 @api the Media pane offers an Audio Player play mode and volume", async ({
+	api,
+}) => {
+	await patchAudioPlayer(api);
+	const servers = await api.request<{ fixtures: Array<Record<string, any>> }>(
+		"GET",
+		"/api/v2/media-servers",
+	);
+	const player = servers.fixtures.find(
+		(server) => server.kind === "audio_player",
+	);
+	expect(player, "the Audio Player is patched").toBeTruthy();
+
+	// The pane enables a control when the selected layer owns its attribute, so what the layer
+	// advertises is what the operator can reach.
+	const layer = player.layers?.[0];
+	expect(layer, "the player offers a layer to select").toBeTruthy();
+	expect(layer.attributes).toEqual(
+		expect.arrayContaining(["media.play_mode", "volume"]),
+	);
+
+	// And it reaches them through the ordinary Media attributes rather than anything audio-only,
+	// which is what puts it on the same encoders as any other player.
+	expect(layer.attributes).toEqual(
+		expect.arrayContaining(["media.folder", "media.file"]),
+	);
+	expect(
+		layer.attributes.filter((attribute: string) =>
+			attribute.startsWith("audio."),
+		),
+		"nothing audio-specific is exposed",
+	).toEqual([]);
+});
+
 /// Patches one shipped Internal Audio Player, which has no DMX footprint and no address.
 async function patchAudioPlayer(api: {
 	request<T>(
