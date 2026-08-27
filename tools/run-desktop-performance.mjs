@@ -17,6 +17,17 @@ import { createPerformanceFixtureInputs } from "./stage-large-scene.mjs";
 const DURATION_SECONDS = 60;
 // Every case requests the same rate, so results are comparable across shows and across releases.
 const REQUESTED_RATE_HZ = 40;
+
+/**
+ * How long to wait for the Sheet to draw the show before the measured window opens. One core
+ * draws at roughly a fixed rate, so the wait grows with the show rather than sitting at a
+ * constant that only ever suited the smaller ones.
+ */
+function drawBudgetMillis(performanceCase, executionMode) {
+	return executionMode === "one_core"
+		? Math.max(300_000, performanceCase.fixtureRecords * 500)
+		: 60_000;
+}
 const LINUX_PROCESS_OPTIONS = {
 	ticksPerSecond: linuxConfiguration("CLK_TCK", 100),
 	pageSize: linuxConfiguration("PAGESIZE", 4096),
@@ -91,6 +102,15 @@ async function runCase(performanceCase, executionMode) {
 			LIGHT_STAGE_PACKAGED_BENCH_PROFILE: performanceCase.caseId,
 			LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW: "0",
 			LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET: "1",
+			// The benchmark surface stops when its own duration elapses, and it defaults to
+			// thirty seconds. Tell it how long this run actually measures for, with headroom
+			// for the wait that precedes the window, or it falls silent midway through and
+			// the liveness gate reports a Sheet that in fact did exactly as it was told.
+			LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS: String(
+				Math.ceil(drawBudgetMillis(performanceCase, executionMode) / 1_000) +
+					DURATION_SECONDS +
+					120,
+			),
 			// The demo show carries whatever it was generated with, which is not ours to
 			// predict before it is loaded. The built workloads are exactly the size we ask for.
 			...(performanceCase.demo
@@ -135,9 +155,7 @@ async function runCase(performanceCase, executionMode) {
 			reportPath,
 			sheetRecords,
 			child,
-			executionMode === "one_core"
-				? Math.max(300_000, performanceCase.fixtureRecords * 500)
-				: 60_000,
+			drawBudgetMillis(performanceCase, executionMode),
 		);
 		const measurementStartedAt = Date.now();
 		const measured = await measureWindow(api, child.pid, executionMode);
