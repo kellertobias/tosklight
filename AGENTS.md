@@ -118,6 +118,28 @@ If the app looks stale, verify the bundle opened by the current `build` script b
 - Help and marketing screenshots are generated, not committed. CI captures both galleries every run; regenerate locally with `npm run screenshots:help` and `npm run screenshots:marketing`.
 - Keep screenshots tied to stable, representative operator states. Neither gallery is a visual-regression baseline; the captures fail on blank, mis-sized, or error-producing renders instead.
 
+## Remote, pushing, and CI
+
+- `origin` is the private Forgejo at `git.tokenet.de`. It is the normal upstream: push there, and
+  do not ask whether to push.
+- **CI does not run on Forgejo.** Forgejo mirrors to GitHub internally, and the pipeline runs there
+  as GitHub Actions on `kellertobias/tosklight`. The mirror lags a push by a minute or two.
+- Read CI with `gh`, which is already authenticated, and always name the mirror explicitly because
+  the repository's own remote is not GitHub:
+
+```sh
+gh run list --repo kellertobias/tosklight --limit 10
+gh run view <run-id> --repo kellertobias/tosklight
+gh run view <run-id> --repo kellertobias/tosklight --log-failed --job <job-id>
+```
+
+- Forgejo's own Actions API is a dead end: `tea` targets `/actions/runs`, which 404s on this
+  Forgejo build, and `tea api` never attaches its token. Do not spend time there.
+- Match a run to a commit by its title, which is the commit subject. Confirm the work reached the
+  remote first: unpushed commits produce no run at all.
+- The Playwright UI job is sharded four ways, so a green summary line in one shard says nothing
+  about the others. Read the failing job, not the run total.
+
 ## Working tree and commits
 
 - Preserve unrelated user changes in a dirty worktree.
