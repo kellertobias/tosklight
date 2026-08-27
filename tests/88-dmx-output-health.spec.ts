@@ -66,20 +66,26 @@ test("DMX-HEALTH-001 @ui the DMX output summary reports live measured output hea
 	expect(average).toBeLessThanOrEqual(maximum);
 
 	const histogram = aside.locator(".dmx-output-histogram");
-	await expect(histogram).toContainText("Frames below rate · last 60 s");
+	await expect(histogram).toContainText("Frames at rate · last 60 s");
 	expect(await histogram.locator("li small").allInnerTexts()).toEqual([
 		"< 20 Hz",
-		"< 30 Hz",
-		"< 38 Hz",
-		"< 40 Hz",
-		"< 44 Hz",
+		"> 20 Hz",
+		"> 30 Hz",
+		"> 38 Hz",
+		"> 40 Hz",
+		"> 44 Hz",
+		"> 48 Hz",
+		"> 52 Hz",
+		"> 56 Hz",
+		"> 60 Hz",
 	]);
-	// The buckets count "below X Hz", so each one contains every slower bucket's frames.
+	// Every band after the first counts "at or above X Hz", so each one is a subset of the band
+	// below it and the counts fall as the bands get faster.
 	const counts = (await histogram.locator("li span").allInnerTexts()).map(
 		Number,
 	);
-	for (let index = 1; index < counts.length; index += 1) {
-		expect(counts[index]).toBeGreaterThanOrEqual(counts[index - 1]);
+	for (let index = 2; index < counts.length; index += 1) {
+		expect(counts[index]).toBeLessThanOrEqual(counts[index - 1]);
 	}
 
 	const errors = aside.locator(".dmx-output-errors");

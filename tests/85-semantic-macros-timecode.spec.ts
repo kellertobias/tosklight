@@ -332,7 +332,9 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 
 		await page.getByRole("button", { name: "Settings" }).click();
 		const settings = page.getByRole("dialog", { name: "Timecode Settings" });
+		// The settings are tabbed: the name is on Generic, the marker import on Markers.
 		await settings.getByLabel("Name").fill("Opening sequence");
+		await settings.getByRole("tab", { name: "Markers" }).click();
 		await settings.getByRole("button", { name: "Append" }).click();
 		await page.getByRole("option", { name: "Replace" }).click();
 		const configuration = await api.request<any>("GET", "/api/v2/configuration");
