@@ -50,7 +50,7 @@ export function attributeScale(
 		stepsBySlot: bands !== null,
 		display:
 			controller.encoderSemanticDisplay(attribute) ??
-			controller.encoderNormalizedDisplay(attribute) ??
+			controller.encoderNormalizedDisplay(attribute, domain) ??
 			(bands ? bandLabel(bands, value) : undefined) ??
 			formatAttributeValue(domain, value),
 		stepAttribute(delta, undoGroup) {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { formatNormalizedRange, formatNormalizedValue } from "./model";
 import {
 	attributeDomain,
 	domainStep,
@@ -65,5 +66,22 @@ describe("attribute domains", () => {
 		expect(domainStep(kelvin, false)).toBeCloseTo(10 / 11_000);
 		expect(domainStep(kelvin, true)).toBeCloseTo(100 / 11_000);
 		expect(domainValue(kelvin, domainStep(kelvin, true))).toBeCloseTo(1_100);
+	});
+
+	it("carries the domain through the display the encoder actually shows", () => {
+		// The encoder reads through formatNormalizedValue/Range, so a domain that stops there
+		// never reaches the operator however well the domain itself formats.
+		const kelvin = attributeDomain("color.temperature", "K");
+		expect(formatNormalizedValue(0.5, kelvin)).toBe("6500 K");
+		expect(formatNormalizedRange([0, 1], kelvin)).toBe("1000 K...12000 K");
+		expect(formatNormalizedRange([0.5, 0.5], kelvin)).toBe("6500 K");
+		const pan = attributeDomain("pan", "deg");
+		expect(formatNormalizedValue(0.5, pan)).toBe("0%");
+		expect(formatNormalizedRange([0, 1], pan)).toBe("-100%...100%");
+	});
+
+	it("still reads as a plain percentage when no domain is given", () => {
+		expect(formatNormalizedValue(0.4)).toBe("40%");
+		expect(formatNormalizedRange([0.12, 0.8])).toBe("12%...80%");
 	});
 });

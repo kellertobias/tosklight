@@ -1,3 +1,4 @@
+import { type AttributeDomain, PERCENT_DOMAIN } from "./attributeDomain";
 import {
 	discreteProgrammerTarget,
 	formatDiscreteValues,
@@ -75,6 +76,8 @@ export function discreteParameterTarget(
 export function normalizedParameterDisplay(
 	projection: ParameterProjection,
 	attribute: string,
+	/// The scale the attribute reads in. Percent unless the caller knows better.
+	domain: AttributeDomain = PERCENT_DOMAIN,
 ) {
 	const mediaAddressLabel =
 		attribute === "media.file" ||
@@ -125,7 +128,7 @@ export function normalizedParameterDisplay(
 				attribute,
 				() => target,
 			) ??
-			format(formatNormalizedValue(target))
+			format(formatNormalizedValue(target, domain))
 		);
 	}
 	const values = projection.selectedFixtureIds.flatMap((fixtureId) => {
@@ -140,7 +143,7 @@ export function normalizedParameterDisplay(
 			attribute,
 			valueFor,
 		) ??
-		formatNormalizedRange(values);
+		formatNormalizedRange(values, domain);
 	return range == null ? undefined : format(range);
 }
 

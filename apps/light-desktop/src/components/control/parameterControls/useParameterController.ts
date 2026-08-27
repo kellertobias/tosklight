@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { AttributeDomain } from "./attributeDomain";
 import { useApp } from "../../../state/AppContext";
 import {
 	type AlignMode,
@@ -53,8 +54,8 @@ function createParameterActions(
 			normalizedParameterTarget(projection, attribute),
 		programmerDiscreteTarget: (attribute: string) =>
 			discreteParameterTarget(projection, attribute),
-		encoderNormalizedDisplay: (attribute: string) =>
-			normalizedParameterDisplay(projection, attribute),
+		encoderNormalizedDisplay: (attribute: string, domain?: AttributeDomain) =>
+			normalizedParameterDisplay(projection, attribute, domain),
 		encoderDiscreteDisplay: (attribute: string) =>
 			discreteParameterDisplay(projection, attribute),
 		encoderSemanticDisplay: (attribute: string) =>

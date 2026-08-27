@@ -20,7 +20,7 @@ export interface AttributeDomain {
 	coarseStep: number;
 }
 
-const PERCENT: AttributeDomain = {
+export const PERCENT_DOMAIN: AttributeDomain = {
 	kind: "percent",
 	minimum: 0,
 	maximum: 100,
@@ -37,7 +37,7 @@ const PERCENT: AttributeDomain = {
  * zero, with the two directions of travel either side of it.
  */
 const SIGNED_PERCENT: AttributeDomain = {
-	...PERCENT,
+	...PERCENT_DOMAIN,
 	kind: "signed-percent",
 	minimum: -100,
 	maximum: 100,
@@ -97,7 +97,7 @@ export function attributeDomain(
 			coarseStep: 5,
 		};
 	}
-	return PERCENT;
+	return PERCENT_DOMAIN;
 }
 
 /** The value the operator reads, from the value on the wire. */

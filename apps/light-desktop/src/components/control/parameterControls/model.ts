@@ -1,3 +1,8 @@
+import {
+	type AttributeDomain,
+	PERCENT_DOMAIN,
+	formatAttributeValue,
+} from "./attributeDomain";
 export const parameterFamilies = {
 	Intensity: ["intensity", "shutter", "master"],
 	Color: [
@@ -150,16 +155,24 @@ export function discreteProgrammerTarget(value: unknown): string | undefined {
 		: discreteProgrammerTarget(record.value);
 }
 
-export function formatNormalizedValue(value: number): string {
-	return `${Math.round(value * 100)}%`;
+export function formatNormalizedValue(
+	value: number,
+	domain: AttributeDomain = PERCENT_DOMAIN,
+): string {
+	return formatAttributeValue(domain, value);
 }
 
-export function formatNormalizedRange(values: number[]): string | undefined {
+export function formatNormalizedRange(
+	values: number[],
+	domain: AttributeDomain = PERCENT_DOMAIN,
+): string | undefined {
 	if (!values.length) return undefined;
-	const rounded = values.map((value) => Math.round(value * 100));
-	const minimum = Math.min(...rounded);
-	const maximum = Math.max(...rounded);
-	return minimum === maximum ? `${minimum}%` : `${minimum}%...${maximum}%`;
+	const shown = values.map((value) => formatAttributeValue(domain, value));
+	const minimum = formatAttributeValue(domain, Math.min(...values));
+	const maximum = formatAttributeValue(domain, Math.max(...values));
+	return shown.every((entry) => entry === shown[0])
+		? shown[0]
+		: `${minimum}...${maximum}`;
 }
 
 export function formatDiscreteValues(values: string[]): string | undefined {
