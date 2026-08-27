@@ -171,7 +171,27 @@ fn with_transport_layers(router: Router<AppState>, state: AppState) -> Router {
         .with_state(state)
         .layer(DefaultBodyLimit::max(256 * 1024 * 1024))
         .layer(cors_layer())
-        .layer(TraceLayer::new_for_http())
+        .layer(request_trace_layer())
+}
+
+/// Request tracing that says which request failed.
+///
+/// The default hook logs a status and a latency and nothing else, so a 500 in a desk's log names
+/// no route, and an operator reporting "I keep seeing errors" leaves nobody anything to go on.
+/// The method and path cost one span field and turn that into something answerable.
+fn request_trace_layer() -> TraceLayer<
+    tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>,
+    fn(&Request<axum::body::Body>) -> tracing::Span,
+> {
+    fn span(request: &Request<axum::body::Body>) -> tracing::Span {
+        tracing::info_span!(
+            "http",
+            method = %request.method(),
+            path = %request.uri().path(),
+        )
+    }
+    TraceLayer::new_for_http()
+        .make_span_with(span as fn(&Request<axum::body::Body>) -> tracing::Span)
 }
 
 fn cors_layer() -> CorsLayer {

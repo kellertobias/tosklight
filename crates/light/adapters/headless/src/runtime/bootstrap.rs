@@ -43,9 +43,19 @@ pub(super) async fn run() -> anyhow::Result<()> {
         .await
 }
 
+/// The desk's default log level, and how to raise it.
+///
+/// `RUST_LOG` wins when it is set. The level was fixed at compile time before, so answering "what
+/// actually failed?" on a desk that is showing errors meant building a new binary — which is not
+/// something an operator can do, and not something anyone should have to do to read a log.
+const DEFAULT_LOG_FILTER: &str = "light_headless_runtime=info,tower_http=info";
+
 fn initialize_tracing() {
     tracing_subscriber::fmt()
-        .with_env_filter("light_headless_runtime=info,tower_http=info")
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(DEFAULT_LOG_FILTER)),
+        )
         .init();
 }
 
@@ -563,4 +573,26 @@ fn desk_token() -> Option<Arc<str>> {
         .ok()
         .filter(|token| !token.is_empty())
         .map(Arc::from)
+}
+
+#[cfg(test)]
+mod log_filter_tests {
+    use super::DEFAULT_LOG_FILTER;
+
+    #[test]
+    fn the_default_filter_is_a_filter_the_subscriber_accepts() {
+        // A malformed default would leave a desk with no log at all, which is the one situation
+        // where a log matters most.
+        assert!(
+            tracing_subscriber::EnvFilter::try_new(DEFAULT_LOG_FILTER).is_ok(),
+            "the default log filter has to parse"
+        );
+    }
+
+    #[test]
+    fn the_default_keeps_the_desk_and_its_requests_at_info() {
+        // Quiet enough to live with, loud enough that a failing request is recorded at all.
+        assert!(DEFAULT_LOG_FILTER.contains("light_headless_runtime=info"));
+        assert!(DEFAULT_LOG_FILTER.contains("tower_http=info"));
+    }
 }
