@@ -374,22 +374,23 @@ describe("CAD fixture interaction", () => {
 		};
 		const { canvas, onSelection } = setup([], [fixture, second]);
 
+		// Swept back to the left, so it takes everything the rectangle touches.
 		fireEvent.pointerDown(canvas, {
 			pointerId: 7,
 			button: 0,
-			clientX: 500,
+			clientX: 570,
 			clientY: 400,
 		});
 		fireEvent.pointerMove(canvas, {
 			pointerId: 7,
 			buttons: 1,
-			clientX: 570,
+			clientX: 500,
 			clientY: 350,
 		});
 		fireEvent.pointerUp(canvas, {
 			pointerId: 7,
 			button: 0,
-			clientX: 570,
+			clientX: 500,
 			clientY: 350,
 		});
 
@@ -398,6 +399,39 @@ describe("CAD fixture interaction", () => {
 			type: "replace",
 			ids: [fixture.id, second.id],
 		});
+	});
+
+	it("takes only what fits inside a rectangle drawn left to right", () => {
+		const second = {
+			...fixture,
+			id: "22222222-2222-4222-8222-222222222222",
+			logicalFixtureId: "22222222-2222-4222-8222-222222222222",
+			positionMillimetres: [600, 0, 4000] as [number, number, number],
+		};
+		const { canvas, onSelection } = setup([], [fixture, second]);
+
+		// The same rectangle as the sweep above, drawn the other way: neither fixture fits
+		// entirely inside it, so it catches nothing.
+		fireEvent.pointerDown(canvas, {
+			pointerId: 9,
+			button: 0,
+			clientX: 500,
+			clientY: 400,
+		});
+		fireEvent.pointerMove(canvas, {
+			pointerId: 9,
+			buttons: 1,
+			clientX: 570,
+			clientY: 350,
+		});
+		fireEvent.pointerUp(canvas, {
+			pointerId: 9,
+			button: 0,
+			clientX: 570,
+			clientY: 350,
+		});
+
+		expect(onSelection).toHaveBeenCalledWith({ type: "replace", ids: [] });
 	});
 
 	it("selects a multi-patch placement through its shared logical fixture", () => {
@@ -442,21 +476,21 @@ describe("CAD fixture interaction", () => {
 			pointerId: 8,
 			button: 0,
 			shiftKey: true,
-			clientX: 500,
+			clientX: 570,
 			clientY: 400,
 		});
 		fireEvent.pointerMove(canvas, {
 			pointerId: 8,
 			buttons: 1,
 			shiftKey: true,
-			clientX: 570,
+			clientX: 500,
 			clientY: 350,
 		});
 		fireEvent.pointerUp(canvas, {
 			pointerId: 8,
 			button: 0,
 			shiftKey: true,
-			clientX: 570,
+			clientX: 500,
 			clientY: 350,
 		});
 

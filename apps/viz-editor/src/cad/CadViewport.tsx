@@ -24,6 +24,12 @@ import type {
 	WorldAxis,
 } from "./types";
 import {
+	boundsOf,
+	entityBounds,
+	marqueeCatches,
+	marqueeMode,
+} from "./marqueeSelection";
+import {
 	planeDelta,
 	previewDeltaForEntity,
 	printPageHeight,
@@ -407,20 +413,20 @@ export function CadViewport({
 				});
 				return;
 			}
-			const box = {
-				start: screenToPlane(...active.start),
-				end: screenToPlane(event.clientX, event.clientY),
-			};
+			const marquee = boundsOf(
+				screenToPlane(...active.start),
+				screenToPlane(event.clientX, event.clientY),
+			);
+			// The direction is read on screen, which is the rectangle the operator drew, rather
+			// than in plane coordinates, which some views mirror.
+			const mode = marqueeMode(active.start[0], event.clientX);
 			const ids = entities
 				.filter((entity) => entity.selectable)
 				.filter((entity) =>
-					pointInside(
-						projectPoint(
-							entity.positionMillimetres,
-							view,
-							rotationQuarterTurns,
-						),
-						box,
+					marqueeCatches(
+						entityBounds(entity, view, rotationQuarterTurns),
+						marquee,
+						mode,
 					),
 				)
 				.map((entity) => entity.logicalFixtureId);
@@ -1333,14 +1339,6 @@ function viewPositionDepth(
 	}
 }
 
-function pointInside(point: [number, number], box: SelectionBox): boolean {
-	return (
-		point[0] >= Math.min(box.start[0], box.end[0]) &&
-		point[0] <= Math.max(box.start[0], box.end[0]) &&
-		point[1] >= Math.min(box.start[1], box.end[1]) &&
-		point[1] <= Math.max(box.start[1], box.end[1])
-	);
-}
 
 function gizmoGeometry(
 	entities: readonly CadEntity[],

@@ -249,7 +249,7 @@ function point3Key(point: readonly [number, number, number]) {
 	return point.map((value) => Math.round(value * 20)).join(",");
 }
 
-function rotateModelPoint(
+export function rotateModelPoint(
 	point: readonly [number, number, number],
 	rotation: readonly [number, number, number],
 ): [number, number, number] {
