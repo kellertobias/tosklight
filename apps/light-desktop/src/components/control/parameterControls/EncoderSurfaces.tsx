@@ -177,6 +177,8 @@ function EncoderSurface({
 	const discrete = controller.encoderDiscreteDisplay(activeAttribute);
 	const scale = attributeScale(controller, activeAttribute, value);
 	const { domain, display, stepAttribute } = scale;
+	// A named slot still has a plain value behind it, so the number pad stays open for it.
+	const withoutPlainValue = Boolean(discrete) && !scale.stepsBySlot;
 	const hasScopedValue = controller.hasProgrammerValue(activeAttribute);
 	const label =
 		parameterLabels[activeAttribute] ??
@@ -197,12 +199,12 @@ function EncoderSurface({
 			slot={index + 1}
 			activateOnHardwarePress
 			target={{ label, value: discrete ?? display }}
-			editValue={discrete ? undefined : domainValue(domain, value)}
+			editValue={withoutPlainValue ? undefined : domainValue(domain, value)}
 			canRelease={hasScopedValue}
 			presets={presetConfig}
 			onPresetSelect={selectIndexedPreset}
 			onEdit={
-				discrete || !controller.canWriteValues
+				withoutPlainValue || !controller.canWriteValues
 					? undefined
 					: (next) =>
 							void controller.applyParameter(
@@ -211,7 +213,7 @@ function EncoderSurface({
 							)
 			}
 			onEditRange={
-				discrete || !controller.canWriteValues
+				withoutPlainValue || !controller.canWriteValues
 					? undefined
 					: (points) =>
 							void controller.applyParameterRange(activeAttribute, points)
@@ -242,7 +244,9 @@ function EncoderSurface({
 			accentColor={attributeColor(activeAttribute)}
 			mode={controller.dynamicsMode ? "Dynamics" : undefined}
 			disabled={!controller.canWriteValues}
-			indexed={Boolean(discrete)}
+			// A wheel with slots turns from one slot to the next, and keeps its number pad, rather
+			// than being frozen into a list the operator has to open.
+			indexed={withoutPlainValue}
 			canRelease={hasScopedValue}
 			presets={presetConfig}
 			onPresetSelect={selectIndexedPreset}
@@ -255,7 +259,7 @@ function EncoderSurface({
 			fastStep={domainStep(domain, true)}
 			onSet={(next) => void controller.applyParameter(activeAttribute, next)}
 			onSetRange={
-				discrete || !controller.canWriteValues
+				withoutPlainValue || !controller.canWriteValues
 					? undefined
 					: (points) =>
 							void controller.applyParameterRange(activeAttribute, points)

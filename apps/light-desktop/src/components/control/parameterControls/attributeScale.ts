@@ -11,6 +11,9 @@ import type { ParameterController } from "./useParameterController";
 export interface AttributeScale {
 	domain: AttributeDomain;
 	display: string;
+	/// Whether the attribute has slots the encoder can step between, so turning it is meaningful
+	/// even though the value it holds is one of a fixed set.
+	stepsBySlot: boolean;
 	/// Moves the attribute by one detent, in whatever the attribute's own steps are.
 	stepAttribute(delta: number, undoGroup?: string): void;
 }
@@ -44,6 +47,7 @@ export function attributeScale(
 	);
 	return {
 		domain,
+		stepsBySlot: bands !== null,
 		display:
 			controller.encoderSemanticDisplay(attribute) ??
 			controller.encoderNormalizedDisplay(attribute) ??
