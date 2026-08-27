@@ -57,6 +57,44 @@ dmxActive: boolean,
  */
 playbackTakeover: boolean, };
 export type AvailableMonitorView = { index: number, name: string, width: number, height: number, refreshMillihertz: number | null, };
+export type CanvasPointView = { x: number, y: number, };
+export type PixelLayoutView = { name: string,
+/**
+ * `red`, `green`, `blue`, `white`, `amber`, `ultra-violet`, or `dimmer`, in wire order.
+ */
+components: Array<string>, };
+export type PixelZoneView = { id: string, name: string, start: CanvasPointView, end: CanvasPointView, columns: number, rows: number, layout: PixelLayoutView,
+/**
+ * `row-major`, `column-major`, `serpentine-rows`, or `serpentine-columns`.
+ */
+order: string, universe: number, startAddress: number, enabled: boolean,
+/**
+ * How many DMX slots this zone occupies, so the UI can show it without recomputing it.
+ */
+footprint: number, };
+export type PixelRouteView = { id: string, name: string,
+/**
+ * `art-net` or `sacn`.
+ */
+protocol: string, universe: number,
+/**
+ * A host, or a host and port. Absent means the protocol's own convention.
+ */
+destination: string | null, enabled: boolean, };
+export type DisplayRegionView = { id: string, name: string, start: CanvasPointView, end: CanvasPointView,
+/**
+ * `none`, `clockwise-90`, `half`, or `counter-clockwise-90`.
+ */
+rotation: string,
+/**
+ * `fill`, `contain`, or `stretch`.
+ */
+fit: string, enabled: boolean, };
+export type PixelMapView = {
+/**
+ * `direct` or `desk-merge`.
+ */
+mode: string, zones: Array<PixelZoneView>, routes: Array<PixelRouteView>, regions: Array<DisplayRegionView>, };
 export type OutputConfigurationValuesView = { targetKind: string, monitorBy: string | null, monitorValue: string | null, fullscreen: boolean, width: number, height: number, presentation: string, framesPerSecond: number | null, soundOutputKind: string, soundOutputName: string | null, personality: string, personalityLayout: string, protocol: string, universe: number, startAddress: number, };
 export type OutputConfigurationView = { id: string, name: string,
 /**
@@ -91,6 +129,10 @@ availableMonitors: Array<AvailableMonitorView>,
  * Audio outputs the operating system currently reports.
  */
 availableSoundOutputs: Array<string>,
+/**
+ * What this output maps onto a rig, and how its canvas is divided across screens.
+ */
+pixelMap: PixelMapView,
 /**
  * `two-layers` or `eight-layers`.
  */
@@ -370,7 +412,12 @@ cycleInterval?: string | null, beatMoveAmount?: number | null, beatMoveDirection
  */
 visualizerParameters?: VisualizerParametersView | null, };
 export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, maskPositionX?: number | null, maskPositionY?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, shaperLeft?: number | null, shaperRight?: number | null, shaperTop?: number | null, shaperBottom?: number | null, shaperLeftRotation?: number | null, shaperRightRotation?: number | null, shaperTopRotation?: number | null, shaperBottomRotation?: number | null, shaperRotation?: number | null, };
-export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, personalityLayout?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null, };
+export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, personalityLayout?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null,
+/**
+ * The whole pixel map, replaced at once. A zone is meaningless on its own — its address has
+ * to be checked against every other zone's — so the map is edited as a piece.
+ */
+pixelMap?: PixelMapView | null, };
 export type CreateVisualizer = {
 /**
  * Client-generated. A resend with the same id returns the first outcome.

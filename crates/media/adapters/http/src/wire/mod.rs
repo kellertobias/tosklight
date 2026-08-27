@@ -21,6 +21,8 @@ mod library;
 mod logs;
 mod network;
 mod output;
+mod output_edit;
+mod pixel_map;
 mod text;
 mod time;
 mod visualizer;
@@ -44,9 +46,13 @@ pub use library::{
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
-    AvailableMonitorView, LayerView, MaskView, MasterView, OutputConfigurationEditError,
-    OutputConfigurationValuesView, OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
-    UpdateOutputConfiguration,
+    AvailableMonitorView, LayerView, MaskView, MasterView, OutputConfigurationValuesView,
+    OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
+};
+pub use output_edit::{OutputConfigurationEditError, UpdateOutputConfiguration};
+pub use pixel_map::{
+    CanvasPointView, DisplayRegionView, PixelLayoutView, PixelMapEditError, PixelMapView,
+    PixelRouteView, PixelZoneView,
 };
 pub use text::{
     CreateText, DeleteText, TextEditError, TextFormatView, TextSlotView, TextStyleView, UpdateText,

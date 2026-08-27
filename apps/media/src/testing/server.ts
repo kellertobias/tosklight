@@ -855,6 +855,7 @@ export function anOutputConfiguration(
 		id,
 		name,
 		...active,
+		pixelMap: { mode: "direct", zones: [], routes: [], regions: [] },
 		availableMonitors: [],
 		availableSoundOutputs: [],
 		active,
