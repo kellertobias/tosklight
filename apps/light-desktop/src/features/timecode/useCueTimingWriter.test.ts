@@ -77,7 +77,7 @@ describe("Cue timing writer", () => {
 	});
 
 	it("replaces a waiting edit rather than refusing it, and writes where the turn rested", async () => {
-		const pending: Array<(object: VersionedObject<CueList>) => void> = [];
+		const pending: Array<() => void> = [];
 		const save = vi.fn(
 			(_basis: unknown, body: CueList) =>
 				new Promise<VersionedObject<CueList>>((resolve) => {

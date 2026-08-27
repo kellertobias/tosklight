@@ -984,7 +984,17 @@ function useTimecodeAddAction({
 	} satisfies TitleAction;
 }
 
-async function decodeAudioPeaks(file: File, count = 220): Promise<number[]> {
+/// Waveform buckets read from a file being imported.
+///
+/// Markers are aligned against the waveform, so it has to carry the same detail as the one the
+/// desk serves for an already-linked file (`AUDIO_WAVEFORM_BUCKETS`); otherwise the lane loses
+/// resolution until the show is reopened.
+const IMPORTED_WAVEFORM_BUCKETS = 4_096;
+
+async function decodeAudioPeaks(
+	file: File,
+	count = IMPORTED_WAVEFORM_BUCKETS,
+): Promise<number[]> {
 	const AudioContextConstructor = window.AudioContext;
 	const context = new AudioContextConstructor();
 	try {

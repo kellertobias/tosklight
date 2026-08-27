@@ -280,13 +280,15 @@
 }
 
 .timecode-waveform-envelope {
-	fill: #4dc6d9;
+	/* The envelope is traced along the top of the audio and back along the bottom, so leaving it
+	   unfilled draws the shape of the audio as an outline rather than as a solid block. */
+	fill: none;
 	stroke: #4dc6d9;
 	/* The envelope is drawn in viewBox units stretched to the lane, so the hairline outline keeps
 	   a quiet passage visible instead of collapsing it to nothing. */
-	stroke-width: 0.5;
+	stroke-width: 1;
 	vector-effect: non-scaling-stroke;
-	opacity: 0.62;
+	opacity: 0.85;
 }
 
 .timecode-track {
