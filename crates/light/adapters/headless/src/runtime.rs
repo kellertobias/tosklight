@@ -177,6 +177,7 @@ mod playback_topology_adapter;
 mod playback_topology_http;
 mod playback_topology_wire;
 mod preload;
+mod programmer_aim_command;
 mod programmer_commands;
 mod programmer_dynamic_commands;
 mod programmer_fixture_commands;

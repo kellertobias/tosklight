@@ -131,6 +131,16 @@ fn fixture_level_values(
         .collect())
 }
 
+/// `AT FIXTURE 5` names an object to aim at rather than a level to set.
+fn aim_target(value: &[String]) -> Option<u32> {
+    let [keyword, number] = value else {
+        return None;
+    };
+    matches!(keyword.as_str(), "FIXTURE" | "FIXTURES" | "FIX")
+        .then(|| number.parse::<u32>().ok())
+        .flatten()
+}
+
 pub(super) fn execute_fixture_programmer_command(
     state: &AppState,
     session: &Session,
@@ -166,7 +176,13 @@ pub(super) fn execute_fixture_programmer_command(
         return Ok(fixtures.len());
     }
     let value = &tokens[at_index + 1..];
-    if value.len() == 3 && value[1] == "." {
+    if let Some(target) = aim_target(value) {
+        state
+            .programming
+            .set_command_line(session.id, command_line.to_owned());
+        let assignments = super::programmer_aim_command::aim_selection(state, &fixtures, target)?;
+        set_command_fixture_values(state, session, assignments, timing);
+    } else if value.len() == 3 && value[1] == "." {
         apply_command_preset(
             state,
             session,

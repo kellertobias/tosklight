@@ -51,6 +51,38 @@ pub(super) fn set_command_fixture_intensities(
     }
 }
 
+/// Apply arbitrary attribute values with the command's own timing.
+///
+/// The intensity path above is the common case; this is for commands that write something else,
+/// such as the pan and tilt that aim a selection at an object.
+pub(super) fn set_command_fixture_values(
+    state: &AppState,
+    session: &Session,
+    assignments: impl IntoIterator<
+        Item = (
+            light_core::FixtureId,
+            light_core::AttributeKey,
+            light_core::AttributeValue,
+        ),
+    >,
+    timing: CommandTiming,
+) {
+    if timing.fade {
+        state.programming.set_many_faded_with_timing(
+            session.id,
+            assignments,
+            timing.fade_millis,
+            timing.delay_millis,
+        );
+    } else {
+        state.programming.set_many_immediate_with_delay(
+            session.id,
+            assignments,
+            timing.delay_millis,
+        );
+    }
+}
+
 pub(super) fn set_command_group_intensity(
     state: &AppState,
     session: &Session,
