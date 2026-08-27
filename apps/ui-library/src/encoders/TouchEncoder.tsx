@@ -32,6 +32,13 @@ export interface TouchEncoderProps {
 	maximum?: number;
 	/** Converts the internal value to the number shown in the absolute-entry modal. */
 	inputScale?: number;
+	/**
+	 * Where the typed scale starts, when it does not start at zero.
+	 *
+	 * A colour temperature runs from 1000 K and a pan reads from -100%, so the editor needs the
+	 * offset as well as the span to show and accept the number the operator is thinking in.
+	 */
+	inputOffset?: number;
 	slowStep?: number;
 	fastStep?: number;
 	repeatSeconds?: number;
@@ -414,6 +421,18 @@ function createEncoderKeyDownHandler({
 	};
 }
 
+/** The conversion between the value on the wire and the number the operator reads and types. */
+function typedScale(inputScale: number, inputOffset: number) {
+	const scale =
+		Number.isFinite(inputScale) && inputScale !== 0 ? inputScale : 1;
+	const offset = Number.isFinite(inputOffset) ? inputOffset : 0;
+	return {
+		resolvedInputScale: scale,
+		typedOf: (normalized: number) => normalized * scale + offset,
+		valueOf: (typed: number) => (typed - offset) / scale,
+	};
+}
+
 export function TouchEncoder({
 	label,
 	slot,
@@ -424,6 +443,7 @@ export function TouchEncoder({
 	minimum = 0,
 	maximum = 1,
 	inputScale = 100,
+	inputOffset = 0,
 	slowStep = TOUCH_ENCODER_FINE_STEP,
 	fastStep = TOUCH_ENCODER_COARSE_STEP,
 	repeatSeconds = TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS / 1000,
@@ -442,9 +462,8 @@ export function TouchEncoder({
 	const [editing, setEditing] = useState(false);
 	const [inputValue, setInputValue] = useState("");
 	const choiceMode = touchInteraction === "choices";
-	const hasChoices = Boolean(
-		presets?.groups.some((group) => group.options.length),
-	);
+	// biome-ignore format: one predicate, kept on one line.
+	const hasChoices = Boolean(presets?.groups.some((g) => g.options.length));
 	const indexedWithoutEditor = indexed && !canRelease && !hasChoices;
 	const unavailable =
 		disabled || indexedWithoutEditor || (choiceMode && !hasChoices);
@@ -458,24 +477,18 @@ export function TouchEncoder({
 		slowStep,
 	});
 	const encoderRef = useContinuousRidgeMotion(interaction.motion);
-	const resolvedInputScale =
-		Number.isFinite(inputScale) && inputScale !== 0 ? inputScale : 1;
+	// biome-ignore format: one binding of the typed scale, kept on one line.
+	const { resolvedInputScale, typedOf, valueOf } = typedScale(inputScale, inputOffset);
 	const renderedValue = display ?? formatValue?.(value) ?? String(value);
 	const clamp = (next: number) => Math.max(minimum, Math.min(maximum, next));
 	const openEditor = () => {
 		if (unavailable || (!indexed && !interaction.canActivate())) return;
-		setInputValue(String(Number((value * resolvedInputScale).toFixed(4))));
+		setInputValue(String(Number(typedOf(value).toFixed(4))));
 		setEditing(true);
 	};
 	const submit = (candidate = inputValue) => {
-		if (
-			submitNumericExpression(
-				candidate,
-				(next) => onSet(clamp(next / resolvedInputScale)),
-				onSetRange,
-			)
-		)
-			setEditing(false);
+		const set = (next: number) => onSet(clamp(valueOf(next)));
+		if (submitNumericExpression(candidate, set, onSetRange)) setEditing(false);
 	};
 	const onWheel = createEncoderWheelHandler({
 		disabled,
@@ -555,6 +568,8 @@ export function TouchEncoder({
 					minimum={minimum}
 					maximum={maximum}
 					resolvedInputScale={resolvedInputScale}
+					typedOf={typedOf}
+					valueOf={valueOf}
 					slowStep={slowStep}
 					accentColor={accentColor}
 					clamp={clamp}
@@ -617,6 +632,8 @@ function TouchEncoderEditing({
 	minimum,
 	maximum,
 	resolvedInputScale,
+	typedOf,
+	valueOf,
 	slowStep,
 	accentColor,
 	clamp,
@@ -641,6 +658,8 @@ function TouchEncoderEditing({
 	choiceMode: boolean;
 	indexed: boolean;
 	resolvedInputScale: number;
+	typedOf(normalized: number): number;
+	valueOf(typed: number): number;
 	clamp(value: number): number;
 }) {
 	return (
@@ -668,11 +687,11 @@ function TouchEncoderEditing({
 					? undefined
 					: {
 							label,
-							minimum: (minimum ?? 0) * resolvedInputScale,
-							maximum: (maximum ?? 1) * resolvedInputScale,
+							minimum: typedOf(minimum ?? 0),
+							maximum: typedOf(maximum ?? 1),
 							step: (slowStep ?? TOUCH_ENCODER_FINE_STEP) * resolvedInputScale,
 							accentColor,
-							onChange: (next) => onSet(clamp(next / resolvedInputScale)),
+							onChange: (next) => onSet(clamp(valueOf(next))),
 						}
 			}
 		/>

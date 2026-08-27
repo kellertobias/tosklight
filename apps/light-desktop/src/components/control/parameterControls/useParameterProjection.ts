@@ -296,6 +296,13 @@ export function useParameterProjection(
 	const attributeLabels = new Map(
 		(registry ?? []).map((descriptor) => [descriptor.id, descriptor.label]),
 	);
+	// The scale an attribute is read in, for the encoders that have to show and accept it.
+	const attributeUnits = new Map(
+		(registry ?? []).map((descriptor) => [
+			descriptor.id,
+			descriptor.display_unit ?? descriptor.physical_unit,
+		]),
+	);
 	return {
 		programmerActions,
 		state,
@@ -327,6 +334,7 @@ export function useParameterProjection(
 		encoderPushTurnSlots,
 		visibleEncoderCount,
 		attributeLabels,
+		attributeUnits,
 		movementRepresentation,
 		panRepresentation,
 		tiltRepresentation,

@@ -1,4 +1,10 @@
 import { useEffect, useRef } from "react";
+import { attributeBands, steppedValue } from "./attributeBands";
+import {
+	attributeDomain,
+	domainStep,
+	selectedChannelUnit,
+} from "./attributeDomain";
 import type { ParameterProjection } from "./useParameterProjection";
 
 interface HardwareParameterActions {
@@ -34,7 +40,11 @@ interface EncoderUndoGroup {
 
 const ENCODER_UNDO_GROUP_IDLE_MILLIS = 250;
 
-export function encoderDelta(attribute: string, value: string | undefined) {
+export function encoderDelta(
+	attribute: string,
+	value: string | undefined,
+	unit?: string | null,
+) {
 	// Every byte-addressed media source steps one DMX address per detent, including the
 	// audio.* names a show patched before TL-367 still declares.
 	const addressStep =
@@ -46,10 +56,15 @@ export function encoderDelta(attribute: string, value: string | undefined) {
 		attribute === "audio.file"
 			? 1 / 255
 			: null;
-	if (value === "up") return addressStep ?? 0.01;
-	if (value === "down") return -(addressStep ?? 0.01);
-	if (value === "right") return addressStep ?? 0.1;
-	if (value === "left") return -(addressStep ?? 0.1);
+	// A detent moves the value the operator reads by a round amount of its own units, so a colour
+	// temperature moves in Kelvin rather than in hundredths of the channel behind it.
+	const domain = attributeDomain(attribute, unit);
+	const fine = addressStep ?? domainStep(domain, false) * 10;
+	const coarse = addressStep ?? domainStep(domain, true) * 10;
+	if (value === "up") return fine;
+	if (value === "down") return -fine;
+	if (value === "right") return coarse;
+	if (value === "left") return -coarse;
 }
 
 function targetKey(projection: ParameterProjection, attribute: string) {
@@ -110,8 +125,38 @@ export function useHardwareParameterEncoders(
 				pushTurnAttribute && (value === "left" || value === "right")
 					? pushTurnAttribute
 					: primaryAttribute;
-			const delta = attribute ? encoderDelta(attribute, value) : undefined;
+			const delta = attribute
+				? encoderDelta(
+						attribute,
+						value,
+						selectedChannelUnit(
+							projection.selectedFixtures,
+							projection.selectedFixtureIds,
+							attribute,
+						)?.unit ?? projection.attributeUnits.get(attribute),
+					)
+				: undefined;
 			if (!attribute || delta == null) return;
+			// A wheel steps one slot per detent whichever surface the detent came from.
+			const bands = attributeBands(
+				projection.selectedFixtures,
+				projection.selectedFixtureIds,
+				attribute,
+			);
+			if (bands) {
+				const base =
+					actions.programmerTarget(attribute) ??
+					projection.normalized.get(attribute) ??
+					0;
+				const target = steppedValue(
+					bands,
+					base,
+					delta < 0 ? -1 : 1,
+					value === "left" || value === "right",
+				);
+				if (target !== base) void actions.applyParameter(attribute, target);
+				return;
+			}
 			if (
 				actions.programmerDiscreteTarget(attribute) ??
 				projection.discrete.get(attribute)

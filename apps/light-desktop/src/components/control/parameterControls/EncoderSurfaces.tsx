@@ -7,11 +7,13 @@ import {
 	useProgrammingDeleteCommandActive,
 } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
+import { domainStep, domainValue, normalizedValue } from "./attributeDomain";
+import { attributeScale } from "./attributeScale";
 import {
 	type IndexedPresetChoice,
 	indexedPresetChoices,
 } from "./indexedPresetChoices";
-import { formatNormalizedValue, parameterLabels } from "./model";
+import { parameterLabels } from "./model";
 import { ProgrammerDynamicsSurface } from "./ProgrammerDynamicsSurface";
 import type { ParameterController } from "./useParameterController";
 
@@ -173,10 +175,8 @@ function EncoderSurface({
 		controller.normalized.get(activeAttribute) ??
 		0;
 	const discrete = controller.encoderDiscreteDisplay(activeAttribute);
-	const display =
-		controller.encoderSemanticDisplay(activeAttribute) ??
-		controller.encoderNormalizedDisplay(activeAttribute) ??
-		formatNormalizedValue(value);
+	const scale = attributeScale(controller, activeAttribute, value);
+	const { domain, display, stepAttribute } = scale;
 	const hasScopedValue = controller.hasProgrammerValue(activeAttribute);
 	const label =
 		parameterLabels[activeAttribute] ??
@@ -197,7 +197,7 @@ function EncoderSurface({
 			slot={index + 1}
 			activateOnHardwarePress
 			target={{ label, value: discrete ?? display }}
-			editValue={discrete ? undefined : value * 100}
+			editValue={discrete ? undefined : domainValue(domain, value)}
 			canRelease={hasScopedValue}
 			presets={presetConfig}
 			onPresetSelect={selectIndexedPreset}
@@ -207,7 +207,7 @@ function EncoderSurface({
 					: (next) =>
 							void controller.applyParameter(
 								activeAttribute,
-								Math.max(0, Math.min(100, next)) / 100,
+								normalizedValue(domain, next),
 							)
 			}
 			onEditRange={
@@ -246,9 +246,13 @@ function EncoderSurface({
 			canRelease={hasScopedValue}
 			presets={presetConfig}
 			onPresetSelect={selectIndexedPreset}
-			onStep={(delta, undoGroup) =>
-				void controller.stepParameter(activeAttribute, delta, undoGroup)
-			}
+			onStep={stepAttribute}
+			minimum={0}
+			maximum={1}
+			inputScale={domain.maximum - domain.minimum}
+			inputOffset={domain.minimum}
+			slowStep={domainStep(domain, false)}
+			fastStep={domainStep(domain, true)}
 			onSet={(next) => void controller.applyParameter(activeAttribute, next)}
 			onSetRange={
 				discrete || !controller.canWriteValues

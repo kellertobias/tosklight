@@ -42,6 +42,7 @@ function projection(
 		encoderPushTurnSlots: Array.from({ length: 6 }, () => null),
 		visibleEncoderCount: 6,
 		attributeLabels: new Map(),
+		attributeUnits: new Map(),
 		movementRepresentation: "movement",
 		panRepresentation: "position",
 		tiltRepresentation: "position",
