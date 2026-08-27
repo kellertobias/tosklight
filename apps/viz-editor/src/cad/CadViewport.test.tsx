@@ -599,6 +599,53 @@ describe("CAD fixture interaction", () => {
 		expect(onSelection).toHaveBeenCalledWith({ type: "replace", ids: [] });
 	});
 
+	it("zooms when the wheel turns over a print page frame", () => {
+		const onCamera = vi.fn();
+		render(
+			<CadViewport
+				entities={[fixture]}
+				drawings={[]}
+				selectedIds={[]}
+				view="top_down"
+				rotationQuarterTurns={0}
+				camera={camera}
+				preview={null}
+				showFixtureIds={false}
+				showDmxAddresses={false}
+				editEnabled={false}
+				printMode
+				printPages={[
+					{
+						id: "page-1",
+						tileId: "tile",
+						name: "Page 1",
+						view: "top_down",
+						rotationQuarterTurns: 0,
+						centreMillimetres: [0, 0],
+						widthMillimetres: 5000,
+						included: true,
+						orientation: "landscape",
+						showFixtureIds: false,
+						showDmxAddresses: false,
+					},
+				]}
+				selectedPrintPageId="page-1"
+				onCamera={onCamera}
+				onSelection={vi.fn()}
+				onPreview={() => undefined}
+				onMove={vi.fn()}
+				onSelectPrintPage={() => undefined}
+				onChangePrintPage={vi.fn()}
+			/>,
+		);
+		// A page frame is a sibling of the canvas, so a wheel over it only reaches a handler
+		// that sits on the viewport they share.
+		const frame = screen.getByText("Page 1").parentElement as HTMLElement;
+		fireEvent.wheel(frame, { deltaY: -120 });
+		expect(onCamera).toHaveBeenCalledTimes(1);
+		expect(onCamera.mock.calls[0][0].zoom).toBeGreaterThan(camera.zoom);
+	});
+
 	it("moves and uniformly scales print frames while rig editing is disabled", () => {
 		const onSelection = vi.fn();
 		const onChangePrintPage = vi.fn();

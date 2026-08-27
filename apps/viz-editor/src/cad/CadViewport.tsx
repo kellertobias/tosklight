@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type WheelEvent, useEffect, useMemo, useRef, useState } from "react";
 import architectIconUrl from "../../../../assets/branding/tosklight-icon-print.svg";
 import {
 	type CadPrintDocumentInfo,
@@ -148,6 +148,16 @@ interface SelectionBox {
 }
 
 type MoveAxis = "plane" | "horizontal" | "vertical";
+
+/** Zooms from a wheel gesture, mounted on the viewport rather than the canvas: print page frames
+ * are siblings of the canvas, so a wheel over one never reached it and print mode did nothing. */
+function zoomFromWheel(camera: TileCamera, onCamera: (c: TileCamera) => void) {
+	return (event: WheelEvent<HTMLDivElement>) => {
+		event.preventDefault();
+		const zoom = camera.zoom * Math.exp(-event.deltaY * 0.0015);
+		onCamera({ ...camera, zoom: Math.min(2.5, Math.max(0.004, zoom)) });
+	};
+}
 
 export function CadViewport({
 	entities,
@@ -436,7 +446,7 @@ export function CadViewport({
 	const scale = cadScaleForZoom(camera.zoom);
 
 	return (
-		<div className="cad-viewport">
+		<div className="cad-viewport" onWheel={zoomFromWheel(camera, onCamera)}>
 			<canvas
 				ref={canvas}
 				className="cad-canvas"
@@ -451,16 +461,6 @@ export function CadViewport({
 					onPreview(null);
 					setGuide(null);
 					setSelectionBox(null);
-				}}
-				onWheel={(event) => {
-					event.preventDefault();
-					onCamera({
-						...camera,
-						zoom: Math.min(
-							2.5,
-							Math.max(0.004, camera.zoom * Math.exp(-event.deltaY * 0.0015)),
-						),
-					});
 				}}
 			/>
 			<div
