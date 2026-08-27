@@ -594,7 +594,11 @@ function handleDataTableKeyDown<T>(
 	total: number,
 	rows: readonly T[],
 	onActiveIndexChange?: (index: number) => void,
-	onActivate?: (row: T, index: number) => void,
+	onActivate?: (
+		row: T,
+		index: number,
+		modifiers: RowActivationModifiers,
+	) => void,
 ) {
 	if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 		event.preventDefault();
@@ -607,8 +611,22 @@ function handleDataTableKeyDown<T>(
 	}
 	if ((event.key === "Enter" || event.key === " ") && rows[index]) {
 		event.preventDefault();
-		onActivate?.(rows[index], index);
+		onActivate?.(rows[index], index, rowActivationModifiers(event));
 	}
+}
+
+/** Which modifier keys were held when a row was activated. */
+export interface RowActivationModifiers {
+	/** Extend from the last activated row to this one. */
+	range: boolean;
+	/** Add this row to what is already selected rather than replacing it. */
+	additive: boolean;
+}
+
+export function rowActivationModifiers(
+	event: Pick<MouseEvent, "shiftKey" | "ctrlKey" | "metaKey">,
+): RowActivationModifiers {
+	return { range: event.shiftKey, additive: event.ctrlKey || event.metaKey };
 }
 
 export function DataTable<T>({
@@ -638,7 +656,11 @@ export function DataTable<T>({
 	) => Record<string, string | undefined>;
 	activeIndex?: number;
 	onActiveIndexChange?: (index: number) => void;
-	onActivate?: (row: T, index: number) => void;
+	onActivate?: (
+		row: T,
+		index: number,
+		modifiers: RowActivationModifiers,
+	) => void;
 	onVisibleRowsChange?: (rows: readonly T[]) => void;
 	emptyRows?: number;
 	className?: string;
@@ -718,9 +740,9 @@ export function DataTable<T>({
 						data-table-index={index}
 						tabIndex={index === (activeIndex ?? 0) ? 0 : -1}
 						className={`ui-data-table-row ${isEmpty ? "empty" : ""} ${row && selected?.(row) ? "selected" : ""} ${row ? (rowClassName?.(row, index) ?? "") : ""} ${index === activeIndex ? "active" : ""}`}
-						onClick={() => {
+						onClick={(event) => {
 							onActiveIndexChange?.(index);
-							if (row) onActivate?.(row, index);
+							if (row) onActivate?.(row, index, rowActivationModifiers(event));
 						}}
 						onKeyDown={(event) =>
 							handleDataTableKeyDown(

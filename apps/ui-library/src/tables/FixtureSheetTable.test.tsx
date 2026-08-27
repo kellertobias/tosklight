@@ -41,6 +41,10 @@ describe("FixtureSheetTableView", () => {
     expect(renderedRows[1]).toHaveClass("fixture-step-contained-current");
     expect(renderedRows[2]).toHaveClass("fixture-head-indented-row", "fixture-step-current", "selected");
     fireEvent.keyDown(renderedRows[2], { key: "Enter" });
-    expect(activate).toHaveBeenCalledWith("head-1");
+    // The sheet is told which modifiers the activation carried, so it can offer a range.
+    expect(activate).toHaveBeenCalledWith("head-1", {
+      range: false,
+      additive: false,
+    });
   });
 });

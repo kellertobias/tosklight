@@ -262,14 +262,22 @@ vi.mock("@tosklight/ui/tables", async (importOriginal) => {
 			onActivate,
 			selectedFixtureIds,
 		}: {
-			onActivate: (fixtureId: string) => void;
+			onActivate: (
+				fixtureId: string,
+				modifiers: { range: boolean; additive: boolean },
+			) => void;
 			selectedFixtureIds: ReadonlySet<string>;
 		}) => (
 			<div
 				data-testid="fixture-sheet-selection"
 				data-selection={[...selectedFixtureIds].join(",")}
 			>
-				<button type="button" onClick={() => onActivate(FIXTURE_2)}>
+				<button
+					type="button"
+					onClick={() =>
+						onActivate(FIXTURE_2, { range: false, additive: false })
+					}
+				>
 					Activate fixture 2
 				</button>
 			</div>

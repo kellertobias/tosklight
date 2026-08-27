@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **193 root cases across 79 files**.
+Default catalog: **194 root cases across 80 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -206,6 +206,7 @@ Default catalog: **193 root cases across 79 files**.
 | 90-desk-setup-defaults.spec.ts | TL-251 @ui › setup navigation exposes a finger-sized scrollbar when touch scrolling is enabled | docs/help/10-Desk/10-Show-Setup/index.md | @ui | desk-setup-defaults | standard failure evidence | parallel | pending-semantic-migration |
 | 91-performance-harness-contract.spec.ts | PERF-HARNESS @api the routes the performance harness calls still answer | repository contract | @api | performance-harness-contract | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 92-fixture-list-scrolling.spec.ts | TL-396 @ui › the fixture list stays where the wheel leaves it | repository contract | @ui | fixture-list-scrolling | standard failure evidence | parallel | pending-semantic-migration |
+| 93-fixture-sheet-shift-range.spec.ts | TL-400 @ui › shift takes the whole run between two fixture-sheet rows | repository contract | @ui | fixture-sheet-shift-range | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 

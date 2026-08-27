@@ -1,5 +1,8 @@
 import { FixtureSheetTableView as FixtureSheetTable } from "@tosklight/ui/tables";
-import { WindowHeader } from "@tosklight/ui/window-kit";
+import {
+	type RowActivationModifiers,
+	WindowHeader,
+} from "@tosklight/ui/window-kit";
 import {
 	type ReactNode,
 	useCallback,
@@ -34,6 +37,60 @@ import {
 } from "./fixtureSheetProjection";
 import { createFixtureStepPresenter } from "./fixtureSheetStep";
 import type { WindowProps } from "./windowTypes";
+
+/**
+ * Every fixture between two rows, in the order the sheet is showing them.
+ *
+ * The sheet's order is the operator's order: it follows whatever sort and filter is in force, so
+ * a range is the run of rows they can see between the two they clicked, not a span of fixture
+ * numbers that might not be next to each other on screen.
+ */
+/**
+ * What clicking a row in the sheet does.
+ *
+ * The anchor is the last row an operator touched, held in a ref so it survives every re-render
+ * the live values cause. Shift takes everything between it and this one, which is how a
+ * run of lanterns down a bar gets selected in one gesture rather than a dozen. Anything else is
+ * the ordinary single-fixture gesture, and either way this row becomes the anchor the next range
+ * is measured from.
+ */
+function activateSheetRow(
+	sheet: {
+		rows: readonly { parentFixtureId: string }[];
+		selectionActions: ReturnType<typeof useProgrammingSelectionActions>;
+		selectionAnchor: { current: string | null };
+	},
+	fixtureId: string,
+	modifiers: RowActivationModifiers,
+) {
+	const anchor = sheet.selectionAnchor.current;
+	const range =
+		modifiers.range && anchor
+			? fixtureRange(sheet.rows, anchor, fixtureId)
+			: null;
+	sheet.selectionAnchor.current = fixtureId;
+	if (range) {
+		void sheet.selectionActions?.replace({ resolvedFixtures: range });
+		return;
+	}
+	void sheet.selectionActions?.gesture({
+		source: { type: "fixture", fixtureId },
+		resolvedFixtures: [fixtureId],
+	});
+}
+
+export function fixtureRange(
+	rows: readonly { parentFixtureId: string }[],
+	anchorFixtureId: string,
+	fixtureId: string,
+): string[] | null {
+	const ordered = [...new Set(rows.map((row) => row.parentFixtureId))];
+	const from = ordered.indexOf(anchorFixtureId);
+	const to = ordered.indexOf(fixtureId);
+	// An anchor that has been filtered away leaves nothing to measure from.
+	if (from < 0 || to < 0) return null;
+	return ordered.slice(Math.min(from, to), Math.max(from, to) + 1);
+}
 
 export function FixtureSheetWindow({
 	active = true,
@@ -135,6 +192,13 @@ export function FixtureSheetWindow({
 		[selection?.selected],
 	);
 	const selectionActionStatus = resolveSelectionActionStatus(selectionActions);
+	const selectionAnchor = useRef<string | null>(null);
+	const activateRow = (fixtureId: string, modifiers: RowActivationModifiers) =>
+		activateSheetRow(
+			{ rows, selectionActions, selectionAnchor },
+			fixtureId,
+			modifiers,
+		);
 
 	return (
 		<FixtureSheetWindowView
@@ -150,15 +214,7 @@ export function FixtureSheetWindow({
 				<FixtureSheetTable
 					activeRow={activeRow}
 					columns={columns}
-					onActivate={
-						viewOnly
-							? undefined
-							: (fixtureId) =>
-									void selectionActions?.gesture({
-										source: { type: "fixture", fixtureId },
-										resolvedFixtures: [fixtureId],
-									})
-					}
+					onActivate={viewOnly ? undefined : activateRow}
 					onActiveRowChange={viewOnly ? undefined : setActiveRow}
 					onVisibleFixtureIdsChange={onVisibleFixtureIdsChange}
 					presentStep={presentStep}

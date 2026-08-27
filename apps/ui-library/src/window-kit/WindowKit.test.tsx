@@ -522,3 +522,59 @@ describe("window kit", () => {
 		expect(screen.queryByText("Hidden content")).not.toBeInTheDocument();
 	});
 });
+
+describe("row activation modifiers", () => {
+	afterEach(cleanup);
+
+	it("tells a table which modifiers a click carried", () => {
+		const activated = vi.fn();
+		render(
+			<DataTable
+				rows={[{ id: "a" }, { id: "b" }, { id: "c" }]}
+				columns={[{ id: "name", header: "Name", render: (row) => row.id }]}
+				rowKey={(row) => row.id}
+				onActivate={activated}
+			/>,
+		);
+		const rows = screen.getAllByRole("row");
+		fireEvent.click(rows[3], { shiftKey: true });
+		expect(activated).toHaveBeenLastCalledWith({ id: "c" }, 2, {
+			range: true,
+			additive: false,
+		});
+
+		fireEvent.click(rows[1], { metaKey: true });
+		expect(activated).toHaveBeenLastCalledWith({ id: "a" }, 0, {
+			range: false,
+			additive: true,
+		});
+
+		fireEvent.click(rows[2]);
+		expect(activated).toHaveBeenLastCalledWith({ id: "b" }, 1, {
+			range: false,
+			additive: false,
+		});
+	});
+
+	it("carries the modifiers of a keyboard activation too", () => {
+		const activated = vi.fn();
+		render(
+			<DataTable
+				rows={[{ id: "a" }, { id: "b" }]}
+				columns={[{ id: "name", header: "Name", render: (row) => row.id }]}
+				rowKey={(row) => row.id}
+				onActivate={activated}
+			/>,
+		);
+		// Shift+Enter has to mean what shift-clicking means, or the keyboard cannot do what the
+		// mouse can.
+		fireEvent.keyDown(screen.getAllByRole("row")[2], {
+			key: "Enter",
+			shiftKey: true,
+		});
+		expect(activated).toHaveBeenLastCalledWith({ id: "b" }, 1, {
+			range: true,
+			additive: false,
+		});
+	});
+});
