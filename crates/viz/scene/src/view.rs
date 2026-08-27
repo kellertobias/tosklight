@@ -201,9 +201,10 @@ impl ViewMode {
 ///
 /// The four tiers are a ladder of what is in the beam, and each one adds to the one below it:
 ///
-/// - **Draft** — the light cones, and nothing in them.
+/// - **Draft** — the light cones, and nothing in them. Opaque scenery still stops light at every
+///   tier; only the number of lights it stops at once goes up the ladder.
 /// - **Standard** — and the gobos, so a projected pattern is a pattern rather than a plain cone.
-/// - **High** — and the fall-off: shaped edges, shadows where a beam meets something opaque.
+/// - **High** — and the fall-off: shaped edges, and more of the rig casting shadows at once.
 /// - **Ultra** — and the haze itself, drifting and uneven, so a beam through it varies along
 ///   its length instead of running through a uniform slab.
 #[derive(
@@ -308,11 +309,16 @@ impl RenderQuality {
 
     /// Maximum number of shadow-casting lights before the renderer degrades visibly.
     ///
-    /// Shadows are part of beam fall-off — a beam stopping where it meets something opaque — so
-    /// they start at High, with the rest of it.
+    /// Every tier casts some. A drape that lets light through is not a cheaper picture, it is a
+    /// wrong one, so opacity is not something a tier may drop; what the tier buys is how many
+    /// lights are occluded at once, and the budget goes to the brightest.
+    ///
+    /// The maps are redrawn only when the rig or the lights on it move, so a standing set costs
+    /// this once rather than every frame.
     pub fn shadow_budget(self) -> u32 {
         match self {
-            Self::Draft | Self::Standard => 0,
+            Self::Draft => 2,
+            Self::Standard => 4,
             Self::High => 6,
             Self::Ultra => 10,
         }

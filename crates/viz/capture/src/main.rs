@@ -541,6 +541,33 @@ mod tests {
         (scene, values, view)
     }
 
+    /// The proven-lit deck of [`two_light_surface_scene`], with something hung between the working
+    /// light and the deck it lights.
+    ///
+    /// Building on a configuration already known to put light on that deck is the point: an
+    /// occlusion test that starts from a shot the light never reached proves nothing.
+    fn occluder_scene(kind: SceneryKind) -> (Scene, SceneValues, ViewConfiguration) {
+        use viz_scene::{glam::Vec3, uuid::Uuid};
+
+        let (mut scene, mut values, view) = two_light_surface_scene();
+        // Light zero is deliberately off in the wings; light one is the one over the deck.
+        values.emitters[0].intensity = 0.0;
+        values.emitters[0].held_intensity = 0.0;
+        scene.scenery.push(SceneryObject {
+            id: Uuid::new_v4(),
+            name: "Occluder".to_owned(),
+            position: Vec3::new(6.0, 2.0, 0.0),
+            rotation_degrees: Vec3::ZERO,
+            size: Vec3::new(4.0, 0.4, 4.0),
+            colour: [0.02, 0.02, 0.02],
+            roughness: 0.95,
+            kind,
+            chords: 0,
+        });
+        scene.recompute_bounds();
+        (scene, values, view)
+    }
+
     fn picture_brightness(image: &viz_render::CapturedImage) -> f64 {
         let total: u64 = image
             .rgba
@@ -548,6 +575,89 @@ mod tests {
             .map(|pixel| u64::from(pixel[0]) + u64::from(pixel[1]) + u64::from(pixel[2]))
             .sum();
         total as f64 / (image.rgba.len() / 4) as f64
+    }
+
+    /// Opaque scenery stops light at every quality tier.
+    ///
+    /// A drape that lets light through is not a cheaper picture, it is a wrong one. The control in
+    /// each pass is the same rig with nothing hung in it: without that, an occlusion test that
+    /// started from a shot the light never reached would pass on nothing at all.
+    #[test]
+    fn opaque_scenery_stops_light_at_every_quality_tier() {
+        let overlay = viz_render::Overlay::default();
+        let mut renderer = viz_render::Renderer::headless(320, 180)
+            .expect("a headless renderer; this machine has no GPU or software adapter");
+        let evidence = std::env::var_os("LIGHT_TMP_DIR").map(PathBuf::from);
+        let (open, open_values, _) = two_light_surface_scene();
+        let open_lit = darkened(&open_values, 0);
+        let open_dark = all_out(&open_lit);
+
+        for kind in [SceneryKind::Prop, SceneryKind::Curtain] {
+            let (scene, values, mut view) = occluder_scene(kind);
+            let dark = all_out(&values);
+            for quality in RenderQuality::ALL {
+                view.quality = quality;
+                let reaches = picture_brightness(
+                    &renderer
+                        .capture(&open, &open_lit, &view, &overlay, 1.0)
+                        .expect("the deck with nothing hung over it"),
+                ) - picture_brightness(
+                    &renderer
+                        .capture(&open, &open_dark, &view, &overlay, 0.0)
+                        .expect("the same deck with the light out"),
+                );
+                let blocked_image = renderer
+                    .capture(&scene, &values, &view, &overlay, 1.0)
+                    .expect("the deck with the occluder hung over it");
+                if let Some(directory) = evidence.as_deref() {
+                    std::fs::create_dir_all(directory).expect("capture evidence directory");
+                    write_png(
+                        &directory.join(format!(
+                            "tl-401-{}-{}.png",
+                            format!("{kind:?}").to_lowercase(),
+                            quality.label()
+                        )),
+                        blocked_image.width,
+                        blocked_image.height,
+                        &blocked_image.rgba,
+                    )
+                    .expect("occlusion evidence");
+                }
+                let blocked = picture_brightness(&blocked_image)
+                    - picture_brightness(
+                        &renderer
+                            .capture(&scene, &dark, &view, &overlay, 0.0)
+                            .expect("the occluded deck with the light out"),
+                    );
+                assert!(
+                    reaches > 2.0,
+                    "{} never lit the deck with nothing in the way, so this proves nothing: {reaches:.3}",
+                    quality.label()
+                );
+                // What is left is the occluder's own lit face, not light on the deck behind it.
+                assert!(
+                    blocked < reaches * 0.25,
+                    "{kind:?} at {} let light past: open +{reaches:.3}, occluded +{blocked:.3}",
+                    quality.label()
+                );
+            }
+        }
+    }
+
+    fn darkened(values: &SceneValues, emitter: usize) -> SceneValues {
+        let mut copy = values.clone();
+        copy.emitters[emitter].intensity = 0.0;
+        copy.emitters[emitter].held_intensity = 0.0;
+        copy
+    }
+
+    fn all_out(values: &SceneValues) -> SceneValues {
+        let mut copy = values.clone();
+        for value in &mut copy.emitters {
+            value.intensity = 0.0;
+            value.held_intensity = 0.0;
+        }
+        copy
     }
 
     /// The generated demo show, built exactly as a capture builds it.
