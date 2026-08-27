@@ -2,7 +2,12 @@ import { Button } from "@tosklight/ui";
 import { TouchEncoder } from "@tosklight/ui/encoders";
 import { useEffect, useState } from "react";
 import type { TimecodeEncoderDeck } from "../../features/timecode/timecodeEncoderBridge";
+import { clampEncoderPage, encoderPages } from "./encoderPaging";
 import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
+import {
+	resolveVisibleEncoderCount,
+	useVisibleEncoderCount,
+} from "./parameterControls/VisibleEncoderCount";
 
 export function TimecodeParameterControls({
 	hardwareConnected,
@@ -12,13 +17,23 @@ export function TimecodeParameterControls({
 	deck: TimecodeEncoderDeck;
 }) {
 	const [group, setGroup] = useState<"timeline" | "keyframe">("keyframe");
-	const slots = deck[group];
+	const [requestedPage, setRequestedPage] = useState(1);
+	const visibleEncoders = resolveVisibleEncoderCount(
+		useVisibleEncoderCount(),
+		hardwareConnected,
+	);
+	// A deck wider than the desk is paged rather than drawn onto encoders that are not there.
+	const pages = encoderPages(deck[group], visibleEncoders);
+	const page = clampEncoderPage(requestedPage, pages.length);
+	const slots = pages[page - 1]?.slots ?? [];
 
 	useEffect(() => {
 		if (!hardwareConnected) return;
 		const handleEncoder = (event: Event) => {
 			const detail = (event as CustomEvent<{ control: string; value?: string }>)
 				.detail;
+			// Encoder three is the third encoder on the page being shown, not the third slot the
+			// view registered: on page two those are different parameters entirely.
 			const slot = slots[Number(detail.control.split("/")[1]) - 1];
 			if (!slot || slot.disabled) return;
 			const direction =
@@ -54,6 +69,14 @@ export function TimecodeParameterControls({
 				>
 					Timecode Timeline
 				</Button>
+				{pages.length > 1 && (
+					<Button
+						className="encoder-page"
+						onClick={() => setRequestedPage((page % pages.length) + 1)}
+					>
+						{`${page}/${pages.length}`}
+					</Button>
+				)}
 			</div>
 			<div className="parameter-surfaces">
 				{slots.map((slot, index) =>
@@ -89,12 +112,15 @@ export function TimecodeParameterControls({
 					),
 				)}
 				{hardwareConnected &&
-					Array.from({ length: Math.max(0, 6 - slots.length) }, (_, index) => (
-						<HardwareEncoderDisplay
-							key={`empty-${index}`}
-							slot={slots.length + index + 1}
-						/>
-					))}
+					Array.from(
+						{ length: Math.max(0, visibleEncoders - slots.length) },
+						(_, index) => (
+							<HardwareEncoderDisplay
+								key={`empty-${index}`}
+								slot={slots.length + index + 1}
+							/>
+						),
+					)}
 			</div>
 		</div>
 	);
