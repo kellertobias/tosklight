@@ -46,8 +46,10 @@ import {
 	sameSelection,
 	type TimecodeEditorSelection,
 	timelineItems,
+	withClipFade,
 	withPlacedCueStart,
 } from "./editorModel";
+import { type ClipFadeKind, CueListClipBody } from "./TimecodeClipBody";
 import {
 	CueListClipContents,
 	CueListClipStatus,
@@ -159,6 +161,12 @@ function TimelineCanvas(props: {
 		clipId: string,
 		cueId: string,
 		offsetFrame: number,
+	): void;
+	onSetClipFade(
+		laneId: string,
+		clipId: string,
+		kind: ClipFadeKind,
+		frames: number,
 	): void;
 	onCueTimingError?(message: string): void;
 }) {
@@ -584,6 +592,9 @@ function EditorLane(
 						onPlaceCueStart={(clipId, cueId, offsetFrame) =>
 							props.onPlaceCueStart(lane.id, clipId, cueId, offsetFrame)
 						}
+						onSetClipFade={(clipId, kind, frames) =>
+							props.onSetClipFade(lane.id, clipId, kind, frames)
+						}
 						onCueTimingError={props.onCueTimingError}
 						clipStatus={
 							lane.content.kind === "cue_list" && item.kind === "clip"
@@ -617,6 +628,7 @@ function TimelineItemButton({
 	timingDefaults,
 	onSaveCueList,
 	onPlaceCueStart,
+	onSetClipFade,
 	onCueTimingError,
 	clipStatus,
 }: {
@@ -641,6 +653,7 @@ function TimelineItemButton({
 	timingDefaults?: CueClipTimingDefaults;
 	onSaveCueList?(cueListId: string, body: CueList): Promise<CueList>;
 	onPlaceCueStart?(clipId: string, cueId: string, offsetFrame: number): void;
+	onSetClipFade?(clipId: string, kind: ClipFadeKind, frames: number): void;
 	onCueTimingError?(message: string): void;
 	clipStatus?: TimecodeCueListClipStatus;
 }) {
@@ -686,55 +699,20 @@ function TimelineItemButton({
 			title={`${item.label} · ${formatFrame(item.frame, fps)}`}
 		>
 			{clipStatus && <CueListClipStatus status={clipStatus} />}
-			{isCueListClip && (
-				<span
-					className="timecode-clip-handle"
-					onPointerDown={(event) => {
-						event.stopPropagation();
-						startDrag(event, item.selection, item.frame, undefined, startVolume);
-					}}
-				>
-					<b>{item.label}</b>
-					{cueList?.number !== undefined && <small>{cueList.number}</small>}
-				</span>
-			)}
-			{item.kind === "clip" && cueList?.body && cueClip && timingDefaults && (
-				<CueListClipContents
-					cueList={{ ...cueList, body: cueList.body }}
+			{isCueListClip && cueClip && (
+				<CueListClipBody
+					item={item}
 					clip={cueClip}
-					pixelsPerFrame={pixelsPerFrame}
+					cueList={cueList}
 					timingDefaults={timingDefaults}
+					pixelsPerFrame={pixelsPerFrame}
+					startDrag={startDrag}
+					startVolume={startVolume}
 					onSaveCueList={onSaveCueList}
 					onPlaceCueStart={onPlaceCueStart}
-					onError={onCueTimingError}
+					onSetClipFade={onSetClipFade}
+					onCueTimingError={onCueTimingError}
 				/>
-			)}
-			{item.kind === "clip" && item.endFrame !== undefined && (
-				<>
-					<span
-						className="timecode-clip-edge start"
-						aria-hidden="true"
-						title="Scale the clip and every Cue timing in it"
-						onPointerDown={(event) => {
-							event.stopPropagation();
-							startDrag(event, item.selection, item.frame, "start");
-						}}
-					/>
-					<span
-						className="timecode-clip-edge end"
-						aria-hidden="true"
-						title="Scale the clip and every Cue timing in it"
-						onPointerDown={(event) => {
-							event.stopPropagation();
-							startDrag(
-								event,
-								item.selection,
-								item.endFrame ?? item.frame,
-								"end",
-							);
-						}}
-					/>
-				</>
 			)}
 			{marker ? (
 				<>
@@ -1154,14 +1132,7 @@ export const TimecodeTimelineEditor = forwardRef<
 	});
 	useEffect(() => () => clearTimecodeEncoderDeck(encoderOwner), [encoderOwner]);
 
-	/// Stores a lane-owned transition point for a Cue that waits for a manual GO.
-	const placeCueStart = (
-		laneId: string,
-		clipId: string,
-		cueId: string,
-		offsetFrame: number,
-	) =>
-		onCommit(withPlacedCueStart(definition, laneId, clipId, cueId, offsetFrame));
+	const { placeCueStart, setClipFade } = clipEditors(definition, onCommit);
 
 	return (
 		<section
@@ -1215,6 +1186,7 @@ export const TimecodeTimelineEditor = forwardRef<
 					timingDefaults,
 					onSaveCueList,
 					onPlaceCueStart: placeCueStart,
+					onSetClipFade: setClipFade,
 					onCueTimingError,
 				}}
 			/>
@@ -1935,4 +1907,31 @@ function Waveform({ peaks }: { peaks: readonly number[] }) {
 			<path className="timecode-waveform-envelope" d={outline} />
 		</svg>
 	);
+}
+
+/// The clip edits the timeline canvas hands back, each one a whole new definition.
+///
+/// `placeCueStart` stores a lane-owned transition point for a Cue that waits for a manual GO;
+/// `setClipFade` stores a clip's own in or out fade, which shapes the level it contributes.
+function clipEditors(
+	definition: TimecodeDefinition,
+	onCommit: (definition: TimecodeDefinition) => void,
+) {
+	return {
+		placeCueStart: (
+			laneId: string,
+			clipId: string,
+			cueId: string,
+			offsetFrame: number,
+		) =>
+			onCommit(
+				withPlacedCueStart(definition, laneId, clipId, cueId, offsetFrame),
+			),
+		setClipFade: (
+			laneId: string,
+			clipId: string,
+			kind: ClipFadeKind,
+			frames: number,
+		) => onCommit(withClipFade(definition, laneId, clipId, kind, frames)),
+	};
 }

@@ -204,6 +204,29 @@ impl PlaybackEngine {
             .map(|mutation| mutation.map(|_| true))
     }
 
+    /// Sets the master of a Cuelist that was activated directly, by id.
+    ///
+    /// Timecode drives a Cuelist without a Playback number, so it has no definition, no fader
+    /// mode and no pickup: none of the physical-fader path applies. This writes the level the
+    /// clip owning the Cuelist is contributing at and nothing else, and does nothing at all if
+    /// that Cuelist is not active, because the clip's own execution owns starting it.
+    pub fn set_cue_list_master_mutation(
+        &mut self,
+        id: CueListId,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err("playback master must be within 0-1".into());
+        }
+        let Some(active) = self.active.get_mut(&PlaybackKey::CueList(id)) else {
+            return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
+        };
+        let changed = active.master != value || active.master_transition.is_some();
+        active.master = value;
+        active.master_transition = None;
+        Ok(PlaybackMutation::new((), durable_effect(changed)))
+    }
+
     pub fn set_master(&mut self, number: u16, value: f32) -> Result<(), String> {
         self.set_master_mutation(number, value).map(|_| ())
     }

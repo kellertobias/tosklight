@@ -840,3 +840,39 @@ export function withPlacedCueStart(
 		),
 	};
 }
+
+/// Stores a clip's own in or out fade, in frames.
+///
+/// The fade is the clip's contribution, not any Cue's timing, so it is clamped to the clip it
+/// belongs to: a fade longer than the clip has nowhere to run and the desk refuses it.
+export function withClipFade(
+	definition: TimecodeDefinition,
+	laneId: string,
+	clipId: string,
+	kind: "in" | "out",
+	frames: number,
+): TimecodeDefinition {
+	return {
+		...definition,
+		lanes: definition.lanes.map((lane) =>
+			lane.id !== laneId || lane.content.kind !== "cue_list"
+				? lane
+				: {
+						...lane,
+						content: {
+							...lane.content,
+							clips: lane.content.clips.map((clip) => {
+								if (clip.id !== clipId) return clip;
+								const length = Math.max(0, clip.end_frame - clip.start_frame);
+								const clamped = Math.round(
+									Math.max(0, Math.min(length, frames)),
+								);
+								return kind === "in"
+									? { ...clip, in_fade_frames: clamped }
+									: { ...clip, out_fade_frames: clamped };
+							}),
+						},
+					},
+		),
+	};
+}

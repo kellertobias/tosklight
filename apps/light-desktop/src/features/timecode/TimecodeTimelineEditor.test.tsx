@@ -929,6 +929,8 @@ describe("TimecodeTimelineEditor", () => {
 									start_behavior: "state",
 									end_behavior: "release",
 									cue_starts: [],
+									in_fade_frames: 0,
+									out_fade_frames: 0,
 								},
 							],
 						},
@@ -1101,6 +1103,8 @@ describe("TimecodeTimelineEditor", () => {
 								start_behavior: "state",
 								end_behavior: "release",
 								cue_starts: [],
+								in_fade_frames: 0,
+								out_fade_frames: 0,
 							},
 						],
 					},
@@ -1175,6 +1179,75 @@ describe("TimecodeTimelineEditor", () => {
 		expect(onPreview).not.toHaveBeenCalled();
 	});
 
+	it("drags a clip's own out fade and commits it to the clip", () => {
+		const clipDefinition: TimecodeDefinition = {
+			...definition,
+			lanes: [
+				{
+					id: "lane-1",
+					name: "Opening",
+					content: {
+						kind: "cue_list",
+						cue_list_id: "cue-list",
+						clips: [
+							{
+								id: "clip-1",
+								start_frame: 44,
+								end_frame: 396,
+								start_cue_id: "cue-1",
+								end_cue_id: "cue-2",
+								start_behavior: "state",
+								end_behavior: "release",
+								cue_starts: [],
+								in_fade_frames: 0,
+								out_fade_frames: 0,
+							},
+						],
+					},
+				},
+			],
+		};
+		const onCommit = vi.fn();
+		const view = render(
+			<TimecodeTimelineEditor
+				definition={clipDefinition}
+				frame={0}
+				fps={44}
+				cueLists={[]}
+				audioPlayers={[]}
+				onScrub={vi.fn()}
+				onCommit={onCommit}
+				onPreview={vi.fn()}
+				onBeginGesture={vi.fn()}
+				onEndGesture={vi.fn()}
+			/>,
+		);
+		const canvas = view.container.querySelector<HTMLElement>(
+			".timecode-timeline-canvas",
+		);
+		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
+		const handle = view.getByRole("slider", { name: "Clip out fade" });
+		// The out handle is measured back from the clip end, so dragging it left lengthens
+		// the fade it owns.
+		fireEvent.pointerDown(handle, { pointerId: 30, clientX: 200 });
+		fireEvent.pointerMove(handle, {
+			pointerId: 30,
+			clientX: 200 - 44 * pixelsPerFrame,
+		});
+		fireEvent.pointerUp(handle, {
+			pointerId: 30,
+			clientX: 200 - 44 * pixelsPerFrame,
+		});
+		expect(onCommit).toHaveBeenCalledTimes(1);
+		const committed = onCommit.mock.calls[0]?.[0] as TimecodeDefinition;
+		const lane = committed.lanes[0];
+		if (lane?.content.kind !== "cue_list") throw new Error("expected a Cuelist lane");
+		expect(lane.content.clips[0]).toMatchObject({
+			in_fade_frames: 0,
+			out_fade_frames: 44,
+		});
+	});
+
 	it("shows the authoritative Cue List clip execution status and message", () => {
 		const view = render(
 			<TimecodeTimelineEditor
@@ -1197,6 +1270,8 @@ describe("TimecodeTimelineEditor", () => {
 										start_behavior: "state",
 										end_behavior: "release",
 										cue_starts: [],
+										in_fade_frames: 0,
+										out_fade_frames: 0,
 									},
 								],
 							},
@@ -1213,6 +1288,7 @@ describe("TimecodeTimelineEditor", () => {
 						cue_list_id: "cue-list",
 						clip_id: "clip-1",
 						state: "unable",
+						level: 0,
 						cue_id: null,
 						cue_start_frame: null,
 						message: "Cue 1 cannot resolve its Link target.",

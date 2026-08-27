@@ -232,6 +232,7 @@ impl TimecodeRuntimeService {
                         AppliedCueListClip {
                             source: CueListClipSource::from(clip),
                             cue_id,
+                            level: clip.level,
                             cue_start_frame: clip.cue_start_frame.unwrap_or(frame),
                             start_behavior: clip.start_behavior,
                             transport,
@@ -575,6 +576,12 @@ fn reconcile_desired_cue_list(
     } else {
         light_engine::EnginePlaybackOutcome::Applied
     };
+    if before.is_none_or(|before| before.level != next.level) {
+        outcome = engine.execute_playback(EnginePlaybackCommand::CueList {
+            id: cue_list_id,
+            action: CueListPlaybackAction::SetMaster(next.level),
+        })?;
+    }
     if next.transport == TimecodeTransportState::Paused
         && (changed_cue || actual.as_ref().is_none_or(|status| !status.playback.paused))
     {
@@ -636,6 +643,8 @@ impl From<&TimecodeCueListClipExecution> for CueListClipSource {
 struct AppliedCueListClip {
     source: CueListClipSource,
     cue_id: uuid::Uuid,
+    /// The level the owning clip's in and out fade put the Cuelist at on this frame.
+    level: f32,
     cue_start_frame: TimecodeFrame,
     start_behavior: light_playback::TimecodeClipStart,
     transport: TimecodeTransportState,

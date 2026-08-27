@@ -17,7 +17,7 @@ pub enum TimecodeCueListClipExecutionKind {
     Unable,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TimecodeCueListClipExecution {
     pub timecode_id: TimecodeId,
     pub lane_id: TimecodeLaneId,
@@ -27,6 +27,11 @@ pub struct TimecodeCueListClipExecution {
     pub cue_id: Option<Uuid>,
     pub cue_start_frame: Option<TimecodeFrame>,
     pub start_behavior: TimecodeClipStart,
+    /// The level the clip is contributing at this frame, from its own in and out fade.
+    ///
+    /// A clip that has not started yet, or that has released, contributes nothing. A clip held
+    /// past its end keeps the level it ended on, which is what its out fade handle drew.
+    pub level: f32,
     pub message: Option<String>,
 }
 
@@ -67,6 +72,7 @@ impl TimecodeDefinition {
                     cue_id: None,
                     cue_start_frame: None,
                     start_behavior: clip.start_behavior,
+                    level: 0.0,
                     message: None,
                 };
                 let Some(cue_list) = cue_list else {
@@ -126,6 +132,7 @@ impl TimecodeDefinition {
                             kind: TimecodeCueListClipExecutionKind::Held,
                             cue_id: schedule.last().map(|(_, cue_id)| *cue_id),
                             cue_start_frame: schedule.last().map(|(start, _)| *start),
+                            level: clip.level_at(clip.end_frame),
                             ..base
                         },
                     });
@@ -141,6 +148,7 @@ impl TimecodeDefinition {
                     kind: TimecodeCueListClipExecutionKind::Active,
                     cue_id: Some(cue_id),
                     cue_start_frame: Some(cue_start_frame),
+                    level: clip.level_at(frame),
                     ..base
                 });
             }

@@ -175,6 +175,14 @@ pub struct TimecodeCueListClip {
     pub end_behavior: TimecodeClipEnd,
     #[serde(default)]
     pub cue_starts: Vec<TimecodeCueStart>,
+    /// Frames over which the clip's own level rises from nothing at its start.
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub in_fade_frames: u64,
+    /// Frames over which the clip's own level falls to nothing, measured back from its end.
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub out_fade_frames: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -297,7 +305,7 @@ pub enum TimecodeCueListClipExecutionState {
     Unable,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct TimecodeCueListClipExecution {
     pub lane_id: Uuid,
     pub cue_list_id: Uuid,
@@ -306,10 +314,12 @@ pub struct TimecodeCueListClipExecution {
     pub cue_id: Option<Uuid>,
     #[ts(type = "number | null")]
     pub cue_start_frame: Option<u64>,
+    /// The level the clip's own in and out fade put its Cuelist at on the reported frame.
+    pub level: f32,
     pub message: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct TimecodeTransportSnapshot {
     pub timecode_id: Uuid,
     #[ts(type = "number")]

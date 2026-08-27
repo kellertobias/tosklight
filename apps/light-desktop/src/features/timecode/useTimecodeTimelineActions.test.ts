@@ -23,6 +23,8 @@ describe("new Cue List clip placement", () => {
 			start_behavior: "state",
 			end_behavior: "release",
 			cue_starts: [],
+			in_fade_frames: 0,
+			out_fade_frames: 0,
 		});
 	});
 
@@ -53,6 +55,8 @@ describe("new Cue List clip placement", () => {
 			start_behavior: "state",
 			end_behavior: "hold",
 			cue_starts: [],
+			in_fade_frames: 0,
+			out_fade_frames: 0,
 		});
 	});
 
@@ -116,6 +120,8 @@ function clip(patch: Partial<TimecodeCueListClip>): TimecodeCueListClip {
 		end_cue_id: "cue-3",
 		start_behavior: "state",
 		end_behavior: "release",
+		in_fade_frames: 0,
+		out_fade_frames: 0,
 		cue_starts: [],
 		...patch,
 	};

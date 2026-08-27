@@ -285,6 +285,8 @@ export function automatedCueClipLength(
 		start_behavior: "state",
 		end_behavior: "release",
 		cue_starts: [],
+		in_fade_frames: 0,
+		out_fade_frames: 0,
 	};
 	const { rows, error } = cueClipTimingRows(probe, cueList, defaults);
 	if (

@@ -352,6 +352,8 @@ describe("TimecodeEditor title and settings", () => {
 								start_behavior: "state" as const,
 								end_behavior: "release" as const,
 								cue_starts: [],
+								in_fade_frames: 0,
+								out_fade_frames: 0,
 							},
 						],
 					},

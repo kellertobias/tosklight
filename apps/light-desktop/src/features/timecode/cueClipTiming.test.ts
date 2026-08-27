@@ -17,6 +17,8 @@ const clip: TimecodeCueListClip = {
 	start_behavior: "state",
 	end_behavior: "release",
 	cue_starts: [],
+	in_fade_frames: 0,
+	out_fade_frames: 0,
 };
 const defaults = { sequenceFadeMillis: 3_000, releaseFadeMillis: 4_000 };
 

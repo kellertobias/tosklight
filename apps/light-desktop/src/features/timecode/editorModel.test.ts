@@ -12,6 +12,7 @@ import {
 	scaleCueListTimings,
 	snapTimelineFrame,
 	timelineItems,
+	withClipFade,
 } from "./editorModel";
 
 const definition: TimecodeDefinition = {
@@ -131,6 +132,8 @@ describe("Timecode editor model", () => {
 								start_behavior: "state",
 								end_behavior: "release",
 								cue_starts: [],
+								in_fade_frames: 0,
+								out_fade_frames: 0,
 							},
 							{
 								id: "00000000-0000-0000-0000-000000000055",
@@ -141,6 +144,8 @@ describe("Timecode editor model", () => {
 								start_behavior: "state",
 								end_behavior: "release",
 								cue_starts: [],
+								in_fade_frames: 0,
+								out_fade_frames: 0,
 							},
 						],
 					},
@@ -435,5 +440,66 @@ describe("Resizing a Cuelist clip", () => {
 			expect(start.offset_frame).toBeGreaterThanOrEqual(0);
 			expect(start.offset_frame).toBeLessThanOrEqual(length);
 		}
+	});
+});
+
+describe("withClipFade", () => {
+	const clipLane = () => ({
+		id: "lane-cues",
+		name: "Opening",
+		content: {
+			kind: "cue_list" as const,
+			cue_list_id: "list-1",
+			clips: [
+				{
+					id: "clip-1",
+					start_frame: 100,
+					end_frame: 200,
+					start_cue_id: "cue-1",
+					end_cue_id: "cue-2",
+					start_behavior: "state" as const,
+					end_behavior: "release" as const,
+					cue_starts: [],
+					in_fade_frames: 0,
+					out_fade_frames: 0,
+				},
+			],
+		},
+	});
+	const definition = (): TimecodeDefinition => ({
+		id: "timecode-1",
+		number: 1,
+		name: "Opener",
+		duration_frame: 880,
+		transport_offset_frame: 0,
+		auto_start: false,
+		markers: [],
+		lanes: [clipLane()],
+	});
+	const clipAfter = (
+		kind: "in" | "out",
+		frames: number,
+	): { in_fade_frames: number; out_fade_frames: number } => {
+		const lane = withClipFade(definition(), "lane-cues", "clip-1", kind, frames)
+			.lanes[0];
+		if (lane?.content.kind !== "cue_list") throw new Error("expected a Cuelist lane");
+		return lane.content.clips[0] as never;
+	};
+
+	it("stores the fade the operator dragged", () => {
+		expect(clipAfter("in", 25)).toMatchObject({
+			in_fade_frames: 25,
+			out_fade_frames: 0,
+		});
+		expect(clipAfter("out", 40)).toMatchObject({
+			in_fade_frames: 0,
+			out_fade_frames: 40,
+		});
+	});
+
+	it("clamps a fade to the clip it belongs to", () => {
+		// The clip is a hundred frames long, so neither fade can be longer than that.
+		expect(clipAfter("in", 400).in_fade_frames).toBe(100);
+		expect(clipAfter("out", -12).out_fade_frames).toBe(0);
 	});
 });

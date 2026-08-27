@@ -83,14 +83,21 @@ export function cueClipPlacement({
 		? Math.max(1, previous.end_frame - previous.start_frame)
 		: null;
 	const length = automated ?? copied ?? Math.max(1, duration - start);
+	const endFrame = Math.min(duration, start + Math.max(1, length));
+	// A fade the operator already drew is kept, but it can never be longer than the clip it
+	// belongs to, so a clip that comes back shorter carries a correspondingly shorter fade.
+	const fits = (frames: number | undefined) =>
+		Math.max(0, Math.min(endFrame - start, frames ?? 0));
 	return {
 		start_frame: start,
-		end_frame: Math.min(duration, start + Math.max(1, length)),
+		end_frame: endFrame,
 		start_cue_id: startCueId,
 		end_cue_id: endCueId,
 		start_behavior: previous?.start_behavior ?? "state",
 		end_behavior: previous?.end_behavior ?? "release",
 		cue_starts: previous?.cue_starts?.map((placed) => ({ ...placed })) ?? [],
+		in_fade_frames: fits(previous?.in_fade_frames),
+		out_fade_frames: fits(previous?.out_fade_frames),
 	};
 }
 

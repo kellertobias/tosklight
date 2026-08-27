@@ -29,6 +29,8 @@ pub(super) fn domain_cue_clip(
                 offset_frame: TimecodeFrame(placed.offset_frame),
             })
             .collect(),
+        in_fade_frames: clip.in_fade_frames,
+        out_fade_frames: clip.out_fade_frames,
     }
 }
 
@@ -58,5 +60,7 @@ pub(super) fn wire_cue_clip(
                 offset_frame: placed.offset_frame.0,
             })
             .collect(),
+        in_fade_frames: clip.in_fade_frames,
+        out_fade_frames: clip.out_fade_frames,
     }
 }

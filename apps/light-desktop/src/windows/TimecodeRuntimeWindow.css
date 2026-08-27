@@ -849,6 +849,41 @@
 .timecode-clip-edge.end {
 	right: 0;
 }
+/* The clip's own level envelope: a wedge over the clip that rises out of one edge and falls
+   back into the other. It sits under the scale grips so the clip stays resizable. */
+.timecode-clip-fade {
+	position: absolute;
+	z-index: 6;
+	top: 0;
+	height: var(--timecode-clip-handle-height, 100%);
+	min-width: 0.45rem;
+	cursor: ew-resize;
+	touch-action: none;
+}
+.timecode-clip-fade.in {
+	background: linear-gradient(
+		to right,
+		rgb(10 14 20 / 78%),
+		rgb(10 14 20 / 0%)
+	);
+	border-right: 1px solid rgb(126 196 255 / 70%);
+}
+.timecode-clip-fade.out {
+	background: linear-gradient(
+		to left,
+		rgb(10 14 20 / 78%),
+		rgb(10 14 20 / 0%)
+	);
+	border-left: 1px solid rgb(126 196 255 / 70%);
+}
+.timecode-clip-fade.empty {
+	background: none;
+	border-color: rgb(126 196 255 / 28%);
+}
+.timecode-clip-fade:focus-visible {
+	outline: 1px solid #7ec4ff;
+	outline-offset: -1px;
+}
 .timecode-timeline-item.item-volume {
 	border-color: #4c839a;
 	background: #173747;

@@ -32,6 +32,8 @@ fn definition() -> TimecodeDefinition {
                             start_behavior: TimecodeClipStart::State,
                             end_behavior: TimecodeClipEnd::Release,
                             cue_starts: Vec::new(),
+                            in_fade_frames: 0,
+                            out_fade_frames: 0,
                         },
                         TimecodeCueListClip {
                             id: TimecodeClipId(id(7)),
@@ -42,6 +44,8 @@ fn definition() -> TimecodeDefinition {
                             start_behavior: TimecodeClipStart::Cue,
                             end_behavior: TimecodeClipEnd::Hold,
                             cue_starts: Vec::new(),
+                            in_fade_frames: 0,
+                            out_fade_frames: 0,
                         },
                     ],
                 },
@@ -385,6 +389,8 @@ fn execution_definition(cue_list: &crate::CueList) -> TimecodeDefinition {
                     start_behavior: TimecodeClipStart::State,
                     end_behavior: TimecodeClipEnd::Release,
                     cue_starts: Vec::new(),
+                    in_fade_frames: 0,
+                    out_fade_frames: 0,
                 }],
             },
         }],
@@ -546,5 +552,77 @@ fn valid_unsorted_clips_reconstruct_in_frame_order_and_zero_length_is_rejected()
     assert_eq!(
         timecode.validate().unwrap_err().message,
         "Cuelist clip end must follow its start"
+    );
+}
+
+fn faded_clip(in_fade: u64, out_fade: u64) -> TimecodeCueListClip {
+    TimecodeCueListClip {
+        id: TimecodeClipId(id(4)),
+        start_frame: TimecodeFrame(100),
+        end_frame: TimecodeFrame(200),
+        start_cue_id: id(5),
+        end_cue_id: id(6),
+        start_behavior: TimecodeClipStart::State,
+        end_behavior: TimecodeClipEnd::Release,
+        cue_starts: Vec::new(),
+        in_fade_frames: in_fade,
+        out_fade_frames: out_fade,
+    }
+}
+
+#[test]
+fn a_clip_without_fades_contributes_fully_from_its_first_frame() {
+    let clip = faded_clip(0, 0);
+    assert_eq!(clip.level_at(TimecodeFrame(99)), 0.0);
+    assert_eq!(clip.level_at(TimecodeFrame(100)), 1.0);
+    assert_eq!(clip.level_at(TimecodeFrame(200)), 1.0);
+    assert_eq!(clip.level_at(TimecodeFrame(201)), 0.0);
+}
+
+#[test]
+fn clip_fades_ramp_from_the_start_and_back_from_the_end() {
+    let clip = faded_clip(20, 40);
+    assert_eq!(clip.level_at(TimecodeFrame(100)), 0.0);
+    assert_eq!(clip.level_at(TimecodeFrame(110)), 0.5);
+    assert_eq!(clip.level_at(TimecodeFrame(120)), 1.0);
+    assert_eq!(clip.level_at(TimecodeFrame(150)), 1.0);
+    assert_eq!(clip.level_at(TimecodeFrame(180)), 0.5);
+    assert_eq!(clip.level_at(TimecodeFrame(200)), 0.0);
+}
+
+#[test]
+fn overlapping_clip_fades_take_the_lower_of_the_two() {
+    // Both fades cover the whole clip, so they cross in the middle rather than fighting.
+    let clip = faded_clip(100, 100);
+    assert_eq!(clip.level_at(TimecodeFrame(125)), 0.25);
+    assert_eq!(clip.level_at(TimecodeFrame(150)), 0.5);
+    assert_eq!(clip.level_at(TimecodeFrame(175)), 0.25);
+}
+
+#[test]
+fn a_clip_reports_its_faded_level_while_it_is_executing() {
+    let cue_list = execution_cue_list();
+    let mut definition = execution_definition(&cue_list);
+    let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
+        panic!("the lane drives a Cuelist");
+    };
+    clips[0].in_fade_frames = 20;
+    clips[0].out_fade_frames = 20;
+    assert_eq!(execution_at(&definition, &cue_list, 90).level, 0.0);
+    assert_eq!(execution_at(&definition, &cue_list, 110).level, 0.5);
+    assert_eq!(execution_at(&definition, &cue_list, 150).level, 1.0);
+    assert_eq!(execution_at(&definition, &cue_list, 190).level, 0.5);
+}
+
+#[test]
+fn a_clip_fade_longer_than_the_clip_is_refused() {
+    let mut definition = definition();
+    let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
+        panic!("the first lane drives a Cuelist");
+    };
+    clips[0].out_fade_frames = 101;
+    assert_eq!(
+        definition.validate().unwrap_err().message,
+        "Cuelist clip fades must fit within the clip"
     );
 }

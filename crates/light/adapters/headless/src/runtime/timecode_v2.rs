@@ -1109,6 +1109,7 @@ pub(super) fn wire_snapshot(
                 },
                 cue_id: clip.cue_id,
                 cue_start_frame: clip.cue_start_frame.map(|frame| frame.0),
+                level: clip.level,
                 message: clip.message,
             })
             .collect(),

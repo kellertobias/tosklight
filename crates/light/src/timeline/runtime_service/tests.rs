@@ -84,6 +84,8 @@ fn definition() -> light_playback::TimecodeDefinition {
                     start_behavior: TimecodeClipStart::State,
                     end_behavior: TimecodeClipEnd::Release,
                     cue_starts: Vec::new(),
+                    in_fade_frames: 0,
+                    out_fade_frames: 0,
                 }],
             },
         }],
@@ -160,6 +162,8 @@ fn execution_definition(cue_list: &CueList) -> light_playback::TimecodeDefinitio
             start_behavior: TimecodeClipStart::State,
             end_behavior: TimecodeClipEnd::Release,
             cue_starts: Vec::new(),
+            in_fade_frames: 0,
+            out_fade_frames: 0,
         }],
     };
     value
@@ -678,4 +682,43 @@ fn external_sync_applies_offsets_and_only_starts_armed_or_running_timecodes() {
             }
             && change.snapshot.timecode_id == armed.id
     }));
+}
+
+#[test]
+fn a_clip_fade_moves_the_driven_cuelists_master() {
+    let (service, _, _) = service();
+    let cue_list = execution_cue_list();
+    let engine = execution_engine(&cue_list);
+    let mut definition = execution_definition(&cue_list);
+    let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
+        panic!("the lane drives a Cuelist");
+    };
+    // The clip runs frames 0 to 20, so a ten-frame in fade is half up at frame 5.
+    clips[0].in_fade_frames = 10;
+    clips[0].out_fade_frames = 10;
+    service.install(definition.clone(), None).unwrap();
+    service
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+
+    let master_at = |frame: u64| {
+        service
+            .handle(
+                definition.id,
+                TimecodeTransportAction::Seek {
+                    frame: TimecodeFrame(frame),
+                },
+            )
+            .unwrap();
+        service.reconcile_cue_lists(&engine);
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .master
+    };
+    assert_eq!(master_at(0), 0.0);
+    assert_eq!(master_at(5), 0.5);
+    assert_eq!(master_at(10), 1.0);
+    assert_eq!(master_at(15), 0.5);
 }

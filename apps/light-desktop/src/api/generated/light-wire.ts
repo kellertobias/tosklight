@@ -1193,7 +1193,15 @@ export type TimecodeAudioPlayerClip = { id: string, start_frame: number, end_fra
 export type TimecodeClipStart = "state" | "cue";
 export type TimecodeClipEnd = "release" | "hold";
 export type TimecodeCueStart = { cue_id: string, offset_frame: number, };
-export type TimecodeCueListClip = { id: string, start_frame: number, end_frame: number, start_cue_id: string, end_cue_id: string, start_behavior: TimecodeClipStart, end_behavior: TimecodeClipEnd, cue_starts: Array<TimecodeCueStart>, };
+export type TimecodeCueListClip = { id: string, start_frame: number, end_frame: number, start_cue_id: string, end_cue_id: string, start_behavior: TimecodeClipStart, end_behavior: TimecodeClipEnd, cue_starts: Array<TimecodeCueStart>,
+/**
+ * Frames over which the clip's own level rises from nothing at its start.
+ */
+in_fade_frames: number,
+/**
+ * Frames over which the clip's own level falls to nothing, measured back from its end.
+ */
+out_fade_frames: number, };
 export type TimecodeSpeedKeyframe = { id: string, frame: number, bpm: number, phase: number, };
 export type TimecodeCurve = "linear" | "ease_in" | "ease_out" | "ease_in_out";
 export type TimecodeVolumeKeyframe = { id: string, frame: number, value: number, fade_frames: number, curve: TimecodeCurve, };
@@ -1204,5 +1212,9 @@ export type TimecodeTransportAction = { "type": "go" } | { "type": "pause" } | {
 export type TimecodeTransportActionRequest = { timecode_id: string, action: TimecodeTransportAction, };
 export type TimecodeTransportState = "stopped" | "playing" | "paused";
 export type TimecodeCueListClipExecutionState = "armed" | "active" | "held" | "released" | "unable";
-export type TimecodeCueListClipExecution = { lane_id: string, cue_list_id: string, clip_id: string, state: TimecodeCueListClipExecutionState, cue_id: string | null, cue_start_frame: number | null, message: string | null, };
+export type TimecodeCueListClipExecution = { lane_id: string, cue_list_id: string, clip_id: string, state: TimecodeCueListClipExecutionState, cue_id: string | null, cue_start_frame: number | null,
+/**
+ * The level the clip's own in and out fade put its Cuelist at on the reported frame.
+ */
+level: number, message: string | null, };
 export type TimecodeTransportSnapshot = { timecode_id: string, revision: number, state: TimecodeTransportState, frame: number, duration_frame: number, audio_linked: boolean, cue_list_clips: Array<TimecodeCueListClipExecution>, };

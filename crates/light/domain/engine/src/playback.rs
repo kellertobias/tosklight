@@ -53,6 +53,9 @@ pub enum CueListPlaybackAction {
     Pause,
     Resume,
     Release,
+    /// The level a directly-driven Cuelist contributes at. Timecode clip fades use this; there
+    /// is no Playback number to address, so none of the pool fader behaviour applies.
+    SetMaster(f32),
 }
 
 #[derive(Clone, Debug)]
@@ -682,6 +685,10 @@ fn execute_cue_list(
         CueListPlaybackAction::Release => Ok(EnginePlaybackOutcome::Changed(addressed_effect(
             durable_effect(playback.release(id)),
         ))),
+        CueListPlaybackAction::SetMaster(value) => {
+            let effect = playback.set_cue_list_master_mutation(id, value)?.effect;
+            Ok(EnginePlaybackOutcome::Changed(addressed_effect(effect)))
+        }
     }
 }
 

@@ -63,6 +63,10 @@ export interface TimecodeCueListClip {
 	end_behavior: "release" | "hold";
 	/// Transition points placed in the lane for Cues that wait for a manual GO.
 	cue_starts: TimecodeCueStart[];
+	/// Frames over which the clip's own level rises from nothing at its start.
+	in_fade_frames: number;
+	/// Frames over which the clip's own level falls to nothing, measured back from its end.
+	out_fade_frames: number;
 }
 
 export interface TimecodeCueStart {

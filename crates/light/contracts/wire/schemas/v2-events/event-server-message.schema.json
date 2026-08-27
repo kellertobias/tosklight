@@ -7583,6 +7583,11 @@
           "type": "string",
           "format": "uuid"
         },
+        "level": {
+          "description": "The level the clip's own in and out fade put its Cuelist at on the reported frame.",
+          "type": "number",
+          "format": "float"
+        },
         "message": {
           "type": [
             "string",
@@ -7600,6 +7605,7 @@
         "state",
         "cue_id",
         "cue_start_frame",
+        "level",
         "message"
       ]
     },

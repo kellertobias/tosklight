@@ -63,22 +63,7 @@ impl TimecodeDefinition {
                         unique(&mut identities, clip.id.0, "Cuelist clip")?;
                     }
                     for clip in clips_by_frame {
-                        if previous_end.is_some_and(|end: TimecodeFrame| clip.start_frame.0 < end.0)
-                        {
-                            return Err(TimecodeValidationError::new(
-                                "Cuelist clips on one lane must not overlap",
-                            ));
-                        }
-                        if clip.end_frame.0 <= clip.start_frame.0 {
-                            return Err(TimecodeValidationError::new(
-                                "Cuelist clip end must follow its start",
-                            ));
-                        }
-                        if clip.start_cue_id.is_nil() || clip.end_cue_id.is_nil() {
-                            return Err(TimecodeValidationError::new(
-                                "Cuelist clip Cue ids must not be nil",
-                            ));
-                        }
+                        cue_clip(clip, previous_end)?;
                         within_duration(clip.end_frame, self.duration, "Cuelist clip")?;
                         previous_end = Some(clip.end_frame);
                     }
@@ -222,4 +207,35 @@ fn within_duration(
     } else {
         Ok(())
     }
+}
+
+/// One Cuelist clip's own invariants, in the order an operator would notice them broken.
+///
+/// A clip's fades shape its contribution across the clip, so neither may outrun it.
+fn cue_clip(
+    clip: &super::TimecodeCueListClip,
+    previous_end: Option<TimecodeFrame>,
+) -> Result<(), TimecodeValidationError> {
+    if previous_end.is_some_and(|end| clip.start_frame.0 < end.0) {
+        return Err(TimecodeValidationError::new(
+            "Cuelist clips on one lane must not overlap",
+        ));
+    }
+    if clip.end_frame.0 <= clip.start_frame.0 {
+        return Err(TimecodeValidationError::new(
+            "Cuelist clip end must follow its start",
+        ));
+    }
+    if clip.start_cue_id.is_nil() || clip.end_cue_id.is_nil() {
+        return Err(TimecodeValidationError::new(
+            "Cuelist clip Cue ids must not be nil",
+        ));
+    }
+    let length = clip.end_frame.0.saturating_sub(clip.start_frame.0);
+    if clip.in_fade_frames > length || clip.out_fade_frames > length {
+        return Err(TimecodeValidationError::new(
+            "Cuelist clip fades must fit within the clip",
+        ));
+    }
+    Ok(())
 }
