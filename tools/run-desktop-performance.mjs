@@ -546,8 +546,23 @@ async function requireFixtureSheetActive(
 		widestSilence = Math.max(widestSilence, edges[index] - edges[index - 1]);
 	if (covering.length && widestSilence <= tolerance) return;
 	const seconds = (value) => `${(value / 1_000).toFixed(1)}s`;
+	// A silence has several possible causes and they are told apart by the shape of the
+	// beats, not by the summary. Print the timeline so one run settles it: when the beats
+	// stop, whether they were ever spaced a second apart, and what each one believed the
+	// show contained.
+	const all = records.filter(
+		(record) => record.kind === "fixture-sheet-heartbeat",
+	);
+	const timeline = all
+		.map((record) => {
+			const at = Date.parse(record.recordedAt) - measurement.startedAt;
+			return `${(at / 1_000).toFixed(1)}s/${record.fixtureRecords}r`;
+		})
+		.join(" ");
 	throw new Error(
-		`Fixture Sheet did not remain active through the timed measurement window: ${covering.length} beats across ${seconds(measurement.endedAt - measurement.startedAt)}, widest silence ${seconds(widestSilence)}, tolerated ${seconds(tolerance)}`,
+		`Fixture Sheet did not remain active through the timed measurement window: ${covering.length} beats across ${seconds(measurement.endedAt - measurement.startedAt)}, widest silence ${seconds(widestSilence)}, tolerated ${seconds(tolerance)}\n` +
+			`  expected fixture records: ${expected === null ? "any" : expected}\n` +
+			`  every heartbeat in the report (offset from window start / fixture records): ${all.length ? timeline : "none"}`,
 	);
 }
 
