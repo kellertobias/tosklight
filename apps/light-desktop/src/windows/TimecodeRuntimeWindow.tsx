@@ -48,6 +48,7 @@ import {
 	type SaveCueListTopology,
 	useCueListTopologyWriter,
 } from "../features/playbackTopology/useCueListTopologyWriter";
+import { useCueTimingWriter } from "../features/timecode/useCueTimingWriter";
 import {
 	useCueLists,
 	usePlaybackDefinitions,
@@ -490,34 +491,14 @@ export function TimecodeEditor({
 	const [error, setError] = useState<string | null>(null);
 	const [actionBusy, setActionBusy] = useState(false);
 	const [audioImporting, setAudioImporting] = useState(false);
-	const [cueTimingSaving, setCueTimingSaving] = useState(false);
-	const cueTimingSavingRef = useRef(false);
-	const [cueListOverrides, setCueListOverrides] = useState<
-		Map<string, (typeof cueLists)[number]>
-	>(new Map());
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [markersLocked, setMarkersLocked] = useState(false);
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
-	const effectiveCueLists = cueLists.map(
-		(cueList) => cueListOverrides.get(cueList.id) ?? cueList,
-	);
-	useEffect(() => {
-		setCueListOverrides((current) => {
-			let changed = false;
-			const next = new Map(current);
-			for (const cueList of cueLists) {
-				const local = next.get(cueList.id);
-				if (local && (cueList.revision ?? 0) >= (local.revision ?? 0)) {
-					next.delete(cueList.id);
-					changed = true;
-				}
-			}
-			return changed ? next : current;
-		});
-	}, [cueLists]);
+	const cueTiming = useCueTimingWriter(cueLists, saveCueList ?? null);
+	const effectiveCueLists = cueTiming.cueLists;
 	const initialRecord = "isNew" in item ? null : item;
 	const writer = useMemo(
 		() =>
@@ -562,47 +543,10 @@ export function TimecodeEditor({
 	}, [waveformError]);
 	const duration = draft.duration_frame ?? 0;
 	const frame = Math.min(editorFrame, duration);
-	const busy = saving || actionBusy || cueTimingSaving;
-	const saveCueTiming = async (cueListId: string, body: CueList) => {
-		if (cueTimingSavingRef.current)
-			throw new Error("Another Cue timing edit is still saving.");
-		const source = effectiveCueLists.find(
-			(cueList) => cueList.id === cueListId,
-		);
-		if (!source?.objectId || source.revision === undefined || !saveCueList)
-			throw new Error("The authoritative Cue List writer is unavailable.");
-		cueTimingSavingRef.current = true;
-		setCueTimingSaving(true);
-		try {
-			const saved = await saveCueList(
-				{
-					cueListId,
-					expectedRevision: source.revision,
-					expectedObjectId: source.objectId,
-				},
-				body,
-			);
-			if (!saved)
-				throw new Error("The desk did not return the saved Cue List.");
-			setCueListOverrides((current) => {
-				const next = new Map(current);
-				next.set(cueListId, {
-					id: saved.body.id,
-					name: saved.body.name,
-					cues: saved.body.cues,
-					objectId: saved.id,
-					revision: saved.revision,
-					body: saved.body,
-				});
-				return next;
-			});
-			setError(null);
-			return saved.body;
-		} finally {
-			cueTimingSavingRef.current = false;
-			setCueTimingSaving(false);
-		}
-	};
+	const busy = saving || actionBusy || cueTiming.saving;
+	useEffect(() => {
+		if (cueTiming.error) setError(cueTiming.error);
+	}, [cueTiming.error]);
 	const act = async (action: TimecodeTransportAction) => {
 		if (!showId || !record) return;
 		setActionBusy(true);
@@ -821,7 +765,7 @@ export function TimecodeEditor({
 				onBeginGesture={beginGesture}
 				onEndGesture={endGesture}
 				timingDefaults={timingDefaults}
-				onSaveCueList={saveCueTiming}
+				onSaveCueList={cueTiming.save}
 				onCueTimingError={setError}
 			/>
 		</section>

@@ -312,12 +312,15 @@ function cueSlots(context: CueEncoderContext) {
 	const inFade = cue ? cue.fade_millis || context.timingDefaults.sequenceFadeMillis : 0;
 	const write = (patch: Partial<CueCoreTiming>) => {
 		if (!cue?.id) return;
-		void context.saveCueList(context.cueListId, {
-			...context.cueList,
-			cues: context.cueList.cues.map((item) =>
-				item.id === cue.id ? { ...item, ...patch } : item,
-			),
-		});
+		// The writer draws the edit and reports its own failures, so a refused save ends here.
+		void context
+			.saveCueList(context.cueListId, {
+				...context.cueList,
+				cues: context.cueList.cues.map((item) =>
+					item.id === cue.id ? { ...item, ...patch } : item,
+				),
+			})
+			.catch(() => undefined);
 	};
 	const timing = (
 		id: string,
