@@ -66,6 +66,8 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
 
     let started = std::time::Instant::now();
     let mut loader = ClipLoader::new(configuration.playback.cache_budget_bytes);
+    let mut pixels = crate::pixel_output::PixelOutputs::default();
+    let cid = crate::pixel_output::instance_cid(configuration.instance_id.as_str());
     while shutdown.reason().is_none() {
         let now = Timestamp::from_micros(started.elapsed().as_micros() as u64);
         let state = shared.state.load();
@@ -112,6 +114,22 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
                 .master_mask
                 .and_then(|slot| output.pipeline.texture(slot));
             output.renderer.present(&draws, &state.master, mask, now);
+            // Pixel mapping is output rather than a preview, so it is decided before the
+            // preview cadence and does not depend on anyone watching.
+            if pixels.wants(&output.configuration, now.as_millis()) {
+                let size = output.renderer.size();
+                let frame = output.renderer.read_image();
+                pixels.send(
+                    &output.configuration,
+                    media_domain::pixel_map::CanvasImage {
+                        width: size.width,
+                        height: size.height,
+                        rgba: &frame,
+                    },
+                    now.as_millis(),
+                    cid,
+                );
+            }
             let program = shared.previews.for_output(state.id);
             let wanted = program.is_some_and(|preview| preview.wanted())
                 || state.layers.iter().enumerate().any(|(layer, _)| {

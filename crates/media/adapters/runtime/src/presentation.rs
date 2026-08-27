@@ -224,8 +224,7 @@ struct RenderWorkerState {
     configuration: SharedConfiguration,
     catalog: SharedCatalog,
     analysis: media_audio::SharedAnalysis,
-    previews: crate::preview::SharedPreviews,
-    last_preview_millis: std::collections::BTreeMap<media_domain::OutputId, u64>,
+    sinks: CaptureSinks,
     outputs: Vec<HostedOutput>,
     state: SharedState,
     started: std::time::Instant,
@@ -399,8 +398,11 @@ impl PresentationHost {
             configuration: self.configuration.clone(),
             catalog: self.catalog.clone(),
             analysis: self.analysis.clone(),
-            previews: self.previews.clone(),
-            last_preview_millis: std::mem::take(&mut self.last_preview_millis),
+            sinks: CaptureSinks {
+                previews: self.previews.clone(),
+                last_preview_millis: std::mem::take(&mut self.last_preview_millis),
+                pixels: crate::pixel_output::PixelOutputs::default(),
+            },
             outputs: std::mem::take(&mut self.outputs),
             state: self.state.clone(),
             started: self.started,
@@ -438,6 +440,42 @@ impl PresentationHost {
             tracing::error!("the Media presentation worker panicked while stopping");
         }
     }
+}
+
+/// Samples one output's frame into its pixel map and sends it.
+///
+/// Output rather than a preview: it runs on its own cadence and does not wait for anyone to be
+/// watching a thumbnail. The cadence is asked before the readback, because the readback is the
+/// expensive half and a frame that will not be sent should not pay for one.
+fn map_pixels(
+    pixels: &mut crate::pixel_output::PixelOutputs,
+    configuration: &MediaConfiguration,
+    output: &mut WindowedOutput,
+    id: media_domain::OutputId,
+    master: &media_domain::MasterState,
+    master_mask: Option<&SourceTexture>,
+    now: Timestamp,
+) {
+    let Some(mapped) = configuration
+        .outputs
+        .iter()
+        .find(|candidate| candidate.id == id)
+        .filter(|candidate| pixels.wants(candidate, now.as_millis()))
+    else {
+        return;
+    };
+    let size = output.size();
+    let frame = output.capture_preview(size, master, master_mask);
+    pixels.send(
+        mapped,
+        media_domain::pixel_map::CanvasImage {
+            width: size.width,
+            height: size.height,
+            rgba: &frame,
+        },
+        now.as_millis(),
+        crate::pixel_output::instance_cid(configuration.instance_id.as_str()),
+    );
 }
 
 impl RenderWorkerState {
@@ -489,8 +527,8 @@ impl RenderWorkerState {
                     now,
                 );
                 capture_previews(
-                    &mut self.last_preview_millis,
-                    &self.previews,
+                    &mut self.sinks,
+                    &configuration,
                     &mut hosted.output,
                     output_state,
                     &[],
@@ -523,8 +561,8 @@ impl RenderWorkerState {
                     }];
                     present(&mut hosted.output, &draws, &master, None, now);
                     capture_previews(
-                        &mut self.last_preview_millis,
-                        &self.previews,
+                        &mut self.sinks,
+                        &configuration,
                         &mut hosted.output,
                         output_state,
                         std::slice::from_ref(&direct.layer),
@@ -609,10 +647,9 @@ impl RenderWorkerState {
                 .master_mask
                 .and_then(|slot| hosted.pipeline.texture(slot));
             present(&mut hosted.output, &draws, &master, master_mask, now);
-
             capture_previews(
-                &mut self.last_preview_millis,
-                &self.previews,
+                &mut self.sinks,
+                &configuration,
                 &mut hosted.output,
                 output_state,
                 &effective_layers,
@@ -763,9 +800,16 @@ fn present(
     }
 }
 
+/// Everywhere a finished frame goes that is not the screen it was drawn for.
+struct CaptureSinks {
+    previews: crate::preview::SharedPreviews,
+    last_preview_millis: std::collections::BTreeMap<media_domain::OutputId, u64>,
+    pixels: crate::pixel_output::PixelOutputs,
+}
+
 fn capture_previews(
-    last_preview_millis: &mut std::collections::BTreeMap<media_domain::OutputId, u64>,
-    previews: &crate::preview::SharedPreviews,
+    sinks: &mut CaptureSinks,
+    configuration: &MediaConfiguration,
     output: &mut WindowedOutput,
     state: &media_domain::OutputState,
     preview_layers: &[media_domain::LayerState],
@@ -775,33 +819,46 @@ fn capture_previews(
     now: Timestamp,
 ) {
     let output_id = state.id;
-    let program = previews.for_output(output_id);
+    // Pixel mapping is output rather than a preview: it happens whether or not anyone is watching
+    // a thumbnail, and on its own cadence.
+    map_pixels(
+        &mut sinks.pixels,
+        configuration,
+        output,
+        output_id,
+        master,
+        master_mask,
+        now,
+    );
+    let program = sinks.previews.for_output(output_id);
     let wanted = program.is_some_and(|preview| preview.wanted())
         || state.layers.iter().enumerate().any(|(layer, _)| {
-            previews
+            sinks
+                .previews
                 .for_layer(output_id, layer)
                 .is_some_and(|preview| preview.wanted())
         });
     if !wanted {
-        if last_preview_millis.remove(&output_id).is_some() {
+        if sinks.last_preview_millis.remove(&output_id).is_some() {
             output.release_preview();
         }
         return;
     }
     if !crate::preview::due(
-        last_preview_millis.get(&output_id).copied(),
+        sinks.last_preview_millis.get(&output_id).copied(),
         now.as_millis(),
     ) {
         return;
     }
-    last_preview_millis.insert(output_id, now.as_millis());
+    sinks.last_preview_millis.insert(output_id, now.as_millis());
     if let Some(preview) = program.filter(|preview| preview.wanted()) {
         let size = preview.requested_size();
         let captured = output.capture_preview(size, master, master_mask);
         preview.publish_pixels(&captured, size, size, false);
     }
     for (layer_index, _) in state.layers.iter().enumerate() {
-        let Some(preview) = previews
+        let Some(preview) = sinks
+            .previews
             .for_layer(output_id, layer_index)
             .filter(|preview| preview.wanted())
         else {

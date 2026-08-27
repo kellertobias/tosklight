@@ -4027,6 +4027,7 @@ dependencies = [
  "media-http",
  "media-library",
  "media-net",
+ "media-pixel",
  "media-playback",
  "media-render",
  "media-text",
