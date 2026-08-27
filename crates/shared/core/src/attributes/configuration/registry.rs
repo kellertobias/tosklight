@@ -104,6 +104,27 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
         AttributeClass::Position,
         "deg",
     ),
+    continuous("point.position.x", "Point X", AttributeClass::Position, "m"),
+    continuous("point.position.y", "Point Y", AttributeClass::Position, "m"),
+    continuous("point.position.z", "Point Z", AttributeClass::Position, "m"),
+    cyclic_continuous(
+        "point.rotation.x",
+        "Point Rot X",
+        AttributeClass::Position,
+        "deg",
+    ),
+    cyclic_continuous(
+        "point.rotation.y",
+        "Point Rot Y",
+        AttributeClass::Position,
+        "deg",
+    ),
+    cyclic_continuous(
+        "point.rotation.z",
+        "Point Rot Z",
+        AttributeClass::Position,
+        "deg",
+    ),
     continuous(
         "pan.continuous",
         "Continuous Pan",

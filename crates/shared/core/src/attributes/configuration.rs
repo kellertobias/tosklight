@@ -49,6 +49,18 @@ impl AttributeConfiguration {
                     "camera.zoom",
                 ],
             ),
+            recommended_activation_group(
+                "point",
+                "3D Point",
+                &[
+                    "point.position.x",
+                    "point.position.y",
+                    "point.position.z",
+                    "point.rotation.x",
+                    "point.rotation.y",
+                    "point.rotation.z",
+                ],
+            ),
             recommended_activation_group("gobo_1", "Gobo 1", &["gobo.1", "gobo.1.rotation"]),
             recommended_activation_group("gobo_2", "Gobo 2", &["gobo.2", "gobo.2.rotation"]),
             recommended_activation_group(

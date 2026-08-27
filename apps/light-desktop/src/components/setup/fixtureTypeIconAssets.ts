@@ -22,6 +22,9 @@ function icon(name: string) {
 
 export function fixtureTypeIconAsset(type: string) {
 	const value = type.toLowerCase();
+	// A 3D Point is a reference object, not a lantern, so it is matched before anything that
+	// could read its name as a beam or a fixture family.
+	if (/point|anchor/.test(value)) return icon("position-point");
 	if (/rigging|truss|pipe/.test(value)) return icon("rigging");
 	if (/venue|scenery|scenic/.test(value)) return icon("venue");
 	if (/fog|haze/.test(value)) return icon("hazer");

@@ -65,6 +65,12 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
         // Camera Zoom stays with the six pose encoders so its linked activation group never
         // crosses control surfaces. It is still classified as Focus in the attribute registry.
         ("camera.zoom", Position, 3, 1),
+        ("point.position.x", Position, 4, 1),
+        ("point.position.y", Position, 4, 2),
+        ("point.position.z", Position, 4, 3),
+        ("point.rotation.x", Position, 4, 4),
+        ("point.rotation.y", Position, 4, 5),
+        ("point.rotation.z", Position, 4, 6),
         ("control", Control, 1, 1),
         ("media.play_mode", Control, 1, 2),
         ("media.playback_speed", Control, 1, 3),

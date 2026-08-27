@@ -341,6 +341,51 @@ fn assert_play_mode_is_named(functions: &[crate::ChannelFunction]) {
 }
 
 #[test]
+fn shipped_three_d_point_is_a_zero_dmx_reference_object_on_six_position_axes() {
+    let profile = shipped_profile("tosklight--3d-point.toskfixture");
+    assert_eq!(profile.manufacturer, "ToskLight");
+    assert_eq!(profile.name, "3D Point");
+    // A point is never patched to a universe: it is a reference an operator moves, not an output.
+    assert_eq!(profile.patch_policy, PatchPolicy::Internal);
+    assert_eq!(profile.modes.len(), 1);
+    let mode = &profile.modes[0];
+    assert_eq!(
+        mode.splits,
+        [FixtureSplit {
+            number: 1,
+            footprint: 0
+        }]
+    );
+    assert_eq!(mode.heads.len(), 1);
+    assert_eq!(
+        mode.channels
+            .iter()
+            .map(|channel| &*channel.attribute.0)
+            .collect::<Vec<_>>(),
+        [
+            "point.position.x",
+            "point.position.y",
+            "point.position.z",
+            "point.rotation.x",
+            "point.rotation.y",
+            "point.rotation.z",
+        ]
+    );
+    // Every axis rests at the centre of its range, so a freshly patched point sits exactly on
+    // its own origin rather than jumping the rig the moment it is added.
+    for channel in &mode.channels {
+        assert_eq!(channel.default_raw, 8_388_608);
+        assert_eq!(channel.highlight_raw, 8_388_608);
+        assert!(channel.secondary_slots.is_empty());
+    }
+    // It emits no light, so nothing about it reacts to a master.
+    for channel in &mode.channels {
+        assert!(!channel.reacts_to_virtual_intensity);
+        assert!(!channel.reacts_to_grand_master);
+    }
+}
+
+#[test]
 fn shipped_audio_player_is_one_programmable_zero_dmx_internal_voice() {
     let profile = shipped_profile("tosklight--audio-player.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");

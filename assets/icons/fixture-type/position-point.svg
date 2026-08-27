@@ -1,0 +1,6 @@
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>fixture type position point</title>
+  <path d="M32 8v14M32 42v14M8 32h14M42 32h14"/>
+  <path d="M17 17l9 9M47 17l-9 9M17 47l9-9M47 47l-9-9"/>
+  <circle cx="32" cy="32" r="7"/>
+</svg>
