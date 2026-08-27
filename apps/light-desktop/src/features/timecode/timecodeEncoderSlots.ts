@@ -50,8 +50,13 @@ interface EncoderSlotOptions {
 	fps: number;
 	zoom: number;
 	maximumZoom: number;
+	/// Where the zoomed window starts, in pixels, and how much of the timeline it can see.
+	scrollLeft: number;
+	viewportWidth: number;
+	timelineWidth: number;
 	encoderOwner: symbol;
 	setZoom(value: number): void;
+	setScrollLeft(value: number): void;
 	setSelection(value: TimecodeEditorSelection | null): void;
 	setSelectedLaneId(laneId: string): void;
 	onScrub(frame: number): void;
@@ -177,7 +182,21 @@ function navigationSlots(options: EncoderSlotOptions) {
 }
 
 function sharedSlots(options: EncoderSlotOptions) {
-	const { duration, fps, frame, zoom, maximumZoom } = options;
+	const {
+		duration,
+		fps,
+		frame,
+		zoom,
+		maximumZoom,
+		scrollLeft,
+		viewportWidth,
+		timelineWidth,
+	} = options;
+	// The further in an operator has zoomed, the finer a turn of the playhead encoder should be.
+	// A second of travel per detent is right at full view and hopeless at ten times in, where a
+	// second is most of the window. A frame is as fine as the timeline goes, so that is the floor.
+	const playheadCoarseStep = Math.max(1, Math.round(fps / Math.max(1, zoom)));
+	const scrollRange = Math.max(0, timelineWidth - viewportWidth);
 	return [
 		{
 			id: "timecode-playhead",
@@ -187,7 +206,7 @@ function sharedSlots(options: EncoderSlotOptions) {
 			minimum: 0,
 			maximum: duration,
 			fineStep: 1,
-			coarseStep: fps,
+			coarseStep: playheadCoarseStep,
 			set: (value: number) =>
 				options.onScrub(Math.max(0, Math.min(duration, Math.round(value)))),
 		},
@@ -202,6 +221,25 @@ function sharedSlots(options: EncoderSlotOptions) {
 			coarseStep: 0.25,
 			set: (value: number) =>
 				options.setZoom(Math.max(1, Math.min(maximumZoom, value))),
+		},
+		{
+			// Zooming in is only half of looking at something: an operator also has to move the
+			// window along the timeline, which until now took a mouse.
+			id: "timecode-timeline-scroll",
+			label: "Timeline scroll",
+			display: scrollRange
+				? `${Math.round((scrollLeft / scrollRange) * 100)}%`
+				: "Whole timeline",
+			value: scrollLeft,
+			minimum: 0,
+			maximum: scrollRange,
+			// A detent moves a tenth of what is on screen, so the step follows the zoom without
+			// having to know about it.
+			fineStep: Math.max(1, Math.round(viewportWidth * 0.1)),
+			coarseStep: Math.max(1, Math.round(viewportWidth * 0.5)),
+			disabled: scrollRange === 0,
+			set: (value: number) =>
+				options.setScrollLeft(Math.max(0, Math.min(scrollRange, value))),
 		},
 	];
 }
@@ -327,9 +365,9 @@ function cueSlots(context: CueEncoderContext) {
 		{
 			id: "timecode-cue-selection",
 			label: "Selected Cue",
-			display: selected
-				? `${selected.number} · ${index + 1} / ${context.cues.length}`
-				: "—",
+			// The number and the position are usually the same digit, so printing both read as
+			// the cue number twice. The label already says which encoder this is.
+			display: selected ? selected.number : "—",
 			value: Math.max(0, index),
 			minimum: 0,
 			maximum: Math.max(0, context.cues.length - 1),

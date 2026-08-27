@@ -1145,8 +1145,17 @@ export const TimecodeTimelineEditor = forwardRef<
 		fps,
 		zoom,
 		maximumZoom,
+		scrollLeft,
+		viewportWidth,
+		timelineWidth: width,
 		encoderOwner,
 		setZoom,
+		// The encoder moves the window itself, not just the number that describes it: setting the
+		// state alone would leave the timeline where it was.
+		setScrollLeft: (next: number) => {
+			if (scrollRef.current) scrollRef.current.scrollLeft = next;
+			setScrollLeft(next);
+		},
 		setSelection,
 		setSelectedLaneId,
 		onScrub,

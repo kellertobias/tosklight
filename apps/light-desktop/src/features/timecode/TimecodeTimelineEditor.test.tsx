@@ -127,11 +127,11 @@ describe("TimecodeTimelineEditor", () => {
 		);
 		expect(screen.getByLabelText("Timecode encoder probe")).toHaveAttribute(
 			"data-keyframe-labels",
-			"Keyframe position|Keyframe value|Playhead|Timeline zone",
+			"Keyframe position|Keyframe value|Playhead|Timeline zone|Timeline scroll",
 		);
 		expect(screen.getByLabelText("Timecode encoder probe")).toHaveAttribute(
 			"data-timeline-labels",
-			"Lane|Keyframe selection|Playhead|Timeline zone",
+			"Lane|Keyframe selection|Playhead|Timeline zone|Timeline scroll",
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Set timeline zone" }));
 		const canvas = screen
@@ -275,11 +275,11 @@ describe("TimecodeTimelineEditor", () => {
 		);
 		expect(screen.getByLabelText("Timecode encoder probe")).toHaveAttribute(
 			"data-keyframe-labels",
-			"Marker position|Marker color|Playhead|Timeline zone",
+			"Marker position|Marker color|Playhead|Timeline zone|Timeline scroll",
 		);
 		expect(screen.getByLabelText("Timecode encoder probe")).toHaveAttribute(
 			"data-keyframe-displays",
-			"00:00:02.00|Green|00:00:01.00|100%",
+			"00:00:02.00|Green|00:00:01.00|100%|Whole timeline",
 		);
 		const colorButton = screen.getByRole("button", {
 			name: "Marker color: Green. Select next color",
