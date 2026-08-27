@@ -58,8 +58,9 @@ export class BrowserAttachedEncoders {
 					(await tilt.locator("strong").first().textContent()) ?? "",
 					10,
 				);
+			// Tilt reads out from home, so one coarse detent above centre is +20, not 60.
 			await hardware.send(`/light/${alias}/encode/2`, ["right"]);
-			await expect.poll(displayedPercent).toBe(60);
+			await expect.poll(displayedPercent).toBe(20);
 			await hardware.send(`/light/${alias}/encode/2`, ["press"]);
 			const dialog = this.page.getByRole("dialog", {
 				name: "Encoder 2 value",

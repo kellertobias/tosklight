@@ -21,9 +21,11 @@ scenario(
 		await t.selection.fixtures.via.fixtureSheet.item(101);
 		await t.expect.selection(fixture(101));
 
+		// Pan reads out from home, so a typed 25 is a quarter of the travel one way rather than a
+		// quarter of the channel: home plus 25 of 100 is 62.5% of the channel, DMX 159.
 		await t.encoder.position.pan.via.ui.set(25);
 		await t.clock.advanceBy("3s");
-		await t.expectFixtureDMX(dmxFixture(101), { Pan: 64 });
+		await t.expectFixtureDMX(dmxFixture(101), { Pan: 159 });
 	},
 );
 
