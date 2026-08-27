@@ -168,6 +168,7 @@ fn template_group_preset() -> light_programmer::Preset {
         family: light_programmer::PresetFamily::Mixed,
         number: 1,
         values: HashMap::new(),
+        aim_at_fixture_number: None,
         group_values: HashMap::from([
             (
                 "front".into(),

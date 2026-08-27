@@ -376,6 +376,7 @@ mod tests {
         let pan = AttributeKey("pan".into());
         let preset = Preset {
             family: PresetFamily::Mixed,
+            aim_at_fixture_number: None,
             number: 1,
             values: HashMap::from([
                 (
@@ -434,6 +435,7 @@ mod tests {
         let attribute = AttributeKey::intensity();
         let preset = Preset {
             family: PresetFamily::Intensity,
+            aim_at_fixture_number: None,
             number: 1,
             values: HashMap::from([
                 (first, HashMap::from([(attribute.clone(), normalized(0.1))])),
@@ -494,6 +496,7 @@ mod tests {
         let intensity = AttributeKey::intensity();
         let preset = Preset {
             family: PresetFamily::Mixed,
+            aim_at_fixture_number: None,
             number: 1,
             values: HashMap::from([
                 (
@@ -541,6 +544,7 @@ mod tests {
         let preset = Preset {
             values: HashMap::from([(fixture, HashMap::new())]),
             group_values: HashMap::from([("empty".into(), HashMap::new())]),
+            aim_at_fixture_number: None,
             ..Preset::default()
         };
         let expansions = HashMap::from([(fixture, vec![fixture])]);
@@ -564,6 +568,7 @@ mod tests {
             let preset = Preset {
                 family,
                 values: HashMap::from([(fixture, HashMap::from([(attribute, normalized(0.5))]))]),
+                aim_at_fixture_number: None,
                 ..Preset::default()
             };
 

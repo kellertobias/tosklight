@@ -145,6 +145,7 @@ pub(super) fn generate_profile_presets_action(
             number,
             values: preset.values,
             group_values: HashMap::new(),
+            aim_at_fixture_number: None,
         })
         .map_err(|error| error.to_string())?;
         body["generated_from_fixture_profile"] = serde_json::json!({

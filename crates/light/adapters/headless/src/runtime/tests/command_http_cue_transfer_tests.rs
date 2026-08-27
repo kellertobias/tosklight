@@ -166,6 +166,7 @@ fn preset_copy_and_move_remain_owned_by_preset_mutation() {
         name: "Legacy color".into(),
         family: light_programmer::PresetFamily::Color,
         number: 1,
+        aim_at_fixture_number: None,
         ..Default::default()
     })
     .unwrap();

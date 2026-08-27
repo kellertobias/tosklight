@@ -129,6 +129,7 @@ impl OperationalScenario {
                 )]),
             )]),
             group_values: std::collections::HashMap::new(),
+            aim_at_fixture_number: None,
         };
         assert_eq!(
             put_show_object(

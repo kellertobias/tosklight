@@ -251,20 +251,46 @@ fn record_cue(
     Ok(1)
 }
 
+/// Split a trailing `AT FIXTURE <number>` off a RECORD body.
+fn split_aim_target(body: &[String]) -> (&[String], Option<u32>) {
+    let [head @ .., at, keyword, number] = body else {
+        return (body, None);
+    };
+    if at != "AT" || !matches!(keyword.as_str(), "FIXTURE" | "FIXTURES" | "FIX") {
+        return (body, None);
+    }
+    match number.parse::<u32>() {
+        Ok(target) => (head, Some(target)),
+        Err(_) => (body, None),
+    }
+}
+
 fn record_preset(
     state: &AppState,
     session: &Session,
     body: &[String],
     context: &light_application::ActionContext,
 ) -> Result<usize, String> {
+    // `RECORD PRESET 2.1 AT FIXTURE 5` records what to look at rather than where the heads happen
+    // to be pointing, so the preset keeps working when the object moves.
+    let (body, aim_at_fixture_number) = split_aim_target(body);
     let address = command_preset_address(body)?;
     let id = address.storage_key();
     let programmer = state
         .programming
         .get(session.id)
         .ok_or("programmer does not exist")?;
-    let preset = programmer_preset(&programmer, format!("Preset {id}"), address);
-    if preset.values.is_empty() && preset.group_values.is_empty() {
+    let mut preset = programmer_preset(&programmer, format!("Preset {id}"), address);
+    if let Some(target) = aim_at_fixture_number {
+        if preset.family != light_programmer::PresetFamily::Position {
+            return Err("only a Position preset can aim at a fixture".into());
+        }
+        // The relation replaces the angles rather than sitting beside them: two answers to where
+        // the heads point would be one too many.
+        preset.values.clear();
+        preset.group_values.clear();
+        preset.aim_at_fixture_number = Some(target);
+    } else if preset.values.is_empty() && preset.group_values.is_empty() {
         return Err("the programmer has no values to record".into());
     }
     let (entry, store) = active_show_store(state)?;
@@ -318,5 +344,37 @@ pub(super) fn execute_record_show_command(
         Err("RECORD + and RECORD - currently require GROUP or PBK ... CUE targets".into())
     } else {
         record_preset(state, session, body, context)
+    }
+}
+
+#[cfg(test)]
+mod aim_target_tests {
+    use super::split_aim_target;
+
+    fn tokens(words: &[&str]) -> Vec<String> {
+        words.iter().map(|word| (*word).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_trailing_target_is_split_off_the_address() {
+        let body = tokens(&["2", ".", "1", "AT", "FIXTURE", "5"]);
+        let (address, target) = split_aim_target(&body);
+        assert_eq!(address, &tokens(&["2", ".", "1"])[..]);
+        assert_eq!(target, Some(5));
+    }
+
+    #[test]
+    fn an_ordinary_record_is_left_alone() {
+        let body = tokens(&["2", ".", "1"]);
+        let (address, target) = split_aim_target(&body);
+        assert_eq!(address, &body[..]);
+        assert_eq!(target, None);
+    }
+
+    #[test]
+    fn a_target_that_is_not_a_number_is_not_a_target() {
+        // Better to fail on the address than to silently record a preset that aims nowhere.
+        let body = tokens(&["2", ".", "1", "AT", "FIXTURE", "front"]);
+        assert_eq!(split_aim_target(&body).1, None);
     }
 }

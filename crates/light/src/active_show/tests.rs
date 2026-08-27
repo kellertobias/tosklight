@@ -493,6 +493,7 @@ fn preset_address_is_validated_before_backup_and_commit() {
         name: "Wrong pool".into(),
         family: light_programmer::PresetFamily::Position,
         number: 1,
+        aim_at_fixture_number: None,
         ..Default::default()
     })
     .unwrap();
@@ -529,6 +530,7 @@ fn stale_member_of_a_batch_leaves_every_group_and_preset_unchanged() {
         name: "Before".into(),
         family: light_programmer::PresetFamily::Color,
         number: 1,
+        aim_at_fixture_number: None,
         ..Default::default()
     })
     .unwrap();

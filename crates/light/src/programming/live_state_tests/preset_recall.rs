@@ -72,6 +72,7 @@ impl RecallSetup {
         let pan = AttributeKey("pan".into());
         let preset = Preset {
             name: "Look".into(),
+            aim_at_fixture_number: None,
             family: PresetFamily::Mixed,
             number: 1,
             values: HashMap::from([

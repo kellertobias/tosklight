@@ -681,6 +681,7 @@ fn preset_body(
 ) -> serde_json::Value {
     serde_json::to_value(light_programmer::Preset {
         name: name.into(),
+        aim_at_fixture_number: None,
         family,
         number,
         ..Default::default()

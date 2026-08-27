@@ -34,6 +34,7 @@ pub(super) fn prepare_preload_preset(
             .unwrap_or_else(|| format!("Preset {}", address.number)),
         family: address.family,
         number: address.number,
+        aim_at_fixture_number: None,
         ..Default::default()
     };
     for value in fixtures {
@@ -65,6 +66,7 @@ pub(super) fn prepare_preload_preset(
         .unwrap_or_else(|| light_programmer::Preset {
             family: address.family,
             number: address.number,
+            aim_at_fixture_number: None,
             ..Default::default()
         });
     if input.family.is_none() && had_existing {

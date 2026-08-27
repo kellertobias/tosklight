@@ -17,6 +17,7 @@ fn preset_update_existing_and_add_new_follow_exact_addresses() {
             })
             .collect(),
         group_values: HashMap::new(),
+        aim_at_fixture_number: None,
     };
     let programmer = content(
         fixtures
@@ -124,6 +125,7 @@ fn stale_and_no_op_updates_produce_no_mutation_plan() {
             HashMap::from([(attribute("intensity"), normalized(0.5))]),
         )]),
         group_values: HashMap::new(),
+        aim_at_fixture_number: None,
     };
     let changed = content(vec![fixture_update(fixture, "intensity", 0.8, 1)]);
     assert!(matches!(
@@ -171,6 +173,7 @@ fn preset_update_ignores_attributes_outside_the_stored_family() {
             HashMap::from([(attribute("color.red"), normalized(0.2))]),
         )]),
         group_values: HashMap::new(),
+        aim_at_fixture_number: None,
     };
     let programmer = content(vec![
         fixture_update(fixture, "color.red", 0.8, 1),

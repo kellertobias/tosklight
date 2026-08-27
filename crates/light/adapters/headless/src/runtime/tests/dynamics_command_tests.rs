@@ -211,6 +211,7 @@ fn fix_at_command_accepts_a_named_preset_batch_with_timing() {
             )]),
         )]),
         group_values: HashMap::new(),
+        aim_at_fixture_number: None,
     };
     ActiveShowRepository::open(&entry.path)
         .unwrap()

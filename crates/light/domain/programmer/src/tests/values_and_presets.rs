@@ -143,6 +143,7 @@ fn preset_store_modes_are_explicit() {
             HashMap::from([(AttributeKey::intensity(), AttributeValue::Normalized(0.5))]),
         )]),
         group_values: HashMap::new(),
+        aim_at_fixture_number: None,
     };
     preset.store(
         Preset {
@@ -157,6 +158,7 @@ fn preset_store_modes_are_explicit() {
                 (other, HashMap::new()),
             ]),
             group_values: HashMap::new(),
+            aim_at_fixture_number: None,
         },
         PresetStoreMode::AddMissingFixtures,
     );
@@ -172,6 +174,7 @@ fn preset_store_modes_are_explicit() {
                 HashMap::from([(AttributeKey("pan".into()), AttributeValue::Normalized(0.2))]),
             )]),
             group_values: HashMap::new(),
+            aim_at_fixture_number: None,
         },
         PresetStoreMode::Merge,
     );
@@ -198,6 +201,7 @@ fn preset_addresses_use_pool_local_numbers() {
 fn legacy_plain_preset_keys_reconcile_with_the_stored_family() {
     let mut legacy_color = Preset {
         name: "Red".into(),
+        aim_at_fixture_number: None,
         family: PresetFamily::Color,
         number: 0,
         ..Default::default()
@@ -209,6 +213,7 @@ fn legacy_plain_preset_keys_reconcile_with_the_stored_family() {
 
     let mut mismatched = Preset {
         family: PresetFamily::Color,
+        aim_at_fixture_number: None,
         number: 1,
         ..Default::default()
     };

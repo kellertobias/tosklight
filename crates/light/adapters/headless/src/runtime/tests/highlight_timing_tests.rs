@@ -192,6 +192,7 @@ fn explicit_profile_preset_generation_writes_portable_show_objects() {
                 name: "Red".into(),
                 family: light_programmer::PresetFamily::Color,
                 number: 1,
+                aim_at_fixture_number: None,
                 ..Default::default()
             })
             .unwrap(),

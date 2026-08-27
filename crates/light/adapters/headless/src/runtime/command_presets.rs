@@ -122,6 +122,22 @@ pub(super) fn apply_command_preset(
         }
         _ => Vec::new(),
     };
+    // A Position preset that names a target aims at wherever that target is now, rather than
+    // replaying angles that were only right where it used to be.
+    if let Some(target) = preset.aim_at_fixture_number {
+        let assignments = super::programmer_aim_command::aim_selection(state, selected, target)?;
+        for (fixture, attribute, value) in assignments {
+            state.programming.set_faded_with_timing(
+                session.id,
+                fixture,
+                attribute,
+                value,
+                Some(programmer_fade_millis),
+                None,
+            );
+        }
+        return Ok(());
+    }
     for fixture in selected {
         if let Some(attributes) = preset.values.get(fixture) {
             for (attribute, value) in attributes {

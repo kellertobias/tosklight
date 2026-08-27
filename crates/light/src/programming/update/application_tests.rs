@@ -878,6 +878,7 @@ fn preset_body_number(fixture: FixtureId, level: f32, number: u32) -> Value {
             HashMap::from([(AttributeKey::intensity(), AttributeValue::Normalized(level))]),
         )]),
         group_values: HashMap::new(),
+        aim_at_fixture_number: None,
     };
     serde_json::to_value(preset).unwrap()
 }

@@ -150,6 +150,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         name: "Document look".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 1,
+        aim_at_fixture_number: None,
         values: HashMap::from([(
             missing,
             HashMap::from([(
@@ -376,6 +377,7 @@ async fn preset_recall_http_redirects_fixture_and_live_group_values_to_pending_p
         name: "Pending look".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 1,
+        aim_at_fixture_number: None,
         values: HashMap::from([(
             fixture,
             HashMap::from([(
@@ -534,6 +536,7 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
             )]),
         )]),
         group_values: HashMap::new(),
+        aim_at_fixture_number: None,
     };
     assert_eq!(
         scenario

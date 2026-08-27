@@ -362,6 +362,7 @@ mod tests {
                 )]),
             )]),
             group_values: HashMap::new(),
+            aim_at_fixture_number: None,
         })
         .unwrap()
     }
@@ -387,6 +388,7 @@ mod tests {
                 )]),
             )]),
             group_values: HashMap::new(),
+            aim_at_fixture_number: None,
         };
         ProgrammingPresetCommit::new(&request, captured)
     }

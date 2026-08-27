@@ -715,6 +715,7 @@ fn core_owned_store_modes_cover_fixture_and_group_semantics() {
 fn preset_with_values(fixture: FixtureId, intensity: f32, group_value: &str) -> Preset {
     Preset {
         name: "Existing".into(),
+        aim_at_fixture_number: None,
         family: PresetFamily::Mixed,
         number: 1,
         values: HashMap::from([(

@@ -199,6 +199,7 @@ fn eligible_menu_filter_excludes_no_ops_but_show_all_keeps_them_distinguishable(
             HashMap::from([(attribute("intensity"), normalized(0.5))]),
         )]),
         group_values: HashMap::new(),
+        aim_at_fixture_number: None,
     };
     let changed = content(vec![fixture_update(fixture, "intensity", 0.8, 1)]);
     let unchanged = content(vec![fixture_update(fixture, "intensity", 0.5, 1)]);

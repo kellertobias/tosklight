@@ -150,6 +150,14 @@ pub struct Preset {
     pub number: u32,
     pub values: HashMap<FixtureId, HashMap<AttributeKey, AttributeValue>>,
     pub group_values: HashMap<String, HashMap<AttributeKey, AttributeValue>>,
+    /// A Position preset that stores what to look at rather than where to point.
+    ///
+    /// Recalling it works the pan and tilt out from where that fixture actually is, so the look
+    /// follows the object: move the 3D Point the target hangs on and the beams follow it, which a
+    /// preset holding fixed angles cannot do. Absent in every preset recorded before this existed,
+    /// and absent means the stored angles are used exactly as they always were.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aim_at_fixture_number: Option<u32>,
 }
 
 impl Preset {

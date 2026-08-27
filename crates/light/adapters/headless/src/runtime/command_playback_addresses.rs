@@ -144,6 +144,7 @@ pub(super) fn programmer_preset(
         name,
         family: address.family,
         number: address.number,
+        aim_at_fixture_number: None,
         ..Default::default()
     };
     for value in programmer.values.iter() {

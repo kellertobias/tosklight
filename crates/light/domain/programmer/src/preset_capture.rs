@@ -20,6 +20,7 @@ impl ProgrammerRegistry {
         let mut preset = Preset {
             name,
             family: address.family,
+            aim_at_fixture_number: None,
             number: address.number,
             ..Preset::default()
         };

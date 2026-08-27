@@ -72,6 +72,7 @@ impl ProgrammingPresetCommit {
     fn empty_target(&self) -> Preset {
         Preset {
             family: self.address.family,
+            aim_at_fixture_number: None,
             number: self.address.number,
             ..Preset::default()
         }
