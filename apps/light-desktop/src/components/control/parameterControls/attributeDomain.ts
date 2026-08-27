@@ -77,7 +77,9 @@ export function attributeDomain(
 		physical.minimum !== physical.maximum
 			? { minimum: physical.minimum, maximum: physical.maximum }
 			: null;
-	if (unit === "K") {
+	// The registry spells these "K" and "deg"; a fixture channel spells them out.
+	const scale = unit?.toLowerCase();
+	if (scale === "k" || scale === "kelvin") {
 		const range = stated ?? DEFAULT_TEMPERATURE_RANGE;
 		return {
 			kind: "kelvin",
@@ -88,7 +90,7 @@ export function attributeDomain(
 			coarseStep: 100,
 		};
 	}
-	if (unit === "deg" && stated) {
+	if ((scale === "deg" || scale === "degrees") && stated) {
 		return {
 			kind: "degrees",
 			...stated,

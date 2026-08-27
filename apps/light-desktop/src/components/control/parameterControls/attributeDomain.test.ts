@@ -84,4 +84,15 @@ describe("attribute domains", () => {
 		expect(formatNormalizedValue(0.4)).toBe("40%");
 		expect(formatNormalizedRange([0.12, 0.8])).toBe("12%...80%");
 	});
+
+	it("reads the unit however the profile spells it", () => {
+		// The attribute registry says "K" and "deg"; a fixture channel says "kelvin" and "degrees".
+		expect(attributeDomain("color.temperature", "kelvin").kind).toBe("kelvin");
+		expect(
+			attributeDomain("shaper.blade.1.angle", "degrees", {
+				minimum: -45,
+				maximum: 45,
+			}).kind,
+		).toBe("degrees");
+	});
 });
