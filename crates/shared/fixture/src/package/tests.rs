@@ -1666,8 +1666,8 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
         }
     }
 
-    assert_eq!(prism_selection_modes, 7);
-    assert_eq!(prism_rotation_modes, 5);
+    assert_eq!(prism_selection_modes, 11);
+    assert_eq!(prism_rotation_modes, 9);
     assert_eq!(generic_control_modes, 5);
     assert_eq!(position_movement_modes, 26);
     assert_eq!(
