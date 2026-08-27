@@ -4,6 +4,8 @@ import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
 import { beginWindowDrag, WindowControls } from "../WindowChrome";
+import { CadCutPlaneControl } from "./CadCutPlaneControl";
+import { visibleEntities } from "./cutPlanes";
 import { CadProjectPanel } from "./CadProjectPanel";
 import { CadViewport } from "./CadViewport";
 import {
@@ -30,6 +32,7 @@ import {
 	type TileCamera,
 	type TileEdge,
 	type TileNode,
+	type CadEntity,
 	type ViewportTile,
 	viewAxes,
 	type WorldAxis,
@@ -243,12 +246,12 @@ export function CadApp() {
 		const pageNumber = printPages.length + 1;
 		const page: CadPrintPage = {
 			kind: "plan",
-			id:
-				globalThis.crypto?.randomUUID?.() ?? `page-${Date.now()}-${pageNumber}`,
+			id: globalThis.crypto?.randomUUID?.() ?? `page-${Date.now()}-${pageNumber}`,
 			tileId: tile.id,
 			name: `Page ${pageNumber}`,
 			view: tile.view,
 			rotationQuarterTurns: tile.rotationQuarterTurns,
+			cutPlanes: tile.cutPlanes,
 			centreMillimetres: [-tile.camera.pan[0], -tile.camera.pan[1]],
 			widthMillimetres: Math.max(3000, 360 / tile.camera.zoom),
 			included: true,
@@ -702,6 +705,11 @@ interface ClosePaneAction {
 	remove: "first" | "second";
 }
 
+/** The elements one tile shows, once its own cut planes are applied. */
+function tileEntities(scene: { entities: readonly CadEntity[] }, tile: ViewportTile) {
+	return visibleEntities(scene.entities, tile.view, tile.cutPlanes);
+}
+
 function CadTile(props: CadTileProps) {
 	const { node } = props;
 	if (node.type === "split") {
@@ -768,6 +776,12 @@ function CadTile(props: CadTileProps) {
 					Fit
 				</Button>
 			</div>
+			<CadCutPlaneControl
+				view={node.view}
+				entities={props.scene.entities}
+				cutPlanes={node.cutPlanes}
+				onChange={(c) => props.onTile(node.id, (t) => ({ ...t, cutPlanes: c }))}
+			/>
 			<CadOrientation
 				view={node.view}
 				rotationQuarterTurns={node.rotationQuarterTurns}
@@ -811,7 +825,7 @@ function CadTile(props: CadTileProps) {
 				);
 			})}
 			<CadViewport
-				entities={props.scene.entities}
+				entities={tileEntities(props.scene, node)}
 				drawings={props.scene.drawings}
 				selectedIds={props.scene.selectedIds}
 				preview={props.preview}

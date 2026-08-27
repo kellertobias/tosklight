@@ -1686,6 +1686,62 @@ body {
 	font-size: 12px;
 }
 
+/* The slice of depth a viewport shows, beside the view it shows it from. */
+.cad-cut-plane-control {
+	position: absolute;
+	z-index: 12;
+	left: 12px;
+	bottom: 52px;
+	display: flex;
+	align-items: center;
+	padding: 0 8px;
+	gap: 8px;
+	border: 1px solid #344251;
+	border-radius: 3px;
+	background: #171c22;
+	color: #8b96a1;
+	font-size: 11px;
+}
+
+.cad-cut-plane-control[data-open="true"] {
+	opacity: 0.72;
+}
+
+.cad-cut-plane-axis {
+	color: #bcc5cd;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.cad-cut-plane-field {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.cad-cut-plane-field input {
+	width: 66px;
+	min-height: 30px;
+	padding: 0 6px;
+	border: 1px solid #344251;
+	border-radius: 3px;
+	background: #0f1318;
+	color: #dfe6ec;
+	font: inherit;
+	font-size: 12px;
+}
+
+.cad-cut-plane-reset.ui-button {
+	min-height: 30px;
+	padding: 0 10px;
+	border: 1px solid #344251;
+	border-radius: 3px;
+	background: #171c22;
+	color: #bcc5cd;
+	font-size: 11px;
+}
+
 .cad-fit-view.ui-button {
 	min-width: 44px;
 	min-height: 32px;

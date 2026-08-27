@@ -1,3 +1,4 @@
+import type { CutPlanes } from "./cutPlanes";
 export type CadViewDirection =
 	| "top_down"
 	| "left_to_right"
@@ -136,6 +137,9 @@ export interface ViewportTile {
 	view: CadViewDirection;
 	rotationQuarterTurns: number;
 	camera: TileCamera;
+	/// The slice of depth this tile shows. Absent means the whole drawing, which is what every
+	/// tile saved before cut planes existed means too.
+	cutPlanes?: CutPlanes;
 }
 
 export interface CadPrintPage {
@@ -151,6 +155,8 @@ export interface CadPrintPage {
 	orientation: "landscape" | "portrait";
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
+	/// The slice of depth this page prints. Absent means the whole drawing.
+	cutPlanes?: CutPlanes;
 }
 
 export function printPaperSize(page: Pick<CadPrintPage, "orientation">) {

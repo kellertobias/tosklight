@@ -54,6 +54,34 @@ const page = (id: string): CadPrintPage => ({
 });
 
 describe("CAD PDF export", () => {
+	it("prints only the slice a page's cut planes leave", () => {
+		const upstage = {
+			...scene.entities[0],
+			id: "upstage",
+			logicalFixtureId: "upstage",
+			fixtureDisplayId: "7",
+			dmxAddress: "2.1",
+			// Eight metres along the axis the side view looks down.
+			positionMillimetres: [8_000, 0, 1_000] as [number, number, number],
+		};
+		const both: CadSceneSnapshot = {
+			...scene,
+			entities: [...scene.entities, upstage],
+		};
+		const sliced: CadPrintPage = {
+			...page("Sliced"),
+			view: "left_to_right",
+			// Only the downstage half of the drawing, measured along the view.
+			cutPlanes: { nearMillimetres: -1_000, farMillimetres: 1_000 },
+		};
+		const whole: CadPrintPage = { ...sliced, id: "Whole", cutPlanes: undefined };
+		const slicedPdf = new TextDecoder().decode(buildCadPdf(both, [sliced]));
+		const wholePdf = new TextDecoder().decode(buildCadPdf(both, [whole]));
+		expect(wholePdf).toContain("ID 7");
+		expect(slicedPdf).not.toContain("ID 7");
+		expect(slicedPdf).toContain("ID 1");
+	});
+
 	it("writes one vector page per selected print outline", () => {
 		const bytes = buildCadPdf(scene, [page("Page 1"), page("Page 2")], {
 			showName: "Festival",

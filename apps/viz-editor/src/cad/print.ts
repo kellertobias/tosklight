@@ -1,4 +1,5 @@
 import architectIconSvg from "../../../../assets/branding/tosklight-icon-print.svg?raw";
+import { visibleEntities } from "./cutPlanes";
 import { entityPlanGeometry, type PlanPoint } from "./projection";
 import {
 	type CadPrintPage,
@@ -148,18 +149,15 @@ export function buildCadPdf(
 				y += grid
 			)
 				commands.push(
-					path(
-						[point([left, y]), point([left + page.widthMillimetres, y])],
-						false,
-						false,
-					),
+					path([point([left, y]), point([left + page.widthMillimetres, y])], false, false),
 				);
 
 			commands.push(
 				"q",
 				`${n(originX)} ${n(originY)} ${n(page.widthMillimetres * scale)} ${n(pageHeight * scale)} re W n`,
 			);
-			for (const entity of scene.entities) {
+			// biome-ignore format: the page's own slice of the drawing, on one line.
+			for (const entity of visibleEntities(scene.entities, page.view, page.cutPlanes)) {
 				const geometry = entityPlanGeometry(
 					entity,
 					drawings.get(entity.drawingId),
