@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	type AttributeBand,
+	attributeBands,
 	bandLabel,
 	steppedValue,
 } from "./attributeBands";
@@ -66,12 +67,77 @@ describe("stepping an indexed attribute", () => {
 		expect(bandLabel(wheel, 80 / 255)).toBeUndefined();
 	});
 
-	it("does not step a plain continuous channel as if it were a wheel", () => {
-		// Pan is one continuous function end to end. Treating that single band as a ranged area
-		// would move it in coarse raw jumps instead of the small ones its own units ask for.
-		const sweep: AttributeBand[] = [
-			{ from: 0, to: 255, kind: "range", label: "", rawValue: 0 },
+	it("does not read a plain continuous channel as a wheel", () => {
+		// Pan is one continuous function end to end. Reading that single band as a ranged area
+		// would step it in coarse raw jumps instead of the movement its own units ask for.
+		expect(attributeBands(fixtures("pan", [sweepFunction("pan")]), ["f1"], "pan")).toBeNull();
+	});
+
+	it("reads a channel as a wheel as soon as it has one slot in it", () => {
+		const wheelChannel = [
+			slotFunction("shutter", "Closed", 0, 15),
+			sweepFunction("shutter", 16, 255),
 		];
-		expect(bandLabel(sweep, 0.5)).toBeUndefined();
+		const bands = attributeBands(fixtures("shutter", wheelChannel), ["f1"], "shutter");
+		expect(bands?.map((band) => band.kind)).toEqual(["slot", "range"]);
+	});
+
+	it("offers no wheel when two selected fixtures lay the channel out differently", () => {
+		const first = fixtures("gobo.1", [slotFunction("gobo.1", "Open", 0, 127)])[0];
+		const second = fixtures("gobo.1", [slotFunction("gobo.1", "Open", 0, 63)])[0];
+		second.fixture_id = "f2";
+		expect(attributeBands([first, second], ["f1", "f2"], "gobo.1")).toBeNull();
 	});
 });
+
+function sweepFunction(attribute: string, from = 0, to = 255) {
+	return {
+		id: `${attribute}-sweep`,
+		name: "",
+		dmx_from: from,
+		dmx_to: to,
+		attribute,
+		priority: 0,
+		behavior: { type: "continuous", physical_min: 0, physical_max: 1, unit: null },
+	};
+}
+
+function slotFunction(attribute: string, label: string, from: number, to: number) {
+	return {
+		id: `${attribute}-${label}`,
+		name: label,
+		dmx_from: from,
+		dmx_to: to,
+		attribute,
+		priority: 0,
+		behavior: {
+			type: "indexed",
+			semantic_id: label.toLowerCase(),
+			label,
+			raw_value: from,
+		},
+	};
+}
+
+/// One selected fixture whose mode holds a single channel of the given shape.
+function fixtures(attribute: string, functions: unknown[]) {
+	const head = { id: "head", master_shared: true };
+	return [
+		{
+			fixture_id: "f1",
+			logical_heads: [],
+			definition: {
+				mode_id: "mode",
+				profile_snapshot: {
+					modes: [
+						{
+							id: "mode",
+							heads: [head],
+							channels: [{ head_id: "head", attribute, functions }],
+						},
+					],
+				},
+			},
+		},
+	] as never[];
+}
