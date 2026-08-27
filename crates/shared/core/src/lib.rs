@@ -1,10 +1,12 @@
 #![forbid(unsafe_code)]
 //! Shared, transport-neutral lighting domain primitives.
 
+mod aim;
 mod attributes;
 mod clock;
 mod surface;
 
+pub use aim::{Mount, Point, pan_tilt_towards};
 pub use attributes::{
     ATTRIBUTE_CONFIGURATION_VERSION, ATTRIBUTE_REGISTRY, AttributeActivationGroup, AttributeBounds,
     AttributeClass, AttributeConfiguration, AttributeConfigurationError, AttributeDescriptor,
