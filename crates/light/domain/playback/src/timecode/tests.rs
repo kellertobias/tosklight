@@ -433,6 +433,34 @@ fn cuelist_clip_seek_matches_follow_and_wait_schedule() {
 }
 
 #[test]
+fn a_clip_that_ends_early_simply_stops_playing_its_later_cues() {
+    // Shortening a clip is an ordinary edit. The Cues past the new end stop being reached, and
+    // the clip cuts where the operator put it — it used to refuse to run at all and report
+    // "Cue N starts outside the clip".
+    let cue_list = execution_cue_list();
+    let mut definition = execution_definition(&cue_list);
+    if let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content {
+        clips[0].end_frame = TimecodeFrame(118);
+    }
+
+    // The Cues inside the shortened clip still play, in their own places.
+    assert_eq!(
+        execution_at(&definition, &cue_list, 107).cue_id,
+        Some(cue_list.cues[0].id)
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 117).cue_id,
+        Some(cue_list.cues[2].id)
+    );
+
+    // The Cue that would have started at 121 is simply never reached, and nothing about the clip
+    // is reported as unable.
+    let cut = execution_at(&definition, &cue_list, 119);
+    assert_ne!(cut.cue_id, Some(cue_list.cues[3].id));
+    assert_ne!(cut.kind, TimecodeCueListClipExecutionKind::Unable);
+}
+
+#[test]
 fn cuelist_clip_seek_follows_a_stable_link_destination() {
     let mut cue_list = execution_cue_list();
     let destination = cue_list.cues[3].id;

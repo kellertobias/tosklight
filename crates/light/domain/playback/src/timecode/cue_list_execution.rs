@@ -177,8 +177,11 @@ fn cue_schedule(
                 cue.number
             ));
         }
+        // A Cue that would start at or after the clip ends is simply not reached. Shortening a
+        // clip is an ordinary edit — the Cues past the new end stop being played, and the clip
+        // cuts where the operator put it rather than refusing to run at all.
         if start.0 >= clip_end.0 {
-            return Err(format!("Cue {} starts outside the clip", cue.number));
+            break;
         }
         let completion = cue_completion_frames(cue_list, cue, timing);
         let completed_at = TimecodeFrame(start.0.saturating_add(completion));
