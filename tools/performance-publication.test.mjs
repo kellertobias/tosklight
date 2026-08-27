@@ -545,7 +545,10 @@ test("the frame-time histogram counts every frame and colours each band by its r
 	assert.match(summary, /performance-tone-failing[^>]*--bar-height:3%/u);
 	assert.match(summary, /performance-tone-spare[^>]*--bar-height:100%/u);
 	// The band a bar covers and its share are readable without a legend.
-	assert.match(summary, /title="10–30 Hz: 2 frames \(3\.2%\)"/u);
+	assert.match(summary, /title="10–30 Hz: 2 frames \(3\.2% of all frames\)"/u);
+	// The open ends of the chart say so instead of naming a bound they do not have.
+	assert.match(summary, /title="Under 10 Hz: 1 frame \(/u);
+	assert.match(summary, /title="60 Hz and above: 32 frames/u);
 });
 
 test("a run without measured frame times says so instead of drawing an empty chart", () => {

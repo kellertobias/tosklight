@@ -295,7 +295,9 @@
       .legend-unknown { color: var(--muted); }
       /* Every delivered frame is counted into a rate band; the bar is coloured by that rate. */
       .performance-histogram { display: flex; align-items: flex-end; gap: 1px; height: 54px; min-width: 220px; padding: 2px; border: 1px solid var(--line); border-radius: 3px; background: rgb(0 0 0 / 0.25); }
-      .performance-histogram-bar { flex: 1; min-width: 2px; height: var(--bar-height, 0%); min-height: 1px; border-radius: 1px 1px 0 0; background: var(--tone, var(--muted)); }
+      .performance-histogram-band { flex: 1; min-width: 2px; display: flex; align-items: flex-end; justify-content: center; height: 100%; cursor: help; }
+      .performance-histogram-band:hover { background: rgb(255 255 255 / 0.08); }
+      .performance-histogram-bar { width: 80%; height: var(--bar-height, 0%); min-height: 1px; border-radius: 1px 1px 0 0; background: var(--tone, var(--muted)); }
       .performance-histogram-empty { color: var(--muted); }
       .performance-tone-failing { --tone: var(--degraded); }
       .performance-tone-struggling { --tone: var(--caution); }

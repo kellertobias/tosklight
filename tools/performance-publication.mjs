@@ -154,12 +154,13 @@ function compactScenarioStatus(scenario, thresholds) {
 /**
  * The colour a frame rate is drawn in, as an operator reads it.
  *
- * Below 30 Hz the desk is failing, to 38 Hz it is struggling, to 44 Hz it is holding, to 60 Hz it
- * is comfortable, and above that it has room to spare.
+ * Below 30 Hz the desk is failing, to 40 Hz it is struggling, to 44 Hz it is holding, to 60 Hz it
+ * is comfortable, and above that it has room to spare. Struggling reaches 39 Hz because a run that
+ * never makes the requested 40 Hz has not started holding it.
  */
 const CADENCE_BANDS = [
 	{ belowHz: 30, tone: "failing" },
-	{ belowHz: 38, tone: "struggling" },
+	{ belowHz: 40, tone: "struggling" },
 	{ belowHz: 44, tone: "holding" },
 	{ belowHz: 60, tone: "comfortable" },
 ];
@@ -246,10 +247,19 @@ function cadenceHistogram(scenario) {
 			const tone = cadenceTone(index === 0 ? lower : (lower + upper) / 2);
 			const height = tallest ? Math.round((count / tallest) * 100) : 0;
 			const share = ((count / total) * 100).toFixed(1);
+			// The open first and last bands catch everything off either end of the chart.
+			const range =
+				index === 0
+					? `Under ${compactNumber(upper)} Hz`
+					: index === counts.length - 1
+						? `${compactNumber(lower)} Hz and above`
+						: `${compactNumber(lower)}–${compactNumber(upper)} Hz`;
+			// The hover target is the full-height column, so a one-pixel band is still readable.
 			return (
+				`<span class="performance-histogram-band"` +
+				` title="${range}: ${compactNumber(count)} ${count === 1 ? "frame" : "frames"} (${share}% of all frames)">` +
 				`<span class="performance-histogram-bar performance-tone-${tone}"` +
-				` style="--bar-height:${height}%"` +
-				` title="${compactNumber(lower)}–${compactNumber(upper)} Hz: ${compactNumber(count)} frames (${share}%)"></span>`
+				` style="--bar-height:${height}%"></span></span>`
 			);
 		})
 		.join("");
@@ -583,7 +593,9 @@ export function renderPerformancePage(performance) {
 		`<title>ToskLight release performance</title><style>body{font:16px system-ui;max-width:1500px;margin:3rem auto;padding:0 1rem;background:#101318;color:#eef2f6}` +
 		`a{color:#72c7ff}.table-scroll,.performance-table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #44505c;padding:.7rem;text-align:left;vertical-align:top}.performance-compact td strong,.performance-compact th strong{display:block}.performance-compact td small,.performance-compact th small{display:block;margin-top:.25rem;color:#aab4bf;font-size:.72rem;line-height:1.3}.performance-row-healthy{background:#123326}.performance-row-warning{background:#3a3014}.performance-row-caution{background:#3a2414}.performance-row-degraded{background:#3b1d20}.performance-row-unknown{background:#252b32}.performance-legend{color:#c5ced8}` +
 		`.performance-histogram{display:flex;align-items:flex-end;gap:1px;height:54px;min-width:220px;padding:2px;border:1px solid #44505c;border-radius:3px;background:#181d23}` +
-		`.performance-histogram-bar{flex:1;min-width:2px;height:var(--bar-height,0%);min-height:1px;border-radius:1px 1px 0 0;background:#6b7784}` +
+		`.performance-histogram-band{flex:1;min-width:2px;display:flex;align-items:flex-end;justify-content:center;height:100%;cursor:help}` +
+		`.performance-histogram-band:hover{background:rgba(255,255,255,0.08)}` +
+		`.performance-histogram-bar{width:80%;height:var(--bar-height,0%);min-height:1px;border-radius:1px 1px 0 0;background:#6b7784}` +
 		`.performance-histogram-empty{color:#9aa5b8}` +
 		`.performance-tone-failing{--tone:#ff6b6b}.performance-tone-struggling{--tone:#ff9f45}.performance-tone-holding{--tone:#ffd166}.performance-tone-comfortable{--tone:#39d98a}.performance-tone-spare{--tone:#72c7ff}` +
 		`.performance-histogram-bar[class*="performance-tone-"]{background:var(--tone)}` +
