@@ -26,6 +26,7 @@ members = [
   "crates/media/adapters/http",
   "crates/media/adapters/library",
   "crates/media/adapters/net",
+  "crates/media/adapters/pixel",
   "crates/media/adapters/playback",
   "crates/media/adapters/render",
   "crates/media/adapters/runtime",
@@ -34,6 +35,7 @@ members = [
   "crates/media/domain",
   "crates/shared/core",
   "crates/shared/discovery",
+  "crates/shared/dmx",
   "crates/shared/fixture",
   "crates/shared/mvr",
   "crates/shared/show",
@@ -117,6 +119,7 @@ tokio-tungstenite = { version = "0.28", default-features = false, features = ["c
 # C source, so `bindgen` (and the LLVM it wants) stays off; the crate carries generated bindings.
 rquickjs = { version = "0.12", default-features = false, features = ["classes", "properties"] }
 light-discovery = { path = "crates/shared/discovery" }
+light-dmx-wire = { path = "crates/shared/dmx" }
 viz-scene = { path = "crates/viz/scene" }
 viz-laser = { path = "crates/viz/laser" }
 viz-effect = { path = "crates/viz/effect" }

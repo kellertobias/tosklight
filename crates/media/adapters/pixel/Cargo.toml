@@ -1,0 +1,15 @@
+[package]
+name = "media-pixel"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+light-dmx-wire = { path = "../../../shared/dmx" }
+media-application = { path = "../../application" }
+media-domain = { path = "../../domain" }
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

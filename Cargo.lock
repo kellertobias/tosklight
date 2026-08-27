@@ -3510,6 +3510,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "light-dmx-wire"
+version = "0.1.0"
+dependencies = [
+ "light-core",
+]
+
+[[package]]
 name = "light-dynamics"
 version = "0.1.0"
 dependencies = [
@@ -3697,6 +3704,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "light-core",
+ "light-dmx-wire",
  "light-usb-dmx-core",
  "serde",
  "serde_json",
@@ -3962,6 +3970,17 @@ dependencies = [
  "socket2 0.6.5",
  "thiserror 2.0.20",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "media-pixel"
+version = "0.1.0"
+dependencies = [
+ "light-dmx-wire",
+ "media-application",
+ "media-domain",
+ "thiserror 2.0.20",
  "tracing",
 ]
 
