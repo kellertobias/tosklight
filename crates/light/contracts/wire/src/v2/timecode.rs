@@ -74,6 +74,9 @@ pub struct TimecodeAudio {
     pub asset_id: Uuid,
     #[ts(type = "number")]
     pub asset_revision: u64,
+    /// The name of the file this audio was imported from, for an operator to recognise it by.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(as = "Option<f64>", optional = nullable)]
     pub end_fade_frames: Option<i64>,

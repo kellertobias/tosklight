@@ -404,6 +404,50 @@ function useTimecodeWaveform(
 	return { waveformPeaks, setWaveformPeaks, waveformError };
 }
 
+/**
+ * The audio a Timecode holds, named so an operator recognises it, with the way to replace it
+ * beside it. The managed asset id names nothing anyone would know.
+ */
+/** How many frames of timeline an imported audio file occupies. */
+function audioDurationFrames(imported: {
+	sample_frames: number;
+	sample_rate: number;
+}) {
+	return Math.ceil((imported.sample_frames * FPS) / imported.sample_rate);
+}
+
+function AudioFileField({
+	audio,
+	busy,
+	importing,
+	onChoose,
+}: {
+	audio: TimecodeDefinition["audio"];
+	busy: boolean;
+	importing: boolean;
+	onChoose(file: File): Promise<void>;
+}) {
+	return (
+		<div className="timecode-audio-import">
+			<span>Audio file</span>
+			<strong className="timecode-audio-file-name">
+				{audio?.file_name ?? (audio ? "Managed audio" : "No audio file")}
+			</strong>
+			<RootConfinedFilePickerButton
+				label={audio ? "Change Audio File" : "Choose audio file"}
+				allowedExtensions={["wav", "mp3"]}
+				disabled={busy}
+				onFiles={async ([file]) => file && onChoose(file)}
+			/>
+			<small>
+				{importing
+					? "Importing and normalizing…"
+					: "WAV or MP3; MP3 is normalized to managed WAV."}
+			</small>
+		</div>
+	);
+}
+
 export function TimecodeEditor({
 	showId,
 	item,
@@ -583,12 +627,12 @@ export function TimecodeEditor({
 			setDraft(
 				reconcileAutomaticAudioLane({
 					...draft,
-					duration_frame: Math.ceil(
-						(imported.sample_frames * FPS) / imported.sample_rate,
-					),
+					duration_frame: audioDurationFrames(imported),
+					// `file_name` is what the operator chose, so the lane and the settings can name it.
 					audio: {
 						asset_id: imported.asset_id,
 						asset_revision: imported.asset_revision,
+						file_name: file.name,
 					},
 				}),
 			);
@@ -865,22 +909,12 @@ export function TimecodeSettings({
 				checked={markersLocked}
 				onChange={(event) => setMarkersLocked(event.currentTarget.checked)}
 			/>
-			<div className="timecode-audio-import">
-				<span>Audio file</span>
-				<RootConfinedFilePickerButton
-					label="Choose audio file"
-					allowedExtensions={["wav", "mp3"]}
-					disabled={busy || audioImporting}
-					onFiles={async ([file]) => file && importAudio(file)}
-				/>
-				<small>
-					{audioImporting
-						? "Importing and normalizing…"
-						: draft.audio
-							? `Managed audio ${draft.audio.asset_id}`
-							: "WAV or MP3; MP3 is normalized to managed WAV."}
-				</small>
-			</div>
+			<AudioFileField
+				audio={draft.audio}
+				busy={busy || audioImporting}
+				importing={audioImporting}
+				onChoose={importAudio}
+			/>
 			<div className="timecode-csv-panel">
 				<SelectField
 					label="Import mode"

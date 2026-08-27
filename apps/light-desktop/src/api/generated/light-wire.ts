@@ -1178,7 +1178,11 @@ export type TimecodeFrameRate = { numerator: number, denominator: number, drop_f
 export type TimecodeDefinition = { id: string, number: number, name: string, duration_frame?: number | null, transport_offset_frame: number, auto_start: boolean, audio?: TimecodeAudio | null, markers: Array<TimecodeMarker>, lanes: Array<TimecodeLane>, };
 export type TimecodeObjectRecord = { revision: number, definition: TimecodeDefinition, };
 export type TimecodeCollectionSnapshot = { show_revision: number, objects: Array<TimecodeObjectRecord>, };
-export type TimecodeAudio = { asset_id: string, asset_revision: number, end_fade_frames?: number | null, };
+export type TimecodeAudio = { asset_id: string, asset_revision: number,
+/**
+ * The name of the file this audio was imported from, for an operator to recognise it by.
+ */
+file_name?: string | null, end_fade_frames?: number | null, };
 export type TimecodeAudioOutputDevices = { devices: Array<string>, };
 export type TimecodeAudioImportResult = { asset_id: string, asset_revision: number, name: string, media_type: string, sample_rate: number, channels: number, sample_frames: number, };
 export type TimecodeAudioWaveform = { peaks: Array<number>, };

@@ -66,6 +66,7 @@ import {
 	MarkerColorButton,
 	markerColorOption,
 	parseTimelineFrame,
+	AudioLaneFileName,
 	TIMECODE_LANE_HEADER_WIDTH,
 	timelineScroller,
 	type OverviewResize,
@@ -141,8 +142,7 @@ function TimelineCanvas(props: {
 	startDrag(
 		event: ReactPointerEvent,
 		selection: TimecodeEditorSelection,
-		frame: number,
-		clipEdge?: "start" | "end",
+		frame: number, clipEdge?: "start" | "end",
 	): void;
 	startLaneDrag(event: ReactPointerEvent, laneId: string): void;
 	consumeLaneDragClick(laneId: string): boolean;
@@ -494,6 +494,7 @@ function EditorLane(
 					role="img"
 					aria-label="Linked audio waveform"
 				>
+					<AudioLaneFileName name={props.definition.audio?.file_name} />
 					{props.waveformPeaks?.length ? (
 						<Waveform peaks={props.waveformPeaks} />
 					) : (
@@ -963,7 +964,6 @@ export const TimecodeTimelineEditor = forwardRef<
 		fitPixelsPerFrame * zoom,
 	);
 	const width = Math.max(timelineViewportWidth, duration * pixelsPerFrame);
-	const totalTimelineWidth = width + TIMECODE_LANE_HEADER_WIDTH;
 	const items = useMemo(() => timelineItems(definition), [definition]);
 	const activeLaneId =
 		selection && "laneId" in selection ? selection.laneId : selectedLaneId;
@@ -1065,7 +1065,7 @@ export const TimecodeTimelineEditor = forwardRef<
 	useLayoutEffect(() => {
 		const viewport = scrollRef.current;
 		if (!viewport) return;
-		const maximumScroll = Math.max(0, totalTimelineWidth - viewportWidth);
+		const maximumScroll = Math.max(0, (width + TIMECODE_LANE_HEADER_WIDTH) - viewportWidth);
 		if (overviewResize) {
 			const next = Math.max(
 				0,
@@ -1079,7 +1079,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		if (viewport.scrollLeft > maximumScroll)
 			viewport.scrollLeft = maximumScroll;
 		setScrollLeft(viewport.scrollLeft);
-	}, [overviewResize, totalTimelineWidth, viewportWidth, width]);
+	}, [overviewResize, (width + TIMECODE_LANE_HEADER_WIDTH), viewportWidth, width]);
 	const resizeOverviewWindow = (startFraction: number, endFraction: number) => {
 		const requestedFraction = Math.max(0.0001, endFraction - startFraction);
 		const requestedPixelsPerFrame = Math.min(

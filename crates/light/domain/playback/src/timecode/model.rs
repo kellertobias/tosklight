@@ -124,6 +124,13 @@ impl TimecodeDefinition {
 pub struct TimecodeAudio {
     pub asset_id: Uuid,
     pub asset_revision: u64,
+    /// The name of the file this audio was imported from.
+    ///
+    /// The asset id identifies the managed copy; it says nothing an operator recognises. This is
+    /// what they chose, kept so the lane and the settings can name it. Absent in every show
+    /// imported before it was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_fade_frames: Option<i64>,
 }

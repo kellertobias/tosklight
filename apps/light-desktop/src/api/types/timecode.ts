@@ -15,6 +15,8 @@ export interface TimecodeDefinition {
 export interface TimecodeAudio {
 	asset_id: string;
 	asset_revision: number;
+	/** The name of the file this audio was imported from. */
+	file_name?: string | null;
 	end_fade_frames?: number | null;
 }
 

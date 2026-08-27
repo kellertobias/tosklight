@@ -142,3 +142,10 @@ export interface OverviewResize {
 	startFraction: number;
 	revision: number;
 }
+
+/** The lane is the audio, so it says which audio it is. */
+export function AudioLaneFileName({ name }: { name?: string | null }) {
+	if (!name) return null;
+	return <span className="timecode-audio-lane-file">{name}</span>;
+}
+

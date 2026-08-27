@@ -327,6 +327,7 @@ fn timecode_mutation(
                 definition.audio = Some(light_playback::TimecodeAudio {
                     asset_id: audio.asset_id,
                     asset_revision: audio.asset_revision,
+                    file_name: audio.file_name.clone(),
                     end_fade_frames: audio.end_fade_frames,
                 });
             }
@@ -435,6 +436,7 @@ fn domain_definition(
         audio: definition.audio.map(|audio| light_playback::TimecodeAudio {
             asset_id: audio.asset_id,
             asset_revision: audio.asset_revision,
+            file_name: audio.file_name,
             end_fade_frames: audio.end_fade_frames,
         }),
         markers: definition.markers.into_iter().map(domain_marker).collect(),
@@ -554,6 +556,7 @@ fn wire_definition(definition: light_playback::TimecodeDefinition) -> wire::Time
         audio: definition.audio.map(|audio| wire::TimecodeAudio {
             asset_id: audio.asset_id,
             asset_revision: audio.asset_revision,
+            file_name: audio.file_name,
             end_fade_frames: audio.end_fade_frames,
         }),
         markers: definition
