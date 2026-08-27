@@ -4,6 +4,7 @@
 //! master pass then tints, dims, and flips that finished composite onto the output.
 
 use bytemuck::{Pod, Zeroable};
+use media_domain::display_region::{DisplayRegion, RegionRotation};
 use media_domain::geometry::{Size, layer_transform};
 use media_domain::{LayerState, MaskSource, MasterState, OutputId, Timestamp, geometry};
 
@@ -213,10 +214,17 @@ struct MasterUniform {
     mask_transform: [f32; 4],
     shaper_edges: [f32; 4],
     shaper_edge_tangents: [f32; 4],
+    region: [f32; 4],
+    region_rotation: [f32; 4],
 }
 
 impl MasterUniform {
-    fn new(master: &MasterState, mask: Option<&SourceTexture>, preserve_alpha: bool) -> Self {
+    fn new(
+        master: &MasterState,
+        mask: Option<&SourceTexture>,
+        preserve_alpha: bool,
+        region: Option<&DisplayRegion>,
+    ) -> Self {
         let (horizontal, vertical) = geometry::flip_signs(master.flip_mirror);
         let (scale_x, scale_y) = master.effective_scale();
         Self {
@@ -256,6 +264,24 @@ impl MasterUniform {
                 master.shaper.top_rotation.to_radians().tan(),
                 master.shaper.bottom_rotation.to_radians().tan(),
             ],
+            region: region.map_or([0.0, 0.0, 1.0, 1.0], |region| {
+                let start_x = region.source.start.x.min(region.source.end.x);
+                let start_y = region.source.start.y.min(region.source.end.y);
+                [
+                    start_x,
+                    start_y,
+                    region.source.width(),
+                    region.source.height(),
+                ]
+            }),
+            // A quarter-turn is exact, so its cosine and sine are written rather than computed
+            // from an angle that would land a hair off zero.
+            region_rotation: match region.map(|region| region.rotation) {
+                Some(RegionRotation::Clockwise90) => [0.0, 1.0, 0.0, 0.0],
+                Some(RegionRotation::Half) => [-1.0, 0.0, 0.0, 0.0],
+                Some(RegionRotation::CounterClockwise90) => [0.0, -1.0, 0.0, 0.0],
+                Some(RegionRotation::None) | None => [1.0, 0.0, 0.0, 0.0],
+            },
         }
     }
 }
@@ -381,6 +407,7 @@ impl Compositor {
         target: &wgpu::TextureView,
         output_id: OutputId,
         now: Timestamp,
+        region: Option<&DisplayRegion>,
     ) {
         self.render_internal(
             layers,
@@ -391,6 +418,7 @@ impl Compositor {
             now,
             false,
             true,
+            region,
         );
     }
 
@@ -412,6 +440,7 @@ impl Compositor {
             now,
             true,
             false,
+            None,
         );
     }
 
@@ -425,6 +454,7 @@ impl Compositor {
         now: Timestamp,
         preserve_alpha: bool,
         advance_feedback: bool,
+        region: Option<&DisplayRegion>,
     ) {
         let device = &self.gpu.device;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -489,7 +519,14 @@ impl Compositor {
             }
         }
 
-        self.master_pass(&mut encoder, master, master_mask, target, preserve_alpha);
+        self.master_pass(
+            &mut encoder,
+            master,
+            master_mask,
+            target,
+            preserve_alpha,
+            region,
+        );
         self.gpu.queue.submit([encoder.finish()]);
     }
 
@@ -510,7 +547,8 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("media-preview"),
             });
-        self.master_pass(&mut encoder, master, master_mask, target, false);
+        // A readback is of the canvas itself, so no screen's slice applies to it.
+        self.master_pass(&mut encoder, master, master_mask, target, false, None);
         self.gpu.queue.submit([encoder.finish()]);
     }
 
@@ -521,12 +559,18 @@ impl Compositor {
         master_mask: Option<&SourceTexture>,
         target: &wgpu::TextureView,
         preserve_alpha: bool,
+        region: Option<&DisplayRegion>,
     ) {
         let device = &self.gpu.device;
         self.gpu.queue.write_buffer(
             &self.master_uniform,
             0,
-            bytemuck::bytes_of(&MasterUniform::new(master, master_mask, preserve_alpha)),
+            bytemuck::bytes_of(&MasterUniform::new(
+                master,
+                master_mask,
+                preserve_alpha,
+                region,
+            )),
         );
         let group = bind_group(
             device,
@@ -756,7 +800,8 @@ mod tests {
     #[test]
     fn the_uniforms_are_the_size_the_shaders_declare() {
         assert_eq!(std::mem::size_of::<LayerUniform>(), 1280);
-        assert_eq!(std::mem::size_of::<MasterUniform>(), 112);
+        // Two more vec4s than before display regions: the slice and its quarter-turn.
+        assert_eq!(std::mem::size_of::<MasterUniform>(), 144);
     }
 
     #[test]
@@ -766,7 +811,7 @@ mod tests {
             dimmer: 0.75,
             ..Default::default()
         };
-        let uniform = MasterUniform::new(&master, None, false);
+        let uniform = MasterUniform::new(&master, None, false, None);
         assert_eq!(&uniform.flip_mask[..2], &[-1.0, 1.0]);
         assert_eq!(uniform.tint[3], 0.75);
     }
@@ -795,7 +840,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let uniform = MasterUniform::new(&master, None, false);
+        let uniform = MasterUniform::new(&master, None, false, None);
         assert_eq!(uniform.transform, [0.25, -0.5, 1.5, 0.75]);
         assert_eq!(&uniform.mask_transform[..2], &[-0.5, 0.75]);
         assert_eq!(uniform.shaper_edges, [0.1, 0.2, 0.3, 0.4]);
@@ -807,9 +852,9 @@ mod tests {
 
     #[test]
     fn a_layer_preview_requests_alpha_preservation_from_the_master_shader() {
-        let uniform = MasterUniform::new(&MasterState::default(), None, true);
+        let uniform = MasterUniform::new(&MasterState::default(), None, true, None);
         assert_eq!(uniform.flip_mask[3], -1.0);
-        let program = MasterUniform::new(&MasterState::default(), None, false);
+        let program = MasterUniform::new(&MasterState::default(), None, false, None);
         assert_eq!(program.flip_mask[3], 0.0);
     }
 }

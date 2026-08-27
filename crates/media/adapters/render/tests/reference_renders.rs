@@ -83,6 +83,23 @@ impl Bench {
         self.render_masked_at(layers, master, master_mask, Timestamp::ZERO)
     }
 
+    fn render_region(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        region: &media_domain::display_region::DisplayRegion,
+    ) -> Image {
+        self.renderer.present(
+            layers,
+            &MasterState::default(),
+            None,
+            Timestamp::ZERO,
+            Some(region),
+        );
+        Image {
+            pixels: self.renderer.read_image(),
+        }
+    }
+
     fn render_masked_at(
         &mut self,
         layers: &[LayerDraw<'_>],
@@ -90,7 +107,8 @@ impl Bench {
         master_mask: Option<&SourceTexture>,
         now: Timestamp,
     ) -> Image {
-        self.renderer.present(layers, master, master_mask, now);
+        self.renderer
+            .present(layers, master, master_mask, now, None);
         Image {
             pixels: self.renderer.read_image(),
         }
@@ -1311,12 +1329,14 @@ fn recreating_an_output_changes_its_resolution_and_forgets_its_cadence() {
         &MasterState::default(),
         None,
         Timestamp::from_micros(0),
+        None,
     );
     renderer.present(
         &[],
         &MasterState::default(),
         None,
         Timestamp::from_micros(16_667),
+        None,
     );
     assert_eq!(renderer.cadence().frames, 2);
 
@@ -1333,6 +1353,7 @@ fn recreating_an_output_changes_its_resolution_and_forgets_its_cadence() {
         &MasterState::default(),
         None,
         Timestamp::from_micros(0),
+        None,
     );
     assert_eq!(renderer.read_image().len(), 32 * 16 * 4);
 }
@@ -1363,12 +1384,14 @@ fn two_outputs_on_one_device_render_independently() {
         &MasterState::default(),
         None,
         Timestamp::from_micros(0),
+        None,
     );
     second.present(
         &[],
         &MasterState::default(),
         None,
         Timestamp::from_micros(0),
+        None,
     );
 
     assert_ne!(first.id(), second.id());
@@ -1798,4 +1821,71 @@ fn the_master_mask_position_moves_only_the_final_composite_mask() {
         BLACK,
         "the composed source stayed in place"
     );
+}
+
+/// A source whose left half is red and right half is green, so a crop and a turn are both legible
+/// from a handful of pixels.
+fn halves(gpu: &Gpu) -> SourceTexture {
+    let mut pixels = Vec::with_capacity((OUTPUT.width * OUTPUT.height * 4) as usize);
+    for _ in 0..OUTPUT.height {
+        for x in 0..OUTPUT.width {
+            pixels.extend_from_slice(if x < OUTPUT.width / 2 { &RED } else { &GREEN });
+        }
+    }
+    SourceTexture::from_rgba8(gpu, OUTPUT, &pixels).expect("the halves source uploads")
+}
+
+#[test]
+fn a_display_region_shows_only_its_slice_of_the_canvas() {
+    use media_domain::display_region::{CanvasRect, DisplayRegion};
+    use media_domain::pixel_map::CanvasPoint;
+
+    let mut bench = Bench::new();
+    let source = halves(&bench.gpu);
+    let layer = ready(LayerState::default());
+    let draws = [LayerDraw {
+        state: &layer,
+        source: &source,
+        mask: None,
+    }];
+
+    // The whole canvas: red on the left, green on the right.
+    let whole = bench.render_region(&draws, &DisplayRegion::whole("all", "All"));
+    assert_eq!(whole.at(8, 32), RED);
+    assert_eq!(whole.at(56, 32), GREEN);
+
+    // The right half alone fills the screen, so every column is green.
+    let right = DisplayRegion {
+        source: CanvasRect::new(CanvasPoint::new(0.5, 0.0), CanvasPoint::new(1.0, 1.0)),
+        ..DisplayRegion::whole("right", "Right")
+    };
+    let cropped = bench.render_region(&draws, &right);
+    assert_eq!(cropped.at(8, 32), GREEN);
+    assert_eq!(cropped.at(56, 32), GREEN);
+}
+
+#[test]
+fn a_regions_quarter_turn_stands_the_slice_on_its_side() {
+    use media_domain::display_region::{DisplayRegion, RegionRotation};
+
+    let mut bench = Bench::new();
+    let source = halves(&bench.gpu);
+    let layer = ready(LayerState::default());
+    let draws = [LayerDraw {
+        state: &layer,
+        source: &source,
+        mask: None,
+    }];
+
+    let turned = DisplayRegion {
+        rotation: RegionRotation::Clockwise90,
+        ..DisplayRegion::whole("wall", "Wall")
+    };
+    let image = bench.render_region(&draws, &turned);
+    // The split ran left to right; turned clockwise the canvas's left edge is at the top, so red
+    // is above green and the split now runs top to bottom.
+    assert_eq!(image.at(32, 8), RED);
+    assert_eq!(image.at(32, 56), GREEN);
+    // And no longer left to right: both ends of the middle row agree.
+    assert_eq!(image.at(8, 32), image.at(56, 32));
 }

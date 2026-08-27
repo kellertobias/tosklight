@@ -581,6 +581,7 @@ mod tests {
                 &media_domain::MasterState::default(),
                 None,
                 Timestamp::from_millis(1_250),
+                None,
             );
             renderer.read_image()
         };

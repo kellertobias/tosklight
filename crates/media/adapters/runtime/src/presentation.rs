@@ -504,10 +504,9 @@ impl RenderWorkerState {
                 continue;
             };
             let master = output_state.master;
-
-            let status_overlay = configuration
-                .output(output_state.id)
-                .is_some_and(|output| output.status_overlay);
+            let region = shown_region(&configuration, output_state.id);
+            let mapped = configuration.output(output_state.id);
+            let status_overlay = mapped.is_some_and(|output| output.status_overlay);
             if crate::standby::visible(
                 status_overlay,
                 output_state.ownership.dmx.is_some(),
@@ -519,13 +518,8 @@ impl RenderWorkerState {
                     source: standby,
                     mask: None,
                 }];
-                present(
-                    &mut hosted.output,
-                    &draws,
-                    &MasterState::default(),
-                    None,
-                    now,
-                );
+                let idle = MasterState::default();
+                present(&mut hosted.output, &draws, &idle, None, now, region);
                 capture_previews(
                     &mut self.sinks,
                     &configuration,
@@ -559,7 +553,7 @@ impl RenderWorkerState {
                         source: texture,
                         mask: None,
                     }];
-                    present(&mut hosted.output, &draws, &master, None, now);
+                    present(&mut hosted.output, &draws, &master, None, now, region);
                     capture_previews(
                         &mut self.sinks,
                         &configuration,
@@ -608,10 +602,8 @@ impl RenderWorkerState {
             let effective_layers = hosted
                 .beat_move
                 .apply(&effective_layers, seconds, heard.beat);
-            let effective_layers =
-                hosted
-                    .beat_scale_turn
-                    .apply(&effective_layers, seconds, heard.beat);
+            let turn = &mut hosted.beat_scale_turn;
+            let effective_layers = turn.apply(&effective_layers, seconds, heard.beat);
             let effective_layers = hosted.beat_scan.apply(
                 &effective_layers,
                 seconds,
@@ -646,7 +638,14 @@ impl RenderWorkerState {
             let master_mask = prepared
                 .master_mask
                 .and_then(|slot| hosted.pipeline.texture(slot));
-            present(&mut hosted.output, &draws, &master, master_mask, now);
+            present(
+                &mut hosted.output,
+                &draws,
+                &master,
+                master_mask,
+                now,
+                region,
+            );
             capture_previews(
                 &mut self.sinks,
                 &configuration,
@@ -785,14 +784,33 @@ fn presentation_worker_wait(
 }
 
 /// Presents one frame, keeping a lost surface from becoming a lost output.
+/// The slice of the canvas this output's screen shows.
+///
+/// The first enabled region, because one window shows one slice; a second region on the same output
+/// describes a second screen, which is a window of its own rather than a second view in this one.
+fn shown_region(
+    configuration: &MediaConfiguration,
+    id: media_domain::OutputId,
+) -> Option<&media_domain::display_region::DisplayRegion> {
+    configuration
+        .outputs
+        .iter()
+        .find(|candidate| candidate.id == id)?
+        .pixel_map
+        .regions
+        .iter()
+        .find(|region| region.enabled)
+}
+
 fn present(
     output: &mut WindowedOutput,
     draws: &[LayerDraw<'_>],
     master: &MasterState,
     master_mask: Option<&SourceTexture>,
     now: Timestamp,
+    region: Option<&media_domain::display_region::DisplayRegion>,
 ) {
-    match output.present(draws, master, master_mask, now) {
+    match output.present(draws, master, master_mask, now, region) {
         Ok(()) | Err(SurfaceLost::Recovered | SurfaceLost::Timeout) => {}
         Err(error) => {
             tracing::error!(id = %output.id(), %error, "output stopped presenting");

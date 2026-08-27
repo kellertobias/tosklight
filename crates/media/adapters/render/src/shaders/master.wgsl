@@ -15,6 +15,11 @@ struct Master {
     shaper_edges: vec4<f32>,
     // Tangents of the corresponding edge rotations.
     shaper_edge_tangents: vec4<f32>,
+    // The slice of the canvas this screen shows. xy: its start, zw: its extent, both as canvas
+    // fractions. The whole canvas is (0, 0, 1, 1).
+    region: vec4<f32>,
+    // xy: cosine/sine of the quarter-turn applied to this screen alone.
+    region_rotation: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> master: Master;
@@ -50,10 +55,18 @@ fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
     // Flipping the sampled coordinate rather than the geometry keeps the pass a single full-screen
     // triangle pair whichever way the operator has turned the output.
     let uv = vec2<f32>(corner.x * 0.5 + 0.5, 0.5 - corner.y * 0.5);
-    out.uv = vec2<f32>(
+    let flipped = vec2<f32>(
         select(uv.x, 1.0 - uv.x, master.flip_mask.x < 0.0),
         select(uv.y, 1.0 - uv.y, master.flip_mask.y < 0.0),
     );
+    // The screen shows one slice of the canvas, turned to suit how it is hung. Turning the sampled
+    // coordinate rather than the canvas leaves every other screen reading the picture as authored.
+    let centred = flipped - vec2<f32>(0.5);
+    let turned = vec2<f32>(
+        centred.x * master.region_rotation.x + centred.y * master.region_rotation.y,
+        -centred.x * master.region_rotation.y + centred.y * master.region_rotation.x,
+    ) + vec2<f32>(0.5);
+    out.uv = master.region.xy + turned * master.region.zw;
     return out;
 }
 

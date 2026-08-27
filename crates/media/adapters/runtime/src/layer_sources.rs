@@ -218,6 +218,7 @@ mod tests {
             &MasterState::default(),
             None,
             Timestamp::ZERO,
+            None,
         );
         let image = renderer.read_image();
         let pixel = |x: usize, y: usize| &image[(y * output_size.width as usize + x) * 4..][..4];

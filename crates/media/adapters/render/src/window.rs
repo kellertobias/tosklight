@@ -180,6 +180,7 @@ impl WindowedOutput {
         master: &MasterState,
         master_mask: Option<&crate::SourceTexture>,
         now: Timestamp,
+        region: Option<&media_domain::display_region::DisplayRegion>,
     ) -> Result<(), SurfaceLost> {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -202,7 +203,7 @@ impl WindowedOutput {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         self.compositor
-            .render(layers, master, master_mask, &view, self.id, now);
+            .render(layers, master, master_mask, &view, self.id, now, region);
         // macOS does not use winit's pre-present notification, and calling it from the render
         // worker would still enqueue a no-op on Cocoa's main queue for every frame.
         #[cfg(not(target_os = "macos"))]

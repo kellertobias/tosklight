@@ -85,6 +85,7 @@ impl OutputRenderer {
         master: &MasterState,
         master_mask: Option<&SourceTexture>,
         now: media_domain::Timestamp,
+        region: Option<&media_domain::display_region::DisplayRegion>,
     ) {
         self.compositor.render(
             layers,
@@ -93,6 +94,7 @@ impl OutputRenderer {
             self.target.view(),
             self.id,
             now,
+            region,
         );
         self.clock.record_present(now);
     }

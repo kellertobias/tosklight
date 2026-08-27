@@ -41,6 +41,17 @@ struct Hosted {
 ///
 /// Returns immediately when there are none, and reports rather than fails when this machine has no
 /// GPU at all: an output that cannot render must not stop the ones that can, or the API.
+/// The slice of the canvas this output's surface shows.
+fn shown_region(
+    configuration: &OutputConfiguration,
+) -> Option<&media_domain::display_region::DisplayRegion> {
+    configuration
+        .pixel_map
+        .regions
+        .iter()
+        .find(|region| region.enabled)
+}
+
 pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdown) {
     if !any(configuration) {
         return;
@@ -113,7 +124,10 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
             let mask = prepared
                 .master_mask
                 .and_then(|slot| output.pipeline.texture(slot));
-            output.renderer.present(&draws, &state.master, mask, now);
+            let region = shown_region(&output.configuration);
+            output
+                .renderer
+                .present(&draws, &state.master, mask, now, region);
             // Pixel mapping is output rather than a preview, so it is decided before the
             // preview cadence and does not depend on anyone watching.
             if pixels.wants(&output.configuration, now.as_millis()) {

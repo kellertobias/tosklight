@@ -2,7 +2,7 @@
 
 use super::effect::EffectSlotView;
 use media_application::configuration::{
-    DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
+    DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, SoundOutput,
 };
 use media_domain::{LayerPersonality, PresentationMode};
 use media_domain::{LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputState};
