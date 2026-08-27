@@ -194,8 +194,11 @@ impl NativeTimecodeAudioOutput {
             .map_err(|error| format!("Timecode audio startup worker could not start: {error}"))?;
         receive_startup(
             &startup,
-            Duration::from_secs(3),
-            "Timecode audio initialization did not finish within 3 seconds",
+            AUDIO_STARTUP_TIMEOUT,
+            &format!(
+                "Timecode audio initialization did not finish within {} seconds",
+                AUDIO_STARTUP_TIMEOUT.as_secs()
+            ),
             "Timecode audio startup worker stopped unexpectedly",
         )?
     }
@@ -225,8 +228,11 @@ impl NativeTimecodeAudioOutput {
             .map_err(|error| format!("Timecode audio output worker could not start: {error}"))?;
         receive_startup(
             &startup,
-            Duration::from_secs(3),
-            "Timecode audio output worker did not start within 3 seconds",
+            AUDIO_STARTUP_TIMEOUT,
+            &format!(
+                "Timecode audio output worker did not start within {} seconds",
+                AUDIO_STARTUP_TIMEOUT.as_secs()
+            ),
             "Timecode audio output worker stopped during startup",
         )??;
         Ok(Self {
@@ -295,6 +301,15 @@ impl NativeInternalAudioOutput {
         self.worker.request(command)
     }
 }
+
+/// How long the desk waits for a native audio device to open before giving up on it.
+///
+/// This bounds startup so a wedged device cannot hang the desk, but it has to be long enough for
+/// a device that is merely slow. CoreAudio routinely takes several seconds to hand over a device
+/// on a cold start, and at three seconds this desk timed out on every launch — which left no
+/// `default` output registered, so every Internal Audio Player reported an unmapped output and
+/// Timecode audio stayed silent.
+const AUDIO_STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
 
 fn receive_startup<T>(
     receiver: &std::sync::mpsc::Receiver<T>,

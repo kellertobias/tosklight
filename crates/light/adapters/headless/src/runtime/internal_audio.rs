@@ -503,6 +503,12 @@ impl InternalAudioRuntime {
         state: PlayerState,
         previous: Option<PlayerState>,
     ) -> Result<(), String> {
+        // A library is addressed from one, so folder zero names no folder. A player nobody has
+        // pointed at anything yet is idle, not broken, and saying otherwise makes a freshly
+        // patched fixture look like a fault an operator has to go and find.
+        if state.source.0 == 0 || state.source.1 == 0 {
+            return Ok(());
+        }
         let library_name = fixture
             .internal_bindings
             .library
@@ -867,4 +873,39 @@ mod tests {
         assert!(error.contains("outside the selected library root"));
         fs::remove_file(outside).unwrap();
     }
+}
+
+/// Gives a desk with no audio library of its own one beside its data, so a patched Internal Audio
+/// Player is usable rather than merely present.
+///
+/// Without a `default` binding an Audio Player resolves nothing and reports its library as unmapped
+/// — a fixture an operator can patch, address and program, which can never make a sound until they
+/// find the setting. Seeding the binding is not the same as choosing content for them: the folder
+/// starts empty, and the player then honestly reports that it has no files rather than that it has
+/// no library. An operator who has already pointed `default` somewhere keeps their own answer.
+pub(super) fn ensure_default_library_root(
+    configuration: &mut super::configuration::DeskConfiguration,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    if configuration
+        .internal_audio_library_roots
+        .contains_key("default")
+    {
+        return Ok(());
+    }
+    let root = data_dir.join("audio");
+    std::fs::create_dir_all(&root)?;
+    let Some(root) = root.to_str() else {
+        // A path the configuration cannot carry is not worth failing startup over; the player
+        // reports an unmapped library exactly as it did before.
+        return Ok(());
+    };
+    tracing::info!(
+        path = root,
+        "seeded the default Internal Audio library root"
+    );
+    configuration
+        .internal_audio_library_roots
+        .insert("default".to_owned(), root.to_owned());
+    Ok(())
 }

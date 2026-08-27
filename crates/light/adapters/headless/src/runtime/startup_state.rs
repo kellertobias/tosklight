@@ -157,7 +157,8 @@ impl PersistentState {
             &data_dir,
             fixture_package_dir.as_deref(),
         )?;
-        let configuration = load_configuration(&desk, osc_bind_override, output_bind_override)?;
+        let mut configuration = load_configuration(&desk, osc_bind_override, output_bind_override)?;
+        super::internal_audio::ensure_default_library_root(&mut configuration, &data_dir)?;
         let active_show = match &show_file {
             Some(path) => Some(adopt_show_file(&desk, path)?),
             None => load_active_show(&desk, default_show)?,
