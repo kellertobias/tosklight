@@ -660,6 +660,70 @@ mod tests {
         copy
     }
 
+    /// A shaft stops where it meets something opaque, at every tier.
+    ///
+    /// With haze the beam volume is the picture, and it is drawn by a pass that writes no depth of
+    /// its own. A drape hung across the shaft must take the part below it away, not just shade the
+    /// floor underneath.
+    #[test]
+    fn a_shaft_stops_where_it_meets_a_drape_at_every_quality_tier() {
+        let overlay = viz_render::Overlay::default();
+        let mut renderer = viz_render::Renderer::headless(320, 180)
+            .expect("a headless renderer; this machine has no GPU or software adapter");
+        let evidence = std::env::var_os("LIGHT_TMP_DIR").map(PathBuf::from);
+        let (open, open_values, _) = two_light_surface_scene();
+        let mut open_lit = darkened(&open_values, 0);
+        open_lit.atmosphere.density = 0.6;
+        let open_dark = all_out(&open_lit);
+
+        let (scene, mut values, mut view) = occluder_scene(SceneryKind::Curtain);
+        values.atmosphere.density = 0.6;
+        let dark = all_out(&values);
+
+        for quality in RenderQuality::ALL {
+            view.quality = quality;
+            let shaft = picture_brightness(
+                &renderer
+                    .capture(&open, &open_lit, &view, &overlay, 1.0)
+                    .expect("the hazy shaft with nothing across it"),
+            ) - picture_brightness(
+                &renderer
+                    .capture(&open, &open_dark, &view, &overlay, 0.0)
+                    .expect("the same haze with the light out"),
+            );
+            let cut_image = renderer
+                .capture(&scene, &values, &view, &overlay, 1.0)
+                .expect("the hazy shaft with a drape across it");
+            if let Some(directory) = evidence.as_deref() {
+                std::fs::create_dir_all(directory).expect("capture evidence directory");
+                write_png(
+                    &directory.join(format!("tl-401-shaft-{}.png", quality.label())),
+                    cut_image.width,
+                    cut_image.height,
+                    &cut_image.rgba,
+                )
+                .expect("shaft evidence");
+            }
+            let cut = picture_brightness(&cut_image)
+                - picture_brightness(
+                    &renderer
+                        .capture(&scene, &dark, &view, &overlay, 0.0)
+                        .expect("the drape and haze with the light out"),
+                );
+            assert!(
+                shaft > 2.0,
+                "{} drew no shaft with nothing across it, so this proves nothing: {shaft:.3}",
+                quality.label()
+            );
+            // The length above the drape is still legitimately lit; the length below it is not.
+            assert!(
+                cut < shaft * 0.75,
+                "{} kept the shaft below the drape: open +{shaft:.3}, cut +{cut:.3}",
+                quality.label()
+            );
+        }
+    }
+
     /// The generated demo show, built exactly as a capture builds it.
     fn demo_scene_and_values(name: &str) -> (Scene, SceneValues) {
         let directory = std::env::var_os("LIGHT_TMP_DIR").map_or_else(
