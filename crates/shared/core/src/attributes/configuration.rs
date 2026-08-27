@@ -1045,7 +1045,11 @@ pub(super) fn custom_descriptor(key: &AttributeKey) -> ResolvedAttributeDescript
         normalized_bounds: None,
         domain_bounds: None,
         cyclic: false,
-        recordable: false,
+        // An attribute the desk has never heard of is still a channel on a real fixture, and an
+        // operator who can set it expects to be able to store what they set. Refusing to record
+        // it made every vendor-specific control silently absent from the cue that looked like it
+        // held one. A channel that must not be stored says so by being registered as a Control.
+        recordable: true,
         built_in: false,
     }
 }

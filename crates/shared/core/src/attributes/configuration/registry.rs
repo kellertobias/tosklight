@@ -387,4 +387,224 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
     indexed("media.effect.2", "Media Effect 2", AttributeClass::Media),
     indexed("media.effect.3", "Media Effect 3", AttributeClass::Media),
     indexed("media.effect.4", "Media Effect 4", AttributeClass::Media),
+    // Fixture-specific control channels.
+    //
+    // Every shipped profile addresses these, and until they were registered each one fell back to
+    // the custom descriptor: family Custom, so it sat in the Custom encoder group instead of
+    // beside the attributes it belongs with. Registering them puts each one in its own family and
+    // gives it an operator label.
+    //
+    // They are recordable, because they are things an operator programs. The three exceptions are
+    // the channels whose whole purpose is striking or dousing a lamp and forcing a reset: a cue
+    // that fired one of those on playback would be a hazard, so they stay Control and stay out of
+    // cues.
+    control("fixture.reset", "Reset", AttributeClass::Control),
+    control(
+        "fixture.lamp_control",
+        "Lamp Control",
+        AttributeClass::Control,
+    ),
+    control(
+        "fixture.power_special_functions",
+        "Power / Special Functions",
+        AttributeClass::Control,
+    ),
+    indexed(
+        "fixture.control",
+        "Fixture Control",
+        AttributeClass::Control,
+    ),
+    indexed(
+        "fixture.special_control",
+        "Special Control",
+        AttributeClass::Control,
+    ),
+    indexed("fixture.function", "Function", AttributeClass::Control),
+    indexed(
+        "fixture.plus_7_control",
+        "Plus 7 Control",
+        AttributeClass::Control,
+    ),
+    indexed("fixture.programs", "Programs", AttributeClass::Control),
+    indexed(
+        "fixture.fan_control",
+        "Fan Control",
+        AttributeClass::Control,
+    ),
+    continuous(
+        "fixture.auto_speed",
+        "Auto Program Speed",
+        AttributeClass::Control,
+        "percent",
+    ),
+    indexed("fixture.unused_4", "Unused 4", AttributeClass::Control),
+    indexed("fixture.unused_7", "Unused 7", AttributeClass::Control),
+    indexed("fixture.unused_8", "Unused 8", AttributeClass::Control),
+    continuous(
+        "fixture.pan_tilt_speed",
+        "Pan / Tilt Speed",
+        AttributeClass::Position,
+        "percent",
+    ),
+    continuous(
+        "fixture.pan_tilt_speed_time",
+        "Pan / Tilt Speed or Time",
+        AttributeClass::Position,
+        "percent",
+    ),
+    continuous(
+        "fixture.pan_tilt_time",
+        "Pan / Tilt Time",
+        AttributeClass::Position,
+        "percent",
+    ),
+    continuous(
+        "fixture.mspeed",
+        "M-Speed",
+        AttributeClass::Position,
+        "percent",
+    ),
+    indexed(
+        "fixture.blackout_move",
+        "Blackout While Moving",
+        AttributeClass::Position,
+    ),
+    indexed(
+        "fixture.colour_macros",
+        "Colour Macros",
+        AttributeClass::Color,
+    ),
+    indexed(
+        "fixture.colour_mix_control",
+        "Colour Mix Control",
+        AttributeClass::Color,
+    ),
+    continuous("fixture.tint", "Tint", AttributeClass::Color, "percent"),
+    indexed("fixture.blade_1", "Blade 1", AttributeClass::Shapers),
+    indexed("fixture.blade_2", "Blade 2", AttributeClass::Shapers),
+    indexed("fixture.blade_3", "Blade 3", AttributeClass::Shapers),
+    indexed("fixture.blade_4", "Blade 4", AttributeClass::Shapers),
+    indexed(
+        "fixture.framing_macro",
+        "Framing Macro",
+        AttributeClass::Shapers,
+    ),
+    continuous(
+        "fixture.framing_macro_speed",
+        "Framing Macro Speed",
+        AttributeClass::Shapers,
+        "percent",
+    ),
+    indexed(
+        "fixture.barndoor_macros",
+        "Barndoor Macros",
+        AttributeClass::Shapers,
+    ),
+    continuous(
+        "fixture.barndoor_macro_speed",
+        "Barndoor Macro Speed",
+        AttributeClass::Shapers,
+        "percent",
+    ),
+    cyclic_continuous(
+        "fixture.barndoor_module_rotation",
+        "Barndoor Module Rotation",
+        AttributeClass::Shapers,
+        "deg",
+    ),
+    indexed(
+        "fixture.effect_animations",
+        "Effect Animations",
+        AttributeClass::Beam,
+    ),
+    indexed(
+        "fixture.effect_wheel_position",
+        "Effect Wheel Position",
+        AttributeClass::Beam,
+    ),
+    continuous(
+        "fixture.effect_wheel_rotation",
+        "Effect Wheel Rotation",
+        AttributeClass::Beam,
+        "percent",
+    ),
+    indexed(
+        "fixture.effects_movement",
+        "Effects Movement",
+        AttributeClass::Beam,
+    ),
+    continuous(
+        "fixture.effects_speed",
+        "Effects Speed",
+        AttributeClass::Beam,
+        "percent",
+    ),
+    continuous(
+        "fixture.fx_crossfade",
+        "Effect Crossfade",
+        AttributeClass::Beam,
+        "percent",
+    ),
+    indexed(
+        "fixture.beam_fx_select",
+        "Beam Effect",
+        AttributeClass::Beam,
+    ),
+    indexed(
+        "fixture.beam_fx_movement",
+        "Beam Effect Movement",
+        AttributeClass::Beam,
+    ),
+    continuous(
+        "fixture.beam_rate",
+        "Beam Rate",
+        AttributeClass::Beam,
+        "percent",
+    ),
+    continuous(
+        "fixture.beam_duration",
+        "Beam Duration",
+        AttributeClass::Beam,
+        "percent",
+    ),
+    continuous(
+        "fixture.beam_time",
+        "Beam Time",
+        AttributeClass::Beam,
+        "percent",
+    ),
+    indexed(
+        "fixture.plate_fx_select",
+        "Plate Effect",
+        AttributeClass::Beam,
+    ),
+    indexed(
+        "fixture.plate_fx_movement",
+        "Plate Effect Movement",
+        AttributeClass::Beam,
+    ),
+    continuous(
+        "fixture.plate_flash_rate",
+        "Plate Flash Rate",
+        AttributeClass::Beam,
+        "percent",
+    ),
+    continuous(
+        "fixture.plate_flash_duration",
+        "Plate Flash Duration",
+        AttributeClass::Beam,
+        "percent",
+    ),
+    continuous(
+        "fixture.plate_pixel_master",
+        "Plate Pixel Master",
+        AttributeClass::Intensity,
+        "percent",
+    ),
+    continuous(
+        "fixture.plate_background_master",
+        "Plate Background Master",
+        AttributeClass::Intensity,
+        "percent",
+    ),
 ];

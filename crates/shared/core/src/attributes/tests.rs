@@ -349,8 +349,12 @@ mod attribute_registry_tests {
         assert_eq!(descriptor.label, &*key.0);
         assert_eq!(descriptor.family, AttributeClass::Custom);
         assert!(!descriptor.built_in);
-        assert!(!descriptor.recordable);
+        // An unknown channel is still a channel an operator can set, so what they set can be
+        // stored. What the desk still does not know is its range, and Dynamics needs one, so a
+        // name it has never heard of remains ineligible for an effect lane.
+        assert!(descriptor.recordable);
         assert_eq!(descriptor.normalized_bounds, None);
+        assert!(!descriptor.supports_dynamics());
     }
 
     #[test]
@@ -1628,7 +1632,7 @@ mod attribute_registry_tests {
         add_custom(
             &mut configuration,
             custom_descriptor("vendor.reset", AttributeValueType::Control, false),
-            EncoderPlacement::new(EncoderGroup::Control, 2, 2),
+            EncoderPlacement::new(EncoderGroup::Control, 4, 6),
         );
         configuration.validate().unwrap();
         assert!(
