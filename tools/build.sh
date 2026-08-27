@@ -464,6 +464,7 @@ build_debug_app_bundle() {
 archive_release_locked() {
   local install="${1:-false}"
   local version app_path hardware_app_path artifact_dir app_zip hardware_app_zip universal_server
+  local universal_renderer
 
   require cargo
   require npm
@@ -501,6 +502,17 @@ archive_release_locked() {
     "$TARGET_DIR/x86_64-apple-darwin/release/light-headless" \
     -output "$universal_server"
 
+  # The desk looks for the renderer beside its own executable and starts nothing if it is absent,
+  # so a bundle without it opens with "This screen cannot draw a Stage" on every Stage pane.
+  echo "Building self-contained macOS universal visualizer..."
+  cargo build --manifest-path "$ROOT/Cargo.toml" --release --target aarch64-apple-darwin -p viz-renderer
+  cargo build --manifest-path "$ROOT/Cargo.toml" --release --target x86_64-apple-darwin -p viz-renderer
+  universal_renderer="$TARGET_DIR/release/viz-renderer"
+  lipo -create \
+    "$TARGET_DIR/aarch64-apple-darwin/release/viz-renderer" \
+    "$TARGET_DIR/x86_64-apple-darwin/release/viz-renderer" \
+    -output "$universal_renderer"
+
   echo "Building self-contained Windows Light headless..."
   cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --target x86_64-pc-windows-gnu -p light-headless --bin light-headless
   echo "Building self-contained Linux AMD64 Light headless..."
@@ -516,6 +528,7 @@ archive_release_locked() {
   app_path="$TARGET_DIR/release/bundle/macos/ToskLight.app"
   hardware_app_path="$TARGET_DIR/release/bundle/macos/ToskLight Hardware Controls.app"
   cp "$universal_server" "$app_path/Contents/MacOS/light-headless"
+  cp "$universal_renderer" "$app_path/Contents/MacOS/viz-renderer"
   mkdir -p "$artifact_dir"
   archive_binary "$universal_server" "light-headless" "$artifact_dir/light-headless-$version-macos-universal.zip"
   archive_binary "$TARGET_DIR/x86_64-pc-windows-gnu/release/light-headless.exe" "light-headless.exe" "$artifact_dir/light-headless-$version-windows-amd64.zip"

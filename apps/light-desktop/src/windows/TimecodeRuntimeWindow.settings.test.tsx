@@ -38,44 +38,52 @@ describe("Timecode Settings", () => {
 			/>,
 		);
 
+		const tab = (name: string) => screen.getByRole("tab", { name });
+		// Generic opens first and carries what the Timecode is.
 		expect(screen.queryByLabelText("Number")).toBeNull();
 		expect(screen.queryByLabelText("Frames")).toBeNull();
 		expect(screen.getByLabelText("Duration")).toHaveValue("00:00:10.00");
-		expect(screen.getByLabelText("Transport offset")).toHaveValue(
-			"00:00:00.00",
-		);
-		expect(screen.queryByRole("textbox", { name: "Marker CSV" })).toBeNull();
-		expect(screen.getByLabelText("Lock markers")).not.toBeChecked();
-		fireEvent.click(screen.getByLabelText("Lock markers"));
-		expect(setMarkersLocked).toHaveBeenCalledWith(true);
-
 		fireEvent.change(screen.getByLabelText("Duration"), {
 			target: { value: "00:00:20.00" },
 		});
 		expect(setDraft).toHaveBeenCalledWith({ ...draft, duration_frame: 880 });
-
-		expect(pickerProps.get("Choose audio file")?.allowedExtensions).toEqual([
+		expect(pickerProps.get("Select File")?.allowedExtensions).toEqual([
 			"wav",
 			"mp3",
 		]);
-		expect(pickerProps.get("Choose marker CSV")?.allowedExtensions).toEqual([
-			"csv",
-		]);
 		const audio = new File(["audio"], "track.mp3");
-		const csv = new File(["position,name\n00:00:01:00,Intro"], "markers.csv");
 		await act(async () => {
 			await (
-				pickerProps.get("Choose audio file")?.onFiles as (
+				pickerProps.get("Select File")?.onFiles as (
 					files: File[],
 				) => Promise<void>
 			)([audio]);
+		});
+		expect(importAudio).toHaveBeenCalledWith(audio);
+
+		// Sync carries how it follows an external clock.
+		fireEvent.click(tab("Sync"));
+		expect(screen.getByLabelText("Transport offset")).toHaveValue(
+			"00:00:00.00",
+		);
+
+		// Markers carries what its markers do.
+		fireEvent.click(tab("Markers"));
+		expect(screen.queryByRole("textbox", { name: "Marker CSV" })).toBeNull();
+		expect(screen.getByLabelText("Lock markers")).not.toBeChecked();
+		fireEvent.click(screen.getByLabelText("Lock markers"));
+		expect(setMarkersLocked).toHaveBeenCalledWith(true);
+		expect(pickerProps.get("Choose marker CSV")?.allowedExtensions).toEqual([
+			"csv",
+		]);
+		const csv = new File(["position,name\n00:00:01:00,Intro"], "markers.csv");
+		await act(async () => {
 			await (
 				pickerProps.get("Choose marker CSV")?.onFiles as (
 					files: File[],
 				) => Promise<void>
 			)([csv]);
 		});
-		expect(importAudio).toHaveBeenCalledWith(audio);
 		expect(importCsv).toHaveBeenCalledWith(csv);
 	});
 

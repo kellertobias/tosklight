@@ -30,6 +30,19 @@
 	grid-template-columns: minmax(9rem, 1fr) minmax(12rem, 2fr);
 	gap: 0.6rem;
 	padding: 0.7rem;
+	align-content: start;
+}
+.timecode-settings-tabs {
+	display: flex;
+	grid-column: 1 / -1;
+	gap: 0.3rem;
+	border-bottom: 1px solid #2a2c38;
+	padding-bottom: 0.5rem;
+}
+/* The name and the audio file are each one statement about the Timecode, so they take the pane's
+   whole width rather than sharing a row with something unrelated. */
+.timecode-settings-fields > label:first-of-type {
+	grid-column: 1 / -1;
 }
 .timecode-settings-fields label,
 .timecode-audio-import {
@@ -37,6 +50,24 @@
 	gap: 0.2rem;
 	color: #a8abb8;
 	font-size: 0.72rem;
+}
+/* The chosen file reads on the left and the button that changes it sits on the right, so the
+   answer and the way to change it are on one line. */
+.timecode-audio-import {
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	column-gap: 0.6rem;
+}
+.timecode-audio-import > span,
+.timecode-audio-import > small {
+	grid-column: 1 / -1;
+}
+.timecode-audio-file-name {
+	min-width: 0;
+	overflow: hidden;
+	color: #fff;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .timecode-duration-fields {
 	display: grid;

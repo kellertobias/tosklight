@@ -226,8 +226,24 @@ describe("TimecodeEditor title and settings", () => {
 		const settings = screen.getByRole("dialog", {
 			name: "Timecode Settings",
 		});
-		for (const label of ["Name", "Duration", "Transport offset", "Auto-start"])
+		// The settings are grouped into three tabs, so each field is on the one it belongs to.
+		const tab = (name: string) =>
+			within(settings).getByRole("tab", { name });
+		expect(tab("Generic")).toHaveAttribute("aria-selected", "true");
+		for (const label of ["Name", "Duration"])
 			expect(within(settings).getByLabelText(label)).toBeTruthy();
+		expect(
+			within(settings).getByRole("button", { name: "Select File" }),
+		).toBeTruthy();
+		expect(within(settings).queryByLabelText("Transport offset")).toBeNull();
+		expect(within(settings).queryByLabelText("Lock markers")).toBeNull();
+
+		fireEvent.click(tab("Sync"));
+		expect(within(settings).getByLabelText("Transport offset")).toBeTruthy();
+		expect(within(settings).getByLabelText("Arm")).toBeTruthy();
+		expect(within(settings).queryByLabelText("Name")).toBeNull();
+
+		fireEvent.click(tab("Markers"));
 		const markerLock = within(settings).getByLabelText("Lock markers");
 		expect(markerLock).not.toBeChecked();
 		fireEvent.click(markerLock);
@@ -238,11 +254,10 @@ describe("TimecodeEditor title and settings", () => {
 			within(settings).queryByRole("textbox", { name: "Marker CSV" }),
 		).toBeNull();
 		expect(
-			within(settings).getByRole("button", { name: "Choose audio file" }),
-		).toBeTruthy();
-		expect(
 			within(settings).getByRole("button", { name: "Choose marker CSV" }),
 		).toBeTruthy();
+		// Editing the name means going back to the tab it lives on.
+		fireEvent.click(tab("Generic"));
 		fireEvent.change(within(settings).getByLabelText("Name"), {
 			target: { value: "Opening sequence" },
 		});
@@ -252,7 +267,9 @@ describe("TimecodeEditor title and settings", () => {
 				name: "Opening sequence",
 			}),
 		);
-		fireEvent.click(within(settings).getByLabelText("Auto-start"));
+		// Arming against an external clock is on the Sync tab.
+		fireEvent.click(tab("Sync"));
+		fireEvent.click(within(settings).getByLabelText("Arm"));
 		await waitFor(() =>
 			expect(update).toHaveBeenLastCalledWith(SHOW_ID, TIMECODE_ID, 5, {
 				auto_start: true,

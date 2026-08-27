@@ -1,4 +1,5 @@
 import {
+	Button,
 	CheckboxField,
 	SelectField,
 	TextField,
@@ -435,7 +436,7 @@ function AudioFileField({
 				{audio?.file_name ?? (audio ? "Managed audio" : "No audio file")}
 			</strong>
 			<RootConfinedFilePickerButton
-				label={audio ? "Change Audio File" : "Choose audio file"}
+				label={audio ? "Change Selected File" : "Select File"}
 				allowedExtensions={["wav", "mp3"]}
 				disabled={busy}
 				onFiles={async ([file]) => file && onChoose(file)}
@@ -772,6 +773,10 @@ export function TimecodeEditor({
 	);
 }
 
+/// The settings an operator edits, grouped so one pane does not ask for everything at once:
+/// what the Timecode is, how it follows an external clock, and what its markers do.
+const TIMECODE_SETTINGS_TABS = ["Generic", "Sync", "Markers"] as const;
+
 export function TimecodeSettings({
 	draft,
 	setDraft,
@@ -799,6 +804,8 @@ export function TimecodeSettings({
 	markersLocked: boolean;
 	setMarkersLocked(value: boolean): void;
 }) {
+	const [activeTab, setActiveTab] =
+		useState<(typeof TIMECODE_SETTINGS_TABS)[number]>("Generic");
 	const changeFrameField = (
 		field: "duration_frame" | "transport_offset_frame",
 		value: string,
@@ -809,74 +816,105 @@ export function TimecodeSettings({
 	};
 	return (
 		<div className="timecode-settings-fields">
-			<TextField
-				label="Name"
-				value={draft.name}
-				onChange={(event) =>
-					setDraft({ ...draft, name: event.currentTarget.value })
-				}
-			/>
-			<div className="timecode-duration-fields">
-				<TextField
-					label="Duration"
-					value={formatFrame(duration)}
-					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
-					onChange={(event) =>
-						changeFrameField("duration_frame", event.currentTarget.value)
-					}
-				/>
-				<TextField
-					label="Transport offset"
-					value={formatFrame(draft.transport_offset_frame)}
-					pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
-					onChange={(event) =>
-						changeFrameField(
-							"transport_offset_frame",
-							event.currentTarget.value,
-						)
-					}
-				/>
+			<div
+				className="timecode-settings-tabs"
+				role="tablist"
+				aria-label="Timecode settings"
+			>
+				{TIMECODE_SETTINGS_TABS.map((tab) => (
+					<Button
+						key={tab}
+						role="tab"
+						aria-selected={activeTab === tab}
+						active={activeTab === tab}
+						onClick={() => setActiveTab(tab)}
+					>
+						{tab}
+					</Button>
+				))}
 			</div>
-			<CheckboxField
-				className="timecode-checkbox"
-				label="Auto-start"
-				stateLabel="Start with external Timecode"
-				checked={draft.auto_start}
-				onChange={(event) =>
-					setDraft({ ...draft, auto_start: event.currentTarget.checked })
-				}
-			/>
-			<CheckboxField
-				className="timecode-checkbox"
-				label="Lock markers"
-				stateLabel="Prevent marker movement"
-				checked={markersLocked}
-				onChange={(event) => setMarkersLocked(event.currentTarget.checked)}
-			/>
-			<AudioFileField
-				audio={draft.audio}
-				busy={busy || audioImporting}
-				importing={audioImporting}
-				onChoose={importAudio}
-			/>
-			<div className="timecode-csv-panel">
-				<SelectField
-					label="Import mode"
-					value={csvMode}
-					onChange={setCsvMode}
-					options={[
-						{ value: "append", label: "Append" },
-						{ value: "replace", label: "Replace" },
-					]}
-				/>
-				<RootConfinedFilePickerButton
-					label="Choose marker CSV"
-					allowedExtensions={["csv"]}
-					disabled={busy}
-					onFiles={async ([file]) => file && importCsv(file)}
-				/>
-				{csvError && <p role="alert">{csvError}</p>}
-			</div>
+			{activeTab === "Generic" && (
+				<>
+					<TextField
+						label="Name"
+						value={draft.name}
+						onChange={(event) =>
+							setDraft({ ...draft, name: event.currentTarget.value })
+						}
+					/>
+					<div className="timecode-duration-fields">
+						<TextField
+							label="Duration"
+							value={formatFrame(duration)}
+							pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
+							onChange={(event) =>
+								changeFrameField("duration_frame", event.currentTarget.value)
+							}
+						/>
+					</div>
+					<AudioFileField
+						audio={draft.audio}
+						busy={busy || audioImporting}
+						importing={audioImporting}
+						onChoose={importAudio}
+					/>
+				</>
+			)}
+			{activeTab === "Sync" && (
+				<>
+					<div className="timecode-duration-fields">
+						<TextField
+							label="Transport offset"
+							value={formatFrame(draft.transport_offset_frame)}
+							pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
+							onChange={(event) =>
+								changeFrameField(
+									"transport_offset_frame",
+									event.currentTarget.value,
+								)
+							}
+						/>
+					</div>
+					<CheckboxField
+						className="timecode-checkbox"
+						label="Arm"
+						stateLabel="Start with external Timecode"
+						checked={draft.auto_start}
+						onChange={(event) =>
+							setDraft({ ...draft, auto_start: event.currentTarget.checked })
+						}
+					/>
+				</>
+			)}
+			{activeTab === "Markers" && (
+				<>
+					<CheckboxField
+						className="timecode-checkbox"
+						label="Lock markers"
+						stateLabel="Prevent marker movement"
+						checked={markersLocked}
+						onChange={(event) => setMarkersLocked(event.currentTarget.checked)}
+					/>
+					<div className="timecode-csv-panel">
+						<SelectField
+							label="Import mode"
+							value={csvMode}
+							onChange={setCsvMode}
+							options={[
+								{ value: "append", label: "Append" },
+								{ value: "replace", label: "Replace" },
+							]}
+						/>
+						<RootConfinedFilePickerButton
+							label="Choose marker CSV"
+							allowedExtensions={["csv"]}
+							disabled={busy}
+							onFiles={async ([file]) => file && importCsv(file)}
+						/>
+						{csvError && <p role="alert">{csvError}</p>}
+					</div>
+				</>
+			)}
 		</div>
 	);
 }
