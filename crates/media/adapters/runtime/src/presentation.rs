@@ -105,6 +105,7 @@ pub fn run_event_loop(
         clip_size: Size::new(2, 2),
         administration_endpoint,
         windows: Vec::new(),
+        entering_fullscreen: Vec::new(),
         worker: None,
         expects_outputs: needs_a_window(configuration),
         #[cfg(feature = "tray")]
@@ -198,6 +199,11 @@ struct PresentationHost {
     administration_endpoint: String,
     /// Main-thread references ensure the final native-window drop happens on the Cocoa thread.
     windows: Vec<Arc<Window>>,
+    /// Windows configured for full screen, waiting for their first turn through the event loop.
+    ///
+    /// Each is paired with the monitor it belongs on, because `toggleFullScreen:` takes the
+    /// window's current screen rather than a screen of its own.
+    entering_fullscreen: Vec<(Arc<Window>, winit::monitor::MonitorHandle)>,
     worker: Option<PresentationWorker>,
     /// Whether this configuration asked for output windows at all. A server with none is a normal
     /// state — it still runs, and it still has a menu bar item — so an empty output list only
@@ -303,8 +309,7 @@ impl PresentationHost {
             return; // Off-screen outputs never reach the event loop.
         };
 
-        let selected = select_monitor(monitor, event_loop.available_monitors());
-        if selected.is_none() {
+        let Some(selected) = select_monitor(monitor, event_loop.available_monitors()) else {
             // Opening on a different display would be worse than saying so: an operator would
             // have no way to tell the output had moved.
             tracing::error!(
@@ -313,19 +318,16 @@ impl PresentationHost {
                 "the configured monitor is not connected; this output stays closed"
             );
             return;
-        }
+        };
 
-        let mut attributes = Window::default_attributes()
+        let attributes = Window::default_attributes()
             .with_title(format!("ToskLight Media — {}", configuration.name))
             .with_window_icon(application_icon())
             .with_inner_size(winit::dpi::PhysicalSize::new(
                 configuration.resolution.width,
                 configuration.resolution.height,
-            ));
-        if *fullscreen {
-            attributes =
-                attributes.with_fullscreen(Some(winit::window::Fullscreen::Borderless(selected)));
-        }
+            ))
+            .with_position(selected.position());
 
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
@@ -334,6 +336,13 @@ impl PresentationHost {
                 return;
             }
         };
+
+        if *fullscreen {
+            // Full screen is asked for once the window is on screen, not in its attributes.
+            // Asking at creation goes through a window that does not exist yet, and macOS
+            // answers by handing back the plain window and leaving full screen behind.
+            self.entering_fullscreen.push((window.clone(), selected));
+        }
 
         match WindowedOutput::open(configuration.id, window.clone(), configuration.presentation) {
             Ok(output) => {
@@ -999,6 +1008,11 @@ impl ApplicationHandler for PresentationHost {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // The window exists and has been through one pass of the loop, so the platform can now
+        // take it into its own full screen — the same transition the maximize button performs.
+        for (window, monitor) in self.entering_fullscreen.drain(..) {
+            window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(monitor))));
+        }
         if self.shutdown.reason().is_some() {
             event_loop.exit();
             return;

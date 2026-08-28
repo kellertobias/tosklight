@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Wrap the winit Media server in a Finder-launchable macOS application bundle.
 #
-# The bundle is an accessory application: `LSUIElement` keeps it out of the Dock and gives it no
-# application menu, because it has no main window to switch to. Its presence is the menu bar item
-# the runtime creates, and its outputs are full-screen surfaces on the monitors an operator
-# assigned. An accessory application may still own those windows.
+# The bundle is a regular application. It was an accessory one (`LSUIElement`) while its outputs
+# were assumed to be surfaces nobody would ever touch, but an accessory application cannot open a
+# full-screen Space: `toggleFullScreen:` fails, the green button does nothing, and an operator is
+# left with a window that will not go full screen. Its outputs are ordinary windows an operator
+# maximizes, so it is an ordinary application. The menu bar item the runtime creates stays.
 set -euo pipefail
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
@@ -53,7 +54,6 @@ cat >"$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>10.13</string>
-  <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSLocalNetworkUsageDescription</key><string>ToskLight Media receives Art-Net, sACN, and CITP and serves its administration interface on the local network.</string>
 </dict></plist>
