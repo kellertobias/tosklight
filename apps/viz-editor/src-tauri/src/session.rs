@@ -208,6 +208,8 @@ fn summarize(document: &PlanningDocument) -> Answer<DocumentSummary> {
 
 #[tauri::command]
 pub fn create_document(
+    app: tauri::AppHandle,
+    window: tauri::Window,
     session: tauri::State<'_, Session>,
     discovery: tauri::State<'_, Discovery>,
     path: String,
@@ -215,17 +217,21 @@ pub fn create_document(
 ) -> Answer<DocumentSummary> {
     let summary = session.open_path(Path::new(&path), Some(&name))?;
     discovery.announce_document(Some(summary.name.clone()));
+    announce_document_change(&app, &window)?;
     Ok(summary)
 }
 
 #[tauri::command]
 pub fn open_document(
+    app: tauri::AppHandle,
+    window: tauri::Window,
     session: tauri::State<'_, Session>,
     discovery: tauri::State<'_, Discovery>,
     path: String,
 ) -> Answer<DocumentSummary> {
     let summary = session.open_path(Path::new(&path), None)?;
     discovery.announce_document(Some(summary.name.clone()));
+    announce_document_change(&app, &window)?;
     Ok(summary)
 }
 
@@ -236,10 +242,12 @@ pub fn document_summary(session: tauri::State<'_, Session>) -> Answer<Option<Doc
 
 #[tauri::command]
 pub fn save_document_paperwork(
+    app: tauri::AppHandle,
+    window: tauri::Window,
     session: tauri::State<'_, Session>,
     paperwork: PaperworkInput,
 ) -> Answer<DocumentSummary> {
-    session.change(|document| {
+    let summary = session.change(|document| {
         document
             .save_paperwork_metadata(&PaperworkMetadata {
                 lighting_designer: paperwork.lighting_designer,
@@ -252,7 +260,9 @@ pub fn save_document_paperwork(
             })
             .map_err(|error| error.to_string())?;
         summarize(document)
-    })
+    })?;
+    announce_document_change(&app, &window)?;
+    Ok(summary)
 }
 
 /// Portable Art-Net and sACN receiver intent for the current planning document.
@@ -283,16 +293,25 @@ pub fn save_live_dmx_inputs(
 
 /// Writes a complete copy of the document. The result is an ordinary show file the desk opens.
 #[tauri::command]
-pub fn save_document_as(session: tauri::State<'_, Session>, path: String) -> Answer<()> {
+pub fn save_document_as(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    session: tauri::State<'_, Session>,
+    path: String,
+) -> Answer<()> {
     session.with(|document| {
         document
             .save_as(Path::new(&path))
             .map_err(|error| error.to_string())
-    })
+    })?;
+    announce_document_change(&app, &window)?;
+    Ok(())
 }
 
 #[tauri::command]
 pub fn rename_document(
+    app: tauri::AppHandle,
+    window: tauri::Window,
     session: tauri::State<'_, Session>,
     discovery: tauri::State<'_, Discovery>,
     name: String,
@@ -300,6 +319,7 @@ pub fn rename_document(
     session.change(|document| document.rename(&name).map_err(|error| error.to_string()))?;
     // The record is what a desk's menu names, so a renamed document is a renamed offer.
     discovery.announce_document(Some(name));
+    announce_document_change(&app, &window)?;
     Ok(())
 }
 
@@ -315,10 +335,13 @@ pub fn patch_snapshot(session: tauri::State<'_, Session>) -> Answer<SnapshotDto>
 
 #[tauri::command]
 pub fn patch_fixtures(
+    app: tauri::AppHandle,
+    window: tauri::Window,
     session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
     mutation: MutationDto,
 ) -> Answer<OutcomeDto> {
-    session.change(|document| {
+    let outcome = session.change(|document| {
         let request_id = mutation.request_id.clone();
         let command = mutation.into_command(document.show_id());
         let result = document
@@ -330,7 +353,40 @@ pub fn patch_fixtures(
             changed: result.changed,
             change: ChangeDto::new(result.change, result.event_sequence),
         })
-    })
+    })?;
+    if outcome.changed {
+        // The window that patched already has this outcome from the call it made. Every other
+        // window learns the edit as its own patch stream would have delivered it, so its sheet
+        // applies one delta rather than reloading the whole rig.
+        crate::windows::broadcast(
+            &app,
+            window.label(),
+            crate::windows::PATCH_CHANGE_EVENT,
+            serde_json::to_value(&outcome.change).map_err(|error| error.to_string())?,
+        )?;
+        // The rig drawings are the same edit seen from the CAD side, and every window draws them,
+        // including the one that patched.
+        let revision =
+            session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+        crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
+    }
+    Ok(outcome)
+}
+
+/// Say that the open document itself changed — a different file, a new name, fresh paperwork.
+///
+/// The summary is not carried in the event on purpose: a window that hears this reads the session
+/// again, which is the same authority it read at startup and cannot go stale in transit.
+pub(crate) fn announce_document_change(
+    app: &tauri::AppHandle,
+    window: &tauri::Window,
+) -> Answer<()> {
+    crate::windows::broadcast(
+        app,
+        window.label(),
+        crate::windows::DOCUMENT_CHANGED_EVENT,
+        (),
+    )
 }
 
 /// Portable media servers, advertised sources, surfaces, LED modules and projectors.
@@ -680,12 +736,14 @@ pub fn preview_mvr(session: tauri::State<'_, Session>, path: String) -> Answer<M
 /// decision. A fixture with no decision keeps the desk's own default handling.
 #[tauri::command]
 pub fn import_mvr(
+    app: tauri::AppHandle,
+    window: tauri::Window,
     session: tauri::State<'_, Session>,
     path: String,
     resolutions: HashMap<String, ResolutionDto>,
 ) -> Answer<MvrImportReport> {
     let resolutions = decode_resolutions(resolutions)?;
-    session.change(|document| {
+    let report = session.change(|document| {
         let archive = read_archive(&path)?;
         let outcome = document
             .import_mvr(archive, resolutions.clone())
@@ -695,7 +753,9 @@ pub fn import_mvr(
             unresolved_fixtures: outcome.unresolved_fixtures,
             warnings: outcome.warnings,
         })
-    })
+    })?;
+    announce_document_change(&app, &window)?;
+    Ok(report)
 }
 
 fn read_archive(path: &str) -> Answer<light_mvr::MvrDocument> {

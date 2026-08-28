@@ -1,4 +1,5 @@
 import type {
+	PatchChange,
 	PatchEventObserver,
 	PatchEventStream,
 	PatchMutation,
@@ -8,15 +9,17 @@ import type {
 } from "@tosklight/patch";
 import { PatchTransportError } from "@tosklight/patch";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { PATCH_CHANGE_EVENT } from "./session";
 
 /**
  * The patch authority for a planning document.
  *
  * The desk reaches its patch over HTTP because many surfaces share one authority and any of them
- * may change it. This application is a single window over a single file: it is the only writer,
- * so the mutation outcome is the whole truth and there is nothing to stream. `subscribe` therefore
- * reports itself ready and then stays quiet, which is exactly what the patch store expects from a
- * source with no concurrent writers.
+ * may change it. Here the authority is the Rust session, and the surfaces are this application's
+ * windows: an operator may have two open on the same document. The mutation outcome answers the
+ * window that made the edit, and the stream below carries the same change to the others, so a
+ * second window is a reader of the same rig rather than a stale copy of it.
  */
 export class TauriPatchTransport implements PatchTransport {
 	async snapshot(_showId: string): Promise<PatchSnapshot> {
@@ -40,19 +43,40 @@ export class TauriPatchTransport implements PatchTransport {
 
 	subscribe(
 		_showId: string,
-		_afterSequence: number,
+		afterSequence: number,
 		observer: PatchEventObserver,
 	): PatchEventStream {
 		let closed = false;
+		let unlisten: UnlistenFn | undefined;
 		// Deliver asynchronously so a subscriber that reads its own stream synchronously during
 		// setup behaves the same here as against a real socket.
 		queueMicrotask(() => {
-			if (!closed) observer.message({ type: "ready", cursor: 0 });
+			if (!closed) observer.message({ type: "ready", cursor: afterSequence });
 		});
+		listen<PatchChange>(PATCH_CHANGE_EVENT, (event) => {
+			if (closed) return;
+			const change = event.payload;
+			// An edit made in this window never arrives here — the command that made it already
+			// returned the outcome. A sequence the store cannot follow makes it re-read the
+			// snapshot, so an event that overtakes another repairs itself.
+			observer.message({
+				type: "event",
+				sequence: change.eventSequence ?? 0,
+				change,
+			});
+		})
+			.then((stop) => {
+				if (closed) stop();
+				else unlisten = stop;
+			})
+			.catch((reason) => {
+				if (!closed) observer.error(new Error(String(reason)));
+			});
 		return {
 			repair: () => undefined,
 			close: () => {
 				closed = true;
+				unlisten?.();
 				observer.closed();
 			},
 		};

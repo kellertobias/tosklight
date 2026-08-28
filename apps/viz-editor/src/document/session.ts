@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
 	FixtureNote,
 	FixtureProfile,
@@ -7,6 +8,11 @@ import type {
 	PatchSnapshot,
 	VersionedObject,
 } from "@tosklight/patch";
+
+/** One window's document was replaced or renamed; every other window reloads. */
+export const DOCUMENT_CHANGED_EVENT = "document-changed";
+/** One window patched the rig; every other window's patch sheet applies the delta. */
+export const PATCH_CHANGE_EVENT = "patch-change";
 
 export interface DocumentSummary {
 	showId: string;
@@ -309,8 +315,22 @@ export const documentSession = {
 	 * folder and opens that one, so nothing an operator does to a demo reaches the next one.
 	 */
 	openDemoShow: () => invoke<DocumentSummary>("open_demo_show"),
-	/** Open the synchronized orthographic CAD planning window. */
-	openCad: () => invoke<void>("open_cad"),
+	/**
+	 * Open another editor window on the same document.
+	 *
+	 * Every window is the same surface over the one session, so this is how an operator puts the
+	 * CAD rig on one screen and the patch sheet on another without a second kind of window.
+	 * Resolves with the new window's label.
+	 */
+	openWindow: () => invoke<string>("open_editor_window"),
+	/**
+	 * The open document was replaced, renamed or re-imported by another window.
+	 *
+	 * The event carries nothing: a window that hears it reads the session again rather than
+	 * trusting a summary that travelled.
+	 */
+	onDocumentChanged: (handler: () => void): Promise<UnlistenFn> =>
+		listen<unknown>(DOCUMENT_CHANGED_EVENT, () => handler()),
 	/** Open the separate visualizer output for the document currently being edited. */
 	openVisualizer: () => invoke<void>("open_visualizer"),
 	/** Whether the editor-owned Visualizer child is still running. */

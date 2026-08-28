@@ -236,7 +236,7 @@ body {
 	font-size: 20px;
 }
 
-.viz-editor-open-cad,
+.viz-editor-open-window,
 .viz-editor-open-viz {
 	margin-top: 6px;
 	min-height: 52px;
@@ -1275,7 +1275,7 @@ body {
 	text-align: right;
 }
 
-/* The CAD window is a retained WebGL planning surface, not a lighting preview. */
+/* The CAD screen is a retained WebGL planning surface, not a lighting preview. */
 .cad-app {
 	position: relative;
 	display: flex;
@@ -1294,8 +1294,24 @@ body {
 	flex: none;
 	height: 31px;
 	min-height: 31px;
-	padding-left: 103px;
 	font-size: 12px;
+}
+
+/* Inside the editor window the CAD screen is one destination among the others: the window's own
+   frame, controls and title bar are already drawn around it, so it draws none of its own. */
+.viz-editor-workspace > .cad-app {
+	flex: 1;
+	border: none;
+}
+
+.viz-editor-workspace > .cad-app > .ui-window-header {
+	-webkit-app-region: drag;
+	user-select: none;
+}
+
+.viz-editor-workspace > .cad-app > .ui-window-header button,
+.viz-editor-workspace > .cad-app > .ui-window-header [role="button"] {
+	-webkit-app-region: no-drag;
 }
 
 .cad-error {

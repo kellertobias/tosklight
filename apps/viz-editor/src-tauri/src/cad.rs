@@ -1,8 +1,9 @@
-//! Canonical scene and command boundary for the web-owned CAD planning window.
+//! Canonical scene and command boundary for the web-owned CAD planning surface.
 //!
 //! The canvases are deliberately only views. Selection, fixture transforms, revisions and mount
-//! relationships live here beside the open planning document, so closing a CAD window cannot
-//! lose show data and a stale drag cannot overwrite a newer Patch edit.
+//! relationships live here beside the open planning document, so closing a window cannot lose
+//! show data and a stale drag cannot overwrite a newer Patch edit. Every editor window shows the
+//! same scene, which is why the deltas below are broadcast rather than sent to one window.
 
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::Session;
@@ -14,7 +15,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     fs,
 };
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use uuid::Uuid;
 
 pub const SCENE_DELTA_EVENT: &str = "cad-scene-delta";
@@ -185,27 +186,6 @@ pub struct TransformOutcome {
     pub scene_revision: u64,
     pub transforms: Vec<EntityTransform>,
     pub attachments: Vec<RigAttachment>,
-}
-
-#[tauri::command]
-pub fn open_cad(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("cad") {
-        window.show().map_err(|error| error.to_string())?;
-        window.set_focus().map_err(|error| error.to_string())?;
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        "cad",
-        tauri::WebviewUrl::App("index.html?surface=cad".into()),
-    )
-    .title("Rig Planner · CAD")
-    .decorations(false)
-    .inner_size(1280.0, 820.0)
-    .min_inner_size(760.0, 520.0)
-    .build()
-    .map_err(|error| error.to_string())?;
-    Ok(())
 }
 
 #[tauri::command]

@@ -174,9 +174,19 @@ function renderApp(children: ReactNode = <App />) {
 	return render(<ModalProvider>{children}</ModalProvider>);
 }
 
+// The CAD screen keeps its tile layout, settings and print pages in the window's own storage.
+const localStore = new Map<string, string>();
+
 beforeEach(() => {
 	invoke.mockReset();
 	eventHandlers.clear();
+	localStore.clear();
+	vi.stubGlobal("localStorage", {
+		getItem: (key: string) => localStore.get(key) ?? null,
+		setItem: (key: string, value: string) => localStore.set(key, value),
+		removeItem: (key: string) => localStore.delete(key),
+		clear: () => localStore.clear(),
+	});
 	vi.stubGlobal(
 		"ResizeObserver",
 		class {
@@ -331,12 +341,12 @@ describe("the Viz editor window", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Close window" }));
 		await waitFor(() => expect(nativeWindow.close).toHaveBeenCalledOnce());
-		for (const label of ["Show", "Patch", "Venue", "Effects", "Media"])
+		for (const label of ["Show", "CAD", "Patch", "Venue", "Effects", "Media"])
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-		const openCad = screen.getByRole("button", { name: "Open CAD" });
+		const openWindow = screen.getByRole("button", { name: "Open Window" });
 		const openViz = screen.getByRole("button", { name: "Open Viz" });
-		expect(openCad).toBeEnabled();
-		expect(openCad.nextElementSibling).toBe(openViz);
+		expect(openWindow).toBeEnabled();
+		expect(openWindow.nextElementSibling).toBe(openViz);
 		fireEvent.click(screen.getByRole("button", { name: "Patch" }));
 		await screen.findByRole("columnheader", { name: "Fixture ID" });
 		expect(
@@ -738,21 +748,41 @@ describe("the Viz editor window", () => {
 		).toBeInTheDocument();
 	});
 
-	it("opens the separate CAD planner immediately above the visualizer action", async () => {
+	it("opens another window on the same show immediately above the visualizer action", async () => {
 		invoke.mockImplementation((command: string) => {
-			if (command === "open_cad") return Promise.resolve();
+			if (command === "open_editor_window")
+				return Promise.resolve("architect-2");
 			if (command === "document_summary") return Promise.resolve(document);
 			if (command === "patch_snapshot") return Promise.resolve(snapshot);
 			if (command === "live_dmx_inputs") return Promise.resolve(liveInputs);
 			return Promise.resolve([]);
 		});
 		renderApp();
-		const openCad = await screen.findByRole("button", { name: "Open CAD" });
-		expect(openCad.nextElementSibling).toBe(
+		const openWindow = await screen.findByRole("button", {
+			name: "Open Window",
+		});
+		expect(openWindow.nextElementSibling).toBe(
 			screen.getByRole("button", { name: "Open Viz" }),
 		);
-		fireEvent.click(openCad);
-		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_cad"));
+		fireEvent.click(openWindow);
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("open_editor_window"),
+		);
+	});
+
+	it("shows the CAD planning screen in this window rather than another one", async () => {
+		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "CAD" }));
+		const header = (await screen.findByText("CAD", {
+			selector: ".ui-window-header *",
+		})) as HTMLElement;
+		expect(header.closest(".viz-editor-workspace > .cad-app")).not.toBeNull();
+		expect(invoke).not.toHaveBeenCalledWith("open_editor_window");
+		// The sidebar stays put: CAD is a screen of this window, so the window's own destinations
+		// remain reachable beside the drawing.
+		expect(
+			screen.getByRole("button", { name: "Patch" }),
+		).toBeInTheDocument();
 	});
 
 	it("applies renderer Settings directly above Open Viz", async () => {

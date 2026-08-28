@@ -16,6 +16,7 @@ import { OperatorDestinationList } from "@tosklight/ui/application";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import appIcon from "../src-tauri/icons/icon.svg";
+import { CadApp } from "./cad/CadApp";
 import { CadRigOverview } from "./cad/CadViewport";
 import { cadSession } from "./cad/session";
 import type { CadEntity, CadSceneSnapshot } from "./cad/types";
@@ -56,10 +57,10 @@ export function App() {
 	>(new Map());
 	const [error, setError] = useState<string | null>(null);
 	const [workspace, setWorkspace] = useState<
-		"show" | "patch" | "venue" | "effects" | "media" | "settings"
+		"show" | "cad" | "patch" | "venue" | "effects" | "media" | "settings"
 	>("show");
 	const [showPage, setShowPage] = useState<ShowPage>("show");
-	const [openingCad, setOpeningCad] = useState(false);
+	const [openingWindow, setOpeningWindow] = useState(false);
 	const [openingViz, setOpeningViz] = useState(false);
 	const [visualizerRunning, setVisualizerRunning] = useState(false);
 	// Bumped when something outside the sheet changed the document — an MVR import — so the sheet
@@ -167,7 +168,16 @@ export function App() {
 					const selectedEntity = cadEntitiesRef.current.get(
 						delta.selectedIds[0],
 					);
-					setWorkspace(selectedEntity?.kind === "venue" ? "venue" : "patch");
+					// Selecting in the drawing shows what was selected. On the CAD screen the
+					// drawing already is that view, so following the selection to the sheet would
+					// take the operator away from the thing they just clicked.
+					setWorkspace((current) =>
+						current === "cad"
+							? current
+							: selectedEntity?.kind === "venue"
+								? "venue"
+								: "patch",
+					);
 				}
 			})
 			.then((unlisten) => {
@@ -204,6 +214,19 @@ export function App() {
 			selectionUnlisten?.();
 			sceneUnlisten?.();
 		};
+	}, []);
+
+	// Another window opened, renamed or imported into the same document. The session is the
+	// authority for both windows, so this one reads it again instead of being told what changed.
+	useEffect(() => {
+		let unlisten: (() => void) | undefined;
+		documentSession
+			.onDocumentChanged(() => reloadDocument())
+			.then((stop) => {
+				unlisten = stop;
+			})
+			.catch(() => undefined);
+		return () => unlisten?.();
 	}, []);
 
 	function replaceSelection(ids: readonly string[]) {
@@ -282,6 +305,22 @@ export function App() {
 				setFixtureNotes(new Map(stored.map((note) => [note.fixtureId, note]))),
 			)
 			.catch(report);
+	}
+
+	/// Read the session again, from the top.
+	///
+	/// Whatever changed the document — this window's file bar, an MVR import, or another window
+	/// on the same session — the answer is the same: nothing here is authoritative, so everything
+	/// here is read back rather than patched in place.
+	function reloadDocument() {
+		setReload((current) => current + 1);
+		documentSession.current().then(setDocument).catch(report);
+		documentSession.fixtureProfiles().then(setProfiles).catch(report);
+		loadLayers();
+		loadFixtureVisibility();
+		loadFixtureNotes();
+		loadFixtures();
+		loadCadScene().catch(report);
 	}
 
 	const report = useCallback((reason: unknown) => {
@@ -422,6 +461,12 @@ export function App() {
 						entries={[
 							{ id: "show", label: "Show", icon: <span>◫</span> },
 							{
+								id: "cad",
+								label: "CAD",
+								icon: <span>⊞</span>,
+								disabled: !document,
+							},
+							{
 								id: "patch",
 								label: "Patch",
 								icon: <span>⌘</span>,
@@ -458,17 +503,18 @@ export function App() {
 						Settings
 					</Button>
 					<Button
-						className="viz-editor-open-cad"
-						disabled={!document || openingCad}
+						className="viz-editor-open-window"
+						title="Open another window on this show"
+						disabled={openingWindow}
 						onClick={() => {
-							setOpeningCad(true);
+							setOpeningWindow(true);
 							documentSession
-								.openCad()
+								.openWindow()
 								.catch(report)
-								.finally(() => setOpeningCad(false));
+								.finally(() => setOpeningWindow(false));
 						}}
 					>
-						{openingCad ? "Opening CAD…" : "Open CAD"}
+						{openingWindow ? "Opening…" : "Open Window"}
 					</Button>
 					<Button
 						className="viz-editor-open-viz"
@@ -539,14 +585,7 @@ export function App() {
 											.then(setProfiles)
 											.catch(report)
 									}
-									onReloadDocument={() => {
-										setReload((current) => current + 1);
-										documentSession.current().then(setDocument).catch(report);
-										loadLayers();
-										loadFixtureVisibility();
-										loadFixtures();
-										loadCadScene().catch(report);
-									}}
+									onReloadDocument={reloadDocument}
 								>
 									{document && cadScene?.showId === document.showId ? (
 										<figure className="viz-show-rig-overview">
@@ -581,8 +620,10 @@ export function App() {
 							)}
 						</section>
 					) : null}
+					{document && workspace === "cad" ? <CadApp /> : null}
 					{document &&
 					workspace !== "show" &&
+					workspace !== "cad" &&
 					workspace !== "media" &&
 					workspace !== "settings" ? (
 						<PatchHostProvider value={host}>

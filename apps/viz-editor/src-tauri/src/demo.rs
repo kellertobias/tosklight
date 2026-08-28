@@ -66,11 +66,13 @@ pub(crate) fn open_default_copy(
 #[tauri::command]
 pub fn open_demo_show(
     app: tauri::AppHandle,
+    window: tauri::Window,
     session: tauri::State<'_, Session>,
     discovery: tauri::State<'_, Discovery>,
 ) -> Result<DocumentSummary, String> {
     let summary = open_default_copy(&app, &session)?;
     discovery.announce_document(Some(summary.name.clone()));
+    crate::session::announce_document_change(&app, &window)?;
     Ok(summary)
 }
 

@@ -174,28 +174,24 @@ beforeEach(() => {
 	for (const action of Object.values(nativeWindow)) action.mockClear();
 });
 
-describe("the CAD planning window", () => {
-	it("uses the shared native chrome and exposes every view from the viewport corner", async () => {
+describe("the CAD planning screen", () => {
+	it("draws no window chrome of its own and exposes every view from the viewport corner", async () => {
 		render(
 			<ModalProvider>
 				<CadApp />
 			</ModalProvider>,
 		);
-		const title = screen.getByText("ToskLight Architect");
+		const title = screen.getByText("CAD");
 		expect(title.closest(".ui-window-header")).toBeInTheDocument();
-		expect(await screen.findByText("demo.show")).toBeInTheDocument();
 		expect(
 			screen.queryByText(/First synchronized 2D planning slice/i),
 		).not.toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Close window" }),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Enter fullscreen" }),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Move window" }),
-		).toBeInTheDocument();
+		// The editor window draws the frame around this screen, so drawing a second set of
+		// window controls inside it would close or resize the window the operator is working in.
+		for (const control of ["Close window", "Enter fullscreen", "Move window"])
+			expect(
+				screen.queryByRole("button", { name: control }),
+			).not.toBeInTheDocument();
 		const direction = await screen.findByRole("combobox", {
 			name: "View direction",
 		});
@@ -317,7 +313,7 @@ describe("the CAD planning window", () => {
 		).not.toBeInTheDocument();
 	});
 
-	it("keeps the CAD window mounted while editing and saving project information", async () => {
+	it("keeps the CAD screen mounted while editing and saving project information", async () => {
 		render(
 			<ModalProvider>
 				<CadApp />

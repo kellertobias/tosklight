@@ -14,6 +14,7 @@ mod recent;
 mod session;
 mod verify;
 mod visualizer;
+mod windows;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -191,7 +192,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             session::create_document,
             session::open_document,
-            cad::open_cad,
+            windows::open_editor_window,
             cad::cad_scene_snapshot,
             cad::cad_replace_selection,
             cad::cad_transform,

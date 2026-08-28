@@ -17,7 +17,7 @@ The Rig Editor's preview does not require a DMX route. A standalone renderer fol
 
 ## Open Architect
 
-Start the PreViz Rig Editor. On a new installation it opens a writable copy of the Demo Show; otherwise it reopens the recent document. Use **Open Viz** in the editor to launch the renderer against that planning document, and **Open CAD** to open the CAD editor on the same document in its own window; pressing it again brings that window forward instead of opening another one. Use **Load from Desk** when a discovered Desk should be copied into the editor, or **Load from Visualizer** on the Desk to copy the editor document back.
+Start the PreViz Rig Editor. On a new installation it opens a writable copy of the Demo Show; otherwise it reopens the recent document. Use **Open Viz** in the editor to launch the renderer against that planning document. The CAD drawing is not a separate window: **CAD** is a screen in the sidebar beside Show, Patch, Venue, Effects and Media. Use **Open Window** to open another Architect window on the same show when the drawing and the patch sheet should be on two screens at once; every window edits the one open document, so a fixture patched in one appears in the other. The renderer stays the one window of its own. Use **Load from Desk** when a discovered Desk should be copied into the editor, or **Load from Visualizer** on the Desk to copy the editor document back.
 
 Discovery uses ToskLight's local-network show service. It is optional, and it is separate from the CITP service used for Media Server libraries and previews. A missing discovery button does not stop either application from opening an ordinary `.show` file.
 

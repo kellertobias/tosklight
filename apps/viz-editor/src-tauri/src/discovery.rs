@@ -132,6 +132,8 @@ fn deduplicate_desk_peers(peers: Vec<DeskPeer>) -> Vec<DeskPeer> {
 /// Take a copy of that desk's active show and open it here.
 #[tauri::command]
 pub async fn load_from_desk(
+    app: tauri::AppHandle,
+    window: tauri::Window,
     discovery: tauri::State<'_, Discovery>,
     session: tauri::State<'_, Session>,
     instance: String,
@@ -152,6 +154,7 @@ pub async fn load_from_desk(
     std::fs::write(&path, bytes).map_err(|error| error.to_string())?;
     let summary = session.open(&path)?;
     discovery.announce_document(Some(summary.name.clone()));
+    crate::session::announce_document_change(&app, &window)?;
     Ok(summary)
 }
 

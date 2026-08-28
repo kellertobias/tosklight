@@ -3,7 +3,7 @@ import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
-import { beginWindowDrag, WindowControls } from "../WindowChrome";
+import { beginWindowDrag } from "../WindowChrome";
 import { CadTileViewBar } from "./CadTileViewBar";
 import { visibleEntities } from "./cutPlanes";
 import { CadProjectPanel } from "./CadProjectPanel";
@@ -49,6 +49,12 @@ interface CadSettings {
 	showCoordinateOrigins: boolean;
 }
 
+/**
+ * The CAD planning surface, as one destination of the editor window.
+ *
+ * It draws no window controls of its own: it is a screen inside the Architect window rather than
+ * a window, and the operator who wants it beside the patch sheet opens a second editor window.
+ */
 export function CadApp() {
 	const [scene, setScene] = useState<CadSceneSnapshot | null>(null);
 	const [layout, setLayout] = useState<TileNode>(restoreLayout);
@@ -388,14 +394,8 @@ export function CadApp() {
 
 	return (
 		<main className="cad-app">
-			<WindowControls />
 			<WindowHeader
-				title="ToskLight Architect"
-				info={
-					documentInfo?.fileName
-						? { primary: documentInfo.fileName }
-						: undefined
-				}
+				title="CAD"
 				dragHandleProps={{
 					"data-tauri-drag-region": true,
 					onPointerDown: beginWindowDrag,

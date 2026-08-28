@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Viz rig planning window",
-  "windows": ["main", "cad"],
+  "windows": ["main", "architect-*"],
   "permissions": [
     "core:default",
     "core:window:allow-close",
