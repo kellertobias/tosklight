@@ -204,11 +204,19 @@ export class BrowserOperatorShell {
 			const mvr = this.page.getByRole("dialog", {
 				name: "MVR import and export",
 			});
-			// Loading from MVR asks for the file itself, so the chooser may already be up.
+			// Loading from MVR asks for the file itself, so the chooser may already be up. Waiting
+			// for it is the only safe way to ask: a count() is a snapshot, and a chooser that opens
+			// in the gap between the snapshot and the click lands on top of the button being
+			// clicked, so the click retries against the overlay until it times out. The timeout is
+			// the answer "it did not open on its own", not a failure.
 			const mvrPicker = this.page.getByRole("dialog", {
 				name: "Choose files or folders",
 			});
-			if (!(await mvrPicker.count()))
+			const pickerAlreadyOpen = await mvrPicker
+				.waitFor({ state: "visible", timeout: 2000 })
+				.then(() => true)
+				.catch(() => false);
+			if (!pickerAlreadyOpen)
 				await mvr
 					.getByRole("button", { name: "Choose MVR file", exact: true })
 					.click();
