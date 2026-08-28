@@ -10,5 +10,6 @@ Recommended order:
 4. [Patch Fixtures and Scenery](12-patch-fixtures-and-scenery.md), including fixture IDs, modes, splits, multi-patch, and deliberately unpatched fixtures.
 5. Set [Stage Positions and Scenery](13-stage-positions-and-scenery.md).
 6. Use [Attribute Reference and Activation Examples](14-attribute-reference-and-activation.md) when mapping an unfamiliar fixture concept into the Programmer.
+7. Connect a follow system under [Tracking with PosiStageNet](15-tracking-with-posistagenet.md) when the show is tracked.
 
 MVR is whole-rig interchange; GDTF describes fixture types inside or alongside that interchange. ToskLight currently exposes MVR import as a new show and MVR export. Merge-into-current-show support is not yet an operator workflow.
