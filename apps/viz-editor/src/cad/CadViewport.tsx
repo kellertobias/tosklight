@@ -1,4 +1,9 @@
+import { Button, SwitchField } from "@tosklight/ui";
 import { type WheelEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+	PrintPageLabels,
+	PrintPageSettings,
+} from "./CadPrintPageParts";
 import architectIconUrl from "../../../../assets/branding/tosklight-icon-print.svg";
 import {
 	type CadPrintDocumentInfo,
@@ -680,6 +685,7 @@ function PrintFrame({
 			onPointerUp={stop}
 			onPointerCancel={stop}
 		>
+			<PrintPageSettings {...{ page, entities, onChange }} />
 			<div
 				className="cad-print-sheet"
 				style={
@@ -693,49 +699,9 @@ function PrintFrame({
 				aria-hidden="true"
 			>
 				<div className="cad-print-page-name">{page.name}</div>
-				{page.showFixtureIds || page.showDmxAddresses ? (
-					<div className="cad-print-labels">
-						{entities
-							.filter((entity) => entity.kind !== "venue")
-							.map((entity) => {
-								const point = projectPoint(
-									entity.positionMillimetres,
-									page.view,
-									page.rotationQuarterTurns,
-								);
-								const x =
-									(point[0] -
-										page.centreMillimetres[0] +
-										page.widthMillimetres / 2) *
-										camera.zoom -
-									PRINT_BORDER_MM * millimetrePixels;
-								const y =
-									(page.centreMillimetres[1] + height / 2 - point[1]) *
-										camera.zoom -
-									PRINT_BORDER_MM * millimetrePixels;
-								if (
-									x < 0 ||
-									y < 0 ||
-									x > page.widthMillimetres * camera.zoom ||
-									y > height * camera.zoom
-								)
-									return null;
-								return (
-									<span key={entity.id} style={{ left: x, top: y }}>
-										{page.showFixtureIds
-											? `ID ${entity.fixtureDisplayId}`
-											: null}
-										{page.showFixtureIds && page.showDmxAddresses
-											? " · "
-											: null}
-										{page.showDmxAddresses && entity.dmxAddress !== "—"
-											? `DMX ${entity.dmxAddress}`
-											: null}
-									</span>
-								);
-							})}
-					</div>
-				) : null}
+				<PrintPageLabels
+					{...{ page, entities, camera, height, millimetrePixels }}
+				/>
 				<div className="cad-print-title-block">
 					<img src={architectIconUrl} alt="ToskLight application icon" />
 					<div className="cad-print-brand">

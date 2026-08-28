@@ -71,7 +71,9 @@ export function WindowControls() {
 	};
 
 	return (
-		<div className="viz-native-window-controls">
+		<>
+			<WindowResizeGrip />
+			<div className="viz-native-window-controls">
 			<Button
 				className="viz-native-window-close"
 				aria-label="Close window"
@@ -107,7 +109,8 @@ export function WindowControls() {
 					<path d="M8 1v14M1 8h14M8 1L6 3m2-2 2 2M8 15l-2-2m2 2 2-2M1 8l2-2M1 8l2 2m12-2-2-2m2 2-2 2" />
 				</svg>
 			</Button>
-		</div>
+			</div>
+		</>
 	);
 }
 

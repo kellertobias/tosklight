@@ -3,12 +3,8 @@ import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
-import {
-	beginWindowDrag,
-	WindowControls,
-	WindowResizeGrip,
-} from "../WindowChrome";
-import { CadCutPlaneControl } from "./CadCutPlaneControl";
+import { beginWindowDrag, WindowControls } from "../WindowChrome";
+import { CadTileViewBar } from "./CadTileViewBar";
 import { visibleEntities } from "./cutPlanes";
 import { CadProjectPanel } from "./CadProjectPanel";
 import { CadViewport } from "./CadViewport";
@@ -393,7 +389,6 @@ export function CadApp() {
 	return (
 		<main className="cad-app">
 			<WindowControls />
-			<WindowResizeGrip />
 			<WindowHeader
 				title="ToskLight Architect"
 				info={
@@ -559,28 +554,6 @@ export function CadApp() {
 											>
 												Rotate page
 											</Button>
-											<SwitchField
-												label="Show fixture IDs"
-												offLabel={null}
-												onLabel={null}
-												checked={page.showFixtureIds}
-												onChange={(event) =>
-													changePrintPage(page.id, {
-														showFixtureIds: event.currentTarget.checked,
-													})
-												}
-											/>
-											<SwitchField
-												label="Show DMX patch"
-												offLabel={null}
-												onLabel={null}
-												checked={page.showDmxAddresses}
-												onChange={(event) =>
-													changePrintPage(page.id, {
-														showDmxAddresses: event.currentTarget.checked,
-													})
-												}
-											/>
 										</section>
 									);
 								})()
@@ -673,7 +646,7 @@ function findTile(node: TileNode, id: string): ViewportTile | null {
 	return findTile(node.first, id) ?? findTile(node.second, id);
 }
 
-interface CadTileProps {
+export interface CadTileProps {
 	node: TileNode;
 	root: TileNode;
 	closeActions: Partial<Record<TileEdge, ClosePaneAction>>;
@@ -713,6 +686,9 @@ function tileEntities(scene: { entities: readonly CadEntity[] }, tile: ViewportT
 }
 
 function CadTile(props: CadTileProps) {
+	// The range settings take the same corner as the view controls, so opening them slides the
+	// controls out rather than stacking a second row of chrome over the drawing.
+	const [rangeOpen, setRangeOpen] = useState(false);
 	const { node } = props;
 	if (node.type === "split") {
 		return (
@@ -750,39 +726,13 @@ function CadTile(props: CadTileProps) {
 					Add New Page
 				</Button>
 			) : null}
-			<div className="cad-view-control">
-				<select
-					aria-label="View direction"
-					value={node.view}
-					onChange={(event) => {
-						const view = event.currentTarget.value as ViewportTile["view"];
-						props.onTile(node.id, (tile) => ({
-							...tile,
-							view,
-							rotationQuarterTurns: 0,
-							camera: fittedCamera(props.scene.entities, view, 0),
-						}));
-					}}
-				>
-					{Object.entries(CAD_VIEW_LABELS).map(([value, label]) => (
-						<option key={value} value={value}>
-							{label}
-						</option>
-					))}
-				</select>
-				<Button
-					className="cad-fit-view"
-					disabled={!props.scene.entities.length}
-					onClick={() => props.onFit(node.id)}
-				>
-					Fit
-				</Button>
-			</div>
-			<CadCutPlaneControl
-				view={node.view}
-				entities={props.scene.entities}
-				cutPlanes={node.cutPlanes}
-				onChange={(c) => props.onTile(node.id, (t) => ({ ...t, cutPlanes: c }))}
+			<CadTileViewBar
+				node={node}
+				scene={props.scene}
+				onTile={props.onTile}
+				onFit={props.onFit}
+				rangeOpen={rangeOpen}
+				setRangeOpen={setRangeOpen}
 			/>
 			<CadOrientation
 				view={node.view}
@@ -1134,7 +1084,7 @@ function axisLabel(value: { axis: WorldAxis; sign: 1 | -1 }) {
 	return `${value.sign === 1 ? "+" : "−"}${value.axis.toUpperCase()}`;
 }
 
-function fittedCamera(
+export function fittedCamera(
 	entities: readonly CadSceneSnapshot["entities"][number][],
 	view: CadViewDirection,
 	rotationQuarterTurns: number,
