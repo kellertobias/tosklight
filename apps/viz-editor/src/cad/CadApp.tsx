@@ -59,7 +59,13 @@ export function CadApp() {
 	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [preview, setPreview] = useState<CadTransformPreview | null>(null);
-	const [printMode, setPrintMode] = useState(false);
+	// Which print-side panel is open, and nothing when neither is. Print and Meta are two
+	// independent choices rather than a mode with a tab strip inside it, so each title button
+	// opens its own panel and closes it again when it is already the one showing.
+	const [printPanel, setPrintPanel] = useState<"print" | "project" | null>(
+		null,
+	);
+	const printMode = printPanel !== null;
 	const [printPages, setPrintPages] =
 		useState<CadPrintPage[]>(restorePrintPages);
 	const [selectedPrintPageId, setSelectedPrintPageId] = useState<string | null>(
@@ -81,7 +87,6 @@ export function CadApp() {
 		showDate: "",
 	});
 	const [savingPaperwork, setSavingPaperwork] = useState(false);
-	const [sidebarTab, setSidebarTab] = useState<"print" | "project">("print");
 	const sceneRef = useRef<CadSceneSnapshot | null>(null);
 	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
 
@@ -241,9 +246,9 @@ export function CadApp() {
 		}
 	}
 
-	function togglePrintMode() {
+	function togglePrintPanel(panel: "print" | "project") {
 		setPreview(null);
-		setPrintMode((current) => !current);
+		setPrintPanel((current) => (current === panel ? null : panel));
 	}
 
 	function addPrintPage(tile: ViewportTile) {
@@ -401,31 +406,20 @@ export function CadApp() {
 					onPointerDown: beginWindowDrag,
 				}}
 				groups={[
-					// The print sidebar shows one of two panels, so which one is a window-level
-					// choice rather than a control inside the panel it switches away from.
-					...(printMode
-						? [
-								{
-									id: "cad-print-tabs" as const,
-									kind: "tabs" as const,
-									activeId: sidebarTab,
-									onActiveChange: (id: string) =>
-										setSidebarTab(id === "project" ? "project" : "print"),
-									actions: [
-										{ id: "print", label: "Pages" },
-										{ id: "project", label: "Project" },
-									],
-								},
-							]
-						: []),
 					{
 						id: "cad-actions",
 						actions: [
 							{
 								id: "print",
 								label: "Print",
-								active: printMode,
-								onPress: togglePrintMode,
+								active: printPanel === "print",
+								onPress: () => togglePrintPanel("print"),
+							},
+							{
+								id: "meta",
+								label: "Meta",
+								active: printPanel === "project",
+								onPress: () => togglePrintPanel("project"),
 							},
 							{
 								id: "undo",
@@ -482,12 +476,12 @@ export function CadApp() {
 				{printMode ? (
 					<aside className="cad-print-sidebar" aria-label="Print pages">
 						<header>
-							<h2>{sidebarTab === "project" ? "Project" : "Prints"}</h2>
+							<h2>{printPanel === "project" ? "Meta" : "Prints"}</h2>
 							<span>
-								{sidebarTab === "project" ? "Printed on every page" : "A4 pages"}
+								{printPanel === "project" ? "Printed on every page" : "A4 pages"}
 							</span>
 						</header>
-						{sidebarTab === "project" ? (
+						{printPanel === "project" ? (
 							<CadProjectPanel
 								paperwork={paperwork}
 								documentInfo={documentInfo}
@@ -496,7 +490,7 @@ export function CadApp() {
 								onSave={() => void savePaperwork()}
 							/>
 						) : null}
-						{sidebarTab === "print" ? (
+						{printPanel === "print" ? (
 							<>
 						<div className="cad-print-list">
 							{printPages.length ? (

@@ -229,7 +229,7 @@ describe("the CAD planning window", () => {
 			within(header as HTMLElement)
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Print", "Undo", "Redo", "⚙"]);
+		).toEqual(["Print", "Meta", "Undo", "Redo", "⚙"]);
 		expect(
 			screen.getByRole("button", {
 				name: "Rotate top-down view 90 degrees counterclockwise",
@@ -281,7 +281,7 @@ describe("the CAD planning window", () => {
 		);
 	});
 
-	it("shows project paperwork and print pages on separate sidebar tabs", async () => {
+	it("opens print pages and meta from their own window title buttons", async () => {
 		render(
 			<ModalProvider>
 				<CadApp />
@@ -290,14 +290,15 @@ describe("the CAD planning window", () => {
 		await screen.findByTestId("cad-canvas");
 		fireEvent.click(screen.getByRole("button", { name: "Print" }));
 
-		// Pages first: the paperwork must not be taking room from the page list. "Add New Page"
+		// Print first: the paperwork must not be taking room from the page list. "Add New Page"
 		// is a toolbar control and stays put, so the sidebar's own Export button is the tell.
 		expect(screen.getByRole("button", { name: "Export to PDF" })).toBeVisible();
 		expect(
 			screen.queryByRole("textbox", { name: "Lighting designer" }),
 		).not.toBeInTheDocument();
 
-		fireEvent.click(screen.getByRole("tab", { name: "Project" }));
+		// Meta is its own title button, not a tab that appears once Print is on.
+		fireEvent.click(screen.getByRole("button", { name: "Meta" }));
 		expect(
 			screen.getByRole("textbox", { name: "Lighting designer" }),
 		).toBeVisible();
@@ -306,8 +307,14 @@ describe("the CAD planning window", () => {
 			screen.queryByRole("button", { name: "Export to PDF" }),
 		).not.toBeInTheDocument();
 
-		fireEvent.click(screen.getByRole("tab", { name: "Pages" }));
+		fireEvent.click(screen.getByRole("button", { name: "Print" }));
 		expect(screen.getByRole("button", { name: "Export to PDF" })).toBeVisible();
+
+		// Pressing the open panel's own button closes it again.
+		fireEvent.click(screen.getByRole("button", { name: "Print" }));
+		expect(
+			screen.queryByRole("complementary", { name: "Print pages" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("keeps the CAD window mounted while editing and saving project information", async () => {
@@ -317,10 +324,8 @@ describe("the CAD planning window", () => {
 			</ModalProvider>,
 		);
 		await screen.findByTestId("cad-canvas");
-		fireEvent.click(screen.getByRole("button", { name: "Print" }));
-		// Project paperwork now has its own sidebar tab, so a shallow window can show all of
-		// it without competing with the page list.
-		fireEvent.click(screen.getByRole("tab", { name: "Project" }));
+		// Meta opens straight from the window title, without going through Print first.
+		fireEvent.click(screen.getByRole("button", { name: "Meta" }));
 
 		const lightingDesigner = screen.getByRole("textbox", {
 			name: "Lighting designer",
