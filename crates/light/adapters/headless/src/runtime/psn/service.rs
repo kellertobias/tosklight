@@ -158,10 +158,12 @@ impl PsnResource {
             self.inner.sources.lock().clear();
             self.inner.held.lock().positions.clear();
             *self.inner.error.write() = None;
+            // Only a move is worth reopening the socket for. Editing a binding or a zone must not
+            // interrupt a stream that is arriving correctly.
+            self.inner
+                .generation
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-        self.inner
-            .generation
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub(in crate::runtime) fn generation(&self) -> u64 {
@@ -180,7 +182,7 @@ impl PsnResource {
         let mut sources = self.inner.sources.lock();
         sources
             .entry(source)
-            .or_insert_with(PsnTracking::new)
+            .or_default()
             .observe(datagram, now_millis);
     }
 

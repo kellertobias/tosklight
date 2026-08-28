@@ -1,5 +1,6 @@
 //! Typed object intents and validation for portable command Macros.
 
+use super::macros_v2_triggers::{application_trigger, trigger_wire};
 use super::show_object_intents_v2::{ReplayAction, ReplayKey};
 use super::show_objects_v2::{active_entry, object_record, validate_request_id};
 use super::*;
@@ -83,7 +84,7 @@ async fn run_macro_line(
     )
 }
 
-fn start_execution(
+pub(in crate::runtime) fn start_execution(
     state: &AppState,
     session: &Session,
     definition: light_application::CommandMacroDefinition,
@@ -199,37 +200,6 @@ pub(super) fn start_macro_from_playback(
         definition,
         revision,
         wire::MacroTrigger::Playback { playback_number },
-        None,
-        show_id,
-    )?;
-    Ok(())
-}
-
-/// Run a Macro because a tracking zone changed.
-///
-/// As the desk, on a connected session, exactly as an OSC surface's Macro runs. A desk with
-/// nobody connected runs nothing rather than inventing an actor: the show is not being operated,
-/// and an action with no operator behind it has nowhere to report itself.
-pub(super) fn start_macro_from_tracking(state: &AppState, macro_id: Uuid) -> Result<(), ApiError> {
-    let show_id = state
-        .active_show
-        .current()
-        .as_ref()
-        .map(|show| show.id)
-        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    let session = state
-        .sessions
-        .sessions()
-        .into_iter()
-        .find(|session| session.connected)
-        .ok_or_else(|| ApiError::bad_request("no desk session is connected"))?;
-    let (revision, definition) = macro_for_run(state, show_id, macro_id)?;
-    let _started = start_execution(
-        state,
-        &session,
-        definition,
-        revision,
-        wire::MacroTrigger::Tracking,
         None,
         show_id,
     )?;
@@ -1259,7 +1229,7 @@ fn byte_to_utf16(value: &str, byte: usize) -> u32 {
     value[..byte].encode_utf16().count() as u32
 }
 
-fn macro_for_run(
+pub(in crate::runtime) fn macro_for_run(
     state: &AppState,
     show_id: light_core::ShowId,
     macro_id: Uuid,
@@ -1506,42 +1476,6 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
         } else {
             light_application::CommandMacroSequenceOutcome::Succeeded
         })
-    }
-}
-
-fn application_trigger(trigger: wire::MacroTrigger) -> light_application::CommandMacroTrigger {
-    match trigger {
-        wire::MacroTrigger::Pool => light_application::CommandMacroTrigger::Pool,
-        wire::MacroTrigger::Editor => light_application::CommandMacroTrigger::Editor,
-        wire::MacroTrigger::Playback { playback_number } => {
-            light_application::CommandMacroTrigger::Playback { playback_number }
-        }
-        wire::MacroTrigger::CommandLine => light_application::CommandMacroTrigger::CommandLine,
-        wire::MacroTrigger::Http => light_application::CommandMacroTrigger::Http,
-        wire::MacroTrigger::WebSocket => light_application::CommandMacroTrigger::WebSocket,
-        wire::MacroTrigger::Osc => light_application::CommandMacroTrigger::Osc,
-        wire::MacroTrigger::Hardware => light_application::CommandMacroTrigger::Hardware,
-        wire::MacroTrigger::Schedule => light_application::CommandMacroTrigger::Schedule,
-        wire::MacroTrigger::Timecode => light_application::CommandMacroTrigger::Timecode,
-        wire::MacroTrigger::Tracking => light_application::CommandMacroTrigger::Tracking,
-    }
-}
-
-fn trigger_wire(trigger: light_application::CommandMacroTrigger) -> wire::MacroTrigger {
-    match trigger {
-        light_application::CommandMacroTrigger::Pool => wire::MacroTrigger::Pool,
-        light_application::CommandMacroTrigger::Editor => wire::MacroTrigger::Editor,
-        light_application::CommandMacroTrigger::Playback { playback_number } => {
-            wire::MacroTrigger::Playback { playback_number }
-        }
-        light_application::CommandMacroTrigger::CommandLine => wire::MacroTrigger::CommandLine,
-        light_application::CommandMacroTrigger::Http => wire::MacroTrigger::Http,
-        light_application::CommandMacroTrigger::WebSocket => wire::MacroTrigger::WebSocket,
-        light_application::CommandMacroTrigger::Osc => wire::MacroTrigger::Osc,
-        light_application::CommandMacroTrigger::Hardware => wire::MacroTrigger::Hardware,
-        light_application::CommandMacroTrigger::Schedule => wire::MacroTrigger::Schedule,
-        light_application::CommandMacroTrigger::Timecode => wire::MacroTrigger::Timecode,
-        light_application::CommandMacroTrigger::Tracking => wire::MacroTrigger::Tracking,
     }
 }
 

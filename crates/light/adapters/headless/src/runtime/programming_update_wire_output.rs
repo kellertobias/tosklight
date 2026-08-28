@@ -126,6 +126,7 @@ fn wire_kind(
         | app::ActiveShowObjectKind::Macro
         | app::ActiveShowObjectKind::Playback
         | app::ActiveShowObjectKind::PlaybackPage
+        | app::ActiveShowObjectKind::Psn
         | app::ActiveShowObjectKind::Schedule
         | app::ActiveShowObjectKind::StageLayout
         | app::ActiveShowObjectKind::Timecode

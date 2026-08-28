@@ -3210,6 +3210,19 @@
           "required": [
             "type"
           ]
+        },
+        {
+          "description": "A tracking zone the operator configured: somebody walked into it, or out of it.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tracking"
+            }
+          },
+          "required": [
+            "type"
+          ]
         }
       ]
     },
@@ -6959,6 +6972,34 @@
             "kind": {
               "type": "string",
               "const": "cue_list"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "psn"
             },
             "object_id": {
               "type": "string"

@@ -33,6 +33,7 @@ use crate::v2::programmer_lifecycle::*;
 use crate::v2::programmer_priority::*;
 use crate::v2::programming::*;
 use crate::v2::programming_update::*;
+use crate::v2::psn::*;
 use crate::v2::runtime::*;
 use crate::v2::schedules::*;
 use crate::v2::screen_configuration::*;
@@ -67,6 +68,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(playback_transport(config));
     declarations.extend(playback_topology(config));
     declarations.extend(patch(config));
+    declarations.extend(psn(config));
     declarations.extend(stage_layout(config));
     declarations.extend(runtime(config));
     declarations.extend(schedules(config));
@@ -993,6 +995,23 @@ fn visualizer_view(config: &Config) -> Vec<String> {
         VisualizerViewPatch::decl(config),
         VisualizerViewUpdateRequest::decl(config),
         VisualizerViewUpdateOutcome::decl(config),
+    ]
+}
+
+fn psn(config: &Config) -> Vec<String> {
+    vec![
+        PsnCalibrationProjection::decl(config),
+        PsnBindingProjection::decl(config),
+        PsnZoneProjection::decl(config),
+        PsnConfigurationProjection::decl(config),
+        PsnHealthProjection::decl(config),
+        PsnTrackerProjection::decl(config),
+        PsnPlacementProjection::decl(config),
+        PsnStatusProjection::decl(config),
+        PsnSnapshot::decl(config),
+        PsnUpdateRequest::decl(config),
+        PsnUpdateOutcome::decl(config),
+        PsnErrorResponse::decl(config),
     ]
 }
 

@@ -3,6 +3,7 @@ mod objects;
 mod ports;
 mod route;
 mod service;
+mod tracking;
 mod undo;
 
 pub use model::{
@@ -18,6 +19,9 @@ pub use model::{
 pub use ports::{ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity};
 pub use service::ActiveShowService;
 pub(crate) use service::{CompletedActiveShowTransaction, PreparedActiveShowTransaction};
+pub use tracking::{
+    DEFAULT_PSN_GROUP, DEFAULT_PSN_PORT, PsnBinding, PsnCalibration, PsnConfiguration, PsnZone,
+};
 
 #[cfg(test)]
 mod tests;

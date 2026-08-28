@@ -29,6 +29,10 @@ const TICK: Duration = Duration::from_millis(20);
 /// A PSN datagram is capped at 1500 bytes by the protocol; this leaves room for a sender that
 /// ignores the cap, so an oversized packet is read and rejected rather than silently truncated.
 const DATAGRAM_BUFFER: usize = 2_048;
+/// How often the stored configuration is read again. The desk's own edits are installed as they
+/// are accepted, so this is only for the changes that arrive another way: a show being opened, an
+/// undo, an import.
+const RELOAD_EVERY: Duration = Duration::from_secs(2);
 
 pub(in crate::runtime) async fn run(
     state: AppState,
@@ -39,7 +43,12 @@ pub(in crate::runtime) async fn run(
     let mut buffer = vec![0_u8; DATAGRAM_BUFFER];
     let mut ticker = tokio::time::interval(TICK);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut reloaded_at = std::time::Instant::now() - RELOAD_EVERY;
     loop {
+        if reloaded_at.elapsed() >= RELOAD_EVERY {
+            reloaded_at = std::time::Instant::now();
+            reload(&state);
+        }
         let generation = state.psn.generation();
         if generation != bound_generation {
             bound_generation = generation;
@@ -74,6 +83,27 @@ pub(in crate::runtime) async fn run(
                     _ = ticker.tick() => tick(&state),
                 }
             }
+        }
+    }
+}
+
+/// Take the configuration the show holds.
+///
+/// The desk's own edits are installed as they are accepted, so this catches what arrives another
+/// way — a show opened, an undo, a selective import — and a show with no tracking configuration at
+/// all installs the default, which is off and bound to nothing.
+fn reload(state: &AppState) {
+    let Some(show) = state.active_show.current() else {
+        return;
+    };
+    match super::super::psn_http::stored_configuration(state, show.id) {
+        Ok((_, configuration)) => {
+            if configuration != state.psn.configuration() {
+                state.psn.install(configuration);
+            }
+        }
+        Err(error) => {
+            tracing::debug!(error = %error.message, "the tracking configuration could not be read");
         }
     }
 }
@@ -168,7 +198,7 @@ fn point_locations(snapshot: &light_engine::EngineSnapshot) -> HashMap<uuid::Uui
 
 /// The desk's own clock, in milliseconds. Nothing in PSN is synchronised to it — the sender's
 /// timestamps are on the sender's clock — so freshness is measured against arrival here.
-fn now_millis() -> u64 {
+pub(in crate::runtime) fn now_millis() -> u64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START
         .get_or_init(std::time::Instant::now)

@@ -97,6 +97,7 @@ fn projection_for_kind(
         | ActiveShowObjectKind::Dynamic
         | ActiveShowObjectKind::PatchLayer
         | ActiveShowObjectKind::Preset
+        | ActiveShowObjectKind::Psn
         | ActiveShowObjectKind::Schedule
         | ActiveShowObjectKind::StageLayout
         | ActiveShowObjectKind::Timecode

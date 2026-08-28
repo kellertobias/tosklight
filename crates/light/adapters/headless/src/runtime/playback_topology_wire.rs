@@ -392,6 +392,7 @@ fn wire_kind(
         | Input::Dynamic
         | Input::PatchLayer
         | Input::Preset
+        | Input::Psn
         | Input::Schedule
         | Input::StageLayout
         | Input::Timecode

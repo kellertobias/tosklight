@@ -460,6 +460,7 @@ pub(in crate::runtime) struct ReplayResource {
         Arc<tokio::sync::Mutex<control_desk_configuration_v2::ControlDeskConfigurationReplayCache>>,
     desk_management: Arc<tokio::sync::Mutex<desk_management_v2::DeskManagementReplayCache>>,
     cue_thumbnails: Arc<Mutex<cue_thumbnails_http::CueThumbnailReplayCache>>,
+    psn: Arc<Mutex<psn_http::PsnReplayCache>>,
     stage_layout: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
     virtual_playback_zones:
         Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,
@@ -479,6 +480,7 @@ impl Default for ReplayResource {
             control_desk_configuration: Arc::default(),
             desk_management: Arc::default(),
             cue_thumbnails: Arc::default(),
+            psn: Arc::default(),
             stage_layout: Arc::default(),
             virtual_playback_zones: Arc::default(),
             visualizer_view: Arc::default(),

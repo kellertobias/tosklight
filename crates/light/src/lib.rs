@@ -38,10 +38,11 @@ pub use active_show::{
     ActiveShowUnitOfWork, BackupIdentity, CreateOutputRouteRangeCommand,
     CreateOutputRouteRangeResult, MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult,
     MutateOutputRouteCommand, MutateOutputRouteResult, OutputRouteChange, OutputRouteMutation,
-    PatchLayer, StageCamera3d, StageLayout, StagePosition2d, StagePosition3d,
-    StagePositions2dConfig, StagePositions2dProvenance, StageProjection2d,
-    UndoActiveShowObjectCommand, UndoActiveShowObjectResult, UndoActiveShowRecordingCommand,
-    UndoActiveShowRecordingObject, UndoActiveShowRecordingOperation, UserLayout,
+    PatchLayer, PsnBinding, PsnCalibration, PsnConfiguration, PsnZone, StageCamera3d, StageLayout,
+    StagePosition2d, StagePosition3d, StagePositions2dConfig, StagePositions2dProvenance,
+    StageProjection2d, UndoActiveShowObjectCommand, UndoActiveShowObjectResult,
+    UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
+    UndoActiveShowRecordingOperation, UserLayout,
 };
 pub use command_macro::{
     CommandMacroCompilation, CommandMacroCompileError, CommandMacroCompiledLine,

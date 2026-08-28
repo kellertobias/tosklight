@@ -622,6 +622,14 @@ pub enum ShowObjectChange {
         body: Option<serde_json::Value>,
         deleted: bool,
     },
+    Psn {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
     Group {
         object_id: String,
         #[ts(type = "number")]
@@ -716,6 +724,7 @@ pub enum ShowObjectKind {
     Playback,
     PlaybackPage,
     Preset,
+    Psn,
     Schedule,
     StageLayout,
     Timecode,

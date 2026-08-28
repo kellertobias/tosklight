@@ -34,11 +34,11 @@ pub const OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS: [u64; 20] = [
 
 /// Frame-rate thresholds an operator watches for dropped output cadence.
 ///
-/// An operator judging cadence asks "how many frames made 40 Hz?", not "how many fell short of
-/// it", so the counts read upward from each bound. There is one more bucket than there are
-/// bounds: the first holds every frame slower than the lowest bound, and each bound after it
-/// holds every frame at or above that bound. The counts are therefore cumulative from the top,
-/// and the last bucket is the fastest band the desk is asked about.
+/// The bounds split the rate axis into disjoint bands, so a delivered frame is counted exactly
+/// once and the bucket counts sum to the frames in the window. There is one more bucket than
+/// there are bounds: the first holds every frame slower than the lowest bound, bucket `n + 1`
+/// holds every frame from bound `n` up to but not including bound `n + 1`, and the last holds
+/// every frame at or above the highest bound.
 pub const OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ: [f32; 9] =
     [20.0, 30.0, 38.0, 40.0, 44.0, 48.0, 52.0, 56.0, 60.0];
 
@@ -60,6 +60,18 @@ pub const OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ: [f32; 34] = [
     70.0, 73.0, 76.0, 79.0, 82.0, 85.0, 88.0, 91.0, 94.0, 97.0, 100.0, 103.0, 106.0, 109.0, 112.0,
     115.0, 118.0, 120.0,
 ];
+
+/// The single [`OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ`] bucket a measured rate belongs to.
+///
+/// The bands are disjoint: a frame slower than the lowest bound lands in bucket zero, a frame at
+/// or above the highest bound lands in the last bucket, and everything between lands in the one
+/// band whose floor it reaches.
+pub fn recent_frame_rate_bucket(frame_hz: f32) -> usize {
+    OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ
+        .iter()
+        .position(|bound| frame_hz < *bound)
+        .unwrap_or(OUTPUT_FRAME_RATE_BUCKET_COUNT - 1)
+}
 
 /// The band a delivered frame's measured rate belongs to.
 ///
@@ -92,8 +104,9 @@ pub struct OutputHealth {
     /// Mean measured frame rate over the last [`OUTPUT_RECENT_WINDOW`].
     pub recent_frame_hz_average: f32,
     /// Frames in the last [`OUTPUT_RECENT_WINDOW`] by [`OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ`]
-    /// band: index zero is slower than the lowest bound, and index `n + 1` is at or above
-    /// bound `n`.
+    /// band: index zero is slower than the lowest bound, index `n + 1` reaches bound `n` without
+    /// reaching bound `n + 1`, and the last is at or above the highest bound. The bands are
+    /// disjoint, so every frame is counted once.
     pub recent_frame_rate_bucket_counts: [u64; OUTPUT_FRAME_RATE_BUCKET_COUNT],
     /// Send errors observed in the last [`OUTPUT_RECENT_WINDOW`].
     pub recent_send_errors: u64,
@@ -154,14 +167,7 @@ impl OutputHealth {
             minimum = minimum.min(*frame_hz);
             maximum = maximum.max(*frame_hz);
             total += f64::from(*frame_hz);
-            if *frame_hz < OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ[0] {
-                self.recent_frame_rate_bucket_counts[0] += 1;
-            }
-            for (bucket, bound) in OUTPUT_FRAME_RATE_BUCKET_BOUNDS_HZ.iter().enumerate() {
-                if *frame_hz >= *bound {
-                    self.recent_frame_rate_bucket_counts[bucket + 1] += 1;
-                }
-            }
+            self.recent_frame_rate_bucket_counts[recent_frame_rate_bucket(*frame_hz)] += 1;
         }
         self.recent_frame_hz_minimum = minimum;
         self.recent_frame_hz_maximum = maximum;
@@ -225,11 +231,11 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_counts_into_every_band_it_reaches() {
+    fn a_frame_counts_into_exactly_one_band() {
         let mut health = OutputHealth::default();
         let start = origin();
         health.record_frame(start);
-        // 25 Hz: at or above 20 and nothing faster, and not slower than the lowest bound.
+        // 25 Hz: reaches 20 without reaching 30, so only that band counts it.
         health.record_frame(start + Duration::from_millis(40));
         health.refresh_recent(start + Duration::from_millis(40));
 
@@ -238,7 +244,7 @@ mod tests {
             [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
         );
 
-        // 62 Hz reaches every band, including the fastest.
+        // 62 Hz is above the highest bound, so only the overflow band counts it.
         let mut fast = OutputHealth::default();
         fast.record_frame(start);
         fast.record_frame(start + Duration::from_micros(16_129));
@@ -246,7 +252,7 @@ mod tests {
 
         assert_eq!(
             fast.recent_frame_rate_bucket_counts,
-            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
         );
 
         // 12 Hz reaches none of them, so only the below-lowest band counts it.

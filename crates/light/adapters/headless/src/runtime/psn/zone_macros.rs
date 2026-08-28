@@ -12,6 +12,8 @@
 
 use uuid::Uuid;
 
+use super::super::ApiError;
+
 use super::super::AppState;
 use super::zones::ZoneTransition;
 
@@ -27,7 +29,7 @@ pub(in crate::runtime) fn run(state: &AppState, zone_id: Uuid, transition: ZoneT
     let Some(macro_id) = macro_id else {
         return;
     };
-    if let Err(error) = super::super::macros_v2::start_macro_from_tracking(state, macro_id) {
+    if let Err(error) = start_macro(state, macro_id) {
         tracing::warn!(
             zone = %zone.name,
             %macro_id,
@@ -35,4 +37,35 @@ pub(in crate::runtime) fn run(state: &AppState, zone_id: Uuid, transition: ZoneT
             "a tracking zone could not run its Macro"
         );
     }
+}
+
+/// Run a Macro because a tracking zone changed.
+///
+/// As the desk, on a connected session, exactly as an OSC surface's Macro runs. A desk with
+/// nobody connected runs nothing rather than inventing an actor: the show is not being operated,
+/// and an action with no operator behind it has nowhere to report itself.
+fn start_macro(state: &AppState, macro_id: Uuid) -> Result<(), ApiError> {
+    let show_id = state
+        .active_show
+        .current()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.connected)
+        .ok_or_else(|| ApiError::bad_request("no desk session is connected"))?;
+    let (revision, definition) = super::super::macros_v2::macro_for_run(state, show_id, macro_id)?;
+    let _started = super::super::macros_v2::start_execution(
+        state,
+        &session,
+        definition,
+        revision,
+        light_wire::v2::macros::MacroTrigger::Tracking,
+        None,
+        show_id,
+    )?;
+    Ok(())
 }

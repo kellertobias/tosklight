@@ -76,6 +76,8 @@ mod programmer_values_ws_action_tests;
 mod programming_interaction_ws_action_tests;
 #[path = "programming_update_route_tests.rs"]
 mod programming_update_route_tests;
+#[path = "psn_route_tests.rs"]
+mod psn_route_tests;
 #[path = "runtime_v2_route_tests.rs"]
 mod runtime_v2_route_tests;
 #[path = "schedules_v2_route_tests.rs"]
@@ -94,6 +96,7 @@ mod show_object_v2_route_tests;
 mod show_patch_route_tests;
 #[path = "speed_group_v2_tests.rs"]
 mod speed_group_v2_tests;
+
 #[path = "stage_layout_route_tests.rs"]
 mod stage_layout_route_tests;
 #[path = "timecode_playback_convergence_tests.rs"]

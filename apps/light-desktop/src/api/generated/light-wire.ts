@@ -514,8 +514,8 @@ export type OutputRuntimeScope = { show_id: string, };
 export type OutputRuntimeProjection = { scope: OutputRuntimeScope, identity: OutputRuntimeIdentity, revision: number, grand_master: number, blackout: boolean, };
 export type OutputRuntimeChange = { projection: OutputRuntimeProjection, };
 export type OutputRuntimeSnapshot = { cursor: EventSnapshotCursor, projection: OutputRuntimeProjection, };
-export type ShowObjectKind = "attribute_configuration" | "cue_list" | "dynamic" | "group" | "macro" | "patch_layer" | "playback" | "playback_page" | "preset" | "schedule" | "stage_layout" | "timecode" | "user_layout";
-export type ShowObjectChange = { "kind": "attribute_configuration", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "dynamic", object_id: string, object_revision: number, body: unknown | null, validation_error?: string | null, deleted: boolean, } | { "kind": "cue_list", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "group", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "macro", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "patch_layer", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback_page", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "preset", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "schedule", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "stage_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "timecode", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "user_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
+export type ShowObjectKind = "attribute_configuration" | "cue_list" | "dynamic" | "group" | "macro" | "patch_layer" | "playback" | "playback_page" | "preset" | "psn" | "schedule" | "stage_layout" | "timecode" | "user_layout";
+export type ShowObjectChange = { "kind": "attribute_configuration", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "dynamic", object_id: string, object_revision: number, body: unknown | null, validation_error?: string | null, deleted: boolean, } | { "kind": "cue_list", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "psn", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "group", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "macro", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "patch_layer", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback_page", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "preset", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "schedule", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "stage_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "timecode", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "user_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
 export type ShowObjectsChange = { show_id: string, show_revision: number, changes: Array<ShowObjectChange>, };
 export type SelectiveImportObjectChange = { kind: string, object_id: string, object_revision: number, body: unknown, };
 export type FixtureProfileIdentity = { profile_id: string, revision: number, };
@@ -781,6 +781,101 @@ export type PatchSnapshot = { show_id: string, show_revision: number, patch_revi
  * Exactly one entry per profile revision referenced by `fixtures`.
  */
 profile_revisions: Array<PatchProfileRevisionProjection>, };
+export type PsnCalibrationProjection = {
+/**
+ * Where the tracking system's origin is in the show, in metres.
+ */
+offset_metres: [number, number, number],
+/**
+ * About the show's up axis, applied before the offset.
+ */
+rotation_degrees: number, scale: number, };
+export type PsnBindingProjection = { id: string, tracker_id: number,
+/**
+ * The 3D Point this tracker is. While the binding exists nothing else writes it.
+ */
+point_fixture_id: string, enabled: boolean, };
+export type PsnZoneProjection = { id: string, name: string, min_metres: [number, number, number], max_metres: [number, number, number],
+/**
+ * Empty means every tracker counts.
+ */
+tracker_ids: Array<number>, enter_macro_id?: string | null, leave_macro_id?: string | null,
+/**
+ * How long a change has to hold before it counts, in milliseconds.
+ */
+dwell_millis: number, };
+export type PsnConfigurationProjection = { enabled: boolean,
+/**
+ * The multicast group the desk listens to, as dotted quad.
+ */
+group: string, port: number,
+/**
+ * The network card to listen on, when the desk has more than one.
+ */
+interface?: string | null, stale_after_millis: number, calibration: PsnCalibrationProjection, bindings: Array<PsnBindingProjection>, zones: Array<PsnZoneProjection>, };
+export type PsnHealthProjection = { "state": "silent" } | { "state": "receiving" } | { "state": "stale", silent_for_millis: number, };
+export type PsnTrackerProjection = { tracker_id: number,
+/**
+ * What the sender calls it. A data packet carries only the number, so a source heard for less
+ * than a second has no name yet.
+ */
+name?: string | null,
+/**
+ * Where it is in the show's stage space, in metres, calibration applied.
+ */
+position_metres?: [number, number, number] | null, age_millis: number, stale: boolean,
+/**
+ * Which sender this came from, as address and port.
+ */
+source: string, };
+export type PsnPlacementProjection = { binding_id: string, point_fixture_id: string, position_metres: [number, number, number],
+/**
+ * The marker is further from where the point was patched than a 3D Point can reach, so the
+ * point stopped at the end of its travel.
+ */
+out_of_reach: boolean, };
+export type PsnStatusProjection = { enabled: boolean,
+/**
+ * The group and port the desk is listening on, when it is.
+ */
+listening_on?: string | null, health?: PsnHealthProjection | null,
+/**
+ * What the senders call themselves, once their info packets have said.
+ */
+system_names: Array<string>, trackers: Array<PsnTrackerProjection>, placements: Array<PsnPlacementProjection>, occupied_zone_ids: Array<string>, frames: number,
+/**
+ * Datagrams on the group that were not PSN, or could not be read. A steady climb here with
+ * frames also arriving means something else is talking on the group.
+ */
+ignored_datagrams: number,
+/**
+ * Why the desk is not listening, when it should be but cannot.
+ */
+error?: string | null, };
+export type PsnSnapshot = { revision: number, configuration: PsnConfigurationProjection, status: PsnStatusProjection, };
+export type PsnUpdateRequest = {
+/**
+ * Client-generated idempotency identity, scoped to the authenticated desk session.
+ */
+request_id: string, enabled?: boolean | null, group?: string | null, port?: number | null,
+/**
+ * Present and null clears the interface; absent leaves it alone.
+ */
+interface?: string | null | null, stale_after_millis?: number | null, calibration?: PsnCalibrationProjection | null,
+/**
+ * The whole binding list, when bindings are what changed.
+ */
+bindings?: Array<PsnBindingProjection> | null,
+/**
+ * The whole zone list, when zones are what changed.
+ */
+zones?: Array<PsnZoneProjection> | null, };
+export type PsnUpdateOutcome = { request_id: string, revision: number, configuration: PsnConfigurationProjection,
+/**
+ * True when the edit asked for what was already stored.
+ */
+unchanged: boolean, replayed: boolean, };
+export type PsnErrorResponse = { error: string, };
 export type StagePositionAxis = "x" | "y" | "z" | "rotation_x" | "rotation_y" | "rotation_z";
 export type StagePosition2d = { x: number, y: number, rotation: number, };
 export type StageProjection2d = "top_to_bottom" | "bottom_to_top" | "front_to_back" | "back_to_front" | "left_to_right" | "right_to_left";
@@ -1170,7 +1265,7 @@ export type MacroRunLineActionRequest = { source_revision: number, line: number,
 export type MacroLiveAction = { "type": "run", macro_id: string, source_revision?: number | null, trigger: MacroTrigger, } | { "type": "run_line", macro_id: string, source_revision: number, line: number, };
 export type MacroCancelActionRequest = { execution_id: string, };
 export type MacroRunLineUndoOutcome = { execution_id: string, changed: boolean, message: string, };
-export type MacroTrigger = { "type": "pool" } | { "type": "editor" } | { "type": "playback", playback_number: number, } | { "type": "command_line" } | { "type": "http" } | { "type": "web_socket" } | { "type": "osc" } | { "type": "hardware" } | { "type": "schedule" } | { "type": "timecode" };
+export type MacroTrigger = { "type": "pool" } | { "type": "editor" } | { "type": "playback", playback_number: number, } | { "type": "command_line" } | { "type": "http" } | { "type": "web_socket" } | { "type": "osc" } | { "type": "hardware" } | { "type": "schedule" } | { "type": "timecode" } | { "type": "tracking" };
 export type MacroExecutionState = "queued" | "validating" | "running" | "succeeded" | "failed" | "cancelled";
 export type MacroExecutionSnapshot = { execution_id: string, macro_id: string, macro_number: number, macro_name: string, source_revision: number, desk_id: string, session_id: string, state: MacroExecutionState, line?: number | null, statement?: number | null, command?: string | null, message?: string | null, trigger: MacroTrigger, started_at: string, finished_at?: string | null, };
 export type MacroRuntimeSnapshot = { desk_id: string, active: Array<MacroExecutionSnapshot>, recent: Array<MacroExecutionSnapshot>, };

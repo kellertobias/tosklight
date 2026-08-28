@@ -358,6 +358,10 @@ fn normalize_body(
             request,
         )
         .map(ActiveShowObjectBody::Schedule),
+        ActiveShowObjectBody::Psn(request) => {
+            normalize_passthrough(existing.and_then(ActiveShowObjectBody::psn), request)
+                .map(ActiveShowObjectBody::Psn)
+        }
         ActiveShowObjectBody::StageLayout(request) => normalize_passthrough(
             existing.and_then(ActiveShowObjectBody::stage_layout),
             request,

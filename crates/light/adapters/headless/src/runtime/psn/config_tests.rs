@@ -1,4 +1,5 @@
 use super::*;
+use uuid::Uuid;
 
 fn zone(min: [f32; 3], max: [f32; 3]) -> PsnZone {
     PsnZone {
@@ -90,7 +91,10 @@ fn an_uncalibrated_rig_is_taken_at_its_word() {
     // PSN and the desk already agree on metres and on which way is up, so the default is the
     // identity: a tracking system whose origin is the show's origin needs no calibration at all.
     let calibration = PsnCalibration::default();
-    assert_eq!(calibration.place_in_show([1.5, 2.0, -3.0]), [1.5, 2.0, -3.0]);
+    assert_eq!(
+        calibration.place_in_show([1.5, 2.0, -3.0]),
+        [1.5, 2.0, -3.0]
+    );
 }
 
 #[test]

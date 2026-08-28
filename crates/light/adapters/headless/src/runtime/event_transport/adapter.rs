@@ -687,6 +687,7 @@ fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire
             variant!(AttributeConfiguration)
         }
         application::ActiveShowObjectKind::CueList => variant!(CueList),
+        application::ActiveShowObjectKind::Psn => variant!(Psn),
         application::ActiveShowObjectKind::Dynamic => {
             let body = change
                 .body

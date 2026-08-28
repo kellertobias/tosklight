@@ -22,21 +22,12 @@ pub(in crate::runtime) enum ZoneTransition {
 }
 
 /// One zone as the tracker sees it.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(in crate::runtime) struct ZoneState {
     /// What the desk has committed to and acted on.
     pub occupied: bool,
     /// What the last look said, when it disagreed with `occupied`.
     pending: Option<(bool, u64)>,
-}
-
-impl Default for ZoneState {
-    fn default() -> Self {
-        Self {
-            occupied: false,
-            pending: None,
-        }
-    }
 }
 
 /// Advance every configured zone by one look at the trackers.

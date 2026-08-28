@@ -387,6 +387,23 @@ impl ReplayResource {
         self.cue_thumbnails.lock().insert(key, thumbnails, outcome);
     }
 
+    pub(in crate::runtime) async fn lookup_psn(
+        &self,
+        key: &psn_http::ReplayKey,
+        request: &light_wire::v2::psn::PsnUpdateRequest,
+    ) -> Result<Option<light_wire::v2::psn::PsnUpdateOutcome>, ApiError> {
+        self.psn.lock().get(key, request)
+    }
+
+    pub(in crate::runtime) async fn insert_psn(
+        &self,
+        key: psn_http::ReplayKey,
+        request: light_wire::v2::psn::PsnUpdateRequest,
+        outcome: light_wire::v2::psn::PsnUpdateOutcome,
+    ) {
+        self.psn.lock().insert(key, request, outcome);
+    }
+
     pub(in crate::runtime) async fn lookup_stage_layout(
         &self,
         key: &stage_layout_http::ReplayKey,

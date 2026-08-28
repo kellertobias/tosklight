@@ -20,6 +20,8 @@ pub enum ActiveShowObjectKind {
     Playback,
     PlaybackPage,
     Preset,
+    /// Live tracking: which tracker is which 3D Point, and what a zone does.
+    Psn,
     Schedule,
     StageLayout,
     Timecode,
@@ -40,6 +42,7 @@ pub enum ActiveShowObjectBody {
     Playback(LosslessBody<PlaybackDefinition>),
     PlaybackPage(LosslessBody<PlaybackPage>),
     Preset(LosslessBody<Preset>),
+    Psn(LosslessBody<super::PsnConfiguration>),
     Schedule(LosslessBody<crate::ScheduleDefinition>),
     StageLayout(LosslessBody<StageLayout>),
     Timecode(LosslessBody<light_playback::TimecodeDefinition>),
@@ -61,6 +64,7 @@ impl ActiveShowObjectBody {
             ActiveShowObjectKind::Playback => Self::Playback(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::PlaybackPage => Self::PlaybackPage(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Preset => Self::Preset(LosslessBody::decode(raw)?),
+            ActiveShowObjectKind::Psn => Self::Psn(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Schedule => Self::Schedule(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::StageLayout => Self::StageLayout(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Timecode => Self::Timecode(LosslessBody::decode(raw)?),
@@ -79,6 +83,7 @@ impl ActiveShowObjectBody {
             Self::Playback(_) => ActiveShowObjectKind::Playback,
             Self::PlaybackPage(_) => ActiveShowObjectKind::PlaybackPage,
             Self::Preset(_) => ActiveShowObjectKind::Preset,
+            Self::Psn(_) => ActiveShowObjectKind::Psn,
             Self::Schedule(_) => ActiveShowObjectKind::Schedule,
             Self::StageLayout(_) => ActiveShowObjectKind::StageLayout,
             Self::Timecode(_) => ActiveShowObjectKind::Timecode,
@@ -97,6 +102,7 @@ impl ActiveShowObjectBody {
             Self::Playback(body) => body.encode(),
             Self::PlaybackPage(body) => body.encode(),
             Self::Preset(body) => body.encode(),
+            Self::Psn(body) => body.encode(),
             Self::Schedule(body) => body.encode(),
             Self::StageLayout(body) => body.encode(),
             Self::Timecode(body) => body.encode(),
@@ -174,6 +180,13 @@ impl ActiveShowObjectBody {
         }
     }
 
+    pub(crate) fn psn(&self) -> Option<&LosslessBody<super::PsnConfiguration>> {
+        match self {
+            Self::Psn(body) => Some(body),
+            _ => None,
+        }
+    }
+
     pub(crate) fn stage_layout(&self) -> Option<&LosslessBody<StageLayout>> {
         match self {
             Self::StageLayout(body) => Some(body),
@@ -230,6 +243,20 @@ fn validate_family_shape(
             "stage_layout body has no Stage Layout fields",
         ));
     }
+    if kind == ActiveShowObjectKind::Psn {
+        // Every field of a tracking configuration has a default, so an empty body is the valid
+        // "off, nothing bound" one. A body carrying another family's fields is still refused.
+        if object.is_empty()
+            || ["enabled", "bindings", "zones", "calibration", "group"]
+                .iter()
+                .any(|field| object.contains_key(*field))
+        {
+            return Ok(());
+        }
+        return Err(<serde_json::Error as serde::de::Error>::custom(
+            "psn body has no tracking fields",
+        ));
+    }
     if kind == ActiveShowObjectKind::Group {
         return validate_group_family_shape(object);
     }
@@ -259,6 +286,7 @@ fn validate_family_shape(
         ActiveShowObjectKind::PlaybackPage => &["number", "name", "slots", "virtual_playbacks"],
         // `values` was absent from early empty Presets and is defaulted by the typed model.
         ActiveShowObjectKind::Preset => &["name", "family", "number"],
+        ActiveShowObjectKind::Psn => unreachable!("handled above"),
         ActiveShowObjectKind::Schedule => &["id", "name", "enabled", "trigger", "target"],
         ActiveShowObjectKind::StageLayout => unreachable!("handled above"),
         ActiveShowObjectKind::Timecode => &[
@@ -602,6 +630,7 @@ impl ActiveShowObjectKind {
             "playback" => Some(Self::Playback),
             "playback_page" => Some(Self::PlaybackPage),
             "preset" => Some(Self::Preset),
+            "psn" => Some(Self::Psn),
             "schedule" => Some(Self::Schedule),
             "stage_layout" => Some(Self::StageLayout),
             "timecode" => Some(Self::Timecode),
@@ -621,6 +650,7 @@ impl ActiveShowObjectKind {
             Self::Playback => "playback",
             Self::PlaybackPage => "playback_page",
             Self::Preset => "preset",
+            Self::Psn => "psn",
             Self::Schedule => "schedule",
             Self::StageLayout => "stage_layout",
             Self::Timecode => "timecode",

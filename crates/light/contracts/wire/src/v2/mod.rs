@@ -33,6 +33,7 @@ pub mod programmer_lifecycle;
 pub mod programmer_priority;
 pub mod programming;
 pub mod programming_update;
+pub mod psn;
 pub mod runtime;
 pub mod schedules;
 pub mod screen_configuration;
