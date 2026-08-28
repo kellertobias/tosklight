@@ -324,14 +324,11 @@ fn validate_show(
     if document.id() != commit.show_id {
         return Err(not_found("requested show is not active"));
     }
-    if let Some(expected) = commit.expected_show_revision
-        && expected != document.revision()
-    {
-        return Err(
-            ActionError::new(ActionErrorKind::Conflict, "stale active-show revision")
-                .at_related_revision(document.revision().value()),
-        );
-    }
+    // Deliberately no whole-show revision check. Every management operation names one Group and
+    // carries that Group's own revision, which `validate_revision` enforces immediately below. The
+    // show revision moves for every unrelated edit anywhere in the show, so checking it here
+    // refused edits that collided with nothing — the operator saw a conflict for a Cue somebody
+    // else recorded while their Group settings dialog was open.
     Ok(())
 }
 

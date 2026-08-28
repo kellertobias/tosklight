@@ -376,12 +376,27 @@ fn a_stale_object_revision_conflicts_and_reports_the_current_revision() {
 }
 
 #[test]
-fn a_stale_show_revision_conflicts_before_reading_the_group() {
+fn an_unrelated_show_edit_does_not_conflict_with_a_current_group() {
+    // The show revision moves for every edit anywhere in the show. This write names one Group and
+    // brings that Group's own revision, so an unrelated edit elsewhere must not refuse it.
     let rig = TestRig::new([("house", group_body("house", "House", &[]))]);
     let mut commit = commit_for(&rig, "house", rename("Renamed"));
     commit.expected_show_revision = Some(light_show::PortableShowRevision::from_value(
         rig.document.revision().value() + 40,
     ));
+
+    let result = changed(&rig, &commit);
+
+    assert_eq!(result.projection.object_id, "house");
+}
+
+#[test]
+fn a_stale_group_revision_still_conflicts_however_fresh_the_show_is() {
+    // The object guard is the one protecting the data, and it is unchanged.
+    let rig = TestRig::new([("house", group_body("house", "House", &[]))]);
+    let mut commit = commit_for(&rig, "house", rename("Renamed"));
+    commit.expected_object_revision += 7;
+    commit.expected_show_revision = Some(rig.document.revision());
 
     let error = error_for(&rig, &commit);
 

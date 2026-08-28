@@ -217,7 +217,16 @@ fn validate_show(
             "requested show is not active",
         ));
     }
+    // The write changes one Group, and the Group's own revision is what protects it. The show
+    // revision moves for every unrelated edit in the show — another Cue recorded, another preset
+    // stored, a different Group changed — so pinning it here would refuse writes that collide with
+    // nothing. It is still honoured when the caller brings no object guard, because then it is the
+    // only protection the write has.
     if let Some(expected) = commit.expected_show_revision
+        && matches!(
+            commit.expected_object_revision,
+            ProgrammingGroupRevisionExpectation::Current
+        )
         && expected != document.revision()
     {
         return Err(

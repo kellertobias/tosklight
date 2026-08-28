@@ -43,14 +43,8 @@ export class CueRecordingWriter implements CueRecordingActions {
 			input.target.kind === "selected_playback"
 				? this.options.selectedPlayback()
 				: null;
-		const request = { ...input, requestId: crypto.randomUUID() };
 		try {
-			const outcome = await this.send(revision, request);
-			if (!this.isCurrent(generation)) return null;
-			assertOutcome(request, outcome);
-			this.installOutcome(outcome);
-			this.options.onError?.(null);
-			return outcome;
+			return await this.attempt(input, revision, generation);
 		} catch (reason) {
 			if (!this.isCurrent(generation)) return null;
 			const error = asError(reason);
@@ -60,9 +54,59 @@ export class CueRecordingWriter implements CueRecordingActions {
 				generation,
 				selectedPlayback,
 			);
+			if (!this.isCurrent(generation)) return null;
+			// Recording a Cue names no single object, so the desk pins the whole show's revision —
+			// and that moves for every unrelated edit anywhere in the show. The repair above has
+			// already installed the authoritative revision and reloaded the target, and the capture
+			// is unchanged. One further attempt against that revision either succeeds, in which case
+			// nothing was ever wrong and the operator has no reason to see a failure, or fails and is
+			// reported exactly as it always was.
+			const repaired = this.repairedShowRevision(error, generation, revision);
+			if (repaired != null) {
+				try {
+					return await this.attempt(input, repaired, generation);
+				} catch (retried) {
+					if (!this.isCurrent(generation)) return null;
+					this.options.onError?.(asError(retried));
+					return null;
+				}
+			}
 			this.options.onError?.(error);
 			return null;
 		}
+	}
+
+	/**
+	 * The Show revision worth one further attempt, or null when retrying would be wrong.
+	 *
+	 * Only a revision conflict qualifies, and only when the repair actually moved the store on to a
+	 * newer revision than the one that was refused. A retry at the same revision would ask the same
+	 * question and get the same answer.
+	 */
+	private repairedShowRevision(
+		error: Error,
+		generation: number,
+		attempted: number,
+	) {
+		if (transportFailure(error)?.status !== 409) return null;
+		const snapshot = this.options.store.getSnapshot();
+		if (snapshot.authorityGeneration !== generation) return null;
+		const current = snapshot.showRevision;
+		return current != null && current > attempted ? current : null;
+	}
+
+	private async attempt(
+		input: RecordCueInput,
+		revision: number,
+		generation: number,
+	) {
+		const request = { ...input, requestId: crypto.randomUUID() };
+		const outcome = await this.send(revision, request);
+		if (!this.isCurrent(generation)) return null;
+		assertOutcome(request, outcome);
+		this.installOutcome(outcome);
+		this.options.onError?.(null);
+		return outcome;
 	}
 
 	stop() {

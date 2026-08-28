@@ -244,6 +244,28 @@ fn exact_object_and_show_revisions_are_validated_before_mutation() {
     );
 }
 
+#[test]
+fn an_unrelated_show_edit_does_not_conflict_with_a_current_group() {
+    // A stale show revision alongside an exact object guard is the false conflict this path used
+    // to raise: the Group named here has not moved, only something else in the show has.
+    let document = TestDocument::new([("target", group_body("target", "Target", []))]);
+    let mut commit = recording(
+        &document,
+        "target",
+        [],
+        ProgrammingGroupRecordOperation::Overwrite,
+    );
+    commit.expected_object_revision = ProgrammingGroupRevisionExpectation::Exact(1);
+    commit.expected_show_revision = Some(PortableShowRevision::from_value(0));
+
+    let result = prepare_recording(&document.document, &commit);
+
+    assert!(
+        result.is_ok(),
+        "an unrelated show edit must not refuse a write guarded by its own object revision"
+    );
+}
+
 fn recording_error(
     result: Result<PreparedActiveShowTransaction<PreparedRecording>, ActionError>,
 ) -> ActionError {

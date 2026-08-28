@@ -175,7 +175,15 @@ fn validate_show(
             "requested show is not active",
         ));
     }
+    // The write changes one Preset, and the Preset's own revision is what protects it. The show
+    // revision moves for every unrelated edit in the show, so pinning it here would refuse writes
+    // that collide with nothing. It is still honoured when the caller brings no object guard,
+    // because then it is the only protection the write has.
     if let Some(expected) = commit.expected_show_revision
+        && matches!(
+            commit.expected_object_revision,
+            ProgrammingPresetRevisionExpectation::Current
+        )
         && expected != document.revision()
     {
         return Err(
@@ -303,6 +311,27 @@ mod tests {
         };
         assert_eq!(state.result.projection.object_id, "01");
         assert_eq!(state.result.projection.raw_body["future"]["keep"], true);
+    }
+
+    #[test]
+    fn an_unrelated_show_edit_does_not_conflict_with_a_current_preset() {
+        // The Preset named here has not moved; only something else in the show has. That is the
+        // false conflict this path used to raise.
+        let document = TestDocument::new([("2.1", preset_body("Canonical", 0.2))]);
+        let mut commit = recording(&document, 0.8);
+        commit.expected_object_revision = ProgrammingPresetRevisionExpectation::Exact(
+            document
+                .document
+                .object("preset", "2.1")
+                .unwrap()
+                .revision(),
+        );
+        commit.expected_show_revision = Some(PortableShowRevision::from_value(0));
+
+        assert!(
+            prepare_recording(&document.document, &commit).is_ok(),
+            "an unrelated show edit must not refuse a write guarded by its own object revision"
+        );
     }
 
     #[test]

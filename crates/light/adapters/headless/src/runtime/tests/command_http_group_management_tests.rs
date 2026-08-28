@@ -283,21 +283,23 @@ async fn spatial_mapping_set_validate_and_remove_are_atomic_revisioned_object_in
     assert!(settings["resolved_spatial"]["projected_positions"][0].get("v").is_some());
     let baseline = scenario.state.events.latest_sequence();
 
-    let stale_show = scenario
+    // The Group's own revision is the guard that protects this write. A stale one still refuses,
+    // and refuses before mutating anything.
+    let stale_object = scenario
         .group_management_action(
             &show_id,
             Some(&scenario.token),
             group_management_request(
-                "mapping-stale-show",
+                "mapping-stale-object",
                 "house",
                 serde_json::json!({"type":"remove_spatial_mapping"}),
-                object_revision + 1,
-                show_revision,
+                object_revision,
+                set_show_revision,
             ),
         )
         .await;
-    assert_eq!(stale_show.status(), StatusCode::CONFLICT);
-    assert_eq!(json(stale_show).await["current_related_revision"], set_show_revision);
+    assert_eq!(stale_object.status(), StatusCode::CONFLICT);
+    assert_eq!(json(stale_object).await["current_revision"], object_revision + 1);
     assert_eq!(scenario.state.events.latest_sequence(), baseline);
 
     let mut invalid_mapping = top_grid_mapping();
@@ -342,6 +344,57 @@ async fn spatial_mapping_set_validate_and_remove_are_atomic_revisioned_object_in
     assert_eq!(
         management_group_body(&removed)["future_extension"],
         serde_json::json!({"retain":true})
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn an_unrelated_show_edit_does_not_refuse_a_group_management_write() {
+    // Editing a Group names one object and carries that object's revision. The show revision moves
+    // for every unrelated edit anywhere in the show, so it must not be what decides this write.
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("Group unrelated show edit").await;
+    seed_group(&scenario, &show_id, "house").await;
+    seed_group(&scenario, &show_id, "spare").await;
+    let (stale_show_revision, object_revision) =
+        group_authority(&scenario, &show_id, "house").await;
+
+    // An edit to a different Group, which moves the show revision and nothing about "house".
+    let unrelated = scenario
+        .group_management_action(
+            &show_id,
+            Some(&scenario.token),
+            group_management_request(
+                "unrelated-rename",
+                "spare",
+                rename("Spare renamed"),
+                group_authority(&scenario, &show_id, "spare").await.1,
+                stale_show_revision,
+            ),
+        )
+        .await;
+    assert_eq!(unrelated.status(), StatusCode::OK);
+    let moved_show_revision = management_show_revision(&management_outcome(unrelated).await);
+    assert_ne!(moved_show_revision, stale_show_revision);
+
+    let renamed = scenario
+        .group_management_action(
+            &show_id,
+            Some(&scenario.token),
+            group_management_request(
+                "house-rename",
+                "house",
+                rename("House renamed"),
+                object_revision,
+                stale_show_revision,
+            ),
+        )
+        .await;
+
+    assert_eq!(renamed.status(), StatusCode::OK);
+    assert_eq!(
+        management_group_body(&management_outcome(renamed).await)["name"],
+        "House renamed"
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

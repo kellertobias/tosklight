@@ -415,6 +415,49 @@ describe("CueRecordingWriter", () => {
 		expect(onError).toHaveBeenLastCalledWith(failure);
 	});
 
+	it("retries once against the repaired Show revision and reports no failure", async () => {
+		// A Cue recording carries no object guard, so the desk pins the whole show's revision. An
+		// unrelated edit anywhere in the show moves it and refuses a recording that collides with
+		// nothing. The repair already knows the authoritative revision, so one further attempt is
+		// the operator's answer rather than an error message.
+		const attempts: number[] = [];
+		const record = vi.fn(
+			async (
+				_showId: string,
+				revision: number,
+				request: CueRecordingRequest,
+			) => {
+				attempts.push(revision);
+				if (attempts.length === 1) throw conflictError(9);
+				return outcome(request.requestId);
+			},
+		);
+		const { store, writer, onError } = setup(record);
+
+		await expect(writer.record(input())).resolves.toMatchObject({
+			status: "changed",
+		});
+
+		expect(attempts).toEqual([7, 9]);
+		expect(onError).toHaveBeenLastCalledWith(null);
+		expect(store.getSnapshot().cueLists[0].body.cues[0].name).toBe("Response");
+	});
+
+	it("retries a conflict only once and then reports the second failure", async () => {
+		const second = conflictError(11);
+		const attempts: number[] = [];
+		const record = vi.fn(async (_showId: string, revision: number) => {
+			attempts.push(revision);
+			throw attempts.length === 1 ? conflictError(9) : second;
+		});
+		const { writer, onError } = setup(record);
+
+		expect(await writer.record(input())).toBeNull();
+
+		expect(attempts).toEqual([7, 9]);
+		expect(onError).toHaveBeenLastCalledWith(second);
+	});
+
 	it("repairs only the Page-to-Playback-to-Cuelist chain on conflict", async () => {
 		const conflict = conflictError(9);
 		const repairedPage = page(9);
