@@ -5,7 +5,11 @@
  * and a transport is not needed to do it.
  */
 
-import type { Desk, PatchedFixture } from "./desk";
+import {
+	type PatchBackend,
+	type PatchedFixture,
+	UnsupportedByProduct,
+} from "./backend";
 
 export interface Tool {
 	name: string;
@@ -15,7 +19,7 @@ export interface Tool {
 		properties: Record<string, unknown>;
 		required?: string[];
 	};
-	run(desk: Desk, input: Record<string, any>): Promise<unknown>;
+	run(desk: PatchBackend, input: Record<string, any>): Promise<unknown>;
 }
 
 const fixtureNumber = {
@@ -64,7 +68,7 @@ function appearanceWithGel(
 }
 
 /** One past the last layer's order, so a new layer lands at the end rather than on top of one. */
-async function nextLayerOrder(desk: Desk): Promise<number> {
+async function nextLayerOrder(desk: PatchBackend): Promise<number> {
 	const layers = await desk.layers();
 	return layers.reduce((highest, layer) => Math.max(highest, layer.order), -1) + 1;
 }
@@ -500,6 +504,11 @@ export const tools: Tool[] = [
 			required: ["layer_id", "name"],
 		},
 		async run(desk, input) {
+			// The Architect keeps layers on its fixtures and has no route that names or reorders
+			// one. Saying which product cannot do this is more use than a failure from inside an
+			// HTTP call, and set_fixture_layer still works there.
+			if (!desk.saveLayer)
+				throw new UnsupportedByProduct(desk.product, "create or rename a layer");
 			const existing = await desk.layer(input.layer_id);
 			// An unstated order keeps where the layer already sits, and puts a new one at the end
 			// rather than on top of whatever happens to hold order zero.

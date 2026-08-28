@@ -33,6 +33,21 @@ pub fn broadcast<P: Serialize + Clone>(
     .map_err(|error| error.to_string())
 }
 
+/// Tell every window, with nothing excluded.
+///
+/// The counterpart to [`broadcast`] for a change that no window made — an edit arriving through the
+/// local editing API has no originating window, so there is nobody who already knows about it.
+pub fn broadcast_all<P: Serialize + Clone>(
+    app: &tauri::AppHandle,
+    event: &str,
+    payload: P,
+) -> Result<(), String> {
+    app.emit_filter(event, payload, |target| {
+        matches!(target, EventTarget::WebviewWindow { .. })
+    })
+    .map_err(|error| error.to_string())
+}
+
 /// Open another window of the editor on the same document.
 ///
 /// Every window is the same surface, so this is deliberately not a second kind of window with its

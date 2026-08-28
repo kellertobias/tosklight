@@ -11,11 +11,12 @@ import {
 	CallToolRequestSchema,
 	ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Desk, DeskError, type DeskOptions } from "./desk";
+import type { PatchBackend } from "./backend";
+import { DeskError } from "./desk";
 import { tools } from "./tools";
 
-export function createServer(options: DeskOptions): Server {
-	const desk = new Desk(options);
+/** Serve the patch tools against one product. */
+export function createServer(desk: PatchBackend): Server {
 	const server = new Server(
 		{ name: "tosklight-patch", version: "0.1.0" },
 		{ capabilities: { tools: {} } },

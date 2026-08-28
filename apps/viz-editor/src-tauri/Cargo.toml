@@ -9,6 +9,7 @@ authors.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+axum.workspace = true
 base64.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"

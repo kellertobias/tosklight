@@ -181,6 +181,19 @@ describe("patch tools", () => {
 		).rejects.toThrow("cannot be emptied onto itself");
 	});
 
+	it("says which product cannot edit a layer, rather than failing inside a request", async () => {
+		// The Architect keeps layers on its fixtures and has no route that names or reorders one.
+		const { desk } = fakeDesk([], []);
+		const architectShaped = Object.assign(Object.create(Object.getPrototypeOf(desk)), desk, {
+			product: "The Architect",
+			saveLayer: undefined,
+		});
+
+		await expect(
+			tool("save_layer").run(architectShaped, { layer_id: "truss", name: "Truss" }),
+		).rejects.toThrow("The Architect cannot create or rename a layer");
+	});
+
 	it("searches the library by manufacturer, name or mode", async () => {
 		const { desk } = fakeDesk([]);
 		const found = (await tool("search_fixture_library").run(desk, {

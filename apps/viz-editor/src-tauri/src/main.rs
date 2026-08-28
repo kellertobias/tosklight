@@ -10,6 +10,7 @@ mod cad;
 mod contract;
 mod demo;
 mod discovery;
+mod local_api;
 mod recent;
 mod session;
 mod verify;
@@ -271,6 +272,12 @@ fn main() {
             }
             prepare_local_visualizer(app).map_err(std::io::Error::other)?;
             announce_on_the_network(app);
+            // An editor whose local API will not start is still an editor. Say so and carry on
+            // rather than refusing to open a window over a port an operator may never use.
+            match local_api::start(app) {
+                Ok(handle) => println!("local editing API on 127.0.0.1:{}", handle.port),
+                Err(error) => eprintln!("{error}"),
+            }
             if let Some(address) = scene_address() {
                 let source = session.scene_source();
                 tauri::async_runtime::spawn(async move {

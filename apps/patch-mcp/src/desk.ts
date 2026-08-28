@@ -7,6 +7,13 @@
  * that in one place is what stops a tool quietly dropping a field it did not know about.
  */
 
+import type {
+	PatchBackend,
+	PatchLayer,
+	PatchSnapshot,
+	PatchedFixture,
+} from "./backend";
+
 export interface DeskOptions {
 	/** Where the desk is listening. */
 	baseUrl: string;
@@ -15,43 +22,20 @@ export interface DeskOptions {
 	fetch?: typeof globalThis.fetch;
 }
 
-/** A fixture as the patch reports it. Kept loose: the desk owns this shape, not this server. */
-export type PatchedFixture = Record<string, unknown> & {
-	fixture_id: string;
-	fixture_number: number | null;
-	name: string;
-	profile_id: string;
-	profile_revision: number;
-	mode_id: string;
-	layer_id: string;
-	split_patches: Array<{
-		split: number;
-		universe: number | null;
-		address: number | null;
-	}>;
-};
-
-/** A patch layer as the show stores it. */
-export interface PatchLayer {
-	id: string;
-	revision: number;
-	name: string;
-	order: number;
-}
+// The patch shapes are the same on both products and now live in `backend.ts`, beside the
+// interface the tools are written against. Re-exported here so existing importers are undisturbed.
+export type { PatchLayer, PatchedFixture, PatchSnapshot } from "./backend";
 
 interface PatchLayerBody {
 	name?: string;
 	order?: number;
 }
 
-export interface PatchSnapshot {
-	patch_revision: number;
-	fixtures: PatchedFixture[];
-}
-
 export class DeskError extends Error {}
 
-export class Desk {
+export class Desk implements PatchBackend {
+	readonly product = "The Control desk";
+
 	private readonly options: DeskOptions;
 	private readonly http: typeof globalThis.fetch;
 	private token: string | null = null;

@@ -341,6 +341,25 @@ pub fn patch_fixtures(
     cad: tauri::State<'_, crate::cad::CadState>,
     mutation: MutationDto,
 ) -> Answer<OutcomeDto> {
+    apply_patch_mutation(&app, &session, &cad, Some(window.label()), mutation)
+}
+
+/// Apply one patch mutation and tell every window that needs to know.
+///
+/// Both ways into the patch come through here — a window's own command, and the local editing API —
+/// because the announcement is the part that is easy to forget and expensive to omit. A mutation
+/// that does not announce itself leaves every other window drawing a rig that no longer exists.
+///
+/// `origin` is the window that asked, when a window asked. It already holds the outcome the call
+/// returned, so it is left out of the patch announcement rather than being told its own edit twice.
+/// A call from the local API has no originating window, and then nothing is left out.
+pub(crate) fn apply_patch_mutation(
+    app: &tauri::AppHandle,
+    session: &Session,
+    cad: &crate::cad::CadState,
+    origin: Option<&str>,
+    mutation: MutationDto,
+) -> Answer<OutcomeDto> {
     let outcome = session.change(|document| {
         let request_id = mutation.request_id.clone();
         let command = mutation.into_command(document.show_id());
@@ -355,20 +374,22 @@ pub fn patch_fixtures(
         })
     })?;
     if outcome.changed {
-        // The window that patched already has this outcome from the call it made. Every other
-        // window learns the edit as its own patch stream would have delivered it, so its sheet
-        // applies one delta rather than reloading the whole rig.
-        crate::windows::broadcast(
-            &app,
-            window.label(),
-            crate::windows::PATCH_CHANGE_EVENT,
-            serde_json::to_value(&outcome.change).map_err(|error| error.to_string())?,
-        )?;
+        // Every window that did not make the edit learns it as its own patch stream would have
+        // delivered it, so its sheet applies one delta rather than reloading the whole rig.
+        let change = serde_json::to_value(&outcome.change).map_err(|error| error.to_string())?;
+        match origin {
+            Some(origin) => {
+                crate::windows::broadcast(app, origin, crate::windows::PATCH_CHANGE_EVENT, change)?;
+            }
+            None => {
+                crate::windows::broadcast_all(app, crate::windows::PATCH_CHANGE_EVENT, change)?;
+            }
+        }
         // The rig drawings are the same edit seen from the CAD side, and every window draws them,
         // including the one that patched.
-        let revision =
-            session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
-        crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
+        let revision = session
+            .with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+        crate::cad::emit_scene_state_delta(app, session, cad, revision)?;
     }
     Ok(outcome)
 }
