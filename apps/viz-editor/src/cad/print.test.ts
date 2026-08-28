@@ -101,7 +101,7 @@ describe("CAD PDF export", () => {
 		expect(pdf).toContain("/Count 2");
 		expect(pdf.match(/\/Type \/Page\b/g)).toHaveLength(2);
 		expect(pdf).toContain(" re W n");
-		expect(pdf).toContain("Tasklight Architect");
+		expect(pdf).toContain("ToskLight Architect");
 		expect(pdf).toContain("Festival");
 		expect(pdf).toContain("Alex Designer");
 		expect(pdf).toContain("Grand Hall");

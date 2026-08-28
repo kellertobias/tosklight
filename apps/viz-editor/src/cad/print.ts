@@ -276,7 +276,7 @@ export function buildCadPdf(
 				["Version", info.showVersion],
 			].filter((entry) => entry[1]);
 			commands.push(
-				text("Tasklight Architect", tx + 76, BORDER + TITLE_H - 15, 10, true),
+				text("ToskLight Architect", tx + 76, BORDER + TITLE_H - 15, 10, true),
 				...details
 					.slice(0, 4)
 					.map(([label, value], index) =>
@@ -385,7 +385,7 @@ function fixtureListStreams(
 			"0.7 w",
 			`${n(BORDER)} ${n(BORDER)} ${n(W - BORDER * 2)} ${n(H - BORDER * 2)} re S`,
 			...mark(BORDER + 4, H - BORDER - 54),
-			text("Tasklight Architect", BORDER + 64, H - BORDER - 18, 13, true),
+			text("ToskLight Architect", BORDER + 64, H - BORDER - 18, 13, true),
 			text(
 				`${info.project || info.showName || "Show"} - Fixture List${chunks.length > 1 ? ` ${pageIndex + 1}/${chunks.length}` : ""}`,
 				BORDER + 64,
@@ -514,7 +514,7 @@ function svgIconPath(fill: string) {
 		.sort((left, right) => right[1].length - left[1].length);
 	if (!matches[0])
 		throw new Error(
-			`Tasklight application SVG is missing its ${fill} vector path`,
+			`ToskLight application SVG is missing its ${fill} vector path`,
 		);
 	const tokens =
 		matches[0][1].match(/[MLCZ]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? [];
@@ -532,7 +532,7 @@ function svgIconPath(fill: string) {
 		} else if (command === "Z") output.push("h");
 		else
 			throw new Error(
-				`Unsupported command ${command} in Tasklight application SVG`,
+				`Unsupported command ${command} in ToskLight application SVG`,
 			);
 	}
 	return output.join(" ");
@@ -575,7 +575,7 @@ function pdfDocument(
 			`<< /Length ${new TextEncoder().encode(streams[i].content).length} >>\nstream\n${streams[i].content}\nendstream`,
 		);
 	}
-	let output = "%PDF-1.4\n%Tasklight Architect\n";
+	let output = "%PDF-1.4\n%ToskLight Architect\n";
 	const offsets = [0];
 	for (let i = 0; i < objects.length; i++) {
 		offsets.push(new TextEncoder().encode(output).length);

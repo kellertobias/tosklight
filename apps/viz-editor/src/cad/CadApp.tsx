@@ -297,7 +297,7 @@ export function CadApp() {
 		if (!selected.length) return;
 		const path = await save({
 			title: "Export CAD plan pages",
-			defaultPath: "Tasklight Architect Plan.pdf",
+			defaultPath: "ToskLight Architect Plan.pdf",
 			filters: [{ name: "PDF document", extensions: ["pdf"] }],
 		});
 		if (!path) return;
@@ -385,7 +385,7 @@ export function CadApp() {
 		<main className="cad-app">
 			<WindowControls />
 			<WindowHeader
-				title="Tasklight Architect"
+				title="ToskLight Architect"
 				info={
 					documentInfo?.fileName
 						? { primary: documentInfo.fileName }
@@ -396,6 +396,23 @@ export function CadApp() {
 					onPointerDown: beginWindowDrag,
 				}}
 				groups={[
+					// The print sidebar shows one of two panels, so which one is a window-level
+					// choice rather than a control inside the panel it switches away from.
+					...(printMode
+						? [
+								{
+									id: "cad-print-tabs" as const,
+									kind: "tabs" as const,
+									activeId: sidebarTab,
+									onActiveChange: (id: string) =>
+										setSidebarTab(id === "project" ? "project" : "print"),
+									actions: [
+										{ id: "print", label: "Pages" },
+										{ id: "project", label: "Project" },
+									],
+								},
+							]
+						: []),
 					{
 						id: "cad-actions",
 						actions: [
@@ -465,20 +482,6 @@ export function CadApp() {
 								{sidebarTab === "project" ? "Printed on every page" : "A4 pages"}
 							</span>
 						</header>
-						<div className="cad-print-tabs" role="tablist">
-							{(["print", "project"] as const).map((tab) => (
-								<button
-									key={tab}
-									type="button"
-									role="tab"
-									aria-selected={sidebarTab === tab}
-									className={sidebarTab === tab ? "is-selected" : ""}
-									onClick={() => setSidebarTab(tab)}
-								>
-									{tab === "print" ? "Pages" : "Project"}
-								</button>
-							))}
-						</div>
 						{sidebarTab === "project" ? (
 							<CadProjectPanel
 								paperwork={paperwork}

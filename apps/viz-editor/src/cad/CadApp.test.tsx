@@ -181,7 +181,7 @@ describe("the CAD planning window", () => {
 				<CadApp />
 			</ModalProvider>,
 		);
-		const title = screen.getByText("Tasklight Architect");
+		const title = screen.getByText("ToskLight Architect");
 		expect(title.closest(".ui-window-header")).toBeInTheDocument();
 		expect(await screen.findByText("demo.show")).toBeInTheDocument();
 		expect(

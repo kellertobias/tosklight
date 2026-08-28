@@ -739,7 +739,7 @@ function PrintFrame({
 				<div className="cad-print-title-block">
 					<img src={architectIconUrl} alt="ToskLight application icon" />
 					<div className="cad-print-brand">
-						<strong>Tasklight Architect</strong>
+						<strong>ToskLight Architect</strong>
 						{documentInfo?.project ? <span>{documentInfo.project}</span> : null}
 					</div>
 					<div className="cad-print-meta">

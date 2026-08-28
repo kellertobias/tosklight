@@ -1327,33 +1327,6 @@ body {
 	font-size: 11px;
 }
 
-.cad-print-tabs {
-	display: flex;
-	flex: none;
-	border-bottom: 1px solid #222d37;
-}
-
-.cad-print-tabs button {
-	flex: 1;
-	padding: 9px 8px;
-	border: 0;
-	border-bottom: 2px solid transparent;
-	background: none;
-	color: #89949e;
-	font: inherit;
-	font-size: 12px;
-	cursor: pointer;
-}
-
-.cad-print-tabs button:hover {
-	color: #d5dde4;
-}
-
-.cad-print-tabs button.is-selected {
-	border-bottom-color: #4c8fd8;
-	color: #f2f6f9;
-}
-
 .cad-print-list {
 	flex: 1;
 	overflow-y: auto;
