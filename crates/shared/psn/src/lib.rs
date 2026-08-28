@@ -22,8 +22,10 @@
 
 mod chunk;
 mod frame;
+mod tracking;
 
 pub use frame::{PsnFrame, PsnFrameAssembler};
+pub use tracking::{PsnObservation, PsnSourceHealth, PsnTracked, PsnTracking};
 
 use chunk::Chunks;
 use std::collections::BTreeMap;
