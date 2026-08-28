@@ -68,3 +68,19 @@ standby picture, and is the source for the generated macOS bundle icon.
 The old `tosklight-media-badge.svg` and `tosklight-media-icon.*` files are retained only as
 superseded artwork and must not be used for product branding. `npm run test:app-icons` holds the
 Control, Architect, Pixel, renderer, manual, and public-site uses together.
+
+## Manual assets
+
+The help pages show each product's icon and a strip of all three. Those files are committed, and
+nothing used to produce them, so they drifted whenever the artwork was replaced. Regenerate them
+from the approved sources after changing any product icon:
+
+```sh
+python3 tools/generate_brand_doc_assets.py
+```
+
+## A source icon has to be square
+
+The Tauri icon generator refuses anything that is not, and it is what produces both the Architect
+platform set and the Pixel `.icns` the Media bundle is built with — so a source that is a pixel out
+does not degrade the icon, it stops the build. Export at 1024x1024.
