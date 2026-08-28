@@ -21,9 +21,11 @@
 //! squared, radians.
 
 mod chunk;
+mod encode;
 mod frame;
 mod tracking;
 
+pub use encode::{PSN_MAX_PACKET_BYTES, encode_data_frame, encode_info_packet};
 pub use frame::{PsnFrame, PsnFrameAssembler};
 pub use tracking::{PsnObservation, PsnSourceHealth, PsnTracked, PsnTracking};
 
