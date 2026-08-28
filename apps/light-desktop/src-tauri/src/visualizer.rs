@@ -40,7 +40,7 @@ impl Visualizer {
 
     /// What is drawing, once the helper has said. `None` before the greeting completes.
     pub(crate) fn renderer(&self) -> Result<Option<String>, String> {
-        Ok(self.is_open()?.then(|| "ToskLight PreViz".to_owned()))
+        Ok(self.is_open()?.then(|| "ToskLight Architect".to_owned()))
     }
 
     pub(crate) fn close(&self) -> Result<(), String> {

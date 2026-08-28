@@ -108,10 +108,14 @@ fn editor_binary() -> Result<PathBuf, String> {
 #[cfg(target_os = "macos")]
 fn installed_editor() -> Option<PathBuf> {
     let bundles = [
+        // Architect's executable is the editor, named after the product.
+        "Applications/ToskLight Architect.app/Contents/MacOS/ToskLight Architect",
+        // Bundles built before the editor became the executable carried it beside the renderer
+        // under its own file name, and the product has been renamed twice; each of those stays
+        // discoverable so an installation that has not been replaced yet still opens its editor.
+        "Applications/ToskLight Architect.app/Contents/MacOS/viz-editor",
         "Applications/ToskLight PreViz.app/Contents/MacOS/viz-editor",
-        // Keep the previous bundle discoverable during the product-name migration.
         "Applications/ToskLight Visualizer.app/Contents/MacOS/viz-editor",
-        // Legacy standalone editor installations remain discoverable during migration.
         "Applications/ToskLight Viz Editor.app/Contents/MacOS/viz-editor",
     ];
     let home = std::env::var_os("HOME").map(PathBuf::from)?;

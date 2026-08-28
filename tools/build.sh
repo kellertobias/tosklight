@@ -779,15 +779,21 @@ build_visualizer() {
   cargo build --release --manifest-path "$ROOT/Cargo.toml" -p viz-renderer
   echo "Visualizer built: $TARGET_DIR/release/viz-renderer"
   if [[ "$(uname -s)" == "Darwin" ]]; then
+    # Architect is one product with two executables, so the bundle needs both. Building only the
+    # renderer here would produce a bundle that opens the visualizer and cannot reach the editor
+    # at all, which is not the product the release assembles.
+    build_viz_editor
     bash "$ROOT/tools/bundle-visualizer-macos.sh" \
-      "$TARGET_DIR/release/viz-renderer" "$TARGET_DIR/release/bundle/macos"
+      "$TARGET_DIR/release/viz-editor" \
+      "$TARGET_DIR/release/viz-renderer" \
+      "$TARGET_DIR/release/bundle/macos"
   fi
 }
 
 # On macOS the executable has to be launched from inside the bundle to inherit its icon, name and
 # menu; everywhere else the bare binary is the product.
 visualizer_executable() {
-  local bundled="$TARGET_DIR/release/bundle/macos/ToskLight PreViz.app/Contents/MacOS/ToskLight PreViz"
+  local bundled="$TARGET_DIR/release/bundle/macos/ToskLight Architect.app/Contents/MacOS/viz-renderer"
   if [[ "$(uname -s)" == "Darwin" && -x "$bundled" ]]; then
     printf '%s\n' "$bundled"
   else

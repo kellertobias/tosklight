@@ -275,10 +275,12 @@ test("macOS release apps are sealed only after their final helpers and resources
 	assert.ok(desktopSeal < desktopSmoke);
 	assert.match(sealer, /codesign --force --deep --sign - --timestamp=none/u);
 	assert.match(sealer, /codesign --verify --deep --strict/u);
-	assert.match(workflow, /ToskLight PreViz\.app[\s\S]*seal-macos-app\.sh/u);
+	assert.match(workflow, /ToskLight Architect\.app[\s\S]*seal-macos-app\.sh/u);
+	// The editor's own executable is kept aside and handed back to the bundler, so the assembled
+	// product opens the Rig Editor rather than the renderer.
 	assert.match(
 		workflow,
-		/editor_app="\$bundle\/macos\/ToskLight PreViz\.app"[\s\S]*accessory\/viz-editor[\s\S]*ToskLight PreViz\.app\/Contents\/MacOS\/viz-editor[\s\S]*seal-macos-app\.sh/u,
+		/editor_app="\$bundle\/macos\/ToskLight Architect\.app"[\s\S]*MacOS\/ToskLight Architect" "\$accessory\/viz-editor"[\s\S]*bundle-visualizer-macos\.sh[\s\S]*seal-macos-app\.sh/u,
 	);
 	assert.match(workflow, /bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u);
 	assert.match(assembler, /codesign --verify --deep --strict/u);
@@ -317,27 +319,27 @@ test("the Viz release builds only the bundle format its staging step consumes", 
 	assert.doesNotMatch(buildStep, /--bundles all/u);
 });
 
-test("the Viz release keeps one product identity and literal accessory names", () => {
+test("the Architect release keeps one product identity and literal accessory names", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const assembler = read("tools/assemble-release-bundle.sh");
 	const config = read("apps/viz-editor/src-tauri/tauri.conf.json");
 	const bundler = read("tools/bundle-visualizer-macos.sh");
 
-	assert.match(config, /"productName": "ToskLight PreViz"/u);
-	assert.match(config, /"title": "ToskLight PreViz"/u);
+	assert.match(config, /"productName": "ToskLight Architect"/u);
+	assert.match(config, /"title": "ToskLight Architect"/u);
 	assert.match(config, /"identifier": "de\.tokenet\.tosklight\.visualizer"/u);
 	assert.match(config, /"icons\/icon\.icns"/u);
-	assert.match(bundler, /PRODUCT_NAME="ToskLight PreViz"/u);
+	assert.match(bundler, /PRODUCT_NAME="ToskLight Architect"/u);
 	assert.match(bundler, /IDENTIFIER="de\.tokenet\.tosklight\.visualizer"/u);
 	assert.match(bundler, /apps\/viz-editor\/src-tauri\/icons\/icon\.icns/u);
 	assert.doesNotMatch(workflow, /tosklight-viz-\$version-windows-amd64-setup/u);
-	assert.match(assembler, /ToskLight PreViz\.exe/u);
-	assert.match(assembler, /tosklight-previz-\$asset_slug\.app/u);
-	assert.match(workflow, /tosklight-previz-\$version-macos-arm64\.zip/u);
+	assert.match(assembler, /ToskLight Architect\.exe/u);
+	assert.match(assembler, /tosklight-architect-\$asset_slug\.app/u);
+	assert.match(workflow, /tosklight-architect-\$version-macos-arm64\.zip/u);
 	assert.doesNotMatch(assembler, /mv "\$previz\/viz-editor(?:\.exe)?"/u);
 });
 
-test("the editor-owned renderer is an accessory of the same PreViz application", () => {
+test("the editor-owned renderer is an accessory of the same Architect application", () => {
 	const launcher = read("apps/viz-editor/src-tauri/src/visualizer.rs");
 	const renderer = read("apps/viz-renderer/src/main.rs");
 	const editor = read("apps/viz-editor/src-tauri/src/main.rs");

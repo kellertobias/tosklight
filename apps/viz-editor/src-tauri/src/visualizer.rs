@@ -189,10 +189,14 @@ fn visualizer_binary() -> Result<PathBuf, String> {
     let directory = executable
         .parent()
         .ok_or_else(|| "the rig editor binary has no directory".to_owned())?;
+    // Only the renderer's own file name. The bundle's executable is the editor and carries the
+    // product name, so searching for that name here would find this binary and launch it again.
+    // The older bundles named their executable after the renderer, which is why those names stay
+    // discoverable for an installation that has not been replaced yet.
     let names: &[&str] = if cfg!(windows) {
-        &["ToskLight PreViz.exe", "viz-renderer.exe"]
+        &["viz-renderer.exe", "ToskLight PreViz.exe"]
     } else {
-        &["ToskLight PreViz", "viz-renderer"]
+        &["viz-renderer", "ToskLight PreViz"]
     };
     names
         .iter()

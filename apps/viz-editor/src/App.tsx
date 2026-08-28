@@ -406,7 +406,7 @@ export function App() {
 					>
 						<img
 							src={appIcon}
-							alt="ToskLight PreViz"
+							alt="ToskLight Architect"
 							className="viz-editor-app-icon"
 						/>
 						<span>{filename}</span>

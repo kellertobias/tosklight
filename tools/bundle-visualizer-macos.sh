@@ -1,26 +1,31 @@
 #!/usr/bin/env bash
 #
-# Wrap the standalone visualizer binary in a macOS application bundle.
+# Assemble the ToskLight Architect macOS application bundle.
 #
-# The visualizer is a plain winit/wgpu process, not a Tauri application, so nothing generates a
-# bundle for it. Without one macOS gives it the generic executable icon in the Dock and the
-# window's application menu is titled after the binary. This produces the same layout Tauri emits
-# for the other applications, so release staging can treat every macOS product the same way.
+# Architect is one product with two executables: the Rig Editor an operator launches, and the
+# renderer it owns and starts as an accessory. The editor is the bundle's executable, so opening
+# the application opens the editor — the renderer is a helper beside it, found by name, and never
+# the thing a double-click runs.
 #
-# usage: bundle-visualizer-macos.sh BINARY OUTPUT_DIR [VERSION]
+# The renderer is a plain winit/wgpu process rather than a Tauri application, so nothing generates
+# a bundle for it and this assembles the layout by hand instead. Release staging can then treat
+# every macOS product the same way.
+#
+# usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY OUTPUT_DIR [VERSION]
 
 set -euo pipefail
 
-if [[ $# -lt 2 || $# -gt 3 ]]; then
-  echo "usage: bundle-visualizer-macos.sh BINARY OUTPUT_DIR [VERSION]" >&2
+if [[ $# -lt 3 || $# -gt 4 ]]; then
+  echo "usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY OUTPUT_DIR [VERSION]" >&2
   exit 2
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BINARY="$1"
-OUTPUT_DIR="$2"
-VERSION="${3:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
-PRODUCT_NAME="ToskLight PreViz"
+EDITOR_BINARY="$1"
+RENDERER_BINARY="$2"
+OUTPUT_DIR="$3"
+VERSION="${4:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
+PRODUCT_NAME="ToskLight Architect"
 IDENTIFIER="de.tokenet.tosklight.visualizer"
 ICON="$ROOT/apps/viz-editor/src-tauri/icons/icon.icns"
 
@@ -28,7 +33,8 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "error: macOS application bundles can only be assembled on macOS" >&2
   exit 1
 fi
-[[ -f "$BINARY" ]] || { echo "error: no visualizer binary at $BINARY" >&2; exit 1; }
+[[ -f "$EDITOR_BINARY" ]] || { echo "error: no rig editor binary at $EDITOR_BINARY" >&2; exit 1; }
+[[ -f "$RENDERER_BINARY" ]] || { echo "error: no renderer binary at $RENDERER_BINARY" >&2; exit 1; }
 # The Viz Editor owns the icon set both products share, so a missing icon means the icon set was
 # never generated and a silently unbadged bundle would be worse than a failed build.
 [[ -f "$ICON" ]] || { echo "error: no Viz application icon at $ICON" >&2; exit 1; }
@@ -37,7 +43,11 @@ APP="$OUTPUT_DIR/$PRODUCT_NAME.app"
 rm -rf -- "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-install -m 0755 "$BINARY" "$APP/Contents/MacOS/$PRODUCT_NAME"
+# The editor is the executable, so launching the application opens the Rig Editor. The renderer
+# keeps its own file name: the editor looks for it by that name beside itself, and naming it after
+# the product would make the editor find itself instead.
+install -m 0755 "$EDITOR_BINARY" "$APP/Contents/MacOS/$PRODUCT_NAME"
+install -m 0755 "$RENDERER_BINARY" "$APP/Contents/MacOS/viz-renderer"
 install -m 0644 "$ICON" "$APP/Contents/Resources/icon.icns"
 
 cat >"$APP/Contents/Info.plist" <<PLIST
@@ -81,4 +91,4 @@ PLIST
 # left behind. Touching it makes Finder pick the icon up instead of showing a stale cached one.
 touch "$APP"
 
-echo "Visualizer bundled: $APP"
+echo "Architect bundled: $APP"

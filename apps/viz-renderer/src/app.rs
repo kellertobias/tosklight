@@ -977,7 +977,7 @@ impl ApplicationHandler for Application {
             .helper_source
             .as_mut()
             .and_then(crate::helper_source::HelperSource::take_title)
-            .unwrap_or_else(|| "ToskLight PreViz".to_owned());
+            .unwrap_or_else(|| "ToskLight Architect".to_owned());
         let attributes = Window::default_attributes()
             .with_title(title)
             .with_inner_size(winit::dpi::LogicalSize::new(1600.0, 900.0));

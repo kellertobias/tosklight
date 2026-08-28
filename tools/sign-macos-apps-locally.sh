@@ -9,7 +9,7 @@ BUNDLE_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 found=0
 for app in \
   "$BUNDLE_DIR/tosklight-desk-macos_arm64.app" \
-  "$BUNDLE_DIR/tosklight-previz-macos_arm64.app" \
+  "$BUNDLE_DIR/tosklight-architect-macos_arm64.app" \
   "$BUNDLE_DIR/tosklight-media-macos_arm64.app"; do
   [[ -d "$app" ]] || continue
   found=1

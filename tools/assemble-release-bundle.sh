@@ -66,12 +66,12 @@ case "$SLUG" in
 
     previz_unpack="$stage_root/previz"
     extract_archive "$COMPONENTS/tosklight-viz-$VERSION-macos-arm64.zip" "$previz_unpack"
-    mv "$previz_unpack/ToskLight PreViz.app" "$bundle/tosklight-previz-$asset_slug.app"
+    mv "$previz_unpack/ToskLight Architect.app" "$bundle/tosklight-architect-$asset_slug.app"
     cp "$ROOT/docs/release/macos-first-start.txt" "$bundle/"
     cp "$ROOT/tools/sign-macos-apps-locally.sh" "$bundle/"
     chmod +x "$bundle/sign-macos-apps-locally.sh"
     codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-desk-$asset_slug.app"
-    codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-previz-$asset_slug.app"
+    codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-architect-$asset_slug.app"
     codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-media-$asset_slug.app"
     ;;
   windows-amd64)
@@ -81,10 +81,10 @@ case "$SLUG" in
       "$bundle/tosklight-desk-$asset_slug-setup.exe"
     previz_unpack="$stage_root/previz"
     extract_archive \
-      "$COMPONENTS/tosklight-previz-$VERSION-windows-amd64.zip" "$previz_unpack"
-    previz="$bundle/tosklight-previz-$asset_slug"
+      "$COMPONENTS/tosklight-architect-$VERSION-windows-amd64.zip" "$previz_unpack"
+    previz="$bundle/tosklight-architect-$asset_slug"
     mv "$(single_directory "$previz_unpack")" "$previz"
-    mv "$previz/viz-renderer.exe" "$previz/ToskLight PreViz.exe"
+    mv "$previz/viz-renderer.exe" "$previz/ToskLight Architect.exe"
     cp -R "$headless/fixture-library" "$previz/fixture-library"
     mkdir -p "$previz/demo-show"
     cp "$COMPONENTS/demo.show" "$previz/demo-show/demo.show"
@@ -98,10 +98,10 @@ case "$SLUG" in
       "$bundle/tosklight-desk-$asset_slug.deb"
     previz_unpack="$stage_root/previz"
     extract_archive \
-      "$COMPONENTS/tosklight-previz-$VERSION-linux-amd64.zip" "$previz_unpack"
-    previz="$bundle/tosklight-previz-$asset_slug"
+      "$COMPONENTS/tosklight-architect-$VERSION-linux-amd64.zip" "$previz_unpack"
+    previz="$bundle/tosklight-architect-$asset_slug"
     mv "$(single_directory "$previz_unpack")" "$previz"
-    mv "$previz/viz-renderer" "$previz/tosklight-previz-$asset_slug"
+    mv "$previz/viz-renderer" "$previz/tosklight-architect-$asset_slug"
     cp -R "$headless/fixture-library" "$previz/fixture-library"
     mkdir -p "$previz/demo-show"
     cp "$COMPONENTS/demo.show" "$previz/demo-show/demo.show"

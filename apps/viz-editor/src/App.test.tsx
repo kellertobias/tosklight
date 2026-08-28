@@ -277,7 +277,7 @@ describe("the Viz editor window", () => {
 
 	it("uses borderless native chrome and the operator sidebar", async () => {
 		renderApp();
-		const icon = await screen.findByAltText("ToskLight PreViz");
+		const icon = await screen.findByAltText("ToskLight Architect");
 		const identity = icon.parentElement;
 		if (!identity) throw new Error("visualizer identity was not rendered");
 		expect(identity).toHaveAttribute("data-tauri-drag-region");

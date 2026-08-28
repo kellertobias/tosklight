@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ToskLight PreViz",
+  "productName": "ToskLight Architect",
   "version": "0.1.0",
   "identifier": "de.tokenet.tosklight.visualizer",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ToskLight PreViz",
+        "title": "ToskLight Architect",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
