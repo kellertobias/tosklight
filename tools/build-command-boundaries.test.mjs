@@ -600,3 +600,25 @@ test("non-main branch pushes run validation without release work", () => {
 		/release:[\s\S]*?needs:[\s\S]*?- workspace[\s\S]*?- native-extension-draft[\s\S]*?- usb-dmx[\s\S]*?- e2e[\s\S]*?- build/u,
 	);
 });
+
+/// The release job proves each platform bundle carries every product by grepping the archive for
+/// `tosklight-<product>-<slug>`, and `grep` says nothing when it finds nothing: a product renamed in
+/// the assembler and not here fails the release with an empty log and no clue. Tying the two files
+/// together is what makes that rename impossible to land silently.
+test("the release verification greps for product names the assembler writes", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const assembler = read("tools/assemble-release-bundle.sh");
+
+	const loops = [...workflow.matchAll(/for product in ([a-z ]+); do/gu)];
+	assert.ok(loops.length >= 2, "the release job verifies bundle contents by product");
+	const products = new Set(loops.flatMap((loop) => loop[1].trim().split(/\s+/)));
+	assert.ok(products.has("architect"), "the Rig Editor ships as architect");
+	assert.ok(!products.has("previz"), "previz is the superseded product name");
+
+	for (const product of products)
+		assert.match(
+			assembler,
+			new RegExp(`tosklight-${product}-\\$asset_slug`, "u"),
+			`the assembler writes no tosklight-${product}- asset, so the release check greps for something that cannot exist`,
+		);
+});

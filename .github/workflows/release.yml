@@ -1168,7 +1168,9 @@ jobs:
             test -f ".artifacts/release/$required"
           done
           for slug in macos_arm64 linux_amd64 windows_amd64; do
-            for product in desk headless previz media; do
+            # "architect" is what the assembler names the Rig Editor now; the release used to
+            # ship it as "previz" and this check kept looking for that.
+            for product in desk headless architect media; do
               unzip -Z1 ".artifacts/release/tosklight-bundle-$slug.zip" |
                 grep -F "tosklight-$product-$slug" >/dev/null
             done
