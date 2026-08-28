@@ -72,6 +72,7 @@ fn test_state_with_programmers(
                 ),
             ),
             installation: InstallationResource::open_test_installation(data_dir.clone()).unwrap(),
+            psn: crate::runtime::psn::service::PsnResource::new(),
             sessions: SessionResource::new(),
             dynamics: light_application::DynamicsService::new(programmers.clone()),
             macros: light_application::CommandMacroExecutionService::default(),

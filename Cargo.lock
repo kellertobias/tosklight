@@ -3654,6 +3654,7 @@ dependencies = [
  "light-output",
  "light-playback",
  "light-programmer",
+ "light-psn-wire",
  "light-show",
  "light-usb-dmx-serial",
  "light-wire",

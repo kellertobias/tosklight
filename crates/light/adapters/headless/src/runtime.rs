@@ -184,6 +184,7 @@ mod programmer_fixture_commands;
 mod programmer_group_commands;
 mod programmer_selection_values;
 mod programming_interaction;
+mod psn;
 mod request_context;
 mod schedules_v2;
 mod screen_configuration_v2;

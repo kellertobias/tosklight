@@ -508,6 +508,7 @@ fn build_app_state(
             Arc::clone(&resources.playback_telemetry),
         ),
         highlight: HighlightResource::new(highlight),
+        psn: crate::runtime::psn::service::PsnResource::new(),
         output: OutputResource::new(
             OutputRuntimeService::new(application_events.clone()),
             SpeedGroupService::new(application_events.clone()),

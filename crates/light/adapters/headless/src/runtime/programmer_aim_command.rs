@@ -6,6 +6,13 @@
 
 use super::*;
 
+/// How far a 3D Point's stored offset reaches along one axis, in metres.
+///
+/// Both halves of the round trip read this: what places a point writes the offset scaled to this
+/// range, and what reads a point back scales it out again. A tracking system that wrote against a
+/// different number would put the point somewhere other than where it said.
+pub(super) const POINT_AXIS_METRES: f32 = 100.0;
+
 /// A fixture's placement once any 3D Point it is slaved to has been applied, in metres.
 pub(super) fn world_mount(
     fixture: &light_fixture::PatchedFixture,
@@ -116,9 +123,9 @@ pub(super) fn point_transforms(
                     fixture.location.z as f32 / 1000.0,
                 ],
                 offset: [
-                    axis("point.position.x", -100.0, 100.0),
-                    axis("point.position.y", -100.0, 100.0),
-                    axis("point.position.z", -100.0, 100.0),
+                    axis("point.position.x", -POINT_AXIS_METRES, POINT_AXIS_METRES),
+                    axis("point.position.y", -POINT_AXIS_METRES, POINT_AXIS_METRES),
+                    axis("point.position.z", -POINT_AXIS_METRES, POINT_AXIS_METRES),
                 ],
                 rotation_degrees: [
                     axis("point.rotation.x", -180.0, 180.0),

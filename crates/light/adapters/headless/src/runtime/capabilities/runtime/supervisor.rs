@@ -118,6 +118,10 @@ impl CapabilitySupervisors {
             state.clone(),
             runtime_tasks.cancellation(),
         ));
+        runtime_tasks.spawn(crate::runtime::psn::listener::run(
+            state.clone(),
+            runtime_tasks.cancellation(),
+        ));
 
         Self {
             root_cancellation,

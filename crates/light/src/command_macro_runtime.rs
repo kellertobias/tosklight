@@ -25,7 +25,9 @@ pub const DEFAULT_MACRO_HISTORY_LIMIT: usize = 100;
 pub enum CommandMacroTrigger {
     Pool,
     Editor,
-    Playback { playback_number: u16 },
+    Playback {
+        playback_number: u16,
+    },
     CommandLine,
     Http,
     WebSocket,
@@ -33,6 +35,8 @@ pub enum CommandMacroTrigger {
     Hardware,
     Schedule,
     Timecode,
+    /// A tracking zone: somebody walked into it, or out of it.
+    Tracking,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

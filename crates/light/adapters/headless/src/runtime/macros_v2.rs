@@ -205,6 +205,37 @@ pub(super) fn start_macro_from_playback(
     Ok(())
 }
 
+/// Run a Macro because a tracking zone changed.
+///
+/// As the desk, on a connected session, exactly as an OSC surface's Macro runs. A desk with
+/// nobody connected runs nothing rather than inventing an actor: the show is not being operated,
+/// and an action with no operator behind it has nowhere to report itself.
+pub(super) fn start_macro_from_tracking(state: &AppState, macro_id: Uuid) -> Result<(), ApiError> {
+    let show_id = state
+        .active_show
+        .current()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.connected)
+        .ok_or_else(|| ApiError::bad_request("no desk session is connected"))?;
+    let (revision, definition) = macro_for_run(state, show_id, macro_id)?;
+    let _started = start_execution(
+        state,
+        &session,
+        definition,
+        revision,
+        wire::MacroTrigger::Tracking,
+        None,
+        show_id,
+    )?;
+    Ok(())
+}
+
 /// Ordered desk-WebSocket entry point for Macro pool and editor execution.
 pub(super) fn run_macro_live_action(
     state: &AppState,
@@ -1492,6 +1523,7 @@ fn application_trigger(trigger: wire::MacroTrigger) -> light_application::Comman
         wire::MacroTrigger::Hardware => light_application::CommandMacroTrigger::Hardware,
         wire::MacroTrigger::Schedule => light_application::CommandMacroTrigger::Schedule,
         wire::MacroTrigger::Timecode => light_application::CommandMacroTrigger::Timecode,
+        wire::MacroTrigger::Tracking => light_application::CommandMacroTrigger::Tracking,
     }
 }
 
@@ -1509,6 +1541,7 @@ fn trigger_wire(trigger: light_application::CommandMacroTrigger) -> wire::MacroT
         light_application::CommandMacroTrigger::Hardware => wire::MacroTrigger::Hardware,
         light_application::CommandMacroTrigger::Schedule => wire::MacroTrigger::Schedule,
         light_application::CommandMacroTrigger::Timecode => wire::MacroTrigger::Timecode,
+        light_application::CommandMacroTrigger::Tracking => wire::MacroTrigger::Tracking,
     }
 }
 

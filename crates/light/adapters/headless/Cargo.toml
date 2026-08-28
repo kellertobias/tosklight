@@ -26,6 +26,7 @@ light-extensions-host = { path = "../extensions" }
 light-extensions-contract = { path = "../../contracts/extensions" }
 light-media = { path = "../media" }
 light-mvr = { path = "../../../shared/mvr" }
+light-psn-wire = { path = "../../../shared/psn" }
 light-fixture = { path = "../../../shared/fixture" }
 light-output = { path = "../../domain/output" }
 light-usb-dmx-serial = { path = "../usb-dmx-serial" }

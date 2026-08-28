@@ -205,7 +205,9 @@ pub struct MacroRunLineUndoOutcome {
 pub enum MacroTrigger {
     Pool,
     Editor,
-    Playback { playback_number: u16 },
+    Playback {
+        playback_number: u16,
+    },
     CommandLine,
     Http,
     WebSocket,
@@ -213,6 +215,8 @@ pub enum MacroTrigger {
     Hardware,
     Schedule,
     Timecode,
+    /// A tracking zone the operator configured: somebody walked into it, or out of it.
+    Tracking,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -23,6 +23,8 @@ pub(super) struct AppState {
     pub(super) internal_audio: InternalAudioResource,
     pub(super) replay: ReplayResource,
     pub(super) lifecycle: LifecycleResource,
+    /// Live PosiStageNet: what the show asked to listen to, and what is arriving.
+    pub(super) psn: super::psn::service::PsnResource,
     /// The other ToskLights on the network, and this desk's own announcement to them.
     pub(super) discovery: discovery_http::DiscoveryResource,
 }
