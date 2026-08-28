@@ -7,6 +7,13 @@
 //! Reading is therefore the same three lines everywhere, and a chunk whose id means nothing to this
 //! decoder costs exactly one skip. That is what the protocol asks for: an application must ignore
 //! chunks it does not know, which is how a desk survives meeting a newer sender.
+//!
+//! One caveat worth knowing before trusting this against real hardware. The bit layout below comes
+//! from the figure in the v2.02 specification, and the tests that check it — including the
+//! round trip through the encoder — are all built from that same reading. If the reading is wrong,
+//! everything here agrees with itself about it. The independent check is a datagram captured from a
+//! real sender; there has not been one yet, and the first time this meets an actual tracking system
+//! is the first time that assumption is tested.
 
 use crate::PsnError;
 
