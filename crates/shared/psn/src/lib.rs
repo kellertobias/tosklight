@@ -63,6 +63,7 @@ const DATA_TRACKER_ORI: u16 = 0x0002;
 const DATA_TRACKER_STATUS: u16 = 0x0003;
 const DATA_TRACKER_ACCEL: u16 = 0x0004;
 const DATA_TRACKER_TARGET_POS: u16 = 0x0005;
+const DATA_TRACKER_TIMESTAMP: u16 = 0x0006;
 
 /// What a datagram turned out to be.
 ///
@@ -146,6 +147,13 @@ pub struct PsnTrackerData {
     pub acceleration: Option<PsnVector3>,
     /// Where the tracker is heading, in metres.
     pub target_position: Option<PsnVector3>,
+    /// When *this tracker* was measured, in microseconds on the sender's clock.
+    ///
+    /// Not in the v2.02 document's packet scheme, but present in the protocol's own reference
+    /// implementation and sent by real senders. It is finer-grained than the packet header's
+    /// timestamp: one packet may carry trackers sampled at different moments, and a desk that
+    /// wants true per-tracker latency has to read this rather than the packet's.
+    pub timestamp_micros: Option<u64>,
 }
 
 /// One `PSN_DATA` packet: where the trackers are, right now, as far as this packet goes.
@@ -232,6 +240,13 @@ fn decode_tracker_data(id: u16, body: &[u8]) -> Result<PsnTrackerData, PsnError>
             DATA_TRACKER_STATUS => tracker.validity = float(chunk.data, 0),
             DATA_TRACKER_ACCEL => tracker.acceleration = vector(chunk.data),
             DATA_TRACKER_TARGET_POS => tracker.target_position = vector(chunk.data),
+            DATA_TRACKER_TIMESTAMP => {
+                tracker.timestamp_micros = chunk
+                    .data
+                    .get(0..8)
+                    .and_then(|bytes| bytes.try_into().ok())
+                    .map(u64::from_le_bytes);
+            }
             _ => {}
         }
     }

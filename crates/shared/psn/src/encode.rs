@@ -26,6 +26,7 @@ const DATA_TRACKER_ORI: u16 = 0x0002;
 const DATA_TRACKER_STATUS: u16 = 0x0003;
 const DATA_TRACKER_ACCEL: u16 = 0x0004;
 const DATA_TRACKER_TARGET_POS: u16 = 0x0005;
+const DATA_TRACKER_TIMESTAMP: u16 = 0x0006;
 
 fn chunk(id: u16, has_subchunks: bool, data: &[u8]) -> Vec<u8> {
     // A chunk length is fifteen bits. Nothing this writes comes close, and a caller that managed
@@ -74,6 +75,13 @@ fn tracker_chunk(tracker: &PsnTrackerData) -> Vec<u8> {
     }
     if let Some(target) = tracker.target_position {
         body.extend(vector_chunk(DATA_TRACKER_TARGET_POS, target));
+    }
+    if let Some(timestamp) = tracker.timestamp_micros {
+        body.extend(chunk(
+            DATA_TRACKER_TIMESTAMP,
+            false,
+            &timestamp.to_le_bytes(),
+        ));
     }
     chunk(tracker.id, true, &body)
 }

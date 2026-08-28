@@ -55,6 +55,7 @@ fn a_written_frame_reads_back_field_for_field() {
             y: 0.0,
             z: 8.0,
         }),
+        timestamp_micros: Some(12_000),
     };
 
     let packets = encode_data_frame(12_345, 7, &[full]);
@@ -76,6 +77,27 @@ fn a_field_left_out_stays_left_out() {
     let decoded = data_of(&packets[0]);
     assert_eq!(decoded.trackers[0].speed, None);
     assert_eq!(decoded.trackers[0].validity, None);
+}
+
+#[test]
+fn a_per_tracker_timestamp_survives_the_round_trip() {
+    // Not in the v2.02 document's packet scheme, but in the protocol's own reference
+    // implementation and on the wire from real senders. A packet's header timestamp says when the
+    // packet was sent; this says when the tracker was measured, and only the second gives a desk
+    // honest per-tracker latency.
+    let measured = PsnTrackerData {
+        id: 3,
+        timestamp_micros: Some(9_876_543_210),
+        ..tracker(3, 0.0)
+    };
+
+    let packets = encode_data_frame(1, 1, &[measured]);
+
+    let decoded = data_of(&packets[0]);
+    assert_eq!(decoded.trackers[0].timestamp_micros, Some(9_876_543_210));
+    // And a sender that does not stamp its trackers still reads as not having stamped them.
+    let unstamped = data_of(&encode_data_frame(1, 1, &[tracker(4, 0.0)])[0]);
+    assert_eq!(unstamped.trackers[0].timestamp_micros, None);
 }
 
 #[test]

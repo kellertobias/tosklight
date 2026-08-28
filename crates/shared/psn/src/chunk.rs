@@ -8,12 +8,15 @@
 //! decoder costs exactly one skip. That is what the protocol asks for: an application must ignore
 //! chunks it does not know, which is how a desk survives meeting a newer sender.
 //!
-//! One caveat worth knowing before trusting this against real hardware. The bit layout below comes
-//! from the figure in the v2.02 specification, and the tests that check it — including the
-//! round trip through the encoder — are all built from that same reading. If the reading is wrong,
-//! everything here agrees with itself about it. The independent check is a datagram captured from a
-//! real sender; there has not been one yet, and the first time this meets an actual tracking system
-//! is the first time that assumption is tested.
+//! The layout below was read off the figure in the v2.02 specification, and every test that
+//! exercises it is built from that same reading — so on its own it could only ever have agreed with
+//! itself. It has since been checked against the protocol authors' own C++ implementation
+//! (`vyv/psn-cpp`, `include/psn_defs.hpp`), which declares the header as bitfields of 16, 15 and 1
+//! in that order, and against a second independent implementation. Both agree with what is here,
+//! as do every chunk id and the default address and port.
+//!
+//! What is still untested is the whole stack against a real datagram: two readings of one figure
+//! agreeing is strong, but it is not a capture. That remains the last assumption.
 
 use crate::PsnError;
 
