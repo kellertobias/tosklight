@@ -277,10 +277,12 @@ test("macOS release apps are sealed only after their final helpers and resources
 	assert.match(sealer, /codesign --verify --deep --strict/u);
 	assert.match(workflow, /ToskLight Architect\.app[\s\S]*seal-macos-app\.sh/u);
 	// The editor's own executable is kept aside and handed back to the bundler, so the assembled
-	// product opens the Rig Editor rather than the renderer.
+	// product opens the Rig Editor rather than the renderer. Tauri names that executable after the
+	// Cargo package, so it is viz-editor inside a bundle called "ToskLight Architect.app" - the
+	// product name renames the bundle, never the binary.
 	assert.match(
 		workflow,
-		/editor_app="\$bundle\/macos\/ToskLight Architect\.app"[\s\S]*MacOS\/ToskLight Architect" "\$accessory\/viz-editor"[\s\S]*bundle-visualizer-macos\.sh[\s\S]*seal-macos-app\.sh/u,
+		/editor_app="\$bundle\/macos\/ToskLight Architect\.app"[\s\S]*MacOS\/viz-editor" "\$accessory\/viz-editor"[\s\S]*bundle-visualizer-macos\.sh[\s\S]*seal-macos-app\.sh/u,
 	);
 	assert.match(workflow, /bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u);
 	assert.match(assembler, /codesign --verify --deep --strict/u);
