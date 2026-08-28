@@ -38,6 +38,7 @@ members = [
   "crates/shared/dmx",
   "crates/shared/fixture",
   "crates/shared/mvr",
+  "crates/shared/psn",
   "crates/shared/show",
   "crates/viz/scene",
   "crates/viz/laser",
