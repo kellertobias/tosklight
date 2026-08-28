@@ -229,7 +229,7 @@ describe("the CAD planning window", () => {
 			within(header as HTMLElement)
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Print", "Meta", "Undo", "Redo", "⚙"]);
+		).toEqual(["Undo", "Redo", "Print", "Meta", "⚙"]);
 		expect(
 			screen.getByRole("button", {
 				name: "Rotate top-down view 90 degrees counterclockwise",

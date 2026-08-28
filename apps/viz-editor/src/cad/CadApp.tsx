@@ -410,18 +410,6 @@ export function CadApp() {
 						id: "cad-actions",
 						actions: [
 							{
-								id: "print",
-								label: "Print",
-								active: printPanel === "print",
-								onPress: () => togglePrintPanel("print"),
-							},
-							{
-								id: "meta",
-								label: "Meta",
-								active: printPanel === "project",
-								onPress: () => togglePrintPanel("project"),
-							},
-							{
 								id: "undo",
 								label: "Undo",
 								disabled: !scene,
@@ -432,6 +420,18 @@ export function CadApp() {
 								label: "Redo",
 								disabled: !scene,
 								onPress: () => void history("redo"),
+							},
+							{
+								id: "print",
+								label: "Print",
+								active: printPanel === "print",
+								onPress: () => togglePrintPanel("print"),
+							},
+							{
+								id: "meta",
+								label: "Meta",
+								active: printPanel === "project",
+								onPress: () => togglePrintPanel("project"),
 							},
 						],
 					},
