@@ -49,6 +49,45 @@ body {
 	user-select: text;
 }
 
+/* The window has no decorations, so nothing marks its resizable corner and only a hairline of
+   edge catches the pointer. The target is 26px square — big enough to hit without aiming — while
+   the diagonal it draws stays small so it does not sit on top of the content behind it. */
+.viz-window-resize-grip {
+	position: fixed;
+	z-index: 900;
+	right: 0;
+	bottom: 0;
+	width: 26px;
+	height: 26px;
+	display: grid;
+	place-items: end;
+	padding: 3px;
+	border-top-left-radius: 6px;
+	background: linear-gradient(
+		135deg,
+		transparent 45%,
+		rgb(10 13 17 / 85%) 45%
+	);
+	cursor: nwse-resize;
+	touch-action: none;
+	user-select: none;
+}
+
+.viz-window-resize-grip svg {
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: #6c7a87;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	pointer-events: none;
+}
+
+.viz-window-resize-grip:hover svg,
+.viz-window-resize-grip:active svg {
+	stroke: #d5dde4;
+}
+
 .viz-native-window-controls {
 	position: absolute;
 	z-index: 800;

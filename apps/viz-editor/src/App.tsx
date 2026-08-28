@@ -26,7 +26,11 @@ import { FileBar } from "./FileBar";
 import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { RendererSettingsWorkspace } from "./RendererSettingsWorkspace";
-import { beginWindowDrag, WindowControls } from "./WindowChrome";
+import {
+	beginWindowDrag,
+	WindowControls,
+	WindowResizeGrip,
+} from "./WindowChrome";
 
 const DEFAULT_LAYER: PatchLayer = {
 	id: "default",
@@ -396,6 +400,7 @@ export function App() {
 	return (
 		<div className="viz-editor">
 			<WindowControls />
+			<WindowResizeGrip />
 			<div className="viz-editor-shell">
 				<aside className="viz-editor-sidebar">
 					<div

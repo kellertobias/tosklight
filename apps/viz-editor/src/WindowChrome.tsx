@@ -14,6 +14,41 @@ export function beginWindowDrag(event: React.PointerEvent<HTMLElement>) {
 		.catch(() => undefined);
 }
 
+/// Starts a native resize from the corner grip.
+///
+/// The window is drawn without decorations, so macOS gives it no visible corner to pull and only
+/// a hairline of edge to catch. This hands the gesture back to the window manager, which is what
+/// makes the resize feel native rather than something reimplemented from pointer deltas.
+export function beginWindowResize(event: React.PointerEvent<HTMLElement>) {
+	if (event.button !== 0) return;
+	event.preventDefault();
+	event.stopPropagation();
+	void currentWindow()
+		.then((window) => window.startResizeDragging("SouthEast"))
+		.catch(() => undefined);
+}
+
+/// The corner an operator pulls to resize the window.
+///
+/// Deliberately larger than the diagonal it draws: the mark is small enough to stay out of the
+/// way of the content behind it, and the target around it is big enough to hit without aiming.
+export function WindowResizeGrip() {
+	return (
+		<div
+			className="viz-window-resize-grip"
+			role="separator"
+			aria-orientation="vertical"
+			aria-label="Resize window"
+			title="Drag to resize window"
+			onPointerDown={beginWindowResize}
+		>
+			<svg viewBox="0 0 16 16" aria-hidden="true">
+				<path d="M15 5L5 15M15 10l-5 5" />
+			</svg>
+		</div>
+	);
+}
+
 export function WindowControls() {
 	const [fullscreen, setFullscreen] = useState(false);
 

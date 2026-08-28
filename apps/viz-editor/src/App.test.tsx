@@ -87,6 +87,7 @@ const nativeWindow = vi.hoisted(() => ({
 	isFullscreen: vi.fn().mockResolvedValue(false),
 	setFullscreen: vi.fn().mockResolvedValue(undefined),
 	startDragging: vi.fn().mockResolvedValue(undefined),
+	startResizeDragging: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({
@@ -273,6 +274,24 @@ describe("the Viz editor window", () => {
 			button: 0,
 		});
 		expect(nativeWindow.startDragging).toHaveBeenCalledOnce();
+	});
+
+	it("resizes the borderless window from its corner grip", async () => {
+		renderApp();
+		const grip = await screen.findByRole("separator", {
+			name: "Resize window",
+		});
+		// The mark is small so it does not sit on the content; the target around it is not.
+		expect(grip.querySelector("svg")).not.toBeNull();
+		nativeWindow.startResizeDragging.mockClear();
+		fireEvent.pointerDown(grip, { button: 0 });
+		await waitFor(() =>
+			expect(nativeWindow.startResizeDragging).toHaveBeenCalledWith("SouthEast"),
+		);
+		// A right-click is not a resize, and the grip never starts a window move.
+		fireEvent.pointerDown(grip, { button: 2 });
+		expect(nativeWindow.startResizeDragging).toHaveBeenCalledOnce();
+		expect(nativeWindow.startDragging).not.toHaveBeenCalled();
 	});
 
 	it("uses borderless native chrome and the operator sidebar", async () => {

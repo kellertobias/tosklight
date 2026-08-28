@@ -3,7 +3,11 @@ import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
-import { beginWindowDrag, WindowControls } from "../WindowChrome";
+import {
+	beginWindowDrag,
+	WindowControls,
+	WindowResizeGrip,
+} from "../WindowChrome";
 import { CadCutPlaneControl } from "./CadCutPlaneControl";
 import { visibleEntities } from "./cutPlanes";
 import { CadProjectPanel } from "./CadProjectPanel";
@@ -384,6 +388,7 @@ export function CadApp() {
 	return (
 		<main className="cad-app">
 			<WindowControls />
+			<WindowResizeGrip />
 			<WindowHeader
 				title="ToskLight Architect"
 				info={
