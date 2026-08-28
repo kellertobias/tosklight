@@ -143,13 +143,36 @@ pub struct PsnPlacementProjection {
     pub out_of_reach: bool,
 }
 
-/// Configuration and status together, for a tab that has just been opened.
+/// A 3D Point a tracker can be bound to.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PsnPointProjection {
+    pub fixture_id: Uuid,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, type = "number | null")]
+    pub fixture_number: Option<u32>,
+}
+
+/// A Macro a zone can run.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PsnMacroProjection {
+    pub id: Uuid,
+    pub number: u16,
+    pub name: String,
+}
+
+/// Configuration, status, and what an operator can pick from — everything a tab that has just
+/// been opened needs, in one read.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PsnSnapshot {
     #[ts(type = "number")]
     pub revision: u64,
     pub configuration: PsnConfigurationProjection,
     pub status: PsnStatusProjection,
+    /// Every 3D Point in the show. The desk decides what counts as one, not the tab.
+    pub points: Vec<PsnPointProjection>,
+    /// Every Macro in the show, for a zone's enter and leave.
+    pub macros: Vec<PsnMacroProjection>,
 }
 
 /// An edit carrying only what changed.

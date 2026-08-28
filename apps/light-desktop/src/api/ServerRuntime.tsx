@@ -15,6 +15,8 @@ import {
 } from "../features/highlight/HighlightState";
 import { MacroActionsProvider } from "../features/macros/MacroActionsContext";
 import { MediaServersProvider } from "../features/mediaServers/MediaServersContext";
+import { PsnProvider } from "../features/psn/PsnContext";
+import type { PsnEdit } from "./client/psn";
 import { PlaybackTopologyProvider } from "../features/playbackTopology/PlaybackTopologyProvider";
 import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
 import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
@@ -362,6 +364,17 @@ function useDynamicsActionSource(state: ReturnType<typeof useServerState>) {
 	);
 }
 
+/// What the Tracking tab may ask of the desk, bound to the one desk connection.
+function usePsnSource(state: ReturnType<typeof useServerState>) {
+    return useMemo(
+        () => ({
+            snapshot: () => state.api.psn.snapshot(),
+            update: (edit: PsnEdit) => state.api.psn.update(edit),
+        }),
+        [state.api],
+    );
+}
+
 /// What the desk sends its connected visualizers, bound to the one desk connection.
 function useVisualizerViewActionSource(
 	state: ReturnType<typeof useServerState>,
@@ -388,12 +401,14 @@ function ServerActionProviderStack({
 	actions,
 	dynamicsActions,
 	visualizerViewActions,
+	psn,
 }: PropsWithChildren<{
 	state: ReturnType<typeof useServerState>;
 	data: ReturnType<typeof useProviderDataSources>;
 	actions: ReturnType<typeof useProviderActionSources>;
 	dynamicsActions: ReturnType<typeof useDynamicsActionSource>;
 	visualizerViewActions: ReturnType<typeof useVisualizerViewActionSource>;
+	psn: ReturnType<typeof usePsnSource>;
 }>) {
 	return (
 		<HighlightStateProvider store={state.highlightStore}>
@@ -409,11 +424,13 @@ function ServerActionProviderStack({
 												library={data.fixtureLibraryState}
 											>
 												<MediaServersProvider media={data.mediaServersState}>
+													<PsnProvider psn={psn}>
 													<SoundToLightProvider
 														actions={actions.soundToLightActions}
 													>
 														{children}
 													</SoundToLightProvider>
+													</PsnProvider>
 												</MediaServersProvider>
 											</FixtureLibraryProvider>
 										</DeskConnectionProvider>
@@ -606,6 +623,7 @@ export function ServerRuntime({
 	} = useProviderActionSources(value);
 	const dynamicsActions = useDynamicsActionSource(state);
 	const visualizerViewActions = useVisualizerViewActionSource(state);
+	const psn = usePsnSource(state);
 	const readDeskStateDiagnostics = useCallback(
 		() => state.api.runtime.diagnostics(),
 		[state.api],
@@ -679,6 +697,7 @@ export function ServerRuntime({
 										}}
 										dynamicsActions={dynamicsActions}
 										visualizerViewActions={visualizerViewActions}
+										psn={psn}
 									>
 										<ServerShowProviderStack
 											state={state}

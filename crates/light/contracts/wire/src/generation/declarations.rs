@@ -1008,6 +1008,8 @@ fn psn(config: &Config) -> Vec<String> {
         PsnTrackerProjection::decl(config),
         PsnPlacementProjection::decl(config),
         PsnStatusProjection::decl(config),
+        PsnPointProjection::decl(config),
+        PsnMacroProjection::decl(config),
         PsnSnapshot::decl(config),
         PsnUpdateRequest::decl(config),
         PsnUpdateOutcome::decl(config),

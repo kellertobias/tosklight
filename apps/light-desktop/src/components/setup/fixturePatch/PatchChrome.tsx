@@ -83,6 +83,15 @@ export function PatchHeader() {
 								},
 							]
 						: []),
+					...(props.onTracking
+						? [
+								{
+									id: "tracking",
+									label: "Tracking",
+									onPress: props.onTracking,
+								},
+							]
+						: []),
 				] },
 			]}
 		/>

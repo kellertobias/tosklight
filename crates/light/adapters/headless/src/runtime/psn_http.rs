@@ -39,6 +39,8 @@ async fn read_psn(
             revision,
             configuration: wire_configuration(&configuration),
             status: wire_status(&status),
+            points: points(&state),
+            macros: macros(&state, show_id)?,
         },
     ))
 }
@@ -122,6 +124,58 @@ async fn update_psn(
     state.psn.install(updated);
     state.replay.insert_psn(key, request, outcome.clone()).await;
     Ok(json_with_etag(outcome.revision, outcome))
+}
+
+/// Every 3D Point in the show, as something an operator can pick.
+///
+/// The desk decides what counts as a 3D Point — a fixture carrying the point position
+/// attributes — because the tab must not have an opinion about how the show is resolved.
+fn points(state: &AppState) -> Vec<wire_psn::PsnPointProjection> {
+    let snapshot = state.output.snapshot();
+    let mut points: Vec<_> = snapshot
+        .fixtures
+        .iter()
+        .filter(|fixture| {
+            fixture.definition.heads.iter().any(|head| {
+                head.parameters.iter().any(|parameter| {
+                    parameter.attribute.0.as_ref() == super::psn::bindings::POINT_AXIS_ATTRIBUTES[0]
+                })
+            })
+        })
+        .map(|fixture| wire_psn::PsnPointProjection {
+            fixture_id: fixture.fixture_id.0,
+            name: fixture.name.clone(),
+            fixture_number: fixture.fixture_number,
+        })
+        .collect();
+    points.sort_by(|left, right| {
+        (left.fixture_number, &left.name).cmp(&(right.fixture_number, &right.name))
+    });
+    points
+}
+
+/// Every Macro in the show, for a zone's enter and leave.
+fn macros(
+    state: &AppState,
+    show_id: light_core::ShowId,
+) -> Result<Vec<wire_psn::PsnMacroProjection>, ApiError> {
+    let entry = active_entry(state, show_id)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
+    let mut macros: Vec<_> = store
+        .objects("macro")
+        .map_err(ApiError::store)?
+        .into_iter()
+        .filter_map(|object| {
+            let id = Uuid::parse_str(&object.id).ok()?;
+            Some(wire_psn::PsnMacroProjection {
+                id,
+                number: u16::try_from(object.body.get("number")?.as_u64()?).ok()?,
+                name: object.body.get("name")?.as_str()?.to_owned(),
+            })
+        })
+        .collect();
+    macros.sort_by_key(|entry| entry.number);
+    Ok(macros)
 }
 
 /// What the show holds, and at which object revision. An absent object is the valid "off,

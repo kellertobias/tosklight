@@ -76,6 +76,7 @@ export type PlacementBaseline = {
 export type FixturePatchSetupProps = {
 	active?: boolean;
 	onMedia?: () => void;
+	onTracking?: () => void;
 	stagePreviewOpen?: boolean;
 	stagePreviewClearance?: number;
 	onStagePreview?: () => void;
@@ -370,6 +371,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		data,
 		props: {
 			onMedia: props.onMedia,
+			onTracking: props.onTracking,
 			stagePreviewOpen: props.stagePreviewOpen ?? false,
 			stagePreviewClearance: props.stagePreviewClearance ?? 0,
 			onStagePreview: props.onStagePreview,

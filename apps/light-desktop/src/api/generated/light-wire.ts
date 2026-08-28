@@ -852,7 +852,17 @@ ignored_datagrams: number,
  * Why the desk is not listening, when it should be but cannot.
  */
 error?: string | null, };
-export type PsnSnapshot = { revision: number, configuration: PsnConfigurationProjection, status: PsnStatusProjection, };
+export type PsnPointProjection = { fixture_id: string, name: string, fixture_number?: number | null, };
+export type PsnMacroProjection = { id: string, number: number, name: string, };
+export type PsnSnapshot = { revision: number, configuration: PsnConfigurationProjection, status: PsnStatusProjection,
+/**
+ * Every 3D Point in the show. The desk decides what counts as one, not the tab.
+ */
+points: Array<PsnPointProjection>,
+/**
+ * Every Macro in the show, for a zone's enter and leave.
+ */
+macros: Array<PsnMacroProjection>, };
 export type PsnUpdateRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.
