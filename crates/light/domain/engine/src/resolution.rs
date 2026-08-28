@@ -122,8 +122,20 @@ impl Engine {
         }
         let mut resolved = crate::timed(crate::RenderPhase::ResolverFinish, || resolver.finish());
         self.apply_group_color_contributions(generation, &mut resolved, &programmer_colors);
+        // Last, and on the read path as well as the render path: a 3D Point that a tracking
+        // system holds has to read as moved everywhere the desk looks at it — the visualizer, the
+        // Stage view, and `Fixture 1 AT Fixture 5` all ask for resolved values, and a beam aimed
+        // at where the point used to be is the whole failure this feature exists to avoid.
+        self.apply_tracked_overrides(&mut resolved);
         resolved.automatic_playback_transitions = playback.automatic_transitions;
         resolved
+    }
+
+    fn apply_tracked_overrides(&self, resolved: &mut ResolvedAttributes) {
+        let overrides = self.tracked_overrides.read();
+        for held in overrides.iter() {
+            resolved.override_value(held.fixture_id, &held.attribute, held.value.clone(), None);
+        }
     }
 
     fn resolve_playback(

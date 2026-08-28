@@ -32,6 +32,7 @@ mod render_phases;
 mod resolution;
 mod runtime_generation;
 mod safety;
+mod tracked_positions;
 mod value_pool;
 mod visualization;
 
@@ -55,6 +56,7 @@ pub use playback_exclusion::PoolPlaybackTransition;
 pub use render_phases::{
     accumulated_microseconds, enabled as render_phases_enabled, reset as reset_render_phases,
 };
+pub use tracked_positions::TrackedOverride;
 
 pub(crate) use channel_slots::{ChannelSlotIndex, HeadChannelSlots};
 pub(crate) use contribution::{

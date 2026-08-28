@@ -507,3 +507,5 @@ mod contribution_batches;
 mod frame_reuse;
 
 mod playback_boundary;
+
+mod tracked_positions;

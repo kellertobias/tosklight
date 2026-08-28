@@ -41,6 +41,9 @@ pub struct Engine {
     /// Live Highlight is an output overlay, not programmer/show data. Ownership and remembered
     /// selection live in the server; the engine only needs the currently lit fixture identities.
     pub(crate) highlight_layers: RwLock<HashMap<FixtureId, HighlightOutputLayer>>,
+    /// What an external tracking source holds outright. Live, unpersisted, and applied last: see
+    /// `tracked_positions`.
+    pub(crate) tracked_overrides: RwLock<Vec<crate::TrackedOverride>>,
     /// Installation-owned Highlight intent. A bare engine starts in review-required compatibility
     /// mode so callers that have not installed desk configuration retain exact legacy raw output.
     pub(crate) highlight_look: RwLock<HighlightLook>,
@@ -114,6 +117,7 @@ impl Engine {
             group_master_transitions: Mutex::new(HashMap::new()),
             group_colors: RwLock::new(HashMap::new()),
             highlight_layers: RwLock::new(HashMap::new()),
+            tracked_overrides: RwLock::new(Vec::new()),
             highlight_look: RwLock::new(HighlightLook {
                 compatibility: HighlightLookCompatibility::NeedsReview,
                 ..HighlightLook::default()

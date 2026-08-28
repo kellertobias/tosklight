@@ -1,5 +1,5 @@
 use crate::engine::GroupMasterTransition;
-use crate::{Engine, EngineError, GroupMasterGenerationUpdate, RuntimeGeneration};
+use crate::{Engine, EngineError, GroupMasterGenerationUpdate, RuntimeGeneration, TrackedOverride};
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_fixture::{ChannelFunctionBehavior, HighlightLook};
 use std::{cell::Cell, collections::HashSet};
@@ -288,6 +288,24 @@ impl Engine {
             .collect::<Vec<_>>();
         layers.sort_by_key(|layer| layer.fixture_id.0);
         layers
+    }
+
+    /// Replace what external tracking currently holds.
+    ///
+    /// One call carries the whole set, because a receiver knows all of its bindings at once and a
+    /// point dropped from the list must stop being held in the same frame that the others move.
+    /// A binding whose source has gone quiet is *not* dropped: the receiver keeps sending the last
+    /// position it heard, so the light stays where it was pointed until an operator takes it back.
+    pub fn set_tracked_overrides(&self, overrides: impl IntoIterator<Item = TrackedOverride>) {
+        *self.tracked_overrides.write() = overrides.into_iter().collect();
+    }
+
+    pub fn clear_tracked_overrides(&self) {
+        self.tracked_overrides.write().clear();
+    }
+
+    pub fn tracked_overrides(&self) -> Vec<TrackedOverride> {
+        self.tracked_overrides.read().clone()
     }
 
     /// Replace the installation-owned semantic Highlight look without touching show or
