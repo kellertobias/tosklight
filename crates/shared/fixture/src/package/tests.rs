@@ -257,7 +257,7 @@ fn stage_lamp_packages_leave_body_models_to_visualizer_defaults() {
 #[test]
 fn shipped_jbled_a7_uses_the_documented_safe_shutter_table_in_every_mode() {
     let profile = shipped_profile("jb-lighting--jbled-a7.toskfixture");
-    assert_eq!(profile.revision, 2);
+    assert_eq!(profile.revision, 3);
     assert!(profile.notes.contains("JBLED_A7_DMX_Protocol.pdf"));
     assert_eq!(profile.modes.len(), 4);
     for mode in &profile.modes {
@@ -547,7 +547,7 @@ fn assert_moving_lamp_geometry(filename: &str) {
 #[test]
 fn robe_dls_profile_exposes_canonical_framing_controls() {
     let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
-    assert_eq!(profile.revision, 3);
+    assert_eq!(profile.revision, 4);
     assert!(profile.notes.contains("DMX protocol version 1.0"));
     assert!(profile.notes.contains("user manual version 1.3"));
     assert_eq!(
@@ -912,7 +912,7 @@ fn shipped_native_hsi_modes_bind_their_physical_coordinates_and_highlight_white(
 
     for (filename, modes) in expected {
         let profile = shipped_profile(filename);
-        assert_eq!(profile.revision, 2);
+        assert_eq!(profile.revision, 3);
         for (mode_name, hue_id, saturation_id, intensity_id) in modes {
             let mode = profile
                 .modes
@@ -2287,5 +2287,178 @@ fn shipped_library_homes_to_white_and_centred_position() {
                 }
             }
         }
+    }
+}
+
+/// A wheel, macro or control channel modelled as one function spanning the whole channel leaves
+/// the desk with nothing to name: an encoder sweeps it as a percentage and the operator reads
+/// "62%" where the manual says "Gobo 3". Each repaired package is probed at a value inside a band
+/// its own manufacturer table prints, so a transcription that drifts fails here rather than on a
+/// rig.
+#[test]
+fn shipped_wheel_channels_name_the_manufacturer_slot_at_a_probed_value() {
+    let expected: &[(&str, &str, &str, u32, &str)] = &[
+        (
+            "chauvet-professional--colorado-1-solo.toskfixture",
+            "TOUR",
+            "fixture.colour_macros",
+            203,
+            "White 1",
+        ),
+        (
+            "chauvet-professional--colorado-1-solo.toskfixture",
+            "TOUR",
+            "fixture.programs",
+            45,
+            "Auto 1",
+        ),
+        (
+            "chauvet-professional--colorado-1-solo.toskfixture",
+            "SSP",
+            "shutter",
+            50,
+            "0–20 Hz",
+        ),
+        (
+            "robe--robin-300-ledwash.toskfixture",
+            "Mode 1",
+            "color.wheel.1",
+            11,
+            "White 5600 K",
+        ),
+        (
+            "robe--robin-300-ledwash.toskfixture",
+            "Mode 1",
+            "fixture.power_special_functions",
+            185,
+            "Zoom reset",
+        ),
+        (
+            "robe--robin-600x-ledwash.toskfixture",
+            "Mode 1",
+            "color.wheel.1",
+            252,
+            "Zone effect 3",
+        ),
+        (
+            "robe--robin-ledbeam-150.toskfixture",
+            "Mode 1 – Standard 16-bit",
+            "color.wheel.1",
+            5,
+            "Filter 19 (Fire)",
+        ),
+        (
+            "robe--robin-ledbeam-150.toskfixture",
+            "Mode 1 – Standard 16-bit",
+            "fixture.colour_mix_control",
+            45,
+            "Addition mode (Virtual + Colour mix)",
+        ),
+        (
+            "robe--robin-dlf-wash.toskfixture",
+            "Mode 1",
+            "fixture.barndoor_macros",
+            8,
+            "Macro 2",
+        ),
+        (
+            "robe--robin-dls-profile.toskfixture",
+            "Mode 1",
+            "gobo.1",
+            12,
+            "Gobo 3",
+        ),
+        (
+            "robe--robin-dls-profile.toskfixture",
+            "Mode 1",
+            "prism.1",
+            130,
+            "Macro 1",
+        ),
+        // 16-bit channel: the manual's 8-bit table is carried onto the whole 16-bit range, so
+        // "Closed" starts where coarse 180 does.
+        (
+            "robe--robin-dls-profile.toskfixture",
+            "Mode 1",
+            "iris",
+            46_080,
+            "Closed",
+        ),
+        (
+            "claypaky--sharpy.toskfixture",
+            "Standard",
+            "color.wheel.1",
+            9,
+            "RED",
+        ),
+        (
+            "claypaky--sharpy.toskfixture",
+            "Standard",
+            "gobo.1",
+            12,
+            "GOBO 3",
+        ),
+        (
+            "jb-lighting--jbled-a7.toskfixture",
+            "Standard RGB 8 Bit (S8)",
+            "fixture.control",
+            240,
+            "reset (after 2 second)",
+        ),
+        (
+            "etc--source-four-led-series-2-lustr.toskfixture",
+            "HSI Plus 7",
+            "fixture.plus_7_control",
+            130,
+            "Plus Seven activated",
+        ),
+        (
+            "glp--jdc1.toskfixture",
+            "Normal 23-channel",
+            "fixture.special_control",
+            41,
+            "Position feedback on",
+        ),
+        (
+            "high-end-systems--trackspot.toskfixture",
+            "DMX Low Resolution",
+            "gobo.1",
+            55,
+            "gobo 3",
+        ),
+        (
+            "high-end-systems--trackspot.toskfixture",
+            "DMX High Resolution",
+            "color.wheel.1",
+            130,
+            "color 2",
+        ),
+    ];
+
+    for (filename, mode_name, attribute, probe, slot) in expected {
+        let profile = shipped_profile(filename);
+        let mode = profile
+            .modes
+            .iter()
+            .find(|mode| mode.name == *mode_name)
+            .unwrap_or_else(|| panic!("{filename} has no mode {mode_name}"));
+        let channel = mode
+            .channels
+            .iter()
+            .find(|channel| *channel.attribute.0 == **attribute)
+            .unwrap_or_else(|| panic!("{filename} {mode_name} has no {attribute} channel"));
+        assert!(
+            channel.functions.len() > 1,
+            "{filename} {mode_name} {attribute} is still one blanket function"
+        );
+        let function = channel
+            .functions
+            .iter()
+            .find(|function| function.dmx_from <= *probe && *probe <= function.dmx_to)
+            .unwrap_or_else(|| panic!("{filename} {attribute} names no slot at {probe}"));
+        assert_eq!(
+            function.name, *slot,
+            "{filename} {mode_name} {attribute} at {probe}"
+        );
     }
 }
