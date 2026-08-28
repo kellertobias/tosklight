@@ -63,6 +63,12 @@ function appearanceWithGel(
 	return appearance;
 }
 
+/** One past the last layer's order, so a new layer lands at the end rather than on top of one. */
+async function nextLayerOrder(desk: Desk): Promise<number> {
+	const layers = await desk.layers();
+	return layers.reduce((highest, layer) => Math.max(highest, layer.order), -1) + 1;
+}
+
 export const tools: Tool[] = [
 	{
 		name: "search_fixture_library",
@@ -446,24 +452,100 @@ export const tools: Tool[] = [
 	},
 	{
 		name: "list_layers",
-		description: "The patch layers in the show.",
+		description:
+			"The patch layers the show stores, in their own order, each with the number of fixtures standing on it. A named layer with no fixtures is listed too.",
 		inputSchema: { type: "object", properties: {} },
 		async run(desk) {
-			const { fixtures } = await desk.patch();
+			const [layers, { fixtures }] = await Promise.all([
+				desk.layers(),
+				desk.patch(),
+			]);
 			const counts = new Map<string, number>();
 			for (const fixture of fixtures) {
 				counts.set(fixture.layer_id, (counts.get(fixture.layer_id) ?? 0) + 1);
 			}
-			return [...counts].map(([layer_id, fixtures]) => ({
-				layer_id,
-				fixtures,
+			const listed = layers.map((layer) => ({
+				layer_id: layer.id,
+				name: layer.name,
+				order: layer.order,
+				fixtures: counts.get(layer.id) ?? 0,
 			}));
+			// A fixture may stand on a layer the show has no record for. Saying so is more use than
+			// hiding it: those fixtures are in the patch and an operator has to be able to see them.
+			const named = new Set(layers.map((layer) => layer.id));
+			for (const [layer_id, fixtures] of counts) {
+				if (named.has(layer_id)) continue;
+				listed.push({ layer_id, name: layer_id, order: 0, fixtures });
+			}
+			return listed;
+		},
+	},
+	{
+		name: "save_layer",
+		description:
+			"Create a layer, or rename and reorder one that exists. The id is the layer's stable name in the patch; `name` is what an operator reads and `order` is where it sits in the list.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				layer_id: {
+					type: "string",
+					description: "The layer's stable id. A new id creates a layer.",
+				},
+				name: { type: "string" },
+				order: {
+					type: "number",
+					description: "Where the layer sits. Lower comes first.",
+				},
+			},
+			required: ["layer_id", "name"],
+		},
+		async run(desk, input) {
+			const existing = await desk.layer(input.layer_id);
+			// An unstated order keeps where the layer already sits, and puts a new one at the end
+			// rather than on top of whatever happens to hold order zero.
+			const order =
+				input.order ?? existing?.order ?? (await nextLayerOrder(desk));
+			return desk.saveLayer(input.layer_id, input.name, order);
+		},
+	},
+	{
+		name: "remove_layer",
+		description:
+			"Empty a layer by moving every fixture on it to another layer. The desk keeps the layer record itself; there is no route that deletes one.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				layer_id: { type: "string" },
+				move_to_layer_id: {
+					type: "string",
+					description: "Where the fixtures go. Must be a different layer.",
+				},
+			},
+			required: ["layer_id", "move_to_layer_id"],
+		},
+		async run(desk, input) {
+			if (input.layer_id === input.move_to_layer_id)
+				throw new Error("a layer cannot be emptied onto itself");
+			const snapshot = await desk.patch();
+			const moved = snapshot.fixtures
+				.filter((fixture) => fixture.layer_id === input.layer_id)
+				.map((fixture) => ({
+					...structuredClone(fixture),
+					layer_id: input.move_to_layer_id,
+				}));
+			if (moved.length > 0)
+				await desk.putFixtures(snapshot.patch_revision, moved);
+			return {
+				layer_id: input.layer_id,
+				moved_fixtures: moved.map((fixture) => fixture.fixture_number),
+				moved_to: input.move_to_layer_id,
+			};
 		},
 	},
 	{
 		name: "set_fixture_layer",
 		description:
-			"Move a fixture onto a layer. A layer exists when a fixture is on it, so this both creates and removes layers.",
+			"Move one fixture onto a layer. The layer should exist already; use save_layer to create it.",
 		inputSchema: {
 			type: "object",
 			properties: {

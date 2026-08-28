@@ -31,6 +31,19 @@ export type PatchedFixture = Record<string, unknown> & {
 	}>;
 };
 
+/** A patch layer as the show stores it. */
+export interface PatchLayer {
+	id: string;
+	revision: number;
+	name: string;
+	order: number;
+}
+
+interface PatchLayerBody {
+	name?: string;
+	order?: number;
+}
+
 export interface PatchSnapshot {
 	patch_revision: number;
 	fixtures: PatchedFixture[];
@@ -152,5 +165,54 @@ export class Desk {
 
 	profiles(): Promise<{ profiles: Array<Record<string, unknown>> }> {
 		return this.request("GET", "/api/v2/fixture-library/profiles");
+	}
+
+	/**
+	 * The patch layers the show actually stores.
+	 *
+	 * A layer is a show object with a name and an order, not something inferred from the fixtures
+	 * standing on it: a show may hold a named layer nothing is patched onto yet, and that layer is
+	 * as real as any other.
+	 */
+	async layers(): Promise<PatchLayer[]> {
+		const snapshot = await this.request<{
+			objects: Array<{ id: string; revision: number; body: PatchLayerBody }>;
+		}>("GET", "/api/v2/objects/patch_layer");
+		return snapshot.objects
+			.map((object) => ({
+				id: object.id,
+				revision: object.revision,
+				name: object.body?.name ?? object.id,
+				order: object.body?.order ?? 0,
+			}))
+			.sort((left, right) => left.order - right.order);
+	}
+
+	async layer(id: string): Promise<PatchLayer | null> {
+		return (await this.layers()).find((layer) => layer.id === id) ?? null;
+	}
+
+	/**
+	 * Create a layer, or rename and reorder an existing one.
+	 *
+	 * The desk has one route for both, and the revision decides which it is: a layer that does not
+	 * exist yet is saved against revision 0. The revision read here is the one written back, so a
+	 * layer someone else has moved in between is refused rather than overwritten.
+	 */
+	async saveLayer(id: string, name: string, order: number): Promise<PatchLayer> {
+		const existing = await this.layer(id);
+		await this.request(
+			"POST",
+			`/api/v2/patch/layers/${encodeURIComponent(id)}/update`,
+			{
+				request_id: crypto.randomUUID(),
+				action: {
+					type: "save",
+					expected_revision: existing?.revision ?? 0,
+					layer: { name, order },
+				},
+			},
+		);
+		return { id, revision: (existing?.revision ?? 0) + 1, name, order };
 	}
 }
