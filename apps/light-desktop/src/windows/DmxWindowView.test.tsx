@@ -99,14 +99,14 @@ describe("DMX application view", () => {
     const histogram = container.querySelector(".dmx-output-histogram")!;
     expect([...histogram.querySelectorAll("li")].map((row) => row.textContent)).toEqual([
       "< 20 Hz2",
-      "> 20 Hz118",
-      "> 30 Hz116",
-      "> 38 Hz113",
-      "> 40 Hz101",
-      "> 44 Hz74",
-      "> 48 Hz41",
-      "> 52 Hz12",
-      "> 56 Hz3",
+      "20\u201330 Hz2",
+      "30\u201338 Hz3",
+      "38\u201340 Hz12",
+      "40\u201344 Hz27",
+      "44\u201348 Hz33",
+      "48\u201352 Hz29",
+      "52\u201356 Hz9",
+      "56\u201360 Hz3",
       "> 60 Hz0",
     ]);
     const errors = container.querySelector(".dmx-output-errors")!;
@@ -114,6 +114,14 @@ describe("DMX application view", () => {
     expect(errors.textContent).toContain("Since show start");
     expect(container.querySelector(".ui-data-table")).not.toBeInTheDocument();
     expect(container.querySelector(".ui-selection-tree")).not.toBeInTheDocument();
+  });
+
+  it("caps the maximum frame rate reading at the fastest rate the desk is asked about", () => {
+    renderView({
+      outputHealth: { ...dmxOutputHealth, recent_frame_hz_maximum: 78.6 },
+    });
+    expect(screen.getByText("> 60 Hz", { selector: "dd" })).toBeInTheDocument();
+    expect(screen.queryByText("78.6 Hz")).toBeNull();
   });
 
   it("keeps a selected patched address stable and presents its complete inspector", () => {

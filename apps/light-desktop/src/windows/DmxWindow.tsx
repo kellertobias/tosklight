@@ -26,6 +26,19 @@ function hz(value: number | undefined): string {
   return value === undefined || !Number.isFinite(value) || value <= 0 ? "—" : value.toFixed(1);
 }
 
+/// The desk never asks for more than this, so a faster measured frame is reported as an overflow
+/// rather than as a rate an operator could act on.
+const FRAME_RATE_CEILING_HZ = 60;
+
+/// The maximum reading, capped at the fastest rate the desk is asked about.
+function maximumHz(value: number | undefined): string {
+  const reading = hz(value);
+  if (reading === "—") return reading;
+  return value !== undefined && value > FRAME_RATE_CEILING_HZ
+    ? `> ${FRAME_RATE_CEILING_HZ} Hz`
+    : `${reading} Hz`;
+}
+
 function OutputSummary({ health }: { health: OutputHealth | null }) {
   const seconds = health?.recent_window_seconds ?? 60;
   const bounds = health?.recent_frame_rate_bucket_bounds_hz ?? [];
@@ -38,18 +51,22 @@ function OutputSummary({ health }: { health: OutputHealth | null }) {
       <dl>
         <div><dt>Min</dt><dd>{hz(health?.recent_frame_hz_minimum)} Hz</dd></div>
         <div><dt>Avg</dt><dd>{hz(health?.recent_frame_hz_average)} Hz</dd></div>
-        <div><dt>Max</dt><dd>{hz(health?.recent_frame_hz_maximum)} Hz</dd></div>
+        <div><dt>Max</dt><dd>{maximumHz(health?.recent_frame_hz_maximum)}</dd></div>
       </dl>
     </section>
     <section className="dmx-output-histogram">
       <b>Frames at rate · last {seconds} s</b>
-      {/* One band below the lowest bound, then one at-or-above band per bound, which is how an
-          operator reads cadence: how many frames made 40 Hz, not how many fell short of it. */}
+      {/* The bands are disjoint, so a frame lands in exactly one row and the counts sum to the
+          frames in the window: below the lowest bound, one band between each pair of bounds, and
+          an overflow band above the highest. */}
       {bounds.length ? <ul>{["below", ...bounds].map((bound, index) => {
         const count = counts[index] ?? 0;
+        const next = bounds[index];
         const label = index === 0
           ? <>&lt; {bounds[0]} Hz</>
-          : <>&gt; {bound} Hz</>;
+          : next === undefined
+            ? <>&gt; {bound} Hz</>
+            : <>{bound}–{next} Hz</>;
         return <li key={index === 0 ? "below" : bound}>
           <small>{label}</small>
           <i aria-hidden="true" style={{ "--dmx-histogram-fill": `${Math.round((count / busiest) * 100)}%` } as CSSProperties}/>

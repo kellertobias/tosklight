@@ -174,7 +174,7 @@ export const dmxOutputHealth: OutputHealth = {
 	recent_frame_hz_maximum: 44.2,
 	recent_frame_hz_average: 43.8,
 	recent_frame_rate_bucket_bounds_hz: [20, 30, 38, 40, 44, 48, 52, 56, 60],
-	recent_frame_rate_bucket_counts: [2, 118, 116, 113, 101, 74, 41, 12, 3, 0],
+	recent_frame_rate_bucket_counts: [2, 2, 3, 12, 27, 33, 29, 9, 3, 0],
 	recent_send_errors: 0,
 	frame_rate_band_bounds_hz: [20, 30, 40, 44, 60],
 	frame_rate_band_counts: [0, 0, 1, 3, 12],

@@ -58,35 +58,39 @@ test("DMX-HEALTH-001 @ui the DMX output summary reports live measured output hea
 		timeout: 15_000,
 	});
 	const readings = await rate.locator("dd").allInnerTexts();
-	const [minimum, average, maximum] = readings.map((text) =>
-		Number.parseFloat(text),
+	const [minimum, average, maximumText] = readings;
+	// The maximum is capped at the fastest rate the desk is asked about, so a faster measured
+	// frame reads as an overflow instead of a number.
+	const maximum =
+		maximumText.trim() === "> 60 Hz" ? 60 : Number.parseFloat(maximumText);
+	expect(Number.parseFloat(minimum)).toBeGreaterThan(0);
+	expect(Number.parseFloat(minimum)).toBeLessThanOrEqual(
+		Number.parseFloat(average),
 	);
-	expect(minimum).toBeGreaterThan(0);
-	expect(minimum).toBeLessThanOrEqual(average);
-	expect(average).toBeLessThanOrEqual(maximum);
+	expect(Number.parseFloat(average)).toBeLessThanOrEqual(maximum);
 
 	const histogram = aside.locator(".dmx-output-histogram");
 	await expect(histogram).toContainText("Frames at rate · last 60 s");
 	expect(await histogram.locator("li small").allInnerTexts()).toEqual([
 		"< 20 Hz",
-		"> 20 Hz",
-		"> 30 Hz",
-		"> 38 Hz",
-		"> 40 Hz",
-		"> 44 Hz",
-		"> 48 Hz",
-		"> 52 Hz",
-		"> 56 Hz",
+		"20\u201330 Hz",
+		"30\u201338 Hz",
+		"38\u201340 Hz",
+		"40\u201344 Hz",
+		"44\u201348 Hz",
+		"48\u201352 Hz",
+		"52\u201356 Hz",
+		"56\u201360 Hz",
 		"> 60 Hz",
 	]);
-	// Every band after the first counts "at or above X Hz", so each one is a subset of the band
-	// below it and the counts fall as the bands get faster.
+	// The bands are disjoint, so every delivered frame is counted exactly once.
 	const counts = (await histogram.locator("li span").allInnerTexts()).map(
 		Number,
 	);
-	for (let index = 2; index < counts.length; index += 1) {
-		expect(counts[index]).toBeLessThanOrEqual(counts[index - 1]);
+	for (const count of counts) {
+		expect(count).toBeGreaterThanOrEqual(0);
 	}
+	expect(counts.reduce((total, count) => total + count, 0)).toBeGreaterThan(0);
 
 	const errors = aside.locator(".dmx-output-errors");
 	await expect(errors).toContainText("Last 60 s");
