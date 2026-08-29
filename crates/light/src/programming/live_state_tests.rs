@@ -211,6 +211,7 @@ fn handle_publishes_one_sparse_authoritative_change_per_interaction() {
     let selected = setup.handle(ProgrammingCommand::Execute {
         command: Some("SELECT".into()),
         policy: ExecutionPolicy::AtomicProgrammer,
+        origin: CommandOrigin::CommandLine,
     });
     assert_eq!(selected.interaction_event_sequence, Some(2));
 
@@ -317,6 +318,7 @@ fn final_change_is_captured_after_selection_reconciliation() {
     let result = setup.handle(ProgrammingCommand::Execute {
         command: Some("SELECT".into()),
         policy: ExecutionPolicy::AtomicProgrammer,
+        origin: CommandOrigin::CommandLine,
     });
     let EventReplay::Events(events) = setup.events.replay(0, &setup.selection_filter()) else {
         panic!("the final selection change should be replayable")

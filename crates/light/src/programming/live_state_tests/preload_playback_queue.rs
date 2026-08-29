@@ -176,6 +176,7 @@ fn queue_transitions_publish_once_and_request_replay_is_sparse() {
         command: ProgrammingCommand::Execute {
             command: Some("QUEUE".into()),
             policy: ExecutionPolicy::AtomicProgrammer,
+            origin: CommandOrigin::CommandLine,
         },
     };
     let first = setup.service.handle(action.clone(), &setup.ports).unwrap();

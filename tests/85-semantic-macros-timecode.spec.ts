@@ -57,6 +57,76 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 			.toMatchObject({ macro_id: macroId, trigger: { type: "command_line" } });
 	});
 
+	test("MACRO-002 @api › a running Macro never disturbs the command line the operator is typing", async ({
+		api,
+		show,
+	}) => {
+		const macroId = "00000000-0000-4000-8000-000000000072";
+		await api.request(
+			"POST",
+			"/api/v2/macros/actions",
+			{
+				request_id: "playwright-create-macro-72",
+				action: {
+					type: "create",
+					definition: {
+						id: macroId,
+						number: 72,
+						name: "Detached lines",
+						source: "1 AT 50",
+						presentation: { color: "#3f6f45" },
+					},
+				},
+			},
+			true,
+			undefined,
+			{ showId: show.id },
+		);
+
+		const typed = await api.setCommandLineText("GROUP 1 AT 50");
+		expect(typed.commandLine).toMatchObject({
+			text: "GROUP 1 AT 50",
+			pristine: false,
+		});
+
+		await api.request(
+			"POST",
+			`/api/v2/macros/${macroId}/run`,
+			{ request_id: "playwright-run-macro-72" },
+			true,
+			undefined,
+			{ showId: show.id, deskId: api.session?.desk.id },
+		);
+		await expect
+			.poll(async () => {
+				const runtime = await api.request<{
+					recent: Array<{ macro_id: string; state: string }>;
+				}>("GET", "/api/v2/macros/runtime", undefined, true, undefined, {
+					showId: show.id,
+					deskId: api.session?.desk.id,
+				});
+				return runtime.recent.find(
+					(execution) => execution.macro_id === macroId,
+				)?.state;
+			})
+			.toBe("succeeded");
+
+		// The Macro line reached the Programmer …
+		const programmers = await api.request<Array<{ values: unknown[] }>>(
+			"GET",
+			"/api/v2/programmers",
+		);
+		expect(programmers.some((state) => state.values.length > 0)).toBe(true);
+
+		// … but the half-entered operator command is exactly as it was typed — same text, same
+		// revision, so no command-line change was published either.
+		expect((await api.getCommandLine()).commandLine).toMatchObject({
+			text: "GROUP 1 AT 50",
+			pristine: false,
+			revision: typed.commandLine.revision,
+		});
+	});
+
 	test("MACRO-004 @ui › refined editor exposes settings, focus, alternating lines, and IntelliCode", async ({
 		api,
 		desk,

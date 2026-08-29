@@ -61,6 +61,11 @@ pub struct ProgrammerRegistry {
     /// because public mutation helpers compose other public helpers (for example,
     /// `activate_preload` calls `activate_preload_at`).
     pub(crate) mutation_gate: Arc<ReentrantMutex<()>>,
+    /// Nesting depth of the detached-command scopes currently open on this desk. While it is
+    /// non-zero every command-line write is dropped: a Macro line, or any other command that
+    /// carries its own text, reaches the Programmer without touching the command line the
+    /// operator is typing into.
+    pub(crate) command_line_writes_suppressed: Arc<AtomicU64>,
     /// The one Programmer this desk has. Every session binds to it, whatever identity the session
     /// arrived holding, so the command line, selection and values converge across every screen,
     /// OSC client and attached hardware surface.
@@ -93,9 +98,30 @@ impl ProgrammerRegistry {
             priority_revisions: crate::desk_stamp::DeskStamp::default(),
             priority_changed_at: Arc::default(),
             mutation_gate: Arc::new(ReentrantMutex::new(())),
+            command_line_writes_suppressed: Arc::default(),
             desk: crate::DeskAuthority::default(),
             clock,
         }
+    }
+
+    /// Opens a scope in which every command-line write on this desk is dropped.
+    ///
+    /// A detached command — a Macro line, whatever triggered it — still selects fixtures, sets
+    /// values and records show objects. What it must never do is edit, echo itself into, or clear
+    /// the shared command line, because an operator may be halfway through typing one. Command
+    /// implementations echo the command they ran into that line, so the suppression lives here
+    /// rather than at each of those call sites.
+    #[must_use]
+    pub fn suppress_command_line_writes(&self) -> SuppressedCommandLineWrites {
+        self.command_line_writes_suppressed
+            .fetch_add(1, Ordering::SeqCst);
+        SuppressedCommandLineWrites {
+            depth: Arc::clone(&self.command_line_writes_suppressed),
+        }
+    }
+
+    pub(crate) fn command_line_writes_suppressed(&self) -> bool {
+        self.command_line_writes_suppressed.load(Ordering::SeqCst) > 0
     }
 
     pub fn clock(&self) -> SharedClock {
@@ -521,5 +547,17 @@ impl ProgrammerRegistry {
             revision: selection.revision,
             gesture_open: selection.gesture_open,
         })
+    }
+}
+
+/// Closes the detached-command scope opened by
+/// [`ProgrammerRegistry::suppress_command_line_writes`].
+pub struct SuppressedCommandLineWrites {
+    depth: Arc<AtomicU64>,
+}
+
+impl Drop for SuppressedCommandLineWrites {
+    fn drop(&mut self) {
+        self.depth.fetch_sub(1, Ordering::SeqCst);
     }
 }

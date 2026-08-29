@@ -5,6 +5,18 @@ use light_programmer::{
     CommandLineState, PendingCommandChoice, ProgrammerSelection, SelectionRule,
 };
 
+/// Where the text of an executed command came from, and therefore whether completing it may
+/// write the shared desk command line.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum CommandOrigin {
+    /// The operator's own command line. Execution clears or restores its visible text.
+    #[default]
+    CommandLine,
+    /// A Macro line or another automated source. The command reaches the Programmer with the
+    /// current selection, but the shared command line the operator is typing into stays untouched.
+    Detached,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ExecutionPolicy {
     AtomicProgrammer,
@@ -26,6 +38,7 @@ pub enum ProgrammingCommand {
     Execute {
         command: Option<String>,
         policy: ExecutionPolicy,
+        origin: CommandOrigin,
     },
     ClearStep,
     Undo,

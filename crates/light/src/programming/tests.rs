@@ -380,6 +380,7 @@ fn choice_required_is_explicit_revisioned_and_replay_cannot_restore_it() {
     let typed = ProgrammingCommand::Execute {
         command: Some(command.into()),
         policy: ExecutionPolicy::AtomicProgrammer,
+        origin: CommandOrigin::CommandLine,
     };
     let sequence_before = harness.service.events().latest_sequence();
     let first_context = harness.context.clone().with_request_id("choice-1");
@@ -459,12 +460,14 @@ fn accepted_choice_selection_clears_the_command_and_choice_atomically() {
     let pending = harness.handle(ProgrammingCommand::Execute {
         command: Some("COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2".into()),
         policy: ExecutionPolicy::Compatibility,
+        origin: CommandOrigin::CommandLine,
     });
     let sequence = harness.service.events().latest_sequence();
 
     let accepted = harness.handle(ProgrammingCommand::Execute {
         command: Some("COPY PLAIN CUELIST 1 CUE 1 AT CUELIST 2 CUE 2".into()),
         policy: ExecutionPolicy::Compatibility,
+        origin: CommandOrigin::CommandLine,
     });
 
     assert!(matches!(
@@ -593,6 +596,7 @@ fn same_desk_requests_execute_in_arrival_order() {
                 command: ProgrammingCommand::Execute {
                     command: Some("FIRST".into()),
                     policy: ExecutionPolicy::AtomicProgrammer,
+                    origin: CommandOrigin::CommandLine,
                 },
             },
             first_ports.as_ref(),
@@ -610,6 +614,7 @@ fn same_desk_requests_execute_in_arrival_order() {
                 command: ProgrammingCommand::Execute {
                     command: Some("SECOND".into()),
                     policy: ExecutionPolicy::AtomicProgrammer,
+                    origin: CommandOrigin::CommandLine,
                 },
             },
             second_ports.as_ref(),
@@ -630,6 +635,7 @@ fn rejected_supplied_execution_retains_the_command() {
     let result = harness.handle(ProgrammingCommand::Execute {
         command: Some("REJECT".into()),
         policy: ExecutionPolicy::AtomicProgrammer,
+        origin: CommandOrigin::CommandLine,
     });
     assert!(matches!(
         result.outcome,
@@ -831,4 +837,147 @@ fn live_group_selection_stays_referenced_and_frozen_selection_dereferences() {
                 .collect(),
         })
     );
+}
+
+/// A Macro line is a detached command: it reaches the Programmer with the current selection, but
+/// the shared command line the operator is typing into keeps its text, its revision and its
+/// pristine flag. An externally triggered Macro must not erase a half-entered command.
+#[test]
+fn a_detached_command_leaves_the_operator_command_line_untouched() {
+    let harness = Harness::new(ActionSource::Macro);
+    let session = SessionId(harness.context.session_id.expect("operator session"));
+    for key in [CommandKey::Digit(1), CommandKey::Plus, CommandKey::Digit(2)] {
+        harness.press(key);
+    }
+    let typed = harness
+        .registry
+        .command_line_state(session)
+        .expect("command line");
+    assert_eq!(typed.visible_text(), "F1 + F2");
+
+    let result = harness.handle(ProgrammingCommand::Execute {
+        command: Some("G7 AT 50".into()),
+        policy: ExecutionPolicy::Compatibility,
+        origin: CommandOrigin::Detached,
+    });
+
+    assert!(matches!(
+        result.outcome,
+        ProgrammingOutcome::Accepted {
+            action: ProgrammingAction::Executed,
+            ..
+        }
+    ));
+    assert_eq!(
+        harness.ports.executed_commands.lock().last().unwrap(),
+        "G7 AT 50"
+    );
+    let after = harness
+        .registry
+        .command_line_state(session)
+        .expect("command line");
+    assert_eq!(after.visible_text(), "F1 + F2");
+    assert_eq!(after.revision, typed.revision);
+    assert!(!after.pristine);
+}
+
+/// A rejected detached command must not push the Macro's own text onto the operator command line.
+#[test]
+fn a_rejected_detached_command_does_not_publish_its_text_to_the_operator() {
+    let harness = Harness::new(ActionSource::Macro);
+    let session = SessionId(harness.context.session_id.expect("operator session"));
+    harness.press(CommandKey::Digit(4));
+    let typed = harness
+        .registry
+        .command_line_state(session)
+        .expect("command line");
+
+    let result = harness.handle(ProgrammingCommand::Execute {
+        command: Some("REJECT".into()),
+        policy: ExecutionPolicy::Compatibility,
+        origin: CommandOrigin::Detached,
+    });
+
+    assert!(matches!(
+        result.outcome,
+        ProgrammingOutcome::Rejected { .. }
+    ));
+    let after = harness
+        .registry
+        .command_line_state(session)
+        .expect("command line");
+    assert_eq!(after.visible_text(), typed.visible_text());
+    assert_eq!(after.revision, typed.revision);
+}
+
+/// A choice a detached command raises belongs to that execution, never to the operator's command
+/// line: the Macro reports it as an interaction failure instead.
+#[test]
+fn a_detached_command_never_parks_a_pending_choice_on_the_operator_command_line() {
+    let harness = Harness::new(ActionSource::Macro);
+    let session = SessionId(harness.context.session_id.expect("operator session"));
+
+    let result = harness.handle(ProgrammingCommand::Execute {
+        command: Some("COPY CUELIST 1 CUE 1 AT CUELIST 2 CUE 2".into()),
+        policy: ExecutionPolicy::Compatibility,
+        origin: CommandOrigin::Detached,
+    });
+
+    assert!(matches!(
+        result.outcome,
+        ProgrammingOutcome::ChoiceRequired { .. }
+    ));
+    assert!(
+        harness
+            .registry
+            .command_line_state(session)
+            .expect("command line")
+            .pending_choice
+            .is_none()
+    );
+}
+
+/// The operator's own execution keeps clearing the command line it ran.
+#[test]
+fn an_operator_command_line_execution_still_clears_the_command_line() {
+    let harness = Harness::new(ActionSource::Keyboard);
+    let session = SessionId(harness.context.session_id.expect("operator session"));
+    harness.press(CommandKey::Digit(1));
+
+    harness.handle(ProgrammingCommand::Execute {
+        command: None,
+        policy: ExecutionPolicy::AtomicProgrammer,
+        origin: CommandOrigin::CommandLine,
+    });
+
+    let after = harness
+        .registry
+        .command_line_state(session)
+        .expect("command line");
+    assert_eq!(after.visible_text(), after.target.as_str());
+    assert!(after.pristine);
+}
+
+/// A detached command must carry its own text; it may never fall back to running whatever the
+/// operator happens to have typed.
+#[test]
+fn a_detached_command_without_text_is_refused() {
+    let harness = Harness::new(ActionSource::Macro);
+    harness.press(CommandKey::Digit(1));
+    let error = harness
+        .service
+        .handle(
+            ActionEnvelope {
+                context: harness.context.clone(),
+                command: ProgrammingCommand::Execute {
+                    command: None,
+                    policy: ExecutionPolicy::Compatibility,
+                    origin: CommandOrigin::Detached,
+                },
+            },
+            &harness.ports,
+        )
+        .expect_err("a detached command without text is invalid");
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(harness.ports.executed_commands.lock().is_empty());
 }

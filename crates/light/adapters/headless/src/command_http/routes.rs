@@ -14,7 +14,8 @@ use axum::{
     routing::{get, post},
 };
 use light_application::{
-    ActionContext, ActionSource, ExecutionPolicy, ProgrammingCommand, ProgrammingResult,
+    ActionContext, ActionSource, CommandOrigin, ExecutionPolicy, ProgrammingCommand,
+    ProgrammingResult,
 };
 use light_programmer::CommandLineState;
 use light_wire::v2::command_line::{
@@ -163,6 +164,7 @@ async fn execute_command_line(
         ProgrammingCommand::Execute {
             command: input.command.clone(),
             policy: ExecutionPolicy::AtomicProgrammer,
+            origin: CommandOrigin::CommandLine,
         },
     )?;
     if let Some(warning) = publish_service_result(

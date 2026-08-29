@@ -1340,6 +1340,7 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
             light_application::ProgrammingCommand::Execute {
                 command: Some(line.command.clone()),
                 policy: light_application::ExecutionPolicy::Compatibility,
+                origin: light_application::CommandOrigin::Detached,
             }
         };
         let result = command_http::run_service_with_source(
@@ -1416,6 +1417,7 @@ impl light_application::CommandMacroExecutionHost for ServerMacroExecutionHost {
                     light_application::ProgrammingCommand::Execute {
                         command: Some(line.command.clone()),
                         policy: light_application::ExecutionPolicy::Compatibility,
+                        origin: light_application::CommandOrigin::Detached,
                     }
                 };
                 light_application::ActionEnvelope { context, command }

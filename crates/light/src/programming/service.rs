@@ -1,8 +1,8 @@
 use super::{
-    ExecutionPolicy, ProgrammingAction, ProgrammingCaptureModeChange, ProgrammingCommand,
-    ProgrammingExecution, ProgrammingInteractionChange, ProgrammingOutcome, ProgrammingPorts,
-    ProgrammingPreloadPlaybackQueueChange, ProgrammingResult, ProgrammingValuesChange,
-    operation::DeskOperationGates,
+    CommandOrigin, ExecutionPolicy, ProgrammingAction, ProgrammingCaptureModeChange,
+    ProgrammingCommand, ProgrammingExecution, ProgrammingInteractionChange, ProgrammingOutcome,
+    ProgrammingPorts, ProgrammingPreloadPlaybackQueueChange, ProgrammingResult,
+    ProgrammingValuesChange, operation::DeskOperationGates,
 };
 use crate::{ActionEnvelope, ActionError, EventBus};
 use light_core::SessionId;
@@ -308,9 +308,18 @@ impl ProgrammingService {
                     ports,
                 )?
             }
-            ProgrammingCommand::Execute { command, policy } => {
-                self.execute_command(session, command.as_deref(), *policy, &action.context, ports)?
-            }
+            ProgrammingCommand::Execute {
+                command,
+                policy,
+                origin,
+            } => self.execute_command(
+                session,
+                command.as_deref(),
+                *policy,
+                *origin,
+                &action.context,
+                ports,
+            )?,
             ProgrammingCommand::ClearStep => self.clear(session, &action.context, ports)?,
             ProgrammingCommand::Undo => self.undo(session, &action.context, ports)?,
             ProgrammingCommand::Preload { capture_programmer } => {
@@ -473,7 +482,14 @@ impl ProgrammingService {
             })
             .ok_or_else(unknown_programmer)?;
         if execute {
-            self.execute_command(session, None, policy, context, ports)
+            self.execute_command(
+                session,
+                None,
+                policy,
+                CommandOrigin::CommandLine,
+                context,
+                ports,
+            )
         } else {
             let warning = ports.persist(context, "programmer.command_line");
             Ok(accepted(ProgrammingAction::Edited, None, warning))
@@ -500,15 +516,27 @@ impl ProgrammingService {
         session: SessionId,
         supplied: Option<&str>,
         policy: ExecutionPolicy,
+        origin: CommandOrigin,
         context: &crate::ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingOutcome, ActionError> {
         if let Some(command) = supplied {
             validate_command(command)?;
+        } else if origin == CommandOrigin::Detached {
+            return Err(ActionError::new(
+                crate::ActionErrorKind::Invalid,
+                "a detached command must carry its own text",
+            ));
         }
         let current = command_line(&self.programmers, session)?;
         let command = supplied.unwrap_or_else(|| current.visible_text());
+        // Command implementations echo the command they ran into the shared command line and the
+        // adapters clear it afterwards. A detached command must do neither, so the whole execution
+        // runs inside a scope where the desk drops command-line writes.
+        let suppressed = (origin == CommandOrigin::Detached)
+            .then(|| self.programmers.suppress_command_line_writes());
         let outcome = ports.execute(&self.programmers, context, command, policy);
+        drop(suppressed);
         let replayed = matches!(
             &outcome,
             ProgrammingExecution::Accepted { replayed: true, .. }
@@ -522,7 +550,10 @@ impl ProgrammingService {
         } else {
             supplied
         };
-        if !replayed {
+        // A detached command — a Macro line, whoever pressed the button that started it — reaches
+        // the Programmer with the current selection but never writes the shared command line the
+        // operator may be typing into.
+        if !replayed && origin == CommandOrigin::CommandLine {
             self.programmers
                 .complete_command_execution(session, final_text, pending_choice)
                 .ok_or_else(unknown_programmer)?;

@@ -10,6 +10,8 @@ Create a Macro containing comments, blank lines, state-dependent ordinary comman
 
 Start a multi-line Macro and attempt a manual command and a second Macro from another session. No partial command interaction interleaves. Cancel between lines and confirm accepted earlier commands remain. Make one undoable **Run line** change and confirm **Undo last run** uses authoritative Undo. Then intervene with another accepted command or change the Macro revision and confirm Undo is disabled with an explanation.
 
+Type a partial command such as `GROUP 1 AT 50` into the shared command line, leave it unexecuted, and start a Macro whose lines select fixtures, set values, and record a show object. The Macro's changes reach the Programmer and the show, while the command line keeps its exact text, target, pristine flag, and revision, and no command-line change is published. Repeat with a Macro whose line is rejected and with one that would ask for an operator choice: neither leaves the Macro's own text, an error, or a pending choice on the operator's command line. Repeat once more with the Macro started from a Playback GO rather than the pool, because an externally triggered Macro is the case that must not interrupt typing.
+
 ## MACRO-003 — One-shot Playback convergence
 
 Assign one Macro to physical and Virtual Playbacks. Start it from pool, physical Playback, Virtual Playback, OSC, HTTP, and WebSocket. Every path creates the same one-shot execution model and authenticated provenance. Cue, GO-minus, Pause, fader, tracking, and persistent-runtime controls are absent or inert with an explanation.

@@ -33,8 +33,8 @@ pub use capture_mode_projection::{
     ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection, ProgrammingCaptureModeSnapshot,
 };
 pub use command::{
-    ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, ProgrammingResult,
-    SelectionGestureSource,
+    CommandOrigin, ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingOutcome,
+    ProgrammingResult, SelectionGestureSource,
 };
 pub use cue_deletion::{
     ProgrammingCueDeletionAddress, ProgrammingCueDeletionAuthority,

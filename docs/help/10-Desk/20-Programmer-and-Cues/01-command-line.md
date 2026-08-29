@@ -509,6 +509,8 @@ The Fixture Sheet marks a full Freeze as `❄ FREEZE`. A partial Freeze shows th
 
 `[^PBK] <macro-number> [ENT]` runs the addressed Macro.
 
+A Macro's lines never pass through the command line. They run against the Programmer as it stands — including the current selection — but they do not type themselves into the command line, clear it, or leave an error on it. Whatever you have half-entered is still there, unchanged, after the Macro has run, which matters because a Macro can also be started by a Playback, OSC, a Schedule, or a Timecode while you are typing.
+
 Inside a Macro source document, put `DELAY <seconds>` on its own source line to wait before the next line runs. The duration is non-negative and may use up to three decimal places, so `DELAY 1.5` waits for one and a half seconds and `DELAY 0.025` waits for 25 milliseconds. This is a Macro execution pause, not a Programmer or Cue timing clause. The Macro is fully validated before its first line runs, and it keeps its desk interaction sequence while waiting, so another command cannot interleave. Output, fades, and Dynamics continue running. The Macro execution display shows the active `DELAY` line and can cancel the wait immediately.
 
 Prefix an address with `[SET]` to edit instead of run it. `[SET][^CUE] <timecode-number> [ENT]` opens that Timecode's editor, and `[SET][^PBK] <macro-number> [ENT]` opens that Macro's editor. The same rule opens a Cuelist: `[SET][CUE][CUE] <Cuelist-number> [ENT]`.

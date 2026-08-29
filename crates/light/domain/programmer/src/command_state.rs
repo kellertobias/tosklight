@@ -212,6 +212,9 @@ impl ProgrammerRegistry {
         if !self.sessions.read().contains(&session) {
             return Err(CommandLineReplaceError::UnknownSession);
         }
+        if self.command_line_writes_suppressed() {
+            return Ok(self.command_state.read().clone());
+        }
         let _context = self.command_context(session);
         let mut commands = self.command_state.write();
         let current = &mut *commands;
@@ -245,6 +248,9 @@ impl ProgrammerRegistry {
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains(&session) {
             return None;
+        }
+        if self.command_line_writes_suppressed() {
+            return Some(self.command_state.read().clone());
         }
         let _context = self.command_context(session);
         let mut commands = self.command_state.write();
@@ -284,6 +290,9 @@ impl ProgrammerRegistry {
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains(&session) {
             return None;
+        }
+        if self.command_line_writes_suppressed() {
+            return Some(self.command_state.read().clone());
         }
         let _context = self.command_context(session);
         let mut commands = self.command_state.write();

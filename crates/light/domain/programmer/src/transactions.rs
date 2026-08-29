@@ -186,6 +186,9 @@ impl ProgrammerRegistry {
             priority_revisions: crate::desk_stamp::DeskStamp::seeded(priority_revision),
             priority_changed_at: Arc::new(RwLock::new(Some(priority_changed_at))),
             mutation_gate: Arc::new(ReentrantMutex::new(())),
+            // A detached command suppresses command-line writes for the whole execution, staged
+            // Programmer included: the staged command line is committed back over the live one.
+            command_line_writes_suppressed: Arc::clone(&self.command_line_writes_suppressed),
             // The snapshot operates the same desk, so it inherits the same authority rather than
             // settling on one of its own.
             desk: self.desk.clone(),
