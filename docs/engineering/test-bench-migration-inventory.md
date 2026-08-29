@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **195 root cases across 80 files**.
+Default catalog: **196 root cases across 80 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -194,6 +194,7 @@ Default catalog: **195 root cases across 80 files**.
 | 84-semantic-media-running-panes.spec.ts | MEDIA-001 @ui › Media is absent without an eligible patched server | docs/testing/14-media-and-running-panes.md | @ui | semantic-media-running-panes | standard failure evidence | parallel | pending-semantic-migration |
 | 84-semantic-media-running-panes.spec.ts | RUNNING-003 @ui › a Macro row filters and cancels through its exact live Off action | docs/testing/14-media-and-running-panes.md | @ui | semantic-media-running-panes | standard failure evidence | parallel | pending-semantic-migration |
 | 85-semantic-macros-timecode.spec.ts | MACRO-003 @api › command-line start uses the shared one-shot execution | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 85-semantic-macros-timecode.spec.ts | MACRO-002 @api › a running Macro never disturbs the command line the operator is typing | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 85-semantic-macros-timecode.spec.ts | MACRO-004 @ui › refined editor exposes settings, focus, alternating lines, and IntelliCode | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | 85-semantic-macros-timecode.spec.ts | TIMECODE-003 @api › transport routes address one authoritative runtime | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 85-semantic-macros-timecode.spec.ts | TIMECODE-001 @ui › title actions, Settings autosave, Add menu, CSV, and zoom geometry match the operator contract | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
