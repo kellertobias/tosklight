@@ -12,10 +12,8 @@ import {
 	PatchViewProvider,
 } from "@tosklight/patch";
 import { Button } from "@tosklight/ui";
-import { OperatorDestinationList } from "@tosklight/ui/application";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import appIcon from "../src-tauri/icons/icon.svg";
 import { CadApp } from "./cad/CadApp";
 import { CadRigOverview } from "./cad/CadViewport";
 import { cadSession } from "./cad/session";
@@ -23,6 +21,7 @@ import type { CadEntity, CadSceneSnapshot } from "./cad/types";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
+import { type EditorWorkspace, EditorSidebar } from "./EditorSidebar";
 import { FileBar } from "./FileBar";
 import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
@@ -56,12 +55,8 @@ export function App() {
 		ReadonlyMap<string, FixtureNote>
 	>(new Map());
 	const [error, setError] = useState<string | null>(null);
-	const [workspace, setWorkspace] = useState<
-		"show" | "cad" | "patch" | "venue" | "effects" | "media" | "settings"
-	>("show");
+	const [workspace, setWorkspace] = useState<EditorWorkspace>("show");
 	const [showPage, setShowPage] = useState<ShowPage>("show");
-	const [openingWindow, setOpeningWindow] = useState(false);
-	const [openingViz, setOpeningViz] = useState(false);
 	const [visualizerRunning, setVisualizerRunning] = useState(false);
 	// Bumped when something outside the sheet changed the document — an MVR import — so the sheet
 	// reads the new snapshot instead of showing the rig as it was before.
@@ -436,101 +431,32 @@ export function App() {
 		<div className="viz-editor">
 			<WindowControls />
 			<div className="viz-editor-shell">
-				<aside className="viz-editor-sidebar">
-					<div
-						className="viz-editor-identity"
-						data-tauri-drag-region
-						title={filename}
-						onPointerDown={beginWindowDrag}
-					>
-						<img
-							src={appIcon}
-							alt="ToskLight Architect"
-							className="viz-editor-app-icon"
-						/>
-						<span>{filename}</span>
-					</div>
-					<OperatorDestinationList
-						ariaLabel="Visualizer screens"
-						activeId={workspace}
-						onSelect={(id) => {
-							if (id === "venue") loadFixtures();
-							if (id === "show") setShowPage("show");
-							setWorkspace(id as typeof workspace);
-						}}
-						entries={[
-							{ id: "show", label: "Show", icon: <span>◫</span> },
-							{
-								id: "cad",
-								label: "CAD",
-								icon: <span>⊞</span>,
-								disabled: !document,
-							},
-							{
-								id: "patch",
-								label: "Patch",
-								icon: <span>⌘</span>,
-								disabled: !document,
-							},
-							{
-								id: "venue",
-								label: "Venue",
-								icon: <span>◇</span>,
-								disabled: !document,
-							},
-							{
-								id: "effects",
-								label: "Effects",
-								icon: <span>✦</span>,
-								disabled: !document,
-							},
-							{
-								id: "media",
-								label: "Media",
-								icon: <span>▣</span>,
-								disabled: !document,
-							},
-						]}
-					/>
-					<Button
-						className="viz-editor-settings-nav"
-						active={workspace === "settings"}
-						onClick={() => {
-							setShowPage("rendering");
-							setWorkspace("settings");
-						}}
-					>
-						Settings
-					</Button>
-					<Button
-						className="viz-editor-open-window"
-						title="Open another window on this show"
-						disabled={openingWindow}
-						onClick={() => {
-							setOpeningWindow(true);
-							documentSession
-								.openWindow()
-								.catch(report)
-								.finally(() => setOpeningWindow(false));
-						}}
-					>
-						{openingWindow ? "Opening…" : "Open Window"}
-					</Button>
-					<Button
-						className="viz-editor-open-viz"
-						disabled={!document || openingViz}
-						onClick={() => {
-							setOpeningViz(true);
-							documentSession
-								.openVisualizer()
-								.then(() => setVisualizerRunning(true))
-								.catch(report)
-								.finally(() => setOpeningViz(false));
-						}}
-					>
-						{openingViz ? "Opening Viz…" : "Open Viz"}
-					</Button>
-				</aside>
+				<EditorSidebar
+					filename={filename}
+					workspace={workspace}
+					hasDocument={Boolean(document)}
+					onSelectWorkspace={(id) => {
+						if (id === "venue") loadFixtures();
+						if (id === "show") setShowPage("show");
+						setWorkspace(id);
+					}}
+					onSelectSettings={() => {
+						setShowPage("rendering");
+						setWorkspace("settings");
+					}}
+					openWindow={() =>
+						documentSession
+							.openWindow()
+							.then(() => undefined)
+							.catch(report)
+					}
+					openVisualizer={() =>
+						documentSession
+							.openVisualizer()
+							.then(() => setVisualizerRunning(true))
+							.catch(report)
+					}
+				/>
 				<main
 					className="viz-editor-workspace"
 					onPointerDown={(event) => {
