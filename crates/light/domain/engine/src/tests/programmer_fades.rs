@@ -252,3 +252,41 @@ fn programmer_master_fade_interpolates_live_values() {
             .is_some_and(|level| (level - 0.5).abs() < 0.02)
     );
 }
+
+/// An indexed attribute names a state rather than a level, so the Programmer must arrive at the
+/// operator's choice in the frame they make it. Fading one walks an Audio Player's play mode
+/// through Stop and Pause on its way to Play, and its media address through every slot in between.
+#[test]
+fn an_indexed_attribute_snaps_in_the_programmer_whatever_the_profile_flag_says() {
+    let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let shared: SharedClock = clock.clone();
+    let programmers = ProgrammerRegistry::with_clock(shared);
+    let session = SessionId::new();
+    programmers.start(session);
+    let play_mode = AttributeKey("media.play_mode".into());
+    let (mut fixture, logical) = fixture();
+    // The profile leaves the channel unflagged; the attribute registry is what makes it snap.
+    retarget_only_channel(&mut fixture, "media.play_mode");
+    let engine = Engine::new(programmers.clone());
+    engine.set_control_timing([120.0; 5], 1_000, 0, 0);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+
+    programmers.set_faded(
+        session,
+        logical,
+        play_mode.clone(),
+        AttributeValue::Normalized(0.85),
+    );
+
+    assert!(
+        (normalized(&engine.resolved_values(), logical, "media.play_mode") - 0.85).abs() < 0.001,
+        "the chosen play mode has to resolve in the same frame it was chosen"
+    );
+}

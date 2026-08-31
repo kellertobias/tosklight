@@ -158,7 +158,14 @@ impl Engine {
                 .and_then(|values| values.value(value.fixture_id, &value.attribute))
                 .or_else(|| generation.default_value(value.fixture_id, &value.attribute))
         });
-        let snap = generation.attribute_is_snap(value.fixture_id, &value.attribute);
+        // An indexed or control attribute names a state, not a level: play mode, media folder and
+        // file, gobo and colour wheel slots. Interpolating one walks the operator's selection
+        // through every slot in between and only arrives at the chosen one when the Programmer
+        // fade ends, which is why an Audio Player took the fade time to change source or transport.
+        // Cue transitions already snap these; the Programmer now agrees, whatever the profile's
+        // own channel flag says.
+        let snap = generation.attribute_is_snap(value.fixture_id, &value.attribute)
+            || light_playback::attribute_uses_snap_transition(&value.attribute);
         self.faded_programmer_value(value, now, underlying, programmer_id, source, snap)
     }
 }
