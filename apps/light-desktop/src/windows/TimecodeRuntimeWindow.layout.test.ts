@@ -37,6 +37,20 @@ describe("Timecode timeline layout", () => {
 		);
 	});
 
+	it("splits the overview window between panning above and resizing below", () => {
+		// However far the timeline is zoomed in, the window keeps a surface of each kind: the
+		// upper half always pans it and the lower half always resizes its start and end.
+		expect(css).toMatch(
+			/\.timecode-timeline-overview-handle\s*\{[\s\S]*?top:\s*50%;[\s\S]*?bottom:\s*-1px;[\s\S]*?width:\s*min\(16px, 50%\);/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-overview-handle\.handle-start\s*\{[\s\S]*?left:\s*-1px;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-timeline-overview-handle\.handle-end\s*\{[\s\S]*?right:\s*-1px;/,
+		);
+	});
+
 	it("does not cap the rendered width of long Timecode clips", () => {
 		expect(css).toMatch(
 			/\.timecode-timeline-item\.item-clip\s*\{[\s\S]*?max-width:\s*none;/,
@@ -72,7 +86,7 @@ describe("Timecode timeline layout", () => {
 			/\.timecode-timeline-overview-visible\s*\{[\s\S]*?border:\s*1px solid #58d4ef;/,
 		);
 		expect(css).toMatch(
-			/\.timecode-timeline-overview-handle\s*\{[\s\S]*?width:\s*16px;[\s\S]*?cursor:\s*ew-resize;/,
+			/\.timecode-timeline-overview-handle\s*\{[\s\S]*?width:\s*min\(16px, 50%\);[\s\S]*?cursor:\s*ew-resize;/,
 		);
 	});
 

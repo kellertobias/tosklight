@@ -318,9 +318,13 @@
 }
 .timecode-timeline-overview-handle {
 	position: absolute;
-	top: -1px;
+	/* Zoomed far in, the window is narrower than two edge grips, and an operator still has to be
+	   able to move it. The edges therefore own the lower half of the window and the upper half is
+	   always the pan surface, so however narrow the window gets it keeps a grip of each kind.
+	   Capping each edge at half the window keeps the two of them from covering each other. */
+	top: 50%;
 	bottom: -1px;
-	width: 16px;
+	width: min(16px, 50%);
 	cursor: ew-resize;
 	touch-action: none;
 }
