@@ -59,6 +59,15 @@ pub enum ConfigurationError {
     },
     #[error("output '{output}' has two pixel zones with the identity {id}")]
     DuplicateZoneId { output: String, id: String },
+    #[error("output '{output}' has two pixel output routes with the identity {id}")]
+    DuplicatePixelRouteId { output: String, id: String },
+    #[error("outputs '{first}' and '{second}' both send complete {protocol} universe {universe}")]
+    PixelRouteCollision {
+        first: String,
+        second: String,
+        protocol: &'static str,
+        universe: u16,
+    },
     #[error(
         "pixel zone '{zone}' on output '{output}' has no pixels; give it at least one column and one row"
     )]
@@ -93,6 +102,32 @@ pub enum ConfigurationError {
         zone: String,
         universe: u16,
     },
+    #[error("pixel zone '{zone}' on output '{output}' has no desk input patch")]
+    MissingZoneHandoff { output: String, zone: String },
+    #[error("output '{output}' has more than one desk input patch for pixel zone {zone_id}")]
+    DuplicateZoneHandoff { output: String, zone_id: String },
+    #[error("output '{output}' has a desk input patch for unknown pixel zone {zone_id}")]
+    UnknownZoneHandoff { output: String, zone_id: String },
+    #[error("output '{output}' is in direct mode but still contains desk input patches")]
+    DirectModeHasHandoffs { output: String },
+    #[error(
+        "pixel zone '{zone}' on output '{output}' has an invalid desk {field} address {address}"
+    )]
+    InvalidHandoffAddress {
+        output: String,
+        zone: String,
+        field: &'static str,
+        address: u16,
+    },
+    #[error(
+        "pixel zone '{zone}' on output '{output}' has fixture footprint {fixture_footprint}, smaller than its {pixel_footprint} pixel slots"
+    )]
+    HandoffFootprintTooSmall {
+        output: String,
+        zone: String,
+        fixture_footprint: u16,
+        pixel_footprint: usize,
+    },
     #[error("output '{output}' has two display regions with the identity {id}")]
     DuplicateRegionId { output: String, id: String },
     #[error("display region '{region}' on output '{output}' covers none of the canvas")]
@@ -120,7 +155,8 @@ pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), Configu
         validate_pixel_map(output)?;
     }
 
-    validate_patch_overlap(&configuration.outputs)
+    validate_patch_overlap(&configuration.outputs)?;
+    validate_pixel_route_collisions(&configuration.outputs)
 }
 
 /// Everything a pixel map has to satisfy before the sampler is allowed to run against it.
@@ -160,7 +196,9 @@ fn validate_pixel_map(output: &OutputConfiguration) -> Result<(), ConfigurationE
     }
 
     validate_zone_overlap(&name, output)?;
+    validate_pixel_routes(&name, output)?;
     validate_zone_routes(&name, output)?;
+    validate_handoffs(&name, output)?;
 
     let mut regions = HashSet::new();
     for region in &map.regions {
@@ -180,6 +218,72 @@ fn validate_pixel_map(output: &OutputConfiguration) -> Result<(), ConfigurationE
     Ok(())
 }
 
+fn validate_pixel_routes(
+    output_name: &str,
+    output: &OutputConfiguration,
+) -> Result<(), ConfigurationError> {
+    let mut ids = HashSet::new();
+    for route in &output.pixel_map.routes {
+        if !ids.insert(route.id.as_str()) {
+            return Err(ConfigurationError::DuplicatePixelRouteId {
+                output: output_name.to_owned(),
+                id: route.id.clone(),
+            });
+        }
+        match route.protocol {
+            DmxProtocol::ArtNet if route.universe > 32_767 => {
+                return Err(ConfigurationError::UniverseOutOfRange {
+                    output: format!("{output_name} pixel output route"),
+                    protocol: "Art-Net",
+                    universe: route.universe,
+                    range: "0 through 32767",
+                });
+            }
+            DmxProtocol::Sacn if !(1..=63_999).contains(&route.universe) => {
+                return Err(ConfigurationError::UniverseOutOfRange {
+                    output: format!("{output_name} pixel output route"),
+                    protocol: "sACN",
+                    universe: route.universe,
+                    range: "1 through 63999",
+                });
+            }
+            DmxProtocol::ArtNet | DmxProtocol::Sacn => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_pixel_route_collisions(
+    outputs: &[OutputConfiguration],
+) -> Result<(), ConfigurationError> {
+    let mut occupied: HashSet<(DmxProtocol, u16)> = HashSet::new();
+    let mut owners = std::collections::HashMap::new();
+    for output in outputs
+        .iter()
+        .filter(|output| output.enabled && output.pixel_map.zones.iter().any(|zone| zone.enabled))
+    {
+        for route in output.pixel_map.routes.iter().filter(|route| route.enabled) {
+            let key = (route.protocol, route.universe);
+            if !occupied.insert(key) {
+                return Err(ConfigurationError::PixelRouteCollision {
+                    first: owners
+                        .get(&key)
+                        .cloned()
+                        .unwrap_or_else(|| "another output".to_owned()),
+                    second: output.name.to_string(),
+                    protocol: match route.protocol {
+                        DmxProtocol::ArtNet => "Art-Net",
+                        DmxProtocol::Sacn => "sACN",
+                    },
+                    universe: route.universe,
+                });
+            }
+            owners.insert(key, output.name.to_string());
+        }
+    }
+    Ok(())
+}
+
 /// Two zones may share a universe, but not a slot within it.
 fn validate_zone_overlap(
     output_name: &str,
@@ -192,11 +296,11 @@ fn validate_zone_overlap(
         .filter(|zone| zone.enabled)
         .collect();
     for (index, zone) in enabled.iter().enumerate() {
-        let Some(last) = zone_last_address(zone) else {
+        let Some(last) = output_zone_last_address(output, zone) else {
             continue;
         };
         for other in enabled.iter().skip(index + 1) {
-            let Some(other_last) = zone_last_address(other) else {
+            let Some(other_last) = output_zone_last_address(output, other) else {
                 continue;
             };
             if zone.universe != other.universe {
@@ -217,17 +321,32 @@ fn validate_zone_overlap(
     Ok(())
 }
 
-/// A zone sending directly needs somewhere for its universe to go.
-///
-/// A zone handed to the desk does not: the desk owns the sending, so a missing route there is not
-/// a mistake to stop startup over.
+fn output_zone_last_address(
+    output: &OutputConfiguration,
+    zone: &media_domain::pixel_map::PixelZone,
+) -> Option<u16> {
+    let footprint = if output.pixel_map.mode == PixelOutputMode::DeskMerge {
+        output
+            .pixel_map
+            .handoffs
+            .iter()
+            .find(|handoff| handoff.zone_id == zone.id)
+            .map_or(zone.footprint(), |handoff| {
+                usize::from(handoff.fixture_footprint)
+            })
+    } else {
+        zone.footprint()
+    };
+    let footprint = u16::try_from(footprint).ok()?;
+    let last = zone.start_address.checked_add(footprint.checked_sub(1)?)?;
+    (zone.start_address >= 1 && last <= 512).then_some(last)
+}
+
+/// Every enabled zone needs an output route. In desk-merge mode Media sends the merged result.
 fn validate_zone_routes(
     output_name: &str,
     output: &OutputConfiguration,
 ) -> Result<(), ConfigurationError> {
-    if output.pixel_map.mode != PixelOutputMode::Direct {
-        return Ok(());
-    }
     let carried: HashSet<u16> = output
         .pixel_map
         .routes
@@ -241,6 +360,140 @@ fn validate_zone_routes(
                 output: output_name.to_string(),
                 zone: zone.name.clone(),
                 universe: zone.universe,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_handoffs(
+    output_name: &str,
+    output: &OutputConfiguration,
+) -> Result<(), ConfigurationError> {
+    let zone_ids: HashSet<&str> = output
+        .pixel_map
+        .zones
+        .iter()
+        .map(|zone| zone.id.as_str())
+        .collect();
+    if output.pixel_map.mode == PixelOutputMode::Direct && !output.pixel_map.handoffs.is_empty() {
+        return Err(ConfigurationError::DirectModeHasHandoffs {
+            output: output_name.to_owned(),
+        });
+    }
+    let mut seen = HashSet::new();
+    for handoff in &output.pixel_map.handoffs {
+        if !zone_ids.contains(handoff.zone_id.as_str()) {
+            return Err(ConfigurationError::UnknownZoneHandoff {
+                output: output_name.to_owned(),
+                zone_id: handoff.zone_id.clone(),
+            });
+        }
+        if !seen.insert(handoff.zone_id.as_str()) {
+            return Err(ConfigurationError::DuplicateZoneHandoff {
+                output: output_name.to_owned(),
+                zone_id: handoff.zone_id.clone(),
+            });
+        }
+    }
+    if output.pixel_map.mode != PixelOutputMode::DeskMerge {
+        return Ok(());
+    }
+    for zone in output.pixel_map.zones.iter().filter(|zone| zone.enabled) {
+        let Some(handoff) = output
+            .pixel_map
+            .handoffs
+            .iter()
+            .find(|handoff| handoff.zone_id == zone.id)
+        else {
+            return Err(ConfigurationError::MissingZoneHandoff {
+                output: output_name.to_owned(),
+                zone: zone.name.clone(),
+            });
+        };
+        for (field, address) in [
+            ("input start", handoff.input_start_address),
+            ("Dimmer", handoff.dimmer_address),
+            ("Mix", handoff.mix_address),
+        ] {
+            if !(1..=512).contains(&address) {
+                return Err(ConfigurationError::InvalidHandoffAddress {
+                    output: output_name.to_owned(),
+                    zone: zone.name.clone(),
+                    field,
+                    address,
+                });
+            }
+        }
+        if handoff.dimmer_address == handoff.mix_address {
+            return Err(ConfigurationError::InvalidHandoffAddress {
+                output: output_name.to_owned(),
+                zone: zone.name.clone(),
+                field: "Mix (same as Dimmer)",
+                address: handoff.mix_address,
+            });
+        }
+        match handoff.protocol {
+            DmxProtocol::ArtNet if handoff.input_universe > 32_767 => {
+                return Err(ConfigurationError::UniverseOutOfRange {
+                    output: format!("{output_name} / {} desk input", zone.name),
+                    protocol: "Art-Net",
+                    universe: handoff.input_universe,
+                    range: "0 through 32767",
+                });
+            }
+            DmxProtocol::Sacn if !(1..=63_999).contains(&handoff.input_universe) => {
+                return Err(ConfigurationError::UniverseOutOfRange {
+                    output: format!("{output_name} / {} desk input", zone.name),
+                    protocol: "sACN",
+                    universe: handoff.input_universe,
+                    range: "1 through 63999",
+                });
+            }
+            DmxProtocol::ArtNet | DmxProtocol::Sacn => {}
+        }
+        if usize::from(handoff.fixture_footprint) < zone.footprint() {
+            return Err(ConfigurationError::HandoffFootprintTooSmall {
+                output: output_name.to_owned(),
+                zone: zone.name.clone(),
+                fixture_footprint: handoff.fixture_footprint,
+                pixel_footprint: zone.footprint(),
+            });
+        }
+        let last_input = usize::from(handoff.input_start_address)
+            .saturating_add(usize::from(handoff.fixture_footprint))
+            .saturating_sub(1);
+        if last_input > 512 {
+            return Err(ConfigurationError::InvalidHandoffAddress {
+                output: output_name.to_owned(),
+                zone: zone.name.clone(),
+                field: "fixture footprint",
+                address: last_input.min(usize::from(u16::MAX)) as u16,
+            });
+        }
+        let physical = usize::from(handoff.input_start_address)..=last_input;
+        for (field, address) in [
+            ("Dimmer (inside pixel fixture span)", handoff.dimmer_address),
+            ("Mix (inside pixel fixture span)", handoff.mix_address),
+        ] {
+            if physical.contains(&usize::from(address)) {
+                return Err(ConfigurationError::InvalidHandoffAddress {
+                    output: output_name.to_owned(),
+                    zone: zone.name.clone(),
+                    field,
+                    address,
+                });
+            }
+        }
+        let last_output = usize::from(zone.start_address)
+            .saturating_add(usize::from(handoff.fixture_footprint))
+            .saturating_sub(1);
+        if last_output > 512 {
+            return Err(ConfigurationError::InvalidHandoffAddress {
+                output: output_name.to_owned(),
+                zone: zone.name.clone(),
+                field: "Media Server output footprint",
+                address: last_output.min(usize::from(u16::MAX)) as u16,
             });
         }
     }
@@ -292,10 +545,10 @@ fn validate_output(output: &OutputConfiguration) -> Result<(), ConfigurationErro
         });
     }
 
-    if let PresentationMode::FixedFps { frames_per_second } = output.presentation {
-        if !frames_per_second.is_finite() || !(1.0..=65_535.0).contains(&frames_per_second) {
-            return Err(ConfigurationError::InvalidFixedRate { output: name });
-        }
+    if let PresentationMode::FixedFps { frames_per_second } = output.presentation
+        && (!frames_per_second.is_finite() || !(1.0..=65_535.0).contains(&frames_per_second))
+    {
+        return Err(ConfigurationError::InvalidFixedRate { output: name });
     }
 
     Ok(())
@@ -418,6 +671,48 @@ mod tests {
     }
 
     #[test]
+    fn two_outputs_cannot_each_send_a_complete_pixel_universe() {
+        let pixel_zone = |id: &str| media_domain::pixel_map::PixelZone {
+            id: id.into(),
+            name: id.into(),
+            start: media_domain::pixel_map::CanvasPoint::new(0.0, 0.0),
+            end: media_domain::pixel_map::CanvasPoint::new(1.0, 1.0),
+            columns: 1,
+            rows: 1,
+            layout: media_domain::pixel_map::PixelLayout::rgb(),
+            order: media_domain::pixel_map::PixelOrder::RowMajor,
+            universe: 7,
+            start_address: 1,
+            enabled: true,
+        };
+        let mut first = OutputConfiguration::new("Main");
+        first.pixel_map.zones = vec![pixel_zone("first")];
+        first.pixel_map.routes = vec![crate::configuration::PixelOutputRoute {
+            id: "first-route".into(),
+            name: "Wall".into(),
+            protocol: DmxProtocol::ArtNet,
+            universe: 7,
+            destination: None,
+            enabled: true,
+        }];
+        let mut second = OutputConfiguration::new("Second");
+        second.universe = 2;
+        second.pixel_map.zones = vec![pixel_zone("second")];
+        second.pixel_map.routes = vec![crate::configuration::PixelOutputRoute {
+            id: "second-route".into(),
+            name: "Same wall".into(),
+            protocol: DmxProtocol::ArtNet,
+            universe: 7,
+            destination: None,
+            enabled: true,
+        }];
+        assert!(matches!(
+            validate(&configuration(vec![first, second])),
+            Err(ConfigurationError::PixelRouteCollision { universe: 7, .. })
+        ));
+    }
+
+    #[test]
     fn an_empty_resolution_is_rejected() {
         let mut output = OutputConfiguration::new("Main");
         output.resolution.height = 0;
@@ -481,7 +776,7 @@ mod tests {
 mod pixel_map_tests {
     use super::*;
     use crate::configuration::pixel_map::tests::zone;
-    use crate::configuration::{PixelMapConfiguration, PixelOutputRoute};
+    use crate::configuration::{PixelMapConfiguration, PixelOutputRoute, PixelZoneHandoff};
     use media_domain::display_region::DisplayRegion;
     use media_domain::pixel_map::CanvasPoint;
 
@@ -493,6 +788,20 @@ mod pixel_map_tests {
             universe,
             destination: None,
             enabled: true,
+        }
+    }
+
+    fn handoff(zone_id: &str, footprint: u16) -> PixelZoneHandoff {
+        PixelZoneHandoff {
+            zone_id: zone_id.into(),
+            fixture_name: "Zone fixture".into(),
+            protocol: DmxProtocol::ArtNet,
+            input_universe: 9,
+            input_start_address: 3,
+            dimmer_address: 1,
+            mix_address: 2,
+            fixture_footprint: footprint,
+            automatic_patch: false,
         }
     }
 
@@ -569,14 +878,71 @@ mod pixel_map_tests {
     }
 
     #[test]
-    fn a_zone_handed_to_the_desk_needs_no_route_of_its_own() {
+    fn a_zone_handed_to_the_desk_still_needs_a_physical_output_route() {
         let map = PixelMapConfiguration {
             mode: PixelOutputMode::DeskMerge,
             zones: vec![zone("strip", 4, 1, 10)],
-            routes: Vec::new(),
+            routes: vec![route(4)],
+            handoffs: vec![PixelZoneHandoff {
+                zone_id: "strip".into(),
+                fixture_name: "Strip fixture".into(),
+                protocol: DmxProtocol::ArtNet,
+                input_universe: 9,
+                input_start_address: 3,
+                dimmer_address: 1,
+                mix_address: 2,
+                fixture_footprint: 30,
+                automatic_patch: false,
+            }],
             ..PixelMapConfiguration::default()
         };
         assert_eq!(validate_pixel_map(&output_with(map)), Ok(()));
+    }
+
+    #[test]
+    fn merge_mode_requires_one_desk_patch_per_enabled_zone() {
+        let map = PixelMapConfiguration {
+            mode: PixelOutputMode::DeskMerge,
+            zones: vec![zone("strip", 4, 1, 10)],
+            routes: vec![route(4)],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::MissingZoneHandoff { .. })
+        ));
+    }
+
+    #[test]
+    fn direct_mode_has_no_hidden_desk_input_patch() {
+        let map = PixelMapConfiguration {
+            zones: vec![zone("strip", 1, 1, 10)],
+            routes: vec![route(1)],
+            handoffs: vec![handoff("strip", 30)],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::DirectModeHasHandoffs { .. })
+        ));
+    }
+
+    #[test]
+    fn merge_mode_validates_the_complete_physical_output_footprint() {
+        let map = PixelMapConfiguration {
+            mode: PixelOutputMode::DeskMerge,
+            zones: vec![zone("strip", 1, 480, 10)],
+            routes: vec![route(1)],
+            handoffs: vec![handoff("strip", 40)],
+            ..PixelMapConfiguration::default()
+        };
+        assert!(matches!(
+            validate_pixel_map(&output_with(map)),
+            Err(ConfigurationError::InvalidHandoffAddress {
+                field: "Media Server output footprint",
+                ..
+            })
+        ));
     }
 
     #[test]

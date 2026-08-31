@@ -24,7 +24,9 @@ pub use network::{
 pub use output::{
     CitpIdentity, DmxProtocol, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
-pub use pixel_map::{PixelMapConfiguration, PixelOutputMode, PixelOutputRoute, zone_last_address};
+pub use pixel_map::{
+    PixelMapConfiguration, PixelOutputMode, PixelOutputRoute, PixelZoneHandoff, zone_last_address,
+};
 pub use service::{
     AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, MAXIMUM_UTC_OFFSET_MINUTES,
     PlaybackConfiguration, TargetCodec, TimeConfiguration,

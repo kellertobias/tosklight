@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// Which DMX protocol feeds this output. Both translate into identical domain commands; the
 /// selection only says which ingress routes to this output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DmxProtocol {
     #[default]

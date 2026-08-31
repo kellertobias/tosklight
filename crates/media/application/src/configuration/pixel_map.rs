@@ -11,9 +11,33 @@ pub enum PixelOutputMode {
     /// The Media Server sends the mapped values itself. No desk is involved.
     #[default]
     Direct,
-    /// The values are handed to the lighting desk, which merges them with the zone's own Dimmer
-    /// and Mix channels before anything reaches the rig.
+    /// The Media Server receives the desk's zone fixture, combines both contributions, and sends
+    /// the resulting full universes to the rig.
     DeskMerge,
+}
+
+/// The lighting-desk side of one physical pixel zone.
+///
+/// The zone itself owns the Media Server output patch. Keeping this as a separate keyed record
+/// lets the input and output addresses differ without changing the stable zone identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PixelZoneHandoff {
+    pub zone_id: String,
+    pub fixture_name: String,
+    #[serde(default)]
+    pub protocol: super::DmxProtocol,
+    pub input_universe: u16,
+    /// First desk pixel slot. Dimmer and Mix are explicit because custom fixture layouts may put
+    /// them on either side of the pixel block.
+    pub input_start_address: u16,
+    pub dimmer_address: u16,
+    pub mix_address: u16,
+    /// Complete physical fixture footprint. Slots after the configured pixels pass through.
+    pub fixture_footprint: u16,
+    /// Offer creation of the equivalent custom fixture whenever a ToskLight desk is recognized.
+    #[serde(default)]
+    pub automatic_patch: bool,
 }
 
 /// One route the mapped universes are sent on.
@@ -48,6 +72,9 @@ pub struct PixelMapConfiguration {
     pub zones: Vec<PixelZone>,
     #[serde(default)]
     pub routes: Vec<PixelOutputRoute>,
+    /// Desk input patches, keyed to zones by stable identity. Ignored in direct mode.
+    #[serde(default)]
+    pub handoffs: Vec<PixelZoneHandoff>,
     /// The screens this output's canvas is divided across. Empty means the whole canvas on the one
     /// screen, which is what every output did before regions existed.
     #[serde(default)]
@@ -184,6 +211,7 @@ mod compatibility_tests {
         use media_domain::display_region::DisplayRegion;
         let mut configuration = crate::configuration::MediaConfiguration::default();
         let output = configuration.outputs.first_mut().expect("one output");
+        output.pixel_map.mode = super::PixelOutputMode::DeskMerge;
         output.pixel_map.zones = vec![zone("strip", 1, 1, 12)];
         output.pixel_map.routes = vec![super::PixelOutputRoute {
             id: "route-1".into(),
@@ -192,6 +220,17 @@ mod compatibility_tests {
             universe: 1,
             destination: None,
             enabled: true,
+        }];
+        output.pixel_map.handoffs = vec![super::PixelZoneHandoff {
+            zone_id: "strip".into(),
+            fixture_name: "Upstage strip".into(),
+            protocol: crate::configuration::DmxProtocol::ArtNet,
+            input_universe: 7,
+            input_start_address: 10,
+            dimmer_address: 1,
+            mix_address: 2,
+            fixture_footprint: 36,
+            automatic_patch: true,
         }];
         output.pixel_map.regions = vec![DisplayRegion::whole("main", "HDMI 1")];
         let restored = load(&save(&configuration)).expect("the document round-trips");

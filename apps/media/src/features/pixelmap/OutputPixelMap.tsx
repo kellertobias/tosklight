@@ -60,7 +60,7 @@ export function OutputPixelMap({
 			<SettingsSaveState
 				busy={editing.busy}
 				failed={editing.failure !== undefined}
-				restartBound={false}
+				restartBound={true}
 			/>
 			<PixelMapSettings
 				key={`${output.id}-${revision}`}

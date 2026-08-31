@@ -5,7 +5,7 @@
 //! open: a fixture nobody has thought of yet is a new list of component names, not a new type here.
 
 use media_application::configuration::{
-    DmxProtocol, PixelMapConfiguration, PixelOutputMode, PixelOutputRoute,
+    DmxProtocol, PixelMapConfiguration, PixelOutputMode, PixelOutputRoute, PixelZoneHandoff,
 };
 use media_domain::display_region::{CanvasRect, DisplayRegion, RegionFit, RegionRotation};
 use media_domain::pixel_map::{CanvasPoint, PixelComponent, PixelLayout, PixelOrder, PixelZone};
@@ -231,6 +231,56 @@ impl PixelRouteView {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
+pub struct PixelZoneHandoffView {
+    pub zone_id: String,
+    pub fixture_name: String,
+    /// `art-net` or `sacn`.
+    pub protocol: String,
+    pub input_universe: u16,
+    pub input_start_address: u16,
+    pub dimmer_address: u16,
+    pub mix_address: u16,
+    pub fixture_footprint: u16,
+    pub automatic_patch: bool,
+}
+
+impl PixelZoneHandoffView {
+    fn of(handoff: &PixelZoneHandoff) -> Self {
+        Self {
+            zone_id: handoff.zone_id.clone(),
+            fixture_name: handoff.fixture_name.clone(),
+            protocol: protocol_name(handoff.protocol).to_owned(),
+            input_universe: handoff.input_universe,
+            input_start_address: handoff.input_start_address,
+            dimmer_address: handoff.dimmer_address,
+            mix_address: handoff.mix_address,
+            fixture_footprint: handoff.fixture_footprint,
+            automatic_patch: handoff.automatic_patch,
+        }
+    }
+
+    fn into_domain(self) -> Result<PixelZoneHandoff, PixelMapEditError> {
+        let protocol = match self.protocol.as_str() {
+            "art-net" => DmxProtocol::ArtNet,
+            "sacn" => DmxProtocol::Sacn,
+            _ => return Err(PixelMapEditError::Protocol),
+        };
+        Ok(PixelZoneHandoff {
+            zone_id: self.zone_id,
+            fixture_name: self.fixture_name,
+            protocol,
+            input_universe: self.input_universe,
+            input_start_address: self.input_start_address,
+            dimmer_address: self.dimmer_address,
+            mix_address: self.mix_address,
+            fixture_footprint: self.fixture_footprint,
+            automatic_patch: self.automatic_patch,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
 pub struct DisplayRegionView {
     pub id: String,
     pub name: String,
@@ -306,6 +356,7 @@ pub struct PixelMapView {
     pub mode: String,
     pub zones: Vec<PixelZoneView>,
     pub routes: Vec<PixelRouteView>,
+    pub handoffs: Vec<PixelZoneHandoffView>,
     pub regions: Vec<DisplayRegionView>,
 }
 
@@ -318,6 +369,7 @@ impl PixelMapView {
             },
             zones: map.zones.iter().map(PixelZoneView::of).collect(),
             routes: map.routes.iter().map(PixelRouteView::of).collect(),
+            handoffs: map.handoffs.iter().map(PixelZoneHandoffView::of).collect(),
             regions: map.regions.iter().map(DisplayRegionView::of).collect(),
         }
     }
@@ -339,6 +391,11 @@ impl PixelMapView {
                 .routes
                 .into_iter()
                 .map(PixelRouteView::into_domain)
+                .collect::<Result<_, _>>()?,
+            handoffs: self
+                .handoffs
+                .into_iter()
+                .map(PixelZoneHandoffView::into_domain)
                 .collect::<Result<_, _>>()?,
             regions: self
                 .regions
@@ -381,6 +438,7 @@ mod tests {
                 destination: Some("10.0.0.4".into()),
                 enabled: true,
             }],
+            handoffs: Vec::new(),
             regions: vec![DisplayRegion {
                 rotation: RegionRotation::Clockwise90,
                 fit: RegionFit::Contain,

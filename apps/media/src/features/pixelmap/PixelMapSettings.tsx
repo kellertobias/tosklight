@@ -18,8 +18,10 @@ import type {
 	OutputConfigurationView,
 	PixelMapView,
 	PixelRouteView,
+	PixelZoneHandoffView,
 	PixelZoneView,
 } from "../../shared/api/generated/media-wire";
+import { useDeskShowName } from "../../operator/DeskIdentityContext";
 import {
 	PIXEL_LAYOUTS,
 	PIXEL_ORDERS,
@@ -28,6 +30,7 @@ import {
 	footprintOf,
 	newRegion,
 	newRoute,
+	newHandoff,
 	newZone,
 	pixelMapProblems,
 } from "./pixelMapEditing";
@@ -35,6 +38,101 @@ import {
 /** A percentage for CSS, from a canvas fraction. */
 function percent(value: number): string {
 	return `${Math.max(0, Math.min(1, value)) * 100}%`;
+}
+
+function HandoffEditor({
+	handoff,
+	zone,
+	deskShowName,
+	onChange,
+}: {
+	handoff: PixelZoneHandoffView;
+	zone: PixelZoneView;
+	deskShowName?: string;
+	onChange: (handoff: PixelZoneHandoffView) => void;
+}) {
+	const edit = (patch: Partial<PixelZoneHandoffView>) =>
+		onChange({ ...handoff, ...patch });
+	return (
+		<div
+			className="media-pixel-zone-editor"
+			aria-label={`${zone.name} desk handoff`}
+		>
+			<TextField
+				label="Zone fixture"
+				value={handoff.fixtureName}
+				onChange={(event) => edit({ fixtureName: event.target.value })}
+			/>
+			<SelectField
+				label="Desk input protocol"
+				value={handoff.protocol}
+				options={[
+					{ value: "art-net", label: "Art-Net" },
+					{ value: "sacn", label: "sACN" },
+				]}
+				onChange={(protocol) => edit({ protocol })}
+			/>
+			<NumberField
+				label="Desk input universe"
+				min={0}
+				step={1}
+				value={String(handoff.inputUniverse)}
+				onChange={(event) =>
+					edit({ inputUniverse: Number(event.target.value) })
+				}
+			/>
+			<NumberField
+				label="Desk input first pixel address"
+				min={1}
+				max={512}
+				step={1}
+				value={String(handoff.inputStartAddress)}
+				onChange={(event) =>
+					edit({ inputStartAddress: Number(event.target.value) })
+				}
+			/>
+			<NumberField
+				label="Dimmer address"
+				min={1}
+				max={512}
+				step={1}
+				value={String(handoff.dimmerAddress)}
+				onChange={(event) =>
+					edit({ dimmerAddress: Number(event.target.value) })
+				}
+			/>
+			<NumberField
+				label="Mix address"
+				min={1}
+				max={512}
+				step={1}
+				value={String(handoff.mixAddress)}
+				onChange={(event) => edit({ mixAddress: Number(event.target.value) })}
+			/>
+			<NumberField
+				label="Zone fixture footprint"
+				description="Channels after the mapped pixels pass through unchanged from the desk."
+				min={zone.footprint}
+				max={512}
+				step={1}
+				value={String(handoff.fixtureFootprint)}
+				onChange={(event) =>
+					edit({ fixtureFootprint: Number(event.target.value) })
+				}
+			/>
+			<CheckboxField
+				label="Request automatic desk patch"
+				description={
+					deskShowName
+						? `ToskLight desk recognized (${deskShowName}); patching waits for an authenticated desk confirmation.`
+						: "No compatible ToskLight desk is currently recognized; use the manual desk input patch above."
+				}
+				checked={handoff.automaticPatch}
+				disabled={!deskShowName}
+				onChange={(event) => edit({ automaticPatch: event.target.checked })}
+			/>
+		</div>
+	);
 }
 
 /// The zones and regions drawn over a stand-in for the canvas, at the output's own aspect ratio.
@@ -106,11 +204,7 @@ function ZoneEditor({
 		const next = { ...zone, ...patch };
 		onChange({ ...next, footprint: footprintOf(next) });
 	};
-	const corner = (
-		corner: "start" | "end",
-		axis: "x" | "y",
-		label: string,
-	) => (
+	const corner = (corner: "start" | "end", axis: "x" | "y", label: string) => (
 		<NumberField
 			label={label}
 			description="A fraction of the canvas, from zero to one."
@@ -119,7 +213,9 @@ function ZoneEditor({
 			step={0.01}
 			value={String(zone[corner][axis])}
 			onChange={(event) =>
-				edit({ [corner]: { ...zone[corner], [axis]: Number(event.target.value) } })
+				edit({
+					[corner]: { ...zone[corner], [axis]: Number(event.target.value) },
+				})
 			}
 		/>
 	);
@@ -157,9 +253,13 @@ function ZoneEditor({
 					label: `${layout.name} · ${layout.components.length} channels`,
 				}))}
 				onChange={(name) => {
-					const layout = PIXEL_LAYOUTS.find((candidate) => candidate.name === name);
+					const layout = PIXEL_LAYOUTS.find(
+						(candidate) => candidate.name === name,
+					);
 					if (layout) {
-						edit({ layout: { name: layout.name, components: [...layout.components] } });
+						edit({
+							layout: { name: layout.name, components: [...layout.components] },
+						});
 					}
 				}}
 			/>
@@ -171,14 +271,14 @@ function ZoneEditor({
 				onChange={(order) => edit({ order })}
 			/>
 			<NumberField
-				label="Universe"
+				label="Media Server output universe"
 				min={0}
 				step={1}
 				value={String(zone.universe)}
 				onChange={(event) => edit({ universe: Number(event.target.value) })}
 			/>
 			<NumberField
-				label="First address"
+				label="Media Server output address"
 				description={`This zone occupies ${footprintOf(zone)} slots.`}
 				min={1}
 				max={512}
@@ -213,7 +313,7 @@ function RouteRow({
 				onChange={(event) => onChange({ ...route, name: event.target.value })}
 			/>
 			<SelectField
-				label="Protocol"
+				label="Media Server output protocol"
 				value={route.protocol}
 				options={[
 					{ value: "art-net", label: "Art-Net" },
@@ -222,11 +322,13 @@ function RouteRow({
 				onChange={(protocol) => onChange({ ...route, protocol })}
 			/>
 			<NumberField
-				label="Universe"
+				label="Media Server output universe"
 				min={0}
 				step={1}
 				value={String(route.universe)}
-				onChange={(event) => onChange({ ...route, universe: Number(event.target.value) })}
+				onChange={(event) =>
+					onChange({ ...route, universe: Number(event.target.value) })
+				}
 			/>
 			<TextField
 				label="Destination"
@@ -239,7 +341,9 @@ function RouteRow({
 			<CheckboxField
 				label="Send on this route"
 				checked={route.enabled}
-				onChange={(event) => onChange({ ...route, enabled: event.target.checked })}
+				onChange={(event) =>
+					onChange({ ...route, enabled: event.target.checked })
+				}
 			/>
 			<Button onClick={onRemove}>Remove route</Button>
 		</div>
@@ -297,7 +401,9 @@ function RegionRow({
 			<CheckboxField
 				label="Show this region"
 				checked={region.enabled}
-				onChange={(event) => onChange({ ...region, enabled: event.target.checked })}
+				onChange={(event) =>
+					onChange({ ...region, enabled: event.target.checked })
+				}
 			/>
 			<Button onClick={onRemove}>Remove region</Button>
 		</div>
@@ -314,34 +420,58 @@ export function PixelMapSettings({
 	busy: boolean;
 	onSave: (map: PixelMapView) => void;
 }) {
+	const deskShowName = useDeskShowName();
 	const [map, setMap] = useState<PixelMapView>(output.pixelMap);
 	const [selectedZoneId, setSelectedZoneId] = useState<string | null>(
 		output.pixelMap.zones[0]?.id ?? null,
 	);
 	const selected = map.zones.find((zone) => zone.id === selectedZoneId);
+	const selectedHandoff = map.handoffs.find(
+		(handoff) => handoff.zoneId === selectedZoneId,
+	);
 	const problems = pixelMapProblems(map);
 
 	const replaceZone = (zone: PixelZoneView) =>
 		setMap((current) => ({
 			...current,
-			zones: current.zones.map((candidate) => (candidate.id === zone.id ? zone : candidate)),
+			zones: current.zones.map((candidate) =>
+				candidate.id === zone.id ? zone : candidate,
+			),
 		}));
 
 	return (
-		<article className="media-settings-section" aria-label={`${output.name} pixel map`}>
+		<article
+			className="media-settings-section"
+			aria-label={`${output.name} pixel map`}
+		>
 			<div className="media-settings-section-heading">
 				<h3>{output.name} pixel map</h3>
 			</div>
 			<SelectField
-				label="Output mode"
-				description="Direct sends the mapped values from here. Desk merge hands them to the lighting desk instead."
+				label="Operating mode"
+				description="Direct sends Media Server pixels. Desk merge combines a desk fixture with Media Server pixels and sends the result."
 				value={map.mode}
 				options={[
 					{ value: "direct", label: "Direct Media Server output" },
-					{ value: "desk-merge", label: "Hand to the lighting desk" },
+					{ value: "desk-merge", label: "Desk merge" },
 				]}
-				onChange={(mode) => setMap((current) => ({ ...current, mode }))}
+				onChange={(mode) =>
+					setMap((current) => ({
+						...current,
+						mode,
+						handoffs:
+							mode === "direct"
+								? []
+								: current.zones.map(
+										(zone) =>
+											current.handoffs.find(
+												(handoff) => handoff.zoneId === zone.id,
+											) ?? newHandoff(zone),
+									),
+					}))
+				}
 			/>
+			<h4>Pixel zones and desk handoff</h4>
 			<CanvasOverlay
 				map={map}
 				width={output.width}
@@ -353,7 +483,14 @@ export function PixelMapSettings({
 				<Button
 					onClick={() => {
 						const zone = newZone(map.zones);
-						setMap((current) => ({ ...current, zones: [...current.zones, zone] }));
+						setMap((current) => ({
+							...current,
+							zones: [...current.zones, zone],
+							handoffs:
+								current.mode === "desk-merge"
+									? [...current.handoffs, newHandoff(zone)]
+									: current.handoffs,
+						}));
 						setSelectedZoneId(zone.id);
 					}}
 				>
@@ -361,7 +498,10 @@ export function PixelMapSettings({
 				</Button>
 				<Button
 					onClick={() =>
-						setMap((current) => ({ ...current, routes: [...current.routes, newRoute(current.routes)] }))
+						setMap((current) => ({
+							...current,
+							routes: [...current.routes, newRoute(current.routes)],
+						}))
 					}
 				>
 					Add output route
@@ -378,21 +518,44 @@ export function PixelMapSettings({
 				</Button>
 			</div>
 			{selected ? (
-				<ZoneEditor
-					key={selected.id}
-					zone={selected}
-					onChange={replaceZone}
-					onRemove={() => {
-						setMap((current) => ({
-							...current,
-							zones: current.zones.filter((zone) => zone.id !== selected.id),
-						}));
-						setSelectedZoneId(null);
-					}}
-				/>
+				<>
+					<ZoneEditor
+						key={selected.id}
+						zone={selected}
+						onChange={replaceZone}
+						onRemove={() => {
+							setMap((current) => ({
+								...current,
+								zones: current.zones.filter((zone) => zone.id !== selected.id),
+								handoffs: current.handoffs.filter(
+									(handoff) => handoff.zoneId !== selected.id,
+								),
+							}));
+							setSelectedZoneId(null);
+						}}
+					/>
+					{map.mode === "desk-merge" && selectedHandoff ? (
+						<HandoffEditor
+							handoff={selectedHandoff}
+							zone={selected}
+							deskShowName={deskShowName}
+							onChange={(next) =>
+								setMap((current) => ({
+									...current,
+									handoffs: current.handoffs.map((candidate) =>
+										candidate.zoneId === next.zoneId ? next : candidate,
+									),
+								}))
+							}
+						/>
+					) : null}
+				</>
 			) : (
-				<p>No pixel zone selected. Add one, or choose one on the canvas above.</p>
+				<p>
+					No pixel zone selected. Add one, or choose one on the canvas above.
+				</p>
 			)}
+			<h4>Media Server DMX output</h4>
 			{map.routes.map((route) => (
 				<RouteRow
 					key={route.id}
@@ -408,11 +571,14 @@ export function PixelMapSettings({
 					onRemove={() =>
 						setMap((current) => ({
 							...current,
-							routes: current.routes.filter((candidate) => candidate.id !== route.id),
+							routes: current.routes.filter(
+								(candidate) => candidate.id !== route.id,
+							),
 						}))
 					}
 				/>
 			))}
+			<h4>Visual canvas display regions</h4>
 			{map.regions.map((region) => (
 				<RegionRow
 					key={region.id}
@@ -428,7 +594,9 @@ export function PixelMapSettings({
 					onRemove={() =>
 						setMap((current) => ({
 							...current,
-							regions: current.regions.filter((candidate) => candidate.id !== region.id),
+							regions: current.regions.filter(
+								(candidate) => candidate.id !== region.id,
+							),
 						}))
 					}
 				/>

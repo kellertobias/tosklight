@@ -119,6 +119,7 @@ fn run_inner() -> anyhow::Result<()> {
     let importer = start_importer(&configuration, &catalog);
     let (audio, analysis) = start_audio(&configuration);
     let dmx_diagnostics = dmx::diagnostics();
+    let universe_inputs = dmx::universe_inputs();
     let console_identity = citp::ConsoleIdentity::default();
     let available_monitors = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
 
@@ -151,6 +152,7 @@ fn run_inner() -> anyhow::Result<()> {
             shutdown.clone(),
             started,
             dmx_diagnostics,
+            universe_inputs.clone(),
         )?;
         citp::spawn(
             &configuration,
@@ -174,6 +176,7 @@ fn run_inner() -> anyhow::Result<()> {
             configuration: live.clone(),
             analysis: analysis.clone(),
             previews: previews.clone(),
+            universe_inputs: universe_inputs.clone(),
         };
         let shutdown = shutdown.clone();
         std::thread::Builder::new()
@@ -210,6 +213,7 @@ fn run_inner() -> anyhow::Result<()> {
             configuration: live,
             analysis,
             previews,
+            universe_inputs,
         },
         shutdown.clone(),
         diagnostics_arguments,
@@ -484,6 +488,7 @@ fn applies_to(audio: Option<&media_audio::AudioService>) -> media_http::ApplyCon
 /// this machine offers, and what has been logged. The API is handed functions rather than any of
 /// the objects behind them, because a platform stream belongs to the thread that opened it while a
 /// request arrives on another.
+#[allow(clippy::too_many_arguments)]
 fn diagnostics_of(
     audio: Option<&media_audio::AudioService>,
     logging: &logging::InstalledLogging,

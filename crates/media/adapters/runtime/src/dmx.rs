@@ -24,6 +24,49 @@ pub type SharedState = Arc<ArcSwap<MediaState>>;
 
 pub type SharedDiagnostics = Arc<Mutex<HashMap<OutputId, IngressSample>>>;
 
+/// Fresh complete desk universes used by pixel-output handoffs.
+pub type SharedUniverseInputs = Arc<Mutex<HashMap<(DmxProtocol, u16), CachedUniverse>>>;
+
+#[derive(Debug, Clone)]
+pub struct CachedUniverse {
+    slots: [u8; media_domain::pixel_map::DMX_SLOTS],
+    received_at: std::time::Instant,
+}
+
+pub fn universe_inputs() -> SharedUniverseInputs {
+    Arc::new(Mutex::new(HashMap::new()))
+}
+
+pub fn fresh_universe(
+    inputs: &SharedUniverseInputs,
+    protocol: DmxProtocol,
+    universe: u16,
+    maximum_age: std::time::Duration,
+) -> Option<[u8; media_domain::pixel_map::DMX_SLOTS]> {
+    let inputs = inputs.lock().ok()?;
+    let frame = inputs.get(&(protocol, universe))?;
+    (frame.received_at.elapsed() <= maximum_age).then_some(frame.slots)
+}
+
+#[cfg(test)]
+pub fn remember_universe_for_test(
+    inputs: &SharedUniverseInputs,
+    protocol: DmxProtocol,
+    universe: u16,
+    slots: [u8; media_domain::pixel_map::DMX_SLOTS],
+    age: std::time::Duration,
+) {
+    if let Ok(mut inputs) = inputs.lock() {
+        inputs.insert(
+            (protocol, universe),
+            CachedUniverse {
+                slots,
+                received_at: std::time::Instant::now() - age,
+            },
+        );
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct IngressSample {
     protocol: DmxProtocol,
@@ -192,6 +235,34 @@ fn apply_frame_with_diagnostics(
     }
 }
 
+fn capture_handoff_frame(
+    frame: &UniverseFrame,
+    wanted: &[(DmxProtocol, u16)],
+    inputs: &SharedUniverseInputs,
+) {
+    let protocol = match frame.source {
+        media_domain::CommandSource::ArtNet => DmxProtocol::ArtNet,
+        media_domain::CommandSource::Sacn => DmxProtocol::Sacn,
+        _ => return,
+    };
+    if !wanted.contains(&(protocol, frame.universe))
+        || frame.slots.len() < media_domain::pixel_map::DMX_SLOTS
+    {
+        return;
+    }
+    let mut slots = [0; media_domain::pixel_map::DMX_SLOTS];
+    slots.copy_from_slice(&frame.slots[..media_domain::pixel_map::DMX_SLOTS]);
+    if let Ok(mut inputs) = inputs.lock() {
+        inputs.insert(
+            (protocol, frame.universe),
+            CachedUniverse {
+                slots,
+                received_at: std::time::Instant::now(),
+            },
+        );
+    }
+}
+
 #[cfg(test)]
 fn apply_frame(state: &SharedState, routes: &[Route], frame: &UniverseFrame) {
     apply_frame_with_diagnostics(state, routes, frame, &diagnostics());
@@ -207,29 +278,47 @@ pub fn spawn(
     shutdown: Shutdown,
     started: std::time::Instant,
     diagnostics: SharedDiagnostics,
+    inputs: SharedUniverseInputs,
 ) -> Result<(), IngressError> {
     let routes = routes(configuration);
+    let mut handoffs: Vec<(DmxProtocol, u16)> = configuration
+        .outputs
+        .iter()
+        .filter(|output| output.enabled)
+        .flat_map(|output| output.pixel_map.handoffs.iter())
+        .map(|handoff| (handoff.protocol, handoff.input_universe))
+        .collect();
+    handoffs.sort_by_key(|(protocol, universe)| (matches!(protocol, DmxProtocol::Sacn), *universe));
+    handoffs.dedup();
     let resolved = configuration.network.resolved();
     let now = move || Timestamp::from_micros(started.elapsed().as_micros() as u64);
 
     if routes
         .iter()
         .any(|route| route.protocol == DmxProtocol::ArtNet)
+        || handoffs
+            .iter()
+            .any(|(protocol, _)| *protocol == DmxProtocol::ArtNet)
     {
         let mut listener = ArtNetListener::bind(resolved.art_net_listen)?;
         tracing::info!(address = %resolved.art_net_listen, "listening for Art-Net");
-        let (routes, state, mut watcher, now, diagnostics) = (
+        let (routes, state, mut watcher, now, diagnostics, handoffs, inputs) = (
             routes.clone(),
             state.clone(),
             shutdown.watcher(),
             now,
             diagnostics.clone(),
+            handoffs.clone(),
+            inputs.clone(),
         );
         tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = watcher.wait() => break,
-                    frame = listener.receive(&now) => apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics),
+                    frame = listener.receive(&now) => {
+                        capture_handoff_frame(&frame, &handoffs, &inputs);
+                        apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics);
+                    },
                 }
             }
         });
@@ -238,25 +327,38 @@ pub fn spawn(
     if routes
         .iter()
         .any(|route| route.protocol == DmxProtocol::Sacn)
+        || handoffs
+            .iter()
+            .any(|(protocol, _)| *protocol == DmxProtocol::Sacn)
     {
-        let universes: Vec<u16> = routes
+        let mut universes: Vec<u16> = routes
             .iter()
             .filter(|route| route.protocol == DmxProtocol::Sacn)
             .map(|route| route.universe)
             .collect();
+        universes.extend(handoffs.iter().filter_map(|(protocol, universe)| {
+            (*protocol == DmxProtocol::Sacn).then_some(*universe)
+        }));
+        universes.sort_unstable();
+        universes.dedup();
         let mut listener = SacnListener::bind(resolved.sacn_listen, &universes)?;
         tracing::info!(address = %resolved.sacn_listen, ?universes, "listening for sACN");
-        let (routes, state, mut watcher, diagnostics) = (
+        let (routes, state, mut watcher, diagnostics, handoffs, inputs) = (
             routes.clone(),
             state.clone(),
             shutdown.watcher(),
             diagnostics.clone(),
+            handoffs,
+            inputs,
         );
         tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = watcher.wait() => break,
-                    frame = listener.receive(&now) => apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics),
+                    frame = listener.receive(&now) => {
+                        capture_handoff_frame(&frame, &handoffs, &inputs);
+                        apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics);
+                    },
                 }
             }
         });
@@ -494,5 +596,45 @@ mod tests {
         let stale = diagnostic_snapshot(&diagnostics, Timestamp::from_millis(3_000));
         assert!(!stale[0].active);
         assert_eq!(stale[0].age_millis, 2_860);
+    }
+
+    #[test]
+    fn pixel_handoff_capture_requires_the_configured_protocol_universe_and_a_full_frame() {
+        let inputs = universe_inputs();
+        let wanted = vec![(DmxProtocol::ArtNet, 9)];
+        let frame = |source, universe, slots| UniverseFrame {
+            universe,
+            source,
+            source_label: "desk".into(),
+            slots,
+            received_at: Timestamp::from_millis(0),
+        };
+        capture_handoff_frame(
+            &frame(media_domain::CommandSource::ArtNet, 9, vec![7; 511]),
+            &wanted,
+            &inputs,
+        );
+        assert!(
+            fresh_universe(&inputs, DmxProtocol::ArtNet, 9, std::time::Duration::MAX).is_none()
+        );
+
+        capture_handoff_frame(
+            &frame(media_domain::CommandSource::Sacn, 9, vec![8; 512]),
+            &wanted,
+            &inputs,
+        );
+        assert!(
+            fresh_universe(&inputs, DmxProtocol::ArtNet, 9, std::time::Duration::MAX).is_none()
+        );
+
+        capture_handoff_frame(
+            &frame(media_domain::CommandSource::ArtNet, 9, vec![9; 512]),
+            &wanted,
+            &inputs,
+        );
+        assert_eq!(
+            fresh_universe(&inputs, DmxProtocol::ArtNet, 9, std::time::Duration::MAX).unwrap()[0],
+            9
+        );
     }
 }

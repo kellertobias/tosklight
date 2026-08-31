@@ -75,6 +75,7 @@ pub fn run_event_loop(
         configuration: live,
         analysis,
         previews,
+        universe_inputs,
     } = shared;
     let event_loop = EventLoop::new()?;
     // Cocoa owns this thread. Rendering and surface reconstruction happen on the presentation
@@ -86,6 +87,7 @@ pub fn run_event_loop(
         catalog,
         analysis,
         previews,
+        universe_inputs,
         last_preview_millis: std::collections::BTreeMap::new(),
         outputs: Vec::new(),
         pending: configuration
@@ -141,6 +143,7 @@ pub struct Shared {
     pub configuration: SharedConfiguration,
     pub analysis: media_audio::SharedAnalysis,
     pub previews: crate::preview::SharedPreviews,
+    pub universe_inputs: crate::dmx::SharedUniverseInputs,
 }
 
 /// The published library snapshot, shared with the services so both read one catalog.
@@ -153,6 +156,7 @@ pub type SharedCatalog = Arc<arc_swap::ArcSwap<media_domain::catalog::CatalogSna
 pub type SharedConfiguration = Arc<arc_swap::ArcSwap<MediaConfiguration>>;
 
 struct HostedOutput {
+    configuration: OutputConfiguration,
     output: WindowedOutput,
     /// Kept alive for the surface's lifetime, and used to resolve resize events back to an output.
     window: Arc<Window>,
@@ -184,6 +188,7 @@ struct PresentationHost {
     analysis: media_audio::SharedAnalysis,
     /// The output preview a subscribed console receives.
     previews: crate::preview::SharedPreviews,
+    universe_inputs: crate::dmx::SharedUniverseInputs,
     last_preview_millis: std::collections::BTreeMap<media_domain::OutputId, u64>,
     outputs: Vec<HostedOutput>,
     pending: Vec<OutputConfiguration>,
@@ -380,6 +385,7 @@ impl PresentationHost {
                     )
                     .ok();
                 self.outputs.push(HostedOutput {
+                    configuration: configuration.clone(),
                     output,
                     window: window.clone(),
                     test_pattern,
@@ -402,7 +408,9 @@ impl PresentationHost {
     }
 
     fn start_worker(&mut self) {
-        let cache_budget = self.configuration.load().playback.cache_budget_bytes;
+        let loaded = self.configuration.load();
+        let cache_budget = loaded.playback.cache_budget_bytes;
+        let instance = crate::pixel_output::instance_cid(loaded.instance_id.as_str());
         let renderer = RenderWorkerState {
             configuration: self.configuration.clone(),
             catalog: self.catalog.clone(),
@@ -411,6 +419,8 @@ impl PresentationHost {
                 previews: self.previews.clone(),
                 last_preview_millis: std::mem::take(&mut self.last_preview_millis),
                 pixels: crate::pixel_output::PixelOutputs::default(),
+                universe_inputs: self.universe_inputs.clone(),
+                instance,
             },
             outputs: std::mem::take(&mut self.outputs),
             state: self.state.clone(),
@@ -456,34 +466,32 @@ impl PresentationHost {
 /// Output rather than a preview: it runs on its own cadence and does not wait for anyone to be
 /// watching a thumbnail. The cadence is asked before the readback, because the readback is the
 /// expensive half and a frame that will not be sent should not pay for one.
+#[allow(clippy::too_many_arguments)]
 fn map_pixels(
     pixels: &mut crate::pixel_output::PixelOutputs,
-    configuration: &MediaConfiguration,
+    configuration: &OutputConfiguration,
     output: &mut WindowedOutput,
-    id: media_domain::OutputId,
     master: &media_domain::MasterState,
     master_mask: Option<&SourceTexture>,
     now: Timestamp,
+    instance: [u8; 16],
+    universe_inputs: &crate::dmx::SharedUniverseInputs,
 ) {
-    let Some(mapped) = configuration
-        .outputs
-        .iter()
-        .find(|candidate| candidate.id == id)
-        .filter(|candidate| pixels.wants(candidate, now.as_millis()))
-    else {
+    if !pixels.wants(configuration, now.as_millis()) {
         return;
-    };
+    }
     let size = output.size();
     let frame = output.capture_preview(size, master, master_mask);
     pixels.send(
-        mapped,
+        configuration,
         media_domain::pixel_map::CanvasImage {
             width: size.width,
             height: size.height,
             rgba: &frame,
         },
         now.as_millis(),
-        crate::pixel_output::instance_cid(configuration.instance_id.as_str()),
+        instance,
+        universe_inputs,
     );
 }
 
@@ -531,7 +539,7 @@ impl RenderWorkerState {
                 present(&mut hosted.output, &draws, &idle, None, now, region);
                 capture_previews(
                     &mut self.sinks,
-                    &configuration,
+                    &hosted.configuration,
                     &mut hosted.output,
                     output_state,
                     &[],
@@ -565,7 +573,7 @@ impl RenderWorkerState {
                     present(&mut hosted.output, &draws, &master, None, now, region);
                     capture_previews(
                         &mut self.sinks,
-                        &configuration,
+                        &hosted.configuration,
                         &mut hosted.output,
                         output_state,
                         std::slice::from_ref(&direct.layer),
@@ -657,7 +665,7 @@ impl RenderWorkerState {
             );
             capture_previews(
                 &mut self.sinks,
-                &configuration,
+                &hosted.configuration,
                 &mut hosted.output,
                 output_state,
                 &effective_layers,
@@ -832,11 +840,14 @@ struct CaptureSinks {
     previews: crate::preview::SharedPreviews,
     last_preview_millis: std::collections::BTreeMap<media_domain::OutputId, u64>,
     pixels: crate::pixel_output::PixelOutputs,
+    universe_inputs: crate::dmx::SharedUniverseInputs,
+    instance: [u8; 16],
 }
 
+#[allow(clippy::too_many_arguments)]
 fn capture_previews(
     sinks: &mut CaptureSinks,
-    configuration: &MediaConfiguration,
+    configuration: &OutputConfiguration,
     output: &mut WindowedOutput,
     state: &media_domain::OutputState,
     preview_layers: &[media_domain::LayerState],
@@ -852,10 +863,11 @@ fn capture_previews(
         &mut sinks.pixels,
         configuration,
         output,
-        output_id,
         master,
         master_mask,
         now,
+        sinks.instance,
+        &sinks.universe_inputs,
     );
     let program = sinks.previews.for_output(output_id);
     let wanted = program.is_some_and(|preview| preview.wanted())

@@ -855,7 +855,13 @@ export function anOutputConfiguration(
 		id,
 		name,
 		...active,
-		pixelMap: { mode: "direct", zones: [], routes: [], regions: [] },
+		pixelMap: {
+			mode: "direct",
+			zones: [],
+			routes: [],
+			handoffs: [],
+			regions: [],
+		},
 		availableMonitors: [],
 		availableSoundOutputs: [],
 		active,
@@ -930,17 +936,19 @@ function analogTvEffect(
 		label: "Analog TV",
 		enabled: true,
 		mix: 1,
-		parameters: withEffectParameterBounds([
-			["tv-curvature", "TV curvature", 0.3],
-			["distortion", "Distortion", 0.18],
-			["image-grain", "Image grain", 0.2],
-			["glitching", "Glitching", 0.08],
-		].map(([id, label, value]) => ({
-			id: String(id),
-			label: String(label),
-			value: Number(value),
-			defaultValue: Number(value),
-		}))),
+		parameters: withEffectParameterBounds(
+			[
+				["tv-curvature", "TV curvature", 0.3],
+				["distortion", "Distortion", 0.18],
+				["image-grain", "Image grain", 0.2],
+				["glitching", "Glitching", 0.08],
+			].map(([id, label, value]) => ({
+				id: String(id),
+				label: String(label),
+				value: Number(value),
+				defaultValue: Number(value),
+			})),
+		),
 	};
 }
 
@@ -1284,18 +1292,20 @@ function digitalTvEffect(
 		label: "Digital TV",
 		enabled: true,
 		mix: 1,
-		parameters: withEffectParameterBounds([
-			["compression-damage", "Compression damage", 0.35],
-			["block-size", "Block size", 0.35],
-			["tile-displacement", "Tile displacement", 0.25],
-			["chroma-damage", "Chroma damage", 0.2],
-			["glitching", "Glitching", 0.15],
-		].map(([id, label, value]) => ({
-			id: String(id),
-			label: String(label),
-			value: Number(value),
-			defaultValue: Number(value),
-		}))),
+		parameters: withEffectParameterBounds(
+			[
+				["compression-damage", "Compression damage", 0.35],
+				["block-size", "Block size", 0.35],
+				["tile-displacement", "Tile displacement", 0.25],
+				["chroma-damage", "Chroma damage", 0.2],
+				["glitching", "Glitching", 0.15],
+			].map(([id, label, value]) => ({
+				id: String(id),
+				label: String(label),
+				value: Number(value),
+				defaultValue: Number(value),
+			})),
+		),
 	};
 }
 

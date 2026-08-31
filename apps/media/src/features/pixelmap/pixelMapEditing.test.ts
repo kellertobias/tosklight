@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { PixelMapView, PixelZoneView } from "../../shared/api/generated/media-wire";
+import type {
+	PixelMapView,
+	PixelZoneView,
+} from "../../shared/api/generated/media-wire";
 import {
 	footprintOf,
 	newRegion,
 	newRoute,
+	newHandoff,
 	newZone,
 	nextFreeAddress,
 	pixelMapProblems,
@@ -31,7 +35,17 @@ function map(overrides: Partial<PixelMapView> = {}): PixelMapView {
 	return {
 		mode: "direct",
 		zones: [],
-		routes: [{ id: "r", name: "Universe 1", protocol: "art-net", universe: 1, destination: null, enabled: true }],
+		routes: [
+			{
+				id: "r",
+				name: "Universe 1",
+				protocol: "art-net",
+				universe: 1,
+				destination: null,
+				enabled: true,
+			},
+		],
+		handoffs: [],
 		regions: [],
 		...overrides,
 	};
@@ -78,7 +92,12 @@ describe("what an operator is told is wrong", () => {
 
 	it("names the two zones that collide and the address they collide at", () => {
 		const problems = pixelMapProblems(
-			map({ zones: [zone({ id: "a", name: "Left" }), zone({ id: "b", name: "Right", startAddress: 20 })] }),
+			map({
+				zones: [
+					zone({ id: "a", name: "Left" }),
+					zone({ id: "b", name: "Right", startAddress: 20 }),
+				],
+			}),
 		);
 		expect(problems).toHaveLength(1);
 		expect(problems[0]).toContain("Left");
@@ -87,7 +106,9 @@ describe("what an operator is told is wrong", () => {
 	});
 
 	it("says when a zone runs past the end of its universe", () => {
-		const problems = pixelMapProblems(map({ zones: [zone({ startAddress: 500 })] }));
+		const problems = pixelMapProblems(
+			map({ zones: [zone({ startAddress: 500 })] }),
+		);
 		expect(problems[0]).toContain("runs past the end of universe 1");
 	});
 
@@ -96,15 +117,33 @@ describe("what an operator is told is wrong", () => {
 		expect(problems[0]).toContain("no enabled output route carries");
 	});
 
-	it("asks for no route when the map is handed to the desk", () => {
+	it("requires both the physical output route and the desk input patch in merge mode", () => {
+		const merged = zone({ universe: 7 });
+		const problems = pixelMapProblems(
+			map({ mode: "desk-merge", routes: [], zones: [merged], handoffs: [] }),
+		);
+		expect(problems).toContain(
+			"Zone sends universe 7, which no enabled output route carries.",
+		);
+		expect(problems).toContain("Zone needs exactly one desk input patch.");
+
 		expect(
-			pixelMapProblems(map({ mode: "desk-merge", routes: [], zones: [zone({ universe: 7 })] })),
+			pixelMapProblems(
+				map({
+					mode: "desk-merge",
+					zones: [merged],
+					routes: [{ ...newRoute([]), universe: 7 }],
+					handoffs: [newHandoff(merged)],
+				}),
+			),
 		).toEqual([]);
 	});
 
 	it("says when a zone has no pixels", () => {
 		const problems = pixelMapProblems(map({ zones: [zone({ columns: 0 })] }));
-		expect(problems.some((problem) => problem.includes("no pixels"))).toBe(true);
+		expect(problems.some((problem) => problem.includes("no pixels"))).toBe(
+			true,
+		);
 	});
 
 	it("says when a region covers none of the canvas", () => {

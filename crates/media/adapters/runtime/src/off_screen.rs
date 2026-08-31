@@ -142,6 +142,7 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
                     },
                     now.as_millis(),
                     cid,
+                    &shared.universe_inputs,
                 );
             }
             let program = shared.previews.for_output(state.id);

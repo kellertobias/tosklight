@@ -52,7 +52,7 @@ pub use output::{
 pub use output_edit::{OutputConfigurationEditError, UpdateOutputConfiguration};
 pub use pixel_map::{
     CanvasPointView, DisplayRegionView, PixelLayoutView, PixelMapEditError, PixelMapView,
-    PixelRouteView, PixelZoneView,
+    PixelRouteView, PixelZoneHandoffView, PixelZoneView,
 };
 pub use text::{
     CreateText, DeleteText, TextEditError, TextFormatView, TextSlotView, TextStyleView, UpdateText,

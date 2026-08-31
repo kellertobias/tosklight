@@ -332,7 +332,7 @@ impl UniverseFrames {
     ///
     /// A one-based address outside the universe is dropped rather than wrapped into the next one:
     /// a pixel that does not fit is a configuration to fix, not slots to scatter.
-    fn write(&mut self, universe: u16, address: u16, value: u8) {
+    pub fn write(&mut self, universe: u16, address: u16, value: u8) {
         let Some(index) = (address as usize).checked_sub(1) else {
             return;
         };
@@ -343,9 +343,32 @@ impl UniverseFrames {
     }
 
     /// Starts every universe a zone addresses, so a zone that samples pure black still sends.
-    fn open(&mut self, universe: u16) {
+    pub fn open(&mut self, universe: u16) {
         self.frames.entry(universe).or_insert([0; DMX_SLOTS]);
     }
+}
+
+/// The two control values carried by a desk-merge zone fixture.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ZoneMergeControls {
+    /// Brightness applied only to the Media Server contribution.
+    pub dimmer: u8,
+    /// 0 is Media Server, 254 is desk, and 255 is HTP.
+    pub mix: u8,
+}
+
+/// Combines one Media Server pixel slot with its lighting-desk counterpart.
+///
+/// Integer arithmetic keeps the result identical on every platform. Intermediate values use the
+/// complete 0..=254 crossfade range; 255 is deliberately outside that range and selects HTP.
+pub fn merge_slot(media: u8, desk: u8, controls: ZoneMergeControls) -> u8 {
+    let media = (u32::from(media) * u32::from(controls.dimmer) + 127) / 255;
+    if controls.mix == 255 {
+        return media.max(u32::from(desk)) as u8;
+    }
+    let desk_weight = u32::from(controls.mix);
+    let media_weight = 254 - desk_weight;
+    ((media * media_weight + u32::from(desk) * desk_weight + 127) / 254) as u8
 }
 
 /// Samples the canvas through every enabled zone and lays the result out in universes.
@@ -517,6 +540,53 @@ mod tests {
             },
         );
         assert!(frames.is_empty());
+    }
+
+    #[test]
+    fn zone_merge_endpoints_and_htp_are_exact() {
+        let full = ZoneMergeControls {
+            dimmer: 255,
+            mix: 0,
+        };
+        assert_eq!(merge_slot(200, 40, full), 200);
+        assert_eq!(
+            merge_slot(200, 40, ZoneMergeControls { mix: 254, ..full }),
+            40
+        );
+        assert_eq!(
+            merge_slot(100, 180, ZoneMergeControls { mix: 255, ..full }),
+            180
+        );
+    }
+
+    #[test]
+    fn zone_merge_dims_only_the_media_contribution() {
+        let half_media = ZoneMergeControls {
+            dimmer: 128,
+            mix: 0,
+        };
+        assert_eq!(merge_slot(200, 255, half_media), 100);
+        assert_eq!(
+            merge_slot(
+                200,
+                180,
+                ZoneMergeControls {
+                    mix: 255,
+                    ..half_media
+                }
+            ),
+            180,
+            "desk HTP remains undimmed"
+        );
+    }
+
+    #[test]
+    fn zone_merge_crossfades_over_zero_through_254() {
+        let controls = ZoneMergeControls {
+            dimmer: 255,
+            mix: 127,
+        };
+        assert_eq!(merge_slot(200, 40, controls), 120);
     }
 
     #[test]

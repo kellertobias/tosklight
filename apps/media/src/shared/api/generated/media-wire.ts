@@ -72,6 +72,11 @@ order: string, universe: number, startAddress: number, enabled: boolean,
  * How many DMX slots this zone occupies, so the UI can show it without recomputing it.
  */
 footprint: number, };
+export type PixelZoneHandoffView = { zoneId: string, fixtureName: string,
+/**
+ * `art-net` or `sacn`.
+ */
+protocol: string, inputUniverse: number, inputStartAddress: number, dimmerAddress: number, mixAddress: number, fixtureFootprint: number, automaticPatch: boolean, };
 export type PixelRouteView = { id: string, name: string,
 /**
  * `art-net` or `sacn`.
@@ -94,7 +99,7 @@ export type PixelMapView = {
 /**
  * `direct` or `desk-merge`.
  */
-mode: string, zones: Array<PixelZoneView>, routes: Array<PixelRouteView>, regions: Array<DisplayRegionView>, };
+mode: string, zones: Array<PixelZoneView>, routes: Array<PixelRouteView>, handoffs: Array<PixelZoneHandoffView>, regions: Array<DisplayRegionView>, };
 export type OutputConfigurationValuesView = { targetKind: string, monitorBy: string | null, monitorValue: string | null, fullscreen: boolean, width: number, height: number, presentation: string, framesPerSecond: number | null, soundOutputKind: string, soundOutputName: string | null, personality: string, personalityLayout: string, protocol: string, universe: number, startAddress: number, };
 export type OutputConfigurationView = { id: string, name: string,
 /**

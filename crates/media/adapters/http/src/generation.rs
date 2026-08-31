@@ -19,12 +19,13 @@ use crate::wire::{
     FolderPresentationView, FolderPresentationsView, Health, ImportJobView, ImportsView, LayerView,
     LogRecordView, LogsView, MaskView, MasterView, NetworkAddressesView, NetworkView,
     OutputConfigurationValuesView, OutputConfigurationView, OutputView, PendingImportView,
-    PixelLayoutView, PixelMapView, PixelRouteView, PixelZoneView, RemoveFolderPicture,
-    RunningOutputView, RunningServerView, ServerLogLevelView, SourceStatusView, StartImport,
-    TelemetryFrame, TextFormatView, TextSlotView, TextStyleView, TimeView, UpdateAudio,
-    UpdateFolderPresentation, UpdateLayer, UpdateLibraryFolder, UpdateLibraryItem, UpdateMaster,
-    UpdateNetwork, UpdateOutputConfiguration, UpdateServerLogLevel, UpdateText, UpdateTime,
-    UpdateVisualizer, UploadAcceptedView, VisualizerParametersView, VisualizerView, WaveformView,
+    PixelLayoutView, PixelMapView, PixelRouteView, PixelZoneHandoffView, PixelZoneView,
+    RemoveFolderPicture, RunningOutputView, RunningServerView, ServerLogLevelView,
+    SourceStatusView, StartImport, TelemetryFrame, TextFormatView, TextSlotView, TextStyleView,
+    TimeView, UpdateAudio, UpdateFolderPresentation, UpdateLayer, UpdateLibraryFolder,
+    UpdateLibraryItem, UpdateMaster, UpdateNetwork, UpdateOutputConfiguration,
+    UpdateServerLogLevel, UpdateText, UpdateTime, UpdateVisualizer, UploadAcceptedView,
+    VisualizerParametersView, VisualizerView, WaveformView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -86,6 +87,7 @@ fn declarations(config: &Config) -> Vec<String> {
         CanvasPointView::decl(config),
         PixelLayoutView::decl(config),
         PixelZoneView::decl(config),
+        PixelZoneHandoffView::decl(config),
         PixelRouteView::decl(config),
         DisplayRegionView::decl(config),
         PixelMapView::decl(config),

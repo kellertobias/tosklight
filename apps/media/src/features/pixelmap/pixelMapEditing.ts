@@ -7,6 +7,7 @@ import type {
 	DisplayRegionView,
 	PixelMapView,
 	PixelRouteView,
+	PixelZoneHandoffView,
 	PixelZoneView,
 } from "../../shared/api/generated/media-wire";
 
@@ -16,7 +17,10 @@ export const PIXEL_LAYOUTS: { name: string; components: string[] }[] = [
 	{ name: "RGB", components: ["red", "green", "blue"] },
 	{ name: "RGBW", components: ["red", "green", "blue", "white"] },
 	{ name: "RGBA", components: ["red", "green", "blue", "amber"] },
-	{ name: "RGBWA+UV", components: ["red", "green", "blue", "white", "amber", "ultra-violet"] },
+	{
+		name: "RGBWA+UV",
+		components: ["red", "green", "blue", "white", "amber", "ultra-violet"],
+	},
 	{ name: "Dimmer RGB", components: ["dimmer", "red", "green", "blue"] },
 ];
 
@@ -97,7 +101,23 @@ export function newRoute(existing: readonly PixelRouteView[]): PixelRouteView {
 	};
 }
 
-export function newRegion(existing: readonly DisplayRegionView[]): DisplayRegionView {
+export function newHandoff(zone: PixelZoneView): PixelZoneHandoffView {
+	return {
+		zoneId: zone.id,
+		fixtureName: zone.name,
+		protocol: "art-net",
+		inputUniverse: zone.universe,
+		inputStartAddress: 3,
+		dimmerAddress: 1,
+		mixAddress: 2,
+		fixtureFootprint: footprintOf(zone),
+		automaticPatch: false,
+	};
+}
+
+export function newRegion(
+	existing: readonly DisplayRegionView[],
+): DisplayRegionView {
 	return {
 		id: newId("region"),
 		name: `Screen ${existing.length + 1}`,
@@ -123,7 +143,9 @@ export function pixelMapProblems(map: PixelMapView): string[] {
 	const enabled = map.zones.filter((zone) => zone.enabled);
 	for (const zone of map.zones) {
 		if (zone.columns < 1 || zone.rows < 1) {
-			problems.push(`${zone.name} has no pixels; give it at least one column and one row.`);
+			problems.push(
+				`${zone.name} has no pixels; give it at least one column and one row.`,
+			);
 		}
 		if (zone.layout.components.length === 0) {
 			problems.push(`${zone.name} has no colour channels to send.`);
@@ -142,21 +164,58 @@ export function pixelMapProblems(map: PixelMapView): string[] {
 			if (first.universe !== second.universe) continue;
 			const firstLast = first.startAddress + footprintOf(first) - 1;
 			const secondLast = second.startAddress + footprintOf(second) - 1;
-			if (first.startAddress <= secondLast && second.startAddress <= firstLast) {
+			if (
+				first.startAddress <= secondLast &&
+				second.startAddress <= firstLast
+			) {
 				problems.push(
 					`${first.name} and ${second.name} both use universe ${first.universe} around address ${Math.max(first.startAddress, second.startAddress)}.`,
 				);
 			}
 		}
 	}
-	if (map.mode === "direct") {
-		const carried = new Set(
-			map.routes.filter((route) => route.enabled).map((route) => route.universe),
-		);
+	const carried = new Set(
+		map.routes.filter((route) => route.enabled).map((route) => route.universe),
+	);
+	for (const zone of enabled) {
+		if (!carried.has(zone.universe)) {
+			problems.push(
+				`${zone.name} sends universe ${zone.universe}, which no enabled output route carries.`,
+			);
+		}
+	}
+	if (map.mode === "direct" && map.handoffs.length > 0) {
+		problems.push("Direct Media Server mode cannot carry desk input patches.");
+	}
+	if (map.mode === "desk-merge") {
 		for (const zone of enabled) {
-			if (!carried.has(zone.universe)) {
+			const matching = map.handoffs.filter(
+				(handoff) => handoff.zoneId === zone.id,
+			);
+			if (matching.length !== 1) {
+				problems.push(`${zone.name} needs exactly one desk input patch.`);
+				continue;
+			}
+			const handoff = matching[0];
+			if (handoff.fixtureFootprint < footprintOf(zone)) {
 				problems.push(
-					`${zone.name} sends universe ${zone.universe}, which no enabled output route carries.`,
+					`${zone.name}'s zone fixture is smaller than its mapped pixel channels.`,
+				);
+			}
+			if (handoff.dimmerAddress === handoff.mixAddress) {
+				problems.push(
+					`${zone.name}'s Dimmer and Mix addresses must be different.`,
+				);
+			}
+			if (
+				handoff.inputStartAddress < 1 ||
+				handoff.inputStartAddress + handoff.fixtureFootprint - 1 > 512
+			) {
+				problems.push(`${zone.name}'s desk input patch runs past address 512.`);
+			}
+			if (zone.startAddress + handoff.fixtureFootprint - 1 > 512) {
+				problems.push(
+					`${zone.name}'s Media Server output patch runs past address 512.`,
 				);
 			}
 		}
