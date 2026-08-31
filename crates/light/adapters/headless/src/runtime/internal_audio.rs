@@ -386,7 +386,13 @@ impl InternalAudioRuntime {
             volume_percent: state.map_or(0, |state| {
                 ((u16::from(state.volume) * 100 + 127) / 255) as u8
             }),
-            transport: state.map_or("stop", |state| state.transport.label()),
+            // A player pointed at the empty slot holds no voice, so the pane reads it as stopped
+            // whatever the play mode channel happens to say.
+            transport: if is_addressed(state) {
+                state.map_or("stop", |state| state.transport.label())
+            } else {
+                "stop"
+            },
             repeat: state.is_some_and(|state| state.repeat),
             source,
             diagnostic: self.diagnostics.get(&fixture.fixture_id).cloned(),
@@ -503,62 +509,129 @@ impl InternalAudioRuntime {
         state: PlayerState,
         previous: Option<PlayerState>,
     ) -> Result<(), String> {
-        // A library is addressed from one, so folder zero names no folder. A player nobody has
-        // pointed at anything yet is idle, not broken, and saying otherwise makes a freshly
-        // patched fixture look like a fault an operator has to go and find.
-        if state.source.0 == 0 || state.source.1 == 0 {
+        let steps = player_steps(previous, state);
+        if steps.is_empty() {
             return Ok(());
         }
-        let library_name = fixture
-            .internal_bindings
-            .library
-            .as_deref()
-            .unwrap_or("default");
+        let output = self.output_of(fixture)?;
+        for step in steps {
+            match step {
+                PlayerStep::Remove => output.remove(fixture.fixture_id)?,
+                PlayerStep::Prepare => {
+                    let library_name = fixture
+                        .internal_bindings
+                        .library
+                        .as_deref()
+                        .unwrap_or("default");
+                    let library = self.libraries.get(library_name).ok_or_else(|| {
+                        format!(
+                            "Audio Player library binding {library_name} is not mapped on this desk"
+                        )
+                    })?;
+                    output.prepare(
+                        fixture.fixture_id,
+                        &library.load(state.source.0, state.source.1)?,
+                    )?;
+                }
+                PlayerStep::Repeat(enabled) => output.repeat(fixture.fixture_id, enabled)?,
+                PlayerStep::Volume(volume) => {
+                    output.volume(fixture.fixture_id, f32::from(volume) / 255.0)?;
+                }
+                PlayerStep::Seek(cursor_millis) => {
+                    output.seek(fixture.fixture_id, cursor_millis)?;
+                }
+                PlayerStep::Transport(transport) => {
+                    output.transport(
+                        fixture.fixture_id,
+                        match transport {
+                            Transport::Stop => NativeInternalTransport::Stop,
+                            Transport::Pause => NativeInternalTransport::Pause,
+                            Transport::Play => NativeInternalTransport::Play,
+                            Transport::RestartPlay => NativeInternalTransport::RestartPlay,
+                        },
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn output_of(&self, fixture: &PatchedFixture) -> Result<&NativeInternalAudioOutput, String> {
         let output_name = fixture
             .internal_bindings
             .output
             .as_deref()
             .unwrap_or("default");
-        let output = self.outputs.get(output_name).ok_or_else(|| format!("Audio Player output binding {output_name} is not mapped or unavailable on this desk"))?;
-        if previous.is_none_or(|old| old.source != state.source) {
-            let library = self.libraries.get(library_name).ok_or_else(|| {
-                format!("Audio Player library binding {library_name} is not mapped on this desk")
-            })?;
-            output.prepare(
-                fixture.fixture_id,
-                &library.load(state.source.0, state.source.1)?,
-            )?;
-        }
-        if previous.is_none_or(|old| old.repeat != state.repeat) {
-            output.repeat(fixture.fixture_id, state.repeat)?;
-        }
-        if previous.is_none_or(|old| old.volume != state.volume) {
-            output.volume(fixture.fixture_id, f32::from(state.volume) / 255.0)?;
-        }
-        let source_changed = previous.is_some_and(|old| old.source != state.source);
-        let cursor_jump = previous.is_none_or(|old| {
-            state.cursor_millis < old.cursor_millis
-                || state.cursor_millis.saturating_sub(old.cursor_millis) > 250
-        });
-        if source_changed || cursor_jump {
-            output.seek(fixture.fixture_id, state.cursor_millis)?;
-        }
-        if source_changed
-            || previous.is_none_or(|old| {
-                old.transport != state.transport
-                    || old.transport_changed_at != state.transport_changed_at
-            })
-        {
-            let action = match state.transport {
-                Transport::Stop => NativeInternalTransport::Stop,
-                Transport::Pause => NativeInternalTransport::Pause,
-                Transport::Play => NativeInternalTransport::Play,
-                Transport::RestartPlay => NativeInternalTransport::RestartPlay,
-            };
-            output.transport(fixture.fixture_id, action)?;
-        }
-        Ok(())
+        self.outputs.get(output_name).ok_or_else(|| format!("Audio Player output binding {output_name} is not mapped or unavailable on this desk"))
     }
+}
+
+/// One thing the device is told, in the order the voice needs to hear it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PlayerStep {
+    Remove,
+    Prepare,
+    Repeat(bool),
+    Volume(u8),
+    Seek(u32),
+    Transport(Transport),
+}
+
+/// What one player state change asks of the device, decided without touching it.
+///
+/// Every step is settled here so the whole decision is testable on a desk with no audio hardware,
+/// and so a change the operator makes reaches the voice inside the frame that resolved it.
+fn player_steps(previous: Option<PlayerState>, state: PlayerState) -> Vec<PlayerStep> {
+    // A library is addressed from one, so folder zero names no folder. A player nobody has
+    // pointed at anything yet is idle, not broken, and saying otherwise makes a freshly patched
+    // fixture look like a fault an operator has to go and find.
+    if !is_addressed(Some(state)) {
+        // Selecting the empty slot is a transport decision, not the absence of one. The voice the
+        // operator just deselected has to fall silent in this frame; leaving it prepared would
+        // keep playing a source the desk no longer says is selected.
+        return if is_addressed(previous) {
+            vec![PlayerStep::Remove]
+        } else {
+            Vec::new()
+        };
+    }
+    // A source that was empty left no voice on the device, so the next selection is a fresh
+    // preparation even where the two states otherwise agree.
+    let prepared =
+        !is_addressed(previous) || previous.is_some_and(|old| old.source != state.source);
+    let mut steps = Vec::new();
+    if prepared {
+        steps.push(PlayerStep::Prepare);
+    }
+    // A prepared voice starts from the device's own defaults, so repeat and level are restated for
+    // it rather than assumed to have survived the source change.
+    if prepared || previous.is_none_or(|old| old.repeat != state.repeat) {
+        steps.push(PlayerStep::Repeat(state.repeat));
+    }
+    if prepared || previous.is_none_or(|old| old.volume != state.volume) {
+        steps.push(PlayerStep::Volume(state.volume));
+    }
+    let cursor_jump = previous.is_none_or(|old| {
+        state.cursor_millis < old.cursor_millis
+            || state.cursor_millis.saturating_sub(old.cursor_millis) > 250
+    });
+    if prepared || cursor_jump {
+        steps.push(PlayerStep::Seek(state.cursor_millis));
+    }
+    if prepared
+        || previous.is_none_or(|old| {
+            old.transport != state.transport
+                || old.transport_changed_at != state.transport_changed_at
+        })
+    {
+        steps.push(PlayerStep::Transport(state.transport));
+    }
+    steps
+}
+
+/// Whether a player state names a library entry at all, rather than the empty slot.
+fn is_addressed(state: Option<PlayerState>) -> bool {
+    state.is_some_and(|state| state.source.0 != 0 && state.source.1 != 0)
 }
 
 fn declared_attributes(fixture: &PatchedFixture) -> HashSet<String> {
@@ -661,6 +734,93 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    fn player(source: (u8, u8), transport: Transport) -> PlayerState {
+        PlayerState {
+            source,
+            transport,
+            repeat: false,
+            volume: 128,
+            cursor_millis: 0,
+            transport_changed_at: None,
+        }
+    }
+
+    /// Selecting the empty slot is the operator saying "nothing", which has to silence the voice
+    /// that was playing instead of leaving the deselected source running.
+    #[test]
+    fn selecting_the_empty_slot_removes_the_voice_that_was_playing() {
+        let playing = player((1, 1), Transport::Play);
+
+        assert_eq!(
+            player_steps(Some(playing), player((1, 0), Transport::Play)),
+            [PlayerStep::Remove]
+        );
+        assert_eq!(
+            player_steps(Some(playing), player((0, 1), Transport::Play)),
+            [PlayerStep::Remove]
+        );
+        // A player that was already on the empty slot has no voice to silence.
+        assert!(
+            player_steps(
+                Some(player((0, 0), Transport::Play)),
+                player((0, 0), Transport::Play)
+            )
+            .is_empty()
+        );
+    }
+
+    /// The next selection after an empty slot has no voice left on the device, so it prepares one
+    /// and restates the level, repeat and transport the new voice does not inherit.
+    #[test]
+    fn a_selection_after_the_empty_slot_prepares_a_complete_voice() {
+        let steps = player_steps(
+            Some(player((0, 0), Transport::Play)),
+            player((2, 3), Transport::Play),
+        );
+
+        assert_eq!(
+            steps,
+            [
+                PlayerStep::Prepare,
+                PlayerStep::Repeat(false),
+                PlayerStep::Volume(128),
+                PlayerStep::Seek(0),
+                PlayerStep::Transport(Transport::Play),
+            ]
+        );
+    }
+
+    /// A different source is a whole new voice on the device: the level and repeat the operator
+    /// set carry over to it rather than reverting to the device's own defaults.
+    #[test]
+    fn a_new_source_restates_the_level_and_repeat_the_operator_already_chose() {
+        let mut quiet_loop = player((1, 1), Transport::Play);
+        quiet_loop.volume = 40;
+        quiet_loop.repeat = true;
+        let mut next = quiet_loop;
+        next.source = (1, 2);
+
+        let steps = player_steps(Some(quiet_loop), next);
+
+        assert!(steps.contains(&PlayerStep::Repeat(true)));
+        assert!(steps.contains(&PlayerStep::Volume(40)));
+        assert_eq!(steps[0], PlayerStep::Prepare);
+    }
+
+    /// A play mode change is one transport command and nothing else, so it lands in the frame the
+    /// operator makes it rather than re-reading the source.
+    #[test]
+    fn changing_only_the_play_mode_is_a_single_transport_command() {
+        let playing = player((1, 1), Transport::Play);
+        let mut stopped = playing;
+        stopped.transport = Transport::Stop;
+
+        assert_eq!(
+            player_steps(Some(playing), stopped),
+            [PlayerStep::Transport(Transport::Stop)]
+        );
     }
 
     #[test]
