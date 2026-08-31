@@ -37,6 +37,18 @@ describe("Timecode timeline layout", () => {
 		);
 	});
 
+	it("keeps the audio waveform inside a taller audio lane and fills its body", () => {
+		expect(css).toMatch(
+			/\.timecode-editor-lane\.lane-audio_volume\s*\{[\s\S]*?height:\s*calc\(var\(--timecode-lane-height\) \* 1\.5\);[\s\S]*?max-height:\s*calc\(var\(--timecode-lane-height\) \* 1\.5\);/,
+		);
+		expect(css).toMatch(
+			/\.timecode-audio-lane-content \.timecode-waveform\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset:\s*0;[\s\S]*?height:\s*100%;/,
+		);
+		expect(css).toMatch(
+			/\.timecode-audio-lane-content \.timecode-waveform-envelope\s*\{[\s\S]*?fill:\s*#7a63b8;[\s\S]*?stroke:\s*none;/,
+		);
+	});
+
 	it("splits the overview window between panning above and resizing below", () => {
 		// However far the timeline is zoomed in, the window keeps a surface of each kind: the
 		// upper half always pans it and the lower half always resizes its start and end.

@@ -727,14 +727,13 @@ describe("TimecodeTimelineEditor", () => {
 		const waveform = screen.getByLabelText("Linked audio waveform");
 		expect(waveform.querySelectorAll("path")).toHaveLength(1);
 		const envelope = waveform.querySelector("path")?.getAttribute("d") ?? "";
-		// Only the upper half is drawn: traced along the top of every peak, then closed along the
-		// lane floor. Three buckets is therefore three peak points plus the two baseline corners.
-		expect(envelope.split(" L ")).toHaveLength(5);
+		// The envelope is symmetric about the lane's centre: three buckets traced along the top
+		// and the same three traced back along the bottom.
+		expect(envelope.split(" L ")).toHaveLength(6);
 		expect(envelope.startsWith("M 0 ")).toBe(true);
 		expect(envelope.endsWith(" Z")).toBe(true);
-		// The loudest bucket reaches the top of the lane, and the shape stands on its floor.
-		expect(envelope).toContain("1 0 ");
-		expect(envelope).toContain("2 48 L 0 48 Z");
+		// The loudest bucket spans the whole lane, and the quiet ones stay centred on it.
+		expect(envelope).toBe("M 0 19.2 L 1 0 L 2 14.4 L 2 33.6 L 1 48 L 0 28.8 Z");
 		expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
 		expect(screen.queryByLabelText("Speed Group")).toBeNull();

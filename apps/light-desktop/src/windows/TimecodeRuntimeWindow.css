@@ -474,6 +474,28 @@
 	stroke-width: 0.65;
 	opacity: 0.85;
 }
+.timecode-audio-lane-file {
+	position: relative;
+	z-index: 2;
+}
+.timecode-audio-lane-content .timecode-waveform {
+	/* The envelope belongs to the lane, not to the flow after the file name. Left in the flow it
+	   started below that label and ran a full lane height past the lane's own floor. */
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 1;
+	pointer-events: none;
+	stroke: none;
+}
+.timecode-audio-lane-content .timecode-waveform-envelope {
+	/* The body of the audio carries the colour. An outline left every loud passage as a hole
+	   bounded by a hairline, which is the hardest thing on the lane to read while programming. */
+	fill: #7a63b8;
+	fill-opacity: 0.85;
+	stroke: none;
+}
 .ui-button.timecode-timeline-marker {
 	position: absolute;
 	top: 0;
@@ -531,6 +553,13 @@
 	min-height: var(--timecode-lane-height);
 	max-height: var(--timecode-lane-height);
 	border-bottom: 1px solid #2d2f3c;
+}
+.timecode-editor-lane.lane-audio_volume {
+	/* A waveform needs more vertical room than a row of cue blocks to say anything about the
+	   track, so the audio lane is taller than the rest and follows the same vertical zoom. */
+	height: calc(var(--timecode-lane-height) * 1.5);
+	min-height: calc(var(--timecode-lane-height) * 1.5);
+	max-height: calc(var(--timecode-lane-height) * 1.5);
 }
 .timecode-editor-lane-label {
 	position: sticky;
