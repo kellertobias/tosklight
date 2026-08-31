@@ -81,7 +81,8 @@ impl LayerSources {
         // WGPU can only create a BC3 texture when both physical dimensions end on a complete
         // 4x4 block. Clips themselves may have any dimensions, so preserve an odd-sized clip's
         // exact logical size by expanding its edge blocks before upload.
-        let block_aligned = source_size.width % 4 == 0 && source_size.height % 4 == 0;
+        let block_aligned =
+            source_size.width.is_multiple_of(4) && source_size.height.is_multiple_of(4);
         let texture = if self.gpu.samples_block_compression() && block_aligned {
             SourceTexture::from_bc3_blocks(&self.gpu, source_size, &blocks)
         } else {

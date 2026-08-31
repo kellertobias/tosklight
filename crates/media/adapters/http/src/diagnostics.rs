@@ -145,6 +145,18 @@ pub trait UploadStream: Send {
 pub type BeginUpload = Arc<
     dyn Fn(MediaAddress, &str, &str, bool) -> Result<Box<dyn UploadStream>, String> + Send + Sync,
 >;
+pub type UpdateFolderPresentation = Arc<
+    dyn Fn(
+            u16,
+            Option<Option<String>>,
+            Option<Option<String>>,
+        ) -> Result<FolderPresentation, String>
+        + Send
+        + Sync,
+>;
+pub type SetFolderPicture =
+    Arc<dyn Fn(u16, &str, &[u8]) -> Result<FolderPresentation, String> + Send + Sync>;
+pub type ReadFolderPicture = Arc<dyn Fn(u16) -> Result<(String, Vec<u8>), String> + Send + Sync>;
 
 /// Mutations and files the running library exposes to the API.
 #[derive(Clone)]
@@ -154,19 +166,10 @@ pub struct LibraryAccess {
     pub begin_upload: BeginUpload,
     pub folder_presentations:
         Arc<dyn Fn() -> Result<Vec<FolderPresentation>, String> + Send + Sync>,
-    pub update_folder_presentation: Arc<
-        dyn Fn(
-                u16,
-                Option<Option<String>>,
-                Option<Option<String>>,
-            ) -> Result<FolderPresentation, String>
-            + Send
-            + Sync,
-    >,
-    pub set_folder_picture:
-        Arc<dyn Fn(u16, &str, &[u8]) -> Result<FolderPresentation, String> + Send + Sync>,
+    pub update_folder_presentation: UpdateFolderPresentation,
+    pub set_folder_picture: SetFolderPicture,
     pub remove_folder_picture: Arc<dyn Fn(u16) -> Result<FolderPresentation, String> + Send + Sync>,
-    pub folder_picture: Arc<dyn Fn(u16) -> Result<(String, Vec<u8>), String> + Send + Sync>,
+    pub folder_picture: ReadFolderPicture,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -44,7 +44,7 @@ pub fn render(size: Size, endpoint: &str) -> anyhow::Result<Frame> {
         size,
         pixels: vec![0; size.width as usize * size.height as usize * 4],
     };
-    for pixel in frame.pixels.chunks_exact_mut(4) {
+    for pixel in frame.pixels.as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&BACKGROUND);
     }
     draw_guides(&mut frame);

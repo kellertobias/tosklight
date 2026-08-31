@@ -29,22 +29,13 @@ pub enum TextKind {
 }
 
 /// Operator-visible formatting, stored beside the kind so old unit variants remain compatible.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextFormat {
     #[serde(default)]
     pub clock: ClockFormat,
     #[serde(default)]
     pub countdown: CountdownFormat,
-}
-
-impl Default for TextFormat {
-    fn default() -> Self {
-        Self {
-            clock: ClockFormat::default(),
-            countdown: CountdownFormat::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

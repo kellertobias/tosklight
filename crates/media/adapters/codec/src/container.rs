@@ -235,8 +235,10 @@ impl<R: Read + Seek> ClipReader<R> {
             .read_exact(&mut raw)
             .map_err(|_| ContainerError::Unfinished)?;
 
-        let index = raw
-            .chunks_exact(INDEX_ENTRY_BYTES)
+        let (raw_entries, remainder) = raw.as_chunks::<INDEX_ENTRY_BYTES>();
+        debug_assert!(remainder.is_empty());
+        let index = raw_entries
+            .iter()
             .map(|entry| FrameEntry {
                 offset: u64::from_le_bytes(entry[0..8].try_into().unwrap()),
                 length: u32::from_le_bytes(entry[8..12].try_into().unwrap()),

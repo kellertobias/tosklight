@@ -340,14 +340,14 @@ fn encode_publication(
     // The compositor target stores premultiplied RGB, as every correct source-over blend target
     // does. PNG/browser pixels are straight alpha; writing the premultiplied bytes directly makes
     // semitransparent edges dark and displaying them over a checkerboard multiplies alpha twice.
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         let alpha = u16::from(pixel[3]);
         if alpha == 0 {
             pixel[..3].fill(0);
             continue;
         }
-        for channel in 0..3 {
-            pixel[channel] = ((u16::from(pixel[channel]) * 255 + alpha / 2) / alpha).min(255) as u8;
+        for channel in pixel.iter_mut().take(3) {
+            *channel = ((u16::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
         }
     }
 
@@ -363,10 +363,10 @@ fn encode_publication(
     // checkerboard the web UI exposes behind the transparent PNG, so both operator surfaces show
     // transparency rather than silently turning it black.
     let mut checker = rgba.clone();
-    for (index, pixel) in checker.chunks_exact_mut(4).enumerate() {
+    for (index, pixel) in checker.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let x = index as u32 % width;
         let y = index as u32 / width;
-        let background = if (x / 8 + y / 8) % 2 == 0 {
+        let background = if (x / 8 + y / 8).is_multiple_of(2) {
             [22_u8, 27, 32]
         } else {
             [41_u8, 49, 57]

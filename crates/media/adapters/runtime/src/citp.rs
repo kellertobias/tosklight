@@ -274,7 +274,9 @@ fn visualizer_thumbnail(kind: VisualizerKind, request: &ThumbnailRequest) -> Opt
     let rgba = match info.color_type {
         png::ColorType::Rgba => pixels.to_vec(),
         png::ColorType::Rgb => pixels
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], 255])
             .collect(),
         _ => return None,

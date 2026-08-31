@@ -105,7 +105,8 @@ impl LayerUniform {
                 effect_types[index] = 6;
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
                 effect_parameters[index] = parameters.as_array();
-                for (event, values) in effect.parameters[4..].chunks_exact(2).take(16).enumerate() {
+                let (events, _) = effect.parameters[4..].as_chunks::<2>();
+                for (event, values) in events.iter().take(16).enumerate() {
                     beat_scan_positions[event][index] = values[0];
                     beat_scan_counts[event][index] = values[1];
                 }
@@ -116,7 +117,8 @@ impl LayerUniform {
                 effect_parameters[index].copy_from_slice(&values[..4]);
                 effect_parameter_tail[index] = values[4];
                 effect_seeds[index] = values[5];
-                for (event, values) in effect.parameters[6..].chunks_exact(2).take(16).enumerate() {
+                let (events, _) = effect.parameters[6..].as_chunks::<2>();
+                for (event, values) in events.iter().take(16).enumerate() {
                     beat_scan_positions[event][index] = values[0];
                     beat_scan_counts[event][index] = values[1];
                 }
@@ -124,7 +126,8 @@ impl LayerUniform {
                 effect_types[index] = 8;
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
                 effect_parameters[index] = parameters.as_array();
-                for (event, values) in effect.parameters[4..].chunks_exact(4).take(16).enumerate() {
+                let (events, _) = effect.parameters[4..].as_chunks::<4>();
+                for (event, values) in events.iter().take(16).enumerate() {
                     beat_scan_positions[event][index] = values[0];
                     beat_event_x[event][index] = values[1];
                     beat_event_y[event][index] = values[2];
@@ -399,6 +402,7 @@ impl Compositor {
     /// Layers draw lowest first, so layer 8 lands above layer 1 wherever it is opaque. A layer
     /// that does not draw — dimmer at zero, nothing selected, or a source that failed to load —
     /// contributes nothing rather than contributing black.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
         layers: &[LayerDraw<'_>],
@@ -444,6 +448,7 @@ impl Compositor {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_internal(
         &mut self,
         layers: &[LayerDraw<'_>],

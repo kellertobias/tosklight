@@ -147,7 +147,6 @@ pub fn master_state(slots: &[u8]) -> MasterState {
                 .map(dmx::master_rotation)
                 .unwrap_or_default(),
         },
-        ..MasterState::default()
     }
 }
 
@@ -207,7 +206,7 @@ pub fn frame(
 
     Ok(DecodedFrame {
         layers,
-        master: master_state(&master_slots),
+        master: master_state(master_slots),
     })
 }
 
