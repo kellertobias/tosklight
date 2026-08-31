@@ -77,9 +77,53 @@
 	height: 100%;
 }
 
+/* Buttons inside one group are parted by a single gray line. The boundary between two groups
+   reads as 2px dark gray, 1px cyan, 2px dark gray, so related controls stay visibly grouped
+   without opening a black gap. The boundary draws all five pixels itself, and the buttons it
+   separates drop their own edge there so the seam never doubles up. */
 .ui-title-chrome-group + .ui-title-chrome-group,
-.ui-title-chrome-terminals {
-	border-left: 1px solid var(--line2);
+.ui-title-chrome-terminals,
+.ui-window-action-group + .ui-window-action-group {
+	border-left: 0;
+}
+
+.ui-title-chrome-group + .ui-title-chrome-group::before,
+.ui-title-chrome-terminals::before,
+.ui-window-action-group + .ui-window-action-group::before {
+	content: "";
+	flex: none;
+	align-self: stretch;
+	width: 5px;
+	min-width: 5px;
+	background: linear-gradient(
+		to right,
+		var(--line) 0 2px,
+		var(--cyan) 2px 3px,
+		var(--line) 3px 5px
+	);
+}
+
+.ui-title-chrome-group:has(+ .ui-title-chrome-group) > :last-child,
+.ui-title-chrome-group:has(+ .ui-title-chrome-group) > :last-child > :last-child,
+.ui-title-chrome:has(> .ui-title-chrome-terminals)
+	.ui-title-chrome-groups
+	> .ui-title-chrome-group:last-child
+	> :last-child,
+.ui-title-chrome:has(> .ui-title-chrome-terminals)
+	.ui-title-chrome-groups
+	> .ui-title-chrome-group:last-child
+	> :last-child
+	> :last-child,
+.ui-window-action-group:has(+ .ui-window-action-group) > :last-child {
+	border-right: 0;
+}
+
+.ui-title-chrome-group + .ui-title-chrome-group > :first-child,
+.ui-title-chrome-group + .ui-title-chrome-group > :first-child > :first-child,
+.ui-title-chrome-terminals > :first-child,
+.ui-title-chrome-terminals > :first-child > :first-child,
+.ui-window-action-group + .ui-window-action-group > :first-child {
+	border-left: 0;
 }
 
 .ui-title-chrome-action > .ui-button,
@@ -256,10 +300,6 @@
 
 .ui-window-action-group {
 	border-left: 0;
-}
-
-.ui-window-action-group + .ui-window-action-group {
-	border-left: 1px solid var(--line2);
 }
 
 .ui-window-action-group > .ui-button {

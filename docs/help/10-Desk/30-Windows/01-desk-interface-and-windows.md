@@ -15,7 +15,7 @@ main window the **X** quits ToskLight, because that window is the desk itself. O
 window the **X** closes only that screen; the screen keeps its configuration and reopens from
 **Desk Setup → Screens**.
 
-Title-bar buttons within one action group use a single gray divider. The boundary between action groups uses a gray, light-blue, gray divider, making related controls visible without inserting a black gap.
+Title-bar buttons within one action group use a single gray divider. The boundary between action groups uses a wider divider — two pixels of dark gray, one pixel of cyan, two pixels of dark gray — making related controls visible without inserting a black gap. Modal title bars use the same two dividers.
 
 > [!danger] Missing graphic
 > Add an annotated Desk screenshot identifying the Dock, pane workspace, window strip, Show menu, command line, Programmer controls, playback page controls, and Running & Output status.

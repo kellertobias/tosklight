@@ -25,13 +25,17 @@ describe("desktop DataTable styles", () => {
 });
 
 describe("Patch title-action styles", () => {
-	it("keeps a visible divider between each adjacent Patch action group", () => {
-		const dividerRules = ruleBodies(
+	it("leaves the divider between adjacent action groups package-owned", () => {
+		const patchRules = ruleBodies(
 			desktopStyles,
 			".show-patch-layout > .ui-window-header .ui-window-action-group + .ui-window-action-group",
 		);
+		const groupRules = ruleBodies(
+			desktopStyles,
+			".ui-window-action-group + .ui-window-action-group",
+		);
 
-		expect(dividerRules).toHaveLength(1);
-		expect(dividerRules[0]).toContain("border-left: 1px solid var(--line2)");
+		expect(patchRules).toHaveLength(0);
+		expect(groupRules).toHaveLength(0);
 	});
 });

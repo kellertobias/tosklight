@@ -245,12 +245,6 @@
 	border-image: none;
 	box-shadow: none;
 }
-.show-patch-layout
-	> .ui-window-header
-	.ui-window-action-group
-	+ .ui-window-action-group {
-	border-left: 1px solid var(--line2);
-}
 .ui-window-settings.popover {
 	position: fixed;
 	z-index: 951;
