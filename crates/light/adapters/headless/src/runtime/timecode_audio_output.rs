@@ -614,6 +614,11 @@ fn build_stream<T: OutputSample>(
     clock: Arc<dyn TimecodeClock>,
 ) -> Result<cpal::Stream, String> {
     let channels = usize::from(config.channels);
+    // The callback runs on the device's real-time thread once per buffer and mixes every output
+    // frame in it, so the scratch frame is allocated here and only refilled there. Allocating it
+    // per frame put an allocator call between the device and its deadline, which is heard as
+    // crackle rather than as the late buffer it is.
+    let mut mix = vec![0.0_f32; channels];
     device
         .build_output_stream(
             config,
@@ -624,14 +629,14 @@ fn build_stream<T: OutputSample>(
                 };
                 let now = clock.now_micros();
                 for frame in output.chunks_mut(channels) {
-                    let mut mix = vec![0.0_f32; channels];
+                    mix.fill(0.0);
                     for voice in voices.timecodes.values_mut() {
                         voice.mix_frame(&mut mix, now);
                     }
                     for voice in voices.internal.values_mut() {
                         voice.mix_frame(&mut mix, now);
                     }
-                    for (target, sample) in frame.iter_mut().zip(mix) {
+                    for (target, sample) in frame.iter_mut().zip(mix.iter()) {
                         *target = T::from_mix(sample.clamp(-1.0, 1.0));
                     }
                 }
@@ -762,9 +767,23 @@ impl Voice {
                 return;
             }
         }
+        // The source rarely runs at the device's own rate, so a play head lands between two
+        // recorded frames. Taking the nearer of the two turns that offset into a jitter of the
+        // waveform itself, which is heard as a rasp over the whole track; reading the pair and
+        // interpolating keeps the recorded shape.
+        let fraction = (self.position - self.position.floor()) as f32;
+        let next_frame = if source_frame + 1 < end {
+            source_frame + 1
+        } else if self.looping && end > 0 {
+            0
+        } else {
+            source_frame
+        };
         for channel in 0..self.output_channels.min(output.len()) {
             let source_channel = channel.min(self.source_channels - 1);
-            let sample = self.samples[source_frame * self.source_channels + source_channel];
+            let current = self.samples[source_frame * self.source_channels + source_channel];
+            let following = self.samples[next_frame * self.source_channels + source_channel];
+            let sample = current + (following - current) * fraction;
             // CPAL owns the sole mutable output frame, so mixing converts through f32 here.
             // Current callers use one Timecode audio lane; clamping is still safe if that expands.
             output[channel] += sample * self.volume;
@@ -931,6 +950,47 @@ mod tests {
             ),
             Err("startup disconnected".to_owned())
         );
+    }
+
+    #[test]
+    fn a_voice_resampling_to_the_device_interpolates_between_recorded_frames() {
+        // A 44.1 kHz track on a 48 kHz device lands the play head between two recorded frames on
+        // most output frames. Repeating the nearer frame instead of reading through the pair
+        // rasps over the whole track, so the ramp below has to come out as a ramp.
+        let mut voices = DeviceVoices::default();
+        apply_native(
+            &mut voices,
+            NativeCommand::PrepareInternal {
+                fixture_id: fixture(1),
+                decoded: decoded(&[0.0, 1.0]),
+            },
+            2,
+            1,
+        )
+        .unwrap();
+        apply_native(
+            &mut voices,
+            NativeCommand::InternalTransport {
+                fixture_id: fixture(1),
+                action: NativeInternalTransport::Play,
+            },
+            2,
+            1,
+        )
+        .unwrap();
+
+        let voice = voices
+            .internal
+            .get_mut(&fixture(1))
+            .expect("prepared voice");
+        let mut mixed = Vec::new();
+        for _ in 0..3 {
+            let mut output = [0.0];
+            voice.mix_frame(&mut output, 0);
+            mixed.push(output[0]);
+        }
+
+        assert_eq!(mixed, vec![0.0, 0.5, 1.0]);
     }
 
     #[test]
