@@ -402,7 +402,9 @@ export function CadApp() {
 				}}
 				groups={[
 					{
-						id: "cad-actions",
+						// Editing the drawing and describing the print are two different jobs, so the
+						// title bar parts them: the boundary belongs right of Redo.
+						id: "cad-history",
 						actions: [
 							{
 								id: "undo",
@@ -416,6 +418,11 @@ export function CadApp() {
 								disabled: !scene,
 								onPress: () => void history("redo"),
 							},
+						],
+					},
+					{
+						id: "cad-print",
+						actions: [
 							{
 								id: "print",
 								label: "Print",
