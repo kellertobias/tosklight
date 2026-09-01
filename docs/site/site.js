@@ -44,3 +44,42 @@ if (
 	platformSelect.addEventListener("change", updatePlatform);
 	updatePlatform();
 }
+
+document.querySelectorAll(".topbar").forEach((topbar) => {
+	const links = topbar.querySelector(".nav-links");
+	if (!links) return;
+	const applications = [...links.querySelectorAll("a")].find((link) =>
+		link.getAttribute("href")?.endsWith("#applications"),
+	);
+	if (applications instanceof HTMLAnchorElement) {
+		const picker = document.createElement("div");
+		picker.className = "application-picker";
+		const trigger = document.createElement("button");
+		trigger.type = "button";
+		trigger.className = "nav-application-toggle";
+		trigger.textContent = "Applications";
+		trigger.setAttribute("aria-expanded", "false");
+		const menu = document.createElement("div");
+		menu.className = "application-menu";
+		const prefix = topbar.querySelector(".wordmark")?.getAttribute("href") === "../" ? "../" : "";
+		menu.innerHTML = `<a href="${prefix}control/">ToskLight Control</a><a href="${prefix}pixel/">ToskLight Pixel</a><a href="${prefix}architect/">ToskLight Architect</a><a href="${prefix}#applications">All applications</a>`;
+		trigger.addEventListener("click", () => {
+			const open = picker.classList.toggle("is-open");
+			trigger.setAttribute("aria-expanded", String(open));
+		});
+		picker.append(trigger, menu);
+		applications.replaceWith(picker);
+	}
+	const burger = document.createElement("button");
+	burger.type = "button";
+	burger.className = "menu-toggle";
+	burger.setAttribute("aria-expanded", "false");
+	burger.setAttribute("aria-label", "Open navigation menu");
+	burger.innerHTML = '<span></span><span></span><span></span>';
+	burger.addEventListener("click", () => {
+		const open = topbar.classList.toggle("menu-open");
+		burger.setAttribute("aria-expanded", String(open));
+		burger.setAttribute("aria-label", open ? "Close navigation menu" : "Open navigation menu");
+	});
+	topbar.append(burger);
+});
