@@ -13,6 +13,7 @@
   --amber-bright: #8af2f3;
   --blue: #6aaeff;
   --cyan: #5fd8dc;
+  --control-yellow: #ffc85a;
   --green: #50d395;
   --purple: #bb8cff;
   --danger: #ff7777;
@@ -56,7 +57,7 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .nav-links a { color: var(--muted); font-size: .9rem; font-weight: 650; text-decoration: none; }
 .nav-links a:hover { color: var(--text); }
 .nav-links .is-active { color: var(--text); }
-.nav-links .nav-cta { padding: .55rem .9rem; border: 1px solid var(--line-bright); border-radius: .55rem; color: var(--text); }
+.nav-links .nav-cta { padding: .55rem .9rem; border: 1px solid var(--cyan); border-radius: .55rem; background: rgb(95 216 220 / .12); color: var(--cyan); }
 
 .hero { display: grid; grid-template-columns: minmax(26rem, 1fr) minmax(34rem, 1.25fr); align-items: center; gap: 3rem; min-height: 43rem; padding-block: 5.75rem 7rem; }
 .hero-copy { position: relative; z-index: 2; }
@@ -74,7 +75,7 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .version:hover { color: var(--muted); }
 
 .hero-visual { position: relative; min-height: 31rem; perspective: 1400px; }
-.hero-glow { position: absolute; inset: 15% 5%; border-radius: 50%; background: radial-gradient(circle, rgb(247 173 45 / .22), rgb(88 126 182 / .12) 42%, transparent 72%); filter: blur(26px); }
+.hero-glow { position: absolute; inset: 15% 5%; border-radius: 50%; background: radial-gradient(circle, rgb(95 216 220 / .22), rgb(88 126 182 / .12) 42%, transparent 72%); filter: blur(26px); }
 .hero-frame { position: absolute; overflow: hidden; margin: 0; border: 1px solid rgb(255 255 255 / .17); border-radius: .8rem; background: #0b1018; box-shadow: var(--shadow); }
 .hero-frame::before { content: ""; position: absolute; inset: 0; z-index: 1; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .035); pointer-events: none; }
 .hero-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -102,7 +103,7 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .product-identity > img { width: 4.75rem; height: 4.75rem; flex: none; padding: .12rem; border: 1px solid rgb(255 255 255 / .32); border-radius: 1.15rem; background: rgb(255 255 255 / .06); box-shadow: 0 12px 35px rgb(0 0 0 / .28), 0 0 0 3px rgb(0 0 0 / .24); }
 .product-identity h2 { margin: .15rem 0 0; font-size: clamp(2rem, 4vw, 3.35rem); line-height: 1; letter-spacing: -.045em; }
 .product-category { margin: 0; font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.product-control .product-category { color: var(--amber-bright); }
+.product-control .product-category { color: var(--control-yellow); }
 .product-pixel .product-category { color: var(--cyan); }
 .product-architect .product-category { color: var(--purple); }
 .status { display: flex; align-items: center; gap: .45rem; margin: 0; color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
@@ -139,7 +140,7 @@ code { padding: .12rem .32rem; border-radius: .3rem; background: rgb(255 255 255
 .product-detail-title-row { display: flex; align-items: center; justify-content: space-between; gap: 2rem; max-width: 58rem; margin-top: 1rem; }
 .product-detail-title-row h1 { margin: 0; font-size: clamp(3.1rem, 7vw, 6rem); line-height: .94; letter-spacing: -.06em; }
 .product-detail-title-row img { width: clamp(4.5rem, 9vw, 6rem); height: clamp(4.5rem, 9vw, 6rem); padding: .15rem; border: 1px solid rgb(255 255 255 / .32); border-radius: 1.25rem; background: rgb(255 255 255 / .06); box-shadow: 0 12px 35px rgb(0 0 0 / .28); }
-.product-detail-control .product-category { color: var(--amber-bright); }
+.product-detail-control .product-category { color: var(--control-yellow); }
 .product-detail-pixel .product-category { color: var(--cyan); }
 .product-detail-architect .product-category { color: var(--purple); }
 .product-detail-hero > p { max-width: 47rem; margin: 1.5rem 0 0; color: var(--muted); font-size: 1.12rem; }
@@ -207,8 +208,8 @@ code { padding: .12rem .32rem; border-radius: .3rem; background: rgb(255 255 255
 .download-list li { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding-top: .75rem; border-top: 1px solid var(--line); }
 .download-kind { display: block; font-size: .85rem; }
 .download-meta code { display: block; margin-top: .15rem; padding: 0; background: none; color: var(--quiet); font-size: .68rem; word-break: break-all; }
-.download-button { flex: none; padding: .4rem .75rem; border: 1px solid var(--line-bright); border-radius: .45rem; font-size: .78rem; font-weight: 750; text-decoration: none; }
-.download-button:hover { border-color: var(--amber); color: var(--amber-bright); }
+.download-button { flex: none; padding: .4rem .75rem; border: 1px solid var(--cyan); border-radius: .45rem; background: rgb(95 216 220 / .12); color: var(--cyan); font-size: .78rem; font-weight: 750; text-decoration: none; }
+.download-button:hover { border-color: var(--amber-bright); color: var(--amber-bright); }
 .signing-note { color: var(--quiet); font-size: .78rem; }
 .download-cta { padding: 5rem 0; border-top: 1px solid rgb(255 255 255 / .08); background: var(--bg-raised); }
 .download-cta-inner { display: flex; align-items: center; justify-content: space-between; gap: 3rem; }
