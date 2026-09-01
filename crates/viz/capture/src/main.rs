@@ -1148,11 +1148,9 @@ mod tests {
 #[cfg(test)]
 mod profile_moving_light {
     use std::path::{Path, PathBuf};
-
     fn repository() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
     }
-
     /// TL-68's deliberate exception, guarded.
     ///
     /// The plan preserves *both* profile-moving-light implementations — the native renderer's
@@ -1171,7 +1169,6 @@ mod profile_moving_light {
             "the native renderer's generic profile-moving-head GLB is gone: {}",
             native.display()
         );
-
         let procedural = repository().join("apps/light-desktop/src/windows/builtInStageModels.ts");
         let source = std::fs::read_to_string(&procedural).unwrap_or_else(|_| {
             panic!(
@@ -1185,7 +1182,6 @@ mod profile_moving_light {
              until the choice between them is made"
         );
     }
-
     /// Desk, PreViz, and capture use one committed portable show rather than parallel demo rigs.
     #[test]
     fn the_demo_show_has_one_canonical_asset() {
