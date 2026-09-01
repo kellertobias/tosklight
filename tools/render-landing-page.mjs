@@ -276,7 +276,7 @@ const productPages = [
 			["Visualizers", "Sound becomes part of the visual system.", "Pixel includes proof-of-concept visualizers driven by live audio input. They can be freely configured to suit the room, the music, and the rest of the composition.", "The visualizer catalogue will grow as the application develops. Today it provides a configurable starting point rather than claiming a finished library."],
 			["Output", "Map one picture across the real room.", "Map Pixel's output across multiple projection surfaces and DMX-controlled fixtures. Each fixture can be reached remotely from the desk, so a show can send the same fixture on another universe and Pixel merges its media colour information into the result.", "Use Art-Net, sACN, CITP, and MSEX to connect Pixel to the rest of the show and make media choices available where the operator needs them."],
 		],
-		coming: [["Output mapping", "Being tested. Single output through the application window is the well-tested path today."]],
+		coming: [["Output mapping", "Being tested. Single output through the application window is the well-tested path today."], ["More visualizers", "Planned as the visualizer catalogue grows beyond the current proof-of-concept set."]],
 	},
 	{
 		path: "architect",
@@ -300,7 +300,7 @@ const productPages = [
 			["Lasers", "Simulate the path, not just the beam.", "Architect can simulate lasers from a scan path produced by a JavaScript function supplied by the user. The function receives DMX input and returns the path that the renderer draws.", "That gives the designer control over the laser's shape, brightness, scan speed, and position, and leaves room to build a laser effect that matches the specific production."],
 			["Early prototypes", "See the right trigger, with more to come.", "Architect includes early prototypes for physical elements such as falling curtains and pyro elements such as flame jets and sparklers. They are intentionally rudimentary today.", "They are useful for confirming that the intended DMX channel was triggered, not yet for final visual realism. These elements may become more detailed as the application grows."],
 		],
-		coming: [["Media server integration", "Being tested"], ["Paperwork rendering", "Being improved. A real Architect-generated printout will be added here when it is ready to capture."]],
+		coming: [["Media server integration", "Being tested"], ["Paperwork rendering", "Being improved. A real Architect-generated printout will be added here when it is ready to capture."], ["Better crowd simulation", "Planned for a more complete picture of the room in motion."]],
 	},
 ];
 
