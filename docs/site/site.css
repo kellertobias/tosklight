@@ -155,8 +155,9 @@ code { padding: .12rem .32rem; border-radius: .3rem; background: rgb(255 255 255
 .product-detail-story article { display: grid; grid-template-columns: minmax(14rem, .75fr) minmax(20rem, 1.25fr); gap: 2rem 5rem; padding: 4rem 0; border-top: 1px solid var(--line); }
 .product-detail-story h2 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1.08; letter-spacing: -.04em; }
 .product-detail-story .product-detail-text p { margin: 0 0 1rem; color: var(--muted); }
-.product-detail-story .shot { grid-column: 1 / -1; }
-.product-detail-story .shot > img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.product-detail-story .shot { grid-column: 1 / -1; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.product-detail-story .shot > img { display: block; width: 100%; height: auto; aspect-ratio: auto; object-fit: contain; }
+.product-detail-story .shot figcaption { padding: .75rem 0 0; }
 .product-detail-coming { padding: 5rem 0 7rem; border-top: 1px solid var(--line); }
 .product-detail-coming h2 { margin: 0; font-size: clamp(2.2rem, 5vw, 4rem); line-height: 1; letter-spacing: -.05em; }
 .product-detail-coming > div { display: grid; gap: .8rem; margin-top: 2rem; }
