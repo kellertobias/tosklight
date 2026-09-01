@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use viz_scene::{Scene, SceneValues, ViewConfiguration, ViewMode};
+use viz_scene::{RenderQuality, Scene, SceneValues, ViewConfiguration, ViewMode};
 
 const USAGE: &str = "viz-capture --show FILE --output DIR [options]
 
@@ -25,6 +25,7 @@ const USAGE: &str = "viz-capture --show FILE --output DIR [options]
   --step SECONDS    Scene time between frames (default 1/30).
   --settle N        Frames rendered and discarded first, so time-based motion has run (default 30).
   --haze PERCENT    Haze the beams are drawn through (default 50).
+  --quality NAME    draft | standard | high | ultra (default high).
   --fixture NAME    Frame close on fixtures whose name starts with NAME.
   --view NAME       full3d | simple3d | lines3d | top-down | left-to-right |
                     right-to-left | front-to-back | back-to-front (default full3d).";
@@ -38,6 +39,7 @@ struct Options {
     step: f32,
     settle: u32,
     view: ViewMode,
+    quality: RenderQuality,
     fixture: Option<String>,
     /// Haze, `0..=1`. Renderer-local by design — a hazer's DMX says how hard the machine is
     /// working, not what the room ends up like — so the capture states it rather than reading it
@@ -58,6 +60,7 @@ impl Default for Options {
             step: 1.0 / 30.0,
             settle: 30,
             view: ViewMode::Full3d,
+            quality: RenderQuality::High,
             fixture: None,
             haze: viz_scene::DEFAULT_DENSITY,
         }
@@ -101,6 +104,7 @@ fn run(options: &Options) -> Result<u32, String> {
     let mut renderer = viz_render::Renderer::headless(options.width, options.height)?;
     let mut view = ViewConfiguration::default();
     view.mode = options.view;
+    view.quality = options.quality;
     // The camera is framed from the rig rather than left wherever a previous session put it, so
     // the same show always yields the same shot.
     // The rig for the house view and the whole room for a plan, exactly as the desk's pane frames
@@ -425,6 +429,11 @@ fn parse(arguments: impl Iterator<Item = String>) -> Result<Option<Options>, Str
                     other => return Err(format!("{other} is not a view")),
                 };
             }
+            "--quality" => {
+                let name = required(&mut arguments, "--quality")?;
+                options.quality = RenderQuality::from_wire(&name)
+                    .ok_or_else(|| format!("{name} is not a render quality"))?;
+            }
             other => return Err(format!("{other} is not an option this tool takes")),
         }
     }
@@ -456,6 +465,44 @@ mod tests {
         BodyKind, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody,
         FixtureInstance, RenderQuality, SceneryKind, SceneryObject,
     };
+
+    #[test]
+    fn capture_quality_can_be_selected_explicitly() {
+        let options = parse(
+            [
+                "--show",
+                "demo.show",
+                "--output",
+                "frames",
+                "--quality",
+                "ultra",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .expect("capture arguments should parse")
+        .expect("capture should run");
+        assert_eq!(options.quality, RenderQuality::Ultra);
+    }
+
+    #[test]
+    fn capture_rejects_an_unknown_quality() {
+        let error = parse(
+            [
+                "--show",
+                "demo.show",
+                "--output",
+                "frames",
+                "--quality",
+                "cinema",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .err()
+        .expect("unknown quality should fail");
+        assert_eq!(error, "cinema is not a render quality");
+    }
 
     fn two_light_surface_scene() -> (Scene, SceneValues, ViewConfiguration) {
         use viz_scene::{glam::Vec3, uuid::Uuid};

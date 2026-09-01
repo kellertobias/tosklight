@@ -3,600 +3,149 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ToskLight — show-lighting control desk</title>
-    <meta
-      name="description"
-      content="ToskLight is a show-lighting desk, engine, and control server for fixtures, groups, cue lists, playback faders, and Art-Net/sACN output."
-    />
+    <meta name="theme-color" content="#07090d" />
+    <meta name="description" content="Meet ToskLight Control, Pixel, and Architect: a connected toolkit for lighting control, media playback, rig planning, and live visualization." />
+    <title>ToskLight: control, media, and visualization for live shows</title>
     <link rel="icon" href="icon.png" type="image/png" />
-    <style>
-      :root {
-        color-scheme: dark;
-        --bg: #0b0d12;
-        --panel: #141821;
-        --edge: #242b38;
-        --text: #e8ecf4;
-        --muted: #9aa5b8;
-        --accent: #ffb020;
-        --healthy: #39d98a;
-        --warning: #ffd166;
-        --caution: #ff9f45;
-        --degraded: #ff6b6b;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      }
-      a { color: var(--accent); }
-      .wrap { max-width: 68rem; margin: 0 auto; padding: 0 1.5rem; }
-      .topbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        padding: 1rem 0;
-        border-bottom: 1px solid var(--edge);
-      }
-      .topbar strong { color: var(--text); }
-      .topbar-links { display: flex; align-items: center; gap: 1rem; }
-      .topbar a { text-decoration: none; }
-      .manual-link {
-        padding: 0.45rem 0.9rem;
-        background: var(--accent);
-        border: 1px solid var(--accent);
-        border-radius: 0.45rem;
-        color: #12151c;
-        font-weight: 700;
-      }
-      header { padding: 4rem 0 3rem; text-align: center; }
-      header img { width: 112px; height: 112px; }
-      h1 { font-size: clamp(2.2rem, 6vw, 3.4rem); margin: 1rem 0 0.5rem; letter-spacing: -0.02em; }
-      .tagline { color: var(--muted); font-size: 1.15rem; max-width: 44rem; margin: 0 auto; }
-      .hero-actions {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 0.8rem;
-        margin-top: 1.5rem;
-      }
-      .hero-action {
-        padding: 0.6rem 1rem;
-        border: 1px solid var(--edge);
-        border-radius: 0.45rem;
-        color: var(--text);
-        font-weight: 600;
-        text-decoration: none;
-      }
-      .hero-action-primary { border-color: var(--accent); color: var(--accent); }
-      .version {
-        display: inline-block;
-        margin-top: 1.25rem;
-        padding: 0.2rem 0.7rem;
-        border: 1px solid var(--edge);
-        border-radius: 999px;
-        color: var(--muted);
-        font-size: 0.85rem;
-      }
-      .cards {
-        display: grid;
-        gap: 1rem;
-        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-        padding: 2rem 0 1rem;
-      }
-      .product-suite {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 1rem;
-        padding: 0 0 3rem;
-      }
-      .product-card {
-        padding: 1.25rem;
-        background: var(--panel);
-        border: 1px solid var(--edge);
-        border-radius: 0.9rem;
-      }
-      .product-card img {
-        display: block;
-        width: 4.25rem;
-        height: 4.25rem;
-        margin-bottom: 0.9rem;
-        border-radius: 1rem;
-      }
-      .product-card h2 { margin: 0 0 0.35rem; font-size: 1.15rem; }
-      .product-card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
-      .card {
-        display: block;
-        padding: 1.5rem;
-        background: var(--panel);
-        border: 1px solid var(--edge);
-        border-radius: 0.9rem;
-        text-decoration: none;
-        color: inherit;
-        transition: border-color 0.15s ease, transform 0.15s ease;
-      }
-      .card:hover { border-color: var(--accent); transform: translateY(-2px); }
-      .card h2 { margin: 0 0 0.4rem; font-size: 1.15rem; }
-      .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
-      section { padding: 2.5rem 0; border-top: 1px solid var(--edge); }
-      section h2 { font-size: 1.4rem; margin: 0 0 1rem; }
-      section h3 { margin: 1.5rem 0 0.5rem; }
-      .marketing-copy { max-width: 52rem; font-size: 1.08rem; }
-      .marketing-copy p { color: var(--muted); }
-      .marketing-copy strong { color: var(--text); }
-      ul.features { margin: 0; padding-left: 1.2rem; color: var(--muted); }
-      ul.features li { margin-bottom: 0.4rem; }
-      ul.features strong { color: var(--text); font-weight: 600; }
-      .section-lede { color: var(--muted); margin: -0.5rem 0 1.5rem; font-size: 0.95rem; }
-      .gallery {
-        display: grid;
-        gap: 1rem;
-        grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-      }
-      .shot {
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-        background: var(--panel);
-        border: 1px solid var(--edge);
-        border-radius: 0.7rem;
-        overflow: hidden;
-      }
-      .shot:hover, .shot:focus-within { border-color: var(--accent); }
-      .shot-wide { grid-column: 1 / -1; }
-      .shot-image {
-        display: block;
-        width: 100%;
-        padding: 0;
-        border: 0;
-        background: none;
-        cursor: zoom-in;
-      }
-      /* Source screenshots vary from 3:2 to 4:1. Fit whole frames into one tile ratio —
-         cropping to fill would zoom the wide keypad capture into an unreadable fragment. */
-      .shot-image img {
-        display: block;
-        width: 100%;
-        aspect-ratio: 16 / 10;
-        object-fit: contain;
-        background: #0f1219;
-        border-bottom: 1px solid var(--edge);
-      }
-      .shot figcaption { margin-top: auto; padding: 0.8rem 1rem; color: var(--muted); font-size: 0.88rem; }
-      .shot figcaption strong { display: block; color: var(--text); font-weight: 600; }
-      .lightbox {
-        width: min(96vw, 100rem);
-        max-width: none;
-        padding: 0;
-        border: 1px solid var(--edge);
-        border-radius: 0.8rem;
-        background: var(--panel);
-        color: var(--text);
-      }
-      .lightbox::backdrop { background: rgb(0 0 0 / 0.8); }
-      .lightbox-close {
-        position: absolute;
-        top: 0.75rem;
-        right: 0.75rem;
-        z-index: 1;
-        padding: 0.45rem 0.7rem;
-        border: 1px solid var(--edge);
-        border-radius: 0.4rem;
-        background: var(--panel);
-        color: var(--text);
-        font: inherit;
-        cursor: pointer;
-      }
-      .lightbox figure { margin: 0; }
-      .lightbox img { display: block; width: 100%; max-height: 82vh; object-fit: contain; background: #0f1219; }
-      .lightbox figcaption { padding: 0.9rem 1rem; color: var(--muted); }
-      .product-demo {
-        display: block;
-        width: 100%;
-        border: 1px solid var(--edge);
-        border-radius: 0.7rem;
-        background: #000;
-      }
-      .downloads {
-        display: grid;
-        gap: 1rem;
-        grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-      }
-      .platform {
-        padding: 1.25rem;
-        background: var(--panel);
-        border: 1px solid var(--edge);
-        border-radius: 0.7rem;
-      }
-      .platform h3 { margin: 0 0 0.3rem; font-size: 1.05rem; }
-      .platform-note { margin: 0 0 0.9rem; color: var(--muted); font-size: 0.85rem; }
-      .download-list { list-style: none; margin: 0; padding: 0; }
-      .download-list li {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        padding: 0.7rem 0;
-        border-top: 1px solid var(--edge);
-      }
-      .download-list li:first-child { border-top: none; }
-      .download-meta { min-width: 0; }
-      .download-kind { display: block; font-size: 0.9rem; }
-      .download-list code {
-        display: block;
-        color: var(--muted);
-        font-size: 0.75rem;
-        word-break: break-all;
-      }
-      .download-button {
-        flex: none;
-        padding: 0.35rem 0.85rem;
-        border: 1px solid var(--accent);
-        border-radius: 0.4rem;
-        color: var(--accent);
-        font-size: 0.85rem;
-        font-weight: 600;
-        text-decoration: none;
-      }
-      .download-button:hover { background: var(--accent); color: #12151c; }
-      .signing-note { margin: 1.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
-      a.version { text-decoration: none; }
-      a.version:hover { border-color: var(--accent); color: var(--text); }
-      .performance-table-scroll { overflow-x: visible; }
-      .performance-compact {
-        width: 100%;
-        table-layout: fixed;
-        border-collapse: separate;
-        border-spacing: 0 0.45rem;
-      }
-      .performance-compact th,
-      .performance-compact td {
-        padding: 0.75rem 0.9rem;
-        text-align: left;
-        vertical-align: top;
-      }
-      .performance-compact thead th {
-        color: var(--muted);
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-      }
-      .performance-row th:first-child { border-radius: 0.55rem 0 0 0.55rem; }
-      .performance-row td:last-child { border-radius: 0 0.55rem 0.55rem 0; }
-      .performance-row strong { display: block; color: var(--text); font-size: 1rem; }
-      .performance-row small {
-        display: block;
-        margin-top: 0.15rem;
-        color: var(--muted);
-        font-size: 0.72rem;
-        line-height: 1.35;
-        white-space: normal;
-        overflow-wrap: anywhere;
-      }
-      .performance-row-healthy > * { background: rgb(57 217 138 / 0.12); }
-      .performance-row-warning > * { background: rgb(255 209 102 / 0.16); }
-      .performance-row-caution > * { background: rgb(255 159 69 / 0.16); }
-      .performance-row-degraded > * { background: rgb(255 107 107 / 0.15); }
-      .performance-row-unknown > * { background: rgb(154 165 184 / 0.1); }
-      .performance-legend,
-      .performance-details,
-      .performance-empty { color: var(--muted); font-size: 0.82rem; }
-      .performance-legend { margin: 0.85rem 0 0; }
-      .performance-details { margin: 0.35rem 0 0; }
-      .legend-healthy { color: var(--healthy); }
-      .legend-warning { color: var(--warning); }
-      .legend-caution { color: var(--caution); }
-      .legend-degraded { color: var(--degraded); }
-      .legend-unknown { color: var(--muted); }
-      /* Every delivered frame is counted into a rate band; the bar is coloured by that rate. */
-      .performance-histogram { display: flex; align-items: flex-end; gap: 1px; height: 54px; min-width: 220px; padding: 2px; border: 1px solid var(--line); border-radius: 3px; background: rgb(0 0 0 / 0.25); }
-      .performance-histogram-band { flex: 1; min-width: 2px; display: flex; align-items: flex-end; justify-content: center; height: 100%; cursor: help; }
-      .performance-histogram-band:hover { background: rgb(255 255 255 / 0.08); }
-      .performance-histogram-bar { width: 80%; height: var(--bar-height, 0%); min-height: 1px; border-radius: 1px 1px 0 0; background: var(--tone, var(--muted)); }
-      .performance-histogram-empty { color: var(--muted); }
-      .performance-tone-failing { --tone: var(--degraded); }
-      .performance-tone-struggling { --tone: var(--caution); }
-      .performance-tone-holding { --tone: var(--warning); }
-      .performance-tone-comfortable { --tone: var(--healthy); }
-      .performance-tone-spare { --tone: #72c7ff; }
-      td[class*="performance-tone-"] strong { color: var(--tone); }
-      .specs {
-        display: grid;
-        gap: 1rem;
-        grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-      }
-      .spec {
-        padding: 1.2rem;
-        background: var(--panel);
-        border: 1px solid var(--edge);
-        border-radius: 0.7rem;
-      }
-      .spec strong { display: block; margin-bottom: 0.25rem; }
-      .spec span { color: var(--muted); font-size: 0.9rem; }
-      .developer-note { color: var(--muted); }
-      code { padding: 0.1rem 0.3rem; background: #20262d; border-radius: 0.25rem; }
-      @media (max-width: 38rem) {
-        .topbar { align-items: flex-start; }
-        .topbar-links { align-items: flex-end; flex-direction: column; gap: 0.5rem; }
-        header { padding-top: 3rem; }
-        .product-suite { grid-template-columns: 1fr; }
-        .shot-wide { grid-column: auto; }
-      }
-      footer {
-        padding: 2.5rem 0 4rem;
-        border-top: 1px solid var(--edge);
-        color: var(--muted);
-        font-size: 0.9rem;
-        text-align: center;
-      }
-      footer p { margin: 0 0 0.5rem; }
-      footer p:last-child { margin-bottom: 0; }
-    </style>
+    <link rel="stylesheet" href="site.css" />
   </head>
   <body>
-    <div class="wrap">
-      <nav class="topbar" aria-label="Primary">
-        <strong>ToskLight</strong>
-        <div class="topbar-links">
-          <a class="manual-link" href="manual/">Operator manual →</a>
-          <a href="tosklight-manual.pdf">PDF manual</a>
-          <a href="#downloads">Downloads</a>
-        </div>
-      </nav>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <nav class="topbar shell" aria-label="Primary navigation">
+      <a class="wordmark" href="#top" aria-label="ToskLight home"><img src="icon.png" alt="" /><span>ToskLight</span></a>
+      <div class="nav-links">
+        <a href="#applications">Applications</a>
+        <a href="performance/">Development</a>
+        <a href="manual/">Manual</a>
+        <a class="nav-cta" href="downloads/">Downloads</a>
+      </div>
+    </nav>
 
-      <header>
-        <img src="icon.png" alt="ToskLight application icon" />
-        <h1>ToskLight</h1>
-        <p class="tagline">
-          The DMX lighting desk for small and medium venues — professional programming,
-          playback, visualization, and output from one portable show file.
-        </p>
-        <div class="hero-actions">
-          <a class="hero-action hero-action-primary" href="manual/">Read the operator manual</a>
-          <a class="hero-action" href="#downloads">Download ToskLight</a>
+    <main id="main">
+      <header class="hero shell" id="top">
+        <div class="hero-copy">
+          <p class="eyebrow">One show. Three focused tools.</p>
+          <h1><span class="hero-line">Build the rig.</span><span class="hero-line">Shape the light.</span><span class="hero-line hero-line-accent">Move the room.</span></h1>
+          <p class="hero-lede">ToskLight brings professional lighting control, live visuals, and media playback into one coherent show workflow without asking smaller productions to learn throwaway tools.</p>
+          <div class="actions">
+            <a class="button button-primary" href="downloads/">Download</a>
+            <a class="button" href="#applications">Explore the suite</a>
+          </div>
+          <a class="version" id="version" href="__RELEASE_URL__" data-built="__VERSION__">Current build · v__VERSION__</a>
         </div>
-        <a
-          class="version"
-          id="version"
-          href="https://github.com/kellertobias/tosklight/releases/latest"
-          data-built="__VERSION__"
-          >v__VERSION__</a
-        >
+        <div class="hero-visual" aria-label="ToskLight product family">
+          <div class="hero-glow"></div>
+          <figure class="hero-frame hero-frame-control"><img src="screenshots/application-overview.png" alt="ToskLight Control operator workspace" /></figure>
+          <figure class="hero-frame hero-frame-pixel"><img src="screenshots/architect-renderer-ultra.png" alt="ToskLight Architect Ultra-quality live renderer" /></figure>
+          <figure class="hero-frame hero-frame-architect"><img src="screenshots/architect-cad.png" alt="ToskLight Architect CAD planning application" /></figure>
+        </div>
       </header>
 
-      <section class="product-suite" aria-label="ToskLight applications">
-        <article class="product-card">
-          <img src="product-icons/tosklight-control.png" alt="ToskLight Control application icon" />
-          <h2>ToskLight Control</h2>
-          <p>Program fixtures, build presets and cue lists, run playbacks, and send your show to the stage.</p>
-        </article>
-        <article class="product-card">
-          <img src="product-icons/tosklight-architect.png" alt="ToskLight Architect application icon" />
-          <h2>ToskLight Architect</h2>
-          <p>Visualize fixture positions, beams, colors, and looks before the rig is in front of you.</p>
-        </article>
-        <article class="product-card">
-          <img src="product-icons/tosklight-pixel.png" alt="ToskLight Pixel application icon" />
-          <h2>ToskLight Pixel</h2>
-          <p>Prepare and play media alongside the lighting show from the same portable production package.</p>
-        </article>
-      </section>
-
-      <section>
-        <h2>See the desk in action</h2>
-        <p class="section-lede">
-          Product-demo videos are rendered and reviewed on the operator's computer. CI regenerates
-          the show used for the capture directly through the desk API without browser pacing, ships
-          it as the desk default, and attaches it to every release.
-        </p>
+      <section class="demo shell" aria-labelledby="demo-title">
+        <div class="section-heading"><p class="eyebrow">From idea to opening night</p><h2 id="demo-title">Make the room feel exactly right.</h2><p>Turn a rough venue plan into a show that looks considered from the first focus session to the final cue. ToskLight keeps lighting, visualisation, and video together, so the whole picture stays clear as the production comes to life.</p></div>
         __DEMO__
       </section>
 
-      <section>
-        <div class="marketing-copy">
-          <h2>Professional concepts should survive a smaller budget.</h2>
-          <p>
-            Industry-standard lighting desks are excellent tools and worth every penny. But below
-            that price point, small productions are often left with workflows that do not transfer
-            when the venue, show, or operator grows.
-          </p>
-          <p>
-            <strong>ToskLight is built to bridge that gap.</strong> Start by pointing and clicking,
-            then grow into the command line, Programmer, tracking, Groups, Presets, Cuelists, and
-            Playbacks used by professional desks. The hours spent learning the software should
-            remain useful on the next show and the next control surface.
-          </p>
+      <section class="suite-intro shell" id="applications">
+        <div class="suite-heading-row"><div><p class="eyebrow">The ToskLight suite</p><h2>Plan your venue. Build the moment. Run the show.</h2></div><div class="suite-icons" aria-label="ToskLight applications"><img src="product-icons/tosklight-control.png" alt="ToskLight Control" /><img src="product-icons/tosklight-pixel.png" alt="ToskLight Pixel" /><img src="product-icons/tosklight-architect.png" alt="ToskLight Architect" /></div></div>
+        <p>Draw and print a plan, see the rig before you arrive, program a show that stays understandable, and play video as part of the picture. Use the suite together or connect each application to any Art-Net or sACN-compatible lighting desk.</p>
+      </section>
+
+      <section class="product product-control" aria-labelledby="control-title">
+        <div class="shell product-grid">
+          <div class="product-copy">
+            <div class="product-identity">
+              <img src="product-icons/tosklight-control.png" alt="ToskLight Control icon" />
+              <div><p class="product-category">Open source lighting control desk</p><h2 id="control-title">ToskLight Control</h2></div>
+            </div>
+            <h3 class="product-claim">Easy to enter. Deep enough to grow with you.</h3>
+            <p class="product-lede">Start with direct fixture control and reusable looks. Add tracked cues, Dynamics, command-line programming, and custom workspaces as your show and your confidence grow.</p>
+            <ul class="feature-list">
+              <li><strong>Program naturally.</strong> Start with direct controls and grow into a desk-style command language.</li>
+              <li><strong>Make changes that hold.</strong> Groups and presets keep a look connected to the show, so a correction made in rehearsal follows through the cue list.</li>
+              <li><strong>Connect to the real world.</strong> Output through sACN, Art-Net, or USB DMX, with as many universes as your hardware supports. The released desk is tested with eight full universes.</li>
+            </ul>
+            <a class="text-link" href="control/">Discover ToskLight Control <span>→</span></a>
+          </div>
+          <div class="product-gallery product-gallery-control">__CONTROL_GALLERY__</div>
         </div>
       </section>
 
-      <section>
-        <h2>Everything a live desk needs</h2>
-        <ul class="features">
-          <li><strong>Programmer and command line.</strong> Select fixtures, use desk-style keypad grammar, spread values, and turn ideas into reusable looks.</li>
-          <li><strong>Groups, Presets, Cues, and Playbacks.</strong> Build a show from reusable preset building blocks, then store sparse tracked cues and run them from page-aware playbacks.</li>
-          <li><strong>Visualization.</strong> Keep Fixture Sheet, Channels, DMX, and built-in 2D and 3D Stage views connected to the live desk as you program.</li>
-          <li><strong>Fixture and show exchange.</strong> Transfer fixture packages and portable SQLite show files; use MVR to bring venue data into a show.</li>
-          <li><strong>Output and integration.</strong> Send DMX over Art-Net, sACN, or supported USB DMX interfaces; integrate OSC, native extensions, timecode, attached hardware, and browser-connected operator surfaces.</li>
-        </ul>
-      </section>
-
-      <section>
-        <h2>Explore the current application</h2>
-        <p class="section-lede">
-          These reviewed screenshots are regenerated from deterministic application stories for
-          every Pages release.
-        </p>
-        <div class="gallery">
-        __GALLERY__
+      <section class="product product-pixel" aria-labelledby="pixel-title">
+        <div class="shell product-grid product-grid-reverse">
+          <div class="product-copy">
+            <div class="product-identity">
+              <img src="product-icons/tosklight-pixel.png" alt="ToskLight Pixel icon" />
+              <div><p class="product-category">Open source live media server</p><h2 id="pixel-title">ToskLight Pixel</h2></div>
+            </div>
+            <p class="product-lede">Build a complete visual picture from video, images, text, generated visuals, and effects. Run it locally or let any Art-Net or sACN-compatible desk take control.</p>
+            <ul class="feature-list">
+              <li><strong>Compose the image live.</strong> Stack up to eight independent video layers, shape them, and keep the final composition in view.</li>
+              <li><strong>Use the desk you already know.</strong> Patch Pixel into any Art-Net or sACN show, with previews and media choices available when you need them.</li>
+              <li><strong>Make every surface count.</strong> Send a deliberate picture to LED walls, projection, off-screen outputs, or a room full of displays.</li>
+            </ul>
+            <a class="text-link" href="pixel/">Discover ToskLight Pixel <span>→</span></a>
+          </div>
+          <div class="product-gallery product-gallery-pixel">__PIXEL_GALLERY__</div>
         </div>
       </section>
 
-      <section>
-        <h2>Technical specifications</h2>
-        <div class="specs">
-          <div class="spec">
-            <strong>Show files</strong>
-            <span>MVR import and export, GDTF fixture support, and portable show files in SQLite format.</span>
+      <section class="product product-architect" aria-labelledby="architect-title">
+        <div class="shell product-grid">
+          <div class="product-copy">
+            <div class="product-identity">
+              <img src="product-icons/tosklight-architect.png" alt="ToskLight Architect icon" />
+              <div><p class="product-category">Open source visualizer and show CAD</p><h2 id="architect-title">ToskLight Architect</h2></div>
+            </div>
+            <p class="product-lede">Plan a venue in CAD, print the plan, and see the finished rig in a live 3D renderer. Prepare before the desk arrives, then visualize real Art-Net or sACN from ToskLight or another compatible desk.</p>
+            <ul class="feature-list">
+              <li><strong>Plan the physical show.</strong> Lay out fixtures, scenery, media surfaces, patch, and installed geometry.</li>
+              <li><strong>Move between planning and control.</strong> Architect and Control read the same portable <code>.show</code> format.</li>
+              <li><strong>Visualize live.</strong> Render beams, focus, color, movement, gobos, lasers, particles, and venue geometry.</li>
+            </ul>
+            <a class="text-link" href="architect/">Discover ToskLight Architect <span>→</span></a>
           </div>
-          <div class="spec">
-            <strong>Output</strong>
-            <span>Send networked DMX via Art-Net and sACN, or route a universe directly to supported USB DMX interfaces. The desk runs at up to 60 Hz across as many as 128 sparsely populated universes; a realistic modern-hardware workload is 4,096 or more occupied addresses.</span>
-          </div>
-          <div class="spec">
-            <strong>Desktop and headless</strong>
-            <span>Native desktop builds support macOS on Apple Silicon, 64-bit Windows, and Linux x86_64. A headless Raspberry Pi ARM64 build serves its UI through a browser.</span>
-          </div>
-          <div class="spec">
-            <strong>Starter show</strong>
-            <span>The included demo show is built for live and club busking. Import your fixtures, assign them to the prepared Groups, update the Presets, and you are ready for doors open.</span>
-          </div>
-          <div class="spec">
-            <strong>Tracking sparse Cuelists</strong>
-            <span>Store only what changes while earlier values track forward automatically. Cue Only restores temporary changes, and per-value fades and delays keep complex Cuelists compact and readable.</span>
-          </div>
-          <div class="spec">
-            <strong>Dynamics editor</strong>
-            <span>Build effects visually from familiar sine, cosine, PWM, and random waveform lanes. Touch-friendly controls make size, speed, phase, wings, ordering, and fixture targeting approachable.</span>
-          </div>
-          <div class="spec">
-            <strong>Macro engine</strong>
-            <span>Automate repeated desk actions and build custom operator interfaces from reusable actions.</span>
-          </div>
-          <div class="spec">
-            <strong>Timecode / timeline playback</strong>
-            <span>Arrange cue-list clips, markers, audio, speed, and volume changes on a frame-addressed timeline, then run the show from its shared timecode clock.</span>
-          </div>
+          <div class="product-gallery product-gallery-architect">__ARCHITECT_GALLERY__</div>
         </div>
       </section>
 
-      <section id="downloads">
-        <h2>Downloads</h2>
-        <p class="section-lede">
-          Version <strong>v__VERSION__</strong> · <a href="__RELEASE_URL__">all assets and release notes →</a>
-        </p>
-        <div class="downloads">
-        __DOWNLOADS__
-        </div>
-        <p class="signing-note">
-          Builds are not code-signed. On macOS, open the app once via right-click → Open; on
-          Windows, choose “More info” → “Run anyway” at the SmartScreen prompt.
-        </p>
+      <section class="why-it-exists shell" aria-labelledby="why-it-exists-title">
+        <p class="eyebrow">Why it exists</p>
+        <h2 id="why-it-exists-title">Professional concepts should survive a smaller budget.</h2>
+        <p>The industry-standard consoles are excellent and worth every penny. The difficulty sits below that budget: smaller productions often learn a workflow that stops applying the day they decide to take the craft further.</p>
+        <p>ToskLight bridges that gap with professional concepts, free to use on macOS, Windows, and Linux. Start by pointing at things to get a show running, then grow into the command line, tracking, and referencing as you need them.</p>
       </section>
 
-      <section id="performance">
-        <h2>Release performance</h2>
-        <p class="section-lede">
-          Output-cadence runs measured after publication using the released Linux benchmark artifact.
-          Each row summarizes the test set, concurrent load, refresh statistics, time below target,
-          and measured CPU evidence.
-        </p>
-        __PERFORMANCE__
+      <section class="workflow shell" aria-labelledby="workflow-title">
+        <div class="section-heading"><p class="eyebrow">A connected production workflow</p><h2 id="workflow-title">From first idea to final output.</h2></div>
+        <ol class="workflow-steps">
+          <li><span>01</span><strong>Plan</strong><p>Build the venue, rig, patch, and media surfaces in Architect.</p></li>
+          <li><span>02</span><strong>Program</strong><p>Create fixture looks, cues, effects, timelines, and playbacks in Control.</p></li>
+          <li><span>03</span><strong>Connect</strong><p>Patch Pixel outputs as ordinary media fixtures and discover their libraries.</p></li>
+          <li><span>04</span><strong>Perform</strong><p>Run lighting and media from one deliberate operator workflow.</p></li>
+        </ol>
       </section>
 
-      <section>
-        <h2>Standalone server</h2>
-        <p class="developer-note">
-          Download the server archive for your platform, unpack it, and run <code>light-headless</code>.
-          The operator UI is embedded — open <code>http://127.0.0.1:5000</code>. Bind beyond localhost
-          only on a trusted control network, and set <code>LIGHT_DESK_TOKEN</code> when you do.
-        </p>
-      </section>
-
-      <section id="developers">
-        <h2>For developers</h2>
-        <p class="section-lede">
-          ToskLight is a Rust workspace with TypeScript/React operator interfaces hosted by Tauri.
-          Build and start the full desktop development path with <code>npm run build:open</code>.
-        </p>
-        <div class="cards">
-          <a class="card" href="storybook/">
-            <h2>Storybook →</h2>
-            <p>Browse the reviewed operator surfaces, control states, windows, and deterministic application stories built by CI.</p>
-          </a>
-          <a class="card" href="safari/">
-            <h2>Code Safari →</h2>
-            <p>Guided routes through architecture, one operator action end to end, persistence, tests, and Rust/Tauri.</p>
-          </a>
-          <a class="card" href="semantic-tests/semantic-test-catalog.html">
-            <h2>Semantic test catalog →</h2>
-            <p>Searchable human-readable contracts compiled statically from the Playwright scenario suite.</p>
-          </a>
-          <a class="card" href="https://github.com/kellertobias/tosklight">
-            <h2>Source and development →</h2>
-            <p>Build commands, architecture documentation, issues, and the complete repository on GitHub.</p>
-          </a>
+      <section class="download-cta">
+        <div class="shell download-cta-inner">
+          <div><p class="eyebrow">Current test release · v__VERSION__</p><h2>Ready to try the suite?</h2><p>Choose the right build for your show computer on the dedicated downloads page.</p></div>
+          <a class="button button-primary" href="downloads/">Open Downloads</a>
         </div>
       </section>
+    </main>
 
-      <footer>
-        <p>
-          Free to use, modify, and operate — including for commercial productions — under the
-          <a href="https://github.com/kellertobias/tosklight/blob/main/LICENSE">ToskLight Community License</a>.
-        </p>
-        <p>
-          <a href="manual/">Operator manual</a> ·
-          <a href="tosklight-manual.pdf">PDF manual</a> ·
-          <a href="third-party-licenses.html">Third-party licenses</a> ·
-          <a href="storybook/">Storybook</a> ·
-          <a href="https://github.com/kellertobias/tosklight">Source on GitHub</a>
-        </p>
-        <p>
-          A project by <a href="https://tobisk.de">tobisk.de</a> ·
-          <a href="https://tobisk.de/imprint">Imprint &amp; Privacy</a>
-        </p>
-      </footer>
-    </div>
+    <footer>
+      <div class="shell footer-grid">
+        <div><a class="wordmark" href="#top"><img src="icon.png" alt="" /><span>ToskLight</span></a><p>Professional show concepts for productions of every size.</p></div>
+        <div class="footer-links"><a href="downloads/">Downloads</a><a href="manual/">Operator manual</a><a href="tosklight-manual.pdf">PDF manual</a><a href="performance/">Development</a><a href="https://github.com/kellertobias/tosklight">Source on GitHub</a></div>
+        <div class="footer-meta"><a href="license/">ToskLight Community License</a><a href="third-party-licenses.html">Third-party licenses</a><a href="imprint/">Imprint &amp; Privacy</a></div>
+      </div>
+    </footer>
+
     <dialog class="lightbox" id="image-lightbox" aria-labelledby="lightbox-caption">
-      <form method="dialog"><button class="lightbox-close" aria-label="Close enlarged image">Close</button></form>
-      <figure>
-        <img id="lightbox-image" alt="" />
-        <figcaption id="lightbox-caption"></figcaption>
-      </figure>
+      <button class="lightbox-close" type="button" aria-label="Close enlarged image">Close</button>
+      <figure><img id="lightbox-image" alt="" /><figcaption id="lightbox-caption"></figcaption></figure>
     </dialog>
-    <script>
-      // The stamped version is whatever main was built from. Prefer the newest published
-      // release when GitHub is reachable; keep the build-time value on any failure.
-      (async () => {
-        const badge = document.getElementById("version");
-        try {
-          const response = await fetch(
-            "https://api.github.com/repos/kellertobias/tosklight/releases/latest",
-            { headers: { Accept: "application/vnd.github+json" } },
-          );
-          if (!response.ok) return;
-          const { tag_name: tag, html_url: url } = await response.json();
-          if (!tag) return;
-          badge.textContent = tag.startsWith("v") ? tag : `v${tag}`;
-          if (url) badge.href = url;
-          if (tag.replace(/^v/, "") !== badge.dataset.built) {
-            badge.title = `Latest release ${tag} · site built from ${badge.dataset.built}`;
-          }
-        } catch {
-          /* Offline or rate-limited: the stamped version already renders. */
-        }
-      })();
-      (() => {
-        const dialog = document.getElementById("image-lightbox");
-        const image = document.getElementById("lightbox-image");
-        const caption = document.getElementById("lightbox-caption");
-        document.querySelectorAll(".shot-image").forEach((control) => {
-          control.addEventListener("click", () => {
-            const shot = control.closest(".shot");
-            if (!shot) return;
-            const thumbnail = shot.querySelector("img");
-            if (!thumbnail) return;
-            image.src = thumbnail.currentSrc || thumbnail.src;
-            image.alt = thumbnail.alt;
-            caption.textContent = shot.querySelector("figcaption")?.textContent || "";
-            dialog.showModal();
-          });
-        });
-      })();
-    </script>
+    <script src="site.js"></script>
   </body>
 </html>

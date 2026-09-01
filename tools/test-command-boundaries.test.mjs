@@ -134,19 +134,21 @@ test("documentation screenshots share one Storybook build", () => {
 	);
 });
 
-test("Storybook stays in developer resources instead of the Pages header", () => {
+test("Storybook stays on the Development subpage", () => {
 	const landingPage = fs.readFileSync(
 		path.join(repositoryRoot, "docs/site/index.html"),
 		"utf8",
 	);
+	const performanceSource = fs.readFileSync(
+		path.join(repositoryRoot, "tools/performance-publication.mjs"),
+		"utf8",
+	);
 	const topbar =
-		/<nav class="topbar"[\s\S]*?<\/nav>/u.exec(landingPage)?.[0] ?? "";
-	const developers =
-		/<section id="developers">[\s\S]*?<\/section>/u.exec(landingPage)?.[0] ??
-		"";
+		/<nav class="topbar[^"]*"[\s\S]*?<\/nav>/u.exec(landingPage)?.[0] ?? "";
 
 	assert.doesNotMatch(topbar, /storybook\//u);
-	assert.match(developers, /href="storybook\/"[\s\S]*Storybook/u);
+	assert.match(topbar, /href="performance\/"[\s\S]*Development/u);
+	assert.match(performanceSource, /href="\.\.\/storybook\/"[\s\S]*Storybook/u);
 });
 
 test("release CI excludes the debugging-only Hardware Controls application", () => {

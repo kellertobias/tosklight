@@ -448,7 +448,7 @@ test("report-controlled text and URLs are escaped or rejected", () => {
 	status.release.url = "javascript:alert(2)";
 
 	const page = renderPerformancePage(status);
-	assert.doesNotMatch(page, /<script>|<img|javascript:/u);
+	assert.doesNotMatch(page, /<script>|javascript:/u);
 	assert.match(
 		page,
 		/&lt;script&gt;alert\(&quot;summary&quot;\)&lt;\/script&gt;/u,
@@ -520,13 +520,48 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		);
 		assert.match(detailPage, /87\.5 Hz/u);
 		assert.match(detailPage, /report-performance\.zip/u);
+		assert.match(detailPage, /<h1>Development<\/h1>/u);
+		assert.match(detailPage, /href="\.\.\/storybook\/"/u);
+		assert.match(detailPage, /href="\.\.\/safari\/"/u);
+		assert.match(detailPage, /semantic-test-catalog\.html/u);
+		assert.doesNotMatch(detailPage, /href="status\.json"/u);
+		assert.doesNotMatch(detailPage, /Performance methodology|Stage acceptance contract/u);
+		const downloadsPage = readFileSync(
+			resolve(directory, "downloads/index.html"),
+			"utf8",
+		);
+		assert.match(downloadsPage, /<h1>Download ToskLight\.<\/h1>/u);
+		assert.match(downloadsPage, /Currently in development/u);
+		assert.match(downloadsPage, /Release candidate/u);
+		assert.match(downloadsPage, /Published with Pixel/u);
+		assert.equal(downloadsPage.match(/class="download-button"/gu)?.length, 3);
+		assert.equal(downloadsPage.match(/id="platform-download"/gu)?.length, 1);
+		assert.equal(downloadsPage.match(/<option value=/gu)?.length, 4);
+		assert.match(downloadsPage, /Additional downloads/u);
+		assert.match(downloadsPage, /href="\.\.\/license\/"/u);
+		assert.match(downloadsPage, /href="\.\.\/imprint\/"/u);
+		const legalPage = readFileSync(resolve(ROOT, "docs/site/imprint/index.html"), "utf8");
+		assert.match(legalPage, /Angaben gemäß § 5 DDG/u);
+		assert.match(legalPage, /GitHub Pages/u);
+		assert.match(legalPage, /GitHub, Inc\., 88 Colin P\. Kelly Jr\. Street/u);
+		assert.match(legalPage, /GitHub B\.V\., Prins Bernhardplein 200/u);
+		assert.match(legalPage, /<strong>Tobisk Media<\/strong>/u);
+		assert.doesNotMatch(legalPage, /api\.github\.com|Tobisk Music/u);
+		assert.match(legalPage, /setzt auf dieser Webseite selbst keine Cookies/u);
 		const landingPage = readFileSync(target, "utf8");
-		assert.match(landingPage, /class="performance-compact"/u);
-		assert.match(landingPage, /37,720 parameters \/ 2,000 fixtures/u);
-		assert.match(landingPage, /6,480 dyn\. attr\./u);
-		assert.match(landingPage, /Yellow<\/span>: slowest above 30 Hz/u);
-		assert.match(landingPage, /table-layout: fixed/u);
-		assert.doesNotMatch(landingPage, /min-width: 58rem/u);
+		assert.doesNotMatch(landingPage, /class="performance-compact"|class="downloads"/u);
+		assert.match(landingPage, /Currently in development/u);
+		assert.match(landingPage, /Release candidate/u);
+		assert.match(landingPage, /Will be published with ToskLight Pixel/u);
+		assert.match(landingPage, /screenshots\/application-overview\.png/u);
+		assert.match(landingPage, /screenshots\/tracked-programming\.png/u);
+		assert.match(landingPage, /screenshots\/media-server-playback\.png/u);
+		assert.match(landingPage, /screenshots\/architect-renderer-ultra\.png/u);
+		assert.match(landingPage, /screenshots\/architect-cad\.png/u);
+		assert.doesNotMatch(landingPage, /screenshots\/media-server-dashboard\.png/u);
+		assert.match(landingPage, /href="downloads\/"/u);
+		assert.match(landingPage, /href="imprint\/"/u);
+		assert.doesNotMatch(landingPage, /__[A-Z_]+__/u);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}

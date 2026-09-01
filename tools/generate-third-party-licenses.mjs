@@ -86,25 +86,24 @@ const document = `<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090d" />
   <title>ToskLight third-party license notices</title>
-  <style>
-    body { max-width: 90rem; margin: 2rem auto; padding: 0 1.25rem; color: #17202a; font: 16px/1.5 system-ui, sans-serif; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: .5rem; text-align: left; vertical-align: top; border-bottom: 1px solid #dce1e7; }
-    th { background: #f4f6f8; position: sticky; top: 0; }
-    code { font-size: .9em; }
-  </style>
+  <link rel="icon" href="icon.png" type="image/png" />
+  <link rel="stylesheet" href="site.css" />
 </head>
-<body>
-  <h1>Third-party license notices</h1>
-  <p>ToskLight itself is distributed under the <a href="license.txt">ToskLight Community License</a>. The packages below remain under their own licenses.</p>
-  <p>This notice is generated from the resolved production dependency graphs: ${npm.length} npm packages and ${rust.length} Rust packages. It excludes development-only dependencies. Generated ${escape(generatedAt)}.</p>
-  <table>
-    <thead><tr><th>Ecology</th><th>Package</th><th>Version</th><th>Declared license</th><th>Project source</th></tr></thead>
-    <tbody>
+<body class="legal-page">
+  <nav class="topbar shell"><a class="wordmark" href="./"><img src="icon.png" alt="" /><span>ToskLight</span></a><div class="nav-links"><a href="downloads/">Downloads</a><a href="performance/">Development</a><a class="nav-cta" href="./">Back to the suite</a></div></nav>
+  <main class="document-page shell">
+    <header class="document-hero"><p class="eyebrow">Open-source software</p><h1>Third-party licenses.</h1><p>ToskLight stands on excellent open-source work. Every package remains available under its own declared license.</p></header>
+    <section class="license-summary"><p>ToskLight itself is distributed under the <a href="license/">ToskLight Community License</a>. This notice is generated from the resolved production dependency graphs: ${npm.length} npm packages and ${rust.length} Rust packages. It excludes development-only dependencies.</p><p>Generated ${escape(generatedAt)}.</p></section>
+    <div class="license-table-scroll"><table class="license-table">
+      <thead><tr><th>Ecology</th><th>Package</th><th>Version</th><th>Declared license</th><th>Project source</th></tr></thead>
+      <tbody>
 ${table([...npm, ...rust])}
-    </tbody>
-  </table>
+      </tbody>
+    </table></div>
+  </main>
+  <footer><div class="shell download-footer"><p><a href="license/">ToskLight Community License</a> · <a href="imprint/">Imprint &amp; Privacy</a></p><a href="./">← Back to ToskLight</a></div></footer>
 </body>
 </html>
 `;

@@ -203,6 +203,8 @@ build_pages() {
 
   for required in \
     index.html \
+    downloads/index.html \
+    imprint/index.html \
     manual/index.html \
     storybook/index.html \
     safari/index.html \
@@ -210,6 +212,7 @@ build_pages() {
     performance/index.html \
     semantic-tests/semantic-test-catalog.html \
     semantic-tests/semantic-test-catalog.v1.json \
+    license/index.html \
     license.txt \
     third-party-licenses.html
   do

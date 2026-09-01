@@ -52,7 +52,7 @@ test("captures the reviewed Storybook marketing gallery and preserves static sti
 		await fs.readFile(MANIFEST_PATH, "utf8"),
 	) as MarketingScreenshotManifest;
 	expect(manifest.version).toBe(1);
-	expect(manifest.entries).toHaveLength(25);
+	expect(manifest.entries).toHaveLength(37);
 	await fs.rm(ACTUAL_ROOT, { recursive: true, force: true });
 	await fs.mkdir(ACTUAL_ROOT, { recursive: true });
 	await fs.mkdir(REVIEWED_ROOT, { recursive: true });

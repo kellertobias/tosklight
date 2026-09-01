@@ -2,6 +2,40 @@
 	"version": 1,
 	"entries": [
 		{
+			"file": "control-desk.png", "sourceFile": "docs/marketing/assets/stills/control-desk.png", "title": "The desk", "caption": "Everything an operator touches, on one surface.", "theme": "dark"
+		},
+		{
+			"file": "control-programmer.png", "sourceFile": "docs/marketing/assets/stills/control-programmer.png", "title": "The programmer", "caption": "Familiar attribute banks, encoders, and command-line programming.", "theme": "dark"
+		},
+		{
+			"file": "control-groups.png", "sourceFile": "docs/marketing/assets/stills/control-groups.png", "title": "Groups", "caption": "Keep the fixture selections you use throughout the show close at hand.", "theme": "dark"
+		},
+		{
+			"file": "control-cues.png", "sourceFile": "docs/marketing/assets/stills/control-cues.png", "title": "Cues", "caption": "Build a repeatable sequence of intentions for the show.", "theme": "dark"
+		},
+		{
+			"file": "control-preload-go.png", "sourceFile": "docs/marketing/assets/stills/control-preload-go.png", "title": "Preload and GO", "caption": "Set up a change while the current look remains live.", "theme": "dark"
+		},
+		{
+			"file": "control-stage.png", "sourceFile": "docs/marketing/assets/stills/control-stage.png", "title": "Visualizer", "caption": "See the rig and its beams without a second copy of the show.", "theme": "dark"
+		},
+		{
+			"file": "control-fixture-library.png", "sourceFile": "docs/marketing/assets/stills/control-fixture-library.png", "title": "Fixture library", "caption": "Bring real fixture data into the show.", "theme": "dark"
+		},
+		{
+			"file": "control-output-engine.png", "sourceFile": "docs/marketing/assets/stills/control-output-engine.png", "title": "Output", "caption": "Map logical universes to Art-Net and streaming ACN routes.", "theme": "dark"
+		},
+		{
+			"file": "tracked-programming.png",
+			"title": "Track every change",
+			"caption": "See what comes from the current cue, what the Programmer changes, and what is prepared next, so you can build a new look without losing the one on stage.",
+			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
+			"viewport": { "width": 1180, "height": 720 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
 			"file": "application-overview.png",
 			"title": "Application overview",
 			"caption": "Run the complete desk: select and program fixtures, build looks, store cues, and operate playbacks from one workspace.",
@@ -82,6 +116,20 @@
 			"theme": "dark"
 		},
 		{
+			"file": "architect-renderer-ultra.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-renderer-ultra.png",
+			"title": "See the finished room",
+			"caption": "Preview the complete rig with detailed fixture models, beams, focus, color, haze, and venue geometry before the audience arrives.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-cad.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-cad.png",
+			"title": "Draw the physical show",
+			"caption": "Build the venue and rig as a measured plan, place and focus fixtures, organize layers, and carry the same show into visualization and control.",
+			"theme": "dark"
+		},
+		{
 			"file": "fixture-library.png",
 			"title": "Fixture library",
 			"caption": "Find, inspect, and import fixture profiles so real hardware is ready to patch into a show.",
@@ -146,10 +194,11 @@
 		},
 		{
 			"file": "dynamics.png",
-			"title": "Dynamics",
-			"caption": "Create fixture effects with editable waveform lanes, timing, phase, wings, and touch-friendly encoder control.",
+			"title": "Movement with intent",
+			"caption": "Shape intensity, color, and position as editable curves, spread motion across a fixture selection, and preview the result before it reaches the stage.",
 			"storyId": "tosklight-marketing--dynamics-view",
 			"viewport": { "width": 1600, "height": 920 },
+			"captureSelector": "section.dynamic-full-discussion-editor",
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -175,9 +224,17 @@
 			"interactions": []
 		},
 		{
+			"file": "pixel-eight-layer-composite.png",
+			"sourceFile": "docs/marketing/assets/stills/pixel-eight-layer-composite.png",
+			"title": "Eight layers. One deliberate picture.",
+			"caption": "Build a complete output from up to eight independent video layers. The dotted line shows a mask boundary; master shapes finish the picture without losing the layers below.",
+			"wide": true,
+			"theme": "dark"
+		},
+		{
 			"file": "media-server-playback.png",
-			"title": "Media Server playback",
-			"caption": "The production CITP Media Pane monitors live server playback and offers an explicit local takeover when the operator needs to drive it from the server.",
+			"title": "Built-in live controls",
+			"caption": "Run Pixel directly with familiar desk-style controls when DMX is not the right control path, then adjust playback, position, masks, frames, and effects while the show is running.",
 			"storyId": "tosklight-media-server--media",
 			"viewport": { "width": 1440, "height": 900 },
 			"theme": "dark",
@@ -186,8 +243,8 @@
 		},
 		{
 			"file": "media-server-library.png",
-			"title": "Media Server library",
-			"caption": "One Library uses title buttons for Media, Visualizers, and Text; its Media filter combines preset-pool folders, multi-select files, previews, drag reordering, and 900-series parking storage.",
+			"title": "Every visual, ready for the show",
+			"caption": "Manage videos, transparent images, live visualizers, and flexible text in one visual library. Pixel prepares imported media for reliable playback and keeps every asset ready at a predictable desk address.",
 			"storyId": "tosklight-media-server--library",
 			"viewport": { "width": 1440, "height": 900 },
 			"theme": "dark",
@@ -196,8 +253,8 @@
 		},
 		{
 			"file": "media-server-visualizers.png",
-			"title": "Media Server library visualizers",
-			"caption": "The Library's Visualizers filter uses folders 250–255, pooled sources, a representative picture preview, and direct parameter editing.",
+			"title": "A visual library that goes beyond files",
+			"caption": "Select a live sound-driven visualizer beside videos, transparent images, and flexible text, then keep every visual asset ready to use from one clear library.",
 			"storyId": "tosklight-media-server--visualizers",
 			"viewport": { "width": 1440, "height": 900 },
 			"theme": "dark",
