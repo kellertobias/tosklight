@@ -537,7 +537,7 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.equal(downloadsPage.match(/class="download-button"/gu)?.length, 3);
 		assert.equal(downloadsPage.match(/id="platform-download"/gu)?.length, 1);
 		assert.equal(downloadsPage.match(/<option value=/gu)?.length, 4);
-		assert.match(downloadsPage, /Additional downloads/u);
+		assert.match(downloadsPage, /Useful alongside the suite/u);
 		assert.match(downloadsPage, /href="\.\.\/license\/"/u);
 		assert.match(downloadsPage, /href="\.\.\/imprint\/"/u);
 		const legalPage = readFileSync(resolve(ROOT, "docs/site/imprint/index.html"), "utf8");
@@ -550,9 +550,9 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(legalPage, /setzt auf dieser Webseite selbst keine Cookies/u);
 		const landingPage = readFileSync(target, "utf8");
 		assert.doesNotMatch(landingPage, /class="performance-compact"|class="downloads"/u);
-		assert.match(landingPage, /Currently in development/u);
-		assert.match(landingPage, /Release candidate/u);
-		assert.match(landingPage, /Will be published with ToskLight Pixel/u);
+		assert.match(landingPage, /Open source lighting control desk/u);
+		assert.match(landingPage, /Open source live media server/u);
+		assert.match(landingPage, /Open source visualizer and show CAD/u);
 		assert.match(landingPage, /screenshots\/application-overview\.png/u);
 		assert.match(landingPage, /screenshots\/tracked-programming\.png/u);
 		assert.match(landingPage, /screenshots\/media-server-playback\.png/u);
