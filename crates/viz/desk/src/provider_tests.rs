@@ -80,6 +80,53 @@ mod network_rule_tests {
         );
     }
 
+    /// The desk serves its output at a fixed rate. Only a read that would change the picture is
+    /// a new frame; the same slots read again, with the same overlay through the same scene, hold
+    /// the picture the renderer already has.
+    #[test]
+    fn a_desk_output_read_that_changes_nothing_is_not_a_new_frame() {
+        let snapshot = |slot: u8| crate::wire::OutputDmxSnapshot {
+            revision: 1,
+            universes: vec![crate::wire::PreviewUniverse {
+                universe: 1,
+                slots: vec![slot; viz_dmx::DMX_SLOTS],
+            }],
+        };
+        let same = desk_output_signature(&snapshot(7), None, 3);
+        assert_eq!(same, desk_output_signature(&snapshot(7), None, 3));
+        assert_ne!(
+            same,
+            desk_output_signature(&snapshot(8), None, 3),
+            "a level moved"
+        );
+        assert_ne!(
+            same,
+            desk_output_signature(&snapshot(7), None, 4),
+            "the scene changed"
+        );
+        let preload = crate::wire::PreloadProjection {
+            fixture_values: vec![crate::wire::PreloadFixtureValue {
+                fixture_id: uuid::Uuid::nil(),
+                attribute: "intensity".into(),
+                value: crate::wire::PreloadAttributeValue::Normalized(0.5),
+            }],
+        };
+        assert_ne!(
+            same,
+            desk_output_signature(&snapshot(7), Some(&preload), 3),
+            "a followed preload is part of the picture"
+        );
+        let empty = crate::wire::OutputDmxSnapshot {
+            revision: 1,
+            universes: vec![],
+        };
+        assert_ne!(
+            desk_output_signature(&empty, None, 3),
+            same,
+            "an unpatched rig is its own picture, and still a first frame"
+        );
+    }
+
     #[test]
     fn an_empty_desk_output_snapshot_still_advances_the_stage_source() {
         let mut values = SceneValues::default();

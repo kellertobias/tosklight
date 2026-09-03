@@ -157,6 +157,10 @@ pub struct DeskProvider {
     /// Newest accepted packet already reported to the host.
     reported_input_micros: u64,
     value_frame: u64,
+    /// What the last presented desk-output snapshot said, so the next one that says the same
+    /// thing is not presented again. The desk serves its output at a fixed rate whether or not a
+    /// level moved; the value frame counts changes, because the renderer redraws on it.
+    presented_desk_output: Option<u64>,
     /// The planning window's preview values, and the revision of them already folded in.
     ///
     /// Empty for a lighting desk, which never serves them.
@@ -206,6 +210,7 @@ impl DeskProvider {
             pending_view: false,
             reported_input_micros: 0,
             value_frame: 0,
+            presented_desk_output: None,
             preview: crate::wire::PreviewSnapshot::default(),
             selection: crate::wire::SelectionSnapshot::default(),
             desk_output: None,
@@ -577,9 +582,18 @@ impl SceneProvider for DeskProvider {
             }
             // An empty output snapshot is still an authoritative source frame. A show may retain
             // a complete unpatched rig, and the Stage must keep presenting it instead of treating
-            // the absence of network universes as the absence of the desk.
-            stamp_desk_output_frame(&mut self.values, &mut self.value_frame, now);
-            events.push(ProviderEvent::Values(Box::new(self.values.clone())));
+            // the absence of network universes as the absence of the desk. But a snapshot that
+            // says what the last one said is not a new frame: the pane holds its picture.
+            let signature = desk_output_signature(
+                &output,
+                self.following_preload.then_some(&self.preload_projection),
+                scene.revision,
+            );
+            if self.presented_desk_output != Some(signature) {
+                self.presented_desk_output = Some(signature);
+                stamp_desk_output_frame(&mut self.values, &mut self.value_frame, now);
+                events.push(ProviderEvent::Values(Box::new(self.values.clone())));
+            }
         }
 
         if let (Some(receivers), Some(decoder), Some(scene)) =
@@ -607,13 +621,17 @@ impl SceneProvider for DeskProvider {
                 self.applied_preview_revision = Some(self.preview.revision);
             }
 
-            // A held look still arrives at full rate, so the newest accepted packet — not the
-            // newest content change — is what the presented frame is measured against.
+            // A held look still arrives at full rate. The newest accepted packet is what a
+            // presented frame is measured against, but only a packet that changed something is a
+            // frame to present: the renderer redraws on the value frame, and a rig sitting still
+            // under a live desk used to redraw at packet rate for a picture it already had.
             let newest = receivers.newest_accepted_micros();
             if newest > self.reported_input_micros {
                 self.reported_input_micros = newest;
-                self.value_frame += 1;
                 self.values.newest_input_micros = newest;
+            }
+            if !frames.is_empty() {
+                self.value_frame += 1;
                 self.values.frame = self.value_frame;
                 events.push(ProviderEvent::Values(Box::new(self.values.clone())));
             }
@@ -1065,6 +1083,37 @@ async fn watch(
             }
         }
     }
+}
+
+/// What a desk-output read would put on screen, as one number: every universe's slots, the
+/// preload overlay while it is followed, and the scene the slots are decoded through.
+fn desk_output_signature(
+    output: &crate::wire::OutputDmxSnapshot,
+    preload: Option<&crate::wire::PreloadProjection>,
+    scene_revision: u64,
+) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::hash::DefaultHasher::new();
+    scene_revision.hash(&mut hasher);
+    output.universes.len().hash(&mut hasher);
+    for universe in &output.universes {
+        universe.universe.hash(&mut hasher);
+        universe.slots.hash(&mut hasher);
+    }
+    if let Some(preload) = preload {
+        preload.fixture_values.len().hash(&mut hasher);
+        for entry in &preload.fixture_values {
+            entry.fixture_id.hash(&mut hasher);
+            entry.attribute.hash(&mut hasher);
+            match entry.value {
+                crate::wire::PreloadAttributeValue::Normalized(value) => {
+                    value.to_bits().hash(&mut hasher)
+                }
+                crate::wire::PreloadAttributeValue::Other => u32::MAX.hash(&mut hasher),
+            }
+        }
+    }
+    hasher.finish()
 }
 
 fn stamp_desk_output_frame(values: &mut SceneValues, value_frame: &mut u64, now: u64) {
