@@ -228,7 +228,14 @@ pub(super) fn dynamic_contributions_with_auto_off(
         &engine_snapshot,
         &active_dynamic_playbacks,
     );
-    let samples = dynamics.sample_all(now_millis, interval, &speed_transports, &sources);
+    let addresser = engine.frame_addresser();
+    let samples = dynamics.sample_all_addressed(
+        now_millis,
+        interval,
+        &speed_transports,
+        &sources,
+        Some(&addresser),
+    );
     let after_runtime = dynamics.output_projection_snapshot();
     drop(dynamics);
     let dynamic_events = dynamic_transition_events(&before_runtime, &after_runtime, now_millis);
@@ -248,6 +255,7 @@ pub(super) fn dynamic_contributions_with_auto_off(
     };
 
     let candidates = collect_dynamic_candidates(
+        &addresser,
         &programmer_values,
         &cue_values,
         extra_programmer_values,
@@ -275,53 +283,56 @@ pub(super) fn dynamic_contributions_with_auto_off(
 }
 
 fn dynamic_contribution_batch(
-    candidates: FxHashMap<(FixtureId, AttributeKey), Vec<DynamicCandidate>>,
+    candidates: FxHashMap<CandidateKey, CandidateStack>,
     sources: &TickSources<'_>,
     now: chrono::DateTime<chrono::Utc>,
 ) -> ContributionBatch {
-    ContributionBatch::new(
-        candidates
-            .into_iter()
-            .map(|((fixture_id, attribute), mut stack)| {
-                stack.sort_by_key(|candidate| {
-                    (
-                        candidate.priority,
-                        candidate.changed_at_millis,
-                        candidate.stable_order,
-                    )
-                });
-                let has_dynamic = stack.iter().any(|candidate| candidate.dynamic);
-                let resolved = resolve_dynamic_stack(&stack, || {
-                    sources
-                        .values()
-                        .get(&(fixture_id, attribute.clone()))
-                        .cloned()
-                });
-                let candidate = stack
-                    .last()
-                    .expect("one Dynamic/FAT candidate exists for every stack");
-                let merge_mode = if attribute.is_intensity() && !has_dynamic {
-                    MergeMode::Htp
-                } else {
-                    MergeMode::Ltp
-                };
-                ContributionSample::independent(TimedValue {
-                    fixture_id,
-                    attribute,
-                    value: resolved,
-                    priority: candidate.priority,
-                    changed_at: chrono::DateTime::from_timestamp_millis(
-                        i64::try_from(candidate.changed_at_millis).unwrap_or(i64::MAX),
-                    )
-                    .unwrap_or(now),
-                    programmer_order: candidate.stable_order.min(u128::from(u64::MAX)) as u64,
-                    merge_mode,
-                    fade: false,
-                    fade_millis: None,
-                    delay_millis: None,
-                })
-            }),
-    )
+    ContributionBatch::new(candidates.into_values().map(|entry| {
+        let CandidateStack {
+            fixture_id,
+            attribute,
+            address,
+            candidates: mut stack,
+        } = entry;
+        stack.sort_by_key(|candidate| {
+            (
+                candidate.priority,
+                candidate.changed_at_millis,
+                candidate.stable_order,
+            )
+        });
+        let has_dynamic = stack.iter().any(|candidate| candidate.dynamic);
+        let resolved = resolve_dynamic_stack(&stack, || {
+            sources
+                .values()
+                .get(&(fixture_id, attribute.clone()))
+                .cloned()
+        });
+        let candidate = stack
+            .last()
+            .expect("one Dynamic/FAT candidate exists for every stack");
+        let merge_mode = if attribute.is_intensity() && !has_dynamic {
+            MergeMode::Htp
+        } else {
+            MergeMode::Ltp
+        };
+        ContributionSample::independent(TimedValue {
+            fixture_id,
+            attribute,
+            value: resolved,
+            priority: candidate.priority,
+            changed_at: chrono::DateTime::from_timestamp_millis(
+                i64::try_from(candidate.changed_at_millis).unwrap_or(i64::MAX),
+            )
+            .unwrap_or(now),
+            programmer_order: candidate.stable_order.min(u128::from(u64::MAX)) as u64,
+            merge_mode,
+            fade: false,
+            fade_millis: None,
+            delay_millis: None,
+        })
+        .at(address)
+    }))
 }
 
 fn dynamic_tick_is_idle(
@@ -392,7 +403,28 @@ fn resolve_dynamic_stack(
     resolved
 }
 
+/// How candidates for one attribute are gathered into one stack.
+///
+/// A pair the patch numbered is keyed by its number, so a Dynamic's samples cost no hash of the
+/// attribute name; a pair it did not is keyed by name. Both sides ask the same resolver, so a
+/// Programmer value and a Dynamic sample for one pair always land in the same stack.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum CandidateKey {
+    Address(light_core::FrameAddress),
+    Name(FixtureId, AttributeKey),
+}
+
+/// One attribute's candidates and the pair they are for.
+struct CandidateStack {
+    fixture_id: FixtureId,
+    attribute: AttributeKey,
+    address: Option<light_core::FrameAddress>,
+    candidates: Vec<DynamicCandidate>,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn collect_dynamic_candidates(
+    addresser: &dyn light_core::FrameAddressResolver,
     programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
     cue_values: &[light_playback::ActiveCueDynamicValue],
     extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
@@ -400,12 +432,28 @@ fn collect_dynamic_candidates(
     playback_controls: &HashMap<Uuid, DynamicPlaybackControl>,
     sources: &TickSources,
     now_millis: u64,
-) -> FxHashMap<(FixtureId, AttributeKey), Vec<DynamicCandidate>> {
+) -> FxHashMap<CandidateKey, CandidateStack> {
     // One entry per addressed attribute, rebuilt every tick: the hash is the cost, so it is the
     // cheap one rather than the DoS-resistant one nothing here needs.
-    let mut candidates = FxHashMap::<(FixtureId, AttributeKey), Vec<DynamicCandidate>>::default();
-    let mut consider = |key: (FixtureId, AttributeKey), candidate: DynamicCandidate| {
-        candidates.entry(key).or_default().push(candidate);
+    let mut candidates = FxHashMap::<CandidateKey, CandidateStack>::default();
+    let mut consider = |fixture_id: FixtureId,
+                        attribute: &AttributeKey,
+                        address: Option<light_core::FrameAddress>,
+                        candidate: DynamicCandidate| {
+        let key = match address {
+            Some(address) => CandidateKey::Address(address),
+            None => CandidateKey::Name(fixture_id, attribute.clone()),
+        };
+        candidates
+            .entry(key)
+            .or_insert_with(|| CandidateStack {
+                fixture_id,
+                attribute: attribute.clone(),
+                address,
+                candidates: Vec::new(),
+            })
+            .candidates
+            .push(candidate);
     };
     for sample in samples {
         let dynamic_value =
@@ -435,7 +483,9 @@ fn collect_dynamic_candidates(
             continue;
         }
         consider(
-            (sample.target, sample.attribute.clone()),
+            sample.target,
+            &sample.attribute,
+            sample.address,
             DynamicCandidate {
                 value: AttributeValue::Normalized(dynamic_value),
                 priority: sample.priority,
@@ -459,7 +509,9 @@ fn collect_dynamic_candidates(
             | light_dynamics::DynamicSemanticValue::Release => continue,
         };
         consider(
-            (stored.fixture_id, stored.attribute.clone()),
+            stored.fixture_id,
+            &stored.attribute,
+            addresser.frame_address(stored.fixture_id, &stored.attribute),
             DynamicCandidate {
                 value,
                 priority: *priority,
@@ -487,7 +539,9 @@ fn collect_dynamic_candidates(
             | light_dynamics::DynamicSemanticValue::Release => continue,
         };
         consider(
-            (stored.fixture_id, stored.attribute.clone()),
+            stored.fixture_id,
+            &stored.attribute,
+            addresser.frame_address(stored.fixture_id, &stored.attribute),
             DynamicCandidate {
                 value,
                 priority: stored.priority,

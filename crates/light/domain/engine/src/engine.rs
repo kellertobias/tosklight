@@ -79,6 +79,12 @@ impl Engine {
         self.generation.load().frames().built()
     }
 
+    /// Where the current patch generation keeps each fixture's attributes, for producers that
+    /// emit the same pairs every tick and would rather not have them looked up by name each time.
+    pub fn frame_addresser(&self) -> crate::FrameAddresser {
+        crate::FrameAddresser::new(std::sync::Arc::clone(self.generation.load().slots()))
+    }
+
     pub fn cue_timing_masters(&self) -> (u64, u64) {
         (
             self.sequence_master_fade_millis.load(Ordering::Relaxed),

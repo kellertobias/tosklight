@@ -345,6 +345,7 @@ fn dynamic_sample(
         priority,
         activated_at_millis,
         activation_mix: 1.0,
+        address: None,
     }
 }
 

@@ -257,3 +257,98 @@ fn global_pause_freezes_existing_and_new_instances_without_inheriting_old_pause_
             > 0.0
     );
 }
+
+mod frame_addresses {
+    use super::*;
+    use light_core::{FrameAddress, FrameAddressResolver};
+    use std::cell::Cell;
+
+    /// Numbers every pair it is asked about, and counts the asking.
+    struct CountingAddresser {
+        generation: u64,
+        asked: Cell<usize>,
+    }
+
+    impl FrameAddressResolver for CountingAddresser {
+        fn generation(&self) -> u64 {
+            self.generation
+        }
+
+        fn frame_address(&self, _: FixtureId, _: &AttributeKey) -> Option<FrameAddress> {
+            self.asked.set(self.asked.get() + 1);
+            Some(FrameAddress {
+                generation: self.generation,
+                slot: 7,
+            })
+        }
+    }
+
+    /// A running Dynamic asks where its pairs live once, not once per tick, and asks again only
+    /// when the patch generation moves on.
+    #[test]
+    fn addresses_are_resolved_once_per_generation() {
+        let target = FixtureId::new();
+        let dynamic = definition(lane());
+        let definition_id = dynamic.id;
+        let request = start_request(definition_id, controller(94, 1, false), target, 0, false);
+        let mut runtime = DynamicRuntime::default();
+        runtime.install_definitions([dynamic]).unwrap();
+        runtime.start(request).unwrap();
+        let addresser = CountingAddresser {
+            generation: 5,
+            asked: Cell::new(0),
+        };
+        let transport = DynamicSpeedTransport {
+            effective_bpm: 60.0,
+            phase_origin_millis: 0,
+            phase_reference_millis: 0,
+            beat_phase: 0.0,
+            phase_advancing: true,
+        };
+        let mut sample = |runtime: &mut DynamicRuntime, now, addresser: &CountingAddresser| {
+            runtime.sample_all_addressed(
+                now,
+                10,
+                &[transport; 5],
+                &Sources { current: 0.0 },
+                Some(addresser),
+            )
+        };
+
+        let first = sample(&mut runtime, 100, &addresser);
+        assert_eq!(first.len(), 1);
+        assert_eq!(
+            first[0].address,
+            Some(FrameAddress {
+                generation: 5,
+                slot: 7
+            })
+        );
+        let asked_after_first = addresser.asked.get();
+        assert!(asked_after_first >= 1);
+        sample(&mut runtime, 200, &addresser);
+        sample(&mut runtime, 300, &addresser);
+        assert_eq!(
+            addresser.asked.get(),
+            asked_after_first,
+            "later ticks reuse the remembered addresses"
+        );
+
+        let repatched = CountingAddresser {
+            generation: 6,
+            asked: Cell::new(0),
+        };
+        let after = sample(&mut runtime, 400, &repatched);
+        assert_eq!(after[0].address.map(|address| address.generation), Some(6));
+        assert!(
+            repatched.asked.get() >= 1,
+            "a new generation is asked again"
+        );
+
+        let unaddressed = runtime.sample_all(500, 10, &[transport; 5], &Sources { current: 0.0 });
+        assert_eq!(
+            unaddressed[0].address, None,
+            "nobody asked, nothing is claimed"
+        );
+    }
+}

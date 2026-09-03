@@ -1,5 +1,6 @@
 use super::*;
 use crate::{DynamicEvaluationContext, DynamicEvaluator, project_phase};
+use light_core::{FrameAddress, FrameAddressResolver};
 
 struct SamplingFrame {
     definition: Arc<DynamicDefinition>,
@@ -10,6 +11,8 @@ struct SamplingFrame {
 }
 
 struct SampleEnvironment<'a> {
+    /// Indexed by `target_index * lanes + lane_index`; empty when nobody asked for addresses.
+    addresses: Arc<[Option<FrameAddress>]>,
     instance_id: Uuid,
     now_millis: u64,
     cycle_duration_millis: u64,
@@ -41,6 +44,7 @@ impl DynamicRuntime {
             output_interval_millis,
             None,
             sources,
+            None,
         )?;
         if completed {
             self.complete_one_shot(instance_id);
@@ -48,6 +52,7 @@ impl DynamicRuntime {
         Ok(samples)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn sample_with_transport(
         &mut self,
         instance_id: Uuid,
@@ -56,6 +61,7 @@ impl DynamicRuntime {
         output_interval_millis: u64,
         transport: Option<DynamicSpeedTransport>,
         sources: &dyn ScalarSourceResolver,
+        addresses: Option<&dyn FrameAddressResolver>,
     ) -> Result<(Vec<DynamicRuntimeSample>, bool), DynamicRuntimeError> {
         let instance = self
             .instances
@@ -67,6 +73,10 @@ impl DynamicRuntime {
             SamplingPreparation::Complete => return Ok((Vec::new(), true)),
             SamplingPreparation::Ready(frame) => frame,
         };
+        let addresses = addresses.map_or_else(
+            || Arc::from([]),
+            |resolver| instance.frame_addresses(resolver),
+        );
         let samples = collect_samples(
             instance,
             instance_id,
@@ -75,6 +85,7 @@ impl DynamicRuntime {
             output_interval_millis,
             sources,
             &frame,
+            addresses,
         );
         finish_synchronized_resume(instance, frame.synchronized_resume_mix);
         Ok((samples, false))
@@ -87,6 +98,27 @@ impl DynamicRuntime {
         output_interval_millis: u64,
         speed_groups: &[DynamicSpeedTransport; 5],
         sources: &dyn ScalarSourceResolver,
+    ) -> Vec<DynamicRuntimeSample> {
+        self.sample_all_addressed(
+            now_millis,
+            output_interval_millis,
+            speed_groups,
+            sources,
+            None,
+        )
+    }
+
+    /// [`Self::sample_all`], with each sample told where the engine keeps its pair.
+    ///
+    /// The addresses are resolved once per instance and kept while the patch generation, the
+    /// definition and the targets stand, so a running Dynamic costs the engine no lookup by name.
+    pub fn sample_all_addressed(
+        &mut self,
+        now_millis: u64,
+        output_interval_millis: u64,
+        speed_groups: &[DynamicSpeedTransport; 5],
+        sources: &dyn ScalarSourceResolver,
+        addresses: Option<&dyn FrameAddressResolver>,
     ) -> Vec<DynamicRuntimeSample> {
         self.remove_completed_releases(now_millis);
         let mut samples = Vec::new();
@@ -105,6 +137,7 @@ impl DynamicRuntime {
                 output_interval_millis,
                 transport,
                 sources,
+                addresses,
             ) {
                 samples.append(&mut instance_samples);
                 if completed {
@@ -312,6 +345,7 @@ fn synchronized_resume_mix(instance: &DynamicInstance, now_millis: u64) -> Optio
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_samples(
     instance: &mut DynamicInstance,
     instance_id: Uuid,
@@ -320,6 +354,7 @@ fn collect_samples(
     output_interval_millis: u64,
     sources: &dyn ScalarSourceResolver,
     frame: &SamplingFrame,
+    addresses: Arc<[Option<FrameAddress>]>,
 ) -> Vec<DynamicRuntimeSample> {
     let evaluator = DynamicEvaluator::new(&frame.definition);
     let random_phases = random_phase_by_lane_target(
@@ -329,6 +364,7 @@ fn collect_samples(
         cycle_duration_millis,
     );
     let environment = SampleEnvironment {
+        addresses,
         instance_id,
         now_millis,
         cycle_duration_millis,
@@ -398,8 +434,9 @@ fn collect_controller_samples(
             ..Default::default()
         });
     let activation_mix = transition_mix(transition, environment.now_millis);
-    for target in &frame.targets {
-        for lane in &frame.definition.lanes {
+    let lanes = frame.definition.lanes.len();
+    for (target_index, target) in frame.targets.iter().enumerate() {
+        for (lane_index, lane) in frame.definition.lanes.iter().enumerate() {
             let phase = environment
                 .random_phases
                 .get(&lane.id)
@@ -467,6 +504,11 @@ fn collect_controller_samples(
                 priority: controller.priority,
                 activated_at_millis: controller.activated_at_millis,
                 activation_mix,
+                address: environment
+                    .addresses
+                    .get(target_index * lanes + lane_index)
+                    .copied()
+                    .flatten(),
             });
         }
     }

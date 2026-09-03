@@ -1,8 +1,8 @@
 use crate::light_benchmark::arguments::{ProfileConfig, ProtocolSelection};
 use chrono::{TimeZone, Utc};
 use light_core::{
-    AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, MergeMode, SessionId,
-    TimedValue,
+    AttributeKey, AttributeValue, CueListId, FixtureId, FrameAddressResolver, ManualClock,
+    MergeMode, SessionId, TimedValue,
 };
 use light_dynamics::{
     ActivationBoundary, ActivationPolicy, DynamicDefinition, DynamicEvaluationContext,
@@ -191,7 +191,9 @@ impl BenchmarkScenario {
     }
 
     pub fn dynamic_batch(&self, at: chrono::DateTime<Utc>) -> Option<ContributionBatch> {
-        self.dynamic.as_ref().map(|dynamic| dynamic.sample(at))
+        self.dynamic
+            .as_ref()
+            .map(|dynamic| dynamic.sample(at, &self.engine.frame_addresser()))
     }
 
     pub fn sampled_batches(&self, at: chrono::DateTime<Utc>) -> Vec<ContributionBatch> {
@@ -542,7 +544,11 @@ impl BenchmarkDynamic {
         })
     }
 
-    fn sample(&self, at: chrono::DateTime<Utc>) -> ContributionBatch {
+    fn sample(
+        &self,
+        at: chrono::DateTime<Utc>,
+        addresser: &dyn FrameAddressResolver,
+    ) -> ContributionBatch {
         let elapsed_millis = at
             .signed_duration_since(self.started_at)
             .num_milliseconds()
@@ -571,6 +577,9 @@ impl BenchmarkDynamic {
                     continue;
                 }
                 for lane in &definition.lanes {
+                    // The desk's Dynamics runtime remembers these; the benchmark asks each tick,
+                    // outside the timed path, and hands the engine the same numbers.
+                    let address = addresser.frame_address(*target, &lane.attribute);
                     let Some(mut value) = evaluator.sample_lane(
                         lane,
                         DynamicEvaluationContext {
@@ -598,31 +607,37 @@ impl BenchmarkDynamic {
                     } else {
                         0
                     };
-                    samples.push(ContributionSample::independent(TimedValue {
-                        fixture_id: *target,
-                        attribute: lane.attribute.clone(),
-                        value: AttributeValue::Normalized(value),
-                        priority: 10 + definition_index as i16 + controller_switch,
-                        changed_at: at,
-                        programmer_order: definition_index as u64,
-                        merge_mode: MergeMode::Ltp,
-                        fade: false,
-                        fade_millis: None,
-                        delay_millis: None,
-                    }));
-                    if target_index % 16 == 0 {
-                        samples.push(ContributionSample::independent(TimedValue {
+                    samples.push(
+                        ContributionSample::independent(TimedValue {
                             fixture_id: *target,
                             attribute: lane.attribute.clone(),
-                            value: AttributeValue::Normalized(0.65),
-                            priority: 40,
+                            value: AttributeValue::Normalized(value),
+                            priority: 10 + definition_index as i16 + controller_switch,
                             changed_at: at,
-                            programmer_order: 40,
+                            programmer_order: definition_index as u64,
                             merge_mode: MergeMode::Ltp,
                             fade: false,
                             fade_millis: None,
                             delay_millis: None,
-                        }));
+                        })
+                        .at(address),
+                    );
+                    if target_index % 16 == 0 {
+                        samples.push(
+                            ContributionSample::independent(TimedValue {
+                                fixture_id: *target,
+                                attribute: lane.attribute.clone(),
+                                value: AttributeValue::Normalized(0.65),
+                                priority: 40,
+                                changed_at: at,
+                                programmer_order: 40,
+                                merge_mode: MergeMode::Ltp,
+                                fade: false,
+                                fade_millis: None,
+                                delay_millis: None,
+                            })
+                            .at(address),
+                        );
                     }
                 }
             }

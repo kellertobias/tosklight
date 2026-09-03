@@ -4,6 +4,7 @@
 mod aim;
 mod attributes;
 mod clock;
+mod frame_address;
 mod surface;
 
 pub use aim::{Mount, Point, pan_tilt_towards};
@@ -21,6 +22,7 @@ pub use attributes::{
     transform_canonical_normalized, transform_canonical_value,
 };
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
+pub use frame_address::{FrameAddress, FrameAddressResolver};
 pub use surface::SurfaceCapability;
 
 use serde::{Deserialize, Serialize};

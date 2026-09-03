@@ -1,4 +1,4 @@
-use light_core::{AttributeKey, AttributeValue, FixtureId, ProgrammerId, TimedValue};
+use light_core::{AttributeKey, AttributeValue, FixtureId, FrameAddress, ProgrammerId, TimedValue};
 use light_playback::SequenceMasterSource;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
@@ -100,6 +100,9 @@ pub struct ContributionSample {
     transition_ordinal: Option<u64>,
     replacement_source: Option<ContributionSourceId>,
     sequence_master: Option<ContributionSequenceMaster>,
+    /// Where the producer already knows this pair lives. Read by number when it belongs to the
+    /// frame's generation, otherwise looked up by name as before.
+    address: Option<FrameAddress>,
 }
 
 impl ContributionSample {
@@ -110,7 +113,18 @@ impl ContributionSample {
             transition_ordinal: None,
             replacement_source: None,
             sequence_master: None,
+            address: None,
         }
+    }
+
+    /// Say where this sample's pair lives, when the producer knows.
+    pub fn at(mut self, address: Option<FrameAddress>) -> Self {
+        self.address = address;
+        self
+    }
+
+    pub const fn address(&self) -> Option<FrameAddress> {
+        self.address
     }
 
     /// Replace the originating semantic assignment at the same fixture and attribute.
@@ -120,6 +134,7 @@ impl ContributionSample {
             transition_ordinal: None,
             replacement_source: Some(source),
             sequence_master: None,
+            address: None,
         }
     }
 
@@ -143,6 +158,7 @@ impl ContributionSample {
             transition_ordinal: Some(transition_ordinal),
             replacement_source: Some(ContributionSourceId::playback(source)),
             sequence_master: Some(ContributionSequenceMaster::new(source, sequence_master)),
+            address: None,
         }
     }
 

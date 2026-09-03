@@ -68,6 +68,7 @@ pub(crate) use contribution_batch::{replaces_source, sampled_values};
 pub(crate) use fixture::profile_head_owner;
 #[allow(unused_imports)]
 pub(crate) use frame_pool::FramePool;
+pub use frame_slots::FrameAddresser;
 #[allow(unused_imports)]
 pub(crate) use frame_slots::next_generation;
 pub(crate) use frame_slots::{Slot, SlotTable};

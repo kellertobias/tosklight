@@ -3,7 +3,7 @@ use crate::{
     SpatialPosition, SpatialSelectionMapping, SpatialTarget, evaluate_dynamic_spatial_mapping,
     project_phase, project_ranked_phase, validate_definition,
 };
-use light_core::{AttributeKey, FixtureId};
+use light_core::{AttributeKey, FixtureId, FrameAddress, FrameAddressResolver};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -74,6 +74,8 @@ pub struct DynamicRuntimeSample {
     pub activated_at_millis: u64,
     /// Ownership influence after activation/release timing. Size remains part of `value`.
     pub activation_mix: f32,
+    /// Where the engine keeps this pair, when the sampler was told how to find out.
+    pub address: Option<FrameAddress>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -217,6 +219,54 @@ struct DynamicInstance {
     synchronized_resume_transition: Option<DynamicSynchronizedResumeTransitionSnapshot>,
     last_sample_values: HashMap<(Uuid, FixtureId, Uuid), f32>,
     synchronized_hold_values: HashMap<(Uuid, FixtureId, Uuid), f32>,
+    /// Where each target-and-lane pair lives in the engine's frame, remembered across ticks.
+    frame_addresses: Option<FrameAddressTable>,
+}
+
+/// One instance's addresses, valid for one patch generation, one definition and one target list.
+#[derive(Clone, Debug)]
+struct FrameAddressTable {
+    generation: u64,
+    /// The definition the lanes were read from, compared by identity.
+    definition: Arc<DynamicDefinition>,
+    targets: Vec<FixtureId>,
+    /// Indexed by `target_index * lanes + lane_index`.
+    addresses: Arc<[Option<FrameAddress>]>,
+}
+
+impl DynamicInstance {
+    /// This instance's addresses for `resolver`'s generation, resolved once and kept until the
+    /// patch, the definition or the targets change.
+    fn frame_addresses(
+        &mut self,
+        resolver: &dyn FrameAddressResolver,
+    ) -> Arc<[Option<FrameAddress>]> {
+        let generation = resolver.generation();
+        if let Some(table) = &self.frame_addresses
+            && table.generation == generation
+            && Arc::ptr_eq(&table.definition, &self.definition)
+            && table.targets == self.targets
+        {
+            return Arc::clone(&table.addresses);
+        }
+        let addresses = self
+            .targets
+            .iter()
+            .flat_map(|target| {
+                self.definition
+                    .lanes
+                    .iter()
+                    .map(|lane| resolver.frame_address(*target, &lane.attribute))
+            })
+            .collect::<Arc<[_]>>();
+        self.frame_addresses = Some(FrameAddressTable {
+            generation,
+            definition: Arc::clone(&self.definition),
+            targets: self.targets.clone(),
+            addresses: Arc::clone(&addresses),
+        });
+        addresses
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -516,6 +566,7 @@ impl DynamicRuntime {
                     synchronized_hold_values: sample_values_from_snapshot(
                         stored.synchronized_hold_values,
                     ),
+                    frame_addresses: None,
                 },
             );
         }
@@ -692,6 +743,7 @@ impl DynamicRuntime {
             synchronized_resume_transition: None,
             last_sample_values: HashMap::new(),
             synchronized_hold_values: HashMap::new(),
+            frame_addresses: None,
         };
         if bound {
             self.bound_instances

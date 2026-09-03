@@ -77,6 +77,40 @@ pub(crate) struct SlotTable {
     common: FxHashMap<FixtureId, CommonSlots>,
 }
 
+/// Hands out [`light_core::FrameAddress`]es for one generation's numbering.
+///
+/// Held by producers that emit the same pairs every tick, so the engine can read their samples by
+/// number rather than by name.
+#[derive(Clone)]
+pub struct FrameAddresser {
+    slots: std::sync::Arc<SlotTable>,
+}
+
+impl FrameAddresser {
+    pub(crate) fn new(slots: std::sync::Arc<SlotTable>) -> Self {
+        Self { slots }
+    }
+}
+
+impl light_core::FrameAddressResolver for FrameAddresser {
+    fn generation(&self) -> u64 {
+        self.slots.generation()
+    }
+
+    fn frame_address(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<light_core::FrameAddress> {
+        self.slots
+            .slot(fixture_id, attribute)
+            .map(|slot| light_core::FrameAddress {
+                generation: self.slots.generation(),
+                slot: slot.index() as u32,
+            })
+    }
+}
+
 impl SlotTable {
     /// Number every pair the fixtures of this generation can produce.
     pub(crate) fn compile(generation: u64, fixtures: &[PatchedFixture]) -> Self {
