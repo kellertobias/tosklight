@@ -38,17 +38,25 @@ impl PlaybackEngine {
         if !playback.enabled {
             return None;
         }
-        let values = self
-            .contributions_with_context(now, None)
-            .into_iter()
-            .filter(|contribution| {
-                contribution.source.cue_list_id == playback.cue_list_id
-                    && contribution.source.playback_identity == playback.playback_identity
-                    && !contribution.source.temporary
-            })
-            .map(|contribution| contribution.value)
-            .collect::<Vec<_>>();
-        Some(values)
+        // Only this playback's values are wanted, so only this playback is built. Building every
+        // playback and keeping one used to run the whole contribution pass once more per active
+        // playback per tick.
+        let context = ContributionContext {
+            engine: self,
+            now,
+            is_snap: None,
+        };
+        if context.suppressed(playback) {
+            return Some(Vec::new());
+        }
+        let mut values = Vec::new();
+        context.extend_playback(&mut values, playback);
+        Some(
+            values
+                .into_iter()
+                .map(|contribution| contribution.value)
+                .collect(),
+        )
     }
 
     pub fn contributions_at_with_snap(

@@ -150,6 +150,11 @@ impl Engine {
             let mut playback = generation.playback().write();
             let PlaybackTickResult { transitions } =
                 playback.tick(now, (timecode != u64::MAX).then_some(timecode));
+            // The tick is the only mutation. Reading the contributions needs no exclusivity, so
+            // the lock steps down atomically: no command slips in between the tick and the values
+            // built from it, and status readers stop waiting out the whole resolve. This relies on
+            // parking_lot's downgrade; the standard library's RwLock has none.
+            let playback = parking_lot::RwLockWriteGuard::downgrade(playback);
             return self.playback_resolution(&playback, now, transitions, sampled);
         }
         let playback = generation.playback().read();

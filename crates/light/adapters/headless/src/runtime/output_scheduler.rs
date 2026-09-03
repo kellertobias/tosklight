@@ -218,11 +218,13 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         runtime.timecodes.tick();
     }
     let options = runtime.control.lock().render_options();
+    // The plain runtime: the status projection also works out next cues and timing for every
+    // playback, none of which this comparison reads.
     let before_cues = runtime
         .engine
-        .playback_runtime_status()
+        .playback_runtime()
         .into_iter()
-        .map(|status| (status.playback.cue_list_id, status.playback.current_cue_id))
+        .map(|playback| (playback.cue_list_id, playback.current_cue_id))
         .collect::<HashMap<_, _>>();
     let (rendered, visualization_scope, dynamic, engine) = {
         let Ok(_activation) = runtime.activation.try_acquire() else {
@@ -443,15 +445,12 @@ fn dispatch_automatic_cue_actions(
         return;
     };
     let snapshot = engine.snapshot();
-    for status in engine.playback_runtime_status() {
-        if status.playback.transition_timing_bypassed
-            || status.playback.discrete_cue_actions_suppressed
-        {
+    for playback in engine.playback_runtime() {
+        if playback.transition_timing_bypassed || playback.discrete_cue_actions_suppressed {
             continue;
         }
-        let cue_list_id = status.playback.cue_list_id;
-        let Some(current) = status
-            .playback
+        let cue_list_id = playback.cue_list_id;
+        let Some(current) = playback
             .current_cue_id
             .filter(|current| before.get(&cue_list_id).copied().flatten() != Some(*current))
         else {
