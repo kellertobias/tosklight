@@ -3664,6 +3664,7 @@ dependencies = [
  "rs-matter",
  "rusqlite",
  "rust-embed",
+ "rustc-hash 2.1.3",
  "serde",
  "serde_ignored",
  "serde_json",

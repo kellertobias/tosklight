@@ -1,4 +1,5 @@
 use super::*;
+use rustc_hash::FxHashMap;
 use std::sync::OnceLock;
 
 type DynamicProgrammerValues = Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)>;
@@ -274,7 +275,7 @@ pub(super) fn dynamic_contributions_with_auto_off(
 }
 
 fn dynamic_contribution_batch(
-    candidates: HashMap<(FixtureId, AttributeKey), Vec<DynamicCandidate>>,
+    candidates: FxHashMap<(FixtureId, AttributeKey), Vec<DynamicCandidate>>,
     sources: &TickSources<'_>,
     now: chrono::DateTime<chrono::Utc>,
 ) -> ContributionBatch {
@@ -399,8 +400,10 @@ fn collect_dynamic_candidates(
     playback_controls: &HashMap<Uuid, DynamicPlaybackControl>,
     sources: &TickSources,
     now_millis: u64,
-) -> HashMap<(FixtureId, AttributeKey), Vec<DynamicCandidate>> {
-    let mut candidates = HashMap::<(FixtureId, AttributeKey), Vec<DynamicCandidate>>::new();
+) -> FxHashMap<(FixtureId, AttributeKey), Vec<DynamicCandidate>> {
+    // One entry per addressed attribute, rebuilt every tick: the hash is the cost, so it is the
+    // cheap one rather than the DoS-resistant one nothing here needs.
+    let mut candidates = FxHashMap::<(FixtureId, AttributeKey), Vec<DynamicCandidate>>::default();
     let mut consider = |key: (FixtureId, AttributeKey), candidate: DynamicCandidate| {
         candidates.entry(key).or_default().push(candidate);
     };

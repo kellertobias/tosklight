@@ -37,6 +37,7 @@ light-discovery.workspace = true
 light-show = { path = "../../../shared/show" }
 light-wire.workspace = true
 parking_lot.workspace = true
+rustc-hash.workspace = true
 rusqlite.workspace = true
 rust-embed.workspace = true
 serde.workspace = true

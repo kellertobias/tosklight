@@ -1,9 +1,7 @@
 use light_core::{AttributeKey, AttributeValue, FixtureId, ProgrammerId, TimedValue};
 use light_playback::SequenceMasterSource;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::Arc;
 
 /// Opaque identity of the semantic source whose assignment produced a sampled value.
 ///
@@ -170,7 +168,8 @@ impl ContributionSample {
     }
 }
 
-type ReplacementIndex = HashMap<ContributionSourceId, HashMap<FixtureId, HashSet<AttributeKey>>>;
+type ReplacementIndex =
+    FxHashMap<ContributionSourceId, FxHashMap<FixtureId, FxHashSet<AttributeKey>>>;
 
 /// One immutable sample from an externally owned semantic contribution source.
 ///
@@ -216,13 +215,15 @@ impl ContributionBatch {
 
 impl From<Vec<ContributionSample>> for ContributionBatch {
     fn from(samples: Vec<ContributionSample>) -> Self {
-        let mut replacements = ReplacementIndex::new();
+        // A batch of independent samples — every Dynamics tick — replaces nothing, and is told
+        // so without hashing each sample's source, fixture and attribute to find out.
+        let mut replacements = ReplacementIndex::default();
         for sample in &samples {
-            let Some(source) = sample.replacement_source.clone() else {
+            let Some(source) = sample.replacement_source.as_ref() else {
                 continue;
             };
             replacements
-                .entry(source)
+                .entry(source.clone())
                 .or_default()
                 .entry(sample.value.fixture_id)
                 .or_default()
