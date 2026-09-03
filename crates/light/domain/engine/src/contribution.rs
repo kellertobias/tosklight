@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, TimedValue};
 use light_playback::{AutomaticPlaybackTransition, PlaybackContribution};
 use rustc_hash::FxHashMap;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashMap;
 
 pub(crate) fn value_for_ordered_position(
     value: &AttributeValue,
@@ -198,16 +198,12 @@ impl ResolvedAttributes {
 /// allocates a fresh frame every tick.
 pub(crate) struct ResolvedFrame {
     slots: std::sync::Arc<crate::SlotTable>,
+    /// The frame's storage, including the values for pairs the compiled patch could not number.
+    /// Those are kept beside the numbered slots rather than instead of them: one unrecognised
+    /// name from a hardware surface or an HTTP client costs the desk that one value's lookup,
+    /// not the whole frame's dense reading.
     state: Option<crate::FrameState>,
     pool: Option<std::sync::Arc<crate::FramePool>>,
-    /// Values for pairs the compiled patch could not number, grouped by the fixture that owns
-    /// them. Empty for a show whose sources only name attributes their fixtures declare, which is
-    /// every show that has not been sent something unexpected.
-    ///
-    /// Kept beside the frame rather than instead of it: one unrecognised name from a hardware
-    /// surface or an HTTP client should cost the desk that one value's lookup, not the whole
-    /// frame's dense reading.
-    overflow: FxHashMap<FixtureId, Vec<(AttributeKey, EngineWinner)>>,
 }
 
 impl Drop for ResolvedFrame {
@@ -221,31 +217,26 @@ impl Drop for ResolvedFrame {
 impl ResolvedFrame {
     /// Values this frame could not number, for one fixture.
     pub(crate) fn overflow(&self, fixture_id: FixtureId) -> &[(AttributeKey, EngineWinner)] {
-        // Checked for emptiness before hashing: a show whose sources name attributes their
-        // fixtures declare asks this once per head per frame and the answer is always nothing.
-        if self.overflow.is_empty() {
-            return &[];
-        }
-        self.overflow
-            .get(&fixture_id)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
+        self.state
+            .as_ref()
+            .map_or(&[], |state| state.overflow(fixture_id))
     }
 
     /// Whether anything this frame resolved could not be numbered.
     pub(crate) fn has_overflow(&self) -> bool {
-        !self.overflow.is_empty()
+        self.state
+            .as_ref()
+            .is_some_and(crate::FrameState::has_overflow)
     }
 
     /// Every unnumbered value, with the fixture that owns it.
     pub(crate) fn overflowed(
         &self,
     ) -> impl Iterator<Item = (FixtureId, &AttributeKey, &EngineWinner)> {
-        self.overflow.iter().flat_map(|(fixture_id, values)| {
-            values
-                .iter()
-                .map(move |(attribute, winner)| (*fixture_id, attribute, winner))
-        })
+        self.state
+            .as_ref()
+            .into_iter()
+            .flat_map(crate::FrameState::overflowed)
     }
 
     /// The value holding a slot, or nothing when nothing contributed to it this frame.
@@ -306,7 +297,6 @@ pub(crate) struct EngineContributionResolver<'a> {
     slots: &'a std::sync::Arc<crate::SlotTable>,
     pool: Option<std::sync::Arc<crate::FramePool>>,
     frame: crate::FrameState,
-    overflow: FxHashMap<(FixtureId, AttributeKey), EngineWinner>,
 }
 
 impl<'a> EngineContributionResolver<'a> {
@@ -326,7 +316,6 @@ impl<'a> EngineContributionResolver<'a> {
             slots,
             pool: Some(std::sync::Arc::clone(pool)),
             frame,
-            overflow: FxHashMap::default(),
         }
     }
 
@@ -340,7 +329,6 @@ impl<'a> EngineContributionResolver<'a> {
             slots,
             pool: None,
             frame,
-            overflow: FxHashMap::default(),
         }
     }
 
@@ -536,31 +524,23 @@ impl<'a> EngineContributionResolver<'a> {
         attribute: &AttributeKey,
         candidate: EngineWinner,
     ) {
-        match self.overflow.entry((fixture_id, attribute.clone())) {
-            Entry::Vacant(entry) => {
-                entry.insert(candidate);
-            }
-            Entry::Occupied(mut entry) => {
-                if winner_wins(&candidate, entry.get()) {
-                    entry.insert(candidate);
-                }
-            }
-        }
+        self.frame
+            .offer_overflow(fixture_id, attribute, candidate, winner_wins);
     }
 
     /// The values resolved so far, by name. Built only for the Move-in-Black base, which is asked
     /// for solely when a Cue actually has candidates to move in the dark.
     pub(crate) fn values(&self) -> crate::ResolvedValues {
         let mut values = crate::ResolvedValues::with_capacity_and_hasher(
-            self.frame.occupied_len() + self.overflow.len(),
+            self.frame.occupied_len(),
             Default::default(),
         );
         for (slot, winner) in self.frame.occupied() {
             let (fixture_id, attribute) = self.slots.pair(slot);
             values.insert((fixture_id, attribute.clone()), winner.value.clone());
         }
-        for ((fixture_id, attribute), winner) in &self.overflow {
-            values.insert((*fixture_id, attribute.clone()), winner.value.clone());
+        for (fixture_id, attribute, winner) in self.frame.overflow_offers() {
+            values.insert((fixture_id, attribute.clone()), winner.value.clone());
         }
         values
     }
@@ -569,21 +549,13 @@ impl<'a> EngineContributionResolver<'a> {
     /// into and whatever the compiled patch could not number.
     pub(crate) fn finish(mut self) -> ResolvedAttributes {
         // Grouped by fixture so a head reads its own unnumbered values without walking everyone
-        // else's. Normally there are none and this costs an empty map.
-        let mut overflow: FxHashMap<FixtureId, Vec<(AttributeKey, EngineWinner)>> =
-            FxHashMap::default();
-        for ((fixture_id, attribute), winner) in std::mem::take(&mut self.overflow) {
-            overflow
-                .entry(fixture_id)
-                .or_default()
-                .push((attribute, winner));
-        }
+        // else's. Normally there are none and this costs nothing.
+        self.frame.group_overflow();
         ResolvedAttributes {
             frame: Some(ResolvedFrame {
                 slots: std::sync::Arc::clone(self.slots),
                 state: Some(self.frame),
                 pool: self.pool.take(),
-                overflow,
             }),
             ..ResolvedAttributes::default()
         }
@@ -896,5 +868,44 @@ mod frame_address_tests {
             Some(&AttributeValue::Normalized(0.5))
         );
         assert_eq!(values.value(fixture_id, &AttributeKey("pan".into())), None);
+    }
+}
+
+#[cfg(test)]
+mod pooled_overflow_tests {
+    use super::*;
+
+    /// Unnumbered values live with the pooled frame storage, so a fill that had some must not
+    /// show them to the next fill that reuses the same storage.
+    #[test]
+    fn a_reused_frame_starts_with_no_overflow() {
+        let fixture_id = FixtureId::new();
+        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["intensity"]);
+        let slots =
+            std::sync::Arc::new(crate::SlotTable::compile(1, std::slice::from_ref(&fixture)));
+        let pool = std::sync::Arc::new(crate::FramePool::for_generation(1, slots.len()));
+        let unnumbered = AttributeKey("never.declared".into());
+
+        let mut first = EngineContributionResolver::for_generation(&slots, &pool);
+        first.add_borrowed_unscaled(
+            fixture_id,
+            &unnumbered,
+            &AttributeValue::Normalized(0.4),
+            0,
+            Utc::now(),
+            MergeMode::Ltp,
+        );
+        let resolved = first.finish();
+        let frame = resolved.frame.as_ref().unwrap();
+        assert!(frame.has_overflow());
+        assert_eq!(frame.overflow(fixture_id).len(), 1);
+        drop(resolved);
+
+        let second = EngineContributionResolver::for_generation(&slots, &pool);
+        let resolved = second.finish();
+        let frame = resolved.frame.as_ref().unwrap();
+        assert!(!frame.has_overflow(), "the reused storage was cleared");
+        assert!(frame.overflow(fixture_id).is_empty());
+        assert_eq!(frame.overflowed().count(), 0);
     }
 }

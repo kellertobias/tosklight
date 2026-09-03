@@ -6,7 +6,9 @@
 //! without anyone having to walk the array to blank it.
 
 use chrono::{DateTime, Utc};
+use light_core::{AttributeKey, FixtureId};
 use light_core::{AttributeValue, MergeMode};
+use rustc_hash::FxHashMap;
 
 use crate::Slot;
 use crate::contribution::ApplicableSequenceMaster;
@@ -62,6 +64,18 @@ pub(crate) struct FrameState {
     winners: Vec<SlotWinner>,
     /// Slots written this fill, so reading a sparse frame does not scan the whole table.
     touched: Vec<u32>,
+    /// Values for pairs the table could not number, as they are offered this fill.
+    ///
+    /// Kept with the frame's storage so its capacity survives from fill to fill: a Dynamic that
+    /// names a lane a target does not declare offers the same unnumbered pairs every tick, and
+    /// growing a fresh map for them each time was most of what those offers cost.
+    overflow: FxHashMap<(FixtureId, AttributeKey), SlotWinner>,
+    /// The same values grouped by fixture once the fill is finished, so a head reads its own
+    /// unnumbered values without walking everyone else's.
+    overflow_by_fixture: FxHashMap<FixtureId, Vec<(AttributeKey, SlotWinner)>>,
+    /// How many unnumbered values the finished fill holds. Zero for every show whose sources
+    /// only name attributes their fixtures declare.
+    overflow_len: usize,
 }
 
 impl FrameState {
@@ -73,6 +87,9 @@ impl FrameState {
             stamp: vec![0; slots],
             winners: vec![SlotWinner::default(); slots],
             touched: Vec::with_capacity(slots),
+            overflow: FxHashMap::default(),
+            overflow_by_fixture: FxHashMap::default(),
+            overflow_len: 0,
         }
     }
 
@@ -89,6 +106,12 @@ impl FrameState {
     /// Begin a fill. Every slot reads as empty again without a single write to `winners`.
     pub(crate) fn begin(&mut self) {
         self.touched.clear();
+        // Cleared, not dropped: the maps keep their capacity and the grouped vectors keep theirs.
+        self.overflow.clear();
+        for values in self.overflow_by_fixture.values_mut() {
+            values.clear();
+        }
+        self.overflow_len = 0;
         // A wrap would make stale slots from 4 billion frames ago look current, so the one time it
         // happens the stamps are blanked properly.
         match self.epoch.checked_add(1) {
@@ -150,6 +173,77 @@ impl FrameState {
         winner.transition_ordinal = offer.transition_ordinal;
         winner.sequence_master = None;
         build(winner);
+    }
+
+    /// Offer a value for a pair the table could not number.
+    pub(crate) fn offer_overflow(
+        &mut self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        candidate: SlotWinner,
+        wins: impl FnOnce(&SlotWinner, &SlotWinner) -> bool,
+    ) {
+        match self.overflow.entry((fixture_id, attribute.clone())) {
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(candidate);
+            }
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                if wins(&candidate, entry.get()) {
+                    entry.insert(candidate);
+                }
+            }
+        }
+    }
+
+    /// The unnumbered values offered so far this fill, before they are grouped.
+    pub(crate) fn overflow_offers(
+        &self,
+    ) -> impl Iterator<Item = (FixtureId, &AttributeKey, &SlotWinner)> {
+        self.overflow
+            .iter()
+            .map(|((fixture_id, attribute), winner)| (*fixture_id, attribute, winner))
+    }
+
+    /// Group this fill's unnumbered values by fixture. Called once when the fill is finished.
+    pub(crate) fn group_overflow(&mut self) {
+        self.overflow_len = self.overflow.len();
+        for ((fixture_id, attribute), winner) in self.overflow.drain() {
+            self.overflow_by_fixture
+                .entry(fixture_id)
+                .or_default()
+                .push((attribute, winner));
+        }
+    }
+
+    /// The finished fill's unnumbered values for one fixture.
+    pub(crate) fn overflow(&self, fixture_id: FixtureId) -> &[(AttributeKey, SlotWinner)] {
+        // Checked before hashing: a show whose sources name attributes their fixtures declare asks
+        // this once per head per frame and the answer is always nothing.
+        if self.overflow_len == 0 {
+            return &[];
+        }
+        self.overflow_by_fixture
+            .get(&fixture_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    /// Whether the finished fill holds anything the table could not number.
+    pub(crate) fn has_overflow(&self) -> bool {
+        self.overflow_len > 0
+    }
+
+    /// Every unnumbered value of the finished fill, with the fixture that owns it.
+    pub(crate) fn overflowed(
+        &self,
+    ) -> impl Iterator<Item = (FixtureId, &AttributeKey, &SlotWinner)> {
+        self.overflow_by_fixture
+            .iter()
+            .flat_map(|(fixture_id, values)| {
+                values
+                    .iter()
+                    .map(move |(attribute, winner)| (*fixture_id, attribute, winner))
+            })
     }
 
     /// Write a value into a slot regardless of what holds it, as a Freeze does when it takes the
