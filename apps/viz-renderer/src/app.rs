@@ -120,6 +120,8 @@ pub struct Application {
     stats: FrameStats,
     overlay: Overlay,
     redraw_gate: crate::redraw::RedrawGate,
+    /// The fixture labels from the last frame, reused while nothing they read has changed.
+    label_cache: crate::redraw::LabelCache,
     camera_is_local: bool,
     /// Ownership of the dedicated external 3D presentation camera. Embedded Stage helpers never
     /// consult this state: their camera remains the desk pane's local view.
@@ -339,6 +341,7 @@ impl Application {
             stats: FrameStats::default(),
             overlay: Overlay::default(),
             redraw_gate: crate::redraw::RedrawGate::default(),
+            label_cache: crate::redraw::LabelCache::default(),
             camera_is_local: false,
             external_camera: ExternalCameraOwnership::default(),
             hosted_show: None,

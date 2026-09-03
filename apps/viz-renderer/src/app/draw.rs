@@ -237,9 +237,13 @@ impl Application {
             notice,
             camera_control,
         );
+        let time_driven =
+            crate::redraw::is_time_driven(values, view, &self.preferences.persistence);
         build_overlay(
             &mut self.overlay,
             &mut self.hotspots,
+            &mut self.label_cache,
+            time_driven,
             &self.quick_settings,
             &self.preferences,
             &model,
@@ -260,8 +264,6 @@ impl Application {
             (width as u32, height as u32),
             &self.overlay.quads,
         );
-        let time_driven =
-            crate::redraw::is_time_driven(values, view, &self.preferences.persistence);
         let forced = self.options.capture.is_some()
             || self.options.verify_only
             || self.options.benchmark_seconds.is_some();
@@ -338,6 +340,8 @@ fn status_model<'a>(
 fn build_overlay(
     overlay: &mut Overlay,
     hotspots: &mut Vec<ui::HotspotRect>,
+    label_cache: &mut crate::redraw::LabelCache,
+    time_driven: bool,
     quick_settings: &QuickSettings,
     preferences: &Preferences,
     model: &StatusModel<'_>,
@@ -362,15 +366,23 @@ fn build_overlay(
             width / height.max(1.0),
             session.scene.bounds,
         );
-        ui::build_fixture_labels(
-            overlay,
-            &session.scene,
+        let inputs = crate::redraw::LabelInputs::new(
+            session.scene.revision,
             values,
-            &camera,
             view,
-            width,
-            height,
+            (width as u32, height as u32),
         );
+        label_cache.append(overlay, inputs, time_driven, |overlay| {
+            ui::build_fixture_labels(
+                overlay,
+                &session.scene,
+                values,
+                &camera,
+                view,
+                width,
+                height,
+            )
+        });
         *hotspots = ui::build_status(overlay, model, width, height);
         ui::build_quick_settings(overlay, quick_settings, preferences, model, width, height);
     }
