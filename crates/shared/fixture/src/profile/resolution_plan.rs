@@ -21,6 +21,33 @@ struct CompiledChannelResolution {
     channel_id: Uuid,
     control_attribute: AttributeKey,
     functions_by_priority: Box<[usize]>,
+    /// Whether the manufacturer's name for this channel differs from its canonical one, so a
+    /// canonical miss has a second name to try.
+    fixture_attribute_differs: bool,
+    canonical_is_intensity: bool,
+    fixture_is_intensity: bool,
+    control_is_intensity: bool,
+    /// What each function's attribute is, indexed like `channel.functions`.
+    functions: Box<[CompiledFunctionResolution]>,
+}
+
+/// The two questions asked of a function's name on every channel of every frame, answered
+/// when the mode is compiled. An attribute key is a heap string; comparing two of them per
+/// function per channel per frame was most of what resolving a channel cost.
+#[derive(Clone, Copy, Debug)]
+struct CompiledFunctionResolution {
+    /// The function is named after the channel itself, so a fixture-facing value can drive it.
+    aliases_channel: bool,
+    is_intensity: bool,
+}
+
+/// The attribute a channel ended up reading, as told to the scale lookup.
+#[derive(Clone, Copy, Debug)]
+pub struct ActiveAttribute<'a> {
+    pub which: ChannelAttribute,
+    pub key: &'a AttributeKey,
+    /// Decided when the mode was compiled; the same answer `key.is_intensity()` would give.
+    pub is_intensity: bool,
 }
 
 /// One resolved physical channel and the semantic address which owns its sequence master.
@@ -50,9 +77,22 @@ impl FixtureMode {
                         .cmp(&channel.functions[*left].priority)
                         .then_with(|| left.cmp(right))
                 });
+                let control_attribute = Self::control_action_attribute(channel.id);
                 CompiledChannelResolution {
                     channel_id: channel.id,
-                    control_attribute: Self::control_action_attribute(channel.id),
+                    fixture_attribute_differs: channel.fixture_attribute != channel.attribute,
+                    canonical_is_intensity: channel.attribute.is_intensity(),
+                    fixture_is_intensity: channel.fixture_attribute.is_intensity(),
+                    control_is_intensity: control_attribute.is_intensity(),
+                    functions: channel
+                        .functions
+                        .iter()
+                        .map(|function| CompiledFunctionResolution {
+                            aliases_channel: function.attribute == channel.attribute,
+                            is_intensity: function.attribute.is_intensity(),
+                        })
+                        .collect(),
+                    control_attribute,
                     functions_by_priority: functions.into_boxed_slice(),
                 }
             })
@@ -108,9 +148,7 @@ impl BoundFixtureModeResolution<'_> {
         highlight_override: Option<u32>,
         scales: impl FnOnce(Option<&AttributeKey>) -> ChannelScales,
     ) -> PlannedChannelResolution<'_> {
-        let scales = |active: Option<(ChannelAttribute, &AttributeKey)>| {
-            scales(active.map(|(_, attribute)| attribute))
-        };
+        let scales = |active: Option<ActiveAttribute<'_>>| scales(active.map(|active| active.key));
         self.resolve_channel_with(
             channel_index,
             |_, attribute| values.get(attribute),
@@ -133,11 +171,16 @@ impl BoundFixtureModeResolution<'_> {
         value: impl Fn(ChannelAttribute, &AttributeKey) -> Option<&'values AttributeValue>,
         highlighted: bool,
         highlight_override: Option<u32>,
-        scales: impl FnOnce(Option<(ChannelAttribute, &AttributeKey)>) -> ChannelScales,
+        scales: impl FnOnce(Option<ActiveAttribute<'_>>) -> ChannelScales,
     ) -> PlannedChannelResolution<'_> {
         let channel = &self.mode.channels[channel_index];
         let compiled = &self.plan.channels[channel_index];
         debug_assert_eq!(channel.id, compiled.channel_id);
+        let fixture_facing = ActiveAttribute {
+            which: ChannelAttribute::Fixture,
+            key: &channel.fixture_attribute,
+            is_intensity: compiled.fixture_is_intensity,
+        };
         let winning_function = compiled
             .functions_by_priority
             .iter()
@@ -145,27 +188,29 @@ impl BoundFixtureModeResolution<'_> {
                 channel
                     .functions
                     .get(*index)
-                    .map(|function| (*index, function))
+                    .map(|function| (*index, function, compiled.functions[*index]))
             })
-            .find_map(|(index, function)| {
+            .find_map(|(index, function, flags)| {
                 if let Some(found) = value(ChannelAttribute::Function(index), &function.attribute) {
                     function_value_for(function, Some(found), channel.canonical_transform).map(
                         |raw| {
                             (
-                                (ChannelAttribute::Function(index), &function.attribute),
+                                ActiveAttribute {
+                                    which: ChannelAttribute::Function(index),
+                                    key: &function.attribute,
+                                    is_intensity: flags.is_intensity,
+                                },
                                 raw,
                             )
                         },
                     )
-                } else if function.attribute == channel.attribute
-                    && channel.fixture_attribute != channel.attribute
-                {
+                } else if flags.aliases_channel && compiled.fixture_attribute_differs {
                     function_value_for(
                         function,
                         value(ChannelAttribute::Fixture, &channel.fixture_attribute),
                         super::CanonicalTransform::Identity,
                     )
-                    .map(|raw| ((ChannelAttribute::Fixture, &channel.fixture_attribute), raw))
+                    .map(|raw| (fixture_facing, raw))
                 } else {
                     None
                 }
@@ -175,13 +220,17 @@ impl BoundFixtureModeResolution<'_> {
             if let Some(found) = value(ChannelAttribute::Canonical, &channel.attribute) {
                 (
                     Some(found),
-                    Some((ChannelAttribute::Canonical, &channel.attribute)),
+                    Some(ActiveAttribute {
+                        which: ChannelAttribute::Canonical,
+                        key: &channel.attribute,
+                        is_intensity: compiled.canonical_is_intensity,
+                    }),
                     channel.canonical_transform,
                 )
-            } else if channel.fixture_attribute != channel.attribute {
+            } else if compiled.fixture_attribute_differs {
                 (
                     value(ChannelAttribute::Fixture, &channel.fixture_attribute),
-                    Some((ChannelAttribute::Fixture, &channel.fixture_attribute)),
+                    Some(fixture_facing),
                     super::CanonicalTransform::Identity,
                 )
             } else {
@@ -190,7 +239,11 @@ impl BoundFixtureModeResolution<'_> {
         let active_attribute = if channel.behavior == ChannelBehavior::Static {
             None
         } else if control_value.is_some() {
-            Some((ChannelAttribute::Control, &compiled.control_attribute))
+            Some(ActiveAttribute {
+                which: ChannelAttribute::Control,
+                key: &compiled.control_attribute,
+                is_intensity: compiled.control_is_intensity,
+            })
         } else if let Some((attribute, _)) = winning_function {
             Some(attribute)
         } else {
@@ -206,7 +259,7 @@ impl BoundFixtureModeResolution<'_> {
             winning_function.map(|(_, raw)| raw),
         );
         PlannedChannelResolution {
-            active_attribute: active_attribute.map(|(_, attribute)| attribute),
+            active_attribute: active_attribute.map(|active| active.key),
             raw: scale_channel_raw(channel, highlighted, resolved, scales(active_attribute)),
         }
     }
@@ -237,4 +290,59 @@ fn resolved_raw(
             })
         })
         .unwrap_or(ResolvedChannelRaw::Exact(channel.default_raw))
+}
+
+#[cfg(test)]
+mod compiled_flag_tests {
+
+    /// Every flag the plan compiles must be the answer the string comparison it replaces would
+    /// give, for every mode of every shipped fixture package.
+    #[test]
+    fn compiled_flags_agree_with_the_names_for_every_shipped_fixture() {
+        let library = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .join("assets/fixture-library");
+        let mut modes = 0usize;
+        for entry in std::fs::read_dir(&library).expect("the shipped fixture library exists") {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("toskfixture") {
+                continue;
+            }
+            let profile = crate::read_fixture_package(&std::fs::read(&path).unwrap())
+                .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+            for mode in &profile.modes {
+                let plan = mode.compile_resolution_plan();
+                for (channel, compiled) in mode.channels.iter().zip(plan.channels.iter()) {
+                    assert_eq!(compiled.channel_id, channel.id);
+                    assert_eq!(
+                        compiled.fixture_attribute_differs,
+                        channel.fixture_attribute != channel.attribute
+                    );
+                    assert_eq!(
+                        compiled.canonical_is_intensity,
+                        channel.attribute.is_intensity()
+                    );
+                    assert_eq!(
+                        compiled.fixture_is_intensity,
+                        channel.fixture_attribute.is_intensity()
+                    );
+                    assert_eq!(
+                        compiled.control_is_intensity,
+                        compiled.control_attribute.is_intensity()
+                    );
+                    assert_eq!(compiled.functions.len(), channel.functions.len());
+                    for (function, flags) in channel.functions.iter().zip(compiled.functions.iter())
+                    {
+                        assert_eq!(
+                            flags.aliases_channel,
+                            function.attribute == channel.attribute
+                        );
+                        assert_eq!(flags.is_intensity, function.attribute.is_intensity());
+                    }
+                }
+                modes += 1;
+            }
+        }
+        assert!(modes > 0, "no fixture modes were checked");
+    }
 }

@@ -343,9 +343,14 @@ fn resolve_head_without_overlays(
                 .flatten(),
             |active| {
                 let sequence_master = active
-                    .filter(|(_, attribute)| !attribute.is_intensity())
-                    .and_then(|(which, attribute)| {
-                        values.sequence_master_at(head_read, *channel_index, which, attribute)
+                    .filter(|active| !active.is_intensity)
+                    .and_then(|active| {
+                        values.sequence_master_at(
+                            head_read,
+                            *channel_index,
+                            active.which,
+                            active.key,
+                        )
                     })
                     .filter(|master| {
                         !channel.reacts_to_virtual_intensity
@@ -355,9 +360,7 @@ fn resolve_head_without_overlays(
                     .map(|master| master.scale)
                     .unwrap_or(1.0);
                 ChannelScales {
-                    virtual_intensity: if active
-                        .is_some_and(|(_, attribute)| attribute.is_intensity())
-                    {
+                    virtual_intensity: if active.is_some_and(|active| active.is_intensity) {
                         1.0
                     } else {
                         virtual_intensity
