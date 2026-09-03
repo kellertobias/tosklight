@@ -321,9 +321,22 @@ pub use table::{AttributeEntry, AttributeId, AttributeTable};
 #[serde(transparent)]
 pub struct AttributeKey(pub std::sync::Arc<str>);
 
+/// The two names every head is asked about on every frame, allocated once. Building either from
+/// its literal costs a heap allocation, and the render used to do that twice per head per tick.
+static INTENSITY: std::sync::LazyLock<AttributeKey> =
+    std::sync::LazyLock::new(|| AttributeKey("intensity".into()));
+static COLOR: std::sync::LazyLock<AttributeKey> =
+    std::sync::LazyLock::new(|| AttributeKey("color".into()));
+
 impl AttributeKey {
+    /// The canonical intensity attribute, shared rather than allocated.
     pub fn intensity() -> Self {
-        Self("intensity".into())
+        INTENSITY.clone()
+    }
+
+    /// The canonical colour attribute, shared rather than allocated.
+    pub fn color() -> Self {
+        COLOR.clone()
     }
 
     pub fn is_intensity(&self) -> bool {

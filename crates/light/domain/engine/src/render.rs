@@ -336,7 +336,7 @@ fn insert_profile_visualization_values(
         );
         if let Some(color) = head.color {
             values.insert(
-                (head.owner, light_core::AttributeKey("color".into())),
+                (head.owner, light_core::AttributeKey::color()),
                 light_core::AttributeValue::ColorXyz(color),
             );
         }

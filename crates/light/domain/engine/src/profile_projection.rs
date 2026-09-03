@@ -521,7 +521,7 @@ fn apply_semantic_highlight(
             .is_empty();
         if supported {
             inputs.values.insert(
-                AttributeKey("color".into()),
+                AttributeKey::color(),
                 AttributeValue::ColorXyz(color.to_xyz()),
             );
             inputs.semantic_highlight_color = Some(color);
@@ -601,7 +601,7 @@ fn virtual_intensity(inputs: &ProfileHeadInputs) -> f32 {
 
 fn requested_color(values: &crate::HeadValues) -> Option<Xyz> {
     values
-        .get(&AttributeKey("color".into()))
+        .get(&AttributeKey::color())
         .and_then(|value| match value {
             AttributeValue::ColorXyz(color) => Some(*color),
             _ => None,
@@ -616,7 +616,7 @@ fn resolve_requested_color(
     let Some(target) = target else {
         return Ok(());
     };
-    let color_attribute = AttributeKey("color".into());
+    let color_attribute = AttributeKey::color();
     let color_master = inputs.sequence_masters.get(&color_attribute).copied();
     let resolved = match inputs.semantic_highlight_color {
         Some(color) => mode.resolve_highlight_color(inputs.head_id, color),
