@@ -328,11 +328,11 @@ fn resolve_head_without_overlays(
     let intensity_master = common.intensity_master;
     // Where this head's channels read from, worked out when the patch compiled. A lookup is an
     // array index; only an attribute the patch could not number falls back to its name.
-    let addresses = values.channel_addresses(owner);
+    let head_read = values.head_read(owner);
     channels.extend(head.channel_indices.iter().map(|channel_index| {
         let channel = &mode.channels[*channel_index];
         let read = |which: ChannelAttribute, attribute: &AttributeKey| {
-            values.value_at(owner, addresses, *channel_index, which, attribute)
+            values.value_at(head_read, *channel_index, which, attribute)
         };
         let resolved = resolution.resolve_channel_with(
             *channel_index,
@@ -345,13 +345,7 @@ fn resolve_head_without_overlays(
                 let sequence_master = active
                     .filter(|(_, attribute)| !attribute.is_intensity())
                     .and_then(|(which, attribute)| {
-                        values.sequence_master_at(
-                            owner,
-                            addresses,
-                            *channel_index,
-                            which,
-                            attribute,
-                        )
+                        values.sequence_master_at(head_read, *channel_index, which, attribute)
                     })
                     .filter(|master| {
                         !channel.reacts_to_virtual_intensity

@@ -126,6 +126,13 @@ impl SlotTable {
                     {
                         let id = attributes.intern(&channel.attribute);
                         declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
+                        // The manufacturer's own name for the channel is read for every channel
+                        // whose canonical name differs from it, so it is numbered too; otherwise
+                        // that read is a miss that has to be answered by name.
+                        if channel.fixture_attribute != channel.attribute {
+                            let id = attributes.intern(&channel.fixture_attribute);
+                            declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
+                        }
                         for function in &channel.functions {
                             let id = attributes.intern(&function.attribute);
                             declare(owner, id, &mut owners, &mut owner_rows, &mut declared);

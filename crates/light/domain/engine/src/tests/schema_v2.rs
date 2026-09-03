@@ -862,3 +862,96 @@ fn virtual_dimmer_intensity_multiplies_reacting_channels_one_way() {
         .unwrap();
     assert_eq!(red.value, AttributeValue::Normalized(0.8));
 }
+
+/// A channel is read by its manufacturer name whenever its canonical name is absent, so that
+/// name is numbered with the patch. And one fixture handed a name the patch never declared must
+/// not send its neighbours' unnumbered reads through a lookup by name: the overflow is that
+/// fixture's alone.
+#[test]
+fn manufacturer_channel_name_is_numbered_and_overflow_stays_with_its_fixture() {
+    let (mut dimmer, dimmer_id) =
+        schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
+    let mut profile = dimmer
+        .definition
+        .profile_snapshot
+        .as_deref()
+        .expect("a test fixture carries its profile")
+        .clone();
+    let mode_id = {
+        let mode = &mut profile.modes[0];
+        mode.channels[0].fixture_attribute = AttributeKey("dimmer".into());
+        mode.id
+    };
+    dimmer.definition = profile.resolved_definition(mode_id).unwrap();
+    let (mut neighbour, neighbour_id) =
+        schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
+    neighbour.address = Some(2);
+    neighbour.fixture_number = Some(2);
+
+    let slots = crate::SlotTable::compile(1, &[dimmer.clone(), neighbour.clone()]);
+    assert!(
+        slots
+            .slot(dimmer_id, &AttributeKey("dimmer".into()))
+            .is_some(),
+        "the manufacturer's name for a channel is numbered beside the canonical one"
+    );
+    assert!(
+        slots
+            .slot(neighbour_id, &AttributeKey("dimmer".into()))
+            .is_none(),
+        "a fixture whose channel does not carry that name does not get a slot for it"
+    );
+
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session);
+    programmers.set(
+        session,
+        dimmer_id,
+        AttributeKey("dimmer".into()),
+        AttributeValue::Normalized(1.0),
+    );
+    programmers.set(
+        session,
+        neighbour_id,
+        AttributeKey("never.declared".into()),
+        AttributeValue::Normalized(0.25),
+    );
+    programmers.set(
+        session,
+        neighbour_id,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(1.0),
+    );
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![dimmer, neighbour].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+
+    let rendered = engine.render(RenderOptions::default()).unwrap();
+    let frame = rendered
+        .universes
+        .get(&1)
+        .expect("both fixtures patch universe 1");
+    assert_eq!(
+        frame[0],
+        u8::MAX,
+        "the manufacturer name drives the channel"
+    );
+    assert_eq!(
+        frame[1],
+        u8::MAX,
+        "the neighbour still renders its own value"
+    );
+    assert_eq!(
+        rendered
+            .resolved_values
+            .get(&(neighbour_id, AttributeKey("never.declared".into()))),
+        Some(&AttributeValue::Normalized(0.25)),
+        "the undeclared name still reaches the boundary for the fixture it was sent to"
+    );
+}

@@ -35,58 +35,65 @@ impl<'a> ProfileValueIndex<'a> {
         }
     }
 
-    /// One head's channel addresses, or nothing when this projection is not read by slot.
-    pub(crate) fn channel_addresses(
-        &self,
-        owner: FixtureId,
-    ) -> Option<crate::HeadChannelSlots<'a>> {
-        match self {
-            Self::Dense { channels, .. } => channels.head(owner),
-            Self::Scanned { .. } => None,
-        }
-    }
-
     /// One of a channel's attributes, read from where the patch said it lives.
     ///
     /// Falls back to the attribute's name only when the patch could not number it and the frame
     /// actually holds something unnumbered; otherwise an absent address means absent.
     pub(crate) fn value_at(
         &self,
-        owner: FixtureId,
-        addresses: Option<crate::HeadChannelSlots<'a>>,
+        head: HeadRead<'a>,
         channel_index: usize,
         which: light_fixture::ChannelAttribute,
         attribute: &AttributeKey,
     ) -> Option<&'a AttributeValue> {
-        if let (Self::Dense { frame, .. }, Some(addresses)) = (self, addresses) {
+        if let (Self::Dense { frame, .. }, Some(addresses)) = (self, head.addresses) {
             if let Some(slot) = addresses.slot(channel_index, which) {
                 return frame.value(slot);
             }
-            if !frame.has_overflow() {
+            if !head.overflowed {
                 return None;
             }
         }
-        self.value(owner, attribute)
+        self.value(head.owner, attribute)
     }
 
     /// The sequence master scaling one of a channel's attributes, read the same way.
     pub(crate) fn sequence_master_at(
         &self,
-        owner: FixtureId,
-        addresses: Option<crate::HeadChannelSlots<'a>>,
+        head: HeadRead<'a>,
         channel_index: usize,
         which: light_fixture::ChannelAttribute,
         attribute: &AttributeKey,
     ) -> Option<ApplicableSequenceMaster> {
-        if let (Self::Dense { frame, .. }, Some(addresses)) = (self, addresses) {
+        if let (Self::Dense { frame, .. }, Some(addresses)) = (self, head.addresses) {
             if let Some(slot) = addresses.slot(channel_index, which) {
                 return frame.sequence_master(slot);
             }
-            if !frame.has_overflow() {
+            if !head.overflowed {
                 return None;
             }
         }
-        self.sequence_master(owner, attribute)
+        self.sequence_master(head.owner, attribute)
+    }
+
+    /// Everything one head's channels need to know before reading, found once per head.
+    ///
+    /// Whether the head has to consider unnumbered values is decided here rather than per
+    /// channel: a frame that overflowed for one fixture used to send every other fixture's
+    /// unnumbered reads through a hash of the attribute name, for a value that was never there.
+    pub(crate) fn head_read(&self, owner: FixtureId) -> HeadRead<'a> {
+        let (addresses, overflowed) = match self {
+            Self::Dense { frame, channels } => (
+                channels.head(owner),
+                frame.has_overflow() && !frame.overflow(owner).is_empty(),
+            ),
+            Self::Scanned { .. } => (None, true),
+        };
+        HeadRead {
+            owner,
+            addresses,
+            overflowed,
+        }
     }
 
     pub(crate) fn values(&self, fixture_id: FixtureId) -> crate::HeadValues {
@@ -283,6 +290,15 @@ fn index_sequence_masters(
             .push((attribute, *master));
     }
     indexed
+}
+
+/// Where one head reads from, and whether it has to look past the numbered frame at all.
+#[derive(Clone, Copy)]
+pub(crate) struct HeadRead<'a> {
+    pub(crate) owner: FixtureId,
+    pub(crate) addresses: Option<crate::HeadChannelSlots<'a>>,
+    /// True only when this head's fixture has values the patch could not number.
+    pub(crate) overflowed: bool,
 }
 
 /// What projection asks of every head before it looks at a single channel.
