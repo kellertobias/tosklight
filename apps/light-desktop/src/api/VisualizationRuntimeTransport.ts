@@ -247,11 +247,21 @@ class WebSocketVisualizationRuntimeStream
 					"Visualization stream message was not text",
 				);
 			const decoded = JSON.parse(raw) as unknown;
+			// A batch is handed on already decoded. Re-serialising each element only to parse
+			// it again doubled the JSON work on exactly the payload batching exists to cheapen.
 			if (Array.isArray(decoded)) {
-				for (const message of decoded)
-					this.receive(JSON.stringify(message), rawReceivedAt);
+				for (const message of decoded) this.receiveDecoded(message, rawReceivedAt);
 				return;
 			}
+			this.receiveDecoded(decoded, rawReceivedAt);
+		} catch (reason) {
+			this.observer.error(asError(reason));
+			this.closeSocket();
+		}
+	}
+
+	private receiveDecoded(decoded: unknown, rawReceivedAt: number) {
+		try {
 			const message = recordAt(decoded, "$");
 			const type = stringAt(message.type, "$.type");
 			if (type === "hello") {
