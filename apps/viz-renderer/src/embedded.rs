@@ -275,6 +275,16 @@ fn adopt_provider_values(current: &mut SceneValues, mut next: SceneValues, physi
 }
 
 /// Everything the pane draws with, and the texture it draws into.
+/// Everything the fixture labels are built from.
+#[derive(Clone, Debug, PartialEq)]
+struct OverlayInputs {
+    scene_revision: u64,
+    values_frame: u64,
+    view: viz_scene::ViewConfiguration,
+    size: (u32, u32),
+    selection: std::collections::HashSet<uuid::Uuid>,
+}
+
 struct PaneState {
     renderer: Renderer,
     scene: Scene,
@@ -296,6 +306,11 @@ struct PaneState {
     /// camera nobody could aim.
     camera_is_local: bool,
     redraw_gate: crate::redraw::RedrawGate,
+    /// What the fixture labels were last built from. The pane's loop turns every two
+    /// milliseconds, and building the labels raycasts the whole scene once per fixture; doing that
+    /// five hundred times a second for a picture the redraw gate then declines is the cost this
+    /// remembers its way out of.
+    overlay_inputs: Option<OverlayInputs>,
     last_tick: Instant,
     presented_frames: u64,
     physics: crate::physics::Physics,
@@ -328,6 +343,7 @@ impl PaneState {
             camera_is_local: false,
             following_preload: false,
             redraw_gate: crate::redraw::RedrawGate::default(),
+            overlay_inputs: None,
             last_tick: Instant::now(),
             presented_frames: 0,
             physics: crate::physics::Physics::with_state_path(physics_state_path),
@@ -625,7 +641,24 @@ impl PaneState {
             self.view.quality,
             self.view.physics_reset_generation,
         );
-        self.rebuild_fixture_overlay();
+        let persistence = viz_scene::PersistencePreference {
+            decay_seconds: 0.0,
+            ..viz_scene::PersistencePreference::default()
+        };
+        let time_driven = crate::redraw::is_time_driven(&self.values, &self.view, &persistence);
+        let overlay_inputs = OverlayInputs {
+            scene_revision: self.scene.revision,
+            values_frame: self.values.frame,
+            view: self.view,
+            size: self.size,
+            selection: self.values.selected_fixtures.clone(),
+        };
+        // Motion moves what the labels are pinned to, so a time-driven picture rebuilds them
+        // every turn as before; a still one rebuilds them when something they read changed.
+        if time_driven || self.overlay_inputs.as_ref() != Some(&overlay_inputs) {
+            self.rebuild_fixture_overlay();
+            self.overlay_inputs = Some(overlay_inputs);
+        }
         let redraw_state = crate::redraw::RedrawState::new(
             self.scene.revision,
             0,
@@ -634,14 +667,7 @@ impl PaneState {
             self.size,
             &self.overlay.quads,
         );
-        let persistence = viz_scene::PersistencePreference {
-            decay_seconds: 0.0,
-            ..viz_scene::PersistencePreference::default()
-        };
-        if !self.redraw_gate.should_draw(
-            redraw_state,
-            crate::redraw::is_time_driven(&self.values, &self.view, &persistence),
-        ) {
+        if !self.redraw_gate.should_draw(redraw_state, time_driven) {
             return Ok(());
         }
         let stats = match self.transport {
