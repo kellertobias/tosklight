@@ -117,6 +117,12 @@ impl EngineContribution {
         }
     }
 
+    /// Say where this contribution's pair lives, when the producer knows.
+    pub(crate) fn at(mut self, address: Option<light_core::FrameAddress>) -> Self {
+        self.address = address;
+        self
+    }
+
     pub(crate) fn from_playback(contribution: PlaybackContribution) -> Self {
         Self {
             value: contribution.value,
@@ -399,29 +405,17 @@ impl<'a> EngineContributionResolver<'a> {
         );
     }
 
-    /// The number for an attribute name, so a caller applying one attribute across many fixtures
-    /// hashes the name once instead of once per fixture.
-    pub(crate) fn attribute_id(&self, attribute: &AttributeKey) -> Option<light_core::AttributeId> {
-        self.slots.attribute_id(attribute)
-    }
-
-    /// Offer a value for a pair already reduced to numbers.
-    ///
-    /// A pair this fixture cannot produce is dropped here rather than stored and ignored later.
-    /// Group programming reaches the resolver this way: a Group that programs an attribute one of
-    /// its members does not have leaves that member alone.
-    pub(crate) fn add_numbered_unscaled(
+    /// Offer a value straight to its slot. Group programming reaches the resolver this way: the
+    /// generation worked out where every member's attribute lives, and a member that does not
+    /// have the attribute was left out then.
+    pub(crate) fn add_slot_unscaled(
         &mut self,
-        fixture_id: FixtureId,
-        attribute: light_core::AttributeId,
+        slot: crate::Slot,
         value: &AttributeValue,
         priority: i16,
         changed_at: DateTime<Utc>,
         merge_mode: MergeMode,
     ) {
-        let Some(slot) = self.slots.slot_of(fixture_id, attribute) else {
-            return;
-        };
         self.frame.offer(
             slot,
             crate::Offer {

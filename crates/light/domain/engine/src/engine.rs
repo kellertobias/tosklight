@@ -32,6 +32,9 @@ pub struct Engine {
     pub(crate) programmer_transitions:
         Mutex<HashMap<ProgrammerTransitionKey, ProgrammerTransition>>,
     dynamic_programmer_cache: Mutex<DynamicProgrammerCache>,
+    /// Where each Programmer's stored values live in the current frame, remembered against the
+    /// registry's shared value vectors so an unchanged Programmer costs no lookup by name.
+    pub(crate) programmer_addresses: Mutex<crate::programmer_resolution::ProgrammerAddressMemo>,
     pub(crate) move_in_black: Mutex<HashMap<MoveInBlackKey, MoveInBlackRuntime>>,
     pub(crate) group_master_flashes: RwLock<HashMap<String, f32>>,
     pub(crate) group_master_transitions: Mutex<HashMap<String, GroupMasterTransition>>,
@@ -118,6 +121,7 @@ impl Engine {
             release_fade_millis: AtomicU64::new(0),
             programmer_transitions: Mutex::new(HashMap::new()),
             dynamic_programmer_cache: Mutex::new(DynamicProgrammerCache::default()),
+            programmer_addresses: Mutex::new(Default::default()),
             move_in_black: Mutex::new(HashMap::new()),
             group_master_flashes: RwLock::new(HashMap::new()),
             group_master_transitions: Mutex::new(HashMap::new()),

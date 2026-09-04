@@ -11,6 +11,7 @@ mod frame_pool;
 mod frame_slots;
 mod frame_state;
 mod frame_values;
+mod group_plan;
 mod lifecycle;
 mod model;
 mod move_in_black;

@@ -31,6 +31,8 @@ pub(crate) struct RuntimeGeneration {
     frames: Arc<crate::FramePool>,
     /// Where each channel of each head reads its attributes from.
     channel_slots: Arc<crate::ChannelSlotIndex>,
+    /// Every Group's programming, as the slots it lands in.
+    group_plan: Arc<crate::group_plan::GroupContributionPlan>,
 }
 
 #[derive(Clone, Copy)]
@@ -62,6 +64,11 @@ impl RuntimeGeneration {
             slots.len(),
         ));
         let channel_slots = Arc::new(crate::ChannelSlotIndex::compile(&snapshot.fixtures, &slots));
+        let group_plan = Arc::new(crate::group_plan::GroupContributionPlan::compile(
+            &snapshot.groups,
+            &groups,
+            &slots,
+        ));
         // Every compiled cue list learns where this generation keeps its pairs, so a playback
         // contribution is offered by number rather than by name on every tick.
         playback
@@ -81,6 +88,7 @@ impl RuntimeGeneration {
             slots,
             frames,
             channel_slots,
+            group_plan,
         }
     }
 
@@ -154,6 +162,15 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.group_rankings)
         };
+        let group_plan = if groups_changed || fixtures_changed {
+            Arc::new(crate::group_plan::GroupContributionPlan::compile(
+                &snapshot.groups,
+                &groups,
+                &slots,
+            ))
+        } else {
+            Arc::clone(&current.group_plan)
+        };
         // Every compiled cue list learns where this generation keeps its pairs, so a playback
         // contribution is offered by number rather than by name on every tick.
         playback
@@ -173,6 +190,7 @@ impl RuntimeGeneration {
             slots,
             frames,
             channel_slots,
+            group_plan,
         }
     }
 
@@ -202,6 +220,7 @@ impl RuntimeGeneration {
                 slots: Arc::clone(&current.slots),
                 frames: Arc::clone(&current.frames),
                 channel_slots: Arc::clone(&current.channel_slots),
+                group_plan: Arc::clone(&current.group_plan),
             }),
             GroupMasterGenerationUpdate::Changed,
         )
@@ -236,6 +255,10 @@ impl RuntimeGeneration {
 
     pub(crate) fn playback_arc(&self) -> Arc<RwLock<PlaybackEngine>> {
         Arc::clone(&self.playback)
+    }
+
+    pub(crate) fn group_plan(&self) -> &crate::group_plan::GroupContributionPlan {
+        &self.group_plan
     }
 
     pub(crate) fn groups(&self) -> &HashMap<String, GroupDefinition> {

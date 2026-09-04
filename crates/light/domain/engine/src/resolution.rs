@@ -1,16 +1,14 @@
-use std::{collections::HashMap, sync::atomic::Ordering};
+use std::sync::atomic::Ordering;
 
 use chrono::{DateTime, Utc};
-use light_core::MergeMode;
 use light_playback::{
     ActivePlayback, AutomaticPlaybackTransition, MoveInBlackCandidate, PlaybackEngine,
     PlaybackTickResult,
 };
-use light_programmer::{GroupDefinition, resolve_group};
 
 use super::{
-    ContributionBatch, Engine, EngineContribution, EngineContributionResolver, EngineSnapshot,
-    ResolvedAttributes, ResolvedContributionIndex, RuntimeGeneration, sampled_values,
+    ContributionBatch, Engine, EngineContribution, EngineContributionResolver, ResolvedAttributes,
+    ResolvedContributionIndex, RuntimeGeneration, sampled_values,
 };
 
 struct PlaybackResolution {
@@ -61,8 +59,6 @@ impl Engine {
         sampled: &[ContributionBatch],
         advance_playback: bool,
     ) -> ResolvedAttributes {
-        let snapshot = generation.snapshot();
-        let groups = generation.groups();
         let has_samples = sampled.iter().any(|batch| !batch.is_empty());
         let mut playback = crate::timed(crate::RenderPhase::PlaybackResolution, || {
             self.resolve_playback(generation, now, advance_playback, sampled)
@@ -101,7 +97,7 @@ impl Engine {
             }
         });
         crate::timed(crate::RenderPhase::GroupContributions, || {
-            add_group_contributions(&mut resolver, snapshot, groups, now)
+            add_group_contributions(&mut resolver, generation.group_plan(), now)
         });
         let base = if playback.move_in_black_candidates.is_empty() {
             crate::ResolvedValues::default()
@@ -203,40 +199,13 @@ impl Engine {
     }
 }
 
+/// Group programming was reduced to slots when the generation was built; the tick offers them.
 fn add_group_contributions(
     resolver: &mut EngineContributionResolver,
-    snapshot: &EngineSnapshot,
-    groups: &HashMap<String, GroupDefinition>,
+    plan: &crate::group_plan::GroupContributionPlan,
     now: DateTime<Utc>,
 ) {
-    for group in snapshot.groups.iter() {
-        let fixtures = resolve_group(&group.id, groups).unwrap_or_default();
-        if fixtures.is_empty() || group.programming.is_empty() {
-            continue;
-        }
-        // A Group fans one programmed attribute out to every member, so its name is reduced to a
-        // number once here rather than hashed once per member fixture.
-        let programming = group
-            .programming
-            .iter()
-            .filter_map(|(attribute, value)| {
-                Some((
-                    resolver.attribute_id(attribute)?,
-                    value,
-                    if attribute.is_intensity() {
-                        MergeMode::Htp
-                    } else {
-                        MergeMode::Ltp
-                    },
-                ))
-            })
-            .collect::<Vec<_>>();
-        for fixture_id in fixtures {
-            for (attribute, value, merge_mode) in &programming {
-                // A member that does not have this attribute is left alone rather than given a
-                // value nothing would ever project.
-                resolver.add_numbered_unscaled(fixture_id, *attribute, value, 0, now, *merge_mode);
-            }
-        }
+    for entry in plan.entries() {
+        resolver.add_slot_unscaled(entry.slot, &entry.value, 0, now, entry.merge_mode);
     }
 }
