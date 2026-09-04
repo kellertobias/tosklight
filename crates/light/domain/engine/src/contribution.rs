@@ -25,6 +25,9 @@ pub(crate) struct EngineContribution {
     value: TimedValue,
     transition_ordinal: Option<u64>,
     sequence_master: Option<ApplicableSequenceMaster>,
+    /// Where the producer already knows this pair lives; read by number when it belongs to the
+    /// frame's generation, by name otherwise.
+    address: Option<light_core::FrameAddress>,
 }
 
 /// Borrowed arbitration result for intermediate lookups during one render.
@@ -110,6 +113,7 @@ impl EngineContribution {
             value,
             transition_ordinal: None,
             sequence_master: None,
+            address: None,
         }
     }
 
@@ -121,6 +125,7 @@ impl EngineContribution {
                 contribution.source,
                 contribution.sequence_master,
             )),
+            address: contribution.address,
         }
     }
 
@@ -355,6 +360,7 @@ impl<'a> EngineContributionResolver<'a> {
             value,
             transition_ordinal: Some(transition_ordinal),
             sequence_master: None,
+            address: None,
         });
     }
 
@@ -484,6 +490,7 @@ impl<'a> EngineContributionResolver<'a> {
             value,
             transition_ordinal,
             sequence_master,
+            address,
         } = candidate;
         let TimedValue {
             fixture_id,
@@ -494,7 +501,13 @@ impl<'a> EngineContributionResolver<'a> {
             merge_mode,
             ..
         } = value;
-        match self.slots.slot(fixture_id, &attribute) {
+        let slot = match address {
+            Some(address) if address.generation == self.slots.generation() => {
+                Some(crate::Slot::from_index(address.slot as usize))
+            }
+            _ => self.slots.slot(fixture_id, &attribute),
+        };
+        match slot {
             Some(slot) => {
                 let level = value.normalized().unwrap_or(0.0);
                 let mut carried = Some(value);
@@ -695,6 +708,7 @@ mod transition_order_tests {
                 cue_list_id: CueListId::new(),
                 temporary: false,
             },
+            address: None,
         })
     }
 

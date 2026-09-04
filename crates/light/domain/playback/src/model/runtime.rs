@@ -319,6 +319,8 @@ pub struct PlaybackContribution {
     pub transition_ordinal: u64,
     pub sequence_master: f32,
     pub source: SequenceMasterSource,
+    /// Where the engine's frame keeps this pair, when the compiled cue list was told.
+    pub address: Option<light_core::FrameAddress>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

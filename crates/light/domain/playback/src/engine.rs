@@ -147,6 +147,16 @@ impl PlaybackEngine {
         self.set_dynamics_paused(paused);
         paused
     }
+    /// Tell every compiled cue list where the engine's frame keeps its pairs.
+    ///
+    /// Called when this engine joins a patch generation. A cue list registered afterwards is
+    /// offered by name until the next generation resolves it, which is slower and still right.
+    pub fn resolve_frame_addresses(&mut self, resolver: &dyn light_core::FrameAddressResolver) {
+        for compiled in self.compiled_cue_lists.values_mut() {
+            Arc::make_mut(compiled).resolve_frame_addresses(resolver);
+        }
+    }
+
     pub fn register(&mut self, mut cue_list: CueList) -> Result<(), String> {
         cue_list.validate()?;
         cue_list.migrate_legacy_chaser_xfade(&self.speed_groups_bpm);

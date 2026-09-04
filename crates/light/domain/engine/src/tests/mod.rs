@@ -504,6 +504,7 @@ mod lifecycle;
 
 mod contribution_batches;
 
+mod frame_addresses;
 mod frame_reuse;
 
 mod playback_boundary;

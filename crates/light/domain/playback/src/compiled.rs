@@ -23,6 +23,9 @@ pub(crate) struct CompiledAttribute {
     uses_snap_transition: bool,
     /// Whether this attribute drives brightness, decided for the same reason.
     is_intensity: bool,
+    /// Where the engine's frame keeps this pair, resolved once when the cue list joins a patch
+    /// generation so a contribution is offered by number rather than by name every tick.
+    frame_address: Option<light_core::FrameAddress>,
     first_cue_index: usize,
     history: Vec<CompiledChange>,
 }
@@ -51,6 +54,18 @@ impl CompiledCueList {
 
     pub(crate) fn attributes(&self) -> &[CompiledAttribute] {
         &self.attributes
+    }
+
+    /// Ask `resolver` where every compiled pair lives. Called when the cue list joins a patch
+    /// generation; a pair the patch never numbered keeps no address and is offered by name.
+    pub(crate) fn resolve_frame_addresses(
+        &mut self,
+        resolver: &dyn light_core::FrameAddressResolver,
+    ) {
+        for attribute in &mut self.attributes {
+            attribute.frame_address =
+                resolver.frame_address(attribute.fixture_id, &attribute.attribute);
+        }
     }
 
     pub(crate) fn attributes_through(&self, cue_index: usize) -> &[CompiledAttribute] {
@@ -109,6 +124,7 @@ impl CompiledCueList {
                 uses_snap_transition: crate::attribute_uses_snap_transition(&change.attribute),
                 is_intensity: change.attribute.is_intensity(),
                 attribute: change.attribute.clone(),
+                frame_address: None,
                 first_cue_index: cue_index,
                 history: Vec::new(),
             });
@@ -148,6 +164,10 @@ impl CompiledAttribute {
     }
 
     /// Whether this attribute drives brightness, decided when the cue list compiled.
+    pub(crate) fn frame_address(&self) -> Option<light_core::FrameAddress> {
+        self.frame_address
+    }
+
     pub(crate) fn is_intensity(&self) -> bool {
         self.is_intensity
     }

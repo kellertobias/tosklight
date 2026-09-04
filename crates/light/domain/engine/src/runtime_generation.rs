@@ -62,6 +62,11 @@ impl RuntimeGeneration {
             slots.len(),
         ));
         let channel_slots = Arc::new(crate::ChannelSlotIndex::compile(&snapshot.fixtures, &slots));
+        // Every compiled cue list learns where this generation keeps its pairs, so a playback
+        // contribution is offered by number rather than by name on every tick.
+        playback
+            .write()
+            .resolve_frame_addresses(&crate::FrameAddresser::new(Arc::clone(&slots)));
         Self {
             snapshot: Arc::new(snapshot),
             playback,
@@ -149,6 +154,11 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.group_rankings)
         };
+        // Every compiled cue list learns where this generation keeps its pairs, so a playback
+        // contribution is offered by number rather than by name on every tick.
+        playback
+            .write()
+            .resolve_frame_addresses(&crate::FrameAddresser::new(Arc::clone(&slots)));
         Self {
             snapshot: Arc::new(snapshot),
             playback,

@@ -26,6 +26,7 @@ impl ContributionContext<'_> {
                 transition_ordinal,
                 sequence_master,
                 source,
+                address: None,
             }
         }));
     }
@@ -86,6 +87,7 @@ impl ContributionContext<'_> {
             key.clone(),
             value,
             snap,
+            attribute.frame_address(),
         ));
     }
 
@@ -111,6 +113,7 @@ impl ContributionContext<'_> {
             attribute.clone(),
             value,
             snap,
+            None,
         ));
     }
 }
@@ -189,6 +192,7 @@ fn attribute_contribution(
     attribute: AttributeKey,
     value: AttributeValue,
     snap: bool,
+    address: Option<light_core::FrameAddress>,
 ) -> PlaybackContribution {
     let sequence_master = frame.master_for(snap);
     let value = apply_intensity_master(value, &attribute, sequence_master);
@@ -197,6 +201,7 @@ fn attribute_contribution(
         transition_ordinal: frame.playback.transition_ordinal,
         sequence_master,
         source: frame.source,
+        address,
     }
 }
 
