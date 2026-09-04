@@ -105,6 +105,8 @@ impl LabelCache {
 #[derive(Debug, Default)]
 pub(crate) struct RedrawGate {
     last: Option<RedrawState>,
+    /// The fixture labels from the last frame, reused while nothing they read has changed.
+    pub labels: LabelCache,
 }
 
 impl RedrawGate {

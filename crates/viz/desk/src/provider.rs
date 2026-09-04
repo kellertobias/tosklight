@@ -10,6 +10,7 @@
 //! transport.
 
 use crate::client::DeskClient;
+use crate::desk_output_frame::{desk_output_signature, stamp_desk_output_frame};
 use crate::routes;
 use crate::scene_build::{self, DeskReadModels};
 use crate::wire::StageLayoutBody;
@@ -476,52 +477,9 @@ impl DeskProvider {
     }
 }
 
-impl SceneProvider for DeskProvider {
-    fn capabilities(&self) -> ProviderCapabilities {
-        ProviderCapabilities {
-            kind: ProviderKind::LightingDesk,
-            available: true,
-            unavailable_reason: None,
-            default_host: "127.0.0.1".into(),
-            default_port: 5000,
-            uses_network_input: true,
-        }
-    }
-
-    fn poll(&mut self) -> Vec<ProviderEvent> {
-        let mut events = Vec::new();
-        self.drain_messages(&mut events);
-        self.emit_pending_scene(&mut events);
-
-        // Live values come from the network, and — for a planning source only — from the preview
-        // plane on universes the network has never claimed.
-        // A universe that has ever accepted a real packet belongs to the network from then on.
-        self.update_real_universes();
-        // The editor's own frames, for the universes it still owns. Rebuilt every poll, and
-        // re-applied whenever the operator changes something — including when a real source has
-        // just taken a universe away, because the frame the decoder holds is a merge of everything
-        // applied so far and the remaining preview universes have to be re-asserted.
-        let preview_universes = self.editor_driven_universes();
-        let preview_moved = self.applied_preview_revision != Some(self.preview.revision);
-        let preview_now = self.epoch.elapsed().as_micros() as u64;
-        let preview_frames: Vec<viz_dmx::UniverseFrame> = self
-            .preview
-            .universes
-            .iter()
-            .filter(|universe| preview_universes.contains(&universe.universe))
-            .map(|universe| {
-                let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
-                let length = universe.slots.len().min(viz_dmx::DMX_SLOTS);
-                slots[..length].copy_from_slice(&universe.slots[..length]);
-                viz_dmx::UniverseFrame {
-                    logical_universe: universe.universe,
-                    slots,
-                    received_micros: preview_now,
-                    stale: false,
-                }
-            })
-            .collect();
-
+impl DeskProvider {
+    /// Fold the desk's own output into the values, and present it when it changed the picture.
+    fn apply_desk_output(&mut self, events: &mut Vec<ProviderEvent>) {
         // The desk's own output, for a renderer drawing inside the desk's window. Decoded through
         // exactly the path a real packet takes, so nothing downstream can tell the difference —
         // the numbers are the same numbers, read from the desk instead of heard from the wire.
@@ -595,6 +553,56 @@ impl SceneProvider for DeskProvider {
                 events.push(ProviderEvent::Values(Box::new(self.values.clone())));
             }
         }
+    }
+}
+
+impl SceneProvider for DeskProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            kind: ProviderKind::LightingDesk,
+            available: true,
+            unavailable_reason: None,
+            default_host: "127.0.0.1".into(),
+            default_port: 5000,
+            uses_network_input: true,
+        }
+    }
+
+    fn poll(&mut self) -> Vec<ProviderEvent> {
+        let mut events = Vec::new();
+        self.drain_messages(&mut events);
+        self.emit_pending_scene(&mut events);
+
+        // Live values come from the network, and — for a planning source only — from the preview
+        // plane on universes the network has never claimed.
+        // A universe that has ever accepted a real packet belongs to the network from then on.
+        self.update_real_universes();
+        // The editor's own frames, for the universes it still owns. Rebuilt every poll, and
+        // re-applied whenever the operator changes something — including when a real source has
+        // just taken a universe away, because the frame the decoder holds is a merge of everything
+        // applied so far and the remaining preview universes have to be re-asserted.
+        let preview_universes = self.editor_driven_universes();
+        let preview_moved = self.applied_preview_revision != Some(self.preview.revision);
+        let preview_now = self.epoch.elapsed().as_micros() as u64;
+        let preview_frames: Vec<viz_dmx::UniverseFrame> = self
+            .preview
+            .universes
+            .iter()
+            .filter(|universe| preview_universes.contains(&universe.universe))
+            .map(|universe| {
+                let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
+                let length = universe.slots.len().min(viz_dmx::DMX_SLOTS);
+                slots[..length].copy_from_slice(&universe.slots[..length]);
+                viz_dmx::UniverseFrame {
+                    logical_universe: universe.universe,
+                    slots,
+                    received_micros: preview_now,
+                    stale: false,
+                }
+            })
+            .collect();
+
+        self.apply_desk_output(&mut events);
 
         if let (Some(receivers), Some(decoder), Some(scene)) =
             (&self.receivers, &mut self.decoder, &self.scene)
@@ -1083,43 +1091,6 @@ async fn watch(
             }
         }
     }
-}
-
-/// What a desk-output read would put on screen, as one number: every universe's slots, the
-/// preload overlay while it is followed, and the scene the slots are decoded through.
-fn desk_output_signature(
-    output: &crate::wire::OutputDmxSnapshot,
-    preload: Option<&crate::wire::PreloadProjection>,
-    scene_revision: u64,
-) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::hash::DefaultHasher::new();
-    scene_revision.hash(&mut hasher);
-    output.universes.len().hash(&mut hasher);
-    for universe in &output.universes {
-        universe.universe.hash(&mut hasher);
-        universe.slots.hash(&mut hasher);
-    }
-    if let Some(preload) = preload {
-        preload.fixture_values.len().hash(&mut hasher);
-        for entry in &preload.fixture_values {
-            entry.fixture_id.hash(&mut hasher);
-            entry.attribute.hash(&mut hasher);
-            match entry.value {
-                crate::wire::PreloadAttributeValue::Normalized(value) => {
-                    value.to_bits().hash(&mut hasher)
-                }
-                crate::wire::PreloadAttributeValue::Other => u32::MAX.hash(&mut hasher),
-            }
-        }
-    }
-    hasher.finish()
-}
-
-fn stamp_desk_output_frame(values: &mut SceneValues, value_frame: &mut u64, now: u64) {
-    *value_frame = value_frame.saturating_add(1);
-    values.newest_input_micros = now;
-    values.frame = *value_frame;
 }
 
 fn apply_selection(values: &mut SceneValues, selection: &crate::wire::SelectionSnapshot) {

@@ -111,107 +111,115 @@ impl light_core::FrameAddressResolver for FrameAddresser {
     }
 }
 
+/// Which attributes each fixture declares, collected before any column is addressed.
+#[derive(Default)]
+struct Declarations {
+    owners: Vec<FixtureId>,
+    owner_rows: FxHashMap<FixtureId, usize>,
+    declared: Vec<Vec<AttributeId>>,
+}
+
+impl Declarations {
+    /// The row an owner has, or the next one if it has none yet. Every fixture owns a row even
+    /// when its profile declares nothing, so an unpatched or empty fixture is still addressable
+    /// rather than absent.
+    fn row(&mut self, owner: FixtureId) -> usize {
+        *self.owner_rows.entry(owner).or_insert_with(|| {
+            self.owners.push(owner);
+            self.declared.push(Vec::new());
+            self.owners.len() - 1
+        })
+    }
+
+    fn declare(&mut self, owner: FixtureId, attribute: AttributeId) {
+        let row = self.row(owner);
+        if !self.declared[row].contains(&attribute) {
+            self.declared[row].push(attribute);
+        }
+    }
+
+    fn declare_fixture(&mut self, fixture: &PatchedFixture, attributes: &mut AttributeTable) {
+        // Every fixture owns a row even when its profile declares nothing, so an unpatched or
+        // empty fixture is still addressable rather than absent.
+        self.row(fixture.fixture_id);
+        if let Some(mode) = crate::fixture::profile_mode(fixture) {
+            for (head_index, head) in mode.heads.iter().enumerate() {
+                let owner = crate::fixture::profile_head_owner(fixture, head_index, head);
+                // Every head can carry a colour and a level whether or not its mode names a
+                // channel for them: projection composes both from the channels it does have,
+                // and a Group colour or a virtual dimmer supplies them directly.
+                for synthesised in SYNTHESISED_HEAD_ATTRIBUTES {
+                    let id = attributes.intern(&AttributeKey((*synthesised).into()));
+                    self.declare(owner, id);
+                }
+                for channel in mode
+                    .channels
+                    .iter()
+                    .filter(|channel| channel.head_id == head.id)
+                {
+                    let id = attributes.intern(&channel.attribute);
+                    self.declare(owner, id);
+                    // The manufacturer's own name for the channel is read for every channel
+                    // whose canonical name differs from it, so it is numbered too; otherwise
+                    // that read is a miss that has to be answered by name.
+                    if channel.fixture_attribute != channel.attribute {
+                        let id = attributes.intern(&channel.fixture_attribute);
+                        self.declare(owner, id);
+                    }
+                    for function in &channel.functions {
+                        let id = attributes.intern(&function.attribute);
+                        self.declare(owner, id);
+                    }
+                }
+            }
+        }
+        for (head_index, head) in fixture.definition.heads.iter().enumerate() {
+            let owner = if head.shared {
+                fixture.fixture_id
+            } else {
+                fixture
+                    .logical_heads
+                    .iter()
+                    .find(|logical| logical.head_index == head.index)
+                    .map(|logical| logical.fixture_id)
+                    .unwrap_or(fixture.fixture_id)
+            };
+            let _ = head_index;
+            for parameter in &head.parameters {
+                let id = attributes.intern(&parameter.attribute);
+                self.declare(owner, id);
+            }
+        }
+        // A fixture's safe values name attributes it must be able to hold, whether or not a
+        // channel in the current mode declares them.
+        for attribute in fixture.definition.safe_values.keys() {
+            let id = attributes.intern(attribute);
+            self.declare(fixture.fixture_id, id);
+        }
+        // A Freeze holds values that were resolvable when it was taken, so its targets keep
+        // their numbering even if the underlying profile no longer offers them.
+        for (fixture_id, target) in &fixture.freeze.targets {
+            for attribute in target.values.keys() {
+                let id = attributes.intern(attribute);
+                self.declare(*fixture_id, id);
+            }
+        }
+    }
+}
+
 impl SlotTable {
     /// Number every pair the fixtures of this generation can produce.
     pub(crate) fn compile(generation: u64, fixtures: &[PatchedFixture]) -> Self {
         let mut attributes = AttributeTable::with_built_ins();
-        let mut owners: Vec<FixtureId> = Vec::new();
-        let mut owner_rows: FxHashMap<FixtureId, usize> = FxHashMap::default();
         // Collected before any column is addressed, because the stride is the attribute count and
         // that is only final once every profile has been read.
-        let mut declared: Vec<Vec<AttributeId>> = Vec::new();
-        let declare = |owner: FixtureId,
-                       attribute: AttributeId,
-                       owners: &mut Vec<FixtureId>,
-                       owner_rows: &mut FxHashMap<FixtureId, usize>,
-                       declared: &mut Vec<Vec<AttributeId>>| {
-            let row = *owner_rows.entry(owner).or_insert_with(|| {
-                owners.push(owner);
-                declared.push(Vec::new());
-                owners.len() - 1
-            });
-            if !declared[row].contains(&attribute) {
-                declared[row].push(attribute);
-            }
-        };
-
+        let mut declarations = Declarations::default();
         for fixture in fixtures {
-            // Every fixture owns a row even when its profile declares nothing, so an unpatched or
-            // empty fixture is still addressable rather than absent.
-            let _ = *owner_rows.entry(fixture.fixture_id).or_insert_with(|| {
-                owners.push(fixture.fixture_id);
-                declared.push(Vec::new());
-                owners.len() - 1
-            });
-            if let Some(mode) = crate::fixture::profile_mode(fixture) {
-                for (head_index, head) in mode.heads.iter().enumerate() {
-                    let owner = crate::fixture::profile_head_owner(fixture, head_index, head);
-                    // Every head can carry a colour and a level whether or not its mode names a
-                    // channel for them: projection composes both from the channels it does have,
-                    // and a Group colour or a virtual dimmer supplies them directly.
-                    for synthesised in SYNTHESISED_HEAD_ATTRIBUTES {
-                        let id = attributes.intern(&AttributeKey((*synthesised).into()));
-                        declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
-                    }
-                    for channel in mode
-                        .channels
-                        .iter()
-                        .filter(|channel| channel.head_id == head.id)
-                    {
-                        let id = attributes.intern(&channel.attribute);
-                        declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
-                        // The manufacturer's own name for the channel is read for every channel
-                        // whose canonical name differs from it, so it is numbered too; otherwise
-                        // that read is a miss that has to be answered by name.
-                        if channel.fixture_attribute != channel.attribute {
-                            let id = attributes.intern(&channel.fixture_attribute);
-                            declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
-                        }
-                        for function in &channel.functions {
-                            let id = attributes.intern(&function.attribute);
-                            declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
-                        }
-                    }
-                }
-            }
-            for (head_index, head) in fixture.definition.heads.iter().enumerate() {
-                let owner = if head.shared {
-                    fixture.fixture_id
-                } else {
-                    fixture
-                        .logical_heads
-                        .iter()
-                        .find(|logical| logical.head_index == head.index)
-                        .map(|logical| logical.fixture_id)
-                        .unwrap_or(fixture.fixture_id)
-                };
-                let _ = head_index;
-                for parameter in &head.parameters {
-                    let id = attributes.intern(&parameter.attribute);
-                    declare(owner, id, &mut owners, &mut owner_rows, &mut declared);
-                }
-            }
-            // A fixture's safe values name attributes it must be able to hold, whether or not a
-            // channel in the current mode declares them.
-            for attribute in fixture.definition.safe_values.keys() {
-                let id = attributes.intern(attribute);
-                declare(
-                    fixture.fixture_id,
-                    id,
-                    &mut owners,
-                    &mut owner_rows,
-                    &mut declared,
-                );
-            }
-            // A Freeze holds values that were resolvable when it was taken, so its targets keep
-            // their numbering even if the underlying profile no longer offers them.
-            for (fixture_id, target) in &fixture.freeze.targets {
-                for attribute in target.values.keys() {
-                    let id = attributes.intern(attribute);
-                    declare(*fixture_id, id, &mut owners, &mut owner_rows, &mut declared);
-                }
-            }
+            declarations.declare_fixture(fixture, &mut attributes);
         }
+        let Declarations {
+            owners, declared, ..
+        } = declarations;
 
         let stride = attributes.len();
         let mut columns = vec![UNNUMBERED; owners.len().saturating_mul(stride)];

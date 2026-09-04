@@ -242,7 +242,7 @@ impl Application {
         build_overlay(
             &mut self.overlay,
             &mut self.hotspots,
-            &mut self.label_cache,
+            &mut self.redraw_gate.labels,
             time_driven,
             &self.quick_settings,
             &self.preferences,
