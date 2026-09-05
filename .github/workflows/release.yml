@@ -116,6 +116,7 @@ jobs:
           components: rustfmt, clippy
 
       - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+        if: matrix.desktop
         with:
           version: v0.17.0
 
@@ -763,6 +764,9 @@ jobs:
 
       - name: Build the ARM64 Headless and Media servers
         if: '!matrix.desktop'
+        env:
+          RUSTC_WRAPPER: ""
+          SCCACHE_GHA_ENABLED: "false"
         shell: bash
         run: >-
           cargo build --release --locked --target ${{ matrix.target }}
