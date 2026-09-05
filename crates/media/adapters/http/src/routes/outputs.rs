@@ -174,9 +174,10 @@ pub(super) async fn update_output_configuration(
     Path(output): Path<String>,
     TolerantJson(body): TolerantJson<UpdateOutputConfiguration>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
 
     let id = parse_output(&output)?;
     let mut configuration = MediaConfiguration::clone(&state.configuration.load());
@@ -955,37 +956,52 @@ pub(super) async fn set_playback_takeover(
 
 /// Applies commands through the reducer and publishes one new snapshot.
 fn submit(state: &ApiState, commands: Vec<CommandKind>, now: Timestamp) -> Result<(), ApiError> {
+    submit_to(&state.state, commands, now)
+}
+
+fn submit_to(
+    state: &arc_swap::ArcSwap<MediaState>,
+    commands: Vec<CommandKind>,
+    now: Timestamp,
+) -> Result<(), ApiError> {
     if commands.is_empty() {
         return Ok(());
     }
-    let mut next = MediaState::clone(&state.state.load());
-    let mut published = false;
+    loop {
+        let current = state.load_full();
+        let mut next = MediaState::clone(&current);
+        let mut published = false;
 
-    for kind in commands {
-        let command = Command::new(kind, CommandSource::Web, now);
-        match apply(&mut next, &command) {
-            Applied::Changed => published = true,
-            Applied::Unchanged => {}
-            Applied::RejectedNotOwner => {
-                return Err(ApiError::new(
-                    StatusCode::CONFLICT,
-                    "playback-takeover-required",
-                    "take over playback for this output before changing its live values",
-                ));
-            }
-            Applied::RejectedUnknownOutput => {
-                return Err(ApiError::not_found("unknown-output", "no such output"));
-            }
-            Applied::RejectedUnknownLayer => {
-                return Err(ApiError::not_found("unknown-layer", "no such layer"));
+        for kind in &commands {
+            let command = Command::new(kind.clone(), CommandSource::Web, now);
+            match apply(&mut next, &command) {
+                Applied::Changed => published = true,
+                Applied::Unchanged => {}
+                Applied::RejectedNotOwner => {
+                    return Err(ApiError::new(
+                        StatusCode::CONFLICT,
+                        "playback-takeover-required",
+                        "take over playback for this output before changing its live values",
+                    ));
+                }
+                Applied::RejectedUnknownOutput => {
+                    return Err(ApiError::not_found("unknown-output", "no such output"));
+                }
+                Applied::RejectedUnknownLayer => {
+                    return Err(ApiError::not_found("unknown-layer", "no such layer"));
+                }
             }
         }
-    }
 
-    if published {
-        state.state.store(Arc::new(next));
+        if !published {
+            return Ok(());
+        }
+        let previous = state.compare_and_swap(&current, Arc::new(next));
+        if Arc::ptr_eq(&previous, &current) {
+            return Ok(());
+        }
+        // Ownership and output existence must be checked again against the winning snapshot.
     }
-    Ok(())
 }
 
 fn view_of(state: &ApiState, output: &media_domain::OutputState, now: Timestamp) -> OutputView {
@@ -1021,6 +1037,43 @@ mod tests {
     use tower::ServiceExt as _;
 
     use crate::routes::bench::{Bench, bench, get, post, send};
+
+    #[test]
+    fn concurrent_resets_are_each_applied_once_without_losing_updates() {
+        let output = OutputId::new();
+        let state = arc_swap::ArcSwap::from_pointee(MediaState::with_outputs(vec![
+            media_domain::OutputState::new(output, LayerPersonality::TwoLayers),
+        ]));
+        super::submit_to(
+            &state,
+            vec![media_domain::CommandKind::TakeOverPlayback {
+                output,
+                take_over: true,
+            }],
+            Timestamp::ZERO,
+        )
+        .unwrap();
+        let barrier = std::sync::Barrier::new(4);
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                scope.spawn(|| {
+                    for _ in 0..500 {
+                        barrier.wait();
+                        super::submit_to(
+                            &state,
+                            vec![media_domain::CommandKind::ResetLayer { output, layer: 0 }],
+                            Timestamp::ZERO,
+                        )
+                        .unwrap();
+                    }
+                });
+            }
+        });
+        assert_eq!(
+            state.load().output(output).unwrap().layers[0].reset_trigger_id,
+            2_000
+        );
+    }
 
     async fn take_over(bench: &Bench) {
         let (status, _) = send(

@@ -10,6 +10,7 @@ import {
 } from "@tosklight/ui/controls";
 import { NumberField } from "@tosklight/ui/forms";
 import { type ChangeEvent, useState } from "react";
+import { requestId } from "../../shared/api/editing";
 import type {
 	UpdateVisualizer,
 	VisualizerParametersView,
@@ -64,7 +65,7 @@ export function VisualizerEditor({
 
 	const publish = (nextParameters: VisualizerParametersView) =>
 		onChange({
-			requestId: crypto.randomUUID(),
+			requestId: requestId(),
 			parameters: nextParameters,
 		});
 	const set = (

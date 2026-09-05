@@ -14,6 +14,8 @@ use media_domain::{
 };
 use media_library::LibraryStorage;
 
+use crate::MediaLoader;
+#[cfg(test)]
 use crate::loader::ClipLoader;
 use crate::session::PlaybackSession;
 
@@ -22,6 +24,7 @@ struct Selected {
     address: MediaAddress,
     asset: AssetId,
     session: PlaybackSession,
+    reset_trigger_id: u32,
 }
 
 /// What a layer needs from the caller this frame.
@@ -34,15 +37,24 @@ pub struct LayerSource {
     pub size: (u32, u32),
 }
 
+#[derive(Clone, Copy)]
+struct FailedSelection {
+    address: MediaAddress,
+    asset: Option<AssetId>,
+    reset_trigger_id: u32,
+    failure: SourceFailure,
+}
+
 /// Sessions for one output's layers.
 pub struct LayerSessions {
     output: OutputId,
     storage: LibraryStorage,
     selected: HashMap<usize, Selected>,
+    pending: HashMap<usize, (MediaAddress, AssetId)>,
     sizes: HashMap<AssetId, (u32, u32)>,
     /// Addresses that have already failed, so a layer holding a bad selection does not retry on
     /// every single frame.
-    failed: HashMap<MediaAddress, SourceFailure>,
+    failed: HashMap<usize, FailedSelection>,
 }
 
 impl LayerSessions {
@@ -51,6 +63,7 @@ impl LayerSessions {
             output,
             storage,
             selected: HashMap::new(),
+            pending: HashMap::new(),
             sizes: HashMap::new(),
             failed: HashMap::new(),
         }
@@ -70,7 +83,7 @@ impl LayerSessions {
         layer_index: usize,
         layer: &LayerState,
         catalog: &CatalogSnapshot,
-        loader: &mut ClipLoader,
+        loader: &mut impl MediaLoader,
         now: Timestamp,
     ) -> Option<LayerSource> {
         if layer.address.is_blank() {
@@ -78,28 +91,67 @@ impl LayerSessions {
             return None;
         }
 
+        let catalog_asset = catalog.resolve(layer.address).map(|item| item.id);
+
         // A selection that has already failed is reported from memory rather than retried every
         // frame; changing the address clears it, and so does a reset.
-        if let Some(failure) = self.failed.get(&layer.address).copied() {
-            if layer.reset_trigger_id == 0 {
+        if let Some(failed) = self.failed.get(&layer_index).copied() {
+            if failed.address == layer.address
+                && failed.asset == catalog_asset
+                && failed.reset_trigger_id == layer.reset_trigger_id
+            {
                 return Some(LayerSource {
                     asset: AssetId::default(),
                     frame: None,
-                    status: SourceStatus::Failed { failure },
+                    status: SourceStatus::Failed {
+                        failure: failed.failure,
+                    },
                     size: (0, 0),
                 });
             }
-            self.failed.remove(&layer.address);
+            self.failed.remove(&layer_index);
         }
 
-        let already = self
+        let retry = self
             .selected
             .get(&layer_index)
-            .is_some_and(|selected| selected.address == layer.address);
+            .filter(|selected| {
+                selected.reset_trigger_id != layer.reset_trigger_id
+                    && (loader.failure(selected.asset).is_some() || layer.source_status.is_failed())
+            })
+            .map(|selected| selected.asset);
+        if let Some(asset) = retry {
+            loader.retry(asset);
+        }
+        let already = self.selected.get(&layer_index).is_some_and(|selected| {
+            retry.is_none()
+                && selected.address == layer.address
+                && Some(selected.asset) == catalog_asset
+                && !(selected.reset_trigger_id != layer.reset_trigger_id
+                    && (loader.failure(selected.asset).is_some()
+                        || layer.source_status.is_failed()))
+        });
         if !already {
-            self.release(layer_index, loader);
+            let pending_matches = self
+                .pending
+                .get(&layer_index)
+                .is_some_and(|(address, asset)| {
+                    *address == layer.address && Some(*asset) == catalog_asset
+                });
+            if !pending_matches {
+                self.release(layer_index, loader);
+            }
             if let Err(failure) = self.select(layer_index, layer, catalog, loader, now) {
-                self.failed.insert(layer.address, failure);
+                self.release(layer_index, loader);
+                self.failed.insert(
+                    layer_index,
+                    FailedSelection {
+                        address: layer.address,
+                        asset: catalog_asset,
+                        reset_trigger_id: layer.reset_trigger_id,
+                        failure,
+                    },
+                );
                 return Some(LayerSource {
                     asset: AssetId::default(),
                     frame: None,
@@ -109,7 +161,15 @@ impl LayerSessions {
             }
         }
 
-        let selected = self.selected.get_mut(&layer_index)?;
+        let Some(selected) = self.selected.get_mut(&layer_index) else {
+            return Some(LayerSource {
+                asset: catalog_asset.unwrap_or_default(),
+                frame: None,
+                status: SourceStatus::Loading,
+                size: (0, 0),
+            });
+        };
+        selected.reset_trigger_id = layer.reset_trigger_id;
         selected.session.reconcile(layer, now);
         let delivery = selected
             .session
@@ -129,7 +189,7 @@ impl LayerSessions {
         layer_index: usize,
         layer: &LayerState,
         catalog: &CatalogSnapshot,
-        loader: &mut ClipLoader,
+        loader: &mut impl MediaLoader,
         now: Timestamp,
     ) -> Result<(), SourceFailure> {
         let item = catalog
@@ -138,23 +198,22 @@ impl LayerSessions {
         let path: PathBuf = self.storage.item_path(layer.address, &item.name);
         let asset = item.id;
 
-        let loaded = loader
-            .load(asset, &path, &mut |progress| {
-                tracing::debug!(?progress, address = %layer.address, "loading a selected clip");
-            })
-            .map_err(|error| {
-                tracing::warn!(address = %layer.address, %error, "cannot load the selected media");
-                SourceFailure::MissingFile
-            })?;
-
-        // A clip an output is showing is pinned, so the cache cannot evict what is on screen.
-        loader.cache_mut().pin(asset);
+        if let std::collections::hash_map::Entry::Vacant(entry) = self.pending.entry(layer_index) {
+            loader.begin_selection(asset);
+            entry.insert((layer.address, asset));
+        }
+        let Some(loaded) = loader.request_load(asset, &path)? else {
+            return Ok(());
+        };
+        self.pending.remove(&layer_index);
+        loader.finish_selection(asset);
         self.sizes.insert(asset, (loaded.width, loaded.height));
         self.selected.insert(
             layer_index,
             Selected {
                 address: layer.address,
                 asset,
+                reset_trigger_id: layer.reset_trigger_id,
                 session: PlaybackSession::new(
                     asset,
                     loaded.timing,
@@ -173,9 +232,20 @@ impl LayerSessions {
 
     /// Lets go of a layer's selection, releasing its pin so the clip can be evicted once nothing
     /// else is showing it.
-    fn release(&mut self, layer_index: usize, loader: &mut ClipLoader) {
+    pub fn release(&mut self, layer_index: usize, loader: &mut impl MediaLoader) {
+        self.failed.remove(&layer_index);
+        if let Some((_, asset)) = self.pending.remove(&layer_index) {
+            loader.release_selection(asset);
+        }
         if let Some(previous) = self.selected.remove(&layer_index) {
-            loader.cache_mut().unpin(previous.asset);
+            loader.release_selection(previous.asset);
+            if !self
+                .selected
+                .values()
+                .any(|selected| selected.asset == previous.asset)
+            {
+                self.sizes.remove(&previous.asset);
+            }
         }
     }
 }
@@ -321,6 +391,88 @@ mod tests {
             let source = bench.reconcile(&pointing_at(9, 9), millis).unwrap();
             assert!(source.status.is_failed(), "at {millis}ms");
         }
+    }
+
+    #[test]
+    fn a_failed_selection_retries_once_per_new_reset() {
+        let mut bench = Bench::new("reset-failure-edge");
+        let mut layer = pointing_at(1, 1);
+        layer.reset_trigger_id = 7;
+        bench.add(1, 1, "Repaired", 10);
+        let path = LibraryStorage::new(bench.root.clone()).item_path(layer.address, "Repaired");
+        std::fs::remove_file(&path).unwrap();
+        assert!(bench.reconcile(&layer, 0).unwrap().status.is_failed());
+        std::fs::write(path, clip(10)).unwrap();
+        assert!(
+            bench.reconcile(&layer, 16).unwrap().status.is_failed(),
+            "an old reset must not trigger a disk retry every frame"
+        );
+        layer.reset_trigger_id += 1;
+        assert_eq!(
+            bench.reconcile(&layer, 32).unwrap().status,
+            SourceStatus::Ready
+        );
+    }
+
+    #[test]
+    fn deselection_clears_failure_and_allows_a_repaired_address() {
+        let mut bench = Bench::new("reselect-failure");
+        let layer = pointing_at(1, 1);
+        assert!(bench.reconcile(&layer, 0).unwrap().status.is_failed());
+        bench.reconcile(&LayerState::default(), 16);
+        bench.add(1, 1, "Repaired", 10);
+        assert_eq!(
+            bench.reconcile(&layer, 32).unwrap().status,
+            SourceStatus::Ready
+        );
+    }
+
+    #[test]
+    fn one_layers_failed_selection_does_not_poison_another_layer() {
+        let mut bench = Bench::new("layer-failure-isolation");
+        let layer = pointing_at(1, 1);
+        assert!(bench.reconcile(&layer, 0).unwrap().status.is_failed());
+        bench.add(1, 1, "Repaired", 10);
+        let source = bench
+            .sessions
+            .reconcile(
+                1,
+                &layer,
+                &bench.catalog,
+                &mut bench.loader,
+                Timestamp::ZERO,
+            )
+            .unwrap();
+        assert_eq!(source.status, SourceStatus::Ready);
+    }
+
+    #[test]
+    fn importing_a_previously_missing_address_recovers_without_a_reset() {
+        let mut bench = Bench::new("import-recovers");
+        let layer = pointing_at(1, 1);
+        assert!(bench.reconcile(&layer, 0).unwrap().status.is_failed());
+        let asset = bench.add(1, 1, "Imported", 10);
+        let source = bench.reconcile(&layer, 16).unwrap();
+        assert_eq!(source.status, SourceStatus::Ready);
+        assert_eq!(source.asset, asset);
+    }
+
+    #[test]
+    fn replacing_the_catalog_asset_reloads_the_active_address() {
+        let mut bench = Bench::new("replace-active");
+        let layer = pointing_at(1, 1);
+        let first = bench.add(1, 1, "Clip", 10);
+        bench.reconcile(&layer, 0);
+        let mut replacement = bench.catalog.resolve(layer.address).unwrap().clone();
+        replacement.id = AssetId::new();
+        let next_asset = replacement.id;
+        bench.catalog = CatalogSnapshot::default();
+        bench.catalog.insert(1, replacement).unwrap();
+        let source = bench.reconcile(&layer, 500).unwrap();
+        assert_eq!(source.asset, next_asset);
+        assert_eq!(source.frame, Some(0));
+        assert!(!bench.loader.cache().is_pinned(first));
+        assert!(bench.loader.cache().is_pinned(next_asset));
     }
 
     #[test]

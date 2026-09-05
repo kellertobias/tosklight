@@ -394,7 +394,7 @@ pub(super) fn validate_projection_svg_contract(
         let attribute = attribute
             .map_err(|error| invalid(format!("SVG projection attribute is malformed: {error}")))?;
         let value = attribute
-            .decode_and_unescape_value(reader.decoder())
+            .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())
             .map_err(|error| invalid(format!("SVG projection attribute is invalid: {error}")))?;
         match attribute.key.as_ref() {
             b"data-tosklight-view" => view = Some(value.into_owned()),
@@ -476,7 +476,7 @@ fn validate_svg_attributes(
             )));
         }
         let value = attribute
-            .decode_and_unescape_value(reader.decoder())
+            .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())
             .map_err(|error| invalid(format!("SVG projection attribute is invalid: {error}")))?;
         match name {
             b"xmlns" if value.as_ref() != "http://www.w3.org/2000/svg" => {

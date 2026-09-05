@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiFailure, api } from "../../shared/api/client";
+import { useEditingFailure } from "../../shared/api/editingFailure";
 import type {
 	CreateVisualizer,
 	UpdateVisualizer,
@@ -29,9 +30,10 @@ export function useVisualizerEditing(reload: () => void): VisualizerEditing {
 	const [editing, setEditing] = useState<string | undefined>(undefined);
 	const [busy, setBusy] = useState(false);
 	const [failure, setFailure] = useState<ApiFailure | undefined>(undefined);
-	const pendingLive = useRef<
-		{ visualizer: VisualizerView; edit: UpdateVisualizer } | undefined
-	>(undefined);
+	const reportFailure = useEditingFailure(setFailure);
+	const pendingLive = useRef(
+		new Map<string, { visualizer: VisualizerView; edit: UpdateVisualizer }>(),
+	);
 	const liveTimer = useRef<number | undefined>(undefined);
 	const drainingLive = useRef(false);
 
@@ -48,16 +50,12 @@ export function useVisualizerEditing(reload: () => void): VisualizerEditing {
 				setEditing(undefined);
 				reload();
 			} catch (error) {
-				setFailure(
-					error instanceof ApiFailure
-						? error
-						: new ApiFailure("unexpected-error", String(error), 0),
-				);
+				reportFailure(error);
 			} finally {
 				setBusy(false);
 			}
 		},
-		[reload],
+		[reload, reportFailure],
 	);
 	const create = useCallback(
 		async (edit: CreateVisualizer) => {
@@ -69,17 +67,13 @@ export function useVisualizerEditing(reload: () => void): VisualizerEditing {
 				reload();
 				return created;
 			} catch (error) {
-				setFailure(
-					error instanceof ApiFailure
-						? error
-						: new ApiFailure("unexpected-error", String(error), 0),
-				);
+				reportFailure(error);
 				return undefined;
 			} finally {
 				setBusy(false);
 			}
 		},
-		[reload],
+		[reload, reportFailure],
 	);
 	const drainLive = useCallback(async () => {
 		if (drainingLive.current) return;
@@ -87,9 +81,10 @@ export function useVisualizerEditing(reload: () => void): VisualizerEditing {
 		setBusy(true);
 		let saved = false;
 		try {
-			while (pendingLive.current) {
-				const { visualizer, edit } = pendingLive.current;
-				pendingLive.current = undefined;
+			while (pendingLive.current.size > 0) {
+				const [key, { visualizer, edit }] =
+					pendingLive.current.entries().next().value!;
+				pendingLive.current.delete(key);
 				try {
 					await api.updateVisualizer(
 						visualizer.address.folder,
@@ -99,11 +94,7 @@ export function useVisualizerEditing(reload: () => void): VisualizerEditing {
 					saved = true;
 					setFailure(undefined);
 				} catch (error) {
-					setFailure(
-						error instanceof ApiFailure
-							? error
-							: new ApiFailure("unexpected-error", String(error), 0),
-					);
+					reportFailure(error);
 				}
 			}
 		} finally {
@@ -111,10 +102,13 @@ export function useVisualizerEditing(reload: () => void): VisualizerEditing {
 			setBusy(false);
 			if (saved) reload();
 		}
-	}, [reload]);
+	}, [reload, reportFailure]);
 	const saveLive = useCallback(
 		(visualizer: VisualizerView, edit: UpdateVisualizer) => {
-			pendingLive.current = { visualizer, edit };
+			pendingLive.current.set(
+				`${visualizer.address.folder}/${visualizer.address.file}`,
+				{ visualizer, edit },
+			);
 			setBusy(true);
 			if (liveTimer.current !== undefined)
 				window.clearTimeout(liveTimer.current);
@@ -126,10 +120,13 @@ export function useVisualizerEditing(reload: () => void): VisualizerEditing {
 		[drainLive],
 	);
 
+	const flushLive = useRef(drainLive);
+	flushLive.current = drainLive;
 	useEffect(
 		() => () => {
 			if (liveTimer.current !== undefined)
 				window.clearTimeout(liveTimer.current);
+			if (pendingLive.current.size > 0) void flushLive.current();
 		},
 		[],
 	);

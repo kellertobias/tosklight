@@ -66,7 +66,24 @@ impl Shutdown {
     /// Resolves once shutdown has been requested, whether by a signal or from inside the process.
     pub async fn wait_for_signal(&self) -> ShutdownReason {
         let mut watcher = self.watcher();
+        #[cfg(unix)]
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .map_err(|error| tracing::warn!(%error, "cannot listen for the terminate signal"))
+                .ok();
+        let terminated = async {
+            #[cfg(unix)]
+            if let Some(signal) = terminate.as_mut() {
+                signal.recv().await;
+                return;
+            }
+            std::future::pending::<()>().await;
+        };
         tokio::select! {
+            () = terminated => {
+                self.request(ShutdownReason::Signal);
+                self.reason().unwrap_or(ShutdownReason::Signal)
+            },
             reason = watcher.wait() => reason,
             result = tokio::signal::ctrl_c() => {
                 if let Err(error) = result {
@@ -110,6 +127,49 @@ impl ShutdownWatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sigterm_requests_orderly_shutdown() {
+        const CHILD: &str = "TOSKLIGHT_MEDIA_SIGTERM_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "shutdown::tests::sigterm_requests_orderly_shutdown",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "SIGTERM child failed: {:?} {} {}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let shutdown = Shutdown::new();
+        let send_signal = async {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            assert!(
+                std::process::Command::new("kill")
+                    .args(["-TERM", &std::process::id().to_string()])
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        };
+        let (reason, ()) = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            tokio::join!(shutdown.wait_for_signal(), send_signal)
+        })
+        .await
+        .expect("SIGTERM should wake the shutdown broadcast");
+        assert_eq!(reason, ShutdownReason::Signal);
+        assert_eq!(shutdown.watcher().wait().await, ShutdownReason::Signal);
+    }
 
     #[tokio::test]
     async fn a_watcher_created_before_the_request_observes_it() {

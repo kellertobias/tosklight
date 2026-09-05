@@ -3,6 +3,7 @@
 //
 // Kept apart from the component so the rules can be read and tested without rendering anything.
 
+import { newIdentity } from "../../shared/api/identity";
 import type {
 	DisplayRegionView,
 	PixelMapView,
@@ -46,8 +47,7 @@ export const REGION_FITS = [
 
 /** A short, stable identity for something the operator just made. */
 export function newId(prefix: string): string {
-	const random = globalThis.crypto?.randomUUID?.() ?? String(Date.now());
-	return `${prefix}-${random.slice(0, 8)}`;
+	return `${prefix}-${newIdentity()}`;
 }
 
 /// A new zone covering the middle of the canvas, so it is visible the moment it is added and can

@@ -148,13 +148,22 @@ impl ImportQueue {
         self.waiting.len()
     }
 
-    /// The next job to start, if there is room. Oldest first, so a queue drains in the order an
-    /// operator dropped things in.
+    /// The oldest runnable job, if there is room. Imports to one address are serialized because
+    /// they publish the same clip and thumbnail; other addresses can still use the free workers.
     pub fn next_to_start(&mut self) -> Option<Job> {
         if self.running.len() >= self.concurrency {
             return None;
         }
-        let id = self.waiting.pop_front()?;
+        let position = self.waiting.iter().position(|id| {
+            let Some(waiting) = self.job(*id) else {
+                return false;
+            };
+            !self.running.iter().any(|running| {
+                self.job(*running)
+                    .is_some_and(|job| job.destination == waiting.destination)
+            })
+        })?;
+        let id = self.waiting.remove(position)?;
         self.running.push(id);
         self.set(
             id,
@@ -168,7 +177,11 @@ impl ImportQueue {
 
     /// Records progress on a running job.
     pub fn progress(&mut self, id: JobId, frames_done: u32, frames_total: Option<u32>) {
-        if self.running.contains(&id) {
+        if self.running.contains(&id)
+            && self
+                .job(id)
+                .is_some_and(|job| matches!(job.state, JobState::Running { .. }))
+        {
             self.set(
                 id,
                 JobState::Running {
@@ -182,6 +195,7 @@ impl ImportQueue {
     /// Records a terminal outcome and frees the slot.
     pub fn finish(&mut self, id: JobId, state: JobState) {
         debug_assert!(state.is_terminal());
+        self.waiting.retain(|waiting| *waiting != id);
         self.running.retain(|running| *running != id);
         self.set(id, state);
     }
@@ -196,7 +210,6 @@ impl ImportQueue {
             return false;
         }
         self.waiting.retain(|waiting| *waiting != id);
-        self.running.retain(|running| *running != id);
         self.set(id, JobState::Cancelled);
         true
     }
@@ -207,7 +220,10 @@ impl ImportQueue {
         let mut succeeded: Vec<JobId> = self
             .jobs
             .iter()
-            .filter(|job| matches!(job.state, JobState::Succeeded { .. } | JobState::Cancelled))
+            .filter(|job| {
+                matches!(job.state, JobState::Succeeded { .. } | JobState::Cancelled)
+                    && !self.running.contains(&job.id)
+            })
             .map(|job| job.id)
             .collect();
         if succeeded.len() <= keep {
@@ -332,15 +348,40 @@ mod tests {
     }
 
     #[test]
-    fn a_running_job_can_be_cancelled_and_frees_its_slot() {
+    fn a_running_job_keeps_its_slot_until_cancellation_is_acknowledged() {
         let mut queue = ImportQueue::new(1);
         let first = submit(&mut queue, "clip.mp4", 1);
         submit(&mut queue, "clip.mp4", 2);
         queue.next_to_start();
 
         assert!(queue.cancel(first));
-        assert_eq!(queue.running(), 0);
+        assert_eq!(queue.running(), 1);
+        assert!(queue.next_to_start().is_none());
+        queue.progress(first, 1, Some(10));
+        assert_eq!(queue.job(first).unwrap().state, JobState::Cancelled);
+        queue.forget_completed(0);
+        assert!(
+            queue.job(first).is_some(),
+            "the active address reservation survives retention"
+        );
+        queue.finish(first, JobState::Cancelled);
         assert!(queue.next_to_start().is_some());
+    }
+
+    #[test]
+    fn same_address_jobs_wait_while_other_addresses_can_start() {
+        let mut queue = queue();
+        let first = submit(&mut queue, "first.mp4", 1);
+        let replacement = submit(&mut queue, "replacement.mp4", 1);
+        let other = submit(&mut queue, "other.mp4", 2);
+        assert_eq!(queue.next_to_start().unwrap().id, first);
+        assert_eq!(queue.next_to_start().unwrap().id, other);
+        queue.finish(other, JobState::Succeeded { frames: 1 });
+        assert!(queue.next_to_start().is_none());
+        queue.cancel(first);
+        assert!(queue.next_to_start().is_none());
+        queue.finish(first, JobState::Cancelled);
+        assert_eq!(queue.next_to_start().unwrap().id, replacement);
     }
 
     #[test]

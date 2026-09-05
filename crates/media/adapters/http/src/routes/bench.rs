@@ -23,6 +23,7 @@ use crate::diagnostics::Diagnostics;
 use crate::routes::{ApiState, OutputPreviewFrame, router};
 
 pub(crate) struct Bench {
+    pub(crate) api: ApiState,
     /// What was written, so a test can prove an edit reached storage without a filesystem.
     pub(crate) stored: Arc<Mutex<Vec<MediaConfiguration>>>,
     /// Set to make the next write fail.
@@ -85,7 +86,8 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         upload_body_limit: 8 * 1024 * 1024 * 1024 + 1024 * 1024,
     };
     Bench {
-        router: router(api),
+        router: router(api.clone()),
+        api,
         output,
         state,
         configuration,

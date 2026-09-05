@@ -1,4 +1,5 @@
 import { Button } from "@tosklight/ui/controls";
+import { newIdentity } from "../shared/api/identity";
 import {
 	createContext,
 	type ReactNode,
@@ -15,6 +16,11 @@ interface ToastApi {
 
 const ToastContext = createContext<ToastApi>({ error: () => undefined });
 
+/** The error callback remains usable after a page unmounts while an accepted save finishes. */
+export function useToast(): ToastApi {
+	return useContext(ToastContext);
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
 	const [toasts, setToasts] = useState<Array<{ id: string; message: string }>>(
 		[],
@@ -22,7 +28,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 	const error = useCallback((message: string) => {
 		setToasts((current) => {
 			if (current.some((toast) => toast.message === message)) return current;
-			return [...current, { id: crypto.randomUUID(), message }];
+			return [...current, { id: newIdentity(), message }];
 		});
 	}, []);
 	return (

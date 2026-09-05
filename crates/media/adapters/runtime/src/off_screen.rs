@@ -14,7 +14,7 @@ use media_application::MediaConfiguration;
 use media_application::configuration::{OutputConfiguration, OutputTarget};
 use media_domain::geometry::Size;
 use media_domain::{MediaState, Timestamp};
-use media_playback::ClipLoader;
+use media_playback::AsyncClipLoader;
 use media_render::{Gpu, LayerDraw, OutputRenderer};
 
 use crate::layer_pipeline::{FrameContext, LayerPipeline};
@@ -76,7 +76,7 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
     tracing::info!(outputs = hosted.len(), "off-screen outputs presenting");
 
     let started = std::time::Instant::now();
-    let mut loader = ClipLoader::new(configuration.playback.cache_budget_bytes);
+    let mut loader = AsyncClipLoader::new(configuration.playback.cache_budget_bytes);
     let mut pixels = crate::pixel_output::PixelOutputs::default();
     let cid = crate::pixel_output::instance_cid(configuration.instance_id.as_str());
     while shutdown.reason().is_none() {
@@ -246,9 +246,11 @@ fn publish(
     if reports.is_empty() {
         return;
     }
-    if let Some(next) = crate::presentation::with_reports(&shared.state.load(), &reports, now) {
-        shared.state.store(Arc::new(next));
-    }
+    shared.state.rcu(|current| {
+        crate::presentation::with_reports(current, &reports, now)
+            .map(Arc::new)
+            .unwrap_or_else(|| Arc::clone(current))
+    });
 }
 
 fn unix_millis() -> i64 {

@@ -46,7 +46,9 @@ pub enum FrameError {
 pub const fn block_bytes(width: u32, height: u32) -> usize {
     let blocks_across = width.div_ceil(4) as usize;
     let blocks_down = height.div_ceil(4) as usize;
-    blocks_across * blocks_down * BC3_BLOCK_BYTES
+    blocks_across
+        .saturating_mul(blocks_down)
+        .saturating_mul(BC3_BLOCK_BYTES)
 }
 
 /// The compression settings import uses.
@@ -97,6 +99,20 @@ pub fn encode(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, FrameErro
 pub fn decode_blocks(width: u32, height: u32, payload: &[u8]) -> Result<Vec<u8>, FrameError> {
     if width == 0 || height == 0 {
         return Err(FrameError::Empty);
+    }
+    let expected = block_bytes(width, height);
+    // Snappy's header carries its allocation size. Compare it before asking the decoder to
+    // allocate: a corrupt tiny payload must not request gigabytes for a small video frame.
+    let found = snap::raw::decompress_len(payload).map_err(|error| FrameError::Corrupt {
+        detail: error.to_string(),
+    })?;
+    if found != expected {
+        return Err(FrameError::WrongBlockLength {
+            width,
+            height,
+            expected,
+            found,
+        });
     }
     let blocks = snap::raw::Decoder::new()
         .decompress_vec(payload)
@@ -159,6 +175,21 @@ mod tests {
     }
 
     #[test]
+    fn a_corrupt_snappy_length_is_rejected_before_decompression() {
+        // A Snappy preamble advertising 2 GiB, with no encoded body.
+        let payload = [0x80, 0x80, 0x80, 0x80, 0x08];
+        assert!(matches!(
+            decode_blocks(4, 4, &payload),
+            Err(FrameError::WrongBlockLength {
+                expected: 16,
+                found: 2_147_483_648,
+                ..
+            })
+        ));
+        assert!(decode_blocks(u32::MAX, u32::MAX, &[0]).is_err());
+    }
+
+    #[test]
     fn a_frame_round_trips_through_the_codec() {
         let (width, height) = (64, 64);
         let payload = encode(width, height, &solid(width, height, [200, 40, 90, 255])).unwrap();
@@ -168,7 +199,7 @@ mod tests {
         let rgba = expand_to_rgba(width, height, &blocks).unwrap();
         assert_eq!(rgba.len(), width as usize * height as usize * 4);
         // BC3 is lossy in colour, so a flat fill comes back close rather than exact.
-        for pixel in rgba.chunks_exact(4) {
+        for pixel in rgba.as_chunks::<4>().0 {
             assert!(
                 (pixel[0] as i32 - 200).abs() <= 8,
                 "red drifted to {}",
@@ -196,7 +227,7 @@ mod tests {
                 encode(width, height, &solid(width, height, [255, 255, 255, alpha])).unwrap();
             let blocks = decode_blocks(width, height, &payload).unwrap();
             let rgba = expand_to_rgba(width, height, &blocks).unwrap();
-            for pixel in rgba.chunks_exact(4) {
+            for pixel in rgba.as_chunks::<4>().0 {
                 assert!(
                     (pixel[3] as i32 - alpha as i32).abs() <= 8,
                     "alpha {alpha} came back as {}",

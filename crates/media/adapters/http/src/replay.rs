@@ -8,8 +8,8 @@
 //! Live control has no such machinery on purpose. A caller that sends GO twice meant GO twice; it
 //! is *edits* that must be idempotent.
 
-use std::collections::VecDeque;
-use std::sync::Mutex;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex, Weak};
 
 /// How many recent edits are remembered.
 ///
@@ -28,11 +28,38 @@ struct Executed {
 #[derive(Debug, Default)]
 pub struct Replays {
     executed: Mutex<VecDeque<Executed>>,
+    requests: Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>,
+    transaction: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Replays {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A request lease spans execution and remembering the result. Waiting retries inspect the
+    /// replay window only after the first handler finishes; cancellation releases the lease.
+    pub async fn request(&self, request_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
+        let lock = {
+            let mut requests = self
+                .requests
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            requests.retain(|_, lock| lock.strong_count() > 0);
+            if let Some(lock) = requests.get(request_id).and_then(Weak::upgrade) {
+                lock
+            } else {
+                let lock = Arc::new(tokio::sync::Mutex::new(()));
+                requests.insert(request_id.to_owned(), Arc::downgrade(&lock));
+                lock
+            }
+        };
+        lock.lock_owned().await
+    }
+
+    /// Serialize configuration read/modify/persist/publication, including different request IDs.
+    pub async fn transaction(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.transaction.clone().lock_owned().await
     }
 
     /// What this request id produced before, if it is still in the window.

@@ -9,6 +9,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiFailure } from "./client";
+import { newIdentity } from "./identity";
+import { useEditingFailure } from "./editingFailure";
 
 export interface Editing {
 	/** Which object is open for editing, by whatever key the feature uses. */
@@ -21,19 +23,20 @@ export interface Editing {
 	/** Runs one edit, reloading on success and reporting the refusal otherwise. */
 	save: (edit: () => Promise<unknown>) => Promise<void>;
 	/** Coalesces rapid field changes, preserves their order, and keeps the editor open. */
-	saveLive: (edit: () => Promise<unknown>) => void;
+	saveLive: (edit: () => Promise<unknown>, objectKey?: string) => void;
 }
 
 /** A client-generated identity for one edit. Resending it returns the first outcome. */
 export function requestId(): string {
-	return crypto.randomUUID();
+	return newIdentity();
 }
 
 export function useEditing(reload: () => void): Editing {
 	const [editing, setEditing] = useState<string | undefined>(undefined);
 	const [busy, setBusy] = useState(false);
 	const [failure, setFailure] = useState<ApiFailure | undefined>(undefined);
-	const pendingLive = useRef<(() => Promise<unknown>) | undefined>(undefined);
+	const reportFailure = useEditingFailure(setFailure);
+	const pendingLive = useRef(new Map<string, () => Promise<unknown>>());
 	const liveTimer = useRef<number | undefined>(undefined);
 	const drainingLive = useRef(false);
 
@@ -43,19 +46,15 @@ export function useEditing(reload: () => void): Editing {
 		setBusy(true);
 		let saved = false;
 		try {
-			while (pendingLive.current) {
-				const edit = pendingLive.current;
-				pendingLive.current = undefined;
+			while (pendingLive.current.size > 0) {
+				const [key, edit] = pendingLive.current.entries().next().value!;
+				pendingLive.current.delete(key);
 				try {
 					await edit();
 					saved = true;
 					setFailure(undefined);
 				} catch (error) {
-					setFailure(
-						error instanceof ApiFailure
-							? error
-							: new ApiFailure("unexpected-error", String(error), 0),
-					);
+					reportFailure(error);
 				}
 			}
 		} finally {
@@ -63,11 +62,11 @@ export function useEditing(reload: () => void): Editing {
 			setBusy(false);
 			if (saved) reload();
 		}
-	}, [reload]);
+	}, [reload, reportFailure]);
 
 	const saveLive = useCallback(
-		(edit: () => Promise<unknown>) => {
-			pendingLive.current = edit;
+		(edit: () => Promise<unknown>, objectKey = "default") => {
+			pendingLive.current.set(objectKey, edit);
 			setBusy(true);
 			if (liveTimer.current !== undefined)
 				window.clearTimeout(liveTimer.current);
@@ -79,10 +78,14 @@ export function useEditing(reload: () => void): Editing {
 		[drainLive],
 	);
 
+	const flushLive = useRef(drainLive);
+	flushLive.current = drainLive;
 	useEffect(
 		() => () => {
 			if (liveTimer.current !== undefined)
 				window.clearTimeout(liveTimer.current);
+			// Navigation must not discard the final displayed edit during its debounce.
+			if (pendingLive.current.size > 0) void flushLive.current();
 		},
 		[],
 	);
@@ -96,16 +99,12 @@ export function useEditing(reload: () => void): Editing {
 				setEditing(undefined);
 				reload();
 			} catch (error) {
-				setFailure(
-					error instanceof ApiFailure
-						? error
-						: new ApiFailure("unexpected-error", String(error), 0),
-				);
+				reportFailure(error);
 			} finally {
 				setBusy(false);
 			}
 		},
-		[reload],
+		[reload, reportFailure],
 	);
 
 	return {

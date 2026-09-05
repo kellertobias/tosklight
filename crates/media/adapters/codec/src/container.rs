@@ -229,25 +229,45 @@ impl<R: Read + Seek> ClipReader<R> {
             intrinsic_bpm: (bpm > 0.0).then_some(bpm),
         };
 
-        let mut raw = vec![0u8; frame_count as usize * INDEX_ENTRY_BYTES];
+        // Validate the claimed index against the actual source before allocating from an
+        // untrusted frame count. A tiny damaged header must never request gigabytes of memory.
+        let file_bytes = source.seek(SeekFrom::End(0))?;
+        let index_bytes = u64::from(frame_count) * INDEX_ENTRY_BYTES as u64;
+        if index_offset < HEADER_BYTES
+            || index_offset
+                .checked_add(index_bytes)
+                .is_none_or(|end| end > file_bytes)
+        {
+            return Err(ContainerError::Unfinished);
+        }
         source.seek(SeekFrom::Start(index_offset))?;
-        source
-            .read_exact(&mut raw)
-            .map_err(|_| ContainerError::Unfinished)?;
-
-        let (raw_entries, remainder) = raw.as_chunks::<INDEX_ENTRY_BYTES>();
-        debug_assert!(remainder.is_empty());
-        let index = raw_entries
-            .iter()
-            .map(|entry| FrameEntry {
+        let mut index = Vec::new();
+        index
+            .try_reserve_exact(frame_count as usize)
+            .map_err(|error| {
+                ContainerError::Io(std::io::Error::other(format!(
+                    "cannot allocate the frame index: {error}"
+                )))
+            })?;
+        for _ in 0..frame_count {
+            let mut entry = [0u8; INDEX_ENTRY_BYTES];
+            source
+                .read_exact(&mut entry)
+                .map_err(|_| ContainerError::Unfinished)?;
+            index.push(FrameEntry {
                 offset: u64::from_le_bytes(entry[0..8].try_into().unwrap()),
                 length: u32::from_le_bytes(entry[8..12].try_into().unwrap()),
                 presentation_micros: u64::from_le_bytes(entry[12..20].try_into().unwrap()),
-            })
-            .collect::<Vec<_>>();
+            });
+        }
 
         for (position, entry) in index.iter().enumerate() {
-            if entry.offset + u64::from(entry.length) > index_offset {
+            if entry.offset < HEADER_BYTES
+                || entry
+                    .offset
+                    .checked_add(u64::from(entry.length))
+                    .is_none_or(|end| end > index_offset)
+            {
                 return Err(ContainerError::IndexPastEnd {
                     frame: position as u32,
                 });
@@ -477,6 +497,37 @@ mod tests {
 
         let error = ClipReader::open(Cursor::new(bytes)).unwrap_err();
         assert!(matches!(error, ContainerError::NotAClip), "{error}");
+    }
+
+    #[test]
+    fn a_tiny_file_cannot_claim_a_huge_or_misplaced_index() {
+        for (count, offset) in [(u32::MAX, HEADER_BYTES), (1, u64::MAX), (1, 1)] {
+            let mut bytes = write_clip(header(), 1);
+            bytes[field::FRAME_COUNT..field::FRAME_COUNT + 4].copy_from_slice(&count.to_le_bytes());
+            bytes[field::INDEX_OFFSET..field::INDEX_OFFSET + 8]
+                .copy_from_slice(&offset.to_le_bytes());
+            assert!(matches!(
+                ClipReader::open(Cursor::new(bytes)),
+                Err(ContainerError::Unfinished)
+            ));
+        }
+    }
+
+    #[test]
+    fn payload_ranges_cannot_overflow_or_point_into_the_header() {
+        for offset in [u64::MAX - 1, HEADER_BYTES - 1] {
+            let mut bytes = write_clip(header(), 1);
+            let index_offset = u64::from_le_bytes(
+                bytes[field::INDEX_OFFSET..field::INDEX_OFFSET + 8]
+                    .try_into()
+                    .unwrap(),
+            ) as usize;
+            bytes[index_offset..index_offset + 8].copy_from_slice(&offset.to_le_bytes());
+            assert!(matches!(
+                ClipReader::open(Cursor::new(bytes)),
+                Err(ContainerError::IndexPastEnd { frame: 0 })
+            ));
+        }
     }
 
     #[test]

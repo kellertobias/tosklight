@@ -200,6 +200,7 @@ export function TextSourcesPage({
 														...payloadOf(next),
 													},
 												),
+												`${selected.address.folder}/${selected.address.file}`,
 											);
 										}}
 										onDelete={() =>

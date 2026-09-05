@@ -6,10 +6,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use media_codec::ClipCache;
 use media_domain::AssetId;
 use media_domain::SourceFailure;
 use media_domain::geometry::Size;
+#[cfg(test)]
+use media_playback::ClipLoader;
 use media_render::{Gpu, SourceTexture};
 
 /// A layer's uploaded frame, kept so an unchanged frame is not uploaded twice.
@@ -27,6 +28,7 @@ struct Uploaded {
 pub struct LayerSources {
     gpu: Gpu,
     uploaded: HashMap<usize, Uploaded>,
+    consumers: HashMap<usize, (AssetId, u64)>,
     warned_decode: HashSet<(AssetId, u32, u32)>,
 }
 
@@ -35,6 +37,7 @@ impl LayerSources {
         Self {
             gpu: gpu.clone(),
             uploaded: HashMap::new(),
+            consumers: HashMap::new(),
             warned_decode: HashSet::new(),
         }
     }
@@ -50,17 +53,52 @@ impl LayerSources {
         asset: AssetId,
         frame: usize,
         source_size: Size,
-        cache: &mut ClipCache,
+        loader: &mut impl media_playback::MediaLoader,
     ) -> Result<bool, SourceFailure> {
+        if !self
+            .gpu
+            .supports_resolution(source_size.width, source_size.height)
+        {
+            return Err(SourceFailure::GpuUploadFailed);
+        }
+        static NEXT_CONSUMER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        if self
+            .consumers
+            .get(&layer)
+            .is_some_and(|(selected, _)| *selected != asset)
+        {
+            self.release(layer, loader);
+        }
+        let consumer = self
+            .consumers
+            .entry(layer)
+            .or_insert_with(|| {
+                (
+                    asset,
+                    NEXT_CONSUMER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                )
+            })
+            .1;
         if self.uploaded.get(&layer).is_some_and(|held| {
             held.asset == asset && held.frame == frame && held.size == source_size
         }) {
             return Ok(true);
         }
 
-        let Some(payload) = cache.frame(asset, frame) else {
-            return Ok(self.uploaded.contains_key(&layer));
+        let Some((frame, payload)) = loader.request_frame(asset, frame, consumer) else {
+            if let Some(failure) = loader.failure(asset) {
+                return Err(failure);
+            }
+            return Ok(self
+                .uploaded
+                .get(&layer)
+                .is_some_and(|held| held.asset == asset));
         };
+        if self.uploaded.get(&layer).is_some_and(|held| {
+            held.asset == asset && held.frame == frame && held.size == source_size
+        }) {
+            return Ok(true);
+        }
         let blocks = match media_codec::decode_blocks(
             source_size.width,
             source_size.height,
@@ -124,7 +162,10 @@ impl LayerSources {
     }
 
     /// Drops a layer's texture, for a layer that has stopped drawing.
-    pub fn release(&mut self, layer: usize) {
+    pub fn release(&mut self, layer: usize, loader: &mut impl media_playback::MediaLoader) {
+        if let Some((_, consumer)) = self.consumers.remove(&layer) {
+            loader.release_consumer(consumer);
+        }
         self.uploaded.remove(&layer);
     }
 
@@ -139,7 +180,7 @@ impl LayerSources {
 mod tests {
     use std::sync::Arc;
 
-    use media_codec::{ClipCache, ResidentClip};
+    use media_codec::ResidentClip;
     use media_domain::{
         LayerState, MasterState, OutputId, PresentationMode, ScalingMode, Timestamp,
     };
@@ -157,15 +198,17 @@ mod tests {
     fn mixed_source_sizes_decode_independently_of_the_output() {
         let gpu = Gpu::off_screen().expect("an adapter is available");
         let mut sources = LayerSources::new(&gpu, Size::new(1280, 720));
-        let mut cache = ClipCache::new(16 * 1024 * 1024);
+        let mut cache = ClipLoader::new(16 * 1024 * 1024);
         let portrait = Size::new(13, 29);
         let landscape = Size::new(64, 36);
         let portrait_asset = AssetId::new();
         let landscape_asset = AssetId::new();
         cache
+            .cache_mut()
             .admit(portrait_asset, resident(portrait, [255, 0, 0, 255]))
             .unwrap();
         cache
+            .cache_mut()
             .admit(landscape_asset, resident(landscape, [0, 255, 0, 255]))
             .unwrap();
 
@@ -188,8 +231,9 @@ mod tests {
         let source_size = Size::new(13, 29);
         let asset = AssetId::new();
         let mut sources = LayerSources::new(&gpu, output_size);
-        let mut cache = ClipCache::new(1024 * 1024);
+        let mut cache = ClipLoader::new(1024 * 1024);
         cache
+            .cache_mut()
             .admit(asset, resident(source_size, [255, 0, 0, 255]))
             .unwrap();
         assert_eq!(
@@ -229,14 +273,54 @@ mod tests {
     }
 
     #[test]
+    fn a_streamed_clip_uploads_when_it_exceeds_the_resident_budget() {
+        use media_codec::container::{ClipHeader, ClipWriter};
+        let gpu = Gpu::off_screen().expect("an adapter is available");
+        let size = Size::new(16, 16);
+        let asset = AssetId::new();
+        let path = std::env::temp_dir().join(format!("media-streamed-upload-{asset}.toskclip"));
+        let file = std::fs::File::create(&path).unwrap();
+        let mut writer = ClipWriter::new(
+            file,
+            ClipHeader {
+                width: size.width,
+                height: size.height,
+                frame_count: 0,
+                frame_rate: (30, 1),
+                intrinsic_bpm: None,
+            },
+        )
+        .unwrap();
+        for (index, color) in [[255, 0, 0, 255], [0, 255, 0, 255]].iter().enumerate() {
+            let payload = media_codec::encode(size.width, size.height, &color.repeat(256)).unwrap();
+            writer.write_frame(&payload, index as u64 * 33_333).unwrap();
+        }
+        writer.finish().unwrap();
+        let mut loader = ClipLoader::new(1);
+        loader.load(asset, &path, &mut |_| {}).unwrap();
+        assert_eq!(loader.cache().used(), 0);
+        let mut sources = LayerSources::new(&gpu, size);
+        for frame in [0, 1, 0] {
+            assert_eq!(
+                sources.prepare(0, asset, frame, size, &mut loader),
+                Ok(true)
+            );
+            assert_eq!(sources.uploaded[&0].frame, frame);
+        }
+        loader.release(asset);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn one_bad_asset_is_logged_once_instead_of_once_per_render_frame() {
         let gpu = Gpu::off_screen().expect("an adapter is available");
         let mut sources = LayerSources::new(&gpu, Size::new(1280, 720));
-        let mut cache = ClipCache::new(1024 * 1024);
+        let mut cache = ClipLoader::new(1024 * 1024);
         let asset = AssetId::new();
         let actual = Size::new(16, 16);
         let wrong = Size::new(17, 16);
         cache
+            .cache_mut()
             .admit(asset, resident(actual, [255, 255, 255, 255]))
             .unwrap();
 

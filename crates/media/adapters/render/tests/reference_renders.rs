@@ -307,8 +307,10 @@ fn feedback_state(direction: FeedbackMotion, enabled: bool) -> LayerState {
 
 fn changed_pixels(left: &Image, right: &Image) -> usize {
     left.pixels
-        .chunks_exact(4)
-        .zip(right.pixels.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(right.pixels.as_chunks::<4>().0.iter())
         .filter(|(left, right)| left != right)
         .count()
 }
@@ -457,12 +459,16 @@ fn rasterize_has_distinct_monochrome_and_cmyk_dots_live_with_exact_bypass() {
     assert!(
         black_and_white
             .pixels
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|pixel| pixel[0] == pixel[1] && pixel[1] == pixel[2])
     );
     assert!(
         cmyk.pixels
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|pixel| pixel[0] != pixel[1] || pixel[1] != pixel[2])
             .count()
             > 500

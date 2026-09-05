@@ -87,7 +87,9 @@ fn write_png(path: &Path, rgba: &[u8]) -> Result<(), Box<dyn std::error::Error>>
 
 fn write_jpeg(path: &Path, rgba: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let rgb = rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .flat_map(|pixel| pixel[..3].iter().copied())
         .collect::<Vec<_>>();
     let mut encoded = Vec::new();

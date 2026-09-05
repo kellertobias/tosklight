@@ -15,7 +15,7 @@ use media_domain::{MasterState, MediaState, Timestamp};
 
 use crate::dmx::SharedState;
 use crate::layer_pipeline::LayerPipeline;
-use media_playback::{ClipLoader, PlaybackSession};
+use media_playback::{AsyncClipLoader, ClipLoader, MediaLoader, PlaybackSession};
 use media_render::{LayerDraw, SourceTexture, SurfaceLost, WindowedOutput, select_monitor};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -175,6 +175,7 @@ struct HostedOutput {
 
 /// A clip loaded for the development `--play` affordance.
 struct DirectClip {
+    path: std::path::PathBuf,
     asset: media_domain::AssetId,
     size: Size,
     session: PlaybackSession,
@@ -240,7 +241,7 @@ struct RenderWorkerState {
     state: SharedState,
     started: std::time::Instant,
     test_pattern_layer: media_domain::LayerState,
-    loader: ClipLoader,
+    loader: AsyncClipLoader,
     direct: Option<DirectClip>,
     administration_endpoint: String,
 }
@@ -287,6 +288,7 @@ impl PresentationHost {
             "playing"
         );
         self.direct = Some(DirectClip {
+            path,
             asset,
             size: self.clip_size,
             session: PlaybackSession::new(
@@ -411,6 +413,13 @@ impl PresentationHost {
         let loaded = self.configuration.load();
         let cache_budget = loaded.playback.cache_budget_bytes;
         let instance = crate::pixel_output::instance_cid(loaded.instance_id.as_str());
+        let mut loader = AsyncClipLoader::new(cache_budget);
+        if let Some(direct) = &self.direct {
+            loader.begin_selection(direct.asset);
+        }
+        // Diagnostic startup may have read a clip synchronously before presentation starts.
+        // From here onward all source I/O belongs to the disk workers.
+        self.loader = ClipLoader::new(0);
         let renderer = RenderWorkerState {
             configuration: self.configuration.clone(),
             catalog: self.catalog.clone(),
@@ -426,7 +435,7 @@ impl PresentationHost {
             state: self.state.clone(),
             started: self.started,
             test_pattern_layer: self.test_pattern_layer.clone(),
-            loader: std::mem::replace(&mut self.loader, ClipLoader::new(cache_budget)),
+            loader,
             direct: self.direct.take(),
             administration_endpoint: self.administration_endpoint.clone(),
         };
@@ -554,6 +563,12 @@ impl RenderWorkerState {
             // A clip named at launch plays on layer one. It is a development affordance and it
             // takes precedence over the real path so a machine with no library still proves it.
             if let Some(direct) = self.direct.as_mut() {
+                if !matches!(
+                    self.loader.request_load(direct.asset, &direct.path),
+                    Ok(Some(_))
+                ) {
+                    continue;
+                }
                 let delivery =
                     direct
                         .session
@@ -561,7 +576,7 @@ impl RenderWorkerState {
                 if let Some(frame) = delivery.frame
                     && hosted
                         .sources
-                        .prepare(0, direct.asset, frame, direct.size, self.loader.cache_mut())
+                        .prepare(0, direct.asset, frame, direct.size, &mut self.loader)
                         .unwrap_or(false)
                     && let Some(texture) = hosted.sources.texture(0)
                 {
@@ -689,9 +704,11 @@ impl RenderWorkerState {
         if reports.is_empty() {
             return;
         }
-        if let Some(next) = with_reports(&self.state.load(), &reports, now) {
-            self.state.store(Arc::new(next));
-        }
+        self.state.rcu(|current| {
+            with_reports(current, &reports, now)
+                .map(Arc::new)
+                .unwrap_or_else(|| Arc::clone(current))
+        });
     }
 
     fn run(mut self, receiver: std::sync::mpsc::Receiver<RenderCommand>, shutdown: Shutdown) {

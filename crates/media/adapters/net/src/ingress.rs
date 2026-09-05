@@ -36,8 +36,7 @@ pub struct UniverseFrame {
 #[derive(Debug, thiserror::Error)]
 pub enum IngressError {
     #[error(
-        "cannot bind {protocol} to {address}: {source}. Another process — often a second Media \
-         Server or a lighting tool — already holds it."
+        "cannot bind {protocol} to {address}: {source}. Check the listen address, port availability, and network permissions."
     )]
     BindConflict {
         protocol: &'static str,

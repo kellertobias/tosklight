@@ -180,31 +180,35 @@ impl ClipLoader {
             height: header.height,
         };
 
-        let resident = reader.read_resident()?;
-        let bytes = resident.bytes();
-        match self.cache.admit(asset, resident) {
-            Ok(()) => {}
-            Err(AdmissionError::LargerThanBudget { needed, budget }) => {
-                tracing::warn!(
-                    %asset,
-                    needed,
-                    budget,
-                    "the clip is larger than the whole cache budget; it will stream from storage"
-                );
-                // Keep the reader open so streaming is a seek and a read rather than a reopen.
-                let handle = std::fs::File::open(path).map_err(|source| LoadError::Unreadable {
-                    path: path.to_path_buf(),
-                    source,
-                })?;
-                self.streaming.insert(
-                    asset,
-                    StreamingClip {
-                        reader: ClipReader::open(handle)?,
-                        recent: std::collections::VecDeque::with_capacity(STREAMING_QUEUE),
-                    },
-                );
+        // Decide before reading the payloads: a multi-gigabyte clip must not be allocated
+        // in full just to discover that it cannot fit in the resident cache.
+        let bytes = reader
+            .index()
+            .iter()
+            .map(|entry| u64::from(entry.length))
+            .sum();
+        let stream = if bytes > self.cache.budget() {
+            true
+        } else {
+            match self.cache.admit(asset, reader.read_resident()?) {
+                Ok(()) => false,
+                // Other playing layers are pinned. Keep them intact and stream this selection.
+                Err(
+                    AdmissionError::LargerThanBudget { .. }
+                    | AdmissionError::PinnedClipsFillTheBudget { .. },
+                ) => true,
             }
-            Err(error) => return Err(error.into()),
+        };
+        if stream {
+            self.streaming.insert(
+                asset,
+                StreamingClip {
+                    reader,
+                    recent: std::collections::VecDeque::with_capacity(STREAMING_QUEUE),
+                },
+            );
+        } else {
+            self.streaming.remove(&asset);
         }
 
         report(LoadProgress::Finished {
@@ -287,6 +291,22 @@ mod tests {
             }
         );
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_second_clip_streams_when_the_resident_budget_is_pinned() {
+        let path = write_temp("pinned-budget-stream.toskclip", &clip_bytes(10));
+        let mut loader = ClipLoader::new(320);
+        let first = AssetId::new();
+        let second = AssetId::new();
+        loader.load(first, &path, &mut |_| {}).unwrap();
+        loader.cache_mut().pin(first);
+        loader.load(second, &path, &mut |_| {}).unwrap();
+        assert!(loader.cache().is_pinned(first));
+        assert_eq!(loader.cache().used(), 320);
+        assert_eq!(loader.frame(second, 7).unwrap().as_ref(), &[7; 32]);
+        loader.release(second);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

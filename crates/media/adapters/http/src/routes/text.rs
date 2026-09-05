@@ -33,9 +33,10 @@ pub(super) async fn create_text(
     State(state): State<ApiState>,
     TolerantJson(body): TolerantJson<CreateText>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
 
     let slot = body
         .slot()
@@ -56,9 +57,10 @@ pub(super) async fn update_text(
     Path((folder, file)): Path<(u8, u8)>,
     TolerantJson(body): TolerantJson<UpdateText>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
 
     let address = MediaAddress::new(folder, file);
     let mut configuration = MediaConfiguration::clone(&state.configuration.load());
@@ -84,9 +86,10 @@ pub(super) async fn delete_text(
     Path((folder, file)): Path<(u8, u8)>,
     TolerantJson(body): TolerantJson<DeleteText>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
 
     let address = MediaAddress::new(folder, file);
     let mut configuration = MediaConfiguration::clone(&state.configuration.load());

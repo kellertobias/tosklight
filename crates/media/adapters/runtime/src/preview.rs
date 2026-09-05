@@ -463,7 +463,9 @@ mod tests {
         let info = reader.next_frame(&mut pixels).unwrap();
         assert!(
             pixels[..info.buffer_size()]
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .all(|pixel| pixel[3] == 0),
             "empty layer pixels stay transparent"
         );

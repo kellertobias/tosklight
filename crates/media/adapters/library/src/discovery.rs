@@ -5,8 +5,8 @@
 //! reason in the log rather than failing the scan — an operator with one bad file still gets a
 //! working library.
 //!
-//! Identities are minted per scan. They become durable when the catalog is persisted, which is
-//! what lets a rename keep its identity while a freshly discovered library gets fresh ones.
+//! Identities are provisional for a new scan. The runtime reconciles unchanged items with the
+//! published catalog before replacing it, so importing a new clip preserves other item identities.
 
 use std::path::{Path, PathBuf};
 

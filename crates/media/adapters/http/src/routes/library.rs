@@ -35,9 +35,10 @@ pub(super) async fn start_import(
     State(state): State<ApiState>,
     TolerantJson(body): TolerantJson<StartImport>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
     if !state.diagnostics.imports.available {
         return Err(ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -101,9 +102,10 @@ pub(super) async fn update_item(
     Path(id): Path<String>,
     TolerantJson(body): TolerantJson<UpdateLibraryItem>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
     let id = Uuid::parse_str(&id)
         .map(AssetId::from_uuid)
         .map_err(|_| ApiError::bad_request("invalid-asset-id", "the catalog item id is invalid"))?;
@@ -142,9 +144,10 @@ pub(super) async fn update_folder(
     Path(folder): Path<u16>,
     TolerantJson(body): TolerantJson<UpdateLibraryFolder>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
     let operation = match (body.name, body.icon, body.swap_with) {
         (Some(name), None, None) => {
             let name = name.trim();
@@ -211,9 +214,10 @@ pub(super) async fn upload(
     Query(query): Query<UploadQuery>,
     mut multipart: Multipart,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &query.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin_upload(&state, &query.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
     if !state.diagnostics.imports.available {
         return Err(ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,

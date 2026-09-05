@@ -12,6 +12,7 @@ mod beat_grid_wave;
 mod beat_move;
 mod beat_scale_turn;
 mod beat_scan;
+mod catalog_publication;
 mod citp;
 mod citp_console_presence;
 mod dmx;
@@ -116,7 +117,8 @@ fn run_inner() -> anyhow::Result<()> {
             media_library::discover(&configuration.library.root).unwrap_or_default(),
         ));
 
-    let importer = start_importer(&configuration, &catalog);
+    let catalog_edits = std::sync::Arc::new(std::sync::Mutex::new(()));
+    let importer = start_importer(&configuration, &catalog, &catalog_edits);
     let (audio, analysis) = start_audio(&configuration);
     let dmx_diagnostics = dmx::diagnostics();
     let universe_inputs = dmx::universe_inputs();
@@ -133,6 +135,7 @@ fn run_inner() -> anyhow::Result<()> {
         &importer,
         &configuration.library.root,
         &catalog,
+        &catalog_edits,
         &dmx_diagnostics,
         &console_identity,
         &available_monitors,
@@ -198,12 +201,26 @@ fn run_inner() -> anyhow::Result<()> {
     // The Media Server is an application with a menu bar item; a server with nothing assigned to a
     // monitor is still that application, and an operator has to be able to see and stop it.
     if !desktop_is_available(&arguments) {
-        return runtime.block_on(serve_with(services));
+        let served = runtime.block_on(serve_with(services));
+        shutdown.request(ShutdownReason::Requested);
+        importer.stop();
+        if let Some(thread) = off_screen {
+            let _ = thread.join();
+        }
+        drop(audio);
+        return served;
     }
 
     // The services run on the background runtime; the main thread hosts the outputs. Shutdown
     // reaches both through the same handle, whichever of them starts it.
-    let serving = runtime.spawn(async move { serve_with(services).await });
+    let service_shutdown = shutdown.clone();
+    let serving = runtime.spawn(async move {
+        let result = serve_with(services).await;
+        // Failed administration startup must stop the output/event loop too. Otherwise the
+        // process looks alive but cannot be administered, and its error is never observed.
+        service_shutdown.request(ShutdownReason::Requested);
+        result
+    });
 
     let presented = presentation::run_event_loop(
         &configuration,
@@ -222,15 +239,16 @@ fn run_inner() -> anyhow::Result<()> {
         administration_endpoint(&configuration),
     );
     shutdown.request(ShutdownReason::Requested);
-    let _ = runtime.block_on(serving);
+    let served = runtime.block_on(serving);
+    importer.stop();
     if let Some(thread) = off_screen {
         let _ = thread.join();
     }
-    importer.stop();
     // Closing the device before the process ends keeps the operating system from logging a
     // stream that vanished.
     drop(audio);
-    presented
+    presented?;
+    served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
 }
 
 fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
@@ -314,15 +332,21 @@ fn unix_millis() -> i64 {
 fn start_importer(
     configuration: &MediaConfiguration,
     catalog: &presentation::SharedCatalog,
+    edits: &catalog_publication::CatalogEdits,
 ) -> media_library::Importer {
     let catalog = catalog.clone();
+    let edits = edits.clone();
     let root = configuration.library.root.clone();
     media_library::Importer::start(
         media_library::LibraryStorage::new(configuration.library.root.clone()),
         IMPORT_CONCURRENCY,
-        std::sync::Arc::new(move || {
-            if let Ok(published) = media_library::discover(&root) {
-                catalog.store(std::sync::Arc::new(published));
+        std::sync::Arc::new(move |address| {
+            if let Err(error) =
+                catalog_publication::publish_import(&catalog, &edits, address, || {
+                    media_library::discover(&root).map_err(|error| error.to_string())
+                })
+            {
+                tracing::error!(%error, "an imported clip could not be published in the catalog");
             }
         }),
     )
@@ -495,6 +519,7 @@ fn diagnostics_of(
     importer: &media_library::Importer,
     library_root: &std::path::Path,
     catalog: &presentation::SharedCatalog,
+    catalog_edits: &catalog_publication::CatalogEdits,
     dmx_diagnostics: &dmx::SharedDiagnostics,
     console_identity: &citp::ConsoleIdentity,
     available_monitors: &std::sync::Arc<std::sync::RwLock<Vec<media_http::MonitorDevice>>>,
@@ -543,7 +568,7 @@ fn diagnostics_of(
         logs: std::sync::Arc::new(move |query| log.page(query)),
         log_level: logging.control(),
         imports: imports_of(importer, library_root),
-        library: library_access(importer, library_root, catalog),
+        library: library_access(importer, library_root, catalog, catalog_edits),
         dmx: std::sync::Arc::new(move || {
             dmx::diagnostic_snapshot(
                 &dmx_diagnostics,
@@ -560,13 +585,14 @@ fn library_access(
     importer: &media_library::Importer,
     library_root: &std::path::Path,
     catalog: &presentation::SharedCatalog,
+    catalog_edits: &catalog_publication::CatalogEdits,
 ) -> media_http::LibraryAccess {
     let storage = media_library::LibraryStorage::new(library_root.to_path_buf());
     let editing = storage.clone();
     let reading = storage.clone();
     let uploading_root = library_root.to_path_buf();
     let published = catalog.clone();
-    let edit_lock = std::sync::Arc::new(std::sync::Mutex::new(()));
+    let edit_lock = catalog_edits.clone();
     let upload_importer = importer.clone();
     let folder_storage = storage.clone();
     let folder_reading = storage.clone();
@@ -585,6 +611,9 @@ fn library_access(
                 .lock()
                 .map_err(|_| "the library edit lock is unavailable".to_owned())?;
             let mut next = (*published.load_full()).clone();
+            let affected = catalog_publication::edited_addresses(&next, &operation);
+            let _idle = media_library::uploads::guard_idle_addresses(editing.root(), &affected)
+                .map_err(|error| error.to_string())?;
             match operation {
                 media_http::LibraryEdit::RenameItem { id, name } => {
                     editing.rename_item(&mut next, id, &name)
@@ -748,16 +777,12 @@ impl media_http::UploadStream for RuntimeUpload {
     }
 
     fn finish(mut self: Box<Self>) -> Result<String, String> {
-        let source = self
-            .upload
+        self.upload
             .take()
             .ok_or_else(|| "the upload is already complete".to_owned())?
-            .finish()
-            .map_err(|error| error.to_string())?;
-        Ok(self
-            .importer
-            .submit(source, self.address, &self.name)
-            .to_string())
+            .finish_and_import(&self.importer, self.address, &self.name)
+            .map(|id| id.to_string())
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -981,18 +1006,25 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
         upload_body_limit: media_library::MAX_UPLOAD_BYTES as usize + 1024 * 1024,
     };
 
-    let listener = tokio::net::TcpListener::bind(resolved.http_listen).await.map_err(|error| {
-        anyhow::anyhow!(
-            "cannot bind the administration interface to {}: {error}. Another process already              holds it.",
-            resolved.http_listen
-        )
-    })?;
+    let listener = tokio::net::TcpListener::bind(resolved.http_listen)
+        .await
+        .map_err(|error| {
+            let hint = if error.kind() == std::io::ErrorKind::AddrInUse {
+                " Another process already holds it."
+            } else {
+                " Check the listen address and operating-system network permissions."
+            };
+            anyhow::anyhow!(
+                "cannot bind the administration interface to {}: {error}.{hint}",
+                resolved.http_listen
+            )
+        })?;
     tracing::info!(address = %resolved.http_listen, "administration interface listening");
 
     let serving = shutdown.clone();
     axum::serve(listener, media_http::router(api))
         .with_graceful_shutdown(async move {
-            let _ = serving.watcher().wait().await;
+            let _ = serving.wait_for_signal().await;
         })
         .await?;
 

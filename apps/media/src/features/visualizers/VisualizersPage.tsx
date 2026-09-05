@@ -172,7 +172,7 @@ export function VisualizersPage({
 										onChoose={(typeId, name) => {
 											void editing
 												.create({
-													requestId: crypto.randomUUID(),
+													requestId: requestId(),
 													folder: selectedSlot.folder,
 													file: selectedSlot.file,
 													typeId,
@@ -259,7 +259,7 @@ export function VisualizerDetail({
 					options={kinds}
 					onChange={(value) =>
 						onChange({
-							requestId: crypto.randomUUID(),
+							requestId: requestId(),
 							typeId: Number(value),
 						})
 					}
@@ -341,7 +341,7 @@ function VisualizerName({
 			onChange={(event) => {
 				setName(event.target.value);
 				onChange({
-					requestId: crypto.randomUUID(),
+					requestId: requestId(),
 					name: event.target.value,
 				});
 			}}

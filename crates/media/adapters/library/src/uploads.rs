@@ -5,8 +5,10 @@
 //! file and become a pending import only after the request finishes, so discovery never offers a
 //! half-uploaded clip.
 
+use std::collections::HashSet;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use media_domain::MediaAddress;
 
@@ -27,7 +29,7 @@ pub enum UploadError {
     FileOutOfRange { file: u8 },
     #[error("{filename} is not an importable media file")]
     Unsupported { filename: String },
-    #[error("media address {address} already has a clip or source")]
+    #[error("media address {address} already has a clip, source, or active upload/import")]
     AddressTaken { address: MediaAddress },
     #[error("the upload exceeds the {limit_bytes} byte limit")]
     TooLarge { limit_bytes: u64 },
@@ -47,7 +49,70 @@ pub struct Upload {
     destination: PathBuf,
     written: u64,
     committed: bool,
-    replace: bool,
+    _reservation: Reservation,
+}
+
+// Reserve the numeric address, not a display name: two browser clients may use different
+// filenames for the same slot. In-memory leases are released on cancellation and process exit.
+pub(crate) struct Reservation(PathBuf);
+static UPLOADING: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
+
+/// Excludes new upload/import reservations while a library edit checks and changes its addresses.
+/// Keep this guard alive for the complete filesystem and catalog mutation.
+pub struct IdleAddressesGuard {
+    _active: std::sync::MutexGuard<'static, HashSet<PathBuf>>,
+}
+
+pub fn guard_idle_addresses(
+    root: &Path,
+    addresses: &[MediaAddress],
+) -> Result<IdleAddressesGuard, UploadError> {
+    let active = UPLOADING
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for address in addresses {
+        // A folder which does not exist cannot have an active reservation.
+        if let Ok(folder) = root
+            .join(naming::folder_directory(address.folder))
+            .canonicalize()
+            && active.contains(&folder.join(format!("{:03}", address.file)))
+        {
+            return Err(UploadError::AddressTaken { address: *address });
+        }
+    }
+    Ok(IdleAddressesGuard { _active: active })
+}
+
+impl Reservation {
+    pub(crate) fn acquire(folder: &Path, address: MediaAddress) -> Result<Self, UploadError> {
+        let folder = folder
+            .canonicalize()
+            .map_err(|source| UploadError::Filesystem {
+                operation: "resolve upload folder",
+                path: folder.to_owned(),
+                source,
+            })?;
+        let key = folder.join(format!("{:03}", address.file));
+        let mut active = UPLOADING
+            .get_or_init(Mutex::default)
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !active.insert(key.clone()) {
+            return Err(UploadError::AddressTaken { address });
+        }
+        Ok(Self(key))
+    }
+}
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        UPLOADING
+            .get_or_init(Mutex::default)
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&self.0);
+    }
 }
 
 impl Upload {
@@ -92,14 +157,16 @@ impl Upload {
                 filename: original_filename.to_owned(),
             })?;
         let folder = root.join(naming::folder_directory(address.folder));
-        if !replace && address_is_taken(&folder, address.file) {
-            return Err(UploadError::AddressTaken { address });
-        }
         std::fs::create_dir_all(&folder).map_err(|source| UploadError::Filesystem {
             operation: "create",
             path: folder.clone(),
             source,
         })?;
+
+        let reservation = Reservation::acquire(&folder, address)?;
+        if !replace && address_is_taken(&folder, address.file) {
+            return Err(UploadError::AddressTaken { address });
+        }
 
         let safe = naming::safe_name(name);
         let safe = safe.trim_matches(['-', ' ', '.']);
@@ -109,19 +176,23 @@ impl Upload {
             format!("{:03}-{safe}", address.file)
         };
         let destination = folder.join(format!("{stem}.{extension}"));
-        let staging = folder.join(format!(".{stem}.{extension}.uploading"));
-        let file = std::fs::File::create(&staging).map_err(|source| UploadError::Filesystem {
-            operation: "create",
-            path: staging.clone(),
-            source,
-        })?;
+        let staging = folder.join(format!(".{stem}.{}.uploading", uuid::Uuid::new_v4()));
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staging)
+            .map_err(|source| UploadError::Filesystem {
+                operation: "create",
+                path: staging.clone(),
+                source,
+            })?;
         Ok(Self {
             file: Some(file),
             staging,
             destination,
             written: 0,
             committed: false,
-            replace,
+            _reservation: reservation,
         })
     }
 
@@ -148,6 +219,24 @@ impl Upload {
 
     /// Publishes the complete source and returns where the importer can read it.
     pub fn finish(mut self) -> Result<PathBuf, UploadError> {
+        self.publish()?;
+        Ok(self.destination.clone())
+    }
+
+    /// Publishes and queues conversion while keeping this address reserved until the job stops.
+    /// There is no gap in which a replacement can overwrite a source a queued job will read.
+    pub fn finish_and_import(
+        mut self,
+        importer: &crate::Importer,
+        address: MediaAddress,
+        name: &str,
+    ) -> Result<crate::JobId, UploadError> {
+        self.publish()?;
+        let source = self.destination.clone();
+        Ok(importer.submit_upload(source, address, name, self))
+    }
+
+    fn publish(&mut self) -> Result<(), UploadError> {
         let mut file = self.file.take().expect("an unfinished upload has a file");
         file.flush().map_err(|source| UploadError::Filesystem {
             operation: "flush",
@@ -155,13 +244,8 @@ impl Upload {
             source,
         })?;
         drop(file);
-        if self.replace && self.destination.exists() {
-            std::fs::remove_file(&self.destination).map_err(|source| UploadError::Filesystem {
-                operation: "replace source",
-                path: self.destination.clone(),
-                source,
-            })?;
-        }
+        // std::fs::rename replaces files on both Unix and Windows. Do not unlink first:
+        // a failed publication must leave the previous source intact.
         std::fs::rename(&self.staging, &self.destination).map_err(|source| {
             UploadError::Filesystem {
                 operation: "publish",
@@ -170,13 +254,15 @@ impl Upload {
             }
         })?;
         self.committed = true;
-        Ok(self.destination.clone())
+        Ok(())
     }
 }
 
 impl Drop for Upload {
     fn drop(&mut self) {
         if !self.committed {
+            // Close before unlinking so cancellation cleans up on Windows as well.
+            drop(self.file.take());
             let _ = std::fs::remove_file(&self.staging);
         }
     }
@@ -211,6 +297,31 @@ mod tests {
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn concurrent_uploads_reserve_the_address_even_with_different_names() {
+        let root = root("concurrent");
+        let address = MediaAddress::new(1, 1);
+        let mut first = Upload::begin(&root, address, "First", "first.mov").unwrap();
+        first.write(b"intact").unwrap();
+        assert!(matches!(
+            Upload::begin(&root, address, "Second", "second.mp4"),
+            Err(UploadError::AddressTaken { .. })
+        ));
+        assert!(matches!(
+            Upload::begin_replacement(&root, address, "First", "first.mov"),
+            Err(UploadError::AddressTaken { .. })
+        ));
+        assert_eq!(std::fs::read(first.finish().unwrap()).unwrap(), b"intact");
+    }
+
+    #[test]
+    fn cancelling_releases_the_address_for_a_retry() {
+        let root = root("retry");
+        let address = MediaAddress::new(1, 1);
+        drop(Upload::begin(&root, address, "First", "first.mov").unwrap());
+        assert!(Upload::begin(&root, address, "Retry", "retry.mov").is_ok());
     }
 
     #[test]

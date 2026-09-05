@@ -27,9 +27,10 @@ pub(super) async fn update_network(
     State(state): State<ApiState>,
     TolerantJson(body): TolerantJson<UpdateNetwork>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
 
     let mut configuration = MediaConfiguration::clone(&state.configuration.load());
     configuration.network = body

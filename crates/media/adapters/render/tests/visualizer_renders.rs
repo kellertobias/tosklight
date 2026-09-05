@@ -84,7 +84,9 @@ fn read_back(gpu: &Gpu, texture: &SourceTexture) -> Vec<u8> {
 /// depend on a hash function's exact output.
 fn brightness(pixels: &[u8]) -> f64 {
     pixels
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|pixel| {
             let alpha = f64::from(pixel[3]) / 255.0;
             (f64::from(pixel[0]) + f64::from(pixel[1]) + f64::from(pixel[2])) / 765.0 * alpha

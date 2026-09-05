@@ -43,6 +43,22 @@ pub fn generate(
     source: &Path,
     is_video: bool,
 ) -> Result<std::path::PathBuf, ThumbnailError> {
+    generate_cancellable(
+        storage,
+        address,
+        source,
+        is_video,
+        std::sync::Arc::new(|| false),
+    )
+}
+
+pub fn generate_cancellable(
+    storage: &LibraryStorage,
+    address: MediaAddress,
+    source: &Path,
+    is_video: bool,
+    cancelled: media_codec::import::Cancellation,
+) -> Result<std::path::PathBuf, ThumbnailError> {
     let destination = storage.thumbnail_path(address);
     if let Some(parent) = destination.parent() {
         std::fs::create_dir_all(parent).map_err(|source| ThumbnailError::Unwritable {
@@ -65,10 +81,17 @@ pub fn generate(
         .args(["-q:v", "5"])
         .arg(&destination);
 
-    let output = command
-        .output()
-        .map_err(|_| ThumbnailError::FfmpegMissing)?;
+    let output = media_codec::import::command_output_cancellable(&mut command, cancelled).map_err(
+        |error| {
+            let _ = std::fs::remove_file(&destination);
+            ThumbnailError::Failed {
+                path: source.to_path_buf(),
+                detail: error.to_string(),
+            }
+        },
+    )?;
     if !output.status.success() || !destination.exists() {
+        let _ = std::fs::remove_file(&destination);
         return Err(ThumbnailError::Failed {
             path: source.to_path_buf(),
             detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),

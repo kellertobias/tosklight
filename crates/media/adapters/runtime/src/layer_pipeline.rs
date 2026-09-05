@@ -13,7 +13,9 @@ use media_domain::audio::Analysis;
 use media_domain::catalog::CatalogSnapshot;
 use media_domain::geometry::Size;
 use media_domain::{AddressClass, LayerState, MediaAddress, OutputState, PlayMode, Timestamp};
-use media_playback::{ClipLoader, LayerSessions};
+#[cfg(test)]
+use media_playback::ClipLoader;
+use media_playback::LayerSessions;
 use media_render::{Gpu, LayerDraw, SourceTexture, VisualizerFrame, VisualizerRenderer};
 
 use crate::layer_sources::LayerSources;
@@ -121,7 +123,7 @@ impl LayerPipeline {
         &mut self,
         output: &OutputState,
         frame: FrameContext<'_>,
-        loader: &mut ClipLoader,
+        loader: &mut impl media_playback::MediaLoader,
     ) -> Prepared {
         let (catalog, now) = (frame.catalog, frame.now);
         let mut prepared = Prepared::default();
@@ -132,6 +134,10 @@ impl LayerPipeline {
             .enumerate()
             .take(media_render::MAX_LAYERS)
         {
+            if !matches!(layer.address.classify(), AddressClass::Library) {
+                self.media.release(index, loader);
+                self.uploads.release(index, loader);
+            }
             let source = match layer.address.classify() {
                 AddressClass::Blank => {
                     // Releasing here is what unpins a clip nothing is showing any more.
@@ -147,7 +153,11 @@ impl LayerPipeline {
                 }
             };
 
-            let Some(source) = source else { continue };
+            let Some(source) = source else {
+                self.masks.release(index, loader);
+                self.mask_uploads.release(index, loader);
+                continue;
+            };
             prepared.layers.push(PreparedLayer {
                 index,
                 source,
@@ -206,7 +216,7 @@ impl LayerPipeline {
         index: usize,
         layer: &LayerState,
         catalog: &CatalogSnapshot,
-        loader: &mut ClipLoader,
+        loader: &mut impl media_playback::MediaLoader,
         now: Timestamp,
         prepared: &mut Prepared,
     ) -> Option<Slot> {
@@ -220,14 +230,16 @@ impl LayerPipeline {
             resolved.asset,
             frame,
             Size::new(resolved.size.0, resolved.size.1),
-            loader.cache_mut(),
+            loader,
         ) {
             Ok(true) => {
                 prepared.statuses.push((index, resolved.status));
                 Some(Slot::Media(index))
             }
             Ok(false) => {
-                prepared.statuses.push((index, resolved.status));
+                prepared
+                    .statuses
+                    .push((index, media_domain::SourceStatus::Loading));
                 None
             }
             Err(failure) => {
@@ -318,7 +330,7 @@ impl LayerPipeline {
         index: usize,
         layer: &LayerState,
         frame: FrameContext<'_>,
-        loader: &mut ClipLoader,
+        loader: &mut impl media_playback::MediaLoader,
     ) -> Option<Slot> {
         self.load_mask(
             index,
@@ -333,7 +345,7 @@ impl LayerPipeline {
         &mut self,
         output: &OutputState,
         frame: FrameContext<'_>,
-        loader: &mut ClipLoader,
+        loader: &mut impl media_playback::MediaLoader,
     ) -> Option<Slot> {
         self.load_mask(
             MASTER_MASK_SLOT,
@@ -354,10 +366,11 @@ impl LayerPipeline {
         address: MediaAddress,
         active: bool,
         frame: FrameContext<'_>,
-        loader: &mut ClipLoader,
+        loader: &mut impl media_playback::MediaLoader,
     ) -> Option<Slot> {
         let class = address.classify();
         if !active || !matches!(class, AddressClass::Library) {
+            self.mask_uploads.release(slot, loader);
             let selection = LayerState::default();
             self.masks
                 .reconcile(slot, &selection, frame.catalog, loader, frame.now);
@@ -435,7 +448,7 @@ impl LayerPipeline {
                 resolved.asset,
                 frame,
                 Size::new(resolved.size.0, resolved.size.1),
-                loader.cache_mut(),
+                loader,
             )
             .unwrap_or(false)
             .then_some(Slot::Mask(slot))
@@ -514,8 +527,10 @@ mod tests {
 
     fn changed_pixels(first: &[u8], second: &[u8]) -> usize {
         first
-            .chunks_exact(4)
-            .zip(second.chunks_exact(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(second.as_chunks::<4>().0.iter())
             .filter(|(left, right)| left != right)
             .count()
     }
@@ -589,7 +604,9 @@ mod tests {
         let baseline = render(&output.layers[0], None);
         assert!(
             baseline
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .any(|pixel| pixel[..3] != [0, 0, 0]),
             "{label} baseline is empty"
         );

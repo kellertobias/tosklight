@@ -147,6 +147,19 @@ impl ClipCache {
         Ok(())
     }
 
+    /// Makes room for an in-flight resident load without evicting any playing clip.
+    pub fn make_room(&mut self, needed: u64) -> bool {
+        if needed > self.budget {
+            return false;
+        }
+        while self.available() < needed {
+            if !self.evict_least_recent() {
+                return false;
+            }
+        }
+        true
+    }
+
     /// A frame from a resident clip, marking the clip as recently used.
     ///
     /// Returns `None` when the clip is not resident; the caller streams from storage instead.

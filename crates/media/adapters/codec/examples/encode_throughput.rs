@@ -5,7 +5,7 @@ fn main() {
     let (width, height) = (1920u32, 1080u32);
     let mut rgba = vec![0u8; width as usize * height as usize * 4];
     // Something with real detail: a flat fill would flatter the compressor.
-    for (index, pixel) in rgba.chunks_exact_mut(4).enumerate() {
+    for (index, pixel) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let x = (index as u32 % width) as u8;
         let y = (index as u32 / width) as u8;
         pixel.copy_from_slice(&[x, y, x ^ y, 255 - (x / 2)]);

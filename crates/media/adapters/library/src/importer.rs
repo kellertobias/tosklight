@@ -29,7 +29,7 @@ use crate::naming;
 use crate::storage::LibraryStorage;
 
 /// Told once after each import that published something, so the catalog can be read again.
-pub type Published = Arc<dyn Fn() + Send + Sync>;
+pub type Published = Arc<dyn Fn(MediaAddress) + Send + Sync>;
 
 /// How many finished jobs stay visible. Enough for an operator to look at what a batch did after
 /// it has finished, without the list growing all evening.
@@ -47,14 +47,23 @@ struct Inner {
     queue: Mutex<ImportQueue>,
     /// The name each job's imported clip keeps. Settled when the job is submitted rather than when
     /// it runs, so two jobs for one address cannot race to different filenames.
-    names: Mutex<HashMap<JobId, String>>,
+    names: Mutex<HashMap<JobId, ImportDetails>>,
     storage: LibraryStorage,
     published: Published,
     stopping: AtomicBool,
+    workers: Mutex<Vec<std::thread::JoinHandle<()>>>,
+    startup_failure: Mutex<Option<String>>,
     /// Woken when work arrives or a worker finishes, so an idle pool costs nothing.
     work: std::sync::Condvar,
     /// Guarded by `work`; separate from the queue lock so a waiting worker holds nothing.
     pending: Mutex<bool>,
+}
+
+struct ImportDetails {
+    name: String,
+    // A finished browser upload owns the address lease until its job has actually stopped.
+    _upload: Option<crate::Upload>,
+    _reservation: Option<crate::uploads::Reservation>,
 }
 
 impl std::fmt::Debug for Importer {
@@ -72,6 +81,19 @@ impl Importer {
     /// Concurrency is bounded because import is CPU-bound compression: running one per clip on a
     /// forty-clip library would leave nothing for the outputs, and a show may be running.
     pub fn start(storage: LibraryStorage, concurrency: usize, published: Published) -> Self {
+        Self::start_with_spawner(storage, concurrency, published, |worker, inner| {
+            std::thread::Builder::new()
+                .name(format!("media-import-{worker}"))
+                .spawn(move || run_worker(&inner))
+        })
+    }
+
+    fn start_with_spawner(
+        storage: LibraryStorage,
+        concurrency: usize,
+        published: Published,
+        mut spawn: impl FnMut(usize, Arc<Inner>) -> std::io::Result<std::thread::JoinHandle<()>>,
+    ) -> Self {
         let concurrency = concurrency.clamp(1, 8);
         let importer = Self {
             inner: Arc::new(Inner {
@@ -80,33 +102,129 @@ impl Importer {
                 storage,
                 published,
                 stopping: AtomicBool::new(false),
+                workers: Mutex::new(Vec::new()),
+                startup_failure: Mutex::new(None),
                 work: std::sync::Condvar::new(),
                 pending: Mutex::new(false),
             }),
         };
 
         for worker in 0..concurrency {
-            let inner = Arc::clone(&importer.inner);
-            let _ = std::thread::Builder::new()
-                .name(format!("media-import-{worker}"))
-                .spawn(move || run_worker(&inner));
+            match spawn(worker, Arc::clone(&importer.inner)) {
+                Ok(handle) => importer
+                    .inner
+                    .workers
+                    .lock()
+                    .expect("import workers")
+                    .push(handle),
+                Err(error) => {
+                    let reason = format!("cannot start media import worker: {error}");
+                    tracing::error!(%reason);
+                    *importer
+                        .inner
+                        .startup_failure
+                        .lock()
+                        .expect("import startup failure") = Some(reason);
+                    importer.stop();
+                    break;
+                }
+            }
         }
         importer
     }
 
     /// Queues one import and returns its identity.
     pub fn submit(&self, source: PathBuf, destination: MediaAddress, name: &str) -> JobId {
+        let reservation = self
+            .inner
+            .storage
+            .ensure_folder(destination.folder)
+            .map_err(|error| error.to_string())
+            .and_then(|()| {
+                crate::uploads::Reservation::acquire(
+                    &self
+                        .inner
+                        .storage
+                        .root()
+                        .join(naming::folder_directory(destination.folder)),
+                    destination,
+                )
+                .map_err(|error| error.to_string())
+            });
+        let reservation = match reservation {
+            Ok(reservation) => reservation,
+            Err(reason) => {
+                let mut queue = self.inner.queue.lock().expect("the import queue");
+                let id = queue.submit(source, destination);
+                queue.finish(id, JobState::Failed { reason });
+                return id;
+            }
+        };
+        self.submit_with_details(
+            source,
+            destination,
+            ImportDetails {
+                name: name.to_owned(),
+                _upload: None,
+                _reservation: Some(reservation),
+            },
+        )
+    }
+
+    pub(crate) fn submit_upload(
+        &self,
+        source: PathBuf,
+        destination: MediaAddress,
+        name: &str,
+        upload: crate::Upload,
+    ) -> JobId {
+        self.submit_with_details(
+            source,
+            destination,
+            ImportDetails {
+                name: name.to_owned(),
+                _upload: Some(upload),
+                _reservation: None,
+            },
+        )
+    }
+
+    fn submit_with_details(
+        &self,
+        source: PathBuf,
+        destination: MediaAddress,
+        details: ImportDetails,
+    ) -> JobId {
         // The destination filename is settled here, not when the job runs, so two jobs for one
         // address cannot race to different names.
         let id = {
             let mut queue = self.inner.queue.lock().expect("the import queue");
-            queue.submit(source, destination)
+            let id = queue.submit(source, destination);
+            let unavailable = self
+                .inner
+                .startup_failure
+                .lock()
+                .expect("import startup failure")
+                .clone()
+                .or_else(|| {
+                    self.inner
+                        .stopping
+                        .load(Ordering::SeqCst)
+                        .then(|| "the media importer has stopped".to_owned())
+                });
+            if let Some(reason) = unavailable {
+                queue.finish(id, JobState::Failed { reason });
+                return id;
+            }
+            // Publish the name before releasing the queue: an already awake worker may claim
+            // this job immediately, without waiting for our wake notification.
+            self.inner
+                .names
+                .lock()
+                .expect("the import names")
+                .insert(id, details);
+            id
         };
-        self.inner
-            .names
-            .lock()
-            .expect("the import names")
-            .insert(id, name.to_owned());
         self.wake();
         id
     }
@@ -123,17 +241,41 @@ impl Importer {
 
     /// Stops a job. One still queued never starts; one already running stops at its next frame.
     pub fn cancel(&self, id: JobId) -> bool {
-        self.inner
-            .queue
-            .lock()
-            .expect("the import queue")
-            .cancel(id)
+        let mut queue = self.inner.queue.lock().expect("the import queue");
+        let was_queued = queue
+            .job(id)
+            .is_some_and(|job| job.state == JobState::Queued);
+        let cancelled = queue.cancel(id);
+        if cancelled && was_queued {
+            self.inner
+                .names
+                .lock()
+                .expect("the import names")
+                .remove(&id);
+            queue.forget_completed(KEEP_FINISHED);
+        }
+        cancelled
     }
 
-    /// Asks the workers to finish what they are doing and stop.
+    /// Cancels queued/active work and joins workers after their decoder and staging cleanup.
+    /// Decoder subprocess stalls are supervised; a kernel filesystem stall can still delay exit.
     pub fn stop(&self) {
         self.inner.stopping.store(true, Ordering::SeqCst);
+        // Queued uploads will never get a worker after shutdown, so release their leases now.
+        for job in self.jobs() {
+            self.cancel(job.id);
+        }
         self.wake();
+        let mut workers = self.inner.workers.lock().expect("import workers");
+        for worker in workers.drain(..) {
+            // A user-supplied publication callback cannot synchronously join its own thread.
+            if worker.thread().id() == std::thread::current().id() {
+                continue;
+            }
+            if worker.join().is_err() {
+                tracing::error!("a media import worker panicked during shutdown");
+            }
+        }
     }
 
     fn wake(&self) {
@@ -167,16 +309,22 @@ fn run_worker(inner: &Arc<Inner>) {
             continue;
         };
 
-        let outcome = run_one(inner, &job);
-        let published = matches!(outcome, JobState::Succeeded { .. });
+        let details = inner
+            .names
+            .lock()
+            .expect("the import names")
+            .remove(&job.id)
+            .expect("a submitted import has its details");
+        let outcome = run_one(inner, &job, &details);
+        // Keep the address reserved until the catalog reflects the published clip as well.
+        if matches!(outcome, JobState::Succeeded { .. }) {
+            (inner.published)(job.destination);
+        }
+        drop(details);
         {
             let mut queue = inner.queue.lock().expect("the import queue");
             queue.finish(job.id, outcome);
             queue.forget_completed(KEEP_FINISHED);
-        }
-        // The catalog is read again only when something actually arrived in it.
-        if published {
-            (inner.published)();
         }
         // A freed slot may let a waiting job start.
         let mut pending = inner.pending.lock().expect("the import signal");
@@ -186,17 +334,23 @@ fn run_worker(inner: &Arc<Inner>) {
 }
 
 /// Imports one job, reporting progress and honouring cancellation.
-fn run_one(inner: &Arc<Inner>, job: &Job) -> JobState {
-    let name = inner
-        .names
-        .lock()
-        .expect("the import names")
-        .get(&job.id)
-        .cloned()
-        .unwrap_or_default();
-    let destination = inner
-        .storage
-        .item_path(job.destination, &naming::safe_name(&name));
+fn run_one(inner: &Arc<Inner>, job: &Job, details: &ImportDetails) -> JobState {
+    let name = &details.name;
+    // Replacements keep the occupied slot's filename so discovery cannot pick an older duplicate.
+    let existing_name = match crate::discover(inner.storage.root()) {
+        Ok(catalog) => catalog
+            .resolve(job.destination)
+            .map(|item| item.name.clone()),
+        Err(error) => {
+            return JobState::Failed {
+                reason: error.to_string(),
+            };
+        }
+    };
+    let destination = inner.storage.item_path(
+        job.destination,
+        &naming::safe_name(existing_name.as_deref().unwrap_or(name)),
+    );
 
     if let Err(error) = inner.storage.ensure_folder(job.destination.folder) {
         return JobState::Failed {
@@ -206,8 +360,8 @@ fn run_one(inner: &Arc<Inner>, job: &Job) -> JobState {
 
     let mut report = |progress: media_codec::import::Progress| {
         let mut queue = inner.queue.lock().expect("the import queue");
-        // A job cancelled while it ran is no longer in the queue's running set, and that is the
-        // signal to stop: the codec deletes its staging file and leaves the library untouched.
+        // Cancellation changes the visible state but reserves the worker/address until this
+        // import returns and releases its staging file.
         let still_running = queue
             .job(job.id)
             .is_some_and(|current| matches!(current.state, JobState::Running { .. }));
@@ -225,7 +379,23 @@ fn run_one(inner: &Arc<Inner>, job: &Job) -> JobState {
         still_running && !inner.stopping.load(Ordering::SeqCst)
     };
 
-    match media_codec::import::import(&job.source, &destination, &mut report) {
+    let cancellation_inner = Arc::clone(inner);
+    let id = job.id;
+    let cancelled: media_codec::import::Cancellation = Arc::new(move || {
+        cancellation_inner.stopping.load(Ordering::SeqCst)
+            || cancellation_inner
+                .queue
+                .lock()
+                .expect("the import queue")
+                .job(id)
+                .is_none_or(|job| !matches!(job.state, JobState::Running { .. }))
+    });
+    match media_codec::import::import_cancellable(
+        &job.source,
+        &destination,
+        &mut report,
+        Arc::clone(&cancelled),
+    ) {
         Ok(0) => JobState::Cancelled,
         Ok(frames) => {
             let extension = job
@@ -235,9 +405,13 @@ fn run_one(inner: &Arc<Inner>, job: &Job) -> JobState {
                 .unwrap_or_default()
                 .to_ascii_lowercase();
             let is_video = !["png", "jpg", "jpeg", "tif"].contains(&extension.as_str());
-            if let Err(error) =
-                crate::thumbnails::generate(&inner.storage, job.destination, &job.source, is_video)
-            {
+            if let Err(error) = crate::thumbnails::generate_cancellable(
+                &inner.storage,
+                job.destination,
+                &job.source,
+                is_video,
+                cancelled,
+            ) {
                 // The clip is already complete and playable. Keep that successful import and
                 // expose the UI's explicit missing-thumbnail state rather than lying that the
                 // whole conversion failed after publication.
@@ -278,13 +452,35 @@ mod tests {
     }
 
     fn importer(storage: LibraryStorage, concurrency: usize) -> (Importer, Arc<AtomicBool>) {
+        configured_importer(storage, concurrency, false)
+    }
+
+    fn idle_importer(storage: LibraryStorage, concurrency: usize) -> (Importer, Arc<AtomicBool>) {
+        configured_importer(storage, concurrency, true)
+    }
+
+    fn configured_importer(
+        storage: LibraryStorage,
+        concurrency: usize,
+        idle: bool,
+    ) -> (Importer, Arc<AtomicBool>) {
         let published = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&published);
-        let importer = Importer::start(
-            storage,
-            concurrency,
-            Arc::new(move || flag.store(true, Ordering::SeqCst)),
-        );
+        let library_root = storage.root().to_owned();
+        let published_callback: Published = Arc::new(move |address| {
+            assert!(
+                crate::uploads::guard_idle_addresses(&library_root, &[address]).is_err(),
+                "publication still owns the address reservation"
+            );
+            flag.store(true, Ordering::SeqCst);
+        });
+        let importer = if idle {
+            Importer::start_with_spawner(storage, concurrency, published_callback, |_, _| {
+                std::thread::Builder::new().spawn(|| {})
+            })
+        } else {
+            Importer::start(storage, concurrency, published_callback)
+        };
         (importer, published)
     }
 
@@ -332,6 +528,89 @@ mod tests {
     }
 
     #[test]
+    fn worker_start_failure_is_visible_and_releases_the_submission_lease() {
+        let storage = library("spawn-failure");
+        let importer =
+            Importer::start_with_spawner(storage.clone(), 1, Arc::new(|_| {}), |_, _| {
+                Err(std::io::Error::other("simulated worker exhaustion"))
+            });
+        let address = MediaAddress::new(1, 1);
+        let id = importer.submit(PathBuf::from("source.mp4"), address, "Clip");
+        assert!(
+            matches!(&importer.jobs().iter().find(|job| job.id == id).unwrap().state,
+            JobState::Failed { reason } if reason.contains("simulated worker exhaustion"))
+        );
+        assert!(crate::uploads::guard_idle_addresses(storage.root(), &[address]).is_ok());
+        assert!(importer.inner.names.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn stopping_joins_active_conversion_and_releases_its_files_and_address() {
+        if !has_ffmpeg() {
+            return;
+        }
+        let storage = library("joined-stop");
+        let source = storage.root().join("long.mp4");
+        assert!(
+            std::process::Command::new("ffmpeg")
+                .args([
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=256x256:rate=30:duration=20"
+                ])
+                .arg(&source)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let (importer, _) = importer(storage.clone(), 1);
+        let address = MediaAddress::new(1, 1);
+        let id = importer.submit(source, address, "Long");
+        let started = std::time::Instant::now();
+        loop {
+            let jobs = importer.jobs();
+            let job = jobs.iter().find(|job| job.id == id).unwrap();
+            if matches!(job.state, JobState::Running { frames_done, .. } if frames_done > 0) {
+                break;
+            }
+            assert!(
+                !job.state.is_terminal(),
+                "conversion must still be active: {:?}",
+                job.state
+            );
+            assert!(started.elapsed() < std::time::Duration::from_secs(10));
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        importer.stop();
+        assert!(importer.inner.workers.lock().unwrap().is_empty());
+        assert_eq!(
+            importer
+                .jobs()
+                .iter()
+                .find(|job| job.id == id)
+                .unwrap()
+                .state,
+            JobState::Cancelled
+        );
+        assert!(crate::uploads::guard_idle_addresses(storage.root(), &[address]).is_ok());
+        let destination = storage.item_path(address, "Long");
+        assert!(!destination.exists());
+        assert!(
+            !destination
+                .with_file_name("001-Long.toskclip.importing")
+                .exists()
+        );
+        let rejected = importer.submit(PathBuf::from("another.mp4"), address, "Another");
+        assert!(
+            matches!(&importer.jobs().iter().find(|job| job.id == rejected).unwrap().state,
+            JobState::Failed { reason } if reason.contains("stopped"))
+        );
+    }
+
+    #[test]
     fn a_submitted_job_is_visible_before_anything_has_run() {
         let storage = library("queued");
         // No workers can start it, because nothing has been given to them that exists.
@@ -349,15 +628,18 @@ mod tests {
             "a source that is not there fails with a reason rather than vanishing: {:?}",
             job.state
         );
+        assert!(
+            importer.inner.names.lock().unwrap().is_empty(),
+            "finished names are released"
+        );
         importer.stop();
     }
 
     #[test]
     fn a_queued_job_that_is_cancelled_never_runs() {
         let storage = library("cancelled");
-        let (importer, published) = importer(storage, 1);
-        // Submitted against a stopped pool, so it cannot be picked up before it is cancelled.
-        importer.stop();
+        let (importer, published) = idle_importer(storage, 1);
+        // Submitted against an idle test pool, so it cannot be picked up before it is cancelled.
         let id = importer.submit(
             PathBuf::from("/does/not/exist/001.mp4"),
             MediaAddress::new(1, 1),
@@ -376,6 +658,10 @@ mod tests {
             .expect("the job");
         assert_eq!(job.state, JobState::Cancelled);
         assert!(
+            importer.inner.names.lock().unwrap().is_empty(),
+            "cancelled queued names are released"
+        );
+        assert!(
             !published.load(Ordering::SeqCst),
             "nothing was published, so the catalog was not re-read"
         );
@@ -391,8 +677,18 @@ mod tests {
         let source = source(&storage, "001/001-Bars.mp4");
         let (importer, published) = importer(storage.clone(), 1);
 
-        importer.submit(source, MediaAddress::new(1, 1), "Bars");
+        let address = MediaAddress::new(1, 1);
+        let mut upload =
+            crate::Upload::begin_replacement(storage.root(), address, "Bars", "bars.mp4").unwrap();
+        upload.write(&std::fs::read(source).unwrap()).unwrap();
+        upload
+            .finish_and_import(&importer, address, "Bars")
+            .unwrap();
         let jobs = settle(&importer);
+        assert!(
+            crate::Upload::begin_replacement(storage.root(), address, "Bars", "bars.mp4").is_ok(),
+            "successful conversion releases the upload lease"
+        );
         importer.stop();
 
         assert!(
@@ -418,6 +714,146 @@ mod tests {
         assert!(
             crate::pending_imports(storage.root()).is_empty(),
             "and it is no longer waiting to be imported"
+        );
+    }
+
+    #[test]
+    fn local_source_jobs_exclude_uploads_and_edits_until_cancelled() {
+        let storage = library("local-source-lease");
+        let (importer, _) = idle_importer(storage.clone(), 1);
+        let address = MediaAddress::new(1, 1);
+        let first = importer.submit(PathBuf::from("source.mp4"), address, "Clip");
+        let duplicate = importer.submit(PathBuf::from("other.mp4"), address, "Other");
+        assert!(matches!(
+            importer
+                .jobs()
+                .iter()
+                .find(|job| job.id == duplicate)
+                .unwrap()
+                .state,
+            JobState::Failed { .. }
+        ));
+        assert!(
+            crate::Upload::begin_replacement(storage.root(), address, "Clip", "clip.mp4").is_err()
+        );
+        assert!(crate::uploads::guard_idle_addresses(storage.root(), &[address]).is_err());
+        assert!(importer.cancel(first));
+        assert!(
+            importer
+                .inner
+                .queue
+                .lock()
+                .unwrap()
+                .next_to_start()
+                .is_none(),
+            "an admission failure never remains runnable"
+        );
+        assert!(crate::uploads::guard_idle_addresses(storage.root(), &[address]).is_ok());
+        assert!(
+            crate::Upload::begin_replacement(storage.root(), address, "Clip", "clip.mp4").is_ok()
+        );
+    }
+
+    #[test]
+    fn queued_uploaded_sources_are_reserved_until_cancelled() {
+        let storage = library("queued-upload-lease");
+        let (importer, _) = idle_importer(storage.clone(), 1);
+        let address = MediaAddress::new(1, 1);
+        let mut upload = crate::Upload::begin(storage.root(), address, "Clip", "clip.mp4").unwrap();
+        upload.write(b"original uploaded source").unwrap();
+        let id = upload
+            .finish_and_import(&importer, address, "Clip")
+            .unwrap();
+        assert!(
+            crate::Upload::begin_replacement(storage.root(), address, "Clip", "clip.mp4").is_err()
+        );
+        assert!(importer.cancel(id));
+        assert!(
+            crate::Upload::begin_replacement(storage.root(), address, "Clip", "clip.mp4").is_ok()
+        );
+    }
+
+    #[test]
+    fn running_uploaded_sources_keep_the_lease_until_the_worker_returns() {
+        for cancelled in [false, true] {
+            let storage = library(if cancelled {
+                "cancelled-upload-lease"
+            } else {
+                "failed-upload-lease"
+            });
+            let (importer, _) = idle_importer(storage.clone(), 1);
+            let address = MediaAddress::new(1, 1);
+            let mut upload =
+                crate::Upload::begin(storage.root(), address, "Clip", "clip.mp4").unwrap();
+            upload
+                .write(b"invalid source that will fail conversion")
+                .unwrap();
+            let id = upload
+                .finish_and_import(&importer, address, "Clip")
+                .unwrap();
+            let job = importer
+                .inner
+                .queue
+                .lock()
+                .unwrap()
+                .next_to_start()
+                .unwrap();
+            if cancelled {
+                assert!(importer.cancel(id));
+            }
+            assert!(
+                crate::Upload::begin_replacement(storage.root(), address, "Clip", "clip.mp4")
+                    .is_err()
+            );
+            let details = importer
+                .inner
+                .names
+                .lock()
+                .unwrap()
+                .remove(&job.id)
+                .unwrap();
+            let outcome = run_one(&importer.inner, &job, &details);
+            if cancelled {
+                assert_eq!(outcome, JobState::Cancelled);
+            } else {
+                assert!(matches!(outcome, JobState::Failed { .. }));
+            }
+            drop(details);
+            assert!(
+                crate::Upload::begin_replacement(storage.root(), address, "Clip", "clip.mp4")
+                    .is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn a_replacement_with_a_new_name_replaces_the_existing_clip() {
+        if !has_ffmpeg() {
+            return;
+        }
+        let storage = library("replacement");
+        let source = source(&storage, "source.mp4");
+        let (importer, _) = importer(storage.clone(), 2);
+        importer.submit(source.clone(), MediaAddress::new(1, 1), "Original");
+        settle(&importer);
+        importer.submit(source, MediaAddress::new(1, 1), "Replacement");
+        let jobs = settle(&importer);
+        importer.stop();
+        assert!(
+            jobs.iter()
+                .all(|job| matches!(job.state, JobState::Succeeded { .. })),
+            "{jobs:?}"
+        );
+        let catalog = crate::discover(storage.root()).unwrap();
+        assert_eq!(catalog.item_count(), 1);
+        assert_eq!(
+            catalog.resolve(MediaAddress::new(1, 1)).unwrap().name,
+            "Original"
+        );
+        assert!(
+            !storage
+                .item_path(MediaAddress::new(1, 1), "Replacement")
+                .exists()
         );
     }
 

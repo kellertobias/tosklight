@@ -49,9 +49,10 @@ pub(super) async fn update(
     TolerantJson(body): TolerantJson<UpdateFolderPresentation>,
 ) -> Result<Response, ApiError> {
     validate_folder(folder)?;
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
     let (name, icon) = match (body.name, body.icon) {
         (Some(name), None) => (Some(normalize(name)), None),
         (None, Some(icon)) => (None, Some(normalize(icon))),
@@ -80,9 +81,10 @@ pub(super) async fn upload_picture(
     mut multipart: Multipart,
 ) -> Result<Response, ApiError> {
     validate_folder(folder)?;
-    if let Proceed::Replay(response) = edit::begin(&state, &query.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin_upload(&state, &query.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
     let mut upload = None;
     while let Some(mut field) = multipart.next_field().await.map_err(|_| {
         ApiError::bad_request(
@@ -153,9 +155,10 @@ pub(super) async fn remove_picture(
     TolerantJson(body): TolerantJson<RemoveFolderPicture>,
 ) -> Result<Response, ApiError> {
     validate_folder(folder)?;
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
     let presentation = (state.diagnostics.library.remove_folder_picture)(folder)
         .map_err(|detail| unavailable("folder-picture-not-removed", detail))?;
     remember(&state, &body.request_id, &presentation)

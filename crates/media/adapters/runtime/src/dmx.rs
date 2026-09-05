@@ -167,10 +167,8 @@ fn apply_frame_with_diagnostics(
         return;
     }
 
-    // One mutation of a cloned snapshot, then one publish, so readers never observe a partially
-    // updated state.
-    let mut next = MediaState::clone(&state.load());
-    let mut changed = false;
+    // Decode once; replay only the pure reducer if another writer publishes concurrently.
+    let mut commands = Vec::new();
 
     for route in matching {
         let start = usize::from(route.start_address.saturating_sub(1));
@@ -217,7 +215,7 @@ fn apply_frame_with_diagnostics(
                     frame.source,
                     frame.received_at,
                 );
-                changed |= apply(&mut next, &command).is_accepted();
+                commands.push(command);
             }
             Err(error) => {
                 tracing::debug!(
@@ -230,9 +228,18 @@ fn apply_frame_with_diagnostics(
         }
     }
 
-    if changed {
-        state.store(Arc::new(next));
-    }
+    state.rcu(|current| {
+        let mut next = MediaState::clone(current);
+        let mut changed = false;
+        for command in &commands {
+            changed |= apply(&mut next, command) == media_domain::Applied::Changed;
+        }
+        if changed {
+            Arc::new(next)
+        } else {
+            Arc::clone(current)
+        }
+    });
 }
 
 fn capture_handoff_frame(
@@ -404,6 +411,60 @@ mod tests {
         slots[base + 1] = 4; // file
         slots[base + 14] = 255; // dimmer
         slots
+    }
+
+    #[test]
+    fn concurrent_protocol_frames_preserve_both_outputs() {
+        let mut configuration = configuration(DmxProtocol::ArtNet, 3, 1);
+        let mut second = configuration.outputs[0].clone();
+        second.id = OutputId::new();
+        second.protocol = DmxProtocol::Sacn;
+        configuration.outputs.push(second);
+        let state = state_for(&configuration);
+        let routes = routes(&configuration);
+        let barrier = std::sync::Barrier::new(2);
+        let lost_update = std::sync::atomic::AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            for source in [
+                media_domain::CommandSource::ArtNet,
+                media_domain::CommandSource::Sacn,
+            ] {
+                let state = &state;
+                let routes = &routes;
+                let barrier = &barrier;
+                let configuration = &configuration;
+                let lost_update = &lost_update;
+                scope.spawn(move || {
+                    for file in 1..=200 {
+                        let mut values = slots(1);
+                        values[1] = file;
+                        barrier.wait();
+                        apply_frame(
+                            state,
+                            routes,
+                            &UniverseFrame {
+                                universe: 3,
+                                source,
+                                source_label: "desk".to_owned(),
+                                slots: values,
+                                received_at: Timestamp::from_millis(u64::from(file)),
+                            },
+                        );
+                        barrier.wait();
+                        let snapshot = state.load();
+                        for output in &configuration.outputs {
+                            if snapshot.output(output.id).unwrap().layers[0].address
+                                != MediaAddress::new(1, file)
+                            {
+                                lost_update.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
+                        barrier.wait();
+                    }
+                });
+            }
+        });
+        assert!(!lost_update.load(std::sync::atomic::Ordering::Relaxed));
     }
 
     #[test]

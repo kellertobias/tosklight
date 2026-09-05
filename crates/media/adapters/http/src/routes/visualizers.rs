@@ -25,9 +25,10 @@ pub(super) async fn create_visualizer(
     State(state): State<ApiState>,
     TolerantJson(body): TolerantJson<CreateVisualizer>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
 
     let kind = VisualizerKind::from_type_id(body.type_id).ok_or_else(|| {
         ApiError::bad_request(
@@ -72,9 +73,10 @@ pub(super) async fn update_visualizer(
     Path((folder, file)): Path<(u8, u8)>,
     TolerantJson(body): TolerantJson<UpdateVisualizer>,
 ) -> Result<Response, ApiError> {
-    if let Proceed::Replay(response) = edit::begin(&state, &body.request_id)? {
-        return Ok(response);
-    }
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
 
     let address = MediaAddress::new(folder, file);
     let mut configuration = MediaConfiguration::clone(&state.configuration.load());

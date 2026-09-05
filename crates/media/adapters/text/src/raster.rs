@@ -146,7 +146,9 @@ mod tests {
     fn ink(rendered: &Rendered) -> usize {
         rendered
             .pixels
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|pixel| pixel[3] > 0)
             .count()
     }
@@ -155,7 +157,7 @@ mod tests {
     fn centre_of_ink(rendered: &Rendered) -> f32 {
         let mut weighted = 0.0;
         let mut total = 0.0;
-        for (index, pixel) in rendered.pixels.chunks_exact(4).enumerate() {
+        for (index, pixel) in rendered.pixels.as_chunks::<4>().0.iter().enumerate() {
             let alpha = f32::from(pixel[3]);
             if alpha == 0.0 {
                 continue;
@@ -259,7 +261,9 @@ mod tests {
 
         let inked = rendered
             .pixels
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .find(|pixel| pixel[3] > 0)
             .expect("something was drawn");
         assert_eq!([inked[0], inked[1], inked[2]], [255, 0, 0]);
