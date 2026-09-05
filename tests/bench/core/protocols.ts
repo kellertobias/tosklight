@@ -50,15 +50,18 @@ export class DmxReceiver {
   }
 
   static async bind(): Promise<DmxReceiver> {
-    const socket = dgram.createSocket("udp4");
-    await new Promise<void>((resolve, reject) => {
-      socket.once("error", reject);
-      socket.bind(0, "127.0.0.1", () => {
-        socket.off("error", reject);
-        resolve();
-      });
-    });
+    const socket = await bindUdp();
     return new DmxReceiver(socket, (socket.address() as dgram.AddressInfo).port);
+  }
+
+  static async canBind(): Promise<boolean> {
+    try {
+      const socket = await bindUdp();
+      await closeUdpSocket(socket);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   mark(): number { return this.nextCursor; }
@@ -230,12 +233,27 @@ export class OscHardware {
 }
 
 async function bindUdp(): Promise<Socket> {
-  const socket = dgram.createSocket("udp4");
-  await new Promise<void>((resolve, reject) => {
-    socket.once("error", reject);
-    socket.bind(0, "127.0.0.1", () => { socket.off("error", reject); resolve(); });
-  });
-  return socket;
+  const candidates: Array<string | undefined> = [undefined, "127.0.0.1", "localhost"];
+  const errors: unknown[] = [];
+  for (const address of candidates) {
+    try {
+      return await new Promise<Socket>((resolve, reject) => {
+        const socket = dgram.createSocket("udp4");
+        socket.once("error", (error) => {
+          socket.close();
+          reject(error);
+        });
+        const onBound = () => resolve(socket);
+        if (address === undefined) socket.bind(0, onBound);
+        else socket.bind(0, address, onBound);
+      });
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  throw new Error(
+    `Failed to bind UDP socket for test protocol helpers (retries: ${candidates.length}): ${errors.map((error) => String(error)).join(", ")}`
+  );
 }
 
 function closeUdpSocket(socket: Socket): Promise<void> {

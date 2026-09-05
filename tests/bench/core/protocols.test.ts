@@ -2,8 +2,10 @@ import dgram from "node:dgram";
 import { describe, expect, it } from "vitest";
 import { DmxReceiver } from "./protocols";
 
+const hasUsableUdpBinding = await DmxReceiver.canBind();
+
 describe("DmxReceiver packet cursors", () => {
-	it("finds packets after a mark when the bounded history has truncated", async () => {
+	it.runIf(hasUsableUdpBinding)("finds packets after a mark when the bounded history has truncated", async () => {
 		const receiver = await DmxReceiver.bind();
 		const sender = dgram.createSocket("udp4");
 		try {
