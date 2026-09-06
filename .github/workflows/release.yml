@@ -168,6 +168,8 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run Clippy
+        env:
+          RUSTC_WRAPPER: ""
         run: cargo clippy --workspace --all-targets --locked
 
   unit:

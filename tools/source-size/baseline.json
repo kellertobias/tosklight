@@ -4,7 +4,7 @@
   "files": {
     "apps/light-desktop/src-tauri/src/stage_pane.rs": 1246,
     "apps/light-desktop/src/components/control/PlaybackConfigurationTabs.tsx": 1257,
-    "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx": 1325,
+    "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx": 1905,
     "apps/media/src/features/layers/MediaPanePage.tsx": 2143,
     "apps/viz-editor/src-tauri/src/cad.rs": 1577,
     "apps/viz-editor/src/cad/CadViewport.tsx": 1462,
@@ -31,7 +31,7 @@
     "apps/light-desktop/src/components/setup/MediaServerSetup.tsx::javascript:function:MediaServerSetup:ebeb8fab2a0b:1": 257,
     "apps/light-desktop/src/components/setup/screens/ScreenSettingsCards.tsx::javascript:function:ScreenSettingsCard:38f146401d3b:1": 154,
     "apps/light-desktop/src/features/controlSurfaceInteraction/SetInteractionProvider.tsx::javascript:function:SetInteractionProvider:7ad4c5cbb6a4:1": 155,
-    "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimecodeTimelineEditor:6909217a8925:1": 343,
+    "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimecodeTimelineEditor:6909217a8925:1": 345,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimelineOverview:16fafd302031:1": 211,
     "apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx::javascript:function:NativeBenchmark:42a50ebfaeb7:1": 213,
     "apps/light-desktop/src/windows/cuelistWindow/CuelistPool.tsx::javascript:function:useCuelistPoolActions:58fe5a3d2a5d:1": 196,
@@ -49,7 +49,7 @@
     "apps/light-desktop/src/windows/MediaPaneWindow.tsx::javascript:function:MediaPaneWindow:524b4c7a99c2:1": 219,
     "apps/light-desktop/src/windows/stageWindow/StageVizSettings.tsx::javascript:function:StageVizSettings:1bf5d18db46a:1": 200,
     "apps/light-desktop/src/windows/stageWindow/useNativeStagePane.ts::javascript:function:useNativeStagePane:594eb11477bc:1": 151,
-    "apps/light-desktop/src/windows/TimecodeRuntimeWindow.tsx::javascript:function:TimecodeEditor:7b955907b986:1": 309,
+    "apps/light-desktop/src/windows/TimecodeRuntimeWindow.tsx::javascript:function:TimecodeEditor:7b955907b986:1": 322,
     "apps/light-desktop/src/windows/TimecodeRuntimeWindow.tsx::javascript:function:TimecodeRuntimeWindow:d912494f991d:1": 230,
     "apps/light-desktop/src/windows/VirtualPlaybacksWindow.tsx::javascript:function:VirtualPlaybacksWindow:8aae0be0815a:1": 239,
     "apps/media/src/features/layers/MediaPanePage.tsx::javascript:arrow:arrow:f6c7521a73dd:1": 695,
@@ -102,7 +102,6 @@
     "crates/viz/desk/src/provider.rs::rust:function:watch:b47d355f1855:1": 175,
     "crates/viz/desk/src/scene_build.rs::rust:function:build_media:37efb85c7c5c:1": 169,
     "crates/viz/document/src/media.rs::rust:function:validate:b72f0c353398:1": 174,
-    "crates/viz/project/src/decode.rs::rust:function:decode_emitter:faf75ae84791:1": 155,
     "crates/viz/project/src/plan/compile_instances.rs::rust:function:compile_instances:a1f140b293b0:1": 163,
     "crates/viz/render/src/instances/media.rs::rust:function:push_media:40c036e43a0b:1": 209
   }
