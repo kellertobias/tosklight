@@ -46,6 +46,18 @@ type ShowPage =
 	| "features"
 	| "mcp";
 
+function showSettingsActions(hasDocument: boolean) {
+	return [
+		{ id: "show", label: "Show" },
+		{ id: "dmx", label: "DMX", disabled: !hasDocument },
+		{ id: "rendering", label: "Rendering" },
+		{ id: "atmosphere", label: "Atmosphere" },
+		{ id: "picture", label: "Picture" },
+		{ id: "features", label: "Features" },
+		{ id: "mcp", label: "MCP" },
+	];
+}
+
 export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
 	const [profiles, setProfiles] = useState<readonly FixtureProfile[]>([]);
@@ -490,15 +502,7 @@ export function App() {
 											setShowPage(page);
 											setWorkspace(page === "show" ? "show" : "settings");
 										},
-										actions: [
-											{ id: "show", label: "Show" },
-											{ id: "dmx", label: "DMX", disabled: !document },
-											{ id: "rendering", label: "Rendering" },
-											{ id: "atmosphere", label: "Atmosphere" },
-											{ id: "picture", label: "Picture" },
-											{ id: "features", label: "Features" },
-											{ id: "mcp", label: "MCP" },
-										],
+										actions: showSettingsActions(Boolean(document)),
 									},
 								]}
 							/>

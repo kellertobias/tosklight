@@ -289,8 +289,15 @@ test("native Timecode audio stays out of the ARM headless build", () => {
 		appManifest,
 		/native-audio-output = \["light-headless-runtime\/native-audio-output"\]/u,
 	);
-	assert.match(runtimeManifest, /native-audio-output = \["dep:cpal"\]/u);
+	assert.match(
+		runtimeManifest,
+		/native-audio-output = \["dep:cpal", "dep:crossbeam-queue"\]/u,
+	);
 	assert.match(runtimeManifest, /cpal = \{[^\n]*optional = true[^\n]*\}/u);
+	assert.match(
+		runtimeManifest,
+		/crossbeam-queue = \{[^\n]*optional = true[^\n]*\}/u,
+	);
 });
 
 test("macOS release apps are sealed only after their final helpers and resources", () => {

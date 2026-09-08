@@ -381,48 +381,48 @@ impl Decoder {
             value.intensity = read(&binding.fog).unwrap_or(value.intensity);
         }
 
-        value.cells = if binding.cells.is_empty() {
-            Vec::new()
-        } else {
-            // A repeated per-cell dimmer is not a fixture master. Only multiply an
-            // independently bound master; each cell already carries its own colour level.
-            let master = binding
-                .intensity
-                .as_ref()
-                .filter(|master| {
-                    !binding.cells.iter().any(|cell| {
-                        cell.intensity.as_ref().is_some_and(|channel| {
-                            channel.logical_universe == master.logical_universe
-                                && channel.slots == master.slots
-                        })
-                    })
-                })
-                .map(|channel| channel.normalised(&self.slots(channel.logical_universe)))
-                .unwrap_or(1.0);
-            binding
-                .cells
-                .iter()
-                .enumerate()
-                .map(|(index, cell)| {
-                    let mut decoded = self.decode_cell(cell, master);
-                    // Decoding rebuilds the cell list from scratch every DMX frame, and the tail
-                    // a cell is part-way through fading is display state rather than decoded
-                    // state. Losing it here would leave per-cell persistence resetting to nothing
-                    // at DMX rate, which is exactly the fixtures — blinders, pixel strips — that
-                    // need it most.
-                    decoded.held_intensity = value
-                        .cells
-                        .get(index)
-                        .map(|previous| previous.held_intensity)
-                        .unwrap_or(0.0);
-                    decoded
-                })
-                .collect()
-        };
+        self.decode_cells(binding, value);
         value.stale = binding
             .universes
             .iter()
             .any(|universe| self.stale.get(universe).copied().unwrap_or(true));
+    }
+
+    fn decode_cells(&self, binding: &EmitterBinding, value: &mut EmitterValues) {
+        if binding.cells.is_empty() {
+            value.cells.clear();
+            return;
+        }
+        // A repeated per-cell dimmer is not a fixture master. Only multiply an independently
+        // bound master; each cell already carries its own colour level.
+        let master = binding
+            .intensity
+            .as_ref()
+            .filter(|master| {
+                !binding.cells.iter().any(|cell| {
+                    cell.intensity.as_ref().is_some_and(|channel| {
+                        channel.logical_universe == master.logical_universe
+                            && channel.slots == master.slots
+                    })
+                })
+            })
+            .map(|channel| channel.normalised(&self.slots(channel.logical_universe)))
+            .unwrap_or(1.0);
+        value.cells = binding
+            .cells
+            .iter()
+            .enumerate()
+            .map(|(index, cell)| {
+                let mut decoded = self.decode_cell(cell, master);
+                // Preserve the display-state fade tail while rebuilding decoded cell state each
+                // DMX frame; otherwise fixtures such as blinders and pixel strips lose it.
+                decoded.held_intensity = value
+                    .cells
+                    .get(index)
+                    .map_or(0.0, |previous| previous.held_intensity);
+                decoded
+            })
+            .collect();
     }
 
     fn decode_cell(&self, cell: &ColourBinding, master: f32) -> CellValue {

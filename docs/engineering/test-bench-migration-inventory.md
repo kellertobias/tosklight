@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **196 root cases across 80 files**.
+Default catalog: **197 root cases across 80 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -197,6 +197,7 @@ Default catalog: **196 root cases across 80 files**.
 | 85-semantic-macros-timecode.spec.ts | MACRO-002 @api › a running Macro never disturbs the command line the operator is typing | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 85-semantic-macros-timecode.spec.ts | MACRO-004 @ui › refined editor exposes settings, focus, alternating lines, and IntelliCode | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | 85-semantic-macros-timecode.spec.ts | TIMECODE-003 @api › transport routes address one authoritative runtime | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 85-semantic-macros-timecode.spec.ts | TIMECODE-001 @ui › live editing preserves transport and scrubbing stays independent until explicit seek | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | 85-semantic-macros-timecode.spec.ts | TIMECODE-001 @ui › title actions, Settings autosave, Add menu, CSV, and zoom geometry match the operator contract | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | 87-channel-disabled-reasons.spec.ts | TL-166 @ui › empty faders explain their state while available faders stay clear | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |
 | 87-channel-disabled-reasons.spec.ts | TL-373 @ui › channel faders are labelled with the fixture name, not the Fixture ID | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |
