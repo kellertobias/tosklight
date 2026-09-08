@@ -418,6 +418,27 @@ test("every Architect package includes the generated MCP bridge", () => {
 	);
 });
 
+test("fresh Rust CI jobs build the Architect MCP bridge before Cargo", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const qualityJob = workflow.slice(
+		workflow.indexOf("  quality:"),
+		workflow.indexOf("  unit:"),
+	);
+	const workspaceJob = workflow.slice(
+		workflow.indexOf("  workspace:"),
+		workflow.indexOf("  native-extension-draft:"),
+	);
+
+	assert.match(
+		qualityJob,
+		/Build the Architect MCP bridge[\s\S]*?npm run build:patch-mcp[\s\S]*?cargo clippy/u,
+	);
+	assert.match(
+		workspaceJob,
+		/Build the Architect MCP bridge[\s\S]*?npm run build:patch-mcp[\s\S]*?tools\/test\.sh rust-workspace/u,
+	);
+});
+
 test("the editor-owned renderer is an accessory of the same Architect application", () => {
 	const launcher = read("apps/viz-editor/src-tauri/src/visualizer.rs");
 	const renderer = read("apps/viz-renderer/src/main.rs");
