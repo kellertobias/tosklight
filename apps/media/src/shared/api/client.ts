@@ -146,6 +146,8 @@ function boundedIntegerFields<T extends object>(
 export const api = {
 	health: () => request<Health>("/health"),
 	runtime: () => request<RunningServerView>("/runtime"),
+	openDataDirectory: () =>
+		request<void>("/runtime/data-directory/open", { method: "POST" }),
 	catalog: () => request<CatalogView>("/catalog"),
 	folderPresentations: () =>
 		request<FolderPresentationsView>("/folder-presentations"),

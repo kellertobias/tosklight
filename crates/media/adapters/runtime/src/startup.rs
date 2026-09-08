@@ -90,6 +90,74 @@ pub fn apply_macos_app_defaults(configuration: &mut MediaConfiguration, path: &P
     }
 }
 
+/// Resolves an explicitly configuration-relative library root.
+///
+/// Older configurations used bare relative paths relative to the process working directory. We
+/// keep those compatible. New portable configurations are written with a leading `./`, which
+/// makes their ownership by the configuration directory unambiguous.
+pub fn resolve_portable_library_root(configuration: &mut MediaConfiguration, path: &Path) {
+    let root = &configuration.library.root;
+    if root.is_absolute() || !root.starts_with(".") {
+        return;
+    }
+    if let Some(parent) = absolute_path(path).parent() {
+        configuration.library.root = parent.join(root);
+    }
+}
+
+/// Recovers a copied application-data folder whose older configuration stored the source
+/// computer's absolute library path.
+pub fn recover_moved_macos_library(configuration: &mut MediaConfiguration, path: &Path) -> bool {
+    let root = &configuration.library.root;
+    if !root.is_absolute() || root.exists() {
+        return false;
+    }
+    let Some(name) = root.file_name() else {
+        return false;
+    };
+    let Some(parent) = absolute_path(path).parent().map(Path::to_path_buf) else {
+        return false;
+    };
+    let candidate = parent.join(name);
+    if !candidate.exists() {
+        return false;
+    }
+    configuration.library.root = candidate;
+    true
+}
+
+/// The directory an operator can copy to carry this server's configuration and library together.
+pub fn portable_data_directory(configuration_path: &Path, library_root: &Path) -> Option<PathBuf> {
+    let configuration_path = absolute_path(configuration_path);
+    let library_root = absolute_path(library_root);
+    let directory = configuration_path.parent()?.to_path_buf();
+    let relative = library_root.strip_prefix(&directory).ok()?;
+    relative
+        .components()
+        .all(|component| {
+            matches!(
+                component,
+                std::path::Component::CurDir | std::path::Component::Normal(_)
+            )
+        })
+        .then_some(directory)
+}
+
+fn absolute_path(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    }
+}
+
+/// A stable absolute path for operator-facing process facts.
+pub fn resolved_path(path: &Path) -> PathBuf {
+    absolute_path(path)
+}
+
 /// Writes a configuration back where it was read from, atomically.
 ///
 /// A show can be edited while it is running, so a half-written file is not an acceptable failure:
@@ -108,8 +176,19 @@ pub fn write_configuration(
         })?;
     }
 
+    let mut stored = configuration.clone();
+    if let Some(directory) = portable_data_directory(path, &stored.library.root)
+        && let Ok(relative) = absolute_path(&stored.library.root).strip_prefix(directory)
+    {
+        stored.library.root = if relative.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            PathBuf::from(".").join(relative)
+        };
+    }
+
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
-    std::fs::write(&temporary, configuration::save(configuration)).map_err(|source| {
+    std::fs::write(&temporary, configuration::save(&stored)).map_err(|source| {
         StartupError::Unwritable {
             path: temporary.clone(),
             source,
@@ -122,6 +201,28 @@ pub fn write_configuration(
             source,
         }
     })
+}
+
+/// Opens the data directory in the file manager on the machine running the Media Server.
+pub fn open_data_directory(path: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let status = std::process::Command::new("/usr/bin/open")
+        .arg(path)
+        .status()?;
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new("explorer.exe")
+        .arg(path)
+        .status()?;
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let status = std::process::Command::new("xdg-open").arg(path).status()?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "the file manager exited with {status}"
+        )))
+    }
 }
 
 /// Why the server cannot start.
@@ -350,6 +451,82 @@ mod tests {
             configuration.library.root,
             PathBuf::from("/tmp/ToskLight Media/Media")
         );
+    }
+
+    #[test]
+    fn portable_relative_library_paths_follow_the_configuration_folder() {
+        let mut configuration = MediaConfiguration::default();
+        configuration.library.root = PathBuf::from("./Media");
+
+        resolve_portable_library_root(
+            &mut configuration,
+            Path::new("/tmp/ToskLight Media/media-server.json"),
+        );
+
+        assert_eq!(
+            configuration.library.root,
+            PathBuf::from("/tmp/ToskLight Media/Media")
+        );
+    }
+
+    #[test]
+    fn legacy_bare_relative_library_paths_keep_their_working_directory_meaning() {
+        let mut configuration = MediaConfiguration::default();
+        resolve_portable_library_root(
+            &mut configuration,
+            Path::new("/tmp/ToskLight Media/media-server.json"),
+        );
+        assert_eq!(configuration.library.root, PathBuf::from("media"));
+    }
+
+    #[test]
+    fn writing_a_colocated_library_makes_the_stored_document_portable() {
+        let directory = std::env::temp_dir().join("media-portable-configuration");
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(directory.join("Media")).unwrap();
+        let path = directory.join("media-server.json");
+        let mut configuration = MediaConfiguration::default();
+        configuration.library.root = directory.join("Media");
+
+        write_configuration(&path, &configuration).unwrap();
+        let serialized = std::fs::read_to_string(&path).unwrap();
+        assert!(serialized.contains(r#""root": "./Media""#), "{serialized}");
+
+        let mut loaded = load_configuration(&ConfigurationSource::File {
+            path: path.clone(),
+            required: true,
+        })
+        .unwrap();
+        resolve_portable_library_root(&mut loaded, &path);
+        assert_eq!(loaded.library.root, directory.join("Media"));
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn a_library_that_escapes_through_a_parent_is_not_called_portable() {
+        assert_eq!(
+            portable_data_directory(
+                Path::new("/tmp/ToskLight Media/media-server.json"),
+                Path::new("/tmp/ToskLight Media/../Other Media")
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_copied_older_macos_folder_recovers_its_sibling_library() {
+        let directory = std::env::temp_dir().join("media-copied-configuration");
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(directory.join("Media")).unwrap();
+        let mut configuration = MediaConfiguration::default();
+        configuration.library.root = PathBuf::from("/Users/previous/Library/Media");
+
+        assert!(recover_moved_macos_library(
+            &mut configuration,
+            &directory.join("media-server.json")
+        ));
+        assert_eq!(configuration.library.root, directory.join("Media"));
+        let _ = std::fs::remove_dir_all(directory);
     }
 
     #[test]

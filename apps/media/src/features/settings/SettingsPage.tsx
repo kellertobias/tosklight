@@ -22,6 +22,7 @@ import {
 	useHealth,
 	useNetwork,
 	useOutputs,
+	useRuntime,
 	useTime,
 } from "../../shared/api/queries";
 import { LogsPage } from "../logs/LogsPage";
@@ -34,6 +35,7 @@ const HEALTH_POLL_MS = 15_000;
 
 export function SettingsPage() {
 	const health = useHealth(HEALTH_POLL_MS);
+	const runtime = useRuntime();
 	const outputs = useOutputs(HEALTH_POLL_MS);
 	const network = useNetwork();
 	const time = useTime();
@@ -59,6 +61,10 @@ export function SettingsPage() {
 								<ServerSettings health={data} />
 							</article>
 						)}
+					</ResourceState>
+
+					<ResourceState resource={runtime} subject="the data folder">
+						{(data) => <PortableDataFolder runtime={data} />}
 					</ResourceState>
 
 					<ResourceState resource={time} subject="the server time">
@@ -194,6 +200,55 @@ export function SettingsPage() {
 			)}
 			{section === "logs" && <LogsPage />}
 		</MediaSettingsLayout>
+	);
+}
+
+function PortableDataFolder({
+	runtime,
+}: {
+	runtime: import("../../shared/api/generated/media-wire").RunningServerView;
+}) {
+	const [opening, setOpening] = useState(false);
+	const [failure, setFailure] = useState<string>();
+	return (
+		<article className="media-settings-section" aria-label="Portable data folder">
+			<h2>Media and configuration folder</h2>
+			{runtime.dataDirectory ? (
+				<>
+					<p>
+						Copy this whole folder to carry the Media Server configuration and
+						all media to another computer.
+					</p>
+					<code className="media-data-directory">{runtime.dataDirectory}</code>
+					<div className="media-settings-actions">
+						<Button
+							disabled={opening}
+							onClick={async () => {
+								setOpening(true);
+								setFailure(undefined);
+								try {
+									await api.openDataDirectory();
+								} catch (error) {
+									setFailure(
+										error instanceof Error ? error.message : "The folder could not be opened.",
+									);
+								} finally {
+									setOpening(false);
+								}
+							}}
+						>
+							{opening ? "Opening on Media Server…" : "Show folder on Media Server"}
+						</Button>
+					</div>
+					{failure && <p role="alert">{failure}</p>}
+				</>
+			) : (
+				<p role="status">
+					The media library is outside the configuration folder. Move it beside
+					the configuration before copying this server.
+				</p>
+			)}
+		</article>
 	);
 }
 

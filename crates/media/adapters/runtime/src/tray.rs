@@ -5,9 +5,8 @@
 //! operator assigned, and with none assigned it draws nothing at all — so without this the process
 //! is invisible, and the only way to stop it is Activity Monitor.
 //!
-//! The menu is the icon and Quit, deliberately. Everything an operator can change lives in the
-//! administration interface; a menu that mirrors any of it becomes a second surface to keep in
-//! sync with the first.
+//! The menu keeps only process-level actions: reveal the one portable data folder on macOS, or
+//! quit. Everything an operator can change remains in the administration interface.
 
 use crate::shutdown::{Shutdown, ShutdownReason};
 use muda::{Menu, MenuEvent, MenuItem};
@@ -21,6 +20,9 @@ const ICON: &[u8] = include_bytes!("../../../../../assets/branding/ToskLight Pix
 /// What the menu bar draws. Big enough for a Retina menu bar, small enough that decoding it costs
 /// nothing at startup.
 const ICON_EDGE: u32 = 44;
+
+#[cfg(target_os = "macos")]
+const OPEN_FOLDER_LABEL: &str = "open Folder in Finder";
 
 /// The desktop presence, held for as long as the server runs.
 ///
@@ -37,7 +39,7 @@ pub struct Tray {
 ///
 /// A failure here is not fatal. A server that cannot draw a menu bar item is still a server, and
 /// taking the whole process down over its icon would turn a cosmetic problem into an outage.
-pub fn show(shutdown: &Shutdown) -> Option<Tray> {
+pub fn show(shutdown: &Shutdown, data_directory: Option<&std::path::Path>) -> Option<Tray> {
     let icon = match icon() {
         Ok(icon) => icon,
         Err(error) => {
@@ -47,6 +49,15 @@ pub fn show(shutdown: &Shutdown) -> Option<Tray> {
     };
 
     let menu = Menu::new();
+    #[cfg(target_os = "macos")]
+    let open_folder = MenuItem::new(OPEN_FOLDER_LABEL, data_directory.is_some(), None);
+    #[cfg(target_os = "macos")]
+    let open_folder_id = open_folder.id().clone();
+    #[cfg(target_os = "macos")]
+    if let Err(error) = menu.append(&open_folder) {
+        tracing::warn!(%error, "the menu bar menu could not be built; running without one");
+        return None;
+    }
     let quit = MenuItem::new("Quit ToskLight Media", true, None);
     let quit_id = quit.id().clone();
     if let Err(error) = menu.append(&quit) {
@@ -57,7 +68,17 @@ pub fn show(shutdown: &Shutdown) -> Option<Tray> {
     // The handler rather than a polled channel: a click arrives on the platform's own thread, and
     // `about_to_wait` already observes the shutdown it requests within one wake.
     let requested = shutdown.clone();
+    let data_directory = data_directory.map(std::path::Path::to_path_buf);
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
+        #[cfg(target_os = "macos")]
+        if event.id == open_folder_id {
+            if let Some(path) = data_directory.as_deref()
+                && let Err(error) = crate::startup::open_data_directory(path)
+            {
+                tracing::error!(%error, "the portable Media Server folder could not be opened");
+            }
+            return;
+        }
         handle(&event.id, &quit_id, &requested);
     }));
 
@@ -138,6 +159,12 @@ fn box_filter(source: &[u8], width: u32, height: u32, edge: u32) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_finder_action_uses_the_operator_label() {
+        assert_eq!(OPEN_FOLDER_LABEL, "open Folder in Finder");
+    }
 
     #[test]
     fn the_quit_item_stops_the_server() {

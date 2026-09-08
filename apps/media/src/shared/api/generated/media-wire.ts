@@ -13,7 +13,7 @@ export type Health = { status: string, instance: string, outputs: number,
  */
 catalogRevision: number, catalogItems: number, };
 export type RunningOutputView = { id: string, name: string, protocol: string, universe: number, startAddress: number, };
-export type RunningServerView = { administrationIp: string, outputs: Array<RunningOutputView>, };
+export type RunningServerView = { administrationIp: string, outputs: Array<RunningOutputView>, dataDirectory: string | null, configurationFile: string, libraryDirectory: string, portable: boolean, };
 export type AddressView = { folder: number, file: number,
 /**
  * Which address space the pair falls in, so the UI can label a selection without

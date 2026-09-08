@@ -725,7 +725,7 @@ seed_media_configuration() {
   "version": 1,
   "configuration": {
     "instanceId": "development",
-    "library": { "root": "$data_dir/library", "targetCodec": "h264" },
+    "library": { "root": "./library", "targetCodec": "h264" },
     "outputs": [
       {
         "id": "6b1f0c2a-1111-4a2b-8c3d-000000000001",

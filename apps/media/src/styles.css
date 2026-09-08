@@ -264,6 +264,16 @@ body {
 	margin: 0;
 }
 
+.media-data-directory {
+	display: block;
+	max-width: 100%;
+	padding: 0.65rem 0.75rem;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel2);
+	overflow-wrap: anywhere;
+}
+
 .media-picker {
 	display: grid;
 	/* Two equal columns, never three: a squeezed folder list is unreadable on a touch panel. */

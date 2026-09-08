@@ -237,6 +237,7 @@ fn run_inner() -> anyhow::Result<()> {
         available_monitors,
         started,
         administration_endpoint(&configuration),
+        portable_data_directory_for(&configuration),
     );
     shutdown.request(ShutdownReason::Requested);
     let served = runtime.block_on(serving);
@@ -251,6 +252,14 @@ fn run_inner() -> anyhow::Result<()> {
     served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
 }
 
+fn portable_data_directory_for(configuration: &MediaConfiguration) -> Option<std::path::PathBuf> {
+    let configuration_path = ConfigurationSource::from_environment().path();
+    configuration_path
+        .exists()
+        .then(|| startup::portable_data_directory(&configuration_path, &configuration.library.root))
+        .flatten()
+}
+
 fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
     let app_mode = running_from_macos_app_bundle();
     let source = ConfigurationSource::from_environment();
@@ -260,6 +269,9 @@ fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
     if app_mode && first_run {
         startup::apply_macos_app_defaults(&mut configuration, &source.path());
     }
+    startup::resolve_portable_library_root(&mut configuration, &source.path());
+    let recovered_moved_library =
+        app_mode && startup::recover_moved_macos_library(&mut configuration, &source.path());
     // A first run inherits legacy text once, then the resulting document belongs to this server.
     if first_run {
         startup::adopt_legacy_text(&mut configuration, true, unix_millis());
@@ -268,6 +280,15 @@ fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
         {
             tracing::error!(%error, "the adopted text sources could not be stored");
         }
+    }
+    if app_mode
+        && !first_run
+        && (recovered_moved_library
+            || startup::portable_data_directory(&source.path(), &configuration.library.root)
+                .is_some())
+        && let Err(error) = startup::write_configuration(&source.path(), &configuration)
+    {
+        tracing::error!(%error, "the portable library path could not be stored");
     }
     Ok(configuration)
 }
@@ -970,10 +991,21 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
     // is handed the one path this run was started from, so a saved edit lands where the next
     // start will read it.
     let configuration_path = ConfigurationSource::from_environment().path();
+    let data_directory = portable_data_directory_for(&configuration);
+    let configuration_path_for_view = startup::resolved_path(&configuration_path);
+    let open_data_directory = data_directory.clone();
     let api = media_http::ApiState {
         configuration: live,
         active_configuration: Arc::clone(&configuration),
         administration_endpoint: administration_endpoint(&configuration),
+        configuration_path: configuration_path_for_view,
+        data_directory,
+        open_data_directory: std::sync::Arc::new(move || {
+            let path = open_data_directory
+                .as_deref()
+                .ok_or_else(|| "the library is outside the configuration folder".to_owned())?;
+            startup::open_data_directory(path).map_err(|error| error.to_string())
+        }),
         state,
         catalog,
         now: std::sync::Arc::new(move || {

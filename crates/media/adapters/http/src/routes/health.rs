@@ -1,6 +1,7 @@
 //! What the process is running, and the library it published.
 
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 
 use crate::routes::ApiState;
@@ -25,7 +26,23 @@ pub(super) async fn runtime(State(state): State<ApiState>) -> impl IntoResponse 
     axum::Json(RunningServerView::of(
         &state.active_configuration,
         &state.administration_endpoint,
+        &state.configuration_path,
+        state.data_directory.as_deref(),
     ))
+}
+
+pub(super) async fn open_data_directory(
+    State(state): State<ApiState>,
+) -> Result<StatusCode, crate::ApiError> {
+    (state.open_data_directory)().map_err(|error| {
+        tracing::error!(%error, "the portable Media Server folder could not be opened");
+        crate::ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "data-directory-not-opened",
+            "The folder could not be opened on the Media Server computer.",
+        )
+    })?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
@@ -59,6 +76,25 @@ mod tests {
         assert_eq!(body["administrationIp"], "127.0.0.1");
         assert_eq!(body["outputs"][0]["universe"], 0);
         assert_eq!(body["outputs"][0]["startAddress"], 1);
+        assert_eq!(body["dataDirectory"], "/tmp/tosklight-media");
+        assert_eq!(body["libraryDirectory"], "/tmp/tosklight-media/library");
+        assert_eq!(
+            body["configurationFile"],
+            "/tmp/tosklight-media/media-server.json"
+        );
+        assert_eq!(body["portable"], true);
+    }
+
+    #[tokio::test]
+    async fn opening_the_data_directory_uses_the_process_owned_action() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            crate::routes::bench::post("/api/v2/runtime/data-directory/open".into(), "{}"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(body, serde_json::Value::Null);
     }
 
     #[tokio::test]

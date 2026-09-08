@@ -79,6 +79,11 @@ describe("the production Media pane", () => {
 			outputs: [main, backup],
 			runtime: {
 				administrationIp: "192.0.2.10",
+				dataDirectory: "/Users/Shared/ToskLight Media",
+				configurationFile:
+					"/Users/Shared/ToskLight Media/media-server.json",
+				libraryDirectory: "/Users/Shared/ToskLight Media/Media",
+				portable: true,
 				outputs: [
 					{
 						id: main.id,

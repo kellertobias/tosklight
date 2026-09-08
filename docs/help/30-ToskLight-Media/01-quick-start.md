@@ -6,6 +6,8 @@ ToskLight Pixel is a media-server process with a browser administration interfac
 
 Start **ToskLight Pixel** from the installed ToskLight applications. On macOS, the packaged first launch creates its configuration and media-library location under the user's Application Support folder, binds the administration interface for local-network access, and creates one fullscreen Main output on monitor 0. Other packaged platforms use their platform application-data location.
 
+Open **Settings > Libraries** and use **Show folder on Media Server** to reveal the single portable data folder on the server computer. On macOS, the Media Server menu-bar item also offers **open Folder in Finder**. Copy that whole folder—not only its `Media` subfolder—to carry `media-server.json`, uploaded media, thumbnails, and generated-source configuration to another computer. Stop the Media Server before replacing the folder on the destination computer.
+
 Open the administration address shown by the server. On the server machine the usual address is `http://127.0.0.1:8080`. If another computer is administering it, use the Media Server machine's permitted network address and allow the configured HTTP port through the firewall.
 
 ## Development launch

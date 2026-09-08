@@ -61,6 +61,10 @@ export function stubServer(
 		outputConfigurations: {},
 		runtime: {
 			administrationIp: "192.0.2.10",
+			dataDirectory: "/Users/Shared/ToskLight Media",
+			configurationFile: "/Users/Shared/ToskLight Media/media-server.json",
+			libraryDirectory: "/Users/Shared/ToskLight Media/Media",
+			portable: true,
 			outputs: [
 				{
 					id: "11111111-1111-4111-8111-111111111111",
@@ -143,6 +147,8 @@ export function stubServer(
 			}
 			if (path === "/health") return jsonResponse(server.health);
 			if (path === "/runtime") return jsonResponse(server.runtime);
+			if (path === "/runtime/data-directory/open")
+				return new Response(null, { status: 204 });
 			if (path === "/catalog") return jsonResponse(server.catalog);
 			if (path === "/folder-presentations")
 				return jsonResponse(server.folderPresentations);

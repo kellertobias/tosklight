@@ -27,6 +27,7 @@ mod text;
 mod time;
 mod visualizers;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -68,6 +69,7 @@ pub type PersistConfiguration =
 /// to while they turn it. Which ones those are is the process's knowledge, not the API's, so the
 /// API simply says that the configuration changed.
 pub type ApplyConfiguration = Arc<dyn Fn(&MediaConfiguration) + Send + Sync>;
+pub type OpenDataDirectory = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
 
 /// Everything the routes read and write.
 #[derive(Clone)]
@@ -82,6 +84,10 @@ pub struct ApiState {
     pub active_configuration: Arc<MediaConfiguration>,
     /// The literal, usable administration endpoint selected for this running process.
     pub administration_endpoint: String,
+    /// The configuration file and its copyable parent are process-owned filesystem facts.
+    pub configuration_path: PathBuf,
+    pub data_directory: Option<PathBuf>,
+    pub open_data_directory: OpenDataDirectory,
     pub state: Arc<ArcSwap<MediaState>>,
     pub catalog: Arc<ArcSwap<CatalogSnapshot>>,
     /// Stamps commands. Injected so the API's behaviour is testable without real time passing.
@@ -118,6 +124,10 @@ pub fn router(state: ApiState) -> Router {
     Router::new()
         .route("/api/v2/health", get(health::health))
         .route("/api/v2/runtime", get(health::runtime))
+        .route(
+            "/api/v2/runtime/data-directory/open",
+            post(health::open_data_directory),
+        )
         .route("/api/v2/catalog", get(health::catalog))
         .route("/api/v2/logs", get(logs::logs))
         .route("/api/v2/logs/level", get(logs::server_level))

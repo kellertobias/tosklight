@@ -55,6 +55,24 @@ describe("the settings page", () => {
 		expect(explanation).not.toHaveClass("is-notice");
 	});
 
+	it("links to the one folder containing media and configuration", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+		await openSettings("Libraries");
+
+		const portable = await screen.findByRole("article", {
+			name: "Portable data folder",
+		});
+		expect(portable).toHaveTextContent("/Users/Shared/ToskLight Media");
+		expect(portable).toHaveTextContent(/configuration and all media/u);
+		await userEvent.click(
+			within(portable).getByRole("button", {
+				name: "Show folder on Media Server",
+			}),
+		);
+		expect(server.writes).toContain("/runtime/data-directory/open");
+	});
+
 	it("offers actual monitors on a direct picture-output form and saves only picture fields", async () => {
 		const output = stubOutputConfiguration();
 		renderSettings();

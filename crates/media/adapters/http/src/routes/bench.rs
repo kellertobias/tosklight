@@ -45,10 +45,12 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
     let mut configured = OutputConfiguration::new("Main");
     configured.personality = LayerPersonality::TwoLayers;
     let output = configured.id;
-    let active_configuration = Arc::new(MediaConfiguration {
+    let mut active_configuration = MediaConfiguration {
         outputs: vec![configured],
         ..Default::default()
-    });
+    };
+    active_configuration.library.root = "/tmp/tosklight-media/library".into();
+    let active_configuration = Arc::new(active_configuration);
     let configuration = Arc::new(ArcSwap::from(Arc::clone(&active_configuration)));
     let state = Arc::new(ArcSwap::from_pointee(MediaState::with_outputs(vec![
         OutputState::new(output, LayerPersonality::TwoLayers),
@@ -67,6 +69,9 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         configuration: Arc::clone(&configuration),
         active_configuration,
         administration_endpoint: "127.0.0.1:18080".to_owned(),
+        configuration_path: "/tmp/tosklight-media/media-server.json".into(),
+        data_directory: Some("/tmp/tosklight-media".into()),
+        open_data_directory: Arc::new(|| Ok(())),
         state: state.clone(),
         catalog: Arc::new(ArcSwap::from_pointee(CatalogSnapshot::default())),
         now: Arc::new(|| Timestamp::from_millis(0)),

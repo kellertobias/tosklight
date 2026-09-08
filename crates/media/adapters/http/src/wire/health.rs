@@ -7,6 +7,7 @@ use media_application::MediaConfiguration;
 use media_application::configuration::DmxProtocol;
 use media_domain::{MediaAddress, SourceFailure, SourceStatus};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use ts_rs::TS;
 
 /// Whether the process is up and what it is running.
@@ -29,6 +30,10 @@ pub struct Health {
 pub struct RunningServerView {
     pub administration_ip: String,
     pub outputs: Vec<RunningOutputView>,
+    pub data_directory: Option<String>,
+    pub configuration_file: String,
+    pub library_directory: String,
+    pub portable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
@@ -42,13 +47,22 @@ pub struct RunningOutputView {
 }
 
 impl RunningServerView {
-    pub fn of(configuration: &MediaConfiguration, administration_endpoint: &str) -> Self {
+    pub fn of(
+        configuration: &MediaConfiguration,
+        administration_endpoint: &str,
+        configuration_path: &Path,
+        data_directory: Option<&Path>,
+    ) -> Self {
         let administration_ip = administration_endpoint
             .parse::<std::net::SocketAddr>()
             .map(|address| address.ip().to_string())
             .unwrap_or_else(|_| administration_endpoint.to_owned());
         Self {
             administration_ip,
+            data_directory: data_directory.map(|path| path.display().to_string()),
+            configuration_file: configuration_path.display().to_string(),
+            library_directory: configuration.library.root.display().to_string(),
+            portable: data_directory.is_some(),
             outputs: configuration
                 .outputs
                 .iter()

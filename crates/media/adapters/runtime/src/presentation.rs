@@ -68,6 +68,7 @@ pub fn run_event_loop(
     // frame's presentation sit on one timeline.
     started: std::time::Instant,
     administration_endpoint: String,
+    data_directory: Option<std::path::PathBuf>,
 ) -> anyhow::Result<()> {
     let Shared {
         state,
@@ -106,6 +107,7 @@ pub fn run_event_loop(
         direct: None,
         clip_size: Size::new(2, 2),
         administration_endpoint,
+        data_directory,
         windows: Vec::new(),
         entering_fullscreen: Vec::new(),
         worker: None,
@@ -203,6 +205,7 @@ struct PresentationHost {
     direct: Option<DirectClip>,
     clip_size: Size,
     administration_endpoint: String,
+    data_directory: Option<std::path::PathBuf>,
     /// Main-thread references ensure the final native-window drop happens on the Cocoa thread.
     windows: Vec<Arc<Window>>,
     /// Windows configured for full screen, waiting for their first turn through the event loop.
@@ -975,7 +978,7 @@ impl ApplicationHandler for PresentationHost {
         // is exactly what reaching this callback means.
         #[cfg(feature = "tray")]
         if self.tray.is_none() {
-            self.tray = crate::tray::show(&self.shutdown);
+            self.tray = crate::tray::show(&self.shutdown, self.data_directory.as_deref());
         }
         let monitors = media_render::monitors(event_loop.available_monitors())
             .into_iter()
