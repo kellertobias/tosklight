@@ -143,6 +143,15 @@ pub fn portable_data_directory(configuration_path: &Path, library_root: &Path) -
         .then_some(directory)
 }
 
+/// The copyable directory for the configuration source used by this process.
+pub fn current_portable_data_directory(configuration: &MediaConfiguration) -> Option<PathBuf> {
+    let configuration_path = ConfigurationSource::from_environment().path();
+    configuration_path
+        .exists()
+        .then(|| portable_data_directory(&configuration_path, &configuration.library.root))
+        .flatten()
+}
+
 fn absolute_path(path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()

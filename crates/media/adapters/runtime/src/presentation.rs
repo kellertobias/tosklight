@@ -68,7 +68,6 @@ pub fn run_event_loop(
     // frame's presentation sit on one timeline.
     started: std::time::Instant,
     administration_endpoint: String,
-    data_directory: Option<std::path::PathBuf>,
 ) -> anyhow::Result<()> {
     let Shared {
         state,
@@ -107,7 +106,7 @@ pub fn run_event_loop(
         direct: None,
         clip_size: Size::new(2, 2),
         administration_endpoint,
-        data_directory,
+        data_directory: crate::startup::current_portable_data_directory(configuration),
         windows: Vec::new(),
         entering_fullscreen: Vec::new(),
         worker: None,

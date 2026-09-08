@@ -237,7 +237,6 @@ fn run_inner() -> anyhow::Result<()> {
         available_monitors,
         started,
         administration_endpoint(&configuration),
-        portable_data_directory_for(&configuration),
     );
     shutdown.request(ShutdownReason::Requested);
     let served = runtime.block_on(serving);
@@ -250,14 +249,6 @@ fn run_inner() -> anyhow::Result<()> {
     drop(audio);
     presented?;
     served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
-}
-
-fn portable_data_directory_for(configuration: &MediaConfiguration) -> Option<std::path::PathBuf> {
-    let configuration_path = ConfigurationSource::from_environment().path();
-    configuration_path
-        .exists()
-        .then(|| startup::portable_data_directory(&configuration_path, &configuration.library.root))
-        .flatten()
 }
 
 fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
@@ -991,7 +982,7 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
     // is handed the one path this run was started from, so a saved edit lands where the next
     // start will read it.
     let configuration_path = ConfigurationSource::from_environment().path();
-    let data_directory = portable_data_directory_for(&configuration);
+    let data_directory = startup::current_portable_data_directory(&configuration);
     let configuration_path_for_view = startup::resolved_path(&configuration_path);
     let open_data_directory = data_directory.clone();
     let api = media_http::ApiState {
