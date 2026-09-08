@@ -191,6 +191,42 @@ test("every Tauri overlay names a frontend Tauri can embed", () => {
 	}
 });
 
+test("the Architect Tauri overlay follows a custom artifact root for its MCP bridge", () => {
+	const temporaryParent = path.join(repositoryRoot, ".artifacts", "tmp");
+	fs.mkdirSync(temporaryParent, { recursive: true });
+	const temporary = fs.mkdtempSync(
+		path.join(temporaryParent, "tauri-architect-mcp-contract."),
+	);
+	try {
+		const artifactRoot = path.join(temporary, "artifacts");
+		const output = path.join(temporary, "viz-editor.json");
+		execFileSync(
+			process.execPath,
+			[
+				path.join(repositoryRoot, "tools/write-tauri-artifact-config.mjs"),
+				"viz-editor",
+				output,
+			],
+			{ env: { ...process.env, LIGHT_ARTIFACTS_DIR: artifactRoot } },
+		);
+		const resources = JSON.parse(fs.readFileSync(output, "utf8")).bundle
+			.resources;
+		assert.equal(
+			resources[
+				path.join(
+					artifactRoot,
+					"build",
+					"patch-mcp",
+					"tosklight-patch-mcp.mjs",
+				)
+			],
+			"tosklight-patch-mcp.mjs",
+		);
+	} finally {
+		fs.rmSync(temporary, { recursive: true, force: true });
+	}
+});
+
 test("release Desk bundles both supervised helpers before packaging", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const sidecarBuild = workflow.indexOf(
@@ -339,6 +375,40 @@ test("the Architect release keeps one product identity and literal accessory nam
 	assert.match(assembler, /tosklight-architect-\$asset_slug\.app/u);
 	assert.match(workflow, /tosklight-architect-\$version-macos-arm64\.zip/u);
 	assert.doesNotMatch(assembler, /mv "\$previz\/viz-editor(?:\.exe)?"/u);
+});
+
+test("every Architect package includes the generated MCP bridge", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const config = read("apps/viz-editor/src-tauri/tauri.conf.json");
+	const configWriter = read("tools/write-tauri-artifact-config.mjs");
+	const buildScript = read("tools/build.sh");
+	const bridgeBuilder = read("tools/build-patch-mcp.mjs");
+	const bundler = read("tools/bundle-visualizer-macos.sh");
+
+	assert.match(
+		config,
+		/beforeBuildCommand[^\n]*build:patch-mcp/u,
+		"a direct Tauri build must generate the bridge before packaging",
+	);
+	assert.match(config, /tosklight-patch-mcp\.mjs/u);
+	assert.match(configWriter, /tosklight-patch-mcp\.mjs/u);
+	assert.match(bridgeBuilder, /artifactRoot/u);
+	assert.match(
+		buildScript,
+		/build_viz_editor\(\)[\s\S]*?npm run build:patch-mcp/u,
+	);
+	assert.match(
+		bundler,
+		/install -m 0644 "\$MCP_SERVER" "\$APP\/Contents\/Resources\/tosklight-patch-mcp\.mjs"/u,
+	);
+	assert.match(
+		workflow,
+		/windows-amd64\)[\s\S]*?cp "\.artifacts\/build\/patch-mcp\/tosklight-patch-mcp\.mjs" "\$stage\/"/u,
+	);
+	assert.match(
+		workflow,
+		/linux-amd64\)[\s\S]*?cp "\.artifacts\/build\/patch-mcp\/tosklight-patch-mcp\.mjs" "\$stage\/"/u,
+	);
 });
 
 test("the editor-owned renderer is an accessory of the same Architect application", () => {

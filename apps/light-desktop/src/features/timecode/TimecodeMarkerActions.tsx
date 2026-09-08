@@ -1,5 +1,5 @@
 import { Button, InputModal } from "@tosklight/ui";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import type { TimecodeEditorSelection } from "./editorModel";
 import { sameSelection } from "./editorModel";
@@ -149,6 +149,7 @@ export function MarkerActionStrip({
 	items,
 	onSelection,
 	onCommit,
+	children,
 }: {
 	definition: TimecodeDefinition;
 	selection: Extract<TimecodeEditorSelection, { kind: "marker" }>;
@@ -157,6 +158,7 @@ export function MarkerActionStrip({
 	items: readonly TimelineItem[];
 	onSelection(item: TimelineItem): void;
 	onCommit(definition: TimecodeDefinition): void;
+	children?: ReactNode;
 }) {
 	const marker = definition.markers.find(
 		(candidate) => candidate.id === selection.itemId,
@@ -222,6 +224,7 @@ export function MarkerActionStrip({
 				lastFrame={lastFrame}
 				update={update}
 			/>
+			{children}
 			<StackedButton
 				label="Next Marker"
 				top="Next"

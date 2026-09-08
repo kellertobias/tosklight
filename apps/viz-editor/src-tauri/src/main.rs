@@ -11,6 +11,7 @@ mod contract;
 mod demo;
 mod discovery;
 mod local_api;
+mod mcp;
 mod recent;
 mod session;
 mod verify;
@@ -193,6 +194,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             session::create_document,
             session::open_document,
+            mcp::mcp_configuration,
             windows::open_editor_window,
             cad::cad_scene_snapshot,
             cad::cad_replace_selection,

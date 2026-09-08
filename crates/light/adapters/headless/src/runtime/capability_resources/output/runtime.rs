@@ -225,6 +225,10 @@ impl OutputResource {
         self.timecode.lock().configure(config);
     }
 
+    pub(in crate::runtime) fn uses_internal_timecode_clock(&self) -> bool {
+        self.timecode.lock().uses_internal_clock()
+    }
+
     pub(in crate::runtime) fn ingest_timecode(
         &self,
         timecode: light_control::SmpteTimecode,

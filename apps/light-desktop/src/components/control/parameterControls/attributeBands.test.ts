@@ -1,3 +1,4 @@
+import type { ChannelResolution } from "../../../api/types";
 import { describe, expect, it } from "vitest";
 import {
 	type AttributeBand,
@@ -8,11 +9,11 @@ import {
 
 /// A gobo wheel: four gobos, then a band the wheel spins in.
 const wheel: AttributeBand[] = [
-	{ from: 0, to: 9, kind: "slot", label: "Open", rawValue: 0 },
-	{ from: 10, to: 19, kind: "slot", label: "Gobo 1", rawValue: 10 },
-	{ from: 20, to: 29, kind: "slot", label: "Gobo 2", rawValue: 20 },
-	{ from: 30, to: 39, kind: "slot", label: "Gobo 3", rawValue: 30 },
-	{ from: 128, to: 255, kind: "range", label: "Rotate", rawValue: 128 },
+	{ rawMaximum: 255, from: 0, to: 9, kind: "slot", label: "Open", rawValue: 0 },
+	{ rawMaximum: 255, from: 10, to: 19, kind: "slot", label: "Gobo 1", rawValue: 10 },
+	{ rawMaximum: 255, from: 20, to: 29, kind: "slot", label: "Gobo 2", rawValue: 20 },
+	{ rawMaximum: 255, from: 30, to: 39, kind: "slot", label: "Gobo 3", rawValue: 30 },
+	{ rawMaximum: 255, from: 128, to: 255, kind: "range", label: "Rotate", rawValue: 128 },
 ];
 
 function raw(normalized: number): number {
@@ -82,6 +83,39 @@ describe("stepping an indexed attribute", () => {
 		expect(bands?.map((band) => band.kind)).toEqual(["slot", "range"]);
 	});
 
+	it("uses the shipped ROBE DLS 16-bit iris scale for labels and stepping", () => {
+		// ROBE Robin DLS Profile, Mode 1, iris (coarse/fine): preserve the package's
+		// raw boundaries rather than reducing them to the coarse byte.
+		const functions = [
+			slotFunction("iris", "Open", 0, 255),
+			sweepFunction("iris", 256, 46079),
+			slotFunction("iris", "Closed", 46080, 49151),
+			sweepFunction("iris", 49152, 56319),
+			sweepFunction("iris", 56320, 63487),
+			slotFunction("iris", "Random pulse opening (fast)", 63488, 63999),
+			slotFunction("iris", "Random pulse opening (slow)", 64000, 64511),
+			slotFunction("iris", "Random pulse closing (fast)", 64512, 65023),
+			slotFunction("iris", "Random pulse closing (slow)", 65024, 65535),
+		];
+		const bands = attributeBands(fixtures("iris", functions, "f1", "u16"), ["f1"], "iris")!;
+		expect(bandLabel(bands, 0)).toBe("Open");
+		expect(bandLabel(bands, 46080 / 65535)).toBe("Closed");
+		expect(bandLabel(bands, 1)).toBe("Random pulse closing (slow)");
+		const entered = steppedValue(bands, 0, 1, false);
+		expect(Math.round(entered * 65535)).toBe(256);
+		expect(steppedValue(bands, entered, 1, false)).toBeGreaterThan(entered);
+		expect(Math.round(steppedValue(bands, 46079 / 65535, 1, false) * 65535)).toBe(46080);
+		expect(Math.round(steppedValue(bands, 46080 / 65535, -1, false) * 65535)).toBe(46079);
+	});
+
+	it("does not share raw bands between different channel resolutions", () => {
+		const functions = [slotFunction("iris", "Open", 0, 255)];
+		expect(attributeBands([
+			...fixtures("iris", functions, "f1", "u8"),
+			...fixtures("iris", functions, "f2", "u16"),
+		], ["f1", "f2"], "iris")).toBeNull();
+	});
+
 	it("offers no wheel when two selected fixtures lay the channel out differently", () => {
 		const wide = fixtures("gobo.1", [slotFunction("gobo.1", "Open", 0, 127)]);
 		const narrow = fixtures("gobo.1", [slotFunction("gobo.1", "Open", 0, 63)], "f2");
@@ -121,7 +155,7 @@ function slotFunction(attribute: string, label: string, from: number, to: number
 }
 
 /// One selected fixture whose mode holds a single channel of the given shape.
-function fixtures(attribute: string, functions: unknown[], fixtureId = "f1") {
+function fixtures(attribute: string, functions: unknown[], fixtureId = "f1", resolution: ChannelResolution = "u8") {
 	const head = { id: "head", master_shared: true };
 	return [
 		{
@@ -134,7 +168,7 @@ function fixtures(attribute: string, functions: unknown[], fixtureId = "f1") {
 						{
 							id: "mode",
 							heads: [head],
-							channels: [{ head_id: "head", attribute, functions }],
+							channels: [{ resolution, head_id: "head", attribute, functions }],
 						},
 					],
 				},

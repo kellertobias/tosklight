@@ -136,13 +136,16 @@ impl DeviceCapture {
     fn open(configuration: &AudioConfiguration) -> Result<(Self, Opened), AudioError> {
         let host = cpal::default_host();
         let device = select(&host, &configuration.device)?;
-        let name = device.name().unwrap_or_else(|_| "an input".to_owned());
+        let name = device
+            .description()
+            .map(|description| description.name().to_owned())
+            .unwrap_or_else(|_| "an input".to_owned());
         let config = device
             .default_input_config()
             .map_err(|error| AudioError::NoUsableFormat {
                 detail: error.to_string(),
             })?;
-        let sample_rate = config.sample_rate().0 as f32;
+        let sample_rate = config.sample_rate() as f32;
         let channels = usize::from(config.channels().max(1));
 
         let queue = Arc::new(ArrayQueue::new(QUEUE_CAPACITY));
@@ -154,7 +157,7 @@ impl DeviceCapture {
         let filling = Arc::clone(&queue);
         let stream = device
             .build_input_stream(
-                &config.config(),
+                config.config(),
                 move |samples: &[f32], _| {
                     // Mono: a stereo input is averaged, so a source panned to one side is not
                     // analysed as half as loud.
@@ -255,7 +258,12 @@ pub fn input_devices() -> Vec<String> {
         return Vec::new();
     };
     devices
-        .filter_map(|device| device.name().ok())
+        .filter_map(|device| {
+            device
+                .description()
+                .ok()
+                .map(|description| description.name().to_owned())
+        })
         .filter(|name| !name.trim().is_empty())
         .collect()
 }
@@ -267,7 +275,12 @@ pub fn output_devices() -> Vec<String> {
         return Vec::new();
     };
     devices
-        .filter_map(|device| device.name().ok())
+        .filter_map(|device| {
+            device
+                .description()
+                .ok()
+                .map(|description| description.name().to_owned())
+        })
         .filter(|name| !name.trim().is_empty())
         .collect()
 }
@@ -317,7 +330,12 @@ fn select(host: &cpal::Host, selector: &AudioDeviceSelector) -> Result<cpal::Dev
         .collect();
     let names: Vec<String> = devices
         .iter()
-        .map(|device| device.name().unwrap_or_default())
+        .map(|device| {
+            device
+                .description()
+                .map(|description| description.name().to_owned())
+                .unwrap_or_default()
+        })
         .collect();
     let chosen = choose(selector, &names)?;
     devices.into_iter().nth(chosen).ok_or(AudioError::NoDevice)

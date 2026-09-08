@@ -512,10 +512,29 @@ fn canonical_cct_identity_aliases_bind_each_physical_channel_once() {
 
     let plan = compile(&[fixture]);
     let colour = &plan.bindings[0].colour;
-    assert!(colour.white.is_some());
-    assert!(colour.amber.is_some());
-    assert!(colour.cold_white.is_none());
-    assert!(colour.warm_white.is_none());
+    assert!(colour.white.is_none());
+    assert!(colour.amber.is_none());
+    assert!(colour.cold_white.is_some());
+    assert!(colour.warm_white.is_some());
+    let mut decoder = Decoder::new(plan.bindings);
+    let mut values = SceneValues::default();
+    for (slot, expected) in [(0, [0.86, 0.93, 1.0]), (1, [1.0, 0.83, 0.62])] {
+        let mut slots = [0; 512];
+        slots[slot] = 255;
+        decoder.apply(
+            &plan.scene,
+            &[UniverseFrame {
+                logical_universe: 1,
+                slots,
+                received_micros: 0,
+                stale: false,
+            }],
+            &mut values,
+            0.0,
+        );
+        assert_eq!(values.emitters[0].colour, expected);
+        assert_eq!(values.emitters[0].intensity, 1.0);
+    }
 }
 
 #[test]
@@ -704,4 +723,247 @@ fn visual_only_packages_never_enter_the_lamp_or_plan_fixture_paths() {
     assert!(compiled.scene.emitters.is_empty());
     assert!(compiled.scene.fixture_plan.is_empty());
     assert!(compiled.scene.plan_artwork.is_empty());
+}
+
+#[test]
+fn shipped_generic_rgb_dimmer_modes_preserve_colour_brightness() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../assets/fixture-library/generic--rgb-led.toskfixture");
+    let profile =
+        Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+    let mut tested = 0;
+    for mode in &profile.modes {
+        if !mode
+            .channels
+            .iter()
+            .any(|channel| channel.attribute.is_intensity())
+        {
+            continue;
+        }
+        let mut fixture = patched("led", ProfileOptics::default());
+        fixture.profile = Arc::clone(&profile);
+        fixture.mode_id = mode.id;
+        let plan = compile(&[fixture]);
+        assert_eq!(plan.bindings.len(), 1, "{}", mode.name);
+        let binding = &plan.bindings[0];
+        let dimmer_slot = binding.intensity.as_ref().unwrap().slots[0] as usize - 1;
+        let red_slot = binding.colour.red.as_ref().unwrap().slots[0] as usize - 1;
+        let mut decoder = Decoder::new(plan.bindings);
+        let mut values = SceneValues::default();
+        for red in [0_u8, 128, 255] {
+            let mut slots = [0; 512];
+            slots[dimmer_slot] = 128;
+            slots[red_slot] = red;
+            decoder.apply(
+                &plan.scene,
+                &[UniverseFrame {
+                    logical_universe: 1,
+                    slots,
+                    received_micros: 0,
+                    stale: false,
+                }],
+                &mut values,
+                0.0,
+            );
+            let expected = (128.0 / 255.0) * (f32::from(red) / 255.0);
+            assert!(
+                (values.emitters[0].intensity - expected).abs() < 1e-6,
+                "{}",
+                mode.name
+            );
+        }
+        tested += 1;
+    }
+    assert_eq!(tested, 12);
+}
+
+#[test]
+fn shipped_etc_hsi_modes_decode_declared_colour_coordinates_once() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../assets/fixture-library/etc--source-four-led-series-2-lustr.toskfixture");
+    let profile =
+        Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+    let mut tested = 0;
+    for mode in &profile.modes {
+        if !mode.color_systems.iter().any(|system| {
+            matches!(
+                system.system,
+                light_fixture::ColorSystem::HueSaturation { .. }
+            )
+        }) {
+            continue;
+        }
+        let mut fixture = patched("profile", ProfileOptics::default());
+        fixture.profile = Arc::clone(&profile);
+        fixture.mode_id = mode.id;
+        let plan = compile(&[fixture]);
+        let binding = &plan.bindings[0];
+        let hue_slots = binding.colour.hue.as_ref().unwrap().slots.clone();
+        let saturation_slot = binding.colour.saturation.as_ref().unwrap().slots[0] as usize - 1;
+        let intensity_slot = binding.intensity.as_ref().unwrap().slots[0] as usize - 1;
+        let mut decoder = Decoder::new(plan.bindings);
+        let mut values = SceneValues::default();
+        for hue in [0_u8, 85, 170] {
+            for saturation in [0_u8, 255] {
+                let mut slots = [0; 512];
+                for slot in &hue_slots {
+                    slots[*slot as usize - 1] = hue;
+                }
+                slots[saturation_slot] = saturation;
+                slots[intensity_slot] = 128;
+                decoder.apply(
+                    &plan.scene,
+                    &[UniverseFrame {
+                        logical_universe: 1,
+                        slots,
+                        received_micros: 0,
+                        stale: false,
+                    }],
+                    &mut values,
+                    0.0,
+                );
+                let expected = light_core::hsv_to_rgb(light_core::PickerColor {
+                    hue: f32::from(hue) / 255.0,
+                    saturation: f32::from(saturation) / 255.0,
+                    brightness: 1.0,
+                });
+                assert_eq!(values.emitters[0].colour, expected, "{}", mode.name);
+                assert!(
+                    (values.emitters[0].intensity - 128.0 / 255.0).abs() < 1e-6,
+                    "{}",
+                    mode.name
+                );
+            }
+        }
+        tested += 1;
+    }
+    assert_eq!(tested, 4);
+}
+
+#[test]
+fn shipped_percent_zoom_does_not_become_a_hundred_degree_beam() {
+    for name in ["claypaky--stage-zoom-1200", "claypaky--stage-zoom-1200-sv"] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../../../assets/fixture-library/{name}.toskfixture"
+        ));
+        let profile =
+            Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+        let expected = fallback::classify(&profile.fixture_type).cone_angles();
+        for mode in &profile.modes {
+            let mut fixture = patched("profile", ProfileOptics::default());
+            fixture.profile = Arc::clone(&profile);
+            fixture.mode_id = mode.id;
+            let plan = compile(&[fixture]);
+            assert_eq!(plan.bindings[0].zoom.as_ref().unwrap().zoom_degrees(), None);
+            assert_eq!(
+                (
+                    plan.scene.emitters[0].beam_angle_degrees,
+                    plan.scene.emitters[0].field_angle_degrees
+                ),
+                expected,
+                "{name} {}",
+                mode.name
+            );
+        }
+    }
+}
+
+#[test]
+fn shipped_dls_zoom_runs_from_wide_to_narrow_without_changing_dmx() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../assets/fixture-library/robe--robin-dls-profile.toskfixture");
+    let profile =
+        Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+    for mode in &profile.modes {
+        let mut fixture = patched("profile", ProfileOptics::default());
+        fixture.profile = Arc::clone(&profile);
+        fixture.mode_id = mode.id;
+        let plan = compile(&[fixture]);
+        let zoom_slots = plan.bindings[0].zoom.as_ref().unwrap().slots.clone();
+        let mut decoder = Decoder::new(plan.bindings);
+        let mut values = SceneValues::default();
+        for (raw, expected) in [(0, 1.0), (255, 0.0)] {
+            let mut slots = [0; 512];
+            for slot in &zoom_slots {
+                slots[*slot as usize - 1] = raw;
+            }
+            decoder.apply(
+                &plan.scene,
+                &[UniverseFrame {
+                    logical_universe: 1,
+                    slots,
+                    received_micros: 0,
+                    stale: false,
+                }],
+                &mut values,
+                0.0,
+            );
+            assert_eq!(values.emitters[0].zoom, expected, "{}", mode.name);
+        }
+    }
+}
+
+#[test]
+fn suedbahnhof_plan_profiles_compile_into_controllable_architect_emitters() {
+    for (filename, mode_name) in [
+        (
+            "generic--dimmer-rgb-control-par.toskfixture",
+            "Fixed 0, Red, Green, Blue, Fixed 0",
+        ),
+        ("cameo--auro-spot-z300.toskfixture", "20-Channel"),
+        (
+            "cameo--root-par-6.toskfixture",
+            "D7CH — Delay Off, virtual dimmer",
+        ),
+        ("cameo--q-spot-40-tw.toskfixture", "8-CHANNEL"),
+        ("martin--mac-300.toskfixture", "Mode 4"),
+        ("martin--elp-cl-profile.toskfixture", "10-Channel"),
+        ("martin--elp-ww-profile.toskfixture", "4-Channel"),
+        ("prolights--ecl-fresnel-ct-plus-m.toskfixture", "STANDARD"),
+        (
+            "claypaky--stage-zoom-1200.toskfixture",
+            "16 bit - gobo fine - lamp control",
+        ),
+    ] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../assets/fixture-library")
+            .join(filename);
+        let profile =
+            Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+        let mode_id = profile
+            .modes
+            .iter()
+            .find(|mode| mode.name == mode_name)
+            .unwrap()
+            .id;
+        let mut fixture = patched(&profile.fixture_type, profile.optics);
+        fixture.profile = profile;
+        fixture.mode_id = mode_id;
+
+        let compiled = compile(&[fixture]);
+        assert_eq!(compiled.scene.fixtures.len(), 1, "{filename}");
+        assert_eq!(compiled.scene.emitters.len(), 1, "{filename}");
+        assert_eq!(compiled.bindings.len(), 1, "{filename}");
+        assert!(
+            compiled.warnings.is_empty(),
+            "{filename}: {:?}",
+            compiled.warnings
+        );
+    }
+
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../assets/fixture-library/cameo--auro-spot-z300.toskfixture");
+    let profile =
+        Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+    let mut fixture = patched(&profile.fixture_type, profile.optics);
+    fixture.mode_id = profile.modes[0].id;
+    fixture.profile = profile;
+    let compiled = compile(&[fixture]);
+    let binding = &compiled.bindings[0];
+    assert!(binding.intensity.is_some());
+    assert!(binding.pan.is_some() && binding.tilt.is_some());
+    assert!(binding.zoom.is_some() && binding.focus.is_some() && binding.frost.is_some());
+    assert!(binding.gobo.is_some() && binding.gobo_rotation.is_some());
+    assert!(binding.prism.is_some() && binding.prism_rotation.is_some());
+    assert!(binding.colour.wheel.is_some());
 }

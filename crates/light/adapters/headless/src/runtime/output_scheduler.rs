@@ -524,6 +524,9 @@ pub(in crate::runtime) fn combined_delivery_result(
 /// boundary as the production scheduler.
 pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
     let tick_started = Instant::now();
+    if state.output.uses_internal_timecode_clock() {
+        state.timecodes.tick();
+    }
     let action_timing = state.action_timing.begin_output_render();
     let before_cues = state
         .output
@@ -727,7 +730,12 @@ fn apply_external_timecode_loss(runtime: &Runtime, policy: ExternalTimecodeLossP
             ExternalTimecodeLossPolicy::ContinueInternal => false,
         };
         if eligible {
-            let _ = runtime.timecodes.handle(snapshot.timecode_id, action);
+            if let Err(error) = runtime
+                .timecodes
+                .handle_source_loss(snapshot.timecode_id, action)
+            {
+                tracing::warn!(timecode_id = %snapshot.timecode_id.0, error = %error.message, "Timecode source-loss transport failed");
+            }
         }
     }
 }

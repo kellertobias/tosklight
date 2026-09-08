@@ -61,13 +61,20 @@ import {
 	reconcileAutomaticAudioLane,
 } from "../features/timecode/editorModel";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
-import { TimecodeAutosaveWriter } from "../features/timecode/TimecodeAutosaveWriter";
+import { useTimecodeAutosave } from "../features/timecode/useTimecodeAutosave";
 import {
 	type TimecodeAudioPlayerOption,
 	type TimecodeCueListOption,
 	TimecodeTimelineEditor,
 	type TimecodeTimelineEditorHandle,
 } from "../features/timecode/TimecodeTimelineEditor";
+import {
+	timecodeTransportActions,
+	useTimecodeEditorTransport,
+} from "../features/timecode/TimecodeEditorTransport";
+import { useTimecodeWaveform } from "../features/timecode/useTimecodeWaveform";
+import { TimecodeEditorFeedback } from "../features/timecode/TimecodeEditorFeedback";
+import { TimecodeFrameField } from "../features/timecode/TimecodeFrameField";
 import { useTimecodeEditorHistory } from "../features/timecode/useTimecodeEditorHistory";
 import type { WindowProps } from "./windowTypes";
 import "./TimecodeRuntimeWindow.css";
@@ -384,38 +391,27 @@ function newTimecode(number: number): NewTimecode {
 	};
 }
 
-function useTimecodeWaveform(
-	showId: string | null,
-	isNew: boolean,
-	draft: TimecodeDefinition,
-	api: TimecodesApiClient,
-) {
-	const [waveformPeaks, setWaveformPeaks] = useState<number[] | undefined>();
-	const [waveformError, setWaveformError] = useState<string | null>(null);
-	useEffect(() => {
-		if (!showId || isNew || !draft.audio || waveformPeaks) return;
-		let cancelled = false;
-		void api
-			.waveform(showId, draft.id)
-			.then((waveform) => !cancelled && setWaveformPeaks(waveform.peaks))
-			.catch((reason) => !cancelled && setWaveformError(String(reason)));
-		return () => {
-			cancelled = true;
-		};
-	}, [api, draft.audio, draft.id, isNew, showId, waveformPeaks]);
-	return { waveformPeaks, setWaveformPeaks, waveformError };
-}
-
 /**
  * The audio a Timecode holds, named so an operator recognises it, with the way to replace it
  * beside it. The managed asset id names nothing anyone would know.
  */
 /** How many frames of timeline an imported audio file occupies. */
-function audioDurationFrames(imported: {
-	sample_frames: number;
-	sample_rate: number;
-}) {
-	return Math.ceil((imported.sample_frames * FPS) / imported.sample_rate);
+function audioDurationFrames(
+	imported: {
+		sample_frames: number;
+		sample_rate: number;
+	},
+	definition: TimecodeDefinition,
+) {
+	return Math.max(
+		Math.ceil((imported.sample_frames * FPS) / imported.sample_rate),
+		...definition.markers.map((marker) => marker.frame),
+		...definition.lanes.flatMap((lane) =>
+			"clips" in lane.content
+				? lane.content.clips.map((clip) => clip.end_frame)
+				: lane.content.keyframes.map((keyframe) => keyframe.frame),
+		),
+	);
 }
 
 function AudioFileField({
@@ -485,10 +481,15 @@ export function TimecodeEditor({
 		canUndo,
 		canRedo,
 	} = useTimecodeEditorHistory(item.definition);
-	const [editorFrame, setEditorFrame] = useState(snapshot?.frame ?? 0);
-	useEffect(() => {
-		if (snapshot) setEditorFrame(snapshot.frame);
-	}, [snapshot?.frame]);
+	const {
+		transport,
+		editorFrame,
+		scrub,
+		acceptTransportResponse,
+		beginTransportAction,
+	} = useTimecodeEditorTransport(snapshot);
+	const latestDraft = useRef(draft);
+	latestDraft.current = draft;
 	const [error, setError] = useState<string | null>(null);
 	const [actionBusy, setActionBusy] = useState(false);
 	const [audioImporting, setAudioImporting] = useState(false);
@@ -500,60 +501,50 @@ export function TimecodeEditor({
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
 	const cueTiming = useCueTimingWriter(cueLists, saveCueList ?? null);
 	const effectiveCueLists = cueTiming.cueLists;
-	const initialRecord = "isNew" in item ? null : item;
-	const writer = useMemo(
-		() =>
-			showId ? new TimecodeAutosaveWriter(showId, initialRecord, api) : null,
-		[api, item, showId],
-	);
-	const [record, setRecord] = useState<TimecodeObjectRecord | null>(
-		initialRecord,
-	);
-	const [saving, setSaving] = useState(Boolean(writer && !initialRecord));
 	useEffect(() => {
 		const reconciled = reconcileAutomaticAudioLane(draft);
 		if (reconciled !== draft) setDraft(reconciled);
 	}, [draft, setDraft]);
-	useEffect(() => {
-		if (!writer) return;
-		let current = true;
-		setSaving(true);
-		void writer
-			.enqueue(draft)
-			.then((saved) => {
-				if (!current) return;
-				setRecord(saved);
-				setError(null);
-			})
-			.catch((reason) => {
-				if (current)
-					setError(
-						`Autosave failed: ${reason instanceof Error ? reason.message : String(reason)}`,
-					);
-			})
-			.finally(() => current && setSaving(false));
-		return () => {
-			current = false;
-		};
-	}, [draft, writer]);
+	const {
+		record,
+		saving,
+		saveError,
+		retry: retrySave,
+		flush,
+	} = useTimecodeAutosave({ showId, item, draft, api });
 	const isNew = !record;
-	const { waveformPeaks, setWaveformPeaks, waveformError } =
-		useTimecodeWaveform(showId, isNew, draft, api);
-	useEffect(() => {
-		if (waveformError) setError(waveformError);
-	}, [waveformError]);
+	const {
+		waveformPeaks,
+		waveformError,
+		waveformLoading,
+		seedWaveform,
+		retryWaveform,
+	} = useTimecodeWaveform({
+		showId,
+		timecodeId: draft.id,
+		audio: draft.audio,
+		savedAudio: record?.definition.audio,
+		api,
+	});
 	const duration = draft.duration_frame ?? 0;
 	const frame = Math.min(editorFrame, duration);
-	const busy = saving || actionBusy || cueTiming.saving;
+	const busy = saving || actionBusy || audioImporting || cueTiming.saving;
 	useEffect(() => {
 		if (cueTiming.error) setError(cueTiming.error);
 	}, [cueTiming.error]);
 	const act = async (action: TimecodeTransportAction) => {
 		if (!showId || !record) return;
+		const interactionRevision = beginTransportAction();
 		setActionBusy(true);
 		setError(null);
 		try {
-			await api.transportAction(showId, draft.id, action);
+			if (action.type !== "stop") await flush();
+			const result = await api.transportAction(showId, draft.id, action);
+			acceptTransportResponse(
+				result,
+				action.type === "seek",
+				interactionRevision,
+			);
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
@@ -571,8 +562,8 @@ export function TimecodeEditor({
 			]);
 			setDraft(
 				reconcileAutomaticAudioLane({
-					...draft,
-					duration_frame: audioDurationFrames(imported),
+					...latestDraft.current,
+					duration_frame: audioDurationFrames(imported, latestDraft.current),
 					// `file_name` is what the operator chose, so the lane and the settings can name it.
 					audio: {
 						asset_id: imported.asset_id,
@@ -581,7 +572,13 @@ export function TimecodeEditor({
 					},
 				}),
 			);
-			setWaveformPeaks(peaks);
+			seedWaveform(
+				{
+					asset_id: imported.asset_id,
+					asset_revision: imported.asset_revision,
+				},
+				peaks,
+			);
 		} catch (reason) {
 			setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {
@@ -590,7 +587,7 @@ export function TimecodeEditor({
 	};
 	const close = async () => {
 		try {
-			await writer?.flush();
+			await flush();
 			await onClose();
 		} catch (reason) {
 			setError(`Could not close before autosave completed: ${String(reason)}`);
@@ -601,57 +598,24 @@ export function TimecodeEditor({
 			const csvSource = await file.text();
 			const imported = parseMarkerCsv(csvSource, FPS, Math.max(1, duration));
 			setDraft({
-				...draft,
+				...latestDraft.current,
 				markers:
-					csvMode === "append" ? [...draft.markers, ...imported] : imported,
+					csvMode === "append"
+						? [...latestDraft.current.markers, ...imported]
+						: imported,
 			});
 			setCsvError(null);
 		} catch (reason) {
 			setCsvError(reason instanceof Error ? reason.message : String(reason));
 		}
 	};
-	const transportActions: TitleAction[] = [
-		{
-			id: "rewind",
-			label: (
-				<span className="timecode-rewind-glyph" aria-hidden="true">
-					<span>▏</span>
-					<span className="timecode-reversed-play">▶</span>
-				</span>
-			),
-			ariaLabel: "Rewind to start",
-			onPress: () => {
-				setEditorFrame(0);
-				void act({ type: "seek", frame: 0 });
-			},
-			disabled: isNew || busy,
-			className: "timecode-transport-action",
-		},
-		{
-			id: "stop",
-			label: <span aria-hidden="true">■</span>,
-			ariaLabel: "Stop",
-			onPress: () => void act({ type: "stop" }),
-			disabled: isNew || busy,
-			className: "timecode-transport-action",
-		},
-		{
-			id: "play",
-			label: <span aria-hidden="true">▶</span>,
-			ariaLabel: "Play",
-			onPress: () => void act({ type: "go" }),
-			disabled: isNew || busy,
-			className: "timecode-transport-action",
-		},
-		{
-			id: "pause",
-			label: <span aria-hidden="true">Ⅱ</span>,
-			ariaLabel: "Pause",
-			onPress: () => void act({ type: "pause" }),
-			disabled: isNew || busy,
-			className: "timecode-transport-action",
-		},
-	];
+	const transportActions = timecodeTransportActions({
+		disabled: isNew || busy || Boolean(saveError),
+		stopDisabled: isNew || actionBusy,
+		state: transport?.state,
+		onAction: act,
+	});
+
 	const addAction = useTimecodeAddAction({
 		timelineRef,
 		draft,
@@ -664,8 +628,20 @@ export function TimecodeEditor({
 			<WindowHeader
 				title={`Timecode ${draft.number}`}
 				info={{
-					primary: snapshot?.state ?? "Stopped",
-					secondary: record ? "Saved" : "Creating…",
+					primary: transport?.state ?? "Stopped",
+					secondary: audioImporting
+						? "Importing audio…"
+						: saving
+							? record
+								? "Saving…"
+								: "Creating…"
+							: saveError
+								? "Not saved"
+								: waveformLoading
+									? "Loading waveform…"
+									: record
+										? "Saved"
+										: "Not saved",
 				}}
 				groups={[
 					{ id: "timecode-add", actions: [addAction] },
@@ -697,7 +673,7 @@ export function TimecodeEditor({
 						actions: [
 							{
 								id: "position",
-								label: formatFrame(snapshot?.frame ?? frame),
+								label: formatFrame(transport?.frame ?? 0),
 								ariaLabel: "Timecode position",
 								className: "timecode-position-action",
 								onPress: () => void act({ type: "seek", frame }),
@@ -750,6 +726,13 @@ export function TimecodeEditor({
 					{error}
 				</p>
 			)}
+			<TimecodeEditorFeedback
+				savingError={saveError}
+				waveformError={waveformError}
+				busy={busy}
+				onRetrySave={retrySave}
+				onRetryWaveform={retryWaveform}
+			/>
 			<TimecodeTimelineEditor
 				ref={timelineRef}
 				definition={draft}
@@ -759,8 +742,8 @@ export function TimecodeEditor({
 				audioPlayers={audioPlayers}
 				waveformPeaks={waveformPeaks}
 				markersLocked={markersLocked}
-				clipStatuses={snapshot?.cue_list_clips}
-				onScrub={setEditorFrame}
+				clipStatuses={transport?.cue_list_clips}
+				onScrub={scrub}
 				onCommit={setDraft}
 				onPreview={previewDraft}
 				onBeginGesture={beginGesture}
@@ -806,14 +789,7 @@ export function TimecodeSettings({
 }) {
 	const [activeTab, setActiveTab] =
 		useState<(typeof TIMECODE_SETTINGS_TABS)[number]>("Generic");
-	const changeFrameField = (
-		field: "duration_frame" | "transport_offset_frame",
-		value: string,
-	) => {
-		const frame = parseFrame(value);
-		if (frame === null || (field === "duration_frame" && frame < 1)) return;
-		setDraft({ ...draft, [field]: frame });
-	};
+
 	return (
 		<div className="timecode-settings-fields">
 			<div
@@ -843,12 +819,13 @@ export function TimecodeSettings({
 						}
 					/>
 					<div className="timecode-duration-fields">
-						<TextField
+						<TimecodeFrameField
 							label="Duration"
-							value={formatFrame(duration)}
-							pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
-							onChange={(event) =>
-								changeFrameField("duration_frame", event.currentTarget.value)
+							value={duration}
+							fps={FPS}
+							minimum={1}
+							onChange={(duration_frame) =>
+								setDraft({ ...draft, duration_frame })
 							}
 						/>
 					</div>
@@ -863,15 +840,12 @@ export function TimecodeSettings({
 			{activeTab === "Sync" && (
 				<>
 					<div className="timecode-duration-fields">
-						<TextField
+						<TimecodeFrameField
 							label="Transport offset"
-							value={formatFrame(draft.transport_offset_frame)}
-							pattern="[0-9]+:[0-5][0-9]:[0-5][0-9][.:][0-9]+"
-							onChange={(event) =>
-								changeFrameField(
-									"transport_offset_frame",
-									event.currentTarget.value,
-								)
+							value={draft.transport_offset_frame}
+							fps={FPS}
+							onChange={(transport_offset_frame) =>
+								setDraft({ ...draft, transport_offset_frame })
 							}
 						/>
 					</div>

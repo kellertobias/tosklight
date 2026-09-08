@@ -1,6 +1,34 @@
 use super::*;
 
 #[test]
+fn descending_function_endpoints_are_valid_but_constant_or_nonfinite_ranges_are_not() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Reverse optical travel".into();
+    let mode = &mut profile.modes[0];
+    mode.splits[0].footprint = 1;
+    mode.channels = vec![channel(mode.heads[0].id, ChannelResolution::U8, vec![])];
+    for (from, to, valid) in [
+        (1.0, 0.0, true),
+        (0.0, 1.0, true),
+        (1.0, 1.0, false),
+        (f32::NAN, 0.0, false),
+        (0.0, f32::INFINITY, false),
+    ] {
+        profile.modes[0].channels[0].functions[0].behavior = ChannelFunctionBehavior::Continuous {
+            physical_min: from,
+            physical_max: to,
+            unit: None,
+        };
+        assert_eq!(
+            profile.validate().is_ok(),
+            valid,
+            "endpoints {from} -> {to}"
+        );
+    }
+}
+
+#[test]
 fn derives_primary_slots_around_reserved_component_bytes() {
     let head_id = Uuid::new_v4();
     let first = channel(head_id, ChannelResolution::U16, vec![2]);

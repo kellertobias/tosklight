@@ -286,9 +286,10 @@ impl Decoder {
         let colour = colour::resolve(&binding.colour, &reader);
         value.colour = colour.rgb;
 
-        // An explicit dimmer wins; otherwise the colour emitters act as a virtual dimmer.
+        // Additive colour is normalized to hue by the resolver, so its level must still
+        // modulate an explicit dimmer. Otherwise RGB black becomes full-brightness white.
         value.intensity = match read(&binding.intensity) {
-            Some(level) => level,
+            Some(level) => level * colour.level,
             None if colour.explicit => colour.level,
             None => 0.0,
         };
@@ -309,7 +310,11 @@ impl Decoder {
             &reader,
             binding.invert_tilt,
         );
-        value.zoom = read(&binding.zoom).unwrap_or(0.5);
+        value.zoom = binding
+            .zoom
+            .as_ref()
+            .map(|channel| channel.zoom_normalised(&self.slots(channel.logical_universe)))
+            .unwrap_or(0.5);
         value.iris = read(&binding.iris).unwrap_or(0.0);
         value.frost = read(&binding.frost).unwrap_or(0.0);
         value.focus = read(&binding.focus).unwrap_or(0.5);
@@ -379,12 +384,27 @@ impl Decoder {
         value.cells = if binding.cells.is_empty() {
             Vec::new()
         } else {
+            // A repeated per-cell dimmer is not a fixture master. Only multiply an
+            // independently bound master; each cell already carries its own colour level.
+            let master = binding
+                .intensity
+                .as_ref()
+                .filter(|master| {
+                    !binding.cells.iter().any(|cell| {
+                        cell.intensity.as_ref().is_some_and(|channel| {
+                            channel.logical_universe == master.logical_universe
+                                && channel.slots == master.slots
+                        })
+                    })
+                })
+                .map(|channel| channel.normalised(&self.slots(channel.logical_universe)))
+                .unwrap_or(1.0);
             binding
                 .cells
                 .iter()
                 .enumerate()
                 .map(|(index, cell)| {
-                    let mut decoded = self.decode_cell(cell, value);
+                    let mut decoded = self.decode_cell(cell, master);
                     // Decoding rebuilds the cell list from scratch every DMX frame, and the tail
                     // a cell is part-way through fading is display state rather than decoded
                     // state. Losing it here would leave per-cell persistence resetting to nothing
@@ -405,20 +425,16 @@ impl Decoder {
             .any(|universe| self.stale.get(universe).copied().unwrap_or(true));
     }
 
-    fn decode_cell(&self, cell: &ColourBinding, emitter: &EmitterValues) -> CellValue {
+    fn decode_cell(&self, cell: &ColourBinding, master: f32) -> CellValue {
         let reader = |universe: u16| self.slots(universe);
         let colour = colour::resolve(cell, &reader);
-        let cell_level = cell
+        let cell_dimmer = cell
             .intensity
             .as_ref()
             .map(|channel| channel.normalised(&self.slots(channel.logical_universe)))
-            .unwrap_or(if colour.explicit { colour.level } else { 1.0 });
+            .unwrap_or(1.0);
         CellValue {
-            intensity: (cell_level
-                * emitter
-                    .intensity
-                    .max(if cell.intensity.is_some() { 0.0 } else { 1.0 }))
-            .clamp(0.0, 1.0),
+            intensity: (cell_dimmer * colour.level * master).clamp(0.0, 1.0),
             colour: colour.rgb,
             held_intensity: 0.0,
         }
@@ -719,6 +735,7 @@ mod tests {
             invert: false,
             physical_min: 0.0,
             physical_max: 1.0,
+            physical_unit: None,
             snap: false,
             default_raw: 0,
             functions: Vec::new(),
@@ -737,6 +754,7 @@ mod tests {
             invert: false,
             physical_min: 0.0,
             physical_max: 1.0,
+            physical_unit: None,
             snap: false,
             default_raw: 0,
             functions: Vec::new(),
@@ -909,6 +927,58 @@ mod tests {
         );
         assert_eq!(values.emitters[0].intensity, 1.0);
         assert_eq!(values.emitters[0].colour, [1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn additive_colour_level_multiplies_the_physical_dimmer() {
+        let binding = EmitterBinding {
+            intensity: Some(channel(1)),
+            colour: ColourBinding {
+                red: Some(channel(2)),
+                green: Some(channel(3)),
+                blue: Some(channel(4)),
+                ..ColourBinding::default()
+            },
+            universes: vec![1],
+            ..EmitterBinding::default()
+        };
+        let mut decoder = Decoder::new(vec![binding]);
+        let scene = scene(&[EmitterKind::Beam]);
+        let mut values = SceneValues::default();
+        for dimmer in [0_u8, 64, 128, 255] {
+            for red in [0_u8, 64, 128, 255] {
+                decoder.apply(&scene, &[frame(&[(0, dimmer), (1, red)])], &mut values, 0.0);
+                let expected = f32::from(dimmer) * f32::from(red) / (255.0 * 255.0);
+                assert!((values.emitters[0].intensity - expected).abs() < 1e-6);
+                if red > 0 {
+                    assert_eq!(values.emitters[0].colour, [1.0, 0.0, 0.0]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_cells_follow_master_without_squaring_colour_or_cell_dimmers() {
+        for per_cell_dimmer in [false, true] {
+            let binding = EmitterBinding {
+                intensity: Some(channel(1)),
+                cells: vec![ColourBinding {
+                    red: Some(channel(2)),
+                    intensity: per_cell_dimmer.then(|| channel(1)),
+                    ..ColourBinding::default()
+                }],
+                universes: vec![1],
+                ..EmitterBinding::default()
+            };
+            let mut decoder = Decoder::new(vec![binding]);
+            let scene = scene(&[EmitterKind::Emissive]);
+            let mut values = SceneValues::default();
+            for dimmer in [0_u8, 128, 255] {
+                decoder.apply(&scene, &[frame(&[(0, dimmer), (1, 128)])], &mut values, 0.0);
+                let expected = f32::from(dimmer) * 128.0 / (255.0 * 255.0);
+                assert!((values.emitters[0].cells[0].intensity - expected).abs() < 1e-6);
+            }
+        }
     }
 
     #[test]

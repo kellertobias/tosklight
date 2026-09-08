@@ -77,7 +77,7 @@ fn test_state_with_programmers(
             dynamics: light_application::DynamicsService::new(programmers.clone()),
             macros: light_application::CommandMacroExecutionService::default(),
             timecodes: crate::runtime::timecode_v2::new_service_with_clock(
-                Arc::new(light_application::timeline::SystemTimecodeClock::default()),
+                crate::runtime::timecode_clock::runtime_clock(manual_clock.as_ref()),
                 None,
                 application_events.clone(),
             ),

@@ -39,6 +39,18 @@ pub fn resolve(binding: &ColourBinding, frame: &dyn Fn(u16) -> [u8; DMX_SLOTS]) 
         Some(channel.normalised(&frame(channel.logical_universe)))
     };
 
+    if let (Some(hue), Some(saturation)) = (read(&binding.hue), read(&binding.saturation)) {
+        return ResolvedColour {
+            rgb: light_core::hsv_to_rgb(light_core::PickerColor {
+                hue,
+                saturation,
+                brightness: 1.0,
+            }),
+            level: read(&binding.intensity).unwrap_or(1.0),
+            explicit: true,
+        };
+    }
+
     // Subtractive systems describe how much of each primary is removed.
     let cyan = read(&binding.cyan);
     let magenta = read(&binding.magenta);
@@ -171,6 +183,7 @@ mod tests {
             invert: false,
             physical_min: 0.0,
             physical_max: 1.0,
+            physical_unit: None,
             snap: false,
             default_raw: 0,
             functions: Vec::new(),

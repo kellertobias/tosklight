@@ -439,6 +439,56 @@ fn cuelist_clip_seek_matches_follow_and_wait_schedule() {
 }
 
 #[test]
+fn configured_cue_subrange_starts_at_its_selected_cue_and_preserves_placed_transitions() {
+    let mut cue_list = execution_cue_list();
+    cue_list.cues[2].trigger = crate::CueTrigger::Manual;
+    let mut definition = execution_definition(&cue_list);
+    let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
+        unreachable!()
+    };
+    clips[0].start_cue_id = cue_list.cues[1].id;
+    clips[0].end_cue_id = cue_list.cues[2].id;
+    clips[0].end_behavior = TimecodeClipEnd::Hold;
+    clips[0].cue_starts = vec![TimecodeCueStart {
+        cue_id: cue_list.cues[2].id,
+        offset_frame: TimecodeFrame(20),
+    }];
+    for frame in 100..120 {
+        assert_eq!(
+            execution_at(&definition, &cue_list, frame).cue_id,
+            Some(cue_list.cues[1].id)
+        );
+    }
+    for frame in 120..=200 {
+        assert_eq!(
+            execution_at(&definition, &cue_list, frame).cue_id,
+            Some(cue_list.cues[2].id)
+        );
+    }
+    assert_eq!(
+        execution_at(&definition, &cue_list, 200).kind,
+        TimecodeCueListClipExecutionKind::Held
+    );
+    let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content else {
+        unreachable!()
+    };
+    clips[0].start_frame = TimecodeFrame(200);
+    clips[0].end_frame = TimecodeFrame(300);
+    assert_eq!(
+        execution_at(&definition, &cue_list, 219).cue_id,
+        Some(cue_list.cues[1].id)
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 220).cue_id,
+        Some(cue_list.cues[2].id)
+    );
+    assert!(matches!(
+        cue_list.cues[2].trigger,
+        crate::CueTrigger::Manual
+    ));
+}
+
+#[test]
 fn a_clip_that_ends_early_simply_stops_playing_its_later_cues() {
     // Shortening a clip is an ordinary edit. The Cues past the new end stop being reached, and
     // the clip cuts where the operator put it — it used to refuse to run at all and report

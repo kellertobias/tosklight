@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:4177",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npm --prefix ../.. run build:patch-mcp",
     "frontendDist": "../../../.artifacts/build/frontend/viz-editor"
   },
   "app": {
@@ -26,6 +26,9 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
-    "resources": { "../../../assets/fixture-library/": "fixture-library/" }
+    "resources": {
+      "../../../assets/fixture-library/": "fixture-library/",
+      "../../../.artifacts/build/patch-mcp/tosklight-patch-mcp.mjs": "tosklight-patch-mcp.mjs"
+    }
   }
 }

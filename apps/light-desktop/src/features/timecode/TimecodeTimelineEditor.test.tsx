@@ -326,7 +326,9 @@ describe("TimecodeTimelineEditor", () => {
 			fireEvent.keyDown(window, { key: "Backspace" });
 		for (const key of "00:00:03.00") fireEvent.keyDown(window, { key });
 		fireEvent.keyDown(window, { key: "Enter" });
-		expect(screen.queryByRole("dialog", { name: "Marker timecode" })).toBeNull();
+		expect(
+			screen.queryByRole("dialog", { name: "Marker timecode" }),
+		).toBeNull();
 		expect(screen.getByTitle("Chorus · 00:00:03.00")).toBeTruthy();
 
 		fireEvent.click(screen.getByRole("button", { name: "Next Marker" }));
@@ -446,10 +448,15 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.getByTitle(/Speed Group A · 180 BPM/)).toBeTruthy();
 		fireEvent.change(bpmInput, { target: { value: "1200" } });
 		expect(screen.getByTitle(/Speed Group A · 999 BPM/)).toBeTruthy();
+		const phaseInput = screen.getByLabelText("Phase");
+		expect(phaseInput).toHaveAttribute("inputmode", "decimal");
+		fireEvent.change(phaseInput, { target: { value: "1" } });
+		expect(screen.getByLabelText("Phase")).toHaveValue("0.99");
 		fireEvent.click(
-			within(
-				bpmInput.closest(".ui-number-control") as HTMLElement,
-			).getByRole("button", { name: "Open number pad" }),
+			within(bpmInput.closest(".ui-number-control") as HTMLElement).getByRole(
+				"button",
+				{ name: "Open number pad" },
+			),
 		);
 		expect(screen.getByRole("dialog", { name: "BPM" })).toBeInTheDocument();
 
@@ -840,7 +847,7 @@ describe("TimecodeTimelineEditor", () => {
 		expect(moved).not.toHaveStyle({ transform: "translateX(-22px)" });
 	});
 
-	it("creates a clip on a patched Audio Player lane without the old inspector", () => {
+	it("creates a clip on a patched Audio Player lane with editable properties", () => {
 		const commits: TimecodeDefinition[] = [];
 		function Harness() {
 			const [draft, setDraft] = useState<TimecodeDefinition>({
@@ -891,9 +898,21 @@ describe("TimecodeTimelineEditor", () => {
 		);
 		expect(screen.getByTitle(/Audio Player 201 · 000\.000/)).toBeTruthy();
 		expect(screen.queryByLabelText("Audio Folder")).toBeNull();
+		fireEvent.click(
+			within(
+				screen.getByRole("group", {
+					name: "Selected lane and keyframe actions",
+				}),
+			).getByRole("button", { name: "Clip settings" }),
+		);
+		expect(screen.getByLabelText("Audio Folder")).toBeTruthy();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Close clip settings" }),
+		);
 		expect(
-			screen.getByRole("button", { name: "Delete Keyframe" }),
-		).toBeDisabled();
+			screen.queryByRole("button", { name: "Delete Keyframe" }),
+		).toBeNull();
+		expect(screen.getByRole("button", { name: "Delete clip" })).toBeEnabled();
 		const content = commits.at(-1)?.lanes[0].content;
 		expect(content).toMatchObject({
 			kind: "audio_player",
@@ -1241,7 +1260,8 @@ describe("TimecodeTimelineEditor", () => {
 		expect(onCommit).toHaveBeenCalledTimes(1);
 		const committed = onCommit.mock.calls[0]?.[0] as TimecodeDefinition;
 		const lane = committed.lanes[0];
-		if (lane?.content.kind !== "cue_list") throw new Error("expected a Cuelist lane");
+		if (lane?.content.kind !== "cue_list")
+			throw new Error("expected a Cuelist lane");
 		expect(lane.content.clips[0]).toMatchObject({
 			in_fade_frames: 0,
 			out_fade_frames: 44,
@@ -1305,5 +1325,205 @@ describe("TimecodeTimelineEditor", () => {
 		expect(
 			view.getByText("Cue 1 cannot resolve its Link target."),
 		).toBeTruthy();
+	});
+});
+
+describe("Timecode selection properties", () => {
+	function harness(initial: TimecodeDefinition, onCommit = vi.fn()) {
+		function Harness() {
+			const [draft, setDraft] = useState(initial);
+			return (
+				<TimecodeTimelineEditor
+					definition={draft}
+					frame={0}
+					fps={44}
+					cueLists={[
+						{
+							id: "list",
+							name: "Opening",
+							cues: [
+								{ id: "cue-1", number: "1", name: "First" },
+								{ id: "cue-2", number: "2", name: "Second" },
+								{ id: "cue-3", number: "3", name: "Third" },
+							],
+						},
+					]}
+					audioPlayers={[]}
+					onScrub={vi.fn()}
+					onPreview={setDraft}
+					onBeginGesture={vi.fn()}
+					onEndGesture={vi.fn()}
+					onCommit={(value) => {
+						onCommit(value);
+						setDraft(value);
+					}}
+				/>
+			);
+		}
+		render(<Harness />);
+		fireEvent.click(
+			screen.getByRole("button", { name: /Opening.*Drag to reorder lane/ }),
+		);
+		return onCommit;
+	}
+
+	it("exposes ordered Cue ranges, behavior, copy and deletion for selected clips", () => {
+		const commits = harness({
+			...definition,
+			lanes: [
+				{
+					id: "lane",
+					name: "Opening",
+					content: {
+						kind: "cue_list",
+						cue_list_id: "list",
+						clips: [
+							{
+								id: "clip",
+								start_frame: 0,
+								end_frame: 100,
+								start_cue_id: "cue-1",
+								end_cue_id: "cue-2",
+								start_behavior: "state",
+								end_behavior: "release",
+								cue_starts: [],
+								in_fade_frames: 0,
+								out_fade_frames: 0,
+							},
+						],
+					},
+				},
+			],
+		});
+		const strip = screen.getByRole("group", {
+			name: "Selected lane and keyframe actions",
+		});
+		expect(
+			within(strip).getByRole("button", { name: "Prev Keyframe" }),
+		).toBeTruthy();
+		expect(
+			within(strip).getByRole("button", { name: "Next Keyframe" }),
+		).toBeTruthy();
+		expect(
+			within(strip).getByRole("button", { name: "Copy clip" }),
+		).toBeTruthy();
+		expect(
+			screen.queryByRole("group", {
+				name: "Selected timeline item properties",
+			}),
+		).toBeNull();
+		fireEvent.click(
+			within(strip).getByRole("button", { name: "Clip settings" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Start Cue" }));
+		expect(screen.queryByRole("option", { name: "3 · Third" })).toBeNull();
+		fireEvent.click(screen.getByRole("option", { name: "1 · First" }));
+		fireEvent.click(screen.getByRole("button", { name: "Start behavior" }));
+		fireEvent.click(screen.getByRole("option", { name: "Cue Start" }));
+		expect(
+			commits.mock.lastCall?.[0].lanes[0].content.clips[0].start_behavior,
+		).toBe("cue");
+		fireEvent.click(
+			screen.getByRole("button", { name: "Close clip settings" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Copy clip" }));
+		expect(commits.mock.lastCall?.[0].lanes[0].content.clips).toHaveLength(2);
+		fireEvent.click(screen.getByRole("button", { name: "Delete clip" }));
+		expect(commits.mock.lastCall?.[0].lanes[0].content.clips).toHaveLength(1);
+		expect(
+			screen.queryByRole("group", {
+				name: "Selected timeline item properties",
+			}),
+		).toBeNull();
+	});
+
+	it("disables clip copying when no complete copy fits in the lane", () => {
+		harness({
+			...definition,
+			duration_frame: 100,
+			lanes: [
+				{
+					id: "lane",
+					name: "Opening",
+					content: {
+						kind: "audio_player",
+						fixture_id: "player",
+						clips: [
+							{
+								id: "clip",
+								start_frame: 0,
+								end_frame: 100,
+								folder: 1,
+								file: 2,
+								repeat: false,
+								volume_keyframes: [],
+							},
+						],
+					},
+				},
+			],
+		});
+		expect(screen.getByRole("button", { name: "Copy clip" })).toBeDisabled();
+	});
+
+	it("keeps audio volume points inside trimmed clips and clamps device addresses", () => {
+		const commits = harness({
+			...definition,
+			lanes: [
+				{
+					id: "lane",
+					name: "Opening",
+					content: {
+						kind: "audio_player",
+						fixture_id: "player",
+						clips: [
+							{
+								id: "clip",
+								start_frame: 0,
+								end_frame: 100,
+								folder: 1,
+								file: 2,
+								repeat: false,
+								volume_keyframes: [
+									{
+										id: "volume",
+										frame: 80,
+										value: 1,
+										fade_frames: 0,
+										curve: "linear",
+									},
+									{
+										id: "volume-2",
+										frame: 90,
+										value: 0.5,
+										fade_frames: 0,
+										curve: "linear",
+									},
+								],
+							},
+						],
+					},
+				},
+			],
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Clip settings" }));
+		fireEvent.change(screen.getByLabelText("End frame"), {
+			target: { value: "50" },
+		});
+		expect(
+			commits.mock.lastCall?.[0].lanes[0].content.clips[0].volume_keyframes.map(
+				(point: { frame: number }) => point.frame,
+			),
+		).toEqual([49, 49]);
+		fireEvent.change(screen.getByLabelText("Audio Folder"), {
+			target: { value: "999" },
+		});
+		expect(commits.mock.lastCall?.[0].lanes[0].content.clips[0].folder).toBe(
+			255,
+		);
+		fireEvent.click(screen.getByRole("checkbox", { name: /Repeat/ }));
+		expect(commits.mock.lastCall?.[0].lanes[0].content.clips[0].repeat).toBe(
+			true,
+		);
 	});
 });

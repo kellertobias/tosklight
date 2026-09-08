@@ -10,7 +10,7 @@ authors.workspace = true
 # real-time callback without doing anything on that thread that could block it.
 [dependencies]
 arc-swap.workspace = true
-cpal = "0.16"
+cpal = "0.18.2"
 crossbeam-queue = "0.3"
 media-application = { path = "../../application" }
 media-domain = { path = "../../domain" }

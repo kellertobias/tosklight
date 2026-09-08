@@ -169,14 +169,26 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
 
     fixture_channel.behavior = ChannelBehavior::Static;
     fixture_channel.default_raw = 37;
+    fixture_channel.highlight_raw = 211;
+    fixture_channel.invert = true;
+    fixture_channel.reacts_to_virtual_intensity = true;
+    fixture_channel.reacts_to_sequence_master = true;
+    fixture_channel.reacts_to_group_master = true;
+    fixture_channel.reacts_to_grand_master = true;
     assert_eq!(
         mode.resolve_channel_raw(
             &fixture_channel,
             &values,
-            false,
-            None,
-            ChannelScales::default(),
+            true,
+            Some(220),
+            ChannelScales {
+                virtual_intensity: 0.0,
+                sequence_master: 0.0,
+                group_master: 0.0,
+                grand_master: 0.0,
+            },
         ),
-        37
+        37,
+        "a static physical slot is immutable under Highlight, inversion, and every master"
     );
 }

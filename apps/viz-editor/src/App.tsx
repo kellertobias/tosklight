@@ -24,6 +24,7 @@ import { TauriPatchTransport } from "./document/transport";
 import { type EditorWorkspace, EditorSidebar } from "./EditorSidebar";
 import { FileBar } from "./FileBar";
 import { MediaWorkspace } from "./MediaWorkspace";
+import { McpSettingsWorkspace } from "./McpSettingsWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { RendererSettingsWorkspace } from "./RendererSettingsWorkspace";
 import { beginWindowDrag, WindowControls } from "./WindowChrome";
@@ -42,7 +43,8 @@ type ShowPage =
 	| "rendering"
 	| "atmosphere"
 	| "picture"
-	| "features";
+	| "features"
+	| "mcp";
 
 export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
@@ -495,6 +497,7 @@ export function App() {
 											{ id: "atmosphere", label: "Atmosphere" },
 											{ id: "picture", label: "Picture" },
 											{ id: "features", label: "Features" },
+											{ id: "mcp", label: "MCP" },
 										],
 									},
 								]}
@@ -541,6 +544,8 @@ export function App() {
 									}
 									onReloadDocument={() => undefined}
 								/>
+							) : showPage === "mcp" ? (
+								<McpSettingsWorkspace />
 							) : (
 								<RendererSettingsWorkspace page={showPage} onError={report} />
 							)}

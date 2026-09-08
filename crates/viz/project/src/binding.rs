@@ -26,6 +26,7 @@ pub struct ChannelRef {
     pub invert: bool,
     pub physical_min: f32,
     pub physical_max: f32,
+    pub physical_unit: Option<String>,
     pub snap: bool,
     pub default_raw: u32,
     pub functions: Vec<ChannelFunction>,
@@ -48,6 +49,60 @@ impl ChannelRef {
         let raw = self.raw(frame);
         let level = raw as f32 / self.max_raw.max(1) as f32;
         if self.invert { 1.0 - level } else { level }
+    }
+
+    /// Actual beam angle endpoints require an explicit degree unit, never a numeric guess.
+    pub fn zoom_degrees(&self) -> Option<(f32, f32)> {
+        let degrees = |unit: Option<&str>| matches!(unit, Some("deg" | "degree" | "degrees" | "°"));
+        if degrees(self.physical_unit.as_deref()) {
+            return Some((self.physical_min, self.physical_max));
+        }
+        self.functions
+            .iter()
+            .find_map(|function| match &function.behavior {
+                ChannelFunctionBehavior::Continuous {
+                    physical_min,
+                    physical_max,
+                    unit,
+                } if function.dmx_from == 0
+                    && function.dmx_to == self.max_raw
+                    && degrees(unit.as_deref()) =>
+                {
+                    Some((*physical_min, *physical_max))
+                }
+                _ => None,
+            })
+    }
+
+    /// Renderer zoom runs narrow to wide; DMX functions may run wide to narrow.
+    pub fn zoom_normalised(&self, frame: &[u8; DMX_SLOTS]) -> f32 {
+        if let Some(function) = self.function(frame)
+            && let ChannelFunctionBehavior::Continuous {
+                physical_min,
+                physical_max,
+                ..
+            } = function.behavior
+        {
+            let fraction = (self.raw(frame).saturating_sub(function.dmx_from) as f32
+                / function.dmx_to.saturating_sub(function.dmx_from).max(1) as f32)
+                .clamp(0.0, 1.0);
+            let fraction = if self.invert {
+                1.0 - fraction
+            } else {
+                fraction
+            };
+            return if physical_min > physical_max {
+                1.0 - fraction
+            } else {
+                fraction
+            };
+        }
+        let fraction = self.normalised(frame);
+        if self.physical_min > self.physical_max {
+            1.0 - fraction
+        } else {
+            fraction
+        }
     }
 
     /// Absolute camera position in metres from an unsigned 24-bit offset-binary channel.
@@ -242,10 +297,25 @@ mod tests {
             invert,
             physical_min: 0.0,
             physical_max: 1.0,
+            physical_unit: None,
             snap: false,
             default_raw: 0,
             functions: Vec::new(),
         }
+    }
+
+    #[test]
+    fn zoom_degree_endpoints_require_units_and_keep_reverse_direction() {
+        let mut zoom = channel(vec![1], 255, false);
+        zoom.physical_min = 60.0;
+        zoom.physical_max = 10.0;
+        assert_eq!(zoom.zoom_degrees(), None);
+        zoom.physical_unit = Some("deg".into());
+        assert_eq!(zoom.zoom_degrees(), Some((60.0, 10.0)));
+        let mut frame = [0; DMX_SLOTS];
+        assert_eq!(zoom.zoom_normalised(&frame), 1.0);
+        frame[0] = 255;
+        assert_eq!(zoom.zoom_normalised(&frame), 0.0);
     }
 
     #[test]

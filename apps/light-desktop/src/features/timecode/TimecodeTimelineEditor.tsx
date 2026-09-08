@@ -1,12 +1,5 @@
-import {
-	Button,
-	CheckboxField,
-	Input,
-	InputModal,
-	NumberField,
-	SelectField,
-	TextField,
-} from "@tosklight/ui";
+import { SelectionProperties } from "./TimecodeSelectionInspector";
+import { Button } from "@tosklight/ui";
 import {
 	type CSSProperties,
 	forwardRef,
@@ -26,22 +19,8 @@ import type {
 	TimecodeCueListClipStatus,
 	TimecodeDefinition,
 } from "../../api/types/timecode";
+import { type CueClipTimingDefaults } from "./cueClipTiming";
 import {
-	SPEED_GROUP_MAX_BPM,
-	SPEED_GROUP_MIN_BPM,
-} from "../speedGroupRuntime/contracts";
-import {
-	type CueClipTimingDefaults,
-	type CueClipTimingRow,
-	type CueFadeEdge,
-	type CueFadeKind,
-	cueClipTimingRows,
-	cueWithDraggedFade,
-	TIMECODE_FPS,
-} from "./cueClipTiming";
-import {
-	deleteTimelineItem,
-	moveTimelineItem,
 	reorderTimelineLane,
 	sameSelection,
 	type TimecodeEditorSelection,
@@ -51,10 +30,7 @@ import {
 } from "./editorModel";
 import { type ClipFadeKind, CueListClipBody } from "./TimecodeClipBody";
 import { LaneLabel, Waveform } from "./TimecodeLaneParts";
-import {
-	CueListClipContents,
-	CueListClipStatus,
-} from "./TimecodeCueClipContents";
+import { CueListClipStatus } from "./TimecodeCueClipContents";
 import {
 	KeyframeActionStrip,
 	scaleClipCueTimings,
@@ -62,33 +38,24 @@ import {
 	useSelectedCue,
 } from "./TimecodeKeyframeActions";
 import { CueListChooser } from "./TimecodeCueListChooser";
-import { MarkerActionStrip } from "./TimecodeMarkerActions";
 import {
 	formatFrame,
-	markerColorIndex,
-	MarkerColorButton,
 	markerColorOption,
-	parseTimelineFrame,
 	AudioLaneFileName,
 	TIMECODE_LANE_HEADER_WIDTH,
 	timelineScroller,
 	type OverviewResize,
-	TIMECODE_MARKER_COLORS,
 	type TimecodeAudioPlayerOption,
 	type TimecodeCueListOption,
 	type TimelineItem,
 	timelineFrameX,
-	wrappedIndex,
 } from "./timecodeEditorShared";
 import {
 	TIMECODE_SPEED_GROUPS,
 	TimecodeSpeedGroupChooser,
 } from "./TimecodeSpeedGroupChooser";
 import { clearTimecodeEncoderDeck } from "./timecodeEncoderBridge";
-import {
-	laneWithKeyframeValue,
-	useTimecodeEncoderSlots,
-} from "./timecodeEncoderSlots";
+import { useTimecodeEncoderSlots } from "./timecodeEncoderSlots";
 import {
 	useTimelineActions,
 	useTimelineDrag,
@@ -127,7 +94,6 @@ export interface TimecodeTimelineEditorHandle {
 	addAudioPlayerLane(fixtureId: string): void;
 }
 
-
 function TimelineCanvas(props: {
 	definition: TimecodeDefinition;
 	frame: number;
@@ -145,7 +111,8 @@ function TimelineCanvas(props: {
 	startDrag(
 		event: ReactPointerEvent,
 		selection: TimecodeEditorSelection,
-		frame: number, clipEdge?: "start" | "end",
+		frame: number,
+		clipEdge?: "start" | "end",
 	): void;
 	startLaneDrag(event: ReactPointerEvent, laneId: string): void;
 	consumeLaneDragClick(laneId: string): boolean;
@@ -215,6 +182,12 @@ function TimelineCanvas(props: {
 					fps={props.fps}
 					pixelsPerFrame={props.pixelsPerFrame}
 				/>
+				{props.definition.lanes.length === 0 && (
+					<p className="timecode-timeline-empty">
+						Use Add to create a Cuelist or Speed lane. Choose audio in Timecode
+						Settings.
+					</p>
+				)}
 				{props.definition.lanes.map((lane) => (
 					<EditorLane key={lane.id} {...props} lane={lane} />
 				))}
@@ -716,11 +689,12 @@ function TimelineItemButton({
 			) : isCueListClip ? null : (
 				(item.valueLabel ?? item.label)
 			)}
-			{!marker && !isCueListClip && <small>{formatFrame(item.frame, fps)}</small>}
+			{!marker && !isCueListClip && (
+				<small>{formatFrame(item.frame, fps)}</small>
+			)}
 		</Button>
 	);
 }
-
 
 type SpeedKeyframe = Extract<
 	TimecodeDefinition["lanes"][number]["content"],
@@ -765,7 +739,6 @@ export function speedGroupLinePoints(
 	if (last) points.push(point(duration, last));
 	return points.join(" ");
 }
-
 
 const TARGET_MAX_PIXELS_PER_FRAME = 17.5;
 const FALLBACK_VIEWPORT_WIDTH = 720;
@@ -919,14 +892,18 @@ export const TimecodeTimelineEditor = forwardRef<
 	const [cueListId, setCueListId] = useState(cueLists[0]?.id ?? "");
 	const [scrollLeft, setScrollLeft] = useState(0);
 	const [zoom, setZoom] = useState(1);
-	const [overviewResize, setOverviewResize] =
-		useState<OverviewResize | null>(null);
+	const [overviewResize, setOverviewResize] = useState<OverviewResize | null>(
+		null,
+	);
 	const viewportId = useId();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const scrollTimelineTo = timelineScroller(scrollRef, setScrollLeft);
 	const viewportWidth = useTimelineViewportWidth(scrollRef);
 	const duration = Math.max(1, definition.duration_frame ?? fps * 60);
-	const timelineViewportWidth = Math.max(1, viewportWidth - TIMECODE_LANE_HEADER_WIDTH);
+	const timelineViewportWidth = Math.max(
+		1,
+		viewportWidth - TIMECODE_LANE_HEADER_WIDTH,
+	);
 	const { maximumZoom, fitPixelsPerFrame } = timelineZoomGeometry(
 		duration,
 		timelineViewportWidth,
@@ -1034,24 +1011,14 @@ export const TimecodeTimelineEditor = forwardRef<
 		}),
 		[addAudioPlayerLane, addMarker],
 	);
-	useLayoutEffect(() => {
-		const viewport = scrollRef.current;
-		if (!viewport) return;
-		const maximumScroll = Math.max(0, (width + TIMECODE_LANE_HEADER_WIDTH) - viewportWidth);
-		if (overviewResize) {
-			const next = Math.max(
-				0,
-				Math.min(maximumScroll, overviewResize.startFraction * width),
-			);
-			viewport.scrollLeft = next;
-			setScrollLeft(next);
-			setOverviewResize(null);
-			return;
-		}
-		if (viewport.scrollLeft > maximumScroll)
-			viewport.scrollLeft = maximumScroll;
-		setScrollLeft(viewport.scrollLeft);
-	}, [overviewResize, (width + TIMECODE_LANE_HEADER_WIDTH), viewportWidth, width]);
+	useOverviewScroll({
+		scrollRef,
+		width,
+		viewportWidth,
+		overviewResize,
+		setScrollLeft,
+		setOverviewResize,
+	});
 	const resizeOverviewWindow = (startFraction: number, endFraction: number) => {
 		const requestedFraction = Math.max(0.0001, endFraction - startFraction);
 		const requestedPixelsPerFrame = Math.min(
@@ -1073,13 +1040,7 @@ export const TimecodeTimelineEditor = forwardRef<
 		if (!cueLists.some((cueList) => cueList.id === cueListId))
 			setCueListId(cueLists[0]?.id ?? "");
 	}, [cueListId, cueLists]);
-	const availableSpeedGroups = TIMECODE_SPEED_GROUPS.filter(
-		(group) =>
-			!definition.lanes.some(
-				(lane) =>
-					lane.content.kind === "speed_group" && lane.content.group === group,
-			),
-	);
+	const availableSpeedGroups = unusedSpeedGroups(definition);
 	useEffect(() => {
 		if (!availableSpeedGroups.includes(speedGroup as never))
 			setSpeedGroup(availableSpeedGroups[0] ?? "");
@@ -1202,7 +1163,17 @@ export const TimecodeTimelineEditor = forwardRef<
 				onAddClip={() => {
 					if (activeLaneId) addClip(activeLaneId);
 				}}
-			/>
+			>
+				<SelectionProperties
+					definition={definition}
+					selection={selection}
+					cueLists={cueLists}
+					fps={fps}
+					items={items}
+					onCommit={onCommit}
+					onSelect={setSelection}
+				/>
+			</KeyframeActionStrip>
 			{cueListChooserOpen && (
 				<CueListChooser
 					cueLists={cueLists}
@@ -1231,608 +1202,57 @@ export const TimecodeTimelineEditor = forwardRef<
 	);
 });
 
-/// Replaces the easing curve of one audio-volume keyframe.
-
-interface SelectionInspectorProps {
-	definition: TimecodeDefinition;
-	selection: TimecodeEditorSelection | null;
-	selectedLabel?: string;
-	cueLists: readonly TimecodeCueListOption[];
-	fps: number;
-	onCommit(definition: TimecodeDefinition): void;
-}
-
-function SelectionInspector({
-	definition,
-	selection,
-	selectedLabel,
-	cueLists,
-	fps,
-	onCommit,
-}: SelectionInspectorProps) {
-	if (!selection)
-		return (
-			<div className="timecode-selection-inspector">
-				<span>
-					Select a clip, keyframe, or marker to inspect, copy, move, or delete
-					it.
-				</span>
-			</div>
-		);
-	if (selection.kind === "marker")
-		return (
-			<SelectedMarkerInspector
-				{...{ definition, selection, selectedLabel, fps, onCommit }}
-			/>
-		);
-	const lane = definition.lanes.find(
-		(candidate) => candidate.id === selection.laneId,
-	);
-	if (!lane) return null;
-	if (selection.kind === "speed" && lane.content.kind === "speed_group") {
-		const content = lane.content;
-		const keyframe = content.keyframes.find(
-			(candidate) => candidate.id === selection.itemId,
-		);
-		if (!keyframe) return null;
-		return (
-			<SpeedInspector
-				label={selectedLabel}
-				frame={keyframe.frame}
-				fps={fps}
-				bpm={keyframe.bpm}
-				phase={keyframe.phase}
-				onBpm={(bpm) =>
-					onCommit(
-						updateLane(definition, lane.id, {
-							...content,
-							keyframes: content.keyframes.map((candidate) =>
-								candidate.id === keyframe.id
-									? { ...candidate, bpm }
-									: candidate,
-							),
-						}),
-					)
-				}
-				onPhase={(phase) =>
-					onCommit(
-						updateLane(definition, lane.id, {
-							...content,
-							keyframes: content.keyframes.map((candidate) =>
-								candidate.id === keyframe.id
-									? { ...candidate, phase }
-									: candidate,
-							),
-						}),
-					)
-				}
-			/>
-		);
-	}
-	if (selection.kind === "volume" && lane.content.kind === "audio_volume") {
-		const content = lane.content;
-		const keyframe = content.keyframes.find(
-			(candidate) => candidate.id === selection.itemId,
-		);
-		if (!keyframe) return null;
-		const update = (patch: Partial<typeof keyframe>) =>
-			onCommit(
-				updateLane(definition, lane.id, {
-					...content,
-					keyframes: content.keyframes.map((candidate) =>
-						candidate.id === keyframe.id
-							? { ...candidate, ...patch }
-							: candidate,
-					),
-				}),
-			);
-		return (
-			<VolumeInspector
-				label={selectedLabel}
-				keyframe={keyframe}
-				fps={fps}
-				update={update}
-			/>
-		);
-	}
-	if (selection.kind === "clip" && lane.content.kind === "cue_list") {
-		const content = lane.content;
-		const clip = content.clips.find(
-			(candidate) => candidate.id === selection.itemId,
-		);
-		if (!clip) return null;
-		const cues =
-			cueLists
-				.find((candidate) => candidate.id === content.cue_list_id)
-				?.cues.flatMap((cue) => (cue.id ? [{ ...cue, id: cue.id }] : [])) ?? [];
-		const update = (patch: Partial<typeof clip>) =>
-			onCommit(
-				updateLane(definition, lane.id, {
-					...content,
-					clips: content.clips.map((candidate) =>
-						candidate.id === clip.id ? { ...candidate, ...patch } : candidate,
-					),
-				}),
-			);
-		return (
-			<ClipInspector
-				label={selectedLabel}
-				clip={clip}
-				cues={cues}
-				duration={definition.duration_frame}
-				update={update}
-			/>
-		);
-	}
-	if (selection.kind === "clip" && lane.content.kind === "audio_player") {
-		const content = lane.content;
-		const clip = content.clips.find(
-			(candidate) => candidate.id === selection.itemId,
-		);
-		if (!clip) return null;
-		const update = (patch: Partial<typeof clip>) =>
-			onCommit(
-				updateLane(definition, lane.id, {
-					...content,
-					clips: content.clips.map((candidate) =>
-						candidate.id === clip.id ? { ...candidate, ...patch } : candidate,
-					),
-				}),
-			);
-		return (
-			<AudioPlayerClipInspector
-				label={selectedLabel}
-				clip={clip}
-				duration={definition.duration_frame}
-				update={update}
-			/>
-		);
-	}
-	return null;
-}
-
-function SelectedMarkerInspector({
-	definition,
-	selection,
-	selectedLabel,
-	fps,
-	onCommit,
-}: Omit<SelectionInspectorProps, "cueLists"> & {
-	selection: Extract<TimecodeEditorSelection, { kind: "marker" }>;
-}) {
-	const marker = definition.markers.find(
-		(candidate) => candidate.id === selection.itemId,
-	);
-	if (!marker) return null;
-	return (
-		<MarkerInspector
-			{...{ definition, marker, selectedLabel, fps, onCommit }}
-		/>
-	);
-}
-
-type AudioPlayerClip = Extract<
-	TimecodeDefinition["lanes"][number]["content"],
-	{ kind: "audio_player" }
->["clips"][number];
-
-function AudioPlayerClipInspector({
-	label,
-	clip,
-	duration,
-	update,
-}: {
-	label?: string;
-	clip: AudioPlayerClip;
-	duration?: number | null;
-	update(patch: Partial<AudioPlayerClip>): void;
-}) {
-	const updateVolume = (
-		id: string,
-		patch: Partial<AudioPlayerClip["volume_keyframes"][number]>,
-	) =>
-		update({
-			volume_keyframes: clip.volume_keyframes.map((keyframe) =>
-				keyframe.id === id ? { ...keyframe, ...patch } : keyframe,
+function unusedSpeedGroups(definition: TimecodeDefinition) {
+	return TIMECODE_SPEED_GROUPS.filter(
+		(group) =>
+			!definition.lanes.some(
+				(lane) =>
+					lane.content.kind === "speed_group" && lane.content.group === group,
 			),
-		});
-	const addVolumePoint = () => {
-		const previous = clip.volume_keyframes.at(-1);
-		const frame = Math.min(
-			clip.end_frame - 1,
-			Math.max(
-				clip.start_frame,
-				previous
-					? previous.frame + 1
-					: Math.round((clip.start_frame + clip.end_frame) / 2),
-			),
+	);
+}
+
+function useOverviewScroll({
+	scrollRef,
+	width,
+	viewportWidth,
+	overviewResize,
+	setScrollLeft,
+	setOverviewResize,
+}: {
+	scrollRef: RefObject<HTMLDivElement | null>;
+	width: number;
+	viewportWidth: number;
+	overviewResize: OverviewResize | null;
+	setScrollLeft(value: number): void;
+	setOverviewResize(value: null): void;
+}) {
+	useLayoutEffect(() => {
+		const viewport = scrollRef.current;
+		if (!viewport) return;
+		const maximumScroll = Math.max(
+			0,
+			width + TIMECODE_LANE_HEADER_WIDTH - viewportWidth,
 		);
-		update({
-			volume_keyframes: [
-				...clip.volume_keyframes,
-				{
-					id: crypto.randomUUID(),
-					frame,
-					value: previous?.value ?? 1,
-					fade_frames: 0,
-					curve: "linear" as const,
-				},
-			].sort((left, right) => left.frame - right.frame),
-		});
-	};
-	return (
-		<div className="timecode-selection-inspector">
-			<strong>{label}</strong>
-			<InspectorNumber
-				label="Start frame"
-				value={clip.start_frame}
-				min={0}
-				max={clip.end_frame - 1}
-				onValue={(start_frame) => {
-					const offset = start_frame - clip.start_frame;
-					update({
-						start_frame,
-						volume_keyframes: clip.volume_keyframes.map((keyframe) => ({
-							...keyframe,
-							frame: keyframe.frame + offset,
-						})),
-					});
-				}}
-			/>
-			<InspectorNumber
-				label="End frame"
-				value={clip.end_frame}
-				min={clip.start_frame + 1}
-				max={duration ?? undefined}
-				onValue={(end_frame) => update({ end_frame })}
-			/>
-			<InspectorNumber
-				label="Audio Folder"
-				value={clip.folder}
-				min={0}
-				max={255}
-				onValue={(folder) => update({ folder })}
-			/>
-			<InspectorNumber
-				label="Audio File"
-				value={clip.file}
-				min={0}
-				max={255}
-				onValue={(file) => update({ file })}
-			/>
-			<CheckboxField
-				label="Repeat"
-				stateLabel="Repeat clip"
-				checked={clip.repeat}
-				onChange={(event) => update({ repeat: event.currentTarget.checked })}
-			/>
-			{clip.volume_keyframes.map((keyframe, index) => (
-				<div className="timecode-audio-player-volume-point" key={keyframe.id}>
-					<strong>Volume point {index + 1}</strong>
-					<InspectorNumber
-						label="Volume frame"
-						value={keyframe.frame}
-						min={clip.start_frame}
-						max={clip.end_frame - 1}
-						onValue={(frame) => updateVolume(keyframe.id, { frame })}
-					/>
-					<InspectorNumber
-						label="Volume %"
-						value={Math.round(keyframe.value * 100)}
-						min={0}
-						max={100}
-						onValue={(value) =>
-							updateVolume(keyframe.id, { value: value / 100 })
-						}
-					/>
-					<InspectorNumber
-						label="Fade frames"
-						value={keyframe.fade_frames}
-						min={0}
-						onValue={(fade_frames) =>
-							updateVolume(keyframe.id, { fade_frames })
-						}
-					/>
-					<SelectField
-						label="Volume curve"
-						value={keyframe.curve}
-						onChange={(curve) => updateVolume(keyframe.id, { curve })}
-						options={[
-							{ value: "linear", label: "Linear" },
-							{ value: "ease_in", label: "Ease in" },
-							{ value: "ease_out", label: "Ease out" },
-							{ value: "ease_in_out", label: "Ease in/out" },
-						]}
-					/>
-					<Button
-						size="compact"
-						disabled={clip.volume_keyframes.length === 1}
-						onClick={() =>
-							update({
-								volume_keyframes: clip.volume_keyframes.filter(
-									(candidate) => candidate.id !== keyframe.id,
-								),
-							})
-						}
-					>
-						Remove volume point
-					</Button>
-				</div>
-			))}
-			<Button size="compact" onClick={addVolumePoint}>
-				Add volume point
-			</Button>
-		</div>
-	);
-}
-
-function MarkerInspector({
-	definition,
-	marker,
-	selectedLabel,
-	fps,
-	onCommit,
-}: {
-	definition: TimecodeDefinition;
-	marker: TimecodeDefinition["markers"][number];
-	selectedLabel?: string;
-	fps: number;
-	onCommit(value: TimecodeDefinition): void;
-}) {
-	const update = (patch: Partial<typeof marker>) =>
-		onCommit({
-			...definition,
-			markers: definition.markers.map((candidate) =>
-				candidate.id === marker.id ? { ...candidate, ...patch } : candidate,
-			),
-		});
-	return (
-		<div className="timecode-selection-inspector">
-			<strong>{selectedLabel}</strong>
-			<TextField
-				id={`timecode-marker-name-${marker.id}`}
-				label="Name"
-				value={marker.name}
-				onChange={(event) => update({ name: event.currentTarget.value })}
-			/>
-			<MarkerColorButton
-				color={marker.color}
-				onChange={(color) => update({ color })}
-			/>
-			<span>Trigger {formatFrame(marker.frame, fps)}</span>
-		</div>
-	);
-}
-
-
-function SpeedInspector({
-	label,
-	frame,
-	fps,
-	bpm,
-	phase,
-	onBpm,
-	onPhase,
-}: {
-	label?: string;
-	frame: number;
-	fps: number;
-	bpm: number;
-	phase: number;
-	onBpm(value: number): void;
-	onPhase(value: number): void;
-}) {
-	return (
-		<div className="timecode-selection-inspector">
-			<strong>{label}</strong>
-			<InspectorNumber
-				label="BPM"
-				value={bpm}
-				min={SPEED_GROUP_MIN_BPM}
-				max={SPEED_GROUP_MAX_BPM}
-				step={0.1}
-				onValue={onBpm}
-			/>
-			<InspectorNumber
-				label="Phase"
-				value={phase}
-				min={0}
-				max={1}
-				step={0.01}
-				onValue={onPhase}
-			/>
-			<span>Trigger {formatFrame(frame, fps)}</span>
-		</div>
-	);
-}
-
-type VolumeKeyframe = Extract<
-	TimecodeDefinition["lanes"][number]["content"],
-	{ kind: "audio_volume" }
->["keyframes"][number];
-function VolumeInspector({
-	label,
-	keyframe,
-	fps,
-	update,
-}: {
-	label?: string;
-	keyframe: VolumeKeyframe;
-	fps: number;
-	update(patch: Partial<VolumeKeyframe>): void;
-}) {
-	return (
-		<div className="timecode-selection-inspector">
-			<strong>{label}</strong>
-			<InspectorNumber
-				label="Volume %"
-				value={Math.round(keyframe.value * 100)}
-				min={0}
-				max={100}
-				onValue={(value) => update({ value: value / 100 })}
-			/>
-			<InspectorNumber
-				label="Fade frames"
-				value={keyframe.fade_frames}
-				min={0}
-				onValue={(fade_frames) => update({ fade_frames })}
-			/>
-			<SelectField
-				label="Curve"
-				value={keyframe.curve}
-				onChange={(curve) => update({ curve })}
-				options={[
-					{ value: "linear", label: "Linear" },
-					{ value: "ease_in", label: "Ease in" },
-					{ value: "ease_out", label: "Ease out" },
-					{ value: "ease_in_out", label: "Ease in/out" },
-				]}
-			/>
-			<span>Trigger {formatFrame(keyframe.frame, fps)}</span>
-		</div>
-	);
-}
-
-type CueClip = Extract<
-	TimecodeDefinition["lanes"][number]["content"],
-	{ kind: "cue_list" }
->["clips"][number];
-function ClipInspector({
-	label,
-	clip,
-	cues,
-	duration,
-	update,
-}: {
-	label?: string;
-	clip: CueClip;
-	cues: readonly { id: string; number: string; name: string }[];
-	duration?: number | null;
-	update(patch: Partial<CueClip>): void;
-}) {
-	// Offering only Cues that keep the clip order valid removes the "end Cue is
-	// before its start Cue" error instead of reporting it after the fact.
-	const startIndex = Math.max(
-		0,
-		cues.findIndex((cue) => cue.id === clip.start_cue_id),
-	);
-	const endIndex =
-		cues.findIndex((cue) => cue.id === clip.end_cue_id) < 0
-			? cues.length - 1
-			: cues.findIndex((cue) => cue.id === clip.end_cue_id);
-	return (
-		<div className="timecode-selection-inspector">
-			<strong>{label}</strong>
-			<InspectorNumber
-				label="Start frame"
-				value={clip.start_frame}
-				min={0}
-				max={clip.end_frame - 1}
-				onValue={(start_frame) => update({ start_frame })}
-			/>
-			<InspectorNumber
-				label="End frame"
-				value={clip.end_frame}
-				min={clip.start_frame + 1}
-				max={duration ?? undefined}
-				onValue={(end_frame) => update({ end_frame })}
-			/>
-			<CueSelect
-				label="Start Cue"
-				value={clip.start_cue_id}
-				cues={cues.slice(0, endIndex + 1)}
-				onValue={(start_cue_id) => update({ start_cue_id })}
-			/>
-			<CueSelect
-				label="End Cue"
-				value={clip.end_cue_id}
-				cues={cues.slice(startIndex)}
-				onValue={(end_cue_id) => update({ end_cue_id })}
-			/>
-			<SelectField
-				label="Start behavior"
-				value={clip.start_behavior}
-				onChange={(start_behavior) => update({ start_behavior })}
-				options={[
-					{ value: "state", label: "State Start" },
-					{ value: "cue", label: "Cue Start" },
-				]}
-			/>
-			<SelectField
-				label="End behavior"
-				value={clip.end_behavior}
-				onChange={(end_behavior) => update({ end_behavior })}
-				options={[
-					{ value: "release", label: "Release" },
-					{ value: "hold", label: "Hold" },
-				]}
-			/>
-		</div>
-	);
-}
-
-function InspectorNumber({
-	label,
-	value,
-	min,
-	max,
-	step,
-	onValue,
-}: {
-	label: string;
-	value: number;
-	min?: number;
-	max?: number;
-	step?: number;
-	onValue(value: number): void;
-}) {
-	return (
-		<NumberField
-			label={label}
-			value={value}
-			min={min}
-			max={max}
-			step={step}
-			onChange={(event) => onValue(Number(event.currentTarget.value))}
-		/>
-	);
-}
-
-function CueSelect({
-	label,
-	value,
-	cues,
-	onValue,
-}: {
-	label: string;
-	value: string;
-	cues: readonly { id: string; number: string; name: string }[];
-	onValue(value: string): void;
-}) {
-	return (
-		<SelectField
-			label={label}
-			value={value}
-			onChange={onValue}
-			options={cues.map((cue) => ({
-				value: cue.id,
-				label: `${cue.number} · ${cue.name}`,
-			}))}
-		/>
-	);
-}
-
-function updateLane(
-	definition: TimecodeDefinition,
-	laneId: string,
-	content: TimecodeDefinition["lanes"][number]["content"],
-): TimecodeDefinition {
-	return {
-		...definition,
-		lanes: definition.lanes.map((lane) =>
-			lane.id === laneId ? { ...lane, content } : lane,
-		),
-	};
+		if (overviewResize) {
+			const next = Math.max(
+				0,
+				Math.min(maximumScroll, overviewResize.startFraction * width),
+			);
+			viewport.scrollLeft = next;
+			setScrollLeft(next);
+			setOverviewResize(null);
+			return;
+		}
+		if (viewport.scrollLeft > maximumScroll)
+			viewport.scrollLeft = maximumScroll;
+		setScrollLeft(viewport.scrollLeft);
+	}, [
+		overviewResize,
+		width + TIMECODE_LANE_HEADER_WIDTH,
+		viewportWidth,
+		width,
+	]);
 }
 
 function Ruler({

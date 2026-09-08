@@ -2,7 +2,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { artifactPaths, repositoryRoot } from "./artifact-paths.mjs";
+import {
+	artifactPaths,
+	artifactRoot,
+	repositoryRoot,
+} from "./artifact-paths.mjs";
 
 const application = process.argv[2];
 const destination = process.argv[3];
@@ -37,10 +41,10 @@ if (
 	);
 	process.exit(2);
 }
-// The Viz editor packages two things it does not own: the shipped fixture packages, and the
-// generated demo show. The checked-in config names them relative to itself, which is only correct
+// The Viz editor packages things it does not own: the fixture library, generated demo show, and
+// generated MCP bridge. The checked-in config names them relative to itself, which is only correct
 // while the artifact root is the default one; naming them here keeps a build with
-// LIGHT_ARTIFACTS_DIR set packaging the demo that build actually generated.
+// LIGHT_ARTIFACTS_DIR set packaging the artifacts that build actually generated.
 const bundle =
 	application === "viz-editor"
 		? {
@@ -50,6 +54,12 @@ const bundle =
 							"fixture-library/",
 						[path.join(artifactPaths.demoShow, "demo-show.show")]:
 							"demo-show/demo-show.show",
+						[path.join(
+							artifactRoot,
+							"build",
+							"patch-mcp",
+							"tosklight-patch-mcp.mjs",
+						)]: "tosklight-patch-mcp.mjs",
 					},
 				},
 			}

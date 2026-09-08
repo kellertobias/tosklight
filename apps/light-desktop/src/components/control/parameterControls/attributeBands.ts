@@ -1,4 +1,5 @@
-import type { PatchedFixture } from "../../../api/types";
+import type { ChannelResolution, PatchedFixture } from "../../../api/types";
+import { maxRaw } from "../../setup/fixtureProfileModel/rawValues";
 import { profileHeadOwner } from "./indexedPresetChoices";
 
 /**
@@ -9,6 +10,8 @@ import { profileHeadOwner } from "./indexedPresetChoices";
  * so the two are told apart here rather than at the encoder.
  */
 export interface AttributeBand {
+	/// Full raw scale of the owning channel, including its fine bytes.
+	rawMaximum: number;
 	from: number;
 	to: number;
 	kind: "slot" | "range";
@@ -17,17 +20,15 @@ export interface AttributeBand {
 	rawValue: number;
 }
 
-const RAW_MAXIMUM = 255;
-
-function rawOf(normalized: number): number {
+function rawOf(normalized: number, rawMaximum: number): number {
 	return Math.min(
-		RAW_MAXIMUM,
-		Math.max(0, Math.round(normalized * RAW_MAXIMUM)),
+		rawMaximum,
+		Math.max(0, Math.round(normalized * rawMaximum)),
 	);
 }
 
-function normalizedOf(raw: number): number {
-	return Math.min(1, Math.max(0, raw / RAW_MAXIMUM));
+function normalizedOf(raw: number, rawMaximum: number): number {
+	return Math.min(1, Math.max(0, raw / rawMaximum));
 }
 
 /**
@@ -56,7 +57,7 @@ export function attributeBands(
 			const owner = profileHeadOwner(fixture, mode, channel.head_id);
 			if (!owner || (!selected.has(fixture.fixture_id) && !selected.has(owner)))
 				continue;
-			const here = channelBands(channel.functions, attribute);
+			const here = channelBands(channel.functions, attribute, channel.resolution);
 			// A channel that is one continuous sweep end to end has nothing to step between, so it
 			// is not a wheel: it keeps the plain movement its own units give it.
 			if (!here.some((band) => band.kind === "slot")) return null;
@@ -78,13 +79,16 @@ interface BandFunction {
 function channelBands(
 	functions: readonly BandFunction[],
 	attribute: string,
+	resolution: ChannelResolution,
 ): AttributeBand[] {
+	const rawMaximum = maxRaw(resolution);
 	const bands: AttributeBand[] = [];
 	for (const fn of functions) {
 		if (fn.attribute !== attribute) continue;
 		const behavior = fn.behavior;
 		if (behavior.type === "fixed" || behavior.type === "indexed")
 			bands.push({
+				rawMaximum,
 				from: fn.dmx_from,
 				to: fn.dmx_to,
 				kind: "slot",
@@ -93,6 +97,7 @@ function channelBands(
 			});
 		else if (behavior.type === "continuous")
 			bands.push({
+				rawMaximum,
 				from: fn.dmx_from,
 				to: fn.dmx_to,
 				kind: "range",
@@ -113,6 +118,7 @@ function sameBands(
 			const other = right[index];
 			return (
 				other !== undefined &&
+				band.rawMaximum === other.rawMaximum &&
 				band.from === other.from &&
 				band.to === other.to &&
 				band.kind === other.kind &&
@@ -127,7 +133,9 @@ export function bandAt(
 	bands: readonly AttributeBand[],
 	normalized: number,
 ): AttributeBand | undefined {
-	const raw = rawOf(normalized);
+	const first = bands[0];
+	if (!first) return undefined;
+	const raw = rawOf(normalized, first.rawMaximum);
 	return bands.find((band) => raw >= band.from && raw <= band.to);
 }
 
@@ -154,15 +162,16 @@ export function steppedValue(
 	coarse: boolean,
 ): number {
 	if (!bands.length) return normalized;
-	const raw = rawOf(normalized);
+	const rawMaximum = bands[0].rawMaximum;
+	const raw = rawOf(normalized, rawMaximum);
 	const current = bandAt(bands, normalized);
 	const index = current ? bands.indexOf(current) : -1;
 	if (current?.kind === "range") {
 		const span = current.to - current.from;
 		const stepped = raw + direction * Math.max(1, Math.round(span * (coarse ? 0.1 : 0.02)));
 		if (stepped >= current.from && stepped <= current.to)
-			return normalizedOf(stepped);
-		return entryOf(bands, index + direction, direction) ?? normalizedOf(raw);
+			return normalizedOf(stepped, rawMaximum);
+		return entryOf(bands, index + direction, direction) ?? normalizedOf(raw, rawMaximum);
 	}
 	if (index >= 0) return entryOf(bands, index + direction, direction) ?? normalized;
 	// A value in a gap steps onto the first band lying that way.
@@ -170,7 +179,7 @@ export function steppedValue(
 		direction > 0
 			? bands.find((band) => band.from > raw)
 			: [...bands].reverse().find((band) => band.to < raw);
-	return reached ? normalizedOf(enterAt(reached, direction)) : normalized;
+	return reached ? normalizedOf(enterAt(reached, direction), rawMaximum) : normalized;
 }
 
 function entryOf(
@@ -179,7 +188,7 @@ function entryOf(
 	direction: 1 | -1,
 ): number | undefined {
 	const band = bands[index];
-	return band === undefined ? undefined : normalizedOf(enterAt(band, direction));
+	return band === undefined ? undefined : normalizedOf(enterAt(band, direction), band.rawMaximum);
 }
 
 /** A slot is entered where it is selected; a range is entered from the side the encoder came in. */

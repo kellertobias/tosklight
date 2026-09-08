@@ -1,16 +1,17 @@
 //! Native, server-owned Timecode audio output.
 //!
-//! The device callback only takes a non-blocking snapshot of prepared voices and mixes samples.
+//! The device callback owns voice cursors, consumes bounded playback commands, and mixes samples.
 //! Asset reads and WAV decoding happen on the API/scheduler side before playback begins.
 
 use std::{
     collections::{BTreeMap, HashMap},
     process::{Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
+use crossbeam_queue::ArrayQueue;
 use light_application::timeline::TimecodeClock;
 use light_application::{
     AssetChunkSink, AssetReference, ManagedAssetStore, TimecodeAudioCommand, TimecodeAudioOutput,
@@ -65,7 +66,12 @@ fn enumerate_output_devices() -> Result<Vec<String>, String> {
         .output_devices()
         .map(|devices| {
             devices
-                .filter_map(|device| device.name().ok())
+                .filter_map(|device| {
+                    device
+                        .description()
+                        .ok()
+                        .map(|description| description.name().to_owned())
+                })
                 .filter(|name| !name.trim().is_empty())
                 .collect()
         })
@@ -213,7 +219,7 @@ impl NativeTimecodeAudioOutput {
         let supported = device
             .default_output_config()
             .map_err(|error| format!("Timecode audio output has no usable format: {error}"))?;
-        let output_sample_rate = supported.sample_rate().0;
+        let output_sample_rate = supported.sample_rate();
         let baseline = buffer_latency_micros(supported.buffer_size(), output_sample_rate);
         let latency_micros = add_signed(baseline, configuration.latency_trim_micros);
         let config = supported.config();
@@ -362,16 +368,16 @@ fn run_device(
     clock: Arc<dyn TimecodeClock>,
     started: std::sync::mpsc::Sender<Result<(), String>>,
 ) {
-    let voices = Arc::new(Mutex::new(DeviceVoices::default()));
+    let commands = Arc::new(AudioCommandQueue::default());
     let stream = match format {
         cpal::SampleFormat::F32 => {
-            build_stream::<f32>(&device, &config, Arc::clone(&voices), Arc::clone(&clock))
+            build_stream::<f32>(&device, &config, Arc::clone(&commands), Arc::clone(&clock))
         }
         cpal::SampleFormat::I16 => {
-            build_stream::<i16>(&device, &config, Arc::clone(&voices), Arc::clone(&clock))
+            build_stream::<i16>(&device, &config, Arc::clone(&commands), Arc::clone(&clock))
         }
         cpal::SampleFormat::U16 => {
-            build_stream::<u16>(&device, &config, Arc::clone(&voices), clock)
+            build_stream::<u16>(&device, &config, Arc::clone(&commands), clock)
         }
         format => Err(format!(
             "unsupported Timecode audio output sample format {format:?}"
@@ -397,18 +403,17 @@ fn run_device(
             let _ = request.reply.send(Ok(()));
             break;
         }
-        let result = voices
-            .lock()
-            .map_err(|_| "Timecode audio output lock is poisoned".to_owned())
-            .and_then(|mut voices| {
-                apply_native(
-                    &mut voices,
-                    request.command,
-                    config.sample_rate.0,
-                    usize::from(config.channels),
-                )
-            });
+        let result = commands.submit(request.command);
+        let unresponsive = result.as_ref().is_err_and(|error| {
+            error == "Timecode audio device stopped consuming playback commands"
+                || error == "Timecode audio command queue is full"
+        });
         let _ = request.reply.send(result);
+        if unresponsive {
+            // A dead device cannot consume the command. Close the stream instead of allowing a
+            // timed-out Stop/Seek to execute unexpectedly after a later recovery.
+            break;
+        }
     }
     drop(stream);
 }
@@ -469,15 +474,13 @@ fn apply_native(
         }) => {
             let voice = timecode_voice(voices, timecode_id)?;
             voice.looping = enabled;
-            voice.loop_end = voice
-                .sample_at_frame(end_exclusive)
-                .min(voice.sample_frames());
+            voice.loop_end = voice.sample_at_frame(end_exclusive);
         }
         NativeCommand::Transport(TimecodeAudioCommand::SetVolume {
             timecode_id,
             linear,
         }) => {
-            timecode_voice(voices, timecode_id)?.volume = audio_gain(linear as f32);
+            timecode_voice(voices, timecode_id)?.set_volume(linear as f32);
         }
         NativeCommand::Transport(TimecodeAudioCommand::Prepare { .. }) => unreachable!(),
         NativeCommand::PrepareInternal {
@@ -524,7 +527,7 @@ fn apply_native(
             internal_voice(voices, fixture_id)?.looping = enabled;
         }
         NativeCommand::InternalVolume { fixture_id, linear } => {
-            internal_voice(voices, fixture_id)?.volume = audio_gain(linear);
+            internal_voice(voices, fixture_id)?.set_volume(linear);
         }
         NativeCommand::InternalSeek {
             fixture_id,
@@ -568,7 +571,11 @@ fn select_device(
     };
     host.output_devices()
         .map_err(|error| format!("audio output devices could not be enumerated: {error}"))?
-        .find(|device| device.name().is_ok_and(|name| name == *wanted))
+        .find(|device| {
+            device
+                .description()
+                .is_ok_and(|description| description.name() == wanted)
+        })
         .ok_or_else(|| format!("no audio output device is named {wanted}"))
 }
 
@@ -610,10 +617,12 @@ impl OutputSample for u16 {
 fn build_stream<T: OutputSample>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    voices: Arc<Mutex<DeviceVoices>>,
+    commands: Arc<AudioCommandQueue>,
     clock: Arc<dyn TimecodeClock>,
 ) -> Result<cpal::Stream, String> {
     let channels = usize::from(config.channels);
+    let sample_rate = config.sample_rate;
+    let mut voices = DeviceVoices::default();
     // The callback runs on the device's real-time thread once per buffer and mixes every output
     // frame in it, so the scratch frame is allocated here and only refilled there. Allocating it
     // per frame put an allocator call between the device and its deadline, which is heard as
@@ -621,12 +630,10 @@ fn build_stream<T: OutputSample>(
     let mut mix = vec![0.0_f32; channels];
     device
         .build_output_stream(
-            config,
+            *config,
             move |output: &mut [T], _| {
                 output.fill_with(|| T::from_mix(0.0));
-                let Ok(mut voices) = voices.try_lock() else {
-                    return;
-                };
+                commands.apply_pending(&mut voices, sample_rate, channels);
                 let now = clock.now_micros();
                 for frame in output.chunks_mut(channels) {
                     mix.fill(0.0);
@@ -659,33 +666,54 @@ struct DeviceVoices {
     internal: HashMap<FixtureId, Voice>,
 }
 
-/// Attenuation of the quietest audible control position, in decibels.
-///
-/// A desk fader is read as a perceptual scale, so the control range maps onto a decibel taper and
-/// this bound decides where the bottom of that taper sits.
-const AUDIO_MINIMUM_DECIBELS: f32 = -60.0;
+/// The callback alone owns voice cursors. Commands and acknowledgements cross bounded queues;
+/// a control-thread lock can never turn a valid output buffer into silence.
+struct AudioCommandQueue {
+    pending: ArrayQueue<NativeCommand>,
+    completed: ArrayQueue<Result<(), String>>,
+}
 
-/// Converts an operator's 0-1 volume control into the gain applied to samples.
-///
-/// Loudness is perceived logarithmically, so a linear gain crowds every useful level into the top
-/// of the control: half travel sounds far louder than half volume, and the bottom half barely
-/// changes anything. The control is therefore a decibel taper - full travel is unity gain, the
-/// bottom of the travel is silence, and each equal step of the control is an equal change in
-/// perceived loudness.
+impl Default for AudioCommandQueue {
+    fn default() -> Self {
+        Self {
+            pending: ArrayQueue::new(1),
+            completed: ArrayQueue::new(1),
+        }
+    }
+}
+
+impl AudioCommandQueue {
+    fn submit(&self, command: NativeCommand) -> Result<(), String> {
+        self.pending
+            .push(command)
+            .map_err(|_| "Timecode audio command queue is full".to_owned())?;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Some(result) = self.completed.pop() {
+                return result;
+            }
+            if Instant::now() >= deadline {
+                return Err("Timecode audio device stopped consuming playback commands".into());
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    fn apply_pending(&self, voices: &mut DeviceVoices, rate: u32, channels: usize) {
+        if let Some(command) = self.pending.pop() {
+            let result = apply_native(voices, command, rate, channels);
+            // The single worker waits for this acknowledgement before submitting another command.
+            let _ = self.completed.push(result);
+        }
+    }
+}
+
+/// Volume commands and timeline envelopes specify linear gain; apply that value exactly once.
 fn audio_gain(control: f32) -> f32 {
     if !control.is_finite() {
         return 0.0;
     }
-    let control = control.clamp(0.0, 1.0);
-    // Silence has no decibel value, so the closed bottom of the control is an exact zero.
-    if control <= 0.0 {
-        return 0.0;
-    }
-    if control >= 1.0 {
-        return 1.0;
-    }
-    let decibels = AUDIO_MINIMUM_DECIBELS * (1.0 - control);
-    10.0_f32.powf(decibels / 20.0)
+    control.clamp(0.0, 1.0)
 }
 
 struct Voice {
@@ -697,6 +725,8 @@ struct Voice {
     output_channels: usize,
     position: f64,
     volume: f32,
+    target_volume: f32,
+    volume_ramp_remaining: u32,
     playing: bool,
     play_at_micros: Option<u64>,
     looping: bool,
@@ -720,6 +750,8 @@ impl Voice {
             output_channels,
             position: 0.0,
             volume: 1.0,
+            target_volume: 1.0,
+            volume_ramp_remaining: 0,
             playing: false,
             play_at_micros: None,
             looping: false,
@@ -731,6 +763,50 @@ impl Voice {
         self.samples.len() / self.source_channels
     }
 
+    fn set_volume(&mut self, control: f32) {
+        self.target_volume = audio_gain(control);
+        if !self.playing {
+            self.volume = self.target_volume;
+            self.volume_ramp_remaining = 0;
+            return;
+        }
+        // Five milliseconds removes discontinuities from control-rate volume changes without
+        // adding an audible transport delay or changing the envelope's linear gain target.
+        self.volume_ramp_remaining = (self.output_rate / 200).max(1);
+    }
+
+    fn sample(&self, frame: usize, channel: usize) -> f32 {
+        self.samples
+            .get(
+                frame
+                    .saturating_mul(self.source_channels)
+                    .saturating_add(channel),
+            )
+            .copied()
+            .unwrap_or(0.0)
+    }
+
+    fn output_sample(&self, frame: usize, channel: usize) -> f32 {
+        if self.output_channels == 1 {
+            return (0..self.source_channels)
+                .map(|source| self.sample(frame, source))
+                .sum::<f32>()
+                / self.source_channels as f32;
+        }
+        if self.source_channels == 1 {
+            return if channel < 2 {
+                self.sample(frame, 0)
+            } else {
+                0.0
+            };
+        }
+        if channel < self.source_channels {
+            self.sample(frame, channel)
+        } else {
+            0.0
+        }
+    }
+
     fn sample_at_frame(&self, frame: TimecodeFrame) -> usize {
         let numerator = u128::from(frame.0)
             * u128::from(self.source_rate)
@@ -740,7 +816,7 @@ impl Voice {
     }
 
     fn seek(&mut self, frame: TimecodeFrame) {
-        self.position = self.sample_at_frame(frame).min(self.sample_frames()) as f64;
+        self.position = self.sample_at_frame(frame).min(self.loop_end) as f64;
     }
 
     fn seek_millis(&mut self, millis: u32) {
@@ -755,8 +831,12 @@ impl Voice {
             return;
         }
         self.play_at_micros = None;
+        if self.volume_ramp_remaining > 0 {
+            self.volume += (self.target_volume - self.volume) / self.volume_ramp_remaining as f32;
+            self.volume_ramp_remaining -= 1;
+        }
         let mut source_frame = self.position.floor() as usize;
-        let end = self.loop_end.min(self.sample_frames());
+        let end = self.loop_end;
         if source_frame >= end {
             if self.looping && end > 0 {
                 self.position %= end as f64;
@@ -780,9 +860,10 @@ impl Voice {
             source_frame
         };
         for channel in 0..self.output_channels.min(output.len()) {
-            let source_channel = channel.min(self.source_channels - 1);
-            let current = self.samples[source_frame * self.source_channels + source_channel];
-            let following = self.samples[next_frame * self.source_channels + source_channel];
+            // A timeline may outlast its audio. Keep its sample clock moving through silence
+            // until the authoritative loop boundary instead of looping the short asset early.
+            let current = self.output_sample(source_frame, channel);
+            let following = self.output_sample(next_frame, channel);
             let sample = current + (following - current) * fraction;
             // CPAL owns the sole mutable output frame, so mixing converts through f32 here.
             // Current callers use one Timecode audio lane; clamping is still safe if that expands.
@@ -852,305 +933,4 @@ fn decode_wav(bytes: &[u8]) -> Result<DecodedWav, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn decoded(samples: &[f32]) -> DecodedWav {
-        DecodedWav {
-            samples: samples.to_vec(),
-            sample_rate: 1,
-            channels: 1,
-        }
-    }
-
-    fn fixture(value: u128) -> FixtureId {
-        FixtureId(uuid::Uuid::from_u128(value))
-    }
-
-    #[test]
-    fn the_volume_control_closes_to_silence_and_opens_to_unity_gain() {
-        assert_eq!(audio_gain(0.0), 0.0);
-        assert_eq!(audio_gain(1.0), 1.0);
-        assert_eq!(audio_gain(-0.5), 0.0);
-        assert_eq!(audio_gain(2.0), 1.0);
-        assert_eq!(audio_gain(f32::NAN), 0.0);
-    }
-
-    #[test]
-    fn equal_control_steps_are_equal_decibel_steps() {
-        // A perceptual taper keeps the ratio between equally spaced control positions constant.
-        let quarter = audio_gain(0.25);
-        let half = audio_gain(0.5);
-        let three_quarters = audio_gain(0.75);
-        let first = half / quarter;
-        let second = three_quarters / half;
-        assert!(
-            (first - second).abs() < 1e-4,
-            "equal control travel must be an equal loudness change: {first} vs {second}"
-        );
-    }
-
-    #[test]
-    fn half_travel_is_thirty_decibels_down_rather_than_half_the_amplitude() {
-        let half = audio_gain(0.5);
-        // -30 dB, not the 0.5 a linear control would have produced.
-        assert!(
-            (half - 0.031_623).abs() < 1e-4,
-            "half control travel should sit near -30 dB, got {half}"
-        );
-        assert!(half < 0.5);
-    }
-
-    #[test]
-    fn the_control_rises_without_reversing() {
-        let mut previous = audio_gain(0.0);
-        for step in 1..=100 {
-            let gain = audio_gain(step as f32 / 100.0);
-            assert!(
-                gain > previous,
-                "gain must increase with the control at step {step}: {gain} <= {previous}"
-            );
-            previous = gain;
-        }
-    }
-
-    #[test]
-    fn latency_trim_is_signed_and_saturating() {
-        assert_eq!(add_signed(10_000, 2_500), 12_500);
-        assert_eq!(add_signed(10_000, -2_500), 7_500);
-        assert_eq!(add_signed(1_000, -2_500), 0);
-    }
-
-    #[test]
-    fn startup_wait_reports_timeout_without_blocking_server_startup() {
-        let (_sender, receiver) = std::sync::mpsc::channel::<()>();
-
-        assert_eq!(
-            receive_startup(
-                &receiver,
-                Duration::ZERO,
-                "startup timed out",
-                "startup disconnected",
-            ),
-            Err("startup timed out".to_owned())
-        );
-    }
-
-    #[test]
-    fn startup_wait_distinguishes_a_stopped_worker() {
-        let (sender, receiver) = std::sync::mpsc::channel::<()>();
-        drop(sender);
-
-        assert_eq!(
-            receive_startup(
-                &receiver,
-                Duration::from_secs(1),
-                "startup timed out",
-                "startup disconnected",
-            ),
-            Err("startup disconnected".to_owned())
-        );
-    }
-
-    #[test]
-    fn a_voice_resampling_to_the_device_interpolates_between_recorded_frames() {
-        // A 44.1 kHz track on a 48 kHz device lands the play head between two recorded frames on
-        // most output frames. Repeating the nearer frame instead of reading through the pair
-        // rasps over the whole track, so the ramp below has to come out as a ramp.
-        let mut voices = DeviceVoices::default();
-        apply_native(
-            &mut voices,
-            NativeCommand::PrepareInternal {
-                fixture_id: fixture(1),
-                decoded: decoded(&[0.0, 1.0]),
-            },
-            2,
-            1,
-        )
-        .unwrap();
-        apply_native(
-            &mut voices,
-            NativeCommand::InternalTransport {
-                fixture_id: fixture(1),
-                action: NativeInternalTransport::Play,
-            },
-            2,
-            1,
-        )
-        .unwrap();
-
-        let voice = voices
-            .internal
-            .get_mut(&fixture(1))
-            .expect("prepared voice");
-        let mut mixed = Vec::new();
-        for _ in 0..3 {
-            let mut output = [0.0];
-            voice.mix_frame(&mut output, 0);
-            mixed.push(output[0]);
-        }
-
-        assert_eq!(mixed, vec![0.0, 0.5, 1.0]);
-    }
-
-    #[test]
-    fn internal_players_mix_without_voice_stealing() {
-        let mut voices = DeviceVoices::default();
-        for (fixture_id, samples) in [(fixture(1), &[0.25][..]), (fixture(2), &[0.5][..])] {
-            apply_native(
-                &mut voices,
-                NativeCommand::PrepareInternal {
-                    fixture_id,
-                    decoded: decoded(samples),
-                },
-                1,
-                1,
-            )
-            .unwrap();
-            apply_native(
-                &mut voices,
-                NativeCommand::InternalTransport {
-                    fixture_id,
-                    action: NativeInternalTransport::Play,
-                },
-                1,
-                1,
-            )
-            .unwrap();
-        }
-
-        let mut output = [0.0];
-        for voice in voices.internal.values_mut() {
-            voice.mix_frame(&mut output, 0);
-        }
-
-        assert_eq!(voices.internal.len(), 2);
-        assert_eq!(output, [0.75]);
-    }
-
-    #[test]
-    fn internal_transport_resets_on_stop_and_non_repeating_end() {
-        let fixture_id = fixture(3);
-        let mut voices = DeviceVoices::default();
-        apply_native(
-            &mut voices,
-            NativeCommand::PrepareInternal {
-                fixture_id,
-                decoded: decoded(&[0.5]),
-            },
-            1,
-            1,
-        )
-        .unwrap();
-        apply_native(
-            &mut voices,
-            NativeCommand::InternalTransport {
-                fixture_id,
-                action: NativeInternalTransport::Play,
-            },
-            1,
-            1,
-        )
-        .unwrap();
-
-        let voice = voices.internal.get_mut(&fixture_id).unwrap();
-        voice.mix_frame(&mut [0.0], 0);
-        voice.mix_frame(&mut [0.0], 1);
-        assert!(!voice.playing);
-        assert_eq!(voice.position, 0.0);
-
-        voice.position = 1.0;
-        voice.playing = true;
-        apply_native(
-            &mut voices,
-            NativeCommand::InternalTransport {
-                fixture_id,
-                action: NativeInternalTransport::Stop,
-            },
-            1,
-            1,
-        )
-        .unwrap();
-        let voice = &voices.internal[&fixture_id];
-        assert!(!voice.playing);
-        assert_eq!(voice.position, 0.0);
-    }
-
-    #[test]
-    fn restart_play_is_an_edge_action_and_repeat_wraps() {
-        let fixture_id = fixture(4);
-        let mut voices = DeviceVoices::default();
-        apply_native(
-            &mut voices,
-            NativeCommand::PrepareInternal {
-                fixture_id,
-                decoded: decoded(&[0.25, 0.75]),
-            },
-            1,
-            1,
-        )
-        .unwrap();
-        apply_native(
-            &mut voices,
-            NativeCommand::InternalRepeat {
-                fixture_id,
-                enabled: true,
-            },
-            1,
-            1,
-        )
-        .unwrap();
-        apply_native(
-            &mut voices,
-            NativeCommand::InternalTransport {
-                fixture_id,
-                action: NativeInternalTransport::RestartPlay,
-            },
-            1,
-            1,
-        )
-        .unwrap();
-        let voice = voices.internal.get_mut(&fixture_id).unwrap();
-        let mut first = [0.0];
-        voice.mix_frame(&mut first, 0);
-        voice.mix_frame(&mut [0.0], 1);
-        let mut wrapped = [0.0];
-        voice.mix_frame(&mut wrapped, 2);
-        assert_eq!(first, [0.25]);
-        assert_eq!(wrapped, [0.25]);
-
-        apply_native(
-            &mut voices,
-            NativeCommand::InternalTransport {
-                fixture_id,
-                action: NativeInternalTransport::RestartPlay,
-            },
-            1,
-            1,
-        )
-        .unwrap();
-        assert_eq!(voices.internal[&fixture_id].position, 0.0);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn failed_device_probe_is_reported_without_terminating_the_server_process() {
-        let mut command = Command::new("/bin/sh");
-        command.args(["-c", "kill -SEGV $$"]);
-
-        let error = output_devices_from_command(&mut command).unwrap_err();
-
-        assert!(error.contains("stopped unexpectedly"), "{error}");
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn malformed_device_probe_output_is_actionable() {
-        let mut command = Command::new("/bin/sh");
-        command.args(["-c", "printf not-json"]);
-
-        let error = output_devices_from_command(&mut command).unwrap_err();
-
-        assert!(error.contains("returned invalid data"), "{error}");
-    }
-}
+mod tests;

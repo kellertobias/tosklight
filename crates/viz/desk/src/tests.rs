@@ -7,6 +7,78 @@ use std::io::Read;
 use viz_scene::{BodyKind, EmitterKind, euler_degrees};
 
 #[test]
+fn shipped_dls_legacy_gobo_and_prism_names_reach_native_bindings() {
+    let profile = shipped_profile("robe--robin-dls-profile");
+    for mode in profile["modes"].as_array().expect("modes") {
+        let mut input = models(profile.clone(), StageLayoutBody::default());
+        input.patch.fixtures[0].mode_id = serde_json::from_value(mode["id"].clone()).unwrap();
+        let plan = scene_build::build(&input);
+        let binding = &plan.bindings[0];
+        assert!(binding.gobo.is_some(), "{} gobo", mode["name"]);
+        assert!(
+            binding.gobo_rotation.is_some(),
+            "{} gobo rotation",
+            mode["name"]
+        );
+        assert!(binding.prism.is_some(), "{} prism", mode["name"]);
+        assert!(
+            binding.prism_rotation.is_some(),
+            "{} prism rotation",
+            mode["name"]
+        );
+    }
+}
+
+#[test]
+fn desk_dmx_axis_inversion_is_not_applied_again_to_main_or_multipatch() {
+    let mut input = models(
+        shipped_profile("generic--pan-tilt"),
+        StageLayoutBody::default(),
+    );
+    input.patch.fixtures[0].invert_pan = true;
+    input.patch.fixtures[0].multipatch.push(
+        serde_json::from_value(json!({
+            "id": "33333333-3333-4333-8333-333333333333",
+            "split_patches": [{"split": 1, "universe": 2, "address": 100}],
+            "invert_tilt": true
+        }))
+        .expect("multipatch"),
+    );
+    let plan = scene_build::build(&input);
+    assert_eq!(plan.bindings.len(), 2);
+    let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
+    // Programmer Pan=0%, Tilt=0%: the desk sends the inverted high endpoint only
+    // for Main Pan and Multi-patch Tilt. The visualizer must show those wire endpoints.
+    for (index, binding) in plan.bindings.iter().enumerate() {
+        for (channel, high) in [(&binding.pan, index == 0), (&binding.tilt, index == 1)] {
+            for slot in &channel.as_ref().expect("axis binding").slots {
+                slots[usize::from(*slot - 1)] = if high { 255 } else { 0 };
+            }
+        }
+    }
+    let mut values = viz_scene::SceneValues::default();
+    viz_project::Decoder::new(plan.bindings).apply(
+        &plan.scene,
+        &[viz_dmx::UniverseFrame {
+            logical_universe: 2,
+            slots,
+            received_micros: 1,
+            stale: false,
+        }],
+        &mut values,
+        0.0,
+    );
+    assert_eq!(
+        (values.emitters[0].pan, values.emitters[0].tilt),
+        (1.0, 0.0)
+    );
+    assert_eq!(
+        (values.emitters[1].pan, values.emitters[1].tilt),
+        (0.0, 1.0)
+    );
+}
+
+#[test]
 fn patch_api_jbled_a7_revision_one_uses_the_same_safe_shutter_table_as_the_desk() {
     let mut profile = shipped_profile("jb-lighting--jbled-a7");
     profile["revision"] = json!(1);

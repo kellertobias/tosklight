@@ -116,3 +116,33 @@ fn compiled_resolution_rejects_a_different_mode() {
 
     assert!(plan.bind(&other).is_err());
 }
+
+#[test]
+fn compiled_static_channel_ignores_every_runtime_override() {
+    let mut mode = additive_color_mode();
+    let channel = &mut mode.channels[0];
+    channel.behavior = ChannelBehavior::Static;
+    channel.default_raw = 19;
+    channel.highlight_raw = 211;
+    channel.invert = true;
+    channel.reacts_to_virtual_intensity = true;
+    channel.reacts_to_sequence_master = true;
+    channel.reacts_to_group_master = true;
+    channel.reacts_to_grand_master = true;
+    let control = FixtureMode::control_action_attribute(channel.id);
+    let values = HashMap::from([
+        (channel.attribute.clone(), AttributeValue::Normalized(0.75)),
+        (control, AttributeValue::RawDmxExact(173)),
+    ]);
+    let plan = mode.compile_resolution_plan();
+    let bound = plan.bind(&mode).unwrap();
+    let resolved = bound.resolve_channel(0, &values, true, Some(220), |_| ChannelScales {
+        virtual_intensity: 0.0,
+        sequence_master: 0.0,
+        group_master: 0.0,
+        grand_master: 0.0,
+    });
+
+    assert_eq!(resolved.active_attribute, None);
+    assert_eq!(resolved.raw, 19);
+}

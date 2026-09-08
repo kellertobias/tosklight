@@ -596,6 +596,81 @@ body {
 	overflow: hidden;
 }
 
+.viz-mcp-settings {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	background: var(--ui-surface, #16181c);
+}
+
+.viz-mcp-settings-scroll {
+	display: grid;
+	box-sizing: border-box;
+	align-content: start;
+	flex: 1;
+	gap: 1rem;
+	width: 100%;
+	max-width: 58rem;
+	min-height: 0;
+	padding: 1.5rem;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.viz-mcp-settings-scroll > header p,
+.viz-mcp-settings-scroll section p,
+.viz-mcp-settings-scroll aside {
+	color: var(--ui-text-muted, #aeb4bf);
+	line-height: 1.5;
+}
+
+.viz-mcp-settings-scroll pre {
+	padding: 1rem;
+	overflow: auto;
+	border: 1px solid var(--ui-border, #3a3d43);
+	border-radius: 0.4rem;
+	background: #0d0f12;
+	color: #f2f4f8;
+	white-space: pre-wrap;
+	user-select: text;
+}
+
+.viz-mcp-settings-scroll aside {
+	padding: 0.85rem 1rem;
+	border-left: 0.25rem solid var(--ui-accent, #f2b705);
+	background: color-mix(in srgb, var(--ui-accent, #f2b705) 8%, transparent);
+}
+
+.viz-mcp-paths {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.viz-mcp-paths div {
+	display: grid;
+	grid-template-columns: 10rem minmax(0, 1fr);
+	gap: 1rem;
+}
+
+.viz-mcp-paths dt {
+	color: var(--ui-text-muted, #aeb4bf);
+}
+
+.viz-mcp-paths dd {
+	min-width: 0;
+	margin: 0;
+	overflow-wrap: anywhere;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.viz-mcp-settings-error {
+	color: var(--ui-danger, #ff7373);
+}
+
 .viz-renderer-settings-scroll {
 	min-height: 0;
 	overflow-y: auto;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button, Input, NumberField, SelectField } from "@tosklight/ui";
 import type { CueList } from "../../api/types";
 import type { CueClipTimingDefaults } from "./cueClipTiming";
@@ -56,7 +56,8 @@ export function cueRangeOfSelectedClip(
 	selection: TimecodeEditorSelection | null,
 	cueLists: readonly TimecodeCueListOption[],
 ): readonly { id?: string; number: string; name: string }[] {
-	if (lane?.content.kind !== "cue_list" || selection?.kind !== "clip") return [];
+	if (lane?.content.kind !== "cue_list" || selection?.kind !== "clip")
+		return [];
 	const content = lane.content;
 	const clip = content.clips.find((item) => item.id === selection.itemId);
 	const option = cueLists.find((item) => item.id === content.cue_list_id);
@@ -81,6 +82,7 @@ export function KeyframeActionStrip({
 	onInsert,
 	onCommit,
 	onAddClip,
+	children,
 }: {
 	definition: TimecodeDefinition;
 	selection: TimecodeEditorSelection | null;
@@ -95,13 +97,16 @@ export function KeyframeActionStrip({
 	onInsert(): void;
 	onCommit(definition: TimecodeDefinition): void;
 	onAddClip(): void;
+	children?: ReactNode;
 }) {
 	// A selected Marker is edited by its own strip, which owns colour and naming as well.
 	if (selection?.kind === "marker")
 		return (
 			<MarkerActionStrip
 				{...{ definition, selection, frame, fps, items, onSelection, onCommit }}
-			/>
+			>
+				{children}
+			</MarkerActionStrip>
 		);
 	const { lane, laneItems, selectedIndex, selectedVolume, selectedSpeed } =
 		selectedLaneKeyframes(definition, laneId, selection, items);
@@ -118,7 +123,9 @@ export function KeyframeActionStrip({
 	};
 	const updateEasing = (curve: string) => {
 		if (!selectedVolume || selection?.kind !== "volume" || !lane) return;
-		onCommit(laneWithVolumeCurve(definition, lane.id, selectedVolume.id, curve));
+		onCommit(
+			laneWithVolumeCurve(definition, lane.id, selectedVolume.id, curve),
+		);
 	};
 	const updateValue = (value: number) => {
 		if (!lane || !selection) return;
@@ -132,15 +139,8 @@ export function KeyframeActionStrip({
 	// The Cues a selected Cuelist clip spans, in running order.
 	const clipCues = cueRangeOfSelectedClip(lane, selection, cueLists);
 	const stepCue = (delta: number) => {
-		if (!clipCues.length) return;
-		const current = clipCues.findIndex((cue) => cue.id === selectedCueId);
-		const index =
-			current < 0
-				? delta < 0
-					? clipCues.length - 1
-					: 0
-				: wrappedIndex(current + delta, clipCues.length);
-		onSelectCue(clipCues[index]?.id ?? null);
+		if (clipCues.length)
+			onSelectCue(steppedCueId(clipCues, selectedCueId, delta));
 	};
 	return (
 		<div
@@ -171,21 +171,23 @@ export function KeyframeActionStrip({
 					</span>
 				</Button>
 			)}
-			<Button
-				className="timecode-keyframe-action"
-				aria-label="Delete Keyframe"
-				size="compact"
-				disabled={!canDelete}
-				onClick={() => {
-					if (selection) onCommit(deleteTimelineItem(definition, selection));
-				}}
-			>
-				<span>
-					Delete
-					<br />
-					Keyframe
-				</span>
-			</Button>
+			{selection?.kind !== "clip" && (
+				<Button
+					className="timecode-keyframe-action"
+					aria-label="Delete Keyframe"
+					size="compact"
+					disabled={!canDelete}
+					onClick={() => {
+						if (selection) onCommit(deleteTimelineItem(definition, selection));
+					}}
+				>
+					<span>
+						Delete
+						<br />
+						Keyframe
+					</span>
+				</Button>
+			)}
 			{/* A Cuelist clip holds Cue sub-clips, so the strip steps through Cues the same way
 			    it steps through clips. */}
 			{lane?.content.kind === "cue_list" && (
@@ -203,6 +205,7 @@ export function KeyframeActionStrip({
 				onValue={updateValue}
 				onEasing={updateEasing}
 			/>
+			{children}
 			<KeyframeStepButton
 				delta={1}
 				enabled={laneItems.length > 0}
@@ -210,6 +213,21 @@ export function KeyframeActionStrip({
 			/>
 		</div>
 	);
+}
+
+function steppedCueId(
+	cues: readonly { id?: string }[],
+	selectedId: string | null,
+	delta: number,
+): string | null {
+	const current = cues.findIndex((cue) => cue.id === selectedId);
+	const index =
+		current < 0
+			? delta < 0
+				? cues.length - 1
+				: 0
+			: wrappedIndex(current + delta, cues.length);
+	return cues[index]?.id ?? null;
 }
 
 /// What the selected lane currently offers the strip: its items and whichever keyframe is chosen.
@@ -223,7 +241,9 @@ function selectedLaneKeyframes(
 	const laneItems = items.filter((item) => item.laneId === laneId);
 	const content = lane?.content;
 	const chosen = (candidate: { id: string }) =>
-		selection !== null && "itemId" in selection && candidate.id === selection.itemId;
+		selection !== null &&
+		"itemId" in selection &&
+		candidate.id === selection.itemId;
 	return {
 		lane,
 		laneItems,
@@ -436,7 +456,6 @@ function KeyframeValueSlider({
 	);
 }
 
-
 /**
  * The encoder context for the Cue inside a selected Cuelist clip, or nothing when there is none.
  *
@@ -538,7 +557,9 @@ export function useSelectedCue(
 ): [string | null, (cueId: string | null) => void] {
 	const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
 	const clipKey =
-		selection?.kind === "clip" ? `${selection.laneId}:${selection.itemId}` : null;
+		selection?.kind === "clip"
+			? `${selection.laneId}:${selection.itemId}`
+			: null;
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the Cue is cleared by the clip
 	// identity, not by the selection object that happens to carry it.
 	useEffect(() => {

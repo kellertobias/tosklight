@@ -48,9 +48,13 @@ pub(super) async fn advance_test_clock(
     let clock = state.output.acquire_test_clock().await?;
     let now = clock.advance_millis(input.millis);
     refresh_speed_group_engine(&state);
+    if state.output.uses_internal_timecode_clock() {
+        state.timecodes.tick();
+    }
     let action_timing = state.action_timing.begin_output_render();
     let (rendered, visualization_scope) = {
         let _activation = state.active_show.acquire_shared().await;
+        state.timecodes.reconcile_cue_lists(state.output.engine());
         let visualization_scope = light_wire::v2::visualization::VisualizationScope {
             show_id: state.active_show.current().map(|show| show.id.0),
         };

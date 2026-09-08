@@ -59,9 +59,9 @@ pub(super) fn group_by_head<'a>(
 pub(super) fn build_binding(
     owned: &[(&FixtureChannel, &ChannelRef)],
     instance: &PhysicalInstance,
-    _mode: &FixtureMode,
-    _head_id: Uuid,
-    _channels: &HashMap<Uuid, ChannelRef>,
+    mode: &FixtureMode,
+    head_id: Uuid,
+    channels: &HashMap<Uuid, ChannelRef>,
 ) -> EmitterBinding {
     let mut binding = EmitterBinding {
         invert_pan: instance.invert_pan,
@@ -72,6 +72,15 @@ pub(super) fn build_binding(
         // A channel carries two names: the canonical engine attribute and the manufacturer's own.
         // A hazer, for example, exposes its fog output as canonical `intensity` while keeping
         // `fog` as its fixture attribute, so both have to be consulted.
+        // The canonical white/amber controls retain their physical cool/warm LED identity.
+        // Bind that identity once: aliasing both names double-counts the same DMX emitter.
+        if matches!(
+            &*channel.fixture_attribute.0,
+            "color.cold_white" | "color.warm_white"
+        ) {
+            assign(&mut binding, &channel.fixture_attribute, reference);
+            continue;
+        }
         assign(&mut binding, &channel.attribute, reference);
         let canonical_identity_alias = channel.canonical_transform == CanonicalTransform::Identity
             && light_core::canonical_attribute_migration(&channel.fixture_attribute).is_some_and(
@@ -82,6 +91,30 @@ pub(super) fn build_binding(
             );
         if channel.fixture_attribute != channel.attribute && !canonical_identity_alias {
             assign(&mut binding, &channel.fixture_attribute, reference);
+        }
+    }
+    for system in &mode.color_systems {
+        if system.head_id != head_id {
+            continue;
+        }
+        if let light_fixture::ColorSystem::HueSaturation {
+            hue_channel_id,
+            saturation_channel_id,
+            intensity_channel_id,
+        } = &system.system
+        {
+            binding.colour.hue = channels.get(hue_channel_id).cloned();
+            binding.colour.saturation = channels.get(saturation_channel_id).cloned();
+            if let Some(intensity) = intensity_channel_id.and_then(|id| channels.get(&id)) {
+                if binding.intensity.is_none() {
+                    binding.intensity = Some(intensity.clone());
+                } else if binding.intensity.as_ref().is_some_and(|master| {
+                    master.logical_universe != intensity.logical_universe
+                        || master.slots != intensity.slots
+                }) {
+                    binding.colour.intensity = Some(intensity.clone());
+                }
+            }
         }
     }
     let mut universes: Vec<u16> = owned

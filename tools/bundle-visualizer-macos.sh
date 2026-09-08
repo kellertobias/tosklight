@@ -11,20 +11,21 @@
 # a bundle for it and this assembles the layout by hand instead. Release staging can then treat
 # every macOS product the same way.
 #
-# usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY OUTPUT_DIR [VERSION]
+# usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY MCP_SERVER OUTPUT_DIR [VERSION]
 
 set -euo pipefail
 
-if [[ $# -lt 3 || $# -gt 4 ]]; then
-  echo "usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY OUTPUT_DIR [VERSION]" >&2
+if [[ $# -lt 4 || $# -gt 5 ]]; then
+  echo "usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY MCP_SERVER OUTPUT_DIR [VERSION]" >&2
   exit 2
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EDITOR_BINARY="$1"
 RENDERER_BINARY="$2"
-OUTPUT_DIR="$3"
-VERSION="${4:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
+MCP_SERVER="$3"
+OUTPUT_DIR="$4"
+VERSION="${5:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
 PRODUCT_NAME="ToskLight Architect"
 IDENTIFIER="de.tokenet.tosklight.visualizer"
 ICON="$ROOT/apps/viz-editor/src-tauri/icons/icon.icns"
@@ -35,6 +36,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 [[ -f "$EDITOR_BINARY" ]] || { echo "error: no rig editor binary at $EDITOR_BINARY" >&2; exit 1; }
 [[ -f "$RENDERER_BINARY" ]] || { echo "error: no renderer binary at $RENDERER_BINARY" >&2; exit 1; }
+[[ -f "$MCP_SERVER" ]] || { echo "error: no Architect MCP server at $MCP_SERVER" >&2; exit 1; }
 # The Viz Editor owns the icon set both products share, so a missing icon means the icon set was
 # never generated and a silently unbadged bundle would be worse than a failed build.
 [[ -f "$ICON" ]] || { echo "error: no Viz application icon at $ICON" >&2; exit 1; }
@@ -49,6 +51,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 install -m 0755 "$EDITOR_BINARY" "$APP/Contents/MacOS/$PRODUCT_NAME"
 install -m 0755 "$RENDERER_BINARY" "$APP/Contents/MacOS/viz-renderer"
 install -m 0644 "$ICON" "$APP/Contents/Resources/icon.icns"
+install -m 0644 "$MCP_SERVER" "$APP/Contents/Resources/tosklight-patch-mcp.mjs"
 
 cat >"$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

@@ -1,6 +1,81 @@
 use super::*;
 
 #[tokio::test]
+async fn test_bench_clock_advances_timecode_on_step_and_scheduler_ticks() {
+    let clock = Arc::new(ManualClock::new(fixed_test_time()));
+    let (state, data_dir) = test_state_with_clock(clock.clone());
+    let id = light_playback::TimecodeId(Uuid::new_v4());
+    state
+        .timecodes
+        .install(
+            light_playback::TimecodeDefinition {
+                id,
+                number: 1,
+                name: "Controlled clock".into(),
+                duration: Some(light_playback::TimecodeFrame(440)),
+                transport_offset: light_playback::TimecodeFrame::ZERO,
+                auto_start: false,
+                audio: None,
+                markers: Vec::new(),
+                lanes: Vec::new(),
+            },
+            None,
+        )
+        .unwrap();
+    state
+        .timecodes
+        .handle(id, light_playback::TimecodeTransportAction::Go)
+        .unwrap();
+    let app = router(state.clone());
+    let response = app
+        .oneshot(
+            Request::post("/api/v2/test/clock/advance")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"millis":1000}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // This isolated test state intentionally has no network sender. Rendering and transport
+    // still advance before the delivery boundary reports that precise setup limitation.
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        json(response).await["error"],
+        "network output is unavailable"
+    );
+    assert_eq!(
+        state.timecodes.snapshot(id).unwrap().frame,
+        light_playback::TimecodeFrame(44)
+    );
+    // The bounded free-run path calls the same render entry after advancing application time.
+    clock.advance_millis(500);
+    assert_eq!(
+        output_scheduler::render_test_tick(state.clone())
+            .await
+            .unwrap_err()
+            .to_string(),
+        "network output is unavailable"
+    );
+    assert_eq!(
+        state.timecodes.snapshot(id).unwrap().frame,
+        light_playback::TimecodeFrame(66)
+    );
+    // A render without advancing the shared clock cannot move the transport.
+    assert_eq!(
+        output_scheduler::render_test_tick(state.clone())
+            .await
+            .unwrap_err()
+            .to_string(),
+        "network output is unavailable"
+    );
+    assert_eq!(
+        state.timecodes.snapshot(id).unwrap().frame,
+        light_playback::TimecodeFrame(66)
+    );
+    std::fs::remove_dir_all(data_dir).unwrap();
+}
+
+#[tokio::test]
 async fn physical_http_and_virtual_ui_ws_playbacks_control_one_timecode_runtime() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

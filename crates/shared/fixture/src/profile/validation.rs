@@ -656,6 +656,8 @@ impl FixtureChannel {
                     validate_positive(name, value)?;
                 }
             }
+            // Function endpoints follow DMX direction, so a zoom that narrows as DMX rises
+            // legitimately descends. Channel-level physical bounds remain ordered above.
             match &function.behavior {
                 ChannelFunctionBehavior::Continuous {
                     physical_min,
@@ -663,7 +665,7 @@ impl FixtureChannel {
                     ..
                 } if !physical_min.is_finite()
                     || !physical_max.is_finite()
-                    || physical_min >= physical_max =>
+                    || physical_min == physical_max =>
                 {
                     return Err(ProfileError::Invalid(
                         "continuous function range is invalid".into(),

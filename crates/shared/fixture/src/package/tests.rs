@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
-    CanonicalTransform, ChannelResolution, ColorSystem, EmitterLayout,
-    FIXTURE_PROFILE_SCHEMA_VERSION, FixtureProfile, FixtureSplit, ModelUnits, PatchPolicy,
-    PositionMovementRepresentation,
+    CanonicalTransform, ChannelBehavior, ChannelResolution, ChannelScales, ColorSystem,
+    EmitterLayout, FIXTURE_PROFILE_SCHEMA_VERSION, FixtureProfile, FixtureSplit, ModelUnits,
+    PatchPolicy, PositionMovementRepresentation,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
@@ -28,6 +28,242 @@ fn shipped_profile(filename: &str) -> FixtureProfile {
         .join("assets/fixture-library")
         .join(filename);
     read_fixture_package(&fs::read(path).unwrap()).unwrap()
+}
+
+#[test]
+fn suedbahnhof_plan_profiles_ship_with_the_explicit_venue_personalities() {
+    let expected = [
+        (
+            "generic--dimmer-rgb-control-par.toskfixture",
+            "Fixed 0, Red, Green, Blue, Fixed 0",
+            5,
+        ),
+        ("cameo--auro-spot-z300.toskfixture", "20-Channel", 20),
+        (
+            "cameo--root-par-6.toskfixture",
+            "D7CH — Delay Off, virtual dimmer",
+            7,
+        ),
+        ("martin--mac-300.toskfixture", "Mode 4", 13),
+        ("martin--elp-cl-profile.toskfixture", "10-Channel", 10),
+        ("martin--elp-ww-profile.toskfixture", "4-Channel", 4),
+        (
+            "prolights--ecl-fresnel-ct-plus-m.toskfixture",
+            "STANDARD",
+            11,
+        ),
+        (
+            "claypaky--stage-zoom-1200.toskfixture",
+            "16 bit - gobo fine - lamp control",
+            20,
+        ),
+    ];
+
+    for (filename, mode_name, footprint) in expected {
+        let profile = shipped_profile(filename);
+        assert_eq!(profile.schema_version, FIXTURE_PROFILE_SCHEMA_VERSION);
+        let mode = profile
+            .modes
+            .iter()
+            .find(|mode| mode.name == mode_name)
+            .unwrap_or_else(|| panic!("{filename} is missing {mode_name}"));
+        assert_eq!(
+            mode.splits,
+            [FixtureSplit {
+                number: 1,
+                footprint
+            }]
+        );
+        if ![
+            "claypaky--stage-zoom-1200.toskfixture",
+            "generic--dimmer-rgb-control-par.toskfixture",
+        ]
+        .contains(&filename)
+        {
+            assert!(
+                !mode.geometry.emitters.is_empty(),
+                "{filename} must emit in Architect"
+            );
+        }
+    }
+
+    for (filename, mode_name, footprint) in [
+        ("martin--mac-250-entour.toskfixture", "16 Bit", 15),
+        ("robe--robin-300-ledwash.toskfixture", "Mode 3", 15),
+        (
+            "jb-lighting--jbled-a7.toskfixture",
+            "Standard RGB 8 Bit (S8)",
+            16,
+        ),
+        ("eurolite--ts-255-dmx-scan.toskfixture", "6-Channel", 6),
+        ("generic--strobe.toskfixture", "Dimmer, Strobe", 2),
+        ("generic--relay.toskfixture", "Off / On", 1),
+    ] {
+        let profile = shipped_profile(filename);
+        let mode = profile
+            .modes
+            .iter()
+            .find(|mode| mode.name == mode_name)
+            .unwrap_or_else(|| panic!("{filename} is missing {mode_name}"));
+        assert_eq!(mode.splits[0].footprint, footprint);
+    }
+
+    let root = shipped_profile("cameo--root-par-6.toskfixture");
+    let root_mode = &root.modes[0];
+    assert!(
+        !root_mode
+            .channels
+            .iter()
+            .any(|channel| channel.attribute.is_intensity())
+    );
+    assert_eq!(root_mode.channels.len(), 7);
+    assert!(
+        root_mode.channels[..6]
+            .iter()
+            .all(|channel| channel.reacts_to_virtual_intensity)
+    );
+    assert_eq!(
+        &*root_mode.channels[6].fixture_attribute.0,
+        "fixture.dmx_delay"
+    );
+    assert_eq!(root_mode.channels[6].default_raw, 0);
+
+    let suedbahnhof_par = shipped_profile("generic--dimmer-rgb-control-par.toskfixture");
+    assert_eq!(suedbahnhof_par.manufacturer, "Generic");
+    assert_eq!(suedbahnhof_par.name, "Dimmer RGB Control PAR");
+    assert_eq!(suedbahnhof_par.short_name, "LED PAR 56 SB");
+    assert!(suedbahnhof_par.notes.contains("LED PAR 56 Suedbahnhof"));
+    let suedbahnhof_mode = &suedbahnhof_par.modes[0];
+    assert_eq!(
+        suedbahnhof_mode
+            .channels
+            .iter()
+            .map(|channel| &*channel.attribute.0)
+            .collect::<Vec<_>>(),
+        [
+            "fixture.fixed_slot_1",
+            "color.red",
+            "color.green",
+            "color.blue",
+            "fixture.fixed_slot_5",
+        ]
+    );
+    assert_eq!(
+        suedbahnhof_mode
+            .channels
+            .iter()
+            .map(|channel| channel.behavior)
+            .collect::<Vec<_>>(),
+        [
+            ChannelBehavior::Static,
+            ChannelBehavior::Controlled,
+            ChannelBehavior::Controlled,
+            ChannelBehavior::Controlled,
+            ChannelBehavior::Static,
+        ]
+    );
+    for channel in [&suedbahnhof_mode.channels[0], &suedbahnhof_mode.channels[4]] {
+        assert_eq!((channel.default_raw, channel.highlight_raw), (0, 0));
+        assert!(channel.functions.is_empty());
+        assert!(!channel.invert);
+        assert!(!channel.reacts_to_virtual_intensity);
+        assert!(!channel.reacts_to_sequence_master);
+        assert!(!channel.reacts_to_group_master);
+        assert!(!channel.reacts_to_grand_master);
+    }
+    assert!(
+        suedbahnhof_mode.channels[1..4]
+            .iter()
+            .all(|channel| channel.reacts_to_virtual_intensity)
+    );
+    assert_eq!(
+        suedbahnhof_mode
+            .primary_slots()
+            .unwrap()
+            .into_iter()
+            .collect::<std::collections::HashMap<_, _>>(),
+        suedbahnhof_mode
+            .channels
+            .iter()
+            .enumerate()
+            .map(|(index, channel)| (channel.id, index as u16 + 1))
+            .collect()
+    );
+
+    let values = std::collections::HashMap::from([
+        (
+            light_core::AttributeKey("color.red".into()),
+            light_core::AttributeValue::Normalized(128.0 / 255.0),
+        ),
+        (
+            light_core::AttributeKey("color.green".into()),
+            light_core::AttributeValue::Normalized(64.0 / 255.0),
+        ),
+        (
+            light_core::AttributeKey("color.blue".into()),
+            light_core::AttributeValue::Normalized(32.0 / 255.0),
+        ),
+    ]);
+    let resolved = suedbahnhof_mode
+        .channels
+        .iter()
+        .map(|channel| {
+            (
+                channel.id,
+                suedbahnhof_mode.resolve_channel_raw(
+                    channel,
+                    &values,
+                    false,
+                    None,
+                    ChannelScales::default(),
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut frame = [0xff; 512];
+    suedbahnhof_mode
+        .compile_encoding_plan()
+        .unwrap()
+        .encode_split(&mut frame, 1, 1, &resolved)
+        .unwrap();
+    assert_eq!(&frame[..5], &[0, 128, 64, 32, 0]);
+
+    let round_tripped =
+        read_fixture_package(&write_fixture_package(&suedbahnhof_par).unwrap()).unwrap();
+    assert_eq!(
+        serde_json::to_value(round_tripped).unwrap(),
+        serde_json::to_value(suedbahnhof_par).unwrap()
+    );
+
+    let stage_zoom = shipped_profile("claypaky--stage-zoom-1200.toskfixture");
+    let venue_mode = stage_zoom
+        .modes
+        .iter()
+        .find(|mode| mode.name == "16 bit - gobo fine - lamp control")
+        .unwrap();
+    let gobo = venue_mode
+        .channels
+        .iter()
+        .find(|channel| &*channel.fixture_attribute.0 == "gobo.1")
+        .unwrap();
+    assert_eq!(gobo.resolution, ChannelResolution::U16);
+    assert_eq!(gobo.secondary_slots, [20]);
+
+    let q_spot = shipped_profile("cameo--q-spot-40-tw.toskfixture");
+    assert_eq!(
+        q_spot
+            .modes
+            .iter()
+            .map(|mode| (mode.name.as_str(), mode.splits[0].footprint))
+            .collect::<Vec<_>>(),
+        [
+            ("1-CHANNEL", 1),
+            ("2-CHANNEL", 2),
+            ("3-CHANNEL 1", 3),
+            ("3-CHANNEL 2", 3),
+            ("8-CHANNEL", 8),
+        ]
+    );
 }
 
 fn compatibility_profile(filename: &str) -> FixtureProfile {
@@ -285,6 +521,175 @@ fn shipped_jbled_a7_uses_the_documented_safe_shutter_table_in_every_mode() {
         for pair in shutter.functions.windows(2) {
             assert_eq!(pair[0].dmx_to + 1, pair[1].dmx_from);
         }
+    }
+}
+
+#[test]
+fn shipped_auxiliary_controls_do_not_drive_the_optical_parameter() {
+    for (filename, physical, auxiliary, optical) in [
+        (
+            "chauvet-professional--colorado-1-solo.toskfixture",
+            "fixture.zoom_control",
+            "fixture.reset",
+            "zoom",
+        ),
+        (
+            "chauvet-professional--colorado-1-solo.toskfixture",
+            "fixture.dimmer_speed",
+            "fixture.control",
+            "intensity",
+        ),
+        (
+            "robe--robin-dlf-wash.toskfixture",
+            "fixture.wide_zoom",
+            "fixture.function",
+            "zoom",
+        ),
+        (
+            "robe--robin-dls-profile.toskfixture",
+            "fixture.autofocus",
+            "fixture.function",
+            "focus",
+        ),
+    ] {
+        let profile = shipped_profile(filename);
+        let decoded = read_fixture_package(&write_fixture_package(&profile).unwrap()).unwrap();
+        assert_eq!(
+            serde_json::to_value(&decoded).unwrap(),
+            serde_json::to_value(&profile).unwrap()
+        );
+        for mode in &profile.modes {
+            let channel = mode
+                .channels
+                .iter()
+                .find(|channel| channel.fixture_attribute.0.as_ref() == physical)
+                .unwrap();
+            assert_eq!(channel.attribute.0.as_ref(), auxiliary);
+            assert!(
+                channel
+                    .functions
+                    .iter()
+                    .all(|function| function.attribute.0.as_ref() == auxiliary)
+            );
+            assert!(!channel.reacts_to_grand_master);
+            assert!(!channel.reacts_to_sequence_master);
+            assert!(!channel.reacts_to_group_master);
+            assert!(!channel.reacts_to_virtual_intensity);
+            assert_eq!(
+                mode.channels
+                    .iter()
+                    .filter(|channel| channel.attribute.0.as_ref() == optical)
+                    .count(),
+                1
+            );
+            let definition = profile.resolved_definition(mode.id).unwrap();
+            let parameters = &definition.heads[0].parameters;
+            assert_eq!(
+                parameters
+                    .iter()
+                    .filter(|parameter| parameter.attribute.0.as_ref() == optical)
+                    .count(),
+                1
+            );
+            assert_eq!(
+                parameters
+                    .iter()
+                    .filter(|parameter| parameter.attribute.0.as_ref() == auxiliary)
+                    .count(),
+                1
+            );
+        }
+    }
+}
+
+#[test]
+fn shipped_sharpy_vector_colour_time_is_independent_of_colour_selection() {
+    let profile = shipped_profile("claypaky--sharpy.toskfixture");
+    let mode = profile
+        .modes
+        .iter()
+        .find(|mode| mode.name == "Vector")
+        .unwrap();
+    let channel = mode
+        .channels
+        .iter()
+        .find(|channel| channel.fixture_attribute.0.as_ref() == "fixture.colour_time")
+        .unwrap();
+    assert_eq!(channel.attribute.0.as_ref(), "fixture.effects_speed");
+    assert_eq!(
+        channel.id.to_string(),
+        "d29a1659-da77-f734-6b16-e5d46377c8c9"
+    );
+    assert_eq!(
+        mode.channels
+            .iter()
+            .filter(|channel| channel.attribute.0.as_ref() == "color.wheel.1")
+            .count(),
+        1
+    );
+    let decoded = read_fixture_package(&write_fixture_package(&profile).unwrap()).unwrap();
+    assert_eq!(
+        serde_json::to_value(decoded).unwrap(),
+        serde_json::to_value(profile).unwrap()
+    );
+}
+
+#[test]
+fn shipped_dls_zoom_preserves_raw_travel_and_declares_descending_beam_width() {
+    let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
+    for mode in &profile.modes {
+        let zoom = mode
+            .channels
+            .iter()
+            .find(|channel| channel.attribute.0.as_ref() == "zoom")
+            .unwrap();
+        assert_eq!((zoom.physical_min, zoom.physical_max), (None, None));
+        assert_eq!(zoom.unit, None);
+        assert!(!zoom.invert);
+        assert_eq!(zoom.canonical_transform, CanonicalTransform::Identity);
+        assert_eq!(zoom.default_raw, 0);
+        assert_eq!(zoom.highlight_raw, 0);
+        assert_eq!(zoom.functions.len(), 1);
+        for normalized in [0.0_f32, 0.25, 0.5, 0.75, 1.0] {
+            let values = std::collections::HashMap::from([(
+                zoom.attribute.clone(),
+                light_core::AttributeValue::Normalized(normalized),
+            )]);
+            assert_eq!(
+                mode.resolve_channel_raw(
+                    zoom,
+                    &values,
+                    false,
+                    None,
+                    crate::ChannelScales::default()
+                ),
+                (normalized * zoom.resolution.max_raw() as f32).round() as u32
+            );
+        }
+
+        let crate::ChannelFunctionBehavior::Continuous {
+            physical_min,
+            physical_max,
+            unit,
+        } = &zoom.functions[0].behavior
+        else {
+            panic!("Zoom is continuous");
+        };
+        assert_eq!((*physical_min, *physical_max), (1.0, 0.0));
+        assert_eq!(*unit, None);
+        let expected_max = if mode.name == "Mode 1" { 65535 } else { 255 };
+        assert_eq!(
+            (zoom.functions[0].dmx_from, zoom.functions[0].dmx_to),
+            (0, expected_max)
+        );
+        assert_eq!(
+            zoom.secondary_slots,
+            if mode.name == "Mode 1" {
+                vec![30]
+            } else {
+                vec![]
+            }
+        );
     }
 }
 
@@ -547,7 +952,7 @@ fn assert_moving_lamp_geometry(filename: &str) {
 #[test]
 fn robe_dls_profile_exposes_canonical_framing_controls() {
     let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
-    assert_eq!(profile.revision, 4);
+    assert_eq!(profile.revision, 5);
     assert!(profile.notes.contains("DMX protocol version 1.0"));
     assert!(profile.notes.contains("user manual version 1.3"));
     assert_eq!(
@@ -912,7 +1317,14 @@ fn shipped_native_hsi_modes_bind_their_physical_coordinates_and_highlight_white(
 
     for (filename, modes) in expected {
         let profile = shipped_profile(filename);
-        assert_eq!(profile.revision, 3);
+        assert_eq!(
+            profile.revision,
+            if filename.starts_with("chauvet-") {
+                4
+            } else {
+                3
+            }
+        );
         for (mode_name, hue_id, saturation_id, intensity_id) in modes {
             let mode = profile
                 .modes
@@ -1666,15 +2078,15 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
         }
     }
 
-    assert_eq!(prism_selection_modes, 11);
-    assert_eq!(prism_rotation_modes, 9);
-    assert_eq!(generic_control_modes, 5);
-    assert_eq!(position_movement_modes, 26);
+    assert_eq!(prism_selection_modes, 13);
+    assert_eq!(prism_rotation_modes, 11);
+    assert_eq!(generic_control_modes, 6);
+    assert_eq!(position_movement_modes, 28);
     assert_eq!(
         position_movement_sources,
         std::collections::HashMap::from([
             ("fixture.mspeed".into(), 2),
-            ("fixture.pan_tilt_speed".into(), 4),
+            ("fixture.pan_tilt_speed".into(), 6),
             ("fixture.pan_tilt_speed_time".into(), 19),
             ("fixture.pan_tilt_time".into(), 1),
         ])

@@ -210,6 +210,15 @@ beforeEach(() => {
 				return Promise.resolve(liveInputs);
 			case "visualizer_is_running":
 				return Promise.resolve(false);
+			case "mcp_configuration":
+				return Promise.resolve({
+					applicationPath: "/Applications/ToskLight Architect.app",
+					serverPath:
+						"/Applications/ToskLight Architect.app/Contents/Resources/tosklight-patch-mcp.mjs",
+					codexCommand:
+						"codex mcp add tosklight_architect --env TOSKLIGHT_TARGET=architect -- node '/Applications/ToskLight Architect.app/Contents/Resources/tosklight-patch-mcp.mjs'",
+					jsonConfiguration: '{"mcpServers":{"tosklight_architect":{}}}',
+				});
 			case "patch_layers":
 				return Promise.resolve([
 					{ id: "house", name: "House", order: 0 },
@@ -796,6 +805,15 @@ describe("the Viz editor window", () => {
 			if (command === "document_summary") return Promise.resolve(document);
 			if (command === "patch_snapshot") return Promise.resolve(snapshot);
 			if (command === "live_dmx_inputs") return Promise.resolve(liveInputs);
+			if (command === "mcp_configuration")
+				return Promise.resolve({
+					applicationPath: "/Applications/ToskLight Architect.app",
+					serverPath:
+						"/Applications/ToskLight Architect.app/Contents/Resources/tosklight-patch-mcp.mjs",
+					codexCommand:
+						"codex mcp add tosklight_architect --env TOSKLIGHT_TARGET=architect -- node '/Applications/ToskLight Architect.app/Contents/Resources/tosklight-patch-mcp.mjs'",
+					jsonConfiguration: '{"mcpServers":{"tosklight_architect":{}}}',
+				});
 			return Promise.resolve([]);
 		});
 		renderApp();
@@ -825,6 +843,7 @@ describe("the Viz editor window", () => {
 			"Atmosphere",
 			"Picture",
 			"Features",
+			"MCP",
 		]);
 		expect(
 			within(sharedTitle).getByRole("tab", { name: "Rendering" }),
@@ -870,11 +889,34 @@ describe("the Viz editor window", () => {
 		expect(
 			screen.getByRole("heading", { name: "Features" }),
 		).toBeInTheDocument();
+		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "MCP" }));
+		expect(
+			screen.getByRole("heading", { name: "MCP integration" }),
+		).toBeInTheDocument();
+		const mcpWorkspace = screen
+			.getByRole("heading", { name: "MCP integration" })
+			.closest(".viz-mcp-settings");
+		const mcpScroll = mcpWorkspace?.querySelector(".viz-mcp-settings-scroll");
+		expect(mcpWorkspace).not.toBeNull();
+		expect(mcpScroll).not.toBeNull();
+		expect(getComputedStyle(mcpWorkspace as Element).display).toBe("flex");
+		expect(getComputedStyle(mcpWorkspace as Element).flexGrow).toBe("1");
+		expect(getComputedStyle(mcpScroll as Element).boxSizing).toBe("border-box");
+		expect(getComputedStyle(mcpScroll as Element).flexGrow).toBe("1");
+		expect(
+			await screen.findByText("/Applications/ToskLight Architect.app"),
+		).toBeInTheDocument();
+		expect(screen.getByLabelText("Codex MCP configuration")).toHaveTextContent(
+			"/Applications/ToskLight Architect.app/Contents/Resources/tosklight-patch-mcp.mjs",
+		);
+		expect(
+			screen.queryByText(/build from repository/i),
+		).not.toBeInTheDocument();
 		fireEvent.click(
 			within(sharedTitle).getByRole("tab", { name: "Rendering" }),
 		);
 		expect(
-			screen.getByRole("slider", { name: "Environment brightness" }),
+			await screen.findByRole("slider", { name: "Environment brightness" }),
 		).toBeInTheDocument();
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "DMX" }));
 		expect(

@@ -70,6 +70,23 @@ markers, and Cuelist, Speed, and Audio lanes; select an item to edit its timing 
 Markers label positions but do not execute output. The timeline and its optional audio run from one
 authoritative clock, so reopening the editor restores the live position.
 
+Scrub the ruler or drag the playhead to inspect a position without changing live output.
+The **Playhead** encoder shows the editor position. The title position button shows the live
+transport position; press it to explicitly seek to the position selected with the playhead.
+
+Edits save automatically without resetting a playing or paused transport. The title reports
+**Saving…**, **Saved**, or **Not saved**; a failed write retains your draft and offers **Retry
+autosave**. **Stop** remains available while edits save. Duration and transport offset accept
+`HH:MM:SS.FF` at 44 fps; incomplete typing stays local, and invalid entries explain the accepted
+range when you leave the field. Press Escape to restore the current saved field value.
+
+Select a clip to edit its Cue range and start/end behavior, or its Audio Player folder, file,
+repeat, and volume points. Selected Speed keyframes expose phase; audio-volume keyframes expose
+fade duration. **Copy clip**, **Copy keyframe**, and **Copy marker** duplicate the selected item;
+use its Delete action to remove it and editor Undo/Redo to recover changes. A copied clip needs
+an empty interval on its lane. Waveform loading and failures are visible, and **Retry waveform**
+reloads the selected audio without changing transport.
+
 A Cuelist clip contains the individual Cues in its selected Cue range. Each Cue shows its start
 position, its **In fade** across the top of the lane, and its **Out fade** across the bottom. The
 start and end handles of each range snap to Timecode frames. Moving a start handle changes the

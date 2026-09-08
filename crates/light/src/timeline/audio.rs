@@ -377,7 +377,11 @@ pub trait TimecodeAudioOutput: Send + Sync {
 
 #[derive(Clone, Debug)]
 struct PreparedAudio {
+    asset: AssetReference,
+    metadata: WavMetadata,
+    rate: TimecodeFrameRate,
     duration: TimecodeFrame,
+    transport_duration: TimecodeFrame,
     state: TimecodeAudioState,
 }
 
@@ -399,6 +403,59 @@ impl TimecodeAudioService {
             .lock()
             .expect("Timecode audio lock poisoned")
             .contains_key(&timecode_id)
+    }
+
+    pub fn prepared_duration(
+        &self,
+        timecode_id: TimecodeId,
+        asset: AssetReference,
+        metadata: WavMetadata,
+        rate: TimecodeFrameRate,
+        looping: bool,
+    ) -> Option<TimecodeFrame> {
+        self.prepared
+            .lock()
+            .expect("Timecode audio lock poisoned")
+            .get(&timecode_id)
+            .filter(|audio| {
+                audio.asset == asset
+                    && audio.metadata == metadata
+                    && audio.rate == rate
+                    && audio.state.looping == looping
+            })
+            .map(|audio| audio.duration)
+    }
+
+    /// Stop the native voice before forgetting it, including when its timeline is deleted.
+    pub fn unprepare(&self, timecode_id: TimecodeId) -> Result<bool, String> {
+        let mut prepared = self.prepared.lock().expect("Timecode audio lock poisoned");
+        if !prepared.contains_key(&timecode_id) {
+            return Ok(false);
+        }
+        self.output
+            .apply(TimecodeAudioCommand::Stop { timecode_id })?;
+        prepared.remove(&timecode_id);
+        Ok(true)
+    }
+
+    pub fn set_transport_duration(
+        &self,
+        timecode_id: TimecodeId,
+        duration: TimecodeFrame,
+    ) -> Result<(), String> {
+        let mut prepared = self.prepared.lock().expect("Timecode audio lock poisoned");
+        let Some(audio) = prepared.get_mut(&timecode_id) else {
+            return Ok(());
+        };
+        if audio.transport_duration != duration {
+            self.output.apply(TimecodeAudioCommand::SetLoop {
+                timecode_id,
+                enabled: audio.state.looping,
+                end_exclusive: duration,
+            })?;
+            audio.transport_duration = duration;
+        }
+        Ok(())
     }
 
     pub fn prepare(
@@ -431,7 +488,11 @@ impl TimecodeAudioService {
             .insert(
                 timecode_id,
                 PreparedAudio {
+                    asset,
+                    metadata,
+                    rate,
                     duration,
+                    transport_duration: duration,
                     state: TimecodeAudioState {
                         transport: TimecodeTransportState::Stopped,
                         frame: TimecodeFrame::ZERO,
@@ -487,7 +548,7 @@ impl TimecodeAudioService {
                     .apply(TimecodeAudioCommand::Stop { timecode_id })?;
             }
             TimecodeTransportAction::Seek { frame } => {
-                audio.state.frame = TimecodeFrame(frame.0.min(audio.duration.0));
+                audio.state.frame = TimecodeFrame(frame.0.min(audio.transport_duration.0));
                 self.output.apply(TimecodeAudioCommand::Seek {
                     timecode_id,
                     source_frame: audio.state.frame,
@@ -503,31 +564,27 @@ impl TimecodeAudioService {
         timecode_id: TimecodeId,
         frame: TimecodeFrame,
         volume: f64,
-        now_micros: u64,
     ) -> Result<TimecodeAudioState, String> {
-        let audible_at_micros = now_micros.saturating_add(self.output.output_latency_micros());
         let mut prepared = self.prepared.lock().expect("Timecode audio lock poisoned");
         let audio = prepared
             .get_mut(&timecode_id)
             .ok_or("Timecode audio is not prepared")?;
         let frame = if audio.state.looping {
-            TimecodeFrame(frame.0 % audio.duration.0)
+            TimecodeFrame(frame.0 % audio.transport_duration.0)
         } else {
-            TimecodeFrame(frame.0.min(audio.duration.0))
+            TimecodeFrame(frame.0.min(audio.transport_duration.0))
         };
         let volume = if volume.is_finite() {
             volume.clamp(0.0, 1.0)
         } else {
             0.0
         };
-        if frame != audio.state.frame {
-            audio.state.frame = frame;
-            self.output.apply(TimecodeAudioCommand::Seek {
-                timecode_id,
-                source_frame: frame,
-                audible_at_micros,
-            })?;
-        }
+        // Once started, the device's sample clock is the continuous transport authority. The
+        // timeline tick is deliberately not a seek: repositioning the voice at every Timecode
+        // frame cuts the waveform at frame boundaries and re-arms its latency gate, which turns
+        // clean audio into a raspy, chopped signal. Keep the logical frame current for pause and
+        // resume; explicit operator Seek actions still reposition the device in `handle` above.
+        audio.state.frame = frame;
         if volume != audio.state.volume {
             audio.state.volume = volume;
             self.output.apply(TimecodeAudioCommand::SetVolume {
@@ -666,9 +723,7 @@ mod tests {
         service
             .handle(id, TimecodeTransportAction::Go, 1_000_000)
             .unwrap();
-        service
-            .synchronize(id, TimecodeFrame(45), 0.4, 1_010_000)
-            .unwrap();
+        service.synchronize(id, TimecodeFrame(45), 0.4).unwrap();
         service
             .handle(id, TimecodeTransportAction::Pause, 1_020_000)
             .unwrap();
@@ -687,11 +742,13 @@ mod tests {
                 audible_at_micros: 1_012_500
             }
         );
-        assert!(commands.contains(&TimecodeAudioCommand::Seek {
-            timecode_id: id,
-            source_frame: TimecodeFrame(1),
-            audible_at_micros: 1_022_500
-        }));
+        assert!(!commands.iter().any(|command| matches!(
+            command,
+            TimecodeAudioCommand::Seek {
+                source_frame: TimecodeFrame(1),
+                ..
+            }
+        )));
         assert!(commands.contains(&TimecodeAudioCommand::SetVolume {
             timecode_id: id,
             linear: 0.4

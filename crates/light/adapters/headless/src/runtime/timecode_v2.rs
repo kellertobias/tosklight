@@ -218,10 +218,13 @@ async fn object_action(
         .first()
         .ok_or_else(|| ApiError::internal("Timecode mutation returned no object change"))?;
     let object = if change.deleted {
-        state.timecodes.uninstall(TimecodeId(
-            Uuid::parse_str(&change.object_id)
-                .map_err(|error| ApiError::internal(error.to_string()))?,
-        ));
+        state
+            .timecodes
+            .uninstall(TimecodeId(
+                Uuid::parse_str(&change.object_id)
+                    .map_err(|error| ApiError::internal(error.to_string()))?,
+            ))
+            .map_err(|error| ApiError::bad_request(error.message))?;
         previous.ok_or_else(|| ApiError::internal("deleted Timecode had no previous object"))?
     } else {
         let object = ActiveShowRepository::open(&entry.path)
@@ -997,7 +1000,10 @@ fn install_object_if_runnable(
         .map_err(|error| ApiError::internal(format!("stored Timecode is invalid: {error}")))?;
     let audio_duration = prepare_audio_if_present(state, &definition)?;
     if definition.duration.is_none() && audio_duration.is_none() {
-        state.timecodes.uninstall(definition.id);
+        state
+            .timecodes
+            .uninstall(definition.id)
+            .map_err(|error| ApiError::bad_request(error.message))?;
         return Ok(());
     }
     state

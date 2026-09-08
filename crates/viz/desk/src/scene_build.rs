@@ -126,6 +126,13 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     }
 
     let mut plan = viz_project::compile(&fixtures);
+    // Desk output already contains each physical instance's Pan/Tilt inversion. Decode those
+    // wire positions directly; applying the patch flags again would undo the desk's output.
+    // Keep the instance metadata for semantic preview positioning.
+    for binding in &mut plan.bindings {
+        binding.invert_pan = false;
+        binding.invert_tilt = false;
+    }
     let masters: std::collections::HashMap<_, _> = models
         .patch
         .fixtures

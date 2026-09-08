@@ -933,11 +933,7 @@
 	border-right: 1px solid rgb(126 196 255 / 70%);
 }
 .timecode-clip-fade.out {
-	background: linear-gradient(
-		to left,
-		rgb(10 14 20 / 78%),
-		rgb(10 14 20 / 0%)
-	);
+	background: linear-gradient(to left, rgb(10 14 20 / 78%), rgb(10 14 20 / 0%));
 	border-left: 1px solid rgb(126 196 255 / 70%);
 }
 .timecode-clip-fade.empty {
@@ -1162,4 +1158,49 @@
 	.timecode-csv-panel {
 		grid-template-columns: 1fr;
 	}
+}
+
+.timecode-save-error {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.6rem;
+}
+.timecode-timeline-empty {
+	position: absolute;
+	top: 3rem;
+	left: calc(var(--timecode-lane-header-width) + 1rem);
+	max-width: 32rem;
+	margin: 0;
+	color: #aeb2c1;
+	font-size: 0.8rem;
+	pointer-events: none;
+}
+
+.timecode-selection-settings-dialog {
+	width: min(48rem, calc(100vw - 2rem));
+	max-height: calc(100vh - 2rem);
+	overflow: auto;
+}
+.timecode-selection-settings-dialog .timecode-selection-inspector {
+	border-top: 0;
+	padding: 1rem;
+	align-items: end;
+}
+.timecode-keyframe-actions {
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+}
+.timecode-keyframe-actions > .ui-form-field {
+	flex: 0 0 15rem;
+	min-width: 0;
+	margin: 0;
+}
+.timecode-keyframe-actions > .ui-form-field .ui-field {
+	min-width: 0;
+}
+
+.timecode-selection-settings-dialog .ui-form-field {
+	flex: 1 1 15rem;
+	min-width: 15rem;
 }

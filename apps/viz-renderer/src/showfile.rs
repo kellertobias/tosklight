@@ -31,13 +31,7 @@ impl HostedShow {
         let binary = server_binary()?;
         let port = free_port()?;
         let data_dir = scratch_directory(path)?;
-        let child = Command::new(&binary)
-            .arg("--data-dir")
-            .arg(&data_dir)
-            .arg("--show")
-            .arg(path)
-            .arg("--bind")
-            .arg(format!("127.0.0.1:{port}"))
+        let child = private_server_command(&binary, &data_dir, path, port)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -71,6 +65,25 @@ impl HostedShow {
     pub fn exited(&mut self) -> bool {
         matches!(self.child.try_wait(), Ok(Some(_)))
     }
+}
+
+/// Build the private server command without inheriting operator-facing control ports.
+///
+/// A show preview can run beside the real desk, which normally owns OSC port 9000. Binding the
+/// private server to an ephemeral OSC port preserves its complete runtime while preventing a
+/// preview-only helper from colliding with Control and exiting during startup.
+fn private_server_command(binary: &Path, data_dir: &Path, show: &Path, port: u16) -> Command {
+    let mut command = Command::new(binary);
+    command
+        .arg("--data-dir")
+        .arg(data_dir)
+        .arg("--show")
+        .arg(show)
+        .arg("--bind")
+        .arg(format!("127.0.0.1:{port}"))
+        .arg("--osc-bind")
+        .arg("127.0.0.1:0");
+    command
 }
 
 impl Drop for HostedShow {
@@ -155,6 +168,7 @@ fn scratch_directory(show: &Path) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsStr;
 
     #[test]
     fn opening_something_that_is_not_a_file_is_reported_not_guessed() {
@@ -168,5 +182,22 @@ mod tests {
         let first = scratch_directory(Path::new("/shows/tour.show")).expect("first");
         let second = scratch_directory(Path::new("/shows/gala.show")).expect("second");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn private_show_server_does_not_claim_the_desk_osc_port() {
+        let command = private_server_command(
+            Path::new("light-headless"),
+            Path::new("scratch"),
+            Path::new("venue.show"),
+            5311,
+        );
+        let arguments = command.get_args().collect::<Vec<_>>();
+        assert!(
+            arguments
+                .windows(2)
+                .any(|pair| pair == [OsStr::new("--osc-bind"), OsStr::new("127.0.0.1:0")]),
+            "private show server arguments were {arguments:?}"
+        );
     }
 }

@@ -136,6 +136,8 @@ pub struct PhysicsWindow {
 /// Colour channels for one emitter or one cell.
 #[derive(Clone, Debug, Default)]
 pub struct ColourBinding {
+    pub hue: Option<ChannelRef>,
+    pub saturation: Option<ChannelRef>,
     pub red: Option<ChannelRef>,
     pub green: Option<ChannelRef>,
     pub blue: Option<ChannelRef>,
@@ -154,7 +156,9 @@ pub struct ColourBinding {
 
 impl ColourBinding {
     pub fn is_empty(&self) -> bool {
-        self.red.is_none()
+        self.hue.is_none()
+            && self.saturation.is_none()
+            && self.red.is_none()
             && self.green.is_none()
             && self.blue.is_none()
             && self.white.is_none()
@@ -803,6 +807,7 @@ fn compile_channels(
                 invert: channel.invert,
                 physical_min: channel.physical_min.unwrap_or(0.0),
                 physical_max: channel.physical_max.unwrap_or(1.0),
+                physical_unit: channel.unit.clone(),
                 snap: channel.snap,
                 default_raw: channel.default_raw,
                 functions: stage_channel_functions(profile, channel),
@@ -1389,10 +1394,9 @@ fn zoom_refined(narrow: f32, wide: f32, binding: &EmitterBinding) -> (f32, f32) 
     let Some(zoom) = &binding.zoom else {
         return (narrow.max(0.5), wide.max(narrow.max(0.5)));
     };
-    let declared_degrees = zoom.physical_max > 1.5 && zoom.physical_max <= 180.0;
-    if declared_degrees {
-        let low = zoom.physical_min.min(zoom.physical_max).max(0.5);
-        let high = zoom.physical_min.max(zoom.physical_max);
+    if let Some((minimum, maximum)) = zoom.zoom_degrees() {
+        let low = minimum.min(maximum).max(0.5);
+        let high = minimum.max(maximum);
         return (low, high.max(low));
     }
     (narrow.max(0.5), wide.max(narrow.max(0.5)))

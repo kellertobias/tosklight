@@ -291,6 +291,68 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		expect(stopped).toMatchObject({ state: "stopped", frame: 0 });
 	});
 
+	test("TIMECODE-001 @ui › live editing preserves transport and scrubbing stays independent until explicit seek", async ({ api, show, desk, page, bench }, testInfo) => {
+		const definition = editableTimecode();
+		await api.request("POST", "/api/v2/timecodes/actions", {
+			request_id: "create-live-editor-timecode",
+			action: { type: "create", definition },
+		}, true, undefined, { showId: show.id });
+		await desk.open(api.baseUrl);
+		await expect(page.locator(".connection-cover")).toBeHidden();
+		await openBuiltIns(page);
+		await openShiftedBuiltIn(page, "Timecode");
+		await page.getByRole("button", { name: "Timecode 7 Opening track" }).click({ button: "right" });
+		await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+		await page.getByRole("button", { name: "Play", exact: true }).click();
+		const runtime = () => api.request<{ state: string; frame: number }>("GET", `/api/v2/timecodes/${definition.id}/runtime`);
+		await expect.poll(async () => (await runtime()).state).toBe("playing");
+		await bench.tick(1000);
+		await expect.poll(async () => (await runtime()).frame).toBeGreaterThan(10);
+		await page.getByRole("button", { name: "Settings", exact: true }).click();
+		const settings = page.getByRole("dialog", { name: "Timecode Settings" });
+		await settings.getByLabel("Name", { exact: true }).fill("Live edit keeps playing");
+		await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+		expect((await runtime()).state).toBe("playing");
+		// Typing is intentionally character-by-character, including incomplete intermediate text.
+		const duration = settings.getByLabel("Duration", { exact: true });
+		await duration.fill("");
+		await duration.pressSequentially("00:00:45.00");
+		await duration.press("Tab");
+		await expect(duration).toHaveValue("00:00:45.00");
+		await settings.getByRole("button", { name: /Close/ }).click();
+		await expect(page.getByRole("button", { name: "Seek to playhead", exact: true })).toHaveCount(0);
+		await expect(page.getByLabel("Follow transport", { exact: true })).toHaveCount(0);
+		const canvas = page.locator(".timecode-timeline-canvas");
+		const bounds = await canvas.boundingBox();
+		if (!bounds) throw new Error("Timeline canvas is not visible");
+		await page.mouse.click(bounds.x + 350, bounds.y + 12);
+		const playheadValue = page.getByRole("button", { name: "Drag playhead to seek", exact: true });
+		const position = page.getByRole("button", { name: "Timecode position", exact: true });
+		const target = await playheadValue.innerText();
+		const before = (await runtime()).frame;
+		await bench.tick(1000);
+		await expect.poll(async () => (await runtime()).frame).toBeGreaterThan(before + 5);
+		await expect(playheadValue).toHaveText(target);
+		await page.getByRole("button", { name: "Pause", exact: true }).click();
+		await expect.poll(async () => (await runtime()).state).toBe("paused");
+		await page.mouse.click(bounds.x + 350, bounds.y + 12);
+		const seekTarget = await playheadValue.innerText();
+		await position.click();
+		const [hours, minutes, seconds, frames] = seekTarget.trim().split(/[:.]/).map(Number);
+		const targetFrame = ((hours * 60 + minutes) * 60 + seconds) * 44 + frames;
+		await expect.poll(async () => (await runtime()).frame).toBe(targetFrame);
+		await page.getByRole("button", { name: "Add", exact: true }).click();
+		await page.getByRole("menuitem", { name: "Add Speed Lane", exact: true }).click();
+		await page.getByRole("dialog", { name: "Choose Speed Group" }).getByRole("button", { name: "Add lane", exact: true }).click();
+		await expect(page.getByLabel("Phase", { exact: true })).toBeVisible();
+		expect((await page.getByLabel("Phase", { exact: true }).boundingBox())?.width).toBeGreaterThan(48);
+		await expect(page.getByRole("button", { name: "Next Keyframe", exact: true })).toBeInViewport();
+		await expect(page.getByRole("button", { name: "Copy keyframe", exact: true })).toBeInViewport();
+		await page.screenshot({ path: testInfo.outputPath("timecode-editor.png") });
+		await page.getByRole("button", { name: "Stop", exact: true }).click();
+		await expect.poll(async () => (await runtime()).state).toBe("stopped");
+	});
+
 	test("TIMECODE-001 @ui › title actions, Settings autosave, Add menu, CSV, and zoom geometry match the operator contract", async ({
 		api,
 		desk,

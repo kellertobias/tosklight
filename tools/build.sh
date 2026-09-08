@@ -652,6 +652,9 @@ capture_demo() {
 build_viz_editor() {
   require cargo
   require npm
+  # Architect ships its MCP bridge. Build it before the native application so both the local
+  # bundle assembler and the release packager always receive the matching server.
+  (cd "$ROOT" && npm run build:patch-mcp)
   # The editor packages the demo as a resource, so it has to exist before the bundle is assembled.
   build_demo_show
   echo "Building the Viz editor..."
@@ -675,6 +678,7 @@ open_viz_editor() {
   echo "Opening the Viz editor."
   # A development build is not a bundle, so it has no resource directory to find the packaged demo
   # in. The generated artefact is the same file a release packages, so it is named directly.
+  TOSKLIGHT_PATCH_MCP="$LIGHT_ARTIFACTS_DIR/build/patch-mcp/tosklight-patch-mcp.mjs" \
   TOSKLIGHT_VIZ_DEMO_SHOW="$LIGHT_DEMO_SHOW_DIR/demo-show.show" \
     "$TARGET_DIR/release/viz-editor" "$@"
 }
@@ -789,6 +793,7 @@ build_visualizer() {
     bash "$ROOT/tools/bundle-visualizer-macos.sh" \
       "$TARGET_DIR/release/viz-editor" \
       "$TARGET_DIR/release/viz-renderer" \
+      "$LIGHT_ARTIFACTS_DIR/build/patch-mcp/tosklight-patch-mcp.mjs" \
       "$TARGET_DIR/release/bundle/macos"
   fi
 }

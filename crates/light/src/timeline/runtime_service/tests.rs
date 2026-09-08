@@ -543,7 +543,7 @@ fn installed_runtimes_tick_in_stable_timecode_id_order() {
 }
 
 #[test]
-fn authoritative_transport_and_ticks_drive_prepared_audio() {
+fn prepared_audio_free_runs_between_explicit_transport_actions() {
     let clock = Arc::new(ManualTimecodeClock::default());
     let output = Arc::new(RecordingAudioOutput::default());
     let audio = Arc::new(TimecodeAudioService::new(output.clone()));
@@ -571,11 +571,20 @@ fn authoritative_transport_and_ticks_drive_prepared_audio() {
     let service =
         TimecodeRuntimeService::new(clock.clone(), Arc::new(RecordingPublisher::default()), rate)
             .with_audio(audio);
+    let mut definition = definition();
+    definition.audio = Some(light_playback::TimecodeAudio {
+        asset_id: Uuid::from_u128(90),
+        asset_revision: 1,
+        file_name: None,
+        end_fade_frames: None,
+    });
     service
-        .install(definition(), Some(TimecodeFrame(25)))
+        .install(definition, Some(TimecodeFrame(25)))
         .unwrap();
 
     service.handle(id, TimecodeTransportAction::Go).unwrap();
+    clock.advance(40_000);
+    service.tick();
     clock.advance(40_000);
     service.tick();
     service
@@ -593,16 +602,198 @@ fn authoritative_transport_and_ticks_drive_prepared_audio() {
         source_frame: TimecodeFrame::ZERO,
         audible_at_micros: 5_000,
     }));
-    assert!(commands.contains(&TimecodeAudioCommand::Seek {
-        timecode_id: id,
-        source_frame: TimecodeFrame(1),
-        audible_at_micros: 45_000,
-    }));
-    assert!(commands.contains(&TimecodeAudioCommand::Seek {
-        timecode_id: id,
-        source_frame: TimecodeFrame(12),
-        audible_at_micros: 45_000,
-    }));
+    let seeks = commands
+        .iter()
+        .filter_map(|command| match command {
+            TimecodeAudioCommand::Seek {
+                source_frame,
+                audible_at_micros,
+                ..
+            } => Some((*source_frame, *audible_at_micros)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(seeks, vec![(TimecodeFrame(12), 85_000)]);
+}
+
+#[test]
+fn editing_preserves_playing_and_paused_transport_and_revision() {
+    let (service, clock, _) = service();
+    let mut definition = definition();
+    let id = definition.id;
+    service.install(definition.clone(), None).unwrap();
+    service.handle(id, TimecodeTransportAction::Go).unwrap();
+    clock.advance(410_000);
+    definition.name = "Edited while playing".into();
+    let playing = service.install(definition.clone(), None).unwrap();
+    assert_eq!(playing.transport, TimecodeTransportState::Playing);
+    assert_eq!(playing.frame, TimecodeFrame(10));
+    clock.advance(30_000);
+    assert_eq!(service.tick()[0].snapshot.frame, TimecodeFrame(11));
+    service.handle(id, TimecodeTransportAction::Pause).unwrap();
+    clock.advance(400_000);
+    definition.name = "Edited while paused".into();
+    let paused = service.install(definition, None).unwrap();
+    assert_eq!(paused.transport, TimecodeTransportState::Paused);
+    assert_eq!(paused.frame, TimecodeFrame(11));
+    assert!(paused.revision > playing.revision);
+    assert!(service.tick().is_empty());
+}
+
+#[test]
+fn audio_edits_do_not_restart_the_voice_and_removal_and_deletion_stop_it() {
+    let (service, clock, _) = service();
+    let output = Arc::new(RecordingAudioOutput::default());
+    let audio = Arc::new(TimecodeAudioService::new(output.clone()));
+    let service = service.with_audio(audio.clone());
+    let mut definition = definition();
+    definition.lanes.push(TimecodeLane {
+        id: TimecodeLaneId(Uuid::from_u128(91)),
+        name: "Muted start".into(),
+        content: TimecodeLaneContent::AudioVolume {
+            keyframes: vec![light_playback::TimecodeVolumeKeyframe {
+                id: light_playback::TimecodeKeyframeId(Uuid::from_u128(92)),
+                frame: TimecodeFrame::ZERO,
+                value: 0.0,
+                fade_frames: 0,
+                curve: light_playback::TimecodeCurve::Linear,
+            }],
+        },
+    });
+    let id = definition.id;
+    let asset = crate::AssetReference {
+        id: crate::AssetId(Uuid::from_u128(90)),
+        revision: crate::AssetRevision(1),
+    };
+    let metadata = WavMetadata {
+        encoding: WavEncoding::PcmInteger,
+        channels: 2,
+        sample_rate: 48_000,
+        bits_per_sample: 16,
+        data_bytes: 192_000,
+        sample_frames: 48_000,
+    };
+    definition.audio = Some(light_playback::TimecodeAudio {
+        asset_id: asset.id.0,
+        asset_revision: asset.revision.0,
+        file_name: None,
+        end_fade_frames: None,
+    });
+    let duration = service.prepare_audio(id, asset, metadata, true).unwrap();
+    service.install(definition.clone(), Some(duration)).unwrap();
+    service.handle(id, TimecodeTransportAction::Go).unwrap();
+    {
+        let commands = output.0.lock().unwrap();
+        let volume = commands
+            .iter()
+            .position(|command| {
+                matches!(command, TimecodeAudioCommand::SetVolume { linear: 0.0, .. })
+            })
+            .unwrap();
+        let play = commands
+            .iter()
+            .position(|command| matches!(command, TimecodeAudioCommand::Play { .. }))
+            .unwrap();
+        assert!(
+            volume < play,
+            "a muted start must reach the device before Play"
+        );
+    }
+    clock.advance(400_000);
+    service.tick();
+    output.0.lock().unwrap().clear();
+    service.prepare_audio(id, asset, metadata, true).unwrap();
+    definition.name = "Edited while audible".into();
+    let edited = service.install(definition.clone(), Some(duration)).unwrap();
+    assert_eq!(edited.frame, TimecodeFrame(10));
+    assert_eq!(edited.transport, TimecodeTransportState::Playing);
+    assert!(output.0.lock().unwrap().is_empty());
+
+    service
+        .handle(
+            id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(80),
+            },
+        )
+        .unwrap();
+    definition.duration = Some(TimecodeFrame(50));
+    let shortened = service.install(definition.clone(), Some(duration)).unwrap();
+    assert_eq!(shortened.frame, TimecodeFrame(50));
+    assert_eq!(shortened.transport, TimecodeTransportState::Playing);
+    assert!(
+        output
+            .0
+            .lock()
+            .unwrap()
+            .contains(&TimecodeAudioCommand::SetLoop {
+                timecode_id: id,
+                enabled: true,
+                end_exclusive: TimecodeFrame(50),
+            })
+    );
+    assert!(
+        output
+            .0
+            .lock()
+            .unwrap()
+            .contains(&TimecodeAudioCommand::Seek {
+                timecode_id: id,
+                source_frame: TimecodeFrame(50),
+                audible_at_micros: 405_000,
+            })
+    );
+    output.0.lock().unwrap().clear();
+
+    definition.audio = None;
+    let removed = service.install(definition.clone(), None).unwrap();
+    assert!(!removed.audio_linked);
+    assert_eq!(removed.transport, TimecodeTransportState::Playing);
+    assert_eq!(
+        *output.0.lock().unwrap(),
+        vec![TimecodeAudioCommand::Stop { timecode_id: id }]
+    );
+    assert!(!audio.is_prepared(id));
+
+    service.prepare_audio(id, asset, metadata, true).unwrap();
+    output.0.lock().unwrap().clear();
+    assert!(service.uninstall(id).unwrap());
+    assert_eq!(
+        *output.0.lock().unwrap(),
+        vec![TimecodeAudioCommand::Stop { timecode_id: id }]
+    );
+    assert!(!audio.is_prepared(id));
+    assert!(service.snapshot(id).is_err());
+
+    definition.auto_start = true;
+    definition.audio = Some(light_playback::TimecodeAudio {
+        asset_id: asset.id.0,
+        asset_revision: asset.revision.0,
+        file_name: None,
+        end_fade_frames: None,
+    });
+    service.prepare_audio(id, asset, metadata, true).unwrap();
+    service.install(definition, Some(duration)).unwrap();
+    output.0.lock().unwrap().clear();
+    let locked = service.synchronize_external(TimecodeFrame(40));
+    assert_eq!(locked[0].snapshot.frame, TimecodeFrame(40));
+    assert!(
+        output
+            .0
+            .lock()
+            .unwrap()
+            .contains(&TimecodeAudioCommand::Seek {
+                timecode_id: id,
+                source_frame: TimecodeFrame(40),
+                audible_at_micros: 405_000,
+            })
+    );
+    output.0.lock().unwrap().clear();
+    service.synchronize_external(TimecodeFrame(41));
+    assert!(
+        output.0.lock().unwrap().is_empty(),
+        "ordinary source frames must not hard-seek audio"
+    );
 }
 
 #[test]
@@ -624,6 +815,39 @@ fn duration_only_timecode_ignores_available_audio_output() {
 
     assert!(output.0.lock().unwrap().is_empty());
     assert!(!service.snapshot(id).unwrap().audio_linked);
+}
+
+#[test]
+fn source_loss_relocks_but_operator_stop_stays_disarmed() {
+    for action in [
+        TimecodeTransportAction::Pause,
+        TimecodeTransportAction::Stop,
+    ] {
+        let (service, _, _) = service();
+        let definition = definition();
+        let id = definition.id;
+        service.install(definition, None).unwrap();
+        service.handle(id, TimecodeTransportAction::Go).unwrap();
+        service.synchronize_external(TimecodeFrame(10));
+        service.handle_source_loss(id, action).unwrap();
+        assert_ne!(
+            service.snapshot(id).unwrap().transport,
+            TimecodeTransportState::Playing
+        );
+        let relocked = service.synchronize_external(TimecodeFrame(30));
+        assert_eq!(relocked[0].snapshot.frame, TimecodeFrame(30));
+        assert_eq!(
+            relocked[0].snapshot.transport,
+            TimecodeTransportState::Playing
+        );
+        service.handle_source_loss(id, action).unwrap();
+        service.handle(id, TimecodeTransportAction::Stop).unwrap();
+        assert!(service.synchronize_external(TimecodeFrame(40)).is_empty());
+        assert_eq!(
+            service.snapshot(id).unwrap().transport,
+            TimecodeTransportState::Stopped
+        );
+    }
 }
 
 #[test]

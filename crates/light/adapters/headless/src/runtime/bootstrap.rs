@@ -105,8 +105,7 @@ impl RuntimeResources {
             )
             .map_err(|error| anyhow::anyhow!(error.message))?,
         );
-        let timecode_clock: Arc<dyn light_application::timeline::TimecodeClock> =
-            Arc::new(light_application::timeline::SystemTimecodeClock::default());
+        let timecode_clock = super::timecode_clock::runtime_clock(startup.manual_clock.as_ref());
         let audio_device = configuration.timecode_audio_output_device.as_ref().map_or(
             super::timecode_audio_output::OutputDeviceSelector::SystemDefault,
             |device| super::timecode_audio_output::OutputDeviceSelector::Name(device.clone()),
@@ -133,6 +132,7 @@ impl RuntimeResources {
             .ok();
         let mut audio_outputs_by_device = HashMap::new();
         if let Some(output) = &native_audio_output {
+            tracing::info!(device = ?audio_configuration.device, "native Timecode audio output initialized");
             audio_outputs_by_device.insert(trim_key.to_owned(), output.internal_output());
         }
         let mut internal_outputs = std::collections::BTreeMap::new();
