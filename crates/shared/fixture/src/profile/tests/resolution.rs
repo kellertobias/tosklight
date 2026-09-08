@@ -179,8 +179,8 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
         mode.resolve_channel_raw(
             &fixture_channel,
             &values,
-            true,
-            Some(220),
+            false,
+            None,
             ChannelScales {
                 virtual_intensity: 0.0,
                 sequence_master: 0.0,
@@ -189,6 +189,28 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             },
         ),
         37,
-        "a static physical slot is immutable under Highlight, inversion, and every master"
+        "a static physical slot ignores semantic values, inversion, and every master"
+    );
+    assert_eq!(
+        mode.resolve_channel_raw(
+            &fixture_channel,
+            &values,
+            true,
+            None,
+            ChannelScales::default(),
+        ),
+        211,
+        "a static physical slot may have an authored Highlight value"
+    );
+    assert_eq!(
+        mode.resolve_channel_raw(
+            &fixture_channel,
+            &values,
+            true,
+            Some(220),
+            ChannelScales::default(),
+        ),
+        220,
+        "a static physical slot honors its per-instance Highlight override"
     );
 }

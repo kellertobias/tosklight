@@ -95,6 +95,11 @@ invalid footprints and overlapping component slots. Choose a safe home and Highl
 verify them on the real fixture. Detailed raw-value, color-system, and control-action authoring is
 fixture-developer documentation.
 
+A **Static output** channel has no Programmer control. It transmits its authored Default raw value
+during normal output and its separately authored Highlight raw value while Highlight is active, so
+a normally fixed control slot can still switch a fixture display or identification mode for
+Highlight. A per-fixture Highlight override may replace that Highlight raw value.
+
 ### Color
 
 Configure the fixture's additive, subtractive, or wheel color system, then use **Generate portable

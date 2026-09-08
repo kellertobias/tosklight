@@ -179,7 +179,11 @@ impl BoundFixtureModeResolution<'_> {
         if channel.behavior == ChannelBehavior::Static {
             return PlannedChannelResolution {
                 active_attribute: None,
-                raw: channel.default_raw,
+                raw: if highlighted {
+                    highlight_override.unwrap_or(channel.highlight_raw)
+                } else {
+                    channel.default_raw
+                },
             };
         }
         let fixture_facing = ActiveAttribute {
@@ -278,11 +282,11 @@ fn resolved_raw(
     highlight_override: Option<u32>,
     function_raw: Option<ResolvedChannelRaw>,
 ) -> ResolvedChannelRaw {
-    if channel.behavior == ChannelBehavior::Static {
-        return ResolvedChannelRaw::Exact(channel.default_raw);
-    }
     if highlighted {
         return ResolvedChannelRaw::Exact(highlight_override.unwrap_or(channel.highlight_raw));
+    }
+    if channel.behavior == ChannelBehavior::Static {
+        return ResolvedChannelRaw::Exact(channel.default_raw);
     }
     if let Some(AttributeValue::RawDmxExact(value)) = control_value {
         return ResolvedChannelRaw::Exact(*value);

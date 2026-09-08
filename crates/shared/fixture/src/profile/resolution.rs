@@ -75,11 +75,15 @@ impl FixtureMode {
         highlight_override: Option<u32>,
         scales: ChannelScales,
     ) -> u32 {
-        // A static row represents a physical slot whose fixture-manual value is immutable. It is
-        // not part of Highlight and cannot be changed by a stale semantic value, an instance
-        // Highlight override, inversion, or any master scale.
+        // A static row has no Programmer owner: it emits its authored home value normally and its
+        // authored (or per-instance) Highlight value while Highlight is active. Both are exact
+        // fixture values and therefore bypass semantic values, inversion, and master scaling.
         if channel.behavior == ChannelBehavior::Static {
-            return channel.default_raw;
+            return if highlighted {
+                highlight_override.unwrap_or(channel.highlight_raw)
+            } else {
+                channel.default_raw
+            };
         }
         let max = channel.resolution.max_raw();
         let resolved = if highlighted {

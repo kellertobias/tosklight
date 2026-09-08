@@ -118,7 +118,7 @@ fn compiled_resolution_rejects_a_different_mode() {
 }
 
 #[test]
-fn compiled_static_channel_ignores_every_runtime_override() {
+fn compiled_static_channel_uses_only_default_and_highlight_values() {
     let mut mode = additive_color_mode();
     let channel = &mut mode.channels[0];
     channel.behavior = ChannelBehavior::Static;
@@ -136,13 +136,23 @@ fn compiled_static_channel_ignores_every_runtime_override() {
     ]);
     let plan = mode.compile_resolution_plan();
     let bound = plan.bind(&mode).unwrap();
-    let resolved = bound.resolve_channel(0, &values, true, Some(220), |_| ChannelScales {
+    let normal = bound.resolve_channel(0, &values, false, None, |_| ChannelScales {
         virtual_intensity: 0.0,
         sequence_master: 0.0,
         group_master: 0.0,
         grand_master: 0.0,
     });
+    let highlighted = bound.resolve_channel(0, &values, true, None, |_| {
+        panic!("static Highlight output does not request semantic master scales")
+    });
+    let overridden = bound.resolve_channel(0, &values, true, Some(220), |_| {
+        panic!("static Highlight override does not request semantic master scales")
+    });
 
-    assert_eq!(resolved.active_attribute, None);
-    assert_eq!(resolved.raw, 19);
+    assert_eq!(normal.active_attribute, None);
+    assert_eq!(normal.raw, 19);
+    assert_eq!(highlighted.active_attribute, None);
+    assert_eq!(highlighted.raw, 211);
+    assert_eq!(overridden.active_attribute, None);
+    assert_eq!(overridden.raw, 220);
 }
