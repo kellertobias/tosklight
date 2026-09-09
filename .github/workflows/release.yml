@@ -1114,7 +1114,7 @@ jobs:
             IFS=. read -r version_major version_minor version_patch <<<"$numeric"
             numeric_version="${version_major:-0}.${version_minor:-0}.${version_patch:-0}.0"
             makensis='/c/Program Files (x86)/NSIS/makensis.exe'
-            "$makensis" \
+            MSYS2_ARG_CONV_EXCL='*' "$makensis" \
               "/DAPP_VERSION=$version" \
               "/DNUMERIC_VERSION=$numeric_version" \
               "/DSOURCE_DIR=$(cygpath -w "$stage")" \

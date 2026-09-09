@@ -416,6 +416,11 @@ test("the Windows Pixel release is a branded launcher installer", () => {
 	assert.match(workflow, /-p pixel-launcher --bin pixel-launcher/u);
 	assert.match(workflow, /ToskLight Pixel\.exe/u);
 	assert.match(workflow, /pixel-installer\.nsi/u);
+	assert.match(
+		workflow,
+		/MSYS2_ARG_CONV_EXCL='\*' "\$makensis"/u,
+		"Git Bash must not rewrite NSIS /D preprocessor arguments as POSIX paths",
+	);
 	assert.doesNotMatch(
 		workflow,
 		/7z a -tzip[\s\\]*\n[\s\S]{0,120}tosklight-media-\$version-\$SLUG\.zip/u,
