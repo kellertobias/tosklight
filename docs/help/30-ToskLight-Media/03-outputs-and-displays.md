@@ -41,6 +41,8 @@ Pixel uses Art-Net or sACN for control and CITP/MSEX for discovery, media names,
 preview. A working CITP connection does not prove the DMX universe and start address are correct;
 verify both the Media window previews and an actual Folder/File/Dimmer change.
 
+If Pixel cannot bind its configured Art-Net port, it starts without Art-Net input instead of withholding the administration interface. The Network settings show an alert naming that condition; release the port or correct the listen address, then restart Pixel before relying on Art-Net control. Other configured protocols retain their normal startup behavior.
+
 The configuration supports one or more outputs; the shipped and certified baseline is one Main output. Treat additional outputs as an explicit production configuration and verify each monitor, GPU load, audio path, control footprint, and preview identity.
 
 Saved network and output changes apply after restart. The interface can offer to return saved configuration to the active values when a restart should be deferred. Layer and playback changes do not require a restart.

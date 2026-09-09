@@ -114,6 +114,7 @@ fn run_inner() -> anyhow::Result<()> {
     let importer = start_importer(&configuration, &catalog, &catalog_edits);
     let (audio, analysis) = start_audio(&configuration);
     let dmx_diagnostics = dmx::diagnostics();
+    let network_warnings = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let universe_inputs = dmx::universe_inputs();
     let console_identity = citp::ConsoleIdentity::default();
     let available_monitors = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
@@ -128,6 +129,7 @@ fn run_inner() -> anyhow::Result<()> {
         &catalog,
         &catalog_edits,
         &dmx_diagnostics,
+        &network_warnings,
         &console_identity,
         &available_monitors,
         started,
@@ -138,7 +140,7 @@ fn run_inner() -> anyhow::Result<()> {
 
     // The desk drives the outputs, so the listeners come up before anything presents.
     runtime.block_on(async {
-        dmx::spawn(
+        let warnings = dmx::spawn(
             &configuration,
             state.clone(),
             shutdown.clone(),
@@ -146,6 +148,9 @@ fn run_inner() -> anyhow::Result<()> {
             dmx_diagnostics,
             universe_inputs.clone(),
         )?;
+        *network_warnings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = warnings;
         citp::spawn(
             &configuration,
             state.clone(),
@@ -549,12 +554,14 @@ fn diagnostics_of(
     catalog: &presentation::SharedCatalog,
     catalog_edits: &catalog_publication::CatalogEdits,
     dmx_diagnostics: &dmx::SharedDiagnostics,
+    network_warnings: &std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     console_identity: &citp::ConsoleIdentity,
     available_monitors: &std::sync::Arc<std::sync::RwLock<Vec<media_http::MonitorDevice>>>,
     started: std::time::Instant,
 ) -> media_http::Diagnostics {
     let log = logging.window.clone();
     let dmx_diagnostics = dmx_diagnostics.clone();
+    let network_warnings = network_warnings.clone();
     let console_identity = console_identity.clone();
     let available_monitors = available_monitors.clone();
     media_http::Diagnostics {
@@ -602,6 +609,12 @@ fn diagnostics_of(
                 &dmx_diagnostics,
                 Timestamp::from_micros(started.elapsed().as_micros() as u64),
             )
+        }),
+        network_warnings: std::sync::Arc::new(move || {
+            network_warnings
+                .lock()
+                .map(|warnings| warnings.clone())
+                .unwrap_or_default()
         }),
         desk_identity: std::sync::Arc::new(move || console_identity.snapshot()),
     }

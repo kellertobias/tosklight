@@ -286,7 +286,8 @@ pub fn spawn(
     started: std::time::Instant,
     diagnostics: SharedDiagnostics,
     inputs: SharedUniverseInputs,
-) -> Result<(), IngressError> {
+) -> Result<Vec<String>, IngressError> {
+    let mut warnings = Vec::new();
     let routes = routes(configuration);
     let mut handoffs: Vec<(DmxProtocol, u16)> = configuration
         .outputs
@@ -307,28 +308,39 @@ pub fn spawn(
             .iter()
             .any(|(protocol, _)| *protocol == DmxProtocol::ArtNet)
     {
-        let mut listener = ArtNetListener::bind(resolved.art_net_listen)?;
-        tracing::info!(address = %resolved.art_net_listen, "listening for Art-Net");
-        let (routes, state, mut watcher, now, diagnostics, handoffs, inputs) = (
-            routes.clone(),
-            state.clone(),
-            shutdown.watcher(),
-            now,
-            diagnostics.clone(),
-            handoffs.clone(),
-            inputs.clone(),
-        );
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = watcher.wait() => break,
-                    frame = listener.receive(&now) => {
-                        capture_handoff_frame(&frame, &handoffs, &inputs);
-                        apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics);
-                    },
-                }
+        match ArtNetListener::bind(resolved.art_net_listen) {
+            Ok(mut listener) => {
+                tracing::info!(address = %resolved.art_net_listen, "listening for Art-Net");
+                let (routes, state, mut watcher, now, diagnostics, handoffs, inputs) = (
+                    routes.clone(),
+                    state.clone(),
+                    shutdown.watcher(),
+                    now,
+                    diagnostics.clone(),
+                    handoffs.clone(),
+                    inputs.clone(),
+                );
+                tokio::spawn(async move {
+                    loop {
+                        tokio::select! {
+                            _ = watcher.wait() => break,
+                            frame = listener.receive(&now) => {
+                                capture_handoff_frame(&frame, &handoffs, &inputs);
+                                apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics);
+                            },
+                        }
+                    }
+                });
             }
-        });
+            Err(error) => {
+                let warning = format!(
+                    "Art-Net is unavailable at {}. Pixel started without Art-Net input: {error}",
+                    resolved.art_net_listen,
+                );
+                tracing::warn!(%warning);
+                warnings.push(warning);
+            }
+        }
     }
 
     if routes
@@ -371,11 +383,13 @@ pub fn spawn(
         });
     }
 
-    Ok(())
+    Ok(warnings)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::net::UdpSocket;
+
     use media_application::configuration::OutputConfiguration;
     use media_domain::{LayerPersonality, MediaAddress, OutputState};
 
@@ -401,6 +415,26 @@ mod tests {
                 .map(|output| OutputState::new(output.id, output.personality))
                 .collect(),
         )))
+    }
+
+    #[tokio::test]
+    async fn an_unavailable_art_net_socket_leaves_the_server_able_to_start() {
+        let occupied = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let mut configuration = configuration(DmxProtocol::ArtNet, 3, 1);
+        configuration.network.art_net_listen = occupied.local_addr().unwrap();
+        let shutdown = Shutdown::new();
+        let warnings = spawn(
+            &configuration,
+            state_for(&configuration),
+            shutdown.clone(),
+            std::time::Instant::now(),
+            diagnostics(),
+            universe_inputs(),
+        )
+        .unwrap();
+        shutdown.request(crate::shutdown::ShutdownReason::Requested);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Pixel started without Art-Net input"));
     }
 
     /// A universe where the first layer selects folder 1, file 4 at full dimmer.

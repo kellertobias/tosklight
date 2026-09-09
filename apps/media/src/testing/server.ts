@@ -1556,6 +1556,7 @@ export function aNetwork(overrides: Partial<NetworkView> = {}): NetworkView {
 		citpAdvertisedPort: 4809,
 		takesEffectOnRestart: true,
 		pendingRestart: false,
+		warnings: [],
 		...overrides,
 	};
 }

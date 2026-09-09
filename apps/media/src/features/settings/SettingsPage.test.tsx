@@ -46,6 +46,19 @@ describe("the settings page", () => {
 		).toBeVisible();
 	});
 
+	it("keeps the web settings available and warns when Art-Net could not bind", async () => {
+		stubSettingsServer({
+			network: aNetwork({
+				warnings: ["Art-Net is unavailable at 0.0.0.0:6454. Pixel started without Art-Net input."],
+			}),
+		});
+		renderSettings();
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"Pixel started without Art-Net input.",
+		);
+		expect(screen.getByLabelText("Art-Net")).toBeVisible();
+	});
+
 	it("renders the Libraries path explanation as regular information", async () => {
 		stubSettingsServer();
 		renderSettings();

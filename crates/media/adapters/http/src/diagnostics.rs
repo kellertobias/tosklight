@@ -274,6 +274,8 @@ pub struct DmxTelemetry {
 }
 
 pub type DmxSource = Arc<dyn Fn() -> Vec<DmxTelemetry> + Send + Sync>;
+/// Startup warnings for DMX listeners that could not be opened without preventing the web server.
+pub type NetworkWarningSource = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
 
 /// The Light Desk most recently identified over CITP discovery.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -399,6 +401,7 @@ pub struct Diagnostics {
     pub imports: Imports,
     pub library: LibraryAccess,
     pub dmx: DmxSource,
+    pub network_warnings: NetworkWarningSource,
     pub desk_identity: DeskIdentitySource,
 }
 
@@ -418,6 +421,7 @@ impl Default for Diagnostics {
             imports: Imports::default(),
             library: LibraryAccess::default(),
             dmx: Arc::new(Vec::new),
+            network_warnings: Arc::new(Vec::new),
             desk_identity: Arc::new(|| None),
         }
     }

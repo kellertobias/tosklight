@@ -63,6 +63,10 @@ Import a multi-frame clip whose opening samples are black and whose later sample
 
 In Pixel's Library web view, select an imported video and verify its inspector advances through a sequence of pictures while the item remains selected; this is a management preview and does not start a layer or alter output. The source stays private and Pixel decodes its native clip format to bounded JPEG frames because that format is not generally browser-playable. Select an image and verify its thumbnail remains visible. If a video frame cannot be decoded, the inspector keeps the item's existing thumbnail instead of showing a broken image, and no library metadata, address, playback state, or media bytes change.
 
+## PIXEL-008 — Art-Net startup fallback
+
+Configure Pixel with an enabled Art-Net output and occupy its configured Art-Net UDP port before starting Pixel. Pixel still starts its administration interface and does not accept Art-Net input for that run. **Settings > Network** visibly warns that Pixel started without Art-Net input and retains the stored address so the operator can correct the conflict. Releasing the port and restarting restores Art-Net; Pixel never silently changes the configured address or reports the listener as active while it is unavailable.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.

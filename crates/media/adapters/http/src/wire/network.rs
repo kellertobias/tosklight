@@ -74,10 +74,16 @@ pub struct NetworkView {
     pub takes_effect_on_restart: bool,
     /// Whether stored next-start values differ from the immutable startup values.
     pub pending_restart: bool,
+    /// A listener that could not bind this run is disabled rather than preventing administration.
+    pub warnings: Vec<String>,
 }
 
 impl NetworkView {
-    pub fn of(network: &NetworkConfiguration, active: &NetworkConfiguration) -> Self {
+    pub fn of(
+        network: &NetworkConfiguration,
+        active: &NetworkConfiguration,
+        warnings: Vec<String>,
+    ) -> Self {
         let resolved = active.resolved();
         Self {
             same_computer_preset: network.same_computer_preset,
@@ -88,6 +94,7 @@ impl NetworkView {
             citp_advertised_port: resolved.citp_advertised_port,
             takes_effect_on_restart: true,
             pending_restart: network != active,
+            warnings,
         }
     }
 }
@@ -261,7 +268,7 @@ mod tests {
             art_net_listen: "192.168.1.40:6454".parse().unwrap(),
             ..Default::default()
         };
-        let view = NetworkView::of(&network, &network);
+        let view = NetworkView::of(&network, &network, Vec::new());
 
         assert_eq!(view.stored.art_net_listen, "192.168.1.40:6454");
         assert_eq!(

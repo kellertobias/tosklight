@@ -15,6 +15,7 @@ pub(super) async fn network(State(state): State<ApiState>) -> impl IntoResponse 
     axum::Json(NetworkView::of(
         &state.configuration.load().network,
         &state.active_configuration.network,
+        (state.diagnostics.network_warnings)(),
     ))
 }
 
@@ -37,7 +38,11 @@ pub(super) async fn update_network(
         .applied(&configuration.network)
         .map_err(|error| ApiError::bad_request("network-invalid", error.to_string()))?;
 
-    let view = NetworkView::of(&configuration.network, &state.active_configuration.network);
+    let view = NetworkView::of(
+        &configuration.network,
+        &state.active_configuration.network,
+        (state.diagnostics.network_warnings)(),
+    );
     edit::commit(&state, configuration, &body.request_id, &view)
 }
 
@@ -60,10 +65,32 @@ mod tests {
         assert_eq!(body["sameComputerPreset"], false);
         assert_eq!(body["activeSameComputerPreset"], false);
         assert_eq!(body["pendingRestart"], false);
+        assert_eq!(body["warnings"], serde_json::json!([]));
         assert_eq!(
             body["takesEffectOnRestart"], true,
             "an operator must not think a rebind already happened"
         );
+    }
+
+    #[tokio::test]
+    async fn an_unavailable_art_net_listener_is_visible_without_hiding_network_settings() {
+        let diagnostics = crate::diagnostics::Diagnostics {
+            network_warnings: std::sync::Arc::new(|| {
+                vec![
+                    "Art-Net is unavailable at 0.0.0.0:6454. Pixel started without Art-Net input."
+                        .to_owned(),
+                ]
+            }),
+            ..Default::default()
+        };
+        let bench = crate::routes::bench::bench_with(diagnostics);
+        let (status, body) = send(&bench.router, get("/api/v2/network".into())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            body["warnings"][0],
+            "Art-Net is unavailable at 0.0.0.0:6454. Pixel started without Art-Net input."
+        );
+        assert_eq!(body["stored"]["artNetListen"], "0.0.0.0:6454");
     }
 
     #[tokio::test]

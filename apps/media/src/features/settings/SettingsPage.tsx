@@ -278,6 +278,11 @@ function Network({
 				onSave={onSave}
 				showActions={false}
 			/>
+			{network.warnings.map((warning) => (
+				<p key={warning} className="media-state is-error" role="alert">
+					{warning}
+				</p>
+			))}
 			{network.pendingRestart && network.takesEffectOnRestart && (
 				<>
 					<p className="media-state is-notice">

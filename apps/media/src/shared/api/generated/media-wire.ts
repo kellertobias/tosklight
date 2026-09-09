@@ -250,7 +250,11 @@ takesEffectOnRestart: boolean,
 /**
  * Whether stored next-start values differ from the immutable startup values.
  */
-pendingRestart: boolean, };
+pendingRestart: boolean,
+/**
+ * A listener that could not bind this run is disabled rather than preventing administration.
+ */
+warnings: Array<string>, };
 export type TimeView = {
 /**
  * Minutes east of UTC. Negative is west; 0 is UTC itself.
