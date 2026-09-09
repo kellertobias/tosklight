@@ -33,6 +33,12 @@ Open **Show Patch > Media Servers** to discover ToskLight Pixel Media servers on
 
 The Media Server may report that its DMX input change needs a restart; Show Patch keeps that state visible. An unreachable server or discovery failure does not disable the ordinary fixture-library and manual Media Server patch workflows.
 
+Pixel also publishes GDTF and desk-native personality downloads in its management interface under
+**Diagnostics > Console personalities**. Use those files when patching Pixel from MagicQ,
+grandMA2, grandMA3, or another GDTF-compatible desk. The Layer and Master personalities come from
+the same canonical channel layout as Pixel's DMX receiver; patch every Layer consecutively and one
+Master immediately after them.
+
 The placement dialog shows all 512 addresses of the selected universe as a scrollable grid of square touch targets. Existing fixture ranges have a gray outline and translucent gray fill labeled with fixture ID and name. Every fixture requested by **Count** appears as its own blue proposed range, arranged consecutively by default; a range turns red if it overlaps an existing or proposed fixture. Grab any blue range with a mouse or touch to move that fixture independently, or select one and tap a free address. The batch is created from the individual displayed addresses, and every footprint remains inside its universe.
 
 The combined **MIB** cell shows **Off** or one non-negative delay in seconds. `0 s` means Move in Black is enabled with no delay and is distinct from Off. One SET action writes enabled state and millisecond delay atomically; fractional seconds are accepted when representable.

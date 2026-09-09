@@ -579,7 +579,7 @@ async fn announce(
         tracing::warn!(%error, %multicast, %interface, "CITP discovery cannot join its multicast group");
     }
 
-    let group = SocketAddr::from((multicast, media_citp::CITP_PORT));
+    let targets = announcement_targets(listen, multicast);
     let announcement = media_citp::announcement(&service.name, service.listening_port);
     let mut ticker = tokio::time::interval(ANNOUNCE_INTERVAL);
     let mut buffer = vec![0_u8; READ_BUFFER];
@@ -589,8 +589,10 @@ async fn announce(
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                if let Err(error) = socket.send_to(&announcement, group).await {
-                    tracing::debug!(%error, "CITP announcement could not be sent");
+                for target in &targets {
+                    if let Err(error) = socket.send_to(&announcement, target).await {
+                        tracing::debug!(%error, %target, "CITP announcement could not be sent");
+                    }
                 }
             }
             received = socket.recv_from(&mut buffer) => {
@@ -608,6 +610,17 @@ async fn announce(
             _ = &mut stopping => return,
         }
     }
+}
+
+fn announcement_targets(listen: SocketAddr, multicast: Ipv4Addr) -> Vec<SocketAddr> {
+    let mut targets = vec![SocketAddr::from((multicast, media_citp::CITP_PORT))];
+    if listen.ip().is_unspecified() || listen.ip().is_loopback() {
+        targets.push(SocketAddr::from((
+            Ipv4Addr::LOCALHOST,
+            media_citp::CITP_PORT,
+        )));
+    }
+    targets
 }
 
 /// Accepts consoles and serves each one.
@@ -708,13 +721,25 @@ async fn serve_console(
                 };
                 for message in messages {
                     let now = started.elapsed().as_millis() as u64;
-                    let replies = media_citp::respond(
-                        &message,
-                        &service.identity(),
-                        &service.library(),
-                        &mut sessions,
-                        now,
-                    );
+                    let request_sessions = std::mem::take(&mut sessions);
+                    let responder = service.clone();
+                    let answered = tokio::task::spawn_blocking(move || {
+                        let mut sessions = request_sessions;
+                        let replies = media_citp::respond(
+                            &message,
+                            &responder.identity(),
+                            &responder.library(),
+                            &mut sessions,
+                            now,
+                        );
+                        (sessions, replies)
+                    })
+                    .await;
+                    let Ok((updated_sessions, replies)) = answered else {
+                        tracing::warn!(%peer, "a CITP request worker stopped unexpectedly");
+                        break 'connected;
+                    };
+                    sessions = updated_sessions;
                     for reply in replies {
                         if stream.write_all(&reply).await.is_err() {
                             break 'connected;
@@ -888,6 +913,27 @@ mod tests {
             Some(media_http::DeskIdentityTelemetry {
                 show_name: "The Tempest".to_owned(),
             })
+        );
+    }
+
+    #[test]
+    fn wildcard_citp_discovery_also_advertises_to_same_machine_consoles() {
+        let multicast = Ipv4Addr::from(MULTICAST_GROUP);
+        assert_eq!(
+            announcement_targets(SocketAddr::from(([0, 0, 0, 0], 4809)), multicast),
+            vec![
+                SocketAddr::from((multicast, 4809)),
+                SocketAddr::from((Ipv4Addr::LOCALHOST, 4809)),
+            ]
+        );
+    }
+
+    #[test]
+    fn interface_bound_citp_discovery_does_not_advertise_on_loopback() {
+        let multicast = Ipv4Addr::from(MULTICAST_GROUP);
+        assert_eq!(
+            announcement_targets(SocketAddr::from(([192, 0, 2, 10], 4809)), multicast),
+            vec![SocketAddr::from((multicast, 4809))]
         );
     }
 

@@ -118,10 +118,23 @@ pub fn description_xml(fixture: &FixtureType) -> String {
     xml.push_str(
         "        <FeatureGroup Name=\"Control\" Pretty=\"Control\">\n          <Feature Name=\"Control\"/>\n        </FeatureGroup>\n",
     );
+    if attributes(fixture)
+        .iter()
+        .any(|attribute| matches!(attribute.as_str(), "Gobo1" | "Gobo2"))
+    {
+        xml.push_str(
+            "        <FeatureGroup Name=\"Gobo\" Pretty=\"Gobo\">\n          <Feature Name=\"Gobo\"/>\n        </FeatureGroup>\n",
+        );
+    }
     xml.push_str("      </FeatureGroups>\n      <Attributes>\n");
     for attribute in attributes(fixture) {
+        let feature = if matches!(attribute.as_str(), "Gobo1" | "Gobo2") {
+            "Gobo.Gobo"
+        } else {
+            "Control.Control"
+        };
         xml.push_str(&format!(
-            "        <Attribute Name=\"{}\" Pretty=\"{}\" Feature=\"Control.Control\"/>\n",
+            "        <Attribute Name=\"{}\" Pretty=\"{}\" Feature=\"{feature}\"/>\n",
             escape(&attribute),
             escape(&attribute)
         ));
@@ -130,8 +143,7 @@ pub fn description_xml(fixture: &FixtureType) -> String {
 
     xml.push_str("    <Wheels/>\n    <PhysicalDescriptions/>\n    <Models/>\n");
     xml.push_str(&format!(
-        "    <Geometries>\n      <Geometry Name=\"{GEOMETRY}\" Position=\"{IDENTITY}\"/>\n    </Geometries>\n",
-        IDENTITY = IDENTITY_MATRIX
+        "    <Geometries>\n      <Geometry Name=\"{GEOMETRY}\" Position=\"None\"/>\n    </Geometries>\n"
     ));
 
     xml.push_str("    <DMXModes>\n");
@@ -152,9 +164,6 @@ pub fn description_xml(fixture: &FixtureType) -> String {
     xml
 }
 
-/// No transform: the fixture is a body with nothing to place relative to it.
-const IDENTITY_MATRIX: &str = "{1.000000,0.000000,0.000000}{0.000000,1.000000,0.000000}{0.000000,0.000000,1.000000}{0.000000,0.000000,0.000000}";
-
 fn channel_xml(channel: &Channel) -> String {
     let offsets = channel
         .offsets()
@@ -168,20 +177,20 @@ fn channel_xml(channel: &Channel) -> String {
     };
     let default = format!("{}/{resolution}", channel.default);
     let mut xml = format!(
-        "          <DMXChannel DMXBreak=\"1\" Offset=\"{offsets}\" Default=\"{default}\" \
+        "          <DMXChannel DMXBreak=\"1\" Offset=\"{offsets}\" \
          Highlight=\"None\" Geometry=\"{GEOMETRY}\">\n\
          \x20           <LogicalChannel Attribute=\"{attribute}\" Snap=\"No\" Master=\"None\" \
          MibFade=\"0.000000\" DMXChangeTimeLimit=\"0.000000\">\n\
          \x20             <ChannelFunction Name=\"{name}\" Attribute=\"{attribute}\" \
          OriginalAttribute=\"\" DMXFrom=\"0/1\" Default=\"{default}\" PhysicalFrom=\"0.000000\" \
          PhysicalTo=\"1.000000\" RealFade=\"0.000000\">\n",
-        attribute = escape(&channel.attribute),
-        name = escape(&channel.name),
+        attribute = escape(&gdtf_name(&channel.attribute)),
+        name = escape(&gdtf_name(&channel.name)),
     );
     for set in &channel.sets {
         xml.push_str(&format!(
             "              <ChannelSet Name=\"{}\" DMXFrom=\"{}/{resolution}\"/>\n",
-            escape(&set.name),
+            escape(&gdtf_name(&set.name)),
             set.from,
         ));
     }
@@ -233,6 +242,25 @@ fn escape(value: &str) -> String {
         }
     }
     escaped
+}
+
+/// GDTF `Name` values deliberately use a small ASCII character set. Keep authored labels readable
+/// while ensuring one typographic dash or multiplication sign cannot make a console discard the
+/// complete fixture type.
+fn gdtf_name(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| match character {
+            '—' | '–' => '-',
+            '×' => 'x',
+            allowed
+                if allowed.is_ascii_alphanumeric() || "#%()*+-/:;<=>@_` \"'".contains(allowed) =>
+            {
+                allowed
+            }
+            _ => '_',
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -302,13 +330,29 @@ mod tests {
     }
 
     #[test]
+    fn indexed_gobos_use_the_standard_gdtf_feature_magicq_maps_as_media_wheels() {
+        let mut fixture = fixture();
+        fixture.modes[0].channels[0].attribute = "Gobo2".into();
+        fixture.modes[0].channels[1].attribute = "Gobo1".into();
+
+        let xml = description_xml(&fixture);
+        assert!(xml.contains("<FeatureGroup Name=\"Gobo\" Pretty=\"Gobo\">"));
+        assert!(xml.contains("<Attribute Name=\"Gobo1\" Pretty=\"Gobo1\" Feature=\"Gobo.Gobo\"/>"));
+        assert!(xml.contains("<Attribute Name=\"Gobo2\" Pretty=\"Gobo2\" Feature=\"Gobo.Gobo\"/>"));
+    }
+
+    #[test]
     fn a_channel_carries_its_offsets_and_a_default_in_its_own_resolution() {
         let xml = description_xml(&fixture());
-        assert!(xml.contains("Offset=\"1\" Default=\"255/1\""), "{xml}");
+        assert!(xml.contains("Offset=\"1\" Highlight=\"None\""), "{xml}");
+        assert!(!xml.contains("<DMXChannel DMXBreak=\"1\" Offset=\"1\" Default="));
+        assert!(xml.contains("<ChannelFunction Name=\"Dimmer\""));
+        assert!(xml.contains("Default=\"255/1\""), "{xml}");
         assert!(
-            xml.contains("Offset=\"2,3\" Default=\"32768/2\""),
+            xml.contains("Offset=\"2,3\" Highlight=\"None\""),
             "a 16-bit default is expressed across both bytes"
         );
+        assert!(xml.contains("Default=\"32768/2\""));
     }
 
     #[test]
@@ -326,7 +370,7 @@ mod tests {
         ];
         let xml = description_xml(&fixture);
         assert!(xml.contains("<ChannelSet Name=\"Closed\" DMXFrom=\"0/1\"/>"));
-        assert!(xml.contains("<ChannelSet Name=\"Open &amp; live\" DMXFrom=\"128/1\"/>"));
+        assert!(xml.contains("<ChannelSet Name=\"Open _ live\" DMXFrom=\"128/1\"/>"));
     }
 
     #[test]
@@ -340,6 +384,20 @@ mod tests {
             !xml.contains("Bars & \""),
             "an unescaped ampersand makes a file a console silently refuses"
         );
+    }
+
+    #[test]
+    fn console_names_are_restricted_to_the_gdtf_name_character_set() {
+        let mut fixture = fixture();
+        fixture.modes[0].channels[0].name = "Once — 2× café".into();
+        fixture.modes[0].channels[0].sets = vec![ChannelSet {
+            name: "1–255 BPM".into(),
+            from: 0,
+        }];
+
+        let xml = description_xml(&fixture);
+        assert!(xml.contains("Name=\"Once - 2x caf_\""), "{xml}");
+        assert!(xml.contains("Name=\"1-255 BPM\""), "{xml}");
     }
 
     #[test]

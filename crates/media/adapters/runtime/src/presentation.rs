@@ -1001,7 +1001,7 @@ impl ApplicationHandler for PresentationHost {
             self.tray = crate::tray::show(
                 &self.shutdown,
                 self.data_directory.as_deref(),
-                #[cfg(target_os = "windows")]
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
                 &self.administration_endpoint,
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
                 self.bulk_import.clone(),

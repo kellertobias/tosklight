@@ -17,6 +17,10 @@ use media_domain::geometry::Size;
 const MAX_PREVIEW_FPS: u64 = 10;
 /// What a preview is scaled to when no console has asked for a size.
 const DEFAULT_PREVIEW: Size = Size::new(320, 180);
+/// A console preview is an operator thumbnail, not a second program output. Bound untrusted MSEX
+/// requests so one desk cannot make every captured layer allocate full-resolution GPU and PNG
+/// buffers ten times per second.
+const MAX_PREVIEW: Size = Size::new(640, 360);
 
 /// The latest preview, and whether anyone wants one.
 #[derive(Debug, Default)]
@@ -204,7 +208,7 @@ impl Preview {
         if width == 0 || height == 0 {
             DEFAULT_PREVIEW
         } else {
-            Size::new(width, height)
+            bounded_preview_size(Size::new(width, height))
         }
     }
 
@@ -252,6 +256,16 @@ fn default_preview_size(output: Size) -> Size {
         / u64::from(output.width.max(1)))
     .max(1) as u32;
     Size::new(width, height.min(output.height.max(1)))
+}
+
+fn bounded_preview_size(requested: Size) -> Size {
+    let scale = (MAX_PREVIEW.width as f64 / requested.width.max(1) as f64)
+        .min(MAX_PREVIEW.height as f64 / requested.height.max(1) as f64)
+        .min(1.0);
+    Size::new(
+        (requested.width.max(1) as f64 * scale).round().max(1.0) as u32,
+        (requested.height.max(1) as f64 * scale).round().max(1.0) as u32,
+    )
 }
 
 fn unix_millis() -> u64 {
@@ -518,6 +532,16 @@ mod tests {
 
         preview.subscribed(false, None);
         assert!(!preview.wanted());
+    }
+
+    #[test]
+    fn a_console_cannot_turn_a_preview_into_an_unbounded_program_output() {
+        let preview = Preview::new();
+        preview.subscribed(true, Some((1920, 1080)));
+        assert_eq!(preview.requested_size(), Size::new(640, 360));
+
+        preview.requested_size_is(Some((1024, 768)));
+        assert_eq!(preview.requested_size(), Size::new(480, 360));
     }
 
     #[test]

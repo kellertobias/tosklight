@@ -16,7 +16,7 @@ pub(super) async fn fixtures() -> impl IntoResponse {
     axum::Json(names)
 }
 
-/// One fixture, as a `.gdtf` archive.
+/// One console personality in its native download format.
 pub(super) async fn fixture(Path(name): Path<String>) -> Result<Response, ApiError> {
     let packaged = media_application::gdtf::packages().map_err(|error| {
         tracing::error!(%error, "the GDTF fixtures could not be generated");
@@ -35,7 +35,7 @@ pub(super) async fn fixture(Path(name): Path<String>) -> Result<Response, ApiErr
 
     Ok((
         [
-            (header::CONTENT_TYPE, "application/gdtf".to_owned()),
+            (header::CONTENT_TYPE, content_type(&name).to_owned()),
             (
                 header::CONTENT_DISPOSITION,
                 format!("attachment; filename=\"{name}\""),
@@ -44,6 +44,16 @@ pub(super) async fn fixture(Path(name): Path<String>) -> Result<Response, ApiErr
         bytes,
     )
         .into_response())
+}
+
+fn content_type(name: &str) -> &'static str {
+    if name.ends_with(".gdtf") {
+        "application/gdtf"
+    } else if name.ends_with(".xml") {
+        "application/xml"
+    } else {
+        "application/octet-stream"
+    }
 }
 
 #[cfg(test)]
@@ -60,7 +70,11 @@ mod tests {
         let (status, body) = send(&bench.router, get("/api/v2/fixtures".into())).await;
         assert_eq!(status, StatusCode::OK);
         let names: Vec<String> = serde_json::from_value(body).expect("a list of names");
-        assert_eq!(names.len(), 2, "one layer fixture and one master");
+        assert_eq!(
+            names.len(),
+            6,
+            "layer and master personalities for GDTF, MagicQ, and grandMA2"
+        );
 
         let response = bench
             .router
@@ -81,6 +95,36 @@ mod tests {
         );
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&bytes[..2], b"PK", "a GDTF file is an archive");
+
+        let native = bench
+            .router
+            .clone()
+            .oneshot(get("/api/v2/fixtures/ToskLight%20Pixel%20Layer.hed".into()))
+            .await
+            .unwrap();
+        assert_eq!(native.status(), StatusCode::OK);
+        assert_eq!(
+            native
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("application/octet-stream")
+        );
+
+        let grandma2 = bench
+            .router
+            .clone()
+            .oneshot(get("/api/v2/fixtures/tosklight@pixel_layer@39ch.xml".into()))
+            .await
+            .unwrap();
+        assert_eq!(grandma2.status(), StatusCode::OK);
+        assert_eq!(
+            grandma2
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("application/xml")
+        );
     }
 
     #[tokio::test]

@@ -54,18 +54,148 @@ pub fn master_fixture() -> FixtureType {
     }
 }
 
-/// Both fixtures, as `.gdtf` archives ready to hand a console.
+/// Native console personalities plus the two GDTF fixtures, all generated or captured from the
+/// same canonical channel table.
 pub fn packages() -> std::io::Result<Vec<(String, Vec<u8>)>> {
+    let layer = layer_fixture();
+    let master = master_fixture();
     Ok(vec![
+        ("ToskLight Pixel Layer.gdtf".into(), package(&layer)?),
+        ("ToskLight Pixel Master.gdtf".into(), package(&master)?),
         (
-            "ToskLight Pixel Layer.gdtf".into(),
-            package(&layer_fixture())?,
+            "ToskLight Pixel Layer.hed".into(),
+            include_bytes!(
+                "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer.hed"
+            )
+            .to_vec(),
         ),
         (
-            "ToskLight Pixel Master.gdtf".into(),
-            package(&master_fixture())?,
+            "ToskLight Pixel Master.hed".into(),
+            include_bytes!(
+                "../../../../assets/media-personalities/magicq/ToskLight Pixel Master.hed"
+            )
+            .to_vec(),
+        ),
+        (
+            "tosklight@pixel_layer@39ch.xml".into(),
+            grandma2_xml(&layer).into_bytes(),
+        ),
+        (
+            "tosklight@pixel_master@41ch.xml".into(),
+            grandma2_xml(&master).into_bytes(),
         ),
     ])
+}
+
+/// grandMA2's native fixture-library XML. The two media selectors use MA's dedicated media
+/// attributes; the remaining server-specific controls keep their operator names as custom control
+/// channels while retaining the exact coarse/fine offsets and defaults.
+fn grandma2_xml(fixture: &FixtureType) -> String {
+    let mode = &fixture.modes[0];
+    let mut xml = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <MA xmlns=\"http://schemas.malighting.de/grandma2/xml/MA\" \
+         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" \
+         xsi:schemaLocation=\"http://schemas.malighting.de/grandma2/xml/MA \
+         http://schemas.malighting.de/grandma2/xml/3.9.60/MA.xsd\" \
+         major_vers=\"3\" minor_vers=\"9\" stream_vers=\"60\">\n\
+         \x20 <FixtureType index=\"0\" name=\"{}\" mode=\"{}\">\n\
+         \x20   <short_name>{}</short_name>\n\
+         \x20   <manufacturer>{}</manufacturer>\n\
+         \x20   <short_manufacturer>{}</short_manufacturer>\n\
+         \x20   <Modules index=\"0\">\n\
+         \x20     <Module index=\"0\" name=\"Main Module\" class=\"None\" beamtype=\"None\">\n",
+        xml_escape(&fixture.name),
+        xml_escape(&mode.name),
+        xml_escape(&fixture.short_name),
+        xml_escape(&fixture.manufacturer),
+        xml_escape(&fixture.manufacturer),
+    );
+    for (index, channel) in mode.channels.iter().enumerate() {
+        xml.push_str(&grandma2_channel_xml(index, channel));
+    }
+    xml.push_str(
+        "      </Module>\n\
+         \x20   </Modules>\n\
+         \x20   <Instances index=\"1\"><Instance index=\"0\" module_index=\"0\"/></Instances>\n\
+         \x20   <Wheels index=\"2\"/>\n\
+         \x20   <VirtualFunctionBlocks index=\"3\"/>\n\
+         \x20   <AutoPresets index=\"4\"/>\n\
+         \x20   <FixtureMacroCollect index=\"5\"/>\n\
+         \x20   <RdmNotifications index=\"6\"/>\n\
+         \x20 </FixtureType>\n\
+         </MA>\n",
+    );
+    xml
+}
+
+fn grandma2_channel_xml(index: usize, channel: &Channel) -> String {
+    let (attribute, feature, preset, subattribute) = match channel.name.as_str() {
+        "Media Library" => (
+            "MEDIASERVERINPUTDIRECTORY",
+            "MEDIA",
+            "GOBO",
+            "MEDIASERVERINPUTDIRECTORYSELECT",
+        ),
+        "Media Visual" => (
+            "MEDIASERVERINPUT",
+            "MEDIA",
+            "GOBO",
+            "MEDIASERVERINPUTFILESELECT",
+        ),
+        "Dimmer" => ("DIM", "DIMMER", "DIMMER", "DIM"),
+        _ => ("DUMMY", "CONTROL", "CONTROL", "NOFEATURE"),
+    };
+    let fine = match channel.width {
+        Width::Byte => String::new(),
+        Width::Sixteen => format!(" fine=\"{}\"", channel.offset + 1),
+    };
+    let max = match channel.width {
+        Width::Byte => 255,
+        Width::Sixteen => 65_535,
+    };
+    let mut xml = format!(
+        "        <ChannelType index=\"{index}\" attribute=\"{attribute}\" feature=\"{feature}\" \
+         preset=\"{preset}\" coarse=\"{}\"{fine} default=\"{}\">\n\
+         \x20         <ChannelFunction index=\"0\" from=\"0\" to=\"100\" min_dmx_24=\"0\" \
+         max_dmx_24=\"16777215\" physfrom=\"0\" physto=\"{max}\" \
+         subattribute=\"{subattribute}\" subattribute_user_name=\"{}\" attribute=\"{attribute}\" \
+         attribute_user_name=\"{}\" feature=\"{feature}\" feature_user_name=\"{}\" \
+         preset=\"{preset}\" preset_user_name=\"{}\">\n",
+        channel.offset,
+        channel.default,
+        xml_escape(&channel.name),
+        xml_escape(&channel.name),
+        if feature == "MEDIA" {
+            "Media"
+        } else {
+            "Control"
+        },
+        if preset == "GOBO" { "Gobo" } else { "Control" },
+    );
+    for (set_index, set) in channel.sets.iter().enumerate() {
+        let to = channel
+            .sets
+            .get(set_index + 1)
+            .map(|next| next.from.saturating_sub(1))
+            .unwrap_or(max);
+        xml.push_str(&format!(
+            "            <ChannelSet index=\"{set_index}\" name=\"{}\" from_dmx=\"{}\" to_dmx=\"{to}\"/>\n",
+            xml_escape(&set.name),
+            set.from,
+        ));
+    }
+    xml.push_str("          </ChannelFunction>\n        </ChannelType>\n");
+    xml
+}
+
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 pub fn layer_description() -> String {
@@ -85,7 +215,7 @@ fn channels(table: &[media_domain::personality::channels::ChannelSpec]) -> Vec<C
         .iter()
         .filter(|spec| spec.resolution != Resolution::Fine)
         .map(|spec| Channel {
-            name: spec.name.to_owned(),
+            name: console_name_of(spec.name).to_owned(),
             attribute: attribute_of(spec.name),
             // GDTF offsets are one-based; the table's are zero-based.
             offset: spec.offset + 1,
@@ -105,6 +235,15 @@ fn channels(table: &[media_domain::personality::channels::ChannelSpec]) -> Vec<C
 /// interval, so each matching byte becomes a one-byte set. Sorting all starts together preserves
 /// the decoder exactly rather than turning four interleaved values into four false blocks.
 fn channel_sets(spec: &media_domain::personality::channels::ChannelSpec) -> Vec<ChannelSet> {
+    if matches!(spec.name, "Folder" | "File") {
+        return (0_u16..=255)
+            .map(|value| ChannelSet {
+                name: format!("{} {value:03}", spec.name),
+                from: u32::from(value),
+            })
+            .collect();
+    }
+
     let mut projected = spec
         .values
         .sets()
@@ -127,11 +266,24 @@ fn channel_sets(spec: &media_domain::personality::channels::ChannelSpec) -> Vec<
 
 /// The GDTF attribute name for a channel.
 ///
-/// A media server's channels have no standard GDTF attribute, so these are the channel's own name
-/// without spaces. A wrong standard attribute would make a console apply the wrong semantics —
-/// fading a folder number through a crossfade, for instance.
+/// Folder and file deliberately use the indexed-wheel attributes understood by MagicQ's Media
+/// window. Other controls retain descriptive custom attributes instead of borrowing unrelated
+/// fixture semantics.
 fn attribute_of(name: &str) -> String {
-    name.split_whitespace().collect::<Vec<_>>().concat()
+    match name {
+        "Folder" => "Gobo2".into(),
+        "File" => "Gobo1".into(),
+        _ => name.split_whitespace().collect::<Vec<_>>().concat(),
+    }
+}
+
+/// Names MagicQ recognises when associating the two media selector wheels with CITP thumbnails.
+fn console_name_of(name: &str) -> &str {
+    match name {
+        "Folder" => "Media Library",
+        "File" => "Media Visual",
+        _ => name,
+    }
 }
 
 #[cfg(test)]
@@ -208,11 +360,22 @@ mod tests {
     }
 
     #[test]
-    fn attributes_carry_no_spaces_and_no_standard_meaning_is_borrowed() {
+    fn media_selectors_use_console_media_semantics_and_other_attributes_stay_descriptive() {
         assert_eq!(attribute_of("Play mode"), "Playmode");
         assert_eq!(attribute_of("Mask scale X"), "MaskscaleX");
+        assert_eq!(attribute_of("Folder"), "Gobo2");
+        assert_eq!(attribute_of("File"), "Gobo1");
 
-        // Nothing may claim a standard GDTF attribute a console would apply its own semantics to.
+        let layer = layer_fixture();
+        let folder = &layer.modes[0].channels[0];
+        let file = &layer.modes[0].channels[1];
+        assert_eq!(folder.name, "Media Library");
+        assert_eq!(file.name, "Media Visual");
+        assert_eq!(folder.sets.len(), 256);
+        assert_eq!(folder.sets[7].name, "Folder 007");
+        assert_eq!(file.sets.len(), 256);
+        assert_eq!(file.sets[255].name, "File 255");
+
         for channel in &layer_fixture().modes[0].channels {
             assert_ne!(channel.attribute, "Pan");
             assert_ne!(channel.attribute, "Tilt");
@@ -230,8 +393,8 @@ mod tests {
                 .default
         };
 
-        assert_eq!(by_name("Folder"), 0, "nothing is selected");
-        assert_eq!(by_name("File"), 0);
+        assert_eq!(by_name("Media Library"), 0, "nothing is selected");
+        assert_eq!(by_name("Media Visual"), 0);
         assert_eq!(by_name("Dimmer"), 0, "a fresh layer remains transparent");
         assert_eq!(by_name("Scale X"), 32_768, "at its neutral scale");
         assert_eq!(by_name("Mask opacity"), 0, "and unmasked");
@@ -274,12 +437,22 @@ mod tests {
     #[test]
     fn both_package_as_archives_a_console_can_import() {
         let packaged = packages().expect("they package");
-        assert_eq!(packaged.len(), 2);
-        for (name, bytes) in packaged {
-            assert!(name.ends_with(".gdtf"), "{name}");
+        assert_eq!(packaged.len(), 6);
+        for (name, bytes) in packaged.iter().filter(|(name, _)| name.ends_with(".gdtf")) {
             assert!(bytes.len() > 100, "{name} is suspiciously small");
         }
         assert!(layer_description().contains("ToskLight Pixel Layer"));
+    }
+
+    #[test]
+    fn grandma2_personalities_preserve_media_selectors_offsets_and_fine_bytes() {
+        let xml = grandma2_xml(&layer_fixture());
+        assert!(xml.contains("name=\"ToskLight Pixel Layer\" mode=\"Layer\""));
+        assert!(xml.contains("attribute=\"MEDIASERVERINPUTDIRECTORY\""));
+        assert!(xml.contains("attribute=\"MEDIASERVERINPUT\""));
+        assert!(xml.contains("coarse=\"4\" fine=\"5\" default=\"32768\""));
+        assert!(xml.contains("name=\"Folder 007\" from_dmx=\"7\" to_dmx=\"7\""));
+        assert!(xml.ends_with("</MA>\n"));
     }
 
     #[test]

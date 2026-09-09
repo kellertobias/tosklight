@@ -21,6 +21,26 @@ Choose the output's sound device explicitly when content carries audio. The syst
 
 Choose the Media personality and configure its Art-Net or sACN universe and start address. The master and layer profiles patched in ToskLight Control must match that personality and address layout. Art-Net normally listens on UDP `6454`, sACN on UDP `5568`, and CITP/MSEX on the configured TCP/UDP port, normally `4809`.
 
+### Download console personalities
+
+Open **Diagnostics > Console personalities** in the Pixel management interface. Download both the
+**Layer** and **Master** files for the target desk. Patch one Layer for every configured Pixel layer
+at consecutive addresses, then patch one Master immediately after the last layer. Do not patch the
+Master once per layer.
+
+- **MagicQ:** install both native `.hed` files. Configure the server as **CITP MSEX**, set the first
+  layer head and the exact number of layers, enable thumbnail connection and live preview, and set
+  Pixel's IP address. When MagicQ and Pixel run on the same computer, start Pixel first and set
+  MagicQ's **Net host options** to **Normal + Loopback IP**. Use **GET THUMBS** after connecting.
+- **grandMA2:** copy both `.xml` files into the `gma2/library` folder of the selected drive, import
+  them as fixture types, then patch the Layer and Master footprints in order.
+- **grandMA3:** import the two `.gdtf` files directly. The same files are also the standard GDTF
+  download for other compatible desks.
+
+Pixel uses Art-Net or sACN for control and CITP/MSEX for discovery, media names, thumbnails, and live
+preview. A working CITP connection does not prove the DMX universe and start address are correct;
+verify both the Media window previews and an actual Folder/File/Dimmer change.
+
 The configuration supports one or more outputs; the shipped and certified baseline is one Main output. Treat additional outputs as an explicit production configuration and verify each monitor, GPU load, audio path, control footprint, and preview identity.
 
 Saved network and output changes apply after restart. The interface can offer to return saved configuration to the active values when a restart should be deferred. Layer and playback changes do not require a restart.

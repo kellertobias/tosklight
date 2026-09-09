@@ -85,26 +85,67 @@ function FixtureDownloads() {
 		};
 	}, []);
 	if (fixtures.length === 0) return null;
+	const gdtf = fixtures.filter((name) => name.endsWith(".gdtf"));
+	const magicq = fixtures.filter((name) => name.endsWith(".hed"));
+	const grandma2 = fixtures.filter((name) => name.endsWith(".xml"));
 	return (
-		<section className="media-settings-section" aria-label="GDTF fixtures">
-			<h2>GDTF fixtures</h2>
+		<section className="media-settings-section" aria-label="Console personalities">
+			<h2>Console personalities</h2>
 			<p>
-				Download these generated fixtures to patch the same canonical channels
-				on a lighting console.
+				Patch one Layer personality per Pixel layer, followed immediately by one
+				Master personality. Every download uses Pixel’s canonical DMX layout.
 			</p>
+			<PersonalityGroup
+				title="MagicQ"
+				note="Install the native .hed files. They include MagicQ media attributes for CITP thumbnails."
+				files={magicq}
+			/>
+			<PersonalityGroup
+				title="grandMA2"
+				note="Copy the XML files into the gma2/library folder on the selected drive."
+				files={grandma2}
+			/>
+			<PersonalityGroup
+				title="grandMA3"
+				note="grandMA3 imports the GDTF files directly."
+				files={gdtf}
+			/>
+			<PersonalityGroup
+				title="GDTF"
+				note="Use these standards-based files with any GDTF-compatible console."
+				files={gdtf}
+			/>
+		</section>
+	);
+}
+
+function PersonalityGroup({
+	title,
+	note,
+	files,
+}: {
+	title: string;
+	note: string;
+	files: string[];
+}) {
+	if (files.length === 0) return null;
+	return (
+		<div role="group" aria-label={`${title} personalities`}>
+			<h3>{title}</h3>
+			<p>{note}</p>
 			<div className="media-settings-actions">
-				{fixtures.map((name) => (
+				{files.map((name) => (
 					<a
 						className="ui-button ui-secondary ui-default"
 						href={api.fixtureUrl(name)}
 						download
-						key={name}
+						key={`${title}-${name}`}
 					>
 						Download {name}
 					</a>
 				))}
 			</div>
-		</section>
+		</div>
 	);
 }
 

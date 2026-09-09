@@ -5,8 +5,7 @@
 //! operator assigned, and with none assigned it draws nothing at all — so without this the process
 //! is invisible, and the only way to stop it is Activity Monitor.
 //!
-//! The menu keeps only process-level actions: reveal the one portable data folder on macOS, or
-//! quit. Everything an operator can change remains in the administration interface.
+//! The menu keeps only process-level actions plus a shortcut to the administration interface.
 
 use crate::shutdown::{Shutdown, ShutdownReason};
 use muda::{Menu, MenuEvent, MenuItem};
@@ -34,6 +33,9 @@ const OPEN_FOLDER_LABEL: &str = "open Folder in Finder";
 const OPEN_PIXEL_LABEL: &str = "Open ToskLight Pixel";
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
+const OPEN_SETTINGS_LABEL: &str = "Open Settings in Browser";
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 const CONVERT_MULTIPLE_LABEL: &str = "Convert multiple files";
 
 /// The desktop presence, held for as long as the server runs.
@@ -54,7 +56,7 @@ pub struct Tray {
 pub fn show(
     shutdown: &Shutdown,
     data_directory: Option<&std::path::Path>,
-    #[cfg(target_os = "windows")] administration_endpoint: &str,
+    #[cfg(any(target_os = "macos", target_os = "windows"))] administration_endpoint: &str,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     bulk_import: crate::bulk_import::BulkImport,
 ) -> Option<Tray> {
@@ -86,6 +88,15 @@ pub fn show(
         return None;
     }
     #[cfg(any(target_os = "macos", target_os = "windows"))]
+    let open_settings = MenuItem::new(OPEN_SETTINGS_LABEL, true, None);
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    let open_settings_id = open_settings.id().clone();
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    if let Err(error) = menu.append(&open_settings) {
+        tracing::warn!(%error, "the menu bar menu could not be built; running without one");
+        return None;
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let convert_multiple = MenuItem::new(CONVERT_MULTIPLE_LABEL, true, None);
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     let convert_multiple_id = convert_multiple.id().clone();
@@ -110,6 +121,8 @@ pub fn show(
     let _ = data_directory;
     #[cfg(target_os = "windows")]
     let administration_endpoint = administration_endpoint.to_owned();
+    #[cfg(target_os = "macos")]
+    let administration_endpoint = administration_endpoint.to_owned();
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
         #[cfg(target_os = "macos")]
         if event.id == open_folder_id {
@@ -124,6 +137,13 @@ pub fn show(
         if event.id == open_pixel_id {
             if let Err(error) = open_administration(&administration_endpoint) {
                 tracing::error!(%error, "the ToskLight Pixel administration interface could not be opened");
+            }
+            return;
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if event.id == open_settings_id {
+            if let Err(error) = open_settings_in_browser(&administration_endpoint) {
+                tracing::error!(%error, "the ToskLight Pixel settings could not be opened");
             }
             return;
         }
@@ -157,6 +177,11 @@ fn administration_url(endpoint: &str) -> String {
     format!("http://{endpoint}")
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn settings_url(endpoint: &str) -> String {
+    format!("http://{endpoint}/settings")
+}
+
 #[cfg(target_os = "windows")]
 fn open_administration(endpoint: &str) -> std::io::Result<()> {
     let url = administration_url(endpoint);
@@ -165,6 +190,37 @@ fn open_administration(endpoint: &str) -> std::io::Result<()> {
         .args(["url.dll,FileProtocolHandler", &url])
         .creation_flags(CREATE_NO_WINDOW);
     let status = command.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "the browser launcher exited with {status}"
+        )))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn open_settings_in_browser(endpoint: &str) -> std::io::Result<()> {
+    let url = settings_url(endpoint);
+    let mut command = std::process::Command::new("rundll32.exe");
+    command
+        .args(["url.dll,FileProtocolHandler", &url])
+        .creation_flags(CREATE_NO_WINDOW);
+    let status = command.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "the browser launcher exited with {status}"
+        )))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn open_settings_in_browser(endpoint: &str) -> std::io::Result<()> {
+    let status = std::process::Command::new("/usr/bin/open")
+        .arg(settings_url(endpoint))
+        .status()?;
     if status.success() {
         Ok(())
     } else {
@@ -245,6 +301,16 @@ mod tests {
     #[test]
     fn the_bulk_conversion_action_uses_the_operator_label() {
         assert_eq!(CONVERT_MULTIPLE_LABEL, "Convert multiple files");
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn the_settings_action_uses_the_operator_label_and_route() {
+        assert_eq!(OPEN_SETTINGS_LABEL, "Open Settings in Browser");
+        assert_eq!(
+            settings_url("127.0.0.1:8080"),
+            "http://127.0.0.1:8080/settings"
+        );
     }
 
     #[cfg(target_os = "windows")]

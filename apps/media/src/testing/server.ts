@@ -193,6 +193,10 @@ export function stubServer(
 				return jsonResponse([
 					"ToskLight Pixel Layer.gdtf",
 					"ToskLight Pixel Master.gdtf",
+					"ToskLight Pixel Layer.hed",
+					"ToskLight Pixel Master.hed",
+					"tosklight@pixel_layer@39ch.xml",
+					"tosklight@pixel_master@41ch.xml",
 				]);
 			if (path === "/outputs") return jsonResponse(server.outputs);
 			const outputConfiguration = path.match(
