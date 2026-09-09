@@ -421,6 +421,11 @@ test("the Windows Pixel release is a branded launcher installer", () => {
 		/MSYS2_ARG_CONV_EXCL='\*' "\$makensis"/u,
 		"Git Bash must not rewrite NSIS /D preprocessor arguments as POSIX paths",
 	);
+	assert.equal(
+		(workflow.match(/cygpath -aw/g) ?? []).length,
+		3,
+		"NSIS input, output, and icon paths must be absolute Windows paths",
+	);
 	assert.doesNotMatch(
 		workflow,
 		/7z a -tzip[\s\\]*\n[\s\S]{0,120}tosklight-media-\$version-\$SLUG\.zip/u,

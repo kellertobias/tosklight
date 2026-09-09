@@ -1117,9 +1117,9 @@ jobs:
             MSYS2_ARG_CONV_EXCL='*' "$makensis" \
               "/DAPP_VERSION=$version" \
               "/DNUMERIC_VERSION=$numeric_version" \
-              "/DSOURCE_DIR=$(cygpath -w "$stage")" \
-              "/DOUTPUT_FILE=$(cygpath -w "$out/tosklight-media-$version-$SLUG-setup.exe")" \
-              "/DICON_FILE=$(cygpath -w "$pixel_icon")" \
+              "/DSOURCE_DIR=$(cygpath -aw "$stage")" \
+              "/DOUTPUT_FILE=$(cygpath -aw "$out/tosklight-media-$version-$SLUG-setup.exe")" \
+              "/DICON_FILE=$(cygpath -aw "$pixel_icon")" \
               tools/windows/pixel-installer.nsi
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             ditto -c -k --sequesterRsrc --keepParent \
