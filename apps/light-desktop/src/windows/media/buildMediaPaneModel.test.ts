@@ -570,7 +570,7 @@ describe("Media pane disconnected configuration", () => {
 	it("preserves the Media Server control grouping instead of flattening the layer", () => {
 		const server = {
 			fixture_id: "server-1",
-			name: "ToskLight Media Server",
+			name: "ToskLight Pixel",
 			endpoint: {
 				protocol: "citp" as const,
 				ip_address: "127.0.0.1",
@@ -887,7 +887,7 @@ describe("Media pane disconnected configuration", () => {
 	it("exposes exactly two ordered effect banks without per-layer preset editing", () => {
 		const server = {
 			fixture_id: "server-1",
-			name: "ToskLight Media Server",
+			name: "ToskLight Pixel",
 			endpoint: null,
 			native_action: "tosklight_media_v2",
 			layers: [{ fixture_id: "layer-1", head_index: 1 }],
@@ -932,7 +932,7 @@ describe("Media pane disconnected configuration", () => {
 	it("projects independent live select and strength values for each bank", () => {
 		const server = {
 			fixture_id: "server-1",
-			name: "ToskLight Media Server",
+			name: "ToskLight Pixel",
 			endpoint: null,
 			native_action: "tosklight_media_v2",
 			layers: [{ fixture_id: "layer-1", head_index: 1 }],
@@ -989,7 +989,7 @@ describe("Media pane disconnected configuration", () => {
 	it("shows percentage controls as percentages instead of raw DMX bytes", () => {
 		const server = {
 			fixture_id: "server-1",
-			name: "ToskLight Media Server",
+			name: "ToskLight Pixel",
 			endpoint: {
 				protocol: "citp" as const,
 				ip_address: "127.0.0.1",

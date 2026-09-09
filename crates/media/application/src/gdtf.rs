@@ -23,10 +23,10 @@ const MANUFACTURER: &str = "ToskLight";
 /// The layer fixture: the 39 slots one media layer occupies.
 pub fn layer_fixture() -> FixtureType {
     FixtureType {
-        name: "ToskLight Media Layer".into(),
-        short_name: "TL Media".into(),
+        name: "ToskLight Pixel Layer".into(),
+        short_name: "TL Pixel".into(),
         manufacturer: MANUFACTURER.into(),
-        description: "One media layer of a ToskLight Media Server. Patch one per layer; the \
+        description: "One media layer of ToskLight Pixel. Patch one per layer; the \
                       master fixture follows the layers."
             .into(),
         id: LAYER_ID,
@@ -40,10 +40,10 @@ pub fn layer_fixture() -> FixtureType {
 /// The complete 40-slot master fixture that begins immediately after the controlled layers.
 pub fn master_fixture() -> FixtureType {
     FixtureType {
-        name: "ToskLight Media Master".into(),
+        name: "ToskLight Pixel Master".into(),
         short_name: "TL Master".into(),
         manufacturer: MANUFACTURER.into(),
-        description: "The output section of a ToskLight Media Server, which applies to the \
+        description: "The output section of ToskLight Pixel, which applies to the \
                       finished composite. Patch one, immediately after the layers."
             .into(),
         id: MASTER_ID,
@@ -58,11 +58,11 @@ pub fn master_fixture() -> FixtureType {
 pub fn packages() -> std::io::Result<Vec<(String, Vec<u8>)>> {
     Ok(vec![
         (
-            "ToskLight Media Layer.gdtf".into(),
+            "ToskLight Pixel Layer.gdtf".into(),
             package(&layer_fixture())?,
         ),
         (
-            "ToskLight Media Master.gdtf".into(),
+            "ToskLight Pixel Master.gdtf".into(),
             package(&master_fixture())?,
         ),
     ])
@@ -279,7 +279,7 @@ mod tests {
             assert!(name.ends_with(".gdtf"), "{name}");
             assert!(bytes.len() > 100, "{name} is suspiciously small");
         }
-        assert!(layer_description().contains("ToskLight Media Layer"));
+        assert!(layer_description().contains("ToskLight Pixel Layer"));
     }
 
     #[test]

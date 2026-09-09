@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compose the ToskLight Media icon from the base icon and LED-wall badge."""
+"""Compose the ToskLight Pixel icon from the base icon and LED-wall badge."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def main() -> int:
     base = ET.parse(BASE)
     root = base.getroot()
     badge = ET.parse(BADGE).getroot()
-    required(root, "title").text = "ToskLight Media application icon"
+    required(root, "title").text = "ToskLight Pixel application icon"
     required(root, "desc").text = "The ToskLight mark with a glowing LED wall in the bottom-right corner."
     required(root, "defs").extend(list(required(badge, "defs")))
     overlay = next((element for element in badge if element.get("id") == "media-badge"), None)

@@ -335,7 +335,7 @@ async function patchDiscoveredServer(input: {
 	);
 	if (!definition) {
 		setMessage(
-			`The ToskLight Media Server ${mode} fixture profile is unavailable.`,
+			`The ToskLight Pixel ${mode} fixture profile is unavailable.`,
 		);
 		return;
 	}

@@ -382,14 +382,14 @@ describe("MediaPaneSurface control state", () => {
 			servers: [
 				{
 					id: "server",
-					name: "ToskLight Media Server",
+					name: "ToskLight Pixel",
 					fixtureLabel: "1001",
 					statusLabel: "Online",
 				},
 			],
 		});
 		const selector = within(view.container).getByLabelText("Media servers");
-		expect(selector).toHaveTextContent("ToskLight Media Server");
+		expect(selector).toHaveTextContent("ToskLight Pixel");
 		expect(selector).toHaveTextContent("1001");
 		expect(
 			within(view.container).queryByRole("button", { name: "Media server" }),

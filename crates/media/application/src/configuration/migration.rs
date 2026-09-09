@@ -424,6 +424,7 @@ mod tests {
 
     #[test]
     fn a_current_document_is_left_alone() {
+        assert_eq!(CURRENT_VERSION, 4, "effect-library documents are version 4");
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
     }

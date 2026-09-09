@@ -61,9 +61,9 @@ export function stubServer(
 		outputConfigurations: {},
 		runtime: {
 			administrationIp: "192.0.2.10",
-			dataDirectory: "/Users/Shared/ToskLight Media",
-			configurationFile: "/Users/Shared/ToskLight Media/media-server.json",
-			libraryDirectory: "/Users/Shared/ToskLight Media/Media",
+			dataDirectory: "/Users/Shared/ToskLight Pixel",
+			configurationFile: "/Users/Shared/ToskLight Pixel/media-server.json",
+			libraryDirectory: "/Users/Shared/ToskLight Pixel/Media",
 			portable: true,
 			outputs: [
 				{
@@ -191,8 +191,8 @@ export function stubServer(
 			}
 			if (path === "/fixtures")
 				return jsonResponse([
-					"ToskLight Media Layer.gdtf",
-					"ToskLight Media Master.gdtf",
+					"ToskLight Pixel Layer.gdtf",
+					"ToskLight Pixel Master.gdtf",
 				]);
 			if (path === "/outputs") return jsonResponse(server.outputs);
 			const outputConfiguration = path.match(

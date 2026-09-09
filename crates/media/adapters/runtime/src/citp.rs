@@ -482,7 +482,7 @@ pub fn spawn(
     let listen = configuration.network.resolved().citp_listen;
     let preview_sources = configured_preview_sources(configuration, &previews);
     let service = Service {
-        name: format!("ToskLight Media — {}", configuration.instance_id.as_str()),
+        name: format!("ToskLight Pixel — {}", configuration.instance_id.as_str()),
         listening_port: listen.port(),
         previews,
         state,

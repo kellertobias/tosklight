@@ -55,7 +55,7 @@ fn startup_fixture_library_migrates_schema_v1_and_loads_transferable_packages_on
     let media_server = profiles
         .iter()
         .find(|profile| profile.manufacturer == "ToskLight" && profile.name == "Media Server")
-        .expect("the combined ToskLight Media Server fixture is in the profile inventory");
+        .expect("the combined ToskLight Pixel fixture is in the profile inventory");
     assert_eq!(
         media_server
             .modes

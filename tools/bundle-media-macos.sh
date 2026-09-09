@@ -17,8 +17,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BINARY="$1"
 OUTPUT_DIR="$2"
 VERSION="${3:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
-PRODUCT_NAME="ToskLight Media"
+PRODUCT_NAME="ToskLight Pixel"
 APP="$OUTPUT_DIR/$PRODUCT_NAME.app"
+LEGACY_APP="$OUTPUT_DIR/ToskLight Media.app"
 SOURCE_ICON="$ROOT/assets/branding/ToskLight Pixel.png"
 
 [[ "$(uname -s)" == "Darwin" ]] || { echo "error: Media.app can only be built on macOS" >&2; exit 1; }
@@ -34,7 +35,7 @@ icons="$icon_root/icons"
 (cd "$ROOT" && npm exec -- tauri icon "$SOURCE_ICON" --output "$icons" >/dev/null)
 [[ -f "$icons/icon.icns" ]] || { echo "error: Tauri did not generate the Media icns" >&2; exit 1; }
 
-rm -rf -- "$APP"
+rm -rf -- "$APP" "$LEGACY_APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 install -m 0755 "$BINARY" "$APP/Contents/MacOS/$PRODUCT_NAME"
 install -m 0644 "$icons/icon.icns" "$APP/Contents/Resources/icon.icns"
@@ -55,7 +56,7 @@ cat >"$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>10.13</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSLocalNetworkUsageDescription</key><string>ToskLight Media receives Art-Net, sACN, and CITP and serves its administration interface on the local network.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>ToskLight Pixel receives Art-Net, sACN, and CITP and serves its administration interface on the local network.</string>
 </dict></plist>
 PLIST
 touch "$APP"

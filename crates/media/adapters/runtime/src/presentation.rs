@@ -365,7 +365,7 @@ impl PresentationHost {
         };
 
         let attributes = Window::default_attributes()
-            .with_title(format!("ToskLight Media — {}", configuration.name))
+            .with_title(format!("ToskLight Pixel — {}", configuration.name))
             .with_window_icon(application_icon())
             .with_inner_size(winit::dpi::PhysicalSize::new(
                 configuration.resolution.width,

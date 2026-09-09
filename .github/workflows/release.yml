@@ -1096,7 +1096,7 @@ jobs:
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             bash tools/bundle-media-macos.sh \
               ".artifacts/build/cargo/$TARGET/release/media-server" "$stage" "$version"
-            bash tools/seal-macos-app.sh "$stage/ToskLight Media.app"
+            bash tools/seal-macos-app.sh "$stage/ToskLight Pixel.app"
           elif [[ "$RUNNER_OS" != "Windows" ]]; then
             cp ".artifacts/build/cargo/$TARGET/release/media-server$suffix" "$stage/"
           fi
@@ -1234,7 +1234,7 @@ jobs:
           unzip -Z1 .artifacts/release/tosklight-bundle-macos_arm64.zip |
             grep -F "sign-macos-apps-locally.sh" >/dev/null
           unzip -Z1 .artifacts/release/tosklight-bundle-macos_arm64.zip |
-            grep -F "tosklight-media-macos_arm64.app/Contents/MacOS/ToskLight Media" >/dev/null
+            grep -F "tosklight-media-macos_arm64.app/Contents/MacOS/ToskLight Pixel" >/dev/null
           unzip -Z1 .artifacts/release/tosklight-bundle-linux_amd64.zip |
             grep -E '/light-benchmark$' >/dev/null
           (

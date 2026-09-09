@@ -44,7 +44,7 @@ for (const stream of [child.stdout, child.stderr]) {
 
 try {
 	await waitForHealth(child);
-	console.log(`ToskLight Media reached healthy startup on ${process.platform}.`);
+	console.log(`ToskLight Pixel reached healthy startup on ${process.platform}.`);
 } catch (error) {
 	const detail = output.join("").trim();
 	throw new Error(

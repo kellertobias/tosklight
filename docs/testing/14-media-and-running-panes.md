@@ -33,7 +33,7 @@ Given live Folder A / File X, touching Folder B changes only the draft browser a
 
 ## MEDIA-004 — capability-derived controls and persistence
 
-Folder/File and Mask Folder/Mask File encoders remain immediate. The touch browser presents a discoverable **Media / Mask** choice only when masks are advertised. Secondary controls follow fixture and connection capabilities, and a native ToskLight Media Server action appears only behind its advertised capability. Restarting the desktop, changing show, disconnecting, and reconnecting preserve the pane's stable server, layer, browser, section, and secondary-region configuration without changing portable show data.
+Folder/File and Mask Folder/Mask File encoders remain immediate. The touch browser presents a discoverable **Media / Mask** choice only when masks are advertised. Secondary controls follow fixture and connection capabilities, and a native ToskLight Pixel action appears only behind its advertised capability. Restarting the desktop, changing show, disconnecting, and reconnecting preserve the pane's stable server, layer, browser, section, and secondary-region configuration without changing portable show data.
 
 ## PIXEL-001 — desktop recursive multi-file conversion
 

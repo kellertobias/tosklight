@@ -517,7 +517,7 @@ mod tests {
         let message = peer_location(&Presence {
             listening_port: 14_809,
             kind: "MediaServer",
-            name: "ToskLight Media",
+            name: "ToskLight Pixel",
             state: "Running",
         });
         let framed = body_of(&message);

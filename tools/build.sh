@@ -706,7 +706,7 @@ build_media() {
     bash "$ROOT/tools/bundle-media-macos.sh" \
       "$TARGET_DIR/release/media-server" "$TARGET_DIR/release/bundle/macos"
     bash "$ROOT/tools/seal-macos-app.sh" \
-      "$TARGET_DIR/release/bundle/macos/ToskLight Media.app"
+      "$TARGET_DIR/release/bundle/macos/ToskLight Pixel.app"
   fi
 }
 
@@ -767,7 +767,7 @@ open_media() {
 # outside one it has no icon, and `LSUIElement` never applies, so there is no menu bar item to quit
 # it from. Everywhere else the bare binary is the product.
 media_executable() {
-  local bundled="$TARGET_DIR/release/bundle/macos/ToskLight Media.app/Contents/MacOS/ToskLight Media"
+  local bundled="$TARGET_DIR/release/bundle/macos/ToskLight Pixel.app/Contents/MacOS/ToskLight Pixel"
   if [[ "$(uname -s)" == "Darwin" && -x "$bundled" ]]; then
     printf '%s\n' "$bundled"
   else

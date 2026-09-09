@@ -94,7 +94,7 @@ pub fn show(
         tracing::warn!(%error, "the menu bar menu could not be built; running without one");
         return None;
     }
-    let quit = MenuItem::new("Quit ToskLight Media", true, None);
+    let quit = MenuItem::new("Quit ToskLight Pixel", true, None);
     let quit_id = quit.id().clone();
     if let Err(error) = menu.append(&quit) {
         tracing::warn!(%error, "the menu bar menu could not be built; running without one");
@@ -137,7 +137,7 @@ pub fn show(
 
     let built = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
-        .with_tooltip("ToskLight Media")
+        .with_tooltip("ToskLight Pixel")
         .with_icon(icon)
         .build();
     match built {

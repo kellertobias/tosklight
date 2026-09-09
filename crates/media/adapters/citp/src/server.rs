@@ -411,7 +411,7 @@ mod tests {
 
     fn identity() -> Identity {
         Identity {
-            name: "ToskLight Media".into(),
+            name: "ToskLight Pixel".into(),
             listening_port: 14_809,
             layers: 8,
             preview_sources: vec![crate::message::VideoSource {

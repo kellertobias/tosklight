@@ -61,7 +61,7 @@ fi
 
 case "$SLUG" in
   macos-arm64)
-    mv "$media_component/ToskLight Media.app" "$bundle/tosklight-media-$asset_slug.app"
+    mv "$media_component/ToskLight Pixel.app" "$bundle/tosklight-media-$asset_slug.app"
     desk_unpack="$stage_root/desk"
     extract_archive "$COMPONENTS/tosklight-$VERSION-macos-arm64.zip" "$desk_unpack"
     mv "$desk_unpack/ToskLight.app" "$bundle/tosklight-desk-$asset_slug.app"

@@ -302,16 +302,16 @@ fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
 
 /// Makes a Finder-launch failure actionable even though no Terminal window exists.
 fn show_startup_error(error: &anyhow::Error) {
-    tracing::error!(%error, "ToskLight Media could not start");
+    tracing::error!(%error, "ToskLight Pixel could not start");
     #[cfg(target_os = "macos")]
     if running_from_macos_app_bundle() {
-        let message = format!("ToskLight Media could not start.\n\n{error}");
+        let message = format!("ToskLight Pixel could not start.\n\n{error}");
         let _ = std::process::Command::new("/usr/bin/osascript")
             .args([
                 "-e",
                 "on run argv",
                 "-e",
-                "display alert \"ToskLight Media\" message (item 1 of argv) as critical buttons {\"OK\"}",
+                "display alert \"ToskLight Pixel\" message (item 1 of argv) as critical buttons {\"OK\"}",
                 "-e",
                 "end run",
                 "--",
@@ -486,7 +486,7 @@ fn arguments_are_understood(arguments: &[String]) -> Understanding {
 /// What `--help` prints. Written out rather than generated: there are five arguments, and a
 /// dependency on an argument parser would be the larger thing to keep in sync.
 const USAGE: &str = concat!(
-    "ToskLight Media\n",
+    "ToskLight Pixel\n",
     "\n",
     "Runs the media server. With no arguments it serves, opens the outputs its configuration\n",
     "assigns to monitors, and shows an icon in the menu bar or notification area.\n",

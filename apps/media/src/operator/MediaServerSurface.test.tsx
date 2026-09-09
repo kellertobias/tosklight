@@ -28,7 +28,7 @@ describe("the Media Server operator surface", () => {
 			name: "Media Server sections",
 		});
 		expect(
-			within(dock).getByLabelText("ToskLight Media Server"),
+			within(dock).getByLabelText("ToskLight Pixel"),
 		).toBeInTheDocument();
 		expect(dock.querySelector(".media-operator-mark img")).toHaveAttribute(
 			"src",

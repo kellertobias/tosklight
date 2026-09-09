@@ -53,11 +53,11 @@ describe("DMX diagnostics", () => {
 		).toBeInTheDocument();
 		expect(
 			await screen.findByRole("link", {
-				name: "Download ToskLight Media Layer.gdtf",
+				name: "Download ToskLight Pixel Layer.gdtf",
 			}),
 		).toHaveAttribute(
 			"href",
-			"/api/v2/fixtures/ToskLight%20Media%20Layer.gdtf",
+			"/api/v2/fixtures/ToskLight%20Pixel%20Layer.gdtf",
 		);
 	});
 

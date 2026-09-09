@@ -63,14 +63,14 @@ describe("PoolCard", () => {
 			<PoolCard
 				model={{
 					number: 1001,
-					primary: "ToskLight Media Server",
+					primary: "ToskLight Pixel",
 					kind: "preset",
 				}}
 			/>,
 		);
 
 		const card = screen.getByRole("button", {
-			name: /ToskLight Media Server/,
+			name: /ToskLight Pixel/,
 		});
 		expect(card).not.toHaveClass("has-information", "has-media", "has-status");
 		expect(

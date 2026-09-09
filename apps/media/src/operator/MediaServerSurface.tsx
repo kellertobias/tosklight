@@ -45,7 +45,7 @@ export function MediaServerShell({
 			>
 				<Button
 					className="dock-identity media-operator-identity"
-					aria-label="ToskLight Media Server"
+					aria-label="ToskLight Pixel"
 				>
 					<div
 						className="app-mark media-operator-mark"

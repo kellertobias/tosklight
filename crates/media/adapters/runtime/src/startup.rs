@@ -439,7 +439,7 @@ mod tests {
 
     #[test]
     fn finder_first_run_keeps_the_windowed_default_and_opens_a_lan_admin_service() {
-        let path = PathBuf::from("/tmp/ToskLight Media/media-server.json");
+        let path = PathBuf::from("/tmp/ToskLight Pixel/media-server.json");
         let mut configuration = MediaConfiguration::default();
         apply_macos_app_defaults(&mut configuration, &path);
 
@@ -456,7 +456,7 @@ mod tests {
         ));
         assert_eq!(
             configuration.library.root,
-            PathBuf::from("/tmp/ToskLight Media/Media")
+            PathBuf::from("/tmp/ToskLight Pixel/Media")
         );
     }
 
@@ -467,12 +467,12 @@ mod tests {
 
         resolve_portable_library_root(
             &mut configuration,
-            Path::new("/tmp/ToskLight Media/media-server.json"),
+            Path::new("/tmp/ToskLight Pixel/media-server.json"),
         );
 
         assert_eq!(
             configuration.library.root,
-            PathBuf::from("/tmp/ToskLight Media/Media")
+            PathBuf::from("/tmp/ToskLight Pixel/Media")
         );
     }
 
@@ -481,7 +481,7 @@ mod tests {
         let mut configuration = MediaConfiguration::default();
         resolve_portable_library_root(
             &mut configuration,
-            Path::new("/tmp/ToskLight Media/media-server.json"),
+            Path::new("/tmp/ToskLight Pixel/media-server.json"),
         );
         assert_eq!(configuration.library.root, PathBuf::from("media"));
     }
@@ -513,8 +513,8 @@ mod tests {
     fn a_library_that_escapes_through_a_parent_is_not_called_portable() {
         assert_eq!(
             portable_data_directory(
-                Path::new("/tmp/ToskLight Media/media-server.json"),
-                Path::new("/tmp/ToskLight Media/../Other Media")
+                Path::new("/tmp/ToskLight Pixel/media-server.json"),
+                Path::new("/tmp/ToskLight Pixel/../Other Media")
             ),
             None
         );

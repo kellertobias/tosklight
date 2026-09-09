@@ -340,7 +340,12 @@ test("macOS release apps are sealed only after their final helpers and resources
 	);
 	assert.match(
 		localMediaBuild,
-		/bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh[\s\S]*ToskLight Media\.app/u,
+		/bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh[\s\S]*ToskLight Pixel\.app/u,
+	);
+	assert.doesNotMatch(localMediaBuild, /ToskLight Media\.app/u);
+	assert.match(
+		read("tools/bundle-media-macos.sh"),
+		/PRODUCT_NAME="ToskLight Pixel"[\s\S]*LEGACY_APP="\$OUTPUT_DIR\/ToskLight Media\.app"[\s\S]*rm -rf -- "\$APP" "\$LEGACY_APP"/u,
 	);
 	assert.match(assembler, /codesign --verify --deep --strict/u);
 	assert.match(assembler, /macos-first-start\.txt/u);

@@ -63,7 +63,7 @@ describe("the settings page", () => {
 		const portable = await screen.findByRole("article", {
 			name: "Portable data folder",
 		});
-		expect(portable).toHaveTextContent("/Users/Shared/ToskLight Media");
+		expect(portable).toHaveTextContent("/Users/Shared/ToskLight Pixel");
 		expect(portable).toHaveTextContent(/configuration and all media/u);
 		await userEvent.click(
 			within(portable).getByRole("button", {
