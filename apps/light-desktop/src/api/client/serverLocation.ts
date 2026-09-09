@@ -1,3 +1,5 @@
+import { desktopRuntimeAvailable } from "../../platform/desktop";
+
 function persistentBrowserStorage(): Storage | null {
 	const storage = globalThis.localStorage;
 	return storage && typeof storage.getItem === "function" ? storage : null;
@@ -16,16 +18,16 @@ export function browserStorage(): Storage | null {
 }
 
 export function defaultServerUrl(
-	location: Pick<Location, "protocol" | "hostname" | "origin"> = window.location,
+	location: Pick<
+		Location,
+		"protocol" | "hostname" | "origin"
+	> = window.location,
 ): string {
 	const configured = import.meta.env.VITE_LIGHT_SERVER_URL as
 		| string
 		| undefined;
 	if (configured) return configured.replace(/\/$/, "");
-	const nativeWindow = Boolean(
-		(globalThis as typeof globalThis & { __TAURI_INTERNALS__?: unknown })
-			.__TAURI_INTERNALS__,
-	);
+	const nativeWindow = desktopRuntimeAvailable();
 	// Windows serves packaged assets from tauri.localhost; that origin is not the API server.
 	const nativeOrigin =
 		location.protocol === "tauri:" ||
