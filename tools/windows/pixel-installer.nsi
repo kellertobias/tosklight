@@ -38,7 +38,7 @@ Page instfiles
 Section "ToskLight Pixel" SEC_PIXEL
   SetShellVarContext current
   SetOutPath "$INSTDIR"
-  File /oname="ToskLight Pixel.exe" "${SOURCE_DIR}\ToskLight Pixel.exe"
+  File "/oname=ToskLight Pixel.exe" "${SOURCE_DIR}\ToskLight Pixel.exe"
   File /oname=media-server.exe "${SOURCE_DIR}\media-server.exe"
   WriteUninstaller "$INSTDIR\Uninstall ToskLight Pixel.exe"
   WriteRegStr HKCU "Software\ToskLight\Pixel" "InstallLocation" "$INSTDIR"

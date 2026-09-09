@@ -441,6 +441,11 @@ test("the Windows Pixel release is a branded launcher installer", () => {
 	assert.match(installer, /Icon "\$\{ICON_FILE\}"/u);
 	assert.match(
 		installer,
+		/File "\/oname=ToskLight Pixel\.exe" "\$\{SOURCE_DIR\}\\ToskLight Pixel\.exe"/u,
+		"NSIS requires the entire /oname parameter to be quoted when it contains spaces",
+	);
+	assert.match(
+		installer,
 		/CreateShortcut "\$DESKTOP\\ToskLight Pixel\.lnk"/u,
 	);
 });
