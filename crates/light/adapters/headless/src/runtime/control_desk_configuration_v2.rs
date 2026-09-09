@@ -82,7 +82,17 @@ fn update_control_desk(
             patch.rows.unwrap_or(current.rows),
             patch.buttons.unwrap_or(current.buttons),
             layout,
-            Some([patch.hardware_led_brightness.unwrap_or(current.hardware_led_brightness), patch.hardware_gooseneck_brightness.unwrap_or(current.hardware_gooseneck_brightness), patch.hardware_gooseneck_color.unwrap_or(current.hardware_gooseneck_color)]),
+            Some([
+                patch
+                    .hardware_led_brightness
+                    .unwrap_or(current.hardware_led_brightness),
+                patch
+                    .hardware_gooseneck_brightness
+                    .unwrap_or(current.hardware_gooseneck_brightness),
+                patch
+                    .hardware_gooseneck_color
+                    .unwrap_or(current.hardware_gooseneck_color),
+            ]),
         )
         .map_err(ApiError::store)?;
     state.sessions.update_desk_sessions(&desk);

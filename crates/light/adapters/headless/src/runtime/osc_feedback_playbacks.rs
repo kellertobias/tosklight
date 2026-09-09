@@ -362,7 +362,13 @@ pub(super) fn send_playback_osc_feedback(feedback: OscPlaybackFeedback<'_>) {
     // Physical surfaces can address assigned slots beyond the visible UI layout.
     // Include assignments on other pages too so a page switch sends explicit off
     // feedback for those positions on an empty destination page.
-    slots.extend(feedback.snapshot.playback_pages.iter().flat_map(|page| page.slots.keys().copied()));
+    slots.extend(
+        feedback
+            .snapshot
+            .playback_pages
+            .iter()
+            .flat_map(|page| page.slots.keys().copied()),
+    );
     slots.sort_unstable();
     slots.dedup();
     for slot in slots {

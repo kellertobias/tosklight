@@ -151,8 +151,13 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
             }
         }
         if address.ends_with("/fader")
-            || ["/programmer/prog-fade", "/programmer/cue-fade", "/programmer/release-fade"].iter()
-                .any(|suffix| address.ends_with(suffix))
+            || [
+                "/programmer/prog-fade",
+                "/programmer/cue-fade",
+                "/programmer/release-fade",
+            ]
+            .iter()
+            .any(|suffix| address.ends_with(suffix))
         {
             // Apply every control action immediately; publish one current LED/state
             // snapshot per feedback frame instead of blocking ingress on each sample.

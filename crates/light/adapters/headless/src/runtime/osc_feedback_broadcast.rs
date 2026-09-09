@@ -26,7 +26,12 @@ pub(super) fn send_osc_feedback(state: &AppState, _full: bool) {
     // Desk illumination also applies before a show is open.
     if let Some(desk) = osc_control_desk(state) {
         for subscriber in &subscribers {
-            send_osc(state, subscriber.target, format!("/light/{}/feedback/hardware/illumination", subscriber.path), illumination_arguments(&desk));
+            send_osc(
+                state,
+                subscriber.target,
+                format!("/light/{}/feedback/hardware/illumination", subscriber.path),
+                illumination_arguments(&desk),
+            );
         }
     }
     let Some(show) = state.active_show.current().clone() else {
@@ -72,5 +77,9 @@ pub(super) fn send_osc_feedback(state: &AppState, _full: bool) {
 }
 
 pub(super) fn illumination_arguments(desk: &ControlDesk) -> Vec<OscArgument> {
-    vec![OscArgument::Int(i32::from(desk.hardware_led_brightness)), OscArgument::Int(i32::from(desk.hardware_gooseneck_brightness)), OscArgument::Int(i32::from(desk.hardware_gooseneck_color))]
+    vec![
+        OscArgument::Int(i32::from(desk.hardware_led_brightness)),
+        OscArgument::Int(i32::from(desk.hardware_gooseneck_brightness)),
+        OscArgument::Int(i32::from(desk.hardware_gooseneck_color)),
+    ]
 }

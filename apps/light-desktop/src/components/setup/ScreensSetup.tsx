@@ -15,8 +15,8 @@ import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import { listTextEditorFiles } from "../../windows/TextEditorWindow";
-import { PlaybackLayoutModal } from "./PlaybackLayoutModal";
 import { HardwareLightingSettings } from "./HardwareLightingSettings";
+import { PlaybackLayoutModal } from "./PlaybackLayoutModal";
 import {
 	createScreenConfiguration,
 	playbackLayoutLegacyFields,
@@ -33,6 +33,13 @@ import {
 
 export { KnownClientsModal } from "./screens/DefaultScreenPicker";
 export { ScreenSettingsCard } from "./screens/ScreenSettingsCards";
+
+function cueListOptions(cueLists: ReturnType<typeof useCueLists>) {
+	return cueLists.map((cueList) => ({
+		id: cueList.body.id,
+		name: cueList.body.name,
+	}));
+}
 
 function ScreensSetupHeader({
 	desktopAvailable,
@@ -273,10 +280,7 @@ export function ScreensSetup({
 							screen={screen}
 							desks={state.desks}
 							displays={displays}
-							cueLists={cueListObjects.map((cueList) => ({
-								id: cueList.body.id,
-								name: cueList.body.name,
-							}))}
+							cueLists={cueListOptions(cueListObjects)}
 							textFiles={textFiles}
 							programmerOwner={
 								server.screens?.programmer_control_surface.owner_screen_id ===

@@ -237,9 +237,15 @@ impl InstallationResource {
         playback_layout: Option<light_show::PlaybackSurfaceLayout>,
         illumination: Option<[u8; 3]>,
     ) -> Result<ControlDesk, light_show::StoreError> {
-        self.desk
-            .lock()
-            .update_desk_with_illumination(id, name, columns, rows, buttons, playback_layout, illumination)
+        self.desk.lock().update_desk_with_illumination(
+            id,
+            name,
+            columns,
+            rows,
+            buttons,
+            playback_layout,
+            illumination,
+        )
     }
 
     pub(in crate::runtime) fn desk_page(

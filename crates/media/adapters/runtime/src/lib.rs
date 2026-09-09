@@ -193,11 +193,7 @@ fn run_inner() -> anyhow::Result<()> {
     if !desktop_is_available(&arguments) {
         let served = runtime.block_on(serve_with(services));
         shutdown.request(ShutdownReason::Requested);
-        importer.stop();
-        if let Some(thread) = off_screen {
-            let _ = thread.join();
-        }
-        drop(audio);
+        stop_background(importer, off_screen, audio);
         return served;
     }
 
@@ -231,6 +227,16 @@ fn run_inner() -> anyhow::Result<()> {
     );
     shutdown.request(ShutdownReason::Requested);
     let served = runtime.block_on(serving);
+    stop_background(importer, off_screen, audio);
+    presented?;
+    served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
+}
+
+fn stop_background(
+    importer: media_library::Importer,
+    off_screen: Option<std::thread::JoinHandle<()>>,
+    audio: Option<media_audio::AudioService>,
+) {
     importer.stop();
     if let Some(thread) = off_screen {
         let _ = thread.join();
@@ -238,8 +244,6 @@ fn run_inner() -> anyhow::Result<()> {
     // Closing the device before the process ends keeps the operating system from logging a
     // stream that vanished.
     drop(audio);
-    presented?;
-    served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
 }
 
 fn configuration_for(arguments: &[String]) -> anyhow::Result<Option<MediaConfiguration>> {

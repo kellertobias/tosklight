@@ -1,14 +1,12 @@
 import { HardwareControlSummaryView } from "@tosklight/ui/command";
 import { ModalNumberEditor } from "@tosklight/ui/input";
-import { useEffect, useRef, useState } from "react";
-import { KeyboardPageActions } from "./commandLine/playbackShortcutKeys";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
 import {
 	useProgrammerFadeMillis,
 	useReleaseFadeMillis,
 	useSequenceMasterFadeMillis,
 } from "../../features/configuration/ConfigurationState";
-import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import {
 	useHighlightActions,
 	useHighlightErrorMessage,
@@ -21,7 +19,9 @@ import {
 import { usePlaybackTopologyActions } from "../../features/playbackTopology/PlaybackTopologyProvider";
 import { usePlaybackPagesView } from "../../features/playbackTopology/PlaybackTopologyView";
 import type { ShowObject } from "../../features/showObjects/contracts";
+import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../../state/AppContext";
+import { KeyboardPageActions } from "./commandLine/playbackShortcutKeys";
 import { HighlightErrorAlert } from "./HighlightControls";
 import {
 	PlaybackPageMenu,
@@ -30,6 +30,22 @@ import {
 import { formatSpeedGroupBpm } from "./speedGroupFormatting";
 import { useSpeedGroupInteraction } from "./useSpeedGroupInteraction";
 
+type HardwareTimeKind = "prog" | "cue" | "release";
+
+function controlTimingPatch(kind: HardwareTimeKind | null, input: string) {
+	const seconds = Math.max(
+		0,
+		Math.min(kind === "prog" ? 20 : 60, Number(input)),
+	);
+	if (!Number.isFinite(seconds)) return null;
+	const millis = Math.round(seconds * 1000);
+	return kind === "prog"
+		? { programmer_fade_millis: millis }
+		: kind === "cue"
+			? { sequence_master_fade_millis: millis }
+			: { release_fade_millis: millis };
+}
+
 function HardwareTimeInputModal({
 	kind,
 	onChange,
@@ -37,7 +53,7 @@ function HardwareTimeInputModal({
 	onSubmit,
 	value,
 }: {
-	kind: "prog" | "cue" | "release";
+	kind: HardwareTimeKind;
 	onChange: (value: string) => void;
 	onClose: () => void;
 	onSubmit: () => void;
@@ -57,6 +73,82 @@ function HardwareTimeInputModal({
 	);
 }
 
+function useHardwarePageWindowEvents(
+	hardwarePages: KeyboardPageActions,
+	pageReady: boolean,
+	page: number | null,
+	pages: readonly ShowObject<"playback_page">[],
+	onMenu: () => void,
+) {
+	useEffect(() => {
+		const step = (event: Event) => {
+			if (!pageReady) return;
+			hardwarePages.step(
+				{ activePage: page, pages: pages.map((item) => item.body) },
+				(event as CustomEvent<number>).detail > 0 ? 1 : -1,
+			);
+		};
+		const menu = () => {
+			if (pageReady) onMenu();
+		};
+		window.addEventListener("light:playback-page-step", step);
+		window.addEventListener("light:playback-page-menu", menu);
+		return () => {
+			window.removeEventListener("light:playback-page-step", step);
+			window.removeEventListener("light:playback-page-menu", menu);
+		};
+	}, [hardwarePages, onMenu, page, pageReady, pages]);
+}
+
+function HardwareControlOverlays({
+	highlightError,
+	onDismissHighlight,
+	timeInput,
+	inputValue,
+	onInputValue,
+	onSubmitTime,
+	onCloseTime,
+	pagesOpen,
+	onClosePages,
+	renamePage,
+	onCloseRename,
+	speedGroupSettings,
+}: {
+	highlightError: string | null;
+	onDismissHighlight: () => void;
+	timeInput: HardwareTimeKind | null;
+	inputValue: string;
+	onInputValue: (value: string) => void;
+	onSubmitTime: () => void;
+	onCloseTime: () => void;
+	pagesOpen: boolean;
+	onClosePages: () => void;
+	renamePage: ShowObject<"playback_page"> | null;
+	onCloseRename: () => void;
+	speedGroupSettings: ReactNode;
+}) {
+	return (
+		<>
+			<HighlightErrorAlert
+				message={highlightError}
+				onDismiss={onDismissHighlight}
+			/>
+			{timeInput && (
+				<HardwareTimeInputModal
+					kind={timeInput}
+					value={inputValue}
+					onChange={onInputValue}
+					onSubmit={onSubmitTime}
+					onClose={onCloseTime}
+				/>
+			)}
+			<PlaybackPageMenu open={pagesOpen} onClose={onClosePages} />
+			<PlaybackPageRenameDialog page={renamePage} onClose={onCloseRename} />
+			{speedGroupSettings}
+		</>
+	);
+}
+
 export function HardwareControlSummary() {
 	const highlightError = useHighlightErrorMessage();
 	const highlightActions = useHighlightActions();
@@ -65,9 +157,7 @@ export function HardwareControlSummary() {
 	const [pagesOpen, setPagesOpen] = useState(false);
 	const [renamePage, setRenamePage] =
 		useState<ShowObject<"playback_page"> | null>(null);
-	const [timeInput, setTimeInput] = useState<"prog" | "cue" | "release" | null>(
-		null,
-	);
+	const [timeInput, setTimeInput] = useState<HardwareTimeKind | null>(null);
 	const [inputValue, setInputValue] = useState("");
 	const speedGroupInteraction = useSpeedGroupInteraction();
 	const playbackDesk = usePlaybackDeskView();
@@ -81,7 +171,7 @@ export function HardwareControlSummary() {
 	const release = (useReleaseFadeMillis() ?? 3000) / 1000;
 	const runtimeReady = runtimeStatus.status === "ready";
 	const page = runtimeReady ? (playbackDesk?.active_page ?? null) : null;
-	const openTime = (kind: "prog" | "cue" | "release", value: number) => {
+	const openTime = (kind: HardwareTimeKind, value: number) => {
 		const next = String(Number(value.toFixed(1)));
 		setTimeInput(kind);
 		setInputValue(next);
@@ -96,25 +186,23 @@ export function HardwareControlSummary() {
 	const hardwarePages = useRef(new KeyboardPageActions()).current;
 	useEffect(() => {
 		hardwarePages.syncAuthority(
-			pageReady ? topologyActions?.createPage ?? null : null,
-			pageReady ? runtimeActions?.setActivePage ?? null : null,
+			pageReady ? (topologyActions?.createPage ?? null) : null,
+			pageReady ? (runtimeActions?.setActivePage ?? null) : null,
 		);
 		return () => hardwarePages.invalidate();
-	}, [hardwarePages, pageReady, topologyActions?.createPage, runtimeActions?.setActivePage]);
-	useEffect(() => {
-		const step = (event: Event) => {
-			if (!pageReady) return;
-			hardwarePages.step({ activePage: page, pages: topology.pages.map(item => item.body) },
-				(event as CustomEvent<number>).detail > 0 ? 1 : -1);
-		};
-		const menu = () => { if (pageReady) setPagesOpen(true); };
-		window.addEventListener("light:playback-page-step", step);
-		window.addEventListener("light:playback-page-menu", menu);
-		return () => {
-			window.removeEventListener("light:playback-page-step", step);
-			window.removeEventListener("light:playback-page-menu", menu);
-		};
-	}, [hardwarePages, pageReady, page, topology.pages]);
+	}, [
+		hardwarePages,
+		pageReady,
+		topologyActions?.createPage,
+		runtimeActions?.setActivePage,
+	]);
+	useHardwarePageWindowEvents(
+		hardwarePages,
+		pageReady,
+		page,
+		topology.pages,
+		() => setPagesOpen(true),
+	);
 	const openPagesOrRename = () => {
 		if (!pageReady) return;
 		if (state.playbackSetArmed && activePage) {
@@ -128,18 +216,8 @@ export function HardwareControlSummary() {
 		setRenamePage(activePage);
 	};
 	const submitTime = () => {
-		const value = Math.max(
-			0,
-			Math.min(timeInput === "prog" ? 20 : 60, Number(inputValue)),
-		);
-		if (Number.isFinite(value))
-			void configurationActions?.setControlTiming(
-				timeInput === "prog"
-					? { programmer_fade_millis: Math.round(value * 1000) }
-					: timeInput === "cue"
-						? { sequence_master_fade_millis: Math.round(value * 1000) }
-						: { release_fade_millis: Math.round(value * 1000) },
-			);
+		const patch = controlTimingPatch(timeInput, inputValue);
+		if (patch) void configurationActions?.setControlTiming(patch);
 		setTimeInput(null);
 	};
 	return (
@@ -170,8 +248,14 @@ export function HardwareControlSummary() {
 				},
 			]}
 			speedGroups={(["A", "B", "C", "D", "E"] as const).map((group, index) => {
-				const bpm = speedGroups.ready ? speedGroups.projection?.groups[index]?.manualBpm : undefined;
-				return { id: group, bpm, display: bpm === undefined ? "—" : formatSpeedGroupBpm(bpm) };
+				const bpm = speedGroups.ready
+					? speedGroups.projection?.groups[index]?.manualBpm
+					: undefined;
+				return {
+					id: group,
+					bpm,
+					display: bpm === undefined ? "—" : formatSpeedGroupBpm(bpm),
+				};
 			})}
 			onValue={(id) => {
 				if (id === "programmer-fade") openTime("prog", prog);
@@ -194,30 +278,20 @@ export function HardwareControlSummary() {
 			}
 			onSpeedSettings={speedGroupInteraction.openSettings}
 			overlays={
-				<>
-					<HighlightErrorAlert
-						message={highlightError}
-						onDismiss={() => highlightActions?.dismissHighlightError()}
-					/>
-					{timeInput && (
-						<HardwareTimeInputModal
-							kind={timeInput}
-							value={inputValue}
-							onChange={setInputValue}
-							onSubmit={submitTime}
-							onClose={() => setTimeInput(null)}
-						/>
-					)}
-					<PlaybackPageMenu
-						open={pagesOpen}
-						onClose={() => setPagesOpen(false)}
-					/>
-					<PlaybackPageRenameDialog
-						page={renamePage}
-						onClose={() => setRenamePage(null)}
-					/>
-					{speedGroupInteraction.settings}
-				</>
+				<HardwareControlOverlays
+					highlightError={highlightError}
+					onDismissHighlight={() => highlightActions?.dismissHighlightError()}
+					timeInput={timeInput}
+					inputValue={inputValue}
+					onInputValue={setInputValue}
+					onSubmitTime={submitTime}
+					onCloseTime={() => setTimeInput(null)}
+					pagesOpen={pagesOpen}
+					onClosePages={() => setPagesOpen(false)}
+					renamePage={renamePage}
+					onCloseRename={() => setRenamePage(null)}
+					speedGroupSettings={speedGroupInteraction.settings}
+				/>
 			}
 		/>
 	);

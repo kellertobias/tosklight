@@ -22,7 +22,12 @@ pub(super) fn send_action_timing_feedback(
     );
 }
 
-pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[OscArgument], source: Option<&str>) {
+pub(super) fn handle_timing_osc(
+    state: &AppState,
+    address: &str,
+    arguments: &[OscArgument],
+    source: Option<&str>,
+) {
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let numeric = arguments.first().and_then(|v| match v {
         OscArgument::Float(v) => Some(*v),
@@ -100,13 +105,21 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
     }
 }
 
-fn publish_osc_speed_group_change(state: &AppState, source: Option<&str>, path: &str, index: usize) {
+fn publish_osc_speed_group_change(
+    state: &AppState,
+    source: Option<&str>,
+    path: &str,
+    index: usize,
+) {
     let source = source.and_then(|value| value.parse::<SocketAddr>().ok());
     if let Some((subscriber, session)) = programmer_osc_session(state, source)
         && subscriber.path.eq_ignore_ascii_case(path)
     {
         super::speed_group_service::record_external_change_from(
-            state, &session, &[index], light_application::ActionSource::Osc,
+            state,
+            &session,
+            &[index],
+            light_application::ActionSource::Osc,
         );
     }
 }

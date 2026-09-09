@@ -34,15 +34,29 @@ impl DeskStore {
                 row.get::<_, u8>(3)?,
                 row.get::<_, u8>(4)?,
                 row.get::<_, Option<String>>(5)?,
-                row.get::<_, u8>(6)?, row.get::<_, u8>(7)?, row.get::<_, u8>(8)?,
+                row.get::<_, u8>(6)?,
+                row.get::<_, u8>(7)?,
+                row.get::<_, u8>(8)?,
             ))
         })?;
         let Some(row) = rows.next() else {
             return Ok(None);
         };
-        let (id, name, columns, rows, buttons, playback_layout, hardware_led_brightness, hardware_gooseneck_brightness, hardware_gooseneck_color) = row?;
+        let (
+            id,
+            name,
+            columns,
+            rows,
+            buttons,
+            playback_layout,
+            hardware_led_brightness,
+            hardware_gooseneck_brightness,
+            hardware_gooseneck_color,
+        ) = row?;
         Ok(Some(ControlDesk {
-            hardware_led_brightness, hardware_gooseneck_brightness, hardware_gooseneck_color,
+            hardware_led_brightness,
+            hardware_gooseneck_brightness,
+            hardware_gooseneck_color,
             id: Uuid::parse_str(&id)?,
             name,
             columns,
@@ -170,13 +184,32 @@ impl DeskStore {
     }
 
     pub fn update_desk_with_illumination(
-        &self, id: Uuid, name: &str, columns: u8, rows: u8, buttons: u8,
-        playback_layout: Option<PlaybackSurfaceLayout>, illumination: Option<[u8; 3]>,
+        &self,
+        id: Uuid,
+        name: &str,
+        columns: u8,
+        rows: u8,
+        buttons: u8,
+        playback_layout: Option<PlaybackSurfaceLayout>,
+        illumination: Option<[u8; 3]>,
     ) -> Result<ControlDesk, StoreError> {
         let current = self.desk()?;
-        let illumination = illumination.unwrap_or([current.hardware_led_brightness, current.hardware_gooseneck_brightness, current.hardware_gooseneck_color]);
-        for (field, value) in ["hardware_led_brightness", "hardware_gooseneck_brightness", "hardware_gooseneck_color"].into_iter().zip(illumination) {
-            if value > 100 { return Err(StoreError::Invalid(format!("{field} must be within 0-100"))); }
+        let illumination = illumination.unwrap_or([
+            current.hardware_led_brightness,
+            current.hardware_gooseneck_brightness,
+            current.hardware_gooseneck_color,
+        ]);
+        for (field, value) in [
+            "hardware_led_brightness",
+            "hardware_gooseneck_brightness",
+            "hardware_gooseneck_color",
+        ]
+        .into_iter()
+        .zip(illumination)
+        {
+            if value > 100 {
+                return Err(StoreError::Invalid(format!("{field} must be within 0-100")));
+            }
         }
         if name.trim().is_empty()
             || !(1..=32).contains(&columns)

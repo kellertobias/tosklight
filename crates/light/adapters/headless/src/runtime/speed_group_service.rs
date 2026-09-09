@@ -66,7 +66,12 @@ fn execute_with_lock_policy(
 /// Publishes an authority revision for Speed Group runtime changes applied by the v1 surfaces
 /// (tap tempo, double, half, pause) so event-driven v2 views observe them.
 pub(super) fn record_external_change(state: &AppState, session: &Session, affected: &[usize]) {
-    record_external_change_from(state, session, affected, light_application::ActionSource::Http);
+    record_external_change_from(
+        state,
+        session,
+        affected,
+        light_application::ActionSource::Http,
+    );
 }
 
 pub(super) fn record_external_change_from(
@@ -87,11 +92,7 @@ pub(super) fn record_external_change_from(
         session: Some(session),
         require_unlocked: false,
     };
-    let context = ActionContext::operator(
-        session.desk.id,
-        session.id.0,
-        source,
-    );
+    let context = ActionContext::operator(session.desk.id, session.id.0, source);
     if let Err(error) = state.output.record_speed_group_external_change(
         &context,
         &ports,

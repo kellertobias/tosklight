@@ -269,4 +269,6 @@ pub struct VersionedObject {
     pub updated_at: String,
 }
 
-fn default_hardware_illumination() -> u8 { 100 }
+fn default_hardware_illumination() -> u8 {
+    100
+}

@@ -11,9 +11,9 @@ mod tests {
             token: token.into(),
             connected: true,
             desk: ControlDesk {
-            hardware_led_brightness: 100,
-            hardware_gooseneck_brightness: 100,
-            hardware_gooseneck_color: 100,
+                hardware_led_brightness: 100,
+                hardware_gooseneck_brightness: 100,
+                hardware_gooseneck_color: 100,
                 id: desk_id,
                 name: "Standalone desk".into(),
                 columns: 8,

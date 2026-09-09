@@ -332,4 +332,6 @@ mod tests {
     }
 }
 
-fn default_hardware_illumination() -> u8 { 100 }
+fn default_hardware_illumination() -> u8 {
+    100
+}
