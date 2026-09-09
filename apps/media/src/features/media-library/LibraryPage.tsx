@@ -37,6 +37,7 @@ import { useCatalog, useFolderPresentations } from "../../shared/api/queries";
 import { useMainOutputAspectRatio } from "../../shared/output/useMainOutputAspectRatio";
 import { TextSourcesPage } from "../text-sources/TextSourcesPage";
 import { VisualizersPage } from "../visualizers/VisualizersPage";
+import { EffectsPage } from "../effects/EffectsPage";
 import {
 	type FolderPresentation,
 	FolderPresentationEditor,
@@ -67,6 +68,7 @@ export function LibraryPage({
 	if (mode === "text") return <TextSourcesPage onModeChange={onModeChange} />;
 	if (mode === "visualizers")
 		return <VisualizersPage onModeChange={onModeChange} />;
+	if (mode === "effects") return <EffectsPage onModeChange={onModeChange} />;
 	return <MediaLibraryPage onModeChange={onModeChange} />;
 }
 

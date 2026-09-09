@@ -295,22 +295,67 @@ fn mask_strength(uv: vec2<f32>) -> f32 {
     return mix(1.0, clamp(strength, 0.0, 1.0), opacity);
 }
 
-fn blurred_source(uv: vec2<f32>, amount: f32, effect_mix: f32) -> vec4<f32> {
+fn rotated_about_centre(uv: vec2<f32>, angle: f32) -> vec2<f32> {
+    let centred = uv - vec2<f32>(0.5);
+    let sine = sin(angle);
+    let cosine = cos(angle);
+    return vec2<f32>(
+        centred.x * cosine - centred.y * sine,
+        centred.x * sine + centred.y * cosine,
+    ) + vec2<f32>(0.5);
+}
+
+fn blurred_source(uv: vec2<f32>, amount: f32, blur_type: f32, effect_mix: f32) -> vec4<f32> {
     let original = textureSample(source, source_sampler, uv);
     if amount <= 0.0 || effect_mix <= 0.0 {
         return original;
     }
     let dimensions = vec2<f32>(textureDimensions(source));
     let radius = amount * 18.0 / max(dimensions, vec2<f32>(1.0));
-    var blurred = original * 0.2;
-    blurred += textureSample(source, source_sampler, uv + vec2<f32>( radius.x, 0.0)) * 0.1;
-    blurred += textureSample(source, source_sampler, uv + vec2<f32>(-radius.x, 0.0)) * 0.1;
-    blurred += textureSample(source, source_sampler, uv + vec2<f32>(0.0,  radius.y)) * 0.1;
-    blurred += textureSample(source, source_sampler, uv + vec2<f32>(0.0, -radius.y)) * 0.1;
-    blurred += textureSample(source, source_sampler, uv + vec2<f32>( radius.x,  radius.y)) * 0.1;
-    blurred += textureSample(source, source_sampler, uv + vec2<f32>(-radius.x,  radius.y)) * 0.1;
-    blurred += textureSample(source, source_sampler, uv + vec2<f32>( radius.x, -radius.y)) * 0.1;
-    blurred += textureSample(source, source_sampler, uv + vec2<f32>(-radius.x, -radius.y)) * 0.1;
+    let mode = u32(clamp(round(blur_type), 0.0, 4.0));
+    var blurred = original;
+    if mode == 0u {
+        // Nine-tap Gaussian approximation.
+        blurred = original * 0.24;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.12;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.12;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(0.0,  radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.12;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(0.0, -radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.12;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x,  radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.07;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x,  radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.07;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x, -radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.07;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x, -radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.07;
+    } else if mode == 1u {
+        // Shape blur keeps a visible octagonal aperture.
+        blurred = original * 0.2;
+        for (var sample_index = 0u; sample_index < 8u; sample_index += 1u) {
+            let angle = f32(sample_index) * 0.78539816339;
+            let offset = vec2<f32>(cos(angle) * radius.x, sin(angle) * radius.y);
+            blurred += textureSample(source, source_sampler, clamp(uv + offset, vec2<f32>(0.0), vec2<f32>(1.0))) * 0.1;
+        }
+    } else if mode == 2u {
+        // Radial blur pulls samples along a ray toward the centre.
+        let ray = (vec2<f32>(0.5) - uv) * amount * 0.12;
+        blurred = original * 0.25;
+        blurred += textureSample(source, source_sampler, clamp(uv + ray * 0.33, vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
+        blurred += textureSample(source, source_sampler, clamp(uv + ray * 0.66, vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
+        blurred += textureSample(source, source_sampler, clamp(uv + ray, vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
+    } else if mode == 3u {
+        // Linear blur follows one horizontal axis.
+        blurred = original * 0.2;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.2;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.2;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x * 0.5, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.2;
+        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x * 0.5, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.2;
+    } else {
+        // Axial blur samples around the centre, producing a rotational smear.
+        let angle = amount * 0.12;
+        blurred = original * 0.25;
+        blurred += textureSample(source, source_sampler, clamp(rotated_about_centre(uv, angle), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
+        blurred += textureSample(source, source_sampler, clamp(rotated_about_centre(uv, -angle), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
+        blurred += textureSample(source, source_sampler, clamp(rotated_about_centre(uv, angle * 0.5), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.125;
+        blurred += textureSample(source, source_sampler, clamp(rotated_about_centre(uv, -angle * 0.5), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.125;
+    }
     return mix(original, blurred, effect_mix);
 }
 
@@ -321,7 +366,7 @@ fn kaleidoscope_coordinates(
     effect_mix: f32,
 ) -> EffectCoordinates {
     var result = coordinates;
-    let count = clamp(round(repetitions), 1.0, 16.0);
+    let count = clamp(round(repetitions), 0.0, 12.0);
     if count <= 1.0 || effect_mix <= 0.0 {
         return result;
     }
@@ -578,9 +623,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Blur belongs to the source, not after the effects: it re-reads the texture, so applying it
     // later discarded whatever the slots below had just produced. Zero amount is an exact bypass.
-    var sampled = blurred_source(coordinates.uv, layer.blur.x, 1.0);
+    var sampled = blurred_source(coordinates.uv, layer.blur.x, 0.0, 1.0);
     for (var slot = 0u; slot < 4u; slot += 1u) {
-        if layer.effect_types[slot] == 5u {
+        if layer.effect_types[slot] == 3u {
+            sampled = blurred_source(
+                coordinates.uv,
+                layer.effect_parameters[slot].x,
+                layer.effect_parameters[slot].y,
+                layer.effect_mixes[slot],
+            );
+        } else if layer.effect_types[slot] == 5u {
             sampled = rasterized_source(
                 coordinates.uv,
                 layer.effect_parameters[slot].x,

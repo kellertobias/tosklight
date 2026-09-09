@@ -21,14 +21,16 @@ use serde::{Deserialize, Serialize};
 /// dedicated playback channel rather than consuming an effect slot.
 pub const LAYER_SLOTS: u16 = 39;
 
-/// Slots the complete master section occupies: output, colour, geometry, mask, and shapers.
-pub const MASTER_SLOTS: u16 = 40;
+/// Slots the complete current master section occupies, including its fixed effect.
+pub const MASTER_SLOTS: u16 = 41;
 
 /// The original published block before Blur and mask-position controls were appended.
 pub const LEGACY_LAYER_SLOTS: u16 = 34;
 pub const LEGACY_MASTER_SLOTS: u16 = 7;
 /// The v2 block added master-mask positioning but predates master geometry and shapers.
 pub const CURRENT_MASTER_SLOTS: u16 = 11;
+/// The v3 expanded master before the fixed Layer Opacity Cycle channel was appended.
+pub const EXTENDED_MASTER_SLOTS: u16 = 40;
 
 /// Slots in one DMX universe.
 pub const UNIVERSE_SLOTS: u16 = 512;
@@ -51,15 +53,16 @@ pub enum LayerPersonality {
 pub enum PersonalityLayout {
     Legacy,
     Current,
-    #[default]
     Extended,
+    #[default]
+    EffectBanks,
 }
 
 impl PersonalityLayout {
     pub const fn layer_slots(self) -> u16 {
         match self {
             Self::Legacy => LEGACY_LAYER_SLOTS,
-            Self::Current | Self::Extended => LAYER_SLOTS,
+            Self::Current | Self::Extended | Self::EffectBanks => LAYER_SLOTS,
         }
     }
 
@@ -67,7 +70,8 @@ impl PersonalityLayout {
         match self {
             Self::Legacy => LEGACY_MASTER_SLOTS,
             Self::Current => CURRENT_MASTER_SLOTS,
-            Self::Extended => MASTER_SLOTS,
+            Self::Extended => EXTENDED_MASTER_SLOTS,
+            Self::EffectBanks => MASTER_SLOTS,
         }
     }
 }
@@ -87,7 +91,7 @@ impl LayerPersonality {
 
     /// The contiguous slot footprint this personality needs, layers followed by the master.
     pub const fn footprint(self) -> SlotFootprint {
-        self.footprint_for(PersonalityLayout::Extended)
+        self.footprint_for(PersonalityLayout::EffectBanks)
     }
 
     pub const fn footprint_for(self, layout: PersonalityLayout) -> SlotFootprint {
@@ -177,17 +181,17 @@ mod tests {
         let two = LayerPersonality::TwoLayers.footprint();
         assert_eq!(
             (two.layer_slots, two.master_slots, two.total()),
-            (78, 40, 118)
+            (78, 41, 119)
         );
 
         let eight = LayerPersonality::EightLayers.footprint();
         assert_eq!(
             (eight.layer_slots, eight.master_slots, eight.total()),
-            (312, 40, 352)
+            (312, 41, 353)
         );
 
         assert_eq!(SlotFootprint::SINGLE_LAYER.total(), 39);
-        assert_eq!(SlotFootprint::MASTER_ONLY.total(), 40);
+        assert_eq!(SlotFootprint::MASTER_ONLY.total(), 41);
 
         assert_eq!(
             LayerPersonality::TwoLayers
@@ -210,13 +214,13 @@ mod tests {
     fn an_eight_layer_output_must_fit_one_universe() {
         let eight = LayerPersonality::EightLayers.footprint();
         assert_eq!(eight.validate_start_address(1), Ok(()));
-        assert_eq!(eight.validate_start_address(161), Ok(()));
+        assert_eq!(eight.validate_start_address(160), Ok(()));
         assert_eq!(
-            eight.validate_start_address(162),
+            eight.validate_start_address(161),
             Err(StartAddressError::ExceedsUniverse {
-                start_address: 162,
-                required_slots: 352,
-                highest_valid_start_address: 161,
+                start_address: 161,
+                required_slots: 353,
+                highest_valid_start_address: 160,
             })
         );
     }
@@ -240,6 +244,7 @@ mod tests {
     fn the_extended_blocks_include_complete_master_control() {
         assert_eq!(LAYER_SLOTS, 39);
         assert_eq!(CURRENT_MASTER_SLOTS, 11);
-        assert_eq!(MASTER_SLOTS, 40);
+        assert_eq!(MASTER_SLOTS, 41);
+        assert_eq!(EXTENDED_MASTER_SLOTS, 40);
     }
 }

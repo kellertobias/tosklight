@@ -764,6 +764,8 @@ impl RenderWorkerState {
             let Some(output_state) = state.output(hosted.output.id()) else {
                 continue;
             };
+            let resolved_output = crate::effect_banks::resolve_output(output_state, &configuration);
+            let output_state = &resolved_output;
             let master = output_state.master;
             let region = shown_region(&configuration, output_state.id);
             let mapped = configuration.output(output_state.id);

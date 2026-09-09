@@ -349,6 +349,14 @@ export function stubServer(
 				if (body.maskInvert !== undefined) layer.mask.invert = body.maskInvert;
 				if (body.maskOpacity !== undefined)
 					layer.mask.opacity = body.maskOpacity;
+				if (body.effectBank !== undefined) {
+					const bank = layer.effectBanks[body.effectBank];
+					if (bank) {
+						if (body.effectSelect !== undefined) bank.select = body.effectSelect;
+						if (body.effectStrength !== undefined)
+							bank.strength = body.effectStrength;
+					}
+				}
 				if (body.effectSlot !== undefined) {
 					const effect = layer.effects[body.effectSlot];
 					if (body.effectType === "none") {
@@ -550,10 +558,14 @@ export function stubServer(
 					"shaperTopRotation",
 					"shaperBottomRotation",
 					"shaperRotation",
+					"opacityCycleDmx",
 				])
 					if (body[key] !== undefined)
 						(output.master as unknown as Record<string, unknown>)[key] =
 							body[key];
+				if (body.opacityCycleDmx !== undefined)
+					output.master.opacityCycle =
+						({ 0: "Off", 1: "/16", 32: "/8", 64: "/4", 96: "/2", 128: "1x", 160: "2x", 192: "4x", 224: "8x", 240: "16x" } as Record<number, string>)[body.opacityCycleDmx] ?? "Off";
 				if (body.maskFolder !== undefined)
 					output.master.mask.folder = body.maskFolder;
 				if (body.maskFile !== undefined)
@@ -911,6 +923,8 @@ export function anOutput(overrides: Partial<OutputView> = {}): OutputView {
 			shaperTopRotation: 0,
 			shaperBottomRotation: 0,
 			shaperRotation: 0,
+			opacityCycle: "Off",
+			opacityCycleDmx: 0,
 		},
 		layers: [aLayer(0), aLayer(1)],
 		...overrides,
@@ -996,6 +1010,10 @@ export function aLayer(index: number): OutputView["layers"][number] {
 			active: false,
 		},
 		effects: Array.from({ length: 4 }, (_, slot) => emptyEffect(slot)),
+		effectBanks: [
+			{ index: 0, select: 0, strength: 0 },
+			{ index: 1, select: 0, strength: 0 },
+		],
 		drawing: true,
 	};
 }

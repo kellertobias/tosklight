@@ -69,7 +69,9 @@ describe("MediaPaneSurface control state", () => {
 
 		const thumbnail = view.container.querySelector(".media-layer-thumbnail");
 		expect(thumbnail).toHaveClass("is-audio");
-		const values = within(thumbnail as HTMLElement).getByText("42% · 003 / 012");
+		const values = within(thumbnail as HTMLElement).getByText(
+			"42% · 003 / 012",
+		);
 		const note = within(thumbnail as HTMLElement).getByRole("img", {
 			name: "Audio 42% · 003 / 012",
 		});
@@ -586,7 +588,7 @@ describe("MediaPaneSurface control state", () => {
 		expect(onResetControl).toHaveBeenCalledWith("media.layer.scale.x");
 	});
 
-	it("groups effect amounts into four selectable effect slots", async () => {
+	it("groups effect controls into exactly two ordered banks", async () => {
 		const onChangeControl = vi.fn();
 		const view = renderSurface(
 			{ kind: "ready" },
@@ -596,12 +598,25 @@ describe("MediaPaneSurface control state", () => {
 					{
 						id: "effects",
 						label: "Effects",
-						controls: [1, 2, 3, 4].map((slot) => ({
-							id: `media.layer.effect.${slot}`,
-							kind: "value" as const,
-							label: `Effect ${slot}`,
-							value: slot * 10,
-						})),
+						controls: [1, 2].flatMap((bank) => [
+							{
+								id: `media.effect.bank.${bank}.select`,
+								kind: "choice" as const,
+								label: "Effect Select",
+								value: String(bank),
+								options: [
+									{ value: "0", label: "Off" },
+									{ value: String(bank), label: `Slot ${bank}` },
+								],
+							},
+							{
+								id: `media.effect.bank.${bank}.strength`,
+								kind: "value" as const,
+								label: "Effect Strength",
+								value: bank * 10,
+								display: `${bank * 10}%`,
+							},
+						]),
 					},
 				],
 				selectedControlSectionId: "effects",
@@ -610,15 +625,49 @@ describe("MediaPaneSurface control state", () => {
 			onChangeControl,
 		);
 		const surface = within(view.container);
-		const tabs = surface.getByRole("tablist", { name: "Effect slot" });
-		expect(within(tabs).getAllByRole("tab")).toHaveLength(4);
+		const tabs = surface.getByRole("tablist", { name: "Effect bank" });
+		expect(within(tabs).getAllByRole("tab")).toHaveLength(2);
+		expect(within(tabs).getByRole("tab", { name: "Bank 1" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+		expect(surface.getByText("Effect Select")).toBeInTheDocument();
+		expect(surface.getByText("Effect Strength")).toBeInTheDocument();
 		expect(surface.getByText("10%")).toBeInTheDocument();
 		expect(surface.queryByText("20%")).toBeNull();
 
-		await userEvent.click(within(tabs).getByRole("tab", { name: "Effect 2" }));
+		await userEvent.click(within(tabs).getByRole("tab", { name: "Bank 2" }));
 		expect(surface.queryByText("10%")).toBeNull();
 		expect(surface.getByText("20%")).toBeInTheDocument();
-		expect(surface.getByText("Amount")).toBeInTheDocument();
+	});
+
+	it("shows the fixed Master effect without layer bank tabs", () => {
+		const view = renderSurface({ kind: "ready" }, [], {
+			selectedLayerId: "master",
+			controlSections: [
+				{
+					id: "effects",
+					label: "Effects",
+					controls: [
+						{
+							id: "media.master.effect.opacity_cycle",
+							kind: "choice",
+							label: "Multiplier / Divider",
+							value: "0",
+							options: [
+								{ value: "0", label: "Off" },
+								{ value: "128", label: "1×" },
+							],
+						},
+					],
+				},
+			],
+			selectedControlSectionId: "effects",
+			mainSectionId: "effects",
+		});
+		const surface = within(view.container);
+		expect(surface.queryByRole("tablist", { name: "Effect bank" })).toBeNull();
+		expect(surface.getByText("Multiplier / Divider")).toBeInTheDocument();
 	});
 
 	it("opens the selected native Media Server controls and content in place", async () => {

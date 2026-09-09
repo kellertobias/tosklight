@@ -91,6 +91,11 @@ impl LayerUniform {
                 effect_parameters[index].copy_from_slice(&values[..4]);
                 effect_parameter_tail[index] = values[4];
                 effect_seeds[index] = effect_seed(output_id, effect.seed, index);
+            } else if let Some(parameters) = effect.blur_parameters() {
+                effect_types[index] = 3;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index][0] = parameters.amount;
+                effect_parameters[index][1] = parameters.blur_type.parameter();
             } else if let Some(parameters) = effect.kaleidoscope_parameters() {
                 effect_types[index] = 4;
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
@@ -857,7 +862,7 @@ fn pipeline(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use media_domain::{ScalingMode, Tint};
+    use media_domain::{BlurParameters, BlurType, EffectSlot, ScalingMode, Tint};
 
     #[test]
     fn the_layer_uniform_matches_the_geometry_the_domain_computed() {
@@ -912,6 +917,42 @@ mod tests {
         assert_eq!(std::mem::size_of::<LayerUniform>(), 1280);
         // Two more vec4s than before display regions: the slice and its quarter-turn.
         assert_eq!(std::mem::size_of::<MasterUniform>(), 144);
+    }
+
+    #[test]
+    fn blur_type_and_amount_reach_the_shader_in_their_effect_slot() {
+        let mut blur = EffectSlot::blur();
+        blur.mix = 0.8;
+        blur.parameters = BlurParameters {
+            amount: 0.65,
+            blur_type: BlurType::Axial,
+        }
+        .as_array()
+        .to_vec();
+        let mut layer = LayerState::default();
+        layer.effects[1] = blur;
+        let uniform = LayerUniform::new(
+            &layer,
+            Size::new(100, 50),
+            Size::new(1920, 1080),
+            None,
+            OutputId::default(),
+            Timestamp::ZERO,
+        );
+        assert_eq!(uniform.effect_types[1], 3);
+        assert_eq!(uniform.effect_mixes[1], 0.8);
+        assert_eq!(&uniform.effect_parameters[1][..2], &[0.65, 4.0]);
+    }
+
+    #[test]
+    fn layer_shader_with_all_blur_modes_is_valid_wgsl() {
+        let module = naga::front::wgsl::parse_str(include_str!("shaders/layer.wgsl")).unwrap();
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&module)
+        .unwrap();
     }
 
     #[test]

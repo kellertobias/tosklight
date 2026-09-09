@@ -18,6 +18,7 @@ import type {
 	VisualizerView,
 } from "./generated/media-wire";
 import { type Resource, useResource } from "./resource";
+import type { EffectLibrarySlot } from "./effects";
 
 export const KEYS = {
 	health: "health",
@@ -26,6 +27,7 @@ export const KEYS = {
 	folderPresentations: "folder-presentations",
 	outputs: "outputs",
 	visualizers: "visualizers",
+	effects: "effects",
 	network: "network",
 	time: "time",
 	audio: "audio",
@@ -56,6 +58,11 @@ export function useOutputs(pollMs?: number): Resource<OutputView[]> {
 /// Configuration, not state: it changes when an operator reassigns an address, so it is not polled.
 export function useVisualizers(): Resource<VisualizerView[]> {
 	return useResource(KEYS.visualizers, api.visualizers);
+}
+
+/** Stored effect definitions selected by the two live layer effect banks. */
+export function useEffects(): Resource<EffectLibrarySlot[]> {
+	return useResource(KEYS.effects, api.effects);
 }
 
 /// Configuration. It changes when an operator saves it, so it is read once.

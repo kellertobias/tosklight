@@ -36,7 +36,7 @@ pub use dmx::{
     DmxChannelGroupView, DmxChannelView, DmxIngressView, DmxMapView, DmxPersonalityView,
     DmxResolutionView, DmxValueSetView,
 };
-pub use effect::{EffectParameterView, EffectSlotView};
+pub use effect::{EffectParameterView, EffectPresetView, EffectSlotView, UpdateEffectPreset};
 pub use health::{AddressView, Health, RunningOutputView, RunningServerView, SourceStatusView};
 pub use library::{
     DeleteLibraryItem, DeleteLibraryItems, FolderPresentationView, FolderPresentationsView,
@@ -47,8 +47,8 @@ pub use library::{
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
-    AvailableMonitorView, LayerView, MaskView, MasterView, OutputConfigurationValuesView,
-    OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
+    AvailableMonitorView, EffectBankView, LayerView, MaskView, MasterView,
+    OutputConfigurationValuesView, OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
 };
 pub use output_edit::{OutputConfigurationEditError, UpdateOutputConfiguration};
 pub use pixel_map::{

@@ -114,6 +114,16 @@ pub const BEAT_GRID_WAVE_EFFECT: &str = "beat-grid-wave";
 pub const BEAT_FORM_FLASH_EFFECT: &str = "beat-form-flash";
 pub const DRAWN_IMAGE_EFFECT: &str = "drawn-image";
 
+/// One of the two DMX-controlled effect banks on a current layer.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectBankState {
+    /// Zero is Off; `1..=255` addresses a persisted [`crate::EffectLibrary`] preset.
+    pub select: u8,
+    /// Normalized amount applied to the selected preset.
+    pub strength: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawnImageParameters {
     pub strength: f32,
@@ -559,7 +569,7 @@ impl Default for RasterizeParameters {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KaleidoscopeParameters {
-    /// Number of mirrored angular repetitions around the source centre.
+    /// Number of mirrored angular repetitions around the source centre. Zero is Off.
     pub repetitions: u8,
     /// Rotation of the mirror axis in degrees.
     pub angle_degrees: f32,
@@ -575,7 +585,7 @@ impl KaleidoscopeParameters {
             .first()
             .copied()
             .filter(|value| value.is_finite())
-            .map(|value| value.round().clamp(1.0, 16.0) as u8)
+            .map(|value| value.round().clamp(0.0, 12.0) as u8)
             .unwrap_or(defaults.repetitions);
         let angle_degrees = values
             .get(1)
@@ -704,16 +714,20 @@ pub enum FeedbackMotion {
     Right,
     RotateLeft,
     RotateRight,
+    Shake,
+    Tunnel,
 }
 
 impl FeedbackMotion {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
         Self::Top,
         Self::Bottom,
         Self::Left,
         Self::Right,
         Self::RotateLeft,
         Self::RotateRight,
+        Self::Shake,
+        Self::Tunnel,
     ];
 
     pub const fn wire_name(self) -> &'static str {
@@ -724,6 +738,8 @@ impl FeedbackMotion {
             Self::Right => "right",
             Self::RotateLeft => "rotate-left",
             Self::RotateRight => "rotate-right",
+            Self::Shake => "shake",
+            Self::Tunnel => "tunnel",
         }
     }
 
@@ -741,13 +757,15 @@ impl FeedbackMotion {
             Self::Right => 3.0,
             Self::RotateLeft => 4.0,
             Self::RotateRight => 5.0,
+            Self::Shake => 6.0,
+            Self::Tunnel => 7.0,
         }
     }
 
     pub fn from_parameter(value: f32) -> Self {
         Self::ALL
             .get(if value.is_finite() {
-                value.round().clamp(0.0, 5.0) as usize
+                value.round().clamp(0.0, 7.0) as usize
             } else {
                 0
             })
@@ -768,9 +786,9 @@ pub struct FeedbackParameters {
 impl Default for FeedbackParameters {
     fn default() -> Self {
         Self {
-            amount: 0.82,
-            motion: 0.25,
-            direction: FeedbackMotion::Top,
+            amount: 0.94,
+            motion: 0.12,
+            direction: FeedbackMotion::Tunnel,
         }
     }
 }
@@ -799,14 +817,75 @@ impl FeedbackParameters {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlurType {
+    #[default]
+    Gaussian,
+    Shape,
+    Radial,
+    Linear,
+    Axial,
+}
+
+impl BlurType {
+    pub const ALL: [Self; 5] = [
+        Self::Gaussian,
+        Self::Shape,
+        Self::Radial,
+        Self::Linear,
+        Self::Axial,
+    ];
+
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Gaussian => "gaussian",
+            Self::Shape => "shape",
+            Self::Radial => "radial",
+            Self::Linear => "linear",
+            Self::Axial => "axial",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|blur_type| blur_type.wire_name() == value)
+    }
+
+    pub const fn parameter(self) -> f32 {
+        match self {
+            Self::Gaussian => 0.0,
+            Self::Shape => 1.0,
+            Self::Radial => 2.0,
+            Self::Linear => 3.0,
+            Self::Axial => 4.0,
+        }
+    }
+
+    pub fn from_parameter(value: f32) -> Self {
+        Self::ALL
+            .get(if value.is_finite() {
+                value.round().clamp(0.0, 4.0) as usize
+            } else {
+                0
+            })
+            .copied()
+            .unwrap_or_default()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BlurParameters {
     pub amount: f32,
+    pub blur_type: BlurType,
 }
 
 impl Default for BlurParameters {
     fn default() -> Self {
-        Self { amount: 0.35 }
+        Self {
+            amount: 0.35,
+            blur_type: BlurType::Gaussian,
+        }
     }
 }
 
@@ -819,11 +898,16 @@ impl BlurParameters {
             } else {
                 Self::default().amount
             },
+            // Amount stays first so existing one-value presets keep their exact meaning.
+            blur_type: BlurType::from_parameter(values.get(1).copied().unwrap_or_default()),
         }
     }
 
-    pub const fn as_array(self) -> [f32; 1] {
-        [self.amount]
+    pub const IDS: [&'static str; 2] = ["blur-amount", "blur-type"];
+    pub const LABELS: [&'static str; 2] = ["Blur amount", "Blur type"];
+
+    pub const fn as_array(self) -> [f32; 2] {
+        [self.amount, self.blur_type.parameter()]
     }
 }
 
@@ -1361,6 +1445,9 @@ pub struct LayerState {
     /// Blends from source color to luminance.
     pub grayscale: f32,
     pub mask: MaskState,
+    /// The two current effect selectors. Legacy personality layouts continue to use `effects`.
+    #[serde(default)]
+    pub effect_banks: [EffectBankState; 2],
     pub effects: [EffectSlot; 4],
     pub speed_multiplier: SpeedMultiplier,
     /// The per-layer DMX target tempo, used only when the output's tempo source is the channel.
@@ -1388,6 +1475,7 @@ impl Default for LayerState {
             tint: Tint::WHITE,
             grayscale: 0.0,
             mask: MaskState::default(),
+            effect_banks: Default::default(),
             effects: Default::default(),
             speed_multiplier: SpeedMultiplier::default(),
             playback_bpm: None,
@@ -1584,6 +1672,12 @@ mod tests {
             Some(FeedbackMotion::RotateRight)
         );
         assert_eq!(FeedbackMotion::parse("diagonal"), None);
+        assert_eq!(FeedbackMotion::parse("shake"), Some(FeedbackMotion::Shake));
+        assert_eq!(
+            FeedbackMotion::parse("tunnel"),
+            Some(FeedbackMotion::Tunnel)
+        );
+        assert!(FeedbackParameters::default().amount > 0.9);
 
         effect.parameters = vec![2.0, -1.0, 5.0];
         effect.normalize();
@@ -1601,6 +1695,25 @@ mod tests {
             None,
             "disabled clears the temporal path"
         );
+    }
+
+    #[test]
+    fn blur_keeps_legacy_amount_and_exposes_all_five_types() {
+        assert_eq!(
+            BlurParameters::from_normalized(&[0.6]),
+            BlurParameters {
+                amount: 0.6,
+                blur_type: BlurType::Gaussian,
+            }
+        );
+        for (index, blur_type) in BlurType::ALL.into_iter().enumerate() {
+            assert_eq!(BlurType::parse(blur_type.wire_name()), Some(blur_type));
+            assert_eq!(BlurType::from_parameter(index as f32), blur_type);
+        }
+        let mut effect = EffectSlot::blur();
+        effect.parameters = vec![2.0, BlurType::Axial.parameter()];
+        effect.normalize();
+        assert_eq!(effect.parameters, vec![1.0, 4.0]);
     }
 
     #[test]
@@ -1642,7 +1755,7 @@ mod tests {
 
         effect.parameters = vec![-4.0, f32::NAN];
         effect.normalize();
-        assert_eq!(effect.parameters, vec![1.0, 0.0]);
+        assert_eq!(effect.parameters, vec![0.0, 0.0]);
 
         effect.enabled = false;
         assert_eq!(effect.kaleidoscope_parameters(), None);

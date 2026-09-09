@@ -46,6 +46,42 @@ pub struct EffectSlotView {
     pub visualizer_parameters: Option<VisualizerParametersView>,
 }
 
+/// One numbered, persisted effect preset. Slot zero is deliberately absent: it is the fixed
+/// playback value `Off`, while slots 1 through 255 may be assigned by an operator.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectPresetView {
+    pub slot: u8,
+    pub name: String,
+    pub effect: EffectSlotView,
+}
+
+impl EffectPresetView {
+    pub(crate) fn of(preset: &media_domain::EffectPreset) -> Self {
+        Self {
+            slot: preset.slot,
+            name: preset.name.clone(),
+            effect: EffectSlotView::of(0, &preset.effect),
+        }
+    }
+}
+
+/// An object-intent edit of one numbered preset. Setting `clear` removes the assignment; all
+/// other fields are optional so name and implementation settings can be changed independently.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateEffectPreset {
+    pub request_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub effect_type: Option<String>,
+    #[serde(default)]
+    pub parameters: Option<Vec<f32>>,
+    #[serde(default)]
+    pub clear: Option<bool>,
+}
+
 /// Every effect this build renders, with the name an operator reads. Anything outside this list
 /// is reported as unsupported rather than silently renamed or dropped.
 const RENDERED_EFFECTS: [(&str, &str); 13] = [
@@ -113,8 +149,8 @@ fn effect_parameters(effect: &EffectSlot) -> Vec<EffectParameterView> {
             &DigitalTvParameters::default().as_array(),
         ),
         Some(BLUR_EFFECT) => parameter_views(
-            &["blur-amount"],
-            &["Blur amount"],
+            &BlurParameters::IDS,
+            &BlurParameters::LABELS,
             &BlurParameters::from_normalized(stored).as_array(),
             &BlurParameters::default().as_array(),
         ),
@@ -245,7 +281,7 @@ mod tests {
             .iter()
             .find(|parameter| parameter.id == "kaleidoscope-repetitions")
             .expect("the kaleidoscope reports its repetitions");
-        assert_eq!((repetitions.minimum, repetitions.maximum), (1.0, 16.0));
+        assert_eq!((repetitions.minimum, repetitions.maximum), (0.0, 12.0));
         assert_eq!(repetitions.step, 1.0, "a count moves in whole numbers");
 
         let angle = view

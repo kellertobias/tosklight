@@ -6,7 +6,7 @@
 use crate::address::MediaAddress;
 use crate::color::{FlipMirror, Tint};
 use crate::dmx;
-use crate::layer::{LayerState, MaskState, ScalingMode};
+use crate::layer::{EffectBankState, LayerState, MaskState, ScalingMode};
 use crate::master::{MasterShaper, MasterState};
 use crate::playback::PlayMode;
 use crate::speed::SpeedMultiplier;
@@ -24,6 +24,10 @@ pub type MasterSlots = [u8; MASTER_SLOTS as usize];
 /// Every value that is not on the wire keeps the state a fresh layer has, so a short or padded
 /// frame can never invent a selection.
 pub fn layer_state(slots: &[u8]) -> LayerState {
+    layer_state_for_layout(slots, PersonalityLayout::Extended)
+}
+
+pub fn layer_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> LayerState {
     let sixteen = |offset: usize| dmx::sixteen_bit(slots[offset], slots[offset + 1]);
     let optional_position = |offset: usize| {
         slots
@@ -59,18 +63,40 @@ pub fn layer_state(slots: &[u8]) -> LayerState {
             opacity: dmx::unit(slots[layer::MASK_OPACITY]),
             ..MaskState::default()
         },
-        effects: std::array::from_fn(|index| crate::layer::EffectSlot {
-            seed: index as u32,
-            mix: dmx::unit(slots[layer::EFFECT_1 + index]),
-            ..Default::default()
-        }),
+        effect_banks: if layout == PersonalityLayout::EffectBanks {
+            [
+                EffectBankState {
+                    select: slots[layer::EFFECT_1_SELECT],
+                    strength: dmx::unit(slots[layer::EFFECT_1_STRENGTH]),
+                },
+                EffectBankState {
+                    select: slots[layer::EFFECT_2_SELECT],
+                    strength: dmx::unit(slots[layer::EFFECT_2_STRENGTH]),
+                },
+            ]
+        } else {
+            Default::default()
+        },
+        effects: if layout == PersonalityLayout::EffectBanks {
+            Default::default()
+        } else {
+            std::array::from_fn(|index| crate::layer::EffectSlot {
+                seed: index as u32,
+                mix: dmx::unit(slots[layer::EFFECT_1 + index]),
+                ..Default::default()
+            })
+        },
         speed_multiplier: SpeedMultiplier::from_dmx(slots[layer::SPEED_MULTIPLIER]),
         playback_bpm: dmx::playback_bpm(slots[layer::PLAYBACK_BPM]),
-        blur: slots
-            .get(layer::BLUR)
-            .copied()
-            .map(dmx::unit)
-            .unwrap_or_default(),
+        blur: if layout == PersonalityLayout::EffectBanks {
+            0.0
+        } else {
+            slots
+                .get(layer::BLUR)
+                .copied()
+                .map(dmx::unit)
+                .unwrap_or_default()
+        },
         ..LayerState::default()
     }
 }
@@ -147,6 +173,11 @@ pub fn master_state(slots: &[u8]) -> MasterState {
                 .map(dmx::master_rotation)
                 .unwrap_or_default(),
         },
+        opacity_cycle: slots
+            .get(master::OPACITY_CYCLE)
+            .copied()
+            .map(crate::master::BeatRatio::from_dmx)
+            .unwrap_or_default(),
     }
 }
 
@@ -197,7 +228,7 @@ pub fn frame(
         .map(|index| {
             let layer_slots = usize::from(layout.layer_slots());
             let base = index * layer_slots;
-            layer_state(&block[base..base + layer_slots])
+            layer_state_for_layout(&block[base..base + layer_slots], layout)
         })
         .collect();
 
@@ -322,6 +353,22 @@ mod tests {
     }
 
     #[test]
+    fn current_effect_bank_layout_decodes_two_select_and_strength_pairs() {
+        let mut slots = neutral_layer();
+        slots[layer::EFFECT_1_SELECT] = 11;
+        slots[layer::EFFECT_1_STRENGTH] = 64;
+        slots[layer::EFFECT_2_SELECT] = 255;
+        slots[layer::EFFECT_2_STRENGTH] = 255;
+
+        let layer = layer_state_for_layout(&slots, PersonalityLayout::EffectBanks);
+        assert_eq!(layer.effect_banks[0].select, 11);
+        assert!((layer.effect_banks[0].strength - 64.0 / 255.0).abs() < f32::EPSILON);
+        assert_eq!(layer.effect_banks[1].select, 255);
+        assert_eq!(layer.effect_banks[1].strength, 1.0);
+        assert_eq!(layer.effects, std::array::from_fn(|_| Default::default()));
+    }
+
+    #[test]
     fn mask_invert_switches_at_128() {
         let mut slots = neutral_layer();
         slots[layer::MASK_INVERT] = 127;
@@ -367,6 +414,7 @@ mod tests {
         slots[master::SHAPER_RIGHT_ROTATION] = 0xff;
         slots[master::SHAPER_RIGHT_ROTATION + 1] = 0xff;
         slots[master::SHAPER_ROTATION] = 0x80;
+        slots[master::OPACITY_CYCLE] = 192;
 
         let decoded = master_state(&slots);
         assert_eq!(decoded.dimmer, 1.0);
@@ -387,6 +435,7 @@ mod tests {
         assert_eq!(decoded.shaper.left_rotation, -45.0);
         assert_eq!(decoded.shaper.right_rotation, 45.0);
         assert_eq!(decoded.shaper.rotation, 0.0);
+        assert_eq!(decoded.opacity_cycle, crate::master::BeatRatio::Multiply(4));
     }
 
     fn universe(personality: LayerPersonality, start_address: u16) -> Vec<u8> {

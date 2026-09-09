@@ -390,7 +390,12 @@ async fn update_layer_inner(
                     "choose the Blur effect before changing its controls",
                 ));
             }
-            effect.parameters = BlurParameters { amount }.as_array().to_vec();
+            effect.parameters = BlurParameters {
+                amount,
+                ..BlurParameters::default()
+            }
+            .as_array()
+            .to_vec();
         }
         if body.feedback_amount.is_some()
             || body.feedback_motion.is_some()
@@ -467,10 +472,10 @@ async fn update_layer_inner(
             }
             let mut parameters = KaleidoscopeParameters::from_parameters(&effect.parameters);
             if let Some(repetitions) = body.kaleidoscope_repetitions {
-                if !(1..=16).contains(&repetitions) {
+                if repetitions > 12 {
                     return Err(ApiError::bad_request(
                         "kaleidoscope-repetitions-range",
-                        "kaleidoscopeRepetitions must be between 1 and 16",
+                        "kaleidoscopeRepetitions must be between 0 (Off) and 12",
                     ));
                 }
                 parameters.repetitions = repetitions;
@@ -670,6 +675,31 @@ async fn update_layer_inner(
             effects: Box::new(effects.expect("native effect configuration has effects")),
         }
     } else {
+        let effect_banks = if body.effect_select.is_some() || body.effect_strength.is_some() {
+            let bank = usize::from(body.effect_bank.ok_or_else(|| {
+                ApiError::bad_request(
+                    "missing-effect-bank",
+                    "effectBank 0 or 1 is required when changing Effect Select or Effect Strength",
+                )
+            })?);
+            if bank >= current.effect_banks.len() {
+                return Err(ApiError::bad_request(
+                    "effect-bank-out-of-range",
+                    "effectBank must be 0 or 1",
+                ));
+            }
+            validate_unit("effectStrength", body.effect_strength)?;
+            let mut banks = current.effect_banks;
+            if let Some(select) = body.effect_select {
+                banks[bank].select = select;
+            }
+            if let Some(strength) = body.effect_strength {
+                banks[bank].strength = strength;
+            }
+            Some(banks)
+        } else {
+            None
+        };
         CommandKind::SetLayerControls {
             output: id,
             layer,
@@ -701,6 +731,7 @@ async fn update_layer_inner(
                 playback_bpm: body.playback_bpm.map(|value| (value != 0).then_some(value)),
                 blur: body.blur,
                 effects,
+                effect_banks,
             }),
         }
     };
@@ -833,6 +864,9 @@ pub(super) async fn update_master(
                 position_y: body.position_y,
                 rotation: body.rotation,
                 shaper,
+                opacity_cycle: body
+                    .opacity_cycle_dmx
+                    .map(media_domain::BeatRatio::from_dmx),
             }),
         }],
         now,
@@ -1152,7 +1186,7 @@ mod tests {
         assert_eq!(body["outputName"], "Main");
         assert_eq!(body["personality"], "twoLayers");
         assert_eq!(body["layerCount"], 2);
-        assert_eq!(body["channels"].as_array().unwrap().len(), 118);
+        assert_eq!(body["channels"].as_array().unwrap().len(), 119);
         assert_eq!(body["channels"][0]["absoluteChannel"], 1);
         assert_eq!(body["channels"][0]["name"], "Folder");
         assert_eq!(body["channels"][78]["group"]["kind"], "master");

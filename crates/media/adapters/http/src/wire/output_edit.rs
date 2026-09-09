@@ -119,6 +119,7 @@ impl UpdateOutputConfiguration {
                 "legacy" => media_domain::PersonalityLayout::Legacy,
                 "current" => media_domain::PersonalityLayout::Current,
                 "extended" => media_domain::PersonalityLayout::Extended,
+                "effect-banks" => media_domain::PersonalityLayout::EffectBanks,
                 _ => return Err(OutputConfigurationEditError::Personality),
             };
         }

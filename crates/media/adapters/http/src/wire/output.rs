@@ -78,6 +78,8 @@ pub struct LayerView {
     pub source_status: SourceStatusView,
     pub mask: MaskView,
     pub effects: Vec<EffectSlotView>,
+    /// The two current personality banks. Preset definitions remain in `/api/v2/effects`.
+    pub effect_banks: Vec<EffectBankView>,
     /// Whether this layer contributes pixels right now.
     pub drawing: bool,
 }
@@ -123,9 +125,27 @@ impl LayerView {
                 .enumerate()
                 .map(|(index, effect)| EffectSlotView::of(index, effect))
                 .collect(),
+            effect_banks: layer
+                .effect_banks
+                .iter()
+                .enumerate()
+                .map(|(index, bank)| EffectBankView {
+                    index,
+                    select: bank.select,
+                    strength: bank.strength,
+                })
+                .collect(),
             drawing: layer.draws(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectBankView {
+    pub index: usize,
+    pub select: u8,
+    pub strength: f32,
 }
 
 /// The section that applies to the finished composite.
@@ -156,6 +176,8 @@ pub struct MasterView {
     pub shaper_top_rotation: f32,
     pub shaper_bottom_rotation: f32,
     pub shaper_rotation: f32,
+    pub opacity_cycle: String,
+    pub opacity_cycle_dmx: u8,
 }
 
 impl MasterView {
@@ -197,6 +219,8 @@ impl MasterView {
             shaper_top_rotation: master.shaper.top_rotation,
             shaper_bottom_rotation: master.shaper.bottom_rotation,
             shaper_rotation: master.shaper.rotation,
+            opacity_cycle: master.opacity_cycle.label(),
+            opacity_cycle_dmx: master.opacity_cycle.dmx_range().0,
         }
     }
 }
@@ -418,6 +442,7 @@ impl OutputConfigurationValuesView {
                 media_domain::PersonalityLayout::Legacy => "legacy",
                 media_domain::PersonalityLayout::Current => "current",
                 media_domain::PersonalityLayout::Extended => "extended",
+                media_domain::PersonalityLayout::EffectBanks => "effect-banks",
             }
             .to_owned(),
             protocol: match output.protocol {
@@ -515,6 +540,14 @@ pub struct UpdateLayer {
     pub playback_bpm: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blur: Option<f32>,
+    /// The current two-bank personality bank changed by `effectSelect` / `effectStrength`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_bank: Option<u8>,
+    /// Zero is Off; 1..=255 selects a persisted Effects-library slot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_select: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_strength: Option<f32>,
     /// The ordered slot changed by the following typed effect fields, `0..=3`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_slot: Option<u8>,
@@ -707,6 +740,8 @@ impl UpdateLayer {
             || self.speed_multiplier_dmx.is_some()
             || self.playback_bpm.is_some()
             || self.blur.is_some()
+            || self.effect_select.is_some()
+            || self.effect_strength.is_some()
     }
 }
 
@@ -723,6 +758,9 @@ pub struct UpdateMaster {
     pub tint_green: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint_blue: Option<f32>,
+    /// Layer Opacity Cycle beat multiplier/divider encoded by the personality's published bands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_cycle_dmx: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flip_mirror: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

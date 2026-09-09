@@ -14,11 +14,12 @@ const BOUNDS: Record<
 	string,
 	{ minimum: number; maximum: number; step: number }
 > = {
-	"feedback-direction": { minimum: 0, maximum: 5, step: 1 },
+	"blur-type": { minimum: 0, maximum: 4, step: 1 },
+	"feedback-direction": { minimum: 0, maximum: 7, step: 1 },
 	"cycle-interval": { minimum: 0, maximum: 2, step: 1 },
 	"beat-move-direction": { minimum: 0, maximum: 3, step: 1 },
 	"beat-move-decay": { minimum: 0.05, maximum: 5, step: 0.05 },
-	"kaleidoscope-repetitions": { minimum: 1, maximum: 16, step: 1 },
+	"kaleidoscope-repetitions": { minimum: 0, maximum: 12, step: 1 },
 	"kaleidoscope-angle": { minimum: -180, maximum: 180, step: 1 },
 	"rasterize-mode": { minimum: 0, maximum: 1, step: 1 },
 	"rasterize-dot-size": { minimum: 2, maximum: 32, step: 1 },

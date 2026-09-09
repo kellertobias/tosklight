@@ -1,6 +1,5 @@
 import type {
 	MediaServerInspection,
-	NativeMediaEffectParameter,
 	NativeMediaEffectSlot,
 } from "../../api/client/mediaOutput";
 import type { MediaServerFixture } from "../../api/types";
@@ -12,6 +11,7 @@ import {
 } from "./mediaControlValue";
 import type {
 	MediaControlSection,
+	MediaEffectLibrarySlot,
 	MediaPaneLayer,
 	MediaPaneModel,
 	MediaPreviewState,
@@ -38,6 +38,8 @@ export interface BuildMediaPaneModelInput {
 	liveProgrammer: readonly ProgrammerFixtureValue[] | undefined;
 	nativeEffects?: NativeMediaEffectSlot[];
 	nativeEffectsError?: string | null;
+	/** Sparse native-library status; settings remain owned by Pixel's Effects library. */
+	effectLibrarySlots?: readonly MediaEffectLibrarySlot[];
 }
 
 export function buildMediaPaneModel(
@@ -149,7 +151,9 @@ function serverChoices(input: BuildMediaPaneModelInput) {
 export function mediaOfflineReason(diagnostic: string | null): string {
 	if (!diagnostic) return "Not responding";
 	if (/timed out/iu.test(diagnostic)) return "Not responding";
-	if (/refused|unreachable|no route|reset|broken pipe|closed/iu.test(diagnostic))
+	if (
+		/refused|unreachable|no route|reset|broken pipe|closed/iu.test(diagnostic)
+	)
 		return "Connection refused";
 	if (/invalid CITP packet/iu.test(diagnostic)) return "Unexpected reply";
 	if (/rejected/iu.test(diagnostic)) return "Request rejected";
@@ -506,163 +510,7 @@ function controlSections(
 			),
 		});
 	}
-	const effects = sections.find((section) => section.id === "effects");
-	if (effects && input.nativeEffects?.length)
-		effects.controls.push(...nativeEffectControls(input.nativeEffects));
-	if (effects && input.nativeEffectsError)
-		effects.controls.push({
-			id: "native-effects-error",
-			label: "Native effect controls unavailable",
-			kind: "readout",
-			value: input.nativeEffectsError,
-		});
 	return sections;
-}
-
-const NATIVE_EFFECT_TYPES = [
-	["none", "None"],
-	["analog-tv", "Analog TV"],
-	["digital-tv", "Digital TV"],
-	["opacity-cycle", "Layer opacity cycle"],
-	["blur", "Blur"],
-	["feedback", "Feedback"],
-	["beat-move", "Beat Move"],
-	["kaleidoscope", "Kaleidoscope"],
-	["rasterize", "Rasterized Print"],
-	["beat-scan", "Beat Scan"],
-	["beat-scale-turn", "Beat Scale and Turn"],
-	["beat-grid-wave", "Beat Grid Wave"],
-	["beat-form-flash", "Beat Form Flash"],
-	["drawn-image", "Drawn Image"],
-] as const;
-
-function nativeEffectControls(slots: NativeMediaEffectSlot[]) {
-	return slots.flatMap((slot): MediaSecondaryControl[] => {
-		const prefix = `effect-${slot.index}`;
-		const controls: MediaSecondaryControl[] = [
-			{
-				id: `${prefix}-type`,
-				kind: "choice",
-				label: "Effect",
-				value: slot.effectType ?? "none",
-				options: NATIVE_EFFECT_TYPES.map(([value, label]) => ({
-					value,
-					label,
-				})),
-				disabled: !slot.supported,
-			},
-		];
-		if (!slot.effectType) return controls;
-		controls.push(
-			{
-				id: `${prefix}-enabled`,
-				kind: "choice",
-				label: "State",
-				value: String(slot.enabled),
-				options: [
-					{ value: "true", label: "Enabled" },
-					{ value: "false", label: "Bypassed" },
-				],
-			},
-			...slot.parameters.map((parameter) =>
-				nativeEffectParameterControl(prefix, parameter),
-			),
-		);
-		return controls;
-	});
-}
-
-const NATIVE_PARAMETER_CHOICES: Record<
-	string,
-	Array<{ value: string; label: string }>
-> = {
-	"cycle-interval": [
-		{ value: "every-beat", label: "Every beat" },
-		{ value: "every-half-beat", label: "Every half beat" },
-		{ value: "every-second", label: "Every second" },
-	],
-	"feedback-direction": [
-		"top",
-		"bottom",
-		"left",
-		"right",
-		"rotate-left",
-		"rotate-right",
-	].map((value) => ({ value, label: value.replaceAll("-", " ") })),
-	"beat-move-direction": ["up", "down", "left", "right"].map((value) => ({
-		value,
-		label: value,
-	})),
-	"rasterize-mode": [
-		{ value: "black-and-white", label: "Black and White" },
-		{ value: "cmyk", label: "CMYK" },
-	],
-	"beat-scan-edge": [
-		{ value: "sharp", label: "Sharp" },
-		{ value: "soft", label: "Soft" },
-	],
-	"beat-turn-enabled": [
-		{ value: "false", label: "Off" },
-		{ value: "true", label: "On" },
-	],
-	"beat-grid-origin": ["centre", "top", "right", "bottom", "left"].map(
-		(value) => ({ value, label: value }),
-	),
-};
-
-function nativeEffectParameterControl(
-	prefix: string,
-	parameter: NativeMediaEffectParameter,
-): MediaSecondaryControl {
-	const choices = NATIVE_PARAMETER_CHOICES[parameter.id];
-	if (choices) {
-		const index = Math.max(
-			0,
-			Math.min(choices.length - 1, Math.round(parameter.value)),
-		);
-		return {
-			id: `${prefix}-${parameter.id}`,
-			kind: "choice",
-			label: parameter.label,
-			value: choices[index]?.value ?? choices[0]?.value ?? "",
-			options: choices,
-		};
-	}
-	const range = nativeEffectParameterRange(parameter);
-	return {
-		id: `${prefix}-${parameter.id}`,
-		kind: "value",
-		label: parameter.label,
-		value: parameter.value,
-		minimum: range.minimum,
-		maximum: range.maximum,
-		step: range.step,
-		displayFormat: nativeEffectParameterDisplayFormat(range),
-	};
-}
-
-/**
- * The Media Server owns what its parameters accept, so a control offers exactly that. Only a
- * server too old to advertise falls back to a normalized amount, which is what most parameters
- * are; guessing a wider range only lets an operator drag into values that are always refused.
- */
-function nativeEffectParameterRange(parameter: NativeMediaEffectParameter) {
-	const minimum = parameter.minimum ?? 0;
-	const maximum = parameter.maximum ?? 1;
-	return {
-		minimum,
-		maximum,
-		step: parameter.step ?? 0.01,
-	};
-}
-
-function nativeEffectParameterDisplayFormat(range: {
-	minimum: number;
-	maximum: number;
-	step: number;
-}): "percent" | "decimal" | "integer" {
-	if (range.minimum === 0 && range.maximum === 1) return "percent";
-	return range.step >= 1 ? "integer" : "decimal";
 }
 
 const MEDIA_CONTROL_GROUPS = [
@@ -675,7 +523,6 @@ const MEDIA_CONTROL_GROUPS = [
 			"volume",
 			"media.playback_speed",
 			"media.playback_bpm",
-			"media.playback.blur",
 		],
 	},
 	{
@@ -711,10 +558,10 @@ const MEDIA_CONTROL_GROUPS = [
 		id: "effects",
 		label: "Effects",
 		attributes: [
-			"media.effect.1",
-			"media.effect.2",
-			"media.effect.3",
-			"media.effect.4",
+			"media.effect.bank.1.select",
+			"media.effect.bank.1.strength",
+			"media.effect.bank.2.select",
+			"media.effect.bank.2.strength",
 		],
 	},
 ] as const;
@@ -762,6 +609,11 @@ const MASTER_CONTROL_GROUPS = [
 		id: "colour",
 		label: "Colour",
 		attributes: ["color.tint"],
+	},
+	{
+		id: "effects",
+		label: "Effects",
+		attributes: ["media.master.effect.opacity_cycle"],
 	},
 ] as const;
 
@@ -845,14 +697,34 @@ function advertisedControl(
 			display: rawValue === 0 ? "Off" : `${rawValue} BPM`,
 		};
 	}
-	if (attribute === "media.playback.blur")
+	if (/^media\.effect\.bank\.[12]\.select$/u.test(attribute))
 		return {
 			id: attribute,
-			label: "Blur",
+			label: "Effect Select",
+			kind: "choice",
+			value: String(rawValue),
+			options: effectLibrarySlotOptions(input.effectLibrarySlots),
+			description: effectLibrarySlotDescription(
+				rawValue,
+				input.effectLibrarySlots,
+			),
+		};
+	if (attribute === "media.master.effect.opacity_cycle")
+		return {
+			id: attribute,
+			label: "Multiplier / Divider",
+			kind: "choice",
+			value: String(nearestOpacityCycleValue(rawValue)),
+			options: OPACITY_CYCLE_OPTIONS,
+		};
+	if (/^media\.effect\.bank\.[12]\.strength$/u.test(attribute))
+		return {
+			id: attribute,
+			label: "Effect Strength",
 			kind: "value",
-			value: rawValue,
+			value: Math.round(normalized * 100),
 			minimum: 0,
-			maximum: 255,
+			maximum: 100,
 			step: 1,
 			display: `${Math.round((rawValue / 255) * 100)}%`,
 		};
@@ -986,13 +858,72 @@ const PLAY_MODE_OPTIONS = [
 	[236, "Pause"],
 ].map(([value, label]) => ({ value: String(value), label: String(label) }));
 
+function effectLibrarySlotOptions(slots?: readonly MediaEffectLibrarySlot[]) {
+	const statusBySlot = new Map(slots?.map((slot) => [slot.slot, slot]));
+	return [
+		{ value: "0", label: "Off" },
+		...Array.from({ length: 255 }, (_, index) => {
+			const slot = index + 1;
+			const state = statusBySlot.get(slot);
+			const suffix =
+				state?.status === "assigned"
+					? state.name?.trim() || "Assigned"
+					: state?.status === "unsupported"
+						? "Unsupported"
+						: state?.status === "unassigned"
+							? "Unassigned"
+							: null;
+			return {
+				value: String(slot),
+				label: suffix ? `Slot ${slot} · ${suffix}` : `Slot ${slot}`,
+			};
+		}),
+	];
+}
+
+function effectLibrarySlotDescription(
+	selected: number,
+	slots?: readonly MediaEffectLibrarySlot[],
+) {
+	if (selected === 0) return "Off bypasses this bank.";
+	const state = slots?.find((slot) => slot.slot === selected);
+	if (!state || state.status === "assigned") return undefined;
+	return (
+		state.detail ??
+		(state.status === "unsupported"
+			? `Slot ${selected} uses an unsupported effect preset.`
+			: `Slot ${selected} is unassigned.`)
+	);
+}
+
+const OPACITY_CYCLE_OPTIONS = [
+	{ value: "0", label: "Off" },
+	{ value: "1", label: "/16" },
+	{ value: "32", label: "/8" },
+	{ value: "64", label: "/4" },
+	{ value: "96", label: "/2" },
+	{ value: "128", label: "1×" },
+	{ value: "160", label: "2×" },
+	{ value: "192", label: "4×" },
+	{ value: "224", label: "8×" },
+	{ value: "240", label: "16×" },
+];
+
+function nearestOpacityCycleValue(rawValue: number) {
+	return OPACITY_CYCLE_OPTIONS.reduce((nearest, option) => {
+		const value = Number(option.value);
+		return Math.abs(rawValue - value) < Math.abs(rawValue - nearest)
+			? value
+			: nearest;
+	}, 0);
+}
+
 const MEDIA_CONTROL_LABELS: Record<string, string> = {
 	intensity: "Dimmer",
 	volume: "Volume",
 	"media.play_mode": "Play mode",
 	"media.playback_speed": "Speed",
 	"media.playback_bpm": "Playback BPM",
-	"media.playback.blur": "Blur",
 	"media.scale.x": "Scale X",
 	"media.scale.y": "Scale Y",
 	"media.scaling_mode": "Scaling mode",
@@ -1007,10 +938,11 @@ const MEDIA_CONTROL_LABELS: Record<string, string> = {
 	"media.mask.position.y": "Mask position Y",
 	"media.mask.invert": "Invert",
 	"media.mask.opacity": "Mask opacity",
-	"media.effect.1": "Effect 1",
-	"media.effect.2": "Effect 2",
-	"media.effect.3": "Effect 3",
-	"media.effect.4": "Effect 4",
+	"media.effect.bank.1.select": "Effect Select",
+	"media.effect.bank.1.strength": "Effect Strength",
+	"media.effect.bank.2.select": "Effect Select",
+	"media.effect.bank.2.strength": "Effect Strength",
+	"media.master.effect.opacity_cycle": "Multiplier / Divider",
 	"media.flip_mirror": "Flip / Mirror",
 	"shaper.blade.1.position": "Left",
 	"shaper.blade.1.angle": "Left rotation",

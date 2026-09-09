@@ -15,6 +15,7 @@ mod audio;
 #[cfg(test)]
 pub(crate) mod bench;
 mod edit;
+mod effects;
 mod fixtures;
 mod folder_presentations;
 mod health;
@@ -217,6 +218,11 @@ pub fn router(state: ApiState) -> Router {
             post(text::delete_text),
         )
         .route("/api/v2/visualizers", get(visualizers::visualizers))
+        .route("/api/v2/effects", get(effects::effects))
+        .route(
+            "/api/v2/effects/{slot}/update",
+            post(effects::update_effect),
+        )
         .route(
             "/api/v2/visualizers/create",
             post(visualizers::create_visualizer),

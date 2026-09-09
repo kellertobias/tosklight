@@ -15,6 +15,8 @@ const PERCENT_ATTRIBUTES = new Set([
 	"media.effect.2",
 	"media.effect.3",
 	"media.effect.4",
+	"media.effect.bank.1.strength",
+	"media.effect.bank.2.strength",
 	"media.layer.playback.blur",
 	"media.playback.blur",
 ]);

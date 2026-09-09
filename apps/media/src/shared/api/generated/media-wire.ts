@@ -41,12 +41,18 @@ minimum: number, maximum: number,
  */
 step: number, };
 export type EffectSlotView = { index: number, effectType: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, visualizerParameters?: VisualizerParametersView | null, };
+export type EffectPresetView = { slot: number, name: string, effect: EffectSlotView, };
+export type EffectBankView = { index: number, select: number, strength: number, };
 export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, blur: number, sourceStatus: SourceStatusView, mask: MaskView, effects: Array<EffectSlotView>,
+/**
+ * The two current personality banks. Preset definitions remain in `/api/v2/effects`.
+ */
+effectBanks: Array<EffectBankView>,
 /**
  * Whether this layer contributes pixels right now.
  */
 drawing: boolean, };
-export type MasterView = { dimmer: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, flipMirror: string, mask: AddressView, maskPositionX: number, maskPositionY: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, shaperLeft: number, shaperRight: number, shaperTop: number, shaperBottom: number, shaperLeftRotation: number, shaperRightRotation: number, shaperTopRotation: number, shaperBottomRotation: number, shaperRotation: number, };
+export type MasterView = { dimmer: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, flipMirror: string, mask: AddressView, maskPositionX: number, maskPositionY: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, shaperLeft: number, shaperRight: number, shaperTop: number, shaperBottom: number, shaperLeftRotation: number, shaperRightRotation: number, shaperTopRotation: number, shaperBottomRotation: number, shaperRotation: number, opacityCycle: string, opacityCycleDmx: number, };
 export type OutputView = { id: string, name: string, layerCount: number, layers: Array<LayerView>, master: MasterView,
 /**
  * Whether an external desk currently owns this output's continuously controlled values.
@@ -409,6 +415,14 @@ export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer
  */
 playbackBpm?: number | null, blur?: number | null,
 /**
+ * The current two-bank personality bank changed by `effectSelect` / `effectStrength`.
+ */
+effectBank?: number | null,
+/**
+ * Zero is Off; 1..=255 selects a persisted Effects-library slot.
+ */
+effectSelect?: number | null, effectStrength?: number | null,
+/**
  * The ordered slot changed by the following typed effect fields, `0..=3`.
  */
 effectSlot?: number | null,
@@ -424,7 +438,12 @@ cycleInterval?: string | null, beatMoveAmount?: number | null, beatMoveDirection
  * Complete per-layer visualizer settings routed through effect slot one.
  */
 visualizerParameters?: VisualizerParametersView | null, };
-export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, maskPositionX?: number | null, maskPositionY?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, shaperLeft?: number | null, shaperRight?: number | null, shaperTop?: number | null, shaperBottom?: number | null, shaperLeftRotation?: number | null, shaperRightRotation?: number | null, shaperTopRotation?: number | null, shaperBottomRotation?: number | null, shaperRotation?: number | null, };
+export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null,
+/**
+ * Layer Opacity Cycle beat multiplier/divider encoded by the personality's published bands.
+ */
+opacityCycleDmx?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, maskPositionX?: number | null, maskPositionY?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, shaperLeft?: number | null, shaperRight?: number | null, shaperTop?: number | null, shaperBottom?: number | null, shaperLeftRotation?: number | null, shaperRightRotation?: number | null, shaperTopRotation?: number | null, shaperBottomRotation?: number | null, shaperRotation?: number | null, };
+export type UpdateEffectPreset = { requestId: string, name: string | null, effectType: string | null, parameters: Array<number> | null, clear: boolean | null, };
 export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, personalityLayout?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null,
 /**
  * The whole pixel map, replaced at once. A zone is meaningless on its own — its address has

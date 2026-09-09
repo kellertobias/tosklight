@@ -16,6 +16,24 @@ Audio-reactive visualizers depend on the Media Server's configured audio input a
 
 ## Effects and masks
 
-Masks are selected independently from content and can be combined with the layer's shaper and transform. Typed effects retain their own parameter values and apply in the layer's documented order. Use the isolated layer preview to identify an effect or mask problem before diagnosing the output composite.
+Masks are selected independently from content and can be combined with the layer's shaper and
+transform. Each layer has exactly two ordered effect banks. **Bank 1** is applied before **Bank 2**;
+each bank stores an **Effect Select** value and an **Effect Strength**. Select **0** is Off and
+**1–255** resolves the matching preset in the Library's Effects tab. A missing or unsupported
+preset is reported and bypassed instead of silently substituting another effect.
+
+The initial catalogue includes TV/CRT/VHS Simulation, Digital Video/ Glitch Simulation, Blur
+(Gaussian, Shape, Radial, Linear, and Axial), Feedback, Beat Move, Beat Scan, Beat Scale & Turn,
+Beat form Flash, Kaleidoscope, B/W Rasterize, CMYK Rasterize, and Drawn Image Style. Kaleidoscope
+repetitions run from Off through 12. Feedback supports Shake and Tunnel motion and is tuned for a
+longer, smoother trail by default.
+
+The Master layer has a separate fixed **Effects** section. **Layer Opacity Cycle** advances through
+all currently loaded layers whose dimmer is above zero. Its Multiplier / Divider can be Off or beat
+divisions/multiples; cycling changes only effective output opacity and never rewrites stored layer
+dimmers.
+
+Use the isolated layer preview to identify a bank or mask problem before diagnosing the output
+composite. The layer preview and final output use the same bank order and preset settings.
 
 Generated configuration is stored by addressed identity so Desk programming remains stable. Moving or replacing an addressed generated item changes what later recalls produce just as moving uploaded media would.

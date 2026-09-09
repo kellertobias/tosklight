@@ -21,6 +21,8 @@ pub enum ConfigurationError {
     Malformed { detail: String },
     #[error(transparent)]
     Migration(#[from] MigrationError),
+    #[error("the effect library is invalid: {0}")]
+    EffectLibrary(#[from] media_domain::EffectLibraryError),
     #[error("the configuration defines no outputs; a Media Server needs at least one")]
     NoOutputs,
     #[error("two outputs share the identity {id}")]
@@ -143,6 +145,7 @@ pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), Configu
             minutes: configuration.time.utc_offset_minutes,
         });
     }
+    configuration.effects.validate()?;
 
     let mut seen = HashSet::new();
     for output in &configuration.outputs {

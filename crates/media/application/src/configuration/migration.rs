@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 3;
+pub const CURRENT_VERSION: u32 = 4;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -57,11 +57,29 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             )),
             1 => Ok(without_personality_version(current)),
             2 => visualizers_into_final_banks(current),
+            3 => Ok(with_effect_library(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
     }
     Ok(current)
+}
+
+/// Version 3 → 4: effect definitions move out of volatile layer state into an addressed,
+/// persisted library. Existing installations receive the same shipped starter presets as a new
+/// configuration; no layer is activated because selector zero remains Off.
+fn with_effect_library(mut document: Value) -> Value {
+    if let Some(configuration) = document
+        .get_mut("configuration")
+        .and_then(Value::as_object_mut)
+    {
+        configuration.entry("effects").or_insert_with(|| {
+            serde_json::to_value(media_domain::EffectLibrary::default())
+                .expect("the default effect library is serializable")
+        });
+    }
+    document["version"] = json!(4);
+    document
 }
 
 fn kind(value: &Value) -> &'static str {
@@ -323,7 +341,7 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 3"));
+        assert!(written.contains("\"version\": 4"));
     }
 
     #[test]
@@ -345,10 +363,24 @@ mod tests {
         let entries = migrated["configuration"]["visualizers"]["entries"]
             .as_array()
             .expect("entries");
-        assert_eq!(migrated["version"], json!(3));
+        assert_eq!(migrated["version"], json!(4));
         assert_eq!(entries[0]["address"], json!({ "folder": 250, "file": 1 }));
         assert_eq!(entries[1]["address"], json!({ "folder": 250, "file": 2 }));
         assert_eq!(entries[0]["configuration"]["name"], json!("First"));
+    }
+
+    #[test]
+    fn version_three_receives_the_addressed_effect_library_without_enabling_a_bank() {
+        let migrated = migrate_to_current(json!({
+            "version": 3,
+            "configuration": {}
+        }))
+        .expect("version three migrates");
+        assert_eq!(migrated["version"], json!(4));
+        let effects: media_domain::EffectLibrary =
+            serde_json::from_value(migrated["configuration"]["effects"].clone()).unwrap();
+        assert_eq!(effects.resolve(1).unwrap().name, "TV/CRT/VHS Simulation");
+        assert_eq!(media_domain::EffectBankState::default().select, 0);
     }
 
     #[test]

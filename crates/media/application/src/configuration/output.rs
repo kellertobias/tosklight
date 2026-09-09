@@ -143,7 +143,7 @@ impl OutputConfiguration {
             presentation: PresentationMode::default(),
             sound_output: SoundOutput::default(),
             personality: LayerPersonality::default(),
-            personality_layout: PersonalityLayout::Extended,
+            personality_layout: PersonalityLayout::EffectBanks,
             protocol: DmxProtocol::default(),
             universe: 0,
             start_address: first_start_address(),
@@ -164,7 +164,7 @@ mod tests {
         let output = OutputConfiguration::new("Main");
         assert_eq!(output.name.as_str(), "Main");
         assert!(output.enabled);
-        assert_eq!(output.personality_layout, PersonalityLayout::Extended);
+        assert_eq!(output.personality_layout, PersonalityLayout::EffectBanks);
         assert_eq!(
             output.resolution,
             Resolution {

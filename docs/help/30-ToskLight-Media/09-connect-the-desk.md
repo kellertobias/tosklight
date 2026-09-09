@@ -8,7 +8,7 @@ Open **Show > Show Patch**, choose the **ToskLight** manufacturer, and add the c
 
 The fixture contains independent logical heads for its layers and one shared master head. It remains a normal show fixture, so its values can be selected, programmed, stored in Presets and Cues, and assigned to playbacks. Unpatching it preserves that show programming but suppresses DMX output.
 
-The shared Master homes at 100% intensity. Every media layer homes at 0% intensity so patching a server does not unexpectedly place all layers on air; raise the selected layer's **Intensity** when it should contribute to the output. Layer heads expose the regular Desk controls for intensity, volume, RGB colour, frame position, scale, rotation, playback, mask, and effects. Blur is a playback fader with its own DMX channel, not an effect slot. The RGB operator controls are translated to the Media Server personality's physical CMY channels.
+The shared Master homes at 100% intensity. Every media layer homes at 0% intensity so patching a server does not unexpectedly place all layers on air; raise the selected layer's **Intensity** when it should contribute to the output. Layer heads expose the regular Desk controls for intensity, volume, RGB colour, frame position, scale, rotation, playback, mask, and two ordered effect banks. Each bank has **Effect Select** and **Effect Strength**; Blur is selected as a configured library preset rather than a separate playback fader. The RGB operator controls are translated to the Media Server personality's physical CMY channels.
 
 Selecting **Master** in the Media pane selects **Mask** automatically because Master has no content address. Its control sections remain available in this order: **Output**, **Geometry**, **Mask position**, **Shapers**, and **Colour**. Geometry provides scale, scaling mode, position, rotation, and flip/mirror. Shapers provide independent left, right, top, and bottom insertion and rotation plus complete module rotation.
 
@@ -20,16 +20,17 @@ After patching, configure the Media endpoint's IP address and CITP port in the p
 
 CITP discovery is not ToskLight show discovery. CITP describes Media outputs and libraries; ToskLight's local-network discovery offers read-only `.show` copies between Desk and the PreViz Rig Editor.
 
-## Edit the native effect controls
+## Configure effect presets
 
-An effect slot on a ToskLight Pixel layer also exposes the Media Server's own effect configuration
-over HTTP: the effect type, whether it is bypassed, and each effect's typed parameters. The Media
-Server states what every parameter accepts, and the Desk offers exactly that range and step — an
+The Effects tab in the Media Server Library stores the effect type, operator name, and typed
+parameters behind each numbered preset. The Media Server states what every parameter accepts, and
+the Desk offers exactly that range and step — an
 angle stops where the server stops it, and a count moves in whole numbers. A control shows the
 value it is holding while you change it, and a refusal is reported as the Media Server's own
 sentence rather than a silent no-op.
 
-Effect **Amount** stays on DMX. The native controls configure the effect; the DMX byte plays it.
+Effect **Select** and **Strength** stay on DMX. The library configures the shared preset; the two
+ordered banks play it. The Master exposes the fixed **Layer Opacity Cycle** beat ratio separately.
 
 ## Work without CITP
 

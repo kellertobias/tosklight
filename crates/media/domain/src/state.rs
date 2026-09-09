@@ -175,6 +175,9 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             if let Some(value) = controls.effects.clone() {
                 changed |= replace(&mut target.effects, value);
             }
+            if let Some(value) = controls.effect_banks {
+                changed |= replace(&mut target.effect_banks, value);
+            }
             if let Some(value) = controls.mask_address {
                 changed |= replace(&mut target.mask.address, value);
             }
@@ -248,6 +251,9 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             if let Some(value) = controls.shaper {
                 next.shaper = value;
             }
+            if let Some(value) = controls.opacity_cycle {
+                next.opacity_cycle = value;
+            }
             changed_or_not(replace(&mut output.master, next))
         }
         CommandKind::ResetLayer { layer, .. } => {
@@ -303,7 +309,8 @@ mod tests {
     use super::*;
     use crate::address::MediaAddress;
     use crate::command::Timestamp;
-    use crate::layer::{EffectSlot, SourceFailure, SourceStatus};
+    use crate::layer::{EffectBankState, EffectSlot, SourceFailure, SourceStatus};
+    use crate::master::BeatRatio;
     use crate::personality::decode::DecodedFrame;
 
     fn state(personality: LayerPersonality) -> (MediaState, OutputId) {
@@ -662,6 +669,70 @@ mod tests {
             ),
         );
         assert_eq!(media.output(id).unwrap().layers[0].dimmer, 0.0);
+    }
+
+    #[test]
+    fn web_controls_update_effect_banks_and_the_master_opacity_cycle() {
+        let (mut media, id) = state(LayerPersonality::TwoLayers);
+        apply(
+            &mut media,
+            &command(
+                CommandKind::TakeOverPlayback {
+                    output: id,
+                    take_over: true,
+                },
+                CommandSource::Web,
+                0,
+            ),
+        );
+        let banks = [
+            EffectBankState {
+                select: 7,
+                strength: 0.25,
+            },
+            EffectBankState {
+                select: 12,
+                strength: 0.75,
+            },
+        ];
+        assert_eq!(
+            apply(
+                &mut media,
+                &command(
+                    CommandKind::SetLayerControls {
+                        output: id,
+                        layer: 0,
+                        controls: Box::new(crate::LayerControls {
+                            effect_banks: Some(banks),
+                            ..Default::default()
+                        }),
+                    },
+                    CommandSource::Web,
+                    1,
+                ),
+            ),
+            Applied::Changed
+        );
+        assert_eq!(
+            apply(
+                &mut media,
+                &command(
+                    CommandKind::SetMasterControls {
+                        output: id,
+                        controls: Box::new(crate::MasterControls {
+                            opacity_cycle: Some(BeatRatio::Multiply(4)),
+                            ..Default::default()
+                        }),
+                    },
+                    CommandSource::Web,
+                    2,
+                ),
+            ),
+            Applied::Changed
+        );
+        let output = media.output(id).unwrap();
+        assert_eq!(output.layers[0].effect_banks, banks);
+        assert_eq!(output.master.opacity_cycle, BeatRatio::Multiply(4));
     }
 
     #[test]

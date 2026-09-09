@@ -44,6 +44,10 @@ import type {
 	UploadAcceptedView,
 	VisualizerView,
 } from "./generated/media-wire";
+import type {
+	EffectLibrarySlot,
+	UpdateEffectLibrarySlot,
+} from "./effects";
 
 /// Every failure a call site can see, including the ones that never reached the server.
 export class ApiFailure extends Error {
@@ -175,6 +179,12 @@ export const api = {
 			{ method: "POST", body: JSON.stringify({ requestId }) },
 		),
 	visualizers: () => request<VisualizerView[]>("/visualizers"),
+	effects: () => request<EffectLibrarySlot[]>("/effects"),
+	updateEffect: (slot: number, edit: UpdateEffectLibrarySlot) =>
+		request<EffectLibrarySlot | null>(`/effects/${slot}/update`, {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
 	createVisualizer: (edit: CreateVisualizer) =>
 		request<VisualizerView>("/visualizers/create", {
 			method: "POST",

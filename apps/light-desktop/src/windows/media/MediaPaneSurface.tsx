@@ -378,7 +378,6 @@ function browserOptions(maskBrowser: "supported" | "unsupported" | "hidden") {
 	];
 }
 
-
 function MediaLayerStrip({
 	layers,
 	selectedLayerId,
@@ -674,10 +673,13 @@ function MediaSecondaryControls({
 	onChange(controlId: string, value: string | number): void;
 	onReset?(controlId: string): void;
 }) {
-	const [effectSlot, setEffectSlot] = useState(0);
+	const [effectBank, setEffectBank] = useState(1);
 	const section =
 		sections.find((candidate) => candidate.id === selectedSectionId) ??
 		sections[0];
+	const showsEffectBanks = section?.controls.some((control) =>
+		control.id.startsWith("media.effect.bank."),
+	);
 	return (
 		<section
 			className="media-secondary-controls"
@@ -701,21 +703,21 @@ function MediaSecondaryControls({
 								</span>
 							)}
 						</header>
-						{section.id === "effects" ? (
+						{section.id === "effects" && showsEffectBanks ? (
 							<div
 								className="media-effect-tabs"
 								role="tablist"
-								aria-label="Effect slot"
+								aria-label="Effect bank"
 							>
-								{[0, 1, 2, 3].map((slot) => (
+								{[1, 2].map((bank) => (
 									<Button
-										key={slot}
+										key={bank}
 										role="tab"
-										aria-selected={effectSlot === slot}
-										active={effectSlot === slot}
-										onClick={() => setEffectSlot(slot)}
+										aria-selected={effectBank === bank}
+										active={effectBank === bank}
+										onClick={() => setEffectBank(bank)}
 									>
-										Effect {slot + 1}
+										Bank {bank}
 									</Button>
 								))}
 							</div>
@@ -724,8 +726,8 @@ function MediaSecondaryControls({
 							{section.controls
 								.filter(
 									(control) =>
-										section.id !== "effects" ||
-										effectControlBelongsToSlot(control.id, effectSlot),
+										!showsEffectBanks ||
+										effectControlBelongsToBank(control.id, effectBank),
 								)
 								.map((control, index, visibleControls) => (
 									<Fragment key={control.id}>
@@ -734,12 +736,7 @@ function MediaSecondaryControls({
 												<h3>{control.group}</h3>
 											)}
 										<MediaControl
-											control={
-												section.id === "effects" &&
-												control.id === `media.layer.effect.${effectSlot + 1}`
-													? { ...control, label: "Amount" }
-													: control
-											}
+											control={control}
 											sectionDisabled={section.capability === "unsupported"}
 											onChange={onChange}
 											onReset={onReset}
@@ -754,13 +751,8 @@ function MediaSecondaryControls({
 	);
 }
 
-function effectControlBelongsToSlot(controlId: string, slot: number) {
-	return (
-		controlId === "native-effects-error" ||
-		controlId === `media.layer.effect.${slot + 1}` ||
-		controlId.startsWith(`effect-${slot}-`) ||
-		(slot === 0 && controlId.startsWith("visualizer-"))
-	);
+function effectControlBelongsToBank(controlId: string, bank: number) {
+	return controlId.startsWith(`media.effect.bank.${bank}.`);
 }
 
 function MediaControl({

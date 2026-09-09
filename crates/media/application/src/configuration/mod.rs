@@ -33,9 +33,9 @@ pub use service::{
 };
 pub use validate::ConfigurationError;
 
-use media_domain::OutputId;
 use media_domain::text_catalog::TextCatalog;
 use media_domain::visualizer::GeneratedCatalog;
+use media_domain::{EffectLibrary, OutputId};
 use serde::{Deserialize, Serialize};
 
 /// Distinguishes two Media Server processes on one host in logs, CITP announcements, and
@@ -91,6 +91,9 @@ pub struct MediaConfiguration {
     /// Which text entry answers at which address, and how it is drawn.
     #[serde(default)]
     pub text: TextCatalog,
+    /// Addressed effect presets selected by the two banks on every layer.
+    #[serde(default)]
+    pub effects: EffectLibrary,
     /// One or more logical outputs. The first release ships one; the collection is never
     /// collapsed into singleton state.
     pub outputs: Vec<OutputConfiguration>,
@@ -112,6 +115,7 @@ impl Default for MediaConfiguration {
             time: TimeConfiguration::default(),
             visualizers: GeneratedCatalog::default(),
             text: TextCatalog::default(),
+            effects: EffectLibrary::default(),
             outputs: vec![main],
         }
     }

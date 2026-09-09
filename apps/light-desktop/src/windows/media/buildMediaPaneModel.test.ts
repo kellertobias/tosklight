@@ -382,11 +382,10 @@ describe("Media pane disconnected configuration", () => {
 			"volume",
 			"media.playback_speed",
 			"media.playback_bpm",
-			"media.playback.blur",
 		]);
 		expect(
 			playback?.controls.map((control) => Boolean(control.disabled)),
-		).toEqual([false, true, false, true, true, true]);
+		).toEqual([false, true, false, true, true]);
 		expect(
 			model.controlSections
 				.find((section) => section.id === "frame")
@@ -398,7 +397,11 @@ describe("Media pane disconnected configuration", () => {
 		const server = {
 			fixture_id: "server-1",
 			name: "Media master",
-			endpoint: { protocol: "citp" as const, ip_address: "127.0.0.1", port: 4809 },
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "127.0.0.1",
+				port: 4809,
+			},
 			layers: [{ fixture_id: "layer-1", head_index: 0 }],
 			status: { online: true, last_success: null, last_error: null },
 		};
@@ -583,7 +586,10 @@ describe("Media pane disconnected configuration", () => {
 			"media.position.y",
 			"color.cyan",
 			"media.mask.opacity",
-			"media.effect.1",
+			"media.effect.bank.1.select",
+			"media.effect.bank.1.strength",
+			"media.effect.bank.2.select",
+			"media.effect.bank.2.strength",
 		];
 		const inspection = {
 			...EMPTY_MEDIA_INSPECTION,
@@ -709,6 +715,7 @@ describe("Media pane disconnected configuration", () => {
 			"mask-controls",
 			"shapers",
 			"colour",
+			"effects",
 		]);
 		expect(model.controlSections[0]?.controls).toEqual(
 			expect.arrayContaining([
@@ -728,6 +735,17 @@ describe("Media pane disconnected configuration", () => {
 			id: "color.tint",
 			kind: "color",
 			value: "#ffffff",
+		});
+		expect(model.controlSections[5]?.controls[0]).toMatchObject({
+			id: "media.master.effect.opacity_cycle",
+			label: "Multiplier / Divider",
+			kind: "choice",
+			value: "0",
+			options: expect.arrayContaining([
+				{ value: "0", label: "Off" },
+				{ value: "96", label: "/2" },
+				{ value: "160", label: "2×" },
+			]),
 		});
 		expect(model.controlSections[1]?.controls).toEqual(
 			expect.arrayContaining([
@@ -866,7 +884,7 @@ describe("Media pane disconnected configuration", () => {
 		});
 	});
 
-	it("places native server effect controls inside their Effect slot", () => {
+	it("exposes exactly two ordered effect banks without per-layer preset editing", () => {
 		const server = {
 			fixture_id: "server-1",
 			name: "ToskLight Media Server",
@@ -881,44 +899,37 @@ describe("Media pane disconnected configuration", () => {
 				selectedServer: server,
 				selectedServerId: server.fixture_id,
 				selectedLayerId: "layer-1",
-				nativeEffects: [
-					{
-						index: 0,
-						effectType: "blur",
-						label: "Blur",
-						enabled: true,
-						mix: 0.5,
-						supported: true,
-						capabilityDetail: null,
-						parameters: [
-							{
-								id: "blur-amount",
-								label: "Blur amount",
-								value: 0.8,
-								defaultValue: 0.5,
-								minimum: 0,
-								maximum: 1,
-								step: 0.01,
-							},
-						],
-					},
-				],
 			}),
 		);
 
-		expect(model.controlSections.map((section) => section.id)).not.toContain(
-			"native",
-		);
-		expect(model.controlSections.at(-1)).toMatchObject({
-			id: "effects",
-			controls: expect.arrayContaining([
-				expect.objectContaining({ id: "effect-0-type", kind: "choice" }),
-				expect.objectContaining({ id: "effect-0-blur-amount", kind: "value" }),
+		const controls = model.controlSections.at(-1)?.controls ?? [];
+		expect(controls.map((control) => control.id)).toEqual([
+			"media.effect.bank.1.select",
+			"media.effect.bank.1.strength",
+			"media.effect.bank.2.select",
+			"media.effect.bank.2.strength",
+		]);
+		expect(controls[0]).toMatchObject({
+			label: "Effect Select",
+			kind: "choice",
+			value: "0",
+			options: expect.arrayContaining([
+				{ value: "0", label: "Off" },
+				{ value: "1", label: "Slot 1" },
+				{ value: "255", label: "Slot 255" },
 			]),
+		});
+		expect(controls[1]).toMatchObject({
+			label: "Effect Strength",
+			kind: "value",
+			value: 0,
+			minimum: 0,
+			maximum: 100,
+			display: "0%",
 		});
 	});
 
-	it("offers exactly the range the Media Server advertises for a parameter", () => {
+	it("projects independent live select and strength values for each bank", () => {
 		const server = {
 			fixture_id: "server-1",
 			name: "ToskLight Media Server",
@@ -933,67 +944,46 @@ describe("Media pane disconnected configuration", () => {
 				selectedServer: server,
 				selectedServerId: server.fixture_id,
 				selectedLayerId: "layer-1",
-				nativeEffects: [
+				effectLibrarySlots: [
+					{ slot: 12, name: "Soft Tunnel", status: "assigned" },
 					{
-						index: 0,
-						effectType: "kaleidoscope",
-						label: "Kaleidoscope",
-						enabled: true,
-						mix: 1,
-						supported: true,
-						capabilityDetail: null,
-						parameters: [
-							{
-								id: "kaleidoscope-repetitions",
-								label: "Mirror repetitions",
-								value: 6,
-								defaultValue: 6,
-								minimum: 1,
-								maximum: 16,
-								step: 1,
-							},
-							{
-								id: "kaleidoscope-angle",
-								label: "Angle",
-								value: 0,
-								defaultValue: 0,
-								minimum: -180,
-								maximum: 180,
-								step: 1,
-							},
-							{
-								id: "future-amount",
-								label: "Future amount",
-								value: 0.4,
-								defaultValue: 0.5,
-								minimum: null,
-								maximum: null,
-								step: null,
-							},
-						],
+						slot: 13,
+						status: "unsupported",
+						detail: "This preset needs a newer Pixel build.",
+					},
+				],
+				liveProgrammer: [
+					{
+						fixtureId: "layer-1",
+						attribute: "media.effect.bank.1.select",
+						value: { kind: "normalized", value: 12 / 255 },
+						programmerOrder: 0,
+						fade: false,
+						fadeMillis: null,
+						delayMillis: null,
+					},
+					{
+						fixtureId: "layer-1",
+						attribute: "media.effect.bank.1.strength",
+						value: { kind: "normalized", value: 0.5 },
+						programmerOrder: 1,
+						fade: false,
+						fadeMillis: null,
+						delayMillis: null,
 					},
 				],
 			}),
 		);
 
 		const controls = model.controlSections.at(-1)?.controls ?? [];
-		expect(
-			controls.find((control) => control.id === "effect-0-kaleidoscope-repetitions"),
-		).toMatchObject({
-			kind: "value",
-			minimum: 1,
-			maximum: 16,
-			step: 1,
-			displayFormat: "integer",
+		expect(controls[0]).toMatchObject({
+			value: "12",
+			options: expect.arrayContaining([
+				{ value: "12", label: "Slot 12 · Soft Tunnel" },
+				{ value: "13", label: "Slot 13 · Unsupported" },
+			]),
 		});
-		// The desk used to offer 360 here, and every value above 180 was refused.
-		expect(
-			controls.find((control) => control.id === "effect-0-kaleidoscope-angle"),
-		).toMatchObject({ minimum: -180, maximum: 180 });
-		// A Media Server too old to advertise still gets the conservative normalized amount.
-		expect(
-			controls.find((control) => control.id === "effect-0-future-amount"),
-		).toMatchObject({ minimum: 0, maximum: 1, displayFormat: "percent" });
+		expect(controls[1]).toMatchObject({ value: 50, display: "50%" });
 	});
 
 	it("shows percentage controls as percentages instead of raw DMX bytes", () => {

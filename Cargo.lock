@@ -4016,6 +4016,7 @@ dependencies = [
  "bytemuck",
  "media-codec",
  "media-domain",
+ "naga",
  "png 0.18.1",
  "pollster",
  "thiserror 2.0.20",

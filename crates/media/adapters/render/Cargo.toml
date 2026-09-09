@@ -21,6 +21,7 @@ winit.workspace = true
 [dev-dependencies]
 anyhow.workspace = true
 png.workspace = true
+naga = { version = "30", features = ["wgsl-in"] }
 # The reference renders encode a real HAP frame and put it on screen, so the compressed upload
 # path is proven rather than assumed.
 media-codec = { path = "../codec" }

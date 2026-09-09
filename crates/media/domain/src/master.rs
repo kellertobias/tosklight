@@ -8,6 +8,71 @@ use crate::address::MediaAddress;
 use crate::color::{FlipMirror, Tint};
 use crate::layer::ScalingMode;
 
+/// A fixed Layer Opacity Cycle rate relative to the detected beat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind", content = "factor")]
+pub enum BeatRatio {
+    #[default]
+    Disabled,
+    Divide(u8),
+    Unity,
+    Multiply(u8),
+}
+
+impl BeatRatio {
+    /// Broad, jitter-resistant DMX bands. Zero alone is Off so a fresh patch is neutral.
+    pub const fn from_dmx(value: u8) -> Self {
+        match value {
+            0 => Self::Disabled,
+            1..=31 => Self::Divide(16),
+            32..=63 => Self::Divide(8),
+            64..=95 => Self::Divide(4),
+            96..=127 => Self::Divide(2),
+            128..=159 => Self::Unity,
+            160..=191 => Self::Multiply(2),
+            192..=223 => Self::Multiply(4),
+            224..=239 => Self::Multiply(8),
+            240..=255 => Self::Multiply(16),
+        }
+    }
+
+    pub const fn dmx_range(self) -> (u8, u8) {
+        match self {
+            Self::Disabled => (0, 0),
+            Self::Divide(16) => (1, 31),
+            Self::Divide(8) => (32, 63),
+            Self::Divide(4) => (64, 95),
+            Self::Divide(2) => (96, 127),
+            Self::Unity => (128, 159),
+            Self::Multiply(2) => (160, 191),
+            Self::Multiply(4) => (192, 223),
+            Self::Multiply(8) => (224, 239),
+            Self::Multiply(16) => (240, 255),
+            // Construction outside the published set is normalized to Off.
+            Self::Divide(_) | Self::Multiply(_) => (0, 0),
+        }
+    }
+
+    pub fn factor(self) -> Option<f32> {
+        match self {
+            Self::Disabled => None,
+            Self::Divide(divisor) if divisor > 0 => Some(1.0 / f32::from(divisor)),
+            Self::Unity => Some(1.0),
+            Self::Multiply(multiplier) => Some(f32::from(multiplier)),
+            Self::Divide(_) => None,
+        }
+    }
+
+    pub fn label(self) -> String {
+        match self {
+            Self::Disabled => "Off".to_owned(),
+            Self::Divide(divisor) => format!("/{divisor}"),
+            Self::Unity => "1x".to_owned(),
+            Self::Multiply(multiplier) => format!("{multiplier}x"),
+        }
+    }
+}
+
 /// Output-edge shaping applied after the layers have been composited.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,6 +139,9 @@ pub struct MasterState {
     pub rotation: f32,
     #[serde(default)]
     pub shaper: MasterShaper,
+    /// The one fixed Master effect. Missing in old snapshots means Off.
+    #[serde(default)]
+    pub opacity_cycle: BeatRatio,
 }
 
 const fn one() -> f32 {
@@ -97,6 +165,7 @@ impl Default for MasterState {
             position_y: 0.0,
             rotation: 0.0,
             shaper: MasterShaper::default(),
+            opacity_cycle: BeatRatio::Disabled,
         }
     }
 }
@@ -143,6 +212,29 @@ mod tests {
         assert_eq!((master.mask_position_x, master.mask_position_y), (0.0, 0.0));
         assert_eq!((master.scale_x, master.scale_y), (1.0, 1.0));
         assert_eq!(master.shaper, MasterShaper::default());
+        assert_eq!(master.opacity_cycle, BeatRatio::Disabled);
+    }
+
+    #[test]
+    fn opacity_cycle_ratio_has_stable_dmx_bands_and_off_home() {
+        let expected = [
+            (0, BeatRatio::Disabled),
+            (1, BeatRatio::Divide(16)),
+            (32, BeatRatio::Divide(8)),
+            (64, BeatRatio::Divide(4)),
+            (96, BeatRatio::Divide(2)),
+            (128, BeatRatio::Unity),
+            (160, BeatRatio::Multiply(2)),
+            (192, BeatRatio::Multiply(4)),
+            (224, BeatRatio::Multiply(8)),
+            (240, BeatRatio::Multiply(16)),
+            (255, BeatRatio::Multiply(16)),
+        ];
+        for (raw, ratio) in expected {
+            assert_eq!(BeatRatio::from_dmx(raw), ratio, "{raw}");
+        }
+        assert_eq!(BeatRatio::Divide(4).factor(), Some(0.25));
+        assert_eq!(BeatRatio::Multiply(4).factor(), Some(4.0));
     }
 
     #[test]

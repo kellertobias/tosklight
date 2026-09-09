@@ -97,6 +97,8 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
             let Some(state) = state.output(output.configuration.id) else {
                 continue;
             };
+            let resolved_state = crate::effect_banks::resolve_output(state, &live);
+            let state = &resolved_state;
 
             let prepared = output.pipeline.prepare(
                 state,

@@ -94,6 +94,14 @@ export interface MediaLibraryItem {
 	disabled?: boolean;
 }
 
+/** Native Pixel state used to name a numbered effect preset without moving its settings into the show. */
+export interface MediaEffectLibrarySlot {
+	slot: number;
+	name?: string;
+	status: "assigned" | "unassigned" | "unsupported";
+	detail?: string;
+}
+
 interface MediaControlBase {
 	id: string;
 	label: string;

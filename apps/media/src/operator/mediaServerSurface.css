@@ -475,6 +475,30 @@
 	background: var(--panel);
 }
 
+.media-effects-library-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+	min-height: 0;
+	height: 100%;
+}
+
+.media-effects-library-pool,
+.media-effects-library-inspector {
+	min-height: 0;
+}
+
+.media-effect-slot-editor {
+	display: grid;
+	gap: 14px;
+}
+
+@media (max-width: 860px) {
+	.media-effects-library-layout {
+		grid-template-columns: 1fr;
+		grid-template-rows: minmax(280px, 1fr) auto;
+	}
+}
+
 .media-library-folder-pool.ui-button-grid {
 	--button-grid-gap: 6px;
 	padding: 8px;

@@ -197,7 +197,12 @@ mod tests {
             .iter()
             .map(|channel| channel.name.as_str())
             .collect();
-        for expected in ["Effect 1", "Effect 4", "Playback BPM", "Mask opacity"] {
+        for expected in [
+            "Effect 1 Select",
+            "Effect 2 Strength",
+            "Playback BPM",
+            "Mask opacity",
+        ] {
             assert!(names.contains(&expected), "{expected} is missing");
         }
     }

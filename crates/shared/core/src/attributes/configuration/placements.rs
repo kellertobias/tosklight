@@ -96,7 +96,6 @@ fn canonical_placements() -> Vec<PlacedAttribute> {
         ("media.play_mode", Control, 1, 2),
         ("media.playback_speed", Control, 1, 3),
         ("media.playback_bpm", Control, 1, 4),
-        ("media.playback.blur", Control, 1, 6),
         ("media.scaling_mode", Control, 1, 5),
         ("media.folder", Media, 1, 1),
         ("media.file", Media, 1, 2),
@@ -120,10 +119,11 @@ fn canonical_placements() -> Vec<PlacedAttribute> {
         ("media.mask.scale.y", Media, 5, 2),
         ("media.mask.position.x", Media, 5, 3),
         ("media.mask.position.y", Media, 5, 4),
-        ("media.effect.1", Media, 4, 1),
-        ("media.effect.2", Media, 4, 2),
-        ("media.effect.3", Media, 4, 3),
-        ("media.effect.4", Media, 4, 4),
+        ("media.effect.bank.1.select", Media, 4, 1),
+        ("media.effect.bank.1.strength", Media, 4, 2),
+        ("media.effect.bank.2.select", Media, 4, 3),
+        ("media.effect.bank.2.strength", Media, 4, 4),
+        ("media.master.effect.opacity_cycle", Media, 4, 5),
     ]
 }
 

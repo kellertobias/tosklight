@@ -387,6 +387,33 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
     indexed("media.effect.2", "Media Effect 2", AttributeClass::Media),
     indexed("media.effect.3", "Media Effect 3", AttributeClass::Media),
     indexed("media.effect.4", "Media Effect 4", AttributeClass::Media),
+    indexed(
+        "media.effect.bank.1.select",
+        "Effect Bank 1 Select",
+        AttributeClass::Media,
+    ),
+    continuous(
+        "media.effect.bank.1.strength",
+        "Effect Bank 1 Strength",
+        AttributeClass::Media,
+        "percent",
+    ),
+    indexed(
+        "media.effect.bank.2.select",
+        "Effect Bank 2 Select",
+        AttributeClass::Media,
+    ),
+    continuous(
+        "media.effect.bank.2.strength",
+        "Effect Bank 2 Strength",
+        AttributeClass::Media,
+        "percent",
+    ),
+    indexed(
+        "media.master.effect.opacity_cycle",
+        "Layer Opacity Cycle",
+        AttributeClass::Media,
+    ),
     // Fixture-specific control channels.
     //
     // Every shipped profile addresses these, and until they were registered each one fell back to

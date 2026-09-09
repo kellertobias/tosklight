@@ -18,6 +18,7 @@ mod catalog_publication;
 mod citp;
 mod citp_console_presence;
 mod dmx;
+mod effect_banks;
 mod fullscreen_hint;
 mod layer_pipeline;
 mod layer_sources;

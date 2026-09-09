@@ -108,7 +108,6 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Control | P1/E3 | **Playback Speed** (`media.playback_speed`) | — |
 | Control | P1/E4 | **Playback BPM** (`media.playback_bpm`) | — |
 | Control | P1/E5 | **Scaling Mode** (`media.scaling_mode`) | — |
-| Control | P1/E6 | **Blur** (`media.playback.blur`) | — |
 | Control | P2/E1 | **Fixture Control** (`fixture.control`) | — |
 | Control | P2/E2 | **Special Control** (`fixture.special_control`) | — |
 | Control | P2/E3 | **Function** (`fixture.function`) | — |
@@ -134,10 +133,11 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Media | P2/E4 | **Audio Repeat** (`audio.repeat`) | — |
 | Media | P3/E3 | **Scale X** (`media.scale.x`) | — |
 | Media | P3/E4 | **Scale Y** (`media.scale.y`) | — |
-| Media | P4/E1 | **Media Effect 1** (`media.effect.1`) | — |
-| Media | P4/E2 | **Media Effect 2** (`media.effect.2`) | — |
-| Media | P4/E3 | **Media Effect 3** (`media.effect.3`) | — |
-| Media | P4/E4 | **Media Effect 4** (`media.effect.4`) | — |
+| Media | P4/E1 | **Effect Bank 1 Select** (`media.effect.bank.1.select`) | — |
+| Media | P4/E2 | **Effect Bank 1 Strength** (`media.effect.bank.1.strength`) | — |
+| Media | P4/E3 | **Effect Bank 2 Select** (`media.effect.bank.2.select`) | — |
+| Media | P4/E4 | **Effect Bank 2 Strength** (`media.effect.bank.2.strength`) | — |
+| Media | P4/E5 | **Layer Opacity Cycle** (`media.master.effect.opacity_cycle`) | — |
 | Media | P5/E1 | **Mask Scale X** (`media.mask.scale.x`) | — |
 | Media | P5/E2 | **Mask Scale Y** (`media.mask.scale.y`) | — |
 | Media | P5/E3 | **Mask Position X** (`media.mask.position.x`) | — |
@@ -178,7 +178,6 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | **Play Mode** | **Play Mode** (`media.play_mode`) |
 | **Playback Speed** | **Playback Speed** (`media.playback_speed`) |
 | **Playback BPM** | **Playback BPM** (`media.playback_bpm`) |
-| **Blur** | **Blur** (`media.playback.blur`) |
 | **Scaling Mode** | **Scaling Mode** (`media.scaling_mode`) |
 | **Position X** | **Position X** (`media.position.x`) |
 | **Position Y** | **Position Y** (`media.position.y`) |
@@ -191,10 +190,11 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | **Mask Opacity** | **Mask Opacity** (`media.mask.opacity`) |
 | **Invert Mask** | **Invert Mask** (`media.mask.invert`) |
 | **Flip / Mirror** | **Flip / Mirror** (`media.flip_mirror`) |
-| **Media Effect 1** | **Media Effect 1** (`media.effect.1`) |
-| **Media Effect 2** | **Media Effect 2** (`media.effect.2`) |
-| **Media Effect 3** | **Media Effect 3** (`media.effect.3`) |
-| **Media Effect 4** | **Media Effect 4** (`media.effect.4`) |
+| **Effect Bank 1 Select** | **Effect Bank 1 Select** (`media.effect.bank.1.select`) |
+| **Effect Bank 1 Strength** | **Effect Bank 1 Strength** (`media.effect.bank.1.strength`) |
+| **Effect Bank 2 Select** | **Effect Bank 2 Select** (`media.effect.bank.2.select`) |
+| **Effect Bank 2 Strength** | **Effect Bank 2 Strength** (`media.effect.bank.2.strength`) |
+| **Layer Opacity Cycle** | **Layer Opacity Cycle** (`media.master.effect.opacity_cycle`) |
 | **Fixture Control** | **Fixture Control** (`fixture.control`) |
 | **Special Control** | **Special Control** (`fixture.special_control`) |
 | **Function** | **Function** (`fixture.function`) |

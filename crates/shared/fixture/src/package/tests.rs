@@ -1761,7 +1761,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     let profile = shipped_profile("tosklight--media-server.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "Media Server");
-    assert_eq!(profile.revision, 6);
+    assert_eq!(profile.revision, 7);
     assert_eq!(
         profile.direct_control_protocols,
         vec![crate::DirectControlProtocol::Citp],
@@ -1770,8 +1770,8 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     assert_eq!(profile.modes.len(), 2);
 
     for (mode, layer_count, footprint) in [
-        (&profile.modes[0], 2_usize, 118_u16),
-        (&profile.modes[1], 8_usize, 352_u16),
+        (&profile.modes[0], 2_usize, 119_u16),
+        (&profile.modes[1], 8_usize, 353_u16),
     ] {
         assert_eq!(
             mode.splits,
@@ -1905,10 +1905,10 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
             "media.mask.scale.y",
             "media.mask.invert",
             "media.mask.opacity",
-            "media.effect.1",
-            "media.effect.2",
-            "media.effect.3",
-            "media.effect.4",
+            "media.effect.bank.1.select",
+            "media.effect.bank.1.strength",
+            "media.effect.bank.2.select",
+            "media.effect.bank.2.strength",
         ] {
             assert_eq!(
                 mode.channels
@@ -1919,6 +1919,14 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
                 "every layer must expose canonical {attribute} encoder ownership"
             );
         }
+        assert_eq!(
+            mode.channels
+                .iter()
+                .filter(|channel| &*channel.attribute.0 == "media.master.effect.opacity_cycle")
+                .count(),
+            1,
+            "the shared Master must own exactly one Layer Opacity Cycle control"
+        );
         for attribute in [
             "media.scaling_mode",
             "media.position.x",

@@ -970,7 +970,12 @@ mod attribute_registry_tests {
         for compatibility_only in [
             "control.mode",
             "control.speed",
+            "media.effect.1",
+            "media.effect.2",
+            "media.effect.3",
+            "media.effect.4",
             "media.opacity",
+            "media.playback.blur",
             "media.rotation",
         ] {
             assert!(
@@ -978,6 +983,19 @@ mod attribute_registry_tests {
                     .placement_for(&AttributeKey(compatibility_only.into()))
                     .is_none(),
                 "{compatibility_only} must not occupy a default encoder"
+            );
+        }
+        for (attribute, slot) in [
+            ("media.effect.bank.1.select", 1),
+            ("media.effect.bank.1.strength", 2),
+            ("media.effect.bank.2.select", 3),
+            ("media.effect.bank.2.strength", 4),
+            ("media.master.effect.opacity_cycle", 5),
+        ] {
+            assert_eq!(
+                recommended.placement_for(&AttributeKey(attribute.into())),
+                Some(EncoderPlacement::new(EncoderGroup::Media, 4, slot)),
+                "unexpected effect-bank placement for {attribute}"
             );
         }
         recommended.validate().unwrap();

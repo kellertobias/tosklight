@@ -2,6 +2,10 @@
 
 The Media Library is addressed deliberately so the Desk can recall the same content without depending on filenames. Ordinary media uses folders `1`–`199`, text uses `200`–`249`, and generated visualizers use `250`–`255`. Within an addressed folder, file `0` and file `255` are blank; usable content occupies the remaining slots.
 
+The **Effects** tab owns the 255 numbered presets used by playback. Slot **0** is always **Off**;
+slots **1–255** may be assigned, named, cleared, and configured. Editing a preset updates every
+layer bank that selects that number—effect settings are not copied into individual layers or cues.
+
 Select an ordinary media folder to give it an operator-facing name. The name is saved when you leave the field or select another folder and remains attached to that folder after Pixel restarts. Empty folders use a subdued neutral card treatment so populated folders remain more prominent; the selected empty folder still keeps a clear selection outline.
 
 ## Upload a slot

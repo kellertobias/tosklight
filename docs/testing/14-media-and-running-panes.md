@@ -2,6 +2,23 @@
 
 These scenarios are the operator acceptance contract for the capability-gated Media operating surface and the authoritative Running overview.
 
+## MEDIA-005 — two effect banks and shared presets
+
+Given a Media Server is patched and its Effects library assigns two distinct presets, when an
+operator selects them in Bank 1 and Bank 2 and changes each Effect Strength, then both the Media
+Server and ToskLight Control show exactly those two ordered banks with the literal controls
+**Effect Select** and **Effect Strength**. Slot 0 reads Off, missing slots remain visibly
+unassigned, and the isolated layer preview matches the final output ordering.
+
+When the operator edits either preset in the Effects library, every bank selecting that slot uses
+the new settings without changing its Select or Strength value. The legacy four-amount personality
+continues to decode with its previous meaning.
+
+Given loaded layers have dimmer above zero, when Master **Layer Opacity Cycle** is enabled at a beat
+multiplier or divider, then the effective opacity advances in stable layer order on that timing.
+Layers without loaded media or with dimmer zero are skipped, and their authoritative dimmer values
+remain unchanged.
+
 ## MEDIA-001 — eligibility and unavailable state
 
 Given a show without a patched physical media-server master or configured CITP/MSEX connection, **Media** remains present through **Shift + Stage** in Built-ins and through **Open Window**. Opening it states that no CITP Media Server is available while retaining all 0–255 folder/file choices and the Content/Mask configuration surface. When an eligible fixture exists, advertised names and live data reconcile into those same stable choices; unadvertised values remain configurable. A saved Media pane remains in the Desktop when its server disconnects, its patch disappears, or a required capability becomes unavailable; it explains that state and does not silently select another server or layer.

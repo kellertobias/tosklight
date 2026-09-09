@@ -80,8 +80,7 @@ describe("the production Media pane", () => {
 			runtime: {
 				administrationIp: "192.0.2.10",
 				dataDirectory: "/Users/Shared/ToskLight Media",
-				configurationFile:
-					"/Users/Shared/ToskLight Media/media-server.json",
+				configurationFile: "/Users/Shared/ToskLight Media/media-server.json",
 				libraryDirectory: "/Users/Shared/ToskLight Media/Media",
 				portable: true,
 				outputs: [
@@ -446,532 +445,56 @@ describe("the production Media pane", () => {
 		expect(server.outputs[0].playbackTakeover).toBe(false);
 	});
 
-	it("edits a typed Analog TV slot with the documented defaults", async () => {
+	it("controls exactly two effect banks and the fixed master opacity cycle", async () => {
 		const server = stubServer();
 		render(<MediaPanePage />);
 		await userEvent.click(
 			await screen.findByRole("switch", { name: "Take over playback" }),
 		);
 		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Analog TV");
 
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"analog-tv",
-			),
-		);
-		expect(screen.getByLabelText("Slot 1 · TV curvature")).toHaveValue("30");
-		expect(screen.getByLabelText("Slot 1 · Distortion")).toHaveValue("18");
-		expect(screen.getByLabelText("Slot 1 · Image grain")).toHaveValue("20");
-		expect(screen.getByLabelText("Slot 1 · Glitching")).toHaveValue("8");
-
-		fireEvent.input(screen.getByLabelText("Slot 1 · Image grain"), {
-			target: { value: "65" },
-		});
-		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[0].parameters.find(
-					(parameter) => parameter.id === "image-grain",
-				)?.value,
-			).toBeCloseTo(0.65),
-		);
-	});
-
-	it("edits a typed Digital TV slot with five distinct DVB-T controls", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(2, "Digital TV");
-
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[1].effectType).toBe(
-				"digital-tv",
-			),
-		);
-		expect(screen.getByLabelText("Slot 2 · Compression damage")).toHaveValue(
-			"35",
-		);
-		expect(screen.getByLabelText("Slot 2 · Block size")).toHaveValue("35");
-		expect(screen.getByLabelText("Slot 2 · Tile displacement")).toHaveValue(
-			"25",
-		);
-		expect(screen.getByLabelText("Slot 2 · Chroma damage")).toHaveValue("20");
-		expect(screen.getByLabelText("Slot 2 · Glitching")).toHaveValue("15");
-
-		fireEvent.input(screen.getByLabelText("Slot 2 · Tile displacement"), {
-			target: { value: "70" },
-		});
-		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[1].parameters.find(
-					(parameter) => parameter.id === "tile-displacement",
-				)?.value,
-			).toBeCloseTo(0.7),
-		);
-	});
-
-	it("configures the coordinated layer opacity cycle interval", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Layer opacity cycle");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"opacity-cycle",
-			),
-		);
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 · Interval" }),
-			).getByRole("radio", { name: "Every half beat" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].parameters[0].value).toBe(
-				1,
-			),
-		);
-	});
-
-	it("edits a live Blur amount and can bypass the effect", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Blur");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe("blur"),
-		);
-		expect(screen.getByLabelText("Slot 1 · Blur amount")).toHaveValue("35");
-		fireEvent.input(screen.getByLabelText("Slot 1 · Blur amount"), {
-			target: { value: "80" },
-		});
-		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[0].parameters[0].value,
-			).toBeCloseTo(0.8),
-		);
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("configures live Feedback persistence, motion, direction, and bypass", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Feedback");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"feedback",
-			),
-		);
-		expect(screen.getByLabelText("Slot 1 · Feedback amount")).toHaveValue("82");
-		expect(screen.getByLabelText("Slot 1 · Motion speed")).toHaveValue("25");
-		fireEvent.input(screen.getByLabelText("Slot 1 · Feedback amount"), {
-			target: { value: "70" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Motion speed"), {
-			target: { value: "40" },
-		});
-		await chooseNamedChoice("Slot 1 · Motion direction", "Rotate Right");
-		await waitFor(() => {
-			const parameters = server.outputs[0].layers[0].effects[0].parameters;
-			expect(parameters[0].value).toBeCloseTo(0.7);
-			expect(parameters[1].value).toBeCloseTo(0.4);
-			expect(parameters[2].value).toBe(5);
+		expect(screen.getByRole("tab", { name: "Bank 1" })).toBeInTheDocument();
+		expect(screen.getByRole("tab", { name: "Bank 2" })).toBeInTheDocument();
+		expect(
+			screen.queryByRole("tab", { name: "Bank 3" }),
+		).not.toBeInTheDocument();
+		const layerEffects = screen.getByRole("tabpanel", {
+			name: "Effects controls",
 		});
 		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
+			within(layerEffects).getByRole("button", { name: "Off" }),
 		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("configures live Beat Move amount, direction, return time, and bypass", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
 		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
+			screen.getByRole("option", { name: "2 · Unassigned" }),
 		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Beat Move");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"beat-move",
-			),
-		);
-		expect(screen.getByLabelText("Slot 1 · Movement amount")).toHaveValue("15");
-		expect(screen.getByLabelText("Slot 1 · Return time")).toHaveValue("0.35");
-		fireEvent.input(screen.getByLabelText("Slot 1 · Movement amount"), {
-			target: { value: "30" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Return time"), {
-			target: { value: "0.8" },
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 · Direction" }),
-			).getByRole("radio", { name: "Right" }),
-		);
-		await waitFor(() => {
-			const parameters = server.outputs[0].layers[0].effects[0].parameters;
-			expect(parameters[0].value).toBeCloseTo(0.3);
-			expect(parameters[1].value).toBe(3);
-			expect(parameters[2].value).toBeCloseTo(0.8);
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("configures live Kaleidoscope repetitions, angle, and bypass", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Kaleidoscope");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"kaleidoscope",
-			),
-		);
-		expect(screen.getByLabelText("Slot 1 · Angle")).toHaveValue("0");
-		await chooseNamedChoice("Slot 1 · Mirror repetitions", "8");
-		fireEvent.input(screen.getByLabelText("Slot 1 · Angle"), {
-			target: { value: "37" },
-		});
-		await waitFor(() => {
-			const parameters = server.outputs[0].layers[0].effects[0].parameters;
-			expect(parameters[0].value).toBe(8);
-			expect(parameters[1].value).toBe(37);
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("configures live Rasterized Print mode, dot size, and bypass", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Rasterized Print");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"rasterize",
-			),
-		);
-		expect(screen.getByLabelText("Slot 1 · Dot size")).toHaveValue("8");
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 · Print mode" }),
-			).getByRole("radio", { name: "CMYK" }),
-		);
-		fireEvent.input(screen.getByLabelText("Slot 1 · Dot size"), {
-			target: { value: "18" },
-		});
-		await waitFor(() => {
-			const parameters = server.outputs[0].layers[0].effects[0].parameters;
-			expect(parameters[0].value).toBe(1);
-			expect(parameters[1].value).toBe(18);
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("configures live Beat Scan width, edge falloff, travel time, and bypass", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Beat Scan");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"beat-scan",
-			),
-		);
-		expect(screen.queryByLabelText(/spawn count/i)).not.toBeInTheDocument();
-		fireEvent.input(screen.getByLabelText("Slot 1 · Scan width"), {
-			target: { value: "12" },
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 · Edge" }),
-			).getByRole("radio", { name: "Soft" }),
-		);
-		fireEvent.input(screen.getByLabelText("Slot 1 · Edge falloff"), {
-			target: { value: "70" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Travel time"), {
-			target: { value: "2.25" },
-		});
-		await waitFor(() => {
-			const parameters = server.outputs[0].layers[0].effects[0].parameters;
-			expect(parameters[0].value).toBeCloseTo(0.12);
-			expect(parameters[1].value).toBe(1);
-			expect(parameters[2].value).toBeCloseTo(0.7);
-			expect(parameters[3].value).toBeCloseTo(2.25);
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("configures live Beat Scale and Turn amounts, independent turn, decay, and bypass", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Beat Scale and Turn");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"beat-scale-turn",
-			),
-		);
-		fireEvent.input(screen.getByLabelText("Slot 1 · Scale amount"), {
-			target: { value: "22" },
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 · Turn" }),
-			).getByRole("radio", { name: "On" }),
-		);
-		fireEvent.input(screen.getByLabelText("Slot 1 · Rotation amount"), {
-			target: { value: "-7" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Return time"), {
-			target: { value: "0.8" },
-		});
-		await waitFor(() => {
-			const parameters = server.outputs[0].layers[0].effects[0].parameters;
-			expect(parameters[0].value).toBeCloseTo(0.22);
-			expect(parameters[1].value).toBe(1);
-			expect(parameters[2].value).toBe(-7);
-			expect(parameters[3].value).toBeCloseTo(0.8);
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("configures live Beat Grid Wave density, height, origin, colour, timing, and bypass", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Beat Grid Wave");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"beat-grid-wave",
-			),
-		);
-		fireEvent.input(screen.getByLabelText("Slot 1 · Grid density"), {
-			target: { value: "36" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Wave height"), {
-			target: { value: "72" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Travel time"), {
-			target: { value: "1.8" },
-		});
-		await chooseNamedChoice("Slot 1 · Wave origin", "Left");
-		fireEvent.input(screen.getByLabelText("Slot 1 · Grid hue"), {
-			target: { value: "280" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Brightness"), {
-			target: { value: "140" },
-		});
-		await waitFor(() => {
-			const parameters = server.outputs[0].layers[0].effects[0].parameters;
-			expect(parameters.map(({ value }) => value)).toEqual([
-				36, 0.72, 1.8, 4, 280, 1.4,
-			]);
-		});
-		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("configures live Beat Form Flash size, lifetime, density, variation, and bypass", async () => {
-		const server = stubServer();
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
-		);
-		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-		await chooseEffect(1, "Beat Form Flash");
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].effectType).toBe(
-				"beat-form-flash",
-			),
-		);
-		fireEvent.input(screen.getByLabelText("Slot 1 · Start size"), {
-			target: { value: "240" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Lifetime"), {
-			target: { value: "1.6" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Forms per beat"), {
-			target: { value: "3" },
-		});
-		fireEvent.input(screen.getByLabelText("Slot 1 · Variation"), {
+		fireEvent.input(screen.getByRole("slider", { name: "Effect Strength" }), {
 			target: { value: "65" },
 		});
 		await waitFor(() => {
-			const parameters = server.outputs[0].layers[0].effects[0].parameters;
-			expect(parameters.map(({ value }) => value)).toEqual([2.4, 1.6, 3, 0.65]);
+			expect(server.outputs[0].layers[0].effectBanks[0]).toEqual({
+				index: 0,
+				select: 2,
+				strength: 0.65,
+			});
 		});
+
 		await userEvent.click(
-			within(
-				screen.getByRole("radiogroup", { name: "Slot 1 state" }),
-			).getByRole("radio", { name: "Bypassed" }),
-		);
-		await waitFor(() =>
-			expect(server.outputs[0].layers[0].effects[0].enabled).toBe(false),
-		);
-	});
-
-	it("shows an actionable capability error for an effect this build cannot render", async () => {
-		const output = anOutput();
-		output.layers[0].effects[0] = {
-			index: 0,
-			effectType: "future-effect",
-			label: "future-effect",
-			enabled: true,
-			mix: 1,
-			supported: false,
-			capabilityDetail:
-				"This Media Server build cannot render the selected effect.",
-			parameters: [],
-		};
-		stubServer({ outputs: [output] });
-		render(<MediaPanePage />);
-
-		await userEvent.click(await screen.findByRole("tab", { name: "Effects" }));
-		expect(screen.getByRole("status")).toHaveTextContent(
-			"Not supported by this layer · This Media Server build cannot render the selected effect.",
-		);
-	});
-
-	it("routes slot 1 to the active visualizer and restores normal effects for media", async () => {
-		const output = anOutput();
-		output.layers[0].address = {
-			folder: 250,
-			file: 1,
-			class: "generated-visualizer",
-		};
-		const server = stubServer({ outputs: [output] });
-		render(<MediaPanePage />);
-		await userEvent.click(
-			await screen.findByRole("switch", { name: "Take over playback" }),
+			screen.getByRole("button", { name: "Master output" }),
 		);
 		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
-
-		expect(screen.queryByText("Slot 1 effect")).not.toBeInTheDocument();
-		expect(screen.getByText("Slot 1 · Equalizer Bars")).toBeInTheDocument();
-		const size = screen.getByLabelText("Slot 1 · Size");
-		const bloom = screen.getByLabelText("Slot 1 · Bloom");
-		expect(bloom).toHaveAttribute("min", "0");
-		expect(bloom).toHaveAttribute("max", "1");
-		fireEvent.input(bloom, { target: { value: "0.4" } });
-		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[0].visualizerParameters?.amount,
-			).toBeCloseTo(0.4),
-		);
-		expect(size).toHaveAttribute("min", "0.001");
-		expect(size).toHaveAttribute("max", "1");
-		fireEvent.pointerDown(size);
-		fireEvent.input(size, { target: { value: "0.2" } });
-		fireEvent.pointerUp(size);
-		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[0].visualizerParameters?.size,
-			).toBeCloseTo(0.2),
-		);
-		expect(server.writes).toContain(
-			"/outputs/11111111-1111-4111-8111-111111111111/layers/0/update",
-		);
-
+		expect(
+			screen.queryByRole("tab", { name: "Bank 1" }),
+		).not.toBeInTheDocument();
+		const masterEffects = screen.getByRole("tabpanel", {
+			name: "Effects controls",
+		});
 		await userEvent.click(
-			screen.getByRole("radio", { name: "Reset parameters" }),
+			within(masterEffects).getByRole("button", { name: "Off" }),
 		);
+		await userEvent.click(screen.getByRole("option", { name: "4x" }));
 		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[0].visualizerParameters?.size,
-			).toBeCloseTo(0.05),
+			expect(server.outputs[0].master.opacityCycleDmx).toBe(192),
 		);
-
-		server.outputs[0].layers[0].address = {
-			folder: 1,
-			file: 1,
-			class: "library",
-		};
-		writeResource(KEYS.outputs, structuredClone(server.outputs));
-		await waitFor(() =>
-			expect(screen.getByText("Slot 1 effect")).toBeInTheDocument(),
-		);
-		expect(screen.queryByLabelText("Slot 1 · Size")).not.toBeInTheDocument();
 	});
 
 	it("filters Media, VIS, and Text address spaces without writing playback", async () => {

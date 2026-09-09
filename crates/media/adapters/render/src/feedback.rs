@@ -20,11 +20,13 @@ struct FeedbackUniform {
     direction: f32,
     reset: f32,
     delta_seconds: f32,
-    _padding: [f32; 3],
+    clock_seconds: f32,
+    _padding: [f32; 2],
 }
 
 struct History {
     textures: [SourceTexture; 2],
+    source_size: Size,
     current: usize,
     active: bool,
     address: MediaAddress,
@@ -33,12 +35,16 @@ struct History {
 
 impl History {
     fn new(gpu: &Gpu, size: Size, address: MediaAddress) -> Self {
+        // Temporal feedback does not need source-resolution detail. Half-resolution ping-pong
+        // targets cut both retained GPU memory and feedback fill work to one quarter.
+        let target_size = feedback_target_size(size);
         let target = || {
-            SourceTexture::render_target(gpu, size)
+            SourceTexture::render_target(gpu, target_size)
                 .expect("a feedback target matches an already accepted source size")
         };
         Self {
             textures: [target(), target()],
+            source_size: size,
             current: 0,
             active: false,
             address,
@@ -47,7 +53,7 @@ impl History {
     }
 
     fn matches(&self, size: Size, address: MediaAddress) -> bool {
-        self.textures[0].size() == size && self.address == address
+        self.source_size == size && self.address == address
     }
 }
 
@@ -167,7 +173,9 @@ impl FeedbackProcessor {
                 direction: parameters.direction.parameter(),
                 reset: f32::from(u8::from(reset)),
                 delta_seconds,
-                _padding: [0.0; 3],
+                // A bounded clock preserves sub-frame precision after days of uptime.
+                clock_seconds: (now.as_micros() % 1_000_000_000) as f32 / 1_000_000.0,
+                _padding: [0.0; 2],
             };
             self.gpu
                 .queue
@@ -223,12 +231,9 @@ impl FeedbackProcessor {
             history.active = true;
             history.last_frame = Some(now);
         }
-        for (key, history) in &mut self.histories {
-            if !active.contains(key) {
-                history.active = false;
-                history.last_frame = None;
-            }
-        }
+        // Release two GPU textures as soon as a feedback path is bypassed. Re-enabling starts
+        // from live pixels already, so retaining inactive histories only consumed GPU memory.
+        self.histories.retain(|key, _| active.contains(key));
     }
 
     pub(crate) fn source<'a>(&'a self, layer: &'a LayerDraw<'_>) -> &'a wgpu::TextureView {
@@ -251,6 +256,10 @@ fn feedback(layer: &LayerState) -> Option<(FeedbackParameters, f32, u32)> {
 
 fn history_key(address: MediaAddress, seed: u32) -> u64 {
     (u64::from(seed) << 16) | (u64::from(address.folder) << 8) | u64::from(address.file)
+}
+
+fn feedback_target_size(source: Size) -> Size {
+    Size::new(source.width.div_ceil(2), source.height.div_ceil(2))
 }
 
 fn layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -318,10 +327,30 @@ mod tests {
     }
 
     #[test]
-    fn all_six_motion_directions_have_stable_shader_values() {
+    fn all_motion_modes_have_stable_shader_values() {
         for (index, direction) in FeedbackMotion::ALL.into_iter().enumerate() {
             assert_eq!(direction.parameter(), index as f32);
             assert_eq!(FeedbackMotion::from_parameter(index as f32), direction);
         }
+    }
+
+    #[test]
+    fn feedback_history_uses_one_quarter_the_source_pixels() {
+        assert_eq!(
+            feedback_target_size(Size::new(1920, 1080)),
+            Size::new(960, 540)
+        );
+        assert_eq!(feedback_target_size(Size::new(1, 3)), Size::new(1, 2));
+    }
+
+    #[test]
+    fn shake_and_tunnel_feedback_shader_is_valid_wgsl() {
+        let module = naga::front::wgsl::parse_str(include_str!("shaders/feedback.wgsl")).unwrap();
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&module)
+        .unwrap();
     }
 }

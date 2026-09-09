@@ -33,6 +33,7 @@ const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/library": () => <LibraryPage />,
 	"/visualizers": () => <LibraryPage mode="visualizers" />,
 	"/text": () => <LibraryPage mode="text" />,
+	"/effects": () => <LibraryPage mode="effects" />,
 	"/audio": AudioPage,
 	"/dmx": DmxPage,
 	"/settings": SettingsPage,
@@ -43,6 +44,7 @@ const SECTION_BY_PATH: Record<RoutePath, MediaServerSection> = {
 	"/library": "library",
 	"/visualizers": "library",
 	"/text": "library",
+	"/effects": "library",
 	"/audio": "audio",
 	"/dmx": "dmx",
 	"/settings": "settings",
@@ -71,11 +73,14 @@ function AppSurface() {
 		path === "/library" ||
 		path === "/visualizers" ||
 		path === "/text" ||
+		path === "/effects" ||
 		path === "/audio" ||
 		path === "/dmx" ||
 		path === "/settings";
 	const libraryMode =
-		path === "/visualizers"
+		path === "/effects"
+			? "effects"
+			: path === "/visualizers"
 			? "visualizers"
 			: path === "/text"
 				? "text"
@@ -107,16 +112,18 @@ function AppSurface() {
 						{pageOwnsWindow ? (
 							path === "/library" ||
 							path === "/visualizers" ||
-							path === "/text" ? (
+							path === "/text" || path === "/effects" ? (
 								<LibraryPage
 									mode={libraryMode}
 									onModeChange={(mode) =>
 										navigate(
 											mode === "media"
 												? "/library"
-												: mode === "visualizers"
-													? "/visualizers"
-													: "/text",
+											: mode === "visualizers"
+												? "/visualizers"
+												: mode === "text"
+													? "/text"
+													: "/effects",
 										)
 									}
 								/>

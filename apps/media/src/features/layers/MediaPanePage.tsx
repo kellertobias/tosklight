@@ -24,6 +24,7 @@ import type {
 } from "../../shared/api/generated/media-wire";
 import {
 	useCatalog,
+	useEffects,
 	useRuntime,
 	useText,
 	useVisualizers,
@@ -53,6 +54,7 @@ function MediaPanePageContent() {
 	const runtime = useRuntime();
 	const text = useText();
 	const visualizers = useVisualizers();
+	const effects = useEffects();
 	const layers = useMemo(
 		() =>
 			(outputs.data ?? []).flatMap((output) =>
@@ -566,10 +568,10 @@ function MediaPanePageContent() {
 								],
 							},
 							{
-								...effectSection(
-									selected.layer.effects,
+								...effectBankSection(
+									selected.layer.effectBanks,
+									effects.data ?? [],
 									!takeover,
-									displayedVisualizer,
 								),
 							},
 						]
@@ -763,6 +765,15 @@ function tintChange(value: string) {
 
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
+	const bank = /^media\.effect\.bank\.(1|2)\.(select|strength)$/.exec(id);
+	if (bank) {
+		return {
+			effectBank: Number(bank[1]) - 1,
+			...(bank[2] === "select"
+				? { effectSelect: number }
+				: { effectStrength: number / 100 }),
+		};
+	}
 	const effect =
 		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|blur-amount|feedback-amount|feedback-motion|feedback-direction|cycle-interval|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness|beat-form-enlargement|beat-form-lifetime|beat-form-density|beat-form-variation|drawn-strength|drawn-line-detail)$/.exec(
 			id,
@@ -1606,20 +1617,46 @@ function effectControls(
 	});
 }
 
-function effectSection(
-	effects: OutputView["layers"][number]["effects"],
+function effectBankSection(
+	banks: OutputView["layers"][number]["effectBanks"],
+	presets: Awaited<ReturnType<typeof api.effects>>,
 	disabled: boolean,
-	visualizer?: VisualizerView,
 ): MediaPaneModel["controlSections"][number] {
-	const unsupported = effects.find(
-		(effect) => !effect.supported && !(effect.index === 0 && visualizer),
-	);
+	const names = new Map(presets.map((preset) => [preset.slot, preset.name]));
+	const options = Array.from({ length: 256 }, (_, slot) => ({
+		value: String(slot),
+		label:
+			slot === 0
+				? "Off"
+				: names.has(slot)
+					? `${slot} · ${names.get(slot)}`
+					: `${slot} · Unassigned`,
+	}));
 	return {
 		id: "effects",
 		label: "Effects",
-		capability: unsupported ? "unsupported" : undefined,
-		unsupportedDetail: unsupported?.capabilityDetail ?? undefined,
-		controls: unsupported ? [] : effectControls(effects, disabled, visualizer),
+		controls: banks.flatMap((bank) => {
+			const number = bank.index + 1;
+			return [
+				{
+					id: `media.effect.bank.${number}.select`,
+					kind: "choice" as const,
+					label: "Effect Select",
+					value: String(bank.select),
+					options,
+					disabled,
+				},
+				valueControl(
+					`media.effect.bank.${number}.strength`,
+					"Effect Strength",
+					bank.strength * 100,
+					0,
+					100,
+					disabled,
+					"%",
+				),
+			];
+		}),
 	};
 }
 
@@ -1866,6 +1903,8 @@ function masterChange(id: string, value: string | number): UpdateMaster {
 			return { volume: number / 100 };
 		case "master-tint":
 			return tintChange(String(value));
+		case "media.master.effect.opacity_cycle":
+			return { opacityCycleDmx: number };
 		case "flip-mirror":
 			return { flipMirror: String(value) };
 		case "master-scale-x":
@@ -1934,6 +1973,32 @@ function masterSections(
 					!takeover,
 					"%",
 				),
+			],
+		},
+		{
+			id: "effects",
+			label: "Effects",
+			controls: [
+				{
+					id: "media.master.effect.opacity_cycle",
+					kind: "choice",
+					label: "Multiplier / Divider",
+					group: "Layer Opacity Cycle",
+					value: String(output.master.opacityCycleDmx),
+					options: [
+						{ value: "0", label: "Off" },
+						{ value: "1", label: "/16" },
+						{ value: "32", label: "/8" },
+						{ value: "64", label: "/4" },
+						{ value: "96", label: "/2" },
+						{ value: "128", label: "1x" },
+						{ value: "160", label: "2x" },
+						{ value: "192", label: "4x" },
+						{ value: "224", label: "8x" },
+						{ value: "240", label: "16x" },
+					],
+					disabled: !takeover,
+				},
 			],
 		},
 		{

@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::address::MediaAddress;
 use crate::color::{FlipMirror, Tint};
-use crate::layer::{EffectSlot, ScalingMode, SourceStatus};
-use crate::master::MasterShaper;
+use crate::layer::{EffectBankState, EffectSlot, ScalingMode, SourceStatus};
+use crate::master::{BeatRatio, MasterShaper};
 use crate::output::OutputId;
 use crate::personality::decode::DecodedFrame;
 use crate::playback::PlayMode;
@@ -50,6 +50,8 @@ pub struct LayerControls {
     /// Replaces the complete ordered effect chain after the HTTP adapter has applied one
     /// intent-shaped slot edit to the current state.
     pub effects: Option<[EffectSlot; 4]>,
+    /// Replaces the complete ordered current-personality bank state.
+    pub effect_banks: Option<[EffectBankState; 2]>,
 }
 
 /// An intent-shaped edit of the master values at the end of the network personality.
@@ -69,6 +71,7 @@ pub struct MasterControls {
     pub position_y: Option<f32>,
     pub rotation: Option<f32>,
     pub shaper: Option<MasterShaper>,
+    pub opacity_cycle: Option<BeatRatio>,
 }
 
 /// How long external DMX keeps ownership after its last packet.

@@ -60,12 +60,13 @@ const BOUNDS: &[(&str, EffectParameterBounds)] = &[
     ("tile-displacement", EffectParameterBounds::unit()),
     ("chroma-damage", EffectParameterBounds::unit()),
     ("blur-amount", EffectParameterBounds::unit()),
+    ("blur-type", EffectParameterBounds::new(0.0, 4.0, 1.0)),
     ("feedback-amount", EffectParameterBounds::unit()),
     ("feedback-motion", EffectParameterBounds::unit()),
     // Choice parameters carry the index of the chosen option, so their range is the option list.
     (
         "feedback-direction",
-        EffectParameterBounds::new(0.0, 5.0, 1.0),
+        EffectParameterBounds::new(0.0, 7.0, 1.0),
     ),
     ("cycle-interval", EffectParameterBounds::new(0.0, 2.0, 1.0)),
     ("beat-move-amount", EffectParameterBounds::unit()),
@@ -79,7 +80,7 @@ const BOUNDS: &[(&str, EffectParameterBounds)] = &[
     ),
     (
         "kaleidoscope-repetitions",
-        EffectParameterBounds::new(1.0, 16.0, 1.0),
+        EffectParameterBounds::new(0.0, 12.0, 1.0),
     ),
     (
         "kaleidoscope-angle",
@@ -162,8 +163,8 @@ mod tests {
     use super::*;
     use crate::layer::{
         AnalogTvParameters, BeatFormFlashParameters, BeatGridWaveParameters, BeatMoveParameters,
-        BeatScaleTurnParameters, BeatScanParameters, DigitalTvParameters, DrawnImageParameters,
-        KaleidoscopeParameters, RasterizeParameters,
+        BeatScaleTurnParameters, BeatScanParameters, BlurParameters, DigitalTvParameters,
+        DrawnImageParameters, KaleidoscopeParameters, RasterizeParameters,
     };
 
     /// Every id an effect reports has to have a row, or a desk falls back to 0–1 for a parameter
@@ -181,7 +182,8 @@ mod tests {
             BeatGridWaveParameters::IDS.as_slice(),
             BeatFormFlashParameters::IDS.as_slice(),
             DrawnImageParameters::IDS.as_slice(),
-            ["blur-amount", "feedback-amount", "feedback-motion"].as_slice(),
+            BlurParameters::IDS.as_slice(),
+            ["feedback-amount", "feedback-motion"].as_slice(),
             ["feedback-direction", "cycle-interval"].as_slice(),
         ];
         for id in reported.into_iter().flatten() {
@@ -197,8 +199,8 @@ mod tests {
         let repetitions = effect_parameter_bounds("kaleidoscope-repetitions");
         assert!(repetitions.is_whole_number());
         assert_eq!(repetitions.resolve(7.4), 7.0);
-        assert_eq!(repetitions.resolve(99.0), 16.0);
-        assert_eq!(repetitions.resolve(0.0), 1.0);
+        assert_eq!(repetitions.resolve(99.0), 12.0);
+        assert_eq!(repetitions.resolve(0.0), 0.0);
     }
 
     #[test]

@@ -20,6 +20,7 @@ pub mod color;
 pub mod command;
 pub mod display_region;
 pub mod dmx;
+pub mod effect_library;
 pub mod effect_parameters;
 pub mod geometry;
 pub mod layer;
@@ -46,6 +47,7 @@ pub use color::{FlipMirror, Tint};
 pub use command::{
     Command, CommandKind, CommandSource, ControlOwnership, LayerControls, MasterControls, Timestamp,
 };
+pub use effect_library::{EffectLibrary, EffectLibraryError, EffectPreset};
 pub use effect_parameters::{EffectParameterBounds, effect_parameter_bounds};
 pub use geometry::{LayerTransform, Point, Size};
 pub use layer::{
@@ -53,13 +55,13 @@ pub use layer::{
     BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
     BeatFormFlashParameters, BeatGridWaveOrigin, BeatGridWaveParameters, BeatMoveDirection,
     BeatMoveParameters, BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters,
-    DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters, DrawnImageParameters, EffectSlot,
-    FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters, KALEIDOSCOPE_EFFECT,
-    KaleidoscopeParameters, LayerState, MaskSource, MaskState, OPACITY_CYCLE_EFFECT,
-    OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode, RasterizeParameters, ScalingMode,
-    SourceFailure, SourceStatus,
+    BlurType, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters, DrawnImageParameters,
+    EffectBankState, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource, MaskState,
+    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode,
+    RasterizeParameters, ScalingMode, SourceFailure, SourceStatus,
 };
-pub use master::{MasterShaper, MasterState};
+pub use master::{BeatRatio, MasterShaper, MasterState};
 pub use output::{OutputId, OutputName, PresentationMode};
 pub use personality::{LayerPersonality, PersonalityLayout, SlotFootprint, StartAddressError};
 pub use playback::{OnceEndState, PlayMode};

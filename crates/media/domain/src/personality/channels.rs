@@ -5,6 +5,7 @@
 //! tests, and the GDTF export all read — nothing restates it.
 
 use crate::layer::ScalingMode;
+use crate::master::BeatRatio;
 use crate::playback::PlayMode;
 use crate::speed::SpeedMultiplier;
 
@@ -53,6 +54,7 @@ pub enum ValueKind {
     FlipMirror,
     SpeedMultiplier,
     PlaybackBpm,
+    BeatRatio,
     /// A declared channel with no effect implementation to select or describe yet.
     Unimplemented,
 }
@@ -157,6 +159,24 @@ impl ValueKind {
                 ChannelValueSet::range("Off", 0, 0),
                 ChannelValueSet::range("1–255 BPM", 1, 255),
             ],
+            Self::BeatRatio => [
+                BeatRatio::Disabled,
+                BeatRatio::Divide(16),
+                BeatRatio::Divide(8),
+                BeatRatio::Divide(4),
+                BeatRatio::Divide(2),
+                BeatRatio::Unity,
+                BeatRatio::Multiply(2),
+                BeatRatio::Multiply(4),
+                BeatRatio::Multiply(8),
+                BeatRatio::Multiply(16),
+            ]
+            .into_iter()
+            .map(|ratio| {
+                let (from, to) = ratio.dmx_range();
+                ChannelValueSet::range(ratio.label(), from, to)
+            })
+            .collect(),
             Self::Unimplemented => vec![ChannelValueSet {
                 name: "Declared — effect engine not implemented".to_owned(),
                 from: 0,
@@ -201,6 +221,9 @@ macro_rules! layer_channels {
 }
 
 const IMPLEMENTED: ChannelImplementation = ChannelImplementation::Implemented;
+const LEGACY_ONLY: ChannelImplementation = ChannelImplementation::Unimplemented {
+    reason: "reserved for legacy Blur; current effect-bank personalities select Blur from the Effects library",
+};
 
 layer_channels! {
      0 "Folder"                Byte       0, ValueKind::Continuous, IMPLEMENTED;
@@ -231,13 +254,13 @@ layer_channels! {
     25 "Mask scale Y fine"     Fine       0, ValueKind::Continuous, IMPLEMENTED;
     26 "Mask invert"           Byte       0, ValueKind::Binary { off: "Normal", on: "Inverted" }, IMPLEMENTED;
     27 "Mask opacity"          Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    28 "Effect 1"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    29 "Effect 2"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    30 "Effect 3"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    31 "Effect 4"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    28 "Effect 1 Select"       Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    29 "Effect 1 Strength"     Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    30 "Effect 2 Select"       Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    31 "Effect 2 Strength"     Byte       0, ValueKind::Continuous, IMPLEMENTED;
     32 "Speed multiplier"      Byte     127, ValueKind::SpeedMultiplier, IMPLEMENTED;
     33 "Playback BPM"          Byte       0, ValueKind::PlaybackBpm, IMPLEMENTED;
-    34 "Blur"                  Byte       0, ValueKind::Continuous, IMPLEMENTED;
+    34 "Legacy Blur (ignored)" Byte       0, ValueKind::Unimplemented, LEGACY_ONLY;
     // New controls append to the published block. Existing desks therefore keep sending every
     // pre-existing control, especially playback speed, at the slot they originally patched.
     35 "Mask position X"       Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
@@ -568,6 +591,14 @@ pub const MASTER_CHANNELS: &[ChannelSpec] = &[
         values: ValueKind::Continuous,
         implementation: IMPLEMENTED,
     },
+    ChannelSpec {
+        offset: 40,
+        name: "Layer Opacity Cycle",
+        resolution: Resolution::Byte,
+        default_value: 0,
+        values: ValueKind::BeatRatio,
+        implementation: IMPLEMENTED,
+    },
 ];
 
 /// Zero-based layer offsets, named so the decoder reads as the published table does.
@@ -594,6 +625,10 @@ pub mod layer {
     pub const MASK_INVERT: usize = 26;
     pub const MASK_OPACITY: usize = 27;
     pub const EFFECT_1: usize = 28;
+    pub const EFFECT_1_SELECT: usize = 28;
+    pub const EFFECT_1_STRENGTH: usize = 29;
+    pub const EFFECT_2_SELECT: usize = 30;
+    pub const EFFECT_2_STRENGTH: usize = 31;
     pub const SPEED_MULTIPLIER: usize = 32;
     pub const PLAYBACK_BPM: usize = 33;
     pub const BLUR: usize = 34;
@@ -627,6 +662,7 @@ pub mod master {
     pub const SHAPER_TOP_ROTATION: usize = 34;
     pub const SHAPER_BOTTOM_ROTATION: usize = 36;
     pub const SHAPER_ROTATION: usize = 38;
+    pub const OPACITY_CYCLE: usize = 40;
 }
 
 #[cfg(test)]
