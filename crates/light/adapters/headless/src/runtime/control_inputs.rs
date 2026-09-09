@@ -20,11 +20,18 @@ pub(super) fn control_input_tasks(
         let feedback_state = state.clone();
         let feedback_cancel = cancel.clone();
         tasks.push(Box::pin(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(500));
+            let mut interval = tokio::time::interval(Duration::from_millis(20));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut last_heartbeat = Instant::now() - Duration::from_millis(500);
             loop {
                 tokio::select! {
                     _ = feedback_cancel.cancelled() => break,
-                    _ = interval.tick() => send_osc_feedback(&feedback_state, false),
+                    _ = interval.tick() => {
+                        let heartbeat = last_heartbeat.elapsed() >= Duration::from_millis(500);
+                        if flush_control_feedback(&feedback_state, heartbeat) {
+                            last_heartbeat = Instant::now();
+                        }
+                    },
                 }
             }
             Ok(())
@@ -133,7 +140,7 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
             // the whole point of it being able to work beside somebody who is programming.
             measured_action_succeeded |=
                 handle_playback_osc(state, address, arguments, source.as_deref());
-            handle_timing_osc(state, address, arguments);
+            handle_timing_osc(state, address, arguments, source.as_deref());
             if osc_source_capability(state, source.as_deref()).may_program() {
                 handle_highlight_osc(state, address, arguments, source.as_deref());
                 measured_action_succeeded |=
@@ -143,7 +150,17 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
                 handle_encoder_osc(state, address, arguments, source.as_deref());
             }
         }
-        send_osc_feedback(state, false);
+        if address.ends_with("/fader")
+            || ["/programmer/prog-fade", "/programmer/cue-fade", "/programmer/release-fade"].iter()
+                .any(|suffix| address.ends_with(suffix))
+        {
+            // Apply every control action immediately; publish one current LED/state
+            // snapshot per feedback frame instead of blocking ingress on each sample.
+            state.integrations.request_osc_feedback();
+        } else {
+            state.integrations.take_osc_feedback_request();
+            send_osc_feedback(state, false);
+        }
         if let Some(action_timing) = action_timing {
             action_timing.acknowledge(state, measured_action_succeeded);
         }
@@ -174,6 +191,16 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         serde_json::to_value(event)
             .unwrap_or_else(|_| serde_json::json!({"error":"serialization failed"})),
     );
+}
+
+pub(super) fn flush_control_feedback(state: &AppState, heartbeat: bool) -> bool {
+    let pending = state.integrations.take_osc_feedback_request();
+    if heartbeat || pending {
+        send_osc_feedback(state, false);
+        true
+    } else {
+        false
+    }
 }
 
 /// What the surface that sent this message is allowed to do.

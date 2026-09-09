@@ -45,6 +45,16 @@ impl ProgrammingResource {
         self.service.set_alignment(context, ports, mode)
     }
 
+    pub(in crate::runtime) fn alignment_active(&self, session_id: SessionId) -> bool {
+        self.programmers.alignment(session_id).is_some()
+    }
+
+    pub(in crate::runtime) fn preload_output_active(&self) -> bool {
+        self.programmers
+            .programmer_lifecycle()
+            .is_some_and(|summary| summary.preload_active)
+    }
+
     pub(in crate::runtime) fn remember_selective_import(
         &self,
         context: &light_application::ActionContext,

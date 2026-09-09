@@ -20,7 +20,7 @@ export interface ScreenCapabilities {
 export interface ScreensContextValue extends ScreenCapabilities {
 	bootstrap: BootstrapSnapshot | null;
 	session: SessionResponse | null;
-	updateControlDesk: (desk: ControlDesk) => Promise<void>;
+	updateControlDesk: (desk: ControlDesk, options?: { throwOnError?: boolean; hardwareLighting?: import("../../api/types/desk").HardwareLightingPatch }) => Promise<void>;
 	selectControlDesk: (id: string) => void;
 	removeClient: (deskId: string, clientId: string) => Promise<boolean>;
 }

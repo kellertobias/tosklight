@@ -24,6 +24,8 @@ const state = {
 };
 let playbackDesk: { active_page: number } | null = { active_page: 1 };
 let runtimeStatus: "ready" | "loading" | "error" = "ready";
+let speedRuntimeReady = true;
+let speedRuntimeBpms = [120, 90, 60, 30, 15];
 let topologyReady = true;
 let pageObjects = [
 	{
@@ -110,6 +112,12 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => ({
 	usePlaybackRuntimeActions: () => runtimeActions,
 	usePlaybackRuntimeStatus: () => ({ status: runtimeStatus, error: null }),
 }));
+vi.mock("../../features/speedGroupRuntime/SpeedGroupRuntimeView", () => ({
+	useSpeedGroupRuntimeView: () => ({
+		ready: speedRuntimeReady,
+		projection: { groups: speedRuntimeBpms.map(manualBpm => ({ manualBpm })) },
+	}),
+}));
 vi.mock("../../features/playbackTopology/PlaybackTopologyProvider", () => ({
 	usePlaybackTopologyActions: () => topologyActions,
 }));
@@ -129,6 +137,8 @@ afterEach(() => {
 	state.shiftArmed = false;
 	playbackDesk = { active_page: 1 };
 	runtimeStatus = "ready";
+	speedRuntimeReady = true;
+	speedRuntimeBpms = [120, 90, 60, 30, 15];
 	topologyReady = true;
 	topologyActions.error = null;
 	pageObjects = [
@@ -178,6 +188,22 @@ function soundState(group: SpeedGroupId): SpeedGroupSoundState {
 }
 
 describe("HardwareControlSummary playback pages", () => {
+	it("handles hardware page-step events without the disabled computer-keyboard listener", async () => {
+		pageObjects.push({ ...pageObjects[0], id: "page-two", body: { number: 2, name: "Second", slots: {} } });
+		const view = render(<HardwareControlSummary />);
+		act(() => window.dispatchEvent(new CustomEvent("light:playback-page-step", { detail: 1 })));
+		await waitFor(() => expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2));
+		playbackDesk = { active_page: 2 };
+		view.rerender(<HardwareControlSummary />);
+		act(() => window.dispatchEvent(new CustomEvent("light:playback-page-step", { detail: -1 })));
+		await waitFor(() => expect(runtimeActions.setActivePage).toHaveBeenCalledWith(1));
+		runtimeActions.setActivePage.mockClear();
+		runtimeStatus = "loading";
+		view.rerender(<HardwareControlSummary />);
+		act(() => window.dispatchEvent(new CustomEvent("light:playback-page-step", { detail: 1 })));
+		await act(async () => {});
+		expect(runtimeActions.setActivePage).not.toHaveBeenCalled();
+	});
 	it("keeps Release directly reachable beside the other timing masters", () => {
 		renderWithModals(<HardwareControlSummary />);
 		fireEvent.click(screen.getByRole("button", { name: /Release/ }));
@@ -305,6 +331,17 @@ describe("HardwareControlSummary playback pages", () => {
 });
 
 describe("HardwareControlSummary Speed Groups", () => {
+	it("shows live learned BPM and never falls back to stale configuration during repair", () => {
+		const view = renderWithModals(<HardwareControlSummary />);
+		speedRuntimeBpms = [150, 100, 70, 40, 20];
+		view.rerender(<HardwareControlSummary />);
+		expect(screen.getByRole("button", { name: "Speed group A, 150.0 BPM" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Speed group A, 120.0 BPM" })).toBeNull();
+		speedRuntimeReady = false;
+		view.rerender(<HardwareControlSummary />);
+		expect(screen.queryByRole("button", { name: "Speed group A, 150.0 BPM" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Speed group A, 120.0 BPM" })).toBeNull();
+	});
 	it("uses the authoritative Learn action for an ordinary touch activation", async () => {
 		server.session = { session_id: "session-a", desk: { id: "desk-a" } };
 		server.speedGroup.mockImplementation(async (group: SpeedGroupId) =>

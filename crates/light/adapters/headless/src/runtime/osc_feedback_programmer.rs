@@ -390,6 +390,26 @@ fn send_programmer_dynamic_feedback(
     }
 }
 
+fn clear_led_state(
+    programmer: Option<&light_programmer::ProgrammerState>,
+    has_selection: bool,
+) -> &'static str {
+    if has_selection {
+        return "on";
+    }
+    let has_values = programmer.is_some_and(|programmer| {
+        // Match the UI's selected values authority and fixture/group projections.
+        // Dynamic-only and retained active Preload output belong to other indicators.
+        let (fixtures, groups) = if programmer.blind && programmer.preload_capture_programmer {
+            (!programmer.preload_pending.is_empty(), &programmer.preload_group_pending)
+        } else {
+            (!programmer.values.is_empty(), programmer.group_values.as_ref())
+        };
+        fixtures || groups.values().any(|attributes| !attributes.is_empty())
+    });
+    if has_values { "slow" } else { "off" }
+}
+
 pub(super) fn send_programmer_osc_feedback(
     state: &AppState,
     subscriber: &OscSubscriber,
@@ -412,6 +432,18 @@ pub(super) fn send_programmer_osc_feedback(
         vec![OscArgument::Int(i32::from(page))],
     );
     let programmer = state.programming.get(subscriber.session_id);
+    let has_selection = state.programming.selection(subscriber.session_id)
+        .is_some_and(|selection| !selection.selected.is_empty());
+    for (suffix, argument) in [
+        ("clear/state", OscArgument::String(clear_led_state(programmer.as_ref(), has_selection).into())),
+        ("align/active", OscArgument::Bool(state.programming.alignment_active(subscriber.session_id))),
+        ("preload/active", OscArgument::Bool(
+            programmer.as_ref().is_some_and(|programmer| programmer.blind)
+                || state.programming.preload_output_active(),
+        )),
+    ] {
+        send_osc(state, subscriber.target, format!("{prefix}/programmer/{suffix}"), vec![argument]);
+    }
     let command_line = programmer
         .as_ref()
         .map(|programmer| programmer.command_line.clone())

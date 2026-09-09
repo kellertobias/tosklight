@@ -725,3 +725,98 @@ fn software_update_armed_state_is_shared_across_the_desk() {
     assert_eq!(events, vec![Some(true), Some(false)]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
+#[test]
+fn hardware_status_feedback_tracks_authoritative_values_modes_and_assignment() {
+    let registry = ProgrammerRegistry::default();
+    let (state, data_dir) = test_state_with_programmers(registry.clone(), None);
+    let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(), token: "hardware-feedback".into(), connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id);
+    state.sessions.insert_session(session.clone());
+    let subscriber = OscSubscriber {
+        capability: light_core::SurfaceCapability::Programming,
+        path: "hardware-status".into(), target: "127.0.0.1:19139".parse().unwrap(),
+        command_source: "127.0.0.1:19139".parse().unwrap(), session_id: session.id,
+        last_seen: Instant::now(), shifted: false, shift_held: false,
+        update_record_started: None, update_first_release: None, last_highlight_action: None,
+    };
+    let assert_status = |clear: &str, align: bool, preload: bool| {
+        send_programmer_osc_feedback(&state, &subscriber, &session.desk, 1, &[], &HashMap::new());
+        let messages = state.integrations.captured_osc_feedback();
+        for (suffix, value) in [
+            ("clear/state", OscArgument::String(clear.into())),
+            ("align/active", OscArgument::Bool(align)),
+            ("preload/active", OscArgument::Bool(preload)),
+        ] {
+            let address = format!("/light/hardware-status/feedback/programmer/{suffix}");
+            let actual = messages.iter().rev().find(|(_, path, _)| path == &address).unwrap();
+            assert_eq!(actual.2, vec![value], "{suffix}");
+        }
+    };
+    assert_status("off", false, false);
+    let fixture = light_core::FixtureId::new();
+    registry.select(session.id, [fixture]);
+    registry.activate_alignment(session.id, light_programmer::ProgrammerAlignmentMode::Left).unwrap();
+    assert_status("on", true, false);
+    registry.set_many(session.id, [(fixture, light_core::AttributeKey::intensity(), light_core::AttributeValue::Normalized(0.5))]);
+    registry.select(session.id, []);
+    registry.deactivate_alignment(session.id);
+    assert_status("slow", false, false);
+    let mut programmer = registry.get(session.id).unwrap();
+    programmer.blind = true;
+    registry.restore(programmer);
+    // Normal values do not light Clear while the empty Preload authority is selected.
+    assert_status("off", false, true);
+    let mut programmer = registry.get(session.id).unwrap();
+    programmer.preload_pending = programmer.values.as_ref().clone();
+    registry.restore(programmer);
+    assert_status("slow", false, true);
+    let mut programmer = registry.get(session.id).unwrap();
+    programmer.blind = false;
+    programmer.values = Arc::new(Vec::new());
+    programmer.preload_pending.clear();
+    programmer.preload_playback_active = true;
+    registry.restore(programmer);
+    assert_status("off", false, true);
+    let mut programmer = registry.get(session.id).unwrap();
+    programmer.preload_playback_active = false;
+    registry.restore(programmer);
+    assert_status("off", false, false);
+
+    let snapshot = light_engine::EngineSnapshot::default();
+    let speed_groups = state.output.speed_group_snapshots(0);
+    send_playback_osc_feedback(OscPlaybackFeedback {
+        state: &state, subscriber: &subscriber, desk: &session.desk, page: 1,
+        selected_playback: None, snapshot: &snapshot, runtime: &[], speed_groups: &speed_groups,
+    });
+    let messages = state.integrations.captured_osc_feedback();
+    for suffix in ["assigned", "selected"] {
+        let address = format!("/light/hardware-status/feedback/page-playback/1/{suffix}");
+        assert_eq!(messages.iter().rev().find(|(_, path, _)| path == &address).unwrap().2, vec![OscArgument::Bool(false)]);
+    }
+    let mut assigned = snapshot;
+    assigned.playbacks = vec![serde_json::from_value(serde_json::json!({
+        "number": 7, "name": "Assigned", "target": {"type": "grand_master"}
+    })).unwrap()].into();
+    assigned.playback_pages = vec![light_playback::PlaybackPage {
+        number: 1, name: "Page one".into(), slots: HashMap::from([(1, 7), (9, 7), (21, 7), (39, 7)]),
+        virtual_playbacks: HashMap::new(),
+    }].into();
+    for (page, expected) in [(1, true), (2, false)] {
+        send_playback_osc_feedback(OscPlaybackFeedback {
+            state: &state, subscriber: &subscriber, desk: &session.desk, page,
+            selected_playback: Some(7), snapshot: &assigned, runtime: &[], speed_groups: &speed_groups,
+        });
+        let messages = state.integrations.captured_osc_feedback();
+        for slot in [1, 9, 21, 39] {
+            for suffix in ["assigned", "selected"] {
+                let address = format!("/light/hardware-status/feedback/page-playback/{slot}/{suffix}");
+                assert_eq!(messages.iter().rev().find(|(_, path, _)| path == &address).unwrap().2, vec![OscArgument::Bool(expected)]);
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}

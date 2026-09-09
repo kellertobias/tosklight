@@ -11,6 +11,46 @@ use std::fs;
 use uuid::Uuid;
 
 #[test]
+fn hardware_illumination_migrates_legacy_desks_and_persists_without_layout_changes() {
+    let path = temporary("hardware-illumination-legacy");
+    let id = Uuid::new_v4();
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3);").unwrap();
+        conn.execute("INSERT INTO control_desks(id,name) VALUES(?1,'Legacy desk')", [id.to_string()]).unwrap();
+    }
+    let store = DeskStore::open(&path).unwrap();
+    let desk = store.desk().unwrap();
+    assert_eq!((desk.id, desk.hardware_led_brightness, desk.hardware_gooseneck_brightness, desk.hardware_gooseneck_color), (id, 100, 100, 100));
+    let changed = store.update_desk_with_illumination(id, &desk.name, desk.columns, desk.rows, desk.buttons, None, Some([0, 42, 100])).unwrap();
+    assert_eq!(changed.hardware_gooseneck_brightness, 42);
+    for values in [[101, 42, 100], [0, 255, 100], [0, 42, 101]] {
+        assert!(store.update_desk_with_illumination(id, "must not change", 12, 2, 1, None, Some(values)).is_err());
+        assert_eq!(store.desk().unwrap(), changed);
+    }
+    // Existing layout-only callers must retain illumination.
+    let renamed = store.update_desk(id, "Renamed", 8, 1, 3, None).unwrap();
+    assert_eq!(renamed.hardware_gooseneck_brightness, 42);
+    drop(store);
+    let reopened = DeskStore::open(&path).unwrap();
+    assert_eq!(reopened.desk().unwrap(), renamed);
+    drop(reopened);
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn hardware_illumination_new_desk_and_old_json_default_to_full_white() {
+    let path = temporary("hardware-illumination-new");
+    let store = DeskStore::open(&path).unwrap();
+    let desk = store.desk().unwrap();
+    let legacy: crate::ControlDesk = serde_json::from_value(serde_json::json!({"id":desk.id,"name":desk.name,"columns":8,"rows":1,"buttons":3})).unwrap();
+    assert_eq!(desk, legacy);
+    assert_eq!((desk.hardware_led_brightness, desk.hardware_gooseneck_brightness, desk.hardware_gooseneck_color), (100, 100, 100));
+    drop(store);
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn screens_persist_and_keep_independent_pages_per_show() {
     let path = temporary("screens");
     let store = DeskStore::open(&path).unwrap();

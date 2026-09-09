@@ -32,6 +32,12 @@ pub enum ControlDeskConfigurationAction {
 
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ControlDeskConfigurationPatch {
+    #[schemars(range(min = 0, max = 100))]
+    pub hardware_led_brightness: Option<u8>,
+    #[schemars(range(min = 0, max = 100))]
+    pub hardware_gooseneck_brightness: Option<u8>,
+    #[schemars(range(min = 0, max = 100))]
+    pub hardware_gooseneck_color: Option<u8>,
     pub name: Option<String>,
     pub columns: Option<u8>,
     pub rows: Option<u8>,

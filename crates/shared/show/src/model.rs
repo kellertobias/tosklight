@@ -161,6 +161,12 @@ pub struct PlaybackSurfaceLayout {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ControlDesk {
+    #[serde(default = "default_hardware_illumination")]
+    pub hardware_led_brightness: u8,
+    #[serde(default = "default_hardware_illumination")]
+    pub hardware_gooseneck_brightness: u8,
+    #[serde(default = "default_hardware_illumination")]
+    pub hardware_gooseneck_color: u8,
     pub id: Uuid,
     pub name: String,
     pub columns: u8,
@@ -262,3 +268,5 @@ pub struct VersionedObject {
     pub revision: Revision,
     pub updated_at: String,
 }
+
+fn default_hardware_illumination() -> u8 { 100 }

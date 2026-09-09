@@ -25,7 +25,7 @@ impl DeskStore {
     /// Separate from [`Self::desk`] so a read can stay a read: answering what an installation holds
     /// must not write a row into it.
     fn stored_desk(&self) -> Result<Option<ControlDesk>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,columns_count,rows_count,buttons_count,playback_layout_json FROM control_desks ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare("SELECT id,name,columns_count,rows_count,buttons_count,playback_layout_json,hardware_led_brightness,hardware_gooseneck_brightness,hardware_gooseneck_color FROM control_desks ORDER BY name COLLATE NOCASE")?;
         let mut rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -34,13 +34,15 @@ impl DeskStore {
                 row.get::<_, u8>(3)?,
                 row.get::<_, u8>(4)?,
                 row.get::<_, Option<String>>(5)?,
+                row.get::<_, u8>(6)?, row.get::<_, u8>(7)?, row.get::<_, u8>(8)?,
             ))
         })?;
         let Some(row) = rows.next() else {
             return Ok(None);
         };
-        let (id, name, columns, rows, buttons, playback_layout) = row?;
+        let (id, name, columns, rows, buttons, playback_layout, hardware_led_brightness, hardware_gooseneck_brightness, hardware_gooseneck_color) = row?;
         Ok(Some(ControlDesk {
+            hardware_led_brightness, hardware_gooseneck_brightness, hardware_gooseneck_color,
             id: Uuid::parse_str(&id)?,
             name,
             columns,
@@ -141,6 +143,9 @@ impl DeskStore {
 
     fn insert_desk(&self, name: &str) -> Result<ControlDesk, StoreError> {
         let desk = ControlDesk {
+            hardware_led_brightness: 100,
+            hardware_gooseneck_brightness: 100,
+            hardware_gooseneck_color: 100,
             id: Uuid::new_v4(),
             name: name.trim().to_owned(),
             columns: 8,
@@ -161,6 +166,18 @@ impl DeskStore {
         buttons: u8,
         playback_layout: Option<PlaybackSurfaceLayout>,
     ) -> Result<ControlDesk, StoreError> {
+        self.update_desk_with_illumination(id, name, columns, rows, buttons, playback_layout, None)
+    }
+
+    pub fn update_desk_with_illumination(
+        &self, id: Uuid, name: &str, columns: u8, rows: u8, buttons: u8,
+        playback_layout: Option<PlaybackSurfaceLayout>, illumination: Option<[u8; 3]>,
+    ) -> Result<ControlDesk, StoreError> {
+        let current = self.desk()?;
+        let illumination = illumination.unwrap_or([current.hardware_led_brightness, current.hardware_gooseneck_brightness, current.hardware_gooseneck_color]);
+        for (field, value) in ["hardware_led_brightness", "hardware_gooseneck_brightness", "hardware_gooseneck_color"].into_iter().zip(illumination) {
+            if value > 100 { return Err(StoreError::Invalid(format!("{field} must be within 0-100"))); }
+        }
         if name.trim().is_empty()
             || !(1..=32).contains(&columns)
             || !(1..=127).contains(&rows)
@@ -175,7 +192,7 @@ impl DeskStore {
         if let Some(layout) = &playback_layout {
             validate_playback_surface(layout)?;
         }
-        if self.conn.execute("UPDATE control_desks SET name=?1,columns_count=?2,rows_count=?3,buttons_count=?4,playback_layout_json=?5 WHERE id=?6",params![name.trim(),columns,rows,buttons,playback_layout.as_ref().map(serde_json::to_string).transpose()?,id.to_string()])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
+        if self.conn.execute("UPDATE control_desks SET name=?1,columns_count=?2,rows_count=?3,buttons_count=?4,playback_layout_json=?5,hardware_led_brightness=?7,hardware_gooseneck_brightness=?8,hardware_gooseneck_color=?9 WHERE id=?6",params![name.trim(),columns,rows,buttons,playback_layout.as_ref().map(serde_json::to_string).transpose()?,id.to_string(),illumination[0],illumination[1],illumination[2]])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
         self.desk()
     }
 

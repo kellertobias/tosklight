@@ -22,7 +22,7 @@ pub(super) fn send_action_timing_feedback(
     );
 }
 
-pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[OscArgument]) {
+pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[OscArgument], source: Option<&str>) {
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let numeric = arguments.first().and_then(|v| match v {
         OscArgument::Float(v) => Some(*v),
@@ -68,6 +68,7 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
             "speed_group_action",
             serde_json::json!({"group":speed_group_name(index),"path":parts[1],"source":"osc","action":"learn","snapshot":snapshots[index]}),
         );
+        publish_osc_speed_group_change(state, source, parts[1], index);
     }
     if parts.len() == 5
         && parts[0] == "light"
@@ -94,7 +95,19 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
                 "speed_group_changed",
                 serde_json::json!({"group":speed_group_name(index),"path":parts[1],"source":"osc","manual_bpm":bpm}),
             );
+            publish_osc_speed_group_change(state, source, parts[1], index);
         }
+    }
+}
+
+fn publish_osc_speed_group_change(state: &AppState, source: Option<&str>, path: &str, index: usize) {
+    let source = source.and_then(|value| value.parse::<SocketAddr>().ok());
+    if let Some((subscriber, session)) = programmer_osc_session(state, source)
+        && subscriber.path.eq_ignore_ascii_case(path)
+    {
+        super::speed_group_service::record_external_change_from(
+            state, &session, &[index], light_application::ActionSource::Osc,
+        );
     }
 }
 

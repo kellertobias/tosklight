@@ -92,7 +92,7 @@ export class KeyboardPageActions {
 		this.setActivePage = null;
 	}
 
-	step(authority: PlaybackShortcutAuthority, direction: 1 | -1) {
+	step(authority: Pick<PlaybackShortcutAuthority, "activePage" | "pages">, direction: 1 | -1) {
 		if (this.pending) return;
 		const target = pageStepTarget(authority, direction);
 		const scope = target == null ? null : this.capture();
@@ -146,7 +146,7 @@ export class KeyboardPageActions {
 }
 
 function pageStepTarget(
-	authority: PlaybackShortcutAuthority,
+	authority: Pick<PlaybackShortcutAuthority, "activePage" | "pages">,
 	direction: 1 | -1,
 ) {
 	const { activePage, pages } = authority;

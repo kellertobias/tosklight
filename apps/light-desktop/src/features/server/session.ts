@@ -11,11 +11,12 @@ export function createSessionActions(
 > {
 	const { api, setError, setBootstrap, setSession } = model;
 	return {
-		updateControlDesk: async (desk) => {
+		updateControlDesk: async (desk, options) => {
 			try {
 				const updated = await api.playback.updateControlDesk(
 					desk,
 					model.session?.desk,
+					options?.hardwareLighting,
 				);
 				setSession((current) =>
 					current ? { ...current, desk: updated } : current,
@@ -24,6 +25,7 @@ export function createSessionActions(
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
+				if (options?.throwOnError) throw reason;
 			}
 		},
 		selectControlDesk: (id) => {

@@ -16,6 +16,41 @@ fn command_backspace_removes_words_as_tokens_and_numbers_as_characters() {
 }
 
 #[test]
+fn continuous_fader_feedback_coalesces_bursts_without_delaying_discrete_feedback() {
+    let (state, data_dir) = test_state();
+    handle_subscription_osc(&state, "/light/subscribe", &[
+        OscArgument::String("fader-feedback-cadence".into()),
+        OscArgument::String("main".into()), OscArgument::Int(19_015),
+    ], Some("127.0.0.1:19015"));
+    let snapshots = || state.integrations.captured_osc_feedback().iter()
+        .filter(|(_, address, _)| address.ends_with("/hardware/illumination")).count();
+    let initial = snapshots();
+    assert!(initial > 0);
+    for value in 0..100 {
+        handle_control_event(&state, ControlEvent::Osc {
+            address: "/light/main/page-playback/1/fader".into(),
+            arguments: vec![OscArgument::Float(value as f32 / 99.0)],
+            source: Some("127.0.0.1:19015".into()),
+        });
+    }
+    assert_eq!(snapshots(), initial, "fader ingress must not emit 100 full snapshots");
+    assert!(flush_control_feedback(&state, false));
+    assert_eq!(snapshots(), initial + 1);
+    assert!(!flush_control_feedback(&state, false), "idle frames must not repeat feedback");
+    state.integrations.request_osc_feedback();
+    handle_control_event(&state, ControlEvent::Osc {
+        address: "/light/main/programmer/clear".into(),
+        arguments: vec![OscArgument::Bool(false)],
+        source: Some("127.0.0.1:19015".into()),
+    });
+    assert_eq!(snapshots(), initial + 2, "discrete controls retain immediate feedback");
+    assert!(!flush_control_feedback(&state, false));
+    assert!(flush_control_feedback(&state, true), "heartbeat feedback survives idle periods");
+    assert_eq!(snapshots(), initial + 3);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
     use light_programmer::command_line::{CommandKeyIntent, CommandKeyPhase, command_key_intent};
     use light_programmer::{CommandLineState, CommandTarget};

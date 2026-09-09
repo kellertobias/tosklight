@@ -275,6 +275,12 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_numbe
         "/light/{}/feedback/page-playback/{slot}",
         feedback.subscriber.path
     );
+    send_osc(
+        feedback.state,
+        feedback.subscriber.target,
+        format!("{prefix}/assigned"),
+        vec![OscArgument::Bool(definition.is_some())],
+    );
     if let Some(binding) = binding {
         send_osc(
             feedback.state,
@@ -307,7 +313,7 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_numbe
         feedback.state,
         feedback.subscriber,
         &prefix,
-        number == feedback.selected_playback,
+        number.is_some() && number == feedback.selected_playback,
         running,
     );
     send_button_feedback(
@@ -333,7 +339,7 @@ pub(super) fn send_playback_osc_feedback(feedback: OscPlaybackFeedback<'_>) {
         .playback_pages
         .iter()
         .find(|definition| definition.number == feedback.page);
-    let slots = feedback.desk.playback_layout.as_ref().map_or_else(
+    let mut slots = feedback.desk.playback_layout.as_ref().map_or_else(
         || {
             (1..=feedback
                 .desk
@@ -353,6 +359,12 @@ pub(super) fn send_playback_osc_feedback(feedback: OscPlaybackFeedback<'_>) {
                 .collect()
         },
     );
+    // Physical surfaces can address assigned slots beyond the visible UI layout.
+    // Include assignments on other pages too so a page switch sends explicit off
+    // feedback for those positions on an empty destination page.
+    slots.extend(feedback.snapshot.playback_pages.iter().flat_map(|page| page.slots.keys().copied()));
+    slots.sort_unstable();
+    slots.dedup();
     for slot in slots {
         send_slot_feedback(
             &feedback,

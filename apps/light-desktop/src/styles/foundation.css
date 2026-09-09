@@ -740,6 +740,20 @@ button {
 .card-pool {
 	min-height: 0;
 }
+/*
+ * Pool tiles used to divide every spare pixel between their columns.  That is
+ * useful in a small pane, but makes the preset pool disproportionately large
+ * on dense, high-resolution displays.  Keep preset tiles at a touch-friendly
+ * minimum while capping their expansion so extra room becomes more columns,
+ * rather than bigger buttons.
+ */
+.preset-pool-window .ui-button-grid.card-pool {
+	grid-template-columns: repeat(
+		auto-fill,
+		minmax(min(100%, var(--grid-cell-min)), 120px)
+	);
+	justify-content: start;
+}
 .group-card:not(.pool-card),
 .preset-card:not(.pool-card) {
 	position: relative;

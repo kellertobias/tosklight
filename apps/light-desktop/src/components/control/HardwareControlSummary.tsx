@@ -1,13 +1,14 @@
 import { HardwareControlSummaryView } from "@tosklight/ui/command";
 import { ModalNumberEditor } from "@tosklight/ui/input";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { KeyboardPageActions } from "./commandLine/playbackShortcutKeys";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
 import {
 	useProgrammerFadeMillis,
 	useReleaseFadeMillis,
 	useSequenceMasterFadeMillis,
-	useSpeedGroupsBpm,
 } from "../../features/configuration/ConfigurationState";
+import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import {
 	useHighlightActions,
 	useHighlightErrorMessage,
@@ -74,7 +75,7 @@ export function HardwareControlSummary() {
 	const runtimeStatus = usePlaybackRuntimeStatus();
 	const topology = usePlaybackPagesView();
 	const topologyActions = usePlaybackTopologyActions();
-	const bpms = useSpeedGroupsBpm() ?? [120, 90, 60, 30, 15];
+	const speedGroups = useSpeedGroupRuntimeView();
 	const prog = (useProgrammerFadeMillis() ?? 3000) / 1000;
 	const cue = (useSequenceMasterFadeMillis() ?? 3000) / 1000;
 	const release = (useReleaseFadeMillis() ?? 3000) / 1000;
@@ -92,6 +93,28 @@ export function HardwareControlSummary() {
 		activePage !== null &&
 		runtimeActions !== null &&
 		topologyActions !== null;
+	const hardwarePages = useRef(new KeyboardPageActions()).current;
+	useEffect(() => {
+		hardwarePages.syncAuthority(
+			pageReady ? topologyActions?.createPage ?? null : null,
+			pageReady ? runtimeActions?.setActivePage ?? null : null,
+		);
+		return () => hardwarePages.invalidate();
+	}, [hardwarePages, pageReady, topologyActions?.createPage, runtimeActions?.setActivePage]);
+	useEffect(() => {
+		const step = (event: Event) => {
+			if (!pageReady) return;
+			hardwarePages.step({ activePage: page, pages: topology.pages.map(item => item.body) },
+				(event as CustomEvent<number>).detail > 0 ? 1 : -1);
+		};
+		const menu = () => { if (pageReady) setPagesOpen(true); };
+		window.addEventListener("light:playback-page-step", step);
+		window.addEventListener("light:playback-page-menu", menu);
+		return () => {
+			window.removeEventListener("light:playback-page-step", step);
+			window.removeEventListener("light:playback-page-menu", menu);
+		};
+	}, [hardwarePages, pageReady, page, topology.pages]);
 	const openPagesOrRename = () => {
 		if (!pageReady) return;
 		if (state.playbackSetArmed && activePage) {
@@ -146,11 +169,10 @@ export function HardwareControlSummary() {
 					settings: true,
 				},
 			]}
-			speedGroups={(["A", "B", "C", "D", "E"] as const).map((group, index) => ({
-				id: group,
-				bpm: bpms[index],
-				display: formatSpeedGroupBpm(bpms[index]),
-			}))}
+			speedGroups={(["A", "B", "C", "D", "E"] as const).map((group, index) => {
+				const bpm = speedGroups.ready ? speedGroups.projection?.groups[index]?.manualBpm : undefined;
+				return { id: group, bpm, display: bpm === undefined ? "—" : formatSpeedGroupBpm(bpm) };
+			})}
 			onValue={(id) => {
 				if (id === "programmer-fade") openTime("prog", prog);
 				else if (id === "cue-fade") openTime("cue", cue);

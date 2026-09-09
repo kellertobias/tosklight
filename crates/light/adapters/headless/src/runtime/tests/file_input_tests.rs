@@ -414,6 +414,7 @@ fn osc_speed_group_button_performs_the_authoritative_learn_action() {
         &state,
         "/light/main/speed-group/1/button",
         &[OscArgument::Bool(true)],
+        None,
     );
 
     assert!(!state.output.speed_group_sound_config(0).enabled);
@@ -434,6 +435,7 @@ fn osc_release_fade_updates_and_persists_the_desk_timing() {
         &state,
         "/light/main/programmer/release-fade",
         &[OscArgument::Float(0.25)],
+        None,
     );
 
     assert_eq!(state.installation.configuration().release_fade_millis, 15_000);

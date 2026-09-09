@@ -7,6 +7,9 @@ use light_wire::v2::control_desk_configuration as wire;
 const REQUEST_CACHE_ENTRY_LIMIT: usize = 1_024;
 
 pub(super) fn router() -> Router<AppState> {
+    // Retain the established /actions endpoint: installed clients use its typed Update and
+    // SetPage union with the existing replay cache. Illumination extends that sparse Update;
+    // renaming it to /update would require a coordinated transport migration for those clients.
     // The desk is the operand, and there is one. The path carried its id while it could be one
     // of several, which is also why the action below had to compare a caller's desk against it.
     Router::new().route("/api/v2/control-desk/actions", post(apply_action))
@@ -79,6 +82,7 @@ fn update_control_desk(
             patch.rows.unwrap_or(current.rows),
             patch.buttons.unwrap_or(current.buttons),
             layout,
+            Some([patch.hardware_led_brightness.unwrap_or(current.hardware_led_brightness), patch.hardware_gooseneck_brightness.unwrap_or(current.hardware_gooseneck_brightness), patch.hardware_gooseneck_color.unwrap_or(current.hardware_gooseneck_color)]),
         )
         .map_err(ApiError::store)?;
     state.sessions.update_desk_sessions(&desk);
@@ -87,6 +91,7 @@ fn update_control_desk(
         "control_desk_changed",
         serde_json::json!({"desk":desk}),
     );
+    send_osc_feedback(state, false);
     Ok(outcome(desk, None, None, None))
 }
 

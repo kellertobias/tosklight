@@ -3,6 +3,32 @@ use super::playback_topology_route_support::{TopologyScenario, configure_request
 use super::*;
 
 #[tokio::test]
+async fn hardware_illumination_patch_is_sparse_replayed_and_validated() {
+    let scenario = TopologyScenario::new("Hardware illumination").await;
+    let update = serde_json::json!({"request_id":"illumination","action":{"type":"update","patch":{"hardware_led_brightness":0,"hardware_gooseneck_brightness":45,"hardware_gooseneck_color":25}}});
+    let changed = post_desk_action(&scenario, update.clone()).await;
+    assert_eq!(changed.status(), StatusCode::OK);
+    let changed = json(changed).await;
+    assert_eq!(changed["desk"]["hardware_led_brightness"], 0);
+    assert_eq!(changed["desk"]["hardware_gooseneck_brightness"], 45);
+    assert_eq!(changed["desk"]["hardware_gooseneck_color"], 25);
+    let replay = json(post_desk_action(&scenario, update).await).await;
+    assert_eq!(replay["replayed"], true);
+    let sparse = json(post_desk_action(&scenario, serde_json::json!({"request_id":"illumination-sparse","action":{"type":"update","patch":{"hardware_led_brightness":80}}})).await).await;
+    assert_eq!(sparse["desk"]["hardware_gooseneck_brightness"], 45);
+    assert_eq!(sparse["desk"]["hardware_gooseneck_color"], 25);
+    for field in ["hardware_led_brightness", "hardware_gooseneck_brightness", "hardware_gooseneck_color"] {
+        let invalid = post_desk_action(&scenario, serde_json::json!({"request_id":format!("invalid-{field}"),"action":{"type":"update","patch":{(field):101,"name":"must not change"}}})).await;
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    }
+    let desk = scenario.state.installation.desk().unwrap();
+    assert_eq!(desk.hardware_led_brightness, 80);
+    assert_ne!(desk.name, "must not change");
+    assert_eq!(crate::runtime::osc_feedback_broadcast::illumination_arguments(&desk), vec![OscArgument::Int(80), OscArgument::Int(45), OscArgument::Int(25)]);
+    scenario.cleanup();
+}
+
+#[tokio::test]
 async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
     let scenario = TopologyScenario::new("Control desk configuration v2").await;
     let desk_id = scenario_desk_id(&scenario);

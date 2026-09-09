@@ -217,7 +217,14 @@ export interface ControlDesk {
 	rows: number;
 	buttons: number;
 	playback_layout?: PlaybackSurfaceLayout | null;
+	hardware_led_brightness?: number;
+	hardware_gooseneck_brightness?: number;
+	hardware_gooseneck_color?: number;
 }
+
+export type HardwareLightingPatch = Partial<Pick<ControlDesk,
+	"hardware_led_brightness" | "hardware_gooseneck_brightness" | "hardware_gooseneck_color"
+>>;
 
 export interface PlaybackSurfaceRow {
 	first_playback_slot: number;

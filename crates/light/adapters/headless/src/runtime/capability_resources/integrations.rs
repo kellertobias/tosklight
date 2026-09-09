@@ -7,6 +7,7 @@ pub(in crate::runtime) struct IntegrationResource {
     osc_subscribers: Arc<Mutex<HashMap<String, OscSubscriber>>>,
     osc_cue_record_suppression: Arc<Mutex<osc_cue_record_suppression::OscCueRecordSuppression>>,
     osc_feedback: Option<Arc<std::net::UdpSocket>>,
+    osc_feedback_pending: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(test)]
     osc_feedback_capture: Arc<Mutex<Vec<CapturedOscMessage>>>,
 }
@@ -23,6 +24,7 @@ impl IntegrationResource {
             osc_subscribers: Arc::default(),
             osc_cue_record_suppression: Arc::default(),
             osc_feedback,
+            osc_feedback_pending: Arc::default(),
             #[cfg(test)]
             osc_feedback_capture: Arc::default(),
         }
@@ -38,6 +40,14 @@ impl IntegrationResource {
 
     pub(in crate::runtime) fn hardware_connected(&self) -> bool {
         !self.osc_subscribers.lock().is_empty()
+    }
+
+    pub(in crate::runtime) fn request_osc_feedback(&self) {
+        self.osc_feedback_pending.store(true, Ordering::Release);
+    }
+
+    pub(in crate::runtime) fn take_osc_feedback_request(&self) -> bool {
+        self.osc_feedback_pending.swap(false, Ordering::AcqRel)
     }
 
     pub(in crate::runtime) fn osc_subscriber(&self, client_id: &str) -> Option<OscSubscriber> {

@@ -109,6 +109,11 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
     tx.commit()?;
     drop_desk_osc_alias(conn)?;
+    let illumination_tx = conn.transaction()?;
+    add_column_if_missing(&illumination_tx, "control_desks", "hardware_led_brightness", "hardware_led_brightness INTEGER NOT NULL DEFAULT 100 CHECK (hardware_led_brightness BETWEEN 0 AND 100)")?;
+    add_column_if_missing(&illumination_tx, "control_desks", "hardware_gooseneck_brightness", "hardware_gooseneck_brightness INTEGER NOT NULL DEFAULT 100 CHECK (hardware_gooseneck_brightness BETWEEN 0 AND 100)")?;
+    add_column_if_missing(&illumination_tx, "control_desks", "hardware_gooseneck_color", "hardware_gooseneck_color INTEGER NOT NULL DEFAULT 100 CHECK (hardware_gooseneck_color BETWEEN 0 AND 100)")?;
+    illumination_tx.commit()?;
     // Before the desks: collapsing them deletes each superseded desk's own lock setting, and a
     // desk that was locked must not come back unlocked because its row was the one superseded.
     collapse_desk_locks(conn)?;

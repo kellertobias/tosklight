@@ -641,6 +641,9 @@ mod playback_address_tests {
 
     fn desk() -> ControlDesk {
         ControlDesk {
+            hardware_led_brightness: 100,
+            hardware_gooseneck_brightness: 100,
+            hardware_gooseneck_color: 100,
             id: uuid::Uuid::nil(),
             name: "Desk".into(),
             columns: 2,

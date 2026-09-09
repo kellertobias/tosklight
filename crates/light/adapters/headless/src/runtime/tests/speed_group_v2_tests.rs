@@ -1,6 +1,47 @@
 use super::*;
 
 #[tokio::test]
+async fn hardware_and_touch_taps_share_clock_and_publish_live_speed_authority() {
+    let clock = Arc::new(ManualClock::new(chrono::Utc::now()));
+    let (state, data_dir) = test_state_with_clock(clock.clone());
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let source = "127.0.0.1:19018";
+    assert!(handle_subscription_osc(&state, "/light/subscribe", &[
+        OscArgument::String("tap-authority-test".into()),
+        OscArgument::String("main".into()), OscArgument::Int(19018),
+    ], Some(source)));
+    let cursor = state.events.latest_sequence();
+    let hardware = |pressed| handle_control_event(&state, ControlEvent::Osc {
+        address: "/light/main/speed-group/1/button".into(),
+        arguments: vec![OscArgument::Bool(pressed)], source: Some(source.into()),
+    });
+    hardware(true);
+    hardware(false);
+    assert_eq!(speed_group_events(&state, cursor).len(), 1, "release is not another tap");
+    clock.advance_millis(400);
+    let response = app.clone().oneshot(Request::post("/api/v2/speed-groups/A/actions")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::json!({"action":"learn","captured_at_millis":1}).to_string())).unwrap()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json(response).await["snapshot"]["manual_bpm"], 150.0);
+    clock.advance_millis(400);
+    hardware(true);
+    hardware(false);
+    let snapshot = speed_group_snapshot(&app, &token, session.desk.id).await;
+    assert_eq!(snapshot["projection"]["groups"][0]["manual_bpm"], 150.0);
+    assert_eq!(snapshot["projection"]["revision"], 3);
+    let events = speed_group_events(&state, cursor);
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].source, light_application::EventSource::Action(light_application::ActionSource::Osc));
+    assert_eq!(events[1].source, light_application::EventSource::Action(light_application::ActionSource::Http));
+    assert_eq!(events[2].source, light_application::EventSource::Action(light_application::ActionSource::Osc));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn direct_manual_entry_resets_pause_scale_sound_and_capture_ownership() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

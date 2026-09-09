@@ -16,6 +16,7 @@ import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import { listTextEditorFiles } from "../../windows/TextEditorWindow";
 import { PlaybackLayoutModal } from "./PlaybackLayoutModal";
+import { HardwareLightingSettings } from "./HardwareLightingSettings";
 import {
 	createScreenConfiguration,
 	playbackLayoutLegacyFields,
@@ -258,6 +259,7 @@ export function ScreensSetup({
 						setSingleClientMode(enabled);
 					}}
 				/>
+				<HardwareLightingSettings />
 				{!desktop.available && (
 					<p>
 						Additional console screens are available in the ToskLight desktop

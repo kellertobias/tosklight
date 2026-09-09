@@ -45,6 +45,15 @@ pub struct RuntimePlaybackSurfaceLayout {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeControlDesk {
+    #[serde(default = "default_hardware_illumination")]
+    #[schemars(range(min = 0, max = 100))]
+    pub hardware_led_brightness: u8,
+    #[serde(default = "default_hardware_illumination")]
+    #[schemars(range(min = 0, max = 100))]
+    pub hardware_gooseneck_brightness: u8,
+    #[serde(default = "default_hardware_illumination")]
+    #[schemars(range(min = 0, max = 100))]
+    pub hardware_gooseneck_color: u8,
     pub id: Uuid,
     pub name: String,
     pub columns: u8,
@@ -322,3 +331,5 @@ mod tests {
         assert!(error.to_string().contains("UUID"));
     }
 }
+
+fn default_hardware_illumination() -> u8 { 100 }

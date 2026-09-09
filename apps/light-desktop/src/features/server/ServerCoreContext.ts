@@ -73,6 +73,7 @@ export interface ServerCoreContext
 	) => Promise<boolean>;
 	updateControlDesk: (
 		desk: import("../../api/types").ControlDesk,
+		options?: { throwOnError?: boolean; hardwareLighting?: import("../../api/types/desk").HardwareLightingPatch },
 	) => Promise<void>;
 	selectControlDesk: (id: string) => void;
 	removeClient: (deskId: string, clientId: string) => Promise<boolean>;

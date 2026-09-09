@@ -6,6 +6,9 @@ use light_wire::v2::runtime as wire;
 
 pub(super) fn desk(desk: ControlDesk) -> wire::RuntimeControlDesk {
     wire::RuntimeControlDesk {
+        hardware_led_brightness: desk.hardware_led_brightness,
+        hardware_gooseneck_brightness: desk.hardware_gooseneck_brightness,
+        hardware_gooseneck_color: desk.hardware_gooseneck_color,
         id: desk.id,
         name: desk.name,
         columns: desk.columns,

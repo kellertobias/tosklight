@@ -28,6 +28,13 @@ import type {
 } from "../types";
 import { WireValidationError } from "../wireValidation";
 import type { LiveClientTransport } from "./transport";
+import type { HardwareLightingPatch } from "../types/desk";
+
+// Rust Option patch fields may be absent; preserve that intent at the boundary.
+type ControlDeskIntent = Exclude<ControlDeskConfigurationAction, { type: "update" }> | {
+	type: "update";
+	patch: Partial<ControlDeskConfigurationPatch>;
+};
 
 interface PlaybackPageSelectionOptions {
 	existingOnly?: boolean;
@@ -188,10 +195,11 @@ export class PlaybackApiClient {
 	async updateControlDesk(
 		desk: ControlDesk,
 		previous?: ControlDesk,
+		hardwareLighting?: HardwareLightingPatch,
 	): Promise<ControlDesk> {
 		const outcome = await this.controlDeskAction(desk.id, {
 			type: "update",
-			patch: controlDeskPatch(previous, desk),
+			patch: hardwareLighting ?? controlDeskPatch(previous, desk),
 		});
 		return outcome.desk as ControlDesk;
 	}
@@ -244,9 +252,9 @@ export class PlaybackApiClient {
 
 	private controlDeskAction(
 		deskId: string,
-		action: ControlDeskConfigurationAction,
+		action: ControlDeskIntent,
 	): Promise<ControlDeskConfigurationActionOutcome> {
-		const request: ControlDeskConfigurationActionRequest = {
+		const request: Omit<ControlDeskConfigurationActionRequest, "action"> & { action: ControlDeskIntent } = {
 			request_id: crypto.randomUUID(),
 			action,
 		};
@@ -322,6 +330,9 @@ function controlDeskPatch(
 		columns: changed(current?.columns, next.columns),
 		rows: changed(current?.rows, next.rows),
 		buttons: changed(current?.buttons, next.buttons),
+		hardware_led_brightness: next.hardware_led_brightness == null ? null : changed(current?.hardware_led_brightness ?? 100, next.hardware_led_brightness),
+		hardware_gooseneck_brightness: next.hardware_gooseneck_brightness == null ? null : changed(current?.hardware_gooseneck_brightness ?? 100, next.hardware_gooseneck_brightness),
+		hardware_gooseneck_color: next.hardware_gooseneck_color == null ? null : changed(current?.hardware_gooseneck_color ?? 100, next.hardware_gooseneck_color),
 		playback_layout:
 			next.playback_layout == null ||
 			JSON.stringify(current?.playback_layout) ===
