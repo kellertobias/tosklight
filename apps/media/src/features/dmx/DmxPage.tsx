@@ -3,8 +3,8 @@
 // This page answers one question an operator asks at a patch bay: is anything actually arriving,
 // and is it landing where I think it is. It reports; it does not control.
 
-import { useEffect, useState } from "react";
 import { WindowFrame } from "@tosklight/ui/window-kit";
+import { useEffect, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { addressLabel } from "../../entities/catalog";
 import { percent, sourceBadge } from "../../entities/output";
@@ -25,9 +25,9 @@ export function DmxPage() {
 	const telemetry = useTelemetry();
 
 	return (
-			<WindowFrame
-				title="Diagnostics"
-				className="media-dmx-window"
+		<WindowFrame
+			title="Diagnostics"
+			className="media-dmx-window"
 			info={{ primary: "DMX", secondary: "Input and channel diagnostics" }}
 			groups={[
 				{
@@ -45,26 +45,26 @@ export function DmxPage() {
 				},
 			]}
 		>
-				<section className="media-page media-dmx-content">
+			<section className="media-page media-dmx-content">
 				<FixtureDownloads />
-			<ResourceState
-				resource={outputs}
-				subject="outputs"
-				isEmpty={(data) => data.length === 0}
-				empty="This server has no enabled outputs, so nothing is listening for a desk."
-			>
-				{(data) =>
-					data.map((output) => (
-						<OutputDmx
-							key={output.id}
-							output={output}
-							ingress={telemetry.frame?.dmx.find(
-								(sample) => sample.outputId === output.id,
-							)}
-						/>
-					))
-				}
-			</ResourceState>
+				<ResourceState
+					resource={outputs}
+					subject="outputs"
+					isEmpty={(data) => data.length === 0}
+					empty="This server has no enabled outputs, so nothing is listening for a desk."
+				>
+					{(data) =>
+						data.map((output) => (
+							<OutputDmx
+								key={output.id}
+								output={output}
+								ingress={telemetry.frame?.dmx.find(
+									(sample) => sample.outputId === output.id,
+								)}
+							/>
+						))
+					}
+				</ResourceState>
 			</section>
 		</WindowFrame>
 	);
@@ -86,10 +86,15 @@ function FixtureDownloads() {
 	}, []);
 	if (fixtures.length === 0) return null;
 	const gdtf = fixtures.filter((name) => name.endsWith(".gdtf"));
-	const magicq = fixtures.filter((name) => name.endsWith(".hed"));
+	const magicq = fixtures.filter(
+		(name) => name.endsWith(".hed") || name.endsWith(".csv"),
+	);
 	const grandma2 = fixtures.filter((name) => name.endsWith(".xml"));
 	return (
-		<section className="media-settings-section" aria-label="Console personalities">
+		<section
+			className="media-settings-section"
+			aria-label="Console personalities"
+		>
 			<h2>Console personalities</h2>
 			<p>
 				Patch one Layer personality per Pixel layer, followed immediately by one
@@ -97,7 +102,7 @@ function FixtureDownloads() {
 			</p>
 			<PersonalityGroup
 				title="MagicQ"
-				note="Install the native .hed files. They include MagicQ media attributes for CITP thumbnails."
+				note="Install the native .hed files. The generated channel CSV is the editable source for the exact encoder mapping."
 				files={magicq}
 			/>
 			<PersonalityGroup
@@ -130,6 +135,7 @@ function PersonalityGroup({
 }) {
 	if (files.length === 0) return null;
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: this is a download group, not a form fieldset.
 		<div role="group" aria-label={`${title} personalities`}>
 			<h3>{title}</h3>
 			<p>{note}</p>

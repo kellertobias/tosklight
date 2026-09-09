@@ -52,9 +52,11 @@ describe("DMX diagnostics", () => {
 			screen.getByRole("cell", { name: "No frame received" }),
 		).toBeInTheDocument();
 		expect(
-			(await screen.findAllByRole("link", {
-				name: "Download ToskLight Pixel Layer.gdtf",
-			}))[0],
+			(
+				await screen.findAllByRole("link", {
+					name: "Download ToskLight Pixel Layer.gdtf",
+				})
+			)[0],
 		).toHaveAttribute(
 			"href",
 			"/api/v2/fixtures/ToskLight%20Pixel%20Layer.gdtf",
@@ -64,6 +66,13 @@ describe("DMX diagnostics", () => {
 		).toContainElement(
 			screen.getByRole("link", {
 				name: "Download ToskLight Pixel Layer.hed",
+			}),
+		);
+		expect(
+			screen.getByRole("group", { name: "MagicQ personalities" }),
+		).toContainElement(
+			screen.getByRole("link", {
+				name: "Download ToskLight Pixel Layer Channels.csv",
 			}),
 		);
 		expect(

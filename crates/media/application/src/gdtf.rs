@@ -1,8 +1,8 @@
 //! The GDTF fixtures a console imports to patch this server.
 //!
-//! Both are generated from the canonical personality, never written out by hand: the channel table
-//! in `media_domain::personality` is the single source the receivers, the API, the tests, and this
-//! all read, so a channel cannot exist on the wire and be missing from a console's patch.
+//! The open interchange files are generated from the canonical personality. MagicQ's native HED
+//! files are compiled compatibility artifacts because ChamSys does not publish that encoding; the
+//! adjacent generated channel CSV is the editable source for its exact attribute and encoder map.
 //!
 //! Two fixtures, matching how a media server is patched: one layer, which an operator patches once
 //! per layer, and one master. That is why the domain names a single-layer and a master-only
@@ -54,8 +54,7 @@ pub fn master_fixture() -> FixtureType {
     }
 }
 
-/// Native console personalities plus the two GDTF fixtures, all generated or captured from the
-/// same canonical channel table.
+/// Native console personalities, MagicQ's editable channel source, and the two GDTF fixtures.
 pub fn packages() -> std::io::Result<Vec<(String, Vec<u8>)>> {
     let layer = layer_fixture();
     let master = master_fixture();
@@ -73,6 +72,13 @@ pub fn packages() -> std::io::Result<Vec<(String, Vec<u8>)>> {
             "ToskLight Pixel Master.hed".into(),
             include_bytes!(
                 "../../../../assets/media-personalities/magicq/ToskLight Pixel Master.hed"
+            )
+            .to_vec(),
+        ),
+        (
+            "ToskLight Pixel Layer Channels.csv".into(),
+            include_bytes!(
+                "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer Channels.csv"
             )
             .to_vec(),
         ),
@@ -437,11 +443,56 @@ mod tests {
     #[test]
     fn both_package_as_archives_a_console_can_import() {
         let packaged = packages().expect("they package");
-        assert_eq!(packaged.len(), 6);
+        assert_eq!(packaged.len(), 7);
         for (name, bytes) in packaged.iter().filter(|(name, _)| name.ends_with(".gdtf")) {
             assert!(bytes.len() > 100, "{name} is suspiciously small");
         }
         assert!(layer_description().contains("ToskLight Pixel Layer"));
+    }
+
+    #[test]
+    fn magicq_channel_source_has_every_layer_slot_and_requested_encoder_mapping() {
+        let csv = include_str!(
+            "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer Channels.csv"
+        );
+        let rows: Vec<&str> = csv.lines().collect();
+        assert_eq!(rows.len(), LAYER_CHANNELS.len());
+        for (index, row) in rows.iter().enumerate() {
+            assert_eq!(row.split(',').next().unwrap(), (index + 1).to_string());
+        }
+        for mapping in [
+            "Playback BPM,LTP,13,B1D",
+            "Speed Multiplr,LTP,11,B1E",
+            "Play Mode,LTP,10,B1F",
+            "Media Folder,LTP,9,B1Y",
+            "Media File,LTP,8,B1X",
+            "Cyan,LTP,16,C1E",
+            "Magenta,LTP,17,C1F",
+            "Yellow,LTP,18,C1Y",
+            "Greyscale,LTP,19,C1X",
+            "Scale Y,LTP,48,P1C",
+            "Scale X,LTP,49,P1D",
+            "Rotation,LTP,50,P1E",
+            "Scale Mode,LTP,51,P1F",
+            "Pos Y,LTP,5,P1Y",
+            "Pos X,LTP,4,P1X",
+            "Volume,LTP,1,I1Y",
+            "Dimmer,HTP,0,I1X",
+            "FX1 Select,LTP,28,B2X",
+            "FX1 Parameter,LTP,29,B2Y",
+            "FX2 Select,LTP,36,B3X",
+            "FX2 Parameter,LTP,37,B3Y",
+            "Mask Position X,LTP,52,B5A",
+            "Mask Position Y,LTP,53,B5B",
+            "Mask Scale X,LTP,54,B5C",
+            "Mask Scale Y,LTP,55,B5D",
+            "Mask Invert,LTP,56,B5E",
+            "Mask Opacity,LTP,57,B5F",
+            "Mask Folder,LTP,58,B5Y",
+            "Mask File,LTP,59,B5X",
+        ] {
+            assert!(csv.contains(mapping), "missing MagicQ mapping {mapping}");
+        }
     }
 
     #[test]

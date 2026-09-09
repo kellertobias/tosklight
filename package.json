@@ -34,6 +34,8 @@
 		"build:media:open": "bash tools/build.sh build-media-open",
 		"build:media": "bash tools/build.sh build-media",
 		"convert:media": "bash tools/convert-media.sh",
+		"generate:magicq-personality": "node tools/generate-magicq-personality.mjs",
+		"verify:magicq-personality": "node tools/generate-magicq-personality.mjs --check",
 		"open:viz": "bash tools/build.sh open-viz",
 		"build:viz:open": "bash tools/build.sh build-viz-open",
 		"build:viz": "bash tools/build.sh build-viz",

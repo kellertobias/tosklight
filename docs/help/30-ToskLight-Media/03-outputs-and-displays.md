@@ -28,7 +28,9 @@ Open **Diagnostics > Console personalities** in the Pixel management interface. 
 at consecutive addresses, then patch one Master immediately after the last layer. Do not patch the
 Master once per layer.
 
-- **MagicQ:** install both native `.hed` files. Configure the server as **CITP MSEX**, set the first
+- **MagicQ:** install both native `.hed` files. Pixel also provides the generated layer-channel
+  `.csv` used to maintain the exact MagicQ attribute and encoder assignment without re-entering
+  every channel. Configure the server as **CITP MSEX**, set the first
   layer head and the exact number of layers, enable thumbnail connection and live preview, and set
   Pixel's IP address. When MagicQ and Pixel run on the same computer, start Pixel first and set
   MagicQ's **Net host options** to **Normal + Loopback IP**. Use **GET THUMBS** after connecting.

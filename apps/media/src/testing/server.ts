@@ -193,6 +193,7 @@ export function stubServer(
 				return jsonResponse([
 					"ToskLight Pixel Layer.gdtf",
 					"ToskLight Pixel Master.gdtf",
+					"ToskLight Pixel Layer Channels.csv",
 					"ToskLight Pixel Layer.hed",
 					"ToskLight Pixel Master.hed",
 					"tosklight@pixel_layer@39ch.xml",
@@ -356,7 +357,8 @@ export function stubServer(
 				if (body.effectBank !== undefined) {
 					const bank = layer.effectBanks[body.effectBank];
 					if (bank) {
-						if (body.effectSelect !== undefined) bank.select = body.effectSelect;
+						if (body.effectSelect !== undefined)
+							bank.select = body.effectSelect;
 						if (body.effectStrength !== undefined)
 							bank.strength = body.effectStrength;
 					}
@@ -569,7 +571,20 @@ export function stubServer(
 							body[key];
 				if (body.opacityCycleDmx !== undefined)
 					output.master.opacityCycle =
-						({ 0: "Off", 1: "/16", 32: "/8", 64: "/4", 96: "/2", 128: "1x", 160: "2x", 192: "4x", 224: "8x", 240: "16x" } as Record<number, string>)[body.opacityCycleDmx] ?? "Off";
+						(
+							{
+								0: "Off",
+								1: "/16",
+								32: "/8",
+								64: "/4",
+								96: "/2",
+								128: "1x",
+								160: "2x",
+								192: "4x",
+								224: "8x",
+								240: "16x",
+							} as Record<number, string>
+						)[body.opacityCycleDmx] ?? "Off";
 				if (body.maskFolder !== undefined)
 					output.master.mask.folder = body.maskFolder;
 				if (body.maskFile !== undefined)
