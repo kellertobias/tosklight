@@ -549,6 +549,7 @@ export class BrowserCrossSurface {
 				await expect
 					.poll(async () => (await this.activePlayback(1))?.fader_position)
 					.toBeCloseTo(level, 4);
+				await this.bench.tick();
 				await firstHardware.expectAfter(
 					feedbackMark,
 					`/light/desk/feedback/page-playback/1/fader`,
