@@ -7,6 +7,15 @@
 //!
 //! A process whose outputs are all off-screen never builds an event loop at all.
 
+mod display;
+mod frame;
+mod worker_control;
+
+#[cfg(test)]
+use display::DisplayRectangle;
+use display::{DisplayDirection, map_pixels, monitor_rectangle, nearest_display};
+use frame::{operator_overlay, present_direct, present_standby};
+
 use std::sync::Arc;
 
 use media_application::configuration::{MediaConfiguration, OutputConfiguration, OutputTarget};
@@ -631,114 +640,6 @@ fn windows_command_chord(modifiers: ModifiersState) -> bool {
         && !modifiers.super_key()
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DisplayDirection {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct DisplayRectangle {
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
-}
-
-fn monitor_rectangle(monitor: &winit::monitor::MonitorHandle) -> DisplayRectangle {
-    let position = monitor.position();
-    let size = monitor.size();
-    DisplayRectangle {
-        x: position.x,
-        y: position.y,
-        width: size.width,
-        height: size.height,
-    }
-}
-
-fn nearest_display(
-    current: DisplayRectangle,
-    displays: &[DisplayRectangle],
-    direction: DisplayDirection,
-) -> Option<usize> {
-    let centre = |display: DisplayRectangle| {
-        (
-            i64::from(display.x) * 2 + i64::from(display.width),
-            i64::from(display.y) * 2 + i64::from(display.height),
-        )
-    };
-    let (current_x, current_y) = centre(current);
-    let current_right = i64::from(current.x) + i64::from(current.width);
-    let current_bottom = i64::from(current.y) + i64::from(current.height);
-    displays
-        .iter()
-        .enumerate()
-        .filter_map(|(index, display)| {
-            if *display == current {
-                return None;
-            }
-            let (x, y) = centre(*display);
-            let (primary, cross) = match direction {
-                DisplayDirection::Left
-                    if i64::from(display.x) + i64::from(display.width) <= i64::from(current.x) =>
-                {
-                    (current_x - x, (y - current_y).abs())
-                }
-                DisplayDirection::Right if i64::from(display.x) >= current_right => {
-                    (x - current_x, (y - current_y).abs())
-                }
-                DisplayDirection::Up
-                    if i64::from(display.y) + i64::from(display.height) <= i64::from(current.y) =>
-                {
-                    (current_y - y, (x - current_x).abs())
-                }
-                DisplayDirection::Down if i64::from(display.y) >= current_bottom => {
-                    (y - current_y, (x - current_x).abs())
-                }
-                _ => return None,
-            };
-            Some((primary + cross * 2, primary, index))
-        })
-        .min()
-        .map(|(_, _, index)| index)
-}
-
-/// Samples one output's frame into its pixel map and sends it.
-///
-/// Output rather than a preview: it runs on its own cadence and does not wait for anyone to be
-/// watching a thumbnail. The cadence is asked before the readback, because the readback is the
-/// expensive half and a frame that will not be sent should not pay for one.
-#[allow(clippy::too_many_arguments)]
-fn map_pixels(
-    pixels: &mut crate::pixel_output::PixelOutputs,
-    configuration: &OutputConfiguration,
-    output: &mut WindowedOutput,
-    master: &media_domain::MasterState,
-    master_mask: Option<&SourceTexture>,
-    now: Timestamp,
-    instance: [u8; 16],
-    universe_inputs: &crate::dmx::SharedUniverseInputs,
-) {
-    if !pixels.wants(configuration, now.as_millis()) {
-        return;
-    }
-    let size = output.size();
-    let frame = output.capture_preview(size, master, master_mask);
-    pixels.send(
-        configuration,
-        media_domain::pixel_map::CanvasImage {
-            width: size.width,
-            height: size.height,
-            rgba: &frame,
-        },
-        now.as_millis(),
-        instance,
-        universe_inputs,
-    );
-}
-
 impl RenderWorkerState {
     fn now(&self) -> Timestamp {
         Timestamp::from_micros(self.started.elapsed().as_micros() as u64)
@@ -749,11 +650,9 @@ impl RenderWorkerState {
         let seconds = self.started.elapsed().as_secs_f32();
         let state = self.state.load();
         let catalog = self.catalog.load();
-        // Read once per pass rather than once per output, so every output on this frame composites
-        // from the same document even if an edit lands between two of them.
+        // Every output in this pass composites from the same configuration snapshot.
         let configuration = self.configuration.load();
-        // Silence when no input device is open, which is a real analysis rather than a
-        // placeholder: time-driven visualizers run and audio-driven ones rest.
+        // Without an input device, time-driven visualizers run while audio-driven ones rest.
         let heard = self.analysis.load();
         let mut reports = Vec::new();
 
@@ -768,108 +667,34 @@ impl RenderWorkerState {
             let output_state = &resolved_output;
             let master = output_state.master;
             let region = shown_region(&configuration, output_state.id);
-            let mapped = configuration.output(output_state.id);
-            let status_overlay = mapped.is_some_and(|output| output.status_overlay);
-            if crate::standby::visible(
+            let status_overlay = configuration
+                .output(output_state.id)
+                .is_some_and(|output| output.status_overlay);
+            if present_standby(
+                &mut self.sinks,
+                &self.test_pattern_layer,
+                &self.operator_overlay_layer,
+                hosted,
+                output_state,
                 status_overlay,
-                output_state.ownership.dmx.is_some(),
-                output_state.ownership.web_takeover,
-            ) && let Some(standby) = hosted.standby.as_ref()
-            {
-                let draws = [LayerDraw {
-                    state: &self.test_pattern_layer,
-                    source: standby,
-                    mask: None,
-                }];
-                let idle = MasterState::default();
-                let overlay = hosted
-                    .hint_visible_until
-                    .filter(|until| *until > std::time::Instant::now())
-                    .and_then(|_| hosted.fullscreen_hint.as_ref())
-                    .map(|source| LayerDraw {
-                        state: &self.operator_overlay_layer,
-                        source,
-                        mask: None,
-                    });
-                present(
-                    &mut hosted.output,
-                    &draws,
-                    &idle,
-                    None,
-                    now,
-                    region,
-                    overlay,
-                );
-                capture_previews(
-                    &mut self.sinks,
-                    &hosted.configuration,
-                    &mut hosted.output,
-                    output_state,
-                    &[],
-                    &draws,
-                    &MasterState::default(),
-                    None,
-                    now,
-                );
+                now,
+                region,
+            ) {
                 continue;
             }
 
-            // A clip named at launch plays on layer one. It is a development affordance and it
-            // takes precedence over the real path so a machine with no library still proves it.
-            if let Some(direct) = self.direct.as_mut() {
-                if !matches!(
-                    self.loader.request_load(direct.asset, &direct.path),
-                    Ok(Some(_))
-                ) {
-                    continue;
-                }
-                let delivery =
-                    direct
-                        .session
-                        .deliver(&direct.layer, media_domain::ResolvedTempo::None, now);
-                if let Some(frame) = delivery.frame
-                    && hosted
-                        .sources
-                        .prepare(0, direct.asset, frame, direct.size, &mut self.loader)
-                        .unwrap_or(false)
-                    && let Some(texture) = hosted.sources.texture(0)
-                {
-                    let draws = [LayerDraw {
-                        state: &direct.layer,
-                        source: texture,
-                        mask: None,
-                    }];
-                    let overlay = hosted
-                        .hint_visible_until
-                        .filter(|until| *until > std::time::Instant::now())
-                        .and_then(|_| hosted.fullscreen_hint.as_ref())
-                        .map(|source| LayerDraw {
-                            state: &self.operator_overlay_layer,
-                            source,
-                            mask: None,
-                        });
-                    present(
-                        &mut hosted.output,
-                        &draws,
-                        &master,
-                        None,
-                        now,
-                        region,
-                        overlay,
-                    );
-                    capture_previews(
-                        &mut self.sinks,
-                        &hosted.configuration,
-                        &mut hosted.output,
-                        output_state,
-                        std::slice::from_ref(&direct.layer),
-                        &draws,
-                        &master,
-                        None,
-                        now,
-                    );
-                    continue;
-                }
+            if present_direct(
+                &mut self.loader,
+                self.direct.as_mut(),
+                &mut self.sinks,
+                &self.operator_overlay_layer,
+                hosted,
+                output_state,
+                &master,
+                now,
+                region,
+            ) {
+                continue;
             }
 
             // The real path: every layer's address becomes a texture, or reports why it did not.
@@ -941,15 +766,11 @@ impl RenderWorkerState {
             let master_mask = prepared
                 .master_mask
                 .and_then(|slot| hosted.pipeline.texture(slot));
-            let overlay = hosted
-                .hint_visible_until
-                .filter(|until| *until > std::time::Instant::now())
-                .and_then(|_| hosted.fullscreen_hint.as_ref())
-                .map(|source| LayerDraw {
-                    state: &self.operator_overlay_layer,
-                    source,
-                    mask: None,
-                });
+            let overlay = operator_overlay(
+                hosted.hint_visible_until,
+                hosted.fullscreen_hint.as_ref(),
+                &self.operator_overlay_layer,
+            );
             present(
                 &mut hosted.output,
                 &draws,
@@ -990,132 +811,6 @@ impl RenderWorkerState {
                 .map(Arc::new)
                 .unwrap_or_else(|| Arc::clone(current))
         });
-    }
-
-    fn run(mut self, receiver: std::sync::mpsc::Receiver<RenderCommand>, shutdown: Shutdown) {
-        loop {
-            if !self.apply_pending_commands(&receiver) || shutdown.reason().is_some() {
-                break;
-            }
-
-            self.present_all();
-
-            let now = self.now();
-            let wait = presentation_worker_wait(
-                self.outputs
-                    .iter()
-                    .map(|hosted| hosted.output.time_until_deadline(now)),
-            );
-            if let Some(duration) = wait {
-                match receiver.recv_timeout(duration) {
-                    Ok(command) => {
-                        if !self.apply_command(command) {
-                            break;
-                        }
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-                }
-            }
-        }
-
-        for hosted in &self.outputs {
-            let cadence = hosted.output.cadence();
-            tracing::info!(
-                id = %hosted.output.id(),
-                frames = cadence.frames,
-                measured_fps = cadence.frames_per_second(),
-                "output stopped"
-            );
-        }
-    }
-
-    fn apply_pending_commands(
-        &mut self,
-        receiver: &std::sync::mpsc::Receiver<RenderCommand>,
-    ) -> bool {
-        let mut resizes = std::collections::BTreeMap::new();
-        while let Ok(command) = receiver.try_recv() {
-            match command {
-                RenderCommand::Resize { window, size } => {
-                    resizes.insert(window, size);
-                }
-                RenderCommand::ShowFullscreenHint { window } => {
-                    self.show_fullscreen_hint(window);
-                }
-                RenderCommand::HideFullscreenHint { window } => {
-                    self.hide_fullscreen_hint(window);
-                }
-                RenderCommand::Stop => return false,
-            }
-        }
-        for (window, size) in resizes {
-            self.resize(window, size);
-        }
-        true
-    }
-
-    fn apply_command(&mut self, command: RenderCommand) -> bool {
-        match command {
-            RenderCommand::Resize { window, size } => {
-                self.resize(window, size);
-                true
-            }
-            RenderCommand::ShowFullscreenHint { window } => {
-                self.show_fullscreen_hint(window);
-                true
-            }
-            RenderCommand::HideFullscreenHint { window } => {
-                self.hide_fullscreen_hint(window);
-                true
-            }
-            RenderCommand::Stop => false,
-        }
-    }
-
-    fn resize(&mut self, window: WindowId, size: Size) {
-        let Some(hosted) = self
-            .outputs
-            .iter_mut()
-            .find(|hosted| hosted.window.id() == window)
-        else {
-            return;
-        };
-        hosted.output.resize(size);
-        hosted.pipeline.resize(size);
-        hosted.standby = crate::standby::render(size, &self.administration_endpoint)
-            .and_then(|frame| {
-                SourceTexture::from_rgba8(hosted.output.gpu(), frame.size, &frame.pixels)
-                    .map_err(anyhow::Error::from)
-            })
-            .ok();
-        hosted.fullscreen_hint = crate::fullscreen_hint::render(size)
-            .and_then(|frame| {
-                SourceTexture::from_rgba8(hosted.output.gpu(), frame.size, &frame.pixels)
-                    .map_err(anyhow::Error::from)
-            })
-            .ok();
-    }
-
-    fn show_fullscreen_hint(&mut self, window: WindowId) {
-        if let Some(hosted) = self
-            .outputs
-            .iter_mut()
-            .find(|hosted| hosted.window.id() == window)
-        {
-            hosted.hint_visible_until =
-                Some(std::time::Instant::now() + std::time::Duration::from_secs(4));
-        }
-    }
-
-    fn hide_fullscreen_hint(&mut self, window: WindowId) {
-        if let Some(hosted) = self
-            .outputs
-            .iter_mut()
-            .find(|hosted| hosted.window.id() == window)
-        {
-            hosted.hint_visible_until = None;
-        }
     }
 }
 
@@ -1413,204 +1108,5 @@ impl ApplicationHandler for PresentationHost {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use media_application::configuration::MonitorSelector;
-
-    fn monitor_output() -> OutputConfiguration {
-        let mut output = OutputConfiguration::new("Main");
-        output.target = OutputTarget::Monitor {
-            monitor: MonitorSelector::Index(0),
-            fullscreen: false,
-        };
-        output
-    }
-
-    #[test]
-    fn an_all_off_screen_configuration_asks_for_no_output_window() {
-        let mut output = OutputConfiguration::new("Main");
-        output.target = OutputTarget::OffScreen;
-        let configuration = MediaConfiguration {
-            outputs: vec![output],
-            ..Default::default()
-        };
-        assert!(matches!(
-            configuration.outputs[0].target,
-            OutputTarget::OffScreen
-        ));
-        assert!(!needs_a_window(&configuration));
-    }
-
-    #[test]
-    fn a_monitor_bound_output_asks_for_an_output_window() {
-        let configuration = MediaConfiguration {
-            outputs: vec![monitor_output()],
-            ..Default::default()
-        };
-        assert!(needs_a_window(&configuration));
-    }
-
-    #[test]
-    fn arrow_navigation_chooses_the_nearest_display_in_that_direction() {
-        let current = DisplayRectangle {
-            x: 0,
-            y: 0,
-            width: 1920,
-            height: 1080,
-        };
-        let displays = [
-            current,
-            DisplayRectangle {
-                x: 1920,
-                y: 0,
-                width: 2560,
-                height: 1440,
-            },
-            DisplayRectangle {
-                x: 1800,
-                y: 1440,
-                width: 1920,
-                height: 1080,
-            },
-            DisplayRectangle {
-                x: -1280,
-                y: 0,
-                width: 1280,
-                height: 1024,
-            },
-        ];
-
-        assert_eq!(
-            nearest_display(current, &displays, DisplayDirection::Right),
-            Some(1)
-        );
-        assert_eq!(
-            nearest_display(current, &displays, DisplayDirection::Left),
-            Some(3)
-        );
-        assert_eq!(
-            nearest_display(current, &displays, DisplayDirection::Down),
-            Some(2)
-        );
-        assert_eq!(
-            nearest_display(current, &displays, DisplayDirection::Up),
-            None
-        );
-    }
-
-    #[test]
-    fn arrow_navigation_does_nothing_at_the_edge_of_the_desktop() {
-        let current = DisplayRectangle {
-            x: 1920,
-            y: 0,
-            width: 1920,
-            height: 1080,
-        };
-        let displays = [
-            DisplayRectangle {
-                x: 0,
-                y: 0,
-                width: 1920,
-                height: 1080,
-            },
-            current,
-        ];
-        assert_eq!(
-            nearest_display(current, &displays, DisplayDirection::Right),
-            None
-        );
-    }
-
-    #[test]
-    fn fullscreen_commands_require_exactly_control_and_shift() {
-        assert!(windows_command_chord(
-            ModifiersState::CONTROL | ModifiersState::SHIFT
-        ));
-        assert!(!windows_command_chord(ModifiersState::CONTROL));
-        assert!(!windows_command_chord(ModifiersState::SHIFT));
-        assert!(!windows_command_chord(
-            ModifiersState::CONTROL | ModifiersState::SHIFT | ModifiersState::ALT
-        ));
-    }
-
-    #[test]
-    fn an_unconfigured_first_run_asks_for_its_visible_output_window() {
-        assert!(needs_a_window(&MediaConfiguration::default()));
-    }
-
-    #[test]
-    fn the_output_window_has_the_pixel_application_icon() {
-        assert!(application_icon().is_some());
-    }
-
-    #[test]
-    fn a_disabled_monitor_output_does_not_open_a_window() {
-        let mut output = monitor_output();
-        output.enabled = false;
-        let configuration = MediaConfiguration {
-            outputs: vec![output],
-            ..Default::default()
-        };
-        assert!(!needs_a_window(&configuration));
-    }
-
-    #[test]
-    fn presentation_worker_waits_for_the_earliest_fixed_deadline() {
-        assert_eq!(
-            presentation_worker_wait([
-                std::time::Duration::from_millis(33),
-                std::time::Duration::from_millis(16),
-            ]),
-            Some(std::time::Duration::from_millis(16))
-        );
-        assert_eq!(presentation_worker_wait([std::time::Duration::ZERO]), None);
-        assert_eq!(presentation_worker_wait([]), None);
-    }
-
-    #[test]
-    fn an_unlocked_output_keeps_a_mixed_worker_running_immediately() {
-        assert_eq!(
-            presentation_worker_wait([
-                std::time::Duration::from_millis(16),
-                std::time::Duration::ZERO,
-                std::time::Duration::from_millis(33),
-            ]),
-            None
-        );
-    }
-
-    #[test]
-    fn what_the_renderer_saw_reaches_the_authoritative_state() {
-        let id = media_domain::OutputId::new();
-        let state = MediaState::with_outputs(vec![media_domain::OutputState::new(
-            id,
-            media_domain::LayerPersonality::TwoLayers,
-        )]);
-        let failure = media_domain::SourceStatus::Failed {
-            failure: media_domain::SourceFailure::MissingFile,
-        };
-
-        let next = with_reports(&state, &[(id, 0, failure)], Timestamp::from_millis(0))
-            .expect("a new status is a change");
-        assert_eq!(next.output(id).unwrap().layers[0].source_status, failure);
-        assert_eq!(
-            next.output(id).unwrap().layers[1].source_status,
-            media_domain::SourceStatus::Unselected,
-            "one layer's failure is not another's"
-        );
-
-        assert!(
-            with_reports(&next, &[(id, 0, failure)], Timestamp::from_millis(16)).is_none(),
-            "reporting the same status again publishes nothing"
-        );
-        assert!(
-            with_reports(
-                &state,
-                &[(media_domain::OutputId::new(), 0, failure)],
-                Timestamp::from_millis(0)
-            )
-            .is_none(),
-            "a report for an output that is not here changes nothing"
-        );
-    }
-}
+#[path = "presentation_tests.rs"]
+mod tests;

@@ -31,6 +31,7 @@ import {
 } from "../../shared/api/queries";
 import { textPreviewUrl } from "../text-sources/TextSourcesPage";
 import { visualizerPreviewUrl } from "../visualizers/preview";
+import { effectLayerChange } from "./effectLayerChange";
 
 const CATALOG_POLL_MS = 15_000;
 
@@ -124,17 +125,7 @@ function MediaPanePageContent() {
 				: "Running output unavailable",
 		secondary: `${catalog.data?.itemCount ?? 0} library ${catalog.data?.itemCount === 1 ? "item" : "items"}`,
 	};
-	const sourceFailure = (outputs.data ?? [])
-		.flatMap((output) =>
-			output.layers.flatMap((layer) =>
-				layer.sourceStatus.failure
-					? [
-							`${output.name} layer ${layer.index + 1}: ${layer.sourceStatus.failure}`,
-						]
-					: [],
-			),
-		)
-		.join("\n");
+	const sourceFailure = outputSourceFailures(outputs.data ?? []);
 	useFailureToast(sourceFailure ? { message: sourceFailure } : undefined);
 	const previewOutputId = selectedOutput?.id;
 	useEffect(() => {
@@ -688,6 +679,18 @@ function layerId(outputId: string, index: number) {
 	return `${outputId}:${index}`;
 }
 
+function outputSourceFailures(outputs: OutputView[]) {
+	return outputs
+		.flatMap((output) =>
+			output.layers.flatMap((layer) =>
+				layer.sourceStatus.failure
+					? [`${output.name} layer ${layer.index + 1}: ${layer.sourceStatus.failure}`]
+					: [],
+			),
+		)
+		.join("\n");
+}
+
 function sourceFilterForFolder(folder: number): MediaSourceFilter {
 	if (folder >= 250) return "visualizers";
 	if (folder >= 200) return "text";
@@ -774,101 +777,8 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 				: { effectStrength: number / 100 }),
 		};
 	}
-	const effect =
-		/^effect-(\d+)-(type|enabled|mix|tv-curvature|distortion|image-grain|compression-damage|block-size|tile-displacement|chroma-damage|glitching|blur-amount|feedback-amount|feedback-motion|feedback-direction|cycle-interval|beat-move-amount|beat-move-direction|beat-move-decay|kaleidoscope-repetitions|kaleidoscope-angle|rasterize-mode|rasterize-dot-size|beat-scan-width|beat-scan-edge|beat-scan-falloff|beat-scan-duration|beat-scale-amount|beat-turn-enabled|beat-turn-rotation|beat-scale-decay|beat-grid-density|beat-grid-height|beat-grid-duration|beat-grid-origin|beat-grid-hue|beat-grid-brightness|beat-form-enlargement|beat-form-lifetime|beat-form-density|beat-form-variation|drawn-strength|drawn-line-detail)$/.exec(
-			id,
-		);
-	if (effect) {
-		const effectSlot = Number(effect[1]);
-		switch (effect[2]) {
-			case "type":
-				return { effectSlot, effectType: String(value) };
-			case "enabled":
-				return { effectSlot, effectEnabled: value === "true" };
-			case "mix":
-				return { effectSlot, effectMix: number / 100 };
-			case "tv-curvature":
-				return { effectSlot, tvCurvature: number / 100 };
-			case "distortion":
-				return { effectSlot, effectDistortion: number / 100 };
-			case "image-grain":
-				return { effectSlot, imageGrain: number / 100 };
-			case "compression-damage":
-				return { effectSlot, compressionDamage: number / 100 };
-			case "block-size":
-				return { effectSlot, blockSize: number / 100 };
-			case "tile-displacement":
-				return { effectSlot, tileDisplacement: number / 100 };
-			case "chroma-damage":
-				return { effectSlot, chromaDamage: number / 100 };
-			case "glitching":
-				return { effectSlot, effectGlitching: number / 100 };
-			case "blur-amount":
-				return { effectSlot, blurAmount: number / 100 };
-			case "feedback-amount":
-				return { effectSlot, feedbackAmount: number / 100 };
-			case "feedback-motion":
-				return { effectSlot, feedbackMotion: number / 100 };
-			case "feedback-direction":
-				return { effectSlot, feedbackDirection: String(value) };
-			case "cycle-interval":
-				return { effectSlot, cycleInterval: String(value) };
-			case "beat-move-amount":
-				return { effectSlot, beatMoveAmount: number / 100 };
-			case "beat-move-direction":
-				return { effectSlot, beatMoveDirection: String(value) };
-			case "beat-move-decay":
-				return { effectSlot, beatMoveDecay: number };
-			case "kaleidoscope-repetitions":
-				return { effectSlot, kaleidoscopeRepetitions: number };
-			case "kaleidoscope-angle":
-				return { effectSlot, kaleidoscopeAngle: number };
-			case "rasterize-mode":
-				return { effectSlot, rasterizeMode: String(value) };
-			case "rasterize-dot-size":
-				return { effectSlot, rasterizeDotSize: number };
-			case "beat-scan-width":
-				return { effectSlot, beatScanWidth: number / 100 };
-			case "beat-scan-edge":
-				return { effectSlot, beatScanEdge: String(value) };
-			case "beat-scan-falloff":
-				return { effectSlot, beatScanFalloff: number / 100 };
-			case "beat-scan-duration":
-				return { effectSlot, beatScanDuration: number };
-			case "beat-scale-amount":
-				return { effectSlot, beatScaleAmount: number / 100 };
-			case "beat-turn-enabled":
-				return { effectSlot, beatTurnEnabled: value === "true" };
-			case "beat-turn-rotation":
-				return { effectSlot, beatTurnRotation: number };
-			case "beat-scale-decay":
-				return { effectSlot, beatScaleDecay: number };
-			case "beat-grid-density":
-				return { effectSlot, beatGridDensity: number };
-			case "beat-grid-height":
-				return { effectSlot, beatGridHeight: number / 100 };
-			case "beat-grid-duration":
-				return { effectSlot, beatGridDuration: number };
-			case "beat-grid-origin":
-				return { effectSlot, beatGridOrigin: String(value) };
-			case "beat-grid-hue":
-				return { effectSlot, beatGridHue: number };
-			case "beat-grid-brightness":
-				return { effectSlot, beatGridBrightness: number / 100 };
-			case "beat-form-enlargement":
-				return { effectSlot, beatFormEnlargement: number / 100 };
-			case "beat-form-lifetime":
-				return { effectSlot, beatFormLifetime: number };
-			case "beat-form-density":
-				return { effectSlot, beatFormDensity: number };
-			case "beat-form-variation":
-				return { effectSlot, beatFormVariation: number / 100 };
-			case "drawn-strength":
-				return { effectSlot, drawnStrength: number / 100 };
-			case "drawn-line-detail":
-				return { effectSlot, drawnLineDetail: number / 100 };
-		}
-	}
+	const effect = effectLayerChange(id, value);
+	if (effect) return effect;
 	switch (id) {
 		case "play-mode":
 			return { playModeDmx: number };
@@ -1951,258 +1861,70 @@ function masterSections(
 	takeover: boolean,
 ): MediaPaneModel["controlSections"] {
 	return [
-		{
-			id: "output",
-			label: "Output",
-			controls: [
-				valueControl(
-					"master-dimmer",
-					"Dimmer",
-					output.master.dimmer * 100,
-					0,
-					100,
-					!takeover,
-					"%",
-				),
-				valueControl(
-					"master-volume",
-					"Volume",
-					output.master.volume * 100,
-					0,
-					100,
-					!takeover,
-					"%",
-				),
-			],
-		},
-		{
-			id: "effects",
-			label: "Effects",
-			controls: [
-				{
-					id: "media.master.effect.opacity_cycle",
-					kind: "choice",
-					label: "Multiplier / Divider",
-					group: "Layer Opacity Cycle",
-					value: String(output.master.opacityCycleDmx),
-					options: [
-						{ value: "0", label: "Off" },
-						{ value: "1", label: "/16" },
-						{ value: "32", label: "/8" },
-						{ value: "64", label: "/4" },
-						{ value: "96", label: "/2" },
-						{ value: "128", label: "1x" },
-						{ value: "160", label: "2x" },
-						{ value: "192", label: "4x" },
-						{ value: "224", label: "8x" },
-						{ value: "240", label: "16x" },
-					],
-					disabled: !takeover,
-				},
-			],
-		},
-		{
-			id: "geometry",
-			label: "Geometry",
-			controls: [
-				valueControl(
-					"master-position-x",
-					"Position X",
-					output.master.positionX,
-					-2,
-					2,
-					!takeover,
-				),
-				valueControl(
-					"master-position-y",
-					"Position Y",
-					output.master.positionY,
-					-2,
-					2,
-					!takeover,
-				),
-				valueControl(
-					"master-scale-x",
-					"Scale X",
-					output.master.scaleX,
-					0,
-					4,
-					!takeover,
-				),
-				valueControl(
-					"master-scale-y",
-					"Scale Y",
-					output.master.scaleY,
-					0,
-					4,
-					!takeover,
-				),
-				valueControl(
-					"master-rotation",
-					"Rotation",
-					output.master.rotation,
-					-180,
-					180,
-					!takeover,
-					"°",
-					1,
-				),
-				{
-					id: "master-scaling-mode",
-					kind: "choice",
-					label: "Scale mode",
-					value: output.master.scalingMode,
-					options: [
-						{ value: "fit", label: "Fit" },
-						{ value: "fill", label: "Fill" },
-						{ value: "original", label: "Native" },
-						{ value: "stretch", label: "Stretch" },
-					],
-					disabled: !takeover,
-				},
-			],
-		},
-		{
-			id: "mask-controls",
-			label: "Mask position",
-			controls: [
-				valueControl(
-					"master-mask-position-x",
-					"Mask position X",
-					output.master.maskPositionX,
-					-2,
-					2,
-					!takeover,
-				),
-				valueControl(
-					"master-mask-position-y",
-					"Mask position Y",
-					output.master.maskPositionY,
-					-2,
-					2,
-					!takeover,
-				),
-			],
-		},
-		{
-			id: "shapers",
-			label: "Shapers",
-			controls: [
-				valueControl(
-					"shaper-left",
-					"Left",
-					output.master.shaperLeft * 100,
-					0,
-					100,
-					!takeover,
-					"%",
-				),
-				valueControl(
-					"shaper-right",
-					"Right",
-					output.master.shaperRight * 100,
-					0,
-					100,
-					!takeover,
-					"%",
-				),
-				valueControl(
-					"shaper-top",
-					"Top",
-					output.master.shaperTop * 100,
-					0,
-					100,
-					!takeover,
-					"%",
-				),
-				valueControl(
-					"shaper-bottom",
-					"Bottom",
-					output.master.shaperBottom * 100,
-					0,
-					100,
-					!takeover,
-					"%",
-				),
-				valueControl(
-					"shaper-left-rotation",
-					"Left rotation",
-					output.master.shaperLeftRotation,
-					-45,
-					45,
-					!takeover,
-					"°",
-					1,
-				),
-				valueControl(
-					"shaper-right-rotation",
-					"Right rotation",
-					output.master.shaperRightRotation,
-					-45,
-					45,
-					!takeover,
-					"°",
-					1,
-				),
-				valueControl(
-					"shaper-top-rotation",
-					"Top rotation",
-					output.master.shaperTopRotation,
-					-45,
-					45,
-					!takeover,
-					"°",
-					1,
-				),
-				valueControl(
-					"shaper-bottom-rotation",
-					"Bottom rotation",
-					output.master.shaperBottomRotation,
-					-45,
-					45,
-					!takeover,
-					"°",
-					1,
-				),
-				valueControl(
-					"shaper-rotation",
-					"Module rotation",
-					output.master.shaperRotation,
-					-180,
-					180,
-					!takeover,
-					"°",
-					1,
-				),
-			],
-		},
-		{
-			id: "colour",
-			label: "Colour",
-			controls: [
-				{
-					id: "master-tint",
-					kind: "color",
-					label: "Tint",
-					value: tintHex(
-						output.master.tintRed,
-						output.master.tintGreen,
-						output.master.tintBlue,
-					),
-					disabled: !takeover,
-				},
-				{
-					id: "flip-mirror",
-					kind: "choice",
-					label: "Flip / mirror",
-					value: output.master.flipMirror,
-					options: ["none", "horizontal", "vertical", "both"].map((value) => ({
-						value,
-						label: value,
-					})),
-					disabled: !takeover,
-				},
-			],
-		},
+		masterOutputSection(output, takeover), masterEffectsSection(output, takeover),
+		masterGeometrySection(output, takeover), masterMaskSection(output, takeover),
+		masterShapersSection(output, takeover), masterColourSection(output, takeover),
 	];
+}
+
+type MasterSection = MediaPaneModel["controlSections"][number];
+function masterOutputSection(output: OutputView, takeover: boolean): MasterSection {
+	return { id: "output", label: "Output", controls: [
+		valueControl("master-dimmer", "Dimmer", output.master.dimmer * 100, 0, 100, !takeover, "%"),
+		valueControl("master-volume", "Volume", output.master.volume * 100, 0, 100, !takeover, "%"),
+	] };
+}
+function masterEffectsSection(output: OutputView, takeover: boolean): MasterSection {
+	return { id: "effects", label: "Effects", controls: [{
+		id: "media.master.effect.opacity_cycle", kind: "choice", label: "Multiplier / Divider",
+		group: "Layer Opacity Cycle", value: String(output.master.opacityCycleDmx),
+		options: [
+			{ value: "0", label: "Off" }, { value: "1", label: "/16" },
+			{ value: "32", label: "/8" }, { value: "64", label: "/4" },
+			{ value: "96", label: "/2" }, { value: "128", label: "1x" },
+			{ value: "160", label: "2x" }, { value: "192", label: "4x" },
+			{ value: "224", label: "8x" }, { value: "240", label: "16x" },
+		], disabled: !takeover,
+	}] };
+}
+function masterGeometrySection(output: OutputView, takeover: boolean): MasterSection {
+	return { id: "geometry", label: "Geometry", controls: [
+		valueControl("master-position-x", "Position X", output.master.positionX, -2, 2, !takeover),
+		valueControl("master-position-y", "Position Y", output.master.positionY, -2, 2, !takeover),
+		valueControl("master-scale-x", "Scale X", output.master.scaleX, 0, 4, !takeover),
+		valueControl("master-scale-y", "Scale Y", output.master.scaleY, 0, 4, !takeover),
+		valueControl("master-rotation", "Rotation", output.master.rotation, -180, 180, !takeover, "°", 1),
+		{ id: "master-scaling-mode", kind: "choice", label: "Scale mode",
+			value: output.master.scalingMode, options: [
+				{ value: "fit", label: "Fit" }, { value: "fill", label: "Fill" },
+				{ value: "original", label: "Native" }, { value: "stretch", label: "Stretch" },
+			], disabled: !takeover },
+	] };
+}
+function masterMaskSection(output: OutputView, takeover: boolean): MasterSection {
+	return { id: "mask-controls", label: "Mask position", controls: [
+		valueControl("master-mask-position-x", "Mask position X", output.master.maskPositionX, -2, 2, !takeover),
+		valueControl("master-mask-position-y", "Mask position Y", output.master.maskPositionY, -2, 2, !takeover),
+	] };
+}
+function masterShapersSection(output: OutputView, takeover: boolean): MasterSection {
+	return { id: "shapers", label: "Shapers", controls: [
+		valueControl("shaper-left", "Left", output.master.shaperLeft * 100, 0, 100, !takeover, "%"),
+		valueControl("shaper-right", "Right", output.master.shaperRight * 100, 0, 100, !takeover, "%"),
+		valueControl("shaper-top", "Top", output.master.shaperTop * 100, 0, 100, !takeover, "%"),
+		valueControl("shaper-bottom", "Bottom", output.master.shaperBottom * 100, 0, 100, !takeover, "%"),
+		valueControl("shaper-left-rotation", "Left rotation", output.master.shaperLeftRotation, -45, 45, !takeover, "°", 1),
+		valueControl("shaper-right-rotation", "Right rotation", output.master.shaperRightRotation, -45, 45, !takeover, "°", 1),
+		valueControl("shaper-top-rotation", "Top rotation", output.master.shaperTopRotation, -45, 45, !takeover, "°", 1),
+		valueControl("shaper-bottom-rotation", "Bottom rotation", output.master.shaperBottomRotation, -45, 45, !takeover, "°", 1),
+		valueControl("shaper-rotation", "Module rotation", output.master.shaperRotation, -180, 180, !takeover, "°", 1),
+	] };
+}
+function masterColourSection(output: OutputView, takeover: boolean): MasterSection {
+	return { id: "colour", label: "Colour", controls: [
+		{ id: "master-tint", kind: "color", label: "Tint",
+			value: tintHex(output.master.tintRed, output.master.tintGreen, output.master.tintBlue), disabled: !takeover },
+		{ id: "flip-mirror", kind: "choice", label: "Flip / mirror", value: output.master.flipMirror,
+			options: ["none", "horizontal", "vertical", "both"].map((value) => ({ value, label: value })), disabled: !takeover },
+	] };
 }

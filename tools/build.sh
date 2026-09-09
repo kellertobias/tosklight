@@ -430,6 +430,7 @@ build_debug_and_open() {
   # desk whose Open Visualizer cannot find its helper is a menu item that only ever fails.
   cargo build --manifest-path "$ROOT/Cargo.toml" -p viz-renderer --bin viz-renderer
   cp "$TARGET_DIR/debug/viz-renderer" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/viz-renderer"
+  bash "$ROOT/tools/seal-macos-app.sh" "$TARGET_DIR/debug/bundle/macos/ToskLight.app"
   echo "Starting development Light headless service..."
   launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- "$TARGET_DIR/debug/light-headless" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
   wait_for_launchd_server
@@ -704,6 +705,8 @@ build_media() {
   if [[ "$(uname -s)" == "Darwin" ]]; then
     bash "$ROOT/tools/bundle-media-macos.sh" \
       "$TARGET_DIR/release/media-server" "$TARGET_DIR/release/bundle/macos"
+    bash "$ROOT/tools/seal-macos-app.sh" \
+      "$TARGET_DIR/release/bundle/macos/ToskLight Media.app"
   fi
 }
 

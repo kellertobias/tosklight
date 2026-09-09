@@ -629,6 +629,41 @@ function advertisedControl(
 				: 0
 			: mediaControlDefaultNormalized(attribute));
 	const rawValue = Math.round(normalized * 255);
+	const specialized = specializedControl(
+		input,
+		attribute,
+		normalized,
+		rawValue,
+	);
+	if (specialized) return specialized;
+	const selectedMaster = input.selectedLayerId === "master";
+	const value = mediaControlOperatorValue(
+		attribute,
+		normalized,
+		selectedMaster,
+	);
+	if (isMediaPercentAttribute(attribute)) {
+		const percent = Math.round(value);
+		return {
+			id: attribute,
+			label: MEDIA_CONTROL_LABELS[attribute] ?? readableAttribute(attribute),
+			kind: "value",
+			value: percent,
+			minimum: 0,
+			maximum: 100,
+			step: 1,
+			display: `${percent}%`,
+		};
+	}
+	return rangedMediaControl(attribute, value, selectedMaster);
+}
+
+function specializedControl(
+	input: BuildMediaPaneModelInput,
+	attribute: string,
+	normalized: number,
+	rawValue: number,
+): MediaControlSection["controls"][number] | undefined {
 	if (attribute === "color.tint")
 		return {
 			id: attribute,
@@ -685,18 +720,6 @@ function advertisedControl(
 			value: String(rawValue),
 			options: SPEED_OPTIONS,
 		};
-	if (attribute === "media.playback_bpm") {
-		return {
-			id: attribute,
-			label: "Playback BPM",
-			kind: "value",
-			value: rawValue,
-			minimum: 0,
-			maximum: 255,
-			step: 1,
-			display: rawValue === 0 ? "Off" : `${rawValue} BPM`,
-		};
-	}
 	if (/^media\.effect\.bank\.[12]\.select$/u.test(attribute))
 		return {
 			id: attribute,
@@ -717,17 +740,6 @@ function advertisedControl(
 			value: String(nearestOpacityCycleValue(rawValue)),
 			options: OPACITY_CYCLE_OPTIONS,
 		};
-	if (/^media\.effect\.bank\.[12]\.strength$/u.test(attribute))
-		return {
-			id: attribute,
-			label: "Effect Strength",
-			kind: "value",
-			value: Math.round(normalized * 100),
-			minimum: 0,
-			maximum: 100,
-			step: 1,
-			display: `${Math.round((rawValue / 255) * 100)}%`,
-		};
 	if (attribute === "media.flip_mirror")
 		return {
 			id: attribute,
@@ -741,25 +753,36 @@ function advertisedControl(
 				{ value: "3", label: "Both" },
 			],
 		};
-	const selectedMaster = input.selectedLayerId === "master";
-	const value = mediaControlOperatorValue(
-		attribute,
-		normalized,
-		selectedMaster,
-	);
-	if (isMediaPercentAttribute(attribute)) {
-		const percent = Math.round(value);
+	if (attribute === "media.playback_bpm")
 		return {
 			id: attribute,
-			label: MEDIA_CONTROL_LABELS[attribute] ?? readableAttribute(attribute),
+			label: "Playback BPM",
 			kind: "value",
-			value: percent,
+			value: rawValue,
+			minimum: 0,
+			maximum: 255,
+			step: 1,
+			display: rawValue === 0 ? "Off" : `${rawValue} BPM`,
+		};
+	if (/^media\.effect\.bank\.[12]\.strength$/u.test(attribute))
+		return {
+			id: attribute,
+			label: "Effect Strength",
+			kind: "value",
+			value: Math.round(normalized * 100),
 			minimum: 0,
 			maximum: 100,
 			step: 1,
-			display: `${percent}%`,
+			display: `${Math.round((rawValue / 255) * 100)}%`,
 		};
-	}
+	return undefined;
+}
+
+function rangedMediaControl(
+	attribute: string,
+	value: number,
+	selectedMaster: boolean,
+): MediaControlSection["controls"][number] {
 	if (attribute === "media.scale.x" || attribute === "media.scale.y")
 		return valueControl(
 			attribute,

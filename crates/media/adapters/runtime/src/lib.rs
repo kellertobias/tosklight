@@ -22,6 +22,7 @@ mod effect_banks;
 mod fullscreen_hint;
 mod layer_pipeline;
 mod layer_sources;
+mod library_runtime;
 pub mod log_buffer;
 mod logging;
 pub mod off_screen;
@@ -49,6 +50,8 @@ pub use startup::{
 use media_application::MediaConfiguration;
 use media_domain::{MediaState, OutputState, Timestamp};
 use std::sync::Arc;
+
+use library_runtime::{RuntimeUpload, edit_library, imports_of, update_folder_presentation};
 
 /// The argument that reads, migrates, and validates configuration, then exits.
 ///
@@ -86,23 +89,9 @@ pub fn run() -> anyhow::Result<()> {
 fn run_inner() -> anyhow::Result<()> {
     let logging = install_logging();
     let arguments: Vec<String> = std::env::args().collect();
-
-    if !arguments_ask_to_run(&arguments)? {
+    let Some(configuration) = configuration_for(&arguments)? else {
         return Ok(());
-    }
-
-    let configuration = prepare_configuration()?;
-
-    if arguments
-        .iter()
-        .any(|argument| argument == CHECK_CONFIGURATION_ARGUMENT)
-    {
-        tracing::info!(
-            outputs = configuration.outputs.len(),
-            "configuration is valid"
-        );
-        return Ok(());
-    }
+    };
 
     let diagnostics_arguments = diagnostics_asked_for(&arguments);
     let shutdown = Shutdown::new();
@@ -129,8 +118,6 @@ fn run_inner() -> anyhow::Result<()> {
     let console_identity = citp::ConsoleIdentity::default();
     let available_monitors = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
 
-    // One configuration document, read by the outputs and written by the API. A second copy is a
-    // second truth: an operator would edit one and watch the other.
     let live: SharedConfiguration =
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone()));
     let diagnostics = diagnostics_of(
@@ -147,8 +134,6 @@ fn run_inner() -> anyhow::Result<()> {
     );
     let apply = applies_to(audio.as_ref());
 
-    // What a subscribed console sees. Shared between the outputs, which capture, and the CITP
-    // connections, which send.
     let previews = preview::SharedPreviews::configured(&configuration);
 
     // The desk drives the outputs, so the listeners come up before anything presents.
@@ -175,22 +160,18 @@ fn run_inner() -> anyhow::Result<()> {
 
     // Off-screen outputs render on their own thread with their own device, so they run whether or
     // not this process also hosts a window. A rack server with no display is still a media server.
-    let off_screen = {
-        let configuration = configuration.clone();
-        let shared = presentation::Shared {
+    let off_screen = spawn_off_screen(
+        &configuration,
+        presentation::Shared {
             state: state.clone(),
             catalog: catalog.clone(),
             configuration: live.clone(),
             analysis: analysis.clone(),
             previews: previews.clone(),
             universe_inputs: universe_inputs.clone(),
-        };
-        let shutdown = shutdown.clone();
-        std::thread::Builder::new()
-            .name("media-off-screen".into())
-            .spawn(move || off_screen::run(&configuration, shared, shutdown))
-            .ok()
-    };
+        },
+        shutdown.clone(),
+    );
 
     let services = Services {
         configuration: live.clone(),
@@ -254,6 +235,36 @@ fn run_inner() -> anyhow::Result<()> {
     drop(audio);
     presented?;
     served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
+}
+
+fn configuration_for(arguments: &[String]) -> anyhow::Result<Option<MediaConfiguration>> {
+    if !arguments_ask_to_run(arguments)? {
+        return Ok(None);
+    }
+    let configuration = prepare_configuration()?;
+    if arguments
+        .iter()
+        .any(|argument| argument == CHECK_CONFIGURATION_ARGUMENT)
+    {
+        tracing::info!(
+            outputs = configuration.outputs.len(),
+            "configuration is valid"
+        );
+        return Ok(None);
+    }
+    Ok(Some(configuration))
+}
+
+fn spawn_off_screen(
+    configuration: &MediaConfiguration,
+    shared: presentation::Shared,
+    shutdown: Shutdown,
+) -> Option<std::thread::JoinHandle<()>> {
+    let configuration = configuration.clone();
+    std::thread::Builder::new()
+        .name("media-off-screen".into())
+        .spawn(move || off_screen::run(&configuration, shared, shutdown))
+        .ok()
 }
 
 fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
@@ -630,74 +641,7 @@ fn library_access(
 
     media_http::LibraryAccess {
         edit: std::sync::Arc::new(move |operation| {
-            let _guard = edit_lock
-                .lock()
-                .map_err(|_| "the library edit lock is unavailable".to_owned())?;
-            let mut next = (*published.load_full()).clone();
-            let affected = catalog_publication::edited_addresses(&next, &operation);
-            let _idle = media_library::uploads::guard_idle_addresses(editing.root(), &affected)
-                .map_err(|error| error.to_string())?;
-            match operation {
-                media_http::LibraryEdit::RenameItem { id, name } => {
-                    editing.rename_item(&mut next, id, &name)
-                }
-                media_http::LibraryEdit::MoveItem {
-                    id,
-                    destination,
-                    swap,
-                } => {
-                    let occupant = next
-                        .folder(destination.folder)
-                        .and_then(|folder| folder.item(destination.file))
-                        .map(|item| item.id);
-                    match (occupant, swap) {
-                        (Some(other), true) => editing.swap_items(&mut next, id, other),
-                        _ => editing.move_item(&mut next, id, destination),
-                    }
-                }
-                media_http::LibraryEdit::SetItemBpm { id, bpm } => {
-                    editing.set_intrinsic_bpm(&mut next, id, bpm)
-                }
-                media_http::LibraryEdit::SetItemEnabled { id, enabled } => {
-                    editing.set_item_enabled(&mut next, id, enabled)
-                }
-                media_http::LibraryEdit::SetItemsEnabled { ids, enabled } => {
-                    editing.set_items_enabled(&mut next, &ids, enabled)
-                }
-                media_http::LibraryEdit::DeleteItem { id } => editing.remove_item(&mut next, id),
-                media_http::LibraryEdit::DeleteItems { ids } => {
-                    editing.remove_items(&mut next, &ids)
-                }
-                media_http::LibraryEdit::RenameFolder { folder, name } => {
-                    editing.rename_folder(&mut next, folder, name.as_deref())
-                }
-                media_http::LibraryEdit::SetFolderIcon { folder, icon } => {
-                    editing.set_folder_icon(&mut next, folder, icon.as_deref())
-                }
-                media_http::LibraryEdit::SetNotes { targets, note } => {
-                    let targets = targets
-                        .into_iter()
-                        .map(|target| match target {
-                            media_http::LibraryNoteTarget::Item(id) => {
-                                media_library::LibraryNoteTarget::Item(id)
-                            }
-                            media_http::LibraryNoteTarget::Folder(folder) => {
-                                media_library::LibraryNoteTarget::Folder(folder)
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    editing.set_notes(&mut next, &targets, note.as_deref())
-                }
-                media_http::LibraryEdit::SwapFolders { first, second } => {
-                    editing.swap_folders(&mut next, first, second)
-                }
-                media_http::LibraryEdit::CompactFolder { folder } => {
-                    editing.compact_folder(&mut next, folder)
-                }
-            }
-            .map_err(|error| error.to_string())?;
-            published.store(std::sync::Arc::new(next));
-            Ok(())
+            edit_library(&editing, &published, &edit_lock, operation)
         }),
         thumbnail: std::sync::Arc::new(move |address| {
             let path = reading.thumbnail_path(address);
@@ -753,35 +697,14 @@ fn library_access(
                 .collect()
         }),
         update_folder_presentation: std::sync::Arc::new(move |folder, name, icon| {
-            let _guard = folder_edit_lock
-                .lock()
-                .map_err(|_| "the folder presentation edit lock is unavailable".to_owned())?;
-            if media_domain::catalog::is_storage_folder(folder) {
-                let mut next = (*folder_published.load_full()).clone();
-                match (name, icon) {
-                    (Some(name), None) => {
-                        folder_storage.rename_folder(&mut next, folder, name.as_deref())
-                    }
-                    (None, Some(icon)) => {
-                        folder_storage.set_folder_icon(&mut next, folder, icon.as_deref())
-                    }
-                    _ => unreachable!("the HTTP route validates one presentation intent"),
-                }
-                .map_err(|error| error.to_string())?;
-                folder_published.store(std::sync::Arc::new(next));
-            } else {
-                folder_storage
-                    .update_generated_folder_presentation(
-                        folder,
-                        name.as_ref().map(|value| value.as_deref()),
-                        icon.as_ref().map(|value| value.as_deref()),
-                    )
-                    .map_err(|error| error.to_string())?;
-            }
-            folder_storage
-                .folder_presentation(folder)
-                .map(folder_presentation_of)
-                .map_err(|error| error.to_string())
+            update_folder_presentation(
+                &folder_storage,
+                &folder_published,
+                &folder_edit_lock,
+                folder,
+                name,
+                icon,
+            )
         }),
         set_folder_picture: std::sync::Arc::new(move |folder, content_type, bytes| {
             let _guard = folder_picture_lock
@@ -831,122 +754,6 @@ fn folder_presentation_of(
         name: presentation.name,
         icon: presentation.icon,
         picture_content_type: presentation.picture_content_type,
-    }
-}
-
-struct RuntimeUpload {
-    upload: Option<media_library::Upload>,
-    importer: media_library::Importer,
-    address: media_domain::MediaAddress,
-    name: String,
-}
-
-impl media_http::UploadStream for RuntimeUpload {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.upload
-            .as_mut()
-            .ok_or_else(|| "the upload is already complete".to_owned())?
-            .write(bytes)
-            .map_err(|error| error.to_string())
-    }
-
-    fn finish(mut self: Box<Self>) -> Result<String, String> {
-        self.upload
-            .take()
-            .ok_or_else(|| "the upload is already complete".to_owned())?
-            .finish_and_import(&self.importer, self.address, &self.name)
-            .map(|id| id.to_string())
-            .map_err(|error| error.to_string())
-    }
-}
-
-/// What the API can ask and tell the import pool.
-fn imports_of(
-    importer: &media_library::Importer,
-    library_root: &std::path::Path,
-) -> media_http::Imports {
-    let reading = importer.clone();
-    let starting = importer.clone();
-    let cancelling = importer.clone();
-    let root = library_root.to_path_buf();
-    let start_root = root.clone();
-
-    media_http::Imports {
-        state: std::sync::Arc::new(move || {
-            let pending = media_library::pending_imports(&root)
-                .into_iter()
-                .map(|item| media_http::PendingImport {
-                    destination: item.destination,
-                    name: item.name,
-                    filename: filename_of(&item.source),
-                })
-                .collect();
-            let jobs = reading.jobs().iter().map(job_of).collect();
-            (pending, jobs)
-        }),
-        start: std::sync::Arc::new(move |address| {
-            media_library::pending_imports(&start_root)
-                .into_iter()
-                .filter(|item| address.is_none_or(|wanted| item.destination == wanted))
-                .map(|item| {
-                    starting.submit(item.source, item.destination, &item.name);
-                })
-                .count()
-        }),
-        cancel: std::sync::Arc::new(move |id| {
-            cancelling
-                .jobs()
-                .iter()
-                .find(|job| job.id.to_string() == id)
-                .is_some_and(|job| cancelling.cancel(job.id))
-        }),
-        // Import shells out to FFmpeg. A machine without it should say so before an operator
-        // queues a whole library that will fail one clip at a time.
-        available: media_codec::import::ffmpeg_available(),
-    }
-}
-
-fn filename_of(path: &std::path::Path) -> String {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_owned()
-}
-
-fn job_of(job: &media_library::Job) -> media_http::ImportJob {
-    use media_library::JobState;
-    let (outcome, frames_done, frames_total) = match &job.state {
-        JobState::Queued => (media_http::ImportOutcome::Queued, None, None),
-        JobState::Running {
-            frames_done,
-            frames_total,
-        } => (
-            media_http::ImportOutcome::Running,
-            Some(*frames_done),
-            *frames_total,
-        ),
-        JobState::Succeeded { frames } => {
-            (media_http::ImportOutcome::Succeeded, Some(*frames), None)
-        }
-        JobState::Failed { reason } => (
-            media_http::ImportOutcome::Failed {
-                reason: reason.clone(),
-            },
-            None,
-            None,
-        ),
-        JobState::Cancelled => (media_http::ImportOutcome::Cancelled, None, None),
-    };
-    media_http::ImportJob {
-        id: job.id.to_string(),
-        batch_id: job.batch.map(|batch| batch.to_string()),
-        destination: job.destination,
-        filename: filename_of(&job.source),
-        outcome,
-        attempts: job.attempts,
-        fraction: job.state.fraction(),
-        frames_done,
-        frames_total,
     }
 }
 

@@ -54,54 +54,26 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 	}, []);
 
 	// Pushed jobs win over the ones the snapshot came with, so a progress bar moves smoothly.
-	const allJobs = telemetry.frame?.imports ?? imports?.jobs ?? [];
-	// A native multi-file conversion owns the newest contiguous group of jobs. Keep an earlier
-	// run out of its progress and report while leaving ordinary browser imports unchanged.
-	const latestBatch = allJobs.at(-1)?.batchId ?? null;
-	const jobs = latestBatch
-		? allJobs.filter((job) => job.batchId === latestBatch)
-		: allJobs;
-	const finished = jobs.filter((job) => job.state === "succeeded").length;
+	const progress = importProgress(imports, telemetry.frame?.imports);
 
 	// Once something has been converted the catalog holds something new, and what was waiting has
 	// shrunk. Both are re-read rather than guessed at.
 	useEffect(() => {
-		if (finished === 0) return;
+		if (progress.finished === 0) return;
 		onImported();
 		void api
 			.imports()
 			.then(setImports)
 			.catch(() => undefined);
-	}, [finished, onImported]);
+	}, [progress.finished, onImported]);
 
 	if (!imports) return null;
 
-	const pending = imports.pending;
-	const running = jobs.filter(
-		(job) => job.state === "queued" || job.state === "running",
-	);
-	const settled = jobs.length - running.length;
-	const failed = jobs.filter((job) => job.state === "failed").length;
-	const stopped = jobs.filter((job) => job.state === "cancelled").length;
-	const batchFinished = latestBatch !== null && jobs.length > 0 && running.length === 0;
+	const { pending, jobs, running, settled, failed, stopped, batchFinished, latestBatch, finished } = progress;
 
 	if (pending.length === 0 && jobs.length === 0) return null;
 
-	const start = async () => {
-		setBusy(true);
-		try {
-			setImports(await api.startImport({ requestId: requestId() }));
-			setFailure(undefined);
-		} catch (error) {
-			setFailure(
-				error instanceof ApiFailure
-					? error
-					: new ApiFailure("unexpected-error", String(error), 0),
-			);
-		} finally {
-			setBusy(false);
-		}
-	};
+	const start = () => beginImport(setImports, setFailure, setBusy);
 
 	return (
 		<article className="media-settings-section" aria-label="Import">
@@ -204,6 +176,53 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 			)}
 		</article>
 	);
+}
+
+function importProgress(
+	imports: ImportsView | undefined,
+	pushedJobs: ImportJobView[] | undefined,
+) {
+	const allJobs = pushedJobs ?? imports?.jobs ?? [];
+	// A native conversion owns the newest contiguous group; earlier jobs stay out of its report.
+	const latestBatch = allJobs.at(-1)?.batchId ?? null;
+	const jobs = latestBatch
+		? allJobs.filter((job) => job.batchId === latestBatch)
+		: allJobs;
+	const running = jobs.filter(
+		(job) => job.state === "queued" || job.state === "running",
+	);
+	return {
+		pending: imports?.pending ?? [],
+		jobs,
+		running,
+		latestBatch,
+		finished: jobs.filter((job) => job.state === "succeeded").length,
+		settled: jobs.length - running.length,
+		failed: jobs.filter((job) => job.state === "failed").length,
+		stopped: jobs.filter((job) => job.state === "cancelled").length,
+		batchFinished:
+			latestBatch !== null && jobs.length > 0 && running.length === 0,
+	};
+}
+
+async function beginImport(
+	setImports: (value: ImportsView) => void,
+	setFailure: (value: ApiFailure | undefined) => void,
+	setBusy: (value: boolean) => void,
+) {
+	setBusy(true);
+	try {
+		setImports(await api.startImport({ requestId: requestId() }));
+		setFailure(undefined);
+	} catch (error) {
+		setFailure(
+			error instanceof ApiFailure
+				? error
+				: new ApiFailure("unexpected-error", String(error), 0),
+		);
+	} finally {
+		setBusy(false);
+	}
 }
 
 function ImportRow({ job }: { job: ImportJobView }) {

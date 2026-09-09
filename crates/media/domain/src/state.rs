@@ -207,55 +207,7 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             };
             changed_or_not(replace(&mut target.effects, effects.as_ref().clone()))
         }
-        CommandKind::SetMasterControls { controls, .. } => {
-            let mut next: MasterState = output.master;
-            if let Some(value) = controls.dimmer {
-                next.dimmer = value;
-            }
-            if let Some(value) = controls.volume {
-                next.volume = value;
-            }
-            if let Some(value) = controls.tint {
-                next.tint = value;
-            }
-            if let Some(value) = controls.flip_mirror {
-                next.flip_mirror = value;
-            }
-            if let Some(value) = controls.mask {
-                next.mask = value;
-            }
-            if let Some(value) = controls.mask_position_x {
-                next.mask_position_x = value.clamp(-2.0, 2.0);
-            }
-            if let Some(value) = controls.mask_position_y {
-                next.mask_position_y = value.clamp(-2.0, 2.0);
-            }
-            if let Some(value) = controls.scale_x {
-                next.scale_x = value;
-            }
-            if let Some(value) = controls.scale_y {
-                next.scale_y = value;
-            }
-            if let Some(value) = controls.scaling_mode {
-                next.scaling_mode = value;
-            }
-            if let Some(value) = controls.position_x {
-                next.position_x = value;
-            }
-            if let Some(value) = controls.position_y {
-                next.position_y = value;
-            }
-            if let Some(value) = controls.rotation {
-                next.rotation = value;
-            }
-            if let Some(value) = controls.shaper {
-                next.shaper = value;
-            }
-            if let Some(value) = controls.opacity_cycle {
-                next.opacity_cycle = value;
-            }
-            changed_or_not(replace(&mut output.master, next))
-        }
+        CommandKind::SetMasterControls { controls, .. } => apply_master_controls(output, controls),
         CommandKind::ResetLayer { layer, .. } => {
             let Some(target) = output.layers.get_mut(*layer) else {
                 return Applied::RejectedUnknownLayer;
@@ -273,6 +225,40 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             changed_or_not(replace(&mut target.source_status, *status))
         }
     }
+}
+
+fn apply_master_controls(
+    output: &mut OutputState,
+    controls: &crate::command::MasterControls,
+) -> Applied {
+    let mut next: MasterState = output.master;
+    macro_rules! assign {
+        ($field:ident) => {
+            if let Some(value) = controls.$field {
+                next.$field = value;
+            }
+        };
+    }
+    assign!(dimmer);
+    assign!(volume);
+    assign!(tint);
+    assign!(flip_mirror);
+    assign!(mask);
+    assign!(scale_x);
+    assign!(scale_y);
+    assign!(scaling_mode);
+    assign!(position_x);
+    assign!(position_y);
+    assign!(rotation);
+    assign!(shaper);
+    assign!(opacity_cycle);
+    if let Some(value) = controls.mask_position_x {
+        next.mask_position_x = value.clamp(-2.0, 2.0);
+    }
+    if let Some(value) = controls.mask_position_y {
+        next.mask_position_y = value.clamp(-2.0, 2.0);
+    }
+    changed_or_not(replace(&mut output.master, next))
 }
 
 fn replace<T: PartialEq>(slot: &mut T, value: T) -> bool {

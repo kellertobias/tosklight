@@ -1,11 +1,4 @@
-import {
-	Button,
-	FileDropField,
-	NumberField,
-	SwitchField,
-	TextAreaField,
-	TextField,
-} from "@tosklight/ui/controls";
+import { Button, FileDropField, NumberField, SwitchField, TextField } from "@tosklight/ui/controls";
 import {
 	DEFAULT_POOL_COLOR_PALETTE,
 	PoolCard,
@@ -38,15 +31,19 @@ import { useMainOutputAspectRatio } from "../../shared/output/useMainOutputAspec
 import { TextSourcesPage } from "../text-sources/TextSourcesPage";
 import { VisualizersPage } from "../visualizers/VisualizersPage";
 import { EffectsPage } from "../effects/EffectsPage";
-import {
-	type FolderPresentation,
-	FolderPresentationEditor,
-} from "./FolderPresentationEditor";
+import type { FolderPresentation } from "./FolderPresentationEditor";
 import {
 	type LibrarySourceType,
 	librarySourceGroups,
 } from "./GeneratedLibraryBrowserView";
 import { ImportPanel } from "./ImportPanel";
+import {
+	EmptySlotEditor,
+	FolderEditor,
+	isPlayableFolder,
+	LibraryNotesEditor,
+	UploadEditor,
+} from "./LibrarySecondaryEditors";
 
 const CATALOG_POLL_MS = 15_000;
 const MEDIA_FOLDER_COUNT = 199;
@@ -56,7 +53,7 @@ const DRAG_FOLDER_TYPE = "application/x-tosklight-media-folder";
 const FIRST_PARKING_FOLDER = 900;
 const LAST_PARKING_FOLDER = 999;
 
-type CatalogItem = CatalogView["folders"][number]["items"][number];
+export type CatalogItem = CatalogView["folders"][number]["items"][number];
 
 export function LibraryPage({
 	mode = "media",
@@ -92,223 +89,94 @@ function MediaLibraryPage({
 		);
 	}
 
-	return (
-		<LibraryBrowserView
-			folderPresentations={folderPresentations.data?.folders}
-			previewAspectRatio={previewAspectRatio}
-			onModeChange={onModeChange}
-			catalog={catalog.data}
-			busy={editing.busy}
-			failure={editing.failure?.message}
-			importPanel={<ImportPanel onImported={catalog.reload} />}
-			onDismissFailure={editing.dismiss}
-			onRenameFolder={(folder, name) =>
-				editing.save(async () => {
-					await api.updateFolderPresentation(folder, {
-						requestId: requestId(),
-						name,
-					});
-					folderPresentations.reload();
-				})
-			}
-			onSetFolderIcon={(folder, icon) =>
-				editing.save(async () => {
-					await api.updateFolderPresentation(folder, {
-						requestId: requestId(),
-						icon,
-					});
-					folderPresentations.reload();
-				})
-			}
-			onSetFolderPicture={(folder, picture) =>
-				editing.save(async () => {
-					await api.uploadFolderPicture(folder, requestId(), picture);
-					folderPresentations.reload();
-				})
-			}
-			onRemoveFolderPicture={(folder) =>
-				editing.save(async () => {
-					await api.removeFolderPicture(folder, requestId());
-					folderPresentations.reload();
-				})
-			}
-			onSwapFolders={(first, second) =>
-				editing.save(() =>
-					api.updateLibraryFolder(first, {
-						requestId: requestId(),
-						swapWith: second,
-					}),
-				)
-			}
-			onCompactFolder={(folder) =>
-				editing.save(() =>
-					api.updateLibraryFolder(folder, {
-						requestId: requestId(),
-						compact: true,
-					}),
-				)
-			}
-			onReorderItem={(item, destination) =>
-				editing.save(() =>
-					api.updateLibraryItem(item.id, {
-						requestId: requestId(),
-						...destination,
-						swap: true,
-					}),
-				)
-			}
-			onUpdateItem={(item, update) =>
-				editing.save(async () => {
-					try {
-						if (update.name !== undefined) {
-							await api.updateLibraryItem(item.id, {
-								requestId: requestId(),
-								name: update.name,
-								swap: false,
-							});
-						}
-						if (update.intrinsicBpm !== undefined) {
-							await api.updateLibraryItem(item.id, {
-								requestId: requestId(),
-								intrinsicBpm: update.intrinsicBpm,
-								swap: false,
-							});
-						}
-						if (update.enabled !== undefined) {
-							await api.updateLibraryItem(item.id, {
-								requestId: requestId(),
-								enabled: update.enabled,
-								swap: false,
-							});
-						}
-					} catch (error) {
-						// Both wire intents belong to one Save action. If the first was
-						// accepted, refresh before showing a refusal from the second.
-						catalog.reload();
-						throw error;
-					}
-				})
-			}
-			onDeleteItem={(item) =>
-				editing.save(() =>
-					api.deleteLibraryItem(item.id, { requestId: requestId() }),
-				)
-			}
-			onSetItemsEnabled={(items, enabled) =>
-				editing.save(() =>
-					api.updateLibraryItems({
-						requestId: requestId(),
-						ids: items.map((item) => item.id),
-						enabled,
-					}),
-				)
-			}
-			onDeleteItems={(items) =>
-				editing.save(() =>
-					api.deleteLibraryItems({
-						requestId: requestId(),
-						ids: items.map((item) => item.id),
-					}),
-				)
-			}
-			onRetryThumbnail={(item) =>
-				editing.save(() =>
-					api.retryLibraryThumbnail(item.id, { requestId: requestId() }),
-				)
-			}
-			onUploadCustomThumbnail={(item, image) =>
-				editing.save(() =>
-					api.uploadLibraryThumbnail(item.id, requestId(), image),
-				)
-			}
-			onMoveItems={async (items, folder) => {
-				const currentCatalog = catalog.data;
-				if (!currentCatalog) return;
-				if (
-					items.every((item) =>
-						currentCatalog.folders
-							.find((entry) => entry.folder === folder)
-							?.items.some((candidate) => candidate.id === item.id),
-					)
-				)
-					return;
-				await editing.save(async () => {
-					const addresses = allocateFreeAddresses(
-						currentCatalog,
-						folder,
-						items,
-					);
-					try {
-						for (const [index, item] of items.entries()) {
-							const destination = addresses[index];
-							if (!destination)
-								throw new Error("No free media address remains.");
-							await api.updateLibraryItem(item.id, {
-								requestId: requestId(),
-								...destination,
-								swap: false,
-							});
-						}
-					} catch (error) {
-						// A server can accept an earlier move before refusing a later one.
-						// Re-read before the operator retries so allocation never uses stale slots.
-						catalog.reload();
-						throw error;
-					}
-				});
-			}}
-			onUpload={async (files, folder) => {
-				const currentCatalog = catalog.data;
-				if (!currentCatalog) return;
-				await editing.save(async () => {
-					const addresses = allocateFreeAddresses(
-						currentCatalog,
-						folder,
-						[],
-						files.length,
-					);
-					try {
-						for (const [index, media] of files.entries()) {
-							const destination = addresses[index];
-							if (!destination)
-								throw new Error("No free media address remains.");
-							await api.uploadLibraryItem(
-								destination.folder,
-								destination.file,
-								requestId(),
-								media.name.replace(/\.[^.]+$/u, ""),
-								media,
-							);
-						}
-					} catch (error) {
-						catalog.reload();
-						throw error;
-					}
-				});
-			}}
-			onUploadAt={(file, destination, name, replace) =>
-				editing.save(() =>
-					api.uploadLibraryItem(
-						destination.folder,
-						destination.file,
-						requestId(),
-						name,
-						file,
-						replace,
-					),
-				)
-			}
-			onUpdateNotes={(targets, note) =>
-				editing.save(() =>
-					api.updateLibraryNotes({
-						requestId: requestId(),
-						targets,
-						note,
-					}),
-				)
-			}
-		/>
-	);
+	const actions = useLibraryActions(catalog, folderPresentations, editing);
+	return <LibraryBrowserView {...actions} catalog={catalog.data}
+		folderPresentations={folderPresentations.data?.folders}
+		previewAspectRatio={previewAspectRatio} onModeChange={onModeChange}
+		busy={editing.busy} failure={editing.failure?.message}
+		importPanel={<ImportPanel onImported={catalog.reload} />}
+		onDismissFailure={editing.dismiss} />;
+}
+
+function useLibraryActions(
+	catalog: ReturnType<typeof useCatalog>,
+	folderPresentations: ReturnType<typeof useFolderPresentations>,
+	editing: ReturnType<typeof useEditing>,
+): Partial<LibraryBrowserViewProps> {
+	const refreshPresentations = async (action: Promise<unknown>) => {
+		await action;
+		folderPresentations.reload();
+	};
+	const guarded = async (action: () => Promise<void>) => {
+		try { await action(); } catch (error) { catalog.reload(); throw error; }
+	};
+	return {
+		onRenameFolder: (folder, name) => editing.save(() => refreshPresentations(
+			api.updateFolderPresentation(folder, { requestId: requestId(), name }))),
+		onSetFolderIcon: (folder, icon) => editing.save(() => refreshPresentations(
+			api.updateFolderPresentation(folder, { requestId: requestId(), icon }))),
+		onSetFolderPicture: (folder, picture) => editing.save(() => refreshPresentations(
+			api.uploadFolderPicture(folder, requestId(), picture))),
+		onRemoveFolderPicture: (folder) => editing.save(() => refreshPresentations(
+			api.removeFolderPicture(folder, requestId()))),
+		onSwapFolders: (first, second) => editing.save(() => api.updateLibraryFolder(
+			first, { requestId: requestId(), swapWith: second })),
+		onCompactFolder: (folder) => editing.save(() => api.updateLibraryFolder(
+			folder, { requestId: requestId(), compact: true })),
+		onReorderItem: (item, destination) => editing.save(() => api.updateLibraryItem(
+			item.id, { requestId: requestId(), ...destination, swap: true })),
+		onUpdateItem: (item, update) => editing.save(() => guarded(async () => {
+			if (update.name !== undefined) await api.updateLibraryItem(item.id,
+				{ requestId: requestId(), name: update.name, swap: false });
+			if (update.intrinsicBpm !== undefined) await api.updateLibraryItem(item.id,
+				{ requestId: requestId(), intrinsicBpm: update.intrinsicBpm, swap: false });
+			if (update.enabled !== undefined) await api.updateLibraryItem(item.id,
+				{ requestId: requestId(), enabled: update.enabled, swap: false });
+		})),
+		onDeleteItem: (item) => editing.save(() => api.deleteLibraryItem(
+			item.id, { requestId: requestId() })),
+		onSetItemsEnabled: (items, enabled) => editing.save(() => api.updateLibraryItems(
+			{ requestId: requestId(), ids: items.map((item) => item.id), enabled })),
+		onDeleteItems: (items) => editing.save(() => api.deleteLibraryItems(
+			{ requestId: requestId(), ids: items.map((item) => item.id) })),
+		onRetryThumbnail: (item) => editing.save(() => api.retryLibraryThumbnail(
+			item.id, { requestId: requestId() })),
+		onUploadCustomThumbnail: (item, image) => editing.save(() =>
+			api.uploadLibraryThumbnail(item.id, requestId(), image)),
+		onMoveItems: async (items, folder) => {
+			const current = catalog.data;
+			if (!current || items.every((item) => current.folders
+				.find((entry) => entry.folder === folder)?.items
+				.some((candidate) => candidate.id === item.id))) return;
+			await editing.save(() => guarded(async () => {
+				const addresses = allocateFreeAddresses(current, folder, items);
+				for (const [index, item] of items.entries()) {
+					const destination = addresses[index];
+					if (!destination) throw new Error("No free media address remains.");
+					await api.updateLibraryItem(item.id,
+						{ requestId: requestId(), ...destination, swap: false });
+				}
+			}));
+		},
+		onUpload: async (files, folder) => {
+			const current = catalog.data;
+			if (!current) return;
+			await editing.save(() => guarded(async () => {
+				const addresses = allocateFreeAddresses(current, folder, [], files.length);
+				for (const [index, media] of files.entries()) {
+					const destination = addresses[index];
+					if (!destination) throw new Error("No free media address remains.");
+					await api.uploadLibraryItem(destination.folder, destination.file,
+						requestId(), media.name.replace(/\.[^.]+$/u, ""), media);
+				}
+			}));
+		},
+		onUploadAt: (file, destination, name, replace) => editing.save(() =>
+			api.uploadLibraryItem(destination.folder, destination.file,
+				requestId(), name, file, replace)),
+		onUpdateNotes: (targets, note) => editing.save(() => api.updateLibraryNotes(
+			{ requestId: requestId(), targets, note })),
+	};
 }
 
 export interface LibraryBrowserViewProps {
@@ -356,529 +224,111 @@ export interface LibraryBrowserViewProps {
 }
 
 /** The Media Server's address-first, three-pane CITP library editor. */
-export function LibraryBrowserView({
-	catalog,
-	folderPresentations = [],
-	busy = false,
-	failure,
-	onDismissFailure,
-	onRenameFolder,
-	onSetFolderIcon,
-	onSetFolderPicture,
-	onRemoveFolderPicture,
-	onSwapFolders,
-	onCompactFolder,
-	onUpdateItem,
-	onDeleteItem,
-	onSetItemsEnabled,
-	onDeleteItems,
-	onRetryThumbnail,
-	onUploadCustomThumbnail,
-	onMoveItems,
-	onReorderItem,
-	onUpload,
-	onUploadAt,
-	onUpdateNotes,
-	thumbnailUrl = api.thumbnailUrl,
-	previewAspectRatio = 16 / 9,
-	importPanel,
-	onModeChange,
-}: LibraryBrowserViewProps) {
-	const [folder, setFolder] = useState(1);
-	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-	const [selectedFolders, setSelectedFolders] = useState<Set<number>>(
-		new Set(),
-	);
-	const [focusedId, setFocusedId] = useState<string | null>(null);
-	const [emptyFile, setEmptyFile] = useState<number | null>(null);
-	const [folderEditor, setFolderEditor] = useState<number | null>(null);
-	const [search, setSearch] = useState("");
-	const [dropFailure, setDropFailure] = useState<string | null>(null);
-	const picker = useRef<HTMLInputElement>(null);
-	const selectionAnchorId = useRef<string | null>(null);
-	const rangeBaseIds = useRef<Set<string>>(new Set());
-	const selectedFolder = catalog.folders.find(
-		(entry) => entry.folder === folder,
-	);
-	const visibleItems = useMemo(() => {
-		const needle = search.trim().toLowerCase();
-		return (selectedFolder?.items ?? []).filter(
-			(item) => !needle || item.name.toLowerCase().includes(needle),
-		);
-	}, [search, selectedFolder]);
-	const focused = selectedFolder?.items.find((item) => item.id === focusedId);
-
-	useEffect(() => {
-		setSelectedIds(new Set());
-		setFocusedId(null);
-		setEmptyFile(null);
-		selectionAnchorId.current = null;
-		rangeBaseIds.current = new Set();
-	}, [folder]);
-
-	const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => {
-		setSelectedFolders(new Set());
-		setFocusedId(item.id);
-		setEmptyFile(null);
-		setFolderEditor(null);
-		setSelectedIds((current) => {
-			if (event.shiftKey && selectionAnchorId.current) {
-				const anchor = selectedFolder?.items.find(
-					(candidate) => candidate.id === selectionAnchorId.current,
-				);
-				if (anchor) {
-					const first = Math.min(anchor.file, item.file);
-					const last = Math.max(anchor.file, item.file);
-					const next = new Set(rangeBaseIds.current);
-					for (const candidate of selectedFolder?.items ?? []) {
-						if (candidate.file >= first && candidate.file <= last)
-							next.add(candidate.id);
-					}
-					return next;
-				}
-			}
-			if (event.metaKey || event.ctrlKey) {
-				const next = new Set(current);
-				if (next.has(item.id)) next.delete(item.id);
-				else next.add(item.id);
-				selectionAnchorId.current = item.id;
-				rangeBaseIds.current = new Set(next);
-				return next;
-			}
-			selectionAnchorId.current = item.id;
-			rangeBaseIds.current = new Set();
-			return new Set([item.id]);
-		});
-	};
-
-	const selectedItems = (selectedFolder?.items ?? []).filter((item) =>
-		selectedIds.has(item.id),
-	);
-	const selectedFolderEntries = [...selectedFolders]
-		.sort((left, right) => left - right)
-		.map(
-			(number) =>
-				catalog.folders.find((entry) => entry.folder === number) ?? {
-					folder: number,
-					name: null,
-					items: [],
-				},
-		);
-	const folders = [
-		...Array.from({ length: MEDIA_FOLDER_COUNT }, (_, index) => index + 1),
-		...Array.from(
-			{ length: LAST_PARKING_FOLDER - FIRST_PARKING_FOLDER + 1 },
-			(_, index) => FIRST_PARKING_FOLDER + index,
-		),
-	];
-
-	const dropOnFolder = (
-		event: DragEvent<HTMLButtonElement>,
-		number: number,
-	) => {
-		if (!isStorageFolder(number) || busy) return;
-		event.preventDefault();
-		const draggedFolder = Number(
-			typeof event.dataTransfer.getData === "function"
-				? event.dataTransfer.getData(DRAG_FOLDER_TYPE)
-				: "",
-		);
-		if (isStorageFolder(draggedFolder)) {
-			if (draggedFolder !== number) void onSwapFolders?.(draggedFolder, number);
-			return;
-		}
-		const files = [...event.dataTransfer.files];
-		if (files.length) {
-			if (!isPlayableFolder(number)) {
-				setDropFailure(
-					"Upload into a playable folder, then park the imported media.",
-				);
-				return;
-			}
-			if (!files.every(isAcceptedMediaFile)) {
-				setDropFailure("Only video and image files can be uploaded.");
-				return;
-			}
-			setDropFailure(null);
-			void onUpload?.(files, number);
-			return;
-		}
-		if (event.dataTransfer.types.includes(DRAG_MEDIA_TYPE)) {
-			const ids = draggedItemIds(event.dataTransfer.getData(DRAG_MEDIA_TYPE));
-			const byId = new Map(
-				catalog.folders.flatMap((entry) =>
-					entry.items.map((item) => [item.id, item] as const),
-				),
-			);
-			const items = ids.flatMap((id) => {
-				const item = byId.get(id);
-				return item ? [item] : [];
-			});
-			if (items.length) void onMoveItems?.(items, number);
-		}
-	};
-	const dropOnFile = (event: DragEvent<HTMLButtonElement>, file: number) => {
-		event.preventDefault();
-		const ids = draggedItemIds(event.dataTransfer.getData(DRAG_MEDIA_TYPE));
-		if (ids.length !== 1) return;
-		const dragged = catalog.folders
-			.flatMap((entry) => entry.items)
-			.find((candidate) => candidate.id === ids[0]);
-		const sourceFolder = catalog.folders.find((entry) =>
-			entry.items.some((candidate) => candidate.id === dragged?.id),
-		)?.folder;
-		if (!dragged || (sourceFolder === folder && dragged.file === file)) return;
-		void onReorderItem?.(dragged, { folder, file });
-	};
-
-	return (
-		<WindowFrame
-			title="Library"
-			groups={librarySourceGroups({
-				value: "media",
-				onChange: onModeChange,
-				actions: [
-					{
-						id: "new-media",
-						label: "New media",
-						onPress: () => {
-							const destination = allocateFreeAddresses(
-								catalog,
-								folder,
-								[],
-								1,
-							)[0];
-							if (!destination) {
-								setDropFailure("No free media address remains.");
-								return;
-							}
-							setFolder(destination.folder);
-							setSelectedFolders(new Set());
-							setFocusedId(null);
-							setFolderEditor(null);
-							setEmptyFile(destination.file);
-						},
-					},
-				],
-			})}
-			info={{
-				primary: "CITP media library",
-				secondary:
-					"Folders and files keep their desk addresses while you prepare media.",
-			}}
-			className="media-library-window"
-			search={{
-				value: search,
-				onSearch: setSearch,
-				placeholder: "Find media in this folder",
-			}}
-		>
-			{(dropFailure ?? failure) && (
-				<MediaErrorToast
-					message={dropFailure ?? failure ?? "Library operation failed"}
-					onDismiss={() => {
-						setDropFailure(null);
-						onDismissFailure?.();
-					}}
-				/>
-			)}
-			<div className="media-catalog-browser">
-				<WindowScrollArea className="media-library-folders">
-					<div className="media-library-pool-heading">
-						<span>Folders</span>
-						<small>001–199 · Parking 900–999</small>
-					</div>
-					<ButtonGrid className="media-library-folder-pool" minimum={68}>
-						{folders.map((number) => {
-							const entry = catalog.folders.find(
-								(candidate) => candidate.folder === number,
-							);
-							const presentation = folderPresentations.find(
-								(candidate) => candidate.folder === number,
-							);
-							const writable = isStorageFolder(number);
-							const empty =
-								number < FIRST_PARKING_FOLDER &&
-								(entry?.items.length ?? 0) === 0;
-							const selected =
-								selectedFolders.has(number) ||
-								(!selectedFolders.size && folder === number);
-							return (
-								<PoolCard
-									key={number}
-									model={{
-										number: String(number).padStart(3, "0"),
-										primary:
-											presentation?.name ||
-											entry?.name ||
-											(number >= FIRST_PARKING_FOLDER
-												? "Parking"
-												: "Empty folder"),
-										secondary: writable
-											? `${entry?.items.length ?? 0}/254`
-											: "Reserved",
-										color:
-											number >= FIRST_PARKING_FOLDER
-												? DEFAULT_POOL_COLOR_PALETTE.macro
-												: DEFAULT_POOL_COLOR_PALETTE.group,
-										states: [
-											...(selected ? (["selected"] as const) : []),
-											...(empty
-												? (["empty"] as const)
-												: writable
-													? []
-													: (["disabled"] as const)),
-										],
-										icon: presentation?.icon || entry?.icon || "▣",
-										image: presentation?.pictureUrl
-											? {
-													src: presentation.pictureUrl,
-													alt: `${presentation.name ?? entry?.name ?? `Folder ${number}`} preview`,
-												}
-											: undefined,
-									}}
-									className={`media-library-folder ${number >= FIRST_PARKING_FOLDER ? "is-parking" : ""}`}
-									data-folder={number}
-									onClick={(event) => {
-										setFolder(number);
-										setFocusedId(null);
-										setEmptyFile(null);
-										setSelectedIds(new Set());
-										selectionAnchorId.current = null;
-										rangeBaseIds.current = new Set();
-										if (writable && (event.metaKey || event.ctrlKey)) {
-											setSelectedFolders((current) => {
-												const next = new Set(current);
-												if (next.has(number)) next.delete(number);
-												else next.add(number);
-												return next;
-											});
-											setFolderEditor(null);
-										} else {
-											setSelectedFolders(
-												writable ? new Set([number]) : new Set(),
-											);
-											setFolderEditor(writable ? number : null);
-										}
-									}}
-									onContextMenu={(event) => {
-										event.preventDefault();
-										if (writable) {
-											setFolder(number);
-											setSelectedFolders(new Set([number]));
-											setSelectedIds(new Set());
-											selectionAnchorId.current = null;
-											rangeBaseIds.current = new Set();
-											setFolderEditor(number);
-										}
-									}}
-									draggable={writable && !busy}
-									onDragStart={(event) => {
-										event.dataTransfer.setData(
-											DRAG_FOLDER_TYPE,
-											String(number),
-										);
-										event.dataTransfer.effectAllowed = "move";
-									}}
-									onDragOver={(event) => {
-										if (writable && !busy) event.preventDefault();
-									}}
-									onDrop={(event) => dropOnFolder(event, number)}
-								/>
-							);
-						})}
-					</ButtonGrid>
-				</WindowScrollArea>
-
-				<WindowScrollArea className="media-library-pool">
-					<div className="media-library-pool-heading">
-						<span>Folder {String(folder).padStart(3, "0")}</span>
-						<small>
-							{selectedIds.size
-								? `${selectedIds.size} selected`
-								: `${visibleItems.length} media`}
-						</small>
-					</div>
-					<PoolGrid
-						className="media-file-pool-grid media-library-file-pool-grid"
-						slots={visibleItems.map((item) =>
-							itemSlot(item, folder, catalog.revision, thumbnailUrl),
-						)}
-						slotCount={FILES_PER_FOLDER}
-						minimumCardWidth={112}
-						emptySlot={(index) => ({
-							id: `empty-${index + 1}`,
-							position: index,
-							card: { number: index + 1, primary: "", states: ["empty"] },
-						})}
-						renderSlot={(slot) => {
-							const item = visibleItems.find(
-								(candidate) => candidate.file - 1 === slot.position,
-							);
-							if (!item)
-								return (
-									<PoolCard
-										model={slot.card}
-										onClick={() => {
-											setFocusedId(null);
-											setSelectedIds(new Set());
-											selectionAnchorId.current = null;
-											rangeBaseIds.current = new Set();
-											setSelectedFolders(new Set());
-											setFolderEditor(null);
-											setEmptyFile(slot.position + 1);
-										}}
-										onDragOver={(event) => event.preventDefault()}
-										onDrop={(event) => dropOnFile(event, slot.position + 1)}
-									/>
-								);
-							return (
-								<PoolCard
-									model={{
-										...slot.card,
-										states: [
-											...(selectedIds.has(item.id)
-												? ["selected" as const]
-												: []),
-											...(item.enabled === false ? ["disabled" as const] : []),
-										],
-									}}
-									draggable={!busy}
-									onDragStart={(event) => {
-										const ids = selectedIds.has(item.id)
-											? selectedItems.map((selected) => selected.id)
-											: [item.id];
-										if (!selectedIds.has(item.id))
-											setSelectedIds(new Set([item.id]));
-										event.dataTransfer.setData(
-											DRAG_MEDIA_TYPE,
-											JSON.stringify(ids),
-										);
-										event.dataTransfer.effectAllowed = "move";
-									}}
-									onClick={(event) => choose(item, event)}
-									onDragOver={(event) => {
-										event.preventDefault();
-									}}
-									onDrop={(event) => {
-										dropOnFile(event, item.file);
-									}}
-								/>
-							);
-						}}
-					/>
-					{visibleItems.length === 0 && (
-						<div className="media-library-empty-folder" role="status">
-							<strong>This folder is empty</strong>
-							<span>Drop media here or choose files to import.</span>
-						</div>
-					)}
-				</WindowScrollArea>
-
-				<aside className="media-library-inspector">
-					{selectedFolderEntries.length > 1 ? (
-						<LibraryNotesEditor
-							key={`folders-${[...selectedFolders].sort().join("-")}`}
-							label={`${selectedFolderEntries.length} folders`}
-							notes={selectedFolderEntries.map((entry) => entry.note ?? "")}
-							targets={selectedFolderEntries.map((entry) => ({
-								kind: "folder",
-								folder: entry.folder,
-							}))}
-							busy={busy}
-							onSave={onUpdateNotes}
-						/>
-					) : selectedItems.length > 1 ? (
-						<MultiItemEditor
-							key={`items-${selectedItems
-								.map((item) => item.id)
-								.sort()
-								.join("-")}`}
-							items={selectedItems}
-							busy={busy}
-							onUpdateNotes={onUpdateNotes}
-							onSetEnabled={onSetItemsEnabled}
-							onDelete={onDeleteItems}
-						/>
-					) : folderEditor !== null ? (
-						<FolderEditor
-							key={folderEditor}
-							folder={folderEditor}
-							name={
-								catalog.folders.find((entry) => entry.folder === folderEditor)
-									?.name ?? ""
-							}
-							icon={
-								catalog.folders.find((entry) => entry.folder === folderEditor)
-									?.icon ?? ""
-							}
-							pictureUrl={
-								folderPresentations.find(
-									(candidate) => candidate.folder === folderEditor,
-								)?.pictureUrl ?? null
-							}
-							busy={busy}
-							note={
-								catalog.folders.find((entry) => entry.folder === folderEditor)
-									?.note ?? ""
-							}
-							onSave={onRenameFolder}
-							onSetIcon={onSetFolderIcon}
-							onSetPicture={onSetFolderPicture}
-							onRemovePicture={onRemoveFolderPicture}
-							onUpload={onUpload}
-							onUpdateNotes={onUpdateNotes}
-							onCompact={onCompactFolder}
-						/>
-					) : focused ? (
-						<ItemEditor
-							folder={folder}
-							item={focused}
-							busy={busy}
-							onUpdate={onUpdateItem}
-							onReplace={onUploadAt}
-							thumbnailUrl={thumbnailUrl}
-							thumbnailRevision={catalog.revision}
-							previewAspectRatio={previewAspectRatio}
-							onUpdateNotes={onUpdateNotes}
-							onDelete={onDeleteItem}
-							onRetryThumbnail={onRetryThumbnail}
-							onUploadCustomThumbnail={onUploadCustomThumbnail}
-						/>
-					) : emptyFile !== null && isPlayableFolder(folder) ? (
-						<EmptySlotEditor
-							folder={folder}
-							file={emptyFile}
-							busy={busy}
-							onUpload={onUploadAt}
-						/>
-					) : isPlayableFolder(folder) ? (
-						<UploadEditor
-							folder={folder}
-							busy={busy}
-							picker={picker}
-							onUpload={onUpload}
-							importPanel={importPanel}
-						/>
-					) : folder >= FIRST_PARKING_FOLDER ? (
-						<div className="media-library-reserved-copy">
-							<h2>Parking folder {folder}</h2>
-							<p>
-								Drop existing media here to take it out of playback without
-								deleting it.
-							</p>
-						</div>
-					) : (
-						<div className="media-library-reserved-copy">
-							<h2>Folder unavailable</h2>
-						</div>
-					)}
-				</aside>
-			</div>
-		</WindowFrame>
-	);
-}
-
+export function LibraryBrowserView({ catalog, folderPresentations = [], busy = false, failure,
+onDismissFailure, onRenameFolder, onSetFolderIcon, onSetFolderPicture, onRemoveFolderPicture,
+onSwapFolders, onCompactFolder, onUpdateItem, onDeleteItem, onSetItemsEnabled,
+onDeleteItems, onRetryThumbnail, onUploadCustomThumbnail, onMoveItems, onReorderItem,
+onUpload, onUploadAt, onUpdateNotes, thumbnailUrl = api.thumbnailUrl, previewAspectRatio = 16 / 9,
+importPanel, onModeChange, }: LibraryBrowserViewProps) { const [folder, setFolder] = useState(1); const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+const [selectedFolders, setSelectedFolders] = useState<Set<number>>( new Set(), ); const [focusedId, setFocusedId] = useState<string | null>(null); const [emptyFile, setEmptyFile] = useState<number | null>(null);
+const [folderEditor, setFolderEditor] = useState<number | null>(null); const [search, setSearch] = useState(""); const [dropFailure, setDropFailure] = useState<string | null>(null); const picker = useRef<HTMLInputElement>(null); const selectionAnchorId = useRef<string | null>(null);
+const rangeBaseIds = useRef<Set<string>>(new Set()); const selectedFolder = catalog.folders.find( (entry) => entry.folder === folder, ); const visibleItems = useMemo(() => {
+const needle = search.trim().toLowerCase(); return (selectedFolder?.items ?? []).filter( (item) => !needle || item.name.toLowerCase().includes(needle), ); }, [search, selectedFolder]);
+const focused = selectedFolder?.items.find((item) => item.id === focusedId);  useEffect(() => { setSelectedIds(new Set()); setFocusedId(null);
+setEmptyFile(null); selectionAnchorId.current = null; rangeBaseIds.current = new Set(); }, [folder]);
+const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => { setSelectedFolders(new Set()); setFocusedId(item.id); setEmptyFile(null); setFolderEditor(null);
+setSelectedIds((current) => { if (event.shiftKey && selectionAnchorId.current) { const anchor = selectedFolder?.items.find( (candidate) => candidate.id === selectionAnchorId.current, );
+if (anchor) { const first = Math.min(anchor.file, item.file); const last = Math.max(anchor.file, item.file); const next = new Set(rangeBaseIds.current); for (const candidate of selectedFolder?.items ?? []) {
+if (candidate.file >= first && candidate.file <= last) next.add(candidate.id); } return next; }
+} if (event.metaKey || event.ctrlKey) { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+selectionAnchorId.current = item.id; rangeBaseIds.current = new Set(next); return next; } selectionAnchorId.current = item.id;
+rangeBaseIds.current = new Set(); return new Set([item.id]); }); };
+const selectedItems = (selectedFolder?.items ?? []).filter((item) => selectedIds.has(item.id), ); const selectedFolderEntries = [...selectedFolders] .sort((left, right) => left - right)
+.map( (number) => catalog.folders.find((entry) => entry.folder === number) ?? { folder: number, name: null,
+items: [], }, ); const folders = [ ...Array.from({ length: MEDIA_FOLDER_COUNT }, (_, index) => index + 1),
+...Array.from( { length: LAST_PARKING_FOLDER - FIRST_PARKING_FOLDER + 1 }, (_, index) => FIRST_PARKING_FOLDER + index, ), ];
+ const dropOnFolder = ( event: DragEvent<HTMLButtonElement>, number: number, ) => {
+if (!isStorageFolder(number) || busy) return; event.preventDefault(); const draggedFolder = Number( typeof event.dataTransfer.getData === "function" ? event.dataTransfer.getData(DRAG_FOLDER_TYPE)
+: "", ); if (isStorageFolder(draggedFolder)) { if (draggedFolder !== number) void onSwapFolders?.(draggedFolder, number); return;
+} const files = [...event.dataTransfer.files]; if (files.length) { if (!isPlayableFolder(number)) { setDropFailure(
+"Upload into a playable folder, then park the imported media.", ); return; } if (!files.every(isAcceptedMediaFile)) {
+setDropFailure("Only video and image files can be uploaded."); return; } setDropFailure(null); void onUpload?.(files, number);
+return; } if (event.dataTransfer.types.includes(DRAG_MEDIA_TYPE)) { const ids = draggedItemIds(event.dataTransfer.getData(DRAG_MEDIA_TYPE)); const byId = new Map(
+catalog.folders.flatMap((entry) => entry.items.map((item) => [item.id, item] as const), ), ); const items = ids.flatMap((id) => {
+const item = byId.get(id); return item ? [item] : []; }); if (items.length) void onMoveItems?.(items, number); }
+}; const dropOnFile = (event: DragEvent<HTMLButtonElement>, file: number) => { event.preventDefault(); const ids = draggedItemIds(event.dataTransfer.getData(DRAG_MEDIA_TYPE)); if (ids.length !== 1) return;
+const dragged = catalog.folders .flatMap((entry) => entry.items) .find((candidate) => candidate.id === ids[0]); const sourceFolder = catalog.folders.find((entry) => entry.items.some((candidate) => candidate.id === dragged?.id),
+)?.folder; if (!dragged || (sourceFolder === folder && dragged.file === file)) return; void onReorderItem?.(dragged, { folder, file }); };
+return ( <WindowFrame title="Library" groups={librarySourceGroups({ value: "media",
+onChange: onModeChange, actions: [ { id: "new-media", label: "New media",
+onPress: () => { const destination = allocateFreeAddresses( catalog, folder, [],
+1, )[0]; if (!destination) { setDropFailure("No free media address remains."); return;
+} setFolder(destination.folder); setSelectedFolders(new Set()); setFocusedId(null); setFolderEditor(null);
+setEmptyFile(destination.file); }, }, ], })}
+info={{ primary: "CITP media library", secondary: "Folders and files keep their desk addresses while you prepare media.", }}
+className="media-library-window" search={{ value: search, onSearch: setSearch, placeholder: "Find media in this folder",
+}} > {(dropFailure ?? failure) && ( <MediaErrorToast message={dropFailure ?? failure ?? "Library operation failed"}
+onDismiss={() => { setDropFailure(null); onDismissFailure?.(); }} />
+)} <div className="media-catalog-browser"> <WindowScrollArea className="media-library-folders"> <div className="media-library-pool-heading"> <span>Folders</span>
+<small>001–199 · Parking 900–999</small> </div> <ButtonGrid className="media-library-folder-pool" minimum={68}> {folders.map((number) => { const entry = catalog.folders.find(
+(candidate) => candidate.folder === number, ); const presentation = folderPresentations.find( (candidate) => candidate.folder === number, );
+const writable = isStorageFolder(number); const empty = number < FIRST_PARKING_FOLDER && (entry?.items.length ?? 0) === 0; const selected =
+selectedFolders.has(number) || (!selectedFolders.size && folder === number); return ( <PoolCard key={number}
+model={{ number: String(number).padStart(3, "0"), primary: presentation?.name || entry?.name ||
+(number >= FIRST_PARKING_FOLDER ? "Parking" : "Empty folder"), secondary: writable ? `${entry?.items.length ?? 0}/254`
+: "Reserved", color: number >= FIRST_PARKING_FOLDER ? DEFAULT_POOL_COLOR_PALETTE.macro : DEFAULT_POOL_COLOR_PALETTE.group,
+states: [ ...(selected ? (["selected"] as const) : []), ...(empty ? (["empty"] as const) : writable
+? [] : (["disabled"] as const)), ], icon: presentation?.icon || entry?.icon || "▣", image: presentation?.pictureUrl
+? { src: presentation.pictureUrl, alt: `${presentation.name ?? entry?.name ?? `Folder ${number}`} preview`, } : undefined,
+}} className={`media-library-folder ${number >= FIRST_PARKING_FOLDER ? "is-parking" : ""}`} data-folder={number} onClick={(event) => { setFolder(number);
+setFocusedId(null); setEmptyFile(null); setSelectedIds(new Set()); selectionAnchorId.current = null; rangeBaseIds.current = new Set();
+if (writable && (event.metaKey || event.ctrlKey)) { setSelectedFolders((current) => { const next = new Set(current); if (next.has(number)) next.delete(number); else next.add(number);
+return next; }); setFolderEditor(null); } else { setSelectedFolders(
+writable ? new Set([number]) : new Set(), ); setFolderEditor(writable ? number : null); } }}
+onContextMenu={(event) => { event.preventDefault(); if (writable) { setFolder(number); setSelectedFolders(new Set([number]));
+setSelectedIds(new Set()); selectionAnchorId.current = null; rangeBaseIds.current = new Set(); setFolderEditor(number); }
+}} draggable={writable && !busy} onDragStart={(event) => { event.dataTransfer.setData( DRAG_FOLDER_TYPE,
+String(number), ); event.dataTransfer.effectAllowed = "move"; }} onDragOver={(event) => {
+if (writable && !busy) event.preventDefault(); }} onDrop={(event) => dropOnFolder(event, number)} /> );
+})} </ButtonGrid> </WindowScrollArea>  <WindowScrollArea className="media-library-pool">
+<div className="media-library-pool-heading"> <span>Folder {String(folder).padStart(3, "0")}</span> <small> {selectedIds.size ? `${selectedIds.size} selected`
+: `${visibleItems.length} media`} </small> </div> <PoolGrid className="media-file-pool-grid media-library-file-pool-grid"
+slots={visibleItems.map((item) => itemSlot(item, folder, catalog.revision, thumbnailUrl), )} slotCount={FILES_PER_FOLDER} minimumCardWidth={112}
+emptySlot={(index) => ({ id: `empty-${index + 1}`, position: index, card: { number: index + 1, primary: "", states: ["empty"] }, })}
+renderSlot={(slot) => { const item = visibleItems.find( (candidate) => candidate.file - 1 === slot.position, ); if (!item)
+return ( <PoolCard model={slot.card} onClick={() => { setFocusedId(null);
+setSelectedIds(new Set()); selectionAnchorId.current = null; rangeBaseIds.current = new Set(); setSelectedFolders(new Set()); setFolderEditor(null);
+setEmptyFile(slot.position + 1); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnFile(event, slot.position + 1)} />
+); return ( <PoolCard model={{ ...slot.card,
+states: [ ...(selectedIds.has(item.id) ? ["selected" as const] : []), ...(item.enabled === false ? ["disabled" as const] : []),
+], }} draggable={!busy} onDragStart={(event) => { const ids = selectedIds.has(item.id)
+? selectedItems.map((selected) => selected.id) : [item.id]; if (!selectedIds.has(item.id)) setSelectedIds(new Set([item.id])); event.dataTransfer.setData(
+DRAG_MEDIA_TYPE, JSON.stringify(ids), ); event.dataTransfer.effectAllowed = "move"; }}
+onClick={(event) => choose(item, event)} onDragOver={(event) => { event.preventDefault(); }} onDrop={(event) => {
+dropOnFile(event, item.file); }} /> ); }}
+/> {visibleItems.length === 0 && ( <div className="media-library-empty-folder" role="status"> <strong>This folder is empty</strong> <span>Drop media here or choose files to import.</span>
+</div> )} </WindowScrollArea>  <aside className="media-library-inspector">
+{selectedFolderEntries.length > 1 ? ( <LibraryNotesEditor key={`folders-${[...selectedFolders].sort().join("-")}`} label={`${selectedFolderEntries.length} folders`} notes={selectedFolderEntries.map((entry) => entry.note ?? "")}
+targets={selectedFolderEntries.map((entry) => ({ kind: "folder", folder: entry.folder, }))} busy={busy}
+onSave={onUpdateNotes} /> ) : selectedItems.length > 1 ? ( <MultiItemEditor key={`items-${selectedItems
+.map((item) => item.id) .sort() .join("-")}`} items={selectedItems} busy={busy}
+onUpdateNotes={onUpdateNotes} onSetEnabled={onSetItemsEnabled} onDelete={onDeleteItems} /> ) : folderEditor !== null ? (
+<FolderEditor key={folderEditor} folder={folderEditor} name={ catalog.folders.find((entry) => entry.folder === folderEditor)
+?.name ?? "" } icon={ catalog.folders.find((entry) => entry.folder === folderEditor) ?.icon ?? ""
+} pictureUrl={ folderPresentations.find( (candidate) => candidate.folder === folderEditor, )?.pictureUrl ?? null
+} busy={busy} note={ catalog.folders.find((entry) => entry.folder === folderEditor) ?.note ?? ""
+} onSave={onRenameFolder} onSetIcon={onSetFolderIcon} onSetPicture={onSetFolderPicture} onRemovePicture={onRemoveFolderPicture}
+onUpload={onUpload} onUpdateNotes={onUpdateNotes} onCompact={onCompactFolder} /> ) : focused ? (
+<ItemEditor folder={folder} item={focused} busy={busy} onUpdate={onUpdateItem}
+onReplace={onUploadAt} thumbnailUrl={thumbnailUrl} thumbnailRevision={catalog.revision} previewAspectRatio={previewAspectRatio} onUpdateNotes={onUpdateNotes}
+onDelete={onDeleteItem} onRetryThumbnail={onRetryThumbnail} onUploadCustomThumbnail={onUploadCustomThumbnail} /> ) : emptyFile !== null && isPlayableFolder(folder) ? (
+<EmptySlotEditor folder={folder} file={emptyFile} busy={busy} onUpload={onUploadAt}
+/> ) : isPlayableFolder(folder) ? ( <UploadEditor folder={folder} busy={busy}
+picker={picker} onUpload={onUpload} importPanel={importPanel} /> ) : folder >= FIRST_PARKING_FOLDER ? (
+<div className="media-library-reserved-copy"> <h2>Parking folder {folder}</h2> <p> Drop existing media here to take it out of playback without deleting it.
+</p> </div> ) : ( <div className="media-library-reserved-copy"> <h2>Folder unavailable</h2>
+</div> )} </aside> </div> </WindowFrame>
+); }
 function itemSlot(
 	item: CatalogItem,
 	folder: number,
@@ -995,8 +445,6 @@ function ItemEditor({
 }) {
 	const [name, setName] = useState(item.name);
 	const [bpm, setBpm] = useState(item.intrinsicBpm?.toString() ?? "");
-	const replacementPicker = useRef<HTMLInputElement>(null);
-	const thumbnailPicker = useRef<HTMLInputElement>(null);
 	useEffect(() => {
 		setName(item.name);
 		setBpm(item.intrinsicBpm?.toString() ?? "");
@@ -1062,21 +510,35 @@ function ItemEditor({
 			<button type="submit" className="ui-button primary" disabled={busy}>
 				Save media
 			</button>
+			<ItemMediaActions {...{ folder, item, busy, name, onReplace,
+				onDelete, onRetryThumbnail, onUploadCustomThumbnail }} />
+		</form>
+	);
+}
+
+function ItemMediaActions({ folder, item, busy, name, onReplace, onDelete,
+	onRetryThumbnail, onUploadCustomThumbnail }: {
+	folder: number;
+	item: CatalogItem;
+	busy: boolean;
+	name: string;
+	onReplace?: LibraryBrowserViewProps["onUploadAt"];
+	onDelete?: LibraryBrowserViewProps["onDeleteItem"];
+	onRetryThumbnail?: LibraryBrowserViewProps["onRetryThumbnail"];
+	onUploadCustomThumbnail?: LibraryBrowserViewProps["onUploadCustomThumbnail"];
+}) {
+	const replacementPicker = useRef<HTMLInputElement>(null);
+	const thumbnailPicker = useRef<HTMLInputElement>(null);
+	const replace = (replacement?: File) => {
+		if (replacement) void onReplace?.(replacement, { folder, file: item.file },
+			name.trim() || item.name, true);
+	};
+	return <>
 			<FileDropField
 				label="Replacement media"
 				constraints={{ mimeTypes: ["video/*", "image/*"] }}
 				disabled={busy}
-				onFiles={(files) => {
-					const replacement = files[0];
-					if (replacement) {
-						void onReplace?.(
-							replacement,
-							{ folder, file: item.file },
-							name.trim() || item.name,
-							true,
-						);
-					}
-				}}
+				onFiles={(files) => replace(files[0])}
 				onOpenPicker={() => replacementPicker.current?.click()}
 			/>
 			<input
@@ -1087,13 +549,7 @@ function ItemEditor({
 				onChange={(event) => {
 					const replacement = event.currentTarget.files?.[0];
 					event.currentTarget.value = "";
-					if (replacement)
-						void onReplace?.(
-							replacement,
-							{ folder, file: item.file },
-							name.trim() || item.name,
-							true,
-						);
+					replace(replacement);
 				}}
 			/>
 			<p>Replacing keeps this exact folder and media number.</p>
@@ -1139,255 +595,11 @@ function ItemEditor({
 			>
 				Delete media
 			</Button>
-		</form>
-	);
+		</>;
 }
 
 function versionedThumbnailUrl(url: string, revision: number): string {
 	return `${url}${url.includes("?") ? "&" : "?"}revision=${revision}`;
-}
-
-function FolderEditor({
-	folder,
-	name,
-	icon,
-	pictureUrl,
-	busy,
-	note,
-	onSave,
-	onSetIcon,
-	onSetPicture,
-	onRemovePicture,
-	onUpload,
-	onUpdateNotes,
-	onCompact,
-}: {
-	folder: number;
-	name: string;
-	icon: string;
-	pictureUrl: string | null;
-	busy: boolean;
-	note: string;
-	onSave?: LibraryBrowserViewProps["onRenameFolder"];
-	onSetIcon?: LibraryBrowserViewProps["onSetFolderIcon"];
-	onSetPicture?: LibraryBrowserViewProps["onSetFolderPicture"];
-	onRemovePicture?: LibraryBrowserViewProps["onRemoveFolderPicture"];
-	onUpload?: LibraryBrowserViewProps["onUpload"];
-	onUpdateNotes?: LibraryBrowserViewProps["onUpdateNotes"];
-	onCompact?: LibraryBrowserViewProps["onCompactFolder"];
-}) {
-	const folderPicker = useRef<HTMLInputElement>(null);
-	return (
-		<FolderPresentationEditor
-			presentation={{
-				folder,
-				name: name || null,
-				icon: icon || null,
-				pictureUrl,
-			}}
-			busy={busy}
-			onName={(next) => onSave?.(folder, next)}
-			onIcon={(next) => onSetIcon?.(folder, next)}
-			onPicture={(picture) => onSetPicture?.(folder, picture)}
-			onRemovePicture={() => onRemovePicture?.(folder)}
-		>
-			<LibraryNotesEditor
-				label="this folder"
-				notes={[note]}
-				targets={[{ kind: "folder", folder }]}
-				busy={busy}
-				onSave={onUpdateNotes}
-			/>
-			<Button type="button" disabled={busy} onClick={() => onCompact?.(folder)}>
-				Compact files
-			</Button>
-			<p>
-				Moves this folder's files to consecutive slots starting at 1. Numeric
-				media addresses will change.
-			</p>
-			<FileDropField
-				label="Upload media to this folder"
-				constraints={{ mimeTypes: ["video/*", "image/*"], multiple: true }}
-				disabled={busy || !isPlayableFolder(folder)}
-				onFiles={(files) => void onUpload?.(files, folder)}
-				onOpenPicker={() => folderPicker.current?.click()}
-			/>
-			<input
-				ref={folderPicker}
-				hidden
-				type="file"
-				multiple
-				accept="video/*,image/*"
-				onChange={(event) => {
-					const files = [...(event.currentTarget.files ?? [])];
-					event.currentTarget.value = "";
-					if (files.length) void onUpload?.(files, folder);
-				}}
-			/>
-		</FolderPresentationEditor>
-	);
-}
-
-function LibraryNotesEditor({
-	label,
-	notes,
-	targets,
-	busy,
-	onSave,
-}: {
-	label: string;
-	notes: string[];
-	targets: LibraryNoteTargetView[];
-	busy: boolean;
-	onSave?: LibraryBrowserViewProps["onUpdateNotes"];
-}) {
-	const mixed = notes.some((note) => note !== notes[0]);
-	const [note, setNote] = useState(mixed ? "" : (notes[0] ?? ""));
-	return (
-		<section className="media-library-note-editor">
-			<h2>Note</h2>
-			<p>
-				Store licence, attribution, source, or other operator text with {label}.
-			</p>
-			{mixed && <p className="media-library-mixed-note">Multiple values</p>}
-			<TextAreaField
-				label={`Note for ${label}`}
-				value={note}
-				placeholder={mixed ? "Multiple values" : "Add a note"}
-				onChange={(event) => setNote(event.target.value)}
-			/>
-			<div className="media-operator-toolbar">
-				<button
-					type="button"
-					className="ui-button primary"
-					disabled={busy}
-					onClick={() => onSave?.(targets, note)}
-				>
-					{targets.length === 1
-						? "Save note"
-						: `Save note to ${targets.length}`}
-				</button>
-				<button
-					type="button"
-					className="ui-button"
-					disabled={busy}
-					onClick={() => {
-						setNote("");
-						onSave?.(targets, "");
-					}}
-				>
-					Clear note{targets.length === 1 ? "" : "s"}
-				</button>
-			</div>
-		</section>
-	);
-}
-
-function EmptySlotEditor({
-	folder,
-	file,
-	busy,
-	onUpload,
-}: {
-	folder: number;
-	file: number;
-	busy: boolean;
-	onUpload?: LibraryBrowserViewProps["onUploadAt"];
-}) {
-	const [name, setName] = useState("");
-	const mediaPicker = useRef<HTMLInputElement>(null);
-	return (
-		<div className="media-library-editor">
-			<p className="media-library-eyebrow">Empty media slot</p>
-			<h2>Empty</h2>
-			<p className="media-library-address">
-				{String(folder).padStart(3, "0")} / {String(file).padStart(3, "0")}
-			</p>
-			<TextField
-				label="Media name"
-				value={name}
-				onChange={(event) => setName(event.target.value)}
-				placeholder="Name this media"
-				required
-			/>
-			<FileDropField
-				label="Media file"
-				constraints={{ mimeTypes: ["video/*", "image/*"] }}
-				disabled={busy || !name.trim()}
-				onFiles={(files) => {
-					const media = files[0];
-					if (media) {
-						void onUpload?.(media, { folder, file }, name.trim(), false);
-					}
-				}}
-				onOpenPicker={() => mediaPicker.current?.click()}
-			/>
-			<input
-				ref={mediaPicker}
-				hidden
-				type="file"
-				accept="video/*,image/*"
-				onChange={(event) => {
-					const media = event.currentTarget.files?.[0];
-					event.currentTarget.value = "";
-					if (media)
-						void onUpload?.(media, { folder, file }, name.trim(), false);
-				}}
-			/>
-			<p>The upload is assigned directly to this slot.</p>
-		</div>
-	);
-}
-
-function UploadEditor({
-	folder,
-	busy,
-	picker,
-	onUpload,
-	importPanel,
-}: {
-	folder: number;
-	busy: boolean;
-	picker: React.RefObject<HTMLInputElement | null>;
-	onUpload?: LibraryBrowserViewProps["onUpload"];
-	importPanel?: ReactNode;
-}) {
-	return (
-		<div className="media-library-editor">
-			<p className="media-library-eyebrow">
-				Folder {String(folder).padStart(3, "0")}
-			</p>
-			<h2>Add media</h2>
-			<p>
-				Files take the first free slots. If this folder fills up, allocation
-				continues in the next media folder.
-			</p>
-			<input
-				ref={picker}
-				hidden
-				type="file"
-				multiple
-				accept="video/*,image/*"
-				onChange={(event) => {
-					const files = [...(event.target.files ?? [])];
-					event.currentTarget.value = "";
-					if (files.length) void onUpload?.(files, folder);
-				}}
-			/>
-			<FileDropField
-				label="Media files"
-				constraints={{ mimeTypes: ["video/*", "image/*"], multiple: true }}
-				disabled={busy}
-				onFiles={(files) => void onUpload?.(files, folder)}
-				onOpenPicker={() => picker.current?.click()}
-			/>
-			{importPanel}
-		</div>
-	);
-}
-
-function isPlayableFolder(folder: number) {
-	return folder >= 1 && folder <= MEDIA_FOLDER_COUNT;
 }
 
 function isStorageFolder(folder: number) {

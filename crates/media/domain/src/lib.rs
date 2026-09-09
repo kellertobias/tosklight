@@ -24,6 +24,7 @@ pub mod effect_library;
 pub mod effect_parameters;
 pub mod geometry;
 pub mod layer;
+mod layer_effects;
 pub mod master;
 pub mod output;
 pub mod personality;

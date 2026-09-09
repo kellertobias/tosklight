@@ -22,6 +22,7 @@ mod health;
 mod library;
 mod logs;
 mod network;
+mod output_effects;
 mod outputs;
 mod telemetry;
 mod text;
@@ -133,8 +134,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/logs", get(logs::logs))
         .route("/api/v2/logs/level", get(logs::server_level))
         .route("/api/v2/logs/level/update", post(logs::update_server_level))
-        .route("/api/v2/library/imports", get(library::imports))
-        .route("/api/v2/library/import", post(library::start_import))
+        .merge(library_router(upload_body_limit))
         .route(
             "/api/v2/folder-presentations",
             get(folder_presentations::list),
@@ -160,43 +160,6 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/api/v2/folder-presentations/{folder}/picture",
             get(folder_presentations::picture),
-        )
-        .route(
-            "/api/v2/library/items/{id}/update",
-            post(library::update_item),
-        )
-        .route(
-            "/api/v2/library/items/{id}/delete",
-            post(library::delete_item),
-        )
-        .route(
-            "/api/v2/library/items/{id}/thumbnail/retry",
-            post(library::retry_thumbnail),
-        )
-        .route(
-            "/api/v2/library/items/{id}/thumbnail/upload",
-            post(library::upload_thumbnail).layer(DefaultBodyLimit::max(
-                library::MAX_CUSTOM_THUMBNAIL_BYTES + 1024 * 1024,
-            )),
-        )
-        .route("/api/v2/library/items/update", post(library::update_items))
-        .route("/api/v2/library/items/delete", post(library::delete_items))
-        .route(
-            "/api/v2/library/folders/{folder}/update",
-            post(library::update_folder),
-        )
-        .route("/api/v2/library/notes/update", post(library::update_notes))
-        .route(
-            "/api/v2/library/{folder}/{file}/thumbnail",
-            get(library::thumbnail),
-        )
-        .route(
-            "/api/v2/library/{folder}/{file}/upload",
-            post(library::upload).layer(DefaultBodyLimit::max(upload_body_limit)),
-        )
-        .route(
-            "/api/v2/library/imports/{job}/cancel",
-            get(library::cancel_import),
         )
         .route("/api/v2/telemetry", get(telemetry::telemetry))
         .route("/api/v2/fixtures", get(fixtures::fixtures))
@@ -274,4 +237,47 @@ pub fn router(state: ApiState) -> Router {
         // Anything the API did not claim is the administration frontend: its shell, its assets,
         // and its client-side routes.
         .fallback(assets::serve)
+}
+
+fn library_router(upload_body_limit: usize) -> Router<ApiState> {
+    Router::new()
+        .route("/api/v2/library/imports", get(library::imports))
+        .route("/api/v2/library/import", post(library::start_import))
+        .route(
+            "/api/v2/library/items/{id}/update",
+            post(library::update_item),
+        )
+        .route(
+            "/api/v2/library/items/{id}/delete",
+            post(library::delete_item),
+        )
+        .route(
+            "/api/v2/library/items/{id}/thumbnail/retry",
+            post(library::retry_thumbnail),
+        )
+        .route(
+            "/api/v2/library/items/{id}/thumbnail/upload",
+            post(library::upload_thumbnail).layer(DefaultBodyLimit::max(
+                library::MAX_CUSTOM_THUMBNAIL_BYTES + 1024 * 1024,
+            )),
+        )
+        .route("/api/v2/library/items/update", post(library::update_items))
+        .route("/api/v2/library/items/delete", post(library::delete_items))
+        .route(
+            "/api/v2/library/folders/{folder}/update",
+            post(library::update_folder),
+        )
+        .route("/api/v2/library/notes/update", post(library::update_notes))
+        .route(
+            "/api/v2/library/{folder}/{file}/thumbnail",
+            get(library::thumbnail),
+        )
+        .route(
+            "/api/v2/library/{folder}/{file}/upload",
+            post(library::upload).layer(DefaultBodyLimit::max(upload_body_limit)),
+        )
+        .route(
+            "/api/v2/library/imports/{job}/cancel",
+            get(library::cancel_import),
+        )
 }

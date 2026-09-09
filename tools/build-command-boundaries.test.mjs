@@ -55,6 +55,10 @@ test("build:open preserves the focused main desktop rebuild", () => {
 	assert.match(openFunction, /ensure-control-frontend\.mjs/u);
 	assert.match(openFunction, /stop_running/u);
 	assert.match(openFunction, /npm run build:open/u);
+	assert.match(
+		openFunction,
+		/seal-macos-app\.sh[^\n]*debug\/bundle\/macos\/ToskLight\.app/u,
+	);
 	assert.doesNotMatch(openFunction, /npm ci|build_icon_contact_sheets/u);
 	assert.match(appBuildFunction, /light-headless/u);
 	assert.match(appBuildFunction, /CONTROL_TAURI_CONFIG/u);
@@ -301,6 +305,7 @@ test("native Timecode audio stays out of the ARM headless build", () => {
 });
 
 test("macOS release apps are sealed only after their final helpers and resources", () => {
+	const buildScript = read("tools/build.sh");
 	const workflow = read(".github/workflows/release.yml");
 	const assembler = read("tools/assemble-release-bundle.sh");
 	const sealer = read("tools/seal-macos-app.sh");
@@ -328,6 +333,15 @@ test("macOS release apps are sealed only after their final helpers and resources
 		/editor_app="\$bundle\/macos\/ToskLight Architect\.app"[\s\S]*MacOS\/viz-editor" "\$accessory\/viz-editor"[\s\S]*bundle-visualizer-macos\.sh[\s\S]*seal-macos-app\.sh/u,
 	);
 	assert.match(workflow, /bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh/u);
+	const localMediaBuild = shellFunction(
+		buildScript,
+		"build_media",
+		"media_data_dir",
+	);
+	assert.match(
+		localMediaBuild,
+		/bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh[\s\S]*ToskLight Media\.app/u,
+	);
 	assert.match(assembler, /codesign --verify --deep --strict/u);
 	assert.match(assembler, /macos-first-start\.txt/u);
 	assert.match(assembler, /sign-macos-apps-locally\.sh/u);
