@@ -444,6 +444,47 @@ pub(super) async fn thumbnail(
 }
 
 #[derive(Debug, Deserialize)]
+pub(super) struct PreviewQuery {
+    #[serde(default)]
+    frame: usize,
+}
+
+/// Serves one decoded native-clip frame for the browser inspector. It is intentionally a sequence
+/// of bounded JPEGs rather than the source file: `.toskclip`/HAP is not a browser media format.
+pub(super) async fn preview(
+    State(state): State<ApiState>,
+    Path((folder, file)): Path<(u16, u8)>,
+    Query(query): Query<PreviewQuery>,
+) -> Result<Response, ApiError> {
+    let location = CatalogLocation::new(folder, file);
+    let catalog = state.catalog.load();
+    let item = catalog
+        .folder(folder)
+        .and_then(|entry| entry.item(file))
+        .ok_or_else(|| {
+            ApiError::not_found(
+                "media-not-found",
+                "this media item is no longer in the library",
+            )
+        })?;
+    let bytes = (state.diagnostics.library.preview_frame)(location, &item.name, query.frame)
+        .map_err(|_| {
+            ApiError::not_found(
+                "media-preview-not-found",
+                "this media item cannot be previewed",
+            )
+        })?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/jpeg"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct UploadQuery {
     request_id: String,

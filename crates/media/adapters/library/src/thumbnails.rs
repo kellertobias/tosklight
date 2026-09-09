@@ -17,6 +17,9 @@ use media_domain::{CatalogLocation, MediaAddress};
 use crate::storage::LibraryStorage;
 
 pub const THUMBNAIL_WIDTH: u32 = 128;
+/// The browser library inspector is deliberately modest: it is a management preview, not a
+/// second output surface.
+pub const PREVIEW_WIDTH: u32 = 640;
 const MAX_SAMPLED_FRAMES: usize = 12;
 const MAX_CUSTOM_DIMENSION: u32 = 8_192;
 const MAX_CUSTOM_DECODE_BYTES: u64 = 128 * 1024 * 1024;
@@ -92,6 +95,53 @@ pub fn generate_cancellable(
         detail: "the clip contains no readable frames".to_owned(),
     })?;
     write_rgba_thumbnail(storage, address, width, height, pixels)
+}
+
+/// Decodes one native clip frame into a browser-safe JPEG.
+///
+/// Pixel stores HAP frames in `.toskclip`, which browsers do not generally understand. Keeping
+/// this conversion beside thumbnail generation means the web library can still show motion
+/// without ever exposing a filesystem path or pretending that the original is browser-playable.
+pub fn preview_frame(clip: &Path, requested_frame: usize) -> Result<Vec<u8>, ThumbnailError> {
+    let file = std::fs::File::open(clip).map_err(|error| unreadable(clip, error))?;
+    let mut reader = ClipReader::open(file).map_err(|error| unreadable(clip, error))?;
+    let width = reader.header().width;
+    let height = reader.header().height;
+    let frame_count = reader.index().len();
+    if frame_count == 0 {
+        return Err(ThumbnailError::Unreadable {
+            path: clip.to_path_buf(),
+            detail: "the clip contains no readable frames".to_owned(),
+        });
+    }
+    let index = requested_frame % frame_count;
+    let payload = reader
+        .frame(index)
+        .map_err(|error| unreadable(clip, error))?
+        .ok_or_else(|| ThumbnailError::Unreadable {
+            path: clip.to_path_buf(),
+            detail: "the requested frame is absent".to_owned(),
+        })?;
+    let blocks = decode_blocks(width, height, &payload).map_err(|error| unreadable(clip, error))?;
+    let rgba = expand_to_rgba(width, height, &blocks).map_err(|error| unreadable(clip, error))?;
+    let image = image::RgbaImage::from_raw(width, height, rgba).ok_or_else(|| {
+        ThumbnailError::InvalidImage(
+            "the decoded frame dimensions do not match its pixels".to_owned(),
+        )
+    })?;
+    let preview_height = ((u64::from(image.height()) * u64::from(PREVIEW_WIDTH)
+        / u64::from(image.width().max(1))) as u32)
+        .clamp(1, MAX_THUMBNAIL_HEIGHT);
+    let scaled = DynamicImage::ImageRgba8(image).resize_exact(
+        PREVIEW_WIDTH,
+        preview_height,
+        FilterType::Triangle,
+    );
+    let mut encoded = Vec::new();
+    JpegEncoder::new_with_quality(&mut encoded, 78)
+        .encode_image(&scaled)
+        .map_err(|error| ThumbnailError::InvalidImage(error.to_string()))?;
+    Ok(encoded)
 }
 
 /// Validates and normalizes an uploaded image into the same JPEG companion artifact.
@@ -308,6 +358,24 @@ mod tests {
                 .any(|pixel| pixel.0.iter().any(|channel| *channel > 40)),
             "a useful later frame should beat the black opening"
         );
+        let _ = std::fs::remove_dir_all(storage.root());
+    }
+
+    #[test]
+    fn preview_frames_are_browser_safe_and_wrap_a_native_clip() {
+        let storage = storage("preview-frame");
+        let source = storage.root().join("clip.toskclip");
+        clip(&source, &[[220, 10, 10, 255], [10, 10, 220, 255]]);
+
+        let jpeg = preview_frame(&source, 3).unwrap();
+        assert_eq!(&jpeg[..2], &[0xff, 0xd8]);
+        let image = image::load_from_memory(&jpeg).unwrap().to_rgb8();
+        let pixel = image.get_pixel(0, 0).0;
+        assert!(
+            pixel[2] > pixel[0],
+            "frame 3 wraps to the blue second frame"
+        );
+        assert_eq!(image.width(), PREVIEW_WIDTH);
         let _ = std::fs::remove_dir_all(storage.root());
     }
 

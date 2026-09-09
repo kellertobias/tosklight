@@ -273,6 +273,10 @@ fn library_router(upload_body_limit: usize) -> Router<ApiState> {
             get(library::thumbnail),
         )
         .route(
+            "/api/v2/library/{folder}/{file}/preview",
+            get(library::preview),
+        )
+        .route(
             "/api/v2/library/{folder}/{file}/upload",
             post(library::upload).layer(DefaultBodyLimit::max(upload_body_limit)),
         )

@@ -634,6 +634,7 @@ fn library_access(
     let folder_remove_published = catalog.clone();
     let thumbnail_storage = storage.clone();
     let thumbnail_upload_storage = storage.clone();
+    let preview_storage = storage.clone();
     let thumbnail_lock = catalog_edits.clone();
     let thumbnail_upload_lock = catalog_edits.clone();
     let thumbnail_catalog = catalog.clone();
@@ -647,6 +648,11 @@ fn library_access(
             let path = reading.thumbnail_path(address);
             std::fs::read(&path)
                 .map_err(|error| format!("cannot read thumbnail {}: {error}", path.display()))
+        }),
+        preview_frame: std::sync::Arc::new(move |address, name, frame| {
+            let path = preview_storage.item_path(address, name);
+            media_library::thumbnails::preview_frame(&path, frame)
+                .map_err(|error| error.to_string())
         }),
         regenerate_thumbnail: std::sync::Arc::new(move |id| {
             let _guard = thumbnail_lock

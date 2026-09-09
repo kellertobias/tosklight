@@ -466,13 +466,7 @@ function ItemEditor({
 				className="media-library-item-preview"
 				style={{ aspectRatio: previewAspectRatio }}
 			>
-				<img
-					src={versionedThumbnailUrl(
-						thumbnailUrl(folder, item.file),
-						thumbnailRevision,
-					)}
-					alt={`${item.name} preview`}
-				/>
+				<LibraryItemPreview {...{ folder, item, thumbnailUrl, thumbnailRevision }} />
 			</div>
 			<p className="media-library-address">
 				{String(folder).padStart(3, "0")} / {String(item.file).padStart(3, "0")}
@@ -514,6 +508,30 @@ function ItemEditor({
 				onDelete, onRetryThumbnail, onUploadCustomThumbnail }} />
 		</form>
 	);
+}
+
+/** Native Pixel clips are HAP containers, so videos advance through server-decoded JPEGs. */
+function LibraryItemPreview({ folder, item, thumbnailUrl, thumbnailRevision }: {
+	folder: number;
+	item: CatalogItem;
+	thumbnailUrl: (folder: number, file: number) => string;
+	thumbnailRevision: number;
+}) {
+	const [frame, setFrame] = useState(0);
+	const [unavailable, setUnavailable] = useState(false);
+	useEffect(() => {
+		setFrame(0);
+		setUnavailable(false);
+		if (item.kind !== "video") return;
+		const timer = globalThis.setInterval(() => setFrame((value) => value + 1), 250);
+		return () => globalThis.clearInterval(timer);
+	}, [item.id, item.kind]);
+	const fallback = versionedThumbnailUrl(thumbnailUrl(folder, item.file), thumbnailRevision);
+	const source = item.kind === "video" && !unavailable
+		? api.previewUrl(folder, item.file, frame)
+		: fallback;
+	return <img src={source} alt={`${item.name} preview`}
+		onError={() => setUnavailable(true)} />;
 }
 
 function ItemMediaActions({ folder, item, busy, name, onReplace, onDelete,

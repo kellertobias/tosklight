@@ -189,12 +189,16 @@ pub type SetFolderPicture =
 pub type ReadFolderPicture = Arc<dyn Fn(u16) -> Result<(String, Vec<u8>), String> + Send + Sync>;
 pub type RegenerateThumbnail = Arc<dyn Fn(AssetId) -> Result<(), String> + Send + Sync>;
 pub type SetCustomThumbnail = Arc<dyn Fn(AssetId, &[u8]) -> Result<(), String> + Send + Sync>;
+pub type PreviewFrame =
+    Arc<dyn Fn(CatalogLocation, &str, usize) -> Result<Vec<u8>, String> + Send + Sync>;
 
 /// Mutations and files the running library exposes to the API.
 #[derive(Clone)]
 pub struct LibraryAccess {
     pub edit: Arc<dyn Fn(LibraryEdit) -> Result<(), String> + Send + Sync>,
     pub thumbnail: Arc<dyn Fn(CatalogLocation) -> Result<Vec<u8>, String> + Send + Sync>,
+    /// A browser-safe still from a native clip. The HTTP route resolves the catalog name first.
+    pub preview_frame: PreviewFrame,
     pub regenerate_thumbnail: RegenerateThumbnail,
     pub set_custom_thumbnail: SetCustomThumbnail,
     pub begin_upload: BeginUpload,
@@ -219,6 +223,9 @@ impl Default for LibraryAccess {
         Self {
             edit: Arc::new(|_| Err("library editing is unavailable in this process".to_owned())),
             thumbnail: Arc::new(|_| Err("no thumbnail exists at that address".to_owned())),
+            preview_frame: Arc::new(|_, _, _| {
+                Err("media preview is unavailable in this process".to_owned())
+            }),
             regenerate_thumbnail: Arc::new(|_| {
                 Err("thumbnail generation is unavailable in this process".to_owned())
             }),

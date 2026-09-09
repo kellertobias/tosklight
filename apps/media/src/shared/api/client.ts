@@ -328,6 +328,8 @@ export const api = {
 		}),
 	thumbnailUrl: (folder: number, file: number) =>
 		`${BASE}/library/${folder}/${file}/thumbnail`,
+	previewUrl: (folder: number, file: number, frame: number) =>
+		`${BASE}/library/${folder}/${file}/preview?frame=${frame}`,
 	uploadLibraryItem: (
 		folder: number,
 		file: number,

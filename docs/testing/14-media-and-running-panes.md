@@ -59,6 +59,10 @@ Select one media file in Pixel's Library and turn **Enabled** off. The card rema
 
 Import a multi-frame clip whose opening samples are black and whose later samples contain visible detail. Verify the generated thumbnail uses a useful non-black sampled frame and that the selection is deterministic across retries. Select the media file and choose **Retry thumbnail**; verify one replay-safe request regenerates exactly that stable item's thumbnail from the playable clip, refreshes the visible image, and changes no address, content, name, note, BPM correction, or enabled state. If regeneration fails, the previous thumbnail remains. Choose **Upload custom thumbnail**, supply a valid PNG, JPEG, GIF, or WebP image no larger than 16 MiB, and verify Pixel normalizes it to JPEG and refreshes only the selected file. Invalid, empty, non-image, oversized, or excessive-dimension uploads are refused without replacing the current thumbnail. Move, swap, park, and compact the item and verify both automatic and custom thumbnails follow the media identity.
 
+## PIXEL-007 — library media preview
+
+In Pixel's Library web view, select an imported video and verify its inspector advances through a sequence of pictures while the item remains selected; this is a management preview and does not start a layer or alter output. The source stays private and Pixel decodes its native clip format to bounded JPEG frames because that format is not generally browser-playable. Select an image and verify its thumbnail remains visible. If a video frame cannot be decoded, the inspector keeps the item's existing thumbnail instead of showing a broken image, and no library metadata, address, playback state, or media bytes change.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.

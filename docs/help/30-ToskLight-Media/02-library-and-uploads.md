@@ -16,6 +16,8 @@ An upload is not playable merely because the source transfer finished. Wait for 
 
 After conversion, Pixel samples a bounded set of frames across the finished playable clip and chooses the most useful thumbnail by preferring visible content, detail, and colour. A later representative frame therefore wins over an all-black or nearly black opening when one is available. Still images and very short clips use the same safe selection path.
 
+Select a video in the Library to see a moving management preview in its inspector. Pixel decodes a small sequence of JPEG pictures from its native playable clip; it does not start a layer, change the output, or expose the source file to the browser. A still image continues to show its thumbnail. If a frame cannot be decoded, Pixel leaves the existing thumbnail visible.
+
 To reconsider an existing file, select it and choose **Retry thumbnail**. Pixel reruns automatic selection from the stored playable clip, so the original upload does not need to remain available. A failed retry keeps the current thumbnail. Choose **Upload custom thumbnail** to supply one PNG, JPEG, GIF, or WebP image up to 16 MiB; Pixel validates it and normalizes it to the library JPEG size. Both operations change only the thumbnail. The result stays attached to the media file through moves, swaps, parking, and compaction.
 
 Replacing an occupied slot keeps the old playable clip available until the replacement has been accepted and converted. A failed replacement therefore does not silently destroy the content currently used by the show.

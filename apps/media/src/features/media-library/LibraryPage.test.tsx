@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ICON_CATALOG_GROUPS } from "@tosklight/ui/controls";
 import { ModalProvider } from "@tosklight/ui/modals";
@@ -13,7 +13,10 @@ import {
 	LibraryPage,
 } from "./LibraryPage";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	cleanup();
+	vi.unstubAllGlobals();
+});
 
 describe("the CITP media library", () => {
 	it("filters the media folder pool to playable and parking storage", async () => {
@@ -77,7 +80,7 @@ describe("the CITP media library", () => {
 		const preview = screen.getByRole("img", { name: "Blue haze preview" });
 		expect(preview).toHaveAttribute(
 			"src",
-			"/api/v2/library/1/1/thumbnail?revision=3",
+			"/api/v2/library/1/1/preview?frame=0",
 		);
 		expect(preview.parentElement).toHaveClass("media-library-item-preview");
 		const editor = screen
@@ -153,7 +156,7 @@ describe("the CITP media library", () => {
 			expect(server.writes).toContain("/library/items/asset-a/thumbnail/retry"),
 		);
 		expect(
-			screen.getByRole("img", { name: "Blue haze preview" }),
+			screen.getByText("Blue haze").closest("button")?.querySelector("img"),
 		).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail?revision=4");
 
 		await userEvent.click(
@@ -177,7 +180,7 @@ describe("the CITP media library", () => {
 		);
 		await vi.waitFor(() =>
 			expect(
-				screen.getByRole("img", { name: "Blue haze preview" }),
+				screen.getByText("Blue haze").closest("button")?.querySelector("img"),
 			).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail?revision=5"),
 		);
 	});

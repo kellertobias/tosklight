@@ -626,6 +626,64 @@ async fn a_thumbnail_is_a_jpeg_and_a_missing_one_says_so() {
 }
 
 #[tokio::test]
+async fn a_native_media_preview_uses_the_catalog_item_and_never_a_client_path() {
+    let seen = Arc::new(Mutex::new(None));
+    let recorded = Arc::clone(&seen);
+    let diagnostics = Diagnostics {
+        library: LibraryAccess {
+            preview_frame: Arc::new(move |location, name, frame| {
+                *recorded.lock().unwrap() = Some((location, name.to_owned(), frame));
+                Ok(vec![0xff, 0xd8, 0xff, 0xd9])
+            }),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let bench = bench_with(diagnostics);
+    let mut catalog = media_domain::CatalogSnapshot::default();
+    catalog
+        .insert(
+            3,
+            media_domain::CatalogItem {
+                id: media_domain::AssetId::new(),
+                file: 7,
+                name: "House loop".to_owned(),
+                kind: media_domain::ItemKind::Video,
+                width: 1920,
+                height: 1080,
+                frames: Some(42),
+                intrinsic_bpm: None,
+                note: None,
+                enabled: true,
+            },
+        )
+        .unwrap();
+    bench.api.catalog.store(Arc::new(catalog));
+
+    let response = bench
+        .router
+        .clone()
+        .oneshot(get("/api/v2/library/3/7/preview?frame=9".into()))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[axum::http::header::CONTENT_TYPE],
+        "image/jpeg"
+    );
+    assert_eq!(
+        response.headers()[axum::http::header::CACHE_CONTROL],
+        "no-store"
+    );
+    assert_eq!(
+        seen.lock().unwrap().as_ref().unwrap().1,
+        "House loop",
+        "the server resolved the name from its immutable catalog"
+    );
+    assert_eq!(seen.lock().unwrap().as_ref().unwrap().2, 9);
+}
+
+#[tokio::test]
 async fn retrying_a_thumbnail_uses_one_stable_id_and_replays_safely() {
     let regenerated = Arc::new(Mutex::new(Vec::new()));
     let recorded = Arc::clone(&regenerated);
