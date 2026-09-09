@@ -213,6 +213,56 @@ impl WindowedOutput {
         Ok(())
     }
 
+    /// Presents one frame with a transient operator overlay above all authored media layers.
+    #[allow(clippy::too_many_arguments)]
+    pub fn present_with_overlay(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        master: &MasterState,
+        master_mask: Option<&crate::SourceTexture>,
+        now: Timestamp,
+        region: Option<&media_domain::display_region::DisplayRegion>,
+        overlay: LayerDraw<'_>,
+    ) -> Result<(), SurfaceLost> {
+        let frame = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                self.surface
+                    .configure(&self.gpu.device, &self.configuration);
+                self.clock.reset();
+                return Err(SurfaceLost::Recovered);
+            }
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return Err(SurfaceLost::Timeout);
+            }
+            other => {
+                return Err(SurfaceLost::Fatal {
+                    detail: format!("{other:?}"),
+                });
+            }
+        };
+
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        self.compositor.render_with_overlay(
+            layers,
+            master,
+            master_mask,
+            &view,
+            self.id,
+            now,
+            region,
+            overlay,
+        );
+        #[cfg(not(target_os = "macos"))]
+        self.window.pre_present_notify();
+        self.gpu.queue.present(frame);
+        self.clock.record_present(now);
+        Ok(())
+    }
+
     /// Asks the platform for another frame. A display-synchronized output redraws when the
     /// compositor is ready for it rather than spinning.
     pub fn request_redraw(&self) {

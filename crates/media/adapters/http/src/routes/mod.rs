@@ -165,9 +165,26 @@ pub fn router(state: ApiState) -> Router {
             post(library::update_item),
         )
         .route(
+            "/api/v2/library/items/{id}/delete",
+            post(library::delete_item),
+        )
+        .route(
+            "/api/v2/library/items/{id}/thumbnail/retry",
+            post(library::retry_thumbnail),
+        )
+        .route(
+            "/api/v2/library/items/{id}/thumbnail/upload",
+            post(library::upload_thumbnail).layer(DefaultBodyLimit::max(
+                library::MAX_CUSTOM_THUMBNAIL_BYTES + 1024 * 1024,
+            )),
+        )
+        .route("/api/v2/library/items/update", post(library::update_items))
+        .route("/api/v2/library/items/delete", post(library::delete_items))
+        .route(
             "/api/v2/library/folders/{folder}/update",
             post(library::update_folder),
         )
+        .route("/api/v2/library/notes/update", post(library::update_notes))
         .route(
             "/api/v2/library/{folder}/{file}/thumbnail",
             get(library::thumbnail),

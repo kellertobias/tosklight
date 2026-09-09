@@ -100,7 +100,10 @@ describe("the transport", () => {
 			volume: 0.375,
 		});
 
-		const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+		const [, init] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
 		expect(init.body).toBe(
 			'{"folder":0,"file":255,"playModeDmx":216,"speedMultiplierDmx":128,"playbackBpm":120,"effectSlot":3,"volume":0.375}',
 		);
@@ -136,7 +139,10 @@ describe("the transport", () => {
 			maskFile: 300,
 			volume: 0.42,
 		});
-		const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+		const [, init] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
 		expect(init.body).toBe('{"maskFolder":0,"maskFile":255,"volume":0.42}');
 	});
 
@@ -177,7 +183,10 @@ describe("the transport", () => {
 			tileDisplacement: 0.7,
 		});
 
-		const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+		const [, init] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
 		expect(init.body).toBe('{"effectSlot":3,"tileDisplacement":0.7}');
 	});
 
@@ -197,6 +206,163 @@ describe("the transport", () => {
 		expect(url).toBe("/api/v2/library/folders/1/update");
 		expect(init.method).toBe("POST");
 		expect(init.body).toBe('{"requestId":"swap-folder","swapWith":900}');
+	});
+
+	it("sends folder compaction as one replay-safe server intent", async () => {
+		const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
+		vi.stubGlobal("fetch", fetchStub);
+
+		await api.updateLibraryFolder(7, {
+			requestId: "compact-folder",
+			compact: true,
+		});
+
+		const [url, init] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
+		expect(url).toBe("/api/v2/library/folders/7/update");
+		expect(init.method).toBe("POST");
+		expect(init.body).toBe('{"requestId":"compact-folder","compact":true}');
+	});
+
+	it("sends one replay-safe note intent for selected media and folders", async () => {
+		const fetchStub = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({ revision: 1, itemCount: 0, folders: [] }),
+					{
+						status: 200,
+						headers: { "content-type": "application/json" },
+					},
+				),
+		);
+		vi.stubGlobal("fetch", fetchStub);
+
+		await api.updateLibraryNotes({
+			requestId: "notes",
+			targets: [
+				{ kind: "item", id: "asset-a" },
+				{ kind: "folder", folder: 7 },
+			],
+			note: "Licence: CC BY 4.0",
+		});
+
+		const [url, init] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
+		expect(url).toBe("/api/v2/library/notes/update");
+		expect(init.method).toBe("POST");
+		expect(JSON.parse(String(init.body))).toEqual({
+			requestId: "notes",
+			targets: [
+				{ kind: "item", id: "asset-a" },
+				{ kind: "folder", folder: 7 },
+			],
+			note: "Licence: CC BY 4.0",
+		});
+	});
+
+	it("sends replay-safe enable and delete intents for one media file", async () => {
+		const fetchStub = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({ revision: 1, itemCount: 0, folders: [] }),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+		);
+		vi.stubGlobal("fetch", fetchStub);
+
+		await api.updateLibraryItem("asset/a", {
+			requestId: "disable",
+			enabled: false,
+			swap: false,
+		});
+		await api.deleteLibraryItem("asset/a", { requestId: "delete" });
+
+		const [enableUrl, enableInit] = fetchStub.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
+		const [deleteUrl, deleteInit] = fetchStub.mock.calls[1] as unknown as [
+			string,
+			RequestInit,
+		];
+		expect(enableUrl).toBe("/api/v2/library/items/asset%2Fa/update");
+		expect(JSON.parse(String(enableInit.body))).toEqual({
+			requestId: "disable",
+			enabled: false,
+			swap: false,
+		});
+		expect(deleteUrl).toBe("/api/v2/library/items/asset%2Fa/delete");
+		expect(JSON.parse(String(deleteInit.body))).toEqual({
+			requestId: "delete",
+		});
+	});
+
+	it("sends one replay-safe intent for bulk enable and bulk delete", async () => {
+		const fetchStub = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({ revision: 1, itemCount: 0, folders: [] }),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+		);
+		vi.stubGlobal("fetch", fetchStub);
+
+		await api.updateLibraryItems({
+			requestId: "bulk-disable",
+			ids: ["asset-a", "asset-b"],
+			enabled: false,
+		});
+		await api.deleteLibraryItems({
+			requestId: "bulk-delete",
+			ids: ["asset-a", "asset-b"],
+		});
+
+		const calls = fetchStub.mock.calls as unknown as [string, RequestInit][];
+		expect(calls.map(([url]) => url)).toEqual([
+			"/api/v2/library/items/update",
+			"/api/v2/library/items/delete",
+		]);
+		expect(calls.map(([, init]) => JSON.parse(String(init.body)))).toEqual([
+			{
+				requestId: "bulk-disable",
+				ids: ["asset-a", "asset-b"],
+				enabled: false,
+			},
+			{
+				requestId: "bulk-delete",
+				ids: ["asset-a", "asset-b"],
+			},
+		]);
+	});
+
+	it("retries and uploads a custom thumbnail for one stable media id", async () => {
+		const fetchStub = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({ revision: 4, itemCount: 1, folders: [] }),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+		);
+		vi.stubGlobal("fetch", fetchStub);
+
+		await api.retryLibraryThumbnail("asset/a", { requestId: "retry" });
+		const image = new File(["pixels"], "custom.png", { type: "image/png" });
+		await api.uploadLibraryThumbnail("asset/a", "custom", image);
+
+		const calls = fetchStub.mock.calls as unknown as [string, RequestInit][];
+		expect(calls[0][0]).toBe("/api/v2/library/items/asset%2Fa/thumbnail/retry");
+		expect(JSON.parse(String(calls[0][1].body))).toEqual({
+			requestId: "retry",
+		});
+		expect(calls[1][0]).toBe(
+			"/api/v2/library/items/asset%2Fa/thumbnail/upload?requestId=custom",
+		);
+		expect(calls[1][1].body).toBeInstanceOf(FormData);
+		expect((calls[1][1].body as FormData).get("file")).toBe(image);
 	});
 
 	it("triggers a payload-free live action with a plain GET", async () => {

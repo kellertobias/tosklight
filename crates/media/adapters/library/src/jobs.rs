@@ -30,6 +30,28 @@ impl JobId {
     }
 }
 
+/// Identifies one operator-submitted group of imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct BatchId(Uuid);
+
+impl BatchId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+impl Default for BatchId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for BatchId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.0)
+    }
+}
+
 impl Default for JobId {
     fn default() -> Self {
         Self::new()
@@ -87,9 +109,13 @@ impl JobState {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Job {
     pub id: JobId,
+    /// Present when the native desktop submitted several sources together.
+    pub batch: Option<BatchId>,
     pub source: std::path::PathBuf,
     pub destination: MediaAddress,
     pub state: JobState,
+    /// Zero while queued, one on the first conversion, and two while/after the retry.
+    pub attempts: u8,
 }
 
 /// A bounded queue of imports.
@@ -121,12 +147,23 @@ impl ImportQueue {
 
     /// Queues an import and returns its identity.
     pub fn submit(&mut self, source: std::path::PathBuf, destination: MediaAddress) -> JobId {
+        self.submit_in_batch(source, destination, None)
+    }
+
+    pub fn submit_in_batch(
+        &mut self,
+        source: std::path::PathBuf,
+        destination: MediaAddress,
+        batch: Option<BatchId>,
+    ) -> JobId {
         let id = JobId::new();
         self.jobs.push(Job {
             id,
+            batch,
             source,
             destination,
             state: JobState::Queued,
+            attempts: 0,
         });
         self.waiting.push_back(id);
         id
@@ -172,7 +209,23 @@ impl ImportQueue {
                 frames_total: None,
             },
         );
+        if let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) {
+            job.attempts = 1;
+        }
         self.job(id).cloned()
+    }
+
+    /// Marks that a running conversion is making its one allowed retry.
+    pub fn retrying(&mut self, id: JobId) {
+        if let Some(job) = self.jobs.iter_mut().find(|job| job.id == id)
+            && matches!(job.state, JobState::Running { .. })
+        {
+            job.attempts = 2;
+            job.state = JobState::Running {
+                frames_done: 0,
+                frames_total: None,
+            };
+        }
     }
 
     /// Records progress on a running job.
@@ -217,12 +270,16 @@ impl ImportQueue {
     /// Drops finished jobs, keeping the most recent so a client that asks late still sees what
     /// happened. Failures are kept: the whole point of a failed job is that somebody reads it.
     pub fn forget_completed(&mut self, keep: usize) {
+        // Keep the newest native batch intact while it is the current report. Once any later
+        // submission arrives, its successful entries become eligible for the ordinary bound.
+        let protected_batch = self.jobs.last().and_then(|job| job.batch);
         let mut succeeded: Vec<JobId> = self
             .jobs
             .iter()
             .filter(|job| {
                 matches!(job.state, JobState::Succeeded { .. } | JobState::Cancelled)
                     && !self.running.contains(&job.id)
+                    && !(protected_batch.is_some() && job.batch == protected_batch)
             })
             .map(|job| job.id)
             .collect();

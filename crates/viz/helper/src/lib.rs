@@ -21,6 +21,12 @@ pub mod protocol;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// How long to wait after a crash before starting the helper again, and the ceiling that backs
 /// off to.
 ///
@@ -147,12 +153,16 @@ impl SupervisedHelper {
         // one and reads the helper's answers up the other. Stderr is discarded rather than
         // inherited — a child writing over the desk's console would be the desk's problem, which
         // is the opposite of isolation.
-        let child = Command::new(&self.program)
+        let mut command = Command::new(&self.program);
+        command
             .args(&self.arguments)
             .envs(self.environment.iter().map(|(key, value)| (key, value)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(target_os = "windows")]
+        command.creation_flags(CREATE_NO_WINDOW);
+        let child = command
             .spawn()
             .map_err(|error| format!("could not start {}: {error}", self.program.display()))?;
         self.child = Some(child);

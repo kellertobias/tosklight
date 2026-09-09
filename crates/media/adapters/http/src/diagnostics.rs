@@ -77,9 +77,11 @@ pub enum ImportOutcome {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportJob {
     pub id: String,
+    pub batch_id: Option<String>,
     pub destination: media_domain::MediaAddress,
     pub filename: String,
     pub outcome: ImportOutcome,
+    pub attempts: u8,
     /// Absent when the source did not report a frame count. Nothing invents one.
     pub fraction: Option<f32>,
     pub frames_done: Option<u32>,
@@ -119,6 +121,20 @@ pub enum LibraryEdit {
         id: AssetId,
         bpm: Option<f64>,
     },
+    SetItemEnabled {
+        id: AssetId,
+        enabled: bool,
+    },
+    SetItemsEnabled {
+        ids: Vec<AssetId>,
+        enabled: bool,
+    },
+    DeleteItem {
+        id: AssetId,
+    },
+    DeleteItems {
+        ids: Vec<AssetId>,
+    },
     RenameFolder {
         folder: u16,
         name: Option<String>,
@@ -127,10 +143,24 @@ pub enum LibraryEdit {
         folder: u16,
         icon: Option<String>,
     },
+    SetNotes {
+        targets: Vec<LibraryNoteTarget>,
+        note: Option<String>,
+    },
     SwapFolders {
         first: u16,
         second: u16,
     },
+    CompactFolder {
+        folder: u16,
+    },
+}
+
+/// A stable selected object within the physical media library.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LibraryNoteTarget {
+    Item(AssetId),
+    Folder(u16),
 }
 
 /// A streaming upload owned by the runtime/library adapter.
@@ -157,12 +187,16 @@ pub type UpdateFolderPresentation = Arc<
 pub type SetFolderPicture =
     Arc<dyn Fn(u16, &str, &[u8]) -> Result<FolderPresentation, String> + Send + Sync>;
 pub type ReadFolderPicture = Arc<dyn Fn(u16) -> Result<(String, Vec<u8>), String> + Send + Sync>;
+pub type RegenerateThumbnail = Arc<dyn Fn(AssetId) -> Result<(), String> + Send + Sync>;
+pub type SetCustomThumbnail = Arc<dyn Fn(AssetId, &[u8]) -> Result<(), String> + Send + Sync>;
 
 /// Mutations and files the running library exposes to the API.
 #[derive(Clone)]
 pub struct LibraryAccess {
     pub edit: Arc<dyn Fn(LibraryEdit) -> Result<(), String> + Send + Sync>,
     pub thumbnail: Arc<dyn Fn(CatalogLocation) -> Result<Vec<u8>, String> + Send + Sync>,
+    pub regenerate_thumbnail: RegenerateThumbnail,
+    pub set_custom_thumbnail: SetCustomThumbnail,
     pub begin_upload: BeginUpload,
     pub folder_presentations:
         Arc<dyn Fn() -> Result<Vec<FolderPresentation>, String> + Send + Sync>,
@@ -185,6 +219,12 @@ impl Default for LibraryAccess {
         Self {
             edit: Arc::new(|_| Err("library editing is unavailable in this process".to_owned())),
             thumbnail: Arc::new(|_| Err("no thumbnail exists at that address".to_owned())),
+            regenerate_thumbnail: Arc::new(|_| {
+                Err("thumbnail generation is unavailable in this process".to_owned())
+            }),
+            set_custom_thumbnail: Arc::new(|_, _| {
+                Err("custom thumbnail upload is unavailable in this process".to_owned())
+            }),
             begin_upload: Arc::new(|_, _, _, _| {
                 Err("library upload is unavailable in this process".to_owned())
             }),

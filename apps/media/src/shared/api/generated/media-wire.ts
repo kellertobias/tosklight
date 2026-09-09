@@ -185,8 +185,8 @@ export type CatalogItemView = {
 /**
  * Stable across renames, moves, and reindexing — the identity a UI keys a row on.
  */
-id: string, file: number, name: string, kind: string, width: number, height: number, frames: number | null, intrinsicBpm: number | null, };
-export type CatalogFolderView = { folder: number, name: string | null, icon?: string, pictureUrl?: string, items: Array<CatalogItemView>, };
+id: string, file: number, name: string, kind: string, width: number, height: number, frames: number | null, intrinsicBpm: number | null, note?: string, enabled?: boolean, };
+export type CatalogFolderView = { folder: number, name: string | null, icon?: string, pictureUrl?: string, note?: string, items: Array<CatalogItemView>, };
 export type CatalogView = { revision: number, itemCount: number, folders: Array<CatalogFolderView>, };
 export type FolderPresentationView = { folder: number, name: string | null, icon: string | null, pictureUrl: string | null, };
 export type FolderPresentationsView = { folders: Array<FolderPresentationView>, };
@@ -338,11 +338,19 @@ name: string,
  * The filename as it sits on disk, so an operator recognises what they are about to convert.
  */
 filename: string, };
-export type ImportJobView = { id: string, address: AddressView, filename: string,
+export type ImportJobView = { id: string,
+/**
+ * Groups jobs submitted together from the macOS menu.
+ */
+batchId: string | null, address: AddressView, filename: string,
 /**
  * `queued`, `running`, `succeeded`, `failed`, or `cancelled`.
  */
 state: string,
+/**
+ * Zero while queued, one on the initial conversion, two on the retry.
+ */
+attempts: number,
 /**
  * Absent while the total is unknown, rather than a made-up number.
  */
@@ -473,10 +481,24 @@ export type UpdateLibraryItem = { requestId: string, name?: string | null, folde
  */
 intrinsicBpm?: number | null | null,
 /**
+ * Enable or disable playback without changing the stored media.
+ */
+enabled?: boolean | null,
+/**
  * Exchange addresses when the destination is occupied. False refuses the edit.
  */
 swap: boolean, };
-export type UpdateLibraryFolder = { requestId: string, name?: string | null, icon?: string | null, swapWith?: number | null, };
+export type DeleteLibraryItem = { requestId: string, };
+export type UpdateLibraryItems = { requestId: string, ids: Array<string>, enabled: boolean, };
+export type DeleteLibraryItems = { requestId: string, ids: Array<string>, };
+export type UpdateLibraryThumbnail = { requestId: string, };
+export type UpdateLibraryFolder = { requestId: string, name?: string | null, icon?: string | null, swapWith?: number | null,
+/**
+ * Close empty file slots while preserving the folder's existing item order.
+ */
+compact?: boolean | null, };
+export type LibraryNoteTargetView = { "kind": "item", id: string, } | { "kind": "folder", folder: number, };
+export type UpdateLibraryNotes = { requestId: string, targets: Array<LibraryNoteTargetView>, note: string, };
 export type UpdateFolderPresentation = { requestId: string, name?: string | null, icon?: string | null, };
 export type RemoveFolderPicture = { requestId: string, };
 export type UpdateServerLogLevel = { requestId: string, level: string, };

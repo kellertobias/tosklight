@@ -5,6 +5,7 @@ members = [
   "apps/light-hardware-controls/src-tauri",
   "apps/light-headless",
   "apps/media",
+  "apps/pixel-launcher",
   "apps/viz-editor/src-tauri",
   "crates/light",
   "crates/light/adapters/headless",

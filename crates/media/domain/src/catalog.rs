@@ -89,6 +89,16 @@ pub struct CatalogItem {
     pub frames: Option<u32>,
     /// The tempo the asset was authored at, if it has one. An operator may correct or clear it.
     pub intrinsic_bpm: Option<f64>,
+    /// Operator-authored provenance or licence text. It follows the asset when it moves.
+    #[serde(default)]
+    pub note: Option<String>,
+    /// Disabled media remains in the portable library but resolves as transparent playback.
+    #[serde(default = "enabled_by_default")]
+    pub enabled: bool,
+}
+
+const fn enabled_by_default() -> bool {
+    true
 }
 
 /// One library folder.
@@ -105,6 +115,9 @@ pub struct CatalogFolder {
     /// MIME type of the optional operator-uploaded folder picture. Its bytes stay on disk.
     #[serde(default)]
     pub picture_content_type: Option<String>,
+    /// Operator-authored provenance or licence text for the whole folder.
+    #[serde(default)]
+    pub note: Option<String>,
     /// Items in file order. Order is maintained so a reindex is a deliberate rewrite rather than
     /// something that depends on how a directory happened to be read.
     pub items: Vec<CatalogItem>,
@@ -218,6 +231,7 @@ impl CatalogSnapshot {
                     name: None,
                     icon: None,
                     picture_content_type: None,
+                    note: None,
                     items: Vec::new(),
                 });
                 self.folders.sort_by_key(|entry| entry.folder);
@@ -259,6 +273,30 @@ impl CatalogSnapshot {
             .find_map(|folder| folder.items.iter_mut().find(|item| item.id == id))
             .ok_or(CatalogError::NoSuchItem)?;
         item.intrinsic_bpm = bpm;
+        self.bump();
+        Ok(())
+    }
+
+    /// Enables or disables playback without moving or removing the item.
+    pub fn set_item_enabled(&mut self, id: AssetId, enabled: bool) -> Result<(), CatalogError> {
+        let item = self
+            .folders
+            .iter_mut()
+            .find_map(|folder| folder.items.iter_mut().find(|item| item.id == id))
+            .ok_or(CatalogError::NoSuchItem)?;
+        item.enabled = enabled;
+        self.bump();
+        Ok(())
+    }
+
+    /// Sets or clears a note without changing an item's identity or address.
+    pub fn set_item_note(&mut self, id: AssetId, note: Option<&str>) -> Result<(), CatalogError> {
+        let item = self
+            .folders
+            .iter_mut()
+            .find_map(|folder| folder.items.iter_mut().find(|item| item.id == id))
+            .ok_or(CatalogError::NoSuchItem)?;
+        item.note = note.filter(|note| !note.is_empty()).map(str::to_owned);
         self.bump();
         Ok(())
     }
@@ -326,6 +364,7 @@ impl CatalogSnapshot {
                 name: None,
                 icon: None,
                 picture_content_type: None,
+                note: None,
                 items: Vec::new(),
             });
             self.folders.sort_by_key(|entry| entry.folder);
@@ -354,6 +393,7 @@ impl CatalogSnapshot {
                 name: None,
                 icon: None,
                 picture_content_type: None,
+                note: None,
                 items: Vec::new(),
             });
             self.folders.sort_by_key(|entry| entry.folder);
@@ -386,6 +426,7 @@ impl CatalogSnapshot {
                 name: None,
                 icon: None,
                 picture_content_type: None,
+                note: None,
                 items: Vec::new(),
             });
             self.folders.sort_by_key(|entry| entry.folder);
@@ -396,6 +437,32 @@ impl CatalogSnapshot {
             .find(|entry| entry.folder == folder)
             .expect("the folder was just ensured");
         entry.picture_content_type = content_type.map(str::to_owned);
+        self.bump();
+        Ok(())
+    }
+
+    /// Sets or clears a note attached to a physical library folder.
+    pub fn set_folder_note(&mut self, folder: u16, note: Option<&str>) -> Result<(), CatalogError> {
+        if !is_storage_folder(folder) {
+            return Err(CatalogError::NotALibraryFolder { folder });
+        }
+        if self.folder(folder).is_none() {
+            self.folders.push(CatalogFolder {
+                folder,
+                name: None,
+                icon: None,
+                picture_content_type: None,
+                note: None,
+                items: Vec::new(),
+            });
+            self.folders.sort_by_key(|entry| entry.folder);
+        }
+        let entry = self
+            .folders
+            .iter_mut()
+            .find(|entry| entry.folder == folder)
+            .expect("the folder was just ensured");
+        entry.note = note.filter(|note| !note.is_empty()).map(str::to_owned);
         self.bump();
         Ok(())
     }
@@ -492,6 +559,8 @@ mod tests {
             height: 1080,
             frames: Some(100),
             intrinsic_bpm: None,
+            note: None,
+            enabled: true,
         }
     }
 
@@ -552,6 +621,20 @@ mod tests {
             catalog.resolve(MediaAddress::new(1, 1)).is_none(),
             "and it left its old address"
         );
+    }
+
+    #[test]
+    fn enabling_and_disabling_preserves_the_item_and_its_address() {
+        let mut catalog = catalog();
+        let id = catalog.resolve(MediaAddress::new(1, 1)).unwrap().id;
+
+        catalog.set_item_enabled(id, false).unwrap();
+        let item = catalog.item(id).unwrap().1;
+        assert!(!item.enabled);
+        assert_eq!(catalog.address_of(id), Some(MediaAddress::new(1, 1)));
+
+        catalog.set_item_enabled(id, true).unwrap();
+        assert!(catalog.item(id).unwrap().1.enabled);
     }
 
     #[test]

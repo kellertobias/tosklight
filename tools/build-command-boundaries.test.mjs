@@ -379,9 +379,46 @@ test("the Architect release keeps one product identity and literal accessory nam
 	assert.match(bundler, /apps\/viz-editor\/src-tauri\/icons\/icon\.icns/u);
 	assert.doesNotMatch(workflow, /tosklight-viz-\$version-windows-amd64-setup/u);
 	assert.match(assembler, /ToskLight Architect\.exe/u);
+	assert.match(
+		assembler,
+		/mv "\$previz\/viz-editor\.exe" "\$previz\/ToskLight Architect\.exe"/u,
+	);
+	assert.doesNotMatch(
+		assembler,
+		/mv "\$previz\/viz-renderer\.exe"/u,
+		"the renderer remains the Architect's helper executable",
+	);
 	assert.match(assembler, /tosklight-architect-\$asset_slug\.app/u);
 	assert.match(workflow, /tosklight-architect-\$version-macos-arm64\.zip/u);
-	assert.doesNotMatch(assembler, /mv "\$previz\/viz-editor(?:\.exe)?"/u);
+});
+
+test("the Windows Pixel release is a branded launcher installer", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const assembler = read("tools/assemble-release-bundle.sh");
+	const launcher = read("apps/pixel-launcher/src/main.rs");
+	const launcherBuild = read("apps/pixel-launcher/build.rs");
+	const installer = read("tools/windows/pixel-installer.nsi");
+
+	assert.match(workflow, /-p pixel-launcher --bin pixel-launcher/u);
+	assert.match(workflow, /ToskLight Pixel\.exe/u);
+	assert.match(workflow, /pixel-installer\.nsi/u);
+	assert.doesNotMatch(
+		workflow,
+		/7z a -tzip[\s\\]*\n[\s\S]{0,120}tosklight-media-\$version-\$SLUG\.zip/u,
+	);
+	assert.match(assembler, /tosklight-media-\$VERSION-windows-amd64-setup\.exe/u);
+	assert.doesNotMatch(assembler, /mv "\$media\/media-server\.exe"/u);
+	assert.match(launcher, /windows_subsystem = "windows"/u);
+	assert.match(launcher, /CREATE_NO_WINDOW/u);
+	assert.match(launcher, /\/api\/v2\/health/u);
+	assert.match(launcher, /FileProtocolHandler/u);
+	assert.match(launcherBuild, /ToskLight Pixel\.png/u);
+	assert.match(launcherBuild, /FileVersion/u);
+	assert.match(installer, /Icon "\$\{ICON_FILE\}"/u);
+	assert.match(
+		installer,
+		/CreateShortcut "\$DESKTOP\\ToskLight Pixel\.lnk"/u,
+	);
 });
 
 test("every Architect package includes the generated MCP bridge", () => {

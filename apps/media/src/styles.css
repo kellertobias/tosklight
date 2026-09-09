@@ -696,6 +696,20 @@ body {
 	font-size: 1rem;
 }
 
+.media-import-summary {
+	display: grid;
+	gap: 0.45rem;
+}
+
+.media-import-summary p {
+	margin: 0;
+}
+
+.media-import-summary progress {
+	width: 100%;
+	accent-color: var(--cyan);
+}
+
 .media-import-jobs {
 	display: grid;
 	gap: 0.4rem;

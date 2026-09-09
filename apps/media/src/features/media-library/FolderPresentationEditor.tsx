@@ -1,4 +1,8 @@
-import { FileDropField, IconPickerField, TextField } from "@tosklight/ui/controls";
+import {
+	FileDropField,
+	IconPickerField,
+	TextField,
+} from "@tosklight/ui/controls";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 export interface FolderPresentation {
@@ -29,21 +33,45 @@ export function FolderPresentationEditor({
 	const [icon, setIcon] = useState(presentation.icon ?? "");
 	const picker = useRef<HTMLInputElement>(null);
 	const lastSavedName = useRef(name);
+	const pendingName = useRef<string | null>(null);
+	const onNameRef = useRef(onName);
+	onNameRef.current = onName;
+
+	const commitName = (next: string) => {
+		pendingName.current = null;
+		if (next === lastSavedName.current) return;
+		lastSavedName.current = next;
+		void onNameRef.current?.(next);
+	};
 
 	useEffect(() => {
 		const next = presentation.name ?? "";
 		lastSavedName.current = next;
+		pendingName.current = null;
 		setName(next);
 	}, [presentation.name]);
 	useEffect(() => setIcon(presentation.icon ?? ""), [presentation.icon]);
 	useEffect(() => {
-		if (name === lastSavedName.current) return;
+		if (name === lastSavedName.current) {
+			pendingName.current = null;
+			return;
+		}
+		pendingName.current = name;
 		const timer = window.setTimeout(() => {
-			lastSavedName.current = name;
-			void onName?.(name);
+			commitName(name);
 		}, 350);
 		return () => window.clearTimeout(timer);
-	}, [name, onName]);
+	}, [name]);
+	useEffect(
+		() => () => {
+			const pending = pendingName.current;
+			if (pending !== null && pending !== lastSavedName.current) {
+				lastSavedName.current = pending;
+				void onNameRef.current?.(pending);
+			}
+		},
+		[],
+	);
 
 	return (
 		<div className="media-library-editor media-folder-presentation-editor">
@@ -60,6 +88,7 @@ export function FolderPresentationEditor({
 				label="Folder name"
 				value={name}
 				onChange={(event) => setName(event.target.value)}
+				onBlur={() => commitName(name)}
 				placeholder="Empty folder"
 				disabled={busy}
 			/>
@@ -73,7 +102,9 @@ export function FolderPresentationEditor({
 				}}
 			/>
 			<FileDropField
-				label={presentation.pictureUrl ? "Replace folder picture" : "Folder picture"}
+				label={
+					presentation.pictureUrl ? "Replace folder picture" : "Folder picture"
+				}
 				constraints={{ mimeTypes: ["image/*"] }}
 				disabled={busy}
 				onFiles={(files) => {

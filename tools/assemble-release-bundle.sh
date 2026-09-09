@@ -52,10 +52,12 @@ else
   mv "$headless/light-headless" "$headless/tosklight-headless-$asset_slug"
 fi
 
-media_unpack="$stage_root/media"
-extract_archive "$COMPONENTS/tosklight-media-$VERSION-$SLUG.zip" "$media_unpack"
-media="$bundle/tosklight-media-$asset_slug"
-media_component="$(single_directory "$media_unpack")"
+if [[ "$SLUG" != "windows-amd64" ]]; then
+  media_unpack="$stage_root/media"
+  extract_archive "$COMPONENTS/tosklight-media-$VERSION-$SLUG.zip" "$media_unpack"
+  media="$bundle/tosklight-media-$asset_slug"
+  media_component="$(single_directory "$media_unpack")"
+fi
 
 case "$SLUG" in
   macos-arm64)
@@ -75,8 +77,8 @@ case "$SLUG" in
     codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-media-$asset_slug.app"
     ;;
   windows-amd64)
-    mv "$media_component" "$media"
-    mv "$media/media-server.exe" "$media/tosklight-media-$asset_slug.exe"
+    cp "$COMPONENTS/tosklight-media-$VERSION-windows-amd64-setup.exe" \
+      "$bundle/tosklight-media-$asset_slug-setup.exe"
     cp "$COMPONENTS/tosklight-$VERSION-windows-amd64-setup.exe" \
       "$bundle/tosklight-desk-$asset_slug-setup.exe"
     previz_unpack="$stage_root/previz"
@@ -84,7 +86,7 @@ case "$SLUG" in
       "$COMPONENTS/tosklight-architect-$VERSION-windows-amd64.zip" "$previz_unpack"
     previz="$bundle/tosklight-architect-$asset_slug"
     mv "$(single_directory "$previz_unpack")" "$previz"
-    mv "$previz/viz-renderer.exe" "$previz/ToskLight Architect.exe"
+    mv "$previz/viz-editor.exe" "$previz/ToskLight Architect.exe"
     cp -R "$headless/fixture-library" "$previz/fixture-library"
     mkdir -p "$previz/demo-show"
     cp "$COMPONENTS/demo.show" "$previz/demo-show/demo.show"

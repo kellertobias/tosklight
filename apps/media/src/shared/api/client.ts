@@ -9,10 +9,12 @@ import type {
 	CatalogView,
 	CreateText,
 	CreateVisualizer,
+	DeleteLibraryItem,
+	DeleteLibraryItems,
 	DeleteText,
 	DmxMapView,
-	FolderPresentationView,
 	FolderPresentationsView,
+	FolderPresentationView,
 	Health,
 	ImportsView,
 	LogsView,
@@ -29,6 +31,9 @@ import type {
 	UpdateLayer,
 	UpdateLibraryFolder,
 	UpdateLibraryItem,
+	UpdateLibraryItems,
+	UpdateLibraryNotes,
+	UpdateLibraryThumbnail,
 	UpdateMaster,
 	UpdateNetwork,
 	UpdateOutputConfiguration,
@@ -272,8 +277,42 @@ export const api = {
 			method: "POST",
 			body: JSON.stringify(edit),
 		}),
+	deleteLibraryItem: (id: string, edit: DeleteLibraryItem) =>
+		request<CatalogView>(`/library/items/${encodeURIComponent(id)}/delete`, {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	updateLibraryItems: (edit: UpdateLibraryItems) =>
+		request<CatalogView>("/library/items/update", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	deleteLibraryItems: (edit: DeleteLibraryItems) =>
+		request<CatalogView>("/library/items/delete", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	retryLibraryThumbnail: (id: string, edit: UpdateLibraryThumbnail) =>
+		request<CatalogView>(
+			`/library/items/${encodeURIComponent(id)}/thumbnail/retry`,
+			{ method: "POST", body: JSON.stringify(edit) },
+		),
+	uploadLibraryThumbnail: (id: string, requestId: string, image: File) => {
+		const body = new FormData();
+		body.set("file", image);
+		const query = new URLSearchParams({ requestId });
+		return request<CatalogView>(
+			`/library/items/${encodeURIComponent(id)}/thumbnail/upload?${query.toString()}`,
+			{ method: "POST", body },
+		);
+	},
 	updateLibraryFolder: (folder: number, edit: UpdateLibraryFolder) =>
 		request<CatalogView>(`/library/folders/${folder}/update`, {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	updateLibraryNotes: (edit: UpdateLibraryNotes) =>
+		request<CatalogView>("/library/notes/update", {
 			method: "POST",
 			body: JSON.stringify(edit),
 		}),

@@ -493,6 +493,17 @@
 	min-width: 0;
 }
 
+.media-library-folder.empty.selected {
+	border-width: 2px;
+	border-style: solid;
+	border-color: var(--pool-card-resolved-color);
+	background: color-mix(
+		in srgb,
+		var(--pool-card-resolved-color) 32%,
+		var(--panel2)
+	);
+}
+
 .media-library-address {
 	font-variant-numeric: tabular-nums;
 }
@@ -619,10 +630,22 @@
 }
 
 .media-library-editor h2,
+.media-library-note-editor h2,
 .media-library-editor p,
+.media-library-note-editor p,
 .media-library-reserved-copy h2,
 .media-library-reserved-copy p {
 	margin: 0;
+}
+
+.media-library-note-editor {
+	display: grid;
+	gap: 0.65rem;
+}
+
+.media-library-mixed-note {
+	color: var(--warn);
+	font-weight: 700;
 }
 
 .media-library-eyebrow,

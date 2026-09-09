@@ -152,10 +152,11 @@ impl Upload {
         if !(1..=254).contains(&address.file) {
             return Err(UploadError::FileOutOfRange { file: address.file });
         }
-        let extension =
-            importable_extension(original_filename).ok_or_else(|| UploadError::Unsupported {
+        let extension = naming::importable_extension(original_filename).ok_or_else(|| {
+            UploadError::Unsupported {
                 filename: original_filename.to_owned(),
-            })?;
+            }
+        })?;
         let folder = root.join(naming::folder_directory(address.folder));
         std::fs::create_dir_all(&folder).map_err(|source| UploadError::Filesystem {
             operation: "create",
@@ -266,14 +267,6 @@ impl Drop for Upload {
             let _ = std::fs::remove_file(&self.staging);
         }
     }
-}
-
-fn importable_extension(filename: &str) -> Option<String> {
-    const IMPORTABLE: [&str; 8] = ["mp4", "mov", "m4v", "mkv", "png", "jpg", "jpeg", "tif"];
-    let extension = filename.rsplit_once('.')?.1.to_ascii_lowercase();
-    IMPORTABLE
-        .contains(&extension.as_str())
-        .then_some(extension)
 }
 
 fn address_is_taken(folder: &Path, file: u8) -> bool {

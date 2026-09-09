@@ -3,8 +3,8 @@
 // Tests drive the real client and the real resource cache; only the socket is replaced. That way
 // a test proving a rollback is proving the code an operator runs, not a mock of it.
 
-import { withEffectParameterBounds } from "../shared/api/effectParameters";
 import { vi } from "vitest";
+import { withEffectParameterBounds } from "../shared/api/effectParameters";
 import type {
 	AudioPanelView,
 	CatalogView,
@@ -607,6 +607,63 @@ function writeLibrary(
 	path: string,
 	init?: RequestInit,
 ): Response | undefined {
+	const thumbnailRetry = path.match(
+		/^\/library\/items\/([^/]+)\/thumbnail\/retry$/u,
+	);
+	if (thumbnailRetry) {
+		server.catalog.revision += 1;
+		return jsonResponse(server.catalog);
+	}
+	const thumbnailUpload = path.match(
+		/^\/library\/items\/([^/]+)\/thumbnail\/upload\?/u,
+	);
+	if (thumbnailUpload) {
+		server.catalog.revision += 1;
+		return jsonResponse(server.catalog);
+	}
+	if (path === "/library/items/update") {
+		const body = JSON.parse(String(init?.body ?? "{}"));
+		const ids = new Set<string>(body.ids ?? []);
+		for (const item of server.catalog.folders.flatMap(
+			(folder) => folder.items,
+		)) {
+			if (ids.has(item.id)) item.enabled = body.enabled;
+		}
+		return jsonResponse(server.catalog);
+	}
+	if (path === "/library/items/delete") {
+		const body = JSON.parse(String(init?.body ?? "{}"));
+		const ids = new Set<string>(body.ids ?? []);
+		let removed = 0;
+		for (const folder of server.catalog.folders) {
+			const before = folder.items.length;
+			folder.items = folder.items.filter((item) => !ids.has(item.id));
+			removed += before - folder.items.length;
+		}
+		server.catalog.itemCount -= removed;
+		return jsonResponse(server.catalog);
+	}
+	if (path === "/library/notes/update") {
+		const body = JSON.parse(String(init?.body ?? "{}"));
+		for (const target of body.targets ?? []) {
+			if (target.kind === "item") {
+				const item = server.catalog.folders
+					.flatMap((folder) => folder.items)
+					.find((candidate) => candidate.id === target.id);
+				if (item) item.note = body.note || null;
+			} else if (target.kind === "folder") {
+				let folder = server.catalog.folders.find(
+					(candidate) => candidate.folder === target.folder,
+				);
+				if (!folder) {
+					folder = { folder: target.folder, name: null, items: [] };
+					server.catalog.folders.push(folder);
+				}
+				folder.note = body.note || null;
+			}
+		}
+		return jsonResponse(server.catalog);
+	}
 	const itemUpdate = path.match(/^\/library\/items\/([^/]+)\/update$/u);
 	if (itemUpdate) {
 		const body = JSON.parse(String(init?.body ?? "{}"));
@@ -621,6 +678,7 @@ function writeLibrary(
 		if (body.name !== undefined) located.item.name = body.name;
 		if (body.intrinsicBpm !== undefined)
 			located.item.intrinsicBpm = body.intrinsicBpm;
+		if (body.enabled !== undefined) located.item.enabled = body.enabled;
 		if (body.folder !== undefined && body.file !== undefined) {
 			const occupant = server.catalog.folders
 				.find((candidate) => candidate.folder === body.folder)
@@ -656,12 +714,28 @@ function writeLibrary(
 		}
 		return jsonResponse(server.catalog);
 	}
+	const itemDelete = path.match(/^\/library\/items\/([^/]+)\/delete$/u);
+	if (itemDelete) {
+		const id = decodeURIComponent(itemDelete[1]);
+		const folder = server.catalog.folders.find((candidate) =>
+			candidate.items.some((item) => item.id === id),
+		);
+		if (!folder)
+			return jsonResponse(
+				{ code: "library-item-not-deleted", message: "no item" },
+				404,
+			);
+		folder.items = folder.items.filter((item) => item.id !== id);
+		server.catalog.itemCount -= 1;
+		return jsonResponse(server.catalog);
+	}
 	const folderUpdate = path.match(/^\/library\/folders\/(\d+)\/update$/u);
 	if (folderUpdate) {
 		const body = JSON.parse(String(init?.body ?? "{}"));
 		const folder = server.catalog.folders.find(
 			(candidate) => candidate.folder === Number(folderUpdate[1]),
 		);
+		if (!folder && body.compact === true) return jsonResponse(server.catalog);
 		if (!folder)
 			return jsonResponse(
 				{ code: "library-folder-not-updated", message: "no folder" },
@@ -674,6 +748,12 @@ function writeLibrary(
 			folder.folder = body.swapWith;
 			if (second) second.folder = Number(folderUpdate[1]);
 			server.catalog.folders.sort((left, right) => left.folder - right.folder);
+		} else if (body.compact === true) {
+			folder.items
+				.sort((left, right) => left.file - right.file)
+				.forEach((item, index) => {
+					item.file = index + 1;
+				});
 		} else if (body.name !== undefined) {
 			folder.name = body.name.trim() || null;
 		} else if (body.icon !== undefined) {
@@ -709,9 +789,11 @@ function writeImport(
 		}
 		server.imports.jobs = server.imports.pending.map((item, index) => ({
 			id: `job-${index}`,
+			batchId: null,
 			address: item.address,
 			filename: item.filename,
 			state: "running",
+			attempts: 1,
 			fraction: 0.5,
 			framesDone: 50,
 			framesTotal: 100,
@@ -1382,6 +1464,7 @@ export function aCatalog(): CatalogView {
 						height: 1080,
 						frames: 600,
 						intrinsicBpm: 120,
+						enabled: true,
 					},
 					{
 						id: "asset-b",
@@ -1392,6 +1475,7 @@ export function aCatalog(): CatalogView {
 						height: 1080,
 						frames: null,
 						intrinsicBpm: null,
+						enabled: true,
 					},
 				],
 			},

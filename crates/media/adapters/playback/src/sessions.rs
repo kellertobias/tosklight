@@ -91,6 +91,16 @@ impl LayerSessions {
             return None;
         }
 
+        let disabled = catalog
+            .folder(u16::from(layer.address.folder))
+            .and_then(|folder| folder.item(layer.address.file))
+            .is_some_and(|item| !item.enabled);
+        if disabled {
+            self.release(layer_index, loader);
+            self.failed.remove(&layer_index);
+            return None;
+        }
+
         let catalog_asset = catalog.resolve(layer.address).map(|item| item.id);
 
         // A selection that has already failed is reported from memory rather than retried every
@@ -313,6 +323,8 @@ mod tests {
                         height: 180,
                         frames: Some(frames as u32),
                         intrinsic_bpm: None,
+                        note: None,
+                        enabled: true,
                     },
                 )
                 .unwrap();
@@ -369,6 +381,44 @@ mod tests {
         assert!(bench.reconcile(&LayerState::default(), 0).is_none());
         assert!(bench.reconcile(&pointing_at(1, 0), 0).is_none());
         assert!(bench.reconcile(&pointing_at(1, 255), 0).is_none());
+    }
+
+    #[test]
+    fn disabling_an_active_clip_releases_it_and_draws_transparent_until_reenabled() {
+        let mut bench = Bench::new("disabled-active");
+        let layer = pointing_at(1, 4);
+        let asset = bench.add(1, 4, "Clip", 10);
+
+        assert!(bench.reconcile(&layer, 0).is_some());
+        assert!(bench.loader.cache().is_pinned(asset));
+        bench.catalog.set_item_enabled(asset, false).unwrap();
+
+        assert!(bench.reconcile(&layer, 500).is_none());
+        assert!(!bench.loader.cache().is_pinned(asset));
+
+        bench.catalog.set_item_enabled(asset, true).unwrap();
+        let source = bench.reconcile(&layer, 700).unwrap();
+        assert_eq!(source.asset, asset);
+        assert_eq!(source.frame, Some(0), "re-enable starts a fresh session");
+    }
+
+    #[test]
+    fn deleting_an_active_clip_releases_it_without_a_stale_frame() {
+        let mut bench = Bench::new("delete-active");
+        let layer = pointing_at(1, 4);
+        let asset = bench.add(1, 4, "Clip", 10);
+        assert!(bench.reconcile(&layer, 0).is_some());
+
+        assert!(bench.catalog.remove_item(asset));
+        let source = bench.reconcile(&layer, 500).unwrap();
+        assert_eq!(source.frame, None);
+        assert_eq!(
+            source.status,
+            SourceStatus::Failed {
+                failure: SourceFailure::MissingFile,
+            }
+        );
+        assert!(!bench.loader.cache().is_pinned(asset));
     }
 
     #[test]

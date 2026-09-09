@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ICON_CATALOG_GROUPS } from "@tosklight/ui/controls";
 import { ModalProvider } from "@tosklight/ui/modals";
+import { DEFAULT_POOL_COLOR_PALETTE } from "@tosklight/ui/pools";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { aCatalog, stubServer } from "../../testing/server";
 import {
@@ -74,7 +75,10 @@ describe("the CITP media library", () => {
 		if (!media) throw new Error("media card missing");
 		await userEvent.click(media);
 		const preview = screen.getByRole("img", { name: "Blue haze preview" });
-		expect(preview).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail");
+		expect(preview).toHaveAttribute(
+			"src",
+			"/api/v2/library/1/1/thumbnail?revision=3",
+		);
 		expect(preview.parentElement).toHaveClass("media-library-item-preview");
 		const editor = screen
 			.getByRole("button", { name: "Save media" })
@@ -110,6 +114,263 @@ describe("the CITP media library", () => {
 			name: "Opening haze",
 			intrinsicBpm: 128,
 		});
+	});
+
+	it("disables and re-enables one media file without removing it", async () => {
+		const server = stubServer();
+		render(<LibraryPage />);
+		const media = (await screen.findByText("Blue haze")).closest("button");
+		if (!media) throw new Error("media card missing");
+		await userEvent.click(media);
+
+		const enabled = screen.getByRole("switch", { name: "Enabled" });
+		expect(enabled).toBeChecked();
+		await userEvent.click(enabled);
+		await vi.waitFor(() =>
+			expect(server.catalog.folders[0].items[0].enabled).toBe(false),
+		);
+		expect(screen.getByText("Disabled")).toBeInTheDocument();
+		expect(screen.getByRole("switch", { name: "Enabled" })).not.toBeChecked();
+
+		await userEvent.click(screen.getByRole("switch", { name: "Enabled" }));
+		await vi.waitFor(() =>
+			expect(server.catalog.folders[0].items[0].enabled).toBe(true),
+		);
+		expect(server.catalog.folders[0].items).toHaveLength(2);
+	});
+
+	it("retries and uploads a custom thumbnail for the selected stable media file", async () => {
+		const server = stubServer();
+		const { container } = render(<LibraryPage />);
+		const media = (await screen.findByText("Blue haze")).closest("button");
+		if (!media) throw new Error("media card missing");
+		await userEvent.click(media);
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "Retry thumbnail" }),
+		);
+		await vi.waitFor(() =>
+			expect(server.writes).toContain("/library/items/asset-a/thumbnail/retry"),
+		);
+		expect(
+			screen.getByRole("img", { name: "Blue haze preview" }),
+		).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail?revision=4");
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "Upload custom thumbnail" }),
+		);
+		const picker = container.querySelector<HTMLInputElement>(
+			'input[type="file"][accept="image/png,image/jpeg,image/gif,image/webp"]',
+		);
+		if (!picker) throw new Error("custom thumbnail picker missing");
+		fireEvent.change(picker, {
+			target: {
+				files: [new File(["image"], "custom.png", { type: "image/png" })],
+			},
+		});
+		await vi.waitFor(() =>
+			expect(
+				server.writes.some((path) =>
+					path.startsWith("/library/items/asset-a/thumbnail/upload?requestId="),
+				),
+			).toBe(true),
+		);
+		await vi.waitFor(() =>
+			expect(
+				screen.getByRole("img", { name: "Blue haze preview" }),
+			).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail?revision=5"),
+		);
+	});
+
+	it("requires confirmation before permanently deleting one media file", async () => {
+		const server = stubServer();
+		const confirm = vi
+			.fn()
+			.mockReturnValueOnce(false)
+			.mockReturnValueOnce(true);
+		vi.stubGlobal("confirm", confirm);
+		render(<LibraryPage />);
+		const media = (await screen.findByText("Blue haze")).closest("button");
+		if (!media) throw new Error("media card missing");
+		await userEvent.click(media);
+
+		await userEvent.click(screen.getByRole("button", { name: "Delete media" }));
+		expect(server.catalog.itemCount).toBe(2);
+		expect(server.writes).not.toContain("/library/items/asset-a/delete");
+
+		await userEvent.click(screen.getByRole("button", { name: "Delete media" }));
+		await vi.waitFor(() => expect(server.catalog.itemCount).toBe(1));
+		expect(server.catalog.folders[0].items.map((item) => item.id)).toEqual([
+			"asset-b",
+		]);
+		expect(confirm).toHaveBeenCalledWith(
+			"Delete Blue haze permanently? This cannot be undone.",
+		);
+	});
+
+	it("stores one exact licence note on multiple selected media files", async () => {
+		const server = stubServer();
+		server.catalog.folders[0].items[0].note = "Source A";
+		server.catalog.folders[0].items[1].note = "Source B";
+		render(<LibraryPage />);
+
+		const first = (await screen.findByText("Blue haze")).closest("button");
+		const second = screen.getByText("Static grid").closest("button");
+		if (!first || !second) throw new Error("media cards missing");
+		await userEvent.click(first);
+		fireEvent.click(second, { ctrlKey: true });
+
+		expect(screen.getByText("Multiple values")).toBeInTheDocument();
+		const note = screen.getByLabelText("Note for 2 media files");
+		await userEvent.type(note, "Licence: CC BY 4.0\nCreator: Example");
+		await userEvent.click(
+			screen.getByRole("button", { name: "Save note to 2" }),
+		);
+
+		await vi.waitFor(() =>
+			expect(server.catalog.folders[0].items.map((item) => item.note)).toEqual([
+				"Licence: CC BY 4.0\nCreator: Example",
+				"Licence: CC BY 4.0\nCreator: Example",
+			]),
+		);
+		expect(server.writes).toContain("/library/notes/update");
+	});
+
+	it("selects occupied file ranges across gaps and adds later Shift ranges", async () => {
+		const catalog = aCatalog();
+		const template = catalog.folders[0].items[1];
+		catalog.folders[0].items = [
+			{ ...catalog.folders[0].items[0], file: 1, name: "Range one" },
+			{ ...template, id: "asset-b", file: 3, name: "Range three" },
+			{ ...template, id: "asset-c", file: 5, name: "Range five" },
+			{ ...template, id: "asset-d", file: 8, name: "Range eight" },
+			{ ...template, id: "asset-e", file: 10, name: "Range ten" },
+		];
+		catalog.itemCount = 5;
+		render(<LibraryBrowserView catalog={catalog} />);
+
+		fireEvent.click(screen.getByText("Range one").closest("button") as Element);
+		fireEvent.click(
+			screen.getByText("Range five").closest("button") as Element,
+			{
+				shiftKey: true,
+			},
+		);
+		expect(screen.getByText("3 selected")).toBeInTheDocument();
+
+		fireEvent.click(
+			screen.getByText("Range eight").closest("button") as Element,
+			{
+				ctrlKey: true,
+			},
+		);
+		fireEvent.click(
+			screen.getByText("Range ten").closest("button") as Element,
+			{
+				shiftKey: true,
+			},
+		);
+
+		expect(screen.getByText("5 selected")).toBeInTheDocument();
+		for (const name of [
+			"Range one",
+			"Range three",
+			"Range five",
+			"Range eight",
+			"Range ten",
+		]) {
+			expect(screen.getByText(name).closest("button")).toHaveClass("selected");
+		}
+	});
+
+	it("enables, disables, and deletes one selected set through bulk intents", async () => {
+		const server = stubServer();
+		const confirm = vi
+			.fn()
+			.mockReturnValueOnce(false)
+			.mockReturnValueOnce(true);
+		vi.stubGlobal("confirm", confirm);
+		render(<LibraryPage />);
+
+		const first = (await screen.findByText("Blue haze")).closest("button");
+		const second = screen.getByText("Static grid").closest("button");
+		if (!first || !second) throw new Error("media cards missing");
+		fireEvent.click(first);
+		fireEvent.click(second, { ctrlKey: true });
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "Disable selected" }),
+		);
+		await vi.waitFor(() =>
+			expect(
+				server.catalog.folders[0].items.map((item) => item.enabled),
+			).toEqual([false, false]),
+		);
+		expect(server.writes.at(-1)).toBe("/library/items/update");
+		expect(server.writeBodies.at(-1)).toMatchObject({
+			ids: ["asset-a", "asset-b"],
+			enabled: false,
+		});
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "Enable selected" }),
+		);
+		await vi.waitFor(() =>
+			expect(
+				server.catalog.folders[0].items.map((item) => item.enabled),
+			).toEqual([true, true]),
+		);
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "Delete selected" }),
+		);
+		expect(server.catalog.itemCount).toBe(2);
+		await userEvent.click(
+			screen.getByRole("button", { name: "Delete selected" }),
+		);
+		await vi.waitFor(() => expect(server.catalog.itemCount).toBe(0));
+		expect(
+			server.writes.filter((path) => path === "/library/items/delete"),
+		).toHaveLength(1);
+		expect(confirm).toHaveBeenCalledWith(
+			"Delete 2 selected media files permanently? This cannot be undone.",
+		);
+	});
+
+	it("adds and clears one note across multiple media folders", async () => {
+		const server = stubServer();
+		render(<LibraryPage />);
+
+		const first = (await screen.findByText("Looks")).closest("button");
+		const second = screen.getByRole("button", { name: /002Empty folder/u });
+		if (!first) throw new Error("folder card missing");
+		await userEvent.click(first);
+		fireEvent.click(second, { ctrlKey: true });
+
+		const note = screen.getByLabelText("Note for 2 folders");
+		await userEvent.type(note, "Purchased stock library licence");
+		await userEvent.click(
+			screen.getByRole("button", { name: "Save note to 2" }),
+		);
+		await vi.waitFor(() =>
+			expect(
+				server.catalog.folders
+					.filter((folder) => folder.folder === 1 || folder.folder === 2)
+					.map((folder) => folder.note),
+			).toEqual([
+				"Purchased stock library licence",
+				"Purchased stock library licence",
+			]),
+		);
+
+		await userEvent.click(screen.getByRole("button", { name: "Clear notes" }));
+		await vi.waitFor(() =>
+			expect(
+				server.catalog.folders
+					.filter((folder) => folder.folder === 1 || folder.folder === 2)
+					.map((folder) => folder.note),
+			).toEqual([null, null]),
+		);
 	});
 
 	it("frames the larger inspector preview at the configured output ratio", async () => {
@@ -165,6 +426,66 @@ describe("the CITP media library", () => {
 		);
 		await vi.waitFor(() =>
 			expect(server.catalog.folders[0].icon).toBe(catalogIcon.value),
+		);
+	});
+
+	it("persists a folder name when the operator immediately leaves the folder", async () => {
+		const server = stubServer();
+		render(<LibraryPage />);
+		const first = (await screen.findByText("Looks")).closest("button");
+		const second = screen.getByRole("button", { name: /002Empty folder/u });
+		if (!first) throw new Error("folder button missing");
+
+		await userEvent.click(first);
+		await userEvent.clear(screen.getByLabelText("Folder name"));
+		await userEvent.type(screen.getByLabelText("Folder name"), "Act one");
+		await userEvent.click(second);
+
+		await vi.waitFor(() =>
+			expect(server.catalog.folders[0].name).toBe("Act one"),
+		);
+		await userEvent.click(first);
+		expect(screen.getByLabelText("Folder name")).toHaveValue("Act one");
+		expect(first).toHaveTextContent("Act one");
+	});
+
+	it("de-emphasizes empty playable folders without muting populated folders", async () => {
+		stubServer();
+		render(<LibraryPage />);
+		const populated = (await screen.findByText("Looks")).closest("button");
+		const empty = screen.getByRole("button", { name: /002Empty folder/u });
+		if (!populated) throw new Error("populated folder button missing");
+
+		expect(populated).not.toHaveClass("empty");
+		expect(populated.style.getPropertyValue("--pool-card-color")).toBe(
+			DEFAULT_POOL_COLOR_PALETTE.group,
+		);
+		expect(empty).toHaveClass("empty");
+		expect(empty.style.getPropertyValue("--pool-card-color")).toBe("");
+	});
+
+	it("compacts the selected folder into consecutive slots", async () => {
+		const catalog = aCatalog();
+		catalog.folders[0].items[0].file = 3;
+		catalog.folders[0].items[1].file = 8;
+		const server = stubServer({ catalog });
+		render(<LibraryPage />);
+		const folder = (await screen.findByText("Looks")).closest("button");
+		if (!folder) throw new Error("folder button missing");
+
+		await userEvent.click(folder);
+		await userEvent.click(
+			screen.getByRole("button", { name: "Compact files" }),
+		);
+
+		await vi.waitFor(() =>
+			expect(server.catalog.folders[0].items.map((item) => item.file)).toEqual([
+				1, 2,
+			]),
+		);
+		expect(server.writes).toContain("/library/folders/1/update");
+		expect(server.writeBodies).toContainEqual(
+			expect.objectContaining({ compact: true }),
 		);
 	});
 

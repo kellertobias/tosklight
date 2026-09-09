@@ -20,9 +20,9 @@ pub mod wire;
 
 pub use diagnostics::{
     AudioSource, AudioTelemetry, DeskIdentityTelemetry, DeviceLister, Diagnostics, DmxTelemetry,
-    FolderPresentation, ImportJob, ImportOutcome, Imports, LibraryAccess, LibraryEdit, LogEntry,
-    LogLevelControl, LogPage, LogQuery, LogSource, MonitorDevice, MonitorLister, PendingImport,
-    UploadStream,
+    FolderPresentation, ImportJob, ImportOutcome, Imports, LibraryAccess, LibraryEdit,
+    LibraryNoteTarget, LogEntry, LogLevelControl, LogPage, LogQuery, LogSource, MonitorDevice,
+    MonitorLister, PendingImport, UploadStream,
 };
 pub use error::{ApiError, ApiErrorBody};
 pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};

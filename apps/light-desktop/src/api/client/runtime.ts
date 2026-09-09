@@ -33,6 +33,9 @@ interface PendingCommand {
 	timer: number;
 }
 
+const INVALID_SERVER_RESPONSE =
+	"ToskLight server returned an invalid response. Check that the server address points to a running ToskLight server.";
+
 export class LightClientRuntime {
 	private session: SessionResponse | null = null;
 	private socket: WebSocket | null = null;
@@ -315,7 +318,14 @@ export class LightClientRuntime {
 		});
 		if (!response.ok) throw await apiError(response);
 		if (response.status === 204) return undefined as T;
-		return response.json() as Promise<T>;
+		if (!isJsonResponse(response)) {
+			throw new ApiRequestError(INVALID_SERVER_RESPONSE, response.status);
+		}
+		try {
+			return JSON.parse(await response.text()) as T;
+		} catch {
+			throw new ApiRequestError(INVALID_SERVER_RESPONSE, response.status);
+		}
 	}
 
 	private authenticate(headers: Headers): void {
@@ -325,6 +335,15 @@ export class LightClientRuntime {
 		const screenId = requestingScreenId();
 		if (screenId) headers.set("x-tosk-screen", screenId);
 	}
+}
+
+function isJsonResponse(response: Response): boolean {
+	const mediaType = response.headers
+		.get("content-type")
+		?.split(";", 1)[0]
+		.trim()
+		.toLowerCase();
+	return mediaType === "application/json" || mediaType?.endsWith("+json") === true;
 }
 
 /**

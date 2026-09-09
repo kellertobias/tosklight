@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 
 use media_domain::MediaAddress;
 
-use crate::jobs::{ImportQueue, Job, JobId, JobState};
+use crate::jobs::{BatchId, ImportQueue, Job, JobId, JobState};
 use crate::naming;
 use crate::storage::LibraryStorage;
 
@@ -135,6 +135,17 @@ impl Importer {
 
     /// Queues one import and returns its identity.
     pub fn submit(&self, source: PathBuf, destination: MediaAddress, name: &str) -> JobId {
+        self.submit_in_batch(source, destination, name, None)
+    }
+
+    /// Queues one import belonging to a native multi-file conversion.
+    pub fn submit_in_batch(
+        &self,
+        source: PathBuf,
+        destination: MediaAddress,
+        name: &str,
+        batch: Option<BatchId>,
+    ) -> JobId {
         let reservation = self
             .inner
             .storage
@@ -155,7 +166,7 @@ impl Importer {
             Ok(reservation) => reservation,
             Err(reason) => {
                 let mut queue = self.inner.queue.lock().expect("the import queue");
-                let id = queue.submit(source, destination);
+                let id = queue.submit_in_batch(source, destination, batch);
                 queue.finish(id, JobState::Failed { reason });
                 return id;
             }
@@ -168,6 +179,7 @@ impl Importer {
                 _upload: None,
                 _reservation: Some(reservation),
             },
+            batch,
         )
     }
 
@@ -186,6 +198,7 @@ impl Importer {
                 _upload: Some(upload),
                 _reservation: None,
             },
+            None,
         )
     }
 
@@ -194,12 +207,13 @@ impl Importer {
         source: PathBuf,
         destination: MediaAddress,
         details: ImportDetails,
+        batch: Option<BatchId>,
     ) -> JobId {
         // The destination filename is settled here, not when the job runs, so two jobs for one
         // address cannot race to different names.
         let id = {
             let mut queue = self.inner.queue.lock().expect("the import queue");
-            let id = queue.submit(source, destination);
+            let id = queue.submit_in_batch(source, destination, batch);
             let unavailable = self
                 .inner
                 .startup_failure
@@ -390,26 +404,35 @@ fn run_one(inner: &Arc<Inner>, job: &Job, details: &ImportDetails) -> JobState {
                 .job(id)
                 .is_none_or(|job| !matches!(job.state, JobState::Running { .. }))
     });
-    match media_codec::import::import_cancellable(
-        &job.source,
-        &destination,
-        &mut report,
-        Arc::clone(&cancelled),
-    ) {
+    let imported = retry_once(
+        || {
+            media_codec::import::import_cancellable(
+                &job.source,
+                &destination,
+                &mut report,
+                Arc::clone(&cancelled),
+            )
+        },
+        |error| {
+            tracing::warn!(
+                source = %job.source.display(),
+                %error,
+                "a media import failed; retrying once"
+            );
+            inner
+                .queue
+                .lock()
+                .expect("the import queue")
+                .retrying(job.id);
+        },
+    );
+    match imported {
         Ok(0) => JobState::Cancelled,
         Ok(frames) => {
-            let extension = job
-                .source
-                .extension()
-                .and_then(|value| value.to_str())
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            let is_video = !["png", "jpg", "jpeg", "tif"].contains(&extension.as_str());
             if let Err(error) = crate::thumbnails::generate_cancellable(
                 &inner.storage,
-                job.destination,
-                &job.source,
-                is_video,
+                job.destination.into(),
+                &destination,
                 cancelled,
             ) {
                 // The clip is already complete and playable. Keep that successful import and
@@ -433,8 +456,21 @@ fn run_one(inner: &Arc<Inner>, job: &Job, details: &ImportDetails) -> JobState {
         Err(error) => {
             tracing::error!(source = %job.source.display(), %error, "an import failed");
             JobState::Failed {
-                reason: error.to_string(),
+                reason: format!("failed after two attempts: {error}"),
             }
+        }
+    }
+}
+
+fn retry_once<T, E>(
+    mut operation: impl FnMut() -> Result<T, E>,
+    mut before_retry: impl FnMut(&E),
+) -> Result<T, E> {
+    match operation() {
+        Ok(value) => Ok(value),
+        Err(first) => {
+            before_retry(&first);
+            operation()
         }
     }
 }
@@ -442,6 +478,38 @@ fn run_one(inner: &Arc<Inner>, job: &Job, details: &ImportDetails) -> JobState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_operation_is_retried_once_and_can_recover() {
+        let mut attempts = 0;
+        let mut reported = Vec::new();
+        let result = retry_once(
+            || {
+                attempts += 1;
+                (attempts == 2).then_some(42).ok_or("first failure")
+            },
+            |error| reported.push((*error).to_owned()),
+        );
+
+        assert_eq!(result, Ok(42));
+        assert_eq!(attempts, 2);
+        assert_eq!(reported, vec!["first failure"]);
+    }
+
+    #[test]
+    fn a_second_failure_is_returned_without_a_third_attempt() {
+        let mut attempts = 0;
+        let result = retry_once(
+            || {
+                attempts += 1;
+                Err::<(), _>(attempts)
+            },
+            |_| {},
+        );
+
+        assert_eq!(result, Err(2));
+        assert_eq!(attempts, 2);
+    }
 
     /// A library nobody else is using, removed and recreated so a rerun starts clean.
     fn library(name: &str) -> LibraryStorage {

@@ -74,17 +74,15 @@ fn macos_application_support_path() -> Option<PathBuf> {
     )
 }
 
-/// Makes a first Finder launch visible and remotely configurable without changing server defaults.
+/// Makes a first Finder launch remotely configurable and keeps its portable data together.
+///
+/// The shipped configuration already opens its Main output in a window on monitor 0. Keeping the
+/// presentation target out of this platform-specific adjustment makes a first run behave the same
+/// on every desktop platform.
 pub fn apply_macos_app_defaults(configuration: &mut MediaConfiguration, path: &Path) {
-    use media_application::configuration::{HTTP_PORT, MonitorSelector, OutputTarget};
+    use media_application::configuration::HTTP_PORT;
     configuration.network.http_listen =
         std::net::SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, HTTP_PORT));
-    if let Some(output) = configuration.outputs.first_mut() {
-        output.target = OutputTarget::Monitor {
-            monitor: MonitorSelector::Index(0),
-            fullscreen: true,
-        };
-    }
     if let Some(parent) = path.parent() {
         configuration.library.root = parent.join("Media");
     }
@@ -440,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn finder_first_run_opens_a_fullscreen_output_and_a_lan_admin_service() {
+    fn finder_first_run_keeps_the_windowed_default_and_opens_a_lan_admin_service() {
         let path = PathBuf::from("/tmp/ToskLight Media/media-server.json");
         let mut configuration = MediaConfiguration::default();
         apply_macos_app_defaults(&mut configuration, &path);
@@ -453,7 +451,7 @@ mod tests {
             configuration.outputs[0].target,
             media_application::configuration::OutputTarget::Monitor {
                 monitor: media_application::configuration::MonitorSelector::Index(0),
-                fullscreen: true
+                fullscreen: false
             }
         ));
         assert_eq!(

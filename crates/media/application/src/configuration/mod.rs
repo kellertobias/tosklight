@@ -98,6 +98,11 @@ pub struct MediaConfiguration {
 
 impl Default for MediaConfiguration {
     fn default() -> Self {
+        let mut main = OutputConfiguration::new("Main");
+        main.target = OutputTarget::Monitor {
+            monitor: MonitorSelector::Index(0),
+            fullscreen: false,
+        };
         Self {
             instance_id: InstanceId::default(),
             network: NetworkConfiguration::default(),
@@ -107,7 +112,7 @@ impl Default for MediaConfiguration {
             time: TimeConfiguration::default(),
             visualizers: GeneratedCatalog::default(),
             text: TextCatalog::default(),
-            outputs: vec![OutputConfiguration::new("Main")],
+            outputs: vec![main],
         }
     }
 }
@@ -182,6 +187,14 @@ mod tests {
         let configuration = MediaConfiguration::default();
         assert_eq!(configuration.outputs.len(), 1);
         assert_eq!(configuration.outputs[0].name.as_str(), "Main");
+        assert!(configuration.outputs[0].enabled);
+        assert!(matches!(
+            configuration.outputs[0].target,
+            OutputTarget::Monitor {
+                monitor: MonitorSelector::Index(0),
+                fullscreen: false
+            }
+        ));
     }
 
     #[test]

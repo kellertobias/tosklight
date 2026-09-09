@@ -27,8 +27,12 @@ pub(crate) fn edited_addresses(
             .and_then(|location| addressed(location.folder, location.file))
     };
     match edit {
-        LibraryEdit::RenameItem { id, .. } | LibraryEdit::SetItemBpm { id, .. } => {
-            source(*id).into_iter().collect()
+        LibraryEdit::RenameItem { id, .. }
+        | LibraryEdit::SetItemBpm { id, .. }
+        | LibraryEdit::SetItemEnabled { id, .. }
+        | LibraryEdit::DeleteItem { id } => source(*id).into_iter().collect(),
+        LibraryEdit::SetItemsEnabled { ids, .. } | LibraryEdit::DeleteItems { ids } => {
+            ids.iter().filter_map(|id| source(*id)).collect()
         }
         LibraryEdit::MoveItem {
             id, destination, ..
@@ -40,7 +44,21 @@ pub(crate) fn edited_addresses(
             .into_iter()
             .flat_map(|folder| (1..=254).filter_map(move |file| addressed(folder, file)))
             .collect(),
+        LibraryEdit::CompactFolder { folder } => (1..=254)
+            .filter_map(|file| addressed(*folder, file))
+            .collect(),
         LibraryEdit::RenameFolder { .. } | LibraryEdit::SetFolderIcon { .. } => Vec::new(),
+        LibraryEdit::SetNotes { targets, .. } => targets
+            .iter()
+            .flat_map(|target| match target {
+                media_http::LibraryNoteTarget::Item(id) => {
+                    source(*id).into_iter().collect::<Vec<_>>()
+                }
+                media_http::LibraryNoteTarget::Folder(folder) => (1..=254)
+                    .filter_map(|file| addressed(*folder, file))
+                    .collect::<Vec<_>>(),
+            })
+            .collect(),
     }
 }
 
@@ -100,6 +118,8 @@ mod tests {
             height: 16,
             frames: None,
             intrinsic_bpm: None,
+            note: None,
+            enabled: true,
         }
     }
 
@@ -215,7 +235,8 @@ mod tests {
     #[test]
     fn import_guards_cover_empty_move_destinations_and_empty_folder_slots() {
         let existing = item(1, "Opening");
-        let catalog = catalog(vec![existing.clone()]);
+        let second = item(7, "Second");
+        let catalog = catalog(vec![existing.clone(), second.clone()]);
         let addresses = edited_addresses(
             &catalog,
             &media_http::LibraryEdit::MoveItem {
@@ -237,5 +258,20 @@ mod tests {
         );
         assert_eq!(folders.len(), 508);
         assert!(folders.contains(&MediaAddress::new(2, 254)));
+        let compacted = edited_addresses(
+            &catalog,
+            &media_http::LibraryEdit::CompactFolder { folder: 1 },
+        );
+        assert_eq!(compacted.len(), 254);
+        assert!(compacted.contains(&MediaAddress::new(1, 1)));
+        assert!(compacted.contains(&MediaAddress::new(1, 254)));
+        let bulk = edited_addresses(
+            &catalog,
+            &media_http::LibraryEdit::SetItemsEnabled {
+                ids: vec![existing.id, second.id],
+                enabled: false,
+            },
+        );
+        assert_eq!(bulk, vec![MediaAddress::new(1, 1), MediaAddress::new(1, 7)]);
     }
 }

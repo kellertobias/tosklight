@@ -297,8 +297,13 @@ pub struct Compositor {
     program_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
     layer_pipeline: wgpu::RenderPipeline,
+    overlay_pipeline: wgpu::RenderPipeline,
     layer_layout: wgpu::BindGroupLayout,
     layer_uniforms: Vec<wgpu::Buffer>,
+    /// A transient operator overlay is not one of the eight authored media layers. Keeping its
+    /// uniform separate means a full eight-layer output can still explain how to leave full
+    /// screen without displacing show content.
+    overlay_uniform: wgpu::Buffer,
     master_pipeline: wgpu::RenderPipeline,
     master_layout: wgpu::BindGroupLayout,
     master_uniform: wgpu::Buffer,
@@ -323,6 +328,14 @@ impl Compositor {
             PROGRAM_FORMAT,
             Some(wgpu::BlendState::ALPHA_BLENDING),
         );
+        let overlay_pipeline = pipeline(
+            device,
+            "media-operator-overlay",
+            &layer_layout,
+            include_str!("shaders/layer.wgsl"),
+            output_format,
+            Some(wgpu::BlendState::ALPHA_BLENDING),
+        );
         let master_pipeline = pipeline(
             device,
             "media-master",
@@ -342,6 +355,12 @@ impl Compositor {
                 })
             })
             .collect();
+        let overlay_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("media-operator-overlay"),
+            size: std::mem::size_of::<LayerUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         let master_uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("media-master"),
@@ -369,8 +388,10 @@ impl Compositor {
                 ..Default::default()
             }),
             layer_pipeline,
+            overlay_pipeline,
             layer_layout,
             layer_uniforms,
+            overlay_uniform,
             master_pipeline,
             master_layout,
             master_uniform,
@@ -423,6 +444,37 @@ impl Compositor {
             false,
             true,
             region,
+            None,
+        );
+    }
+
+    /// Composites the authored layers and then a transient operator-only overlay.
+    ///
+    /// The overlay is deliberately outside [`MAX_LAYERS`]: it must remain visible when all eight
+    /// media layers are occupied, and it never participates in source feedback.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_with_overlay(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        master: &MasterState,
+        master_mask: Option<&SourceTexture>,
+        target: &wgpu::TextureView,
+        output_id: OutputId,
+        now: Timestamp,
+        region: Option<&DisplayRegion>,
+        overlay: LayerDraw<'_>,
+    ) {
+        self.render_internal(
+            layers,
+            master,
+            master_mask,
+            target,
+            output_id,
+            now,
+            false,
+            true,
+            region,
+            Some(overlay),
         );
     }
 
@@ -445,6 +497,7 @@ impl Compositor {
             true,
             false,
             None,
+            None,
         );
     }
 
@@ -460,6 +513,7 @@ impl Compositor {
         preserve_alpha: bool,
         advance_feedback: bool,
         region: Option<&DisplayRegion>,
+        overlay: Option<LayerDraw<'_>>,
     ) {
         let device = &self.gpu.device;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -532,7 +586,58 @@ impl Compositor {
             preserve_alpha,
             region,
         );
+        if let Some(overlay) = overlay.filter(|overlay| overlay.state.draws()) {
+            self.overlay_pass(&mut encoder, target, output_id, now, overlay);
+        }
         self.gpu.queue.submit([encoder.finish()]);
+    }
+
+    fn overlay_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        output_id: OutputId,
+        now: Timestamp,
+        overlay: LayerDraw<'_>,
+    ) {
+        let uniform = LayerUniform::new(
+            overlay.state,
+            overlay.source.size(),
+            self.size,
+            overlay.mask,
+            output_id,
+            now,
+        );
+        self.gpu
+            .queue
+            .write_buffer(&self.overlay_uniform, 0, bytemuck::bytes_of(&uniform));
+        let group = bind_group(
+            &self.gpu.device,
+            &self.layer_layout,
+            &self.overlay_uniform,
+            &overlay.source.view,
+            &self.sampler,
+            &overlay.mask.unwrap_or(&self.no_mask).view,
+        );
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("media-operator-overlay"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.overlay_pipeline);
+        pass.set_bind_group(0, &group, &[]);
+        pass.draw(0..6, 0..1);
     }
 
     /// Runs the master pass again into a second target.

@@ -25,6 +25,13 @@ pub struct FolderPresentation {
     pub picture_content_type: Option<String>,
 }
 
+/// A stable media-library object that can carry operator-authored notes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LibraryNoteTarget {
+    Item(AssetId),
+    Folder(u16),
+}
+
 /// Why a library edit could not be applied.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -214,13 +221,129 @@ impl LibraryStorage {
                 source,
             })?;
         }
-        let bytes = serde_json::to_vec(&serde_json::json!({ "intrinsicBpm": bpm }))
-            .expect("metadata is serializable");
-        std::fs::write(&path, bytes).map_err(|source| StorageError::Filesystem {
-            operation: "write",
-            path,
-            source,
-        })?;
+        let mut metadata = read_item_metadata(&path);
+        metadata.insert(
+            "intrinsicBpm".to_owned(),
+            bpm.map_or(serde_json::Value::Null, serde_json::Value::from),
+        );
+        write_item_metadata(&path, &metadata)?;
+        *catalog = proposed;
+        Ok(())
+    }
+
+    /// Enables or disables playback while preserving the clip and every other metadata field.
+    pub fn set_item_enabled(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        id: AssetId,
+        enabled: bool,
+    ) -> Result<(), StorageError> {
+        let (address, _) = self.locate(catalog, id)?;
+        let mut proposed = catalog.clone();
+        proposed.set_item_enabled(id, enabled)?;
+        let path = self.metadata_path(address);
+        let mut metadata = read_item_metadata(&path);
+        if enabled {
+            metadata.remove("enabled");
+        } else {
+            metadata.insert("enabled".to_owned(), serde_json::Value::Bool(false));
+        }
+        write_item_metadata(&path, &metadata)?;
+        *catalog = proposed;
+        Ok(())
+    }
+
+    /// Enables or disables a selected set after validating that every stable item still exists.
+    pub fn set_items_enabled(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        ids: &[AssetId],
+        enabled: bool,
+    ) -> Result<(), StorageError> {
+        for id in ids {
+            self.locate(catalog, *id)?;
+        }
+        let mut proposed = catalog.clone();
+        for id in ids {
+            self.set_item_enabled(&mut proposed, *id, enabled)?;
+        }
+        *catalog = proposed;
+        Ok(())
+    }
+
+    /// Rebuilds one item's thumbnail from its playable clip without changing catalog metadata.
+    pub fn regenerate_thumbnail(
+        &self,
+        catalog: &CatalogSnapshot,
+        id: AssetId,
+    ) -> Result<PathBuf, StorageError> {
+        let (address, name) = self.locate(catalog, id)?;
+        let clip = self.item_path(address, &name);
+        crate::thumbnails::generate(self, address, &clip).map_err(|error| {
+            StorageError::Filesystem {
+                operation: "generate thumbnail",
+                path: clip,
+                source: std::io::Error::other(error.to_string()),
+            }
+        })
+    }
+
+    /// Validates and stores one custom image for a stable item identity.
+    pub fn set_custom_thumbnail(
+        &self,
+        catalog: &CatalogSnapshot,
+        id: AssetId,
+        bytes: &[u8],
+    ) -> Result<PathBuf, StorageError> {
+        let (address, _) = self.locate(catalog, id)?;
+        crate::thumbnails::replace_from_image(self, address, bytes).map_err(|error| {
+            StorageError::Filesystem {
+                operation: "store custom thumbnail",
+                path: self.thumbnail_path(address),
+                source: std::io::Error::other(error.to_string()),
+            }
+        })
+    }
+
+    /// Sets or clears one note across every selected item and folder.
+    pub fn set_notes(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        targets: &[LibraryNoteTarget],
+        note: Option<&str>,
+    ) -> Result<(), StorageError> {
+        let mut proposed = catalog.clone();
+        for target in targets {
+            match target {
+                LibraryNoteTarget::Item(id) => proposed.set_item_note(*id, note)?,
+                LibraryNoteTarget::Folder(folder) => proposed.set_folder_note(*folder, note)?,
+            }
+        }
+
+        for target in targets {
+            match target {
+                LibraryNoteTarget::Item(id) => {
+                    let address = proposed.location_of(*id).ok_or(CatalogError::NoSuchItem)?;
+                    let path = self.metadata_path(address);
+                    let mut metadata = read_item_metadata(&path);
+                    match note {
+                        Some(note) => {
+                            metadata.insert(
+                                "note".to_owned(),
+                                serde_json::Value::String(note.to_owned()),
+                            );
+                        }
+                        None => {
+                            metadata.remove("note");
+                        }
+                    }
+                    write_item_metadata(&path, &metadata)?;
+                }
+                LibraryNoteTarget::Folder(folder) => {
+                    self.write_folder_metadata(&proposed, *folder)?;
+                }
+            }
+        }
         *catalog = proposed;
         Ok(())
     }
@@ -274,6 +397,28 @@ impl LibraryStorage {
             self.rename_metadata_if_present(from_address, to)?;
         }
         *catalog = proposed;
+        Ok(())
+    }
+
+    /// Moves every item in one folder into consecutive slots beginning at file 1.
+    ///
+    /// Items move in ascending address order. Each destination is therefore either the item's
+    /// current address or a gap vacated earlier in this operation, so no media is overwritten.
+    pub fn compact_folder(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        folder: u16,
+    ) -> Result<(), StorageError> {
+        // Validate the folder even when it is empty, so an invalid no-op is never accepted.
+        media_domain::catalog::validate_location(CatalogLocation::new(folder, 1))?;
+        let items = catalog
+            .folder(folder)
+            .map(|entry| entry.items.iter().map(|item| item.id).collect::<Vec<_>>())
+            .unwrap_or_default();
+        for (index, id) in items.into_iter().enumerate() {
+            let file = u8::try_from(index + 1).expect("a media folder holds at most 254 items");
+            self.move_item(catalog, id, CatalogLocation::new(folder, file))?;
+        }
         Ok(())
     }
 
@@ -350,6 +495,7 @@ impl LibraryStorage {
             name: entry.and_then(|entry| entry.name.clone()),
             icon: entry.and_then(|entry| entry.icon.clone()),
             picture_content_type: entry.and_then(|entry| entry.picture_content_type.clone()),
+            note: entry.and_then(|entry| entry.note.clone()),
         };
         self.write_raw_folder_metadata(folder, &metadata)
     }
@@ -366,6 +512,7 @@ impl LibraryStorage {
         if metadata.name.is_none()
             && metadata.icon.is_none()
             && metadata.picture_content_type.is_none()
+            && metadata.note.is_none()
         {
             if path.exists() {
                 std::fs::remove_file(&path).map_err(|source| StorageError::Filesystem {
@@ -378,13 +525,17 @@ impl LibraryStorage {
         }
         self.ensure_folder(folder)?;
         // Preserve the legacy plain-text representation when a name is the only metadata.
-        let bytes = if metadata.icon.is_none() && metadata.picture_content_type.is_none() {
+        let bytes = if metadata.icon.is_none()
+            && metadata.picture_content_type.is_none()
+            && metadata.note.is_none()
+        {
             metadata.name.clone().unwrap_or_default().into_bytes()
         } else {
             serde_json::to_vec_pretty(&serde_json::json!({
                 "name": metadata.name,
                 "icon": metadata.icon,
                 "pictureContentType": metadata.picture_content_type,
+                "note": metadata.note,
             }))
             .expect("folder metadata serializes")
         };
@@ -436,7 +587,7 @@ impl LibraryStorage {
         Ok(())
     }
 
-    /// Deletes an item and its thumbnail.
+    /// Deletes an item, its source, thumbnail, and portable per-address metadata.
     pub fn remove_item(
         &self,
         catalog: &mut CatalogSnapshot,
@@ -451,10 +602,34 @@ impl LibraryStorage {
                 source,
             })?;
         }
+        if let Some(source) = self.source_path(address, &name) {
+            std::fs::remove_file(&source).map_err(|error| StorageError::Filesystem {
+                operation: "remove",
+                path: source,
+                source: error,
+            })?;
+        }
         let thumbnail = self.thumbnail_path(address);
         let _ = std::fs::remove_file(thumbnail);
         let _ = std::fs::remove_file(self.metadata_path(address));
         catalog.remove_item(id);
+        Ok(())
+    }
+
+    /// Deletes a selected set only after validating that every stable item still exists.
+    pub fn remove_items(
+        &self,
+        catalog: &mut CatalogSnapshot,
+        ids: &[AssetId],
+    ) -> Result<(), StorageError> {
+        for id in ids {
+            self.locate(catalog, *id)?;
+        }
+        let mut proposed = catalog.clone();
+        for id in ids {
+            self.remove_item(&mut proposed, *id)?;
+        }
+        *catalog = proposed;
         Ok(())
     }
 
@@ -660,6 +835,7 @@ struct StoredFolderMetadata {
     name: Option<String>,
     icon: Option<String>,
     picture_content_type: Option<String>,
+    note: Option<String>,
 }
 
 fn validate_presentation_folder(folder: u16) -> Result<(), StorageError> {
@@ -696,12 +872,54 @@ fn read_folder_metadata(path: &Path) -> StoredFolderMetadata {
                 .and_then(serde_json::Value::as_str)
                 .filter(|value| value.starts_with("image/"))
                 .map(str::to_owned),
+            note: document
+                .get("note")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned),
         },
         _ => StoredFolderMetadata {
             name: normalized(Some(&contents)),
             ..StoredFolderMetadata::default()
         },
     }
+}
+
+fn read_item_metadata(path: &Path) -> serde_json::Map<String, serde_json::Value> {
+    std::fs::read(path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default()
+}
+
+fn write_item_metadata(
+    path: &Path,
+    metadata: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), StorageError> {
+    if metadata.is_empty() {
+        if path.exists() {
+            std::fs::remove_file(path).map_err(|source| StorageError::Filesystem {
+                operation: "remove",
+                path: path.to_path_buf(),
+                source,
+            })?;
+        }
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|source| StorageError::Filesystem {
+            operation: "create",
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(metadata).expect("metadata is serializable");
+    std::fs::write(path, bytes).map_err(|source| StorageError::Filesystem {
+        operation: "write",
+        path: path.to_path_buf(),
+        source,
+    })
 }
 
 fn staging(path: &Path) -> PathBuf {
@@ -749,6 +967,8 @@ mod tests {
                         height: 16,
                         frames: Some(2),
                         intrinsic_bpm: None,
+                        note: None,
+                        enabled: true,
                     },
                 )
                 .unwrap();
@@ -826,6 +1046,110 @@ mod tests {
         assert_eq!(
             library.catalog.address_of(id),
             Some(MediaAddress::new(4, 20))
+        );
+    }
+
+    #[test]
+    fn compacting_closes_gaps_and_carries_every_item_artifact() {
+        let mut library = Library::new("compact");
+        let first = library.add(1, 3, "First");
+        let second = library.add(1, 8, "Second");
+        let other = library.add(2, 9, "Other folder");
+        library
+            .storage
+            .set_intrinsic_bpm(&mut library.catalog, second, Some(128.0))
+            .unwrap();
+        library
+            .storage
+            .set_notes(
+                &mut library.catalog,
+                &[LibraryNoteTarget::Item(second)],
+                Some("Licensed"),
+            )
+            .unwrap();
+        library
+            .storage
+            .set_item_enabled(&mut library.catalog, second, false)
+            .unwrap();
+        let source =
+            library
+                .storage
+                .source_destination(MediaAddress::new(1, 8).into(), "Second", "mov");
+        std::fs::write(&source, b"source").unwrap();
+        let thumbnail = library.storage.thumbnail_path(MediaAddress::new(1, 8));
+        std::fs::create_dir_all(thumbnail.parent().unwrap()).unwrap();
+        std::fs::write(&thumbnail, b"thumb").unwrap();
+
+        library
+            .storage
+            .compact_folder(&mut library.catalog, 1)
+            .unwrap();
+
+        assert_eq!(
+            library.files(1),
+            [
+                ".metadata".to_owned(),
+                ".thumbs".to_owned(),
+                "001-First.toskclip".to_owned(),
+                "002-Second.mov".to_owned(),
+                "002-Second.toskclip".to_owned(),
+            ]
+        );
+        assert_eq!(
+            library.catalog.address_of(first),
+            Some(MediaAddress::new(1, 1))
+        );
+        assert_eq!(
+            library.catalog.address_of(second),
+            Some(MediaAddress::new(1, 2))
+        );
+        assert_eq!(
+            library.catalog.address_of(other),
+            Some(MediaAddress::new(2, 9))
+        );
+        assert_eq!(library.files(2), ["009-Other folder.toskclip"]);
+        let second = library.catalog.item(second).unwrap().1;
+        assert_eq!(second.intrinsic_bpm, Some(128.0));
+        assert_eq!(second.note.as_deref(), Some("Licensed"));
+        assert!(!second.enabled);
+        assert_eq!(
+            std::fs::read(library.storage.thumbnail_path(MediaAddress::new(1, 2))).unwrap(),
+            b"thumb"
+        );
+        assert!(
+            library
+                .storage
+                .metadata_path(MediaAddress::new(1, 2))
+                .exists()
+        );
+    }
+
+    #[test]
+    fn compacting_an_empty_or_already_compact_folder_is_a_no_op() {
+        let mut library = Library::new("compact-no-op");
+        let first = library.add(1, 1, "First");
+        let second = library.add(1, 2, "Second");
+        let before = library.catalog.clone();
+        let files = library.files(1);
+
+        library
+            .storage
+            .compact_folder(&mut library.catalog, 1)
+            .unwrap();
+        library
+            .storage
+            .compact_folder(&mut library.catalog, 2)
+            .unwrap();
+
+        assert_eq!(library.catalog, before);
+        assert_eq!(library.files(1), files);
+        assert_eq!(
+            library.catalog.address_of(first),
+            Some(MediaAddress::new(1, 1))
+        );
+        assert_eq!(
+            library.catalog.address_of(second),
+            Some(MediaAddress::new(1, 2))
         );
     }
 
@@ -912,6 +1236,12 @@ mod tests {
         assert_eq!(
             library.catalog.folder(2).unwrap().name.as_deref(),
             Some("Stingers")
+        );
+        let rediscovered = crate::discover(library.storage.root()).unwrap();
+        assert_eq!(
+            rediscovered.folder(2).unwrap().name.as_deref(),
+            Some("Stingers"),
+            "the portable folder name must survive a server restart"
         );
 
         library
@@ -1096,8 +1426,17 @@ mod tests {
         let mut library = Library::new("thumbnails");
         let id = library.add(1, 5, "Clip");
         let thumbnail = library.storage.thumbnail_path(MediaAddress::new(1, 5));
-        std::fs::create_dir_all(thumbnail.parent().unwrap()).unwrap();
-        std::fs::write(&thumbnail, b"thumb").unwrap();
+        let image = image::DynamicImage::new_rgb8(8, 4);
+        let mut uploaded = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut uploaded, image::ImageFormat::Png)
+            .unwrap();
+        library
+            .storage
+            .set_custom_thumbnail(&library.catalog, id, uploaded.get_ref())
+            .unwrap();
+        let stored = std::fs::read(&thumbnail).unwrap();
+        assert_eq!(image::load_from_memory(&stored).unwrap().width(), 128);
 
         library
             .storage
@@ -1106,7 +1445,7 @@ mod tests {
 
         assert!(!thumbnail.exists());
         let moved = library.storage.thumbnail_path(MediaAddress::new(1, 9));
-        assert_eq!(std::fs::read(moved).unwrap(), b"thumb");
+        assert_eq!(std::fs::read(moved).unwrap(), stored);
     }
 
     #[test]
@@ -1175,6 +1514,89 @@ mod tests {
     }
 
     #[test]
+    fn disabling_preserves_metadata_and_delete_removes_every_item_artifact() {
+        let mut library = Library::new("disable-delete");
+        let id = library.add(1, 3, "Clip");
+        library
+            .storage
+            .set_intrinsic_bpm(&mut library.catalog, id, Some(128.0))
+            .unwrap();
+        library
+            .storage
+            .set_notes(
+                &mut library.catalog,
+                &[LibraryNoteTarget::Item(id)],
+                Some("Licensed"),
+            )
+            .unwrap();
+        let source = library.storage.root().join("001/003-Clip.mov");
+        std::fs::write(&source, b"source").unwrap();
+        let thumbnail = library.storage.thumbnail_path(MediaAddress::new(1, 3));
+        std::fs::create_dir_all(thumbnail.parent().unwrap()).unwrap();
+        std::fs::write(&thumbnail, b"thumb").unwrap();
+
+        library
+            .storage
+            .set_item_enabled(&mut library.catalog, id, false)
+            .unwrap();
+        let metadata = read_item_metadata(&library.storage.metadata_path(MediaAddress::new(1, 3)));
+        assert_eq!(
+            metadata.get("intrinsicBpm"),
+            Some(&serde_json::json!(128.0))
+        );
+        assert_eq!(metadata.get("note"), Some(&serde_json::json!("Licensed")));
+        assert_eq!(metadata.get("enabled"), Some(&serde_json::json!(false)));
+        assert!(
+            library
+                .storage
+                .item_path(MediaAddress::new(1, 3), "Clip")
+                .exists()
+        );
+
+        library
+            .storage
+            .remove_item(&mut library.catalog, id)
+            .unwrap();
+        assert!(library.catalog.item(id).is_none());
+        assert!(!source.exists());
+        assert!(!thumbnail.exists());
+        assert!(
+            !library
+                .storage
+                .metadata_path(MediaAddress::new(1, 3))
+                .exists()
+        );
+    }
+
+    #[test]
+    fn bulk_enable_and_delete_apply_to_exact_stable_item_sets() {
+        let mut library = Library::new("bulk-enable-delete");
+        let first = library.add(1, 1, "First");
+        let second = library.add(1, 4, "Second");
+        let untouched = library.add(1, 7, "Untouched");
+
+        library
+            .storage
+            .set_items_enabled(&mut library.catalog, &[first, second], false)
+            .unwrap();
+        assert!(!library.catalog.item(first).unwrap().1.enabled);
+        assert!(!library.catalog.item(second).unwrap().1.enabled);
+        assert!(library.catalog.item(untouched).unwrap().1.enabled);
+
+        library
+            .storage
+            .remove_items(&mut library.catalog, &[first, second])
+            .unwrap();
+        assert!(library.catalog.item(first).is_none());
+        assert!(library.catalog.item(second).is_none());
+        assert!(library.catalog.item(untouched).is_some());
+        assert_eq!(
+            library.contents(1, 7, "Untouched").as_deref(),
+            Some("Untouched")
+        );
+    }
+
+    #[test]
     fn editing_something_that_is_not_in_the_catalog_reports_it() {
         let mut library = Library::new("absent");
         let error = library
@@ -1216,6 +1638,103 @@ mod tests {
                 .storage
                 .metadata_path(MediaAddress::new(2, 8))
                 .exists()
+        );
+    }
+
+    #[test]
+    fn one_note_update_covers_media_and_folders_and_preserves_other_metadata() {
+        let mut library = Library::new("notes");
+        let id = library.add(1, 3, "Clip");
+        library
+            .storage
+            .set_intrinsic_bpm(&mut library.catalog, id, Some(127.5))
+            .unwrap();
+        library
+            .storage
+            .set_notes(
+                &mut library.catalog,
+                &[LibraryNoteTarget::Item(id), LibraryNoteTarget::Folder(1)],
+                Some("Licence: CC BY 4.0\nCreator: Example"),
+            )
+            .unwrap();
+
+        let discovered = crate::discover(library.storage.root()).unwrap();
+        assert_eq!(
+            discovered.folder(1).unwrap().note.as_deref(),
+            Some("Licence: CC BY 4.0\nCreator: Example")
+        );
+        let metadata_path = library.storage.metadata_path(MediaAddress::new(1, 3));
+        let item: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&metadata_path).unwrap()).unwrap();
+        assert_eq!(
+            item["note"],
+            serde_json::json!("Licence: CC BY 4.0\nCreator: Example")
+        );
+        assert_eq!(item["intrinsicBpm"], serde_json::json!(127.5));
+
+        library
+            .storage
+            .move_item(&mut library.catalog, id, CatalogLocation::new(900, 3))
+            .unwrap();
+        assert_eq!(
+            library.catalog.item(id).unwrap().1.note.as_deref(),
+            Some("Licence: CC BY 4.0\nCreator: Example")
+        );
+        assert!(!metadata_path.exists());
+        let metadata_path = library.storage.metadata_path(CatalogLocation::new(900, 3));
+        let moved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&metadata_path).unwrap()).unwrap();
+        assert_eq!(
+            moved["note"],
+            serde_json::json!("Licence: CC BY 4.0\nCreator: Example")
+        );
+        library
+            .storage
+            .set_notes(
+                &mut library.catalog,
+                &[LibraryNoteTarget::Item(id), LibraryNoteTarget::Folder(1)],
+                None,
+            )
+            .unwrap();
+        assert_eq!(library.catalog.folder(1).unwrap().note, None);
+        let item: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(metadata_path).unwrap()).unwrap();
+        assert!(item.get("note").is_none());
+        assert_eq!(item["intrinsicBpm"], serde_json::json!(127.5));
+    }
+
+    #[test]
+    fn folder_notes_move_with_a_folder_swap() {
+        let mut library = Library::new("folder-note-swap");
+        library
+            .storage
+            .set_notes(
+                &mut library.catalog,
+                &[LibraryNoteTarget::Folder(1), LibraryNoteTarget::Folder(2)],
+                Some("Shared licence"),
+            )
+            .unwrap();
+        library
+            .storage
+            .set_notes(
+                &mut library.catalog,
+                &[LibraryNoteTarget::Folder(2)],
+                Some("Second licence"),
+            )
+            .unwrap();
+
+        library
+            .storage
+            .swap_folders(&mut library.catalog, 1, 2)
+            .unwrap();
+
+        assert_eq!(
+            library.catalog.folder(1).unwrap().note.as_deref(),
+            Some("Second licence")
+        );
+        assert_eq!(
+            library.catalog.folder(2).unwrap().note.as_deref(),
+            Some("Shared licence")
         );
     }
 }

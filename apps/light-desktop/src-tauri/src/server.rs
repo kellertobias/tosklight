@@ -12,6 +12,12 @@ use std::{
 };
 use tauri::Manager;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 pub(crate) struct ServerProcess {
     child: Arc<Mutex<Option<Child>>>,
     stop: Arc<AtomicBool>,
@@ -127,7 +133,8 @@ fn launch(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::E
         .write(true)
         .open(&log_path)?;
     let stderr = stdout.try_clone()?;
-    let mut child = Command::new(server)
+    let mut command = Command::new(server);
+    command
         .arg("--data-dir")
         .arg(&data_dir)
         .arg("--fixture-package-dir")
@@ -137,8 +144,10 @@ fn launch(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::E
         .arg("--bind")
         .arg(address.to_string())
         .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr))
-        .spawn()?;
+        .stderr(Stdio::from(stderr));
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+    let mut child = command.spawn()?;
     // Desk data with restored programmers and a compiled active show needs well over the
     // former 8s on a debug build; the child-exit check still fails fast on crashes.
     let deadline = Instant::now() + Duration::from_secs(60);

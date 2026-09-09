@@ -12,6 +12,12 @@ use crate::shutdown::{Shutdown, ShutdownReason};
 use muda::{Menu, MenuEvent, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// The application icon, compiled in rather than read from the bundle: the same executable runs
 /// bundled and bare, and an icon that only appears in one of them is a difference nobody wants to
 /// discover during a show.
@@ -23,6 +29,12 @@ const ICON_EDGE: u32 = 44;
 
 #[cfg(target_os = "macos")]
 const OPEN_FOLDER_LABEL: &str = "open Folder in Finder";
+
+#[cfg(target_os = "windows")]
+const OPEN_PIXEL_LABEL: &str = "Open ToskLight Pixel";
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+const CONVERT_MULTIPLE_LABEL: &str = "Convert multiple files";
 
 /// The desktop presence, held for as long as the server runs.
 ///
@@ -39,7 +51,13 @@ pub struct Tray {
 ///
 /// A failure here is not fatal. A server that cannot draw a menu bar item is still a server, and
 /// taking the whole process down over its icon would turn a cosmetic problem into an outage.
-pub fn show(shutdown: &Shutdown, data_directory: Option<&std::path::Path>) -> Option<Tray> {
+pub fn show(
+    shutdown: &Shutdown,
+    data_directory: Option<&std::path::Path>,
+    #[cfg(target_os = "windows")] administration_endpoint: &str,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    bulk_import: crate::bulk_import::BulkImport,
+) -> Option<Tray> {
     let icon = match icon() {
         Ok(icon) => icon,
         Err(error) => {
@@ -58,6 +76,24 @@ pub fn show(shutdown: &Shutdown, data_directory: Option<&std::path::Path>) -> Op
         tracing::warn!(%error, "the menu bar menu could not be built; running without one");
         return None;
     }
+    #[cfg(target_os = "windows")]
+    let open_pixel = MenuItem::new(OPEN_PIXEL_LABEL, true, None);
+    #[cfg(target_os = "windows")]
+    let open_pixel_id = open_pixel.id().clone();
+    #[cfg(target_os = "windows")]
+    if let Err(error) = menu.append(&open_pixel) {
+        tracing::warn!(%error, "the notification-area menu could not be built; running without one");
+        return None;
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    let convert_multiple = MenuItem::new(CONVERT_MULTIPLE_LABEL, true, None);
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    let convert_multiple_id = convert_multiple.id().clone();
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    if let Err(error) = menu.append(&convert_multiple) {
+        tracing::warn!(%error, "the menu bar menu could not be built; running without one");
+        return None;
+    }
     let quit = MenuItem::new("Quit ToskLight Media", true, None);
     let quit_id = quit.id().clone();
     if let Err(error) = menu.append(&quit) {
@@ -68,7 +104,12 @@ pub fn show(shutdown: &Shutdown, data_directory: Option<&std::path::Path>) -> Op
     // The handler rather than a polled channel: a click arrives on the platform's own thread, and
     // `about_to_wait` already observes the shutdown it requests within one wake.
     let requested = shutdown.clone();
+    #[cfg(target_os = "macos")]
     let data_directory = data_directory.map(std::path::Path::to_path_buf);
+    #[cfg(not(target_os = "macos"))]
+    let _ = data_directory;
+    #[cfg(target_os = "windows")]
+    let administration_endpoint = administration_endpoint.to_owned();
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
         #[cfg(target_os = "macos")]
         if event.id == open_folder_id {
@@ -77,6 +118,18 @@ pub fn show(shutdown: &Shutdown, data_directory: Option<&std::path::Path>) -> Op
             {
                 tracing::error!(%error, "the portable Media Server folder could not be opened");
             }
+            return;
+        }
+        #[cfg(target_os = "windows")]
+        if event.id == open_pixel_id {
+            if let Err(error) = open_administration(&administration_endpoint) {
+                tracing::error!(%error, "the ToskLight Pixel administration interface could not be opened");
+            }
+            return;
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if event.id == convert_multiple_id {
+            bulk_import.prompt();
             return;
         }
         handle(&event.id, &quit_id, &requested);
@@ -96,6 +149,28 @@ pub fn show(shutdown: &Shutdown, data_directory: Option<&std::path::Path>) -> Op
             tracing::warn!(%error, "the menu bar icon could not be shown; running without one");
             None
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn administration_url(endpoint: &str) -> String {
+    format!("http://{endpoint}")
+}
+
+#[cfg(target_os = "windows")]
+fn open_administration(endpoint: &str) -> std::io::Result<()> {
+    let url = administration_url(endpoint);
+    let mut command = std::process::Command::new("rundll32.exe");
+    command
+        .args(["url.dll,FileProtocolHandler", &url])
+        .creation_flags(CREATE_NO_WINDOW);
+    let status = command.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "the browser launcher exited with {status}"
+        )))
     }
 }
 
@@ -164,6 +239,22 @@ mod tests {
     #[test]
     fn the_finder_action_uses_the_operator_label() {
         assert_eq!(OPEN_FOLDER_LABEL, "open Folder in Finder");
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn the_bulk_conversion_action_uses_the_operator_label() {
+        assert_eq!(CONVERT_MULTIPLE_LABEL, "Convert multiple files");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn the_administration_action_uses_the_operator_label_and_address() {
+        assert_eq!(OPEN_PIXEL_LABEL, "Open ToskLight Pixel");
+        assert_eq!(
+            administration_url("127.0.0.1:8080"),
+            "http://127.0.0.1:8080"
+        );
     }
 
     #[test]

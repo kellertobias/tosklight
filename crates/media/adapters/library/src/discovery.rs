@@ -91,6 +91,9 @@ pub fn discover(root: &Path) -> Result<CatalogSnapshot, DiscoveryError> {
         {
             let _ = catalog.set_folder_picture(folder, Some(content_type));
         }
+        if let Some(note) = metadata.note.as_deref() {
+            let _ = catalog.set_folder_note(folder, Some(note));
+        }
     }
 
     Ok(catalog)
@@ -143,20 +146,40 @@ fn read_item(path: &Path, file: u8, name: &str) -> Option<CatalogItem> {
                 .intrinsic_bpm
                 .or_else(|| authored_tempo::from_filename(name))
         }),
+        note: item_note(path, file),
+        enabled: item_enabled(path, file),
     })
 }
 
-fn corrected_bpm(item_path: &Path, file: u8) -> Option<Option<f64>> {
+fn item_metadata(item_path: &Path, file: u8) -> Option<serde_json::Value> {
     let path = item_path
         .parent()?
         .join(naming::METADATA_DIRECTORY)
         .join(naming::metadata_filename(file));
-    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+}
+
+fn corrected_bpm(item_path: &Path, file: u8) -> Option<Option<f64>> {
+    let value = item_metadata(item_path, file)?;
     match value.get("intrinsicBpm") {
         Some(serde_json::Value::Null) => Some(None),
         Some(value) => value.as_f64().map(Some),
         None => None,
     }
+}
+
+fn item_note(item_path: &Path, file: u8) -> Option<String> {
+    item_metadata(item_path, file)?
+        .get("note")?
+        .as_str()
+        .filter(|note| !note.is_empty())
+        .map(str::to_owned)
+}
+
+fn item_enabled(item_path: &Path, file: u8) -> bool {
+    item_metadata(item_path, file)
+        .and_then(|metadata| metadata.get("enabled").and_then(serde_json::Value::as_bool))
+        .unwrap_or(true)
 }
 
 /// A file sitting in the library that could be played once it is imported.
@@ -252,7 +275,7 @@ fn awaiting_import(path: &Path, folder: u8) -> Vec<Pending> {
             if filename.starts_with('.') || naming::parse_item_filename(&filename).is_some() {
                 return None;
             }
-            if !looks_like_media(&filename) {
+            if naming::importable_extension(&filename).is_none() {
                 return None;
             }
             let (file, name) = naming::parse_source_filename(&filename)?;
@@ -272,13 +295,6 @@ fn awaiting_import(path: &Path, folder: u8) -> Vec<Pending> {
 ///
 /// Deliberately a short list of what the legacy application actually held and what an operator
 /// exports from an editor. Anything else in a folder is somebody's notes.
-fn looks_like_media(filename: &str) -> bool {
-    const IMPORTABLE: [&str; 8] = ["mp4", "mov", "m4v", "mkv", "png", "jpg", "jpeg", "tif"];
-    filename
-        .rsplit_once('.')
-        .is_some_and(|(_, extension)| IMPORTABLE.contains(&extension.to_ascii_lowercase().as_str()))
-}
-
 /// A folder's operator-given name.
 ///
 /// This build writes the name as the file's whole contents. The legacy application wrote a JSON
@@ -289,6 +305,7 @@ struct FolderMetadata {
     name: Option<String>,
     icon: Option<String>,
     picture_content_type: Option<String>,
+    note: Option<String>,
 }
 
 fn read_folder_metadata(path: &Path) -> FolderMetadata {
@@ -314,12 +331,18 @@ fn read_folder_metadata(path: &Path) -> FolderMetadata {
                 .and_then(serde_json::Value::as_str)
                 .filter(|value| value.starts_with("image/"))
                 .map(str::to_owned),
+            note: document
+                .get("note")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned),
         },
         // Legacy and earlier ToskLight builds stored the name as the whole file.
         _ => FolderMetadata {
             name: Some(contents.trim().to_owned()).filter(|value| !value.is_empty()),
             icon: None,
             picture_content_type: None,
+            note: None,
         },
     }
 }
@@ -400,6 +423,28 @@ mod tests {
     }
 
     #[test]
+    fn file_and_folder_notes_are_restored_from_portable_metadata() {
+        let library = Library::new("notes");
+        library.put("001/001-First.toskclip", &clip(10, None));
+        library.put(
+            "001/.metadata/001.json",
+            br#"{"intrinsicBpm":120.0,"note":"Licence: CC BY 4.0\nCreator: Example","enabled":false}"#,
+        );
+        library.put("001/.info", br#"{"name":"Looks","note":"Folder licence"}"#);
+
+        let catalog = discover(&library.0).unwrap();
+        let folder = catalog.folder(1).unwrap();
+        assert_eq!(folder.note.as_deref(), Some("Folder licence"));
+        let item = folder.item(1).unwrap();
+        assert_eq!(
+            item.note.as_deref(),
+            Some("Licence: CC BY 4.0\nCreator: Example")
+        );
+        assert_eq!(item.intrinsic_bpm, Some(120.0));
+        assert!(!item.enabled);
+    }
+
+    #[test]
     fn parking_folders_survive_a_restart_without_becoming_playable_addresses() {
         let library = Library::new("parking");
         library.put("900/001-Alternate.toskclip", &clip(10, None));
@@ -412,6 +457,36 @@ mod tests {
             Some(media_domain::CatalogLocation::new(900, 1))
         );
         assert_eq!(catalog.address_of(parked.id), None);
+    }
+
+    #[test]
+    fn a_file_note_follows_the_file_through_a_move_and_rediscovery() {
+        let library = Library::new("moved-note");
+        library.put("001/003-Licensed.toskclip", &clip(10, Some(127.5)));
+        let storage = crate::LibraryStorage::new(&library.0);
+        let mut catalog = discover(&library.0).unwrap();
+        let id = catalog.folder(1).unwrap().item(3).unwrap().id;
+
+        storage
+            .set_notes(
+                &mut catalog,
+                &[crate::LibraryNoteTarget::Item(id)],
+                Some("Licence: CC BY 4.0\nCreator: Example"),
+            )
+            .unwrap();
+        storage
+            .move_item(&mut catalog, id, media_domain::CatalogLocation::new(900, 8))
+            .unwrap();
+
+        let rediscovered = discover(&library.0).unwrap();
+        let item = rediscovered.folder(900).unwrap().item(8).unwrap();
+        assert_eq!(item.name, "Licensed");
+        assert_eq!(item.intrinsic_bpm, Some(127.5));
+        assert_eq!(
+            item.note.as_deref(),
+            Some("Licence: CC BY 4.0\nCreator: Example")
+        );
+        assert!(rediscovered.folder(1).is_none());
     }
 
     #[test]

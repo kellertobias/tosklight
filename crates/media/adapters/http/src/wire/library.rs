@@ -38,10 +38,14 @@ impl PendingImportView {
 #[serde(rename_all = "camelCase")]
 pub struct ImportJobView {
     pub id: String,
+    /// Groups jobs submitted together from the macOS menu.
+    pub batch_id: Option<String>,
     pub address: AddressView,
     pub filename: String,
     /// `queued`, `running`, `succeeded`, `failed`, or `cancelled`.
     pub state: String,
+    /// Zero while queued, one on the initial conversion, two on the retry.
+    pub attempts: u8,
     /// Absent while the total is unknown, rather than a made-up number.
     pub fraction: Option<f32>,
     pub frames_done: Option<u32>,
@@ -61,9 +65,11 @@ impl ImportJobView {
         };
         Self {
             id: job.id.clone(),
+            batch_id: job.batch_id.clone(),
             address: AddressView::of(job.destination),
             filename: job.filename.clone(),
             state: state.to_owned(),
+            attempts: job.attempts,
             fraction: job.fraction,
             frames_done: job.frames_done,
             frames_total: job.frames_total,
@@ -111,9 +117,43 @@ pub struct UpdateLibraryItem {
     /// Correct or clear the authored tempo. An absent field leaves it unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intrinsic_bpm: Option<Option<f64>>,
+    /// Enable or disable playback without changing the stored media.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
     /// Exchange addresses when the destination is occupied. False refuses the edit.
     #[serde(default)]
     pub swap: bool,
+}
+
+/// Permanently deleting one catalog item. The request id makes retries safe.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteLibraryItem {
+    pub request_id: String,
+}
+
+/// Enables or disables a stable set of catalog items in one replay-safe edit.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLibraryItems {
+    pub request_id: String,
+    pub ids: Vec<String>,
+    pub enabled: bool,
+}
+
+/// Permanently deletes a stable set of catalog items in one replay-safe edit.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteLibraryItems {
+    pub request_id: String,
+    pub ids: Vec<String>,
+}
+
+/// Regenerates one stable item's automatic thumbnail. The request id makes retries safe.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLibraryThumbnail {
+    pub request_id: String,
 }
 
 /// Setting the visible label for one numbered folder. An empty name removes the label.
@@ -127,6 +167,26 @@ pub struct UpdateLibraryFolder {
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub swap_with: Option<u16>,
+    /// Close empty file slots while preserving the folder's existing item order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact: Option<bool>,
+}
+
+/// A selected media item or physical media folder.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LibraryNoteTargetView {
+    Item { id: String },
+    Folder { folder: u16 },
+}
+
+/// One replay-safe intent that applies the same note to every selected library object.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLibraryNotes {
+    pub request_id: String,
+    pub targets: Vec<LibraryNoteTargetView>,
+    pub note: String,
 }
 
 /// Shared presentation for a media, text, or generated-visualizer folder.
@@ -195,9 +255,11 @@ mod tests {
     fn a_running_job_reports_how_far_along_it_is() {
         let view = ImportJobView::of(&ImportJob {
             id: "job-1".to_owned(),
+            batch_id: Some("batch-1".to_owned()),
             destination: MediaAddress::new(1, 4),
             filename: "004-LoopTest.mp4".to_owned(),
             outcome: ImportOutcome::Running,
+            attempts: 1,
             fraction: Some(0.25),
             frames_done: Some(25),
             frames_total: Some(100),
@@ -206,6 +268,7 @@ mod tests {
         assert_eq!(view.state, "running");
         assert_eq!(view.fraction, Some(0.25));
         assert_eq!(view.address.folder, 1);
+        assert_eq!(view.batch_id.as_deref(), Some("batch-1"));
         assert_eq!(view.reason, None);
     }
 
@@ -213,9 +276,11 @@ mod tests {
     fn a_source_with_no_frame_count_gets_no_invented_percentage() {
         let view = ImportJobView::of(&ImportJob {
             id: "job-2".to_owned(),
+            batch_id: None,
             destination: MediaAddress::new(1, 1),
             filename: "001.mov".to_owned(),
             outcome: ImportOutcome::Running,
+            attempts: 1,
             fraction: None,
             frames_done: Some(40),
             frames_total: None,
@@ -229,11 +294,13 @@ mod tests {
     fn a_failed_job_keeps_its_reason_for_somebody_to_read() {
         let view = ImportJobView::of(&ImportJob {
             id: "job-3".to_owned(),
+            batch_id: Some("batch-2".to_owned()),
             destination: MediaAddress::new(2, 1),
             filename: "001-Unknown.png".to_owned(),
             outcome: ImportOutcome::Failed {
                 reason: "FFmpeg is not installed or not on PATH".to_owned(),
             },
+            attempts: 2,
             fraction: None,
             frames_done: None,
             frames_total: None,

@@ -11,6 +11,19 @@ use media_domain::catalog::{FIRST_FILE, LAST_FILE};
 /// The extension normalised playback media carries.
 pub const CLIP_EXTENSION: &str = "toskclip";
 
+/// Formats the Pixel importer currently accepts. Audio-only sources are intentionally absent:
+/// the clip container does not carry audio yet.
+pub fn importable_extension(filename: &str) -> Option<String> {
+    const IMPORTABLE: &[&str] = &[
+        "mp4", "mov", "m4v", "mkv", "avi", "webm", "mpg", "mpeg", "mxf", "wmv", "png", "jpg",
+        "jpeg", "tif", "tiff", "bmp", "webp", "gif", "heic", "heif",
+    ];
+    let extension = filename.rsplit_once('.')?.1.to_ascii_lowercase();
+    IMPORTABLE
+        .contains(&extension.as_str())
+        .then_some(extension)
+}
+
 /// The directory a folder's thumbnails live in.
 pub const THUMBNAIL_DIRECTORY: &str = ".thumbs";
 
@@ -192,6 +205,16 @@ mod tests {
     fn anything_that_is_not_a_clip_is_skipped() {
         for filename in ["007-Clip.mp4", "007-Clip", "notes.txt", ".DS_Store", ""] {
             assert_eq!(parse_item_filename(filename), None, "{filename}");
+        }
+    }
+
+    #[test]
+    fn common_video_and_image_sources_are_importable_but_audio_is_not_yet() {
+        for filename in ["clip.MOV", "clip.webm", "still.tiff", "still.HEIC"] {
+            assert!(importable_extension(filename).is_some(), "{filename}");
+        }
+        for filename in ["song.wav", "song.mp3", "notes.txt"] {
+            assert_eq!(importable_extension(filename), None, "{filename}");
         }
     }
 

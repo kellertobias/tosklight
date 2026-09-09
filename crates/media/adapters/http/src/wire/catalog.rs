@@ -17,6 +17,10 @@ pub struct CatalogItemView {
     pub height: u32,
     pub frames: Option<u32>,
     pub intrinsic_bpm: Option<f64>,
+    #[ts(optional)]
+    pub note: Option<String>,
+    #[ts(optional)]
+    pub enabled: Option<bool>,
 }
 
 impl CatalogItemView {
@@ -34,6 +38,8 @@ impl CatalogItemView {
             height: item.height,
             frames: item.frames,
             intrinsic_bpm: item.intrinsic_bpm,
+            note: item.note.clone(),
+            enabled: Some(item.enabled),
         }
     }
 }
@@ -48,6 +54,8 @@ pub struct CatalogFolderView {
     pub icon: Option<String>,
     #[ts(optional)]
     pub picture_url: Option<String>,
+    #[ts(optional)]
+    pub note: Option<String>,
     pub items: Vec<CatalogItemView>,
 }
 
@@ -78,6 +86,7 @@ impl CatalogView {
                         .picture_content_type
                         .as_ref()
                         .map(|_| format!("/api/v2/folder-presentations/{}/picture", folder.folder)),
+                    note: folder.note.clone(),
                     items: folder.items.iter().map(CatalogItemView::of).collect(),
                 })
                 .collect(),

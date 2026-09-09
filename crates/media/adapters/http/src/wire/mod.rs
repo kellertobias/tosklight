@@ -39,9 +39,10 @@ pub use dmx::{
 pub use effect::{EffectParameterView, EffectSlotView};
 pub use health::{AddressView, Health, RunningOutputView, RunningServerView, SourceStatusView};
 pub use library::{
-    FolderPresentationView, FolderPresentationsView, ImportJobView, ImportsView, PendingImportView,
-    RemoveFolderPicture, StartImport, UpdateFolderPresentation, UpdateLibraryFolder,
-    UpdateLibraryItem, UploadAcceptedView,
+    DeleteLibraryItem, DeleteLibraryItems, FolderPresentationView, FolderPresentationsView,
+    ImportJobView, ImportsView, LibraryNoteTargetView, PendingImportView, RemoveFolderPicture,
+    StartImport, UpdateFolderPresentation, UpdateLibraryFolder, UpdateLibraryItem,
+    UpdateLibraryItems, UpdateLibraryNotes, UpdateLibraryThumbnail, UploadAcceptedView,
 };
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};

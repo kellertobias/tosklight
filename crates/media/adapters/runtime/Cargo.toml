@@ -33,12 +33,20 @@ tracing-subscriber.workspace = true
 tray-icon = { workspace = true, optional = true }
 winit.workspace = true
 
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+rfd = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6.4", optional = true }
+objc2-app-kit = { version = "0.3.2", optional = true, features = ["NSApplication", "NSOpenPanel", "NSPanel", "NSResponder", "NSSavePanel", "NSWindow"] }
+objc2-foundation = { version = "0.3.2", optional = true, features = ["NSArray", "NSString", "NSURL"] }
+
 # The desktop presence is a menu bar item on macOS and a notification-area item on Windows. A
 # server bundle has neither, and on Linux the tray pulls the whole GTK stack in behind it, so a
 # headless target builds without it rather than linking a desktop it will never draw on.
 [features]
 default = ["tray"]
-tray = ["dep:muda", "dep:tray-icon"]
+tray = ["dep:muda", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:rfd", "dep:tray-icon"]
 
 [lints]
 workspace = true

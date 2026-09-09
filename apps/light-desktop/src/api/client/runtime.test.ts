@@ -8,6 +8,7 @@ import {
 	vi,
 } from "vitest";
 import type { EventPayload } from "../generated/light-wire";
+import { ApiRequestError } from "../ApiRequestError";
 import type { BootstrapSnapshot, SessionResponse } from "../types";
 import { LightClientRuntime } from "./runtime";
 import type { LiveClientTransport } from "./transport";
@@ -85,6 +86,69 @@ describe("LightClientRuntime", () => {
 		expectTypeOf<ReturnType<LightClientRuntime["onEvent"]>>().toEqualTypeOf<
 			() => boolean
 		>();
+	});
+
+	it("turns a successful HTML startup response into an actionable error", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response("<html>wrong server</html>", {
+					status: 200,
+					headers: { "content-type": "text/html" },
+				}),
+			),
+		);
+
+		const error = await new LightClientRuntime("http://desk.local")
+			.bootstrap()
+			.catch((reason: unknown) => reason);
+
+		expect(error).toEqual(
+			new ApiRequestError(
+				"ToskLight server returned an invalid response. Check that the server address points to a running ToskLight server.",
+				200,
+			),
+		);
+		expect(String(error)).not.toMatch(/Unexpected token|wrong server/u);
+	});
+
+	it("turns malformed JSON startup responses into an actionable error", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response("{", {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+			),
+		);
+
+		await expect(
+			new LightClientRuntime("http://desk.local").bootstrap(),
+		).rejects.toEqual(
+			new ApiRequestError(
+				"ToskLight server returned an invalid response. Check that the server address points to a running ToskLight server.",
+				200,
+			),
+		);
+	});
+
+	it("accepts JSON response media types with parameters", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response('{"ready":true}', {
+					status: 200,
+					headers: { "content-type": "application/json; charset=utf-8" },
+				}),
+			),
+		);
+
+		await expect(
+			new LightClientRuntime("http://desk.local")
+				.capabilityTransport()
+				.request<{ ready: boolean }>("/api/v2/bootstrap", {}, false),
+		).resolves.toEqual({ ready: true });
 	});
 
 	it("opens the established event endpoint with ordered UTF-8 credentials", async () => {

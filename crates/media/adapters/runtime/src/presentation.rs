@@ -18,8 +18,9 @@ use crate::layer_pipeline::LayerPipeline;
 use media_playback::{AsyncClipLoader, ClipLoader, MediaLoader, PlaybackSession};
 use media_render::{LayerDraw, SourceTexture, SurfaceLost, WindowedOutput, select_monitor};
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{Icon, Window, WindowId};
 
 use crate::shutdown::{Shutdown, ShutdownReason};
@@ -68,6 +69,7 @@ pub fn run_event_loop(
     // frame's presentation sit on one timeline.
     started: std::time::Instant,
     administration_endpoint: String,
+    importer: media_library::Importer,
 ) -> anyhow::Result<()> {
     let Shared {
         state,
@@ -82,6 +84,11 @@ pub fn run_event_loop(
     // worker, so this loop sleeps until a native event or the lightweight shutdown check.
     event_loop.set_control_flow(ControlFlow::Wait);
 
+    #[cfg(all(feature = "tray", any(target_os = "macos", target_os = "windows")))]
+    let bulk_import =
+        crate::bulk_import::BulkImport::new(importer.clone(), administration_endpoint.clone());
+    #[cfg(not(all(feature = "tray", any(target_os = "macos", target_os = "windows"))))]
+    let _ = importer;
     let mut host = PresentationHost {
         configuration: live,
         catalog,
@@ -108,11 +115,15 @@ pub fn run_event_loop(
         administration_endpoint,
         data_directory: crate::startup::current_portable_data_directory(configuration),
         windows: Vec::new(),
+        window_modes: std::collections::HashMap::new(),
+        modifiers: ModifiersState::empty(),
         entering_fullscreen: Vec::new(),
         worker: None,
         expects_outputs: needs_a_window(configuration),
         #[cfg(feature = "tray")]
         tray: None,
+        #[cfg(all(feature = "tray", any(target_os = "macos", target_os = "windows")))]
+        bulk_import,
     };
     let result = event_loop.run_app(&mut host);
     host.stop_worker();
@@ -172,6 +183,8 @@ struct HostedOutput {
     beat_grid_wave: crate::beat_grid_wave::BeatGridWave,
     beat_form_flash: crate::beat_form_flash::BeatFormFlash,
     standby: Option<SourceTexture>,
+    fullscreen_hint: Option<SourceTexture>,
+    hint_visible_until: Option<std::time::Instant>,
 }
 
 /// A clip loaded for the development `--play` affordance.
@@ -207,6 +220,8 @@ struct PresentationHost {
     data_directory: Option<std::path::PathBuf>,
     /// Main-thread references ensure the final native-window drop happens on the Cocoa thread.
     windows: Vec<Arc<Window>>,
+    window_modes: std::collections::HashMap<WindowId, WindowMode>,
+    modifiers: ModifiersState,
     /// Windows configured for full screen, waiting for their first turn through the event loop.
     ///
     /// Each is paired with the monitor it belongs on, because `toggleFullScreen:` takes the
@@ -222,11 +237,21 @@ struct PresentationHost {
     /// A build without the tray feature has no desktop to draw on, so it carries no field.
     #[cfg(feature = "tray")]
     tray: Option<crate::tray::Tray>,
+    #[cfg(all(feature = "tray", any(target_os = "macos", target_os = "windows")))]
+    bulk_import: crate::bulk_import::BulkImport,
 }
 
 enum RenderCommand {
     Resize { window: WindowId, size: Size },
+    ShowFullscreenHint { window: WindowId },
+    HideFullscreenHint { window: WindowId },
     Stop,
+}
+
+#[derive(Clone, Copy)]
+struct WindowMode {
+    fullscreen: bool,
+    normal_size: Size,
 }
 
 struct PresentationWorker {
@@ -246,6 +271,7 @@ struct RenderWorkerState {
     loader: AsyncClipLoader,
     direct: Option<DirectClip>,
     administration_endpoint: String,
+    operator_overlay_layer: media_domain::LayerState,
 }
 
 /// The diagnostic pattern's colour: unmistakably not black and unmistakably not media.
@@ -336,7 +362,10 @@ impl PresentationHost {
                 configuration.resolution.width,
                 configuration.resolution.height,
             ))
-            .with_position(selected.position());
+            .with_position(selected.position())
+            // Windows otherwise briefly exposes a caption and frame before Winit completes its
+            // borderless transition. A configured full-screen output must never have either.
+            .with_decorations(!(*fullscreen && cfg!(target_os = "windows")));
 
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
@@ -388,6 +417,15 @@ impl PresentationHost {
                         |error| tracing::error!(%error, "cannot build the Media standby surface"),
                     )
                     .ok();
+                let fullscreen_hint = crate::fullscreen_hint::render(output.size())
+                    .and_then(|frame| {
+                        SourceTexture::from_rgba8(output.gpu(), frame.size, &frame.pixels)
+                            .map_err(anyhow::Error::from)
+                    })
+                    .map_err(|error| {
+                        tracing::error!(%error, "cannot build the full-screen operator hint")
+                    })
+                    .ok();
                 self.outputs.push(HostedOutput {
                     configuration: configuration.clone(),
                     output,
@@ -402,7 +440,19 @@ impl PresentationHost {
                     beat_grid_wave: crate::beat_grid_wave::BeatGridWave::default(),
                     beat_form_flash: crate::beat_form_flash::BeatFormFlash::default(),
                     standby,
+                    fullscreen_hint,
+                    hint_visible_until: None,
                 });
+                self.window_modes.insert(
+                    window.id(),
+                    WindowMode {
+                        fullscreen: *fullscreen,
+                        normal_size: Size::new(
+                            configuration.resolution.width,
+                            configuration.resolution.height,
+                        ),
+                    },
+                );
                 self.windows.push(window);
             }
             Err(error) => {
@@ -440,6 +490,12 @@ impl PresentationHost {
             loader,
             direct: self.direct.take(),
             administration_endpoint: self.administration_endpoint.clone(),
+            operator_overlay_layer: media_domain::LayerState {
+                address: media_domain::MediaAddress::new(1, 1),
+                source_status: media_domain::SourceStatus::Ready,
+                scaling_mode: media_domain::ScalingMode::Stretch,
+                ..Default::default()
+            },
         };
         let shutdown = self.shutdown.clone();
         let (commands, receiver) = std::sync::mpsc::channel();
@@ -470,6 +526,183 @@ impl PresentationHost {
             tracing::error!("the Media presentation worker panicked while stopping");
         }
     }
+
+    fn show_fullscreen_hint(&self, window: WindowId) {
+        if !cfg!(target_os = "windows") {
+            return;
+        }
+        if !self
+            .window_modes
+            .get(&window)
+            .is_some_and(|mode| mode.fullscreen)
+        {
+            return;
+        }
+        if let Some(worker) = &self.worker {
+            let _ = worker
+                .commands
+                .send(RenderCommand::ShowFullscreenHint { window });
+        }
+    }
+
+    fn handle_fullscreen_key(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        key: KeyCode,
+    ) {
+        if !windows_command_chord(self.modifiers) {
+            return;
+        }
+        if key == KeyCode::Minus {
+            self.restore_window(window_id);
+            return;
+        }
+        let direction = match key {
+            KeyCode::ArrowLeft => DisplayDirection::Left,
+            KeyCode::ArrowRight => DisplayDirection::Right,
+            KeyCode::ArrowUp => DisplayDirection::Up,
+            KeyCode::ArrowDown => DisplayDirection::Down,
+            _ => return,
+        };
+        self.move_fullscreen_window(event_loop, window_id, direction);
+    }
+
+    fn restore_window(&mut self, window_id: WindowId) {
+        let Some(mode) = self.window_modes.get_mut(&window_id) else {
+            return;
+        };
+        if !mode.fullscreen {
+            return;
+        }
+        let Some(window) = self.windows.iter().find(|window| window.id() == window_id) else {
+            return;
+        };
+        window.set_fullscreen(None);
+        window.set_decorations(true);
+        let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(
+            mode.normal_size.width,
+            mode.normal_size.height,
+        ));
+        mode.fullscreen = false;
+        if let Some(worker) = &self.worker {
+            let _ = worker
+                .commands
+                .send(RenderCommand::HideFullscreenHint { window: window_id });
+        }
+    }
+
+    fn move_fullscreen_window(
+        &self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        direction: DisplayDirection,
+    ) {
+        if !self
+            .window_modes
+            .get(&window_id)
+            .is_some_and(|mode| mode.fullscreen)
+        {
+            return;
+        }
+        let Some(window) = self.windows.iter().find(|window| window.id() == window_id) else {
+            return;
+        };
+        let Some(current) = window.current_monitor() else {
+            return;
+        };
+        let monitors: Vec<_> = event_loop.available_monitors().collect();
+        let rectangles: Vec<_> = monitors.iter().map(monitor_rectangle).collect();
+        let current = monitor_rectangle(&current);
+        let Some(index) = nearest_display(current, &rectangles, direction) else {
+            return;
+        };
+        window.set_decorations(false);
+        window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(
+            monitors[index].clone(),
+        ))));
+    }
+}
+
+fn windows_command_chord(modifiers: ModifiersState) -> bool {
+    modifiers.control_key()
+        && modifiers.shift_key()
+        && !modifiers.alt_key()
+        && !modifiers.super_key()
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisplayDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DisplayRectangle {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+fn monitor_rectangle(monitor: &winit::monitor::MonitorHandle) -> DisplayRectangle {
+    let position = monitor.position();
+    let size = monitor.size();
+    DisplayRectangle {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+    }
+}
+
+fn nearest_display(
+    current: DisplayRectangle,
+    displays: &[DisplayRectangle],
+    direction: DisplayDirection,
+) -> Option<usize> {
+    let centre = |display: DisplayRectangle| {
+        (
+            i64::from(display.x) * 2 + i64::from(display.width),
+            i64::from(display.y) * 2 + i64::from(display.height),
+        )
+    };
+    let (current_x, current_y) = centre(current);
+    let current_right = i64::from(current.x) + i64::from(current.width);
+    let current_bottom = i64::from(current.y) + i64::from(current.height);
+    displays
+        .iter()
+        .enumerate()
+        .filter_map(|(index, display)| {
+            if *display == current {
+                return None;
+            }
+            let (x, y) = centre(*display);
+            let (primary, cross) = match direction {
+                DisplayDirection::Left
+                    if i64::from(display.x) + i64::from(display.width) <= i64::from(current.x) =>
+                {
+                    (current_x - x, (y - current_y).abs())
+                }
+                DisplayDirection::Right if i64::from(display.x) >= current_right => {
+                    (x - current_x, (y - current_y).abs())
+                }
+                DisplayDirection::Up
+                    if i64::from(display.y) + i64::from(display.height) <= i64::from(current.y) =>
+                {
+                    (current_y - y, (x - current_x).abs())
+                }
+                DisplayDirection::Down if i64::from(display.y) >= current_bottom => {
+                    (y - current_y, (x - current_x).abs())
+                }
+                _ => return None,
+            };
+            Some((primary + cross * 2, primary, index))
+        })
+        .min()
+        .map(|(_, _, index)| index)
 }
 
 /// Samples one output's frame into its pixel map and sends it.
@@ -547,7 +780,24 @@ impl RenderWorkerState {
                     mask: None,
                 }];
                 let idle = MasterState::default();
-                present(&mut hosted.output, &draws, &idle, None, now, region);
+                let overlay = hosted
+                    .hint_visible_until
+                    .filter(|until| *until > std::time::Instant::now())
+                    .and_then(|_| hosted.fullscreen_hint.as_ref())
+                    .map(|source| LayerDraw {
+                        state: &self.operator_overlay_layer,
+                        source,
+                        mask: None,
+                    });
+                present(
+                    &mut hosted.output,
+                    &draws,
+                    &idle,
+                    None,
+                    now,
+                    region,
+                    overlay,
+                );
                 capture_previews(
                     &mut self.sinks,
                     &hosted.configuration,
@@ -587,7 +837,24 @@ impl RenderWorkerState {
                         source: texture,
                         mask: None,
                     }];
-                    present(&mut hosted.output, &draws, &master, None, now, region);
+                    let overlay = hosted
+                        .hint_visible_until
+                        .filter(|until| *until > std::time::Instant::now())
+                        .and_then(|_| hosted.fullscreen_hint.as_ref())
+                        .map(|source| LayerDraw {
+                            state: &self.operator_overlay_layer,
+                            source,
+                            mask: None,
+                        });
+                    present(
+                        &mut hosted.output,
+                        &draws,
+                        &master,
+                        None,
+                        now,
+                        region,
+                        overlay,
+                    );
                     capture_previews(
                         &mut self.sinks,
                         &hosted.configuration,
@@ -672,6 +939,15 @@ impl RenderWorkerState {
             let master_mask = prepared
                 .master_mask
                 .and_then(|slot| hosted.pipeline.texture(slot));
+            let overlay = hosted
+                .hint_visible_until
+                .filter(|until| *until > std::time::Instant::now())
+                .and_then(|_| hosted.fullscreen_hint.as_ref())
+                .map(|source| LayerDraw {
+                    state: &self.operator_overlay_layer,
+                    source,
+                    mask: None,
+                });
             present(
                 &mut hosted.output,
                 &draws,
@@ -679,6 +955,7 @@ impl RenderWorkerState {
                 master_mask,
                 now,
                 region,
+                overlay,
             );
             capture_previews(
                 &mut self.sinks,
@@ -761,6 +1038,12 @@ impl RenderWorkerState {
                 RenderCommand::Resize { window, size } => {
                     resizes.insert(window, size);
                 }
+                RenderCommand::ShowFullscreenHint { window } => {
+                    self.show_fullscreen_hint(window);
+                }
+                RenderCommand::HideFullscreenHint { window } => {
+                    self.hide_fullscreen_hint(window);
+                }
                 RenderCommand::Stop => return false,
             }
         }
@@ -774,6 +1057,14 @@ impl RenderWorkerState {
         match command {
             RenderCommand::Resize { window, size } => {
                 self.resize(window, size);
+                true
+            }
+            RenderCommand::ShowFullscreenHint { window } => {
+                self.show_fullscreen_hint(window);
+                true
+            }
+            RenderCommand::HideFullscreenHint { window } => {
+                self.hide_fullscreen_hint(window);
                 true
             }
             RenderCommand::Stop => false,
@@ -796,6 +1087,33 @@ impl RenderWorkerState {
                     .map_err(anyhow::Error::from)
             })
             .ok();
+        hosted.fullscreen_hint = crate::fullscreen_hint::render(size)
+            .and_then(|frame| {
+                SourceTexture::from_rgba8(hosted.output.gpu(), frame.size, &frame.pixels)
+                    .map_err(anyhow::Error::from)
+            })
+            .ok();
+    }
+
+    fn show_fullscreen_hint(&mut self, window: WindowId) {
+        if let Some(hosted) = self
+            .outputs
+            .iter_mut()
+            .find(|hosted| hosted.window.id() == window)
+        {
+            hosted.hint_visible_until =
+                Some(std::time::Instant::now() + std::time::Duration::from_secs(4));
+        }
+    }
+
+    fn hide_fullscreen_hint(&mut self, window: WindowId) {
+        if let Some(hosted) = self
+            .outputs
+            .iter_mut()
+            .find(|hosted| hosted.window.id() == window)
+        {
+            hosted.hint_visible_until = None;
+        }
     }
 }
 
@@ -845,8 +1163,14 @@ fn present(
     master_mask: Option<&SourceTexture>,
     now: Timestamp,
     region: Option<&media_domain::display_region::DisplayRegion>,
+    overlay: Option<LayerDraw<'_>>,
 ) {
-    match output.present(draws, master, master_mask, now, region) {
+    let result = if let Some(overlay) = overlay {
+        output.present_with_overlay(draws, master, master_mask, now, region, overlay)
+    } else {
+        output.present(draws, master, master_mask, now, region)
+    };
+    match result {
         Ok(()) | Err(SurfaceLost::Recovered | SurfaceLost::Timeout) => {}
         Err(error) => {
             tracing::error!(id = %output.id(), %error, "output stopped presenting");
@@ -977,7 +1301,14 @@ impl ApplicationHandler for PresentationHost {
         // is exactly what reaching this callback means.
         #[cfg(feature = "tray")]
         if self.tray.is_none() {
-            self.tray = crate::tray::show(&self.shutdown, self.data_directory.as_deref());
+            self.tray = crate::tray::show(
+                &self.shutdown,
+                self.data_directory.as_deref(),
+                #[cfg(target_os = "windows")]
+                &self.administration_endpoint,
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                self.bulk_import.clone(),
+            );
         }
         let monitors = media_render::monitors(event_loop.available_monitors())
             .into_iter()
@@ -1033,6 +1364,23 @@ impl ApplicationHandler for PresentationHost {
                         .send(RenderCommand::Resize { window: id, size });
                 }
             }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers.state();
+            }
+            WindowEvent::KeyboardInput { event, .. }
+                if cfg!(target_os = "windows")
+                    && event.state == ElementState::Pressed
+                    && !event.repeat =>
+            {
+                if let PhysicalKey::Code(key) = event.physical_key {
+                    self.handle_fullscreen_key(event_loop, id, key);
+                }
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => self.show_fullscreen_hint(id),
             WindowEvent::RedrawRequested => {}
             _ => {}
         }
@@ -1042,6 +1390,8 @@ impl ApplicationHandler for PresentationHost {
         // The window exists and has been through one pass of the loop, so the platform can now
         // take it into its own full screen — the same transition the maximize button performs.
         for (window, monitor) in self.entering_fullscreen.drain(..) {
+            #[cfg(target_os = "windows")]
+            window.set_decorations(false);
             window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(monitor))));
         }
         if self.shutdown.reason().is_some() {
@@ -1076,7 +1426,12 @@ mod tests {
 
     #[test]
     fn an_all_off_screen_configuration_asks_for_no_output_window() {
-        let configuration = MediaConfiguration::default();
+        let mut output = OutputConfiguration::new("Main");
+        output.target = OutputTarget::OffScreen;
+        let configuration = MediaConfiguration {
+            outputs: vec![output],
+            ..Default::default()
+        };
         assert!(matches!(
             configuration.outputs[0].target,
             OutputTarget::OffScreen
@@ -1091,6 +1446,94 @@ mod tests {
             ..Default::default()
         };
         assert!(needs_a_window(&configuration));
+    }
+
+    #[test]
+    fn arrow_navigation_chooses_the_nearest_display_in_that_direction() {
+        let current = DisplayRectangle {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let displays = [
+            current,
+            DisplayRectangle {
+                x: 1920,
+                y: 0,
+                width: 2560,
+                height: 1440,
+            },
+            DisplayRectangle {
+                x: 1800,
+                y: 1440,
+                width: 1920,
+                height: 1080,
+            },
+            DisplayRectangle {
+                x: -1280,
+                y: 0,
+                width: 1280,
+                height: 1024,
+            },
+        ];
+
+        assert_eq!(
+            nearest_display(current, &displays, DisplayDirection::Right),
+            Some(1)
+        );
+        assert_eq!(
+            nearest_display(current, &displays, DisplayDirection::Left),
+            Some(3)
+        );
+        assert_eq!(
+            nearest_display(current, &displays, DisplayDirection::Down),
+            Some(2)
+        );
+        assert_eq!(
+            nearest_display(current, &displays, DisplayDirection::Up),
+            None
+        );
+    }
+
+    #[test]
+    fn arrow_navigation_does_nothing_at_the_edge_of_the_desktop() {
+        let current = DisplayRectangle {
+            x: 1920,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let displays = [
+            DisplayRectangle {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            },
+            current,
+        ];
+        assert_eq!(
+            nearest_display(current, &displays, DisplayDirection::Right),
+            None
+        );
+    }
+
+    #[test]
+    fn fullscreen_commands_require_exactly_control_and_shift() {
+        assert!(windows_command_chord(
+            ModifiersState::CONTROL | ModifiersState::SHIFT
+        ));
+        assert!(!windows_command_chord(ModifiersState::CONTROL));
+        assert!(!windows_command_chord(ModifiersState::SHIFT));
+        assert!(!windows_command_chord(
+            ModifiersState::CONTROL | ModifiersState::SHIFT | ModifiersState::ALT
+        ));
+    }
+
+    #[test]
+    fn an_unconfigured_first_run_asks_for_its_visible_output_window() {
+        assert!(needs_a_window(&MediaConfiguration::default()));
     }
 
     #[test]

@@ -54,7 +54,13 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 	}, []);
 
 	// Pushed jobs win over the ones the snapshot came with, so a progress bar moves smoothly.
-	const jobs = telemetry.frame?.imports ?? imports?.jobs ?? [];
+	const allJobs = telemetry.frame?.imports ?? imports?.jobs ?? [];
+	// A native multi-file conversion owns the newest contiguous group of jobs. Keep an earlier
+	// run out of its progress and report while leaving ordinary browser imports unchanged.
+	const latestBatch = allJobs.at(-1)?.batchId ?? null;
+	const jobs = latestBatch
+		? allJobs.filter((job) => job.batchId === latestBatch)
+		: allJobs;
 	const finished = jobs.filter((job) => job.state === "succeeded").length;
 
 	// Once something has been converted the catalog holds something new, and what was waiting has
@@ -74,6 +80,10 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 	const running = jobs.filter(
 		(job) => job.state === "queued" || job.state === "running",
 	);
+	const settled = jobs.length - running.length;
+	const failed = jobs.filter((job) => job.state === "failed").length;
+	const stopped = jobs.filter((job) => job.state === "cancelled").length;
+	const batchFinished = latestBatch !== null && jobs.length > 0 && running.length === 0;
 
 	if (pending.length === 0 && jobs.length === 0) return null;
 
@@ -96,7 +106,13 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 	return (
 		<article className="media-settings-section" aria-label="Import">
 			<header className="media-import-header">
-				<h2>Import</h2>
+				<h2>
+					{latestBatch
+						? batchFinished
+							? "Conversion report"
+							: "Conversion progress"
+						: "Import"}
+				</h2>
 				{pending.length > 0 && (
 					<Button
 						variant="primary"
@@ -108,6 +124,28 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 					</Button>
 				)}
 			</header>
+
+			{latestBatch && jobs.length > 0 && (
+				<section className="media-import-summary" aria-live="polite">
+					<p>
+						{batchFinished
+							? `${finished} converted, ${failed} failed${stopped > 0 ? `, ${stopped} stopped` : ""}.`
+							: `${settled} of ${jobs.length} files finished.`}
+					</p>
+					{!batchFinished && (
+						<progress
+							aria-label="Overall conversion progress"
+							value={settled}
+							max={jobs.length}
+						/>
+					)}
+					{batchFinished && failed > 0 && (
+						<p className="media-state is-error">
+							Conversion failures were retried once. These files were skipped.
+						</p>
+					)}
+				</section>
+			)}
 
 			{!imports.canImport && (
 				<p className="media-state is-error" role="alert">
@@ -177,6 +215,7 @@ function ImportRow({ job }: { job: ImportJobView }) {
 		<li className={`media-import-job is-${job.state}`}>
 			<span className="media-import-name">
 				{addressLabel(job.address.folder, job.address.file)} · {job.filename}
+				{active && job.attempts === 2 ? " · Retrying" : ""}
 			</span>
 
 			{active ? (

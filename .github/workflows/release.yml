@@ -755,6 +755,11 @@ jobs:
           done
           exit 1
 
+      - name: Install the Windows Pixel installer toolchain
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: choco install nsis --no-progress -y
+
       - name: Install workspace dependencies
         shell: bash
         run: npm ci
@@ -781,6 +786,13 @@ jobs:
           ${{ matrix.cargo_flags }}
           -p light-headless --bin light-headless
           -p media-server --bin media-server
+
+      - name: Build the ToskLight Pixel Windows launcher
+        if: matrix.slug == 'windows-amd64'
+        shell: bash
+        run: >-
+          cargo build --release --locked --target ${{ matrix.target }}
+          -p pixel-launcher --bin pixel-launcher
 
       - name: Validate the built Media Server configuration
         shell: bash
@@ -1085,12 +1097,30 @@ jobs:
             bash tools/bundle-media-macos.sh \
               ".artifacts/build/cargo/$TARGET/release/media-server" "$stage" "$version"
             bash tools/seal-macos-app.sh "$stage/ToskLight Media.app"
-          else
+          elif [[ "$RUNNER_OS" != "Windows" ]]; then
             cp ".artifacts/build/cargo/$TARGET/release/media-server$suffix" "$stage/"
           fi
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            (cd "$stage_root" && 7z a -tzip \
-              "$OLDPWD/$out/tosklight-media-$version-$SLUG.zip" "$(basename "$stage")" >/dev/null)
+            cp ".artifacts/build/cargo/$TARGET/release/pixel-launcher.exe" \
+              "$stage/ToskLight Pixel.exe"
+            cp ".artifacts/build/cargo/$TARGET/release/media-server.exe" "$stage/"
+            pixel_icon="$(find ".artifacts/build/cargo/$TARGET/release/build" \
+              -path '*/out/tosklight-pixel.ico' -print -quit)"
+            [[ -f "$pixel_icon" ]] || {
+              echo "error: the Pixel launcher did not produce its Windows icon" >&2
+              exit 1
+            }
+            numeric="${version%%[-+]*}"
+            IFS=. read -r version_major version_minor version_patch <<<"$numeric"
+            numeric_version="${version_major:-0}.${version_minor:-0}.${version_patch:-0}.0"
+            makensis='/c/Program Files (x86)/NSIS/makensis.exe'
+            "$makensis" \
+              "/DAPP_VERSION=$version" \
+              "/DNUMERIC_VERSION=$numeric_version" \
+              "/DSOURCE_DIR=$(cygpath -w "$stage")" \
+              "/DOUTPUT_FILE=$(cygpath -w "$out/tosklight-media-$version-$SLUG-setup.exe")" \
+              "/DICON_FILE=$(cygpath -w "$pixel_icon")" \
+              tools/windows/pixel-installer.nsi
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             ditto -c -k --sequesterRsrc --keepParent \
               "$stage" "$out/tosklight-media-$version-$SLUG.zip"

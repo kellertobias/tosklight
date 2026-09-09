@@ -79,9 +79,11 @@ describe("importing into the library", () => {
 				jobs: [
 					{
 						id: "job-0",
+						batchId: null,
 						address: { folder: 1, file: 1, class: "library" },
 						filename: "001.mov",
 						state: "running",
+						attempts: 1,
 						fraction: null,
 						framesDone: 40,
 						framesTotal: null,
@@ -103,9 +105,11 @@ describe("importing into the library", () => {
 				jobs: [
 					{
 						id: "job-0",
+						batchId: "batch-1",
 						address: { folder: 2, file: 1, class: "library" },
 						filename: "001-Unknown.png",
 						state: "failed",
+						attempts: 2,
 						fraction: null,
 						framesDone: null,
 						framesTotal: null,
@@ -120,6 +124,40 @@ describe("importing into the library", () => {
 			await screen.findByText("the file has no video stream"),
 		).toBeInTheDocument();
 		expect(screen.getByText("Failed")).toBeInTheDocument();
+		expect(screen.getByText("Conversion report")).toBeInTheDocument();
+		expect(screen.getByText("0 converted, 1 failed.")).toBeInTheDocument();
+		expect(
+			screen.getByText(/Conversion failures were retried once/u),
+		).toBeInTheDocument();
+	});
+
+	it("identifies the retry while a native batch is still converting", async () => {
+		stubServer({
+			imports: anImportState({
+				pending: [],
+				jobs: [
+					{
+						id: "job-retry",
+						batchId: "batch-2",
+						address: { folder: 7, file: 254, class: "library" },
+						filename: "Loop.mov",
+						state: "running",
+						attempts: 2,
+						fraction: null,
+						framesDone: 0,
+						framesTotal: null,
+						reason: null,
+					},
+				],
+			}),
+		});
+		render(<LibraryPage />);
+
+		expect(await screen.findByText(/Loop\.mov · Retrying/u)).toBeInTheDocument();
+		expect(screen.getByText("Conversion progress")).toBeInTheDocument();
+		expect(
+			screen.getByRole("progressbar", { name: "Overall conversion progress" }),
+		).toHaveAttribute("value", "0");
 	});
 
 	it("stays out of the way when there is nothing to import", async () => {

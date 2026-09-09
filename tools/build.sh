@@ -712,10 +712,9 @@ media_data_dir() {
   printf '%s\n' "$LIGHT_RUNTIME_DATA_DIR/media"
 }
 
-# A first run has no configuration, and the shipped defaults are off-screen — correct for a
-# server, useless for an operator who typed `open:media` expecting to see something. So a
-# development configuration is seeded once, bound to the primary display. It is never overwritten
-# afterwards: whatever the operator has changed is theirs.
+# The development configuration carries a smaller render size and stable desk-facing addresses
+# than the shipped first-run configuration. It is seeded once and bound to the primary display,
+# then never overwritten: whatever the operator has changed is theirs.
 seed_media_configuration() {
   local data_dir configuration
   data_dir="$(media_data_dir)"

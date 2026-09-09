@@ -1,4 +1,11 @@
-import { FileDropField, NumberField, TextField } from "@tosklight/ui/controls";
+import {
+	Button,
+	FileDropField,
+	NumberField,
+	SwitchField,
+	TextAreaField,
+	TextField,
+} from "@tosklight/ui/controls";
 import {
 	DEFAULT_POOL_COLOR_PALETTE,
 	PoolCard,
@@ -22,7 +29,10 @@ import {
 import { MediaErrorToast } from "../../app/ToastContext";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
-import type { CatalogView } from "../../shared/api/generated/media-wire";
+import type {
+	CatalogView,
+	LibraryNoteTargetView,
+} from "../../shared/api/generated/media-wire";
 import { useCatalog, useFolderPresentations } from "../../shared/api/queries";
 import { useMainOutputAspectRatio } from "../../shared/output/useMainOutputAspectRatio";
 import { TextSourcesPage } from "../text-sources/TextSourcesPage";
@@ -128,6 +138,14 @@ function MediaLibraryPage({
 					}),
 				)
 			}
+			onCompactFolder={(folder) =>
+				editing.save(() =>
+					api.updateLibraryFolder(folder, {
+						requestId: requestId(),
+						compact: true,
+					}),
+				)
+			}
 			onReorderItem={(item, destination) =>
 				editing.save(() =>
 					api.updateLibraryItem(item.id, {
@@ -154,6 +172,13 @@ function MediaLibraryPage({
 								swap: false,
 							});
 						}
+						if (update.enabled !== undefined) {
+							await api.updateLibraryItem(item.id, {
+								requestId: requestId(),
+								enabled: update.enabled,
+								swap: false,
+							});
+						}
 					} catch (error) {
 						// Both wire intents belong to one Save action. If the first was
 						// accepted, refresh before showing a refusal from the second.
@@ -161,6 +186,38 @@ function MediaLibraryPage({
 						throw error;
 					}
 				})
+			}
+			onDeleteItem={(item) =>
+				editing.save(() =>
+					api.deleteLibraryItem(item.id, { requestId: requestId() }),
+				)
+			}
+			onSetItemsEnabled={(items, enabled) =>
+				editing.save(() =>
+					api.updateLibraryItems({
+						requestId: requestId(),
+						ids: items.map((item) => item.id),
+						enabled,
+					}),
+				)
+			}
+			onDeleteItems={(items) =>
+				editing.save(() =>
+					api.deleteLibraryItems({
+						requestId: requestId(),
+						ids: items.map((item) => item.id),
+					}),
+				)
+			}
+			onRetryThumbnail={(item) =>
+				editing.save(() =>
+					api.retryLibraryThumbnail(item.id, { requestId: requestId() }),
+				)
+			}
+			onUploadCustomThumbnail={(item, image) =>
+				editing.save(() =>
+					api.uploadLibraryThumbnail(item.id, requestId(), image),
+				)
 			}
 			onMoveItems={async (items, folder) => {
 				const currentCatalog = catalog.data;
@@ -239,6 +296,15 @@ function MediaLibraryPage({
 					),
 				)
 			}
+			onUpdateNotes={(targets, note) =>
+				editing.save(() =>
+					api.updateLibraryNotes({
+						requestId: requestId(),
+						targets,
+						note,
+					}),
+				)
+			}
 		/>
 	);
 }
@@ -254,10 +320,20 @@ export interface LibraryBrowserViewProps {
 	onSetFolderPicture?: (folder: number, picture: File) => void;
 	onRemoveFolderPicture?: (folder: number) => void;
 	onSwapFolders?: (first: number, second: number) => void;
+	onCompactFolder?: (folder: number) => void;
 	onUpdateItem?: (
 		item: CatalogItem,
-		update: { name?: string; intrinsicBpm?: number | null },
+		update: {
+			name?: string;
+			intrinsicBpm?: number | null;
+			enabled?: boolean;
+		},
 	) => void;
+	onDeleteItem?: (item: CatalogItem) => void;
+	onSetItemsEnabled?: (items: CatalogItem[], enabled: boolean) => void;
+	onDeleteItems?: (items: CatalogItem[]) => void;
+	onRetryThumbnail?: (item: CatalogItem) => void;
+	onUploadCustomThumbnail?: (item: CatalogItem, image: File) => void;
 	onMoveItems?: (items: CatalogItem[], folder: number) => void;
 	onReorderItem?: (
 		item: CatalogItem,
@@ -270,6 +346,7 @@ export interface LibraryBrowserViewProps {
 		name: string,
 		replace: boolean,
 	) => void;
+	onUpdateNotes?: (targets: LibraryNoteTargetView[], note: string) => void;
 	thumbnailUrl?: (folder: number, file: number) => string;
 	previewAspectRatio?: number;
 	importPanel?: ReactNode;
@@ -288,11 +365,18 @@ export function LibraryBrowserView({
 	onSetFolderPicture,
 	onRemoveFolderPicture,
 	onSwapFolders,
+	onCompactFolder,
 	onUpdateItem,
+	onDeleteItem,
+	onSetItemsEnabled,
+	onDeleteItems,
+	onRetryThumbnail,
+	onUploadCustomThumbnail,
 	onMoveItems,
 	onReorderItem,
 	onUpload,
 	onUploadAt,
+	onUpdateNotes,
 	thumbnailUrl = api.thumbnailUrl,
 	previewAspectRatio = 16 / 9,
 	importPanel,
@@ -300,12 +384,17 @@ export function LibraryBrowserView({
 }: LibraryBrowserViewProps) {
 	const [folder, setFolder] = useState(1);
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+	const [selectedFolders, setSelectedFolders] = useState<Set<number>>(
+		new Set(),
+	);
 	const [focusedId, setFocusedId] = useState<string | null>(null);
 	const [emptyFile, setEmptyFile] = useState<number | null>(null);
 	const [folderEditor, setFolderEditor] = useState<number | null>(null);
 	const [search, setSearch] = useState("");
 	const [dropFailure, setDropFailure] = useState<string | null>(null);
 	const picker = useRef<HTMLInputElement>(null);
+	const selectionAnchorId = useRef<string | null>(null);
+	const rangeBaseIds = useRef<Set<string>>(new Set());
 	const selectedFolder = catalog.folders.find(
 		(entry) => entry.folder === folder,
 	);
@@ -321,19 +410,41 @@ export function LibraryBrowserView({
 		setSelectedIds(new Set());
 		setFocusedId(null);
 		setEmptyFile(null);
+		selectionAnchorId.current = null;
+		rangeBaseIds.current = new Set();
 	}, [folder]);
 
 	const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => {
+		setSelectedFolders(new Set());
 		setFocusedId(item.id);
 		setEmptyFile(null);
 		setFolderEditor(null);
 		setSelectedIds((current) => {
+			if (event.shiftKey && selectionAnchorId.current) {
+				const anchor = selectedFolder?.items.find(
+					(candidate) => candidate.id === selectionAnchorId.current,
+				);
+				if (anchor) {
+					const first = Math.min(anchor.file, item.file);
+					const last = Math.max(anchor.file, item.file);
+					const next = new Set(rangeBaseIds.current);
+					for (const candidate of selectedFolder?.items ?? []) {
+						if (candidate.file >= first && candidate.file <= last)
+							next.add(candidate.id);
+					}
+					return next;
+				}
+			}
 			if (event.metaKey || event.ctrlKey) {
 				const next = new Set(current);
 				if (next.has(item.id)) next.delete(item.id);
 				else next.add(item.id);
+				selectionAnchorId.current = item.id;
+				rangeBaseIds.current = new Set(next);
 				return next;
 			}
+			selectionAnchorId.current = item.id;
+			rangeBaseIds.current = new Set();
 			return new Set([item.id]);
 		});
 	};
@@ -341,6 +452,16 @@ export function LibraryBrowserView({
 	const selectedItems = (selectedFolder?.items ?? []).filter((item) =>
 		selectedIds.has(item.id),
 	);
+	const selectedFolderEntries = [...selectedFolders]
+		.sort((left, right) => left - right)
+		.map(
+			(number) =>
+				catalog.folders.find((entry) => entry.folder === number) ?? {
+					folder: number,
+					name: null,
+					items: [],
+				},
+		);
 	const folders = [
 		...Array.from({ length: MEDIA_FOLDER_COUNT }, (_, index) => index + 1),
 		...Array.from(
@@ -430,6 +551,7 @@ export function LibraryBrowserView({
 								return;
 							}
 							setFolder(destination.folder);
+							setSelectedFolders(new Set());
 							setFocusedId(null);
 							setFolderEditor(null);
 							setEmptyFile(destination.file);
@@ -473,6 +595,12 @@ export function LibraryBrowserView({
 								(candidate) => candidate.folder === number,
 							);
 							const writable = isStorageFolder(number);
+							const empty =
+								number < FIRST_PARKING_FOLDER &&
+								(entry?.items.length ?? 0) === 0;
+							const selected =
+								selectedFolders.has(number) ||
+								(!selectedFolders.size && folder === number);
 							return (
 								<PoolCard
 									key={number}
@@ -491,12 +619,14 @@ export function LibraryBrowserView({
 											number >= FIRST_PARKING_FOLDER
 												? DEFAULT_POOL_COLOR_PALETTE.macro
 												: DEFAULT_POOL_COLOR_PALETTE.group,
-										states:
-											folder === number
-												? ["selected"]
+										states: [
+											...(selected ? (["selected"] as const) : []),
+											...(empty
+												? (["empty"] as const)
 												: writable
 													? []
-													: ["disabled"],
+													: (["disabled"] as const)),
+										],
 										icon: presentation?.icon || entry?.icon || "▣",
 										image: presentation?.pictureUrl
 											? {
@@ -507,14 +637,36 @@ export function LibraryBrowserView({
 									}}
 									className={`media-library-folder ${number >= FIRST_PARKING_FOLDER ? "is-parking" : ""}`}
 									data-folder={number}
-									onClick={() => {
+									onClick={(event) => {
 										setFolder(number);
-										setFolderEditor(writable ? number : null);
+										setFocusedId(null);
+										setEmptyFile(null);
+										setSelectedIds(new Set());
+										selectionAnchorId.current = null;
+										rangeBaseIds.current = new Set();
+										if (writable && (event.metaKey || event.ctrlKey)) {
+											setSelectedFolders((current) => {
+												const next = new Set(current);
+												if (next.has(number)) next.delete(number);
+												else next.add(number);
+												return next;
+											});
+											setFolderEditor(null);
+										} else {
+											setSelectedFolders(
+												writable ? new Set([number]) : new Set(),
+											);
+											setFolderEditor(writable ? number : null);
+										}
 									}}
 									onContextMenu={(event) => {
 										event.preventDefault();
 										if (writable) {
 											setFolder(number);
+											setSelectedFolders(new Set([number]));
+											setSelectedIds(new Set());
+											selectionAnchorId.current = null;
+											rangeBaseIds.current = new Set();
 											setFolderEditor(number);
 										}
 									}}
@@ -548,7 +700,7 @@ export function LibraryBrowserView({
 					<PoolGrid
 						className="media-file-pool-grid media-library-file-pool-grid"
 						slots={visibleItems.map((item) =>
-							itemSlot(item, folder, thumbnailUrl),
+							itemSlot(item, folder, catalog.revision, thumbnailUrl),
 						)}
 						slotCount={FILES_PER_FOLDER}
 						minimumCardWidth={112}
@@ -568,6 +720,9 @@ export function LibraryBrowserView({
 										onClick={() => {
 											setFocusedId(null);
 											setSelectedIds(new Set());
+											selectionAnchorId.current = null;
+											rangeBaseIds.current = new Set();
+											setSelectedFolders(new Set());
 											setFolderEditor(null);
 											setEmptyFile(slot.position + 1);
 										}}
@@ -579,7 +734,12 @@ export function LibraryBrowserView({
 								<PoolCard
 									model={{
 										...slot.card,
-										states: selectedIds.has(item.id) ? ["selected"] : [],
+										states: [
+											...(selectedIds.has(item.id)
+												? ["selected" as const]
+												: []),
+											...(item.enabled === false ? ["disabled" as const] : []),
+										],
 									}}
 									draggable={!busy}
 									onDragStart={(event) => {
@@ -614,7 +774,31 @@ export function LibraryBrowserView({
 				</WindowScrollArea>
 
 				<aside className="media-library-inspector">
-					{folderEditor !== null ? (
+					{selectedFolderEntries.length > 1 ? (
+						<LibraryNotesEditor
+							key={`folders-${[...selectedFolders].sort().join("-")}`}
+							label={`${selectedFolderEntries.length} folders`}
+							notes={selectedFolderEntries.map((entry) => entry.note ?? "")}
+							targets={selectedFolderEntries.map((entry) => ({
+								kind: "folder",
+								folder: entry.folder,
+							}))}
+							busy={busy}
+							onSave={onUpdateNotes}
+						/>
+					) : selectedItems.length > 1 ? (
+						<MultiItemEditor
+							key={`items-${selectedItems
+								.map((item) => item.id)
+								.sort()
+								.join("-")}`}
+							items={selectedItems}
+							busy={busy}
+							onUpdateNotes={onUpdateNotes}
+							onSetEnabled={onSetItemsEnabled}
+							onDelete={onDeleteItems}
+						/>
+					) : folderEditor !== null ? (
 						<FolderEditor
 							key={folderEditor}
 							folder={folderEditor}
@@ -632,11 +816,17 @@ export function LibraryBrowserView({
 								)?.pictureUrl ?? null
 							}
 							busy={busy}
+							note={
+								catalog.folders.find((entry) => entry.folder === folderEditor)
+									?.note ?? ""
+							}
 							onSave={onRenameFolder}
 							onSetIcon={onSetFolderIcon}
 							onSetPicture={onSetFolderPicture}
 							onRemovePicture={onRemoveFolderPicture}
 							onUpload={onUpload}
+							onUpdateNotes={onUpdateNotes}
+							onCompact={onCompactFolder}
 						/>
 					) : focused ? (
 						<ItemEditor
@@ -646,7 +836,12 @@ export function LibraryBrowserView({
 							onUpdate={onUpdateItem}
 							onReplace={onUploadAt}
 							thumbnailUrl={thumbnailUrl}
+							thumbnailRevision={catalog.revision}
 							previewAspectRatio={previewAspectRatio}
+							onUpdateNotes={onUpdateNotes}
+							onDelete={onDeleteItem}
+							onRetryThumbnail={onRetryThumbnail}
+							onUploadCustomThumbnail={onUploadCustomThumbnail}
 						/>
 					) : emptyFile !== null && isPlayableFolder(folder) ? (
 						<EmptySlotEditor
@@ -685,6 +880,7 @@ export function LibraryBrowserView({
 function itemSlot(
 	item: CatalogItem,
 	folder: number,
+	revision: number,
 	thumbnailUrl: (folder: number, file: number) => string,
 ): PoolSlotViewModel<string> {
 	return {
@@ -693,11 +889,79 @@ function itemSlot(
 		card: {
 			number: item.file,
 			primary: item.name,
-			secondary: item.intrinsicBpm ? `${item.intrinsicBpm} BPM` : undefined,
-			image: { src: thumbnailUrl(folder, item.file), alt: "" },
+			secondary:
+				item.enabled === false
+					? "Disabled"
+					: item.intrinsicBpm
+						? `${item.intrinsicBpm} BPM`
+						: undefined,
+			image: {
+				src: versionedThumbnailUrl(thumbnailUrl(folder, item.file), revision),
+				alt: "",
+			},
 			color: DEFAULT_POOL_COLOR_PALETTE.preset.mixed,
+			states: item.enabled === false ? ["disabled"] : [],
 		},
 	};
+}
+
+function MultiItemEditor({
+	items,
+	busy,
+	onUpdateNotes,
+	onSetEnabled,
+	onDelete,
+}: {
+	items: CatalogItem[];
+	busy: boolean;
+	onUpdateNotes?: LibraryBrowserViewProps["onUpdateNotes"];
+	onSetEnabled?: LibraryBrowserViewProps["onSetItemsEnabled"];
+	onDelete?: LibraryBrowserViewProps["onDeleteItems"];
+}) {
+	return (
+		<div className="media-library-editor">
+			<p className="media-library-eyebrow">Selection</p>
+			<h2>{items.length} media files</h2>
+			<div className="media-operator-toolbar">
+				<Button
+					type="button"
+					disabled={busy}
+					onClick={() => onSetEnabled?.(items, true)}
+				>
+					Enable selected
+				</Button>
+				<Button
+					type="button"
+					disabled={busy}
+					onClick={() => onSetEnabled?.(items, false)}
+				>
+					Disable selected
+				</Button>
+				<Button
+					type="button"
+					variant="danger"
+					disabled={busy}
+					onClick={() => {
+						if (
+							globalThis.confirm(
+								`Delete ${items.length} selected media files permanently? This cannot be undone.`,
+							)
+						)
+							onDelete?.(items);
+					}}
+				>
+					Delete selected
+				</Button>
+			</div>
+			<LibraryNotesEditor
+				label={`${items.length} media files`}
+				notes={items.map((item) => item.note ?? "")}
+				targets={items.map((item) => ({ kind: "item", id: item.id }))}
+				busy={busy}
+				onSave={onUpdateNotes}
+			/>
+		</div>
+	);
 }
 
 function ItemEditor({
@@ -707,7 +971,12 @@ function ItemEditor({
 	onUpdate,
 	onReplace,
 	thumbnailUrl,
+	thumbnailRevision,
 	previewAspectRatio,
+	onUpdateNotes,
+	onDelete,
+	onRetryThumbnail,
+	onUploadCustomThumbnail,
 }: {
 	folder: number;
 	item: CatalogItem;
@@ -715,11 +984,17 @@ function ItemEditor({
 	onUpdate?: LibraryBrowserViewProps["onUpdateItem"];
 	onReplace?: LibraryBrowserViewProps["onUploadAt"];
 	thumbnailUrl: (folder: number, file: number) => string;
+	thumbnailRevision: number;
 	previewAspectRatio: number;
+	onUpdateNotes?: LibraryBrowserViewProps["onUpdateNotes"];
+	onDelete?: LibraryBrowserViewProps["onDeleteItem"];
+	onRetryThumbnail?: LibraryBrowserViewProps["onRetryThumbnail"];
+	onUploadCustomThumbnail?: LibraryBrowserViewProps["onUploadCustomThumbnail"];
 }) {
 	const [name, setName] = useState(item.name);
 	const [bpm, setBpm] = useState(item.intrinsicBpm?.toString() ?? "");
 	const replacementPicker = useRef<HTMLInputElement>(null);
+	const thumbnailPicker = useRef<HTMLInputElement>(null);
 	useEffect(() => {
 		setName(item.name);
 		setBpm(item.intrinsicBpm?.toString() ?? "");
@@ -742,7 +1017,10 @@ function ItemEditor({
 				style={{ aspectRatio: previewAspectRatio }}
 			>
 				<img
-					src={thumbnailUrl(folder, item.file)}
+					src={versionedThumbnailUrl(
+						thumbnailUrl(folder, item.file),
+						thumbnailRevision,
+					)}
 					alt={`${item.name} preview`}
 				/>
 			</div>
@@ -762,6 +1040,22 @@ function ItemEditor({
 				step={0.01}
 				placeholder="Not set"
 				onChange={(event) => setBpm(event.target.value)}
+			/>
+			<SwitchField
+				label="Enabled"
+				checked={item.enabled !== false}
+				disabled={busy}
+				onChange={(event) =>
+					onUpdate?.(item, { enabled: event.target.checked })
+				}
+			/>
+			<LibraryNotesEditor
+				key={item.id}
+				label="this media file"
+				notes={[item.note ?? ""]}
+				targets={[{ kind: "item", id: item.id }]}
+				busy={busy}
+				onSave={onUpdateNotes}
 			/>
 			<button type="submit" className="ui-button primary" disabled={busy}>
 				Save media
@@ -801,8 +1095,54 @@ function ItemEditor({
 				}}
 			/>
 			<p>Replacing keeps this exact folder and media number.</p>
+			<div className="media-operator-toolbar">
+				<Button
+					type="button"
+					disabled={busy}
+					onClick={() => onRetryThumbnail?.(item)}
+				>
+					Retry thumbnail
+				</Button>
+				<Button
+					type="button"
+					disabled={busy}
+					onClick={() => thumbnailPicker.current?.click()}
+				>
+					Upload custom thumbnail
+				</Button>
+			</div>
+			<input
+				ref={thumbnailPicker}
+				hidden
+				type="file"
+				accept="image/png,image/jpeg,image/gif,image/webp"
+				onChange={(event) => {
+					const image = event.currentTarget.files?.[0];
+					event.currentTarget.value = "";
+					if (image) onUploadCustomThumbnail?.(item, image);
+				}}
+			/>
+			<Button
+				type="button"
+				variant="danger"
+				disabled={busy}
+				onClick={() => {
+					if (
+						globalThis.confirm(
+							`Delete ${item.name} permanently? This cannot be undone.`,
+						)
+					)
+						onDelete?.(item);
+				}}
+			>
+				Delete media
+			</Button>
 		</form>
 	);
+}
+
+function versionedThumbnailUrl(url: string, revision: number): string {
+	return `${url}${url.includes("?") ? "&" : "?"}revision=${revision}`;
 }
 
 function FolderEditor({
@@ -811,22 +1151,28 @@ function FolderEditor({
 	icon,
 	pictureUrl,
 	busy,
+	note,
 	onSave,
 	onSetIcon,
 	onSetPicture,
 	onRemovePicture,
 	onUpload,
+	onUpdateNotes,
+	onCompact,
 }: {
 	folder: number;
 	name: string;
 	icon: string;
 	pictureUrl: string | null;
 	busy: boolean;
+	note: string;
 	onSave?: LibraryBrowserViewProps["onRenameFolder"];
 	onSetIcon?: LibraryBrowserViewProps["onSetFolderIcon"];
 	onSetPicture?: LibraryBrowserViewProps["onSetFolderPicture"];
 	onRemovePicture?: LibraryBrowserViewProps["onRemoveFolderPicture"];
 	onUpload?: LibraryBrowserViewProps["onUpload"];
+	onUpdateNotes?: LibraryBrowserViewProps["onUpdateNotes"];
+	onCompact?: LibraryBrowserViewProps["onCompactFolder"];
 }) {
 	const folderPicker = useRef<HTMLInputElement>(null);
 	return (
@@ -843,6 +1189,20 @@ function FolderEditor({
 			onPicture={(picture) => onSetPicture?.(folder, picture)}
 			onRemovePicture={() => onRemovePicture?.(folder)}
 		>
+			<LibraryNotesEditor
+				label="this folder"
+				notes={[note]}
+				targets={[{ kind: "folder", folder }]}
+				busy={busy}
+				onSave={onUpdateNotes}
+			/>
+			<Button type="button" disabled={busy} onClick={() => onCompact?.(folder)}>
+				Compact files
+			</Button>
+			<p>
+				Moves this folder's files to consecutive slots starting at 1. Numeric
+				media addresses will change.
+			</p>
 			<FileDropField
 				label="Upload media to this folder"
 				constraints={{ mimeTypes: ["video/*", "image/*"], multiple: true }}
@@ -863,6 +1223,61 @@ function FolderEditor({
 				}}
 			/>
 		</FolderPresentationEditor>
+	);
+}
+
+function LibraryNotesEditor({
+	label,
+	notes,
+	targets,
+	busy,
+	onSave,
+}: {
+	label: string;
+	notes: string[];
+	targets: LibraryNoteTargetView[];
+	busy: boolean;
+	onSave?: LibraryBrowserViewProps["onUpdateNotes"];
+}) {
+	const mixed = notes.some((note) => note !== notes[0]);
+	const [note, setNote] = useState(mixed ? "" : (notes[0] ?? ""));
+	return (
+		<section className="media-library-note-editor">
+			<h2>Note</h2>
+			<p>
+				Store licence, attribution, source, or other operator text with {label}.
+			</p>
+			{mixed && <p className="media-library-mixed-note">Multiple values</p>}
+			<TextAreaField
+				label={`Note for ${label}`}
+				value={note}
+				placeholder={mixed ? "Multiple values" : "Add a note"}
+				onChange={(event) => setNote(event.target.value)}
+			/>
+			<div className="media-operator-toolbar">
+				<button
+					type="button"
+					className="ui-button primary"
+					disabled={busy}
+					onClick={() => onSave?.(targets, note)}
+				>
+					{targets.length === 1
+						? "Save note"
+						: `Save note to ${targets.length}`}
+				</button>
+				<button
+					type="button"
+					className="ui-button"
+					disabled={busy}
+					onClick={() => {
+						setNote("");
+						onSave?.(targets, "");
+					}}
+				>
+					Clear note{targets.length === 1 ? "" : "s"}
+				</button>
+			</div>
+		</section>
 	);
 }
 

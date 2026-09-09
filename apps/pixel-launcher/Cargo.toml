@@ -1,0 +1,28 @@
+[package]
+name = "pixel-launcher"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+description = "Windows launcher for ToskLight Pixel"
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+rfd.workspace = true
+
+[build-dependencies]
+png.workspace = true
+winresource = "0.1"
+
+[package.metadata.winresource]
+ProductName = "ToskLight Pixel"
+FileDescription = "ToskLight Pixel launcher"
+InternalName = "ToskLight Pixel"
+OriginalFilename = "ToskLight Pixel.exe"
+LegalCopyright = "Copyright ToskLight contributors"
+
+[lints]
+workspace = true

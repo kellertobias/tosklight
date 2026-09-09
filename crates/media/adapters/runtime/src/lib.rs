@@ -12,10 +12,13 @@ mod beat_grid_wave;
 mod beat_move;
 mod beat_scale_turn;
 mod beat_scan;
+#[cfg(all(feature = "tray", any(target_os = "macos", target_os = "windows")))]
+mod bulk_import;
 mod catalog_publication;
 mod citp;
 mod citp_console_presence;
 mod dmx;
+mod fullscreen_hint;
 mod layer_pipeline;
 mod layer_sources;
 pub mod log_buffer;
@@ -237,6 +240,7 @@ fn run_inner() -> anyhow::Result<()> {
         available_monitors,
         started,
         administration_endpoint(&configuration),
+        importer.clone(),
     );
     shutdown.request(ShutdownReason::Requested);
     let served = runtime.block_on(serving);
@@ -616,6 +620,12 @@ fn library_access(
     let folder_published = catalog.clone();
     let folder_picture_published = catalog.clone();
     let folder_remove_published = catalog.clone();
+    let thumbnail_storage = storage.clone();
+    let thumbnail_upload_storage = storage.clone();
+    let thumbnail_lock = catalog_edits.clone();
+    let thumbnail_upload_lock = catalog_edits.clone();
+    let thumbnail_catalog = catalog.clone();
+    let thumbnail_upload_catalog = catalog.clone();
 
     media_http::LibraryAccess {
         edit: std::sync::Arc::new(move |operation| {
@@ -647,14 +657,41 @@ fn library_access(
                 media_http::LibraryEdit::SetItemBpm { id, bpm } => {
                     editing.set_intrinsic_bpm(&mut next, id, bpm)
                 }
+                media_http::LibraryEdit::SetItemEnabled { id, enabled } => {
+                    editing.set_item_enabled(&mut next, id, enabled)
+                }
+                media_http::LibraryEdit::SetItemsEnabled { ids, enabled } => {
+                    editing.set_items_enabled(&mut next, &ids, enabled)
+                }
+                media_http::LibraryEdit::DeleteItem { id } => editing.remove_item(&mut next, id),
+                media_http::LibraryEdit::DeleteItems { ids } => {
+                    editing.remove_items(&mut next, &ids)
+                }
                 media_http::LibraryEdit::RenameFolder { folder, name } => {
                     editing.rename_folder(&mut next, folder, name.as_deref())
                 }
                 media_http::LibraryEdit::SetFolderIcon { folder, icon } => {
                     editing.set_folder_icon(&mut next, folder, icon.as_deref())
                 }
+                media_http::LibraryEdit::SetNotes { targets, note } => {
+                    let targets = targets
+                        .into_iter()
+                        .map(|target| match target {
+                            media_http::LibraryNoteTarget::Item(id) => {
+                                media_library::LibraryNoteTarget::Item(id)
+                            }
+                            media_http::LibraryNoteTarget::Folder(folder) => {
+                                media_library::LibraryNoteTarget::Folder(folder)
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    editing.set_notes(&mut next, &targets, note.as_deref())
+                }
                 media_http::LibraryEdit::SwapFolders { first, second } => {
                     editing.swap_folders(&mut next, first, second)
+                }
+                media_http::LibraryEdit::CompactFolder { folder } => {
+                    editing.compact_folder(&mut next, folder)
                 }
             }
             .map_err(|error| error.to_string())?;
@@ -665,6 +702,30 @@ fn library_access(
             let path = reading.thumbnail_path(address);
             std::fs::read(&path)
                 .map_err(|error| format!("cannot read thumbnail {}: {error}", path.display()))
+        }),
+        regenerate_thumbnail: std::sync::Arc::new(move |id| {
+            let _guard = thumbnail_lock
+                .lock()
+                .map_err(|_| "the library thumbnail lock is unavailable".to_owned())?;
+            let mut next = (*thumbnail_catalog.load_full()).clone();
+            thumbnail_storage
+                .regenerate_thumbnail(&next, id)
+                .map_err(|error| error.to_string())?;
+            next.revision = next.revision.next();
+            thumbnail_catalog.store(std::sync::Arc::new(next));
+            Ok(())
+        }),
+        set_custom_thumbnail: std::sync::Arc::new(move |id, bytes| {
+            let _guard = thumbnail_upload_lock
+                .lock()
+                .map_err(|_| "the library thumbnail lock is unavailable".to_owned())?;
+            let mut next = (*thumbnail_upload_catalog.load_full()).clone();
+            thumbnail_upload_storage
+                .set_custom_thumbnail(&next, id, bytes)
+                .map_err(|error| error.to_string())?;
+            next.revision = next.revision.next();
+            thumbnail_upload_catalog.store(std::sync::Arc::new(next));
+            Ok(())
         }),
         begin_upload: std::sync::Arc::new(move |address, name, filename, replace| {
             let upload = if replace {
@@ -877,9 +938,11 @@ fn job_of(job: &media_library::Job) -> media_http::ImportJob {
     };
     media_http::ImportJob {
         id: job.id.to_string(),
+        batch_id: job.batch.map(|batch| batch.to_string()),
         destination: job.destination,
         filename: filename_of(&job.source),
         outcome,
+        attempts: job.attempts,
         fraction: job.state.fraction(),
         frames_done,
         frames_total,
@@ -1155,6 +1218,10 @@ mod desktop_presence_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use media_domain::{
+        AssetId, MediaAddress,
+        catalog::{CatalogItem, CatalogSnapshot, ItemKind},
+    };
 
     #[tokio::test]
     async fn the_empty_media_application_starts_and_shuts_down() {
@@ -1193,5 +1260,57 @@ mod tests {
         configuration.network.http_listen = "10.42.0.8:9090".parse().unwrap();
 
         assert_eq!(administration_endpoint(&configuration), "10.42.0.8:9090");
+    }
+
+    #[test]
+    fn a_custom_thumbnail_is_stored_for_the_stable_item_and_republished() {
+        let root = std::env::temp_dir().join("media-runtime-custom-thumbnail");
+        let _ = std::fs::remove_dir_all(&root);
+        let storage = media_library::LibraryStorage::new(root.clone());
+        let id = AssetId::new();
+        let mut snapshot = CatalogSnapshot::default();
+        snapshot
+            .insert(
+                1,
+                CatalogItem {
+                    id,
+                    file: 4,
+                    name: "Opening".to_owned(),
+                    kind: ItemKind::Video,
+                    width: 16,
+                    height: 16,
+                    frames: Some(2),
+                    intrinsic_bpm: None,
+                    note: None,
+                    enabled: true,
+                },
+            )
+            .unwrap();
+        let before = snapshot.revision;
+        let catalog = std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(snapshot));
+        let edits = std::sync::Arc::new(std::sync::Mutex::new(()));
+        let importer =
+            media_library::Importer::start(storage.clone(), 1, std::sync::Arc::new(|_| {}));
+        let access = library_access(&importer, &root, &catalog, &edits);
+        let mut png = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut png, 2, 1);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 0, 255, 0])
+                .unwrap();
+        }
+
+        (access.set_custom_thumbnail)(id, &png).unwrap();
+
+        let after = catalog.load_full();
+        assert_eq!(after.revision, before.next());
+        assert_eq!(after.address_of(id), Some(MediaAddress::new(1, 4)));
+        assert!(storage.thumbnail_path(MediaAddress::new(1, 4)).exists());
+        importer.stop();
+        let _ = std::fs::remove_dir_all(root);
     }
 }

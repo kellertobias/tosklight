@@ -8,6 +8,8 @@
 //! followed by a retry would transcode a library twice — and the replay window answers the retry
 //! with what the first attempt started.
 
+use std::collections::HashSet;
+
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -15,15 +17,18 @@ use media_domain::{AssetId, CatalogLocation, MediaAddress};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::diagnostics::LibraryEdit;
+use crate::diagnostics::{LibraryEdit, LibraryNoteTarget};
 use crate::error::ApiError;
 use crate::routes::ApiState;
 use crate::routes::edit::{self, Proceed};
 use crate::tolerant::TolerantJson;
 use crate::wire::{
-    CatalogView, ImportJobView, ImportsView, PendingImportView, StartImport, UpdateLibraryFolder,
-    UpdateLibraryItem, UploadAcceptedView,
+    CatalogView, DeleteLibraryItem, DeleteLibraryItems, ImportJobView, ImportsView,
+    LibraryNoteTargetView, PendingImportView, StartImport, UpdateLibraryFolder, UpdateLibraryItem,
+    UpdateLibraryItems, UpdateLibraryNotes, UpdateLibraryThumbnail, UploadAcceptedView,
 };
+
+pub(super) const MAX_CUSTOM_THUMBNAIL_BYTES: usize = 16 * 1024 * 1024;
 
 /// What is waiting to be imported, and what every import this run has done.
 pub(super) async fn imports(State(state): State<ApiState>) -> impl IntoResponse {
@@ -109,8 +114,14 @@ pub(super) async fn update_item(
     let id = Uuid::parse_str(&id)
         .map(AssetId::from_uuid)
         .map_err(|_| ApiError::bad_request("invalid-asset-id", "the catalog item id is invalid"))?;
-    let operation = match (body.name, body.folder, body.file, body.intrinsic_bpm) {
-        (Some(name), None, None, None) => {
+    let operation = match (
+        body.name,
+        body.folder,
+        body.file,
+        body.intrinsic_bpm,
+        body.enabled,
+    ) {
+        (Some(name), None, None, None, None) => {
             let name = name.trim().to_owned();
             if name.is_empty() {
                 return Err(ApiError::bad_request(
@@ -120,22 +131,199 @@ pub(super) async fn update_item(
             }
             LibraryEdit::RenameItem { id, name }
         }
-        (None, Some(folder), Some(file), None) => LibraryEdit::MoveItem {
+        (None, Some(folder), Some(file), None, None) => LibraryEdit::MoveItem {
             id,
             destination: CatalogLocation::new(folder, file),
             swap: body.swap,
         },
-        (None, None, None, Some(bpm)) => LibraryEdit::SetItemBpm { id, bpm },
+        (None, None, None, Some(bpm), None) => LibraryEdit::SetItemBpm { id, bpm },
+        (None, None, None, None, Some(enabled)) => LibraryEdit::SetItemEnabled { id, enabled },
         _ => {
             return Err(ApiError::bad_request(
                 "ambiguous-library-edit",
-                "rename with a name, move with both folder and file, or set intrinsic BPM",
+                "rename, move, set intrinsic BPM, or set enabled with exactly one edit",
             ));
         }
     };
     (state.diagnostics.library.edit)(operation)
         .map_err(|detail| library_edit_error("library-item-not-updated", detail))?;
     remember_catalog(&state, &body.request_id)
+}
+
+/// Permanently removes one media item after the UI has obtained explicit operator confirmation.
+pub(super) async fn delete_item(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    TolerantJson(body): TolerantJson<DeleteLibraryItem>,
+) -> Result<Response, ApiError> {
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
+    let id = Uuid::parse_str(&id)
+        .map(AssetId::from_uuid)
+        .map_err(|_| ApiError::bad_request("invalid-asset-id", "the catalog item id is invalid"))?;
+    (state.diagnostics.library.edit)(LibraryEdit::DeleteItem { id })
+        .map_err(|detail| library_edit_error("library-item-not-deleted", detail))?;
+    remember_catalog(&state, &body.request_id)
+}
+
+/// Enables or disables all selected stable items as one retry-safe library edit.
+pub(super) async fn update_items(
+    State(state): State<ApiState>,
+    TolerantJson(body): TolerantJson<UpdateLibraryItems>,
+) -> Result<Response, ApiError> {
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
+    let ids = selected_item_ids(body.ids)?;
+    (state.diagnostics.library.edit)(LibraryEdit::SetItemsEnabled {
+        ids,
+        enabled: body.enabled,
+    })
+    .map_err(|detail| library_edit_error("library-items-not-updated", detail))?;
+    remember_catalog(&state, &body.request_id)
+}
+
+/// Permanently removes all selected stable items after one operator confirmation in the UI.
+pub(super) async fn delete_items(
+    State(state): State<ApiState>,
+    TolerantJson(body): TolerantJson<DeleteLibraryItems>,
+) -> Result<Response, ApiError> {
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
+    let ids = selected_item_ids(body.ids)?;
+    (state.diagnostics.library.edit)(LibraryEdit::DeleteItems { ids })
+        .map_err(|detail| library_edit_error("library-items-not-deleted", detail))?;
+    remember_catalog(&state, &body.request_id)
+}
+
+fn selected_item_ids(ids: Vec<String>) -> Result<Vec<AssetId>, ApiError> {
+    if ids.is_empty() || ids.len() > 1_000 {
+        return Err(ApiError::bad_request(
+            "invalid-item-selection",
+            "select between 1 and 1000 media items",
+        ));
+    }
+    let mut selected = Vec::with_capacity(ids.len());
+    let mut unique = HashSet::with_capacity(ids.len());
+    for id in ids {
+        let id = Uuid::parse_str(&id).map(AssetId::from_uuid).map_err(|_| {
+            ApiError::bad_request("invalid-asset-id", "a selected media item id is invalid")
+        })?;
+        if !unique.insert(id) {
+            return Err(ApiError::bad_request(
+                "duplicate-item-selection",
+                "each selected media item may appear only once",
+            ));
+        }
+        selected.push(id);
+    }
+    Ok(selected)
+}
+
+/// Reruns bounded best-frame selection for one stable media item.
+pub(super) async fn retry_thumbnail(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    TolerantJson(body): TolerantJson<UpdateLibraryThumbnail>,
+) -> Result<Response, ApiError> {
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
+    let id = parse_item_id(&id)?;
+    (state.diagnostics.library.regenerate_thumbnail)(id)
+        .map_err(|detail| library_edit_error("library-thumbnail-not-generated", detail))?;
+    remember_catalog(&state, &body.request_id)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ThumbnailUploadQuery {
+    request_id: String,
+}
+
+/// Validates and normalizes one uploaded image as the stable item's custom thumbnail.
+pub(super) async fn upload_thumbnail(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Query(query): Query<ThumbnailUploadQuery>,
+    mut multipart: Multipart,
+) -> Result<Response, ApiError> {
+    let _edit = match edit::begin_upload(&state, &query.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
+    let id = parse_item_id(&id)?;
+    let mut upload = None;
+    while let Some(mut field) = multipart.next_field().await.map_err(|_| {
+        ApiError::bad_request(
+            "invalid-custom-thumbnail",
+            "the custom thumbnail upload could not be read",
+        )
+    })? {
+        if field.name() != Some("file") {
+            continue;
+        }
+        if upload.is_some() {
+            return Err(ApiError::bad_request(
+                "multiple-custom-thumbnails",
+                "upload exactly one custom thumbnail",
+            ));
+        }
+        let content_type = field.content_type().unwrap_or_default();
+        if !matches!(
+            content_type,
+            "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+        ) {
+            return Err(ApiError::bad_request(
+                "invalid-custom-thumbnail-type",
+                "custom thumbnails must be PNG, JPEG, GIF, or WebP images",
+            ));
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = field.chunk().await.map_err(|_| {
+            ApiError::bad_request(
+                "invalid-custom-thumbnail",
+                "the custom thumbnail upload could not be read",
+            )
+        })? {
+            if bytes.len().saturating_add(chunk.len()) > MAX_CUSTOM_THUMBNAIL_BYTES {
+                return Err(ApiError::new(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "custom-thumbnail-too-large",
+                    "custom thumbnails may be at most 16 MiB",
+                ));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        if bytes.is_empty() {
+            return Err(ApiError::bad_request(
+                "empty-custom-thumbnail",
+                "the uploaded custom thumbnail is empty",
+            ));
+        }
+        upload = Some(bytes);
+    }
+    let bytes = upload.ok_or_else(|| {
+        ApiError::bad_request(
+            "missing-custom-thumbnail",
+            "the multipart body has no file field",
+        )
+    })?;
+    (state.diagnostics.library.set_custom_thumbnail)(id, &bytes)
+        .map_err(|detail| library_edit_error("custom-thumbnail-not-stored", detail))?;
+    remember_catalog(&state, &query.request_id)
+}
+
+fn parse_item_id(id: &str) -> Result<AssetId, ApiError> {
+    Uuid::parse_str(id)
+        .map(AssetId::from_uuid)
+        .map_err(|_| ApiError::bad_request("invalid-asset-id", "the catalog item id is invalid"))
 }
 
 /// Changes a folder's optional visible label. Clearing the field removes `.info` deliberately.
@@ -148,34 +336,86 @@ pub(super) async fn update_folder(
         Proceed::Replay(response) => return Ok(response),
         Proceed::Fresh(guard) => guard,
     };
-    let operation = match (body.name, body.icon, body.swap_with) {
-        (Some(name), None, None) => {
+    let operation = match (body.name, body.icon, body.swap_with, body.compact) {
+        (Some(name), None, None, None) => {
             let name = name.trim();
             LibraryEdit::RenameFolder {
                 folder,
                 name: (!name.is_empty()).then(|| name.to_owned()),
             }
         }
-        (None, Some(icon), None) => {
+        (None, Some(icon), None, None) => {
             let icon = icon.trim();
             LibraryEdit::SetFolderIcon {
                 folder,
                 icon: (!icon.is_empty()).then(|| icon.to_owned()),
             }
         }
-        (None, None, Some(second)) => LibraryEdit::SwapFolders {
+        (None, None, Some(second), None) => LibraryEdit::SwapFolders {
             first: folder,
             second,
         },
+        (None, None, None, Some(true)) => LibraryEdit::CompactFolder { folder },
         _ => {
             return Err(ApiError::bad_request(
                 "ambiguous-library-folder-edit",
-                "set name, set icon, or reorder with swapWith",
+                "set name, set icon, reorder with swapWith, or compact with compact: true",
             ));
         }
     };
     (state.diagnostics.library.edit)(operation)
         .map_err(|detail| library_edit_error("library-folder-not-updated", detail))?;
+    remember_catalog(&state, &body.request_id)
+}
+
+/// Applies one exact note to all selected media items or folders.
+pub(super) async fn update_notes(
+    State(state): State<ApiState>,
+    TolerantJson(body): TolerantJson<UpdateLibraryNotes>,
+) -> Result<Response, ApiError> {
+    let _edit = match edit::begin(&state, &body.request_id).await? {
+        Proceed::Replay(response) => return Ok(response),
+        Proceed::Fresh(guard) => guard,
+    };
+    if body.targets.is_empty() || body.targets.len() > 1_000 {
+        return Err(ApiError::bad_request(
+            "invalid-note-targets",
+            "select between 1 and 1000 media items or folders",
+        ));
+    }
+    if body.note.len() > 64 * 1024 {
+        return Err(ApiError::bad_request(
+            "note-too-large",
+            "a media note cannot exceed 64 KiB",
+        ));
+    }
+
+    let mut targets = Vec::with_capacity(body.targets.len());
+    let mut unique = HashSet::with_capacity(body.targets.len());
+    for target in body.targets {
+        let target = match target {
+            LibraryNoteTargetView::Item { id } => Uuid::parse_str(&id)
+                .map(AssetId::from_uuid)
+                .map(LibraryNoteTarget::Item)
+                .map_err(|_| {
+                    ApiError::bad_request("invalid-asset-id", "a selected media item id is invalid")
+                })?,
+            LibraryNoteTargetView::Folder { folder } => LibraryNoteTarget::Folder(folder),
+        };
+        if !unique.insert(target) {
+            return Err(ApiError::bad_request(
+                "duplicate-note-target",
+                "each media item or folder may be selected only once",
+            ));
+        }
+        targets.push(target);
+    }
+
+    (state.diagnostics.library.edit)(LibraryEdit::SetNotes {
+        targets,
+        note: (!body.note.is_empty()).then_some(body.note),
+    })
+    .map_err(|detail| library_edit_error("library-notes-not-updated", detail))?;
     remember_catalog(&state, &body.request_id)
 }
 
@@ -193,7 +433,14 @@ pub(super) async fn thumbnail(
             )
         },
     )?;
-    Ok(([(header::CONTENT_TYPE, "image/jpeg")], bytes).into_response())
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/jpeg"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 
 #[derive(Debug, Deserialize)]
@@ -311,13 +558,14 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use axum::http::StatusCode;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
     use http_body_util::BodyExt as _;
     use tower::ServiceExt as _;
 
     use crate::diagnostics::{
-        Diagnostics, ImportJob, ImportOutcome, Imports, LibraryAccess, LibraryEdit, PendingImport,
-        UploadStream,
+        Diagnostics, ImportJob, ImportOutcome, Imports, LibraryAccess, LibraryEdit,
+        LibraryNoteTarget, PendingImport, UploadStream,
     };
     use crate::routes::bench::{bench, bench_with, get, post, send};
 
@@ -347,9 +595,11 @@ mod tests {
                         ],
                         vec![ImportJob {
                             id: "job-1".to_owned(),
+                            batch_id: None,
                             destination: media_domain::MediaAddress::new(2, 1),
                             filename: "001.png".to_owned(),
                             outcome: ImportOutcome::Running,
+                            attempts: 1,
                             fraction: Some(0.5),
                             frames_done: Some(50),
                             frames_total: Some(100),
@@ -544,6 +794,15 @@ mod tests {
             &bench.router,
             post(
                 "/api/v2/library/folders/7/update".into(),
+                r#"{"requestId":"compact-folder","compact":true}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
+                "/api/v2/library/folders/7/update".into(),
                 r#"{"requestId":"park-folder","swapWith":900}"#,
             ),
         )
@@ -588,8 +847,37 @@ mod tests {
         let (status, _) = send(
             &bench.router,
             post(
+                "/api/v2/library/notes/update".into(),
+                &format!(
+                    r#"{{"requestId":"notes","targets":[{{"kind":"item","id":"{id}"}},{{"kind":"folder","folder":7}}],"note":"Licence: CC BY 4.0"}}"#
+                ),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
+                format!("/api/v2/library/items/{id}/update"),
+                r#"{"requestId":"disable","enabled":false}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
                 format!("/api/v2/library/items/{id}/update"),
                 r#"{"requestId":"move","folder":2,"file":8,"swap":true}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send(
+            &bench.router,
+            post(
+                format!("/api/v2/library/items/{id}/delete"),
+                r#"{"requestId":"delete"}"#,
             ),
         )
         .await;
@@ -602,6 +890,7 @@ mod tests {
                     id: media_domain::AssetId::from_uuid(id),
                     name: "Opening".to_owned(),
                 },
+                LibraryEdit::CompactFolder { folder: 7 },
                 LibraryEdit::SwapFolders {
                     first: 7,
                     second: 900,
@@ -623,12 +912,237 @@ mod tests {
                     folder: 7,
                     icon: Some("▶".to_owned()),
                 },
+                LibraryEdit::SetNotes {
+                    targets: vec![
+                        LibraryNoteTarget::Item(media_domain::AssetId::from_uuid(id)),
+                        LibraryNoteTarget::Folder(7),
+                    ],
+                    note: Some("Licence: CC BY 4.0".to_owned()),
+                },
+                LibraryEdit::SetItemEnabled {
+                    id: media_domain::AssetId::from_uuid(id),
+                    enabled: false
+                },
                 LibraryEdit::MoveItem {
                     id: media_domain::AssetId::from_uuid(id),
                     destination: media_domain::MediaAddress::new(2, 8).into(),
                     swap: true,
                 },
+                LibraryEdit::DeleteItem {
+                    id: media_domain::AssetId::from_uuid(id)
+                },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_or_duplicate_note_targets_are_refused_before_the_library_changes() {
+        let edits = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&edits);
+        let diagnostics = Diagnostics {
+            library: LibraryAccess {
+                edit: Arc::new(move |edit| {
+                    recorded.lock().unwrap().push(edit);
+                    Ok(())
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/library/notes/update".into(),
+                r#"{"requestId":"empty","targets":[],"note":"Licence"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "invalid-note-targets");
+
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/library/notes/update".into(),
+                r#"{"requestId":"duplicate","targets":[{"kind":"folder","folder":7},{"kind":"folder","folder":7}],"note":"Licence"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "duplicate-note-target");
+        assert!(edits.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn deleting_a_library_item_is_replay_safe() {
+        let edits = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&edits);
+        let diagnostics = Diagnostics {
+            library: LibraryAccess {
+                edit: Arc::new(move |edit| {
+                    recorded.lock().unwrap().push(edit);
+                    Ok(())
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+        let id = uuid::Uuid::new_v4();
+        let request = post(
+            format!("/api/v2/library/items/{id}/delete"),
+            r#"{"requestId":"same-delete"}"#,
+        );
+        let (first, _) = send(&bench.router, request).await;
+        let (second, _) = send(
+            &bench.router,
+            post(
+                format!("/api/v2/library/items/{id}/delete"),
+                r#"{"requestId":"same-delete"}"#,
+            ),
+        )
+        .await;
+
+        assert_eq!(first, StatusCode::OK);
+        assert_eq!(second, StatusCode::OK);
+        assert_eq!(
+            edits.lock().unwrap().as_slice(),
+            [LibraryEdit::DeleteItem {
+                id: media_domain::AssetId::from_uuid(id),
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn bulk_item_edits_use_stable_ids_and_are_replay_safe() {
+        let edits = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&edits);
+        let diagnostics = Diagnostics {
+            library: LibraryAccess {
+                edit: Arc::new(move |edit| {
+                    recorded.lock().unwrap().push(edit);
+                    Ok(())
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+        let first = uuid::Uuid::new_v4();
+        let second = uuid::Uuid::new_v4();
+        let enable_body = format!(
+            r#"{{"requestId":"bulk-enable","ids":["{first}","{second}"],"enabled":false}}"#
+        );
+        let delete_body = format!(r#"{{"requestId":"bulk-delete","ids":["{first}","{second}"]}}"#);
+
+        for _ in 0..2 {
+            let (status, _) = send(
+                &bench.router,
+                post("/api/v2/library/items/update".into(), &enable_body),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+        }
+        for _ in 0..2 {
+            let (status, _) = send(
+                &bench.router,
+                post("/api/v2/library/items/delete".into(), &delete_body),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+        }
+
+        let ids = vec![
+            media_domain::AssetId::from_uuid(first),
+            media_domain::AssetId::from_uuid(second),
+        ];
+        assert_eq!(
+            edits.lock().unwrap().as_slice(),
+            [
+                LibraryEdit::SetItemsEnabled {
+                    ids: ids.clone(),
+                    enabled: false,
+                },
+                LibraryEdit::DeleteItems { ids },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn bulk_item_edits_refuse_empty_and_duplicate_selections() {
+        let edits = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&edits);
+        let diagnostics = Diagnostics {
+            library: LibraryAccess {
+                edit: Arc::new(move |edit| {
+                    recorded.lock().unwrap().push(edit);
+                    Ok(())
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+        let id = uuid::Uuid::new_v4();
+        let (empty, _) = send(
+            &bench.router,
+            post(
+                "/api/v2/library/items/update".into(),
+                r#"{"requestId":"empty-bulk","ids":[],"enabled":false}"#,
+            ),
+        )
+        .await;
+        let (duplicate, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/library/items/delete".into(),
+                &format!(r#"{{"requestId":"duplicate-bulk","ids":["{id}","{id}"]}}"#),
+            ),
+        )
+        .await;
+
+        assert_eq!(empty, StatusCode::BAD_REQUEST);
+        assert_eq!(duplicate, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "duplicate-item-selection");
+        assert!(edits.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn compacting_a_library_folder_is_replay_safe() {
+        let edits = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&edits);
+        let diagnostics = Diagnostics {
+            library: LibraryAccess {
+                edit: Arc::new(move |edit| {
+                    recorded.lock().unwrap().push(edit);
+                    Ok(())
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+        let request = post(
+            "/api/v2/library/folders/7/update".into(),
+            r#"{"requestId":"same-compact","compact":true}"#,
+        );
+        let (first, _) = send(&bench.router, request).await;
+        let (second, _) = send(
+            &bench.router,
+            post(
+                "/api/v2/library/folders/7/update".into(),
+                r#"{"requestId":"same-compact","compact":true}"#,
+            ),
+        )
+        .await;
+
+        assert_eq!(first, StatusCode::OK);
+        assert_eq!(second, StatusCode::OK);
+        assert_eq!(
+            edits.lock().unwrap().as_slice(),
+            [LibraryEdit::CompactFolder { folder: 7 }]
         );
     }
 
@@ -661,6 +1175,10 @@ mod tests {
             "image/jpeg"
         );
         assert_eq!(
+            response.headers()[axum::http::header::CACHE_CONTROL],
+            "no-store"
+        );
+        assert_eq!(
             response.into_body().collect().await.unwrap().to_bytes(),
             &[0xff, 0xd8, 0xff, 0xd9][..]
         );
@@ -668,6 +1186,95 @@ mod tests {
         let (status, body) = send(&bench.router, get("/api/v2/library/3/8/thumbnail".into())).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(body["code"], "thumbnail-not-found");
+    }
+
+    #[tokio::test]
+    async fn retrying_a_thumbnail_uses_one_stable_id_and_replays_safely() {
+        let regenerated = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&regenerated);
+        let diagnostics = Diagnostics {
+            library: LibraryAccess {
+                regenerate_thumbnail: Arc::new(move |id| {
+                    recorded.lock().unwrap().push(id);
+                    Ok(())
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+        let id = uuid::Uuid::new_v4();
+        for _ in 0..2 {
+            let (status, _) = send(
+                &bench.router,
+                post(
+                    format!("/api/v2/library/items/{id}/thumbnail/retry"),
+                    r#"{"requestId":"same-thumbnail-retry"}"#,
+                ),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+        }
+        assert_eq!(
+            regenerated.lock().unwrap().as_slice(),
+            &[media_domain::AssetId::from_uuid(id)]
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_thumbnail_upload_is_bounded_typed_and_replay_safe() {
+        let stored = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&stored);
+        let diagnostics = Diagnostics {
+            library: LibraryAccess {
+                set_custom_thumbnail: Arc::new(move |id, bytes| {
+                    recorded.lock().unwrap().push((id, bytes.to_vec()));
+                    Ok(())
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let bench = bench_with(diagnostics);
+        let id = uuid::Uuid::new_v4();
+        let boundary = "thumbnail-boundary";
+        let payload = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"thumbnail.png\"\r\nContent-Type: image/png\r\n\r\nPNG-BYTES\r\n--{boundary}--\r\n"
+        );
+        for _ in 0..2 {
+            let request = Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v2/library/items/{id}/thumbnail/upload?requestId=same-custom-thumbnail"
+                ))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(payload.clone()))
+                .unwrap();
+            let response = bench.router.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        assert_eq!(stored.lock().unwrap().len(), 1);
+        assert_eq!(stored.lock().unwrap()[0].1, b"PNG-BYTES");
+
+        let boundary = "bad-thumbnail-boundary";
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!(
+                "/api/v2/library/items/{id}/thumbnail/upload?requestId=bad-thumbnail"
+            ))
+            .header(
+                "content-type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(Body::from(format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"bad.txt\"\r\nContent-Type: text/plain\r\n\r\nNO\r\n--{boundary}--\r\n"
+            )))
+            .unwrap();
+        let response = bench.router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     struct RecordedUpload {
