@@ -18,6 +18,7 @@ import type {
 	Health,
 	ImportsView,
 	LogsView,
+	LibrarySettingsView,
 	NetworkView,
 	OutputConfigurationView,
 	OutputView,
@@ -33,6 +34,7 @@ import type {
 	UpdateLibraryItem,
 	UpdateLibraryItems,
 	UpdateLibraryNotes,
+	UpdateLibrarySettings,
 	UpdateLibraryThumbnail,
 	UpdateMaster,
 	UpdateNetwork,
@@ -351,6 +353,13 @@ export const api = {
 	network: () => request<NetworkView>("/network"),
 	updateNetwork: (edit: UpdateNetwork) =>
 		request<NetworkView>("/network/update", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+
+	librarySettings: () => request<LibrarySettingsView>("/library/settings"),
+	updateLibrarySettings: (edit: UpdateLibrarySettings) =>
+		request<LibrarySettingsView>("/library/settings/update", {
 			method: "POST",
 			body: JSON.stringify(edit),
 		}),

@@ -2,6 +2,8 @@
 
 The Media Library is addressed deliberately so the Desk can recall the same content without depending on filenames. Ordinary media uses folders `1`–`199`, text uses `200`–`249`, and generated visualizers use `250`–`255`. Within an addressed folder, file `0` and file `255` are blank; usable content occupies the remaining slots.
 
+To keep the library on another disk or shared storage, open **Settings > Libraries**, enter the folder on the Media Server computer under **Media library directory**, and save it. The new directory is used after Pixel restarts. Pixel does not move the existing library, so copy the addressed folders, media, thumbnails, and dotted metadata files yourself before restarting when the content must follow the setting. **Revert to current directory** cancels a pending directory change before restart.
+
 The **Effects** tab owns the 255 numbered presets used by playback. Slot **0** is always **Off**;
 slots **1–255** may be assigned, named, cleared, and configured. Editing a preset updates every
 layer bank that selects that number—effect settings are not copied into individual layers or cues.

@@ -20,6 +20,7 @@ mod fixtures;
 mod folder_presentations;
 mod health;
 mod library;
+mod library_settings;
 mod logs;
 mod network;
 mod output_effects;
@@ -131,6 +132,11 @@ pub fn router(state: ApiState) -> Router {
             post(health::open_data_directory),
         )
         .route("/api/v2/catalog", get(health::catalog))
+        .route("/api/v2/library/settings", get(library_settings::settings))
+        .route(
+            "/api/v2/library/settings/update",
+            post(library_settings::update_settings),
+        )
         .route("/api/v2/logs", get(logs::logs))
         .route("/api/v2/logs/level", get(logs::server_level))
         .route("/api/v2/logs/level/update", post(logs::update_server_level))

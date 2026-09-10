@@ -255,6 +255,7 @@ pendingRestart: boolean,
  * A listener that could not bind this run is disabled rather than preventing administration.
  */
 warnings: Array<string>, };
+export type LibrarySettingsView = { storedDirectory: string, activeDirectory: string, takesEffectOnRestart: boolean, pendingRestart: boolean, };
 export type TimeView = {
 /**
  * Minutes east of UTC. Negative is west; 0 is UTC itself.
@@ -478,6 +479,7 @@ export type UpdateNetwork = { requestId: string, sameComputerPreset?: boolean | 
  * which is why an absent field and an explicit null have to be different things here.
  */
 speedGroupEndpoint?: string | null, };
+export type UpdateLibrarySettings = { requestId: string, directory?: string | null, };
 export type UpdateTime = { requestId: string, utcOffsetMinutes?: number | null, };
 export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null,
 /**

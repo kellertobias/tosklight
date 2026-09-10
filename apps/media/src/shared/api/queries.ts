@@ -10,6 +10,7 @@ import type {
 	CatalogView,
 	FolderPresentationsView,
 	Health,
+	LibrarySettingsView,
 	NetworkView,
 	OutputView,
 	RunningServerView,
@@ -29,6 +30,7 @@ export const KEYS = {
 	visualizers: "visualizers",
 	effects: "effects",
 	network: "network",
+	librarySettings: "library-settings",
 	time: "time",
 	audio: "audio",
 	text: "text",
@@ -68,6 +70,11 @@ export function useEffects(): Resource<EffectLibrarySlot[]> {
 /// Configuration. It changes when an operator saves it, so it is read once.
 export function useNetwork(): Resource<NetworkView> {
 	return useResource(KEYS.network, api.network);
+}
+
+/// Stored library location. A saved change is used only after the server restarts.
+export function useLibrarySettings(): Resource<LibrarySettingsView> {
+	return useResource(KEYS.librarySettings, api.librarySettings);
 }
 
 /// Configuration: the server's UTC offset changes only when an operator saves it.

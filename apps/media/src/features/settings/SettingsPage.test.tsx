@@ -63,13 +63,44 @@ describe("the settings page", () => {
 		expect(screen.getByLabelText("Art-Net")).toBeVisible();
 	});
 
-	it("renders the Libraries path explanation as regular information", async () => {
-		stubSettingsServer();
+	it("saves a custom media-library directory for the next restart", async () => {
+		const server = stubSettingsServer();
 		renderSettings();
 		await openSettings("Libraries");
-		const explanation = await screen.findByText(/library\.root/u);
-		expect(explanation).not.toHaveClass("media-state");
-		expect(explanation).not.toHaveClass("is-notice");
+		const library = await screen.findByRole("article", {
+			name: "Media library directory",
+		});
+		const directory = within(library).getByLabelText("Library directory");
+		expect(directory).toHaveValue("/Users/Shared/ToskLight Pixel/Media");
+
+		await userEvent.clear(directory);
+		await userEvent.type(directory, "D:\\Shows\\Autumn Gala\\Media");
+		await userEvent.click(
+			within(library).getByRole("button", {
+				name: "Save library directory",
+			}),
+		);
+
+		await waitFor(() =>
+			expect(server.librarySettings.storedDirectory).toBe(
+				"D:\\Shows\\Autumn Gala\\Media",
+			),
+		);
+		expect(server.writes).toContain("/library/settings/update");
+		expect(server.writeBodies.at(-1)).toMatchObject({
+			directory: "D:\\Shows\\Autumn Gala\\Media",
+		});
+		expect(library).toHaveTextContent(/still using.*Users\/Shared/u);
+		const revert = within(library).getByRole("button", {
+				name: "Revert to current directory",
+			});
+		expect(revert).toBeVisible();
+		await userEvent.click(revert);
+		await waitFor(() =>
+			expect(server.librarySettings.pendingRestart).toBe(false),
+		);
+		expect(directory).toHaveValue("/Users/Shared/ToskLight Pixel/Media");
+		expect(library).not.toHaveTextContent(/still using/u);
 	});
 
 	it("links to the one folder containing media and configuration", async () => {
@@ -307,9 +338,11 @@ describe("the settings page", () => {
 		expect(screen.getByRole("status").closest(".ui-window-header")).toBeNull();
 
 		await openSettings("Libraries");
-		const libraries = await screen.findByRole("article", { name: "Libraries" });
+		const libraries = await screen.findByRole("article", {
+			name: "Media library directory",
+		});
 		expect(within(libraries).getByRole("status")).toHaveTextContent(
-			"Saved automatically",
+			"Saved automatically · Applies on restart",
 		);
 	});
 
