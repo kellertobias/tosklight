@@ -57,6 +57,11 @@ fn suedbahnhof_plan_profiles_ship_with_the_explicit_venue_personalities() {
             "16 bit - gobo fine - lamp control",
             20,
         ),
+        (
+            "claypaky--stage-zoom-1200-sv.toskfixture",
+            "16 bit - gobo fine - lamp control",
+            20,
+        ),
     ];
 
     for (filename, mode_name, footprint) in expected {
@@ -76,6 +81,7 @@ fn suedbahnhof_plan_profiles_ship_with_the_explicit_venue_personalities() {
         );
         if ![
             "claypaky--stage-zoom-1200.toskfixture",
+            "claypaky--stage-zoom-1200-sv.toskfixture",
             "generic--dimmer-rgb-control-par.toskfixture",
         ]
         .contains(&filename)
