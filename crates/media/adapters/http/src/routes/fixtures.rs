@@ -72,8 +72,8 @@ mod tests {
         let names: Vec<String> = serde_json::from_value(body).expect("a list of names");
         assert_eq!(
             names.len(),
-            7,
-            "layer and master personalities plus the generated MagicQ channel map"
+            8,
+            "layer and master personalities plus the generated MagicQ channel and range maps"
         );
 
         let response = bench
