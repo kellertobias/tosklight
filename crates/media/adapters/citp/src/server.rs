@@ -211,7 +211,11 @@ pub struct Identity {
 
 /// The greeting sent the moment a console connects, before it has asked anything.
 pub fn greeting(identity: &Identity) -> Vec<u8> {
-    server_information(&identity.name, (1, 2), identity.layers)
+    // An unsolicited SInf is the pre-1.2 connection handshake. It must therefore use a
+    // pre-1.2 wire version: a 1.2 client starts the connection with CInf instead and receives the
+    // negotiated SInf through `respond`. MagicQ still uses the server-first handshake for a
+    // generic CITP MSEX server and rejects an unsolicited 1.2 greeting before asking for media.
+    server_information(&identity.name, (1, 0), identity.layers)
 }
 
 /// The discovery announcement.
@@ -447,6 +451,13 @@ mod tests {
             (1, 0),
             "a console that asked for nothing usable"
         );
+    }
+
+    #[test]
+    fn the_unsolicited_server_first_greeting_uses_the_legacy_handshake_version() {
+        let message = parse(&greeting(&identity())).expect("the greeting frames");
+        assert_eq!(message.content_type, content::SINF);
+        assert_eq!(message.version, (1, 0));
     }
 
     #[test]

@@ -501,8 +501,8 @@ mod tests {
             assert!(csv.contains(mapping), "missing MagicQ mapping {mapping}");
         }
         assert!(
-            csv.contains("35,Reserved,LTP,63,Reserved,8 bit"),
-            "the legacy Blur wire slot must not occupy an encoder"
+            csv.contains("35,Playback BPM F,LTP,13,B1D,16 bit lo"),
+            "the legacy Blur wire slot must be hidden as Playback BPM's fine byte"
         );
     }
 

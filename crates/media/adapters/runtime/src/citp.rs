@@ -13,6 +13,7 @@ use media_citp::server::{Identity, Library, Sessions};
 use media_citp::{MULTICAST_GROUP, packet};
 use media_domain::catalog::CatalogSnapshot;
 use media_domain::{Countdown, MediaAddress, Size, SourceStatus, VisualizerKind};
+use media_net::ingress::{PortSharing, bind};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{TcpListener, UdpSocket};
 
@@ -559,7 +560,10 @@ async fn announce(
     console_identity: ConsoleIdentity,
     listen: SocketAddr,
 ) {
-    let socket = match UdpSocket::bind(listen).await {
+    let socket = match bind("CITP discovery", listen, PortSharing::Shared)
+        .map_err(|error| error.to_string())
+        .and_then(|socket| UdpSocket::from_std(socket).map_err(|error| error.to_string()))
+    {
         Ok(socket) => socket,
         Err(error) => {
             tracing::error!(%error, "CITP discovery could not open a socket; consoles will not find this server");
@@ -914,6 +918,20 @@ mod tests {
                 show_name: "The Tempest".to_owned(),
             })
         );
+    }
+
+    #[tokio::test]
+    async fn citp_discovery_can_share_its_port_with_a_console() {
+        let first = bind(
+            "CITP discovery",
+            "127.0.0.1:0".parse().unwrap(),
+            PortSharing::Shared,
+        )
+        .unwrap();
+        let address = first.local_addr().unwrap();
+        let second = bind("CITP discovery", address, PortSharing::Shared).unwrap();
+
+        assert_eq!(second.local_addr().unwrap(), address);
     }
 
     #[test]

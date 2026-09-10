@@ -2,6 +2,7 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 const channelsOutput = fileURLToPath(
 	new URL(
@@ -22,16 +23,10 @@ const hedOutput = fileURLToPath(
 	),
 );
 
-// MagicQ obfuscates HED text fields on disk. These four sentinels are the
-// native Index values for the first and last rows in both selector blocks.
-// Checking them keeps a re-export from silently restoring Type=None, which
-// makes MagicQ fall back to the 000/128/255 encoder steps.
-const indexedHedSentinels = [
-	[1613, 0xeb],
-	[12578, 0x91],
-	[12619, 0xb9],
-	[23074, 0xe0],
-];
+// MagicQ obfuscates and reflows HED records when any channel changes, so field
+// offsets are not stable. Pin the complete native file instead: this covers all
+// 512 Index ranges and the hidden Playback BPM fine byte together.
+const hedSha256 = "ff6db9b3f023a4056442d879ee199e6a943f810f0d4cda31f924427ca0569156";
 
 // MagicQ's documented channel-import schema. This is the editable source for the
 // console-specific attribute and encoder placement; the DMX order remains the
@@ -70,9 +65,11 @@ const rows = [
 	"31,FX2 Select,LTP,36,B3X,8 bit,yes,yes,no,0,0,0,,0,no,yes,1",
 	"32,FX2 Parameter,LTP,37,B3Y,8 bit,no,no,no,0,0,0,,0,no,yes,1",
 	"33,Speed Multiplr,LTP,11,B1E,8 bit,no,yes,no,127,127,0,,0,no,yes,1",
-	"34,Playback BPM,LTP,13,B1D,8 bit,no,yes,no,0,0,0,,0,no,yes,1",
-	// Keep the obsolete wire slot without letting MagicQ place it on an encoder.
-	"35,Reserved,LTP,63,Reserved,8 bit,no,no,no,0,0,0,,0,no,no,1",
+	"34,Playback BPM,LTP,13,B1D,16 bit hi,no,yes,no,0,0,0,,0,no,yes,1",
+	// The obsolete wire byte is the hidden low half of Playback BPM. MagicQ's Reserved attribute
+	// fills every otherwise-empty Media encoder with "Reserved"; a fine byte preserves the
+	// 39-channel footprint without creating another visible control.
+	"35,Playback BPM F,LTP,13,B1D,16 bit lo,no,no,no,0,0,0,,0,no,yes,1",
 	"36,Mask Position X,LTP,52,B5A,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1",
 	"37,Mask Pos X Fine,LTP,52,B5A,16 bit lo,no,no,no,0,0,0,,0,no,yes,1",
 	"38,Mask Position Y,LTP,53,B5B,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1",
@@ -107,10 +104,7 @@ if (check) {
 	const currentRanges = await readFile(rangesOutput, "utf8").catch(() => "");
 	const currentHed = await readFile(hedOutput).catch(() => Buffer.alloc(0));
 	const hedHasIndexedSelectors =
-		currentHed.length === 25232 &&
-		indexedHedSentinels.every(
-			([offset, expected]) => currentHed[offset] === expected,
-		);
+		createHash("sha256").update(currentHed).digest("hex") === hedSha256;
 	if (
 		currentChannels !== channelsCsv ||
 		currentRanges !== rangesCsv ||
