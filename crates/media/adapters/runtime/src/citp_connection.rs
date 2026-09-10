@@ -403,7 +403,9 @@ mod tests {
                 Shutdown::new(),
             ));
             drop(control);
-            worker
+            // Hand ownership back before publishing: awaiting here would deadlock
+            // the renderer's demand-driven frame publication below.
+            (worker,)
         });
         let mut control = tokio::net::TcpStream::connect(address).await.unwrap();
         let mut body = packet::Body::new();
@@ -422,7 +424,7 @@ mod tests {
             .await
             .unwrap();
         drop(control);
-        let worker = accept.await.unwrap();
+        let (worker,) = accept.await.unwrap();
         tokio::time::timeout(std::time::Duration::from_secs(1), async {
             while !preview.wanted() {
                 tokio::task::yield_now().await;
