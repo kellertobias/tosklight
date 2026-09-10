@@ -32,7 +32,7 @@
 32,FX2 Parameter,LTP,37,B3Y,8 bit,no,no,no,0,0,0,,0,no,yes,1
 33,Speed Multiplr,LTP,11,B1E,8 bit,no,yes,no,127,127,0,,0,no,yes,1
 34,Playback BPM,LTP,13,B1D,8 bit,no,yes,no,0,0,0,,0,no,yes,1
-35,Legacy Blur,LTP,63,B4A,8 bit,no,no,no,0,0,0,,0,no,no,1
+35,Reserved,LTP,63,Reserved,8 bit,no,no,no,0,0,0,,0,no,no,1
 36,Mask Position X,LTP,52,B5A,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1
 37,Mask Pos X Fine,LTP,52,B5A,16 bit lo,no,no,no,0,0,0,,0,no,yes,1
 38,Mask Position Y,LTP,53,B5B,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1

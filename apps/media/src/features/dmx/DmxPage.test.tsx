@@ -72,6 +72,13 @@ describe("DMX diagnostics", () => {
 			screen.getByRole("group", { name: "MagicQ personalities" }),
 		).toContainElement(
 			screen.getByRole("link", {
+				name: "Download ToskLight Pixel Layer Ranges.csv",
+			}),
+		);
+		expect(
+			screen.getByRole("group", { name: "MagicQ personalities" }),
+		).toContainElement(
+			screen.getByRole("link", {
 				name: "Download ToskLight Pixel Layer Channels.csv",
 			}),
 		);

@@ -102,7 +102,7 @@ function FixtureDownloads() {
 			</p>
 			<PersonalityGroup
 				title="MagicQ"
-				note="Install the native .hed files. The generated channel CSV is the editable source for the exact encoder mapping."
+				note="Install the native .hed files. The channel and range CSVs are developer sources for the exact encoder mapping and indexed Media Folder/File behavior."
 				files={magicq}
 			/>
 			<PersonalityGroup

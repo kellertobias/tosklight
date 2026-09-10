@@ -83,6 +83,13 @@ pub fn packages() -> std::io::Result<Vec<(String, Vec<u8>)>> {
             .to_vec(),
         ),
         (
+            "ToskLight Pixel Layer Ranges.csv".into(),
+            include_bytes!(
+                "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer Ranges.csv"
+            )
+            .to_vec(),
+        ),
+        (
             "tosklight@pixel_layer@39ch.xml".into(),
             grandma2_xml(&layer).into_bytes(),
         ),
@@ -443,7 +450,7 @@ mod tests {
     #[test]
     fn both_package_as_archives_a_console_can_import() {
         let packaged = packages().expect("they package");
-        assert_eq!(packaged.len(), 7);
+        assert_eq!(packaged.len(), 8);
         for (name, bytes) in packaged.iter().filter(|(name, _)| name.ends_with(".gdtf")) {
             assert!(bytes.len() > 100, "{name} is suspiciously small");
         }
@@ -492,6 +499,30 @@ mod tests {
             "Mask File,LTP,59,B5X",
         ] {
             assert!(csv.contains(mapping), "missing MagicQ mapping {mapping}");
+        }
+        assert!(
+            csv.contains("35,Reserved,LTP,63,Reserved,8 bit"),
+            "the legacy Blur wire slot must not occupy an encoder"
+        );
+    }
+
+    #[test]
+    fn magicq_media_selectors_have_one_range_per_dmx_value() {
+        let csv = include_str!(
+            "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer Ranges.csv"
+        );
+        let rows = csv.lines().collect::<Vec<_>>();
+        assert_eq!(rows.len(), 512);
+        for channel in [1, 2] {
+            let label = if channel == 1 { "Folder" } else { "File" };
+            let channel_rows = rows
+                .iter()
+                .filter(|row| row.starts_with(&format!("{channel},")))
+                .copied()
+                .collect::<Vec<_>>();
+            assert_eq!(channel_rows.len(), 256);
+            assert!(channel_rows[0].contains(&format!(",{label} 000,0,0,")));
+            assert!(channel_rows[255].contains(&format!(",{label} 255,255,255,")));
         }
     }
 

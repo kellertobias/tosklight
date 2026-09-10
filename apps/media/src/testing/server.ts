@@ -194,6 +194,7 @@ export function stubServer(
 					"ToskLight Pixel Layer.gdtf",
 					"ToskLight Pixel Master.gdtf",
 					"ToskLight Pixel Layer Channels.csv",
+					"ToskLight Pixel Layer Ranges.csv",
 					"ToskLight Pixel Layer.hed",
 					"ToskLight Pixel Master.hed",
 					"tosklight@pixel_layer@39ch.xml",

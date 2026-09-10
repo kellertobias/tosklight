@@ -3,12 +3,35 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-const output = fileURLToPath(
+const channelsOutput = fileURLToPath(
 	new URL(
 		"../assets/media-personalities/magicq/ToskLight Pixel Layer Channels.csv",
 		import.meta.url,
 	),
 );
+const rangesOutput = fileURLToPath(
+	new URL(
+		"../assets/media-personalities/magicq/ToskLight Pixel Layer Ranges.csv",
+		import.meta.url,
+	),
+);
+const hedOutput = fileURLToPath(
+	new URL(
+		"../assets/media-personalities/magicq/ToskLight Pixel Layer.hed",
+		import.meta.url,
+	),
+);
+
+// MagicQ obfuscates HED text fields on disk. These four sentinels are the
+// native Index values for the first and last rows in both selector blocks.
+// Checking them keeps a re-export from silently restoring Type=None, which
+// makes MagicQ fall back to the 000/128/255 encoder steps.
+const indexedHedSentinels = [
+	[1613, 0xeb],
+	[12578, 0x91],
+	[12619, 0xb9],
+	[23074, 0xe0],
+];
 
 // MagicQ's documented channel-import schema. This is the editable source for the
 // console-specific attribute and encoder placement; the DMX order remains the
@@ -48,25 +71,61 @@ const rows = [
 	"32,FX2 Parameter,LTP,37,B3Y,8 bit,no,no,no,0,0,0,,0,no,yes,1",
 	"33,Speed Multiplr,LTP,11,B1E,8 bit,no,yes,no,127,127,0,,0,no,yes,1",
 	"34,Playback BPM,LTP,13,B1D,8 bit,no,yes,no,0,0,0,,0,no,yes,1",
-	"35,Legacy Blur,LTP,63,B4A,8 bit,no,no,no,0,0,0,,0,no,no,1",
+	// Keep the obsolete wire slot without letting MagicQ place it on an encoder.
+	"35,Reserved,LTP,63,Reserved,8 bit,no,no,no,0,0,0,,0,no,no,1",
 	"36,Mask Position X,LTP,52,B5A,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1",
 	"37,Mask Pos X Fine,LTP,52,B5A,16 bit lo,no,no,no,0,0,0,,0,no,yes,1",
 	"38,Mask Position Y,LTP,53,B5B,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1",
 	"39,Mask Pos Y Fine,LTP,53,B5B,16 bit lo,no,no,no,0,0,0,,0,no,yes,1",
 ];
 
-const csv = `${rows.join("\n")}\n`;
+const channelsCsv = `${rows.join("\n")}\n`;
+// Gobo1/Gobo2 are the MagicQ attributes which bind Media File/Folder to the
+// Media window. One-value ranges provide the exact 000-255 labels used by the
+// installable HED. MagicQ's CSV importer does not expose the HED range-type
+// field, so the packaged HED additionally stores these ranges as Index.
+const rangesCsv = `${[1, 2]
+	.flatMap((channel) =>
+		Array.from({ length: 256 }, (_, value) =>
+			[
+				channel,
+				`${channel === 1 ? "Folder" : "File"} ${String(value).padStart(3, "0")}`,
+				value,
+				value,
+				0,
+				0,
+				"",
+				"",
+			].join(","),
+		),
+	)
+	.join("\n")}\n`;
 const check = process.argv.includes("--check");
 
 if (check) {
-	const current = await readFile(output, "utf8").catch(() => "");
-	if (current !== csv) {
+	const currentChannels = await readFile(channelsOutput, "utf8").catch(() => "");
+	const currentRanges = await readFile(rangesOutput, "utf8").catch(() => "");
+	const currentHed = await readFile(hedOutput).catch(() => Buffer.alloc(0));
+	const hedHasIndexedSelectors =
+		currentHed.length === 25232 &&
+		indexedHedSentinels.every(
+			([offset, expected]) => currentHed[offset] === expected,
+		);
+	if (
+		currentChannels !== channelsCsv ||
+		currentRanges !== rangesCsv ||
+		!hedHasIndexedSelectors
+	) {
 		throw new Error(
-			"MagicQ channel CSV is stale; run npm run generate:magicq-personality",
+			"MagicQ personality assets are stale; regenerate the CSVs and preserve the HED Index range types",
 		);
 	}
-	console.log("MagicQ channel CSV is current.");
+	console.log("MagicQ personality CSVs and indexed HED are current.");
 } else {
-	await writeFile(output, csv);
-	console.log(`Generated ${output}`);
+	await Promise.all([
+		writeFile(channelsOutput, channelsCsv),
+		writeFile(rangesOutput, rangesCsv),
+	]);
+	console.log(`Generated ${channelsOutput}`);
+	console.log(`Generated ${rangesOutput}`);
 }
