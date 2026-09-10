@@ -2,7 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { stubServer } from "../../testing/server";
+import { api } from "../../shared/api/client";
+import { aDmxMap, stubServer } from "../../testing/server";
 import { DmxPage } from "./DmxPage";
 
 class FakeSocket {
@@ -21,6 +22,7 @@ afterEach(() => {
 	FakeSocket.opened = [];
 	window.history.replaceState(null, "", "/");
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
 });
 
 describe("DMX diagnostics", () => {
@@ -30,6 +32,9 @@ describe("DMX diagnostics", () => {
 		const { container } = render(<DmxPage />);
 
 		expect(screen.getByText("Diagnostics")).toHaveClass("ui-window-title");
+		expect(
+			screen.getByRole("button", { name: "Connect to Console" }),
+		).toHaveClass("ui-primary", "media-connect-console");
 		expect(container.querySelector(".media-dmx-window")).toBeInTheDocument();
 		expect(container.querySelector(".media-dmx-content")).toBeInTheDocument();
 		await userEvent.click(
@@ -51,51 +56,160 @@ describe("DMX diagnostics", () => {
 		expect(
 			screen.getByRole("cell", { name: "No frame received" }),
 		).toBeInTheDocument();
+	});
+
+	it("opens actual generated downloads, live patch and console-specific instructions", async () => {
+		stubServer();
+		vi.stubGlobal("WebSocket", undefined);
+		render(<DmxPage />);
 		expect(
-			(
-				await screen.findAllByRole("link", {
-					name: "Download ToskLight Pixel Layer.gdtf",
-				})
-			)[0],
-		).toHaveAttribute(
-			"href",
-			"/api/v2/fixtures/ToskLight%20Pixel%20Layer.gdtf",
-		);
-		expect(
-			screen.getByRole("group", { name: "MagicQ personalities" }),
-		).toContainElement(
-			screen.getByRole("link", {
+			screen.queryByRole("link", {
 				name: "Download ToskLight Pixel Layer.hed",
 			}),
+		).not.toBeInTheDocument();
+		await userEvent.click(
+			screen.getByRole("button", { name: "Connect to Console" }),
 		);
 		expect(
-			screen.getByRole("group", { name: "MagicQ personalities" }),
-		).toContainElement(
-			screen.getByRole("link", {
-				name: "Download ToskLight Pixel Layer Ranges.csv",
+			await screen.findByRole("link", {
+				name: "Download ToskLight Pixel Layer.hed",
 			}),
-		);
+		).toHaveAttribute("href", "/api/v2/fixtures/ToskLight%20Pixel%20Layer.hed");
 		expect(
-			screen.getByRole("group", { name: "MagicQ personalities" }),
-		).toContainElement(
-			screen.getByRole("link", {
-				name: "Download ToskLight Pixel Layer Channels.csv",
-			}),
-		);
+			screen.getByRole("link", { name: "Download ToskLight Pixel Master.hed" }),
+		).toHaveAttribute("download");
 		expect(
-			screen.getByRole("group", { name: "grandMA2 personalities" }),
-		).toContainElement(
+			await screen.findByRole("table", { name: /Suggested .* patch/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/not configured for eight layers/),
+		).toBeInTheDocument();
+		expect(await screen.findByText("0.0.0.0:5568")).toBeInTheDocument();
+		expect(screen.getByText(/Same computer:/)).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				/called Send to applications on this PC in older versions/,
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/Different computers: disable/),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/eight distinct layer previews/),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Connect to Console" }),
+		).toHaveClass("is-active");
+		expect(
+			screen.getByText(/Hold SHIFT and press VIEW SERVERS/),
+		).toBeInTheDocument();
+		expect(screen.getByText(/static thumbnail indicators/)).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				/press RELOAD THUMBS in MagicQ; it does not refresh automatically/,
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/Net host options to Normal, without Loopback IP/),
+		).toBeInTheDocument();
+		const selector = screen.getByRole("combobox", { name: "Console" });
+		await userEvent.selectOptions(selector, "grandMA2");
+		expect(
 			screen.getByRole("link", {
 				name: "Download tosklight@pixel_layer@39ch.xml",
 			}),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("link", {
+				name: "Download tosklight@pixel_master@41ch.xml",
+			}),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("link", {
+				name: "Download ToskLight Pixel Layer.hed",
+			}),
+		).not.toBeInTheDocument();
+		for (const consoleName of ["grandMA3", "GDTF"]) {
+			await userEvent.selectOptions(selector, consoleName);
+			expect(
+				screen.getByRole("link", {
+					name: "Download ToskLight Pixel Layer.gdtf",
+				}),
+			).toHaveAttribute(
+				"href",
+				"/api/v2/fixtures/ToskLight%20Pixel%20Layer.gdtf",
+			);
+			expect(
+				screen.getByRole("link", {
+					name: "Download ToskLight Pixel Master.gdtf",
+				}),
+			).toBeInTheDocument();
+		}
+		await userEvent.click(
+			screen.getByRole("button", { name: "Connect to Console" }),
 		);
 		expect(
-			screen.getByRole("group", { name: "grandMA3 personalities" }),
-		).toContainElement(
-			screen.getAllByRole("link", {
-				name: "Download ToskLight Pixel Layer.gdtf",
-			})[0],
+			screen.queryByRole("combobox", { name: "Console" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("derives all eight layer blocks and the independent master from the running map", async () => {
+		const server = stubServer();
+		vi.stubGlobal("WebSocket", undefined);
+		const output = server.outputs[0];
+		const map = aDmxMap(output.id, output.name);
+		const channel = map.channels[0];
+		map.layerCount = 8;
+		map.personality = "eightLayers";
+		map.startAddress = 10;
+		map.channels = Array.from({ length: 353 }, (_, index) => ({
+			...channel,
+			absoluteChannel: 10 + index,
+			localOffset: index < 312 ? index % 39 : index - 312,
+			group:
+				index < 312
+					? { kind: "layer" as const, number: Math.floor(index / 39) + 1 }
+					: { kind: "master" as const },
+		}));
+		vi.spyOn(api, "dmxMap").mockResolvedValue(map);
+		render(<DmxPage />);
+		await userEvent.click(
+			screen.getByRole("button", { name: "Connect to Console" }),
 		);
+		const table = await screen.findByRole("table", {
+			name: /Suggested .* patch/,
+		});
+		const rows = table.querySelectorAll("tbody tr");
+		expect(rows).toHaveLength(9);
+		expect(
+			[...rows[0].querySelectorAll("td")].map((cell) => cell.textContent),
+		).toEqual(["Layer 1", "3", "10", "48", "39"]);
+		expect(
+			[...rows[7].querySelectorAll("td")].map((cell) => cell.textContent),
+		).toEqual(["Layer 8", "3", "283", "321", "39"]);
+		expect(
+			[...rows[8].querySelectorAll("td")].map((cell) => cell.textContent),
+		).toEqual(["Master", "3", "322", "362", "41"]);
+	});
+
+	it("reports generated download failures instead of showing example links", async () => {
+		stubServer();
+		vi.stubGlobal("WebSocket", undefined);
+		vi.spyOn(api, "fixtures").mockRejectedValue(
+			new Error("server unavailable"),
+		);
+		render(<DmxPage />);
+		await userEvent.click(
+			screen.getByRole("button", { name: "Connect to Console" }),
+		);
+		expect(
+			await screen.findByText(
+				/Could not load personalities:.*server unavailable/,
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("link", { name: /Download/ }),
+		).not.toBeInTheDocument();
 	});
 
 	it("shows pushed winning-source diagnostics and exact raw bytes", async () => {

@@ -23,7 +23,7 @@ Choose the Media personality and configure its Art-Net or sACN universe and star
 
 ### Download console personalities
 
-Open **Diagnostics > Console personalities** in the Pixel management interface. Download both the
+Open **DMX > Connect to Console** in the Pixel management interface. Download both the
 **Layer** and **Master** files for the target desk. Patch one Layer for every configured Pixel layer
 at consecutive addresses, then patch one Master immediately after the last layer. Do not patch the
 Master once per layer.

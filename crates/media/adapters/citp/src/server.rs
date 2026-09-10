@@ -6,10 +6,10 @@
 
 use crate::message::{
     LayerStatus, LibraryElement, LibraryFolder, Presence, Thumbnail, ThumbnailRequest,
-    element_library_information, element_library_thumbnail, element_thumbnail, layer_status,
-    media_element_information, peer_location, read_element_request, read_element_thumbnail_request,
-    read_library_request, read_library_thumbnail_request, read_stream_request, server_information,
-    stream_frame, video_sources,
+    element_library_information, element_library_thumbnail_format, element_thumbnail_format,
+    layer_status, media_element_information, peer_location, read_element_request,
+    read_element_thumbnail_request, read_library_request, read_library_thumbnail_request,
+    read_stream_request, server_information, stream_frame_format, video_sources,
 };
 use crate::packet::{Message, content};
 
@@ -17,7 +17,7 @@ use crate::packet::{Message, content};
 ///
 /// A console states what it supports; the reply is the newest both sides know. A console that
 /// asked for nothing gets 1.0, which every console can read.
-pub const SUPPORTED: [(u8, u8); 3] = [(1, 2), (1, 1), (1, 0)];
+pub const SUPPORTED: [(u8, u8); 2] = [(1, 1), (1, 0)];
 
 /// Chooses the version to answer a request at.
 pub fn negotiate(requested: (u8, u8)) -> (u8, u8) {
@@ -45,6 +45,8 @@ pub trait Library {
 /// One console's subscription to the live preview.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subscription {
+    pub format: [u8; 4],
+    pub version: (u8, u8),
     pub source: u16,
     pub width: u16,
     pub height: u16,
@@ -112,6 +114,15 @@ impl Sessions {
 
     /// Records a console's request, replacing any earlier one for the same source.
     pub fn subscribe(&mut self, request: &crate::message::StreamRequest, now_millis: u64) {
+        self.subscribe_versioned(request, now_millis, (1, 1));
+    }
+
+    pub fn subscribe_versioned(
+        &mut self,
+        request: &crate::message::StreamRequest,
+        now_millis: u64,
+        version: (u8, u8),
+    ) {
         self.expire(now_millis);
         let seconds = if request.single_frame() {
             1
@@ -125,6 +136,8 @@ impl Sessions {
             .map_or(0, |existing| existing.last_sequence);
 
         let subscription = Subscription {
+            format: request.format,
+            version,
             source: request.source,
             width: request.width,
             height: request.height,
@@ -174,7 +187,12 @@ impl Sessions {
                 continue;
             }
             subscription.last_sequence = sequence;
-            if let Some(message) = stream_frame(subscription.source, preview) {
+            if let Some(message) = stream_frame_format(
+                subscription.source,
+                preview,
+                subscription.format,
+                subscription.version,
+            ) {
                 messages.push(message);
             }
             if subscription.single_frame {
@@ -258,7 +276,7 @@ pub fn respond(
                     .iter()
                     .any(|source| source.id == request.source)
             {
-                sessions.subscribe(&request, now_millis);
+                sessions.subscribe_versioned(&request, now_millis, version);
             }
             // A subscription is answered by frames, when there are frames — not by an
             // acknowledgement a console would have to correlate.
@@ -280,7 +298,7 @@ fn library_information(
     version: (u8, u8),
     library: &dyn Library,
 ) -> Vec<Vec<u8>> {
-    let Some(request) = read_library_request(version, &message.body) else {
+    let Some(request) = read_library_request(message.version, &message.body) else {
         return Vec::new();
     };
     let folders: Vec<LibraryFolder> = library
@@ -296,7 +314,7 @@ fn element_information(
     version: (u8, u8),
     library: &dyn Library,
 ) -> Vec<Vec<u8>> {
-    let Some(request) = read_element_request(version, &message.body) else {
+    let Some(request) = read_element_request(message.version, &message.body) else {
         return Vec::new();
     };
     let elements: Vec<LibraryElement> = library
@@ -313,7 +331,7 @@ fn element_information(
 }
 
 fn library_thumbnails(message: &Message, version: (u8, u8), library: &dyn Library) -> Vec<Vec<u8>> {
-    let Some(request) = read_library_thumbnail_request(version, &message.body) else {
+    let Some(request) = read_library_thumbnail_request(message.version, &message.body) else {
         return Vec::new();
     };
     library
@@ -322,13 +340,13 @@ fn library_thumbnails(message: &Message, version: (u8, u8), library: &dyn Librar
         .filter(|folder| wanted(folder.number, &request.folders))
         .filter_map(|folder| {
             let thumbnail = library.thumbnail(folder.number, None, &request)?;
-            element_library_thumbnail(version, folder.number, &thumbnail)
+            element_library_thumbnail_format(version, folder.number, &thumbnail, request.format)
         })
         .collect()
 }
 
 fn element_thumbnails(message: &Message, version: (u8, u8), library: &dyn Library) -> Vec<Vec<u8>> {
-    let Some(request) = read_element_thumbnail_request(version, &message.body) else {
+    let Some(request) = read_element_thumbnail_request(message.version, &message.body) else {
         return Vec::new();
     };
     library
@@ -337,7 +355,13 @@ fn element_thumbnails(message: &Message, version: (u8, u8), library: &dyn Librar
         .filter(|element| wanted(element.number, &request.elements))
         .filter_map(|element| {
             let thumbnail = library.thumbnail(request.folder, Some(element.number), &request)?;
-            element_thumbnail(version, request.folder, element.number, &thumbnail)
+            element_thumbnail_format(
+                version,
+                request.folder,
+                element.number,
+                &thumbnail,
+                request.format,
+            )
         })
         .collect()
 }
@@ -443,7 +467,7 @@ mod tests {
 
     #[test]
     fn a_console_gets_the_newest_version_both_sides_speak() {
-        assert_eq!(negotiate((1, 2)), (1, 2), "never above what we implement");
+        assert_eq!(negotiate((1, 2)), (1, 1), "never above what we implement");
         assert_eq!(negotiate((1, 1)), (1, 1));
         assert_eq!(negotiate((1, 0)), (1, 0), "and never above what it asked");
         assert_eq!(
@@ -461,14 +485,16 @@ mod tests {
     }
 
     #[test]
-    fn a_version_request_is_answered_at_the_negotiated_version() {
+    fn legacy_server_information_always_uses_its_defined_wire_version() {
         let replies = reply(&request(content::CINF, (1, 0), &[]));
         assert_eq!(replies.len(), 1);
         assert_eq!(replies[0].content_type, content::SINF);
         assert_eq!(replies[0].version, (1, 0), "a 1.0 console gets 1.0 back");
 
         let replies = reply(&request(content::CINF, (1, 1), &[]));
-        assert_eq!(replies[0].version, (1, 1));
+        assert_eq!(replies[0].version, (1, 0));
+        let replies = reply(&request(content::CINF, (1, 2), &[3, 1, 2, 1, 1, 1, 0]));
+        assert_eq!(replies[0].version, (1, 0));
     }
 
     #[test]
@@ -504,7 +530,7 @@ mod tests {
         );
         let sources = parse(&replies[0]).unwrap();
         assert_eq!(u16::from_le_bytes(sources.body[..2].try_into().unwrap()), 2);
-        assert_eq!(sources.version, (1, 2));
+        assert_eq!(sources.version, (1, 1));
 
         let unknown = StreamRequest {
             source: 7,

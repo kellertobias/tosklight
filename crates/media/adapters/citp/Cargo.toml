@@ -10,6 +10,7 @@ authors.workspace = true
 # extracted only once both sides prove identical types, not on speculation.
 [dependencies]
 media-domain = { path = "../../domain" }
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 thiserror.workspace = true
 tracing.workspace = true
 

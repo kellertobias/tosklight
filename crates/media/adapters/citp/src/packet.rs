@@ -27,6 +27,7 @@ pub mod content {
     pub const LSTA: [u8; 4] = *b"LSta";
     pub const GELI: [u8; 4] = *b"GELI";
     pub const ELIN: [u8; 4] = *b"ELIn";
+    pub const ELUP: [u8; 4] = *b"ELUp";
     pub const GEIN: [u8; 4] = *b"GEIn";
     pub const MEIN: [u8; 4] = *b"MEIn";
     pub const GELT: [u8; 4] = *b"GELT";
@@ -42,6 +43,7 @@ pub mod content {
 /// The image format this server produces. JPEG is what every desk in the interoperability target
 /// accepts, and it is what the application this replaces sent.
 pub const FORMAT_JPEG: [u8; 4] = *b"JPEG";
+pub const FORMAT_RGB8: [u8; 4] = *b"RGB8";
 
 /// The only library type a media server publishes.
 pub const LIBRARY_TYPE_MEDIA: u8 = 1;

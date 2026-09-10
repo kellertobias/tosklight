@@ -135,15 +135,15 @@ pub fn description_xml(fixture: &FixtureType) -> String {
         };
         xml.push_str(&format!(
             "        <Attribute Name=\"{}\" Pretty=\"{}\" Feature=\"{feature}\"/>\n",
-            escape(&attribute),
-            escape(&attribute)
+            escape(&gdtf_name(&attribute)),
+            escape(&gdtf_name(&attribute))
         ));
     }
     xml.push_str("      </Attributes>\n    </AttributeDefinitions>\n");
 
     xml.push_str("    <Wheels/>\n    <PhysicalDescriptions/>\n    <Models/>\n");
     xml.push_str(&format!(
-        "    <Geometries>\n      <Geometry Name=\"{GEOMETRY}\" Position=\"None\"/>\n    </Geometries>\n"
+        "    <Geometries>\n      <Geometry Name=\"{GEOMETRY}\" Position=\"{{1,0,0,0}}{{0,1,0,0}}{{0,0,1,0}}{{0,0,0,1}}\"/>\n    </Geometries>\n"
     ));
 
     xml.push_str("    <DMXModes>\n");
@@ -398,6 +398,66 @@ mod tests {
         let xml = description_xml(&fixture);
         assert!(xml.contains("Name=\"Once - 2x caf_\""), "{xml}");
         assert!(xml.contains("Name=\"1-255 BPM\""), "{xml}");
+    }
+
+    #[test]
+    fn generated_xml_resolves_attributes_geometry_and_feature_references() {
+        use quick_xml::{Reader, events::Event};
+        use std::collections::HashSet;
+        let mut fixture = fixture();
+        fixture.modes[0].channels[1].attribute = "Flip&mirror".into();
+        let xml = description_xml(&fixture);
+        let mut reader = Reader::from_str(&xml);
+        let mut attributes = HashSet::new();
+        let mut geometries = HashSet::new();
+        let mut references = Vec::new();
+        loop {
+            match reader.read_event().expect("well-formed XML") {
+                Event::Start(element) | Event::Empty(element) => {
+                    let fields = element
+                        .attributes()
+                        .map(|attr| {
+                            let attr = attr.unwrap();
+                            (
+                                String::from_utf8(attr.key.as_ref().to_vec()).unwrap(),
+                                attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                                    .unwrap()
+                                    .into_owned(),
+                            )
+                        })
+                        .collect::<std::collections::HashMap<_, _>>();
+                    match element.name().as_ref() {
+                        b"Attribute" => {
+                            assert!(attributes.insert(fields["Name"].clone()));
+                        }
+                        b"Geometry" => {
+                            geometries.insert(fields["Name"].clone());
+                            assert_eq!(fields["Position"], "{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}");
+                        }
+                        b"LogicalChannel" | b"ChannelFunction" => {
+                            references.push(("attribute", fields["Attribute"].clone()));
+                        }
+                        b"DMXMode" | b"DMXChannel" => {
+                            references.push(("geometry", fields["Geometry"].clone()));
+                        }
+                        _ => {}
+                    }
+                }
+                Event::Eof => break,
+                _ => {}
+            }
+        }
+        for (kind, value) in references {
+            assert!(
+                if kind == "attribute" {
+                    attributes.contains(&value)
+                } else {
+                    geometries.contains(&value)
+                },
+                "unresolved {kind}: {value}"
+            );
+        }
+        assert!(attributes.contains("Flip_mirror"));
     }
 
     #[test]

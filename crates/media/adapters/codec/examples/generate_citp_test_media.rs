@@ -28,7 +28,55 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     write_jpeg(&library.join(".thumbs/001-thumb.jpg"), &frames[0])?;
     write_clip(&library.join("001-CITP Test Pattern.toskclip"), &frames)?;
     fs::write(library.join(".info"), "CITP Test\n")?;
+    if std::env::args().any(|arg| arg == "--eight-layers") {
+        for layer in 2..=8 {
+            let frames = (0..FRAMES)
+                .map(|frame| layer_pattern(frame, layer))
+                .collect::<Vec<_>>();
+            write_png(
+                &root.join(format!("source/{layer:03}-Layer-{layer}.png")),
+                &frames[0],
+            )?;
+            write_jpeg(
+                &library.join(format!(".thumbs/{layer:03}-thumb.jpg")),
+                &frames[0],
+            )?;
+            write_clip(
+                &library.join(format!("{layer:03}-Layer {layer} Test Pattern.toskclip")),
+                &frames,
+            )?;
+        }
+    }
     Ok(())
+}
+
+fn layer_pattern(frame: u32, layer: u32) -> Vec<u8> {
+    let colours = [
+        [230, 60, 40],
+        [30, 190, 80],
+        [30, 90, 240],
+        [235, 190, 20],
+        [200, 35, 210],
+        [20, 190, 210],
+        [235, 110, 20],
+        [150, 90, 235],
+    ];
+    let colour = colours[(layer - 1) as usize];
+    let mut rgba = Vec::with_capacity((WIDTH * HEIGHT * 4) as usize);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            // Countable white bars identify the layer, with a moving bottom marker.
+            let bar = y > 10 && y < 48 && x / 14 < layer && x % 14 < 7;
+            let marker = y > 60 && x.abs_diff(8 + frame * 14) < 4;
+            let rgb = if bar || marker {
+                [255, 255, 255]
+            } else {
+                colour
+            };
+            rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
+        }
+    }
+    rgba
 }
 
 fn pattern(frame: u32) -> Vec<u8> {

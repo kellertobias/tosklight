@@ -26,6 +26,8 @@ media-text = { path = "../text" }
 muda = { workspace = true, optional = true }
 png.workspace = true
 jpeg-encoder = "0.6"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+socket2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true

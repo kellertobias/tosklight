@@ -4,6 +4,9 @@
 //! console. Everything a message *means* is decided in `media-citp`, which has no sockets, so what
 //! is left here is carrying bytes and answering from the live catalog and state.
 
+#[path = "citp_connection.rs"]
+mod connection;
+
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 
@@ -215,9 +218,8 @@ impl Library for PublishedLibrary {
                 configuration.time.utc_offset_minutes,
             );
         }
-        // A folder's own picture is its first item's, which is what an operator recognises the
-        // folder by. Resizing to the console's exact request would need a decoder in the request
-        // path; CITP carries the real dimensions, so the stored thumbnail is sent as it is.
+        // A folder's own picture is its first item's. Honor the requested dimensions: consoles
+        // can allocate fixed thumbnail tiles and do not necessarily scale larger cached images.
         let file = element.or_else(|| {
             self.catalog
                 .folder(u16::from(folder))
@@ -226,13 +228,7 @@ impl Library for PublishedLibrary {
         })?;
         let path = self.storage.thumbnail_path(MediaAddress::new(folder, file));
         let jpeg = std::fs::read(path).ok()?;
-        let (width, height) = jpeg_size(&jpeg)?;
-        let thumbnail = Thumbnail {
-            width,
-            height,
-            jpeg,
-        };
-        thumbnail.fits().then_some(thumbnail)
+        resize_thumbnail(&jpeg, request)
     }
 
     fn timestamp(&self) -> u64 {
@@ -264,6 +260,30 @@ fn jpeg_size(jpeg: &[u8]) -> Option<(u16, u16)> {
         at += 2 + length.max(2);
     }
     None
+}
+
+fn resize_thumbnail(jpeg: &[u8], request: &ThumbnailRequest) -> Option<Thumbnail> {
+    let (width, height) = jpeg_size(jpeg)?;
+    let target = thumbnail_size(request, u32::from(width), u32::from(height));
+    if target.width == u32::from(width)
+        && target.height == u32::from(height)
+        && jpeg.len() <= usize::from(u16::MAX)
+    {
+        return Some(Thumbnail {
+            width,
+            height,
+            jpeg: jpeg.to_vec(),
+        });
+    }
+    let image = image::load_from_memory_with_format(jpeg, image::ImageFormat::Jpeg)
+        .ok()?
+        .to_rgba8();
+    crate::preview::encode(
+        image.as_raw(),
+        Size::new(image.width(), image.height()),
+        target,
+    )
+    .ok()
 }
 
 fn visualizer_thumbnail(kind: VisualizerKind, request: &ThumbnailRequest) -> Option<Thumbnail> {
@@ -313,7 +333,10 @@ fn text_thumbnail(
 }
 
 fn thumbnail_size(request: &ThumbnailRequest, width: u32, height: u32) -> Size {
-    let requested = Size::new(u32::from(request.width), u32::from(request.height));
+    let requested = Size::new(
+        u32::from(request.width).clamp(1, 640),
+        u32::from(request.height).clamp(1, 360),
+    );
     if !request.preserve_aspect || width == 0 || height == 0 {
         return requested;
     }
@@ -560,9 +583,17 @@ async fn announce(
     console_identity: ConsoleIdentity,
     listen: SocketAddr,
 ) {
-    let socket = match bind("CITP discovery", listen, PortSharing::Shared)
-        .map_err(|error| error.to_string())
-        .and_then(|socket| UdpSocket::from_std(socket).map_err(|error| error.to_string()))
+    let socket = match bind(
+        "CITP discovery",
+        discovery_bind_address(listen),
+        PortSharing::Shared,
+    )
+    .map_err(|error| error.to_string())
+    .and_then(|socket| {
+        configure_discovery_interface(&socket, listen.ip()).map_err(|error| error.to_string())?;
+        Ok(socket)
+    })
+    .and_then(|socket| UdpSocket::from_std(socket).map_err(|error| error.to_string()))
     {
         Ok(socket) => socket,
         Err(error) => {
@@ -616,6 +647,29 @@ async fn announce(
     }
 }
 
+fn discovery_bind_address(listen: SocketAddr) -> SocketAddr {
+    // MagicQ binds specifically to 127.0.0.1:4809. A second equally specific socket
+    // steals unicast announcements on macOS. The wildcard receiver leaves those
+    // datagrams to the console while still receiving multicast discovery.
+    if listen.ip().is_loopback() && listen.is_ipv4() {
+        SocketAddr::from((Ipv4Addr::UNSPECIFIED, listen.port()))
+    } else {
+        listen
+    }
+}
+
+fn configure_discovery_interface(
+    socket: &std::net::UdpSocket,
+    ip: std::net::IpAddr,
+) -> std::io::Result<()> {
+    if let std::net::IpAddr::V4(interface) = ip {
+        // Binding a source address does not choose the multicast route on macOS. In particular,
+        // a loopback-bound socket otherwise tries the default LAN route and fails with EADDRNOTAVAIL.
+        socket2::SockRef::from(socket).set_multicast_if_v4(&interface)?;
+    }
+    socket.set_multicast_loop_v4(true)
+}
+
 fn announcement_targets(listen: SocketAddr, multicast: Ipv4Addr) -> Vec<SocketAddr> {
     let mut targets = vec![SocketAddr::from((multicast, media_citp::CITP_PORT))];
     if listen.ip().is_unspecified() || listen.ip().is_loopback() {
@@ -654,7 +708,7 @@ async fn listen_for_consoles(service: Service, listen: SocketAddr, shutdown: Shu
                     } else {
                         tracing::debug!(%peer, "a present console opened another connection");
                     }
-                    tokio::spawn(serve_console(
+                    tokio::spawn(connection::serve_console(
                         service.clone(),
                         stream,
                         peer,
@@ -669,164 +723,116 @@ async fn listen_for_consoles(service: Service, listen: SocketAddr, shutdown: Shu
     }
 }
 
-/// One console, for as long as it stays connected.
-async fn serve_console(
-    service: Service,
-    mut stream: tokio::net::TcpStream,
-    peer: SocketAddr,
-    shutdown: Shutdown,
-    presence: ConsolePresence,
-) {
-    // Some CITP consumers receive StFr on the standard multicast group even though the RqSt
-    // lifecycle travels over TCP. Multicast is additive: the requesting TCP peer always receives
-    // the same bounded frame directly as well.
-    let multicast = UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))
-        .await
-        .ok();
-    let multicast_group =
-        SocketAddr::from((Ipv4Addr::from(MULTICAST_GROUP), media_citp::CITP_PORT));
-    let mut sessions = Sessions::new();
-    let mut pending: Vec<u8> = Vec::new();
-    let mut buffer = vec![0u8; READ_BUFFER];
-    let started = std::time::Instant::now();
-
-    // The greeting goes out before the console asks anything, so it knows what it reached.
-    if stream
-        .write_all(&media_citp::greeting(&service.identity()))
-        .await
-        .is_err()
-    {
-        return;
-    }
-
-    let mut status = tokio::time::interval(STATUS_INTERVAL);
-    // What this connection last told the outputs it wanted, so a change is reported once rather
-    // than every tick.
-    let mut subscribed_sources = std::collections::BTreeSet::new();
-    let mut sent_sequences = std::collections::BTreeMap::new();
-    let mut watcher = shutdown.watcher();
-    let mut stopping = Box::pin(watcher.wait());
-
-    'connected: loop {
-        tokio::select! {
-            read = stream.read(&mut buffer) => {
-                let Ok(count) = read else { break };
-                if count == 0 {
-                    break; // the console hung up
-                }
-                pending.extend_from_slice(&buffer[..count]);
-
-                let messages = match packet::take_messages(&mut pending) {
-                    Ok(messages) => messages,
-                    Err(error) => {
-                        tracing::warn!(%peer, %error, "a console sent something that is not CITP");
-                        break;
-                    }
-                };
-                for message in messages {
-                    let now = started.elapsed().as_millis() as u64;
-                    let request_sessions = std::mem::take(&mut sessions);
-                    let responder = service.clone();
-                    let answered = tokio::task::spawn_blocking(move || {
-                        let mut sessions = request_sessions;
-                        let replies = media_citp::respond(
-                            &message,
-                            &responder.identity(),
-                            &responder.library(),
-                            &mut sessions,
-                            now,
-                        );
-                        (sessions, replies)
-                    })
-                    .await;
-                    let Ok((updated_sessions, replies)) = answered else {
-                        tracing::warn!(%peer, "a CITP request worker stopped unexpectedly");
-                        break 'connected;
-                    };
-                    sessions = updated_sessions;
-                    for reply in replies {
-                        if stream.write_all(&reply).await.is_err() {
-                            break 'connected;
-                        }
-                    }
-                }
-            }
-            _ = status.tick() => {
-                if stream
-                    .write_all(&media_citp::status(&service.layer_status()))
-                    .await
-                    .is_err()
-                {
-                    break 'connected;
-                }
-
-                let now = started.elapsed().as_millis() as u64;
-                let active = sessions.active_sources(now).into_iter().collect::<std::collections::BTreeSet<_>>();
-                for source in subscribed_sources.difference(&active) {
-                    if let Some(preview) = service.previews.for_source(*source) {
-                        preview.subscribed(false, None);
-                    }
-                }
-                for source in active.difference(&subscribed_sources) {
-                    if let Some(preview) = service.previews.for_source(*source) {
-                        preview.subscribed(true, sessions.requested_size_for(*source, now));
-                        if let Some((sequence, _)) = preview.latest() {
-                            // A browser refresh asks for one frame at a time. Do not satisfy that
-                            // request with the cached frame from before it subscribed; wait for
-                            // the renderer capture triggered above so moving output stays live.
-                            sessions.acknowledge_cached_sequence(*source, sequence);
-                            sent_sequences.insert(*source, sequence);
-                        }
-                    }
-                }
-                for source in &active {
-                    let Some(preview) = service.previews.for_source(*source) else { continue };
-                    preview.requested_size_is(sessions.requested_size_for(*source, now));
-                    let Some((sequence, frame)) = preview.latest() else { continue };
-                    if sent_sequences.get(source) == Some(&sequence) { continue; }
-                    sent_sequences.insert(*source, sequence);
-                    for message in sessions.frames_for_source(*source, &frame, sequence, now) {
-                        if stream.write_all(&message).await.is_err() {
-                            break 'connected;
-                        }
-                        if let Some(socket) = multicast.as_ref()
-                            && let Err(error) = socket.send_to(&message, multicast_group).await
-                        {
-                            tracing::debug!(%error, "CITP multicast preview frame was not delivered");
-                        }
-                    }
-                }
-                subscribed_sources = active;
-            }
-            _ = &mut stopping => break 'connected,
-        }
-    }
-    for source in subscribed_sources {
-        if let Some(preview) = service.previews.for_source(source) {
-            preview.subscribed(false, None);
-        }
-    }
-    report_console_departure(peer, presence);
-}
-
-/// A console is reported as gone only once it has stayed away, so the short connections a desk
-/// opens for one request each never appear as a disconnection.
-fn report_console_departure(peer: SocketAddr, presence: ConsolePresence) {
-    tracing::debug!(%peer, "a console connection closed");
-    let Some(generation) = presence.departed(peer.ip()) else {
-        return;
-    };
-    tokio::spawn(async move {
-        tokio::time::sleep(PRESENCE_SETTLE).await;
-        if presence.settled(peer.ip(), generation) {
-            tracing::info!(console = %peer.ip(), "a console disconnected");
-        }
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn loopback_console_receives_announcements_after_pixel_binds_the_shared_port() {
+        let console = bind(
+            "MagicQ",
+            "127.0.0.1:0".parse().unwrap(),
+            PortSharing::Shared,
+        )
+        .unwrap();
+        let address = console.local_addr().unwrap();
+        let pixel = bind(
+            "Pixel",
+            discovery_bind_address(address),
+            PortSharing::Shared,
+        )
+        .unwrap();
+        let pixel = UdpSocket::from_std(pixel).unwrap();
+        let console = UdpSocket::from_std(console).unwrap();
+        let announcement = media_citp::announcement("Pixel", address.port());
+        pixel.send_to(&announcement, address).await.unwrap();
+        let mut buffer = [0; 512];
+        let (count, _) = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            console.recv_from(&mut buffer),
+        )
+        .await
+        .expect("the console, not Pixel, receives loopback discovery")
+        .unwrap();
+        assert_eq!(&buffer[..count], announcement);
+    }
+
+    #[tokio::test]
+    async fn loopback_discovery_multicast_reaches_a_second_console_socket() {
+        let receiver = bind(
+            "console discovery",
+            "0.0.0.0:0".parse().unwrap(),
+            PortSharing::Shared,
+        )
+        .unwrap();
+        let port = receiver.local_addr().unwrap().port();
+        let group = Ipv4Addr::from(MULTICAST_GROUP);
+        receiver
+            .join_multicast_v4(&group, &Ipv4Addr::LOCALHOST)
+            .unwrap();
+        let receiver = UdpSocket::from_std(receiver).unwrap();
+        let sender = bind(
+            "Pixel discovery",
+            "127.0.0.1:0".parse().unwrap(),
+            PortSharing::Shared,
+        )
+        .unwrap();
+        configure_discovery_interface(&sender, Ipv4Addr::LOCALHOST.into()).unwrap();
+        let sender = UdpSocket::from_std(sender).unwrap();
+        let announcement = media_citp::announcement("Pixel loopback", 4809);
+        sender
+            .send_to(&announcement, SocketAddr::from((group, port)))
+            .await
+            .unwrap();
+        let mut buffer = [0; 512];
+        let (count, peer) = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            receiver.recv_from(&mut buffer),
+        )
+        .await
+        .expect("loopback multicast arrives")
+        .unwrap();
+        assert_eq!(peer.ip(), Ipv4Addr::LOCALHOST);
+        assert_eq!(&buffer[..count], announcement);
+    }
+
+    #[test]
+    fn stored_thumbnails_are_resampled_to_console_tiles_and_keep_real_pixels() {
+        let source = crate::preview::encode(
+            &[240, 20, 10, 255].repeat(320 * 180),
+            Size::new(320, 180),
+            Size::new(320, 180),
+        )
+        .unwrap();
+        let mut request = ThumbnailRequest {
+            format: packet::FORMAT_JPEG,
+            width: 64,
+            height: 64,
+            preserve_aspect: true,
+            folder: 1,
+            elements: vec![1],
+            folders: Vec::new(),
+        };
+        let resized = resize_thumbnail(&source.jpeg, &request).unwrap();
+        assert_eq!((resized.width, resized.height), (64, 36));
+        let pixels = image::load_from_memory(&resized.jpeg).unwrap().to_rgb8();
+        assert!(pixels.get_pixel(32, 18).0[0] > 200);
+        request.preserve_aspect = false;
+        let stretched = resize_thumbnail(&source.jpeg, &request).unwrap();
+        assert_eq!((stretched.width, stretched.height), (64, 64));
+        request.width = u16::MAX;
+        request.height = u16::MAX;
+        let bounded = resize_thumbnail(&source.jpeg, &request).unwrap();
+        assert!(bounded.width <= 640 && bounded.height <= 360);
+        assert!(bounded.fits());
+    }
+
+    #[tokio::test]
+    async fn preview_multicast_uses_the_console_connections_local_interface() {
+        let socket = connection::preview_socket(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST)).unwrap();
+        assert_eq!(socket.local_addr().unwrap().ip(), Ipv4Addr::LOCALHOST);
+        assert!(socket.multicast_loop_v4().unwrap());
+    }
 
     /// The smallest possible JPEG frame header: SOI, a start-of-frame with one 16×8 image.
     fn tiny_jpeg() -> Vec<u8> {
@@ -879,6 +885,7 @@ mod tests {
                 250,
                 Some(1),
                 &ThumbnailRequest {
+                    format: packet::FORMAT_JPEG,
                     width: 160,
                     height: 90,
                     preserve_aspect: true,

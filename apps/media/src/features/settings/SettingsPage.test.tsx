@@ -17,7 +17,9 @@ describe("the settings page", () => {
 		renderSettings();
 
 		const tabs = screen.getByRole("tablist");
-		expect(tabs).toHaveTextContent("LibrariesPictureSoundNetworkDMXPixel MapLogs");
+		expect(tabs).toHaveTextContent(
+			"LibrariesPictureSoundNetworkDMXPixel MapLogs",
+		);
 		expect(tabs).not.toHaveTextContent("Audio");
 		expect(await screen.findByLabelText("Art-Net")).toBeVisible();
 		expect(
@@ -49,7 +51,9 @@ describe("the settings page", () => {
 	it("keeps the web settings available and warns when Art-Net could not bind", async () => {
 		stubSettingsServer({
 			network: aNetwork({
-				warnings: ["Art-Net is unavailable at 0.0.0.0:6454. Pixel started without Art-Net input."],
+				warnings: [
+					"Art-Net is unavailable at 0.0.0.0:6454. Pixel started without Art-Net input.",
+				],
 			}),
 		});
 		renderSettings();
@@ -182,6 +186,29 @@ describe("the settings page", () => {
 		expect(
 			await screen.findByText(/Saved output changes take effect/u),
 		).toBeVisible();
+	});
+
+	it("offers the generated effect-bank layout with its complete 353-slot footprint", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("DMX");
+		await screen.findByRole("article", { name: "Main DMX input settings" });
+		await choose(
+			"Full master controls (v3)",
+			"Effect banks and full master controls",
+		);
+		expect(
+			await screen.findByRole("button", { name: "8 layers (353 slots)" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				"1 to 160; the complete 353-slot personality must fit in one universe.",
+			),
+		).toBeInTheDocument();
+		await waitFor(() => expect(output.writes).toHaveLength(1));
+		expect(output.writes[0]).toMatchObject({
+			personalityLayout: "effect-banks",
+		});
 	});
 
 	it("opens DMX directly and saves only the DMX intent", async () => {
@@ -415,6 +442,7 @@ type OutputConfigurationValues = {
 	soundOutputKind: "disabled" | "system-default" | "device";
 	soundOutputName: string | null;
 	personality: "two-layers" | "eight-layers";
+	personalityLayout: "legacy" | "current" | "extended" | "effect-banks";
 	protocol: "art-net" | "sacn";
 	universe: number;
 	startAddress: number;
@@ -534,6 +562,8 @@ function installOutputConfiguration(configuration: OutputConfiguration) {
 						configuration.active.soundOutputName;
 				configuration.dmxPendingRestart =
 					configuration.personality !== configuration.active.personality ||
+					configuration.personalityLayout !==
+						configuration.active.personalityLayout ||
 					configuration.protocol !== configuration.active.protocol ||
 					configuration.universe !== configuration.active.universe ||
 					configuration.startAddress !== configuration.active.startAddress;
@@ -562,6 +592,7 @@ function activeOutputConfiguration(): OutputConfigurationValues {
 		soundOutputKind: "disabled",
 		soundOutputName: null,
 		personality: "eight-layers",
+		personalityLayout: "extended",
 		protocol: "art-net",
 		universe: 0,
 		startAddress: 1,

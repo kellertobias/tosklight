@@ -8,6 +8,7 @@
 
 pub mod configuration;
 pub mod gdtf;
+pub mod magicq;
 
 pub use configuration::{
     ConfigurationDocument, ConfigurationError, MediaConfiguration, NetworkConfiguration,

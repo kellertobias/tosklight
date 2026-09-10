@@ -401,7 +401,9 @@ function DmxInputFields({
 			? 7
 			: personalityLayout === "current"
 				? 11
-				: 40;
+				: personalityLayout === "extended"
+					? 40
+					: 41;
 	const footprint =
 		(personality === "two-layers" ? 2 : 8) * slotsPerLayer + masterSlots;
 	const highestStartAddress = 513 - footprint;
@@ -428,7 +430,11 @@ function DmxInputFields({
 				options={[
 					{ value: "legacy", label: "Legacy (existing desk patches)" },
 					{ value: "current", label: "Mask positioning (v2)" },
-					{ value: "extended", label: "Full master controls" },
+					{ value: "extended", label: "Full master controls (v3)" },
+					{
+						value: "effect-banks",
+						label: "Effect banks and full master controls",
+					},
 				]}
 				onChange={setPersonalityLayout}
 			/>

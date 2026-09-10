@@ -9,23 +9,27 @@ use axum::response::{IntoResponse, Response};
 
 use crate::error::ApiError;
 
-pub(super) async fn fixtures() -> impl IntoResponse {
+pub(super) async fn fixtures() -> Result<impl IntoResponse, ApiError> {
     let names: Vec<String> = media_application::gdtf::packages()
-        .map(|packaged| packaged.into_iter().map(|(name, _)| name).collect())
-        .unwrap_or_default();
-    axum::Json(names)
+        .map_err(generation_error)?
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    Ok(([(header::CACHE_CONTROL, "no-store")], axum::Json(names)))
+}
+
+fn generation_error(error: std::io::Error) -> ApiError {
+    tracing::error!(%error, "the console personalities could not be generated");
+    ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "fixture-not-generated",
+        "the fixture file could not be built",
+    )
 }
 
 /// One console personality in its native download format.
 pub(super) async fn fixture(Path(name): Path<String>) -> Result<Response, ApiError> {
-    let packaged = media_application::gdtf::packages().map_err(|error| {
-        tracing::error!(%error, "the GDTF fixtures could not be generated");
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "fixture-not-generated",
-            "the fixture file could not be built",
-        )
-    })?;
+    let packaged = media_application::gdtf::packages().map_err(generation_error)?;
     let (_, bytes) = packaged
         .into_iter()
         .find(|(candidate, _)| *candidate == name)
@@ -35,6 +39,7 @@ pub(super) async fn fixture(Path(name): Path<String>) -> Result<Response, ApiErr
 
     Ok((
         [
+            (header::CACHE_CONTROL, "no-store".to_owned()),
             (header::CONTENT_TYPE, content_type(&name).to_owned()),
             (
                 header::CONTENT_DISPOSITION,
@@ -125,6 +130,36 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("application/xml")
         );
+    }
+
+    #[tokio::test]
+    async fn every_advertised_download_matches_the_running_canonical_generator() {
+        let bench = bench();
+        let (_, listing) = send(&bench.router, get("/api/v2/fixtures".into())).await;
+        let names: Vec<String> = serde_json::from_value(listing).unwrap();
+        let packages = media_application::gdtf::packages().unwrap();
+        assert_eq!(names.len(), packages.len());
+        for (name, expected) in packages {
+            assert!(names.contains(&name));
+            let response = bench
+                .router
+                .clone()
+                .oneshot(get(format!(
+                    "/api/v2/fixtures/{}",
+                    name.replace(' ', "%20")
+                )))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{name}");
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+            assert_eq!(
+                response.headers()[header::CONTENT_DISPOSITION],
+                format!("attachment; filename=\"{name}\"")
+            );
+            let actual = response.into_body().collect().await.unwrap().to_bytes();
+            assert_eq!(actual.as_ref(), expected.as_slice(), "{name}");
+            assert!(!actual.is_empty(), "{name}");
+        }
     }
 
     #[tokio::test]

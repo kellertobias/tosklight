@@ -34,7 +34,7 @@ Open **Show Patch > Media Servers** to discover ToskLight Pixel Media servers on
 The Media Server may report that its DMX input change needs a restart; Show Patch keeps that state visible. An unreachable server or discovery failure does not disable the ordinary fixture-library and manual Media Server patch workflows.
 
 Pixel also publishes GDTF and desk-native personality downloads in its management interface under
-**Diagnostics > Console personalities**. Use those files when patching Pixel from MagicQ,
+**DMX > Connect to Console**. Use those files when patching Pixel from MagicQ,
 grandMA2, grandMA3, or another GDTF-compatible desk. The Layer and Master personalities come from
 the same canonical channel layout as Pixel's DMX receiver; patch every Layer consecutively and one
 Master immediately after them.

@@ -267,6 +267,45 @@ mod tests {
     }
 
     #[test]
+    fn eight_layer_patch_has_identical_blocks_and_an_independent_master() {
+        let mut output = configured_output();
+        output.personality = LayerPersonality::EightLayers;
+        output.start_address = 160; // Highest valid full-footprint start.
+        let view = DmxMapView::of(&output);
+        for layer in 0..8usize {
+            for slot in 0..usize::from(LAYER_SLOTS) {
+                let first = &view.channels[slot];
+                let channel = &view.channels[layer * usize::from(LAYER_SLOTS) + slot];
+                assert_eq!(
+                    channel.group,
+                    DmxChannelGroupView::Layer {
+                        number: layer as u16 + 1
+                    }
+                );
+                assert_eq!(
+                    channel.absolute_channel,
+                    first.absolute_channel + layer as u16 * LAYER_SLOTS
+                );
+                assert_eq!(channel.local_offset, first.local_offset);
+                assert_eq!(channel.name, first.name);
+                assert_eq!(channel.resolution, first.resolution);
+                assert_eq!(channel.default_value, first.default_value);
+                assert_eq!(channel.value_sets, first.value_sets);
+            }
+        }
+        let master = &view.channels[usize::from(8 * LAYER_SLOTS)..];
+        assert_eq!(master.len(), usize::from(MASTER_SLOTS));
+        assert_eq!(master[0].absolute_channel, 472);
+        assert_eq!(master.last().unwrap().absolute_channel, 512);
+        assert!(
+            master
+                .iter()
+                .all(|channel| channel.group == DmxChannelGroupView::Master)
+        );
+        assert!(master.last().unwrap().implemented);
+    }
+
+    #[test]
     fn canonical_defaults_value_sets_and_resolution_reach_the_wire() {
         let view = DmxMapView::of(&configured_output());
         let first_layer = &view.channels[..usize::from(LAYER_SLOTS)];

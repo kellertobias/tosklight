@@ -4,9 +4,8 @@
 //! binds it, validates once, and routes universes to outputs — rather than each output binding for
 //! itself and depending on platform-specific socket reuse.
 //!
-//! A bind conflict is reported with the exact address and port rather than being papered over.
-//! `SO_REUSEPORT` behaviour differs by platform, so relying on it would make the same
-//! configuration work on one operating system and fail on another.
+//! LAN Art-Net binds remain exclusive. The explicit loopback path can share with a console's
+//! wildcard sender: its more specific destination binding receives the console's local unicast.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -61,12 +60,9 @@ pub const fn sacn_multicast_group(universe: u16) -> std::net::Ipv4Addr {
 
 /// Whether a port may be shared with another process.
 ///
-/// This is the difference between the two protocols, and it is deliberate rather than incidental.
-/// A multicast group is designed to be shared — a media server and a monitoring tool both
-/// listening to sACN on 5568 is ordinary — so that socket sets address reuse. Art-Net's unicast
-/// port is not: two processes splitting a desk's packets between them is a fault, and the whole
-/// point of the bind check is to surface it. Setting address reuse there would defeat it, because
-/// BSD-derived systems then allow the second bind.
+/// Multicast listeners share by design. Art-Net stays exclusive on LAN addresses, while a
+/// specifically bound loopback receiver can coexist with a console's wildcard sender. Sharing
+/// two receivers on the exact same unicast address is not a packet fan-out mechanism.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortSharing {
     /// Fail if another process already holds the port.
@@ -142,7 +138,23 @@ pub struct ArtNetListener {
 
 impl ArtNetListener {
     pub fn bind(address: SocketAddr) -> Result<Self, IngressError> {
-        let socket = bind("Art-Net", address, PortSharing::Exclusive)?;
+        Self::bind_with_sharing(address, PortSharing::Exclusive)
+    }
+
+    /// Receive a local console's unicast even when that console also owns the Art-Net port.
+    /// Bind Pixel specifically to 127.0.0.1 and direct the console there; a shared wildcard
+    /// receiver would allow the OS to distribute packets between applications unpredictably.
+    pub fn bind_for_console(address: SocketAddr) -> Result<Self, IngressError> {
+        let sharing = if address.ip().is_loopback() {
+            PortSharing::Shared
+        } else {
+            PortSharing::Exclusive
+        };
+        Self::bind_with_sharing(address, sharing)
+    }
+
+    fn bind_with_sharing(address: SocketAddr, sharing: PortSharing) -> Result<Self, IngressError> {
+        let socket = bind("Art-Net", address, sharing)?;
         Ok(Self {
             socket: Arc::new(UdpSocket::from_std(socket).map_err(|source| {
                 IngressError::BindConflict {
@@ -358,6 +370,37 @@ mod tests {
         assert_eq!(frame.source, CommandSource::ArtNet);
         assert_eq!(frame.source_label, "127.0.0.1");
         assert_eq!(frame.slots, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn local_art_net_console_can_send_from_the_same_port_without_losing_frames() {
+        // Model a console that binds wildcard for network output and a Pixel instance explicitly
+        // bound to loopback. Test delivery, not just that both bind calls succeed.
+        let console = bind("console", "0.0.0.0:0".parse().unwrap(), PortSharing::Shared).unwrap();
+        let destination =
+            SocketAddr::from((Ipv4Addr::LOCALHOST, console.local_addr().unwrap().port()));
+        let console = UdpSocket::from_std(console).unwrap();
+        let mut pixel = ArtNetListener::bind_for_console(destination).unwrap();
+        for sequence in 1..=32 {
+            console
+                .send_to(&artnet::encode(1, sequence, &[sequence, 200]), destination)
+                .await
+                .unwrap();
+            let received =
+                tokio::time::timeout(std::time::Duration::from_secs(1), pixel.receive(now))
+                    .await
+                    .expect("every frame reaches Pixel");
+            assert_eq!(received.slots, [sequence, 200]);
+        }
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(20),
+                console.recv_from(&mut [0; 512])
+            )
+            .await
+            .is_err(),
+            "console does not steal its own outgoing unicast"
+        );
     }
 
     #[tokio::test]

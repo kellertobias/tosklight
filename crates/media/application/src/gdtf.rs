@@ -1,8 +1,8 @@
 //! The GDTF fixtures a console imports to patch this server.
 //!
-//! The open interchange files are generated from the canonical personality. MagicQ's native HED
-//! files are compiled compatibility artifacts because ChamSys does not publish that encoding; the
-//! adjacent generated channel CSV is the editable source for its exact attribute and encoder map.
+//! All formats are generated at runtime from the canonical personality. The native MagicQ
+//! writer shares that table, including byte resolution, home values, and decoder ranges.
+//! grandMA3 imports the generated GDTF files natively.
 //!
 //! Two fixtures, matching how a media server is patched: one layer, which an operator patches once
 //! per layer, and one master. That is why the domain names a single-layer and a master-only
@@ -37,7 +37,7 @@ pub fn layer_fixture() -> FixtureType {
     }
 }
 
-/// The complete 40-slot master fixture that begins immediately after the controlled layers.
+/// The complete 41-slot master fixture that begins immediately after the controlled layers.
 pub fn master_fixture() -> FixtureType {
     FixtureType {
         name: "ToskLight Pixel Master".into(),
@@ -61,33 +61,15 @@ pub fn packages() -> std::io::Result<Vec<(String, Vec<u8>)>> {
     Ok(vec![
         ("ToskLight Pixel Layer.gdtf".into(), package(&layer)?),
         ("ToskLight Pixel Master.gdtf".into(), package(&master)?),
-        (
-            "ToskLight Pixel Layer.hed".into(),
-            include_bytes!(
-                "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer.hed"
-            )
-            .to_vec(),
-        ),
-        (
-            "ToskLight Pixel Master.hed".into(),
-            include_bytes!(
-                "../../../../assets/media-personalities/magicq/ToskLight Pixel Master.hed"
-            )
-            .to_vec(),
-        ),
+        ("ToskLight Pixel Layer.hed".into(), crate::magicq::layer()),
+        ("ToskLight Pixel Master.hed".into(), crate::magicq::master()),
         (
             "ToskLight Pixel Layer Channels.csv".into(),
-            include_bytes!(
-                "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer Channels.csv"
-            )
-            .to_vec(),
+            crate::magicq::channels_csv(false).into_bytes(),
         ),
         (
             "ToskLight Pixel Layer Ranges.csv".into(),
-            include_bytes!(
-                "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer Ranges.csv"
-            )
-            .to_vec(),
+            crate::magicq::ranges_csv(false).into_bytes(),
         ),
         (
             "tosklight@pixel_layer@39ch.xml".into(),
@@ -143,6 +125,21 @@ fn grandma2_xml(fixture: &FixtureType) -> String {
 }
 
 fn grandma2_channel_xml(index: usize, channel: &Channel) -> String {
+    // Give each custom control a distinct ChannelFunction attribute identity instead of
+    // reusing DUMMY for unrelated controls. Derive the identity from the canonical name
+    // and preserve its readable label. Native MA2 import still requires console validation.
+    let custom_attribute = format!(
+        "TLPIXEL_{}",
+        channel
+            .attribute
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else {
+                '_'
+            })
+            .collect::<String>()
+    );
     let (attribute, feature, preset, subattribute) = match channel.name.as_str() {
         "Media Library" => (
             "MEDIASERVERINPUTDIRECTORY",
@@ -156,8 +153,14 @@ fn grandma2_channel_xml(index: usize, channel: &Channel) -> String {
             "GOBO",
             "MEDIASERVERINPUTFILESELECT",
         ),
-        "Dimmer" => ("DIM", "DIMMER", "DIMMER", "DIM"),
-        _ => ("DUMMY", "CONTROL", "CONTROL", "NOFEATURE"),
+        "Dimmer" | "Master dimmer" => ("DIM", "DIMMER", "DIMMER", "DIM"),
+        "Legacy Blur (ignored)" => ("DUMMY", "CONTROL", "CONTROL", "NOFEATURE"),
+        _ => (
+            custom_attribute.as_str(),
+            "TLPIXEL",
+            "CONTROL",
+            custom_attribute.as_str(),
+        ),
     };
     let fine = match channel.width {
         Width::Byte => String::new(),
@@ -248,7 +251,7 @@ fn channels(table: &[media_domain::personality::channels::ChannelSpec]) -> Vec<C
 /// interval, so each matching byte becomes a one-byte set. Sorting all starts together preserves
 /// the decoder exactly rather than turning four interleaved values into four false blocks.
 fn channel_sets(spec: &media_domain::personality::channels::ChannelSpec) -> Vec<ChannelSet> {
-    if matches!(spec.name, "Folder" | "File") {
+    if matches!(spec.name, "Folder" | "File" | "Mask folder" | "Mask file") {
         return (0_u16..=255)
             .map(|value| ChannelSet {
                 name: format!("{} {value:03}", spec.name),
@@ -469,20 +472,20 @@ mod tests {
         }
         for mapping in [
             "Playback BPM,LTP,13,B1D",
-            "Speed Multiplr,LTP,11,B1E",
+            "Speed Multiplier,LTP,11,B1E",
             "Play Mode,LTP,10,B1F",
             "Media Folder,LTP,9,B1Y",
             "Media File,LTP,8,B1X",
             "Cyan,LTP,16,C1E",
             "Magenta,LTP,17,C1F",
             "Yellow,LTP,18,C1Y",
-            "Greyscale,LTP,19,C1X",
+            "Greyscale,LTP,6,C1X",
             "Scale Y,LTP,48,P1C",
             "Scale X,LTP,49,P1D",
             "Rotation,LTP,50,P1E",
             "Scale Mode,LTP,51,P1F",
-            "Pos Y,LTP,5,P1Y",
-            "Pos X,LTP,4,P1X",
+            "Position Y,LTP,5,P1Y",
+            "Position X,LTP,4,P1X",
             "Volume,LTP,1,I1Y",
             "Dimmer,HTP,0,I1X",
             "FX1 Select,LTP,28,B2X",
@@ -501,28 +504,31 @@ mod tests {
             assert!(csv.contains(mapping), "missing MagicQ mapping {mapping}");
         }
         assert!(
-            csv.contains("35,Playback BPM F,LTP,13,B1D,16 bit lo"),
-            "the legacy Blur wire slot must be hidden as Playback BPM's fine byte"
+            csv.contains("35,,LTP,62,,8 bit"),
+            "the ignored wire byte must not consume an encoder or change BPM resolution"
         );
     }
 
     #[test]
-    fn magicq_media_selectors_have_one_range_per_dmx_value() {
-        let csv = include_str!(
-            "../../../../assets/media-personalities/magicq/ToskLight Pixel Layer Ranges.csv"
-        );
-        let rows = csv.lines().collect::<Vec<_>>();
-        assert_eq!(rows.len(), 512);
-        for channel in [1, 2] {
-            let label = if channel == 1 { "Folder" } else { "File" };
-            let channel_rows = rows
-                .iter()
+    fn magicq_selector_ranges_use_native_dynamic_library_marker() {
+        let csv = crate::magicq::ranges_csv(false);
+        for channel in [1, 2, 21, 22] {
+            let rows: Vec<_> = csv
+                .lines()
                 .filter(|row| row.starts_with(&format!("{channel},")))
-                .copied()
-                .collect::<Vec<_>>();
-            assert_eq!(channel_rows.len(), 256);
-            assert!(channel_rows[0].contains(&format!(",{label} 000,0,0,")));
-            assert!(channel_rows[255].contains(&format!(",{label} 255,255,255,")));
+                .collect();
+            assert_eq!(rows, vec![format!("{channel},Dynamic,0,255,0,0,,")]);
+        }
+        // The interchange fixtures still enumerate the complete independent byte domain.
+        for channel in layer_fixture().modes[0].channels.iter().filter(|channel| {
+            matches!(
+                channel.name.as_str(),
+                "Media Library" | "Media Visual" | "Mask folder" | "Mask file"
+            )
+        }) {
+            assert_eq!(channel.sets.len(), 256);
+            assert_eq!(channel.sets[0].from, 0);
+            assert_eq!(channel.sets[255].from, 255);
         }
     }
 
@@ -535,6 +541,31 @@ mod tests {
         assert!(xml.contains("coarse=\"4\" fine=\"5\" default=\"32768\""));
         assert!(xml.contains("name=\"Folder 007\" from_dmx=\"7\" to_dmx=\"7\""));
         assert!(xml.ends_with("</MA>\n"));
+    }
+
+    #[test]
+    fn grandma2_controls_have_distinct_attributes_and_master_home() {
+        for fixture in [layer_fixture(), master_fixture()] {
+            let xml = grandma2_xml(&fixture);
+            let mut attributes = std::collections::HashSet::new();
+            for line in xml.lines().filter(|line| line.contains("<ChannelType ")) {
+                let attribute = line
+                    .split("attribute=\"")
+                    .nth(1)
+                    .unwrap()
+                    .split('"')
+                    .next()
+                    .unwrap();
+                assert!(
+                    attributes.insert(attribute),
+                    "duplicate MA2 attribute {attribute}"
+                );
+            }
+            assert_eq!(attributes.len(), fixture.modes[0].channels.len());
+        }
+        assert!(grandma2_xml(&master_fixture()).contains(
+            "attribute=\"DIM\" feature=\"DIMMER\" preset=\"DIMMER\" coarse=\"1\" default=\"255\""
+        ));
     }
 
     #[test]

@@ -69,10 +69,16 @@ struct OutputPreviews {
 impl SharedPreviews {
     pub fn configured(configuration: &media_application::MediaConfiguration) -> Self {
         let mut used = std::collections::BTreeSet::new();
-        let by_output = configuration
+        // Resolve rare 16-bit collisions in UUID order so reordering outputs in the UI cannot
+        // make cached console subscriptions point at another output or layer after restart.
+        let mut outputs = configuration
             .outputs
             .iter()
             .filter(|output| output.enabled)
+            .collect::<Vec<_>>();
+        outputs.sort_by_key(|output| output.id);
+        let by_output = outputs
+            .into_iter()
             .map(|output| {
                 let bytes = output.id.as_uuid().into_bytes();
                 let mut source = u16::from_le_bytes([bytes[0], bytes[1]]).max(1);
@@ -411,6 +417,36 @@ mod tests {
 
     fn image(size: Size, colour: [u8; 4]) -> Vec<u8> {
         colour.repeat(size.width as usize * size.height as usize)
+    }
+
+    #[test]
+    fn output_reordering_preserves_all_nine_preview_identities_even_on_collision() {
+        let mut first = media_application::configuration::OutputConfiguration::new("First");
+        let mut second = media_application::configuration::OutputConfiguration::new("Second");
+        first.id = OutputId::from_uuid("11220000-0000-4000-8000-000000000001".parse().unwrap());
+        second.id = OutputId::from_uuid("11220000-0000-4000-8000-000000000002".parse().unwrap());
+        first.personality = media_domain::LayerPersonality::EightLayers;
+        second.personality = media_domain::LayerPersonality::EightLayers;
+        let mut configuration = media_application::MediaConfiguration {
+            outputs: vec![first.clone(), second.clone()],
+            ..Default::default()
+        };
+        let before = SharedPreviews::configured(&configuration);
+        configuration.outputs.reverse();
+        let after = SharedPreviews::configured(&configuration);
+        for output in [first.id, second.id] {
+            assert_eq!(
+                before.source_for_output(output),
+                after.source_for_output(output)
+            );
+            for layer in 0..8 {
+                assert_eq!(
+                    before.source_for_layer(output, layer),
+                    after.source_for_layer(output, layer)
+                );
+                assert!(before.source_for_layer(output, layer).is_some());
+            }
+        }
     }
 
     #[test]

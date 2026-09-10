@@ -308,7 +308,7 @@ pub fn spawn(
             .iter()
             .any(|(protocol, _)| *protocol == DmxProtocol::ArtNet)
     {
-        match ArtNetListener::bind(resolved.art_net_listen) {
+        match ArtNetListener::bind_for_console(resolved.art_net_listen) {
             Ok(mut listener) => {
                 tracing::info!(address = %resolved.art_net_listen, "listening for Art-Net");
                 let (routes, state, mut watcher, now, diagnostics, handoffs, inputs) = (

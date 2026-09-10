@@ -66,15 +66,16 @@ pub fn peer_location(presence: &Presence<'_>) -> Vec<u8> {
 }
 
 /// What this server is, sent as soon as a console connects and again whenever it asks.
-pub fn server_information(name: &str, version: (u8, u8), layers: u8) -> Vec<u8> {
+pub fn server_information(name: &str, _version: (u8, u8), layers: u8) -> Vec<u8> {
     let mut body = Body::new();
     body.ucs2(name).u8(0).u8(1).u8(layers);
-    // One DMX source string per layer. Empty means "this layer is not separately patched", which
-    // is true: one Media personality covers every layer of an output.
+    // One DMX source string per layer. Address routing is configured independently; an empty
+    // string leaves the console's explicit per-layer patch authoritative.
     for _ in 0..layers {
         body.ucs1("");
     }
-    msex_message(content::SINF, version, body.as_slice())
+    // SInf has no 1.1 wire layout: servers supporting 1.0/1.1 use the 1.0 greeting.
+    msex_message(content::SINF, (1, 0), body.as_slice())
 }
 
 /// One layer, as a console's status display reads it.
@@ -258,6 +259,15 @@ pub fn element_library_thumbnail(
     folder: u8,
     thumbnail: &Thumbnail,
 ) -> Option<Vec<u8>> {
+    element_library_thumbnail_format(version, folder, thumbnail, FORMAT_JPEG)
+}
+
+pub fn element_library_thumbnail_format(
+    version: (u8, u8),
+    folder: u8,
+    thumbnail: &Thumbnail,
+    format: [u8; 4],
+) -> Option<Vec<u8>> {
     if !thumbnail.fits() {
         return None;
     }
@@ -269,7 +279,7 @@ pub fn element_library_thumbnail(
     } else {
         body.u8(folder);
     }
-    append_image(&mut body, thumbnail);
+    append_image_format(&mut body, thumbnail, format, version)?;
     Some(msex_message(
         content::ELTH,
         (1, if detailed { 1 } else { 0 }),
@@ -284,6 +294,16 @@ pub fn element_thumbnail(
     element: u8,
     thumbnail: &Thumbnail,
 ) -> Option<Vec<u8>> {
+    element_thumbnail_format(version, folder, element, thumbnail, FORMAT_JPEG)
+}
+
+pub fn element_thumbnail_format(
+    version: (u8, u8),
+    folder: u8,
+    element: u8,
+    thumbnail: &Thumbnail,
+    format: [u8; 4],
+) -> Option<Vec<u8>> {
     if !thumbnail.fits() {
         return None;
     }
@@ -296,7 +316,7 @@ pub fn element_thumbnail(
         body.u8(folder);
     }
     body.u8(element);
-    append_image(&mut body, thumbnail);
+    append_image_format(&mut body, thumbnail, format, version)?;
     Some(msex_message(
         content::ETHN,
         (1, if detailed { 1 } else { 0 }),
@@ -334,21 +354,76 @@ pub fn video_sources(version: (u8, u8), sources: &[VideoSource]) -> Vec<u8> {
 
 /// One preview frame.
 pub fn stream_frame(source: u16, frame: &Thumbnail) -> Option<Vec<u8>> {
+    stream_frame_format(source, frame, FORMAT_JPEG, (1, 1))
+}
+
+pub fn stream_frame_format(
+    source: u16,
+    frame: &Thumbnail,
+    format: [u8; 4],
+    version: (u8, u8),
+) -> Option<Vec<u8>> {
     if !frame.fits() || frame.jpeg.is_empty() {
         return None;
     }
     let mut body = Body::new();
     body.u16(source);
-    append_image(&mut body, frame);
-    Some(msex_message(content::STFR, (1, 1), body.as_slice()))
+    append_image_format(&mut body, frame, format, version)?;
+    Some(msex_message(content::STFR, version, body.as_slice()))
 }
 
-fn append_image(body: &mut Body, image: &Thumbnail) {
-    body.four_cc(FORMAT_JPEG)
-        .u16(image.width)
-        .u16(image.height)
-        .u16(image.jpeg.len() as u16)
-        .bytes(&image.jpeg);
+fn append_image_format(
+    body: &mut Body,
+    thumbnail: &Thumbnail,
+    format: [u8; 4],
+    version: (u8, u8),
+) -> Option<()> {
+    if format == FORMAT_JPEG {
+        body.four_cc(format)
+            .u16(thumbnail.width)
+            .u16(thumbnail.height)
+            .u16(thumbnail.jpeg.len().try_into().ok()?)
+            .bytes(&thumbnail.jpeg);
+    } else if format == crate::packet::FORMAT_RGB8 {
+        let image =
+            image::load_from_memory_with_format(&thumbnail.jpeg, image::ImageFormat::Jpeg).ok()?;
+        // RGB8 must fit the protocol's 16-bit buffer length, including for stream requests.
+        let scale = (21800.0 / (f64::from(image.width()) * f64::from(image.height())))
+            .sqrt()
+            .min(1.0);
+        let width = (f64::from(image.width()) * scale).floor().max(1.0) as u32;
+        let height = (f64::from(image.height()) * scale).floor().max(1.0) as u32;
+        let mut pixels = image
+            .resize_exact(width, height, image::imageops::FilterType::Triangle)
+            .to_rgb8()
+            .into_raw();
+        if version == (1, 0) {
+            for pixel in pixels.chunks_exact_mut(3) {
+                pixel.swap(0, 2);
+            }
+        }
+        body.four_cc(format)
+            .u16(width as u16)
+            .u16(height as u16)
+            .u16(pixels.len().try_into().ok()?)
+            .bytes(&pixels);
+    } else {
+        return None;
+    }
+    Some(())
+}
+
+/// Notify a console that a folder's content and membership must be fetched again.
+pub fn library_updated(version: (u8, u8), folder: u8) -> Vec<u8> {
+    let mut body = Body::new();
+    body.u8(LIBRARY_TYPE_MEDIA);
+    if version >= (1, 1) {
+        body.library_id(1, folder);
+    } else {
+        body.u8(folder);
+    }
+    body.u8(0x0f);
+    msex_message(content::ELUP, version, body.as_slice())
 }
 
 // Requests, read from what a console sent.
@@ -413,6 +488,7 @@ pub fn read_element_request(version: (u8, u8), body: &[u8]) -> Option<ElementReq
 /// What a console asked for when it requested thumbnails.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThumbnailRequest {
+    pub format: [u8; 4],
     pub width: u16,
     pub height: u16,
     pub preserve_aspect: bool,
@@ -435,6 +511,7 @@ pub fn read_library_thumbnail_request(version: (u8, u8), body: &[u8]) -> Option<
         reader.list(11, count)
     };
     Some(ThumbnailRequest {
+        format: reader.four_cc(0),
         width: reader.u16(4),
         height: reader.u16(6),
         preserve_aspect: reader.u8(8) & 0x01 != 0,
@@ -457,6 +534,7 @@ pub fn read_element_thumbnail_request(version: (u8, u8), body: &[u8]) -> Option<
         (reader.u8(10), reader.u8(11), 12)
     };
     Some(ThumbnailRequest {
+        format: reader.four_cc(0),
         width: reader.u16(4),
         height: reader.u16(6),
         preserve_aspect: reader.u8(8) & 0x01 != 0,
@@ -510,6 +588,48 @@ mod tests {
 
     fn body_of(message: &[u8]) -> Message {
         parse(message).expect("a built message frames")
+    }
+
+    #[test]
+    fn rgb8_thumbnail_requests_receive_pixels_in_the_requested_version_order() {
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 95)
+            .encode(
+                &[240, 20, 10].repeat(16),
+                4,
+                4,
+                image::ExtendedColorType::Rgb8,
+            )
+            .unwrap();
+        let thumbnail = Thumbnail {
+            width: 4,
+            height: 4,
+            jpeg,
+        };
+        let old = body_of(
+            &element_thumbnail_format((1, 0), 3, 7, &thumbnail, crate::packet::FORMAT_RGB8)
+                .unwrap(),
+        );
+        let new = body_of(
+            &element_thumbnail_format((1, 1), 3, 7, &thumbnail, crate::packet::FORMAT_RGB8)
+                .unwrap(),
+        );
+        assert_eq!(&old.body[3..7], b"RGB8");
+        assert_eq!(&new.body[6..10], b"RGB8");
+        assert_eq!(old.body.len(), 13 + 48);
+        assert_eq!(new.body.len(), 16 + 48);
+        assert!(new.body[16] > 200, "RGB red first");
+        assert!(old.body[13] < 30, "legacy BGR blue first");
+        assert_eq!(old.body[15], new.body[16]);
+    }
+
+    #[test]
+    fn library_refresh_keeps_the_same_folder_identity_in_each_supported_version() {
+        let old = body_of(&library_updated((1, 0), 250));
+        let new = body_of(&library_updated((1, 1), 250));
+        assert_eq!(old.content_type, content::ELUP);
+        assert_eq!(old.body, [1, 250, 15]);
+        assert_eq!(new.body, [1, 1, 250, 0, 0, 15]);
     }
 
     #[test]
