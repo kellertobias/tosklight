@@ -30,12 +30,14 @@ use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
-use winit::window::{Icon, Window, WindowId};
+use winit::window::{Icon, Window, WindowId, WindowLevel};
 
 use crate::shutdown::{Shutdown, ShutdownReason};
 
 const APPLICATION_ICON_PNG: &[u8] =
     include_bytes!("../../../../../assets/branding/ToskLight Pixel.png");
+const FULLSCREEN_DOUBLE_CLICK_INTERVAL: std::time::Duration =
+    std::time::Duration::from_millis(500);
 
 fn application_icon() -> Option<Icon> {
     let decoder = png::Decoder::new(std::io::Cursor::new(APPLICATION_ICON_PNG));
@@ -261,6 +263,7 @@ enum RenderCommand {
 struct WindowMode {
     fullscreen: bool,
     normal_size: Size,
+    last_left_click: Option<std::time::Instant>,
 }
 
 struct PresentationWorker {
@@ -374,7 +377,12 @@ impl PresentationHost {
             .with_position(selected.position())
             // Windows otherwise briefly exposes a caption and frame before Winit completes its
             // borderless transition. A configured full-screen output must never have either.
-            .with_decorations(!(*fullscreen && cfg!(target_os = "windows")));
+            .with_decorations(!(*fullscreen && cfg!(target_os = "windows")))
+            .with_window_level(if *fullscreen && cfg!(target_os = "windows") {
+                WindowLevel::AlwaysOnTop
+            } else {
+                WindowLevel::Normal
+            });
 
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
@@ -460,6 +468,7 @@ impl PresentationHost {
                             configuration.resolution.width,
                             configuration.resolution.height,
                         ),
+                        last_left_click: None,
                     },
                 );
                 self.windows.push(window);
@@ -588,12 +597,14 @@ impl PresentationHost {
             return;
         };
         window.set_fullscreen(None);
+        window.set_window_level(WindowLevel::Normal);
         window.set_decorations(true);
         let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(
             mode.normal_size.width,
             mode.normal_size.height,
         ));
         mode.fullscreen = false;
+        mode.last_left_click = None;
         if let Some(worker) = &self.worker {
             let _ = worker
                 .commands
@@ -630,7 +641,31 @@ impl PresentationHost {
         window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(
             monitors[index].clone(),
         ))));
+        window.set_window_level(WindowLevel::AlwaysOnTop);
     }
+
+    fn handle_left_click(&mut self, window_id: WindowId) {
+        let Some(mode) = self.window_modes.get_mut(&window_id) else {
+            return;
+        };
+        if register_fullscreen_click(mode, std::time::Instant::now()) {
+            self.restore_window(window_id);
+        } else {
+            self.show_fullscreen_hint(window_id);
+        }
+    }
+}
+
+fn register_fullscreen_click(mode: &mut WindowMode, now: std::time::Instant) -> bool {
+    if !mode.fullscreen {
+        mode.last_left_click = None;
+        return false;
+    }
+    let double_click = mode.last_left_click.is_some_and(|previous| {
+        now.saturating_duration_since(previous) <= FULLSCREEN_DOUBLE_CLICK_INTERVAL
+    });
+    mode.last_left_click = (!double_click).then_some(now);
+    double_click
 }
 
 fn windows_command_chord(modifiers: ModifiersState) -> bool {
@@ -1077,7 +1112,7 @@ impl ApplicationHandler for PresentationHost {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
                 ..
-            } => self.show_fullscreen_hint(id),
+            } if cfg!(target_os = "windows") => self.handle_left_click(id),
             WindowEvent::RedrawRequested => {}
             _ => {}
         }
@@ -1090,6 +1125,8 @@ impl ApplicationHandler for PresentationHost {
             #[cfg(target_os = "windows")]
             window.set_decorations(false);
             window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(monitor))));
+            #[cfg(target_os = "windows")]
+            window.set_window_level(WindowLevel::AlwaysOnTop);
         }
         if self.shutdown.reason().is_some() {
             event_loop.exit();

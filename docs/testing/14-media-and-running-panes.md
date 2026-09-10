@@ -45,7 +45,7 @@ After a macOS or Windows multi-file selection is accepted, the Library opens in 
 
 ## PIXEL-003 — Windows fullscreen recovery and display movement
 
-On Windows, start Pixel with a monitor output configured fullscreen. The picture covers that display without a border, frame, or title. Clicking the picture shows a short overlay naming **Ctrl + Shift + -** as the way back to a normal decorated window and **Ctrl + Shift + Arrow** as display movement; it remains visible above a blacked-out master and disappears without changing the picture. With displays arranged on multiple sides, each arrow chord moves the focused picture to the nearest display in that direction and keeps it fullscreen. A direction with no display does nothing. The minus chord returns only the focused output to its configured window size.
+On Windows, start Pixel with a monitor output configured fullscreen. The picture covers that display without a border, frame, or title and stays above other applications on that display. Clicking the picture shows a short overlay naming double-click or **Ctrl + Shift + -** as the way back to a normal decorated window and **Ctrl + Shift + Arrow** as display movement; it remains visible above a blacked-out master and disappears without changing the picture. Double-clicking returns only that output to its configured window size and normal window level. With displays arranged on multiple sides, each arrow chord moves the focused picture to the nearest display in that direction and keeps it fullscreen and always on top. A direction with no display does nothing. The minus chord provides the same focused-output restore behavior.
 
 ## PIXEL-004 — media file and folder notes
 

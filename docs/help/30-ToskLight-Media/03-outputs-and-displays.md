@@ -8,7 +8,7 @@ Choose either a physical monitor or an off-screen output. A monitor output store
 
 Use the test pattern after every monitor, cable, resolution, refresh-rate, or fullscreen change. A browser preview proves that the engine rendered a frame; only the physical test pattern proves that the intended display received it.
 
-On Windows, fullscreen picture outputs are borderless and have no title bar or window frame. Click a fullscreen output to show its short recovery hint. Press **Ctrl + Shift + -** to return that output to a normal window. Press **Ctrl + Shift + an arrow key** to move the still-fullscreen output to the nearest display in that direction; at the edge of the desktop, the output stays on its current display.
+On Windows, fullscreen picture outputs are borderless, have no title bar or window frame, and stay above other windows on their display. Click a fullscreen output to show its short recovery hint. Double-click the picture, or press **Ctrl + Shift + -**, to return that output to a normal decorated window. Press **Ctrl + Shift + an arrow key** to move the still-fullscreen output to the nearest display in that direction; at the edge of the desktop, the output stays on its current display.
 
 > [!danger] Missing graphic
 > Add an output-configuration screenshot showing physical versus off-screen destination, monitor selection, fullscreen, render resolution, presentation rate, and test pattern.

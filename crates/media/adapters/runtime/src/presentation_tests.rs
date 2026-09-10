@@ -118,6 +118,39 @@ fn fullscreen_commands_require_exactly_control_and_shift() {
 }
 
 #[test]
+fn two_quick_clicks_restore_a_fullscreen_output() {
+    let first = std::time::Instant::now();
+    let mut mode = WindowMode {
+        fullscreen: true,
+        normal_size: Size::new(1280, 720),
+        last_left_click: None,
+    };
+
+    assert!(!register_fullscreen_click(&mut mode, first));
+    assert!(register_fullscreen_click(
+        &mut mode,
+        first + std::time::Duration::from_millis(250)
+    ));
+    assert!(mode.last_left_click.is_none());
+}
+
+#[test]
+fn separated_clicks_do_not_restore_a_fullscreen_output() {
+    let first = std::time::Instant::now();
+    let mut mode = WindowMode {
+        fullscreen: true,
+        normal_size: Size::new(1280, 720),
+        last_left_click: None,
+    };
+
+    assert!(!register_fullscreen_click(&mut mode, first));
+    assert!(!register_fullscreen_click(
+        &mut mode,
+        first + FULLSCREEN_DOUBLE_CLICK_INTERVAL + std::time::Duration::from_millis(1)
+    ));
+}
+
+#[test]
 fn an_unconfigured_first_run_asks_for_its_visible_output_window() {
     assert!(needs_a_window(&MediaConfiguration::default()));
 }

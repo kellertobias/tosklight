@@ -4,7 +4,7 @@ use media_domain::{Alignment, Size, TextStyle, Tint};
 
 use crate::standby::Frame;
 
-pub const RESTORE_CHORD: &str = "Ctrl + Shift + -";
+pub const RESTORE_ACTION: &str = "Double-click or Ctrl + Shift + -";
 pub const MOVE_CHORD: &str = "Ctrl + Shift + Arrow";
 
 pub fn render(size: Size) -> anyhow::Result<Frame> {
@@ -33,7 +33,7 @@ pub fn render(size: Size) -> anyhow::Result<Frame> {
     draw_line(
         &mut frame,
         &mut fonts,
-        &format!("Return to a window: {RESTORE_CHORD}"),
+        &format!("Return to a window: {RESTORE_ACTION}"),
         top + 20,
         38,
         Tint::WHITE,
