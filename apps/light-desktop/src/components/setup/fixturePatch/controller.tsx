@@ -87,6 +87,7 @@ function usePatchUiState() {
 	const [activeLayer, setActiveLayer] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
 	const [browserOpen, setBrowserOpen] = useState(false);
+	const [csvImportOpen, setCsvImportOpen] = useState(false);
 	const [placementOpen, setPlacementOpen] = useState(false);
 	const [placementAddressOpen, setPlacementAddressOpen] = useState(false);
 	const [layerModal, setLayerModal] = useState<"add" | "select" | null>(null);
@@ -149,6 +150,8 @@ function usePatchUiState() {
 		setSelectedFixture,
 		browserOpen,
 		setBrowserOpen,
+		csvImportOpen,
+		setCsvImportOpen,
 		placementOpen,
 		setPlacementOpen,
 		placementAddressOpen,

@@ -27,6 +27,10 @@ export interface NewPatchFixture {
 	address: number | null;
 	split_patches?: SplitPatch[];
 	layer_id?: string;
+	/** Installed stage location in millimetres; defaults to the origin. */
+	location?: { x: number; y: number; z: number };
+	/** Installed rotation in degrees; defaults to no rotation. */
+	rotation?: { x: number; y: number; z: number };
 }
 
 export type PatchDefinitionResolver = (
@@ -75,8 +79,8 @@ export function newPatchFixtureCandidate(
 			fixture.definition.profile_snapshot?.patch_policy === "internal"
 				? { library: "default", output: "default" }
 				: {},
-		location: { x: 0, y: 0, z: 0 },
-		rotation: { x: 0, y: 0, z: 0 },
+		location: { ...(fixture.location ?? { x: 0, y: 0, z: 0 }) },
+		rotation: { ...(fixture.rotation ?? { x: 0, y: 0, z: 0 }) },
 		logical_heads: [],
 		multipatch: [],
 		group_masters_enabled: true,

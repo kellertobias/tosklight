@@ -1453,12 +1453,13 @@ describe("selected split selection and SET editing", () => {
 		expect(
 			within(actions)
 				.getAllByRole("button")
-				.slice(0, 7)
+				.slice(0, 8)
 				.map((button) => button.textContent),
 		).toEqual([
 			"Open Stage Renderer",
 			"+ Add layer",
 			"+ Add fixture",
+			"Import CSV",
 			"+ Add multi-patch",
 			"Delete",
 			"Fixtures",
@@ -1476,7 +1477,7 @@ describe("selected split selection and SET editing", () => {
 			),
 		).toEqual([
 			["Open Stage Renderer"],
-			["+ Add layer", "+ Add fixture", "+ Add multi-patch"],
+			["+ Add layer", "+ Add fixture", "Import CSV", "+ Add multi-patch"],
 			["Delete"],
 			["Fixtures", "Media Servers"],
 		]);
@@ -1485,12 +1486,13 @@ describe("selected split selection and SET editing", () => {
 		expect(
 			within(actions)
 				.getAllByRole("button")
-				.slice(0, 7)
+				.slice(0, 8)
 				.map((button) => button.textContent),
 		).toEqual([
 			"Open Stage Renderer",
 			"+ Add layer",
 			"+ Add fixture",
+			"Import CSV",
 			"+ Add multi-patch",
 			"Delete",
 			"Fixtures",
@@ -2807,5 +2809,123 @@ describe("schema-v2 all-conflict resolution", () => {
 		});
 		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 		expect(confirm).toHaveBeenCalledOnce();
+	});
+});
+
+describe("CSV patch import", () => {
+	function libraryProfile(manufacturer: string, name: string, id: string) {
+		const profile = blankFixtureProfile();
+		profile.id = id;
+		profile.manufacturer = manufacturer;
+		profile.name = name;
+		profile.short_name = name;
+		return profile;
+	}
+
+	it("assigns columns, matches exactly, resolves unknown types in the wizard, and imports once", async () => {
+		const dimmer = libraryProfile("Generic", "Dimmer", "profile-dimmer");
+		const wash = libraryProfile("Acme", "Wash", "profile-wash");
+		server.fixtureProfiles = [dimmer, wash];
+		server.patch.fixtures = [];
+		patchFeature.patchFixtures.mockResolvedValue([
+			{ fixtureId: "a", selectionFixtureIds: ["a"] },
+			{ fixtureId: "b", selectionFixtureIds: ["b"] },
+		]);
+		render(<FixturePatchSetup />);
+		fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
+		const csv = [
+			"Patch;Fixture ID;Fixture Name;Manufacturer;Fixture Type;Mode;X;Y;Z;RotX;RotY;RotZ;Notes",
+			`1.1;201;Dim A;generic;DIMMER;${dimmer.modes[0].name};1;2;3;0;0;90;front`,
+			"2.1;202;Wash A;Other;Mystery;Basic;0;0;0;0;0;0;",
+		].join("\n");
+		fireEvent.change(screen.getByLabelText("CSV file"), {
+			target: { files: [new File([csv], "rig.csv", { type: "text/csv" })] },
+		});
+
+		await screen.findByRole("list", { name: "Column assignments" });
+		expect(
+			screen.getByRole("button", { name: "Assign column Fixture Type" }),
+		).toHaveTextContent("Fixture Type");
+		expect(
+			screen.getByRole("button", { name: "Assign column RotZ" }),
+		).toHaveTextContent("RotZ");
+		expect(
+			screen.getByRole("button", { name: "Assign column Notes" }),
+		).toHaveTextContent("Ignore");
+
+		fireEvent.click(screen.getByRole("button", { name: "Next: fixture types" }));
+		expect(
+			screen.getByRole("heading", { name: "Other Mystery · Basic" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /^generic DIMMER.*Exact match/ }),
+		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Next: review" })).toBeDisabled();
+
+		fireEvent.click(screen.getByRole("button", { name: /^WashAcme/ }));
+		fireEvent.click(screen.getByRole("button", { name: "Use this fixture" }));
+		fireEvent.click(screen.getByRole("button", { name: "Next: review" }));
+		fireEvent.click(screen.getByRole("button", { name: "Import 2 fixtures" }));
+
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		const candidates = patchFeature.patchFixtures.mock.calls[0][0] as Array<{
+			fixture: PatchedFixture;
+		}>;
+		expect(candidates.map((candidate) => candidate.fixture)).toMatchObject([
+			{
+				fixture_number: 201,
+				name: "Dim A",
+				definition: { manufacturer: "Generic", name: "Dimmer" },
+				universe: 1,
+				address: 1,
+				location: { x: 1000, y: 2000, z: 3000 },
+				rotation: { x: 0, y: 0, z: 90 },
+			},
+			{
+				fixture_number: 202,
+				name: "Wash A",
+				definition: { manufacturer: "Acme", name: "Wash" },
+				universe: 2,
+				address: 1,
+			},
+		]);
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: /Import CSV/ }),
+			).not.toBeInTheDocument(),
+		);
+	});
+
+	it("keeps the dialog open with a visible error when the server rejects the import", async () => {
+		const dimmer = libraryProfile("Generic", "Dimmer", "profile-dimmer");
+		server.fixtureProfiles = [dimmer];
+		server.patch.fixtures = [];
+		patchFeature.patchFixtures.mockRejectedValue(
+			new Error("Fixture ID 1 is already patched"),
+		);
+		render(<FixturePatchSetup />);
+		fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
+		fireEvent.change(screen.getByLabelText("CSV file"), {
+			target: {
+				files: [
+					new File(["Fixture Type,Patch\nDimmer,1.1\n"], "one.csv", {
+						type: "text/csv",
+					}),
+				],
+			},
+		});
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Next: fixture types" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Import 1 fixture" }));
+
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"Fixture ID 1 is already patched",
+		);
+		expect(
+			screen.getByRole("dialog", { name: /Import CSV/ }),
+		).toBeInTheDocument();
 	});
 });

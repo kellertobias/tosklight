@@ -43,6 +43,11 @@ export function PatchHeader() {
 						onPress: () => ui.setBrowserOpen(true),
 					},
 					{
+						id: "csv-import",
+						label: "Import CSV",
+						onPress: () => ui.setCsvImportOpen(true),
+					},
+					{
 						id: "multipatch",
 						label: "+ Add multi-patch",
 						disabled: !data.selected,

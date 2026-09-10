@@ -25,6 +25,24 @@ Use **+ Add fixture** to search by type, manufacturer, fixture family, and mode,
 
 The manufacturer column is ordered **All manufacturers**, **Generic**, **Venue**, then the actual manufacturers alphabetically. Venue profiles are scenic objects rather than DMX fixtures. Their placement dialog assigns fixture IDs from the reserved `0.x` range, beginning at `0.1`, and asks for name, count, and mode but has no Address field or universe grid. The Patch, MIB, MIB Delay, and Highlight cells show that no DMX patch applies. They remain ordinary transferable show objects with editable location, rotation, and layer. They appear in Show Patch and Stage but are excluded from the Fixture Sheet, which contains programmable fixtures only. The same exclusion applies independently to every `visual_only` profile and every complete fixture ID beginning `0.` so imported or legacy scenery cannot leak into the programming table.
 
+## Importing a CSV Patch List
+
+Use **Import CSV** in the Show Patch title bar to add a whole fixture list from a spreadsheet, paperwork export, or another desk. Every CSV row becomes one fixture. The import only adds fixtures; it never changes or removes fixtures already in the show.
+
+1. **Columns.** Choose the file. Comma, semicolon, and tab separated files are detected automatically, and quoted cells may contain the separator. Choose whether the first row holds **Column names** or **Fixture data**, and whether X / Y / Z are in **Metres** or **Millimetres**. Above every column, assign **Patch**, **Fixture ID**, **Fixture Name**, **Fixture Type**, **Manufacturer**, **Mode**, **X**, **Y**, **Z**, **RotX**, **RotY**, **RotZ**, or **Ignore**. Recognised column names are suggested; each field can be assigned to only one column, so choosing it again moves it.
+2. **Fixture types.** Rows are grouped by manufacturer, fixture type, and mode. A group uses a library fixture directly when exactly one library mode has the same manufacturer, fixture name, and mode name, ignoring only letter case and repeated spaces. Without a Manufacturer column, the Fixture Type may contain both, such as `Martin MAC Aura`. Without a Mode column, only a fixture with a single mode matches. Every other group stops in the wizard: choose the manufacturer, fixture, and mode it should use, or **Skip these rows**. The wizard moves to the next unmatched group after each choice and preselects a likely fixture, which you still confirm. Exact matches can be changed here too.
+3. **Review.** Check every row's fixture ID, name, library fixture, patch, location, and rotation, then press **Import**. All importable rows are added together in one Patch change on the layer currently selected in Show Patch (**Default** when All fixtures is shown).
+
+Cell rules:
+
+- **Patch** accepts `universe.address`, `universe/address`, or one absolute address, where `513` means `2.1`. An empty cell or `-` imports the fixture unpatched. Only the first split of a multi-split mode is patched from the CSV.
+- **Fixture ID** must be a whole number that is not used in the show or earlier in the file. Venue profiles use `0.x`. An empty cell takes the lowest free ID.
+- **Fixture Name** defaults to the fixture name followed by its ID.
+- **X / Y / Z** and **RotX / RotY / RotZ** default to 0; rotation is in degrees. A decimal comma is accepted.
+- **Address conflicts** with the show or an earlier row are imported unpatched by default; choose **Skip row** to leave them out instead.
+
+Rows with an unusable cell are listed as **Not imported** with the reason and never block the other rows. Closing after choosing a file asks for confirmation.
+
 ## Discovering a ToskLight Pixel Media Server
 
 Open **Show Patch > Media Servers** to discover ToskLight Pixel Media servers on the local network. **Refresh discovery** repeats the search without restarting either application. Each output is shown by its Media Server and output name, network address, reachability, layer personality, and configured DMX `universe.address`. A discovered output remains explicitly **Not patched** until you choose an action; discovery alone never changes the show.

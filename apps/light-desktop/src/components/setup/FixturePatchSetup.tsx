@@ -4,6 +4,7 @@ import {
 	PatchControllerProvider,
 	usePatchController,
 } from "./fixturePatch/controller";
+import { CsvImportDialog } from "./fixturePatch/CsvImportDialog";
 import { FixtureBrowser } from "./fixturePatch/FixtureBrowser";
 import { FixturePlacement } from "./fixturePatch/FixturePlacement";
 import { LightSourceAppearanceDialog } from "./fixturePatch/LightSourceAppearance";
@@ -52,6 +53,7 @@ function FixturePatchLayout() {
 			<PatchTable />
 			<FixtureBrowser />
 			<FixturePlacement />
+			<CsvImportDialog />
 			<PlacementCloseConfirm />
 			<EditCloseConfirm />
 			<DeleteConfirm />
