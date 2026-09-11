@@ -213,7 +213,7 @@ describe("the CAD planning screen", () => {
 			"Back to front",
 		]);
 		expect(
-			screen.getByLabelText("Orientation: right +X, up −Y, depth +Z"),
+			screen.getByLabelText("Orientation: right +X, up +Y, depth +Z"),
 		).toBeInTheDocument();
 		expect(
 			screen.queryByText("Scene r9 · Selection r4"),
@@ -282,7 +282,7 @@ describe("the CAD planning screen", () => {
 		expect(pdf).toContain("Fixture ID");
 		expect(pdf).toContain("Robe Robin DLS Profile");
 		expect(pdf).toContain("Use secondary safety");
-		expect(workspace.get("tosklight:viz-editor:cad-print-pages:v1")).toContain(
+		expect(workspace.get("tosklight:viz-editor:cad-print-pages:v2")).toContain(
 			"Page 1",
 		);
 	});
@@ -386,7 +386,7 @@ describe("the CAD planning screen", () => {
 
 		fireEvent.change(direction, { target: { value: "top_down" } });
 		const orientation = screen.getByRole("img", {
-			name: "Orientation: right +X, up −Y, depth +Z",
+			name: "Orientation: right +X, up +Y, depth +Z",
 		}).parentElement as HTMLElement;
 		expect(
 			within(orientation).getAllByRole("button", {
@@ -401,7 +401,7 @@ describe("the CAD planning screen", () => {
 		);
 		expect(canvas).toHaveAttribute("data-rotation", "1");
 		expect(
-			screen.getByLabelText("Orientation: right −Y, up −X, depth +Z"),
+			screen.getByLabelText("Orientation: right +Y, up −X, depth +Z"),
 		).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", {
@@ -476,7 +476,7 @@ describe("the CAD planning screen", () => {
 			expect(screen.getAllByTestId("cad-canvas")).toHaveLength(3),
 		);
 		expect(
-			localStorage.getItem("tosklight:viz-editor:cad-workspace:v1"),
+			localStorage.getItem("tosklight:viz-editor:cad-workspace:v2"),
 		).toContain("split");
 	});
 
@@ -535,7 +535,7 @@ describe("the CAD planning screen", () => {
 		fireEvent.pointerUp(divider, { pointerId: 1, clientX: 700 });
 		await waitFor(() =>
 			expect(
-				localStorage.getItem("tosklight:viz-editor:cad-workspace:v1"),
+				localStorage.getItem("tosklight:viz-editor:cad-workspace:v2"),
 			).toContain('"ratio":0.7'),
 		);
 	});

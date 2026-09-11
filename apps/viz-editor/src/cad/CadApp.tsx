@@ -23,6 +23,7 @@ import {
 	type CadViewDirection,
 	mapTile,
 	newTile,
+	legacyTopDownPlanPoint,
 	normaliseQuarterTurns,
 	projectPoint,
 	removeSplitSide,
@@ -38,9 +39,12 @@ import {
 	type WorldAxis,
 } from "./types";
 
-const WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v1";
+// v2 plans show +Y up. v1 stored the same views mirrored and is converted once on first read.
+const WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v2";
+const LEGACY_WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v1";
 const SETTINGS_KEY = "tosklight:viz-editor:cad-settings:v1";
-const PRINT_KEY = "tosklight:viz-editor:cad-print-pages:v1";
+const PRINT_KEY = "tosklight:viz-editor:cad-print-pages:v2";
+const LEGACY_PRINT_KEY = "tosklight:viz-editor:cad-print-pages:v1";
 
 interface CadSettings {
 	snapToMounts: boolean;
@@ -867,7 +871,11 @@ function restoreSettings(): CadSettings {
 
 function restorePrintPages(): CadPrintPage[] {
 	try {
-		const stored = JSON.parse(localStorage.getItem(PRINT_KEY) ?? "[]");
+		const current = localStorage.getItem(PRINT_KEY);
+		const legacy = current == null;
+		const stored = JSON.parse(
+			current ?? localStorage.getItem(LEGACY_PRINT_KEY) ?? "[]",
+		);
 		if (!Array.isArray(stored)) return [];
 		return stored
 			.filter(
@@ -880,6 +888,13 @@ function restorePrintPages(): CadPrintPage[] {
 			)
 			.map((page) => ({
 				...page,
+				centreMillimetres:
+					legacy && page.view === "top_down"
+						? legacyTopDownPlanPoint(
+								page.centreMillimetres,
+								page.rotationQuarterTurns ?? 0,
+							)
+						: page.centreMillimetres,
 				kind: page.kind === "fixture_list" ? "fixture_list" : "plan",
 				orientation: page.orientation === "portrait" ? "portrait" : "landscape",
 				showFixtureIds: page.showFixtureIds === true,
@@ -1120,10 +1135,36 @@ function restoreLayout(): TileNode {
 			const parsed = JSON.parse(stored) as TileNode;
 			return normaliseStoredLayout(parsed);
 		}
+		const legacy = localStorage.getItem(LEGACY_WORKSPACE_KEY);
+		if (legacy)
+			return normaliseStoredLayout(
+				legacyTopDownLayout(JSON.parse(legacy) as TileNode),
+			);
 	} catch {
 		// A broken workspace preference must not prevent the canonical show from opening.
 	}
 	return newTile();
+}
+
+/** A v1 layout's top-down cameras, pointed at the same part of the rig in the +Y-up plan. */
+function legacyTopDownLayout(node: TileNode): TileNode {
+	if (node.type !== "tile")
+		return {
+			...node,
+			first: legacyTopDownLayout(node.first),
+			second: legacyTopDownLayout(node.second),
+		};
+	if (node.view !== "top_down" || node.camera?.pan?.length !== 2) return node;
+	return {
+		...node,
+		camera: {
+			...node.camera,
+			pan: legacyTopDownPlanPoint(
+				node.camera.pan,
+				node.rotationQuarterTurns ?? 0,
+			),
+		},
+	};
 }
 
 function normaliseStoredLayout(node: TileNode): TileNode {

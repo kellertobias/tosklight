@@ -5,6 +5,7 @@ import {
 	newTile,
 	planeDelta,
 	previewDeltaForEntity,
+	legacyTopDownPlanPoint,
 	projectPoint,
 	removeSplitSide,
 	setSplitRatio,
@@ -25,12 +26,32 @@ describe("CAD workspace model", () => {
 	});
 
 	it("maps screen-plane movement back onto the correct world axes", () => {
-		expect(planeDelta([120, -40], "top_down")).toEqual([120, 40, 0]);
+		expect(planeDelta([120, -40], "top_down")).toEqual([120, -40, 0]);
 		expect(planeDelta([120, -40], "left_to_right")).toEqual([0, 120, -40]);
 		expect(planeDelta([120, -40], "right_to_left")).toEqual([0, -120, -40]);
 		expect(planeDelta([120, -40], "front_to_back")).toEqual([120, 0, -40]);
 		expect(planeDelta([120, -40], "back_to_front")).toEqual([-120, 0, -40]);
-		expect(projectPoint([10, 20, 30], "top_down")).toEqual([10, -20]);
+		expect(projectPoint([10, 20, 30], "top_down")).toEqual([10, 20]);
+	});
+
+	it("draws the top-down plan with +X to the right and +Y up", () => {
+		expect(viewAxes("top_down")).toEqual({
+			horizontal: { axis: "x", sign: 1 },
+			vertical: { axis: "y", sign: 1 },
+		});
+		const [right, up] = projectPoint([1000, 2000, 0], "top_down");
+		expect(right).toBeGreaterThan(0);
+		expect(up).toBeGreaterThan(0);
+	});
+
+	it("moves a view stored in the old mirrored plan onto the same part of the rig", () => {
+		for (const turns of [0, 1, 2, 3]) {
+			const world: [number, number, number] = [1200, -3400, 0];
+			const old = projectPoint([world[0], -world[1], 0], "top_down", turns);
+			expect(legacyTopDownPlanPoint(old, turns)).toEqual(
+				projectPoint(world, "top_down", turns),
+			);
+		}
 	});
 
 	it("interpolates positive and negative spread deltas in selection order", () => {
@@ -49,13 +70,13 @@ describe("CAD workspace model", () => {
 	});
 
 	it("keeps top-down projection, movement, and axes aligned after rotation", () => {
-		expect(projectPoint([10, 20, 30], "top_down", 1)).toEqual([-20, -10]);
-		expect(planeDelta([120, -40], "top_down", 1)).toEqual([40, -120, 0]);
+		expect(projectPoint([10, 20, 30], "top_down", 1)).toEqual([20, -10]);
+		expect(planeDelta([120, -40], "top_down", 1)).toEqual([40, 120, 0]);
 		expect(viewAxes("top_down", 1)).toEqual({
-			horizontal: { axis: "y", sign: -1 },
+			horizontal: { axis: "y", sign: 1 },
 			vertical: { axis: "x", sign: -1 },
 		});
-		expect(projectPoint([10, 20, 30], "top_down", -1)).toEqual([20, 10]);
+		expect(projectPoint([10, 20, 30], "top_down", -1)).toEqual([-20, 10]);
 	});
 
 	it("recursively splits one branch while its sibling remains whole", () => {

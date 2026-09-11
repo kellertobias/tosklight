@@ -173,7 +173,7 @@ export function buildCadPdf(
 						page.view === "top_down"
 							? (((geometry.source === "live_model"
 									? 0
-									: -entity.rotationDegrees[2]) +
+									: entity.rotationDegrees[2]) +
 									page.rotationQuarterTurns * 90) *
 									Math.PI) /
 								180

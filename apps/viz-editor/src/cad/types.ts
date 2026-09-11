@@ -229,10 +229,11 @@ export function viewAxes(
 
 function baseViewAxes(view: CadViewDirection): ViewAxes {
 	switch (view) {
+		// A plan reads like a map: +X to the right and +Y up.
 		case "top_down":
 			return {
 				horizontal: { axis: "x", sign: 1 },
-				vertical: { axis: "y", sign: -1 },
+				vertical: { axis: "y", sign: 1 },
 			};
 		case "left_to_right":
 			return {
@@ -290,7 +291,7 @@ function projectPointUnrotated(
 ): [number, number] {
 	switch (view) {
 		case "top_down":
-			return [point[0], -point[1]];
+			return [point[0], point[1]];
 		case "left_to_right":
 			return [point[1], point[2]];
 		case "right_to_left":
@@ -313,7 +314,7 @@ export function planeDelta(
 			: delta;
 	switch (view) {
 		case "top_down":
-			return [resolved[0], negate(resolved[1]), 0];
+			return [resolved[0], resolved[1], 0];
 		case "left_to_right":
 			return [0, resolved[0], resolved[1]];
 		case "right_to_left":
@@ -339,6 +340,19 @@ function rotatePlane(
 		case 3:
 			return [-point[1], point[0]];
 	}
+}
+
+/**
+ * A plan point stored before the top-down plan showed +Y up, moved into the plan the same tile or
+ * page uses now. The old plan was this one mirrored about its horizontal axis before rotation.
+ */
+export function legacyTopDownPlanPoint(
+	point: readonly [number, number],
+	rotationQuarterTurns: number,
+): [number, number] {
+	return normaliseQuarterTurns(rotationQuarterTurns) % 2 === 0
+		? [point[0], negate(point[1])]
+		: [negate(point[0]), point[1]];
 }
 
 export function normaliseQuarterTurns(value: number): 0 | 1 | 2 | 3 {

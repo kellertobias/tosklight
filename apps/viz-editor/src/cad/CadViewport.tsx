@@ -1202,7 +1202,7 @@ function worldGeometry(
 	);
 	const angle =
 		view === "top_down"
-			? (((geometry.source === "live_model" ? 0 : -entity.rotationDegrees[2]) +
+			? (((geometry.source === "live_model" ? 0 : entity.rotationDegrees[2]) +
 					rotationQuarterTurns * 90) *
 					Math.PI) /
 				180

@@ -34,13 +34,13 @@ describe("marquee direction", () => {
 
 describe("what a marquee catches", () => {
 	const marquee = boundsOf([0, 0], [1_000, 1_000]);
-	const inside = entityBounds(entity([500, -500, 0], [100, 100, 100]), "top_down");
+	const inside = entityBounds(entity([500, 500, 0], [100, 100, 100]), "top_down");
 	const across = entityBounds(
-		entity([900, -500, 0], [400, 100, 100]),
+		entity([900, 500, 0], [400, 100, 100]),
 		"top_down",
 	);
 	const outside = entityBounds(
-		entity([3_000, -500, 0], [100, 100, 100]),
+		entity([3_000, 500, 0], [100, 100, 100]),
 		"top_down",
 	);
 
@@ -58,7 +58,7 @@ describe("what a marquee catches", () => {
 	});
 
 	it("counts an entity sharing only an edge as touched, not enclosed", () => {
-		const edge = entityBounds(entity([1_100, -500, 0], [200, 100, 100]), "top_down");
+		const edge = entityBounds(entity([1_100, 500, 0], [200, 100, 100]), "top_down");
 		expect(marqueeCatches(edge, marquee, "touch")).toBe(true);
 		expect(marqueeCatches(edge, marquee, "enclose")).toBe(false);
 	});

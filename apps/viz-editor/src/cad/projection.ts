@@ -58,6 +58,36 @@ export function entityPlanGeometry(
 	drawing: CadDrawing | undefined,
 	view: CadViewDirection,
 ): PlanGeometry {
+	const geometry = orientedPlanGeometry(entity, drawing, view);
+	// Symbols and supplied SVG projections are drawn with the page's y running down, which in a
+	// plan is world −Y. The top-down plan shows +Y up, so they are mirrored into it; a live model is
+	// projected from world coordinates and is already the right way round.
+	return view === "top_down" && geometry.source !== "live_model"
+		? mirrorVertically(geometry)
+		: geometry;
+}
+
+function mirrorVertically(geometry: PlanGeometry): PlanGeometry {
+	const flip = (point: PlanPoint): PlanPoint => [point[0], -point[1]];
+	return {
+		...geometry,
+		triangles: geometry.triangles.map((triangle) => ({
+			...triangle,
+			points: triangle.points.map(flip) as PlanTriangle["points"],
+		})),
+		outlines: geometry.outlines.map((outline) => outline.map(flip)),
+		lines: geometry.lines.map((line) => ({
+			...line,
+			points: line.points.map(flip) as PlanLine["points"],
+		})),
+	};
+}
+
+function orientedPlanGeometry(
+	entity: CadEntity,
+	drawing: CadDrawing | undefined,
+	view: CadViewDirection,
+): PlanGeometry {
 	const type = entityType(entity);
 	// Crowd-area models describe a procedural volume and read as an unexplained block in plan.
 	// Modeled fixtures and venue objects—including trusses—keep their canonical generated SVG.
@@ -287,7 +317,7 @@ function projectModelPoint(
 ): PlanPoint {
 	switch (view) {
 		case "top_down":
-			return [point[0], -point[2]];
+			return [point[0], point[2]];
 		case "left_to_right":
 			return [point[2], point[1]];
 		case "right_to_left":

@@ -159,6 +159,13 @@ PDF or PNG output rasterizes that SVG at the requested output size rather than m
 separate bitmap asset. Plan composition uses world depth and explicit opaque/empty regions, so its
 occlusion does not depend on package file order or incidental 3D material names.
 
+## Plan orientation
+
+The top-down plan reads like a map: **+X** runs to the right and **+Y** up, so upstage is at the
+top of the drawing and the audience at the bottom. The orientation mark in each viewport names the
+axes it shows. Rotating a top-down viewport turns the whole plan with it; the mark follows, so a
+quarter turn clockwise shows **+Y** to the right and **−X** up.
+
 ## Cut planes
 
 Seen from the side, a stage with curtains both sides is a wall: the near one hides the rig the
