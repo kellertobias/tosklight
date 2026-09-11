@@ -37,6 +37,11 @@ see what the Visualizer draws, and the rig the product demonstration video is sh
 
 ## Editing the patch sheet
 
+While a layer is open, selecting stays in it: clicking, Shift and drag ranges, and Ctrl-click
+only ever select that layer's fixtures, and the sheet keeps showing the layer. A selection made in
+the drawing or another window opens **All fixtures** only when it includes fixtures outside the
+open layer.
+
 Right-click a value to edit it. When the fixture you right-click belongs to the selection, the
 editor changes every selected fixture; when it does not, the selection is replaced by that fixture
 and only that fixture is edited.

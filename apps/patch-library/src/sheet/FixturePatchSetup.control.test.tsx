@@ -378,6 +378,64 @@ describe("patch layer locks", () => {
 		).toHaveClass("active");
 	});
 
+	it("stays in the open layer when the revealed selection is already in it", () => {
+		const floorFixture = splitFixture();
+		floorFixture.fixture_id = "fixture-floor";
+		floorFixture.fixture_number = 18;
+		floorFixture.name = "Floor Wash 18";
+		floorFixture.layer_id = "floor";
+		server.patch.fixtures = [splitFixture(), floorFixture];
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: false } },
+			{ body: { id: "floor", name: "Floor", order: 1, locked: false } },
+		];
+		programming.selection.selected = ["fixture-split"];
+		const { rerender } = render(<FixturePatchSetup showAllLayersRequest={0} />);
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^Stage/ }));
+
+		rerender(<FixturePatchSetup showAllLayersRequest={1} />);
+		expect(within(layers).getByRole("button", { name: /^Stage/ })).toHaveClass(
+			"active",
+		);
+		expect(screen.queryByRole("row", { name: /Floor Wash 18/ })).toBeNull();
+	});
+
+	it("keeps a selection built in an open layer inside that layer", () => {
+		state.desktopEditing = true;
+		const floorFixture = splitFixture();
+		floorFixture.fixture_id = "fixture-floor";
+		floorFixture.fixture_number = 18;
+		floorFixture.name = "Floor Wash 18";
+		floorFixture.layer_id = "floor";
+		server.patch.fixtures = [splitFixture(), floorFixture];
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: false } },
+			{ body: { id: "floor", name: "Floor", order: 1, locked: false } },
+		];
+		programming.selection.selected = ["fixture-split"];
+		render(<FixturePatchSetup />);
+		const layers = screen
+			.getByRole("heading", { name: "Layers" })
+			.closest("aside");
+		if (!layers) throw new Error("Layers sidebar was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^Floor/ }));
+
+		fireEvent.mouseDown(screen.getByRole("row", { name: /Floor Wash 18/ }), {
+			button: 0,
+			ctrlKey: true,
+		});
+		expect(programming.actions.replace).toHaveBeenLastCalledWith({
+			resolvedFixtures: ["fixture-floor"],
+		});
+		expect(within(layers).getByRole("button", { name: /^Floor/ })).toHaveClass(
+			"active",
+		);
+	});
+
 	it("offers Lock Layer in the title only after selecting an unlocked layer", async () => {
 		server.patchLayers = [
 			{ body: { id: "default", name: "Stage", order: 0, locked: false } },

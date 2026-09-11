@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CadApp } from "./cad/CadApp";
 import { CadRigOverview } from "./cad/CadViewport";
 import { cadSession } from "./cad/session";
+import { useCadSelection } from "./cad/useCadSelection";
 import type { CadEntity, CadSceneSnapshot } from "./cad/types";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
@@ -76,10 +77,13 @@ export function App() {
 	// reads the new snapshot instead of showing the rig as it was before.
 	const [reload, setReload] = useState(0);
 	// What the patch sheet has selected, and what the preview controls therefore drive.
-	const [selected, setSelected] = useState<readonly string[]>([]);
-	const [selectionRevision, setSelectionRevision] = useState(0);
-	const selectionRevisionRef = useRef(0);
-	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+	const {
+		selected,
+		revision: selectionRevision,
+		revealRequest,
+		receive: receiveSelection,
+		replace: replaceSelection,
+	} = useCadSelection((reason) => report(reason));
 	const cadEntitiesRef = useRef(new Map<string, CadEntity>());
 	const [cadScene, setCadScene] = useState<CadSceneSnapshot | null>(null);
 	// The rig itself, for the preview controls: the sheet owns the table, this owns the values.
@@ -101,9 +105,7 @@ export function App() {
 		const revision = Number.isFinite(snapshot.selectionRevision)
 			? snapshot.selectionRevision
 			: 0;
-		setSelected(ids);
-		setSelectionRevision(revision);
-		selectionRevisionRef.current = revision;
+		receiveSelection(ids, revision);
 	}
 
 	function loadCadScene() {
@@ -170,9 +172,7 @@ export function App() {
 							}
 						: current,
 				);
-				setSelected(delta.selectedIds);
-				setSelectionRevision(delta.revision);
-				selectionRevisionRef.current = delta.revision;
+				receiveSelection(delta.selectedIds, delta.revision);
 				if (delta.selectedIds.length) {
 					const selectedEntity = cadEntitiesRef.current.get(
 						delta.selectedIds[0],
@@ -237,31 +237,6 @@ export function App() {
 			.catch(() => undefined);
 		return () => unlisten?.();
 	}, []);
-
-	function replaceSelection(ids: readonly string[]) {
-		setSelected(ids);
-		selectionQueue.current = selectionQueue.current.then(async () => {
-			try {
-				const delta = await cadSession.replaceSelection(
-					selectionRevisionRef.current,
-					ids,
-				);
-				selectionRevisionRef.current = delta.revision;
-				setSelectionRevision(delta.revision);
-				setSelected(delta.selectedIds);
-			} catch (reason) {
-				report(reason);
-				try {
-					const snapshot = await cadSession.snapshot();
-					selectionRevisionRef.current = snapshot.selectionRevision;
-					setSelectionRevision(snapshot.selectionRevision);
-					setSelected(snapshot.selectedIds);
-				} catch (refreshReason) {
-					report(refreshReason);
-				}
-			}
-		});
-	}
 
 	useEffect(() => {
 		if ((workspace !== "patch" && workspace !== "venue") || !selected.length)
@@ -573,7 +548,7 @@ export function App() {
 								<FixturePatchSetup
 									title={workspaceTitle}
 									scope={workspace === "patch" ? "dmx" : workspace}
-									showAllLayersRequest={selected.length ? selectionRevision : 0}
+									showAllLayersRequest={revealRequest}
 								/>
 							</PatchViewProvider>
 							{visualizerRunning ? (

@@ -360,6 +360,19 @@ function selectFixtureAdditively(
 	const current = controller.selection.orderedFixtureIds;
 	if (!current) return;
 	controller.selection.replace({
-		resolvedFixtures: toggledFixtureSelection(current, fixture),
+		resolvedFixtures: toggledFixtureSelection(
+			withinActiveLayer(controller, current),
+			fixture,
+		),
 	});
+}
+
+/** While a layer is open, a selection built in the sheet holds only that layer's fixtures. */
+function withinActiveLayer(
+	controller: PatchController,
+	ids: readonly string[],
+) {
+	if (controller.ui.activeLayer === "all") return ids;
+	const inLayer = new Set(controller.data.visible.flatMap(fixtureSelectionIds));
+	return ids.filter((id) => inLayer.has(id));
 }

@@ -23,7 +23,7 @@ import {
 } from "../patchUtils";
 import { compareFixtureIds } from "./fixtureIds";
 import { definitionSplits } from "./patchModel";
-import { usePatchSelection } from "./selection";
+import { fixtureSelectionIds, usePatchSelection } from "./selection";
 
 export type EditKind =
 	| "number"
@@ -409,6 +409,13 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		const request = props.showAllLayersRequest ?? 0;
 		if (!request || request === handledShowAllLayersRequest.current) return;
 		handledShowAllLayersRequest.current = request;
+		// A selection made elsewhere is revealed, but an open layer that already holds all of it stays
+		// open: leaving it would only take the operator away from where they are working.
+		const selectedIds = selection.fixtureIds;
+		if (ui.activeLayer !== "all" && selectedIds?.size) {
+			const inLayer = new Set(data.visible.flatMap(fixtureSelectionIds));
+			if ([...selectedIds].every((id) => inLayer.has(id))) return;
+		}
 		ui.setShowAllLayers(true);
 		ui.setActiveLayer("all");
 	}, [props.showAllLayersRequest, ui.setActiveLayer, ui.setShowAllLayers]);
