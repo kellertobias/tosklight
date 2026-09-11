@@ -36,8 +36,7 @@ use crate::shutdown::{Shutdown, ShutdownReason};
 
 const APPLICATION_ICON_PNG: &[u8] =
     include_bytes!("../../../../../assets/branding/ToskLight Pixel.png");
-const FULLSCREEN_DOUBLE_CLICK_INTERVAL: std::time::Duration =
-    std::time::Duration::from_millis(500);
+const FULLSCREEN_DOUBLE_CLICK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
 
 fn application_icon() -> Option<Icon> {
     let decoder = png::Decoder::new(std::io::Cursor::new(APPLICATION_ICON_PNG));
