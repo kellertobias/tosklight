@@ -2092,8 +2092,10 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
         }
     }
 
-    assert_eq!(prism_selection_modes, 13);
-    assert_eq!(prism_rotation_modes, 11);
+    // The Stage Zoom 1200 SV carries the 1200's shared 20-slot venue personality as well, which
+    // adds one mode with Prism 1 selection and rotation.
+    assert_eq!(prism_selection_modes, 14);
+    assert_eq!(prism_rotation_modes, 12);
     assert_eq!(generic_control_modes, 6);
     assert_eq!(position_movement_modes, 28);
     assert_eq!(
