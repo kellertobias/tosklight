@@ -26,6 +26,6 @@ Repository commands are for development, not the normal installed-operator workf
 > [!danger] Missing graphic
 > Add an annotated Pixel administration overview showing Outputs, Library, layer preview, composite preview, physical output, and test-pattern controls.
 
-Network, monitor, resolution, presentation-rate, sound-device, personality, and DMX-address changes are saved first and become active after a restart. The interface distinguishes saved configuration from the settings the running engine is still using. Playback, layer, master, and takeover changes are live.
+Library-directory, network, monitor, resolution, presentation-rate, sound-device, personality, and DMX-address changes are saved first and become active after a restart. The interface distinguishes saved configuration from the settings the running engine is still using. Playback, layer, master, and takeover changes are live.
 
 If the output is blank, return to the test pattern. A missing physical test pattern points to output/display configuration. A working pattern with missing content points instead to the library job, selected slot, layer state, master state, or DMX ownership.

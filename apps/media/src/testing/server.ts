@@ -13,6 +13,7 @@ import type {
 	Health,
 	ImportsView,
 	LogsView,
+	LibrarySettingsView,
 	NetworkView,
 	OutputConfigurationView,
 	OutputView,
@@ -35,6 +36,7 @@ export interface StubbedServer {
 	folderPresentations: FolderPresentationsView;
 	health: Health;
 	visualizers: VisualizerView[];
+	librarySettings: LibrarySettingsView;
 	network: NetworkView;
 	time: TimeView;
 	playback: PlaybackView;
@@ -80,6 +82,12 @@ export function stubServer(
 		catalog: aCatalog(),
 		folderPresentations: aFolderPresentations(),
 		visualizers: [aVisualizer()],
+		librarySettings: {
+			storedDirectory: "/Users/Shared/ToskLight Pixel/Media",
+			activeDirectory: "/Users/Shared/ToskLight Pixel/Media",
+			takesEffectOnRestart: true,
+			pendingRestart: false,
+		},
 		network: aNetwork(),
 		time: { utcOffsetMinutes: 0, maximumUtcOffsetMinutes: 840 },
 		playback: { switchHoldMillis: 500, maximumSwitchHoldMillis: 10_000 },
@@ -224,6 +232,17 @@ export function stubServer(
 					: jsonResponse({ code: "unknown-output", message: "no" }, 404);
 			}
 			if (path === "/network") return jsonResponse(server.network);
+			if (path === "/library/settings")
+				return jsonResponse(server.librarySettings);
+			if (path === "/library/settings/update") {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				if (body.directory !== undefined)
+					server.librarySettings.storedDirectory = body.directory.trim();
+				server.librarySettings.pendingRestart =
+					server.librarySettings.storedDirectory !==
+					server.librarySettings.activeDirectory;
+				return jsonResponse(server.librarySettings);
+			}
 			if (path === "/text") return jsonResponse(server.text);
 			if (path === "/audio") return jsonResponse(server.audio);
 			const settings = settingsRoute(server, path, init);

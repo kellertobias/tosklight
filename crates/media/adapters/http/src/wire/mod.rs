@@ -18,6 +18,7 @@ mod dmx;
 mod effect;
 mod health;
 mod library;
+mod library_settings;
 mod logs;
 mod network;
 mod output;
@@ -45,6 +46,7 @@ pub use library::{
     StartImport, UpdateFolderPresentation, UpdateLibraryFolder, UpdateLibraryItem,
     UpdateLibraryItems, UpdateLibraryNotes, UpdateLibraryThumbnail, UploadAcceptedView,
 };
+pub use library_settings::{LibrarySettingsEditError, LibrarySettingsView, UpdateLibrarySettings};
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
