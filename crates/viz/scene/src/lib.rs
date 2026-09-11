@@ -40,7 +40,7 @@ pub use provider::{
 };
 pub use renderer_settings::{
     RendererInputOverride, RendererSettingChange, RendererSettings, RendererSettingsIntent,
-    RendererSettingsUpdate,
+    RendererSettingsUpdate, interface_line, parse_interface,
 };
 pub use scene::{
     Aabb, BodyKind, CrowdArea, CrowdDensity, CrowdPosture, EffectProgram, EmitterInstance,

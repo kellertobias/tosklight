@@ -112,6 +112,17 @@ struct Listener {
     protocol: Protocol,
     counters: Arc<Counters>,
     by_universe: HashMap<u16, Vec<usize>>,
+    /// The only interface index this listener accepts datagrams from, when narrowed to one.
+    #[cfg_attr(
+        not(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "android"
+        )),
+        allow(dead_code)
+    )]
+    interface: Option<u32>,
 }
 
 pub struct DmxReceiver {
@@ -174,7 +185,7 @@ impl DmxReceiver {
                 .map(|index| shared.mappings[*index].mapping.destination_universe)
                 .collect();
             match bind(&representative, &multicast_universes) {
-                Ok(socket) => {
+                Ok((socket, interface)) => {
                     let cloned = socket.try_clone().expect("clone receiver socket");
                     sockets.push(socket);
                     let mut by_universe: HashMap<u16, Vec<usize>> = HashMap::new();
@@ -189,6 +200,7 @@ impl DmxReceiver {
                         protocol: key.protocol,
                         counters: shared.mappings[first].listener.clone(),
                         by_universe,
+                        interface,
                     };
                     let shared = shared.clone();
                     threads.push(
@@ -364,13 +376,11 @@ struct ListenerKey {
 }
 
 fn listener_key(mapping: &InputMapping) -> ListenerKey {
+    // The bind address is kept even for multicast, which always binds the wildcard: it names the
+    // interface the groups are joined on, and two interfaces are two listeners.
     ListenerKey {
         protocol: mapping.protocol,
-        bind: match mapping.delivery {
-            // Multicast always binds the wildcard address; membership decides delivery.
-            Delivery::Multicast => SocketAddr::from((Ipv4Addr::UNSPECIFIED, mapping.bind.port())),
-            _ => mapping.bind,
-        },
+        bind: mapping.bind,
         delivery: mapping.delivery,
     }
 }
@@ -383,7 +393,11 @@ fn group_by_listener(mappings: &[InputMapping]) -> HashMap<ListenerKey, Vec<usiz
     groups
 }
 
-fn bind(mapping: &InputMapping, multicast_universes: &[u16]) -> Result<UdpSocket, String> {
+/// A bound listener socket, and the only interface it accepts datagrams from when narrowed.
+fn bind(
+    mapping: &InputMapping,
+    multicast_universes: &[u16],
+) -> Result<(UdpSocket, Option<u32>), String> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(SocketProtocol::UDP))
         .map_err(|error| format!("socket: {error}"))?;
     socket
@@ -399,7 +413,20 @@ fn bind(mapping: &InputMapping, multicast_universes: &[u16]) -> Result<UdpSocket
     // A generous receive buffer keeps a burst from being dropped while the render thread is busy.
     // It is a fixed kernel allocation, so it cannot grow without bound.
     let _ = socket.set_recv_buffer_size(1 << 21);
-    let bind_address = listener_key(mapping).bind;
+    let requested = listener_key(mapping).bind;
+    let interface = match requested.ip() {
+        IpAddr::V4(address) => address,
+        IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED,
+    };
+    // A socket bound to an interface's own address hears only unicast to that address: the
+    // broadcast Art-Net and multicast sACN addressed to a whole network never match it. So one
+    // interface is chosen by binding every address and keeping only what arrived on it.
+    let only = arrival_filter(&socket, interface)?;
+    let bind_address = if only.is_some() || mapping.delivery == Delivery::Multicast {
+        SocketAddr::from((Ipv4Addr::UNSPECIFIED, requested.port()))
+    } else {
+        requested
+    };
     socket
         .bind(&bind_address.into())
         .map_err(|error| format!("bind {bind_address}: {error}"))?;
@@ -416,7 +443,107 @@ fn bind(mapping: &InputMapping, multicast_universes: &[u16]) -> Result<UdpSocket
         }
         let _ = socket.set_multicast_loop_v4(true);
     }
-    Ok(socket.into())
+    Ok((socket.into(), only))
+}
+
+/// Keep only what arrives on the interface that owns `address`, whatever it is addressed to.
+///
+/// Returns that interface's index when the listener is narrowed. The wildcard and loopback
+/// addresses are bound as they are. Windows needs no filter: a socket bound to an interface's
+/// address is delivered that interface's broadcasts.
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "linux",
+    target_os = "android"
+))]
+fn arrival_filter(socket: &Socket, address: Ipv4Addr) -> Result<Option<u32>, String> {
+    if address.is_unspecified() || address.is_loopback() {
+        return Ok(None);
+    }
+    let index = crate::interfaces::index_of(address)
+        .ok_or_else(|| format!("no network interface on this machine has the address {address}"))?;
+    arrival::report_interface(socket)
+        .map_err(|error| format!("listen only on {address}: {error}"))?;
+    Ok(Some(index))
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "linux",
+    target_os = "android"
+)))]
+fn arrival_filter(_socket: &Socket, _address: Ipv4Addr) -> Result<Option<u32>, String> {
+    Ok(None)
+}
+
+/// One datagram, or `None` when it arrived on an interface this listener is not narrowed to.
+fn receive(listener: &Listener, buffer: &mut [u8]) -> std::io::Result<Option<(usize, SocketAddr)>> {
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "android"
+    ))]
+    if let Some(interface) = listener.interface {
+        let (length, from, arrived) = arrival::receive(&listener.socket, buffer)?;
+        return Ok((arrived == Some(interface)).then_some((length, from)));
+    }
+    listener.socket.recv_from(buffer).map(Some)
+}
+
+/// Which interface each datagram arrived on.
+///
+/// Pinning the socket itself is not enough: macOS applies `IP_BOUND_IF` to what a socket sends
+/// and still delivers it datagrams from every interface. So a narrowed listener reads each
+/// datagram's arrival interface and drops the rest.
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "linux",
+    target_os = "android"
+))]
+mod arrival {
+    use nix::sys::socket::{
+        ControlMessageOwned, MsgFlags, SockaddrIn, recvmsg, setsockopt, sockopt,
+    };
+    use std::io::{self, IoSliceMut};
+    use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
+    use std::os::fd::AsRawFd;
+
+    pub(super) fn report_interface(socket: &socket2::Socket) -> io::Result<()> {
+        setsockopt(socket, sockopt::Ipv4PacketInfo, &true).map_err(io::Error::from)
+    }
+
+    /// One datagram, its sender, and the index of the interface it arrived on.
+    // The index is an `int` on Linux and an `unsigned int` on Apple systems.
+    #[allow(clippy::unnecessary_cast)]
+    pub(super) fn receive(
+        socket: &UdpSocket,
+        buffer: &mut [u8],
+    ) -> io::Result<(usize, SocketAddr, Option<u32>)> {
+        let mut iov = [IoSliceMut::new(buffer)];
+        let mut control = nix::cmsg_space!(nix::libc::in_pktinfo);
+        let message = recvmsg::<SockaddrIn>(
+            socket.as_raw_fd(),
+            &mut iov,
+            Some(&mut control),
+            MsgFlags::empty(),
+        )
+        .map_err(io::Error::from)?;
+        let from = message
+            .address
+            .map(|address| SocketAddr::V4(SocketAddrV4::from(address)))
+            .ok_or_else(|| io::Error::other("a datagram without a sender"))?;
+        let arrived = message.cmsgs().ok().and_then(|mut controls| {
+            controls.find_map(|control| match control {
+                ControlMessageOwned::Ipv4PacketInfo(info) => Some(info.ipi_ifindex as u32),
+                _ => None,
+            })
+        });
+        Ok((message.bytes, from, arrived))
+    }
 }
 
 /// Per-destination-universe source state, tracked inside one listener.
@@ -433,8 +560,10 @@ fn receive_loop(shared: Arc<Shared>, listener: Listener) {
     // keep their own sequence, which is what stops them being read as each other's replays.
     let mut sources: HashMap<(u16, SocketAddr), SourceState> = HashMap::new();
     while shared.running.load(Ordering::Relaxed) {
-        let (length, from) = match listener.socket.recv_from(&mut buffer) {
-            Ok(value) => value,
+        let (length, from) = match receive(&listener, &mut buffer) {
+            Ok(Some(value)) => value,
+            // It arrived on another network than the one this listener was narrowed to.
+            Ok(None) => continue,
             Err(error) if is_timeout(&error) => continue,
             Err(_) => continue,
         };
@@ -675,6 +804,64 @@ mod tests {
         assert_eq!(status[0].health, InputHealth::Healthy);
         assert!(status[0].accepted_packets >= 1);
         assert_eq!(status[0].malformed_packets, 0);
+    }
+
+    /// A receiver narrowed to one interface hears that network's broadcast and nothing else.
+    ///
+    /// Needs a connected, broadcast-capable network, which a build machine may not have; run it
+    /// with `cargo test -p viz-dmx -- --ignored`.
+    #[test]
+    #[ignore = "needs a connected, broadcast-capable network interface"]
+    fn a_receiver_on_one_interface_hears_its_broadcast_and_not_another_network() {
+        let lan = crate::network_interfaces()
+            .expect("interfaces")
+            .into_iter()
+            .find(|interface| !interface.loopback && !interface.address.is_link_local())
+            .expect("a connected network interface");
+        let port = free_port();
+        let mut mapping = InputMapping::loopback(Protocol::ArtNet, 5, 5);
+        mapping.delivery = Delivery::Broadcast;
+        mapping.bind = SocketAddr::from((lan.address, port));
+        let receiver = DmxReceiver::start(vec![mapping], Instant::now());
+        let status = &receiver.status()[0];
+        assert_ne!(status.health, InputHealth::Failed, "{}", status.detail);
+
+        // Loopback is another interface, so what arrives there is not this receiver's.
+        let local = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).expect("loopback sender");
+        for sequence in 1..=5 {
+            local
+                .send_to(
+                    &artdmx(5, sequence, &[1, 2, 3, 4]),
+                    (Ipv4Addr::LOCALHOST, port),
+                )
+                .expect("send");
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(
+            receiver
+                .drain_changed()
+                .iter()
+                .all(|frame| frame.received_micros == 0),
+            "loopback reached a receiver on {}",
+            lan.name
+        );
+
+        // The chosen network's own broadcast still arrives, which a socket bound to the
+        // interface's address would never see.
+        let broadcast = Ipv4Addr::from(u32::from(lan.address) | !u32::from(lan.netmask));
+        let sender = UdpSocket::bind((lan.address, 0)).expect("network sender");
+        sender.set_broadcast(true).expect("broadcast");
+        let mut sequence = 10;
+        wait_for(|| {
+            sequence += 1;
+            sender
+                .send_to(&artdmx(5, sequence, &[200, 0, 0, 0]), (broadcast, port))
+                .expect("send");
+            receiver
+                .drain_changed()
+                .iter()
+                .any(|frame| frame.received_micros > 0 && frame.slots[0] == 200)
+        });
     }
 
     /// Send one real E1.31 packet through the operating-system network stack and read it back.

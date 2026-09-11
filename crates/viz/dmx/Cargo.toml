@@ -5,8 +5,13 @@ edition.workspace = true
 license-file.workspace = true
 
 [dependencies]
+if-addrs.workspace = true
 socket2.workspace = true
 viz-scene.workspace = true
+
+# Which interface each datagram arrived on, for receiving on one network only.
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))'.dependencies]
+nix.workspace = true
 
 [lints]
 workspace = true

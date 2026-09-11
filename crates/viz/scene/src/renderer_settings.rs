@@ -27,6 +27,12 @@ pub struct RendererSettings {
     pub floor_grid: Option<bool>,
     pub blender: String,
     pub input_overrides: Vec<RendererInputOverride>,
+    /// The network interface Art-Net is received on, by its system name; `None` is every one.
+    #[serde(default)]
+    pub art_net_interface: Option<String>,
+    /// The network interface sACN is received on, by its system name; `None` is every one.
+    #[serde(default)]
+    pub sacn_interface: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -80,6 +86,8 @@ pub enum RendererSettingChange {
     FloorGrid(Option<bool>),
     Blender(String),
     InputOverrides(Vec<RendererInputOverride>),
+    ArtNetInterface(Option<String>),
+    SacnInterface(Option<String>),
 }
 
 impl Default for RendererSettings {
@@ -107,6 +115,8 @@ impl Default for RendererSettings {
             floor_grid: None,
             blender: String::new(),
             input_overrides: Vec::new(),
+            art_net_interface: None,
+            sacn_interface: None,
         }
     }
 }
@@ -159,6 +169,8 @@ impl RendererSettings {
                         });
                     }
                 }
+                "art_net_interface" => settings.art_net_interface = parse_interface(value),
+                "sacn_interface" => settings.sacn_interface = parse_interface(value),
                 _ => {}
             }
         }
@@ -238,6 +250,9 @@ impl RendererSettings {
         for input in &self.input_overrides {
             line!("input", format!("{} {}", input.universe, input.protocol));
         }
+        // Written even when every interface is meant, so a reader holding an older choice drops it.
+        line!("art_net_interface", interface_line(&self.art_net_interface));
+        line!("sacn_interface", interface_line(&self.sacn_interface));
         text
     }
 
@@ -272,6 +287,8 @@ impl RendererSettings {
         field!(floor_grid, FloorGrid);
         field!(blender, Blender);
         field!(input_overrides, InputOverrides);
+        field!(art_net_interface, ArtNetInterface);
+        field!(sacn_interface, SacnInterface);
         changes
     }
 
@@ -312,6 +329,10 @@ impl RendererSettings {
                 RendererSettingChange::InputOverrides(value) => {
                     self.input_overrides = value.clone()
                 }
+                RendererSettingChange::ArtNetInterface(value) => {
+                    self.art_net_interface = value.clone()
+                }
+                RendererSettingChange::SacnInterface(value) => self.sacn_interface = value.clone(),
             }
         }
     }
@@ -342,8 +363,24 @@ impl RendererSettingChange {
             Self::FloorGrid(_) => "floorGrid",
             Self::Blender(_) => "blender",
             Self::InputOverrides(_) => "inputOverrides",
+            Self::ArtNetInterface(_) => "artNetInterface",
+            Self::SacnInterface(_) => "sacnInterface",
         }
     }
+}
+
+/// A stored interface name; `all` and an empty value mean every interface.
+pub fn parse_interface(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty() && value != "all").then(|| value.to_owned())
+}
+
+pub fn interface_line(interface: &Option<String>) -> &str {
+    interface
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("all")
 }
 
 fn adopt_f32(value: &str, target: &mut f32) {
@@ -381,10 +418,35 @@ mod tests {
     #[test]
     fn settings_round_trip_the_persistence_contract() {
         let source = "source lighting_desk\nhost desk.local\nport 5001\
-quality ultra\nfog 0.08\npersistence 0.12\npersistence_falloff 4\nambient 0.09\nexposure 1.2\nlaser_brightness 1.5\nlamp_fog_cloudiness 0.2\nlamp_fog_turbulence 0.3\nlaser_fog_cloudiness 0.4\nlaser_fog_turbulence 0.5\ncrowd_amount 0.75\ntheme dark_on_light\nbackground 0.1,0.2,0.3\nlabels false\nshow_selection true\nfloor_grid false\nblender /Applications/Blender.app\ninput 2 sacn\n";
+quality ultra\nfog 0.08\npersistence 0.12\npersistence_falloff 4\nambient 0.09\nexposure 1.2\nlaser_brightness 1.5\nlamp_fog_cloudiness 0.2\nlamp_fog_turbulence 0.3\nlaser_fog_cloudiness 0.4\nlaser_fog_turbulence 0.5\ncrowd_amount 0.75\ntheme dark_on_light\nbackground 0.1,0.2,0.3\nlabels false\nshow_selection true\nfloor_grid false\nblender /Applications/Blender.app\ninput 2 sacn\nart_net_interface en5\nsacn_interface all\n";
         let settings = RendererSettings::from_file(source);
         settings.validate().unwrap();
+        assert_eq!(settings.art_net_interface.as_deref(), Some("en5"));
+        assert_eq!(settings.sacn_interface, None);
         assert_eq!(RendererSettings::from_file(&settings.to_file()), settings);
+    }
+
+    #[test]
+    fn every_interface_is_written_down_so_clearing_a_choice_reaches_readers() {
+        let text = RendererSettings::default().to_file();
+        assert!(text.contains("art_net_interface all\n"));
+        assert!(text.contains("sacn_interface all\n"));
+        let old_file = "source lighting_desk\nport 5000\n";
+        assert_eq!(
+            RendererSettings::from_file(old_file).art_net_interface,
+            None
+        );
+    }
+
+    #[test]
+    fn a_settings_payload_from_an_older_editor_listens_everywhere() {
+        let mut json = serde_json::to_value(RendererSettings::default()).unwrap();
+        let object = json.as_object_mut().unwrap();
+        object.remove("artNetInterface");
+        object.remove("sacnInterface");
+        let settings: RendererSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(settings.art_net_interface, None);
+        assert_eq!(settings.sacn_interface, None);
     }
 
     #[test]

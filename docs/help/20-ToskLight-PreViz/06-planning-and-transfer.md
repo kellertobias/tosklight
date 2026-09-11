@@ -127,7 +127,8 @@ copy exists. To send work back, use **Load from Visualizer** in the desk's **Loa
 
 **DMX** in the sidebar opens the editor's DMX screen, with three tabs across its title:
 
-* **Network** configures where the show's DMX arrives from — the live DMX inputs described below.
+* **Network** configures where the show's DMX arrives from: the network interface this computer
+  receives it on, and the live DMX inputs described below.
 * **Patch** shows every channel of every patched universe as a grid of numbered cells. A cell is
   lit when a fixture, one of its splits, or one of its multi-patches occupies that address and dark
   when nothing does; a fixture's first address carries a mark on its left edge, so neighbouring
@@ -143,9 +144,33 @@ copy exists. To send work back, use **Load from Visualizer** in the desk's **Loa
   outputs no DMX, so nothing on this tab overrides a value.
 
 Values listens exactly where the Visualizer does: the show's output routes, the live DMX inputs
-over them, and the Art-Net and sACN defaults for every patched universe when neither names any. It
-only listens while the tab is open, and shares its ports so a Visualizer on the same computer keeps
-receiving beside it.
+over them, and the Art-Net and sACN defaults for every patched universe when neither names any,
+each on the interface chosen for its protocol. It only listens while the tab is open, and shares
+its ports so a Visualizer on the same computer keeps receiving beside it.
+
+## Choose the input network
+
+A computer with more than one network — a lighting network beside an office or venue network, or
+two lighting networks — can receive DMX on only the one that carries it. The **Input Interfaces**
+section at the top of the **DMX** screen's **Network** tab has one choice per protocol:
+
+* **Art-Net interface** and **sACN interface** each offer **All interfaces**, the default, and
+  every network interface this computer has, by its system name and IPv4 address — for example
+  `en0 · 10.0.0.5`. The loopback interface is marked **(this computer only)**.
+* Choosing an interface takes effect at once: the **Values** tab and a running Visualizer listen
+  on that interface only. Art-Net broadcast, sACN multicast, and unicast addressed to that
+  interface all still arrive; DMX arriving on any other network is ignored.
+* The two protocols are independent, so Art-Net can come from one network and sACN from another.
+
+The choice belongs to this computer, not the show. It is saved with the Visualizer's settings,
+so the Visualizer and the editor always listen on the same network, and a show opened on another
+computer never carries this one's interface names.
+
+An interface is remembered by its name, so an address that changes when the network is renewed is
+still the same choice. When the chosen interface is not connected, it is listed as **not
+connected** and a warning says that the protocol is not received until it returns: the editor
+does not quietly fall back to every network. New interfaces appear in the list within a few
+seconds of being connected.
 
 ## Configure live DMX inputs
 
@@ -153,8 +178,8 @@ The **DMX** screen's **Network** tab maps a logical show universe to the Art-Net
 sACN universe the separate Visualizer output receives. Each mapping can be enabled or disabled
 and carries its protocol, wire universe, delivery mode, and UDP port. Art-Net offers Broadcast or
 Unicast; sACN offers Multicast or Unicast. Choose **Apply** to store the mappings in the portable
-show, or **Cancel** to discard the draft. The receiving machine's network-interface choice stays
-local to that machine and is never written into the show.
+show, or **Cancel** to discard the draft. The network interface the mappings are received on is
+chosen separately for each computer, as described above, and is never written into the show.
 
 When a desk is detected, **Take from Desk** reads that desk's compatible output routes through a
 read-only Visualizer session. With more than one desk, first select the source. The imported routes

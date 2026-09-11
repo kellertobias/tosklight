@@ -317,6 +317,18 @@ export interface RendererSettings {
 	floorGrid: boolean | null;
 	blender: string;
 	inputOverrides: RendererInputOverride[];
+	/** The interface Art-Net is received on, by system name; `null` is every interface. */
+	artNetInterface: string | null;
+	/** The interface sACN is received on, by system name; `null` is every interface. */
+	sacnInterface: string | null;
+}
+
+/** One IPv4 address of one network interface on this machine. */
+export interface NetworkInterface {
+	name: string;
+	address: string;
+	netmask: string;
+	loopback: boolean;
 }
 
 export type MediaObjectIntent = {
@@ -417,6 +429,8 @@ export const documentSession = {
 	 * The first call opens the sockets; they stay open until `stopReceivedDmx`.
 	 */
 	receivedDmx: () => invoke<ReceivedDmx>("received_dmx"),
+	/** This machine's IPv4 interfaces, for choosing where Art-Net and sACN are received. */
+	networkInterfaces: () => invoke<NetworkInterface[]>("network_interfaces"),
 	stopReceivedDmx: () => invoke<void>("stop_received_dmx"),
 	/** Take a copy of that desk's show and open it here. */
 	loadFromDesk: (instance: string) =>

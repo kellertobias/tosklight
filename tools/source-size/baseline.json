@@ -9,15 +9,14 @@
     "apps/viz-editor/src-tauri/src/cad.rs": 1577,
     "apps/viz-editor/src/cad/CadViewport.tsx": 1462,
     "apps/viz-editor/src/MediaWorkspace.tsx": 1238,
-    "apps/viz-renderer/src/app.rs": 1336,
-    "apps/viz-renderer/src/settings.rs": 1212,
+    "apps/viz-renderer/src/app.rs": 1324,
     "crates/light/adapters/headless/src/runtime/extensions_runtime.rs": 1223,
     "crates/light/adapters/headless/src/runtime/macros_v2.rs": 1654,
     "crates/media/adapters/http/src/routes/outputs.rs": 1856,
     "crates/media/adapters/library/src/storage.rs": 1215,
     "crates/media/domain/src/layer.rs": 1662,
     "crates/viz/project/src/decode.rs": 1330,
-    "crates/viz/project/src/plan.rs": 1422
+    "crates/viz/project/src/plan.rs": 1366
   },
   "functions": {
     "apps/light-desktop/src/components/control/CommandLineBar.tsx::javascript:function:useCommandLineBarModel:c5f2d01ea62b:1": 195,
@@ -64,7 +63,7 @@
     "apps/ui-library/src/playback/VirtualPlaybackGrid.tsx::javascript:function:VirtualizedPlaybackGrid:af79193287d5:1": 153,
     "apps/ui-library/src/playback/VirtualPlaybackGrid.tsx::javascript:function:VirtualPlaybackBox:e49a00a208b9:1": 154,
     "apps/viz-editor/src-tauri/src/cad.rs::rust:function:entities:c1539f6b45b7:1": 155,
-    "apps/viz-editor/src/App.tsx::javascript:function:App:47f14c277946:1": 564,
+    "apps/viz-editor/src/App.tsx::javascript:function:App:47f14c277946:1": 540,
     "apps/viz-editor/src/cad/CadApp.tsx::javascript:function:CadApp:5277956b9a1d:1": 592,
     "apps/viz-editor/src/cad/CadViewport.tsx::javascript:arrow:arrow:7a8bdabc5b19:1": 326,
     "apps/viz-editor/src/cad/CadViewport.tsx::javascript:function:CadViewport:572627233250:1": 369,

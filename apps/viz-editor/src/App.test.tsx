@@ -825,9 +825,33 @@ describe("the Viz editor window", () => {
 			};
 		};
 
+		const networkInterfaces = [
+			{ name: "en0", address: "10.0.0.5", netmask: "255.255.255.0", loopback: false },
+			{ name: "lo0", address: "127.0.0.1", netmask: "255.0.0.0", loopback: true },
+		];
+		let interfaceSettings = {
+			...rendererSettings,
+			artNetInterface: null as string | null,
+			sacnInterface: "en7" as string | null,
+		};
+
 		function mockDmx() {
-			invoke.mockImplementation((command: string) => {
+			interfaceSettings = {
+				...rendererSettings,
+				artNetInterface: null,
+				sacnInterface: "en7",
+			};
+			invoke.mockImplementation((command: string, payload?: unknown) => {
 				switch (command) {
+					case "network_interfaces":
+						return Promise.resolve(networkInterfaces);
+					case "renderer_settings":
+						return Promise.resolve(interfaceSettings);
+					case "save_renderer_settings":
+						interfaceSettings = (
+							payload as { settings: typeof interfaceSettings }
+						).settings;
+						return Promise.resolve(interfaceSettings);
 					case "document_summary":
 						return Promise.resolve(document);
 					case "patch_snapshot":
@@ -873,6 +897,46 @@ describe("the Viz editor window", () => {
 			).toHaveClass("is-active");
 			// Nothing listens until Values is open.
 			expect(invoke).not.toHaveBeenCalledWith("received_dmx");
+		});
+
+		it("chooses the interface each protocol is received on, for this computer only", async () => {
+			mockDmx();
+			renderApp();
+			fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+			await screen.findByRole("heading", { name: "Input Interfaces" });
+			// A remembered adapter that is gone says so instead of quietly listening everywhere.
+			expect(
+				await screen.findByText(/en7 is not connected\. No sACN is received/),
+			).toBeInTheDocument();
+			const [artNet, sacn] = [
+				...(document_root()?.querySelectorAll<HTMLElement>(
+					".viz-dmx-interface-field .ui-select-trigger",
+				) ?? []),
+			];
+			await waitFor(() => expect(artNet).toBeEnabled());
+			expect(artNet).toHaveTextContent("All interfaces");
+			expect(sacn).toHaveTextContent("en7 · not connected");
+
+			fireEvent.click(artNet);
+			const options = within(
+				await screen.findByRole("listbox", { name: "Art-Net interface" }),
+			);
+			expect(
+				options.getByRole("option", { name: "lo0 · 127.0.0.1 (this computer only)" }),
+			).toBeInTheDocument();
+			fireEvent.click(options.getByRole("option", { name: "en0 · 10.0.0.5" }));
+			await waitFor(() =>
+				expect(invoke).toHaveBeenCalledWith("save_renderer_settings", {
+					settings: expect.objectContaining({
+						artNetInterface: "en0",
+						sacnInterface: "en7",
+					}),
+				}),
+			);
+			expect(
+				await screen.findByText("Art-Net is received on en0 only."),
+			).toBeInTheDocument();
+			expect(artNet).toHaveTextContent("en0 · 10.0.0.5");
 		});
 
 		it("lights every patched address and leaves the rest dark", async () => {

@@ -5,11 +5,15 @@
 //! coalesced to the newest complete frame per logical universe. Nothing here can backpressure the
 //! desk that sent the packets.
 
+mod interfaces;
 mod mapping;
 mod packet;
 mod receiver;
 mod statistics;
 
+pub use interfaces::{
+    ListenInterfaces, NetworkInterface, listen_on, listen_on_this_machine, network_interfaces,
+};
 pub use mapping::{Delivery, InputMapping, Protocol, UniverseInput, apply_overrides};
 pub use packet::{
     ARTNET_PORT, DMX_SLOTS, DecodedFrame, PacketReject, SACN_PORT, decode_artdmx, decode_sacn,

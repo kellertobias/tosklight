@@ -2,9 +2,10 @@
 //!
 //! The Architect outputs no DMX and has no desk behind it, so received values are the only DMX it
 //! can show. It listens exactly where the Visualizer listens — the show's output routes, its Live
-//! DMX Inputs over those, the Art-Net and sACN defaults for every patched universe when neither
-//! names any, and this machine's renderer overrides last — and only while the Values tab asks.
-//! The receiver shares its ports, so a Visualizer on the same machine keeps receiving beside it.
+//! DMX Inputs over those, and the Art-Net and sACN defaults for every patched universe when
+//! neither names any, each on the interface this machine chose for its protocol — and only while
+//! the Values tab asks. The receiver shares its ports, so a Visualizer on the same machine keeps
+//! receiving beside it.
 
 use crate::session::Session;
 use parking_lot::Mutex;
@@ -12,7 +13,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 use viz_desk::wire::ObjectRecord;
-use viz_dmx::{DMX_SLOTS, DmxReceiver, InputMapping, Protocol, UniverseInput};
+use viz_dmx::{DMX_SLOTS, DmxReceiver, InputMapping, ListenInterfaces};
 use viz_document::{LIVE_DMX_INPUT_KIND, PlanningDocument};
 use viz_scene::{InputHealth, SourceProtocol};
 
@@ -166,10 +167,10 @@ impl Listening {
     }
 }
 
-/// Where the Visualizer would listen for this document, on every interface.
+/// Where the Visualizer would listen for this document, on the interfaces this machine chose.
 pub fn listening_mappings(
     document: &PlanningDocument,
-    overrides: &[UniverseInput],
+    interfaces: &ListenInterfaces,
 ) -> Result<(Vec<InputMapping>, Vec<String>), String> {
     // Output routes are stored as show objects of kind `route`, as on the desk.
     let routes = records(document, "route")?;
@@ -186,10 +187,9 @@ pub fn listening_mappings(
         }
         mappings = viz_desk::default_mappings(&universes, None);
     }
-    Ok((
-        viz_dmx::apply_overrides(mappings, overrides, None),
-        warnings,
-    ))
+    let (mappings, interface_warnings) = viz_dmx::listen_on_this_machine(mappings, interfaces);
+    warnings.extend(interface_warnings);
+    Ok((mappings, warnings))
 }
 
 fn records(document: &PlanningDocument, kind: &str) -> Result<Vec<ObjectRecord>, String> {
@@ -232,21 +232,14 @@ fn patched_universes(document: &PlanningDocument) -> Result<Vec<u16>, String> {
     Ok(universes.into_iter().collect())
 }
 
-/// This machine's renderer overrides, which the Visualizer applies last.
-fn renderer_overrides(session: &Session) -> Vec<UniverseInput> {
+/// The interfaces this machine receives Art-Net and sACN on, which the Visualizer shares.
+fn renderer_interfaces(session: &Session) -> ListenInterfaces {
     session
         .scene_source()
         .renderer_settings()
-        .map(|update| {
-            update
-                .settings
-                .input_overrides
-                .iter()
-                .filter_map(|input| {
-                    Protocol::from_wire(input.protocol.trim())
-                        .map(|protocol| UniverseInput::new(input.universe, protocol))
-                })
-                .collect()
+        .map(|update| ListenInterfaces {
+            art_net: update.settings.art_net_interface,
+            sacn: update.settings.sacn_interface,
         })
         .unwrap_or_default()
 }
@@ -277,8 +270,9 @@ pub fn received_dmx(
     session: tauri::State<'_, Session>,
     monitor: tauri::State<'_, DmxInputMonitor>,
 ) -> Result<ReceivedDmx, String> {
-    let overrides = renderer_overrides(&session);
-    let (mappings, warnings) = session.with(|document| listening_mappings(document, &overrides))?;
+    let interfaces = renderer_interfaces(&session);
+    let (mappings, warnings) =
+        session.with(|document| listening_mappings(document, &interfaces))?;
     Ok(monitor.read(mappings, warnings))
 }
 
@@ -288,12 +282,36 @@ pub fn stop_received_dmx(monitor: tauri::State<'_, DmxInputMonitor>) {
     monitor.stop();
 }
 
+/// One IPv4 address of one of this machine's network interfaces.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkInterface {
+    pub name: String,
+    pub address: String,
+    pub netmask: String,
+    pub loopback: bool,
+}
+
+/// This machine's interfaces, for choosing where Art-Net and sACN are received.
+#[tauri::command]
+pub fn network_interfaces() -> Result<Vec<NetworkInterface>, String> {
+    Ok(viz_dmx::network_interfaces()?
+        .into_iter()
+        .map(|interface| NetworkInterface {
+            name: interface.name,
+            address: interface.address.to_string(),
+            netmask: interface.netmask.to_string(),
+            loopback: interface.loopback,
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
     use std::time::Duration;
-    use viz_dmx::Delivery;
+    use viz_dmx::{Delivery, Protocol};
 
     fn free_port() -> u16 {
         UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
@@ -402,29 +420,35 @@ mod tests {
     }
 
     #[test]
-    fn renderer_overrides_are_read_from_the_editor_settings() {
+    fn the_interfaces_are_read_from_the_editor_settings() {
         let session = Session::default();
-        let mut settings = viz_scene::RendererSettings::default();
-        settings
-            .input_overrides
-            .push(viz_scene::RendererInputOverride {
-                universe: 3,
-                protocol: "sacn".into(),
-            });
-        settings
-            .input_overrides
-            .push(viz_scene::RendererInputOverride {
-                universe: 4,
-                protocol: "unknown".into(),
-            });
+        assert_eq!(renderer_interfaces(&session), ListenInterfaces::default());
+        let settings = viz_scene::RendererSettings {
+            art_net_interface: Some("en5".into()),
+            ..viz_scene::RendererSettings::default()
+        };
         session
             .scene_source()
             .set_renderer_settings("test", settings)
             .expect("settings");
-        let overrides = renderer_overrides(&session);
-        assert_eq!(overrides.len(), 1);
-        assert_eq!(overrides[0].universe, 3);
-        assert_eq!(overrides[0].protocol, Protocol::Sacn);
+        assert_eq!(
+            renderer_interfaces(&session),
+            ListenInterfaces {
+                art_net: Some("en5".into()),
+                sacn: None,
+            }
+        );
+    }
+
+    #[test]
+    fn this_machine_lists_its_interfaces_by_name_and_address() {
+        let listed = network_interfaces().expect("interfaces");
+        assert!(listed.iter().all(|interface| !interface.name.is_empty()));
+        assert!(
+            listed
+                .iter()
+                .all(|interface| interface.address.parse::<Ipv4Addr>().is_ok())
+        );
     }
 
     #[test]

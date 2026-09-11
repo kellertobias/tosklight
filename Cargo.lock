@@ -8192,6 +8192,8 @@ dependencies = [
 name = "viz-dmx"
 version = "0.1.0"
 dependencies = [
+ "if-addrs",
+ "nix 0.30.1",
  "socket2 0.6.5",
  "viz-scene",
 ]

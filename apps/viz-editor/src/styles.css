@@ -1347,6 +1347,23 @@ body {
 	background: var(--surface-raised, #10151c);
 }
 
+.viz-dmx-interfaces {
+	margin-bottom: 12px;
+}
+
+.viz-dmx-interface-fields {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 12px;
+	margin-top: 12px;
+}
+
+.viz-dmx-interface-field {
+	display: grid;
+	gap: 6px;
+	align-content: start;
+}
+
 .viz-live-inputs > header,
 .viz-live-inputs > footer,
 .viz-live-input-actions {

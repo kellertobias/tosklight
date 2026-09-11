@@ -38,6 +38,8 @@ pub struct DeskConnection {
     pub retry: Duration,
     /// Operator statements about where a universe actually arrives, overriding the show's routes.
     pub input_overrides: Vec<viz_dmx::UniverseInput>,
+    /// The network interface each protocol is received on, chosen on this machine.
+    pub listen_interfaces: viz_dmx::ListenInterfaces,
     /// Which renderer this window is, for a desk driving more than one. The desk keeps a view per
     /// target, so two renderers side by side can show two different things.
     pub target: String,
@@ -62,6 +64,7 @@ impl Default for DeskConnection {
             bind_interface: None,
             retry: Duration::from_secs(2),
             input_overrides: Vec::new(),
+            listen_interfaces: viz_dmx::ListenInterfaces::default(),
             target: "main".into(),
             // The network rule is the default; the desk's own window opts out deliberately.
             values_from_desk_output: false,
@@ -240,7 +243,8 @@ impl DeskProvider {
                 .then_some(external_camera)
                 .flatten(),
         );
-        let mappings = self.resolved_mappings(mappings, &decoder);
+        let mut diagnostics = diagnostics;
+        let mappings = self.resolved_mappings(mappings, &decoder, &mut diagnostics);
         self.receivers = self
             .listens_on_the_network()
             .then(|| DmxReceiver::start(mappings.clone(), self.epoch));
@@ -282,7 +286,8 @@ impl DeskProvider {
                 .then_some(external_camera)
                 .flatten(),
         );
-        let mappings = self.resolved_mappings(mappings, &decoder);
+        let mut diagnostics = diagnostics;
+        let mappings = self.resolved_mappings(mappings, &decoder, &mut diagnostics);
         if mappings != self.mappings || self.receivers.is_none() {
             if let Some(mut receivers) = self.receivers.take() {
                 receivers.shutdown();
@@ -358,10 +363,12 @@ impl DeskProvider {
         !self.connection.values_from_desk_output
     }
 
+    /// Where this show's universes are received, and anything the operator should hear about it.
     fn resolved_mappings(
         &self,
         mappings: Vec<viz_dmx::InputMapping>,
         decoder: &Decoder,
+        diagnostics: &mut ProviderDiagnostics,
     ) -> Vec<viz_dmx::InputMapping> {
         let mappings = if mappings.is_empty() {
             routes::default_mappings(
@@ -371,11 +378,16 @@ impl DeskProvider {
         } else {
             mappings
         };
-        viz_dmx::apply_overrides(
-            mappings,
-            &self.connection.input_overrides,
-            self.connection.bind_interface,
-        )
+        let (mappings, warnings) = viz_dmx::listen_on_this_machine(
+            viz_dmx::apply_overrides(
+                mappings,
+                &self.connection.input_overrides,
+                self.connection.bind_interface,
+            ),
+            &self.connection.listen_interfaces,
+        );
+        diagnostics.warnings.extend(warnings);
+        mappings
     }
 
     fn drain_messages(&mut self, events: &mut Vec<ProviderEvent>) {
@@ -847,7 +859,7 @@ async fn read_scene(
         interface: connection
             .bind_interface
             .map(|address| address.to_string())
-            .unwrap_or_else(|| "all interfaces".into()),
+            .unwrap_or_else(|| connection.listen_interfaces.describe()),
         inputs: Vec::new(),
         universes: Vec::new(),
         preview_universes: Vec::new(),

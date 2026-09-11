@@ -64,6 +64,7 @@ impl viz_render::PresentationSurface for WindowSurface {
 mod benchmark;
 mod draw;
 mod input;
+mod renderer_settings;
 
 use benchmark::BenchmarkSample;
 use draw::gpu_label;
@@ -431,6 +432,7 @@ impl Application {
                     input_overrides: self
                         .preferences
                         .applied_input_overrides(self.hosted_show.is_some()),
+                    listen_interfaces: self.preferences.listen_interfaces.clone(),
                     target: self.options.target.clone(),
                     ..DeskConnection::default()
                 },
@@ -565,22 +567,6 @@ impl Application {
                 }
                 self.stored_preferences = text;
             }
-        }
-    }
-
-    fn adopt_connected_renderer_settings(&mut self, session: &mut Session) {
-        let Some(update) = session.take_renderer_settings() else {
-            return;
-        };
-        let before = self.preferences.to_file();
-        self.preferences
-            .adopt_file(&update.settings.to_file(), &self.options);
-        if self.preferences.to_file() == before {
-            return;
-        }
-        self.next_preferences_save = Instant::now();
-        if self.quick_settings.open {
-            self.quick_settings.refresh(&self.preferences);
         }
     }
 

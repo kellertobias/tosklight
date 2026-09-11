@@ -241,6 +241,7 @@ fn main() {
             discovery::take_live_dmx_inputs_from_desk,
             dmx_input::received_dmx,
             dmx_input::stop_received_dmx,
+            dmx_input::network_interfaces,
         ])
         .setup(|app| {
             // Before the window is shown, so the tile never appears and then disappears.

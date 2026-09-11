@@ -32,6 +32,7 @@ import {
 	type LiveDmxProtocol,
 	type ReceivedDmx,
 } from "./document/session";
+import { DmxInterfacesPanel } from "./DmxInterfacesPanel";
 import { LiveDmxInputsPanel } from "./LiveDmxInputsPanel";
 import { useDiscoveredDesks } from "./useDiscoveredDesks";
 import { beginWindowDrag } from "./WindowChrome";
@@ -140,6 +141,7 @@ export function DmxWorkspace({
 			) : null}
 			{page === "network" ? (
 				<div className="viz-dmx-network">
+					<DmxInterfacesPanel onError={onError} />
 					<LiveDmxInputsPanel
 						document={document}
 						desks={desks}
