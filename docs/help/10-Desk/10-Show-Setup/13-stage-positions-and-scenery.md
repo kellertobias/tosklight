@@ -24,6 +24,8 @@ Add scenery through **Show > Show Patch**. Choose a visual-only profile from the
 
 Stage does not maintain a second scene-asset collection. Standalone MVR geometry is reported as an import warning; recreate required scenery with Venue fixtures so it remains visible and editable through Patch and the Fixture Library.
 
+The Stage, the PreViz Renderer and ToskLight Architect all draw the same Venue fixtures, and hiding a patch layer hides its scenery and crowds as well as its lights. Shows copied from an older Demo Show also carried a second set of standalone scenery records that no screen listed; opening such a show removes them once its patch holds its own Venue fixtures, so the renderer no longer draws scenery that is not in the patch.
+
 ## Visualization limits
 
 Stage is a programming aid, not a photometric proof. Check real fixtures and DMX output for focus, color, beam, and intensity. Use **Follow Preload** to choose whether Stage displays the live scene or the active Preload scene.

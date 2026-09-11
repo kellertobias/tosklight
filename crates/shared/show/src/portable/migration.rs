@@ -2,7 +2,7 @@ use super::profile_revision::materialize_legacy_fixture_profile_revisions;
 use crate::{StoreError, set_schema_version};
 use rusqlite::{Connection, TransactionBehavior};
 
-pub(crate) const SHOW_SCHEMA_VERSION: i64 = 7;
+pub(crate) const SHOW_SCHEMA_VERSION: i64 = 8;
 
 pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -10,8 +10,42 @@ pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     if schema_version(&tx)? < 4 {
         materialize_legacy_fixture_profile_revisions(&tx)?;
     }
+    if schema_version(&tx)? < 8 {
+        retire_superseded_demo_venue_objects(&tx)?;
+    }
     set_schema_version(&tx, SHOW_SCHEMA_VERSION)?;
     tx.commit()?;
+    Ok(())
+}
+
+/// Drops the standalone `venue` records the original demo generator wrote, once the show carries
+/// its scenery as Venue fixtures.
+///
+/// Nothing but that generator ever wrote a `venue` record, and every show holding its records also
+/// holds the same scenery as visual-only patched fixtures — whole truss runs where the records
+/// were cut into two-metre pieces. There the records are only a stale second copy that no screen
+/// can remove, so they go. A show whose patch has no such fixture keeps them, and any record not
+/// written by the generator is left alone. Schema 8 runs it once.
+fn retire_superseded_demo_venue_objects(conn: &Connection) -> Result<(), StoreError> {
+    conn.execute(
+        "DELETE FROM objects
+          WHERE kind='venue' AND id LIKE 'planned-demo-venue-%'
+            AND EXISTS (
+              SELECT 1 FROM objects fixture
+                LEFT JOIN fixture_profile_revisions profile
+                  ON profile.profile_id = json_extract(fixture.body_json, '$.profile_id')
+                 AND profile.revision = json_extract(fixture.body_json, '$.profile_revision')
+               WHERE fixture.kind='patched_fixture'
+                 AND COALESCE(
+                       json_extract(profile.profile_json, '$.patch_policy'),
+                       json_extract(fixture.body_json, '$.definition.profile_snapshot.patch_policy')
+                     ) = 'visual_only'
+                 AND COALESCE(
+                       json_extract(profile.profile_json, '$.crowd'),
+                       json_extract(fixture.body_json, '$.definition.profile_snapshot.crowd')
+                     ) IS NULL)",
+        [],
+    )?;
     Ok(())
 }
 

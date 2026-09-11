@@ -39,6 +39,8 @@ pub(crate) use store::{bump_revision, current_revision, initialise_revision};
 #[cfg(test)]
 mod candidate_tests;
 #[cfg(test)]
+mod migration_tests;
+#[cfg(test)]
 mod schedule_occurrence_tests;
 #[cfg(test)]
 mod tests;
