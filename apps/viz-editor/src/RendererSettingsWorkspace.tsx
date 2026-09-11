@@ -80,7 +80,7 @@ export function RendererSettingsWorkspace({
 					<p>
 						These controls update every Visualizer connected to this Editor live.
 						Its source is the current document; live values still arrive through
-						the Show screen’s DMX inputs.
+						the inputs on the DMX screen’s Network tab.
 					</p>
 				</header>
 				<div className="viz-renderer-settings-grid">

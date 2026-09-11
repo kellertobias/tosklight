@@ -117,6 +117,37 @@ export interface LiveDmxInputs {
 	mappings: LiveDmxInputMapping[];
 }
 
+/** One show universe the Architect listens for, and what last arrived on it. */
+export interface ReceivedUniverse {
+	universe: number;
+	/** All 512 slots of the newest frame; absent until one arrived. */
+	slots: number[] | null;
+	/** A source is delivering it now, rather than having stopped with its last frame held. */
+	live: boolean;
+	rateHz: number;
+	protocol: LiveDmxProtocol | null;
+}
+
+/** One socket the Architect listens on while the Values tab is open. */
+export interface ReceivingInput {
+	id: string;
+	protocol: LiveDmxProtocol;
+	logicalUniverse: number;
+	destinationUniverse: number;
+	delivery: string;
+	bind: string;
+	health: string;
+	source: string | null;
+	acceptedPackets: number;
+	detail: string;
+}
+
+export interface ReceivedDmx {
+	universes: ReceivedUniverse[];
+	inputs: ReceivingInput[];
+	warnings: string[];
+}
+
 export interface MediaTransform {
 	positionMetres: [number, number, number];
 	rotationDegrees: [number, number, number];
@@ -380,6 +411,13 @@ export const documentSession = {
 	/** Preview compatible routes from a desk; the caller must still explicitly Apply them. */
 	takeLiveDmxInputsFromDesk: (instance: string) =>
 		invoke<LiveDmxInputs>("take_live_dmx_inputs_from_desk", { instance }),
+	/**
+	 * What arrived over Art-Net and sACN, received where the Visualizer listens.
+	 *
+	 * The first call opens the sockets; they stay open until `stopReceivedDmx`.
+	 */
+	receivedDmx: () => invoke<ReceivedDmx>("received_dmx"),
+	stopReceivedDmx: () => invoke<void>("stop_received_dmx"),
 	/** Take a copy of that desk's show and open it here. */
 	loadFromDesk: (instance: string) =>
 		invoke<DocumentSummary>("load_from_desk", { instance }),

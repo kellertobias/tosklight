@@ -123,9 +123,33 @@ each naming its own machine; hovering one shows the address it was found at.
 What arrives is a copy. Patching it here does not reach the desk, and the desk does not know the
 copy exists. To send work back, use **Load from Visualizer** in the desk's **Load Show** menu.
 
+## The DMX screen
+
+**DMX** in the sidebar opens the editor's DMX screen, with three tabs across its title:
+
+* **Network** configures where the show's DMX arrives from — the live DMX inputs described below.
+* **Patch** shows every channel of every patched universe as a grid of numbered cells. A cell is
+  lit when a fixture, one of its splits, or one of its multi-patches occupies that address and dark
+  when nothing does; a fixture's first address carries a mark on its left edge, so neighbouring
+  fixtures stay apart, and an address two patches share is drawn in orange. Select a cell to see
+  which fixture owns it, its patch range, split, fixture channel and attribute, and the address's
+  DIP-switch setting.
+* **Values** is the desk's **DMX Output** window applied to the DMX this machine receives. Each
+  universe the show listens on is a row of dots that brighten with the received level; its header
+  names the protocol and frame rate, **Holding the last frame** once a source stops, or **Waiting
+  for DMX** before anything arrived. Select a dot to read its value, fixture and DIP switches;
+  with nothing selected, the side column lists every input being listened on with its health, its
+  sender, and how many packets it accepted. The window's settings set the dot size. The editor
+  outputs no DMX, so nothing on this tab overrides a value.
+
+Values listens exactly where the Visualizer does: the show's output routes, the live DMX inputs
+over them, the Art-Net and sACN defaults for every patched universe when neither names any, and
+this machine's renderer overrides last. It only listens while the tab is open, and shares its ports
+so a Visualizer on the same computer keeps receiving beside it.
+
 ## Configure live DMX inputs
 
-The **Show** screen's **Live DMX Inputs** section maps a logical show universe to the Art-Net or
+The **DMX** screen's **Network** tab maps a logical show universe to the Art-Net or
 sACN universe the separate Visualizer output receives. Each mapping can be enabled or disabled
 and carries its protocol, wire universe, delivery mode, and UDP port. Art-Net offers Broadcast or
 Unicast; sACN offers Multicast or Unicast. Choose **Apply** to store the mappings in the portable

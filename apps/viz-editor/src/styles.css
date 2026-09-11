@@ -259,6 +259,7 @@ body {
 .viz-editor-workspace > .viz-show-settings-workspace,
 .viz-editor-workspace > .viz-media-workspace,
 .viz-editor-workspace > .viz-editor-empty,
+.viz-editor-workspace > .viz-dmx-workspace,
 .viz-editor-workspace > .viz-venue-workspace {
 	flex: 1;
 	min-width: 0;
@@ -1036,6 +1037,307 @@ body {
 
 .viz-show-actions .ui-button {
 	min-height: 40px;
+}
+
+/*
+ * The DMX screen. Values follows the desk's DMX Output window — dots that brighten with the level,
+ * an information column beside them — and Patch uses the same rows with numbered cells that are
+ * lit where the rig occupies an address and dark where nothing does.
+ */
+.viz-dmx-workspace {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.viz-editor-workspace > .viz-dmx-workspace > .ui-window-header {
+	flex: none;
+}
+
+.viz-dmx-network {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	scrollbar-gutter: stable;
+}
+
+.viz-dmx-content {
+	display: grid;
+	flex: 1;
+	grid-template-columns: minmax(0, 1fr) 260px;
+	min-height: 0;
+}
+
+.viz-dmx-content > .ui-window-scroll-area,
+.viz-dmx-content > div:first-child {
+	min-width: 0;
+	min-height: 0;
+}
+
+.viz-dmx-content main {
+	padding: 7px;
+}
+
+.viz-dmx-universe {
+	margin-bottom: 7px;
+	padding: 6px;
+	border: 1px solid var(--border-subtle, #2a3440);
+	border-radius: 7px;
+}
+
+.viz-dmx-universe > header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 28px;
+}
+
+.viz-dmx-universe > header small {
+	margin-left: auto;
+	color: var(--text-secondary, #98a4b3);
+	font-variant-numeric: tabular-nums;
+}
+
+.viz-dmx-row {
+	display: grid;
+	grid-template-columns: 46px minmax(0, 1fr);
+	gap: 5px;
+	align-items: center;
+	margin: 3px 0;
+}
+
+.viz-dmx-row > code {
+	color: var(--text-secondary, #98a4b3);
+	font-size: 10px;
+	font-variant-numeric: tabular-nums;
+}
+
+.viz-dmx-row > div {
+	display: grid;
+	grid-template-columns: repeat(var(--viz-dmx-columns), var(--viz-dmx-cell));
+	gap: 3px;
+	justify-content: start;
+}
+
+.viz-dmx-row button {
+	box-sizing: border-box;
+	width: var(--viz-dmx-cell);
+	height: var(--viz-dmx-cell);
+	margin: 0;
+	padding: 0;
+	cursor: pointer;
+}
+
+.viz-dmx-universe.is-values .viz-dmx-row button {
+	border: 1px solid #303b43;
+	border-radius: 50%;
+	background: #172027;
+}
+
+.viz-dmx-universe.is-values .viz-dmx-row button.low {
+	background: #174223;
+}
+
+.viz-dmx-universe.is-values .viz-dmx-row button.mid {
+	background: #25923e;
+}
+
+.viz-dmx-universe.is-values .viz-dmx-row button.high {
+	background: #67ed80;
+}
+
+.viz-dmx-universe.is-patch .viz-dmx-row button {
+	border: 1px solid #1d252c;
+	border-radius: 4px;
+	background: #0b0f13;
+	color: #3d4852;
+	font-size: 10px;
+	font-variant-numeric: tabular-nums;
+}
+
+.viz-dmx-universe.is-patch .viz-dmx-row button.is-patched {
+	border-color: #2f8fb0;
+	background: #14506a;
+	color: #e8f6fb;
+}
+
+/* A fixture's first address marks where one patch ends and the next begins. */
+.viz-dmx-universe.is-patch .viz-dmx-row button.is-start {
+	box-shadow: inset 3px 0 0 #7fdcff;
+}
+
+.viz-dmx-universe.is-patch .viz-dmx-row button.is-conflict {
+	border-color: #ff9d4d;
+	background: #6a3614;
+}
+
+.viz-dmx-row button.is-selected {
+	outline: 2px solid var(--accent, #4cc9f0);
+	outline-offset: 1px;
+}
+
+.viz-dmx-empty {
+	color: var(--text-secondary, #98a4b3);
+}
+
+.viz-dmx-info {
+	min-width: 0;
+	padding: 9px;
+	overflow: auto;
+	border-left: 1px solid var(--border-subtle, #2a3440);
+}
+
+.viz-dmx-info > b {
+	display: block;
+}
+
+.viz-dmx-info section {
+	margin-top: 8px;
+	padding: 9px;
+	border: 1px solid var(--border-subtle, #2a3440);
+	border-radius: 6px;
+}
+
+.viz-dmx-info section > b {
+	display: block;
+	margin-bottom: 7px;
+	color: var(--text-secondary, #98a4b3);
+	font-weight: 500;
+}
+
+.viz-dmx-info p {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+}
+
+.viz-dmx-info-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.viz-dmx-address-card strong,
+.viz-dmx-address-card > small,
+.viz-dmx-value-card strong,
+.viz-dmx-value-card small {
+	display: block;
+}
+
+.viz-dmx-address-card > small,
+.viz-dmx-value-card small {
+	margin-top: 3px;
+	color: var(--text-secondary, #98a4b3);
+}
+
+.viz-dmx-value-card strong {
+	font-size: 26px;
+	font-variant-numeric: tabular-nums;
+}
+
+.viz-dmx-dip-switches {
+	display: grid;
+	grid-template-columns: repeat(9, minmax(0, 1fr));
+	gap: 3px;
+	margin-top: 10px;
+}
+
+.viz-dmx-dip-switches > span {
+	min-width: 0;
+	text-align: center;
+}
+
+.viz-dmx-dip-switches i {
+	position: relative;
+	display: block;
+	width: 100%;
+	height: 30px;
+	border: 1px solid var(--border-strong, #34404c);
+	border-radius: 3px;
+	background: #080b0e;
+}
+
+.viz-dmx-dip-switches i::after {
+	content: "";
+	position: absolute;
+	right: 3px;
+	bottom: 3px;
+	left: 3px;
+	height: 10px;
+	border-radius: 2px;
+	background: #53606a;
+}
+
+.viz-dmx-dip-switches .on i {
+	border-color: var(--accent, #4cc9f0);
+	background: #0a252b;
+}
+
+.viz-dmx-dip-switches .on i::after {
+	background: var(--accent, #4cc9f0);
+	transform: translateY(-11px);
+}
+
+.viz-dmx-dip-switches small {
+	display: block;
+	margin-top: 3px;
+	overflow: hidden;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 8px;
+}
+
+.viz-dmx-fixture-card dl {
+	display: grid;
+	grid-template-columns: minmax(78px, 0.8fr) minmax(0, 1.2fr);
+	gap: 6px 8px;
+	margin: 0;
+}
+
+.viz-dmx-fixture-card dl + dl {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--border-subtle, #2a3440);
+}
+
+.viz-dmx-fixture-card dt {
+	color: var(--text-secondary, #98a4b3);
+	font-size: 11px;
+}
+
+.viz-dmx-fixture-card dd {
+	min-width: 0;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.viz-dmx-conflict {
+	margin-top: 8px !important;
+	color: #ff9d4d !important;
+}
+
+.viz-dmx-list {
+	display: grid;
+	gap: 7px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.viz-dmx-list li > * {
+	display: block;
+	overflow-wrap: anywhere;
+}
+
+.viz-dmx-list small {
+	color: var(--text-secondary, #98a4b3);
+}
+
+.viz-dmx-error {
+	display: block;
+	margin-top: 8px;
+	color: var(--status-error, #ff7575);
 }
 
 .viz-live-inputs {

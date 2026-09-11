@@ -21,7 +21,7 @@ pub mod wire;
 mod tests;
 
 pub use provider::{DeskConnection, DeskProvider};
-pub use routes::{default_mappings, mappings};
+pub use routes::{apply_document_inputs, default_mappings, mappings};
 pub use scene_build::{DeskReadModels, build};
 pub use transform::{
     Placement, PlacementSource, resolve, rotation_to_world, slave_to_master, to_world,

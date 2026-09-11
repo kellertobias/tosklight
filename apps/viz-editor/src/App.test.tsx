@@ -577,7 +577,7 @@ describe("the Viz editor window", () => {
 
 	it("offers no desk when there is none on the network", async () => {
 		renderApp();
-		fireEvent.click(await screen.findByRole("tab", { name: "DMX" }));
+		fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
 		await screen.findByRole("heading", { name: "Live DMX Inputs" });
 		expect(screen.queryByText(/Load from Desk/)).not.toBeInTheDocument();
 		expect(
@@ -608,7 +608,7 @@ describe("the Viz editor window", () => {
 		});
 
 		renderApp();
-		fireEvent.click(await screen.findByRole("tab", { name: "DMX" }));
+		fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
 		await screen.findByRole("switch", { name: "Enable universe 1" });
 		const headers = screen
 			.getAllByRole("columnheader")
@@ -640,9 +640,9 @@ describe("the Viz editor window", () => {
 		expect(enabledCell).toHaveTextContent("");
 		fireEvent.click(screen.getByRole("switch", { name: "Enable universe 1" }));
 		expect(row).not.toHaveClass("is-disabled");
-		expect(document_root()?.querySelector(".viz-editor-file-bar")).toHaveClass(
-			"viz-editor-file-bar",
-		);
+		expect(
+			document_root()?.querySelector(".viz-dmx-network .viz-live-inputs"),
+		).not.toBeNull();
 	});
 
 	it("requires an explicit source choice when several desks are detected", async () => {
@@ -672,12 +672,14 @@ describe("the Viz editor window", () => {
 					return Promise.resolve(liveInputs);
 				case "take_live_dmx_inputs_from_desk":
 					return Promise.resolve(liveInputs);
+				case "patch_snapshot":
+					return Promise.resolve(snapshot);
 				default:
 					return Promise.resolve([]);
 			}
 		});
 		renderApp();
-		fireEvent.click(await screen.findByRole("tab", { name: "DMX" }));
+		fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
 		fireEvent.change(await screen.findByRole("combobox", { name: "Desk" }), {
 			target: { value: "desk-backup" },
 		});
@@ -726,6 +728,8 @@ describe("the Viz editor window", () => {
 					return Promise.resolve(liveInputs);
 				case "take_live_dmx_inputs_from_desk":
 					return Promise.resolve(preview);
+				case "patch_snapshot":
+					return Promise.resolve(snapshot);
 				case "save_live_dmx_inputs":
 					return Promise.resolve(preview);
 				default:
@@ -733,7 +737,7 @@ describe("the Viz editor window", () => {
 			}
 		});
 		renderApp();
-		fireEvent.click(await screen.findByRole("tab", { name: "DMX" }));
+		fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
 		fireEvent.click(
 			await screen.findByRole("button", {
 				name: "Take from Desk · front-of-house",
@@ -752,6 +756,188 @@ describe("the Viz editor window", () => {
 				inputs: preview,
 			}),
 		);
+	});
+
+	describe("DMX screen", () => {
+		const patchedSnapshot = {
+			...snapshot,
+			fixtures: [
+				{
+					fixtureId: "44444444-4444-4444-8444-444444444444",
+					fixtureNumber: 101,
+					virtualFixtureNumber: null,
+					name: "Wash Left",
+					profileId: PROFILE_ID,
+					profileRevision: 1,
+					modeId: MODE_ID,
+					splitPatches: [{ split: 1, universe: 2, address: 10 }],
+					layerId: "default",
+					directControl: null,
+					location: { x: 0, y: 0, z: 0 },
+					rotation: { x: 0, y: 0, z: 0 },
+					multipatch: [],
+					fixtureRevision: 1,
+					logicalHeads: [],
+					moveInBlackEnabled: false,
+					moveInBlackDelayMillis: 0,
+					highlightOverrides: [],
+				},
+			],
+			profileRevisions: [
+				{
+					profileId: PROFILE_ID,
+					profileRevision: 1,
+					contentDigest: "digest",
+					manufacturer: "Acme",
+					name: "Planning Wash",
+					fixtureType: "wash",
+					patchPolicy: "dmx",
+					referencedModes: [
+						{ modeId: MODE_ID, name: "Default", splits: [{ split: 1, footprint: 3 }] },
+					],
+					profileSnapshot: null,
+				},
+			],
+		};
+		const received = () => {
+			const slots = Array.from({ length: 512 }, () => 0);
+			slots[9] = 255;
+			slots[10] = 60;
+			return {
+				universes: [
+					{ universe: 2, slots, live: true, rateHz: 44, protocol: "artnet" },
+				],
+				inputs: [
+					{
+						id: "default-art-net-u2",
+						protocol: "artnet",
+						logicalUniverse: 2,
+						destinationUniverse: 2,
+						delivery: "Broadcast",
+						bind: "0.0.0.0:6454",
+						health: "Healthy",
+						source: "Desk · 10.0.0.4:6454",
+						acceptedPackets: 88,
+						detail: "",
+					},
+				],
+				warnings: [],
+			};
+		};
+
+		function mockDmx() {
+			invoke.mockImplementation((command: string) => {
+				switch (command) {
+					case "document_summary":
+						return Promise.resolve(document);
+					case "patch_snapshot":
+						return Promise.resolve(patchedSnapshot);
+					case "live_dmx_inputs":
+						return Promise.resolve(liveInputs);
+					case "received_dmx":
+						return Promise.resolve(received());
+					case "stop_received_dmx":
+						return Promise.resolve();
+					default:
+						return Promise.resolve([]);
+				}
+			});
+		}
+
+		function dmxHeader() {
+			const header = document_root()?.querySelector<HTMLElement>(
+				".viz-dmx-workspace > .ui-window-header",
+			);
+			if (!header) throw new Error("DMX title was not rendered");
+			return header;
+		}
+
+		it("is its own screen, opening on Network with Patch and Values beside it", async () => {
+			mockDmx();
+			renderApp();
+			const dmx = await screen.findByRole("button", { name: "DMX" });
+			// It sits with the show's screens, straight after Patch.
+			expect(screen.getByRole("button", { name: "Patch" }).nextElementSibling).toBe(
+				dmx,
+			);
+			fireEvent.click(dmx);
+			await screen.findByRole("heading", { name: "Live DMX Inputs" });
+			expect(dmxHeader()).toHaveTextContent("DMX");
+			expect(
+				within(dmxHeader())
+					.getAllByRole("tab")
+					.map((tab) => tab.textContent),
+			).toEqual(["Network", "Patch", "Values"]);
+			expect(
+				within(dmxHeader()).getByRole("tab", { name: "Network" }),
+			).toHaveClass("is-active");
+			// Nothing listens until Values is open.
+			expect(invoke).not.toHaveBeenCalledWith("received_dmx");
+		});
+
+		it("lights every patched address and leaves the rest dark", async () => {
+			mockDmx();
+			renderApp();
+			fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Patch" }));
+			const universe = await screen.findByRole("region", {
+				name: "Universe 2 patch",
+			});
+			expect(universe).toHaveTextContent("3 of 512 channels patched");
+			const cell = (address: number) =>
+				within(universe).getByRole("button", {
+					name: new RegExp(`^Universe 2, address ${address}, `),
+				});
+			expect(within(universe).getAllByRole("button")).toHaveLength(512);
+			expect(cell(9)).not.toHaveClass("is-patched");
+			expect(cell(10)).toHaveClass("is-patched", "is-start");
+			expect(cell(11)).toHaveClass("is-patched");
+			expect(cell(11)).not.toHaveClass("is-start");
+			expect(cell(12)).toHaveClass("is-patched");
+			expect(cell(13)).not.toHaveClass("is-patched");
+			expect(cell(13)).toHaveAccessibleName("Universe 2, address 13, not patched");
+			fireEvent.click(cell(11));
+			const info = document_root()?.querySelector(".viz-dmx-info");
+			expect(info).toHaveTextContent("Universe 2 · Channel 11");
+			expect(info).toHaveTextContent("101 · Wash Left");
+			expect(info).toHaveTextContent("Fixture channel2 of 3");
+			expect(info).toHaveTextContent("Patch range2.10–12");
+		});
+
+		it("shows received DMX as the desk's DMX window shows output, and stops listening when left", async () => {
+			mockDmx();
+			renderApp();
+			fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Values" }));
+			const universe = await screen.findByRole("region", {
+				name: "Universe 2 values",
+			});
+			expect(universe).toHaveTextContent("Universe 2 · channels 1–512");
+			expect(universe).toHaveTextContent("Art-Net · 44.0 Hz");
+			const full = within(universe).getByRole("button", {
+				name: "Universe 2, address 10, value 255",
+			});
+			expect(full).toHaveClass("high");
+			expect(
+				within(universe).getByRole("button", {
+					name: "Universe 2, address 11, value 60",
+				}),
+			).toHaveClass("low");
+			const info = document_root()?.querySelector(".viz-dmx-info");
+			expect(info).toHaveTextContent("Art-Net 2 → Universe 2");
+			expect(info).toHaveTextContent("Healthy · Desk · 10.0.0.4:6454 · 88 packets");
+			fireEvent.click(full);
+			expect(info).toHaveTextContent("Received value255");
+			expect(info).toHaveTextContent("101 · Wash Left");
+			// Values reads the network; there is nothing to override.
+			expect(
+				screen.queryByRole("button", { name: "Release override" }),
+			).not.toBeInTheDocument();
+			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Network" }));
+			await waitFor(() =>
+				expect(invoke).toHaveBeenCalledWith("stop_received_dmx"),
+			);
+		});
 	});
 
 	it("waits for a document before mounting the sheet", async () => {
@@ -872,7 +1058,6 @@ describe("the Viz editor window", () => {
 				.map((tab) => tab.textContent),
 		).toEqual([
 			"Show",
-			"DMX",
 			"Rendering",
 			"Atmosphere",
 			"Picture",
@@ -951,10 +1136,6 @@ describe("the Viz editor window", () => {
 		);
 		expect(
 			await screen.findByRole("slider", { name: "Environment brightness" }),
-		).toBeInTheDocument();
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "DMX" }));
-		expect(
-			screen.getByRole("heading", { name: "Live DMX Inputs" }),
 		).toBeInTheDocument();
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Show" }));
 		expect(

@@ -19,6 +19,7 @@ import { CadRigOverview } from "./cad/CadViewport";
 import { cadSession } from "./cad/session";
 import { useCadSelection } from "./cad/useCadSelection";
 import type { CadEntity, CadSceneSnapshot } from "./cad/types";
+import { type DmxPage, DmxWorkspace } from "./DmxWorkspace";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
@@ -41,24 +42,21 @@ const DEFAULT_LAYER: PatchLayer = {
 };
 type ShowPage =
 	| "show"
-	| "dmx"
 	| "rendering"
 	| "atmosphere"
 	| "picture"
 	| "features"
 	| "mcp";
 
-function showSettingsActions(hasDocument: boolean) {
-	return [
-		{ id: "show", label: "Show" },
-		{ id: "dmx", label: "DMX", disabled: !hasDocument },
-		{ id: "rendering", label: "Rendering" },
-		{ id: "atmosphere", label: "Atmosphere" },
-		{ id: "picture", label: "Picture" },
-		{ id: "features", label: "Features" },
-		{ id: "mcp", label: "MCP" },
-	];
-}
+// DMX has its own screen in the sidebar; its Network tab is what used to be a page here.
+const SHOW_SETTINGS_ACTIONS = [
+	{ id: "show", label: "Show" },
+	{ id: "rendering", label: "Rendering" },
+	{ id: "atmosphere", label: "Atmosphere" },
+	{ id: "picture", label: "Picture" },
+	{ id: "features", label: "Features" },
+	{ id: "mcp", label: "MCP" },
+];
 
 export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
@@ -73,6 +71,7 @@ export function App() {
 	const [error, setError] = useState<string | null>(null);
 	const [workspace, setWorkspace] = useState<EditorWorkspace>("show");
 	const [showPage, setShowPage] = useState<ShowPage>("show");
+	const [dmxPage, setDmxPage] = useState<DmxPage>("network");
 	const [visualizerRunning, setVisualizerRunning] = useState(false);
 	// Bumped when something outside the sheet changed the document — an MVR import — so the sheet
 	// reads the new snapshot instead of showing the rig as it was before.
@@ -426,7 +425,7 @@ export function App() {
 					workspace={workspace}
 					hasDocument={Boolean(document)}
 					onSelectWorkspace={(id) => {
-						if (id === "venue") loadFixtures();
+						if (id === "venue" || id === "dmx") loadFixtures();
 						if (id === "show") setShowPage("show");
 						setWorkspace(id);
 					}}
@@ -478,13 +477,12 @@ export function App() {
 											setShowPage(page);
 											setWorkspace(page === "show" ? "show" : "settings");
 										},
-										actions: showSettingsActions(Boolean(document)),
+										actions: SHOW_SETTINGS_ACTIONS,
 									},
 								]}
 							/>
 							{showPage === "show" ? (
 								<FileBar
-									page="show"
 									document={document}
 									onDocument={setDocument}
 									onError={report}
@@ -515,20 +513,6 @@ export function App() {
 										</figure>
 									) : null}
 								</FileBar>
-							) : showPage === "dmx" ? (
-								<FileBar
-									page="dmx"
-									document={document}
-									onDocument={setDocument}
-									onError={report}
-									onReloadProfiles={() =>
-										documentSession
-											.fixtureProfiles()
-											.then(setProfiles)
-											.catch(report)
-									}
-									onReloadDocument={() => undefined}
-								/>
 							) : showPage === "mcp" ? (
 								<McpSettingsWorkspace />
 							) : (
@@ -537,9 +521,20 @@ export function App() {
 						</section>
 					) : null}
 					{document && workspace === "cad" ? <CadApp /> : null}
+					{document && workspace === "dmx" ? (
+						<DmxWorkspace
+							page={dmxPage}
+							onPage={setDmxPage}
+							document={document}
+							fixtures={fixtures}
+							profileRevisions={profileRevisions}
+							onError={report}
+						/>
+					) : null}
 					{document &&
 					workspace !== "show" &&
 					workspace !== "cad" &&
+					workspace !== "dmx" &&
 					workspace !== "media" &&
 					workspace !== "settings" ? (
 						<PatchHostProvider value={host}>

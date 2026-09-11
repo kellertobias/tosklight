@@ -8,6 +8,7 @@ export type EditorWorkspace =
 	| "show"
 	| "cad"
 	| "patch"
+	| "dmx"
 	| "venue"
 	| "effects"
 	| "media"
@@ -68,6 +69,12 @@ export function EditorSidebar({
 						id: "patch",
 						label: "Patch",
 						icon: <span>⌘</span>,
+						disabled: !hasDocument,
+					},
+					{
+						id: "dmx",
+						label: "DMX",
+						icon: <span>▦</span>,
 						disabled: !hasDocument,
 					},
 					{

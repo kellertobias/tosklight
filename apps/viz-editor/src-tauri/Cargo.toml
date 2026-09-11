@@ -24,6 +24,8 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
+viz-desk.workspace = true
+viz-dmx.workspace = true
 viz-document = { path = "../../../crates/viz/document" }
 viz-planning = { path = "../../../crates/viz/planning" }
 viz-project = { path = "../../../crates/viz/project" }

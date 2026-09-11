@@ -8238,6 +8238,8 @@ dependencies = [
  "tauri-plugin-dialog",
  "tokio",
  "uuid",
+ "viz-desk",
+ "viz-dmx",
  "viz-document",
  "viz-planning",
  "viz-project",

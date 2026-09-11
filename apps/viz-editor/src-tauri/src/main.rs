@@ -10,6 +10,7 @@ mod cad;
 mod contract;
 mod demo;
 mod discovery;
+mod dmx_input;
 mod local_api;
 mod mcp;
 mod recent;
@@ -190,6 +191,7 @@ fn main() {
         .manage(session::Session::default())
         .manage(cad::CadState::default())
         .manage(discovery::Discovery::default())
+        .manage(dmx_input::DmxInputMonitor::default())
         .manage(Arc::new(verify::SurfaceReady::default()))
         .invoke_handler(tauri::generate_handler![
             session::create_document,
@@ -237,6 +239,8 @@ fn main() {
             discovery::discovered_desks,
             discovery::load_from_desk,
             discovery::take_live_dmx_inputs_from_desk,
+            dmx_input::received_dmx,
+            dmx_input::stop_received_dmx,
         ])
         .setup(|app| {
             // Before the window is shown, so the tile never appears and then disappears.
