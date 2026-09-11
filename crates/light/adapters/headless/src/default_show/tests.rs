@@ -301,7 +301,16 @@ fn installs_the_generated_product_demo_as_the_default_show() {
     assert_eq!(store.objects("media_source").unwrap().len(), 2);
     assert_eq!(store.objects("media_surface").unwrap().len(), 2);
     assert_eq!(store.objects("led_module_type").unwrap().len(), 1);
-    assert_eq!(store.objects("venue").unwrap().len(), 57);
+    assert!(
+        store.objects("venue").unwrap().is_empty(),
+        "the demo's scenery lives in the patch as Venue fixtures, not as standalone records"
+    );
+    assert!(
+        fixtures
+            .iter()
+            .any(|fixture| fixture.body["name"] == "Back Truss Segment 1"),
+        "the trusses are patched"
+    );
     drop(store);
     std::fs::remove_file(path).unwrap();
 }
