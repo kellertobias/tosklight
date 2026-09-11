@@ -141,3 +141,65 @@ fn rejects_unsafe_paths() {
     let bytes = zip.finish().unwrap().into_inner();
     assert!(read(&bytes).is_err());
 }
+
+fn layer(id: &str, name: &str) -> MvrLayer {
+    MvrLayer {
+        id: id.into(),
+        name: name.into(),
+    }
+}
+
+fn layer_names(xml: &str) -> Vec<String> {
+    xml.match_indices("<Layer uuid=\"")
+        .map(|(index, _)| {
+            let rest = &xml[index..];
+            let start = rest.find("name=\"").unwrap() + 6;
+            let end = rest[start..].find('"').unwrap();
+            rest[start..start + end].to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn layers_carry_the_names_and_order_the_document_declares() {
+    let mut on_truss = spot(Some("truss-id"));
+    on_truss.name = "On truss".into();
+    let doc = MvrDocument {
+        layers: vec![
+            layer("floor-id", "Floor"),
+            layer("truss-id", "Truss"),
+            layer("spare-id", "Spare"),
+        ],
+        fixtures: vec![on_truss, spot(Some("floor-id")), spot(Some("undeclared"))],
+        ..Default::default()
+    };
+    let xml = scene_xml(&write(&doc).unwrap());
+
+    assert_eq!(
+        layer_names(&xml),
+        ["Floor", "Truss", "Spare", "undeclared"],
+        "declared layers keep their order, an empty one included"
+    );
+    let truss = xml.find("name=\"Truss\"").unwrap();
+    let fixture = xml.find("name=\"On truss\"").unwrap();
+    assert!(truss < fixture && fixture < xml[truss..].find("</Layer>").unwrap() + truss);
+    assert!(
+        !xml.contains("truss-id"),
+        "an identity is not a name: {xml}"
+    );
+}
+
+#[test]
+fn layers_that_share_a_name_stay_separate_and_the_default_reads_as_default() {
+    let doc = MvrDocument {
+        layers: vec![
+            layer("a", "Truss"),
+            layer("b", "Truss"),
+            layer("default", ""),
+        ],
+        fixtures: vec![spot(Some("a")), spot(Some("b")), spot(None)],
+        ..Default::default()
+    };
+    let xml = scene_xml(&write(&doc).unwrap());
+    assert_eq!(layer_names(&xml), ["Truss", "Truss", "Default"]);
+}

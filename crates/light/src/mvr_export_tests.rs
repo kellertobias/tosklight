@@ -41,8 +41,13 @@ fn profile(name: &str, revision: u32) -> FixtureProfile {
 fn a_profile_without_a_retained_source_is_embedded_as_a_generated_gdtf() {
     let profile = profile("Wash", 1);
     let fixtures = [patched(&profile, 1), patched(&profile, 2)];
-    let (document, summary) =
-        build_mvr_document(&fixtures, &HashMap::new(), &Retained(HashMap::new())).unwrap();
+    let (document, summary) = build_mvr_document(
+        &fixtures,
+        &HashMap::new(),
+        Vec::new(),
+        &Retained(HashMap::new()),
+    )
+    .unwrap();
 
     assert_eq!(summary.generated_profiles, 2);
     assert!(summary.missing_profiles.is_empty());
@@ -69,7 +74,8 @@ fn a_retained_source_is_embedded_unchanged_under_the_name_the_fixture_references
     let profile = profile("Spot", 1);
     let fixtures = [patched(&profile, 1)];
     let source = Retained(HashMap::from([(profile.id.0, b"source".to_vec())]));
-    let (document, summary) = build_mvr_document(&fixtures, &HashMap::new(), &source).unwrap();
+    let (document, summary) =
+        build_mvr_document(&fixtures, &HashMap::new(), Vec::new(), &source).unwrap();
 
     assert_eq!(summary.embedded_profiles, 1);
     assert_eq!(summary.generated_profiles, 0);
@@ -88,8 +94,13 @@ fn two_revisions_of_one_fixture_get_distinct_archive_names() {
     let mut second = first.clone();
     second.revision = 2;
     let fixtures = [patched(&first, 1), patched(&second, 2)];
-    let (document, _) =
-        build_mvr_document(&fixtures, &HashMap::new(), &Retained(HashMap::new())).unwrap();
+    let (document, _) = build_mvr_document(
+        &fixtures,
+        &HashMap::new(),
+        Vec::new(),
+        &Retained(HashMap::new()),
+    )
+    .unwrap();
     assert_eq!(document.fixtures[0].gdtf_spec, "Acme@Wash.gdtf");
     assert_eq!(document.fixtures[1].gdtf_spec, "Acme@Wash r2.gdtf");
 }
@@ -111,4 +122,47 @@ fn archive_names_stay_at_the_root_and_never_differ_only_by_case() {
     );
     assert_eq!(archive_name("A:B?.gdtf", 1, &mut used), "A_B_.gdtf");
     assert_eq!(archive_name(" .gdtf", 1, &mut used), "Fixture.gdtf");
+}
+
+#[test]
+fn patch_layers_become_named_mvr_layers_in_patch_order() {
+    let layers = mvr_layers([
+        (
+            "floor".to_owned(),
+            serde_json::json!({"id": "floor", "name": "Floor", "order": 2}),
+        ),
+        (
+            "truss".to_owned(),
+            serde_json::json!({"name": " Truss 1 ", "order": 1}),
+        ),
+        (
+            "spare".to_owned(),
+            serde_json::json!({"id": "spare", "order": 3}),
+        ),
+    ]);
+    let layer = |id: &str, name: &str| light_mvr::MvrLayer {
+        id: id.into(),
+        name: name.into(),
+    };
+    assert_eq!(
+        layers,
+        vec![
+            layer("truss", "Truss 1"),
+            layer("floor", "Floor"),
+            layer("spare", "")
+        ]
+    );
+
+    let profile = profile("Wash", 1);
+    let mut on_floor = patched(&profile, 1);
+    on_floor.1.layer_id = "floor".into();
+    let (document, _) = build_mvr_document(
+        &[on_floor],
+        &HashMap::new(),
+        layers.clone(),
+        &Retained(HashMap::new()),
+    )
+    .unwrap();
+    assert_eq!(document.layers, layers);
+    assert_eq!(document.fixtures[0].layer.as_deref(), Some("floor"));
 }

@@ -150,9 +150,17 @@ pub(super) fn build_mvr_export(
             })
     })
     .map_err(|error| ApiError::internal(error.to_string()))?;
+    let layers = light_application::mvr_export::mvr_layers(
+        store
+            .objects("patch_layer")
+            .map_err(ApiError::store)?
+            .into_iter()
+            .map(|o| (o.id, o.body)),
+    );
     let (doc, summary) = light_application::mvr_export::build_mvr_document(
         &fixtures,
         &metas,
+        layers,
         &InstallationGdtf(state),
     )?;
     let preview = MvrExportPreview {

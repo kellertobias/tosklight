@@ -36,8 +36,21 @@ pub enum MvrError {
 pub struct MvrDocument {
     pub fixtures: Vec<MvrFixture>,
     pub geometry: Vec<MvrGeometry>,
+    /// The layers the scene declares, in order. Objects name theirs by [`MvrLayer::id`].
+    #[serde(default)]
+    pub layers: Vec<MvrLayer>,
     #[serde(skip)]
     pub files: HashMap<String, Vec<u8>>,
+}
+
+/// One layer of the scene, as the application that owns the rig names it.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct MvrLayer {
+    /// Stable identity: objects name their layer by it, and the written layer UUID derives from it,
+    /// so two layers that share a name stay two layers.
+    pub id: String,
+    /// What the operator called it. An unnamed layer is written under its identity.
+    pub name: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

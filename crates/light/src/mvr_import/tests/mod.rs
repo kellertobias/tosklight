@@ -370,9 +370,13 @@ fn tosklight_mvr_round_trip_preserves_scenery_markers_and_ordinary_fixtures() {
         .cloned()
         .map(|fixture| (fixture.fixture_id.0.to_string(), fixture))
         .collect::<Vec<_>>();
-    let (document, summary) =
-        crate::mvr_export::build_mvr_document(&export_objects, &Default::default(), &NoGdtf)
-            .unwrap();
+    let (document, summary) = crate::mvr_export::build_mvr_document(
+        &export_objects,
+        &Default::default(),
+        Vec::new(),
+        &NoGdtf,
+    )
+    .unwrap();
     assert_eq!(summary.fixtures, 4);
     assert_eq!(
         document

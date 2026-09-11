@@ -267,6 +267,36 @@ fn exporting_mvr_carries_the_patched_rig() {
     );
 }
 
+#[test]
+fn exported_mvr_layers_carry_the_patch_layer_names() {
+    let rig = rig("mvr-layers");
+    for (id, name, order) in [("default", "Front Truss", 0), ("spare", "Spare", 1)] {
+        rig.document
+            .put_object(
+                "patch_layer",
+                id,
+                &serde_json::json!({"id": id, "name": name, "order": order}),
+            )
+            .expect("store the layer");
+    }
+    rig.document
+        .patch_fixtures(patch_one(rig.document.show_id(), rig.profile))
+        .expect("patch");
+    let export = rig.document.export_mvr().expect("export");
+    let archive = PlanningDocument::read_mvr(&export.data).expect("read back what was written");
+    let xml = String::from_utf8(archive.files["generalscenedescription.xml"].clone()).unwrap();
+
+    let truss = xml
+        .find("name=\"Front Truss\"")
+        .expect("the fixture's layer is named as the patch names it");
+    let fixture = xml.find("name=\"Wash 1\"").expect("the fixture");
+    let spare = xml
+        .find("name=\"Spare\"")
+        .expect("an empty layer is exported too");
+    assert!(truss < fixture && fixture < spare, "{xml}");
+    assert!(!xml.contains("name=\"default\""), "{xml}");
+}
+
 /// An import that cannot place a fixture has to say so before it writes, not count it afterwards.
 #[test]
 fn previewing_mvr_reports_what_the_archive_cannot_resolve_without_writing() {

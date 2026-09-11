@@ -108,13 +108,53 @@ where
         .collect()
 }
 
+/// The show's patch layers as MVR layers, in the order the patch sheet lists them.
+///
+/// `objects` are the stored `patch_layer` objects as `(object id, body)`. Each layer keeps the name
+/// the operator gave it, so another application groups the rig the way the show does.
+pub fn mvr_layers(
+    objects: impl IntoIterator<Item = (String, serde_json::Value)>,
+) -> Vec<light_mvr::MvrLayer> {
+    let mut layers: Vec<(i64, light_mvr::MvrLayer)> = objects
+        .into_iter()
+        .map(|(id, body)| {
+            let text = |key: &str| {
+                body.get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .to_owned()
+            };
+            let stored_id = text("id");
+            let layer = light_mvr::MvrLayer {
+                id: if stored_id.is_empty() { id } else { stored_id },
+                name: text("name"),
+            };
+            let order = body
+                .get("order")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(i64::MAX);
+            (order, layer)
+        })
+        .collect();
+    layers.sort_by(|(left_order, left), (right_order, right)| {
+        left_order
+            .cmp(right_order)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    layers.into_iter().map(|(_, layer)| layer).collect()
+}
+
+/// Each profile mode's id, its own name and its name in a generated GDTF.
+type GeneratedModes = Vec<(Uuid, String, String)>;
+
 /// The GDTF file one profile revision is exported as.
 struct ExportedType {
     /// The archive member, which is also what every fixture of this revision names as its spec.
     spec: String,
     /// For a generated file: each profile mode's id, its own name and its name in the GDTF.
     /// `None` for a retained source, whose mode names are the ones the profile was imported with.
-    generated: Option<Vec<(Uuid, String, String)>>,
+    generated: Option<GeneratedModes>,
 }
 
 impl ExportedType {
@@ -135,12 +175,14 @@ impl ExportedType {
 
 /// Builds the MVR document for a show's patched fixtures.
 ///
-/// `fixtures` is `(stored object id, fixture)` in stored order. Every fixture's profile revision is
+/// `fixtures` is `(stored object id, fixture)` in stored order, and `layers` the patch layers they
+/// belong to, from [`mvr_layers`]. Every fixture's profile revision is
 /// embedded once: as its retained source GDTF where one exists, otherwise as a GDTF generated from
 /// the profile, because an application opening the archive refuses a fixture whose GDTF is absent.
 pub fn build_mvr_document<S: GdtfSource>(
     fixtures: &[(String, PatchedFixture)],
     metadata: &MvrFixtureMetadata,
+    layers: Vec<light_mvr::MvrLayer>,
     gdtf: &S,
 ) -> Result<(light_mvr::MvrDocument, MvrExportSummary), S::Error> {
     // The stored association is looked up by the fixture the body names, which is also how the
@@ -150,7 +192,10 @@ pub fn build_mvr_document<S: GdtfSource>(
         .iter()
         .filter_map(|(key, body)| Some((body.get("fixture_id")?.as_str()?, key.as_str())))
         .collect();
-    let mut document = light_mvr::MvrDocument::default();
+    let mut document = light_mvr::MvrDocument {
+        layers,
+        ..Default::default()
+    };
     let mut summary = MvrExportSummary::default();
     let mut types: HashMap<(Uuid, u32), Option<ExportedType>> = HashMap::new();
     let mut archive_names = HashSet::new();
@@ -170,15 +215,14 @@ pub fn build_mvr_document<S: GdtfSource>(
                 format!("{}@{model}.gdtf", definition.manufacturer)
             });
         let key = (definition.id.0, definition.revision);
-        if !types.contains_key(&key) {
-            let exported = export_type(
+        if let std::collections::hash_map::Entry::Vacant(slot) = types.entry(key) {
+            slot.insert(export_type(
                 definition,
                 &preferred,
                 gdtf,
                 &mut document,
                 &mut archive_names,
-            )?;
-            types.insert(key, exported);
+            )?);
         }
         let (spec, mode) = match &types[&key] {
             Some(exported) => {
@@ -271,9 +315,7 @@ fn export_type<S: GdtfSource>(
 }
 
 /// A GDTF describing the profile the fixture was patched from, with its modes' GDTF names.
-fn generated_gdtf(
-    definition: &FixtureDefinition,
-) -> Option<(Vec<u8>, Vec<(Uuid, String, String)>)> {
+fn generated_gdtf(definition: &FixtureDefinition) -> Option<(Vec<u8>, GeneratedModes)> {
     let profile = match definition.profile_snapshot.as_deref() {
         Some(profile) => profile.clone(),
         None => FixtureProfile::from_flat_modes(std::slice::from_ref(definition)).ok()?,

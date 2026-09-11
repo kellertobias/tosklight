@@ -12,8 +12,8 @@ use super::{MvrDocument, MvrError, MvrFixture, MvrGeometry};
 /// The application named in every archive this writes. MVR 1.6 makes the provider mandatory.
 const PROVIDER: &str = "ToskLight";
 
-/// The layer objects without a layer of their own are placed on.
-const DEFAULT_LAYER: &str = "Default";
+/// The layer objects without a layer of their own are placed on, as the patch names its default.
+const DEFAULT_LAYER_ID: &str = "default";
 
 /// Namespace for layer UUIDs, so exporting the same rig twice names its layers identically.
 const LAYER_NAMESPACE: Uuid = Uuid::from_u128(0x746f_736b_6c69_6768_745f_6d76_725f_6c79);
@@ -48,24 +48,28 @@ pub fn write(document: &MvrDocument) -> Result<Vec<u8>, MvrError> {
 }
 
 struct Layer<'a> {
+    id: &'a str,
     name: &'a str,
     fixtures: Vec<&'a MvrFixture>,
     geometry: Vec<&'a MvrGeometry>,
 }
 
-/// Scene objects grouped by layer, in the order each layer first appears.
+/// Scene objects grouped by layer: the document's declared layers in their order — including one
+/// nothing is on, since the operator made it — then any layer an object names that was not declared.
 ///
 /// Every MVR object lives in a layer, and every layer needs a UUID; an empty rig still gets one.
 fn layers(document: &MvrDocument) -> Vec<Layer<'_>> {
-    fn layer<'a, 'b>(layers: &'b mut Vec<Layer<'a>>, name: Option<&'a str>) -> &'b mut Layer<'a> {
-        let name = name
-            .filter(|name| !name.trim().is_empty())
-            .unwrap_or(DEFAULT_LAYER);
-        let index = match layers.iter().position(|layer| layer.name == name) {
+    fn slot<'a, 'b>(layers: &'b mut Vec<Layer<'a>>, id: Option<&'a str>) -> &'b mut Layer<'a> {
+        let id = id
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .unwrap_or(DEFAULT_LAYER_ID);
+        let index = match layers.iter().position(|layer| layer.id == id) {
             Some(index) => index,
             None => {
                 layers.push(Layer {
-                    name,
+                    id,
+                    name: layer_name(id, ""),
                     fixtures: Vec::new(),
                     geometry: Vec::new(),
                 });
@@ -74,26 +78,45 @@ fn layers(document: &MvrDocument) -> Vec<Layer<'_>> {
         };
         &mut layers[index]
     }
-    let mut layers = Vec::new();
+    let mut layers: Vec<Layer<'_>> = document
+        .layers
+        .iter()
+        .map(|layer| Layer {
+            id: layer.id.trim(),
+            name: layer_name(layer.id.trim(), &layer.name),
+            fixtures: Vec::new(),
+            geometry: Vec::new(),
+        })
+        .collect();
     for fixture in &document.fixtures {
-        layer(&mut layers, fixture.layer.as_deref())
+        slot(&mut layers, fixture.layer.as_deref())
             .fixtures
             .push(fixture);
     }
     for geometry in &document.geometry {
-        layer(&mut layers, geometry.layer.as_deref())
+        slot(&mut layers, geometry.layer.as_deref())
             .geometry
             .push(geometry);
     }
     if layers.is_empty() {
-        layer(&mut layers, None);
+        slot(&mut layers, None);
     }
     layers
 }
 
+/// A layer's name as another application shows it. An unnamed layer keeps its identity, and the
+/// patch's own default layer reads as "Default".
+fn layer_name<'a>(id: &'a str, name: &'a str) -> &'a str {
+    match name.trim() {
+        "" if id == DEFAULT_LAYER_ID => "Default",
+        "" => id,
+        name => name,
+    }
+}
+
 fn write_layer(xml: &mut XmlWriter, layer: &Layer<'_>) -> Result<(), MvrError> {
     let mut node = BytesStart::new("Layer");
-    let uuid = Uuid::new_v5(&LAYER_NAMESPACE, layer.name.as_bytes()).to_string();
+    let uuid = Uuid::new_v5(&LAYER_NAMESPACE, layer.id.as_bytes()).to_string();
     node.push_attribute(("uuid", uuid.as_str()));
     node.push_attribute(("name", layer.name));
     xml.write_event(Event::Start(node))?;

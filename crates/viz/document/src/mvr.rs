@@ -10,7 +10,7 @@ use light_application::{
     ActionEnvelope, ApplyActiveMvrImportCommand, MvrImportResolution, MvrImportService,
     mvr_export::{
         GdtfSource, MvrExportSummary, MvrFixtureMetadata, build_mvr_document,
-        compile_export_fixtures,
+        compile_export_fixtures, mvr_layers,
     },
 };
 use light_core::FixtureId;
@@ -110,8 +110,18 @@ impl PlanningDocument {
                 })
         })
         .map_err(|error| DocumentError::Mvr(error.to_string()))?;
-        let (document, summary) =
-            build_mvr_document(&fixtures, &metadata, &LibraryGdtf(self.ports().library()))?;
+        let layers = mvr_layers(
+            store
+                .objects("patch_layer")?
+                .into_iter()
+                .map(|object| (object.id, object.body)),
+        );
+        let (document, summary) = build_mvr_document(
+            &fixtures,
+            &metadata,
+            layers,
+            &LibraryGdtf(self.ports().library()),
+        )?;
         let data =
             light_mvr::write(&document).map_err(|error| DocumentError::Mvr(error.to_string()))?;
         Ok(MvrExport { data, summary })
