@@ -67,15 +67,15 @@ function PatchColumnHeader({ column }: { column: string }) {
 	return (
 		<th aria-label={column} aria-sort={active ? sort.direction : "none"}>
 			{/* The arrow is drawn by CSS from data-sort, so the header's text stays the column name. */}
-			<button
-				type="button"
-				className={`patch-sort${active ? " is-active" : ""}`}
+			<Button
+				className="patch-sort"
+				active={active}
 				data-sort={active ? sort.direction : undefined}
 				aria-label={`Sort by ${column}`}
 				onClick={() => setSort(nextPatchSort(sort, column))}
 			>
 				{column}
-			</button>
+			</Button>
 		</th>
 	);
 }

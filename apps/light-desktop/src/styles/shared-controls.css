@@ -2549,10 +2549,14 @@ button:not(:disabled):active {
 	padding: 0 9px;
 	border-bottom: 1px solid var(--line);
 }
-.patch-table th .patch-sort {
+.patch-table th .patch-sort.ui-button {
 	display: inline-flex;
 	align-items: center;
+	justify-content: flex-start;
 	gap: 6px;
+	width: auto;
+	height: auto;
+	min-width: 0;
 	min-height: 32px;
 	padding: 0;
 	color: inherit;
@@ -2561,11 +2565,15 @@ button:not(:disabled):active {
 	white-space: nowrap;
 	background: none;
 	border: 0;
+	box-shadow: none;
 	cursor: pointer;
 }
-.patch-table th .patch-sort:hover,
-.patch-table th .patch-sort.is-active {
+.patch-table th .patch-sort.ui-button:hover,
+.patch-table th .patch-sort.ui-button.is-active {
 	color: var(--text, #e8eef3);
+	background: none;
+	border: 0;
+	box-shadow: none;
 }
 .patch-table th .patch-sort::after {
 	content: "";
