@@ -245,9 +245,26 @@ fn exporting_mvr_carries_the_patched_rig() {
     assert_eq!(read.fixtures[0].address, Some(1));
     assert_eq!(
         export.summary.embedded_profiles, 0,
-        "a profile with no retained source GDTF is referenced, not embedded"
+        "no source GDTF is retained"
     );
-    assert_eq!(export.summary.missing_profiles.len(), 1);
+    assert_eq!(
+        export.summary.generated_profiles, 1,
+        "a profile with no retained source GDTF is embedded as a generated GDTF"
+    );
+    assert!(export.summary.missing_profiles.is_empty());
+
+    // Another application resolves the fixture through the file its GDTFSpec names.
+    let fixture = &read.fixtures[0];
+    assert_eq!(fixture.gdtf_spec, "Acme@Wash.gdtf", "manufacturer@model");
+    let gdtf = read
+        .files
+        .get(&fixture.gdtf_spec.to_ascii_lowercase())
+        .expect("the GDTF the fixture names is in the archive");
+    let modes = light_mvr::read_gdtf(gdtf).expect("a readable GDTF");
+    assert!(
+        modes.iter().any(|mode| mode.name == fixture.gdtf_mode),
+        "the fixture's GDTFMode is a mode of that GDTF"
+    );
 }
 
 /// An import that cannot place a fixture has to say so before it writes, not count it afterwards.

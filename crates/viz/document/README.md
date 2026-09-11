@@ -40,5 +40,6 @@ Two behaviors are worth knowing because they are easy to assume otherwise:
 
 - **Overlapping DMX addresses are accepted.** Double-patching is legitimate rigging, so this
   boundary stores it; surfacing the clash to the operator is the patch sheet's job, as on the desk.
-- **A profile with no retained source GDTF is referenced in an export, not embedded**, and is
-  reported in `MvrExportSummary::missing_profiles`.
+- **A profile with no retained source GDTF is embedded as a generated GDTF**, counted in
+  `MvrExportSummary::generated_profiles`. Only a profile that cannot be described at all is
+  referenced without a file and reported in `MvrExportSummary::missing_profiles`.

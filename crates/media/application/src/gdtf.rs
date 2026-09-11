@@ -34,6 +34,7 @@ pub fn layer_fixture() -> FixtureType {
             name: "Layer".into(),
             channels: channels(LAYER_CHANNELS),
         }],
+        ..Default::default()
     }
 }
 
@@ -51,6 +52,7 @@ pub fn master_fixture() -> FixtureType {
             name: "Master".into(),
             channels: channels(MASTER_CHANNELS),
         }],
+        ..Default::default()
     }
 }
 
@@ -162,14 +164,11 @@ fn grandma2_channel_xml(index: usize, channel: &Channel) -> String {
             custom_attribute.as_str(),
         ),
     };
-    let fine = match channel.width {
-        Width::Byte => String::new(),
-        Width::Sixteen => format!(" fine=\"{}\"", channel.offset + 1),
+    let fine = match channel.offsets().get(1) {
+        Some(fine) => format!(" fine=\"{fine}\""),
+        None => String::new(),
     };
-    let max = match channel.width {
-        Width::Byte => 255,
-        Width::Sixteen => 65_535,
-    };
+    let max = channel.width.max_raw();
     let mut xml = format!(
         "        <ChannelType index=\"{index}\" attribute=\"{attribute}\" feature=\"{feature}\" \
          preset=\"{preset}\" coarse=\"{}\"{fine} default=\"{}\">\n\
@@ -241,6 +240,7 @@ fn channels(table: &[media_domain::personality::channels::ChannelSpec]) -> Vec<C
             },
             default: u32::from(spec.default_value),
             sets: channel_sets(spec),
+            ..Default::default()
         })
         .collect()
 }

@@ -41,7 +41,7 @@ Embedded GDTF files are imported into the desk fixture library. Fixtures without
 
 ## Export MVR
 
-Export preview reports fixture counts, embedded profiles, missing retained source profiles, omissions, and warnings. The export includes fixture UUIDs, patch, transforms, and retained GDTF sources where available. Visual-only Venue fixtures are exported as fixtures; there is no separate Stage scene-asset collection. Resolve warnings before relying on the archive as an interchange master.
+Export preview reports fixture counts, embedded profiles, missing profiles, omissions, and warnings. The export includes fixture UUIDs, patch, transforms, and one GDTF file for every fixture type in the patch, so another application — including the GDTF Share MVR viewer — can open the archive. A profile imported from GDTF carries its retained original GDTF unchanged. Every other profile, such as a shipped library fixture or one authored on the desk, gets a GDTF that ToskLight generates from the profile: all of its modes with their exact channels, fine bytes, splits, defaults, Highlight values and named ranges, and one beam per logical head. A generated GDTF has no wheels, emitters or 3D model, and the export preview warns when the archive contains one. Visual-only Venue fixtures are exported as fixtures; there is no separate Stage scene-asset collection. Resolve warnings before relying on the archive as an interchange master.
 
 ![MVR export preview](../../assets/screenshots/workflows/mvr-export.png)
 

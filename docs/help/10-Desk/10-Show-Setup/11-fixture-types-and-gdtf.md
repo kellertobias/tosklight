@@ -52,7 +52,7 @@ readable and exportable.
 
 Choose **Import GDTF** and select a `.gdtf` archive. ToskLight normalizes the supported modes, channels, physical information, emitters, capabilities, geometry, and model into a fixture profile and retains the original GDTF bytes beside every resulting immutable revision. MVR export can therefore use the retained source instead of reconstructing an archive from lossy normalized data.
 
-GDTF interchange is preserved in both directions through the show workflow: import the original `.gdtf` into the Fixture Library, then export an MVR to carry the retained GDTF archives for the fixtures in that rig. ToskLight does not reconstruct a new standalone GDTF archive from edited normalized profile data.
+GDTF interchange is preserved in both directions through the show workflow: import the original `.gdtf` into the Fixture Library, then export an MVR to carry the retained GDTF archives for the fixtures in that rig. A profile without a retained GDTF is exported in the MVR as a GDTF generated from the profile's modes and channels; it describes the patch and channel layout but not wheels, emitters or the 3D model. The Fixture Library does not export a standalone GDTF file.
 
 The same canonical-attribute preflight applies before a newly normalized GDTF profile is stored. An
 import or migration error leaves the original data untouched and appears in the open import dialog

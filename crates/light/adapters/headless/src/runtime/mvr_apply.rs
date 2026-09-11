@@ -158,7 +158,8 @@ pub(super) fn build_mvr_export(
     let preview = MvrExportPreview {
         fixtures: summary.fixtures,
         scenery: summary.scenery,
-        embedded_profiles: summary.embedded_profiles,
+        // A generated GDTF is embedded too; the warnings say which kind the archive carries.
+        embedded_profiles: summary.embedded_profiles + summary.generated_profiles,
         missing_profiles: summary.missing_profiles,
         omitted: vec!["cues, presets, playbacks, users, and desk layouts".into()],
         warnings: summary.warnings,

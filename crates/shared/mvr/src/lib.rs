@@ -168,7 +168,8 @@ fn matrix(text: &str) -> [f64; 12] {
     result[4] = 1.0;
     result[8] = 1.0;
     for (slot, value) in result.iter_mut().zip(
-        text.split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+        // MVR writes `{u1,u2,u3}{v1,v2,v3}{w1,w2,w3}{o1,o2,o3}`; older files list plain numbers.
+        text.split(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | '{' | '}'))
             .filter_map(|v| v.parse().ok()),
     ) {
         *slot = value;
@@ -269,14 +270,28 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
                         "gdtfspec" => f.gdtf_spec = value.into(),
                         "gdtfmode" => f.gdtf_mode = value.into(),
                         "matrix" => f.matrix = matrix(value),
-                        "address" => {
-                            let nums: Vec<u16> = value
+                        // The first address is the fixture's own; later breaks are not modelled.
+                        "address" if f.universe.is_none() => {
+                            let nums: Vec<u32> = value
                                 .split(|c: char| !c.is_ascii_digit())
                                 .filter_map(|v| v.parse().ok())
                                 .collect();
-                            if nums.len() >= 2 {
-                                f.universe = Some(nums[0]);
-                                f.address = Some(nums[1]);
+                            let (universe, address) = match nums.as_slice() {
+                                // `universe.address`
+                                [universe, address, ..] => (*universe, *address),
+                                // Absolute: address 1 of universe 1 is 1, address 1 of universe 2
+                                // is 513.
+                                [absolute] if *absolute > 0 => {
+                                    ((absolute - 1) / 512 + 1, (absolute - 1) % 512 + 1)
+                                }
+                                _ => (0, 0),
+                            };
+                            if let (Ok(universe), Ok(address)) =
+                                (u16::try_from(universe), u16::try_from(address))
+                                && address > 0
+                            {
+                                f.universe = Some(universe);
+                                f.address = Some(address);
                             }
                         }
                         _ => {}
