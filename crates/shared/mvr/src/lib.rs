@@ -190,7 +190,8 @@ fn matrix(text: &str) -> [f64; 12] {
     result
 }
 
-pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
+/// Every member of an MVR archive, keyed by its lowercased path, and its scene description.
+fn archive_members(bytes: &[u8]) -> Result<(HashMap<String, Vec<u8>>, Vec<u8>), MvrError> {
     if bytes.len() > MAX_ARCHIVE_BYTES {
         return Err(MvrError::Invalid("archive exceeds 256 MiB".into()));
     }
@@ -223,6 +224,11 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
     }
     let xml =
         xml.ok_or_else(|| MvrError::Invalid("GeneralSceneDescription.xml is missing".into()))?;
+    Ok((files, xml))
+}
+
+pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
+    let (files, xml) = archive_members(bytes)?;
     let mut reader = Reader::from_reader(xml.as_slice());
     reader.config_mut().trim_text(true);
     let mut doc = MvrDocument {
