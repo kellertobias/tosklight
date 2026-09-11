@@ -46,20 +46,24 @@ test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and
 		surfaces.find((surface) => surface.body.name === "Sunstrip LED Panels")
 			?.body.sections,
 	).toHaveLength(3);
-	const venue = await api.showObjects<any>(show.id, "venue");
-	expect(venue).toHaveLength(57);
-	expect(venue.filter((object) => object.body.kind === "truss")).toHaveLength(
-		24,
-	);
-	expect(venue.filter((object) => object.body.kind === "curtain")).toHaveLength(
-		4,
-	);
-	expect(venue.filter((object) => object.body.kind === "riser")).toHaveLength(
-		20,
-	);
+	// The scenery lives in the patch as Venue fixtures; no standalone venue records remain.
+	expect(await api.showObjects(show.id, "venue")).toHaveLength(0);
+	const scenery = (model: string) =>
+		patch.fixtures.filter((fixture) => fixture.definition.model === model);
+	expect(scenery("Four-Point Truss")).toHaveLength(5);
+	expect(scenery("Curtain 5 m")).toHaveLength(4);
+	expect(scenery("Stage Element 2 × 1 m")).toHaveLength(20);
 	expect(
-		venue.find((object) => object.body.kind === "mirror_ball")?.body.position,
-	).toEqual({ x: 0, y: -3, z: 4.5 });
+		patch.fixtures.filter((fixture) => fixture.name?.includes("Railing")),
+	).toHaveLength(8);
+	expect(
+		patch.fixtures.find((fixture) => fixture.name === "Audience Mirror Ball")
+			?.location,
+	).toEqual({
+		x: 0,
+		y: -3000,
+		z: 4500,
+	});
 
 	const byNumber = new Map(
 		patch.fixtures.flatMap((fixture) =>
