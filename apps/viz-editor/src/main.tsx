@@ -2,9 +2,12 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { installContextMenuPolicy } from "./contextMenuPolicy";
 import "@tosklight/ui/styles.css";
 import "@tosklight/patch/styles.css";
 import "./styles.css";
+
+installContextMenuPolicy(document);
 
 createRoot(document.getElementById("root")!).render(
 	<StrictMode>

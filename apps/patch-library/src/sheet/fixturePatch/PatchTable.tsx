@@ -476,6 +476,7 @@ function DesktopEditableValue({
 			onContextMenu={(event) => {
 				event.preventDefault();
 				event.stopPropagation();
+				if (isControlClick(event)) return;
 				armEdit(
 					controller,
 					fixture,
@@ -637,6 +638,7 @@ function openModalOnContext(
 	if (!controller.host.desktopEditing) return;
 	event.preventDefault();
 	event.stopPropagation();
+	if (isControlClick(event)) return;
 	armEdit(
 		controller,
 		fixture,
@@ -644,6 +646,14 @@ function openModalOnContext(
 		axis,
 		isContextualNumericEdit(kind, axis) ? "value_entry" : "modal",
 	);
+}
+
+/**
+ * macOS reports Ctrl-click as a context-menu gesture as well. In the sheet Ctrl-click is an
+ * additive selection, which the row's mouse-down already applied, so it must not open an editor.
+ */
+function isControlClick(event: ReactMouseEvent<HTMLElement>) {
+	return event.ctrlKey && event.button === 0;
 }
 
 function isContextualNumericEdit(

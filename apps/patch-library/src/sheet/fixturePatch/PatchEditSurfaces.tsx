@@ -6,6 +6,8 @@ import {
 	TextInput,
 } from "@tosklight/ui";
 import { ModalNumberEditor } from "@tosklight/ui/input";
+import { changedPatchFixtureCandidate } from "../../state/PatchContext";
+import type { PatchedFixture } from "../../wire";
 import { parsePatchAddress } from "../fields";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { isDmxPatchable } from "../patchUtils";
@@ -13,7 +15,11 @@ import { usePatchController } from "./controller";
 import { saveEdit, saveSplitEdit } from "./editSave";
 import { cancelEdit, requestFixtureEditClose } from "./editSession";
 import { FixtureAddressScreen } from "./FixtureAddressScreen";
-import { parseFixtureNumber, parseVirtualFixtureNumber } from "./fixtureIds";
+import {
+	fixtureDisplayId,
+	parseFixtureNumber,
+	parseVirtualFixtureNumber,
+} from "./fixtureIds";
 import {
 	closeMultipatchEdit,
 	requestMultipatchEditClose,
@@ -199,9 +205,10 @@ async function applyDesktopValueEntry(
 		);
 		return;
 	}
+	const updates: FixtureUpdate[] = [];
 	for (const [index, fixture] of fixtures.entries()) {
 		const raw = values[index];
-		let changes: Partial<(typeof fixtures)[number]> | null = null;
+		let changes: Partial<PatchedFixture> | null = null;
 		if (edit === "number") {
 			if (isDmxPatchable(fixture.definition)) {
 				const fixtureNumber = parseFixtureNumber(raw);
@@ -245,14 +252,72 @@ async function applyDesktopValueEntry(
 			);
 			return;
 		}
+		updates.push({ fixture, changes });
+	}
+	const conflict =
+		edit === "number" ? fixtureIdConflict(controller.data.all, updates) : null;
+	if (conflict) {
+		controller.ui.setEditError(conflict);
+		return;
+	}
+	if (updates.length === 1) {
+		const [{ fixture, changes }] = updates;
 		if (!(await controller.patch.updateFixture(fixture.fixture_id, changes))) {
 			controller.ui.setEditError(
 				`Could not update ${fixture.name || fixture.fixture_id}.`,
 			);
 			return;
 		}
+	} else if (
+		// One mutation for the whole spread: the patch is validated as a whole, so reversing or
+		// shifting a range over IDs the selection already holds is valid, and a rejected spread
+		// leaves every fixture as it was instead of half renumbered.
+		!(await controller.patch.patchFixtures(
+			updates.map(({ fixture, changes }) =>
+				changedPatchFixtureCandidate(fixture, changes),
+			),
+		))
+	) {
+		controller.ui.setEditError(
+			"The values could not be applied. No fixtures were changed.",
+		);
+		return;
 	}
 	cancelEdit(controller);
+}
+
+interface FixtureUpdate {
+	fixture: PatchedFixture;
+	changes: Partial<PatchedFixture>;
+}
+
+/** Why the fixture IDs after these updates would not be unique, if they would not. */
+function fixtureIdConflict(
+	all: readonly PatchedFixture[],
+	updates: readonly FixtureUpdate[],
+): string | null {
+	const changed = new Map(
+		updates.map(({ fixture, changes }) => [fixture.fixture_id, changes]),
+	);
+	const owners = new Map<string, PatchedFixture>();
+	for (const fixture of all) {
+		const next = { ...fixture, ...changed.get(fixture.fixture_id) };
+		if (next.fixture_number == null && next.virtual_fixture_number == null)
+			continue;
+		const id = String(fixtureDisplayId(next));
+		const owner = owners.get(id);
+		owners.set(id, owner ?? fixture);
+		if (!owner) continue;
+		const ownerChanged = changed.has(owner.fixture_id);
+		const fixtureChanged = changed.has(fixture.fixture_id);
+		if (ownerChanged && fixtureChanged)
+			return `Fixture ID ${id} would be given to more than one fixture.`;
+		if (ownerChanged || fixtureChanged) {
+			const holder = ownerChanged ? fixture : owner;
+			return `Fixture ID ${id} is already in use by ${holder.name || holder.definition.name}.`;
+		}
+	}
+	return null;
 }
 
 function isDesktopNumericEdit(

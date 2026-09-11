@@ -330,6 +330,18 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+/** The fixture IDs of the single batched spread, in the order it wrote them. */
+function spreadFixtureNumbers() {
+	return (
+		patchFeature.patchFixtures.mock.calls[0][0] as Array<{
+			fixture: PatchedFixture;
+		}>
+	).map((candidate) => [
+		candidate.fixture.fixture_id,
+		candidate.fixture.fixture_number,
+	]);
+}
+
 describe("patch layer locks", () => {
 	it("returns to All fixtures when an external selection requests a reveal", () => {
 		const floorFixture = splitFixture();
@@ -751,32 +763,99 @@ describe("selected split selection and SET editing", () => {
 		for (const key of ["2", "0", "THRU", "2", "2", "ENTER"])
 			fireEvent.click(screen.getByRole("button", { name: key }));
 
-		await waitFor(() => {
-			expect(patchFeature.updateFixture).toHaveBeenNthCalledWith(
-				1,
-				"fixture-19",
-				{
-					fixture_number: 20,
-					virtual_fixture_number: null,
-				},
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		expect(spreadFixtureNumbers()).toEqual([
+			["fixture-19", 20],
+			["fixture-split", 21],
+			["fixture-18", 22],
+		]);
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["ascending", ["1", "0", "0", "4", "THRU", "1", "0", "0", "6"], [1004, 1005, 1006]],
+		["descending", ["1", "0", "0", "6", "THRU", "1", "0", "0", "4"], [1006, 1005, 1004]],
+	])(
+		"spreads a %s fixture ID range over the IDs the selection already holds",
+		async (_direction, keys, expected) => {
+			state.patchSetArmed = true;
+			state.desktopEditing = true;
+			server.patch.fixtures = [1005, 1004, 1006].map((number) => {
+				const fixture = splitFixture();
+				fixture.fixture_id = `fixture-${number}`;
+				fixture.fixture_number = number;
+				fixture.name = `Wash ${number}`;
+				return fixture;
+			});
+			programming.selection.selected = [
+				"fixture-1005",
+				"fixture-1004",
+				"fixture-1006",
+			];
+			render(<FixturePatchSetup />);
+
+			fireEvent.contextMenu(
+				screen.getByRole("textbox", { name: "Fixture ID 1004" }),
 			);
-			expect(patchFeature.updateFixture).toHaveBeenNthCalledWith(
-				2,
-				"fixture-split",
-				{
-					fixture_number: 21,
-					virtual_fixture_number: null,
-				},
+			for (const key of [...keys, "ENTER"])
+				fireEvent.click(screen.getByRole("button", { name: key }));
+
+			await waitFor(() =>
+				expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
 			);
-			expect(patchFeature.updateFixture).toHaveBeenNthCalledWith(
-				3,
-				"fixture-18",
-				{
-					fixture_number: 22,
-					virtual_fixture_number: null,
-				},
+			expect(spreadFixtureNumbers()).toEqual(
+				["fixture-1005", "fixture-1004", "fixture-1006"].map(
+					(fixtureId, index) => [fixtureId, expected[index]],
+				),
 			);
+		},
+	);
+
+	it("names the fixture that already holds an ID the spread needs", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		const [first, second, holder] = [1, 2, 3].map((number) => {
+			const fixture = splitFixture();
+			fixture.fixture_id = `fixture-${number}`;
+			fixture.fixture_number = number;
+			fixture.name = `Wash ${number}`;
+			return fixture;
 		});
+		server.patch.fixtures = [first, second, holder];
+		programming.selection.selected = ["fixture-1", "fixture-2"];
+		render(<FixturePatchSetup />);
+
+		fireEvent.contextMenu(screen.getByRole("textbox", { name: "Fixture ID 1" }));
+		for (const key of ["2", "THRU", "3", "ENTER"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"Fixture ID 3 is already in use by Wash 3.",
+		);
+		expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	});
+
+	it("ignores a macOS Ctrl-click context menu instead of opening the editor", () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		render(<FixturePatchSetup />);
+
+		const value = screen.getByRole("textbox", { name: "Fixture ID 17" });
+		const event = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+			ctrlKey: true,
+			button: 0,
+		});
+		value.dispatchEvent(event);
+
+		expect(event.defaultPrevented).toBe(true);
+		expect(
+			screen.queryByRole("dialog", { name: "Fixture ID" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("shows the selected location spread and preserves it when submitted unchanged", async () => {
@@ -812,12 +891,14 @@ describe("selected split selection and SET editing", () => {
 		for (const key of ["0", "THRU", "3", "ENTER"])
 			fireEvent.click(screen.getByRole("button", { name: key }));
 		await waitFor(() =>
-			expect(patchFeature.updateFixture).toHaveBeenCalledTimes(4),
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
 		);
 		expect(
-			patchFeature.updateFixture.mock.calls.map(
-				([, changes]) => (changes as PatchedFixture).location?.x,
-			),
+			(
+				patchFeature.patchFixtures.mock.calls[0][0] as Array<{
+					fixture: PatchedFixture;
+				}>
+			).map((candidate) => candidate.fixture.location?.x),
 		).toEqual([0, 1000, 2000, 3000]);
 	});
 

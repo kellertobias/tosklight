@@ -112,6 +112,17 @@ describe("modal input controls", () => {
 		).toBeVisible();
 	});
 
+	it("types THRU with the desk keyboard's ß key", () => {
+		const enter = vi.fn();
+		render(
+			<NumberHarness enter={enter} escape={vi.fn()} allowThrough={true} />,
+		);
+		for (const key of ["1", "2", "ß", "1", "0", "Enter"])
+			fireEvent.keyDown(window, { key });
+		expect(screen.getByLabelText("value")).toHaveTextContent("12 THRU 10");
+		expect(enter).toHaveBeenCalledOnce();
+	});
+
 	it("moves the text caret and inserts or deletes at that position", () => {
 		render(<TextHarness enter={vi.fn()} escape={vi.fn()} />);
 		for (const key of ["A", "C"]) fireEvent.keyDown(window, { key });

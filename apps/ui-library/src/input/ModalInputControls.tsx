@@ -605,7 +605,8 @@ export function ModalNumberInput({
 					: { value, caret },
 			);
 		}
-		if (key === "THRU") {
+		// `ß` is the desk keyboard's THRU key, so a range can be typed without the on-screen pad.
+		if (key === "THRU" || key === "ß") {
 			const before = value.slice(0, caret);
 			const after = value.slice(caret);
 			if (
