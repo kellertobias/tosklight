@@ -12,7 +12,7 @@ import { unpatchFixtureChanges } from "./patchModel";
 import {
 	fixtureSelectionIds,
 	orderedFixtureSelectionIds,
-	selectedFixturesInOperatorOrder,
+	editTargets,
 	toggledFixtureSelection,
 } from "./selection";
 
@@ -80,10 +80,9 @@ export async function selectLayer(
 	const selected = controller.data.selected;
 	if (!selected) return;
 	// On a desktop sheet the layer goes to the whole selection, as one patch change.
-	const chosen = controller.host.desktopEditing
-		? selectedFixturesInOperatorOrder(controller)
-		: [];
-	const targets = chosen.length ? chosen : [selected];
+	const targets = controller.host.desktopEditing
+		? editTargets(controller, selected)
+		: [selected];
 	const moving = targets.filter(
 		(fixture) => (fixture.layer_id || "default") !== layerId,
 	);
@@ -273,6 +272,25 @@ export function selectPatchFixture(
 		});
 	}
 	ui.selectionAnchor.current = fixture.fixture_id;
+}
+
+/**
+ * A right-click on a fixture outside the selection makes that fixture the selection, so the editor
+ * it opens edits that fixture rather than the ones selected before. Inside the selection it keeps
+ * the selection, and the editor edits all of them.
+ */
+export function selectContextFixture(
+	controller: PatchController,
+	fixture: PatchedFixture,
+) {
+	if (!controller.editArmed) return;
+	const selected = controller.selection.fixtureIds;
+	if (fixtureSelectionIds(fixture).some((id) => selected?.has(id))) return;
+	controller.ui.setSelectedFixture(fixture.fixture_id);
+	void controller.selection.replace({
+		resolvedFixtures: fixtureSelectionIds(fixture),
+	});
+	controller.ui.selectionAnchor.current = fixture.fixture_id;
 }
 
 export function selectFixtureRange(

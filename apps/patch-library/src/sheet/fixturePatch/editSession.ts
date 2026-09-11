@@ -14,7 +14,7 @@ import {
 } from "./patchModel";
 import {
 	fixtureSelectionIds,
-	selectedFixturesInOperatorOrder,
+	editTargets,
 } from "./selection";
 
 export function armEdit(
@@ -77,7 +77,7 @@ export function armEdit(
 		}
 	} else if (kind === "mode") selectFixtureFamily(controller, fixture);
 	if (presentation === "value_entry") {
-		const selected = selectedFixturesInOperatorOrder(controller);
+		const selected = editTargets(controller, fixture);
 		if (selected.length > 1) {
 			const first = numericEditValue(selected[0], kind, axis);
 			const last = numericEditValue(selected[selected.length - 1], kind, axis);
@@ -164,12 +164,7 @@ export async function applyEdit(
 		ui.editPresentation === "modal" &&
 		!changesPhysicalPatch(changes)
 	) {
-		const selectedIds = controller.selection.fixtureIds;
-		const targets = selectedIds
-			? all.filter((fixture) =>
-					fixtureSelectionIds(fixture).some((id) => selectedIds.has(id)),
-				)
-			: [];
+		const targets = editTargets(controller, selected);
 		if (targets.length > 1) {
 			for (const fixture of targets)
 				if (

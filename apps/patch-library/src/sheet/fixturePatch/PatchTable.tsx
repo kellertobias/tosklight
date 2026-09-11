@@ -5,6 +5,7 @@ import {
 	type KeyboardEvent,
 	type MouseEvent as ReactMouseEvent,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../wire";
@@ -17,7 +18,11 @@ import {
 	requestFixtureEditClose,
 	selectSplitAddress,
 } from "./editSession";
-import { selectFixtureRange, selectPatchFixture } from "./fixtureActions";
+import {
+	selectContextFixture,
+	selectFixtureRange,
+	selectPatchFixture,
+} from "./fixtureActions";
 import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
@@ -58,8 +63,23 @@ const columns = [
 
 export function PatchTable() {
 	const controller = usePatchController();
+	const wrap = useRef<HTMLElement>(null);
+	const { revealRequest, setRevealRequest } = controller.ui;
+	const bottomInset = controller.props.stagePreviewOpen
+		? controller.props.stagePreviewClearance
+		: 0;
+	useLayoutEffect(() => {
+		if (!revealRequest) return;
+		setRevealRequest(null);
+		if (wrap.current)
+			revealFixtureRow(wrap.current, revealRequest.fixtureId, bottomInset);
+	}, [revealRequest, setRevealRequest, bottomInset]);
 	return (
-		<section className="patch-table-wrap">
+		<section
+			ref={wrap}
+			className="patch-table-wrap"
+			style={bottomInset ? { scrollPaddingBottom: bottomInset } : undefined}
+		>
 			<table className="patch-table">
 				<thead>
 					<tr>
@@ -86,6 +106,30 @@ export function PatchTable() {
 			)}
 		</section>
 	);
+}
+
+/**
+ * Scrolls a fixture's row into view unless it is already fully visible between the sticky header
+ * and any stage preview covering the bottom of the table.
+ */
+function revealFixtureRow(
+	container: HTMLElement,
+	fixtureId: string,
+	bottomInset: number,
+) {
+	const row = [
+		...container.querySelectorAll<HTMLElement>("tr[data-fixture-id]"),
+	].find((candidate) => candidate.dataset.fixtureId === fixtureId);
+	if (!row) return;
+	const area = container.getBoundingClientRect();
+	// Without layout there is nothing to scroll.
+	if (area.height <= 0) return;
+	const header = container.querySelector("thead")?.getBoundingClientRect();
+	const top = Math.max(area.top, header?.bottom ?? area.top);
+	const bottom = area.bottom - bottomInset;
+	const rect = row.getBoundingClientRect();
+	if (rect.top >= top && rect.bottom <= bottom) return;
+	row.scrollIntoView({ block: "nearest" });
 }
 
 function FixtureRows({ fixture }: { fixture: PatchedFixture }) {
@@ -477,6 +521,7 @@ function DesktopEditableValue({
 				event.preventDefault();
 				event.stopPropagation();
 				if (isControlClick(event)) return;
+				selectContextFixture(controller, fixture);
 				armEdit(
 					controller,
 					fixture,
@@ -639,6 +684,7 @@ function openModalOnContext(
 	event.preventDefault();
 	event.stopPropagation();
 	if (isControlClick(event)) return;
+	selectContextFixture(controller, fixture);
 	armEdit(
 		controller,
 		fixture,
@@ -687,6 +733,7 @@ function FixtureLayerCell({ fixture }: { fixture: PatchedFixture }) {
 					event.preventDefault();
 					event.stopPropagation();
 					if (isControlClick(event) || !controller.editArmed) return;
+					selectContextFixture(controller, fixture);
 					controller.ui.setSelectedFixture(fixture.fixture_id);
 					controller.ui.setLayerModal("select");
 				}}

@@ -422,6 +422,8 @@
 	min-width: 0;
 	min-height: 0;
 	overflow: auto;
+	/* A row scrolled into view stops below the sticky header instead of under it. */
+	scroll-padding-top: 44px;
 	border: 1px solid var(--line);
 	border-radius: 8px;
 	background: var(--panel);

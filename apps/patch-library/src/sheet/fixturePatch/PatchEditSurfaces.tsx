@@ -26,7 +26,7 @@ import {
 	saveMultipatchEdit,
 } from "./multipatchActions";
 import { definitionSplits, replaceSelectedSplitPatch } from "./patchModel";
-import { selectedFixturesInOperatorOrder } from "./selection";
+import { editTargets } from "./selection";
 
 export function MultipatchVectorDialog() {
 	const controller = usePatchController();
@@ -161,8 +161,7 @@ export function DesktopValueEntryDialog() {
 		!selected
 	)
 		return null;
-	const fixtures = selectedFixturesInOperatorOrder(controller);
-	const targets = fixtures.length ? fixtures : [selected];
+	const targets = editTargets(controller, selected);
 	const label = desktopNumericEditLabel(edit, controller.ui.editAxis);
 	return (
 		<ModalNumberEditor
@@ -291,6 +290,13 @@ async function applyDesktopValueEntry(
 		return;
 	}
 	cancelEdit(controller);
+	// The sheet is sorted by fixture ID, so a new ID can move the row out of sight. Follow the
+	// fixture whose cell opened the entry, or the first edited fixture when that one was not edited.
+	const primary =
+		fixtures.find(
+			(fixture) => fixture.fixture_id === controller.ui.selectedFixture,
+		) ?? fixtures[0];
+	if (primary) controller.ui.setRevealRequest({ fixtureId: primary.fixture_id });
 }
 
 interface FixtureUpdate {
@@ -411,13 +417,17 @@ function thruPoints(value: string) {
 /**
  * Fixture IDs are whole numbers, so a range is counted rather than interpolated: the first
  * selected fixture takes the first ID and each next one the next ID towards the end point, until
- * every fixture has one. `1012 THRU 1004` counts down. A range with fewer IDs than fixtures is
- * answered with the reason, as a string.
+ * every fixture has one. `1012 THRU 1004` counts down. A range left open counts from its start,
+ * one ID per fixture, the way the command line's open `10 THRU` reaches upwards: `1100 THRU` gives
+ * 1100, 1101, 1102 and on, and `1101 THRU -` gives 1101, 1100, 1099 and on. A range with fewer IDs
+ * than fixtures is answered with the reason, as a string.
  */
 function fixtureIdSpread(
 	value: string,
 	count: number,
 ): string[] | string | null {
+	const open = /^(.+?)\s+THRU(?:\s*(-))?\s*$/iu.exec(value.trim());
+	if (open) return openFixtureIdSpread(open[1].trim(), open[2] ? -1 : 1, count);
 	const points = thruPoints(value);
 	if (points.length === 1)
 		return Array.from({ length: count }, () => points[0]);
@@ -434,6 +444,23 @@ function fixtureIdSpread(
 	return Array.from(
 		{ length: count },
 		(_, index) => `${isVirtual ? "0." : ""}${first + step * index}`,
+	);
+}
+
+/** `start` and each next ID in `step` direction, one per fixture. IDs start at 1. */
+function openFixtureIdSpread(
+	start: string,
+	step: 1 | -1,
+	count: number,
+): string[] | string | null {
+	const virtual = parseVirtualFixtureNumber(start);
+	const first = virtual ?? parseFixtureNumber(start);
+	if (first == null) return null;
+	if (first + step * (count - 1) < 1)
+		return `${start} THRU - holds ${first} fixture IDs for ${count} fixtures.`;
+	return Array.from(
+		{ length: count },
+		(_, index) => `${virtual != null ? "0." : ""}${first + step * index}`,
 	);
 }
 

@@ -814,6 +814,97 @@ describe("selected split selection and SET editing", () => {
 		},
 	);
 
+	describe("after a value entry is applied with ENTER", () => {
+		const ROW = 43;
+		const HEADER = 44;
+		const VIEW = HEADER + 2 * ROW;
+		let scrolled: Array<{ row: Element; options: unknown }>;
+
+		beforeEach(() => {
+			scrolled = [];
+			// jsdom implements no layout: the table shows its header and exactly two rows.
+			vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+				function (this: Element) {
+					const box = (top: number, height: number) =>
+						({ top, bottom: top + height, height }) as DOMRect;
+					if (this.classList.contains("patch-table-wrap")) return box(0, VIEW);
+					if (this.tagName === "THEAD") return box(0, HEADER);
+					const rows = [...(this.parentElement?.children ?? [])];
+					if (this.tagName === "TR" && this.parentElement?.tagName === "TBODY")
+						return box(HEADER + rows.indexOf(this) * ROW, ROW);
+					return box(0, 0);
+				},
+			);
+			(Element.prototype as { scrollIntoView?: unknown }).scrollIntoView =
+				function (this: Element, options: unknown) {
+					scrolled.push({ row: this, options });
+				};
+			patchFeature.updateFixture.mockImplementation(
+				async (fixtureId: string, changes: Partial<PatchedFixture>) => {
+					server.patch.fixtures = server.patch.fixtures.map((fixture) =>
+						fixture.fixture_id === fixtureId
+							? { ...fixture, ...changes }
+							: fixture,
+					);
+					return true;
+				},
+			);
+			state.patchSetArmed = true;
+			state.desktopEditing = true;
+			server.patch.fixtures = [10, 20, 30].map((number) => {
+				const fixture = splitFixture();
+				fixture.fixture_id = `fixture-${number}`;
+				fixture.fixture_number = number;
+				fixture.name = `Wash ${number}`;
+				return fixture;
+			});
+		});
+
+		afterEach(() => {
+			delete (Element.prototype as { scrollIntoView?: unknown })
+				.scrollIntoView;
+		});
+
+		async function enterFixtureId(from: string, keys: string[]) {
+			const { rerender } = render(<FixturePatchSetup />);
+			fireEvent.contextMenu(
+				screen.getByRole("textbox", { name: `Fixture ID ${from}` }),
+			);
+			for (const key of [...keys, "ENTER"])
+				fireEvent.click(screen.getByRole("button", { name: key }));
+			await waitFor(() =>
+				expect(
+					screen.queryByRole("dialog", { name: "Fixture ID" }),
+				).not.toBeInTheDocument(),
+			);
+			rerender(<FixturePatchSetup />);
+		}
+
+		it("scrolls to the fixture when its new ID sorts it out of view", async () => {
+			await enterFixtureId("10", ["5", "0"]);
+
+			expect(
+				screen
+					.getAllByRole("row")
+					.slice(1)
+					.map((row) => row.getAttribute("data-fixture-id")),
+			).toEqual(["fixture-20", "fixture-30", "fixture-10"]);
+			expect(scrolled).toHaveLength(1);
+			expect(scrolled[0].row).toHaveAttribute("data-fixture-id", "fixture-10");
+			expect(scrolled[0].options).toEqual({ block: "nearest" });
+		});
+
+		it("leaves the scroll position alone when the fixture stays in view", async () => {
+			await enterFixtureId("10", ["1", "5"]);
+
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-10", {
+				fixture_number: 15,
+				virtual_fixture_number: null,
+			});
+			expect(scrolled).toEqual([]);
+		});
+	});
+
 	it("refuses a fixture ID range with fewer IDs than selected fixtures", async () => {
 		state.patchSetArmed = true;
 		state.desktopEditing = true;
@@ -906,6 +997,103 @@ describe("selected split selection and SET editing", () => {
 		);
 		expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
 		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	});
+
+	describe("an open fixture ID range", () => {
+		const selectThree = () => {
+			state.patchSetArmed = true;
+			state.desktopEditing = true;
+			server.patch.fixtures = [1, 2, 3].map((number) => {
+				const fixture = splitFixture();
+				fixture.fixture_id = `fixture-${number}`;
+				fixture.fixture_number = number;
+				fixture.name = `Wash ${number}`;
+				return fixture;
+			});
+			programming.selection.selected = ["fixture-1", "fixture-2", "fixture-3"];
+			render(<FixturePatchSetup />);
+			fireEvent.contextMenu(screen.getByRole("textbox", { name: "Fixture ID 1" }));
+		};
+		const spread = () =>
+			(
+				patchFeature.patchFixtures.mock.calls[0][0] as Array<{
+					fixture: PatchedFixture;
+				}>
+			).map((candidate) => candidate.fixture.fixture_number);
+
+		it("counts up from its start, one ID per fixture", async () => {
+			selectThree();
+			for (const key of ["1", "1", "0", "0", "THRU", "ENTER"])
+				fireEvent.click(screen.getByRole("button", { name: key }));
+			await waitFor(() => expect(patchFeature.patchFixtures).toHaveBeenCalled());
+			expect(spread()).toEqual([1100, 1101, 1102]);
+		});
+
+		it("counts down from its start after THRU minus", async () => {
+			selectThree();
+			for (const key of ["1", "1", "0", "1", "THRU", "−", "ENTER"])
+				fireEvent.click(screen.getByRole("button", { name: key }));
+			await waitFor(() => expect(patchFeature.patchFixtures).toHaveBeenCalled());
+			expect(spread()).toEqual([1101, 1100, 1099]);
+		});
+
+		it("says so when counting down would pass ID 1", async () => {
+			selectThree();
+			for (const key of ["2", "THRU", "−", "ENTER"])
+				fireEvent.click(screen.getByRole("button", { name: key }));
+			expect(await screen.findByRole("alert")).toHaveTextContent(
+				"2 THRU - holds 2 fixture IDs for 3 fixtures.",
+			);
+			expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
+		});
+	});
+
+	it("edits only a right-clicked fixture outside the selection and selects it instead", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		server.patch.fixtures = [1, 2, 3].map((number) => {
+			const fixture = splitFixture();
+			fixture.fixture_id = `fixture-${number}`;
+			fixture.fixture_number = number;
+			fixture.name = `Wash ${number}`;
+			return fixture;
+		});
+		programming.selection.selected = ["fixture-1", "fixture-2"];
+		render(<FixturePatchSetup />);
+
+		fireEvent.contextMenu(screen.getByRole("textbox", { name: "Fixture ID 3" }));
+
+		expect(programming.actions.replace).toHaveBeenCalledWith({
+			resolvedFixtures: ["fixture-3"],
+		});
+		for (const key of ["9", "ENTER"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+		const edited = () => [
+			...patchFeature.updateFixture.mock.calls.map((call) => call[0]),
+			...patchFeature.patchFixtures.mock.calls.flatMap((call) =>
+				(call[0] as Array<{ fixture: PatchedFixture }>).map(
+					(candidate) => candidate.fixture.fixture_id,
+				),
+			),
+		];
+		await waitFor(() => expect(edited()).toEqual(["fixture-3"]));
+	});
+
+	it("keeps the selection when the right-clicked fixture belongs to it", () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		server.patch.fixtures = [1, 2].map((number) => {
+			const fixture = splitFixture();
+			fixture.fixture_id = `fixture-${number}`;
+			fixture.fixture_number = number;
+			return fixture;
+		});
+		programming.selection.selected = ["fixture-1", "fixture-2"];
+		render(<FixturePatchSetup />);
+
+		fireEvent.contextMenu(screen.getByRole("textbox", { name: "Fixture ID 2" }));
+
+		expect(programming.actions.replace).not.toHaveBeenCalled();
 	});
 
 	it("ignores a macOS Ctrl-click context menu instead of opening the editor", () => {

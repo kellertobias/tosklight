@@ -140,6 +140,10 @@ function usePatchUiState() {
 		null,
 	);
 	const [editingSplit, setEditingSplit] = useState<number | null>(null);
+	/** A fixture row the table scrolls into view once, if a committed edit moved it out of sight. */
+	const [revealRequest, setRevealRequest] = useState<{
+		fixtureId: string;
+	} | null>(null);
 	const selectionAnchor = useRef<string | null>(null);
 	const dragSelection = useRef<string | null>(null);
 	return {
@@ -217,6 +221,8 @@ function usePatchUiState() {
 		setDeleteConfirm,
 		editingSplit,
 		setEditingSplit,
+		revealRequest,
+		setRevealRequest,
 		selectionAnchor,
 		dragSelection,
 	};

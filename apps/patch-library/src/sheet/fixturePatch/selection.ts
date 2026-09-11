@@ -60,6 +60,18 @@ export function selectedFixturesInOperatorOrder(controller: PatchController) {
 		});
 }
 
+/**
+ * The fixtures an edit opened on `fixture` applies to: the whole selection when it holds that
+ * fixture, otherwise that fixture alone. A right-click on a row outside the selection must never
+ * edit the selection behind it, even before the host has replaced that selection.
+ */
+export function editTargets(controller: PatchController, fixture: PatchedFixture) {
+	const selected = selectedFixturesInOperatorOrder(controller);
+	return selected.some((candidate) => candidate.fixture_id === fixture.fixture_id)
+		? selected
+		: [fixture];
+}
+
 export function toggledFixtureSelection(
 	current: readonly string[],
 	fixture: PatchedFixture,

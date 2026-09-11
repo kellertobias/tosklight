@@ -35,6 +35,19 @@ The demo is built from the fixture packages this version of ToskLight ships, so 
 the same profile revisions, models and modes the fixture library does. It is the quickest way to
 see what the Visualizer draws, and the rig the product demonstration video is shot from.
 
+## Editing the patch sheet
+
+Right-click a value to edit it. When the fixture you right-click belongs to the selection, the
+editor changes every selected fixture; when it does not, the selection is replaced by that fixture
+and only that fixture is edited.
+
+A Fixture ID range in the value entry can be left open: `1100 [THRU] [ENTER]` numbers the selected
+fixtures 1100, 1101, 1102 and on, and `1101 [THRU] [−] [ENTER]` numbers them 1101, 1100, 1099 and
+on. A closed range such as `1012 [THRU] 1004` still counts from its first value towards its last.
+
+After **Enter**, the sheet scrolls to the fixture whose value you opened when the new value moved
+its row out of view, for example when a new Fixture ID sorts it further down.
+
 ## Lighting the rig without a desk
 
 Select fixtures in the patch sheet and the editor's preview controls light them. No desk, no

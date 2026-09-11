@@ -9,7 +9,7 @@ import {
 	reconcileModePatchChanges,
 	replaceSelectedSplitPatch,
 } from "./patchModel";
-import { fixtureSelectionIds } from "./selection";
+import { editTargets } from "./selection";
 
 export function saveEdit(
 	controller: PatchController,
@@ -123,14 +123,10 @@ async function savePolicy(
 ) {
 	const selected = controller.data.selected;
 	if (!selected) return;
-	const selectedIds = controller.selection.fixtureIds;
-	const targets =
-		controller.host.desktopEditing && selectedIds
-			? controller.data.all.filter((fixture) =>
-					fixtureSelectionIds(fixture).some((id) => selectedIds.has(id)),
-				)
-			: [selected];
-	for (const fixture of targets.length ? targets : [selected])
+	const targets = controller.host.desktopEditing
+		? editTargets(controller, selected)
+		: [selected];
+	for (const fixture of targets)
 		if (
 			!(await controller.patch.updatePolicy(
 				fixture.fixture_id,
