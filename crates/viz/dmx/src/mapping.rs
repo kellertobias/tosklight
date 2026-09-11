@@ -139,6 +139,13 @@ pub fn apply_overrides(
                 .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
             input.port,
         );
+        // A pin names a protocol, so it listens the way that protocol is ordinarily delivered:
+        // sACN by multicast, which only a socket that joined the universe's group ever hears, and
+        // Art-Net by broadcast. Either socket still takes unicast sent to this machine.
+        mapping.delivery = match input.protocol {
+            Protocol::ArtNet => Delivery::Broadcast,
+            Protocol::Sacn => Delivery::Multicast,
+        };
         // An operator's own statement outranks anything derived from the show.
         mapping.priority = 255;
         result.push(mapping);
@@ -201,6 +208,30 @@ mod tests {
         assert!(
             two[0].priority > one[0].priority,
             "the operator outranks the show"
+        );
+    }
+
+    #[test]
+    fn an_override_listens_the_way_its_protocol_is_delivered() {
+        let result = apply_overrides(
+            Vec::new(),
+            &[
+                UniverseInput::new(1, Protocol::ArtNet),
+                UniverseInput::new(3, Protocol::Sacn),
+            ],
+            None,
+        );
+        let delivery = |universe| {
+            result
+                .iter()
+                .find(|mapping| mapping.logical_universe == universe)
+                .map(|mapping| mapping.delivery)
+        };
+        assert_eq!(delivery(1), Some(Delivery::Broadcast));
+        assert_eq!(
+            delivery(3),
+            Some(Delivery::Multicast),
+            "a unicast listener never joins the group a desk's sACN is sent to"
         );
     }
 
