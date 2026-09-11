@@ -890,6 +890,31 @@
 	opacity: 0.45;
 }
 
+/*
+ * While a layer is being chosen the sheet is blurred, so the hint sits over it in the same grid
+ * cell rather than inside it, where the blur would reach it too. The table is placed explicitly so
+ * the hint cannot push it into the next row.
+ */
+.show-patch-layout > .patch-table-wrap,
+.patch-layer-hint {
+	grid-column: 2;
+	grid-row: 2;
+}
+
+.patch-layer-hint {
+	align-self: center;
+	justify-self: center;
+	z-index: 1;
+	margin: 0;
+	padding: 12px 18px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel);
+	font-size: 16px;
+	font-weight: 600;
+	pointer-events: none;
+}
+
 .patch-edit-modal {
 	width: min(760px, calc(100vw - 30px)) !important;
 }

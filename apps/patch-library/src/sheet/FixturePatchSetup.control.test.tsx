@@ -951,6 +951,7 @@ describe("selected split selection and SET editing", () => {
 			.getByRole("heading", { name: "Select layer" })
 			.closest("aside");
 		if (!layers) throw new Error("Layer picker was not rendered");
+		expect(screen.getByText("Select layer on the left")).toBeInTheDocument();
 		fireEvent.click(within(layers).getByRole("button", { name: /^Floor/ }));
 
 		await waitFor(() =>
@@ -972,6 +973,7 @@ describe("selected split selection and SET editing", () => {
 		]);
 		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 		expect(screen.queryByRole("heading", { name: "Select layer" })).toBeNull();
+		expect(screen.queryByText("Select layer on the left")).toBeNull();
 	});
 
 	it("names the fixture that already holds an ID the spread needs", async () => {

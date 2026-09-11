@@ -108,6 +108,11 @@ function FixturePatchLayout() {
 			<PatchHeader />
 			<PatchLayers />
 			<PatchTable />
+			{ui.layerModal === "select" ? (
+				<p className="patch-layer-hint" role="status">
+					Select layer on the left
+				</p>
+			) : null}
 			<FixtureBrowser />
 			<FixturePlacement />
 			<PlacementCloseConfirm />
