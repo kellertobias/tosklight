@@ -25,6 +25,12 @@ Use **+ Add fixture** to search by type, manufacturer, fixture family, and mode,
 
 The manufacturer column is ordered **All manufacturers**, **Generic**, **Venue**, then the actual manufacturers alphabetically. Venue profiles are scenic objects rather than DMX fixtures. Their placement dialog assigns fixture IDs from the reserved `0.x` range, beginning at `0.1`, and asks for name, count, and mode but has no Address field or universe grid. The Patch, MIB, MIB Delay, and Highlight cells show that no DMX patch applies. They remain ordinary transferable show objects with editable location, rotation, and layer. They appear in Show Patch and Stage but are excluded from the Fixture Sheet, which contains programmable fixtures only. The same exclusion applies independently to every `visual_only` profile and every complete fixture ID beginning `0.` so imported or legacy scenery cannot leak into the programming table.
 
+Click a column header in Show Patch to order the table by that column, for example **Fixture ID**
+or **Patch**; click it again to reverse the order. An arrow marks the column the table is ordered
+by. **Patch** orders by universe, then address. Unpatched fixtures and fixtures without a fixture
+ID always come last, and fixtures with the same value keep Fixture ID order. Shift ranges follow
+the order the table shows. Show Patch opens ordered by Fixture ID.
+
 ## Importing a CSV Patch List
 
 Use **Import CSV** in the Show Patch title bar to add a whole fixture list from a spreadsheet, paperwork export, or another desk. Every CSV row becomes one fixture. The import only adds fixtures; it never changes or removes fixtures already in the show.

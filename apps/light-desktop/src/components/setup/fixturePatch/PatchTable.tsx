@@ -13,6 +13,7 @@ import { selectPatchFixture } from "./fixtureActions";
 import { FixtureIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { LightSourceCell } from "./LightSourceAppearance";
+import { isPatchSortColumn, nextPatchSort } from "./tableSort";
 import {
 	beginMultipatchEdit,
 	beginMultipatchEditFromContextMenu,
@@ -54,6 +55,31 @@ const columns = [
 	"Layer",
 ];
 
+/**
+ * A column header. A sortable one orders the table by its column: the first click ascending, the
+ * next descending. The header keeps the column's name; its button is named for what it does.
+ */
+function PatchColumnHeader({ column }: { column: string }) {
+	const controller = usePatchController();
+	if (!isPatchSortColumn(column)) return <th>{column}</th>;
+	const { sort, setSort } = controller.ui;
+	const active = sort.column === column;
+	return (
+		<th aria-label={column} aria-sort={active ? sort.direction : "none"}>
+			{/* The arrow is drawn by CSS from data-sort, so the header's text stays the column name. */}
+			<button
+				type="button"
+				className={`patch-sort${active ? " is-active" : ""}`}
+				data-sort={active ? sort.direction : undefined}
+				aria-label={`Sort by ${column}`}
+				onClick={() => setSort(nextPatchSort(sort, column))}
+			>
+				{column}
+			</button>
+		</th>
+	);
+}
+
 export function PatchTable() {
 	const controller = usePatchController();
 	return (
@@ -66,7 +92,7 @@ export function PatchTable() {
 				<thead>
 					<tr>
 						{columns.map((column) => (
-							<th key={column}>{column}</th>
+							<PatchColumnHeader key={column} column={column} />
 						))}
 					</tr>
 				</thead>
@@ -120,6 +146,7 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 	const pending = controller.patch.pendingFixtureIds.has(fixture.fixture_id);
 	return (
 		<tr
+			data-fixture-id={fixture.fixture_id}
 			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""}`.trim()}
 			aria-busy={pending || undefined}
 			onClick={(event) => {

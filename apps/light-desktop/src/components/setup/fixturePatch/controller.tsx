@@ -24,9 +24,9 @@ import {
 	compareFixtureManufacturers,
 	groupFixtureFamilies,
 } from "../patchUtils";
-import { compareFixtureIds } from "./fixtureIds";
 import { definitionSplits } from "./patchModel";
 import { usePatchSelection } from "./selection";
+import { DEFAULT_PATCH_SORT, type PatchSort, sortPatchFixtures } from "./tableSort";
 
 export type EditKind =
 	| "number"
@@ -93,6 +93,7 @@ function usePatchUiState() {
 	const [layerModal, setLayerModal] = useState<"add" | "select" | null>(null);
 	const [layerName, setLayerName] = useState("");
 	const [query, setQuery] = useState("");
+	const [sort, setSort] = useState<PatchSort>(DEFAULT_PATCH_SORT);
 	const [typeFilter, setTypeFilter] = useState("");
 	const [manufacturer, setManufacturer] = useState("");
 	const [familyKey, setFamilyKey] = useState("");
@@ -162,6 +163,8 @@ function usePatchUiState() {
 		setLayerName,
 		query,
 		setQuery,
+		sort,
+		setSort,
 		typeFilter,
 		setTypeFilter,
 		manufacturer,
@@ -234,13 +237,16 @@ function usePatchDerivedState(
 		.sort((a, b) => a.body.order - b.body.order)
 		.map((item) => item.body);
 	const all = [...patch.fixtures];
-	const visible = all
-		.filter(
+	// Range selection walks this list, so it follows whatever order the table shows.
+	const visible = sortPatchFixtures(
+		all.filter(
 			(fixture) =>
 				ui.activeLayer === "all" ||
 				(fixture.layer_id || "default") === ui.activeLayer,
-		)
-		.sort(compareFixtureIds);
+		),
+		ui.sort,
+		new Map(layers.map((layer) => [layer.id, layer.order])),
+	);
 	const availableDefinitions = useMemo(
 		() =>
 			mergeFixtureDefinitions(
