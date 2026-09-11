@@ -477,3 +477,60 @@ fn visual_fixture(
     }];
     fixture
 }
+
+#[test]
+fn imported_fixtures_land_on_layers_named_as_the_file_names_them() {
+    let rig = Rig::new();
+    let mut on_truss = mvr_fixture(Uuid::from_u128(1), "On truss", 1, 1);
+    on_truss.layer = Some("uuid-truss".into());
+    let mut on_default = mvr_fixture(Uuid::from_u128(2), "On default", 1, 10);
+    on_default.layer = Some("uuid-default".into());
+    let mut envelope = rig.envelope(vec![on_truss, on_default], vec![fixture_definition(1)]);
+    envelope.command.document.layers = vec![
+        light_mvr::MvrLayer {
+            id: "uuid-truss".into(),
+            name: "Front Truss".into(),
+        },
+        light_mvr::MvrLayer {
+            id: "uuid-default".into(),
+            name: "Default".into(),
+        },
+        light_mvr::MvrLayer {
+            id: "uuid-audience".into(),
+            name: "Audience".into(),
+        },
+    ];
+
+    rig.service.apply(envelope, &rig.ports).unwrap();
+
+    let document = rig.document();
+    let layers: Vec<_> = document
+        .objects_of_kind("patch_layer")
+        .map(|object| {
+            (
+                object.key().id().to_owned(),
+                object.body()["name"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        layers,
+        [("uuid-truss".to_owned(), "Front Truss".to_owned())],
+        "a layer no imported fixture is on is not created, and Default is the patch's own"
+    );
+    let layer_of = |name: &str| {
+        document
+            .objects_of_kind("patched_fixture")
+            .map(|object| {
+                PortablePatchedFixtureRecord::decode(object.body().clone())
+                    .unwrap()
+                    .patch()
+                    .unwrap()
+            })
+            .find(|fixture| fixture.name == name)
+            .unwrap()
+            .layer_id
+    };
+    assert_eq!(layer_of("On truss"), "uuid-truss");
+    assert_eq!(layer_of("On default"), DEFAULT_PATCH_LAYER);
+}

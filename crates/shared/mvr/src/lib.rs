@@ -234,12 +234,22 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
     let mut current_geometry: Option<MvrGeometry> = None;
     let mut text = String::new();
     let mut uuids = HashSet::new();
+    // The layer the objects being read sit in; MVR places every object inside one.
+    let mut current_layer: Option<String> = None;
     loop {
         match reader.read_event()? {
             Event::Start(e) => {
                 let tag = String::from_utf8_lossy(local(e.name().as_ref())).to_ascii_lowercase();
                 stack.push(tag.clone());
                 text.clear();
+                if tag == "layer" {
+                    let id = attr(&e, b"uuid").unwrap_or_else(|| Uuid::new_v4().to_string());
+                    doc.layers.push(MvrLayer {
+                        id: id.clone(),
+                        name: attr(&e, b"name").unwrap_or_default(),
+                    });
+                    current_layer = Some(id);
+                }
                 if tag == "fixture" {
                     let uuid = attr(&e, b"uuid")
                         .and_then(|v| Uuid::parse_str(&v).ok())
@@ -253,7 +263,7 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
                         universe: None,
                         address: None,
                         matrix: matrix(""),
-                        layer: attr(&e, b"layer"),
+                        layer: attr(&e, b"layer").or_else(|| current_layer.clone()),
                         class: attr(&e, b"class"),
                     });
                 }
@@ -266,7 +276,7 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
                         name: attr(&e, b"name").unwrap_or_else(|| "Geometry".into()),
                         file_name: attr(&e, b"filename").unwrap_or_default(),
                         matrix: matrix(""),
-                        layer: attr(&e, b"layer"),
+                        layer: attr(&e, b"layer").or_else(|| current_layer.clone()),
                         class: attr(&e, b"class"),
                     });
                 }
@@ -314,6 +324,9 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
                     && tag == "matrix"
                 {
                     g.matrix = matrix(value);
+                }
+                if tag == "layer" {
+                    current_layer = None;
                 }
                 if tag == "fixture" {
                     let f = current_fixture.take().unwrap();

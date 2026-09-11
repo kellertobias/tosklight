@@ -37,7 +37,7 @@ Choose **New Show > Load from MVR** and review the preview before creating the s
 
 ![Start a new show from an MVR archive](../../assets/screenshots/workflows/mvr-new-show.png)
 
-Embedded GDTF files are imported into the desk fixture library. Fixtures without a matching definition remain visible as unresolved import records instead of being silently discarded.
+Embedded GDTF files are imported into the desk fixture library. Fixtures without a matching definition remain visible as unresolved import records instead of being silently discarded. Imported fixtures keep the layers the file puts them on: each lands on the patch layer with the same name, and a layer the show does not have yet is created under the file's name. Only layers that receive a fixture are created; the file's default layer, and fixtures on no layer, go to the show's default layer.
 
 ## Export MVR
 

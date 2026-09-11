@@ -203,3 +203,29 @@ fn layers_that_share_a_name_stay_separate_and_the_default_reads_as_default() {
     let xml = scene_xml(&write(&doc).unwrap());
     assert_eq!(layer_names(&xml), ["Truss", "Truss", "Default"]);
 }
+
+#[test]
+fn reading_keeps_each_layers_name_and_the_fixtures_inside_it() {
+    let mut on_truss = spot(Some("truss-id"));
+    on_truss.name = "On truss".into();
+    let doc = MvrDocument {
+        layers: vec![layer("floor-id", "Floor"), layer("truss-id", "Front Truss")],
+        fixtures: vec![spot(Some("floor-id")), on_truss],
+        ..Default::default()
+    };
+    let read_back = read(&write(&doc).unwrap()).unwrap();
+
+    let names: Vec<_> = read_back
+        .layers
+        .iter()
+        .map(|layer| layer.name.as_str())
+        .collect();
+    assert_eq!(names, ["Floor", "Front Truss"]);
+    let truss = &read_back.layers[1];
+    let fixture = read_back
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.name == "On truss")
+        .unwrap();
+    assert_eq!(fixture.layer.as_deref(), Some(truss.id.as_str()));
+}

@@ -1,3 +1,4 @@
+use super::layers::MvrLayerPlan;
 use super::model::{
     ApplyActiveMvrImportCommand, MvrImportResolution, PlannedFixture, PlannedPatchChange,
     PreparedMvrImportState,
@@ -109,6 +110,12 @@ pub(super) fn plan_import(
     let metadata = document.objects_of_kind("mvr_fixture").collect::<Vec<_>>();
     let fixture_ids = mvr_fixture_ids(&metadata);
     let embedded_fixtures = crate::mvr_export::tosklight_mvr_fixture_metadata(&command.document);
+    let mut layers = MvrLayerPlan::new(
+        &command.document,
+        document
+            .objects_of_kind("patch_layer")
+            .map(|object| (object.key().id().to_owned(), object.body().clone())),
+    );
     let mut changes = ImportChanges::new(document, &existing);
     let mut imported_ids = HashSet::new();
     let mut imported = 0;
@@ -161,6 +168,7 @@ pub(super) fn plan_import(
             &definition,
             fixture_id,
             address,
+            layers.layer_for(source.layer.as_deref()),
             &existing,
             embedded,
         );
@@ -189,6 +197,12 @@ pub(super) fn plan_import(
             ));
         }
         imported += 1;
+    }
+    // Only layers an imported fixture landed on are created, in the same change as the fixtures.
+    for (id, body) in layers.created() {
+        changes
+            .transaction
+            .put("patch_layer", id.clone(), body.clone());
     }
     if !changes.fixtures.is_empty() || !changes.removed_fixture_ids.is_empty() {
         changes.transaction.mark_patch_changed();
@@ -285,6 +299,7 @@ fn patched_fixture(
     definition: &FixtureDefinition,
     fixture_id: light_core::FixtureId,
     address: (Option<u16>, Option<u16>),
+    layer_id: String,
     existing: &[&light_show::PortableShowObject],
     embedded: Option<&PatchedFixture>,
 ) -> PatchedFixture {
@@ -306,7 +321,7 @@ fn patched_fixture(
         universe: address.0,
         address: address.1,
         split_patches: Vec::new(),
-        layer_id: source.layer.clone().unwrap_or_else(|| "default".into()),
+        layer_id: layer_id.clone(),
         // An imported rig is placed against the stage; nothing in MVR describes a 3D Point.
         note: None,
         position_master: None,
@@ -369,7 +384,7 @@ fn patched_fixture(
     patched.definition = definition.clone();
     patched.universe = address.0;
     patched.address = address.1;
-    patched.layer_id = source.layer.clone().unwrap_or_else(|| "default".into());
+    patched.layer_id = layer_id;
     patched.location = location;
     patched.rotation = rotation;
     if let Some(existing_patch) = existing_patch {

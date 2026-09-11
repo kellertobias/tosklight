@@ -297,6 +297,40 @@ fn exported_mvr_layers_carry_the_patch_layer_names() {
     assert!(!xml.contains("name=\"default\""), "{xml}");
 }
 
+#[test]
+fn an_exported_rig_imports_back_onto_layers_with_the_same_names() {
+    let source = rig("mvr-layer-source");
+    source
+        .document
+        .put_object(
+            "patch_layer",
+            "default",
+            &serde_json::json!({"id": "default", "name": "Front Truss", "order": 0}),
+        )
+        .expect("store the layer");
+    source
+        .document
+        .patch_fixtures(patch_one(source.document.show_id(), source.profile))
+        .expect("patch");
+    let archive = PlanningDocument::read_mvr(&source.document.export_mvr().expect("export").data)
+        .expect("read the archive back");
+
+    let target = rig("mvr-layer-target");
+    target
+        .document
+        .import_mvr(archive, Default::default())
+        .expect("import");
+
+    let layers = target.document.objects("patch_layer").expect("layers");
+    let truss = layers
+        .iter()
+        .find(|layer| layer.body["name"] == "Front Truss")
+        .expect("the layer arrives under its own name");
+    let snapshot = target.document.patch_snapshot().expect("snapshot");
+    assert_eq!(snapshot.fixtures.len(), 1);
+    assert_eq!(snapshot.fixtures[0].patch.layer_id, truss.id);
+}
+
 /// An import that cannot place a fixture has to say so before it writes, not count it afterwards.
 #[test]
 fn previewing_mvr_reports_what_the_archive_cannot_resolve_without_writing() {

@@ -117,6 +117,7 @@ fn patched_mvr_fixture(
     definition: &light_fixture::FixtureDefinition,
     fixture_id: light_core::FixtureId,
     address: (Option<u16>, Option<u16>),
+    layer_id: String,
     existing: &[light_show::VersionedObject],
     embedded: Option<&light_fixture::PatchedFixture>,
 ) -> light_fixture::PatchedFixture {
@@ -141,7 +142,7 @@ fn patched_mvr_fixture(
             universe: address.0,
             address: address.1,
             split_patches: Vec::new(),
-            layer_id: source.layer.clone().unwrap_or_else(|| "default".into()),
+            layer_id: layer_id.clone(),
             note: None,
             position_master: None,
             direct_control: None,
@@ -194,7 +195,7 @@ fn patched_mvr_fixture(
     patched.definition = definition.clone();
     patched.universe = address.0;
     patched.address = address.1;
-    patched.layer_id = source.layer.clone().unwrap_or_else(|| "default".into());
+    patched.layer_id = layer_id;
     patched.location = location;
     patched.rotation = rotation;
     if let Some(existing_patch) = existing_patch {
@@ -255,6 +256,14 @@ pub(super) fn apply_mvr_to_store(
     let metadata = store.objects("mvr_fixture").map_err(ApiError::store)?;
     let ids = mvr_fixture_ids(&metadata);
     let embedded_fixtures = light_application::mvr_export::tosklight_mvr_fixture_metadata(document);
+    let mut layers = light_application::mvr_import::MvrLayerPlan::new(
+        document,
+        store
+            .objects("patch_layer")
+            .map_err(ApiError::store)?
+            .into_iter()
+            .map(|object| (object.id, object.body)),
+    );
     let mut imported = 0;
     let mut unresolved = 0;
     let mut warnings = Vec::new();
@@ -295,6 +304,7 @@ pub(super) fn apply_mvr_to_store(
             &definition,
             fixture_id,
             address,
+            layers.layer_for(source.layer.as_deref()),
             &existing_objects,
             embedded,
         );
@@ -304,6 +314,12 @@ pub(super) fn apply_mvr_to_store(
             occupied.push((u, a, definition.footprint, id));
         }
         imported += 1;
+    }
+    // Only layers an imported fixture landed on are created.
+    for (id, body) in layers.created() {
+        store
+            .put_object("patch_layer", id, body, 0)
+            .map_err(ApiError::store)?;
     }
     if !document.geometry.is_empty() {
         warnings.push(
