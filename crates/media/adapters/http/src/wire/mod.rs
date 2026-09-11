@@ -23,6 +23,7 @@ mod network;
 mod output;
 mod output_edit;
 mod pixel_map;
+mod playback;
 mod text;
 mod time;
 mod visualizer;
@@ -55,6 +56,7 @@ pub use pixel_map::{
     CanvasPointView, DisplayRegionView, PixelLayoutView, PixelMapEditError, PixelMapView,
     PixelRouteView, PixelZoneHandoffView, PixelZoneView,
 };
+pub use playback::{PlaybackEditError, PlaybackView, UpdatePlayback};
 pub use text::{
     CreateText, DeleteText, TextEditError, TextFormatView, TextSlotView, TextStyleView, UpdateText,
 };

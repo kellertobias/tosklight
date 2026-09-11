@@ -51,6 +51,11 @@ pub enum ConfigurationError {
     #[error("the UTC offset {minutes} minutes is outside the range any timezone uses")]
     InvalidUtcOffset { minutes: i16 },
     #[error(
+        "the clip switch hold of {millis} ms is longer than the {} ms the server accepts",
+        super::service::MAXIMUM_SWITCH_HOLD_MILLIS
+    )]
+    InvalidSwitchHold { millis: u32 },
+    #[error(
         "outputs '{first}' and '{second}' both consume universe {universe} at address {start_address}"
     )]
     OverlappingPatch {
@@ -143,6 +148,11 @@ pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), Configu
     if !configuration.time.is_valid() {
         return Err(ConfigurationError::InvalidUtcOffset {
             minutes: configuration.time.utc_offset_minutes,
+        });
+    }
+    if !configuration.playback.is_valid() {
+        return Err(ConfigurationError::InvalidSwitchHold {
+            millis: configuration.playback.switch_hold_millis,
         });
     }
     configuration.effects.validate()?;

@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use media_domain::catalog::CatalogSnapshot;
 use media_domain::{
@@ -35,6 +36,25 @@ pub struct LayerSource {
     pub status: SourceStatus,
     /// The source's own dimensions, which the compositor scales from.
     pub size: (u32, u32),
+    /// The clip this layer showed before its current selection, while that selection is not yet
+    /// on screen and the switch hold has not run out.
+    pub outgoing: Option<HeldClip>,
+}
+
+/// A previous clip a layer keeps playing while its new selection loads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeldClip {
+    pub asset: AssetId,
+    pub frame: Option<usize>,
+    pub size: (u32, u32),
+}
+
+/// A clip that has been replaced but is still showing until its successor is.
+struct Outgoing {
+    selected: Selected,
+    /// When the layer lets go regardless, so a slow load ends in an empty layer rather than a
+    /// clip that seems to ignore the desk.
+    until: Timestamp,
 }
 
 #[derive(Clone, Copy)]
@@ -55,6 +75,10 @@ pub struct LayerSessions {
     /// Addresses that have already failed, so a layer holding a bad selection does not retry on
     /// every single frame.
     failed: HashMap<usize, FailedSelection>,
+    /// Replaced clips still on screen, per layer.
+    outgoing: HashMap<usize, Outgoing>,
+    /// How long a replaced clip may stay on screen. Zero drops it at once.
+    switch_hold: Duration,
 }
 
 impl LayerSessions {
@@ -66,11 +90,27 @@ impl LayerSessions {
             pending: HashMap::new(),
             sizes: HashMap::new(),
             failed: HashMap::new(),
+            outgoing: HashMap::new(),
+            switch_hold: Duration::ZERO,
         }
     }
 
     pub const fn output(&self) -> OutputId {
         self.output
+    }
+
+    /// Sets how long a layer keeps its previous clip while a new selection loads. Applies from
+    /// the next switch; a hold already running keeps the limit it started with.
+    pub fn set_switch_hold(&mut self, hold: Duration) {
+        self.switch_hold = hold;
+    }
+
+    /// Lets go of a layer's previous clip, because its new selection is on screen or can never
+    /// be shown.
+    pub fn end_hold(&mut self, layer_index: usize, loader: &mut impl MediaLoader) {
+        if let Some(outgoing) = self.outgoing.remove(&layer_index) {
+            self.let_go(outgoing.selected.asset, loader);
+        }
     }
 
     /// Brings one layer's session in line with its state, loading media if the selection changed.
@@ -103,6 +143,14 @@ impl LayerSessions {
 
         let catalog_asset = catalog.resolve(layer.address).map(|item| item.id);
 
+        if self
+            .outgoing
+            .get(&layer_index)
+            .is_some_and(|outgoing| now >= outgoing.until)
+        {
+            self.end_hold(layer_index, loader);
+        }
+
         // A selection that has already failed is reported from memory rather than retried every
         // frame; changing the address clears it, and so does a reset.
         if let Some(failed) = self.failed.get(&layer_index).copied() {
@@ -117,6 +165,7 @@ impl LayerSessions {
                         failure: failed.failure,
                     },
                     size: (0, 0),
+                    outgoing: None,
                 });
             }
             self.failed.remove(&layer_index);
@@ -149,7 +198,7 @@ impl LayerSessions {
                     *address == layer.address && Some(*asset) == catalog_asset
                 });
             if !pending_matches {
-                self.release(layer_index, loader);
+                self.make_way(layer_index, loader, now);
             }
             if let Err(failure) = self.select(layer_index, layer, catalog, loader, now) {
                 self.release(layer_index, loader);
@@ -167,16 +216,19 @@ impl LayerSessions {
                     frame: None,
                     status: SourceStatus::Failed { failure },
                     size: (0, 0),
+                    outgoing: None,
                 });
             }
         }
 
+        let outgoing = self.held(layer_index, layer, now);
         let Some(selected) = self.selected.get_mut(&layer_index) else {
             return Some(LayerSource {
                 asset: catalog_asset.unwrap_or_default(),
                 frame: None,
                 status: SourceStatus::Loading,
                 size: (0, 0),
+                outgoing,
             });
         };
         selected.reset_trigger_id = layer.reset_trigger_id;
@@ -191,7 +243,69 @@ impl LayerSessions {
             frame: delivery.frame,
             status: delivery.status,
             size,
+            outgoing,
         })
+    }
+
+    /// The frame a layer's previous clip shows now, if it is still being held.
+    ///
+    /// The previous clip keeps the transport it had: it is only filling in, so a play mode or
+    /// reset sent with the new selection belongs to the new selection.
+    fn held(&mut self, layer_index: usize, layer: &LayerState, now: Timestamp) -> Option<HeldClip> {
+        let outgoing = self.outgoing.get_mut(&layer_index)?;
+        let asset = outgoing.selected.asset;
+        let delivery =
+            outgoing
+                .selected
+                .session
+                .deliver(layer, media_domain::ResolvedTempo::None, now);
+        Some(HeldClip {
+            asset,
+            frame: delivery.frame,
+            size: self.sizes.get(&asset).copied().unwrap_or((0, 0)),
+        })
+    }
+
+    /// Clears the way for a new selection on a layer.
+    ///
+    /// With a switch hold the clip on screen becomes the layer's outgoing clip instead of being
+    /// dropped. A hold that is already running keeps the clip that was on screen when it began,
+    /// so switching again before anything new appeared never shows an intermediate selection.
+    fn make_way(&mut self, layer_index: usize, loader: &mut impl MediaLoader, now: Timestamp) {
+        self.failed.remove(&layer_index);
+        if let Some((_, asset)) = self.pending.remove(&layer_index) {
+            loader.release_selection(asset);
+        }
+        let Some(previous) = self.selected.remove(&layer_index) else {
+            return;
+        };
+        if self.switch_hold.is_zero() || self.outgoing.contains_key(&layer_index) {
+            self.let_go(previous.asset, loader);
+            return;
+        }
+        self.outgoing.insert(
+            layer_index,
+            Outgoing {
+                selected: previous,
+                until: now.plus(self.switch_hold),
+            },
+        );
+    }
+
+    /// Releases one selection's pin, forgetting its size once nothing on this output shows it.
+    fn let_go(&mut self, asset: AssetId, loader: &mut impl MediaLoader) {
+        loader.release_selection(asset);
+        let still_shown = self
+            .selected
+            .values()
+            .any(|selected| selected.asset == asset)
+            || self
+                .outgoing
+                .values()
+                .any(|outgoing| outgoing.selected.asset == asset);
+        if !still_shown {
+            self.sizes.remove(&asset);
+        }
     }
 
     fn select(
@@ -244,18 +358,12 @@ impl LayerSessions {
     /// else is showing it.
     pub fn release(&mut self, layer_index: usize, loader: &mut impl MediaLoader) {
         self.failed.remove(&layer_index);
+        self.end_hold(layer_index, loader);
         if let Some((_, asset)) = self.pending.remove(&layer_index) {
             loader.release_selection(asset);
         }
         if let Some(previous) = self.selected.remove(&layer_index) {
-            loader.release_selection(previous.asset);
-            if !self
-                .selected
-                .values()
-                .any(|selected| selected.asset == previous.asset)
-            {
-                self.sizes.remove(&previous.asset);
-            }
+            self.let_go(previous.asset, loader);
         }
     }
 }
@@ -541,6 +649,114 @@ mod tests {
             Some(0),
             "the new selection starts at its own beginning, not the last one's position"
         );
+    }
+
+    #[test]
+    fn a_switch_hold_keeps_the_previous_clip_playing_until_it_runs_out() {
+        let mut bench = Bench::new("switch-hold-expires");
+        let first = bench.add(1, 1, "First", 10);
+        let second = bench.add(1, 2, "Second", 10);
+        bench.sessions.set_switch_hold(Duration::from_millis(300));
+
+        bench.reconcile(&pointing_at(1, 1), 0);
+        let switched = bench.reconcile(&pointing_at(1, 2), 500).unwrap();
+        assert_eq!(switched.asset, second);
+        assert_eq!(switched.frame, Some(0));
+        assert_eq!(
+            switched.outgoing,
+            Some(HeldClip {
+                asset: first,
+                frame: Some(5),
+                size: (320, 180),
+            })
+        );
+        assert!(
+            bench.loader.cache().is_pinned(first),
+            "a held clip cannot be evicted"
+        );
+
+        let still = bench.reconcile(&pointing_at(1, 2), 700).unwrap();
+        assert_eq!(
+            still.outgoing.and_then(|held| held.frame),
+            Some(7),
+            "the previous clip keeps playing rather than freezing"
+        );
+
+        let expired = bench.reconcile(&pointing_at(1, 2), 800).unwrap();
+        assert_eq!(expired.outgoing, None, "the hold runs out");
+        assert!(!bench.loader.cache().is_pinned(first));
+    }
+
+    #[test]
+    fn a_switch_hold_ends_when_the_caller_shows_the_new_clip() {
+        let mut bench = Bench::new("switch-hold-ends");
+        let first = bench.add(1, 1, "First", 10);
+        bench.add(1, 2, "Second", 10);
+        bench.sessions.set_switch_hold(Duration::from_millis(300));
+
+        bench.reconcile(&pointing_at(1, 1), 0);
+        assert!(
+            bench
+                .reconcile(&pointing_at(1, 2), 100)
+                .unwrap()
+                .outgoing
+                .is_some()
+        );
+        bench.sessions.end_hold(0, &mut bench.loader);
+        assert_eq!(
+            bench.reconcile(&pointing_at(1, 2), 150).unwrap().outgoing,
+            None
+        );
+        assert!(!bench.loader.cache().is_pinned(first));
+    }
+
+    #[test]
+    fn blanking_a_layer_drops_a_held_clip_at_once() {
+        let mut bench = Bench::new("switch-hold-blank");
+        let first = bench.add(1, 1, "First", 10);
+        bench.add(1, 2, "Second", 10);
+        bench.sessions.set_switch_hold(Duration::from_millis(300));
+
+        bench.reconcile(&pointing_at(1, 1), 0);
+        bench.reconcile(&pointing_at(1, 2), 100);
+        assert!(bench.reconcile(&LayerState::default(), 120).is_none());
+        assert!(!bench.loader.cache().is_pinned(first));
+        assert_eq!(
+            bench.reconcile(&pointing_at(1, 2), 140).unwrap().outgoing,
+            None
+        );
+    }
+
+    #[test]
+    fn switching_again_during_a_hold_keeps_the_clip_that_was_on_screen() {
+        let mut bench = Bench::new("switch-hold-again");
+        let first = bench.add(1, 1, "First", 10);
+        let second = bench.add(1, 2, "Second", 10);
+        bench.add(1, 3, "Third", 10);
+        bench.sessions.set_switch_hold(Duration::from_millis(300));
+
+        bench.reconcile(&pointing_at(1, 1), 0);
+        bench.reconcile(&pointing_at(1, 2), 100);
+        let third = bench.reconcile(&pointing_at(1, 3), 150).unwrap();
+        assert_eq!(third.outgoing.map(|held| held.asset), Some(first));
+        assert!(
+            !bench.loader.cache().is_pinned(second),
+            "the never-shown selection is released"
+        );
+    }
+
+    #[test]
+    fn without_a_switch_hold_the_previous_clip_is_released_at_once() {
+        let mut bench = Bench::new("switch-hold-off");
+        let first = bench.add(1, 1, "First", 10);
+        bench.add(1, 2, "Second", 10);
+
+        bench.reconcile(&pointing_at(1, 1), 0);
+        assert_eq!(
+            bench.reconcile(&pointing_at(1, 2), 100).unwrap().outgoing,
+            None
+        );
+        assert!(!bench.loader.cache().is_pinned(first));
     }
 
     #[test]

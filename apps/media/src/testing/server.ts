@@ -16,6 +16,7 @@ import type {
 	NetworkView,
 	OutputConfigurationView,
 	OutputView,
+	PlaybackView,
 	RunningServerView,
 	ServerLogLevelView,
 	TextSlotView,
@@ -36,6 +37,7 @@ export interface StubbedServer {
 	visualizers: VisualizerView[];
 	network: NetworkView;
 	time: TimeView;
+	playback: PlaybackView;
 	text: TextSlotView[];
 	audio: AudioPanelView;
 	logs: LogsView;
@@ -80,6 +82,7 @@ export function stubServer(
 		visualizers: [aVisualizer()],
 		network: aNetwork(),
 		time: { utcOffsetMinutes: 0, maximumUtcOffsetMinutes: 840 },
+		playback: { switchHoldMillis: 500, maximumSwitchHoldMillis: 10_000 },
 		text: [aClock(), aCountdown()],
 		audio: anAudioPanel(),
 		logs: aLog(),

@@ -291,6 +291,33 @@ describe("the settings page", () => {
 		expect(server.writes).toContain("/time/update");
 	});
 
+	it("edits how long a layer holds its previous clip while a new one loads", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+
+		await openSettings("Libraries");
+		const article = await screen.findByRole("article", {
+			name: "Clip switch",
+		});
+		const hold = within(article).getByLabelText("Hold previous clip for (ms)");
+		expect(hold).toHaveValue(500);
+		const save = within(article).getByRole("button", {
+			name: "Save clip switch",
+		});
+		expect(save).toBeDisabled();
+
+		await userEvent.clear(hold);
+		await userEvent.type(hold, "20000");
+		expect(save).toBeDisabled();
+
+		await userEvent.clear(hold);
+		await userEvent.type(hold, "800");
+		await userEvent.click(save);
+
+		await waitFor(() => expect(server.playback.switchHoldMillis).toBe(800));
+		expect(server.writes).toContain("/playback/update");
+	});
+
 	it("places restart-aware status beside the content heading", async () => {
 		stubSettingsServer();
 		renderSettings();

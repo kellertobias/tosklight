@@ -24,6 +24,7 @@ mod logs;
 mod network;
 mod output_effects;
 mod outputs;
+mod playback;
 mod telemetry;
 mod text;
 mod time;
@@ -170,6 +171,8 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/audio/update", post(audio::update_audio))
         .route("/api/v2/time", get(time::time))
         .route("/api/v2/time/update", post(time::update_time))
+        .route("/api/v2/playback", get(playback::playback))
+        .route("/api/v2/playback/update", post(playback::update_playback))
         .route("/api/v2/text", get(text::text))
         .route("/api/v2/text/create", post(text::create_text))
         .route(

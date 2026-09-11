@@ -33,6 +33,8 @@ const GENERATED_MASK_SLOT_BASE: usize = MASTER_MASK_SLOT + 1;
 pub enum Slot {
     /// An uploaded video or still frame.
     Media(usize),
+    /// The previous clip a layer keeps showing while its new selection loads.
+    Outgoing(usize),
     /// A mask, uploaded through its own sessions.
     Mask(usize),
     /// A visualizer rendered into this layer's generated target.
@@ -85,6 +87,9 @@ pub struct Prepared {
 pub struct LayerPipeline {
     media: LayerSessions,
     uploads: LayerSources,
+    /// Textures of clips a layer is switching away from, kept apart so the incoming clip's first
+    /// upload cannot drop what is still on screen.
+    outgoing_uploads: LayerSources,
     masks: LayerSessions,
     mask_uploads: LayerSources,
     visualizers: VisualizerRenderer,
@@ -101,6 +106,7 @@ impl LayerPipeline {
         Self {
             media: LayerSessions::new(output, storage.clone()),
             uploads: LayerSources::new(gpu, size),
+            outgoing_uploads: LayerSources::new(gpu, size),
             masks: LayerSessions::new(output, storage),
             mask_uploads: LayerSources::new(gpu, size),
             visualizers: VisualizerRenderer::new(gpu, size),
@@ -127,6 +133,10 @@ impl LayerPipeline {
     ) -> Prepared {
         let (catalog, now) = (frame.catalog, frame.now);
         let mut prepared = Prepared::default();
+        // Masks keep no hold: a mask that is briefly absent draws its layer unmasked, never
+        // black, so there is no flash to cover.
+        self.media
+            .set_switch_hold(frame.configuration.playback.switch_hold());
 
         for (index, layer) in output
             .layers
@@ -137,6 +147,7 @@ impl LayerPipeline {
             if !matches!(layer.address.classify(), AddressClass::Library) {
                 self.media.release(index, loader);
                 self.uploads.release(index, loader);
+                self.outgoing_uploads.release(index, loader);
             }
             let source = match layer.address.classify() {
                 AddressClass::Blank => {
@@ -173,6 +184,7 @@ impl LayerPipeline {
     pub fn texture(&self, slot: Slot) -> Option<&SourceTexture> {
         match slot {
             Slot::Media(layer) => self.uploads.texture(layer),
+            Slot::Outgoing(layer) => self.outgoing_uploads.texture(layer),
             Slot::Mask(layer) => self.mask_uploads.texture(layer),
             Slot::Generated(layer) => self.visualizers.target(layer),
             Slot::Text(layer) => self.text.texture(layer),
@@ -206,6 +218,7 @@ impl LayerPipeline {
 
     pub fn resize(&mut self, size: Size) {
         self.uploads.resize(size);
+        self.outgoing_uploads.resize(size);
         self.mask_uploads.resize(size);
         self.visualizers.resize(size);
         self.text.resize(size);
@@ -220,35 +233,87 @@ impl LayerPipeline {
         now: Timestamp,
         prepared: &mut Prepared,
     ) -> Option<Slot> {
-        let resolved = self.media.reconcile(index, layer, catalog, loader, now)?;
-        let Some(frame) = resolved.frame else {
-            prepared.statuses.push((index, resolved.status));
+        let Some(resolved) = self.media.reconcile(index, layer, catalog, loader, now) else {
+            self.outgoing_uploads.release(index, loader);
             return None;
         };
-        match self.uploads.prepare(
-            index,
-            resolved.asset,
-            frame,
-            Size::new(resolved.size.0, resolved.size.1),
-            loader,
-        ) {
+        match resolved.outgoing {
+            // The texture on screen belongs to the clip being held, so it moves with that clip
+            // before the new selection's first upload can replace it.
+            Some(held) => {
+                self.uploads
+                    .hand_over(index, held.asset, &mut self.outgoing_uploads, loader)
+            }
+            None => self.outgoing_uploads.release(index, loader),
+        }
+        let incoming = match resolved.frame {
+            Some(frame) => self.uploads.prepare(
+                index,
+                resolved.asset,
+                frame,
+                Size::new(resolved.size.0, resolved.size.1),
+                loader,
+            ),
+            None => Ok(false),
+        };
+        match incoming {
             Ok(true) => {
+                self.end_hold(index, loader);
                 prepared.statuses.push((index, resolved.status));
                 Some(Slot::Media(index))
             }
             Ok(false) => {
-                prepared
-                    .statuses
-                    .push((index, media_domain::SourceStatus::Loading));
-                None
+                let status = if resolved.frame.is_some() {
+                    media_domain::SourceStatus::Loading
+                } else {
+                    resolved.status
+                };
+                prepared.statuses.push((index, status));
+                self.held(index, resolved.outgoing, loader)
             }
             Err(failure) => {
+                // A failed selection draws transparent, exactly as it did before it was held.
+                self.end_hold(index, loader);
                 prepared
                     .statuses
                     .push((index, media_domain::SourceStatus::Failed { failure }));
                 None
             }
         }
+    }
+
+    /// Draws a layer's previous clip while its new selection is not on screen yet.
+    fn held(
+        &mut self,
+        index: usize,
+        held: Option<media_playback::HeldClip>,
+        loader: &mut impl media_playback::MediaLoader,
+    ) -> Option<Slot> {
+        let held = held?;
+        let drawn = match held.frame {
+            Some(frame) => self.outgoing_uploads.prepare(
+                index,
+                held.asset,
+                frame,
+                Size::new(held.size.0, held.size.1),
+                loader,
+            ),
+            None => Ok(self.outgoing_uploads.texture(index).is_some()),
+        };
+        match drawn {
+            Ok(true) => Some(Slot::Outgoing(index)),
+            Ok(false) => None,
+            Err(_) => {
+                self.end_hold(index, loader);
+                None
+            }
+        }
+    }
+
+    /// Lets go of a layer's previous clip and its texture.
+    fn end_hold(&mut self, index: usize, loader: &mut impl media_playback::MediaLoader) {
+        self.media.end_hold(index, loader);
+        self.outgoing_uploads.release(index, loader);
     }
 
     fn generated(
@@ -500,6 +565,7 @@ mod tests {
         // Three stores share one layer index; a slot is what keeps them apart. Two slots for the
         // same layer must not be equal, or a mask would be drawn as its own layer's source.
         assert_ne!(Slot::Media(0), Slot::Mask(0));
+        assert_ne!(Slot::Media(0), Slot::Outgoing(0));
         assert_ne!(Slot::Media(0), Slot::Generated(0));
         assert_ne!(Slot::Mask(0), Slot::Generated(0));
         assert_ne!(
@@ -672,6 +738,188 @@ mod tests {
             changed_pixels(&baseline, &render(&effected, None)) > 100,
             "Effects do not affect {label}"
         );
+    }
+
+    /// A loader whose frames for one asset are not resident yet, as a cold clip's are while the
+    /// disk workers read them.
+    struct ColdFrames {
+        inner: ClipLoader,
+        cold: Option<media_domain::AssetId>,
+    }
+
+    impl media_playback::MediaLoader for ColdFrames {
+        fn begin_selection(&mut self, asset: media_domain::AssetId) {
+            self.inner.begin_selection(asset);
+        }
+        fn request_load(
+            &mut self,
+            asset: media_domain::AssetId,
+            path: &std::path::Path,
+        ) -> Result<Option<media_playback::loader::LoadedClip>, media_domain::SourceFailure>
+        {
+            self.inner.request_load(asset, path)
+        }
+        fn finish_selection(&mut self, asset: media_domain::AssetId) {
+            self.inner.finish_selection(asset);
+        }
+        fn release_selection(&mut self, asset: media_domain::AssetId) {
+            self.inner.release_selection(asset);
+        }
+        fn request_frame(
+            &mut self,
+            asset: media_domain::AssetId,
+            frame: usize,
+            consumer: u64,
+        ) -> Option<(usize, std::sync::Arc<[u8]>)> {
+            if self.cold == Some(asset) {
+                return None;
+            }
+            self.inner.request_frame(asset, frame, consumer)
+        }
+    }
+
+    #[test]
+    fn a_clip_switch_shows_the_previous_clip_until_the_new_one_is_ready_or_the_hold_runs_out() {
+        use media_codec::container::{ClipHeader, ClipWriter};
+        use media_domain::catalog::{CatalogItem, ItemKind};
+
+        let size = Size::new(16, 16);
+        let root = std::env::temp_dir()
+            .join("media-switch-hold")
+            .join(media_domain::AssetId::new().to_string());
+        std::fs::create_dir_all(&root).unwrap();
+        let storage = media_library::LibraryStorage::new(root.clone());
+        let mut catalog = CatalogSnapshot::default();
+        let mut add = |file: u8, name: &str, colour: [u8; 4]| {
+            let id = media_domain::AssetId::new();
+            catalog
+                .insert(
+                    1,
+                    CatalogItem {
+                        id,
+                        file,
+                        name: name.to_owned(),
+                        kind: ItemKind::Video,
+                        width: size.width,
+                        height: size.height,
+                        frames: Some(2),
+                        intrinsic_bpm: None,
+                        note: None,
+                        enabled: true,
+                    },
+                )
+                .unwrap();
+            let path = storage.item_path(MediaAddress::new(1, file), name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let mut writer = ClipWriter::new(
+                std::fs::File::create(path).unwrap(),
+                ClipHeader {
+                    width: size.width,
+                    height: size.height,
+                    frame_count: 0,
+                    frame_rate: (30, 1),
+                    intrinsic_bpm: None,
+                },
+            )
+            .unwrap();
+            let payload =
+                media_codec::encode(size.width, size.height, &colour.repeat(256)).unwrap();
+            for index in 0..2u64 {
+                writer.write_frame(&payload, index * 33_333).unwrap();
+            }
+            writer.finish().unwrap();
+            id
+        };
+        let red = add(1, "Red", [255, 0, 0, 255]);
+        let green = add(2, "Green", [0, 255, 0, 255]);
+
+        let gpu = Gpu::off_screen().expect("an adapter is available");
+        let output_id = OutputId::new();
+        let mut pipeline = LayerPipeline::new(&gpu, output_id, storage, size);
+        let mut configuration = MediaConfiguration::default();
+        configuration.playback.switch_hold_millis = 300;
+        let analysis = driven_analysis();
+        let mut loader = ColdFrames {
+            inner: ClipLoader::new(16 * 1024 * 1024),
+            cold: None,
+        };
+        let mut output = OutputState::new(output_id, LayerPersonality::TwoLayers);
+        let show = |pipeline: &mut LayerPipeline,
+                    loader: &mut ColdFrames,
+                    output: &OutputState,
+                    configuration: &MediaConfiguration,
+                    millis: u64| {
+            let context = FrameContext {
+                catalog: &catalog,
+                configuration,
+                analysis: &analysis,
+                now_unix_millis: 0,
+                beat: 0.0,
+                bpm: 120.0,
+                beat_phase: 0.0,
+                seconds: 0.0,
+                now: Timestamp::from_millis(millis),
+            };
+            let prepared = pipeline.prepare(output, context, loader);
+            let status = prepared
+                .statuses
+                .iter()
+                .find(|(index, _)| *index == 0)
+                .map(|(_, status)| *status);
+            let slot = prepared.layers.first().map(|layer| layer.source);
+            if let Some(slot) = slot {
+                assert!(pipeline.texture(slot).is_some(), "{slot:?} has a texture");
+            }
+            (slot, status)
+        };
+        let select = |output: &mut OutputState, file: u8| {
+            output.layers[0] = LayerState {
+                address: MediaAddress::new(1, file),
+                source_status: SourceStatus::Ready,
+                ..Default::default()
+            };
+        };
+
+        select(&mut output, 1);
+        let (slot, _) = show(&mut pipeline, &mut loader, &output, &configuration, 0);
+        assert_eq!(slot, Some(Slot::Media(0)), "red is on screen");
+
+        select(&mut output, 2);
+        loader.cold = Some(green);
+        let (slot, status) = show(&mut pipeline, &mut loader, &output, &configuration, 100);
+        assert_eq!(slot, Some(Slot::Outgoing(0)), "red stays while green loads");
+        assert_eq!(status, Some(SourceStatus::Loading));
+
+        loader.cold = None;
+        let (slot, _) = show(&mut pipeline, &mut loader, &output, &configuration, 200);
+        assert_eq!(slot, Some(Slot::Media(0)), "green replaces red once ready");
+        assert!(
+            pipeline.texture(Slot::Outgoing(0)).is_none(),
+            "red is let go"
+        );
+
+        select(&mut output, 1);
+        loader.cold = Some(red);
+        let (slot, _) = show(&mut pipeline, &mut loader, &output, &configuration, 300);
+        assert_eq!(slot, Some(Slot::Outgoing(0)), "green stays while red loads");
+        let (slot, status) = show(&mut pipeline, &mut loader, &output, &configuration, 700);
+        assert_eq!(slot, None, "past the hold the layer is empty");
+        assert_eq!(status, Some(SourceStatus::Loading));
+
+        loader.cold = None;
+        let (slot, _) = show(&mut pipeline, &mut loader, &output, &configuration, 800);
+        assert_eq!(slot, Some(Slot::Media(0)));
+
+        configuration.playback.switch_hold_millis = 0;
+        select(&mut output, 2);
+        loader.cold = Some(green);
+        let (slot, _) = show(&mut pipeline, &mut loader, &output, &configuration, 900);
+        assert_eq!(
+            slot, None,
+            "a zero hold switches straight to the loading clip"
+        );
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

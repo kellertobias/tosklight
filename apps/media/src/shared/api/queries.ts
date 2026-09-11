@@ -12,6 +12,7 @@ import type {
 	Health,
 	NetworkView,
 	OutputView,
+	PlaybackView,
 	RunningServerView,
 	TextSlotView,
 	TimeView,
@@ -30,6 +31,7 @@ export const KEYS = {
 	effects: "effects",
 	network: "network",
 	time: "time",
+	playback: "playback",
 	audio: "audio",
 	text: "text",
 } as const;
@@ -73,6 +75,11 @@ export function useNetwork(): Resource<NetworkView> {
 /// Configuration: the server's UTC offset changes only when an operator saves it.
 export function useTime(): Resource<TimeView> {
 	return useResource(KEYS.time, api.time);
+}
+
+/// Configuration: the clip switch hold changes only when an operator saves it.
+export function usePlayback(): Resource<PlaybackView> {
+	return useResource(KEYS.playback, api.playback);
 }
 
 export function useText(): Resource<TextSlotView[]> {

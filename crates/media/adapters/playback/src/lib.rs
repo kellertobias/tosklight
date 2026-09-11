@@ -15,4 +15,4 @@ pub use source::MediaLoader;
 
 pub use loader::{ClipLoader, LoadError, LoadProgress};
 pub use session::{Delivery, PlaybackSession};
-pub use sessions::{LayerSessions, LayerSource};
+pub use sessions::{HeldClip, LayerSessions, LayerSource};

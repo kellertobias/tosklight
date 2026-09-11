@@ -1,4 +1,5 @@
-// The stubbed server-wide settings routes: the UTC offset, the log level, and the log feed.
+// The stubbed server-wide settings routes: the UTC offset, the clip switch hold, the log level,
+// and the log feed.
 //
 // They live beside the stub rather than inside its one fetch handler so the handler stays a
 // readable route list.
@@ -19,6 +20,13 @@ export function settingsRoute(
 		if (utcOffsetMinutes !== undefined)
 			server.time = { ...server.time, utcOffsetMinutes };
 		return jsonResponse(server.time);
+	}
+	if (path === "/playback") return jsonResponse(server.playback);
+	if (path === "/playback/update") {
+		const { switchHoldMillis } = body();
+		if (switchHoldMillis !== undefined)
+			server.playback = { ...server.playback, switchHoldMillis };
+		return jsonResponse(server.playback);
 	}
 	if (path === "/logs/level") return jsonResponse(server.serverLogLevel);
 	if (path === "/logs/level/update") {

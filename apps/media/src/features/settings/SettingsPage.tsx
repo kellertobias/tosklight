@@ -16,12 +16,14 @@ import { requestId, useEditing } from "../../shared/api/editing";
 import type {
 	Health,
 	NetworkView,
+	PlaybackView,
 	TimeView,
 } from "../../shared/api/generated/media-wire";
 import {
 	useHealth,
 	useNetwork,
 	useOutputs,
+	usePlayback,
 	useRuntime,
 	useTime,
 } from "../../shared/api/queries";
@@ -39,8 +41,10 @@ export function SettingsPage() {
 	const outputs = useOutputs(HEALTH_POLL_MS);
 	const network = useNetwork();
 	const time = useTime();
+	const playback = usePlayback();
 	const editing = useEditing(network.reload);
 	const timeEditing = useEditing(time.reload);
+	const playbackEditing = useEditing(playback.reload);
 	const initialSection: MediaSettingsSection =
 		window.location.pathname === "/logs"
 			? "logs"
@@ -78,6 +82,24 @@ export function SettingsPage() {
 										api.updateTime({
 											requestId: requestId(),
 											utcOffsetMinutes: minutes,
+										}),
+									)
+								}
+							/>
+						)}
+					</ResourceState>
+
+					<ResourceState resource={playback} subject="the clip switch hold">
+						{(data) => (
+							<ClipSwitch
+								playback={data}
+								busy={playbackEditing.busy}
+								failed={playbackEditing.failure !== undefined}
+								onSave={(millis) =>
+									void playbackEditing.save(() =>
+										api.updatePlayback({
+											requestId: requestId(),
+											switchHoldMillis: millis,
 										}),
 									)
 								}
@@ -353,6 +375,57 @@ function ServerTime({
 				onClick={() => onSave(minutes)}
 			>
 				Save server time
+			</Button>
+		</article>
+	);
+}
+
+/// How long a layer keeps its previous clip while a newly selected one loads.
+function ClipSwitch({
+	playback,
+	busy,
+	failed,
+	onSave,
+}: {
+	playback: PlaybackView;
+	busy: boolean;
+	failed: boolean;
+	onSave: (switchHoldMillis: number) => void;
+}) {
+	const [draft, setDraft] = useState(String(playback.switchHoldMillis));
+	const millis = Number(draft);
+	const valid =
+		draft.trim() !== "" &&
+		Number.isInteger(millis) &&
+		millis >= 0 &&
+		millis <= playback.maximumSwitchHoldMillis;
+	return (
+		<article className="media-settings-section" aria-label="Clip switch">
+			<div className="media-settings-section-heading">
+				<h2>Clip switch</h2>
+				<SettingsSaveState busy={busy} failed={failed} />
+			</div>
+			<p>
+				While a newly selected clip loads, a layer keeps playing the clip it
+				showed before instead of going black. After this time it lets go and
+				shows nothing until the new clip is ready. 0 turns the hold off.
+			</p>
+			<label className="media-field">
+				<span>Hold previous clip for (ms)</span>
+				<input
+					type="number"
+					step={50}
+					min={0}
+					max={playback.maximumSwitchHoldMillis}
+					value={draft}
+					onChange={(event) => setDraft(event.target.value)}
+				/>
+			</label>
+			<Button
+				disabled={busy || !valid || millis === playback.switchHoldMillis}
+				onClick={() => onSave(millis)}
+			>
+				Save clip switch
 			</Button>
 		</article>
 	);

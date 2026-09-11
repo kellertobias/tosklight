@@ -28,8 +28,8 @@ pub use pixel_map::{
     PixelMapConfiguration, PixelOutputMode, PixelOutputRoute, PixelZoneHandoff, zone_last_address,
 };
 pub use service::{
-    AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, MAXIMUM_UTC_OFFSET_MINUTES,
-    PlaybackConfiguration, TargetCodec, TimeConfiguration,
+    AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, MAXIMUM_SWITCH_HOLD_MILLIS,
+    MAXIMUM_UTC_OFFSET_MINUTES, PlaybackConfiguration, TargetCodec, TimeConfiguration,
 };
 pub use validate::ConfigurationError;
 

@@ -21,6 +21,7 @@ import type {
 	NetworkView,
 	OutputConfigurationView,
 	OutputView,
+	PlaybackView,
 	RunningServerView,
 	ServerLogLevelView,
 	StartImport,
@@ -37,6 +38,7 @@ import type {
 	UpdateMaster,
 	UpdateNetwork,
 	UpdateOutputConfiguration,
+	UpdatePlayback,
 	UpdateServerLogLevel,
 	UpdateText,
 	UpdateTime,
@@ -358,6 +360,13 @@ export const api = {
 	time: () => request<TimeView>("/time"),
 	updateTime: (edit: UpdateTime) =>
 		request<TimeView>("/time/update", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+
+	playback: () => request<PlaybackView>("/playback"),
+	updatePlayback: (edit: UpdatePlayback) =>
+		request<PlaybackView>("/playback/update", {
 			method: "POST",
 			body: JSON.stringify(edit),
 		}),

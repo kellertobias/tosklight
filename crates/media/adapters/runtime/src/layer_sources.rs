@@ -161,6 +161,35 @@ impl LayerSources {
         self.uploaded.get(&layer).map(|held| &held.texture)
     }
 
+    /// Moves a layer's texture and frame reservation into another store, when they belong to
+    /// `asset`.
+    ///
+    /// A layer switching clips keeps drawing its previous clip from a second store while the new
+    /// clip uploads into this one; without the move, the first upload of the new clip would drop
+    /// the texture still on screen.
+    pub fn hand_over(
+        &mut self,
+        layer: usize,
+        asset: AssetId,
+        to: &mut Self,
+        loader: &mut impl media_playback::MediaLoader,
+    ) {
+        if !self
+            .consumers
+            .get(&layer)
+            .is_some_and(|(held, _)| *held == asset)
+        {
+            return;
+        }
+        to.release(layer, loader);
+        if let Some(consumer) = self.consumers.remove(&layer) {
+            to.consumers.insert(layer, consumer);
+        }
+        if let Some(uploaded) = self.uploaded.remove(&layer) {
+            to.uploaded.insert(layer, uploaded);
+        }
+    }
+
     /// Drops a layer's texture, for a layer that has stopped drawing.
     pub fn release(&mut self, layer: usize, loader: &mut impl media_playback::MediaLoader) {
         if let Some((_, consumer)) = self.consumers.remove(&layer) {

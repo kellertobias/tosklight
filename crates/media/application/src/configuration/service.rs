@@ -78,6 +78,14 @@ pub struct PlaybackConfiguration {
     /// suggests.
     #[serde(default = "default_cache_budget")]
     pub cache_budget_bytes: u64,
+    /// How long a layer keeps showing its previous clip while a newly selected one loads.
+    ///
+    /// A clip that is not resident yet needs a disk read before its first frame exists. Without
+    /// a hold the layer is empty for those frames, which reads as a black flash on a running
+    /// show. Past the limit the layer lets go and shows nothing, so a slow disk cannot make the
+    /// server look as though it ignored the desk. Zero switches the hold off.
+    #[serde(default = "default_switch_hold_millis")]
+    pub switch_hold_millis: u32,
 }
 
 /// Two gibibytes. Enough for several minutes of 1080p at measured rates, and small enough not to
@@ -86,10 +94,32 @@ const fn default_cache_budget() -> u64 {
     2 * 1024 * 1024 * 1024
 }
 
+/// Long enough to cover a cold load from an ordinary SSD, short enough that a stuck load is
+/// obvious.
+const fn default_switch_hold_millis() -> u32 {
+    500
+}
+
+/// The longest hold the server accepts. Beyond this the old clip would outstay a cue change.
+pub const MAXIMUM_SWITCH_HOLD_MILLIS: u32 = 10_000;
+
+impl PlaybackConfiguration {
+    /// True when the hold is within the accepted range.
+    pub const fn is_valid(&self) -> bool {
+        self.switch_hold_millis <= MAXIMUM_SWITCH_HOLD_MILLIS
+    }
+
+    /// The hold as a duration.
+    pub const fn switch_hold(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.switch_hold_millis as u64)
+    }
+}
+
 impl Default for PlaybackConfiguration {
     fn default() -> Self {
         Self {
             cache_budget_bytes: default_cache_budget(),
+            switch_hold_millis: default_switch_hold_millis(),
         }
     }
 }
@@ -161,6 +191,25 @@ mod tests {
             PlaybackConfiguration::default().cache_budget_bytes,
             2 * 1024 * 1024 * 1024
         );
+    }
+
+    #[test]
+    fn a_clip_switch_holds_the_previous_clip_for_half_a_second_by_default() {
+        assert_eq!(PlaybackConfiguration::default().switch_hold_millis, 500);
+    }
+
+    #[test]
+    fn a_stored_playback_section_without_a_hold_gets_the_default() {
+        let stored: PlaybackConfiguration =
+            serde_json::from_str(r#"{"cacheBudgetBytes":1024}"#).unwrap();
+        assert_eq!(stored.cache_budget_bytes, 1024);
+        assert_eq!(stored.switch_hold_millis, 500);
+        assert!(stored.is_valid());
+        let too_long = PlaybackConfiguration {
+            switch_hold_millis: MAXIMUM_SWITCH_HOLD_MILLIS + 1,
+            ..stored
+        };
+        assert!(!too_long.is_valid());
     }
 
     #[test]

@@ -13,6 +13,8 @@ Take over the output or exact layer before changing it from the browser. The sur
 
 A layer selects one addressed content folder/file and an optional mask folder/file. Content `0` or `255` is blank. The isolated layer preview proves that layer's source and transformations; the composite preview proves the result after layer order, blending, effects, and the Master are applied.
 
+A clip that has not been played recently has to be read from disk before its first frame exists. While it loads, the layer keeps playing the clip it showed before and switches on the first frame of the new clip, so a content change does not flash black. The layer status reads Loading until the switch. Set the limit in **Settings > Libraries > Clip switch** as milliseconds; the default is 500. When the new clip is still not ready after that time, the layer shows nothing until it is. `0` switches the hold off. The limit applies from the next content change without a restart. Selecting blank content, a disabled or deleted file, or a file that fails to load never holds the previous clip: the layer becomes transparent at once.
+
 ## Transform and shape a layer
 
 Layer controls include position, scale, rotation, opacity, crop or shaper behavior, blending, color treatment, and typed effects supported by the active personality. Edit one control at a time while watching both the isolated and composite previews. A correct isolated layer can still disappear in the composite because of its order, blend, opacity, mask, Master, or another layer.

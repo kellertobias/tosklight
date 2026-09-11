@@ -264,6 +264,16 @@ utcOffsetMinutes: number,
  * The widest offset the server accepts, so a panel can bound its own control.
  */
 maximumUtcOffsetMinutes: number, };
+export type PlaybackView = {
+/**
+ * How long a layer keeps showing its previous clip while a newly selected one loads. Zero
+ * means the layer is empty until the new clip's first frame is ready.
+ */
+switchHoldMillis: number,
+/**
+ * The longest hold the server accepts, so a panel can bound its own control.
+ */
+maximumSwitchHoldMillis: number, };
 export type TextStyleView = {
 /**
  * A family name this machine is asked for. An absent family falls back rather than failing.
@@ -479,6 +489,7 @@ export type UpdateNetwork = { requestId: string, sameComputerPreset?: boolean | 
  */
 speedGroupEndpoint?: string | null, };
 export type UpdateTime = { requestId: string, utcOffsetMinutes?: number | null, };
+export type UpdatePlayback = { requestId: string, switchHoldMillis?: number | null, };
 export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null,
 /**
  * Absent means the shipped default appearance, which is what a new slot should look like.
