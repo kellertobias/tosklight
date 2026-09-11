@@ -682,6 +682,14 @@ function FixtureLayerCell({ fixture }: { fixture: PatchedFixture }) {
 						controller.ui.setLayerModal("select");
 					}
 				}}
+				onContextMenu={(event) => {
+					if (!controller.host.desktopEditing) return;
+					event.preventDefault();
+					event.stopPropagation();
+					if (isControlClick(event) || !controller.editArmed) return;
+					controller.ui.setSelectedFixture(fixture.fixture_id);
+					controller.ui.setLayerModal("select");
+				}}
 			>
 				{controller.data.layers.find(
 					(layer) => layer.id === (fixture.layer_id || "default"),

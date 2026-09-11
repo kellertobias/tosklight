@@ -837,6 +837,52 @@ describe("selected split selection and SET editing", () => {
 		expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
 	});
 
+	it("assigns a layer to the whole selection from the Layer cell's context menu", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		server.patchLayers = [
+			{ body: { id: "default", name: "Stage", order: 0, locked: false } },
+			{ body: { id: "floor", name: "Floor", order: 1, locked: false } },
+		];
+		server.patch.fixtures = [1, 2, 3].map((number) => {
+			const fixture = splitFixture();
+			fixture.fixture_id = `fixture-${number}`;
+			fixture.fixture_number = number;
+			fixture.name = `Wash ${number}`;
+			return fixture;
+		});
+		programming.selection.selected = ["fixture-3", "fixture-1", "fixture-2"];
+		render(<FixturePatchSetup />);
+
+		const row = await screen.findByRole("row", { name: /Wash 2/ });
+		fireEvent.contextMenu(within(row).getByRole("button", { name: "Stage" }));
+		const layers = screen
+			.getByRole("heading", { name: "Select layer" })
+			.closest("aside");
+		if (!layers) throw new Error("Layer picker was not rendered");
+		fireEvent.click(within(layers).getByRole("button", { name: /^Floor/ }));
+
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		expect(
+			(
+				patchFeature.patchFixtures.mock.calls[0][0] as Array<{
+					fixture: PatchedFixture;
+				}>
+			).map((candidate) => [
+				candidate.fixture.fixture_id,
+				candidate.fixture.layer_id,
+			]),
+		).toEqual([
+			["fixture-3", "floor"],
+			["fixture-1", "floor"],
+			["fixture-2", "floor"],
+		]);
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+		expect(screen.queryByRole("heading", { name: "Select layer" })).toBeNull();
+	});
+
 	it("names the fixture that already holds an ID the spread needs", async () => {
 		state.patchSetArmed = true;
 		state.desktopEditing = true;

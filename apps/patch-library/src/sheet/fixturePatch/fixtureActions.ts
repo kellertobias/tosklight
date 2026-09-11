@@ -12,6 +12,7 @@ import { unpatchFixtureChanges } from "./patchModel";
 import {
 	fixtureSelectionIds,
 	orderedFixtureSelectionIds,
+	selectedFixturesInOperatorOrder,
 	toggledFixtureSelection,
 } from "./selection";
 
@@ -77,12 +78,29 @@ export async function selectLayer(
 	layerId: string,
 ) {
 	const selected = controller.data.selected;
-	if (
-		selected &&
-		(await controller.patch.updateFixture(selected.fixture_id, {
-			layer_id: layerId,
-		}))
-	) {
+	if (!selected) return;
+	// On a desktop sheet the layer goes to the whole selection, as one patch change.
+	const chosen = controller.host.desktopEditing
+		? selectedFixturesInOperatorOrder(controller)
+		: [];
+	const targets = chosen.length ? chosen : [selected];
+	const moving = targets.filter(
+		(fixture) => (fixture.layer_id || "default") !== layerId,
+	);
+	const applied =
+		moving.length === 0 ||
+		(moving.length === 1
+			? await controller.patch.updateFixture(moving[0].fixture_id, {
+					layer_id: layerId,
+				})
+			: Boolean(
+					await controller.patch.patchFixtures(
+						moving.map((fixture) =>
+							changedPatchFixtureCandidate(fixture, { layer_id: layerId }),
+						),
+					),
+				));
+	if (applied) {
 		controller.ui.setLayerModal(null);
 		controller.host.setEditArmed(false);
 	}
