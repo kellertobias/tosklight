@@ -452,6 +452,31 @@
 	border-bottom: 1px solid var(--line);
 }
 
+.patch-table th .patch-sort {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 32px;
+	padding: 0;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	white-space: nowrap;
+	background: none;
+	border: 0;
+	cursor: pointer;
+}
+
+.patch-table th .patch-sort:hover,
+.patch-table th .patch-sort.is-active {
+	color: var(--text, #e8eef3);
+}
+
+.patch-sort-mark {
+	min-width: 9px;
+	font-size: 9px;
+}
+
 .patch-table tr.selected td {
 	background: #0a252b;
 }

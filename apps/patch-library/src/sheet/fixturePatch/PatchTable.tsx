@@ -26,6 +26,7 @@ import {
 import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
+import { isPatchSortColumn, nextPatchSort } from "./tableSort";
 import {
 	definitionSplits,
 	effectiveSplitPatches,
@@ -84,7 +85,7 @@ export function PatchTable() {
 				<thead>
 					<tr>
 						{columns.map((column) => (
-							<th key={column}>{column}</th>
+							<PatchColumnHeader key={column} column={column} />
 						))}
 					</tr>
 				</thead>
@@ -105,6 +106,32 @@ export function PatchTable() {
 				/>
 			)}
 		</section>
+	);
+}
+
+/**
+ * A column header. A sortable one orders the table by its column: the first click ascending, the
+ * next descending. The header keeps the column's name; its button is named for what it does.
+ */
+function PatchColumnHeader({ column }: { column: string }) {
+	const controller = usePatchController();
+	if (!isPatchSortColumn(column)) return <th>{column}</th>;
+	const { sort, setSort } = controller.ui;
+	const active = sort.column === column;
+	return (
+		<th aria-label={column} aria-sort={active ? sort.direction : "none"}>
+			<button
+				type="button"
+				className={`patch-sort${active ? " is-active" : ""}`}
+				aria-label={`Sort by ${column}`}
+				onClick={() => setSort(nextPatchSort(sort, column))}
+			>
+				{column}
+				<span className="patch-sort-mark" aria-hidden="true">
+					{active ? (sort.direction === "ascending" ? "▲" : "▼") : ""}
+				</span>
+			</button>
+		</th>
 	);
 }
 

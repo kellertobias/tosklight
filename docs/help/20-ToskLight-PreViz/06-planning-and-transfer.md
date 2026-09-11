@@ -45,6 +45,13 @@ The file keeps its name; **Save As** writes the show to a new one.
 
 ## Editing the patch sheet
 
+Click a column header to order the sheet by that column, for example **Fixture ID** or **Patch**;
+click it again to reverse the order. An arrow marks the column the sheet is ordered by. **Patch**
+orders by universe, then address. Fixtures with nothing in the column, such as unpatched fixtures
+or fixtures without a note, always come last, and fixtures with the same value keep Fixture ID
+order. Shift and drag ranges follow the order the sheet shows. The sheet opens ordered by
+Fixture ID.
+
 While a layer is open, selecting stays in it: clicking, Shift and drag ranges, and Ctrl-click
 only ever select that layer's fixtures, and the sheet keeps showing the layer. A selection made in
 the drawing or another window opens **All fixtures** only when it includes fixtures outside the
