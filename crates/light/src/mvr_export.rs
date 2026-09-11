@@ -383,30 +383,13 @@ fn display_fixture_id(stored_id: &str, fixture: &PatchedFixture) -> String {
 /// The fixture's rotation and location as an MVR transform matrix.
 ///
 /// The bracket angle is part of where the fixture actually points, so it is composed into the
-/// matrix: another application opening this archive gets the rig as it hangs, not as it would
-/// hang with every clamp set level. MVR has no separate place to put it, and a rotation nobody
-/// exported is a rotation the other application will never draw.
+/// matrix — after the placement rotation, in the fixture's own frame, exactly as the Stage and the
+/// visualizer turn it. Another application opening this archive gets the rig as it hangs, not as it
+/// would hang with every clamp set level. MVR has no separate place to put it, and a rotation nobody
+/// exported is a rotation the other application will never draw. The convention itself is stated
+/// once, in [`crate::mvr_transform`].
 fn transform_matrix(fixture: &PatchedFixture) -> [f64; 12] {
-    let rx = f64::from(fixture.rotation.x + fixture.bracket_angle).to_radians();
-    let ry = f64::from(fixture.rotation.y).to_radians();
-    let rz = f64::from(fixture.rotation.z).to_radians();
-    let (sx, cx) = rx.sin_cos();
-    let (sy, cy) = ry.sin_cos();
-    let (sz, cz) = rz.sin_cos();
-    [
-        cy * cz,
-        cz * sx * sy - cx * sz,
-        sx * sz + cx * cz * sy,
-        cy * sz,
-        cx * cz + sx * sy * sz,
-        cx * sy * sz - cz * sx,
-        -sy,
-        cy * sx,
-        cx * cy,
-        f64::from(fixture.location.x),
-        f64::from(fixture.location.y),
-        f64::from(fixture.location.z),
-    ]
+    crate::mvr_transform::mvr_matrix(fixture.location, fixture.rotation, fixture.bracket_angle)
 }
 
 #[cfg(test)]

@@ -1,25 +1,11 @@
 use super::*;
 
+/// Where an MVR matrix places a fixture. The desk and a planning document read MVR the same way,
+/// so both use the one conversion.
 pub(super) fn mvr_transform(
     matrix: [f64; 12],
 ) -> (light_fixture::FixtureLocation, light_fixture::FixtureVector) {
-    let location = light_fixture::FixtureLocation {
-        x: matrix[9]
-            .round()
-            .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
-        y: matrix[10]
-            .round()
-            .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
-        z: matrix[11]
-            .round()
-            .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
-    };
-    let rotation = light_fixture::FixtureVector {
-        x: (matrix[9].atan2(matrix[10]).to_degrees()) as f32,
-        y: (-matrix[8].asin().to_degrees()) as f32,
-        z: (matrix[4].atan2(matrix[0]).to_degrees()) as f32,
-    };
-    (location, rotation)
+    light_application::mvr_transform::placement_from_mvr(matrix)
 }
 
 type OccupiedPatch = (u16, u16, u16, String);

@@ -74,24 +74,9 @@ pub(super) fn profile_projections(
     profiles.into_values().collect()
 }
 
+/// Where an MVR matrix places a fixture, under the convention [`crate::mvr_transform`] states.
 pub(super) fn mvr_transform(matrix: [f64; 12]) -> (FixtureLocation, FixtureVector) {
-    let location = FixtureLocation {
-        x: matrix[9]
-            .round()
-            .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
-        y: matrix[10]
-            .round()
-            .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
-        z: matrix[11]
-            .round()
-            .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
-    };
-    let rotation = FixtureVector {
-        x: matrix[9].atan2(matrix[10]).to_degrees() as f32,
-        y: (-matrix[8].asin().to_degrees()) as f32,
-        z: matrix[4].atan2(matrix[0]).to_degrees() as f32,
-    };
-    (location, rotation)
+    crate::mvr_transform::placement_from_mvr(matrix)
 }
 
 fn invalid(error: impl std::fmt::Display) -> ActionError {

@@ -16,6 +16,7 @@ pub mod macro_runtime;
 pub mod managed_assets;
 pub mod mvr_export;
 pub mod mvr_import;
+pub mod mvr_transform;
 pub mod output_runtime;
 pub mod playback;
 mod playback_timecode_graph;
