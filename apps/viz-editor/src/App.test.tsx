@@ -939,6 +939,7 @@ describe("the Viz editor window", () => {
 			expect(artNet).toHaveTextContent("en0 · 10.0.0.5");
 		});
 
+		// Finding 512 cells by accessible name is slow in jsdom: about 7 s on CI, past the 5 s default.
 		it("lights every patched address and leaves the rest dark", async () => {
 			mockDmx();
 			renderApp();
@@ -966,7 +967,7 @@ describe("the Viz editor window", () => {
 			expect(info).toHaveTextContent("101 · Wash Left");
 			expect(info).toHaveTextContent("Fixture channel2 of 3");
 			expect(info).toHaveTextContent("Patch range2.10–12");
-		});
+		}, 20_000);
 
 		it("shows received DMX as the desk's DMX window shows output, and stops listening when left", async () => {
 			mockDmx();
