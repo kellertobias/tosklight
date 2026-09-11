@@ -428,7 +428,9 @@ impl Application {
                 DeskConnection {
                     host,
                     port,
-                    input_overrides: self.preferences.input_overrides.clone(),
+                    input_overrides: self
+                        .preferences
+                        .applied_input_overrides(self.hosted_show.is_some()),
                     target: self.options.target.clone(),
                     ..DeskConnection::default()
                 },

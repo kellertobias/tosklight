@@ -243,14 +243,16 @@ impl QuickSettings {
     /// Every row in the panel, in the order they are drawn.
     pub fn rows(&self) -> Vec<Row> {
         let mut rows = match self.tab {
-            QuickSettingsTab::Source => vec![
-                Row::Source,
-                Row::Server,
-                Row::Port,
-                Row::InputUniverse,
-                Row::InputProtocol,
-                Row::Connect,
-            ],
+            QuickSettingsTab::Source => {
+                let mut rows = vec![Row::Source, Row::Server, Row::Port];
+                // The Architect's live DMX inputs say where its universes arrive, so a pin here
+                // would be a setting that does nothing.
+                if self.staged.source != ProviderKind::PlanningSoftware {
+                    rows.extend([Row::InputUniverse, Row::InputProtocol]);
+                }
+                rows.push(Row::Connect);
+                rows
+            }
             QuickSettingsTab::Rendering => vec![
                 Row::Quality,
                 Row::Focus,

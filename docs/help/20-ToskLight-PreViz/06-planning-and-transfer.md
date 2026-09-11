@@ -143,9 +143,9 @@ copy exists. To send work back, use **Load from Visualizer** in the desk's **Loa
   outputs no DMX, so nothing on this tab overrides a value.
 
 Values listens exactly where the Visualizer does: the show's output routes, the live DMX inputs
-over them, the Art-Net and sACN defaults for every patched universe when neither names any, and
-this machine's renderer overrides last. It only listens while the tab is open, and shares its ports
-so a Visualizer on the same computer keeps receiving beside it.
+over them, and the Art-Net and sACN defaults for every patched universe when neither names any. It
+only listens while the tab is open, and shares its ports so a Visualizer on the same computer keeps
+receiving beside it.
 
 ## Configure live DMX inputs
 
@@ -160,7 +160,12 @@ When a desk is detected, **Take from Desk** reads that desk's compatible output 
 read-only Visualizer session. With more than one desk, first select the source. The imported routes
 are only a preview until **Apply** is chosen: taking routes does not replace the show and does not
 change the desk. An explicit show input wins over a derived output route for the same logical
-universe; a renderer-local override remains the final authority.
+universe.
+
+A Visualizer showing the editor's document always receives where these settings say. The
+per-universe input pins in the Visualizer's own Quick Settings apply only while it shows a desk or
+an opened show file; they are hidden while the editor is the source and never replace the show's
+inputs.
 
 ## Load from Visualizer
 

@@ -585,6 +585,18 @@ impl Preferences {
         self.input_overrides.sort_by_key(|input| input.universe);
     }
 
+    /// The pins the receivers are built with for the connection these preferences select.
+    ///
+    /// A scene served by the Architect is received exactly where that show's live DMX inputs say:
+    /// the Architect is the configuration, and a pin left behind on this machine must not quietly
+    /// replace it. A desk or an opened show file has no such authority, so the pins apply there.
+    pub fn applied_input_overrides(&self, show_file_open: bool) -> Vec<viz_dmx::UniverseInput> {
+        if self.source == ProviderKind::PlanningSoftware && !show_file_open {
+            return Vec::new();
+        }
+        self.input_overrides.clone()
+    }
+
     /// The preferences as they are written to disk.
     ///
     /// A plain `key value` list rather than a serialised structure: it is a handful of settings an
@@ -1083,6 +1095,40 @@ mod preference_tests {
         assert!(
             (preferences.ambient - 0.5).abs() < 1e-6,
             "nothing named an ambient level, so the stored one stands"
+        );
+    }
+
+    /// The Architect is the configuration: a pin left on this machine never replaces its inputs.
+    #[test]
+    fn a_scene_from_the_architect_ignores_this_machines_input_pins() {
+        let options = Options::from_arguments(arguments(&[
+            "--planning-server",
+            "127.0.0.1",
+            "--port",
+            "5311",
+        ]))
+        .unwrap();
+        let mut preferences = Preferences::from_options(&options);
+        preferences.adopt_file("input 1 artnet\ninput 3 sacn\n", &options);
+        assert_eq!(preferences.input_overrides.len(), 2, "the pins are kept");
+        assert!(
+            preferences.applied_input_overrides(false).is_empty(),
+            "the Architect's live DMX inputs decide where its universes arrive"
+        );
+
+        let desk = Options::from_arguments(arguments(&["--server", "192.168.1.5"])).unwrap();
+        let mut preferences = Preferences::from_options(&desk);
+        preferences.adopt_file("input 1 artnet\n", &desk);
+        assert_eq!(
+            preferences.applied_input_overrides(false).len(),
+            1,
+            "a desk is still received where this machine pins it"
+        );
+        preferences.source = ProviderKind::PlanningSoftware;
+        assert_eq!(
+            preferences.applied_input_overrides(true).len(),
+            1,
+            "so is an opened show file"
         );
     }
 
