@@ -35,6 +35,14 @@ The demo is built from the fixture packages this version of ToskLight ships, so 
 the same profile revisions, models and modes the fixture library does. It is the quickest way to
 see what the Visualizer draws, and the rig the product demonstration video is shot from.
 
+## Rename the show
+
+A show has a name of its own, separate from its file. The **Show** page shows it over the rig
+overview, with a pencil beside it. Press the pencil, type the new name, and press Enter or click
+away to keep it; Escape leaves the name as it was, and an empty name changes nothing. The name is
+what a desk's **Load Show** menu offers, so a renamed show is offered under its new name at once.
+The file keeps its name; **Save As** writes the show to a new one.
+
 ## Editing the patch sheet
 
 While a layer is open, selecting stays in it: clicking, Shift and drag ranges, and Ctrl-click

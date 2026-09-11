@@ -28,6 +28,7 @@ import { MediaWorkspace } from "./MediaWorkspace";
 import { McpSettingsWorkspace } from "./McpSettingsWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { RendererSettingsWorkspace } from "./RendererSettingsWorkspace";
+import { ShowNameCaption } from "./ShowNameCaption";
 import { beginWindowDrag, WindowControls } from "./WindowChrome";
 
 const DEFAULT_LAYER: PatchLayer = {
@@ -497,10 +498,15 @@ export function App() {
 								>
 									{document && cadScene?.showId === document.showId ? (
 										<figure className="viz-show-rig-overview">
-											<figcaption>
-												<span>Rig overview</span>
-												<strong>{document.name}</strong>
-											</figcaption>
+											<ShowNameCaption
+												name={document.name}
+												onRename={(name) =>
+													documentSession
+														.rename(name)
+														.then(reloadDocument)
+														.catch(report)
+												}
+											/>
 											<CadRigOverview
 												entities={cadScene.entities}
 												drawings={cadScene.drawings}

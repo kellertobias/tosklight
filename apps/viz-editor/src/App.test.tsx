@@ -267,6 +267,40 @@ describe("the Viz editor window", () => {
 		);
 	});
 
+	it("renames the show from the pencil beside its name", async () => {
+		let name = document.name;
+		const base = invoke.getMockImplementation();
+		invoke.mockImplementation((command: string, args?: { name?: string }) => {
+			if (command === "rename_document") {
+				name = args?.name ?? name;
+				return Promise.resolve();
+			}
+			if (command === "document_summary")
+				return Promise.resolve({ ...document, name });
+			return base?.(command, args);
+		});
+		renderApp();
+
+		fireEvent.click(await screen.findByRole("button", { name: "Rename show" }));
+		const escaped = screen.getByRole("textbox", { name: "Show name" });
+		fireEvent.change(escaped, { target: { value: "Discarded" } });
+		fireEvent.keyDown(escaped, { key: "Escape" });
+		expect(screen.getByText("Planning show", { selector: "strong" })).toBeVisible();
+
+		fireEvent.click(screen.getByRole("button", { name: "Rename show" }));
+		const field = screen.getByRole("textbox", { name: "Show name" });
+		expect(field).toHaveValue("Planning show");
+		fireEvent.change(field, { target: { value: "  Summer Tour  " } });
+		fireEvent.keyDown(field, { key: "Enter" });
+
+		expect(
+			await screen.findByText("Summer Tour", { selector: "strong" }),
+		).toBeVisible();
+		expect(
+			invoke.mock.calls.filter(([command]) => command === "rename_document"),
+		).toEqual([["rename_document", { name: "Summer Tour" }]]);
+	});
+
 	it("shows the desk's patch sheet over the open document", async () => {
 		renderApp();
 		fireEvent.click(await screen.findByRole("button", { name: "Patch" }));

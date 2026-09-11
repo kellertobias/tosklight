@@ -350,6 +350,48 @@ body {
 	font-weight: 650;
 }
 
+.viz-show-name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.viz-show-name-edit {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	color: #7f8b97;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	cursor: pointer;
+	pointer-events: auto;
+}
+
+.viz-show-name-edit:hover,
+.viz-show-name-edit:focus-visible {
+	color: #d9e0e7;
+	border-color: var(--border-subtle, #1d2530);
+	background: #0d141b;
+}
+
+.viz-show-name-input {
+	min-width: 260px;
+	padding: 3px 8px;
+	color: #d9e0e7;
+	font: inherit;
+	font-size: 18px;
+	font-weight: 650;
+	background: #0d141b;
+	border: 1px solid #4dd9e8aa;
+	border-radius: 6px;
+	outline: none;
+	pointer-events: auto;
+	user-select: text;
+}
+
 .viz-show-rig-canvas {
 	position: absolute;
 	inset: 0;
