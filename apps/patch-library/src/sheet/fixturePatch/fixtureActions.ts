@@ -117,42 +117,85 @@ export async function unpatchCurrentFixture(controller: PatchController) {
 		cancelEdit(controller);
 }
 
+/**
+ * Asks whether to delete or unpatch `fixture` or, when it belongs to a selection of several on a
+ * desktop sheet, every selected fixture. A selection never sweeps in fixtures on a locked layer.
+ */
 export function requestFixtureDelete(
 	controller: PatchController,
 	fixture: PatchedFixture,
 ) {
+	const targets = controller.host.desktopEditing
+		? editTargets(controller, fixture).filter(
+				(target) =>
+					target.fixture_id === fixture.fixture_id ||
+					!onLockedLayer(controller, target),
+			)
+		: [fixture];
 	controller.ui.setSelectedFixture(fixture.fixture_id);
-	controller.ui.setDeleteConfirm(fixture);
+	controller.ui.setDeleteConfirm(targets);
 	controller.ui.setDeleteArmed(false);
 }
 
-export async function deleteFixture(controller: PatchController) {
-	const fixture = controller.ui.deleteConfirm;
-	if (!fixture) return;
-	if (await controller.patch.deleteFixture(fixture.fixture_id)) {
-		controller.ui.setDeleteConfirm(null);
-		controller.ui.setDeleteArmed(false);
-		if (controller.ui.selectedFixture === fixture.fixture_id)
-			controller.ui.setSelectedFixture(null);
-		cancelEdit(controller);
-	}
+function onLockedLayer(controller: PatchController, fixture: PatchedFixture) {
+	return Boolean(
+		controller.data.layers.find(
+			(layer) => layer.id === (fixture.layer_id || "default"),
+		)?.locked,
+	);
 }
 
+/** Deletes every fixture the confirmation names, as one patch change. */
+export async function deleteFixture(controller: PatchController) {
+	const targets = controller.ui.deleteConfirm;
+	if (!targets?.length) return;
+	const deleted =
+		targets.length === 1
+			? await controller.patch.deleteFixture(targets[0].fixture_id)
+			: await controller.patch.deleteFixtures(
+					targets.map((fixture) => fixture.fixture_id),
+				);
+	if (!deleted) return;
+	controller.ui.setDeleteConfirm(null);
+	controller.ui.setDeleteArmed(false);
+	if (
+		targets.some(
+			(fixture) => fixture.fixture_id === controller.ui.selectedFixture,
+		)
+	)
+		controller.ui.setSelectedFixture(null);
+	// A deleted selection would otherwise stay selected with nothing behind it.
+	if (targets.length > 1)
+		void controller.selection.replace({ resolvedFixtures: [] });
+	cancelEdit(controller);
+}
+
+/** Clears the DMX addresses of every fixture the confirmation names, as one patch change. */
 export async function unpatchFixtureFromDeleteConfirm(
 	controller: PatchController,
 ) {
-	const fixture = controller.ui.deleteConfirm;
-	if (!fixture) return;
-	if (
-		await controller.patch.updateFixture(
-			fixture.fixture_id,
-			unpatchFixtureChanges(fixture),
-		)
-	) {
-		controller.ui.setDeleteConfirm(null);
-		controller.ui.setDeleteArmed(false);
-		cancelEdit(controller);
-	}
+	const targets = controller.ui.deleteConfirm;
+	if (!targets?.length) return;
+	const unpatched =
+		targets.length === 1
+			? await controller.patch.updateFixture(
+					targets[0].fixture_id,
+					unpatchFixtureChanges(targets[0]),
+				)
+			: Boolean(
+					await controller.patch.patchFixtures(
+						targets.map((fixture) =>
+							changedPatchFixtureCandidate(
+								fixture,
+								unpatchFixtureChanges(fixture),
+							),
+						),
+					),
+				);
+	if (!unpatched) return;
+	controller.ui.setDeleteConfirm(null);
+	controller.ui.setDeleteArmed(false);
+	cancelEdit(controller);
 }
 
 export async function unpatchConflictsAndApply(controller: PatchController) {

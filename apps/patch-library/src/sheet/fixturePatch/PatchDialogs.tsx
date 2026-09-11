@@ -90,9 +90,19 @@ export function EditCloseConfirm() {
 
 export function DeleteConfirm() {
 	const controller = usePatchController();
-	const fixture = controller.ui.deleteConfirm;
-	if (!fixture) return null;
+	const targets = controller.ui.deleteConfirm;
+	if (!targets?.length) return null;
 	const abort = () => controller.ui.setDeleteConfirm(null);
+	const [fixture] = targets;
+	const count = targets.length;
+	const many = count > 1;
+	const shownIds = targets
+		.slice(0, 12)
+		.map((target) => fixtureDisplayId(target))
+		.join(", ");
+	const question = many
+		? `Delete or unpatch ${count} fixtures?`
+		: `Delete or unpatch ${fixture.name || fixture.definition.name}?`;
 	return (
 		<ModalRegistration onClose={abort}>
 			<div className="stacked-modal-layer">
@@ -100,26 +110,40 @@ export function DeleteConfirm() {
 				className="nested-modal patch-small-modal"
 				role="alertdialog"
 				aria-modal="true"
-				aria-label={`Delete or unpatch ${fixture.name || fixture.definition.name}?`}
+				aria-label={question}
 			>
-				<h3>Delete or unpatch {fixtureDisplayId(fixture)}?</h3>
-				<p>
-					Delete removes <b>{fixture.name || fixture.definition.name}</b> from
-					the show. Unpatch keeps the fixture line and clears its DMX addresses,
-					including multi-patch addresses.
-				</p>
+				<h3>
+					{many ? question : <>Delete or unpatch {fixtureDisplayId(fixture)}?</>}
+				</h3>
+				{many ? (
+					<p>
+						Delete removes all {count} selected fixtures (
+						<b>
+							{shownIds}
+							{count > 12 ? ", …" : ""}
+						</b>
+						) from the show. Unpatch keeps their fixture lines and clears all
+						their DMX addresses, including multi-patch addresses.
+					</p>
+				) : (
+					<p>
+						Delete removes <b>{fixture.name || fixture.definition.name}</b> from
+						the show. Unpatch keeps the fixture line and clears its DMX
+						addresses, including multi-patch addresses.
+					</p>
+				)}
 				<footer>
 					<Button
 						className="danger"
 						autoFocus
 						onClick={() => void deleteFixture(controller)}
 					>
-						Delete fixture
+						{many ? `Delete all ${count} fixtures` : "Delete fixture"}
 					</Button>
 					<Button
 						onClick={() => void unpatchFixtureFromDeleteConfirm(controller)}
 					>
-						Unpatch fixture
+						{many ? `Unpatch all ${count} fixtures` : "Unpatch fixture"}
 					</Button>
 					<Button onClick={abort}>
 						Abort

@@ -136,9 +136,9 @@ function usePatchUiState() {
 		"fixture" | "multipatch" | null
 	>(null);
 	const [deleteArmed, setDeleteArmed] = useState(false);
-	const [deleteConfirm, setDeleteConfirm] = useState<PatchedFixture | null>(
-		null,
-	);
+	const [deleteConfirm, setDeleteConfirm] = useState<
+		readonly PatchedFixture[] | null
+	>(null);
 	const [editingSplit, setEditingSplit] = useState<number | null>(null);
 	/** A fixture row the table scrolls into view once, if a committed edit moved it out of sight. */
 	const [revealRequest, setRevealRequest] = useState<{

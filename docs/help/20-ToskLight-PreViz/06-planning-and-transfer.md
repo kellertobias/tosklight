@@ -48,6 +48,11 @@ on. A closed range such as `1012 [THRU] 1004` still counts from its first value 
 After **Enter**, the sheet scrolls to the fixture whose value you opened when the new value moved
 its row out of view, for example when a new Fixture ID sorts it further down.
 
+With several fixtures selected, **Delete** asks whether to delete or unpatch all of them. Delete
+removes every selected fixture from the show and clears the selection; Unpatch keeps their fixture
+lines and clears all their DMX addresses. Either choice is applied as one patch change. Fixtures
+on a locked layer are left out, and a fixture outside the selection is still deleted on its own.
+
 ## Lighting the rig without a desk
 
 Select fixtures in the patch sheet and the editor's preview controls light them. No desk, no

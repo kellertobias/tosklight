@@ -65,6 +65,7 @@ const patchFeature = {
 	updateFixture: vi.fn().mockResolvedValue(true),
 	updatePolicy: vi.fn().mockResolvedValue(true),
 	deleteFixture: vi.fn().mockResolvedValue(true),
+	deleteFixtures: vi.fn().mockResolvedValue(true),
 };
 
 vi.mock("../host", async (importOriginal) => ({
@@ -103,6 +104,7 @@ vi.mock("../state/PatchContext", async (importOriginal) => {
 			updateFixture: patchFeature.updateFixture,
 			updatePolicy: patchFeature.updatePolicy,
 			deleteFixture: patchFeature.deleteFixture,
+			deleteFixtures: patchFeature.deleteFixtures,
 		}),
 	};
 });
@@ -316,6 +318,7 @@ beforeEach(() => {
 	patchFeature.updateFixture.mockResolvedValue(true);
 	patchFeature.updatePolicy.mockResolvedValue(true);
 	patchFeature.deleteFixture.mockResolvedValue(true);
+	patchFeature.deleteFixtures.mockResolvedValue(true);
 	patchFeature.patchFixtures.mockImplementation(
 		async (candidates: Array<{ fixture: PatchedFixture }>) =>
 			candidates.map((candidate) => ({
@@ -2264,6 +2267,90 @@ describe("schema-v2 delete and unpatch controls", () => {
 			expect(patchFeature.deleteFixture).toHaveBeenCalledWith("fixture-split"),
 		);
 		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	});
+
+	describe("with several fixtures selected", () => {
+		const pressDeleteOn = async (row: RegExp, selected: string[]) => {
+			state.desktopEditing = true;
+			server.patch.fixtures = [1, 2, 3].map((number) => {
+				const fixture = splitFixture();
+				fixture.fixture_id = `fixture-${number}`;
+				fixture.fixture_number = number;
+				fixture.name = `Wash ${number}`;
+				return fixture;
+			});
+			programming.selection.selected = selected;
+			render(<FixturePatchSetup />);
+			fireEvent.mouseDown(await screen.findByRole("row", { name: row }), {
+				button: 0,
+			});
+			fireEvent.keyDown(window, { key: "Delete" });
+		};
+		const all = ["fixture-1", "fixture-2", "fixture-3"];
+
+		it("asks once and deletes every selected fixture in one change", async () => {
+			await pressDeleteOn(/Wash 2/, all);
+			const dialog = await screen.findByRole("alertdialog", {
+				name: "Delete or unpatch 3 fixtures?",
+			});
+			expect(
+				within(dialog)
+					.getAllByRole("button")
+					.map((button) => button.textContent),
+			).toEqual(["Delete all 3 fixtures", "Unpatch all 3 fixtures", "Abort"]);
+
+			fireEvent.click(
+				within(dialog).getByRole("button", { name: "Delete all 3 fixtures" }),
+			);
+			await waitFor(() =>
+				expect(patchFeature.deleteFixtures).toHaveBeenCalledWith(all),
+			);
+			expect(patchFeature.deleteFixture).not.toHaveBeenCalled();
+			expect(programming.actions.replace).toHaveBeenLastCalledWith({
+				resolvedFixtures: [],
+			});
+		});
+
+		it("unpatches every selected fixture in one change", async () => {
+			patchFeature.patchFixtures.mockResolvedValue([]);
+			await pressDeleteOn(/Wash 2/, all);
+			const dialog = await screen.findByRole("alertdialog", {
+				name: "Delete or unpatch 3 fixtures?",
+			});
+			fireEvent.click(
+				within(dialog).getByRole("button", { name: "Unpatch all 3 fixtures" }),
+			);
+			await waitFor(() =>
+				expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+			);
+			expect(
+				(
+					patchFeature.patchFixtures.mock.calls[0][0] as Array<{
+						fixture: PatchedFixture;
+					}>
+				).map((candidate) => [
+					candidate.fixture.fixture_id,
+					candidate.fixture.universe ?? null,
+				]),
+			).toEqual(all.map((id) => [id, null]));
+			expect(patchFeature.deleteFixtures).not.toHaveBeenCalled();
+			await waitFor(() =>
+				expect(
+					screen.queryByRole("alertdialog", {
+						name: "Delete or unpatch 3 fixtures?",
+					}),
+				).toBeNull(),
+			);
+		});
+
+		it("deletes a fixture outside the selection on its own", async () => {
+			await pressDeleteOn(/Wash 3/, ["fixture-1", "fixture-2"]);
+			expect(
+				await screen.findByRole("alertdialog", {
+					name: "Delete or unpatch Wash 3?",
+				}),
+			).toBeInTheDocument();
+		});
 	});
 });
 

@@ -62,6 +62,8 @@ export interface PatchContextValue extends PatchStoreSnapshot {
 		changes: Partial<PatchedFixture>,
 	): Promise<boolean>;
 	deleteFixture(fixtureId: string): Promise<boolean>;
+	/** Removes every listed fixture as one patch change. */
+	deleteFixtures(fixtureIds: readonly string[]): Promise<boolean>;
 }
 
 interface PatchViewProviderProps {
@@ -171,6 +173,16 @@ export function PatchViewProvider({
 				if (!session || snapshot.status !== "ready") return false;
 				try {
 					await session.deleteFixture(fixtureId);
+					return true;
+				} catch {
+					return false;
+				}
+			},
+			deleteFixtures: async (fixtureIds) => {
+				if (!session || snapshot.status !== "ready" || !fixtureIds.length)
+					return false;
+				try {
+					await session.patchFixtures([], fixtureIds);
 					return true;
 				} catch {
 					return false;
