@@ -1111,18 +1111,18 @@ mod tests {
         );
     }
 
-    /// A scanner classifies as a lantern, and that is correct rather than a gap.
-    ///
-    /// Nothing in the demo rig may fall through to the shapeless default: `Generic` means the
-    /// projection could not tell what the fixture was, which is the failure this guards.
+    /// A scanner classifies as a lantern, and lightless Venue scenery as `Generic`; both are right.
+    /// No light may fall through to `Generic`, which means the projection could not tell what it was.
     #[test]
     fn no_demo_fixture_falls_through_to_a_shapeless_body() {
         let scene = demo_scene("shapeless");
+        let lit: Vec<u32> = scene.emitters.iter().map(|e| e.fixture_index).collect();
         let shapeless: Vec<&str> = scene
             .fixtures
             .iter()
-            .filter(|fixture| fixture.body.kind == BodyKind::Generic)
-            .map(|fixture| fixture.name.as_str())
+            .zip(0u32..)
+            .filter(|(fixture, i)| lit.contains(i) && fixture.body.kind == BodyKind::Generic)
+            .map(|(fixture, _)| fixture.name.as_str())
             .collect();
         assert!(
             shapeless.is_empty(),
