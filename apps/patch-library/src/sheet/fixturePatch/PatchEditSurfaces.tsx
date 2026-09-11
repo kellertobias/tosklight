@@ -198,7 +198,14 @@ async function applyDesktopValueEntry(
 		cancelEdit(controller);
 		return;
 	}
-	const values = spreadInput(value, fixtures.length);
+	const values =
+		edit === "number"
+			? fixtureIdSpread(value, fixtures.length)
+			: spreadInput(value, fixtures.length);
+	if (typeof values === "string") {
+		controller.ui.setEditError(values);
+		return;
+	}
 	if (!values) {
 		controller.ui.setEditError(
 			"Enter one value, or two endpoints separated by THRU for a selection.",
@@ -393,12 +400,45 @@ function numericFixtureChanges(
 	return null;
 }
 
-function spreadInput(value: string, count: number): string[] | null {
-	const points = value
+function thruPoints(value: string) {
+	return value
 		.trim()
 		.split(/\s+THRU\s+/iu)
 		.map((point) => point.trim())
 		.filter(Boolean);
+}
+
+/**
+ * Fixture IDs are whole numbers, so a range is counted rather than interpolated: the first
+ * selected fixture takes the first ID and each next one the next ID towards the end point, until
+ * every fixture has one. `1012 THRU 1004` counts down. A range with fewer IDs than fixtures is
+ * answered with the reason, as a string.
+ */
+function fixtureIdSpread(
+	value: string,
+	count: number,
+): string[] | string | null {
+	const points = thruPoints(value);
+	if (points.length === 1)
+		return Array.from({ length: count }, () => points[0]);
+	if (points.length !== 2 || count < 2) return null;
+	const virtual = points.map(parseVirtualFixtureNumber);
+	const regular = points.map(parseFixtureNumber);
+	const isVirtual = virtual.every((number) => number != null);
+	const [first, last] = (isVirtual ? virtual : regular) as number[];
+	if (first == null || last == null) return null;
+	const available = Math.abs(last - first) + 1;
+	if (available < count)
+		return `${points[0]} THRU ${points[1]} holds ${available} fixture IDs for ${count} fixtures.`;
+	const step = last >= first ? 1 : -1;
+	return Array.from(
+		{ length: count },
+		(_, index) => `${isVirtual ? "0." : ""}${first + step * index}`,
+	);
+}
+
+function spreadInput(value: string, count: number): string[] | null {
+	const points = thruPoints(value);
 	if (points.length === 1)
 		return Array.from({ length: count }, () => points[0]);
 	if (points.length !== 2 || count < 2) return null;
@@ -415,14 +455,6 @@ function spreadInput(value: string, count: number): string[] | null {
 			return `${Math.floor(slot / 512) + 1}.${(slot % 512) + 1}`;
 		});
 	}
-	const virtual = points.map(parseVirtualFixtureNumber);
-	if (virtual.every((number) => number != null))
-		return interpolate(virtual as number[], count).map(
-			(number) => `0.${number}`,
-		);
-	const fixtureNumbers = points.map(parseFixtureNumber);
-	if (fixtureNumbers.every((number) => number != null))
-		return interpolate(fixtureNumbers as number[], count).map(String);
 	const numeric = points.map(Number);
 	if (numeric.every(Number.isFinite))
 		return interpolate(numeric, count).map((number) =>

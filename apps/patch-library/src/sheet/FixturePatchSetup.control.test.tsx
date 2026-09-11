@@ -775,10 +775,11 @@ describe("selected split selection and SET editing", () => {
 	});
 
 	it.each([
-		["ascending", ["1", "0", "0", "4", "THRU", "1", "0", "0", "6"], [1004, 1005, 1006]],
-		["descending", ["1", "0", "0", "6", "THRU", "1", "0", "0", "4"], [1006, 1005, 1004]],
+		["an ascending", ["1", "0", "0", "4", "THRU", "1", "0", "1", "2"], [1004, 1005, 1006]],
+		["a descending", ["1", "0", "1", "2", "THRU", "1", "0", "0", "4"], [1012, 1011, 1010]],
+		["a reversed", ["1", "0", "0", "6", "THRU", "1", "0", "0", "4"], [1006, 1005, 1004]],
 	])(
-		"spreads a %s fixture ID range over the IDs the selection already holds",
+		"counts %s fixture ID range one ID per selected fixture",
 		async (_direction, keys, expected) => {
 			state.patchSetArmed = true;
 			state.desktopEditing = true;
@@ -812,6 +813,29 @@ describe("selected split selection and SET editing", () => {
 			);
 		},
 	);
+
+	it("refuses a fixture ID range with fewer IDs than selected fixtures", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		server.patch.fixtures = [1, 2, 3].map((number) => {
+			const fixture = splitFixture();
+			fixture.fixture_id = `fixture-${number}`;
+			fixture.fixture_number = number;
+			fixture.name = `Wash ${number}`;
+			return fixture;
+		});
+		programming.selection.selected = ["fixture-1", "fixture-2", "fixture-3"];
+		render(<FixturePatchSetup />);
+
+		fireEvent.contextMenu(screen.getByRole("textbox", { name: "Fixture ID 1" }));
+		for (const key of ["5", "0", "THRU", "5", "1", "ENTER"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"50 THRU 51 holds 2 fixture IDs for 3 fixtures.",
+		);
+		expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
+	});
 
 	it("names the fixture that already holds an ID the spread needs", async () => {
 		state.patchSetArmed = true;
