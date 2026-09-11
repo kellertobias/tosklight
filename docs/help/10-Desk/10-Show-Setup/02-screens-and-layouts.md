@@ -12,7 +12,7 @@ A disconnected window can be dropped with **Forget window** and a named confirma
 
 Choose **Configure desk lock** in the Screens & playback title bar to open its configuration modal. Set the lock message, unlock control, and optional wallpaper, then choose **Save Lock Configuration** in the modal title bar. The Show menu's **Lock Desk** action applies that saved configuration.
 
-When hardware is connected, **Hardware lighting** provides virtual faders for **LED brightness**, **Gooseneck brightness**, and **Gooseneck color**. Move a fader from 0 to 100%; changes apply automatically while you move it. On Compact Connect, color blends its two lamp channels: 0 is blue, 100 is white, and intermediate values mix them. A brightness of 0 turns that illumination off. The settings are saved with the desk and restored when the hardware reconnects. They apply while ToskLight controls the hardware; MagicQ retains its own lighting settings when it takes ownership.
+When hardware is connected, **Hardware lighting** provides virtual faders for **LED brightness**, **Gooseneck brightness**, and **Gooseneck color**. Move a fader from 0 to 100%; changes apply automatically while you move it. On Compact Connect, color blends its two lamp channels: 0 is blue, 100 is white, and intermediate values mix them. A brightness of 0 turns that illumination off. The settings are saved with the desk and restored when the hardware reconnects. They apply while ToskLight controls the hardware; another application that takes ownership keeps its own lighting settings.
 
 The Tauri desktop application can add optional screens. Each optional screen can use its normal
 configurable **Desktop** or a **Fixed full-screen pane**. A fixed pane fills the screen's pane
