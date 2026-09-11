@@ -3,7 +3,7 @@
 use crate::transform::{self, PlacementSource};
 use crate::wire::{ObjectRecord, PatchSnapshot, StageLayoutBody};
 use glam::Vec3;
-use light_fixture::{FixtureProfile, apply_runtime_profile_compatibility};
+use light_fixture::{FixtureProfile, PatchPolicy, apply_runtime_profile_compatibility};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -150,7 +150,14 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     plan.scene.show_name = models.show_name.clone();
     plan.scene.source_identity = models.server_identity.clone();
     plan.scene.revision = models.patch.patch_revision;
-    plan.scene.scenery = build_scenery(&plan.scene, &models.venue_objects);
+    // Standalone `venue` records predate Venue fixtures. Once the patch carries its own scenery
+    // they only duplicate it, so they are drawn solely for a show that has none.
+    let legacy_venue: &[ObjectRecord] = if patch_carries_scenery(models, &profiles) {
+        &[]
+    } else {
+        &models.venue_objects
+    };
+    plan.scene.scenery = build_scenery(&plan.scene, legacy_venue);
     plan.scene.crowds = build_crowds(models, &profiles);
     build_media(&mut plan.scene, models, &mut plan.warnings);
     plan.scene.recompute_bounds();
@@ -194,12 +201,34 @@ fn hidden_fixture_ids(objects: &[ObjectRecord], property: &str) -> std::collecti
         .collect()
 }
 
+/// Whether any patched fixture is visual-only scenery other than a crowd area.
+fn patch_carries_scenery(
+    models: &DeskReadModels,
+    profiles: &HashMap<(Uuid, u64), Arc<FixtureProfile>>,
+) -> bool {
+    models.patch.fixtures.iter().any(|fixture| {
+        profiles
+            .get(&(fixture.profile_id, fixture.profile_revision))
+            .is_some_and(|profile| {
+                profile.patch_policy == PatchPolicy::VisualOnly && profile.crowd.is_none()
+            })
+    })
+}
+
 fn build_crowds(
     models: &DeskReadModels,
     profiles: &HashMap<(Uuid, u64), Arc<FixtureProfile>>,
 ) -> Vec<CrowdArea> {
+    let hidden_fixtures = hidden_fixture_ids(&models.fixture_visibility, "visible3d");
+    let hidden_layers = hidden_object_ids(&models.patch_layers, "visible3d");
     let mut result = Vec::new();
     for (index, fixture) in models.patch.fixtures.iter().enumerate() {
+        // A crowd hides with its layer and on its own, exactly like a fixture.
+        if hidden_fixtures.contains(&fixture.fixture_id)
+            || hidden_layers.contains(&fixture.layer_id)
+        {
+            continue;
+        }
         let Some(profile) = profiles.get(&(fixture.profile_id, fixture.profile_revision)) else {
             continue;
         };

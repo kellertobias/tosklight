@@ -660,3 +660,47 @@ fn a_model_that_cannot_be_read_falls_back_and_says_so() {
         "the unreadable model is not handed to the renderer"
     );
 }
+
+#[test]
+fn legacy_venue_records_give_way_to_the_patchs_own_scenery() {
+    let mut models = models(
+        shipped_profile("venue--two-point-truss"),
+        StageLayoutBody::default(),
+    );
+    models.venue_objects.push(ObjectRecord {
+        id: "planned-demo-venue-1-2".into(),
+        revision: 1,
+        body: json!({"name": "Back Truss Segment 2", "kind": "truss",
+                     "position": {"x": -1.0, "y": 4.0, "z": 4.15},
+                     "size": {"x": 2.0, "y": 0.3, "z": 0.3}}),
+    });
+
+    let plan = scene_build::build(&models);
+
+    assert!(
+        !plan
+            .scene
+            .scenery
+            .iter()
+            .any(|object| object.name == "Back Truss Segment 2"),
+        "a show whose patch carries scenery does not draw it twice"
+    );
+    assert_eq!(plan.scene.fixtures.len(), 1, "the patched truss is drawn");
+    assert!(plan.scene.emitters.is_empty(), "and it is not a light");
+}
+
+#[test]
+fn a_crowd_hides_with_its_layer() {
+    let mut models = models(
+        shipped_profile("venue--crowd-area"),
+        StageLayoutBody::default(),
+    );
+    assert_eq!(scene_build::build(&models).scene.crowds.len(), 1);
+
+    models.patch_layers.push(ObjectRecord {
+        id: "default".into(),
+        revision: 1,
+        body: json!({"id": "default", "name": "Default", "visible3d": false}),
+    });
+    assert!(scene_build::build(&models).scene.crowds.is_empty());
+}

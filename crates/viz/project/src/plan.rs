@@ -2,7 +2,7 @@
 //! This runs once per patch revision. A DMX frame never re-enters this code.
 
 use crate::binding::ChannelRef;
-use crate::default_model::{self, FixtureTraits};
+use crate::default_model::FixtureTraits;
 use crate::fallback::{self, OpticalClass};
 use glam::{EulerRot, Mat4, Quat, Vec3};
 use light_fixture::{
@@ -247,66 +247,6 @@ pub struct ScenePlan {
     pub warnings: Vec<String>,
 }
 
-/// The model a profile is drawn with, read once however many instances are patched from it.
-///
-/// A model that cannot be read leaves the fixture on its procedural proxy and says why, rather
-/// than leaving a hole on the stage. A profile that names no model is the common case rather than
-/// an error — most of the library and everything imported from a patch sheet arrives without one —
-/// and gets the shipped body its type and channels imply, parsed once for every profile that
-/// lands on the same one.
-fn resolve_model(
-    fixture: &PatchedFixture,
-    mode: &FixtureMode,
-    scene: &mut Scene,
-    models: &mut std::collections::HashMap<light_core::FixtureId, Option<u32>>,
-    defaults: &mut std::collections::HashMap<&'static str, u32>,
-    warnings: &mut Vec<String>,
-) -> Option<u32> {
-    match models.entry(fixture.profile.id) {
-        std::collections::hash_map::Entry::Occupied(entry) => *entry.get(),
-        std::collections::hash_map::Entry::Vacant(entry) => {
-            let resolved = match fixture.profile.model_asset.as_deref() {
-                Some(asset) => match read_model_asset(asset) {
-                    Ok(mut model) => {
-                        apply_profile_model_pose(&mut model, mode);
-                        scene.models.push(model);
-                        Some(scene.models.len() as u32 - 1)
-                    }
-                    Err(reason) => {
-                        warnings.push(format!(
-                            "{} {}: {reason}; drawing the built-in body instead",
-                            fixture.profile.manufacturer, fixture.profile.name
-                        ));
-                        None
-                    }
-                },
-                None => {
-                    let chosen = default_model::choose(&fixture.profile.fixture_type, traits(mode));
-                    match defaults.entry(chosen.name) {
-                        std::collections::hash_map::Entry::Occupied(cached) => Some(*cached.get()),
-                        std::collections::hash_map::Entry::Vacant(cached) => {
-                            match viz_scene::read_glb(chosen.bytes) {
-                                Ok(model) => {
-                                    scene.models.push(model);
-                                    let index = scene.models.len() as u32 - 1;
-                                    cached.insert(index);
-                                    Some(index)
-                                }
-                                Err(reason) => {
-                                    warnings
-                                        .push(format!("shipped model {}: {reason}", chosen.name));
-                                    None
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-            *entry.insert(resolved)
-        }
-    }
-}
-
 /// Put model parts onto the authoritative profile geometry graph before the renderer animates
 /// them. Package GLBs keep `moving-base`, `moving-yoke`, and `moving-head` as reusable local
 /// subtrees; the graph supplies their real offsets and pivots. Flattening the GLB without this
@@ -486,15 +426,15 @@ fn resolve_plan_artwork(
     indices
 }
 
-/// Compile the patch into a scene. Fixtures with `VisualOnly` policy become scenery elsewhere and
-/// are skipped here.
+/// Compile the patch into a scene. `VisualOnly` Venue fixtures are drawn as bodies that emit no
+/// light; crowd areas are left to the desk's crowd path.
 pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     let mut scene = Scene::default();
     let mut bindings = Vec::new();
     let mut external_camera = None;
     let mut external_camera_issue = None;
     let mut warnings = Vec::new();
-    let mut models: std::collections::HashMap<light_core::FixtureId, Option<u32>> =
+    let mut models: std::collections::HashMap<(light_core::FixtureId, Uuid), Option<u32>> =
         std::collections::HashMap::new();
     // Shipped default bodies are shared by every profile that lands on the same one.
     let mut defaults: std::collections::HashMap<&'static str, u32> =
@@ -506,10 +446,10 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     let mut plan_artwork: HashMap<light_core::FixtureId, [Option<u32>; 5]> = HashMap::new();
 
     for fixture in fixtures {
-        // Visual-only Venue objects are compiled by the desk's scenery path. Keeping them out of
-        // the fixture plan prevents a curtain, pipe, or truss from acquiring a lamp icon merely
-        // because it arrived through the portable fixture-package schema.
-        if fixture.profile.patch_policy == PatchPolicy::VisualOnly {
+        // A crowd is an area the desk's crowd path draws, not a body. Every other visual-only
+        // Venue object — truss, pipe, stage element, curtain — is drawn from its own model here,
+        // posed for its mode like any fixture, and `build_emitters` gives it no light.
+        if fixture.profile.crowd.is_some() {
             continue;
         }
         let Some((mode, primary_slots)) = selected_mode(fixture, &mut warnings) else {
@@ -946,6 +886,10 @@ fn build_emitters(
     laser: Option<LaserOptics>,
     effect: Option<EffectProgram>,
 ) {
+    // Visual-only Venue objects are scenery: drawn, patched and placed, but never a light.
+    if fixture.profile.patch_policy == PatchPolicy::VisualOnly {
+        return;
+    }
     // Resolved once for the fixture: every head of a laser reads the same footprint, because the
     // script is given the whole fixture rather than one head's channels.
     let laser_window = laser.as_ref().and_then(|_| laser_window(channels));
@@ -1413,7 +1357,7 @@ mod compile_instances;
 mod head_geometry;
 
 pub use assets::{GOBO_ARTWORK_EDGE, decode_gobo_artwork};
-use assets::{decode_script, gobo_wheel, read_model_asset, script_key};
+use assets::{decode_script, gobo_wheel, resolve_model, script_key};
 use bindings::{build_binding, cell_bindings, group_by_head, layout_cells};
 use compile_instances::compile_instances;
 use head_geometry::{fitted_to_head_pitch, head_offset, head_span, pan_axis, tilt_axis};

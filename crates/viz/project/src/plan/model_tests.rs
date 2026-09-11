@@ -711,7 +711,7 @@ fn default_profile_model_supplies_all_orthographic_plan_views() {
 }
 
 #[test]
-fn visual_only_packages_never_enter_the_lamp_or_plan_fixture_paths() {
+fn visual_only_packages_are_drawn_as_bodies_that_emit_no_light() {
     let mut venue = patched("curtain", ProfileOptics::default());
     Arc::get_mut(&mut venue.profile)
         .expect("sole profile owner")
@@ -719,10 +719,43 @@ fn visual_only_packages_never_enter_the_lamp_or_plan_fixture_paths() {
 
     let compiled = compile(&[venue]);
 
-    assert!(compiled.scene.fixtures.is_empty());
+    assert_eq!(
+        compiled.scene.fixtures.len(),
+        1,
+        "a curtain is part of the picture"
+    );
+    assert!(
+        compiled.scene.emitters.is_empty(),
+        "a curtain, pipe or truss is never a lamp"
+    );
+}
+
+#[test]
+fn each_length_of_one_venue_truss_gets_its_own_posed_model() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../assets/fixture-library/venue--two-point-truss.toskfixture");
+    let profile =
+        Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+    assert!(profile.modes.len() >= 2, "the truss ships several lengths");
+    let fixtures: Vec<_> = profile.modes[..2]
+        .iter()
+        .map(|mode| {
+            let mut fixture = patched("rigging", ProfileOptics::default());
+            fixture.profile = Arc::clone(&profile);
+            fixture.mode_id = mode.id;
+            fixture
+        })
+        .collect();
+
+    let compiled = compile(&fixtures);
+
+    assert_eq!(compiled.scene.fixtures.len(), 2);
+    assert_eq!(
+        compiled.scene.models.len(),
+        2,
+        "one model per length, not per profile"
+    );
     assert!(compiled.scene.emitters.is_empty());
-    assert!(compiled.scene.fixture_plan.is_empty());
-    assert!(compiled.scene.plan_artwork.is_empty());
 }
 
 #[test]

@@ -325,6 +325,71 @@ pub(super) fn decode_base64(encoded: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// The model a profile is drawn with, read once however many instances are patched from it.
+///
+/// A model that cannot be read leaves the fixture on its procedural proxy and says why, rather
+/// than leaving a hole on the stage. A profile that names no model is the common case rather than
+/// an error — most of the library and everything imported from a patch sheet arrives without one —
+/// and gets the shipped body its type and channels imply, parsed once for every profile that
+/// lands on the same one.
+pub(super) fn resolve_model(
+    fixture: &super::PatchedFixture,
+    mode: &light_fixture::FixtureMode,
+    scene: &mut Scene,
+    models: &mut std::collections::HashMap<(light_core::FixtureId, uuid::Uuid), Option<u32>>,
+    defaults: &mut std::collections::HashMap<&'static str, u32>,
+    warnings: &mut Vec<String>,
+) -> Option<u32> {
+    // Keyed by mode as well as profile: a mode poses the model, so a 2 m and a 4 m run of one
+    // truss profile are two bodies.
+    match models.entry((fixture.profile.id, mode.id)) {
+        std::collections::hash_map::Entry::Occupied(entry) => *entry.get(),
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            let resolved = match fixture.profile.model_asset.as_deref() {
+                Some(asset) => match read_model_asset(asset) {
+                    Ok(mut model) => {
+                        super::apply_profile_model_pose(&mut model, mode);
+                        scene.models.push(model);
+                        Some(scene.models.len() as u32 - 1)
+                    }
+                    Err(reason) => {
+                        warnings.push(format!(
+                            "{} {}: {reason}; drawing the built-in body instead",
+                            fixture.profile.manufacturer, fixture.profile.name
+                        ));
+                        None
+                    }
+                },
+                None => {
+                    let chosen = crate::default_model::choose(
+                        &fixture.profile.fixture_type,
+                        super::traits(mode),
+                    );
+                    match defaults.entry(chosen.name) {
+                        std::collections::hash_map::Entry::Occupied(cached) => Some(*cached.get()),
+                        std::collections::hash_map::Entry::Vacant(cached) => {
+                            match viz_scene::read_glb(chosen.bytes) {
+                                Ok(model) => {
+                                    scene.models.push(model);
+                                    let index = scene.models.len() as u32 - 1;
+                                    cached.insert(index);
+                                    Some(index)
+                                }
+                                Err(reason) => {
+                                    warnings
+                                        .push(format!("shipped model {}: {reason}", chosen.name));
+                                    None
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            *entry.insert(resolved)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
