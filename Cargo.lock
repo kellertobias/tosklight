@@ -8219,6 +8219,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "viz-drawing"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+ "serde",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "viz-editor"
 version = "0.1.0"
 dependencies = [
@@ -8243,6 +8252,7 @@ dependencies = [
  "viz-desk",
  "viz-dmx",
  "viz-document",
+ "viz-drawing",
  "viz-planning",
  "viz-project",
  "viz-scene",

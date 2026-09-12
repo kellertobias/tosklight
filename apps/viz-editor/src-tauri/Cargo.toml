@@ -27,6 +27,7 @@ uuid.workspace = true
 viz-desk.workspace = true
 viz-dmx.workspace = true
 viz-document = { path = "../../../crates/viz/document" }
+viz-drawing = { path = "../../../crates/viz/drawing" }
 viz-planning = { path = "../../../crates/viz/planning" }
 viz-project = { path = "../../../crates/viz/project" }
 viz-scene = { path = "../../../crates/viz/scene" }

@@ -15,6 +15,7 @@ mod local_api;
 mod mcp;
 mod recent;
 mod session;
+mod underlay;
 mod verify;
 mod visualizer;
 mod windows;
@@ -236,6 +237,11 @@ fn main() {
             session::save_fixture_visibility,
             session::fixture_notes,
             session::save_fixture_note,
+            underlay::preview_cad_underlay,
+            underlay::import_cad_underlay,
+            underlay::cad_underlays,
+            underlay::save_cad_underlay,
+            underlay::delete_cad_underlay,
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,

@@ -51,6 +51,7 @@ members = [
   "crates/viz/helper",
   "crates/viz/demo",
   "crates/viz/document",
+  "crates/viz/drawing",
   "crates/viz/planning",
   "crates/viz/render",
   "crates/viz/snapshot",
@@ -128,6 +129,7 @@ viz-scene = { path = "crates/viz/scene" }
 viz-laser = { path = "crates/viz/laser" }
 viz-effect = { path = "crates/viz/effect" }
 viz-dmx = { path = "crates/viz/dmx" }
+viz-drawing = { path = "crates/viz/drawing" }
 viz-project = { path = "crates/viz/project" }
 viz-desk = { path = "crates/viz/desk" }
 viz-render = { path = "crates/viz/render" }
