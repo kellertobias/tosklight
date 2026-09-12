@@ -272,6 +272,7 @@ mod tests {
         let mut scene = Scene::default();
         let fixture_id = viz_scene::uuid::Uuid::from_u128(7);
         scene.fixtures.push(FixtureInstance {
+            drawn_as_scenery: false,
             instance_id: fixture_id,
             fixture_id,
             name: "Laser".into(),

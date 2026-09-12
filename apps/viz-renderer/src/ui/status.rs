@@ -860,6 +860,7 @@ mod fixture_label_tests {
 
     fn fixture(number: u32, position: Vec3) -> FixtureInstance {
         FixtureInstance {
+            drawn_as_scenery: false,
             instance_id: viz_scene::uuid::Uuid::new_v4(),
             fixture_id: viz_scene::uuid::Uuid::new_v4(),
             name: format!("Fixture {number}"),

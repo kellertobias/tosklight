@@ -586,6 +586,7 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                 mode_id: dto.mode_id,
             },
             patch: PatchedFixturePatch {
+                scenery_size_metres: None,
                 fixture_id: FixtureId(dto.fixture_id),
                 fixture_number: dto.fixture_number,
                 virtual_fixture_number: dto.virtual_fixture_number,
@@ -660,6 +661,7 @@ impl From<&SplitDto> for SplitPatch {
 impl From<MultipatchDto> for MultiPatchInstance {
     fn from(dto: MultipatchDto) -> Self {
         Self {
+            scenery_size_metres: None,
             id: dto.id,
             name: dto.name,
             // Split 1 remains the canonical legacy address for an instance, as it is for a fixture.

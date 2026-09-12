@@ -446,6 +446,7 @@ mod tests {
         let mut scene = Scene::default();
         for (index, id) in ids.iter().enumerate() {
             scene.fixtures.push(viz_scene::FixtureInstance {
+                drawn_as_scenery: false,
                 instance_id: viz_scene::uuid::Uuid::from_u128(*id),
                 fixture_id: viz_scene::uuid::Uuid::from_u128(*id),
                 name: format!("fixture {id}"),

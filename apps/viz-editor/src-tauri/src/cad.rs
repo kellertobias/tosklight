@@ -1261,8 +1261,6 @@ mod tests {
                         .map(|copy| MultiPatchInstance {
                             id: Uuid::new_v4(),
                             name: format!("CAD light 1 segment {copy}"),
-                            universe: None,
-                            address: None,
                             split_patches: vec![SplitPatch {
                                 split: 1,
                                 universe: None,
@@ -1286,6 +1284,7 @@ mod tests {
                         mode_id,
                     },
                     patch: PatchedFixturePatch {
+                        scenery_size_metres: None,
                         fixture_id: FixtureId(*id),
                         fixture_number: Some(index as u32 + 1),
                         virtual_fixture_number: None,
