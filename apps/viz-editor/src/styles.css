@@ -260,6 +260,7 @@ body {
 .viz-editor-workspace > .viz-media-workspace,
 .viz-editor-workspace > .viz-editor-empty,
 .viz-editor-workspace > .viz-dmx-workspace,
+.viz-editor-workspace > .viz-fixture-library-workspace,
 .viz-editor-workspace > .viz-venue-workspace {
 	flex: 1;
 	min-width: 0;
@@ -955,6 +956,7 @@ body {
 
 .viz-editor-workspace > .show-patch-layout > .ui-window-header,
 .viz-editor-workspace > .viz-show-settings-workspace > .ui-window-header,
+.viz-editor-workspace > .viz-fixture-library-workspace > .ui-window-header,
 .viz-editor-workspace > .viz-media-workspace > .ui-window-header {
 	height: 31px;
 	min-height: 31px;
@@ -965,6 +967,7 @@ body {
 .viz-editor-workspace > .show-patch-layout > .ui-window-header button,
 .viz-editor-workspace > .show-patch-layout > .ui-window-header [role="button"],
 .viz-editor-workspace > .viz-show-settings-workspace > .ui-window-header button,
+.viz-editor-workspace > .viz-fixture-library-workspace > .ui-window-header button,
 .viz-editor-workspace > .viz-media-workspace > .ui-window-header button {
 	-webkit-app-region: no-drag;
 }
@@ -2663,4 +2666,67 @@ body {
 	left: auto;
 	right: 4px;
 	bottom: 32px;
+}
+
+/*
+ * The fixture library: this machine's lantern types, editable with no show open.
+ *
+ * The editor itself is the shared one from @tosklight/patch and brings its own layout; what is
+ * here is the list that opens it.
+ */
+.viz-fixture-library-workspace {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+}
+
+.viz-fixture-library-workspace > .ui-search-bar,
+.viz-fixture-library-workspace > .empty-editor-message {
+	margin: 0 12px;
+}
+
+.viz-fixture-library-table {
+	width: calc(100% - 24px);
+	margin: 0 12px 12px;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+.viz-fixture-library-table th,
+.viz-fixture-library-table td {
+	padding: 8px 10px;
+	text-align: left;
+	border-bottom: 1px solid var(--line, #23303a);
+	vertical-align: middle;
+}
+
+.viz-fixture-library-table th {
+	color: var(--muted);
+	font-weight: 600;
+}
+
+.viz-fixture-library-table td:last-child {
+	text-align: right;
+	white-space: nowrap;
+}
+
+/* The picker is a real file input, kept off screen behind the button it labels. */
+.viz-fixture-asset-picker {
+	display: inline-flex;
+	cursor: pointer;
+}
+
+.viz-fixture-asset-picker > input[type="file"] {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
 }

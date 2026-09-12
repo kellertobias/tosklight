@@ -43,6 +43,37 @@ away to keep it; Escape leaves the name as it was, and an empty name changes not
 what a desk's **Load Show** menu offers, so a renamed show is offered under its new name at once.
 The file keeps its name; **Save As** writes the show to a new one.
 
+## Configure the fixtures the rig is made of
+
+**Fixtures** in the sidebar opens this machine's fixture library. It sits before **Patch** because
+that is the order the work happens in: describe the lantern, then patch it. The library belongs to
+the computer rather than to the show, so the screen is available with no document open, and every
+show planned here afterwards patches from what is in it.
+
+The list shows each fixture's manufacturer, model, modes with their footprints, and current
+revision, and the search bar filters it as you type. **Create fixture** opens a blank profile;
+**Edit as new revision** opens an existing one. This is the same editor ToskLight Control uses, so
+a profile authored here is the one the desk reads, with the same Generic, Modes, Heads, Channels,
+Color and Geometry tabs and the same rules. Saving stores the next immutable revision: the library
+assigns the number, and a save is refused rather than silently overwriting work if another window
+has revised the same fixture in the meantime. A show already patched against an earlier revision
+keeps its own embedded snapshot and is unaffected.
+
+Two differences from the desk are deliberate. The Architect reads the operator's own filesystem
+when choosing a photograph, icon, or GLB, because it has no configured file roots to confine a
+chooser to. And the Geometry tab has no live 3D preview here: the parts, transforms and emitters
+are edited and saved exactly as they are on the desk, but confirming the Stage appearance belongs
+in ToskLight Control, which owns the Stage renderer. The tab says so rather than showing an empty
+frame.
+
+Channel work is the same on both products. Channels are ordered by dragging a row or by its move
+buttons, and that order is the DMX slot order within the split. A channel's DMX range is divided
+into named functions — a shutter that is closed to 17, open to 72, then strobing to 254 reads as
+those names on an encoder instead of a percentage — and one physical channel may carry functions
+of different kinds, so a combined dimmer-and-strobe slot is one channel with two bands. Whether a
+channel follows a virtual dimmer, and whether it inverts or never fades, are set per channel in
+its editor.
+
 ## Editing the patch sheet
 
 Click a column header to order the sheet by that column, for example **Fixture ID** or **Patch**;

@@ -7,6 +7,7 @@ import { beginWindowDrag } from "./WindowChrome";
 export type EditorWorkspace =
 	| "show"
 	| "cad"
+	| "fixtures"
 	| "patch"
 	| "dmx"
 	| "venue"
@@ -64,6 +65,11 @@ export function EditorSidebar({
 						label: "CAD",
 						icon: <span>⊞</span>,
 						disabled: !hasDocument,
+					},
+					{
+						id: "fixtures",
+						label: "Fixtures",
+						icon: <span>✺</span>,
 					},
 					{
 						id: "patch",

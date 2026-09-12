@@ -109,6 +109,7 @@ export * from "./transport";
  * which is a different thing from the feature contract of the same name in `./contracts`.
  */
 export type {
+	AttributeDescriptor,
 	FixtureChannel,
 	FixtureDefinition,
 	FixtureHead,

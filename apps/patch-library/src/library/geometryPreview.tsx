@@ -36,6 +36,7 @@ export function GeometryPreview({ mode }: { mode: FixtureMode }) {
 	const { buildGeometryPreview, disposeScene } = useFixtureProfileEditorPorts();
 	useEffect(() => {
 		const container = host.current;
+		if (!buildGeometryPreview) return;
 		if (!container || typeof WebGLRenderingContext === "undefined") return;
 		const scene = new THREE.Scene();
 		scene.background = new THREE.Color(0x080b0e);
@@ -79,16 +80,26 @@ export function GeometryPreview({ mode }: { mode: FixtureMode }) {
 			aria-label="Live geometry preview"
 		>
 			<h3>Live 3D preview</h3>
-			<div
-				ref={host}
-				className="geometry-preview-stage"
-				role="img"
-				aria-label="Fixture geometry hierarchy and beams in three dimensions"
-			/>
+			{buildGeometryPreview ? (
+				<div
+					ref={host}
+					className="geometry-preview-stage"
+					role="img"
+					aria-label="Fixture geometry hierarchy and beams in three dimensions"
+				/>
+			) : (
+				<p className="empty-editor-message" role="status">
+					This application has no Stage renderer, so the geometry cannot be
+					previewed here. The parts, transforms, and emitters below are edited
+					and saved exactly as they are on the desk.
+				</p>
+			)}
 			<small>
 				{mode.geometry.nodes.length} parts · {mode.geometry.emitters.length}{" "}
-				emitters. Preview uses the Stage renderer's hierarchy, transforms,
-				source layouts, and beam angles.
+				emitters.{" "}
+				{buildGeometryPreview
+					? "Preview uses the Stage renderer's hierarchy, transforms, source layouts, and beam angles."
+					: "Confirm the Stage appearance in ToskLight Control."}
 			</small>
 		</section>
 	);

@@ -74,6 +74,21 @@ pub struct LibraryProfile {
     pub profile: serde_json::Value,
 }
 
+/// One canonical attribute, in the shape the shared fixture-profile editor reads.
+#[derive(Debug, Serialize)]
+pub struct AttributeDescriptorDto {
+    pub id: String,
+    pub label: String,
+    pub family: light_core::AttributeClass,
+    pub value_type: light_core::AttributeValueType,
+    pub default_unit: Option<String>,
+    pub display_unit: Option<String>,
+    pub physical_unit: Option<String>,
+    pub cyclic: bool,
+    pub recordable: bool,
+    pub built_in: bool,
+}
+
 type Answer<T> = Result<T, String>;
 
 impl Session {
@@ -710,6 +725,76 @@ pub fn library_profiles(session: tauri::State<'_, Session>) -> Answer<Vec<Librar
                 name: profile.name.clone(),
                 profile: serde_json::to_value(profile).map_err(|error| error.to_string())?,
             })
+        })
+        .collect()
+}
+
+/// Authoring a fixture is a library edit, not a document edit: the profile belongs to this
+/// machine's fixture library and every show opened here patches from it afterwards.
+///
+/// The library assigns the revision. The caller only states which revision it edited, so two
+/// windows editing the same fixture cannot silently overwrite each other.
+#[tauri::command]
+pub fn save_library_profile(
+    session: tauri::State<'_, Session>,
+    profile: serde_json::Value,
+    expected_revision: u32,
+) -> Answer<LibraryProfile> {
+    let Some(path) = session.library_path.lock().clone() else {
+        return Err("This editor has no fixture library attached.".into());
+    };
+    let profile: light_fixture::FixtureProfile =
+        serde_json::from_value(profile).map_err(|error| error.to_string())?;
+    let library = FixtureLibrary::open(&path).map_err(|error| error.to_string())?;
+    let saved = library
+        .save_profile(profile, expected_revision)
+        .map_err(|error| error.to_string())?;
+    Ok(LibraryProfile {
+        id: saved.id.0.to_string(),
+        revision: saved.revision,
+        manufacturer: saved.manufacturer.clone(),
+        name: saved.name.clone(),
+        profile: serde_json::to_value(saved).map_err(|error| error.to_string())?,
+    })
+}
+
+/// Removes one immutable revision. A show already patched against it keeps its own snapshot.
+#[tauri::command]
+pub fn delete_library_profile_revision(
+    session: tauri::State<'_, Session>,
+    id: String,
+    revision: u32,
+) -> Answer<bool> {
+    let Some(path) = session.library_path.lock().clone() else {
+        return Err("This editor has no fixture library attached.".into());
+    };
+    let id = light_core::FixtureId(Uuid::parse_str(&id).map_err(|error| error.to_string())?);
+    let library = FixtureLibrary::open(&path).map_err(|error| error.to_string())?;
+    library
+        .delete_profile(id, revision)
+        .map_err(|error| error.to_string())
+}
+
+/// The canonical attribute registry a profile channel names as its role.
+///
+/// The Architect has no desk to ask, so it reads the same built-in registry the desk configures
+/// from. Show-specific custom attributes are a desk concern and are deliberately absent.
+#[tauri::command]
+pub fn attribute_registry() -> Vec<AttributeDescriptorDto> {
+    light_core::ATTRIBUTE_REGISTRY
+        .iter()
+        .filter(|descriptor| !light_core::built_in_attribute_is_retired(descriptor.id))
+        .map(|descriptor| AttributeDescriptorDto {
+            id: descriptor.id.into(),
+            label: descriptor.label.into(),
+            family: descriptor.family,
+            value_type: descriptor.value_type,
+            default_unit: descriptor.default_unit.map(str::to_owned),
+            display_unit: descriptor.display_unit.map(str::to_owned),
+            physical_unit: descriptor.physical_unit.map(str::to_owned),
+            cyclic: descriptor.cyclic,
+            recordable: descriptor.recordable,
+            built_in: true,
         })
         .collect()
 }

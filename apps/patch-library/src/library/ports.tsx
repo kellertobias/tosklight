@@ -18,7 +18,11 @@ export type ProfileAssetPickerProps = {
  * renderer so the preview and the real Stage agree about what a profile looks like.
  */
 export type FixtureProfileEditorPorts = {
-	buildGeometryPreview: (mode: FixtureMode) => THREE.Object3D;
+	/**
+	 * Absent when the host has no Stage renderer of its own. The geometry graph stays fully
+	 * editable; only the live preview of it is unavailable, and the tab says so.
+	 */
+	buildGeometryPreview?: (mode: FixtureMode) => THREE.Object3D;
 	disposeScene: (scene: THREE.Object3D) => void;
 	AssetPicker: ComponentType<ProfileAssetPickerProps>;
 };

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+	AttributeDescriptor,
 	FixtureNote,
 	FixtureProfile,
 	FixtureVisibility,
@@ -473,6 +474,26 @@ export const documentSession = {
 		const profiles = await invoke<LibraryProfile[]>("library_profiles");
 		return profiles.map((entry) => entry.profile);
 	},
+	/**
+	 * Stores a profile as the next immutable library revision.
+	 *
+	 * `expectedRevision` is the revision the operator edited. The library rejects the save when
+	 * another window has moved on, rather than overwriting that work.
+	 */
+	async saveFixtureProfile(
+		profile: FixtureProfile,
+		expectedRevision: number,
+	): Promise<FixtureProfile> {
+		const saved = await invoke<LibraryProfile>("save_library_profile", {
+			profile,
+			expectedRevision,
+		});
+		return saved.profile;
+	},
+	deleteFixtureProfileRevision: (id: string, revision: number) =>
+		invoke<boolean>("delete_library_profile_revision", { id, revision }),
+	attributeRegistry: () =>
+		invoke<AttributeDescriptor[]>("attribute_registry"),
 };
 
 /**

@@ -1,4 +1,5 @@
 import {
+	type FixtureDefinition,
 	type FixtureNote,
 	FixturePatchSetup,
 	type FixtureProfile,
@@ -13,7 +14,15 @@ import {
 } from "@tosklight/patch";
 import { Button } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FixtureLibraryWorkspace } from "./FixtureLibraryWorkspace";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { CadApp } from "./cad/CadApp";
 import { CadRigOverview } from "./cad/CadViewport";
 import { cadSession } from "./cad/session";
@@ -23,6 +32,7 @@ import { type DmxPage, DmxWorkspace } from "./DmxWorkspace";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
+import type { PatchTransport } from "@tosklight/patch/transport";
 import { type EditorWorkspace, EditorSidebar } from "./EditorSidebar";
 import { FileBar } from "./FileBar";
 import { MediaWorkspace } from "./MediaWorkspace";
@@ -57,6 +67,55 @@ const SHOW_SETTINGS_ACTIONS = [
 	{ id: "features", label: "Features" },
 	{ id: "mcp", label: "MCP" },
 ];
+
+/** What the patch sheet calls itself on each screen that is built from it. */
+const WORKSPACE_TITLES: Partial<Record<EditorWorkspace, string>> = {
+	patch: "Patch",
+	venue: "Venue",
+	effects: "Effects",
+	media: "Media",
+};
+
+/**
+ * The patch sheet's two providers, which every screen built on the sheet needs in the same shape.
+ *
+ * The preview controls sit inside it as an ordinary child: neither provider renders an element,
+ * and the controls read no patch context of their own.
+ */
+function PatchScope({
+	host,
+	showId,
+	reload,
+	suffix,
+	definitions,
+	transport,
+	onError,
+	children,
+}: {
+	host: PatchHost;
+	showId: string;
+	reload: number;
+	suffix?: string;
+	definitions: FixtureDefinition[];
+	transport: PatchTransport;
+	onError: (reason: unknown) => void;
+	children: ReactNode;
+}) {
+	return (
+		<PatchHostProvider value={host}>
+			<PatchViewProvider
+				key={`${showId}-${reload}${suffix ? `-${suffix}` : ""}`}
+				showId={showId}
+				initialFixtures={[]}
+				definitions={definitions}
+				transport={transport}
+				onError={onError}
+			>
+				{children}
+			</PatchViewProvider>
+		</PatchHostProvider>
+	);
+}
 
 export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
@@ -310,6 +369,10 @@ export function App() {
 	const report = useCallback((reason: unknown) => {
 		setError(String(reason));
 	}, []);
+	/** Re-read the machine's fixture library, after authoring a fixture or opening a document. */
+	const reloadProfiles = useCallback(() => {
+		documentSession.fixtureProfiles().then(setProfiles).catch(report);
+	}, [report]);
 	useEffect(() => {
 		if (!error) return;
 		const timeout = window.setTimeout(() => setError(null), 8000);
@@ -404,16 +467,7 @@ export function App() {
 		() => mergeFixtureDefinitions(profiles, []),
 		[profiles],
 	);
-	const workspaceTitle =
-		workspace === "patch"
-			? "Patch"
-			: workspace === "venue"
-				? "Venue"
-				: workspace === "effects"
-					? "Effects"
-					: workspace === "media"
-						? "Media"
-						: "Show";
+	const workspaceTitle = WORKSPACE_TITLES[workspace] ?? "Show";
 	const filename = document ? showFileName(document.path) : "No show open";
 
 	return (
@@ -486,12 +540,7 @@ export function App() {
 									document={document}
 									onDocument={setDocument}
 									onError={report}
-									onReloadProfiles={() =>
-										documentSession
-											.fixtureProfiles()
-											.then(setProfiles)
-											.catch(report)
-									}
+									onReloadProfiles={reloadProfiles}
 									onReloadDocument={reloadDocument}
 								>
 									{document && cadScene?.showId === document.showId ? (
@@ -520,6 +569,13 @@ export function App() {
 							)}
 						</section>
 					) : null}
+					{workspace === "fixtures" ? (
+						<FixtureLibraryWorkspace
+							profiles={profiles}
+							onReloadProfiles={reloadProfiles}
+							onError={report}
+						/>
+					) : null}
 					{document && workspace === "cad" ? <CadApp /> : null}
 					{document && workspace === "dmx" ? (
 						<DmxWorkspace
@@ -534,24 +590,23 @@ export function App() {
 					{document &&
 					workspace !== "show" &&
 					workspace !== "cad" &&
+					workspace !== "fixtures" &&
 					workspace !== "dmx" &&
 					workspace !== "media" &&
 					workspace !== "settings" ? (
-						<PatchHostProvider value={host}>
-							<PatchViewProvider
-								key={`${document.showId}-${reload}`}
-								showId={document.showId}
-								initialFixtures={[]}
-								definitions={definitions}
-								transport={transport}
-								onError={report}
-							>
-								<FixturePatchSetup
-									title={workspaceTitle}
-									scope={workspace === "patch" ? "dmx" : workspace}
-									showAllLayersRequest={revealRequest}
-								/>
-							</PatchViewProvider>
+						<PatchScope
+							host={host}
+							showId={document.showId}
+							reload={reload}
+							definitions={definitions}
+							transport={transport}
+							onError={report}
+						>
+							<FixturePatchSetup
+								title={workspaceTitle}
+								scope={workspace === "patch" ? "dmx" : workspace}
+								showAllLayersRequest={revealRequest}
+							/>
 							{visualizerRunning ? (
 								<PreviewControls
 									fixtures={fixtures}
@@ -560,23 +615,25 @@ export function App() {
 									onError={report}
 								/>
 							) : null}
-						</PatchHostProvider>
+						</PatchScope>
 					) : null}
 					{document && workspace === "media" ? (
-						<PatchHostProvider value={host}>
-							<PatchViewProvider
-								key={`${document.showId}-${reload}-media`}
-								showId={document.showId}
-								initialFixtures={[]}
-								definitions={definitions}
-								transport={transport}
-								onError={report}
-							>
-								<MediaWorkspace onError={report} />
-							</PatchViewProvider>
-						</PatchHostProvider>
+						<PatchScope
+							host={host}
+							showId={document.showId}
+							reload={reload}
+							suffix="media"
+							definitions={definitions}
+							transport={transport}
+							onError={report}
+						>
+							<MediaWorkspace onError={report} />
+						</PatchScope>
 					) : null}
-					{!document && workspace !== "show" && workspace !== "settings" ? (
+					{!document &&
+					workspace !== "show" &&
+					workspace !== "fixtures" &&
+					workspace !== "settings" ? (
 						<section className="viz-editor-empty">
 							<h1>No show open</h1>
 							<p>

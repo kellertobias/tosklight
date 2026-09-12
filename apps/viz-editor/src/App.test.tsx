@@ -267,6 +267,30 @@ describe("the Viz editor window", () => {
 		);
 	});
 
+	it("reaches the fixture library with no show open, because it is the machine's own", async () => {
+		const base = invoke.getMockImplementation();
+		invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+			if (command === "attribute_registry") return Promise.resolve([]);
+			return base?.(command, args);
+		});
+		renderApp();
+
+		const fixtures = await screen.findByRole("button", { name: "Fixtures" });
+		// It sits before Patch: the lantern is described, then it is patched.
+		expect(fixtures.nextElementSibling).toBe(
+			screen.getByRole("button", { name: "Patch" }),
+		);
+		// Everything else in this list needs a document. This one does not.
+		expect(fixtures).not.toBeDisabled();
+
+		fireEvent.click(fixtures);
+		expect(await screen.findByText("Planning Wash")).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
+		expect(
+			await screen.findByRole("dialog", { name: "Create fixture profile" }),
+		).toBeVisible();
+	});
+
 	it("renames the show from the pencil beside its name", async () => {
 		let name = document.name;
 		const base = invoke.getMockImplementation();
