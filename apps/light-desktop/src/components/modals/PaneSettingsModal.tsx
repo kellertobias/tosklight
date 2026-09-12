@@ -48,6 +48,7 @@ import {
 	type CuePaneCuelistPlayback,
 	useCuePaneCuelistPlaybacks,
 } from "./cuePaneCuelistAuthority";
+import { PatchColumnSwitches } from "../setup/fixturePatch/PatchColumnSettings";
 import { VisualizationPaneSettings } from "./VisualizationPaneSettings";
 
 function VirtualPlaybackZoneEditor({
@@ -787,6 +788,25 @@ export function FixtureSheetPaneSettings({
 	);
 }
 
+export function PatchPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<section>
+			<h3>Visible columns</h3>
+			<PatchColumnSwitches
+				hidden={pane.patchHiddenColumns ?? []}
+				onChange={(columns) =>
+					dispatch({
+						type: "SET_PANE_PATCH_HIDDEN_COLUMNS",
+						id: pane.id,
+						columns,
+					})
+				}
+			/>
+		</section>
+	);
+}
+
 function VirtualPlaybackExclusionSettings({
 	pane,
 	close,
@@ -887,6 +907,12 @@ function paneSpecificTabs(
 					selectedCueListId={fixturePaneSelectedCueListId}
 				/>
 			),
+		});
+	if (pane.kind === "patch")
+		tabs.push({
+			id: "patch",
+			label: "Show Patch",
+			content: <PatchPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "virtual_playbacks")
 		tabs.push(

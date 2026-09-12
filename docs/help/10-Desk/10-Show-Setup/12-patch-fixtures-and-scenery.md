@@ -31,6 +31,11 @@ by. **Patch** orders by universe, then address. Unpatched fixtures and fixtures 
 ID always come last, and fixtures with the same value keep Fixture ID order. Shift ranges follow
 the order the table shows. Show Patch opens ordered by Fixture ID.
 
+Choose which columns Show Patch draws from its settings: the gear in the Show Patch header, or
+**Pane Settings → Show Patch** for a Show Patch pane. Switch a column to **Hidden** to leave it out;
+every column is visible until you hide it. Each pane keeps its own choice, and the full-screen
+Show Patch keeps one for the desk. The last visible column cannot be hidden.
+
 ## Importing a CSV Patch List
 
 Use **Import CSV** in the Show Patch title bar to add a whole fixture list from a spreadsheet, paperwork export, or another desk. Every CSV row becomes one fixture. The import only adds fixtures; it never changes or removes fixtures already in the show.

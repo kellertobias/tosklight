@@ -3,6 +3,7 @@ import type { AppState } from "../../types";
 import { normalizeVisualizationRows } from "../../windows/visualizationPaneModel";
 import type { Action } from "../appActions";
 import {
+	normalizePatchHiddenColumns,
 	cueListWindowKind,
 	cueListWindowTitle,
 	normalizeFixtureSheetColumns,
@@ -163,6 +164,9 @@ export function reduceHydration(
 					action.windowSettings?.fixtureSheetColumns,
 					state.fixtureSheetColumns,
 					action.windowSettings?.fixtureSheetShowPatch,
+				),
+				patchHiddenColumns: normalizePatchHiddenColumns(
+					action.windowSettings?.patchHiddenColumns,
 				),
 				// Compact modes are installation-local and hydrate separately by real desk.
 				fixtureSheetCompactMode: "off",

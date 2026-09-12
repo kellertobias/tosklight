@@ -5,6 +5,7 @@ import {
 	cueListWindowKind,
 	cueListWindowTitle,
 	normalizeFixtureSheetColumns,
+	normalizePatchHiddenColumns,
 	overlaps,
 } from "../reducerHelpers";
 
@@ -130,6 +131,11 @@ export function reduceWorkspace(
 				fixtureSheetShowType: action.showType ?? state.fixtureSheetShowType,
 				fixtureSheetIncludedHeads:
 					action.includedHeads ?? state.fixtureSheetIncludedHeads,
+			};
+		case "SET_PATCH_HIDDEN_COLUMNS":
+			return {
+				...state,
+				patchHiddenColumns: normalizePatchHiddenColumns(action.columns),
 			};
 		case "SET_BUILTIN_GROUPS_VISIBLE":
 			return action.window === "fixtures"

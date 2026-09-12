@@ -7,7 +7,12 @@ import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
 import { useDesktopBridge } from "../platform/desktop";
 import type { WindowProps } from "./windowTypes";
 
-export function PatchWindow({ active = true, patchView = "fixtures" }: WindowProps) {
+export function PatchWindow({
+	active = true,
+	compact = false,
+	patchView = "fixtures",
+	patchHiddenColumns,
+}: WindowProps) {
 	const [tab, setTab] = useState<"fixtures" | "media" | "tracking">(patchView);
 	return (
 		<PatchFeatureBoundary>
@@ -28,6 +33,8 @@ export function PatchWindow({ active = true, patchView = "fixtures" }: WindowPro
 			{tab === "fixtures" && (
 				<PatchWindowContent
 					active={active}
+					compact={compact}
+					hiddenColumns={patchHiddenColumns}
 					onMedia={() => setTab("media")}
 					onTracking={() => setTab("tracking")}
 				/>
@@ -38,10 +45,14 @@ export function PatchWindow({ active = true, patchView = "fixtures" }: WindowPro
 
 function PatchWindowContent({
 	active,
+	compact,
+	hiddenColumns,
 	onMedia,
 	onTracking,
 }: {
 	active: boolean;
+	compact: boolean;
+	hiddenColumns: WindowProps["patchHiddenColumns"];
 	onMedia: () => void;
 	onTracking: () => void;
 }) {
@@ -63,6 +74,8 @@ function PatchWindowContent({
 		<div className="patch-window">
 			<FixturePatchSetupContent
 				active={active}
+				compact={compact}
+				hiddenColumns={hiddenColumns}
 				onMedia={onMedia}
 				onTracking={onTracking}
 				onOpenStageWindow={desktop.available ? openStageRenderer : undefined}

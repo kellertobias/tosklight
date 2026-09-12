@@ -45,6 +45,11 @@ export type Action =
 				showType?: boolean;
 			};
 	  }
+	| {
+			type: "SET_PANE_PATCH_HIDDEN_COLUMNS";
+			id: string;
+			columns: AppState["patchHiddenColumns"];
+	  }
 	| { type: "SET_PANE_POOL_COLUMNS"; id: string; value: number }
 	| { type: "DISMISS_LAYOUT_MIGRATION_NOTICE" }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
@@ -196,6 +201,7 @@ export type Action =
 			showType?: boolean;
 			includedHeads?: AppState["fixtureSheetIncludedHeads"];
 	  }
+	| { type: "SET_PATCH_HIDDEN_COLUMNS"; columns: AppState["patchHiddenColumns"] }
 	| {
 			type: "SET_BUILTIN_GROUPS_VISIBLE";
 			window: "fixtures" | "presets";

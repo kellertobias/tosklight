@@ -3,6 +3,7 @@ import type {
 	ChannelDisplayMode,
 	FixtureSheetColumn,
 	FixtureSheetCompactMode,
+	PatchColumn,
 	StageView,
 	VisualizationRow,
 } from "../types";
@@ -21,6 +22,7 @@ export interface WindowProps {
 	fixtureSheetCueListId?: string | null;
 	fixtureSheetColumns?: FixtureSheetColumn[];
 	fixtureSheetShowType?: boolean;
+	patchHiddenColumns?: PatchColumn[];
 	showCueSidebar?: boolean;
 	cueListCompactRows?: boolean;
 	cueInformationBlock?: "off" | "current" | "next";

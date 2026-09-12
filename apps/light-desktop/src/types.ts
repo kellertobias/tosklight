@@ -145,6 +145,8 @@ export interface PaneModel extends GridRect {
 	fixtureSheetCueListId?: string;
 	fixtureSheetColumns?: FixtureSheetColumn[];
 	fixtureSheetShowType?: boolean;
+	/** Show Patch columns hidden in this pane; a column not listed is shown. */
+	patchHiddenColumns?: PatchColumn[];
 	showCueSidebar?: boolean;
 	cueListCompactRows?: boolean;
 	cueInformationBlock?: "off" | "current" | "next";
@@ -329,10 +331,35 @@ export interface AppState {
 	fixtureSheetColumns: FixtureSheetColumn[];
 	fixtureSheetShowType: boolean;
 	fixtureSheetIncludedHeads: FixtureSheetIncludedHeads;
+	patchHiddenColumns: PatchColumn[];
 	fixtureGroupsVisible: boolean;
 	presetGroupsVisible: boolean;
 	groupsReturnToStage: "builtin" | "desk" | null;
 }
+
+/** Every Show Patch column, in the order the table draws them. */
+export const PATCH_COLUMNS = [
+	{ id: "type", label: "Type" },
+	{ id: "fixture_id", label: "Fixture ID" },
+	{ id: "name", label: "Name" },
+	{ id: "fixture_mode", label: "Fixture / mode" },
+	{ id: "patch", label: "Patch" },
+	{ id: "masters", label: "Masters" },
+	{ id: "pan_tilt", label: "Pan / Tilt" },
+	{ id: "mib", label: "MIB" },
+	{ id: "light_source", label: "Light source" },
+	{ id: "location_x", label: "Location X" },
+	{ id: "location_y", label: "Location Y" },
+	{ id: "location_z", label: "Location Z" },
+	{ id: "rotation_x", label: "Rotation X" },
+	{ id: "rotation_y", label: "Rotation Y" },
+	{ id: "rotation_z", label: "Rotation Z" },
+	{ id: "footprint_width", label: "Footprint width" },
+	{ id: "footprint_height", label: "Footprint height" },
+	{ id: "footprint_depth", label: "Footprint depth" },
+	{ id: "layer", label: "Layer" },
+] as const;
+export type PatchColumn = (typeof PATCH_COLUMNS)[number]["id"];
 
 export type FixtureSheetOrder = "fixture-id" | "active";
 export type FixtureSheetIncludedHeads =
@@ -402,6 +429,8 @@ export interface WindowSettings {
 	/** Legacy layout fields retained only for migration. */
 	fixtureSheetShowSubheads?: boolean;
 	fixtureSheetShowMasterHeads?: boolean;
+	/** Absent in layouts saved before columns could be hidden, which show every column. */
+	patchHiddenColumns?: PatchColumn[];
 	fixtureGroupsVisible: boolean;
 	presetGroupsVisible: boolean;
 }

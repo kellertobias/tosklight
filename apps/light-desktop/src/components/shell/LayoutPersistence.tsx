@@ -50,6 +50,7 @@ function persistedWindowSettings(state: AppState) {
 		fixtureSheetColumns: state.fixtureSheetColumns,
 		fixtureSheetShowType: state.fixtureSheetShowType,
 		fixtureSheetIncludedHeads: state.fixtureSheetIncludedHeads,
+		patchHiddenColumns: state.patchHiddenColumns,
 		fixtureGroupsVisible: state.fixtureGroupsVisible,
 		presetGroupsVisible: state.presetGroupsVisible,
 	};
@@ -81,6 +82,9 @@ export function LayoutPersistence() {
 	const compactModesJson = JSON.stringify(
 		collectFixtureSheetCompactModes(state),
 	);
+	// Every persisted window setting, so one that is added to the layout is saved without also
+	// being listed here.
+	const windowSettingsJson = JSON.stringify(persistedWindowSettings(state));
 
 	useEffect(() => {
 		if (connection) saveDeskLayout.current = connection.saveDeskLayout;
@@ -169,42 +173,7 @@ export function LayoutPersistence() {
 	}, [
 		portableDesksSignature,
 		state.activeDeskId,
-		state.dockMode,
-		state.builtIn,
-		state.lastBuiltIn,
-		state.presetFamily,
-		state.presetPoolColors,
-		state.playbackColumns,
-		state.playbackRows,
-		state.playbackPage,
-		state.stageMode,
-		state.stageView,
-		state.stageZoom,
-		state.stagePanX,
-		state.stagePanY,
-		state.stageOrbitX,
-		state.stageOrbitY,
-		state.stageGroupsVisible,
-		state.stageShowSelection,
-		state.stageShowFloorGrid,
-		state.stageShowBeamGuides,
-		state.stage2dSide,
-		state.stageVizBackground,
-		state.stageVizQuality,
-		state.stageVizAtmosphere,
-		state.stageVizExposure,
-		state.stageVizLaserBrightness,
-		state.stageVizShowLabels,
-		state.stageEnvironmentBrightness,
-		state.dmxDotSize,
-		state.fixtureSheetOrder,
-		state.fixtureSheetActiveOnly,
-		state.fixtureSheetCueListId,
-		state.fixtureSheetColumns,
-		state.fixtureSheetShowType,
-		state.fixtureSheetIncludedHeads,
-		state.fixtureGroupsVisible,
-		state.presetGroupsVisible,
+		windowSettingsJson,
 		scope,
 		connection?.deskLayoutScope,
 	]);

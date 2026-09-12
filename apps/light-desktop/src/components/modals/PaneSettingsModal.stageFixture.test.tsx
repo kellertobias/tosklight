@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PaneModel } from "../../types";
 import {
 	FixtureSheetPaneSettings,
+	PatchPaneSettings,
 	StagePaneSettings,
 } from "./PaneSettingsModal";
 
@@ -128,6 +129,29 @@ describe("Fixture Sheet pane settings parity", () => {
 			type: "SET_PANE_FIXTURE_OPTIONS",
 			id: "fixtures-pane",
 			options: { columns: ["id", "name", "patch"] },
+		});
+	});
+});
+
+describe("Show Patch pane settings", () => {
+	it("switches one column at a time on this pane only", () => {
+		render(
+			<PatchPaneSettings pane={pane("patch", { patchHiddenColumns: ["mib"] })} />,
+		);
+		expect(screen.getByRole("switch", { name: /MIB/ })).not.toBeChecked();
+		expect(screen.getByRole("switch", { name: /Layer/ })).toBeChecked();
+
+		fireEvent.click(screen.getByRole("switch", { name: /Layer/ }));
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_PANE_PATCH_HIDDEN_COLUMNS",
+			id: "patch-pane",
+			columns: ["mib", "layer"],
+		});
+		fireEvent.click(screen.getByRole("switch", { name: /MIB/ }));
+		expect(mocks.dispatch).toHaveBeenLastCalledWith({
+			type: "SET_PANE_PATCH_HIDDEN_COLUMNS",
+			id: "patch-pane",
+			columns: [],
 		});
 	});
 });

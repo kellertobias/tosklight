@@ -9,6 +9,7 @@ import {
 	useState,
 } from "react";
 import type { PatchedFixture } from "../../../api/types";
+import type { PatchColumn } from "../../../types";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
 import { useStageLayoutActions } from "../../../features/stageLayout/StageLayoutActions";
@@ -84,6 +85,10 @@ export type FixturePatchSetupProps = {
 	stagePreviewClearance?: number;
 	onStagePreview?: () => void;
 	onOpenStageWindow?: () => void;
+	/** A pane: its own settings button owns the column choice, so the header has none. */
+	compact?: boolean;
+	/** The pane's hidden columns; the desk-wide choice applies when this is not a pane. */
+	hiddenColumns?: PatchColumn[];
 };
 
 function usePatchUiState() {
@@ -388,6 +393,12 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 			stagePreviewClearance: props.stagePreviewClearance ?? 0,
 			onStagePreview: props.onStagePreview,
 			onOpenStageWindow: props.onOpenStageWindow,
+			compact: props.compact ?? false,
+			hiddenColumns: new Set<PatchColumn>(
+				props.compact
+					? (props.hiddenColumns ?? [])
+					: (app.state.patchHiddenColumns ?? []),
+			),
 		},
 	};
 }

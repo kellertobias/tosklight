@@ -187,6 +187,7 @@ function PaneContent({
 				fixtureSheetCueListId={pane.fixtureSheetCueListId || undefined}
 				fixtureSheetColumns={pane.fixtureSheetColumns}
 				fixtureSheetShowType={pane.fixtureSheetShowType ?? true}
+				patchHiddenColumns={pane.patchHiddenColumns}
 				showCueSidebar={pane.showCueSidebar ?? true}
 				cueListCompactRows={pane.cueListCompactRows ?? false}
 				cueInformationBlock={pane.cueInformationBlock ?? "off"}

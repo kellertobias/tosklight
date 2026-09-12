@@ -1,3 +1,4 @@
+import { PATCH_COLUMNS } from "../types";
 import { describe, expect, it } from "vitest";
 import { createVisualizationWidget } from "../windows/visualizationPaneModel";
 import { appReducer, initialState } from "./appReducer";
@@ -1192,6 +1193,46 @@ describe("appReducer Fixture Sheet and preset pane migrations", () => {
 		expect(migrated.fixtureSheetColumns).toEqual(
 			initialState.fixtureSheetColumns,
 		);
+	});
+
+	it("stores hidden Show Patch columns for the desk and per pane, never hiding them all", () => {
+		const desk = appReducer(initialState, {
+			type: "SET_PATCH_HIDDEN_COLUMNS",
+			columns: ["layer", "masters", "layer"],
+		});
+		expect(desk.patchHiddenColumns).toEqual(["masters", "layer"]);
+		const everything = appReducer(desk, {
+			type: "SET_PATCH_HIDDEN_COLUMNS",
+			columns: PATCH_COLUMNS.map((column) => column.id),
+		});
+		expect(everything.patchHiddenColumns).toEqual([]);
+
+		const paned = appReducer(initialState, {
+			type: "SET_PANE_PATCH_HIDDEN_COLUMNS",
+			id: "fixtures",
+			columns: ["mib"],
+		});
+		expect(
+			paned.desks
+				.find((item) => item.id === paned.activeDeskId)
+				?.panes.find((pane) => pane.id === "fixtures")?.patchHiddenColumns,
+		).toEqual(["mib"]);
+		expect(paned.patchHiddenColumns).toEqual([]);
+
+		const legacy = appReducer(desk, {
+			type: "HYDRATE_LAYOUT",
+			desks: initialState.desks,
+			activeDeskId: initialState.activeDeskId,
+			windowSettings: {},
+		});
+		expect(legacy.patchHiddenColumns).toEqual([]);
+		const restored = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: initialState.desks,
+			activeDeskId: initialState.activeDeskId,
+			windowSettings: { patchHiddenColumns: ["name", "retired" as never] },
+		});
+		expect(restored.patchHiddenColumns).toEqual(["name"]);
 	});
 
 	it("persists preset family independently on a preset pane and migrates legacy panes", () => {

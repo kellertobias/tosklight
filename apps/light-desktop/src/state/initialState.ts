@@ -94,6 +94,7 @@ export const initialState: AppState = {
 		"focus",
 	],
 	fixtureSheetShowType: true,
+	patchHiddenColumns: [],
 	fixtureSheetIncludedHeads: "all",
 	fixtureGroupsVisible: true,
 	presetGroupsVisible: true,

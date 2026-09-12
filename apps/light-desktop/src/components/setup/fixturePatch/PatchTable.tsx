@@ -4,7 +4,8 @@ import {
 	sceneryOf,
 } from "./scenerySize";
 import { Button } from "@tosklight/ui";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
+import { PATCH_COLUMNS, type PatchColumn } from "../../../types";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
 import { isDmxPatchable, isInternal } from "../patchUtils";
 import { usePatchController } from "./controller";
@@ -39,27 +40,10 @@ import {
 	formatInstancePatch,
 } from "./patchModel";
 
-const columns = [
-	"Type",
-	"Fixture ID",
-	"Name",
-	"Fixture / mode",
-	"Patch",
-	"Masters",
-	"Pan / Tilt",
-	"MIB",
-	"Light source",
-	"Location X",
-	"Location Y",
-	"Location Z",
-	"Rotation X",
-	"Rotation Y",
-	"Rotation Z",
-	"Footprint width",
-	"Footprint height",
-	"Footprint depth",
-	"Layer",
-];
+/** Draws its cells only while their column is shown. */
+function Shown({ column, children }: { column: PatchColumn; children: ReactNode }) {
+	return usePatchController().props.hiddenColumns.has(column) ? null : children;
+}
 
 /**
  * A column header. A sortable one orders the table by its column: the first click ascending, the
@@ -97,8 +81,10 @@ export function PatchTable() {
 			<table className="patch-table">
 				<thead>
 					<tr>
-						{columns.map((column) => (
-							<PatchColumnHeader key={column} column={column} />
+						{PATCH_COLUMNS.filter(
+							({ id }) => !controller.props.hiddenColumns.has(id),
+						).map(({ id, label }) => (
+							<PatchColumnHeader key={id} column={label} />
 						))}
 					</tr>
 				</thead>
@@ -170,13 +156,25 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 			}}
 		>
 			<FixtureIdentityCells fixture={fixture} />
-			<FixturePatchCell fixture={fixture} />
-			<MastersCell fixture={fixture} />
-			<PanTiltCell fixture={fixture} />
-			<MibCell fixture={fixture} />
-			<LightSourceCell fixture={fixture} />
+			<Shown column="patch">
+				<FixturePatchCell fixture={fixture} />
+			</Shown>
+			<Shown column="masters">
+				<MastersCell fixture={fixture} />
+			</Shown>
+			<Shown column="pan_tilt">
+				<PanTiltCell fixture={fixture} />
+			</Shown>
+			<Shown column="mib">
+				<MibCell fixture={fixture} />
+			</Shown>
+			<Shown column="light_source">
+				<LightSourceCell fixture={fixture} />
+			</Shown>
 			<FixtureTransformCells fixture={fixture} />
-			<FixtureLayerCell fixture={fixture} />
+			<Shown column="layer">
+				<FixtureLayerCell fixture={fixture} />
+			</Shown>
 		</tr>
 	);
 }
@@ -185,10 +183,15 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
 	return (
 		<>
-			<td className="patch-type-cell">
-				<FixtureIcon definition={fixture.definition} />
-			</td>
-			<td>{fixtureDisplayId(fixture)}</td>
+			<Shown column="type">
+				<td className="patch-type-cell">
+					<FixtureIcon definition={fixture.definition} />
+				</td>
+			</Shown>
+			<Shown column="fixture_id">
+				<td>{fixtureDisplayId(fixture)}</td>
+			</Shown>
+			<Shown column="name">
 			<td>
 				<Button
 					className="patch-value"
@@ -202,7 +205,10 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 					{fixture.name || fixture.definition.name}
 				</Button>
 			</td>
-			<FixtureModeCell fixture={fixture} />
+			</Shown>
+			<Shown column="fixture_mode">
+				<FixtureModeCell fixture={fixture} />
+			</Shown>
 		</>
 	);
 }
@@ -306,7 +312,8 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 	return (
 		<>
 			{(["x", "y", "z"] as const).map((axis) => (
-				<td className="patch-secondary" key={`location-${axis}`}>
+				<Shown column={`location_${axis}`} key={`location-${axis}`}>
+				<td className="patch-secondary">
 					<Button
 						className="patch-value"
 						aria-label={`Location ${axis.toUpperCase()} ${fixtureDisplayId(fixture)}`}
@@ -325,9 +332,11 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 						{((fixture.location?.[axis] ?? 0) / 1000).toFixed(3)} m
 					</Button>
 				</td>
+				</Shown>
 			))}
 			{(["x", "y", "z"] as const).map((axis) => (
-				<td className="patch-secondary" key={`rotation-${axis}`}>
+				<Shown column={`rotation_${axis}`} key={`rotation-${axis}`}>
+				<td className="patch-secondary">
 					<Button
 						className="patch-value"
 						aria-label={`Rotation ${axis.toUpperCase()} ${fixtureDisplayId(fixture)}`}
@@ -346,6 +355,7 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 						{Number((fixture.rotation?.[axis] ?? 0).toFixed(3))}°
 					</Button>
 				</td>
+				</Shown>
 			))}
 			<FootprintCells fixture={fixture} />
 		</>
@@ -400,17 +410,18 @@ function FootprintCells({ fixture }: { fixture: PatchedFixture }) {
 		return (
 			<>
 				{SCENERY_AXES.map((axis) =>
-					scenery.adjustable[axis.axis] ? (
-						<MeasurementCell
-							key={axis.axis}
-							fixture={fixture}
-							edit={axis.edit}
-							label={axis.label}
-							metres={placed[axis.key]}
-						/>
-					) : (
-						<Fragment key={axis.axis}>{NO_MEASUREMENT}</Fragment>
-					),
+					<Shown key={axis.axis} column={`footprint_${axis.axis}`}>
+						{scenery.adjustable[axis.axis] ? (
+							<MeasurementCell
+								fixture={fixture}
+								edit={axis.edit}
+								label={axis.label}
+								metres={placed[axis.key]}
+							/>
+						) : (
+							NO_MEASUREMENT
+						)}
+					</Shown>
 				)}
 			</>
 		);
@@ -419,27 +430,31 @@ function FootprintCells({ fixture }: { fixture: PatchedFixture }) {
 	if (!crowd)
 		return (
 			<>
-				{NO_MEASUREMENT}
-				{NO_MEASUREMENT}
-				{NO_MEASUREMENT}
+				<Shown column="footprint_width">{NO_MEASUREMENT}</Shown>
+				<Shown column="footprint_height">{NO_MEASUREMENT}</Shown>
+				<Shown column="footprint_depth">{NO_MEASUREMENT}</Shown>
 			</>
 		);
 	const stored = controller.stagePositions3d[fixture.fixture_id];
 	return (
 		<>
-			<MeasurementCell
-				fixture={fixture}
-				edit="crowd_width"
-				label="Crowd width"
-				metres={stored?.crowdWidthMetres ?? crowd.default_width_metres}
-			/>
-			{NO_MEASUREMENT}
-			<MeasurementCell
-				fixture={fixture}
-				edit="crowd_depth"
-				label="Crowd depth"
-				metres={stored?.crowdDepthMetres ?? crowd.default_depth_metres}
-			/>
+			<Shown column="footprint_width">
+				<MeasurementCell
+					fixture={fixture}
+					edit="crowd_width"
+					label="Crowd width"
+					metres={stored?.crowdWidthMetres ?? crowd.default_width_metres}
+				/>
+			</Shown>
+			<Shown column="footprint_height">{NO_MEASUREMENT}</Shown>
+			<Shown column="footprint_depth">
+				<MeasurementCell
+					fixture={fixture}
+					edit="crowd_depth"
+					label="Crowd depth"
+					metres={stored?.crowdDepthMetres ?? crowd.default_depth_metres}
+				/>
+			</Shown>
 		</>
 	);
 }
@@ -497,12 +512,21 @@ function MultiPatchRow({
 				selectPatchFixture(controller, fixture, event);
 			}}
 		>
-			<td className="patch-tree-cell">
-				<MultiPatchBranch last={last} />
-			</td>
-			<td>—</td>
-			<td>—</td>
-			<FixtureModeCell fixture={fixture} shared />
+			<Shown column="type">
+				<td className="patch-tree-cell">
+					<MultiPatchBranch last={last} />
+				</td>
+			</Shown>
+			<Shown column="fixture_id">
+				<td>—</td>
+			</Shown>
+			<Shown column="name">
+				<td>—</td>
+			</Shown>
+			<Shown column="fixture_mode">
+				<FixtureModeCell fixture={fixture} shared />
+			</Shown>
+			<Shown column="patch">
 			<td>
 				{isDmxPatchable(fixture.definition) ? (
 					<Button
@@ -527,12 +551,46 @@ function MultiPatchRow({
 					<span>Not patchable</span>
 				)}
 			</td>
-			<MastersCell fixture={fixture} shared />
-			<PanTiltCell fixture={fixture} instance={instance} />
-			<MibCell fixture={fixture} shared />
-			<LightSourceCell fixture={fixture} instance={instance} />
+			</Shown>
+			<Shown column="masters">
+				<MastersCell fixture={fixture} shared />
+			</Shown>
+			<Shown column="pan_tilt">
+				<PanTiltCell fixture={fixture} instance={instance} />
+			</Shown>
+			<Shown column="mib">
+				<MibCell fixture={fixture} shared />
+			</Shown>
+			<Shown column="light_source">
+				<LightSourceCell fixture={fixture} instance={instance} />
+			</Shown>
+			<MultiPatchVectorCells fixture={fixture} instance={instance} />
+			<Shown column="footprint_width">{NO_MEASUREMENT}</Shown>
+			<Shown column="footprint_height">{NO_MEASUREMENT}</Shown>
+			<Shown column="footprint_depth">{NO_MEASUREMENT}</Shown>
+			<Shown column="layer">
+				<td className="patch-secondary">
+					<span>—</span>
+				</td>
+			</Shown>
+		</tr>
+	);
+}
+
+/** A multi-patch copy's own location and rotation, one cell per axis. */
+function MultiPatchVectorCells({
+	fixture,
+	instance,
+}: {
+	fixture: PatchedFixture;
+	instance: MultiPatchInstance;
+}) {
+	const controller = usePatchController();
+	return (
+		<>
 			{(["x", "y", "z"] as const).map((axis) => (
-				<td className="patch-secondary" key={`location-${axis}`}>
+				<Shown column={`location_${axis}`} key={`location-${axis}`}>
+				<td className="patch-secondary">
 					<Button
 						className="patch-value"
 						onClick={() =>
@@ -559,9 +617,11 @@ function MultiPatchRow({
 						{(instance.location[axis] / 1000).toFixed(3)} m
 					</Button>
 				</td>
+				</Shown>
 			))}
 			{(["x", "y", "z"] as const).map((axis) => (
-				<td className="patch-secondary" key={`rotation-${axis}`}>
+				<Shown column={`rotation_${axis}`} key={`rotation-${axis}`}>
+				<td className="patch-secondary">
 					<Button
 						className="patch-value"
 						onClick={() =>
@@ -588,13 +648,8 @@ function MultiPatchRow({
 						{Number(instance.rotation[axis].toFixed(3))}°
 					</Button>
 				</td>
+				</Shown>
 			))}
-			<td className="patch-secondary">—</td>
-			<td className="patch-secondary">—</td>
-			<td className="patch-secondary">—</td>
-			<td className="patch-secondary">
-				<span>—</span>
-			</td>
-		</tr>
+		</>
 	);
 }

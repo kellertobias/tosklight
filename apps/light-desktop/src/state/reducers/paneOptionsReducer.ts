@@ -1,3 +1,4 @@
+import { normalizePatchHiddenColumns } from "../reducerHelpers";
 import {
 	MAX_PLAYBACK_PAGE,
 	VIRTUAL_PLAYBACKS_PER_PAGE,
@@ -52,6 +53,11 @@ export function reducePaneOptions(
 				...(action.options.showType === undefined
 					? {}
 					: { fixtureSheetShowType: action.options.showType }),
+			}));
+		case "SET_PANE_PATCH_HIDDEN_COLUMNS":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				patchHiddenColumns: normalizePatchHiddenColumns(action.columns),
 			}));
 		case "SET_PANE_POOL_COLUMNS":
 			return updateActivePane(state, action.id, (pane) => ({

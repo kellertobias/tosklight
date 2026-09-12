@@ -3,7 +3,9 @@ import type {
 	BuiltInWindow,
 	FixtureSheetColumn,
 	GridRect,
+	PatchColumn,
 } from "../types";
+import { PATCH_COLUMNS } from "../types";
 
 export const clamp = (value: number, minimum: number, maximum: number) =>
 	Math.max(minimum, Math.min(maximum, value));
@@ -87,6 +89,18 @@ export const normalizeFixtureSheetColumns = (
 		);
 	}
 	return normalized?.length ? normalized : fallback;
+};
+
+/**
+ * Hidden Show Patch columns from a stored layout: unknown and repeated ids are dropped, and a list
+ * that would hide every column hides none, so the table can never be left empty.
+ */
+export const normalizePatchHiddenColumns = (value: unknown): PatchColumn[] => {
+	if (!Array.isArray(value)) return [];
+	const hidden = PATCH_COLUMNS.map((column) => column.id).filter((id) =>
+		value.includes(id),
+	);
+	return hidden.length < PATCH_COLUMNS.length ? hidden : [];
 };
 
 export const normalizeFixtureSheetCompactMode = (

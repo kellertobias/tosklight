@@ -1,16 +1,24 @@
 import { Button } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
+import { useState } from "react";
 import { usePatchController } from "./controller";
 import { selectLayer, setFixtureNumber } from "./fixtureActions";
 import { addMultipatch } from "./multipatchActions";
+import { PatchColumnSettings } from "./PatchColumnSettings";
 
 export function PatchHeader() {
 	const controller = usePatchController();
 	const { data, ui, server, appState, props } = controller;
 	const selected = data.selected;
+	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	return (
+		<>
 		<WindowHeader
 			title="Show Patch"
+			settings={!props.compact}
+			onSettings={(anchor) =>
+				setSettingsAnchor(anchor.getBoundingClientRect())
+			}
 			info={{
 				primary: `${data.all.length} fixtures · ${data.layers.length} layers`,
 				secondary:
@@ -100,6 +108,13 @@ export function PatchHeader() {
 				] },
 			]}
 		/>
+		{settingsAnchor ? (
+			<PatchColumnSettings
+				anchor={settingsAnchor}
+				onClose={() => setSettingsAnchor(null)}
+			/>
+		) : null}
+		</>
 	);
 }
 

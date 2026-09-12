@@ -2243,6 +2243,54 @@ describe("Crowd Area footprint editing", () => {
 	});
 });
 
+describe("Show Patch visible columns", () => {
+	afterEach(() => {
+		Object.assign(state, { patchHiddenColumns: [] });
+	});
+
+	const rowCells = () =>
+		document.querySelector<HTMLTableRowElement>(
+			'tr[data-fixture-id="fixture-split"]',
+		)?.cells.length;
+
+	it("leaves hidden columns out of the header and every row", () => {
+		Object.assign(state, { patchHiddenColumns: ["masters", "footprint_depth"] });
+		server.patch.fixtures = [splitFixture()];
+		render(<FixturePatchSetup />);
+
+		const headers = screen
+			.getAllByRole("columnheader")
+			.map((header) => header.getAttribute("aria-label") ?? header.textContent);
+		expect(headers).not.toContain("Masters");
+		expect(headers).not.toContain("Footprint depth");
+		expect(headers).toContain("Footprint height");
+		expect(headers).toHaveLength(17);
+		expect(rowCells()).toBe(17);
+	});
+
+	it("hides a column from the header settings", () => {
+		server.patch.fixtures = [splitFixture()];
+		render(<FixturePatchSetup />);
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		fireEvent.click(screen.getByRole("switch", { name: /Layer/ }));
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_PATCH_HIDDEN_COLUMNS",
+			columns: ["layer"],
+		});
+	});
+
+	it("uses a pane's own choice and leaves its settings to the pane", () => {
+		Object.assign(state, { patchHiddenColumns: ["name"] });
+		server.patch.fixtures = [splitFixture()];
+		render(<FixturePatchSetup compact hiddenColumns={["layer"]} />);
+
+		expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
+		expect(screen.getByRole("columnheader", { name: "Name" })).toBeVisible();
+		expect(screen.queryByRole("columnheader", { name: "Layer" })).toBeNull();
+		expect(rowCells()).toBe(18);
+	});
+});
+
 describe("DMX address grid dragging", () => {
 	it("fits whole touch cells into the available width", () => {
 		expect(dmxGridColumnCount(360)).toBe(7);
