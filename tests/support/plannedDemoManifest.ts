@@ -76,9 +76,9 @@ const PROFILES = {
 	acl: profile("Generic", "ACL", "8-bit", "generic--acl.toskfixture"),
 	blinder: profile(
 		"Generic",
-		"Blinder",
-		"Two channel, four blind",
-		"generic--blinder.toskfixture",
+		"Blinder 4",
+		"Two channel",
+		"generic--blinder-4.toskfixture",
 	),
 	hazer: profile("Generic", "Hazer", "Fan, Fog", "generic--hazer.toskfixture"),
 	mediaServer: profile(

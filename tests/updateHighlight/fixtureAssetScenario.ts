@@ -69,7 +69,7 @@ async function prepareFixtureAssets({ api, bench }: FixtureAssetContext) {
 		`${bench.dataDir}/shows/${files.photoA}`,
 	);
 	await extractFixtureAsset(
-		"generic--blinder.toskfixture",
+		"generic--blinder-4.toskfixture",
 		"assets/photograph.png",
 		`${bench.dataDir}/shows/${files.photoB}`,
 	);

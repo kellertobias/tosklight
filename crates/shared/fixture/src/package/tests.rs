@@ -281,45 +281,50 @@ fn compatibility_profile(filename: &str) -> FixtureProfile {
 
 #[test]
 fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
-    let blinder = shipped_profile("generic--blinder.toskfixture");
-    assert_eq!(
-        blinder
-            .modes
-            .iter()
-            .map(|mode| mode.name.as_str())
-            .collect::<Vec<_>>(),
-        [
-            "One channel, two blind",
-            "Two channel, two blind",
-            "One channel, four blind",
-            "Two channel, four blind",
-            "One channel, eight blind",
-            "Two channel, eight blind",
-            "Four channel, eight blind",
-        ]
-    );
-    for mode in &blinder.modes {
-        assert!(mode.heads.iter().all(|head| !head.master_shared));
-        assert_eq!(mode.heads.len(), mode.channels.len());
-        assert_eq!(mode.splits[0].footprint as usize, mode.heads.len());
-        assert!(mode.channels.iter().all(|channel| {
-            channel.attribute.is_intensity()
-                && channel.resolution == ChannelResolution::U8
-                && channel.highlight_raw == 255
-        }));
-        assert!(mode.geometry.emitters.iter().all(|emitter| {
+    // Three fixtures, each with the personalities that lamp count actually has.
+    for (file, modes) in [
+        (
+            "generic--blinder-2.toskfixture",
+            vec!["One channel", "Two channel"],
+        ),
+        (
+            "generic--blinder-4.toskfixture",
+            vec!["One channel", "Two channel"],
+        ),
+        (
+            "generic--blinder-8.toskfixture",
+            vec!["One channel", "Two channel", "Four channel"],
+        ),
+    ] {
+        let blinder = shipped_profile(file);
+        assert_eq!(
+            blinder
+                .modes
+                .iter()
+                .map(|mode| mode.name.as_str())
+                .collect::<Vec<_>>(),
+            modes,
+            "{file}"
+        );
+        assert!(blinder.geometry.emitters.iter().all(|emitter| {
             !emitter.directional
                 && emitter.orientation_degrees.x == 90.0
                 && emitter.origin.z == -126.0
                 && matches!(emitter.layout, EmitterLayout::ExplicitPixels { .. })
         }));
+        for mode in &blinder.modes {
+            assert!(mode.heads.iter().all(|head| !head.master_shared));
+            assert_eq!(mode.heads.len(), mode.channels.len());
+            assert_eq!(mode.splits[0].footprint as usize, mode.heads.len());
+            assert!(mode.channels.iter().all(|channel| {
+                channel.attribute.is_intensity()
+                    && channel.resolution == ChannelResolution::U8
+                    && channel.highlight_raw == 255
+            }));
+        }
     }
-    let demo_blinder = blinder
-        .modes
-        .iter()
-        .find(|mode| mode.name == "Two channel, four blind")
-        .unwrap();
-    let lens_centres = demo_blinder
+    // The four-lamp grid is the one the demo show is built on, and it did not move in the split.
+    let lens_centres = shipped_profile("generic--blinder-4.toskfixture")
         .geometry
         .emitters
         .iter()
@@ -2932,7 +2937,6 @@ fn the_shipped_library_reports_which_fixtures_still_carry_geometry_per_mode() {
         [
             "cameo--q-spot-40-tw.toskfixture",
             "generic--acl.toskfixture",
-            "generic--blinder.toskfixture",
             "generic--dimmer-fresnel.toskfixture",
             "jb-lighting--jbled-a7.toskfixture",
             "robe--robin-300-ledwash.toskfixture",
@@ -2954,4 +2958,61 @@ fn the_shipped_library_reports_which_fixtures_still_carry_geometry_per_mode() {
         ],
         "a fixture left this list, or a new one arrived carrying a graph per mode"
     );
+}
+
+/// The Blinder was one profile whose modes were three different physical fixtures: a two-lamp bar
+/// and a four cannot be the same lantern in two personalities. Split, each has its own geometry
+/// and its modes are only groupings of the lamps that fixture actually has.
+#[test]
+fn split_blinders_carry_one_geometry_and_bind_every_lamp() {
+    for (file, lamps, modes) in [
+        (
+            "generic--blinder-2.toskfixture",
+            2usize,
+            vec![("One channel", 1usize), ("Two channel", 2)],
+        ),
+        (
+            "generic--blinder-4.toskfixture",
+            4,
+            vec![("One channel", 1), ("Two channel", 2)],
+        ),
+        (
+            "generic--blinder-8.toskfixture",
+            8,
+            vec![("One channel", 1), ("Two channel", 2), ("Four channel", 4)],
+        ),
+    ] {
+        let profile = shipped_profile(file);
+        assert_eq!(profile.geometry.emitters.len(), lamps, "{file}");
+        assert!(
+            profile
+                .modes
+                .iter()
+                .all(|mode| mode.geometry.nodes.is_empty()),
+            "{file}"
+        );
+        assert_eq!(
+            profile
+                .modes
+                .iter()
+                .map(|mode| (mode.name.as_str(), mode.heads.len()))
+                .collect::<Vec<_>>(),
+            modes,
+            "{file}"
+        );
+        for mode in &profile.modes {
+            let bound = profile.mode_geometry(mode);
+            assert_eq!(bound.emitters.len(), lamps, "{file} {}", mode.name);
+            let heads: std::collections::HashSet<_> =
+                bound.emitters.iter().filter_map(|e| e.head_id).collect();
+            assert_eq!(heads.len(), mode.heads.len(), "{file} {}", mode.name);
+            assert_eq!(
+                mode.splits[0].footprint as usize,
+                mode.heads.len(),
+                "{file} {}",
+                mode.name
+            );
+        }
+        profile.validate().unwrap();
+    }
 }

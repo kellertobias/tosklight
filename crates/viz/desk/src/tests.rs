@@ -429,7 +429,7 @@ fn a_multi_head_bar_produces_one_emitter_per_head() {
 /// a continuous glowing tube, which is not what either of these fixtures looks like switched on.
 #[test]
 fn a_shipped_lamp_bank_lights_up_as_round_lamps_that_do_not_run_into_each_other() {
-    for package in ["generic--blinder", "showtec--sunstrip-active-dmx"] {
+    for package in ["generic--blinder-4", "showtec--sunstrip-active-dmx"] {
         let plan = scene_build::build(&models(
             shipped_profile(package),
             StageLayoutBody::default(),
