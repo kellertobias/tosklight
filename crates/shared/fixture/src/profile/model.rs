@@ -293,45 +293,103 @@ struct FixtureProfileCanonical {
 /// a blinder family whose modes are different physical fixtures, a curtain whose modes are its
 /// widths — and they are resolved by reworking the fixture, not by a reader picking one mode's
 /// geometry and discarding the rest.
+/// What a node or emitter is, with nothing that only says which mode wrote it.
+///
+/// Identifiers were regenerated per mode by the authoring that produced these profiles, so two
+/// modes describing the same part of the same lantern say so in every field but the UUID. Parents
+/// are compared by their position in the list, which is the same information without the identity.
+fn geometry_content(graph: &GeometryGraph) -> (Vec<String>, Vec<String>) {
+    let position =
+        |id: Option<Uuid>| id.and_then(|id| graph.nodes.iter().position(|node| node.id == id));
+    let nodes = graph
+        .nodes
+        .iter()
+        .map(|node| {
+            let mut value = serde_json::to_value(node).unwrap_or_default();
+            if let Some(object) = value.as_object_mut() {
+                object.remove("id");
+                object.insert(
+                    "parent_id".into(),
+                    serde_json::json!(position(node.parent_id)),
+                );
+            }
+            value.to_string()
+        })
+        .collect();
+    let emitters = graph
+        .emitters
+        .iter()
+        .map(|emitter| {
+            let mut value = serde_json::to_value(emitter).unwrap_or_default();
+            if let Some(object) = value.as_object_mut() {
+                object.remove("id");
+                object.remove("head_id");
+                object.insert(
+                    "node_id".into(),
+                    serde_json::json!(position(Some(emitter.node_id))),
+                );
+            }
+            value.to_string()
+        })
+        .collect();
+    (nodes, emitters)
+}
+
+/// Lift geometry from the modes to the fixture, where a profile's modes agree about it.
+///
+/// A lantern has one set of parts, axes and emitters; a personality only decides which of its
+/// heads drives which of them. Profiles written before that carry a whole graph per mode, and
+/// almost all of them describe the same lantern in each — some identically, and some with a mode
+/// that adds parts the others leave out, which is a personality driving more of the same fixture
+/// rather than a different fixture. The fullest graph is the lantern, and the rest have to be
+/// prefixes of it to qualify.
+///
+/// Where the graphs genuinely disagree the profile is left as it was. Those are real differences —
+/// a curtain whose modes are its widths — and they are resolved by reworking the fixture, not by a
+/// reader picking one mode's geometry and discarding the rest.
 fn lift_geometry_to_the_fixture(profile: &mut FixtureProfile) {
     if !profile.geometry.nodes.is_empty() || profile.modes.is_empty() {
         return;
     }
-    let shape = |graph: &GeometryGraph| {
-        (
-            graph
-                .nodes
-                .iter()
-                .map(|node| serde_json::to_string(node).unwrap_or_default())
-                .collect::<Vec<_>>(),
-            graph
-                .emitters
-                .iter()
-                .map(|emitter| {
-                    let mut without_head = emitter.clone();
-                    without_head.head_id = None;
-                    serde_json::to_string(&without_head).unwrap_or_default()
-                })
-                .collect::<Vec<_>>(),
-        )
-    };
-    let first = shape(&profile.modes[0].geometry);
-    if profile
+    let contents = profile
         .modes
         .iter()
-        .any(|mode| shape(&mode.geometry) != first)
-    {
+        .map(|mode| geometry_content(&mode.geometry))
+        .collect::<Vec<_>>();
+    let Some(fullest) = (0..contents.len()).max_by_key(|index| {
+        (
+            contents[*index].0.len(),
+            contents[*index].1.len(),
+            usize::MAX - index,
+        )
+    }) else {
+        return;
+    };
+    let (nodes, emitters) = &contents[fullest];
+    let prefix_of = |part: &[String], whole: &[String]| whole.starts_with(part);
+    if contents.iter().any(|(mode_nodes, mode_emitters)| {
+        !prefix_of(mode_nodes, nodes) || !prefix_of(mode_emitters, emitters)
+    }) {
         return;
     }
-    let mut lifted = profile.modes[0].geometry.clone();
+
+    let mut lifted = profile.modes[fullest].geometry.clone();
+    let lifted_emitters = lifted
+        .emitters
+        .iter()
+        .map(|emitter| emitter.id)
+        .collect::<Vec<_>>();
     for mode in &mut profile.modes {
+        // A mode's emitters are the first n of the fixture's, so position carries the identity
+        // across from whichever mode happened to be written with which UUID.
         mode.emitter_heads = mode
             .geometry
             .emitters
             .iter()
-            .filter_map(|emitter| {
+            .enumerate()
+            .filter_map(|(index, emitter)| {
                 Some(EmitterHeadBinding {
-                    emitter_id: emitter.id,
+                    emitter_id: *lifted_emitters.get(index)?,
                     head_id: emitter.head_id?,
                 })
             })

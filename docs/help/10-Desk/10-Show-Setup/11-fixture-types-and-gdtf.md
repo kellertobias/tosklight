@@ -137,9 +137,15 @@ mode binds its heads to the emitters described there.
 
 A profile written before this carried a whole graph on each mode. Reading one moves the graph to
 the fixture and leaves the head each emitter named behind as that mode's binding, so nothing an
-operator authored is lost and no show needs repatching. Where a profile's modes genuinely describe
-different geometry — a blinder family whose modes are different physical fixtures, a curtain whose
-modes are its widths — the profile is left exactly as it was until that fixture is reworked.
+operator authored is lost and no show needs repatching. Modes are compared by what they describe
+rather than by the identifiers they were written with, and a mode that adds parts the others leave
+out — a wash whose zone personalities drive four heads where its plain ones drive one — is read as
+that personality driving more of the same lantern.
+
+Where a profile's modes genuinely describe different geometry the profile is left exactly as it
+was. The Venue objects are the remaining case: a curtain's modes are its widths and a truss's are
+its lengths, so nothing can reconcile them into one lantern. Those are for geometry generated from
+the size an operator patches.
 
 Choose a suitable fixture geometry and use the preview to confirm the Stage appearance. Detailed
 model hierarchy, emitter, pivot, and projection authoring is fixture-developer documentation.

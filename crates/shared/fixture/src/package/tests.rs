@@ -476,21 +476,27 @@ fn stage_lamp_packages_leave_body_models_to_visualizer_defaults() {
     assert_eq!(acl.physical.depth_millimetres, Some(200.0));
     assert!(acl.model_asset.is_none());
     assert!(acl.projection_assets.is_none());
-    assert!(acl.modes.iter().all(|mode| {
-        mode.geometry.nodes.len() == 1
-            && mode.geometry.nodes[0].glb_node.as_deref() == Some("acl-body")
-            && mode.geometry.emitters.len() == 1
-            && mode.geometry.emitters[0].origin.y == -192.0
-    }));
+    assert_eq!(acl.geometry.nodes.len(), 1);
+    assert_eq!(acl.geometry.nodes[0].glb_node.as_deref(), Some("acl-body"));
+    assert_eq!(acl.geometry.emitters.len(), 1);
+    assert_eq!(acl.geometry.emitters[0].origin.y, -192.0);
+    assert!(
+        acl.modes
+            .iter()
+            .all(|mode| { acl.mode_geometry(mode).emitters.len() == 1 })
+    );
 
     let fresnel = shipped_profile("generic--dimmer-fresnel.toskfixture");
     assert_eq!(fresnel.model_units, ModelUnits::Metres);
+    assert_eq!(fresnel.geometry.nodes.len(), 1);
+    assert_eq!(
+        fresnel.geometry.nodes[0].glb_node.as_deref(),
+        Some("fresnel-body")
+    );
     assert!(fresnel.modes.iter().all(|mode| {
-        mode.geometry.nodes.len() == 1
-            && mode.geometry.nodes[0].glb_node.as_deref() == Some("fresnel-body")
-            && mode.geometry.emitters.len() == 1
-            && mode.geometry.emitters[0].origin.y == -694.0
-            && mode.geometry.emitters[0].orientation_degrees == crate::Vector3::default()
+        fresnel.mode_geometry(mode).emitters.len() == 1
+            && fresnel.geometry.emitters[0].origin.y == -694.0
+            && fresnel.geometry.emitters[0].orientation_degrees == crate::Vector3::default()
     }));
 
     for filename in [
@@ -939,25 +945,36 @@ fn assert_moving_lamp_geometry(filename: &str) {
     assert_eq!(mover.model_units, ModelUnits::Metres);
     assert!(mover.model_asset.is_none());
     assert!(mover.projection_assets.is_none());
-    assert!(mover.modes.iter().all(|mode| {
-        mode.geometry.nodes.len() == 3
-            && mode.geometry.nodes[0].glb_node.as_deref() == Some("moving-base")
-            && mode.geometry.nodes[1].glb_node.as_deref() == Some("moving-yoke")
-            && mode.geometry.nodes[2].glb_node.as_deref() == Some("moving-head")
-            && mode.geometry.nodes[0].motion.is_none()
-            && mode.geometry.nodes[1]
-                .motion
-                .as_ref()
-                .is_some_and(|motion| *motion.attribute.0 == *"pan")
-            && mode.geometry.nodes[2]
-                .motion
-                .as_ref()
-                .is_some_and(|motion| *motion.attribute.0 == *"tilt")
-            && mode.geometry.nodes[2].transform.translation.y < 0.0
-            && mode.geometry.emitters.len() == 1
-            && mode.geometry.emitters[0].node_id == mode.geometry.nodes[2].id
-            && mode.geometry.emitters[0].origin.y < 0.0
-    }));
+    // The yoke belongs to the lantern, so it is read from the fixture; each mode only says which
+    // of its heads the emitter on the head node belongs to.
+    let nodes = &mover.geometry.nodes;
+    assert_eq!(nodes.len(), 3);
+    assert_eq!(nodes[0].glb_node.as_deref(), Some("moving-base"));
+    assert_eq!(nodes[1].glb_node.as_deref(), Some("moving-yoke"));
+    assert_eq!(nodes[2].glb_node.as_deref(), Some("moving-head"));
+    assert!(nodes[0].motion.is_none());
+    assert!(
+        nodes[1]
+            .motion
+            .as_ref()
+            .is_some_and(|motion| *motion.attribute.0 == *"pan")
+    );
+    assert!(
+        nodes[2]
+            .motion
+            .as_ref()
+            .is_some_and(|motion| *motion.attribute.0 == *"tilt")
+    );
+    assert!(nodes[2].transform.translation.y < 0.0);
+    assert_eq!(mover.geometry.emitters.len(), 1);
+    assert_eq!(mover.geometry.emitters[0].node_id, nodes[2].id);
+    assert!(mover.geometry.emitters[0].origin.y < 0.0);
+    assert!(
+        mover
+            .modes
+            .iter()
+            .all(|mode| mover.mode_geometry(mode).emitters.len() == 1)
+    );
 }
 
 #[test]
@@ -2924,24 +2941,13 @@ fn the_shipped_library_reports_which_fixtures_still_carry_geometry_per_mode() {
         }
     }
     still_per_mode.sort();
-    // Three groups, each waiting on a different piece of work:
-    //
-    // * the Venue objects, whose modes are their measurements — a curtain's modes are its widths
-    //   and a truss's are its lengths. These are for parametric geometry driven by the patch;
-    // * the families whose modes are really different physical fixtures, the Blinder above all,
-    //   which want splitting into separate profiles;
-    // * the rest, whose modes differ only in how their channels reach the same emitters, and
-    //   which the binding table can already express once each is remapped.
+    // What is left is the Venue objects, whose modes are their measurements: a curtain's modes are
+    // its widths and a truss's are its lengths, so their graphs genuinely differ and no reader can
+    // reconcile them. These are for geometry generated from the size the operator patches, not for
+    // the lift.
     assert_eq!(
         still_per_mode,
         [
-            "cameo--q-spot-40-tw.toskfixture",
-            "generic--acl.toskfixture",
-            "generic--dimmer-fresnel.toskfixture",
-            "jb-lighting--jbled-a7.toskfixture",
-            "robe--robin-300-ledwash.toskfixture",
-            "robe--robin-600x-ledwash.toskfixture",
-            "robe--robin-dls-profile.toskfixture",
             "venue--curtain-1-m.toskfixture",
             "venue--curtain-2-m.toskfixture",
             "venue--curtain-3-m.toskfixture",
