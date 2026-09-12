@@ -50,6 +50,8 @@ async function prepareFixtureAssets({ api, bench }: FixtureAssetContext) {
 		depth_millimetres: 310,
 		weight_kilograms: 24.5,
 		power_watts: 720,
+	};
+	const optics = {
 		color_temperature_kelvin: 6500,
 		luminous_output_lumens: 18500,
 		beam_angle_degrees: 36,
@@ -99,7 +101,15 @@ async function prepareFixtureAssets({ api, bench }: FixtureAssetContext) {
 		modelA: `data:application/octet-stream;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.modelA}`)).toString("base64")}`,
 		modelB: `data:application/octet-stream;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.modelB}`)).toString("base64")}`,
 	};
-	return { manufacturer, name, physical, files, expectedAssets, modelSummaries };
+	return {
+		manufacturer,
+		name,
+		physical,
+		optics,
+		files,
+		expectedAssets,
+		modelSummaries,
+	};
 }
 
 type FixtureAssetData = Awaited<ReturnType<typeof prepareFixtureAssets>>;
@@ -108,7 +118,7 @@ async function openConfiguredProfileEditor(
 	{ desk, bench, page }: FixtureAssetContext,
 	data: FixtureAssetData,
 ): Promise<Locator> {
-	const { manufacturer, name, physical } = data;
+	const { manufacturer, name, physical, optics } = data;
 	await desk.open(bench.baseUrl);
 	await page.getByRole("button", { name: /Open show menu/ }).click();
 	await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
@@ -126,15 +136,16 @@ async function openConfiguredProfileEditor(
 	await editor
 		.getByLabel("Fixture notes")
 		.fill("Complete Generic asset and physical metadata acceptance fixture.");
+	await editor.getByRole("tab", { name: "Simulation" }).click();
 	for (const [label, value] of [
 		["Width (mm)", physical.width_millimetres],
 		["Height (mm)", physical.height_millimetres],
 		["Depth (mm)", physical.depth_millimetres],
 		["Weight (kg)", physical.weight_kilograms],
 		["Power consumption (W)", physical.power_watts],
-		["Color temperature (K)", physical.color_temperature_kelvin],
-		["Luminous output (lm)", physical.luminous_output_lumens],
-		["Beam angle (degrees)", physical.beam_angle_degrees],
+		["Color temperature (K)", optics.color_temperature_kelvin],
+		["Luminous output (lm)", optics.luminous_output_lumens],
+		["Beam angle (degrees)", optics.beam_angle_degrees],
 	] as const)
 		await editor.getByLabel(label, { exact: true }).fill(String(value));
 	await expect(editor.getByLabel("Connectors", { exact: true })).toHaveCount(0);
@@ -143,6 +154,7 @@ async function openConfiguredProfileEditor(
 		editor.getByLabel("Color rendering index (CRI)", { exact: true }),
 	).toHaveCount(0);
 	await expect(editor.getByLabel("Lens", { exact: true })).toHaveCount(0);
+	await editor.getByRole("tab", { name: "Identity" }).click();
 	const assetColumns = editor.locator(".fixture-notes-assets > div");
 	await expect(assetColumns).toHaveCount(3);
 	await expect(
@@ -247,7 +259,7 @@ async function loadCreatedProfile(
 	api: FixtureAssetContext["api"],
 	data: FixtureAssetData,
 ) {
-	const { manufacturer, name, physical, expectedAssets } = data;
+	const { manufacturer, name, physical, optics, expectedAssets } = data;
 	const profile = (
 		(await api.fixtureLibrarySnapshot()).profiles as any[]
 	).find(
@@ -261,6 +273,7 @@ async function loadCreatedProfile(
 		stage_icon_asset: expectedAssets.icon,
 		model_asset: expectedAssets.modelB,
 		physical,
+		optics,
 	});
 	return profile;
 }
@@ -271,19 +284,22 @@ async function createProfileRevision(
 	editor: Locator,
 	profile: any,
 ) {
-	const { manufacturer, name, files, expectedAssets, physical } = data;
+	const { manufacturer, name, files, expectedAssets, physical, optics } = data;
 	await page
 		.getByPlaceholder("Search manufacturer, fixture, mode, or type")
 		.fill(manufacturer);
 	await page.getByRole("button", { name: new RegExp(name) }).click();
 	await page.getByRole("button", { name: "Edit fixture", exact: true }).click();
 	editor = page.getByRole("dialog", { name: "Edit fixture profile" });
+	await editor.getByRole("tab", { name: "Simulation" }).click();
 	await expect(editor.getByLabel("Width (mm)", { exact: true })).toHaveValue(
 		"420",
 	);
 	await expect(editor.getByLabel("Color temperature (K)")).toHaveValue("6500");
 	await expect(editor.getByLabel("Luminous output (lm)")).toHaveValue("18500");
 	await expect(editor.getByLabel("Beam angle (degrees)")).toHaveValue("36");
+	await editor.getByLabel("Beam angle (degrees)").fill("42");
+	await editor.getByRole("tab", { name: "Identity" }).click();
 	await expect(editor.getByAltText("Fixture photograph preview")).toHaveCount(
 		0,
 	);
@@ -292,8 +308,6 @@ async function createProfileRevision(
 	await expect(editor.getByRole("status")).toContainText(
 		data.modelSummaries.b,
 	);
-
-	await editor.getByLabel("Beam angle (degrees)").fill("42");
 	await editor
 		.getByRole("button", { name: "Choose photograph", exact: true })
 		.click();
@@ -320,13 +334,14 @@ async function createProfileRevision(
 		photograph_asset: null,
 		stage_icon_asset: expectedAssets.icon,
 		model_asset: expectedAssets.modelB,
-		physical: { beam_angle_degrees: 36 },
+		optics: { beam_angle_degrees: 36 },
 	});
 	expect(revisions[1]).toMatchObject({
 		photograph_asset: expectedAssets.photoA,
 		stage_icon_asset: expectedAssets.icon,
 		model_asset: expectedAssets.modelA,
-		physical: { ...physical, beam_angle_degrees: 42 },
+		physical,
+		optics: { ...optics, beam_angle_degrees: 42 },
 	});
 	return revisions;
 }
@@ -368,6 +383,6 @@ async function patchProfileAndRestart(
 	const reopened = await object<any>(api, "patched_fixture", fixture.id);
 	expect(reopened.body.definition.profile_snapshot).toMatchObject(revisions[1]);
 	expect(
-		reopened.body.definition.profile_snapshot.physical.beam_angle_degrees,
+		reopened.body.definition.profile_snapshot.optics.beam_angle_degrees,
 	).toBe(42);
 }

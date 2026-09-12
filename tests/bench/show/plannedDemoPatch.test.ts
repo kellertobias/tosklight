@@ -12,7 +12,7 @@ const footprintByName: Record<string, number> = {
 	"Dimmer PAR Can": 1,
 	"Sunstrip LED RGB 42206": 30,
 	ACL: 1,
-	Blinder: 2,
+	"Blinder 4": 2,
 	Hazer: 2,
 	"Media Server": 75,
 	"Visualizer Laser": 12,
@@ -79,12 +79,11 @@ describe("overall demo show patch builder", () => {
 			for (const instance of [fixture, ...fixture.multipatch]) {
 				for (const split of instance.split_patches) {
 					if (split.universe == null) continue;
-					const footprint =
-						footprintByName[
-							PLANNED_DEMO_FIXTURES.find(
-								(entry) => entry.number === fixture.fixture_number,
-							)!.profile.name
-						];
+					const name = PLANNED_DEMO_FIXTURES.find(
+						(entry) => entry.number === fixture.fixture_number,
+					)!.profile.name;
+					const footprint = footprintByName[name];
+					expect(footprint, `${name} has no footprint here`).toBeDefined();
 					for (let offset = 0; offset < footprint; offset++) {
 						const slot = `${split.universe}:${split.address + offset}`;
 						expect(occupied.has(slot)).toBe(false);
