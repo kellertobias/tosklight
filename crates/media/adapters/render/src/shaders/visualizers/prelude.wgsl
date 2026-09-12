@@ -29,8 +29,8 @@ struct Visualizer {
 };
 
 @group(0) @binding(0) var<uniform> visualizer: Visualizer;
-// Row 0 is the 512-point waveform. Row 1 holds the 64 spectrum bands in its first texels, and the
-// 64 held levels in the texels after them.
+// Row 0 is the 512-point waveform. Row 1 holds the 64 spectrum bands in its first texels, the 64
+// held levels in the texels after them, and then the three accumulated tone turns.
 @group(0) @binding(1) var analysis: texture_2d<f32>;
 
 const WAVEFORM_POINTS: i32 = 512;
@@ -105,6 +105,20 @@ fn band_held_at(position: f32) -> f32 {
     let scaled = clamp(position, 0.0, 1.0) * f32(BANDS - 1);
     let low = i32(floor(scaled));
     return mix(band_held(low), band_held(low + 1), fract(scaled));
+}
+
+/// How far bass, mid and treble have each carried an animation, in turns.
+///
+/// Time that only passes while there is sound to make it pass. Each tone advances at a rate set by
+/// how loud it is against the other two, scaled by `speed`, so a phase driven from this moves
+/// because of the music rather than merely alongside it -- and in a silent room it stops. Use it
+/// in place of `seconds` wherever an animation should be the music's doing and not the clock's.
+fn tone_turns() -> vec3<f32> {
+    return vec3<f32>(
+        textureLoad(analysis, vec2<i32>(BANDS * 2, 1), 0).x,
+        textureLoad(analysis, vec2<i32>(BANDS * 2 + 1, 1), 0).x,
+        textureLoad(analysis, vec2<i32>(BANDS * 2 + 2, 1), 0).x,
+    );
 }
 
 /// One waveform sample, `-1..1`.

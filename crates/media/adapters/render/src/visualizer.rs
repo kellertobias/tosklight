@@ -203,38 +203,67 @@ const REFERENCE_FALL: f32 = 6.0;
 /// is their difference that an operator actually sees.
 const DECAY_FALL: std::ops::RangeInclusive<f32> = 0.10..=3.0;
 
+/// Turns per second a tone carries an animation while it is at full level.
+///
+/// This is the exchange rate between sound and motion. A visualizer reading the published turns
+/// moves only while there is something moving it, so this says what a beat is worth rather than
+/// what a second is worth.
+const TURNS_PER_SECOND: f32 = 0.05;
+
+/// What the shaders are given about how the music has been going.
+struct Memory {
+    /// Each band's held level as a share, `0..=1`, low frequency first.
+    held: Vec<f32>,
+    /// How far bass, mid and treble have each carried an animation, in turns.
+    turns: [f32; 3],
+}
+
 /// A visualizer's memory of what the music has just done.
 ///
-/// A shader sees one frame and has nowhere to keep anything, so a response that outlasts the
-/// sound that triggered it has to be kept here. Each band rises to its magnitude at once and falls
-/// back at the rate the visualizer's `decay` asks for, which is what turns a bass hit into
-/// something that stands up and then subsides rather than a flicker.
+/// A shader sees one frame and has nowhere to keep anything, so anything that outlasts the sound
+/// that caused it has to be kept here. Two things do. Each band rises to its magnitude at once and
+/// falls back at the rate the visualizer's `decay` asks for, which is what turns a bass hit into
+/// something that stands up and then subsides rather than a flicker. And each tone accumulates
+/// turns while it has something in it, which is what lets a visualizer move *because* of the music
+/// rather than merely alongside it: in a silent room the turns stop, and so does the picture.
 ///
-/// One of these per layer, because `decay` belongs to the configured visualizer, not to the room.
+/// One of these per layer, because `decay` and `speed` belong to the configured visualizer, not to
+/// the room.
 #[derive(Debug, Clone)]
-struct BandEnvelope {
+struct AudioMemory {
     /// Per-band peak-hold, low frequency first.
     held: Vec<f32>,
+    /// Peak-held bass, mid and treble, on the analyser's own 250 Hz and 4 kHz split.
+    tones: [f32; 3],
     /// The loudest band heard lately, falling far more slowly than the bands do. Everything is
     /// published as a share of this, so a held band sinks as it falls back instead of being
     /// renormalised to full height every frame, and nothing depends on how somebody set their
     /// input gain.
     reference: f32,
+    /// The same, for the three tones. Separate because they are means over a range rather than
+    /// single bands and so do not share a scale with them; one reference across all three, because
+    /// which tone is loudest is exactly what has to survive.
+    tone_reference: f32,
+    /// Accumulated turns per tone. Only ever goes forward.
+    turns: [f32; 3],
     /// When this was last advanced, on the same clock the frame carries.
     seconds: Option<f32>,
 }
 
-impl BandEnvelope {
+impl AudioMemory {
     fn new() -> Self {
         Self {
             held: vec![0.0; BANDS],
+            tones: [0.0; 3],
             reference: 0.0,
+            tone_reference: 0.0,
+            turns: [0.0; 3],
             seconds: None,
         }
     }
 
-    /// Advances to this frame and returns each band's held level as a share, `0..=1`.
-    fn advance(&mut self, analysis: &Analysis, seconds: f32, decay: f32) -> Vec<f32> {
+    /// Advances to this frame and returns what the shaders should be given.
+    fn advance(&mut self, analysis: &Analysis, seconds: f32, decay: f32, speed: f32) -> Memory {
         // A first frame, a clock that jumped, or a stall: fall by at most a moderate step rather
         // than emptying the envelope, so nothing flickers when frames are uneven.
         let elapsed = match self.seconds {
@@ -246,6 +275,7 @@ impl BandEnvelope {
         let fall = *DECAY_FALL.start()
             + (1.0 - decay.clamp(0.0, 1.0)) * (*DECAY_FALL.end() - *DECAY_FALL.start());
         let kept = (-elapsed / fall).exp();
+
         let mut loudest = 0.0f32;
         for (index, level) in self.held.iter_mut().enumerate() {
             // Silence is a real analysis, and it arrives carrying no bands at all. Reading a
@@ -255,10 +285,35 @@ impl BandEnvelope {
             *level = magnitude.max(*level * kept);
             loudest = loudest.max(*level);
         }
-
         self.reference = loudest.max(self.reference * (-elapsed / REFERENCE_FALL).exp());
-        let against = self.reference.max(1e-5);
-        self.held.iter().map(|level| level / against).collect()
+
+        let mut strongest = 0.0f32;
+        for (tone, magnitude) in
+            self.tones
+                .iter_mut()
+                .zip([analysis.bass, analysis.mid, analysis.treble])
+        {
+            *tone = magnitude.max(*tone * kept);
+            strongest = strongest.max(*tone);
+        }
+        self.tone_reference =
+            strongest.max(self.tone_reference * (-elapsed / REFERENCE_FALL).exp());
+
+        let against_tones = self.tone_reference.max(1e-5);
+        let step = elapsed * TURNS_PER_SECOND * speed.max(0.0);
+        for (turns, tone) in self.turns.iter_mut().zip(self.tones) {
+            *turns += step * (tone / against_tones).clamp(0.0, 1.0);
+        }
+
+        let against_bands = self.reference.max(1e-5);
+        Memory {
+            held: self
+                .held
+                .iter()
+                .map(|level| level / against_bands)
+                .collect(),
+            turns: self.turns,
+        }
     }
 }
 
@@ -272,7 +327,7 @@ pub struct VisualizerRenderer {
     analysis: wgpu::Texture,
     analysis_view: wgpu::TextureView,
     targets: HashMap<usize, SourceTexture>,
-    envelopes: HashMap<usize, BandEnvelope>,
+    memories: HashMap<usize, AudioMemory>,
 }
 
 impl VisualizerRenderer {
@@ -338,7 +393,7 @@ impl VisualizerRenderer {
             analysis,
             analysis_view,
             targets: HashMap::new(),
-            envelopes: HashMap::new(),
+            memories: HashMap::new(),
         }
     }
 
@@ -371,12 +426,17 @@ impl VisualizerRenderer {
         frame: &VisualizerFrame<'_>,
     ) -> Result<&SourceTexture, VisualizerError> {
         self.ensure_pipeline(kind)?;
-        let held = self
-            .envelopes
+        let memory = self
+            .memories
             .entry(layer)
-            .or_insert_with(BandEnvelope::new)
-            .advance(frame.analysis, frame.seconds, parameters.decay);
-        self.upload_analysis(frame.analysis, &held);
+            .or_insert_with(AudioMemory::new)
+            .advance(
+                frame.analysis,
+                frame.seconds,
+                parameters.decay,
+                parameters.speed,
+            );
+        self.upload_analysis(frame.analysis, &memory);
         self.gpu.queue.write_buffer(
             &self.uniform,
             0,
@@ -493,7 +553,7 @@ impl VisualizerRenderer {
     }
 
     /// Puts the newest analysis where the shaders can read it.
-    fn upload_analysis(&self, analysis: &Analysis, held: &[f32]) {
+    fn upload_analysis(&self, analysis: &Analysis, memory: &Memory) {
         let mut rows = vec![0.0f32; WAVEFORM_POINTS * 2];
         for (slot, value) in rows[..WAVEFORM_POINTS]
             .iter_mut()
@@ -511,7 +571,14 @@ impl VisualizerRenderer {
         // use 64 of it, so this costs nothing and no visualizer that ignores them is affected.
         for (slot, value) in rows[WAVEFORM_POINTS + BANDS..WAVEFORM_POINTS + BANDS * 2]
             .iter_mut()
-            .zip(held.iter())
+            .zip(memory.held.iter())
+        {
+            *slot = *value;
+        }
+        // Then the accumulated turns, in the three texels after those.
+        for (slot, value) in rows[WAVEFORM_POINTS + BANDS * 2..WAVEFORM_POINTS + BANDS * 2 + 3]
+            .iter_mut()
+            .zip(memory.turns.iter())
         {
             *slot = *value;
         }
@@ -552,77 +619,77 @@ mod tests {
         }
     }
 
-    /// Runs the envelope forward the way a rendering output does, a frame at a time. A single
-    /// long step would be clamped, because a clamp is exactly what stops a stalled server from
-    /// emptying an envelope in one go.
+    /// Runs the memory forward the way a rendering output does, a frame at a time. A single long
+    /// step would be clamped, because a clamp is exactly what stops a stalled server from emptying
+    /// an envelope in one go.
     fn play(
-        envelope: &mut BandEnvelope,
+        memory: &mut AudioMemory,
         analysis: &Analysis,
         from: f32,
         seconds: f32,
         decay: f32,
-    ) -> Vec<f32> {
+    ) -> Memory {
         let frame = 1.0 / 60.0;
-        let mut held = Vec::new();
+        let mut published = memory.advance(analysis, from, decay, 1.0);
         let mut now = from;
         while now < from + seconds {
             now += frame;
-            held = envelope.advance(analysis, now, decay);
+            published = memory.advance(analysis, now, decay, 1.0);
         }
-        held
+        published
     }
 
     #[test]
     fn a_hit_stands_after_the_sound_that_made_it_has_gone() {
         // The whole point of holding a band: a bass beat lasts a few frames, and a response that
         // ended with it would be a flicker rather than something an operator can watch subside.
-        let mut envelope = BandEnvelope::new();
-        let hit = envelope.advance(&spectrum(2, 40.0), 0.0, 0.2);
+        let mut memory = AudioMemory::new();
+        let hit = memory.advance(&spectrum(2, 40.0), 0.0, 0.2, 1.0);
         assert!(
-            hit[2] > 0.99,
+            hit.held[2] > 0.99,
             "the band it landed in must reach full height"
         );
 
         let silence = Analysis::default();
-        let after = play(&mut envelope, &silence, 0.0, 0.5, 0.2);
+        let after = play(&mut memory, &silence, 0.0, 0.5, 0.2);
         assert!(
-            after[2] < hit[2],
+            after.held[2] < hit.held[2],
             "a held band must fall once the sound has gone"
         );
         assert!(
-            after[2] > 0.3,
+            after.held[2] > 0.3,
             "half a second must not empty a hit that is still visibly standing: {}",
-            after[2]
+            after.held[2]
         );
 
-        let later = play(&mut envelope, &silence, 0.5, 20.0, 0.2);
+        let later = play(&mut memory, &silence, 0.5, 20.0, 0.2);
         assert!(
-            later[2] < 0.1,
+            later.held[2] < 0.1,
             "the mountain has to come down eventually: {}",
-            later[2]
+            later.held[2]
         );
     }
 
     #[test]
     fn decay_sets_how_long_a_hit_stands() {
-        let mut slow = BandEnvelope::new();
-        let mut quick = BandEnvelope::new();
-        slow.advance(&spectrum(2, 40.0), 0.0, 0.0);
-        quick.advance(&spectrum(2, 40.0), 0.0, 1.0);
+        let mut slow = AudioMemory::new();
+        let mut quick = AudioMemory::new();
+        slow.advance(&spectrum(2, 40.0), 0.0, 0.0, 1.0);
+        quick.advance(&spectrum(2, 40.0), 0.0, 1.0, 1.0);
 
         let silence = Analysis::default();
         let standing = play(&mut slow, &silence, 0.0, 0.4, 0.0);
         let gone = play(&mut quick, &silence, 0.0, 0.4, 1.0);
         assert!(
-            standing[2] > gone[2],
+            standing.held[2] > gone.held[2],
             "a lower decay has to hold a hit longer: {} is not above {}",
-            standing[2],
-            gone[2]
+            standing.held[2],
+            gone.held[2]
         );
         assert!(
-            gone[2] < 0.05,
+            gone.held[2] < 0.05,
             "the fastest decay has to be all but instant: {}",
-            gone[2]
+            gone.held[2]
         );
     }
 
@@ -631,27 +698,109 @@ mod tests {
         // Normalising a held band by the loudest held band would pin a lone decaying mountain at
         // full height for as long as it was the loudest thing present, which is the one thing it
         // must not do.
-        let mut envelope = BandEnvelope::new();
-        envelope.advance(&spectrum(2, 40.0), 0.0, 0.5);
-        let after = play(&mut envelope, &Analysis::default(), 0.0, 1.0, 0.5);
+        let mut memory = AudioMemory::new();
+        memory.advance(&spectrum(2, 40.0), 0.0, 0.5, 1.0);
+        let after = play(&mut memory, &Analysis::default(), 0.0, 1.0, 0.5);
         assert!(
-            after[2] < 0.7,
+            after.held[2] < 0.7,
             "a sole surviving band still has to sink: {}",
-            after[2]
+            after.held[2]
         );
     }
 
     #[test]
     fn a_quiet_passage_gets_its_sensitivity_back() {
         // A loud show followed by a quiet one must not leave the quiet one flat forever.
-        let mut envelope = BandEnvelope::new();
-        envelope.advance(&spectrum(2, 400.0), 0.0, 0.5);
-        play(&mut envelope, &Analysis::default(), 0.0, 30.0, 0.5);
-        let quiet = envelope.advance(&spectrum(2, 4.0), 30.1, 0.5);
+        let mut memory = AudioMemory::new();
+        memory.advance(&spectrum(2, 400.0), 0.0, 0.5, 1.0);
+        play(&mut memory, &Analysis::default(), 0.0, 30.0, 0.5);
+        let quiet = memory.advance(&spectrum(2, 4.0), 30.1, 0.5, 1.0);
         assert!(
-            quiet[2] > 0.9,
+            quiet.held[2] > 0.9,
             "the loudest thing in a quiet room is still the loudest thing: {}",
-            quiet[2]
+            quiet.held[2]
+        );
+    }
+
+    fn tones(bass: f32, mid: f32, treble: f32) -> Analysis {
+        Analysis {
+            spectrum: vec![0.0; BANDS],
+            bass,
+            mid,
+            treble,
+            ..Analysis::default()
+        }
+    }
+
+    #[test]
+    fn nothing_is_carried_forward_by_a_silent_room() {
+        // Turns are time as the music doles it out. With no music there is none to dole out, and a
+        // visualizer reading them has to come to a stop rather than drifting on the clock.
+        let mut memory = AudioMemory::new();
+        let quiet = Analysis::default();
+        memory.advance(&quiet, 0.0, 0.5, 1.0);
+        let published = play(&mut memory, &quiet, 0.0, 5.0, 0.5);
+        assert_eq!(
+            published.turns, [0.0; 3],
+            "silence carried the animation forward"
+        );
+    }
+
+    #[test]
+    fn each_tone_carries_its_own_band_and_only_its_own() {
+        // The split an operator is promised: bass moves the big slow things, treble the small fast
+        // ones, and a bass-only passage must leave the treble's band exactly where it stood.
+        let mut memory = AudioMemory::new();
+        let bass_only = tones(1.0, 0.0, 0.0);
+        memory.advance(&bass_only, 0.0, 0.5, 1.0);
+        let published = play(&mut memory, &bass_only, 0.0, 2.0, 0.5);
+        assert!(
+            published.turns[0] > 0.0,
+            "bass has to carry the swells: {:?}",
+            published.turns
+        );
+        assert_eq!(
+            published.turns[2], 0.0,
+            "a bass-only passage moved the treble's band: {:?}",
+            published.turns
+        );
+    }
+
+    #[test]
+    fn a_tone_keeps_carrying_while_its_hit_subsides() {
+        // The turns run off the held tones, not the arriving ones, so a beat keeps pushing as it
+        // decays instead of advancing by one frame's worth and stopping dead.
+        let mut memory = AudioMemory::new();
+        memory.advance(&tones(1.0, 0.0, 0.0), 0.0, 0.2, 1.0);
+        let hit = memory.advance(&tones(1.0, 0.0, 0.0), 1.0 / 60.0, 0.2, 1.0);
+        let after = play(&mut memory, &Analysis::default(), 1.0 / 60.0, 1.0, 0.2);
+        assert!(
+            after.turns[0] > hit.turns[0],
+            "the swells stopped the instant the hit did"
+        );
+    }
+
+    #[test]
+    fn speed_is_the_exchange_rate_between_sound_and_motion() {
+        let playing = tones(1.0, 1.0, 1.0);
+        let mut slow = AudioMemory::new();
+        let mut quick = AudioMemory::new();
+        slow.advance(&playing, 0.0, 0.5, 0.5);
+        quick.advance(&playing, 0.0, 0.5, 2.0);
+
+        let mut now = 0.0;
+        let mut slow_turns = [0.0; 3];
+        let mut quick_turns = [0.0; 3];
+        for _ in 0..60 {
+            now += 1.0 / 60.0;
+            slow_turns = slow.advance(&playing, now, 0.5, 0.5).turns;
+            quick_turns = quick.advance(&playing, now, 0.5, 2.0).turns;
+        }
+        assert!(
+            quick_turns[0] > slow_turns[0] * 3.0,
+            "speed has to scale how far the same music carries the wave: {} against {}",
+            quick_turns[0],
+            slow_turns[0]
         );
     }
 

@@ -18,6 +18,8 @@ Audio-reactive visualizers follow the beat and three instruments the Media Serve
 
 Audio-reactive visualizers depend on the Media Server's configured audio input and analysis path. A visualizer can render correctly in the browser while reacting incorrectly to silence, the wrong device, or an unsuitable signal level; verify the live input on the production machine.
 
+Some visualizers are carried by the music rather than by a clock, and stand still when there is nothing on the input. A still picture from one of those is a dead input, not a stalled server.
+
 ## Effects and masks
 
 Masks are selected independently from content and can be combined with the layer's shaper and

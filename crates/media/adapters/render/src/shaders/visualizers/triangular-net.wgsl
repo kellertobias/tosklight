@@ -1,13 +1,16 @@
 // A wavy triangular net seen from just above its own surface: nodes joined by dead-straight paths,
-// riding three bands of rolling swell, dissolving into nothing before the horizon.
+// riding four bands of rolling swell, dissolving into nothing before the horizon.
 //
 // The net is never subdivided, exactly as in the still it is modelled on -- every path stays one
 // straight segment between two nodes however wild the waves get, and all the ruggedness comes from
 // moving the nodes up and down.
 //
-// The spectrum is laid across the net's width, so the low end of the music moves one part of the
-// wave and the high end another. That is the whole point of it as a visualizer rather than a
-// wallpaper: an operator watching the output can see *where* in the sound the energy sits.
+// Nothing here moves on its own. The clock is never read: the wave is carried forward by the music
+// and by nothing else, so in a silent room the net holds the shape it was drawn with and stands
+// still. Bass carries the big swells, treble the fine detail, and a held spectrum laid across the
+// net's width decides where the wave stands high. That is the whole point of it as a visualizer
+// rather than a wallpaper: an operator watching the output can see which part of the sound is
+// moving which part of the picture.
 //
 // Everything is drawn from the height field, never from a list of nodes: the ray is walked forward
 // until it meets the surface, and only the handful of nodes around that meeting point are worked
@@ -32,95 +35,78 @@ const NET_JITTER: f32 = 0.25;
 // Metres from the camera at which the net is still solid, and at which it has gone entirely.
 const NET_FADE_START: f32 = 24.0;
 const NET_FADE_END: f32 = 38.0;
-// The loop the wave bands are authored against. Their cycle counts are whole numbers over it,
-// which is what makes the motion seamless.
-const NET_LOOP: f32 = 60.0;
 // A bend of +/-1 reaches this many metres at the far edge.
 const NET_BEND_HEIGHT: f32 = 8.0;
 
-/// What the sound is doing, in terms this shader can multiply by.
-///
-/// The height comes from the held levels, not the live bands. A band that is loud right now is a
-/// flicker at this scale; what an operator wants to see is the hit itself -- a bass beat raises a
-/// mountain where the bass sits, and the mountain then sinks back over as long as `decay` says.
-/// The held levels already arrive as a share of the loudest thing heard lately, so none of this
-/// depends on how anyone set their input gain, and a mountain genuinely falls rather than being
-/// renormalised back to full height the moment the rest of the music goes quiet.
-struct NetDrive {
-    /// Bass, mid and treble, each as a share of the loudest of the three.
-    tones: vec3<f32>,
-}
-
-fn net_drive() -> NetDrive {
-    let tones = vec3<f32>(bass(), mid(), treble());
-    let strongest = max(tones.x, max(tones.y, tones.z));
-    var drive: NetDrive;
-    drive.tones = tones / max(strongest, 1e-5);
-    return drive;
-}
-
 /// How high the sound is holding this position across the net, `0..1`.
+///
+/// The held levels, not the live bands. A band that is loud right now is a flicker at this scale;
+/// what an operator wants to see is the hit itself -- a bass beat raises a mountain where the bass
+/// sits, and the mountain then sinks back over as long as `decay` says. They arrive as a share of
+/// the loudest thing heard lately, so none of this depends on how anyone set their input gain, and
+/// a mountain genuinely falls rather than being renormalised back to full height the moment the
+/// rest of the music goes quiet.
 fn net_share(across: f32) -> f32 {
     return clamp(band_held_at(clamp(across, 0.0, 1.0)), 0.0, 1.0);
 }
 
-/// One wave component: `amplitude * sin(k . position + w t)`, with a whole number of cycles per
-/// loop so the band returns to where it started.
-fn net_wave(position: vec2<f32>, travel: f32, amplitude: f32, k: vec2<f32>, cycles: f32, phase: f32) -> f32 {
-    return amplitude * sin(dot(k, position) + TAU * (cycles * travel + phase));
+/// One wave component: `amplitude * sin(k . position + w t)`, where `carried` is how far the tone
+/// this component belongs to has taken it. Whole numbers of cycles, so a band that is carried all
+/// the way round returns to exactly where it started.
+fn net_wave(position: vec2<f32>, carried: f32, amplitude: f32, k: vec2<f32>, cycles: f32, phase: f32) -> f32 {
+    return amplitude * sin(dot(k, position) + TAU * (cycles * carried + phase));
 }
 
 /// How high the net stands at a point on the plane.
 ///
 /// Four bands of wave -- big rolling swells, mid-scale chop, fine detail, and a scatter short
-/// enough that neighbouring nodes never quite agree with each other. Each band's height is scaled
-/// by the part of the spectrum it belongs to, bass moving the swells and treble the detail, and
-/// again by whatever the spectrum is doing at this point across the net's width, so the wave is
-/// not loud everywhere at once.
+/// enough that neighbouring nodes never quite agree with each other. Height and movement come from
+/// different places on purpose. What the music is *holding* at a point across the net sets how
+/// high the wave stands there; which tone is *playing* sets which of the four bands is moving, so
+/// bass rolls the swells along and treble scurries the detail. In a silent room the net keeps the
+/// shape it was drawn with and stands perfectly still.
 ///
 /// This is the only definition of the surface, and the nodes stand exactly on it. That is what
 /// lets one walk of the ray answer both where the surface is and which nodes are visible there.
-fn net_height(position: vec2<f32>, travel: f32, drive: NetDrive) -> f32 {
+fn net_height(position: vec2<f32>, turns: vec3<f32>) -> f32 {
     let reach = clamp(reactivity(), 0.0, 2.0);
     var across = (position.x + NET_HALF_WIDTH) / (2.0 * NET_HALF_WIDTH);
     if mirrored() {
         across = abs(position.x) / NET_HALF_WIDTH;
     }
-    let local = net_share(across);
-    // How hard the music is working this stretch of the net. A quiet band settles its part of the
-    // wave without stilling it; a loud one lifts its part well above the designed height. Capped,
-    // because the camera stands 2.45 m up and a wave that swallows it is a fault, not a look.
-    let here = clamp(mix(1.0, 0.45 + local * 1.55, reach), 0.20, 1.80);
+    // The designed height is the floor and the music builds on it, rather than the music being all
+    // there is: a quiet passage leaves the net looking like itself instead of flattening it. The
+    // ceiling is there because the camera stands 2.45 m up and a wave that swallows it is a fault.
+    let here = min(1.0 + net_share(across) * reach * 0.90, 1.90);
 
-    // Which band of the wave the sound is moving, as against where along the net it is moving it:
-    // bass rolls the swells, treble ripples the detail. Scaled to hold the overall height roughly
-    // where it was, so this reads as the wave changing character rather than changing size.
     let scale = amount() * here;
-    let large = scale * (0.65 + drive.tones.x * 0.70);
-    let medium = scale * (0.65 + drive.tones.y * 0.70);
-    let small = scale * (0.65 + drive.tones.z * 0.70);
 
+    // The three heights below are the ones the still was built with, and they still add up to it.
+    // What has changed is what carries each band round: the swells are the bass's to move, the
+    // chop the mid's, the detail and the scatter the treble's. The cycle counts inside a band are
+    // what make its components drift against each other rather than march in step.
     var height = 0.0;
-    // Big rolling swells: 0.60 m of total height, one cycle of the band per loop.
-    height += net_wave(position, travel, large * 0.288, vec2<f32>(0.115, 0.055), 1.0, 0.00);
-    height += net_wave(position, travel, large * 0.192, vec2<f32>(-0.070, 0.130), 2.0, 0.35);
-    height += net_wave(position, travel, large * 0.120, vec2<f32>(0.190, -0.090), 3.0, 0.70);
-    // Mid-scale chop: 1.35 m, twice as fast.
-    height += net_wave(position, travel, medium * 0.608, vec2<f32>(0.240, 0.230), 4.0, 0.15);
-    height += net_wave(position, travel, medium * 0.432, vec2<f32>(-0.330, 0.150), 8.0, 0.55);
-    height += net_wave(position, travel, medium * 0.311, vec2<f32>(0.420, -0.360), 6.0, 0.20);
-    // Fine detail: 0.65 m, three times as fast.
-    height += net_wave(position, travel, small * 0.299, vec2<f32>(0.720, 0.480), 15.0, 0.80);
-    height += net_wave(position, travel, small * 0.208, vec2<f32>(-0.610, 0.830), 18.0, 0.42);
-    height += net_wave(position, travel, small * 0.143, vec2<f32>(1.050, -0.740), 24.0, 0.10);
-    // Scatter: 0.45 m at a wavelength of about two node spacings, and the fastest of the four.
+    // Big rolling swells, 0.60 m of height, carried by the bass. Slowest, so a bass hit reads as
+    // the whole landscape heaving rather than as anything twitching.
+    height += net_wave(position, turns.x, scale * 0.288, vec2<f32>(0.115, 0.055), 1.0, 0.00);
+    height += net_wave(position, turns.x, scale * 0.192, vec2<f32>(-0.070, 0.130), 2.0, 0.35);
+    height += net_wave(position, turns.x, scale * 0.120, vec2<f32>(0.190, -0.090), 3.0, 0.70);
+    // Mid-scale chop, 1.35 m, carried by the mid at several times the cycles.
+    height += net_wave(position, turns.y, scale * 0.608, vec2<f32>(0.240, 0.230), 4.0, 0.15);
+    height += net_wave(position, turns.y, scale * 0.432, vec2<f32>(-0.330, 0.150), 8.0, 0.55);
+    height += net_wave(position, turns.y, scale * 0.311, vec2<f32>(0.420, -0.360), 6.0, 0.20);
+    // Fine detail, 0.65 m, carried by the treble, and fastest of the three.
+    height += net_wave(position, turns.z, scale * 0.299, vec2<f32>(0.720, 0.480), 15.0, 0.80);
+    height += net_wave(position, turns.z, scale * 0.208, vec2<f32>(-0.610, 0.830), 18.0, 0.42);
+    height += net_wave(position, turns.z, scale * 0.143, vec2<f32>(1.050, -0.740), 24.0, 0.10);
+    // Scatter, 0.45 m at a wavelength of about two node spacings, on the treble with the detail.
     // Three components at incommensurate angles, so it reads as per-node randomness rather than as
     // a pattern, while staying a smooth field the ray can be walked against. The still it comes
     // from scatters each node independently; nothing a ray can be traced through can do that, and
     // at this wavelength no one can tell the difference.
-    height += net_wave(position, travel, small * 0.180, vec2<f32>(3.310, -2.150), 16.0, 0.13);
-    height += net_wave(position, travel, small * 0.153, vec2<f32>(-2.620, 3.440), 20.0, 0.61);
-    height += net_wave(position, travel, small * 0.117, vec2<f32>(4.530, 4.100), 28.0, 0.29);
+    height += net_wave(position, turns.z, scale * 0.180, vec2<f32>(3.310, -2.150), 16.0, 0.13);
+    height += net_wave(position, turns.z, scale * 0.153, vec2<f32>(-2.620, 3.440), 20.0, 0.61);
+    height += net_wave(position, turns.z, scale * 0.117, vec2<f32>(4.530, 4.100), 28.0, 0.29);
 
     // The static front-to-back bend. Centred, so the middle of the control is a flat plane.
     let bend = (curvature() - 0.5) * 2.0;
@@ -133,13 +119,13 @@ fn net_height(position: vec2<f32>, travel: f32, drive: NetDrive) -> f32 {
 }
 
 /// Where one node of the lattice stands: its scattered place on the plane, and its height there.
-fn net_node(cell: vec2<i32>, spacing: f32, travel: f32, drive: NetDrive) -> vec3<f32> {
+fn net_node(cell: vec2<i32>, spacing: f32, turns: vec3<f32>) -> vec3<f32> {
     let row = f32(cell.y);
     let offset = f32(cell.y & 1) * 0.5;
     let base = vec2<f32>((f32(cell.x) + offset) * spacing, row * spacing * NET_ROW_PITCH);
     let scatter = (hash22(vec2<f32>(f32(cell.x), row)) - 0.5) * 2.0 * NET_JITTER * spacing;
     let place = base + scatter;
-    return vec3<f32>(place, net_height(place, travel, drive));
+    return vec3<f32>(place, net_height(place, turns));
 }
 
 fn net_focal() -> f32 {
@@ -195,8 +181,9 @@ const NET_CELLS: i32 = 25;
 const NET_STEPS: i32 = 72;
 
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
-    let travel = seconds() * speed() / NET_LOOP;
-    let drive = net_drive();
+    // Time, as the music has doled it out. Nothing here reads the clock: `speed` is the exchange
+    // rate between sound and motion, and it is applied where the turns are counted.
+    let turns = tone_turns();
     let focal = net_focal();
     let camera = net_camera();
     let forward = net_forward();
@@ -219,13 +206,13 @@ fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     for (var step = 0; step < NET_STEPS && near < limit; step += 1) {
         let far = min(near + 0.30 + near * 0.06, limit);
         let point = camera + ray * far;
-        if point.z < net_height(point.xy, travel, drive) {
+        if point.z < net_height(point.xy, turns) {
             var low = near;
             var high = far;
             for (var closing = 0; closing < 4; closing += 1) {
                 let middle = (low + high) * 0.5;
                 let sample = camera + ray * middle;
-                if sample.z < net_height(sample.xy, travel, drive) {
+                if sample.z < net_height(sample.xy, turns) {
                     high = middle;
                 } else {
                     low = middle;
@@ -253,7 +240,7 @@ fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
             column + index % NET_SIDE - NET_REACH,
             row + index / NET_SIDE - NET_REACH,
         );
-        screen[index] = net_project(net_node(cell, spacing, travel, drive));
+        screen[index] = net_project(net_node(cell, spacing, turns));
     }
 
     let node_size = 0.015 + size() * 0.30;

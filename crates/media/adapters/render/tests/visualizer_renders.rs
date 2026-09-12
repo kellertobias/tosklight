@@ -8,7 +8,9 @@
 
 use media_domain::audio::{Analysis, BANDS, WAVEFORM_POINTS};
 use media_domain::geometry::Size;
-use media_domain::visualizer::{ALL_KINDS, VisualizerKind, VisualizerParameters};
+use media_domain::visualizer::{
+    ALL_KINDS, VisualizerConfiguration, VisualizerKind, VisualizerParameters,
+};
 use media_render::{Gpu, SourceTexture, VisualizerFrame, VisualizerRenderer};
 
 const OUTPUT: Size = Size::new(64, 64);
@@ -204,7 +206,8 @@ fn waveform_size_changes_the_live_trace_expansion() {
 #[test]
 fn a_visualizer_animates_without_audio() {
     // Several visualizers are driven by time as much as by sound; a silent room must not freeze
-    // a Kaleidoscope or a Starfield on one frame.
+    // a Kaleidoscope or a Starfield on one frame. Triangular Net is deliberately not among them:
+    // it is carried by the music and by nothing else, and standing still is what it is for.
     let gpu = gpu();
     let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
     let quiet = silence();
@@ -218,7 +221,6 @@ fn a_visualizer_animates_without_audio() {
         VisualizerKind::RotatingShape,
         VisualizerKind::CityTunnel,
         VisualizerKind::GridLandscape,
-        VisualizerKind::TriangularNet,
         VisualizerKind::MatrixDigitalRain,
     ] {
         let early = draw(
@@ -242,6 +244,75 @@ fn a_visualizer_animates_without_audio() {
             kind.label()
         );
     }
+}
+
+#[test]
+fn the_triangular_net_stands_still_in_a_silent_room() {
+    // The one visualizer that does not read the clock. Nothing should move it but the music, which
+    // also makes it the honest way to see that an input is dead: a still net means no sound.
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let quiet = silence();
+    let parameters = VisualizerConfiguration::new(VisualizerKind::TriangularNet).parameters;
+
+    let kind = VisualizerKind::TriangularNet;
+    let first = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&quiet, 0.5, 0.0),
+    );
+    let mut last = first.clone();
+    // Play silence at it for a while, a frame at a time, the way an output would.
+    for step in 1..120 {
+        let seconds = 0.5 + step as f32 / 60.0;
+        last = draw(
+            &gpu,
+            &mut renderer,
+            kind,
+            &parameters,
+            &frame(&quiet, seconds, 0.0),
+        );
+    }
+    assert_eq!(
+        first, last,
+        "Triangular Net moved with nothing to move it: it must be the music that carries it"
+    );
+}
+
+#[test]
+fn the_triangular_net_is_carried_forward_by_the_music() {
+    // And the other half of it: given something to move it, it has to actually go somewhere, or
+    // the visualizer is just a still picture with extra steps.
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let playing = loud();
+    let parameters = VisualizerConfiguration::new(VisualizerKind::TriangularNet).parameters;
+
+    let kind = VisualizerKind::TriangularNet;
+    let first = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&playing, 0.5, 1.0),
+    );
+    let mut last = first.clone();
+    for step in 1..120 {
+        let seconds = 0.5 + step as f32 / 60.0;
+        last = draw(
+            &gpu,
+            &mut renderer,
+            kind,
+            &parameters,
+            &frame(&playing, seconds, 0.0),
+        );
+    }
+    assert_ne!(
+        first, last,
+        "two seconds of music left Triangular Net exactly where it started"
+    );
 }
 
 #[test]
