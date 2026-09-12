@@ -1,3 +1,8 @@
+import {
+	SCENERY_AXES,
+	placedSceneryMetres,
+	sceneryOf,
+} from "./scenerySize";
 import type { PatchedFixture } from "../../../api/types";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureRanges, groupFixtureFamilies } from "../patchUtils";
@@ -64,7 +69,16 @@ function beginFixtureEdit(
 				output: fixture.internal_bindings?.output ?? "",
 			}),
 		);
-	else if (kind === "crowd_width" || kind === "crowd_depth") {
+	else if (
+		kind === "scenery_width" ||
+		kind === "scenery_height" ||
+		kind === "scenery_depth"
+	) {
+		const scenery = sceneryOf(fixture);
+		const placed = scenery ? placedSceneryMetres(fixture, scenery) : null;
+		const key = SCENERY_AXES.find((entry) => entry.edit === kind)?.key ?? "x";
+		ui.setEditText(String(placed?.[key] ?? 1));
+	} else if (kind === "crowd_width" || kind === "crowd_depth") {
 		const crowd = fixture.definition.profile_snapshot?.crowd;
 		const stored = controller.stagePositions3d[fixture.fixture_id];
 		ui.setEditText(

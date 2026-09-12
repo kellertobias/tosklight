@@ -36,6 +36,11 @@ export interface FixtureProfile {
 	physical: FixtureProfilePhysical;
 	optics?: FixtureProfileOptics;
 	crowd?: FixtureProfileCrowd | null;
+	/**
+	 * Present on a Venue or Rigging object whose geometry is generated at the size it is placed,
+	 * instead of being drawn from a model made for one size.
+	 */
+	scenery?: FixtureProfileScenery | null;
 	effect?: FixtureProfileEffect | null;
 	modes: FixtureMode[];
 	hazardous: boolean;
@@ -412,4 +417,16 @@ export interface FixtureBodyModel {
 export interface EmitterHeadBinding {
 	emitter_id: string;
 	head_id: string;
+}
+
+/** A Venue or Rigging object whose geometry is generated at the size it is placed. */
+export interface FixtureProfileScenery {
+	kind: "riser" | "truss" | "curtain" | "railing" | "mirror_ball" | "prop";
+	/** Chords in a truss cross-section. Every other kind ignores it. */
+	chords: number;
+	default_size_metres: Vector3Value;
+	/** Which of its dimensions an operator sets; the rest are what the object is. */
+	adjustable: { width: boolean; height: boolean; depth: boolean };
+	minimum_size_metres: Vector3Value;
+	maximum_size_metres: Vector3Value;
 }

@@ -487,7 +487,7 @@ describe("Patch right-click SET parity", () => {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
 
-		rightClick(within(row.cells[17]).getByRole("button"));
+		rightClick(within(row.cells[18]).getByRole("button"));
 
 		expect(
 			screen.getByRole("heading", { name: "Select layer" }),
@@ -2186,6 +2186,61 @@ describe("Crowd Area footprint editing", () => {
 			),
 		);
 	});
+	it("offers a size only on a generated item's adjustable axes and saves it in millimetres", async () => {
+		const fixture = splitFixture();
+		const profile = fixture.definition.profile_snapshot;
+		if (!profile) throw new Error("scenery fixture profile is missing");
+		profile.patch_policy = "visual_only";
+		profile.scenery = {
+			kind: "curtain",
+			chords: 0,
+			default_size_metres: { x: 4, y: 6, z: 0.1 },
+			adjustable: { width: true, height: true, depth: false },
+			minimum_size_metres: { x: 0.5, y: 0.5, z: 0.1 },
+			maximum_size_metres: { x: 30, y: 20, z: 0.1 },
+		};
+		fixture.scenery_size_metres = { x: 8000, y: 0, z: 0 };
+		const plain = splitFixture();
+		plain.fixture_id = "fixture-plain";
+		plain.fixture_number = 18;
+		server.patch.fixtures = [fixture, plain];
+		render(<FixturePatchSetup />);
+
+		expect(screen.getByRole("button", { name: "Width 17" })).toHaveTextContent(
+			"8.00 m",
+		);
+		expect(screen.getByRole("button", { name: "Height 17" })).toHaveTextContent(
+			"6.00 m",
+		);
+		expect(screen.queryByRole("button", { name: "Depth 17" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Width 18" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Height 18" })).toBeNull();
+
+		const enterWidth = (keys: string[]) => {
+			fireEvent.contextMenu(screen.getByRole("button", { name: "Width 17" }));
+			const modal = screen.getByRole("dialog", { name: "Width (metre)" });
+			for (const key of keys)
+				fireEvent.click(within(modal).getByRole("button", { name: key }));
+			fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
+		};
+		enterWidth(["4", "0"]);
+		expect(
+			await screen.findByText("Enter a width from 0.5 to 30 metres."),
+		).toBeInTheDocument();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+
+		cleanup();
+		render(<FixturePatchSetup />);
+		enterWidth(["1", "2", ".", "5"]);
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith(
+				"fixture-split",
+				expect.objectContaining({
+					scenery_size_metres: { x: 12500, y: 6000, z: 100 },
+				}),
+			),
+		);
+	});
 });
 
 describe("DMX address grid dragging", () => {
@@ -2453,7 +2508,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		);
 	});
 
-	it("uses the exact eighteen-column grid for primary and multi-patch rows", () => {
+	it("uses the exact nineteen-column grid for primary and multi-patch rows", () => {
 		server.patch.fixtures = [policyFixture()];
 		render(<FixturePatchSetup />);
 		expect(
@@ -2475,6 +2530,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 			"Rotation Y",
 			"Rotation Z",
 			"Footprint width",
+			"Footprint height",
 			"Footprint depth",
 			"Layer",
 		]);
@@ -2484,8 +2540,8 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const multi = screen.getByRole("row", {
 			name: "Multi-patch Opposite hang",
 		}) as HTMLTableRowElement;
-		expect(primary.cells).toHaveLength(18);
-		expect(multi.cells).toHaveLength(18);
+		expect(primary.cells).toHaveLength(19);
+		expect(multi.cells).toHaveLength(19);
 		expect(multi.cells[1]).toHaveTextContent(/^—$/);
 		expect(multi.cells[2]).toHaveTextContent(/^—$/);
 		expect(multi.cells[4]).toHaveTextContent("S1 3.1 · S3 4.1");

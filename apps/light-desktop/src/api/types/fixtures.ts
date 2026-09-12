@@ -23,6 +23,11 @@ export interface PatchedFixture {
 		head_index: number;
 	}>;
 	location?: { x: number; y: number; z: number };
+	/**
+	 * The size a generated Venue object was placed at, in millimetres, like every other
+	 * measurement the patch carries. Absent means the profile's own default.
+	 */
+	scenery_size_metres?: { x: number; y: number; z: number } | null;
 	rotation?: { x: number; y: number; z: number };
 	multipatch?: MultiPatchInstance[];
 	group_masters_enabled?: boolean;
@@ -57,6 +62,11 @@ export interface MultiPatchInstance {
 	universe: number | null;
 	address: number | null;
 	location: { x: number; y: number; z: number };
+	/**
+	 * The size a generated Venue object was placed at, in millimetres, like every other
+	 * measurement the patch carries. Absent means the profile's own default.
+	 */
+	scenery_size_metres?: { x: number; y: number; z: number } | null;
 	rotation: { x: number; y: number; z: number };
 	split_patches?: SplitPatch[];
 	invert_pan?: boolean;

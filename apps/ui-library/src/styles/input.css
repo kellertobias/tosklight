@@ -296,6 +296,11 @@
 	flex-direction: column;
 }
 
+.modal-number-editor-error {
+	margin: 8px 0 0;
+	color: #ff7b84;
+}
+
 .modal-number-editor-fader {
 	width: 136px;
 	min-height: 342px;

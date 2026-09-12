@@ -1,3 +1,8 @@
+import {
+	SCENERY_AXES,
+	placedSceneryMetres,
+	sceneryOf,
+} from "./scenerySize";
 import type { SplitPatch } from "../../../api/types";
 import type { PatchFixtureUpdateAction } from "../../../features/patch/contracts";
 import { parsePatchAddress } from "../../input/ConsoleFields";
@@ -93,6 +98,8 @@ export function saveEdit(
 			void applyEdit(controller, { internal_bindings: bindings });
 		}
 	}
+	const sceneryAxis = SCENERY_AXES.find((entry) => entry.edit === edit);
+	if (sceneryAxis) void saveSceneryMeasurement(controller, sceneryAxis, value);
 	if (edit === "crowd_width" || edit === "crowd_depth")
 		void saveCrowdFootprint(controller, edit, value);
 	if ((edit === "location" || edit === "rotation") && editAxis)
@@ -433,4 +440,38 @@ function parseSplitDrafts(controller: PatchController): SplitPatch[] | null {
 		universe: item.value?.universe ?? null,
 		address: item.value?.address ?? null,
 	}));
+}
+
+/**
+ * One measurement of a generated Venue object, held to what the object can be built at.
+ *
+ * The size travels with the placed object, so it is a patch edit like a location rather than
+ * something stored beside the show. It is written in millimetres, as every measurement the patch
+ * carries is, and shown in metres because that is how a venue is measured.
+ */
+async function saveSceneryMeasurement(
+	controller: PatchController,
+	axis: (typeof SCENERY_AXES)[number],
+	value: string,
+) {
+	const selected = controller.data.selected;
+	const scenery = selected ? sceneryOf(selected) : null;
+	if (!selected || !scenery) return;
+	const parsed = Number(value);
+	const low = scenery.minimum_size_metres[axis.key];
+	const high = scenery.maximum_size_metres[axis.key];
+	if (!Number.isFinite(parsed) || parsed < low || parsed > high) {
+		controller.ui.setEditError(
+			`Enter a ${axis.label.toLowerCase()} from ${low} to ${high} metres.`,
+		);
+		return;
+	}
+	const placed = { ...placedSceneryMetres(selected, scenery), [axis.key]: parsed };
+	void applyEdit(controller, {
+		scenery_size_metres: {
+			x: Math.round(placed.x * 1_000),
+			y: Math.round(placed.y * 1_000),
+			z: Math.round(placed.z * 1_000),
+		},
+	});
 }

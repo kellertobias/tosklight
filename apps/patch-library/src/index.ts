@@ -111,6 +111,7 @@ export * from "./transport";
 export type {
 	AttributeDescriptor,
 	FixtureBodyModel,
+	FixtureProfileScenery,
 	FixtureChannel,
 	FixtureDefinition,
 	FixtureHead,

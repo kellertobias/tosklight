@@ -1,3 +1,4 @@
+import { SCENERY_AXES } from "./scenerySize";
 import {
 	Button,
 	ModalRegistration,
@@ -153,6 +154,24 @@ export function FixtureEditDialog() {
 			/>
 		);
 	}
+	const sceneryAxis = SCENERY_AXES.find((entry) => entry.edit === edit);
+	if (sceneryAxis) {
+		return (
+			<ModalNumberEditor
+				ariaLabel={`${sceneryAxis.label} (metre)`}
+				title={`Set ${sceneryAxis.label.toLowerCase()}`}
+				value={controller.ui.editText}
+				onChange={controller.ui.setEditText}
+				onSubmit={(value) =>
+					saveEdit(controller, value ?? controller.ui.editText)
+				}
+				onClose={close}
+				allowDecimal
+				unit="meter"
+				error={controller.ui.editError}
+			/>
+		);
+	}
 	if (edit === "crowd_width" || edit === "crowd_depth") {
 		const label = edit === "crowd_width" ? "Crowd width" : "Crowd depth";
 		return (
@@ -167,6 +186,7 @@ export function FixtureEditDialog() {
 				onClose={close}
 				allowDecimal
 				unit="meter"
+				error={controller.ui.editError}
 			/>
 		);
 	}
@@ -490,6 +510,8 @@ function editTitle(
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
 	if (edit === "internal_bindings") return "Audio bindings";
+	const scenery = SCENERY_AXES.find((entry) => entry.edit === edit);
+	if (scenery) return scenery.label;
 	if (edit === "crowd_width") return "Crowd width";
 	if (edit === "crowd_depth") return "Crowd depth";
 	return edit;

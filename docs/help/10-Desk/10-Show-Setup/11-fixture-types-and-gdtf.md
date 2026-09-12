@@ -31,6 +31,14 @@ metres wide until you say otherwise. What can be changed is what the object real
 measure — a curtain's width and drop, a truss's length, a deck's rise — and a size outside what the
 object can be built at is held to what it can.
 
+Set the size in **Show Patch**. The **Footprint width**, **Footprint height**, and **Footprint
+depth** columns offer exactly the dimensions the object is made to measure — a curtain's width and
+drop, a truss's length, a deck's width, depth, and rise — and show a dash for the rest, because a
+truss's cross-section is what the truss is rather than a number to type. Each placed object keeps
+its own size, so every segment of a truss run can differ. A size outside what the object can be
+built at is refused with the range it can take. The same columns set a Crowd
+Area's width and depth.
+
 A show patched before this keeps the fixture revision embedded in it and is unaffected.
 
 - **Venue** visual-only profiles — 1 × 1 m, 2 × 1 m, and 1 × 0.5 m stage elements; correctly rising stage stairs; 1 m, 2 m, 3 m, 5 m, and 6 m curtains; **Disco Ball 50 cm**; and **Crowd Area**. One-, two-, three-, and four-point truss and pipe profiles use the separate **Rigging** type. Crowd Area supplies all nine Sitting, Standing still, and Dancing × Sparse, Medium, and Dense modes and stores independent width and depth with the show. The conventional scenery archives include portable photographs and metre-authored GLB geometry; the desk displays its built-in Venue or Rigging type icon. Crowd Area is rendered procedurally from its portable crowd contract.

@@ -54,6 +54,8 @@ export interface ModalNumberEditorProps {
 	unit?: ReactNode;
 	onRelease?(): void;
 	releaseLabel?: string;
+	/** Why the last value was refused; the editor stays open so it can be corrected. */
+	error?: ReactNode;
 }
 
 export function ModalNumberEditor({
@@ -68,6 +70,7 @@ export function ModalNumberEditor({
 	replaceOnFirstInput = true,
 	dialogClassName = "direct-value-modal",
 	beforeTitle,
+	error,
 	fader,
 	presets,
 	presetsOnly = false,
@@ -185,6 +188,11 @@ export function ModalNumberEditor({
 								replaceOnFirstInput={replaceOnFirstInput}
 								value={value}
 							/>
+							{error ? (
+								<p className="modal-number-editor-error" role="alert">
+									{error}
+								</p>
+							) : null}
 						</div>
 					</div>
 				)}

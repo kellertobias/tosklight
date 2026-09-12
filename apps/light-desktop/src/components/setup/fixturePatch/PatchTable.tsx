@@ -1,3 +1,8 @@
+import {
+	SCENERY_AXES,
+	placedSceneryMetres,
+	sceneryOf,
+} from "./scenerySize";
 import { Button } from "@tosklight/ui";
 import { Fragment } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
@@ -51,6 +56,7 @@ const columns = [
 	"Rotation Y",
 	"Rotation Z",
 	"Footprint width",
+	"Footprint height",
 	"Footprint depth",
 	"Layer",
 ];
@@ -341,52 +347,99 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 					</Button>
 				</td>
 			))}
-			<CrowdFootprintCells fixture={fixture} />
+			<FootprintCells fixture={fixture} />
 		</>
 	);
 }
 
-function CrowdFootprintCells({ fixture }: { fixture: PatchedFixture }) {
+/** One editable measurement in the footprint columns, in metres. */
+function MeasurementCell({
+	fixture,
+	edit,
+	label,
+	metres,
+}: {
+	fixture: PatchedFixture;
+	edit: Parameters<typeof armEdit>[2];
+	label: string;
+	metres: number;
+}) {
 	const controller = usePatchController();
+	return (
+		<td className="patch-secondary">
+			<Button
+				className="patch-value"
+				aria-label={`${label} ${fixtureDisplayId(fixture)}`}
+				onClick={() => armEdit(controller, fixture, edit)}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					beginFixtureEditFromContextMenu(controller, fixture, edit);
+				}}
+			>
+				{metres.toFixed(2)} m
+			</Button>
+		</td>
+	);
+}
+
+const NO_MEASUREMENT = <td className="patch-secondary">—</td>;
+
+/**
+ * Width, height and depth, for the two things in a rig that are made to measure: a crowd area's
+ * footprint and a generated Venue object's size. Anything else is the size it is.
+ *
+ * Only the dimensions the object really is made to measure are offered — a curtain's width and
+ * drop, a truss's length. A truss's cross-section is what the truss is, not a number to type.
+ */
+function FootprintCells({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const scenery = sceneryOf(fixture);
+	if (scenery) {
+		const placed = placedSceneryMetres(fixture, scenery);
+		return (
+			<>
+				{SCENERY_AXES.map((axis) =>
+					scenery.adjustable[axis.axis] ? (
+						<MeasurementCell
+							key={axis.axis}
+							fixture={fixture}
+							edit={axis.edit}
+							label={axis.label}
+							metres={placed[axis.key]}
+						/>
+					) : (
+						<Fragment key={axis.axis}>{NO_MEASUREMENT}</Fragment>
+					),
+				)}
+			</>
+		);
+	}
 	const crowd = fixture.definition.profile_snapshot?.crowd;
-	const stored = controller.stagePositions3d[fixture.fixture_id];
 	if (!crowd)
 		return (
 			<>
-				<td className="patch-secondary">—</td>
-				<td className="patch-secondary">—</td>
+				{NO_MEASUREMENT}
+				{NO_MEASUREMENT}
+				{NO_MEASUREMENT}
 			</>
 		);
+	const stored = controller.stagePositions3d[fixture.fixture_id];
 	return (
 		<>
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					aria-label={`Crowd width ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, "crowd_width")}
-					onContextMenu={(event) => {
-						event.preventDefault();
-						event.stopPropagation();
-						beginFixtureEditFromContextMenu(controller, fixture, "crowd_width");
-					}}
-				>
-					{(stored?.crowdWidthMetres ?? crowd.default_width_metres).toFixed(2)} m
-				</Button>
-			</td>
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					aria-label={`Crowd depth ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, "crowd_depth")}
-					onContextMenu={(event) => {
-						event.preventDefault();
-						event.stopPropagation();
-						beginFixtureEditFromContextMenu(controller, fixture, "crowd_depth");
-					}}
-				>
-					{(stored?.crowdDepthMetres ?? crowd.default_depth_metres).toFixed(2)} m
-				</Button>
-			</td>
+			<MeasurementCell
+				fixture={fixture}
+				edit="crowd_width"
+				label="Crowd width"
+				metres={stored?.crowdWidthMetres ?? crowd.default_width_metres}
+			/>
+			{NO_MEASUREMENT}
+			<MeasurementCell
+				fixture={fixture}
+				edit="crowd_depth"
+				label="Crowd depth"
+				metres={stored?.crowdDepthMetres ?? crowd.default_depth_metres}
+			/>
 		</>
 	);
 }
@@ -536,6 +589,7 @@ function MultiPatchRow({
 					</Button>
 				</td>
 			))}
+			<td className="patch-secondary">—</td>
 			<td className="patch-secondary">—</td>
 			<td className="patch-secondary">—</td>
 			<td className="patch-secondary">
