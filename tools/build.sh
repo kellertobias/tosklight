@@ -797,6 +797,10 @@ build_visualizer() {
       "$TARGET_DIR/release/viz-renderer" \
       "$LIGHT_ARTIFACTS_DIR/build/patch-mcp/tosklight-patch-mcp.mjs" \
       "$TARGET_DIR/release/bundle/macos"
+    # The release seals this bundle too. Without it only the linker's ad-hoc executable signature
+    # is present, which Gatekeeper reads as damaged rather than as an unsigned development build.
+    bash "$ROOT/tools/seal-macos-app.sh" \
+      "$TARGET_DIR/release/bundle/macos/ToskLight Architect.app"
   fi
 }
 

@@ -343,6 +343,12 @@ test("macOS release apps are sealed only after their final helpers and resources
 		/bundle-media-macos\.sh[\s\S]*seal-macos-app\.sh[\s\S]*ToskLight Pixel\.app/u,
 	);
 	assert.doesNotMatch(localMediaBuild, /ToskLight Media\.app/u);
+	// The local Architect bundle is sealed like the release one, so a development build opens
+	// instead of being reported as damaged.
+	assert.match(
+		shellFunction(buildScript, "build_visualizer", "visualizer_executable"),
+		/bundle-visualizer-macos\.sh[\s\S]*seal-macos-app\.sh[\s\S]*ToskLight Architect\.app/u,
+	);
 	assert.match(
 		read("tools/bundle-media-macos.sh"),
 		/PRODUCT_NAME="ToskLight Pixel"[\s\S]*LEGACY_APP="\$OUTPUT_DIR\/ToskLight Media\.app"[\s\S]*rm -rf -- "\$APP" "\$LEGACY_APP"/u,
