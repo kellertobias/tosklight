@@ -201,7 +201,8 @@ fn push_demo_laser(scene: &mut Scene) {
     // face — which is why it hangs nose-down rather than upside down like a lantern.
     let laser_body = Vec3::new(0.39, 0.43, 0.33);
     let laser_model = viz_scene::read_glb(
-        viz_project::choose_default_model("laser", viz_project::FixtureTraits::default()).bytes,
+        viz_project::choose_default_model(None, "laser", viz_project::FixtureTraits::default())
+            .bytes,
     )
     .ok()
     .map(|model| {
