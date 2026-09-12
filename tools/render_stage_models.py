@@ -28,9 +28,14 @@ from pathlib import Path
 
 import bpy
 from mathutils import Vector
-from model_catalogue import write_catalogue
 
 ROOT = Path(__file__).resolve().parent.parent
+# Blender runs this with --factory-startup, so the script's own directory is not importable
+# the way a bare interpreter would make it. The builder beside this one does the same.
+if str(ROOT / "tools") not in sys.path:
+    sys.path.insert(0, str(ROOT / "tools"))
+
+from model_catalogue import write_catalogue  # noqa: E402
 DEFAULT_MODELS = ROOT / "assets" / "models"
 DEFAULT_IMAGES = ROOT / "docs" / "help" / "assets" / "models"
 DEFAULT_PAGE = ROOT / "docs" / "help" / "99-Appendix" / "01-model-catalogue.md"
