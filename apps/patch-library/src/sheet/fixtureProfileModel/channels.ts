@@ -43,9 +43,10 @@ function reserveSecondarySlots(mode: FixtureMode, errors: string[]) {
 	return { footprints, reserved };
 }
 
-export function derivePrimarySlots(
-	mode: FixtureMode,
-): { slots: Map<string, number>; errors: string[] } {
+export function derivePrimarySlots(mode: FixtureMode): {
+	slots: Map<string, number>;
+	errors: string[];
+} {
 	const errors: string[] = [];
 	const { footprints, reserved } = reserveSecondarySlots(mode, errors);
 	const next = new Map<number, number>();
@@ -88,11 +89,7 @@ export function blankChannel(
 		resolution,
 		secondary_slots: [],
 		default_raw: defaultRaw,
-		highlight_raw: semanticHighlightRaw(
-			"intensity",
-			resolution,
-			defaultRaw,
-		),
+		highlight_raw: semanticHighlightRaw("intensity", resolution, defaultRaw),
 		physical_min: 0,
 		physical_max: 100,
 		unit: "percent",
@@ -130,6 +127,7 @@ export function blankFunction(
 		dmx_to: range,
 		attribute: channel.attribute,
 		priority: type === "continuous" ? 0 : type === "control" ? 200 : 100,
+		angular_motion: null,
 		behavior,
 	};
 }

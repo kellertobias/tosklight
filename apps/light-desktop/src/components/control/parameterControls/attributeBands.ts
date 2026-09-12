@@ -1,5 +1,5 @@
 import type { ChannelResolution, PatchedFixture } from "../../../api/types";
-import { maxRaw } from "../../setup/fixtureProfileModel/rawValues";
+import { maxRaw } from "../../setup/fixtureProfileModel";
 import { profileHeadOwner } from "./indexedPresetChoices";
 
 /**

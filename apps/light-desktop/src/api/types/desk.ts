@@ -147,45 +147,8 @@ export interface BootstrapSnapshot {
 	hardware_connected: boolean;
 }
 
-export interface AttributeDescriptor {
-	id: string;
-	label: string;
-	family:
-		| "intensity"
-		| "position"
-		| "color"
-		| "beam"
-		| "shapers"
-		| "focus"
-		| "control"
-		| "media"
-		| "custom";
-	value_type: "continuous" | "color" | "indexed" | "control";
-	default_unit: string | null;
-	display_unit?: string | null;
-	physical_unit?: string | null;
-	normalized_min?: number | null;
-	normalized_max?: number | null;
-	domain_min?: number | null;
-	domain_max?: number | null;
-	cyclic?: boolean;
-	recordable?: boolean;
-	encoder_group?:
-		| "intensity"
-		| "color"
-		| "position"
-		| "beam"
-		| "shapers"
-		| "focus"
-		| "control"
-		| "media";
-	encoder_page?: number;
-	encoder_slot?: number;
-	built_in?: boolean;
-	retired?: boolean;
-	activation_group_id?: string | null;
-	push_turn_of?: string | null;
-}
+export type { AttributeDescriptor } from "@tosklight/patch/fixture-profile";
+import type { AttributeDescriptor } from "@tosklight/patch/fixture-profile";
 
 export interface SessionResponse {
 	session_id: string;

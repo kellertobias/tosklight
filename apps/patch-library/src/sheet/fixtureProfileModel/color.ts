@@ -84,6 +84,7 @@ export function semanticHighlightRaw(
 			"color.white",
 			"color.cold_white",
 			"color.warm_white",
+			"color.amber",
 		].includes(attribute)
 	) {
 		return endpoint(true);
@@ -144,6 +145,45 @@ export function canonicalAttributeProjection(attribute: string): {
 			"media.opacity": ["intensity", "identity"],
 			"media.rotation": ["position.rotation", "identity"],
 			"media.tint": ["color", "identity"],
+			"media.layer.folder": ["media.folder", "identity"],
+			"media.layer.file": ["media.file", "identity"],
+			"media.layer.play.mode": ["media.play_mode", "identity"],
+			"media.layer.scale.x": ["media.scale.x", "identity"],
+			"media.layer.scale.y": ["media.scale.y", "identity"],
+			"media.layer.scaling.mode": ["media.scaling_mode", "identity"],
+			"media.layer.position.x": ["media.position.x", "identity"],
+			"media.layer.position.y": ["media.position.y", "identity"],
+			"media.layer.rotation": ["position.rotation", "identity"],
+			"media.layer.dimmer": ["intensity", "identity"],
+			"media.master.master.dimmer": ["intensity", "identity"],
+			"media.layer.volume": ["volume", "identity"],
+			"media.master.master.volume": ["volume", "identity"],
+			"media.layer.cyan": ["color.red", "invert_normalized"],
+			"media.master.master.cyan": ["color.red", "invert_normalized"],
+			"media.layer.magenta": ["color.green", "invert_normalized"],
+			"media.master.master.magenta": ["color.green", "invert_normalized"],
+			"media.layer.yellow": ["color.blue", "invert_normalized"],
+			"media.master.master.yellow": ["color.blue", "invert_normalized"],
+			"media.layer.grayscale": ["media.grayscale", "identity"],
+			"media.layer.mask.folder": ["media.mask.folder", "identity"],
+			"media.layer.mask.file": ["media.mask.file", "identity"],
+			"media.master.master.mask": ["media.mask.file", "identity"],
+			"media.layer.mask.scale.x": ["media.mask.scale.x", "identity"],
+			"media.layer.mask.scale.y": ["media.mask.scale.y", "identity"],
+			"media.layer.mask.position.x": ["media.mask.position.x", "identity"],
+			"media.layer.mask.position.y": ["media.mask.position.y", "identity"],
+			"media.master.mask.position.x": ["media.mask.position.x", "identity"],
+			"media.master.mask.position.y": ["media.mask.position.y", "identity"],
+			"media.layer.mask.invert": ["media.mask.invert", "identity"],
+			"media.layer.mask.opacity": ["media.mask.opacity", "identity"],
+			"media.layer.effect.1": ["media.effect.1", "identity"],
+			"media.layer.effect.2": ["media.effect.2", "identity"],
+			"media.layer.effect.3": ["media.effect.3", "identity"],
+			"media.layer.effect.4": ["media.effect.4", "identity"],
+			"media.layer.speed.multiplier": ["media.playback_speed", "identity"],
+			"media.layer.playback.bpm": ["media.playback_bpm", "identity"],
+			"media.layer.playback.blur": ["media.playback.blur", "identity"],
+			"media.master.flip.mirror": ["media.flip_mirror", "identity"],
 			"pan.continuous": ["pan", "identity"],
 			"tilt.continuous": ["tilt", "identity"],
 		};
@@ -230,13 +270,9 @@ function additiveWhiteLevels(
 export function semanticHighlightDefaultsForMode(mode: FixtureMode) {
 	const values = new Map(
 		mode.channels.map((channel) => {
-			const fixtureProjection = canonicalAttributeProjection(
-				channel.fixture_attribute,
-			);
-			const highlightAttribute =
-				fixtureProjection.attribute !== channel.fixture_attribute
-					? channel.fixture_attribute
-					: channel.attribute;
+			const inverted =
+				channel.invert !==
+				(channel.canonical_transform === "invert_normalized");
 			const choices = channel.functions.flatMap((fn) =>
 				fn.behavior.type === "fixed" || fn.behavior.type === "indexed"
 					? [
@@ -251,10 +287,10 @@ export function semanticHighlightDefaultsForMode(mode: FixtureMode) {
 			return [
 				channel.id,
 				semanticHighlightRaw(
-					highlightAttribute,
+					channel.attribute,
 					channel.resolution,
 					channel.default_raw,
-					channel.invert,
+					inverted,
 					choices,
 				),
 			] as const;

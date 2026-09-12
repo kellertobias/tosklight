@@ -88,7 +88,7 @@ function channelsFromDefinition(
 			id: uuid(),
 			head_id: heads[headIndex].id,
 			split: 1,
-			fixture_attribute: parameter.attribute,
+			fixture_attribute: parameter.source_attribute ?? parameter.attribute,
 			attribute: projection.attribute,
 			canonical_transform: projection.canonicalTransform,
 			resolution,
@@ -123,7 +123,7 @@ function colorSystemsFromDefinition(
 	heads: FixtureHead[],
 	channels: FixtureChannel[],
 ): HeadColorSystem[] {
-	return heads.flatMap<HeadColorSystem>((head) => {
+	return heads.flatMap<HeadColorSystem>((head, headIndex) => {
 		const hue = channels.find(
 			(channel) =>
 				channel.head_id === head.id && channel.attribute === "color.hue",
@@ -170,13 +170,34 @@ function colorSystemsFromDefinition(
 				const canonicalAttribute = canonicalAttributeProjection(
 					`color.${name}`,
 				).attribute;
+				const sourceAttributes =
+					definition.heads[headIndex]?.parameters
+						.filter((parameter) => {
+							const projection = canonicalAttributeProjection(
+								parameter.attribute,
+							);
+							return (
+								projection.attribute === canonicalAttribute &&
+								projection.canonicalTransform === "identity"
+							);
+						})
+						.map(
+							(parameter) => parameter.source_attribute ?? parameter.attribute,
+						) ?? [];
+				const sourceChannels = channels.filter(
+					(candidate) =>
+						candidate.head_id === head.id &&
+						sourceAttributes.includes(candidate.fixture_attribute),
+				);
 				const canonicalChannels = channels.filter(
 					(candidate) =>
 						candidate.head_id === head.id &&
-						candidate.attribute === canonicalAttribute,
+						candidate.attribute === canonicalAttribute &&
+						candidate.canonical_transform !== "invert_normalized",
 				);
 				const channel =
 					fixtureChannel ??
+					(sourceChannels.length === 1 ? sourceChannels[0] : undefined) ??
 					(canonicalChannels.length === 1 ? canonicalChannels[0] : undefined);
 				return channel
 					? [
@@ -400,12 +421,26 @@ function channelDefinition(
 	channel: FixtureChannel,
 	primary: Map<string, number>,
 ): FixtureDefinition["heads"][number]["parameters"][number] {
+	const projection = canonicalAttributeProjection(channel.attribute);
+	const canonicalTransform =
+		channel.canonical_transform === "invert_normalized"
+			? channel.canonical_transform
+			: projection.canonicalTransform;
+	const maximum = maxRaw(channel.resolution);
+	const normalizedDefault = channel.default_raw / maximum;
+	const physicalDefault = channel.invert
+		? 1 - normalizedDefault
+		: normalizedDefault;
 	return {
-		attribute: channel.attribute,
+		source_attribute: channel.fixture_attribute || channel.attribute,
+		attribute: projection.attribute,
 		components: [primary.get(channel.id) ?? 1, ...channel.secondary_slots].map(
 			(slot) => ({ offset: slot - 1, byte_order: "msb_first" as const }),
 		),
-		default: channel.default_raw / maxRaw(channel.resolution),
+		default:
+			canonicalTransform === "invert_normalized"
+				? 1 - physicalDefault
+				: physicalDefault,
 		virtual_dimmer: channel.reacts_to_virtual_intensity,
 		metadata: {
 			physical_min: channel.physical_min ?? 0,

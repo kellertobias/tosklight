@@ -12,6 +12,9 @@
     "./host": "./src/host.ts",
     "./transport": "./src/transport.ts",
     "./wire": "./src/wire.ts",
+		"./fixture-profile": "./src/fixtureProfile.ts",
+		"./fixture-profile-model": "./src/sheet/fixtureProfileModel.ts",
+		"./library": "./src/library/index.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
@@ -19,7 +22,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@tosklight/ui": "0.1.0"
+    "@tosklight/ui": "0.1.0",
+    "three": "^0.185.1"
   },
   "peerDependencies": {
     "react": ">=19",
@@ -34,6 +38,7 @@
     "jsdom": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "@types/three": "^0.185.1",
     "typescript": "latest",
     "vitest": "latest"
   }

@@ -1,9 +1,3 @@
-export * from "./fixtureProfileModel/channels";
-export * from "./fixtureProfileModel/color";
-export * from "./fixtureProfileModel/defaults";
-export * from "./fixtureProfileModel/definitionCatalog";
-export * from "./fixtureProfileModel/definitions";
-export * from "./fixtureProfileModel/geometry";
-export * from "./fixtureProfileModel/rawValues";
-export * from "./fixtureProfileModel/utilities";
-export * from "./fixtureProfileModel/validation";
+// The fixture-profile model is shared with ToskLight Architect so both desks author, validate and
+// project the same profiles. It lives in @tosklight/patch; this module keeps the desk's import path.
+export * from "@tosklight/patch/fixture-profile-model";
