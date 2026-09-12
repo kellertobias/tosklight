@@ -135,19 +135,55 @@ shipped!(SUNSTRIP, "sunstrip", "lamps/sunstrip.glb");
 shipped!(PROJECTOR_SMALL, "projector-small", "av/projector-small.glb");
 shipped!(PROJECTOR_LARGE, "projector-large", "av/projector-large.glb");
 
+shipped!(PAR_20, "par-20", "lamps/par-20.glb");
+shipped!(
+    FRESNEL_500W,
+    "fresnel-barn-doors-500w",
+    "lamps/fresnel-barn-doors-500w.glb"
+);
+shipped!(
+    FRESNEL_2KW,
+    "fresnel-barn-doors-2kw",
+    "lamps/fresnel-barn-doors-2kw.glb"
+);
+shipped!(
+    PROFILE_SPOT_CLASSIC,
+    "profile-spot-classic",
+    "lamps/profile-spot-classic.glb"
+);
+shipped!(
+    MOVING_PROFILE_LARGE,
+    "moving-head-profile-large",
+    "lamps/moving-head-profile-large.glb"
+);
+shipped!(
+    MOVING_WASH_LARGE,
+    "moving-head-wash-large",
+    "lamps/moving-head-wash-large.glb"
+);
+shipped!(SUNSTRIP_20, "sunstrip-20", "lamps/sunstrip-20.glb");
+shipped!(FLOOD, "flood-asymmetric", "lamps/flood-asymmetric.glb");
+
 /// Every renderer-owned fallback body, in stable gallery order.
 pub fn all() -> &'static [&'static DefaultModel] {
     static ALL: &[&DefaultModel] = &[
         &MOVING_PROFILE,
+        &MOVING_PROFILE_LARGE,
         &MOVING_WASH,
+        &MOVING_WASH_LARGE,
         &MOVING_LED_WASH_300,
         &MOVING_LED_WASH,
         &MOVING_LED_WASH_500,
         &SCANNER_COMPACT,
         &SCANNER,
         &PROFILE_SPOT,
+        &PROFILE_SPOT_CLASSIC,
+        &FRESNEL_500W,
         &FRESNEL,
+        &FRESNEL_2KW,
+        &FLOOD,
         &ACL_PAR_16,
+        &PAR_20,
         &PAR_56_BLACK,
         &PAR_56_SILVER,
         &PAR_CAN,
@@ -161,6 +197,7 @@ pub fn all() -> &'static [&'static DefaultModel] {
         &BLINDER,
         &BLINDER_8,
         &SUNSTRIP,
+        &SUNSTRIP_20,
         &LED_STRIP_0500,
         &LED_STRIP,
         &LED_STRIP_1500,

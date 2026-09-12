@@ -311,7 +311,7 @@ def _moving_head_frame(
     return pivot
 
 
-def moving_head_profile() -> Model:
+def _moving_head_profile(name: str, summary: str, scale: float) -> Model:
     """3.1 — the long-nosed head, turned rather than boxed.
 
     The body is one outline spun about the optical axis and squeezed a little in depth:
@@ -319,46 +319,70 @@ def moving_head_profile() -> Model:
     the nose. Real profile heads are mouldings over a round optical train, and the shape
     the procedural proxy draws — an ovoid, not a crate — is the one that reads as a lamp
     from the back of the room.
+
+    The whole lantern scales together, because a head and the yoke that has to swing it are
+    one mechanism: a large head on a small yoke is a fixture that cannot actually turn over.
     """
 
-    model = Model(
-        "moving-head-profile",
-        "lamps",
-        "Moving head profile: 400 x 250 x 175 base, turned 300 x 480 head on a full-travel yoke",
-    )
+    model = Model(name, "lamps", summary)
     head = model.group_node("moving-head", HEAD)
-    bottom = -240.0
+    bottom = -240.0 * scale
     body = model.part("head-body", HOUSING_DARK, HEAD, head)
     body.revolve(
         [
-            (0.0, 0.0),
-            (54.0, 0.0),
-            (60.0, 16.0),
-            (94.0, 60.0),
-            (122.0, 104.0),
-            (140.0, 150.0),
-            (144.0, 196.0),
-            (144.0, 292.0),
-            (150.0, 308.0),
-            (150.0, 336.0),
-            (144.0, 352.0),
-            (144.0, 384.0),
-            *arc_outline((0.0, 384.0), 144.0, 0.0, 90.0, steps=5, rise=96.0),
+            (x * scale, y * scale)
+            for x, y in [
+                (0.0, 0.0),
+                (54.0, 0.0),
+                (60.0, 16.0),
+                (94.0, 60.0),
+                (122.0, 104.0),
+                (140.0, 150.0),
+                (144.0, 196.0),
+                (144.0, 292.0),
+                (150.0, 308.0),
+                (150.0, 336.0),
+                (144.0, 352.0),
+                (144.0, 384.0),
+                *arc_outline((0.0, 384.0), 144.0, 0.0, 90.0, steps=5, rise=96.0),
+            ]
         ],
         (0, 0, bottom),
         segments=28,
         scale=(1.0, 0.85, 1.0),
     )
-    _head_cheeks(model, head, 150.0, 210.0)
+    _head_cheeks(model, head, 150.0 * scale, 210.0 * scale)
     ring = model.part("lens-ring", RIM_ON_DARK, HEAD, head)
-    ring.tube(132, 96, 26, (0, 0, bottom - 6), segments=24)
+    ring.tube(132 * scale, 96 * scale, 26 * scale, (0, 0, bottom - 6 * scale), segments=24)
     lens = model.part("lens", LENS_CLEAR, HEAD, head)
-    lens.cylinder(100, 14, (0, 0, bottom - 4), segments=24)
-    _moving_head_frame(model, (400.0, 250.0, 175.0), head_half_width=158.0)
+    lens.cylinder(100 * scale, 14 * scale, (0, 0, bottom - 4 * scale), segments=24)
+    _moving_head_frame(
+        model,
+        (400.0 * scale, 250.0 * scale, 175.0 * scale),
+        head_half_width=158.0 * scale,
+    )
     return model
 
 
-def moving_head_wash() -> Model:
+def moving_head_profiles() -> list[Model]:
+    """3.1 — the profile moving light in the two sizes a rig is actually made of."""
+
+    return [
+        _moving_head_profile(
+            "moving-head-profile",
+            "Moving head profile: 400 x 250 x 175 base, turned 300 x 480 head on a full-travel yoke",
+            1.0,
+        ),
+        _moving_head_profile(
+            "moving-head-profile-large",
+            "Moving head profile, large: 500 x 313 x 219 base, turned 375 x 600 head on a "
+            "full-travel yoke",
+            1.25,
+        ),
+    ]
+
+
+def _moving_head_wash(name: str, summary: str, scale: float) -> Model:
     """3.2 — the same family, stubbier, with one big front element.
 
     The silhouette difference between a profile and a wash is the whole point: this one
@@ -366,40 +390,64 @@ def moving_head_wash() -> Model:
     instead of sitting in a nose.
     """
 
-    model = Model(
-        "moving-head-wash",
-        "lamps",
-        "Moving head wash: turned 320 x 330 head with a 210 front lens on a full-travel yoke",
-    )
+    model = Model(name, "lamps", summary)
     head = model.group_node("moving-head", HEAD)
-    bottom = -165.0
+    bottom = -165.0 * scale
     body = model.part("head-body", HOUSING_DARK, HEAD, head)
     body.revolve(
         [
-            (0.0, 0.0),
-            (104.0, 0.0),
-            (118.0, 20.0),
-            (142.0, 54.0),
-            (156.0, 92.0),
-            (160.0, 168.0),
-            (154.0, 200.0),
-            *arc_outline((0.0, 220.0), 154.0, 0.0, 90.0, steps=5, rise=110.0),
+            (x * scale, y * scale)
+            for x, y in [
+                (0.0, 0.0),
+                (104.0, 0.0),
+                (118.0, 20.0),
+                (142.0, 54.0),
+                (156.0, 92.0),
+                (160.0, 168.0),
+                (154.0, 200.0),
+                *arc_outline((0.0, 220.0), 154.0, 0.0, 90.0, steps=5, rise=110.0),
+            ]
         ],
         (0, 0, bottom),
         segments=28,
         scale=(1.0, 0.875, 1.0),
     )
-    _head_cheeks(model, head, 160.0, 180.0)
+    _head_cheeks(model, head, 160.0 * scale, 180.0 * scale)
     ring = model.part("lens-ring", RIM_ON_DARK, HEAD, head)
-    ring.tube(238, 196, 36, (0, 0, bottom - 14), segments=28)
+    ring.tube(238 * scale, 196 * scale, 36 * scale, (0, 0, bottom - 14 * scale), segments=28)
     lens = model.part("lens", LENS_CLEAR, HEAD, head)
     lens.revolve(
-        [(0.0, 2.0), (105.0, 6.0), (105.0, 18.0), (0.0, 26.0)],
-        (0, 0, bottom - 18),
+        [
+            (x * scale, y * scale)
+            for x, y in [(0.0, 2.0), (105.0, 6.0), (105.0, 18.0), (0.0, 26.0)]
+        ],
+        (0, 0, bottom - 18 * scale),
         segments=28,
     )
-    _moving_head_frame(model, (400.0, 250.0, 170.0), head_half_width=168.0)
+    _moving_head_frame(
+        model,
+        (400.0 * scale, 250.0 * scale, 170.0 * scale),
+        head_half_width=168.0 * scale,
+    )
     return model
+
+
+def moving_head_washes() -> list[Model]:
+    """3.2 — the wash moving light in two sizes, matching the profiles beside them."""
+
+    return [
+        _moving_head_wash(
+            "moving-head-wash",
+            "Moving head wash: turned 320 x 330 head with a 210 front lens on a full-travel yoke",
+            1.0,
+        ),
+        _moving_head_wash(
+            "moving-head-wash-large",
+            "Moving head wash, large: turned 400 x 413 head with a 263 front lens on a "
+            "full-travel yoke",
+            1.25,
+        ),
+    ]
 
 
 def led_wash_heads() -> list[Model]:
@@ -488,28 +536,83 @@ def led_wash_heads() -> list[Model]:
 # --------------------------------------------------------------------------------------
 
 
-def fresnel() -> Model:
-    """3.4 — rounded cowl, stepped lens, and four splayed barn-door leaves."""
+def _fresnel(
+    name: str,
+    summary: str,
+    width: float,
+    depth: float,
+    height: float,
+    lens: float,
+    handle_width: float,
+    arm_thickness: float,
+) -> Model:
+    """3.4 — rounded cowl, stepped lens, and four splayed barn-door leaves.
 
-    model = Model("fresnel-barn-doors", "lamps", "Fresnel 260 x 300 x 300 with four barn doors")
-    top, bottom = 150.0, -150.0
+    One shape at three ratings. A Fresnel is sized by the lens it carries and the lamp it has
+    to cool, so the body grows with the glass: the 500 is a hand lantern, the 2 kW is a lift to
+    the bar. Everything but the lens diameter and the box follows from those two.
+    """
+
+    model = Model(name, "lamps", summary)
+    top, bottom = height / 2, -height / 2
     body = model.part("body", HOUSING_BLACK)
-    body.box((260, 300, 300), (0, 0, 0))
-    body.sphere(260, (0, 0, top - 6), segments=16, rings=6, scale=(1.0, 1.12, 0.34))
-    body.box((90, 60, 26), (0, 130, top - 40))
+    body.box((width, depth, height), (0, 0, 0))
+    body.sphere(width, (0, 0, top - 6), segments=16, rings=6, scale=(1.0, 1.12, 0.34))
+    body.box((handle_width, 60, 26), (0, depth / 2 - 20, top - 40))
 
     ring = model.part("lens-ring", RIM_ON_BLACK)
-    ring.tube(228, 200, 30, (0, 0, bottom + 5))
-    lens = model.part("lens", LENS_CLEAR)
-    lens.cylinder(200, 14, (0, 0, bottom + 3))
-    for step, diameter in enumerate((200.0, 146.0, 92.0)):
-        lens.cone(diameter, diameter - 18, 9, (0, 0, bottom - 4 - step * 8), segments=20)
+    ring.tube(lens + 28, lens, 30, (0, 0, bottom + 5))
+    lens_part = model.part("lens", LENS_CLEAR)
+    lens_part.cylinder(lens, 14, (0, 0, bottom + 3))
+    for step, diameter in enumerate((lens, lens - 54, lens - 108)):
+        lens_part.cone(diameter, diameter - 18, 9, (0, 0, bottom - 4 - step * 8), segments=20)
 
     runner = model.part("colour-frame-runner", GEL_FRAME)
-    runner.polygon_frame(340, 296, 46, (0, 0, bottom - 34))
-    barn_doors(model, aperture=200.0, at=bottom - 60, hinge_span=150.0)
-    hang_from_bracket(model, bar_depth=90.0, arm_thickness=20.0)
+    runner.polygon_frame(width + 80, depth - 4, 46, (0, 0, bottom - 34))
+    barn_doors(model, aperture=lens, at=bottom - 60, hinge_span=height / 2)
+    hang_from_bracket(model, bar_depth=depth * 0.3, arm_thickness=arm_thickness)
     return model
+
+
+def fresnels() -> list[Model]:
+    """3.4 — the Fresnel family: 500 W, 1 kW and 2 kW.
+
+    The 1 kW keeps the name every show already refers to it by. The other two are the lanterns
+    on either side of it, which is the distinction a rig full of Fresnels is actually made of.
+    """
+
+    return [
+        _fresnel(
+            "fresnel-barn-doors-500w",
+            "Fresnel 500 W: 200 x 230 x 230 with a 150 lens and four barn doors",
+            200.0,
+            230.0,
+            230.0,
+            150.0,
+            70.0,
+            16.0,
+        ),
+        _fresnel(
+            "fresnel-barn-doors",
+            "Fresnel 260 x 300 x 300 with four barn doors",
+            260.0,
+            300.0,
+            300.0,
+            200.0,
+            90.0,
+            20.0,
+        ),
+        _fresnel(
+            "fresnel-barn-doors-2kw",
+            "Fresnel 2 kW: 330 x 380 x 380 with a 250 lens and four barn doors",
+            330.0,
+            380.0,
+            380.0,
+            250.0,
+            110.0,
+            26.0,
+        ),
+    ]
 
 
 def barn_doors(model: Model, aperture: float, at: float, hinge_span: float) -> None:
@@ -780,6 +883,20 @@ def par_cans() -> list[Model]:
     return built
 
 
+def par_20() -> Model:
+    """The birdie: the small can that lights a table, a truss leg or a band riser."""
+
+    return _par_can(
+        "par-20",
+        "PAR 20 birdie: hollow 70 can, 150 long, single-cell frame",
+        70.0,
+        150.0,
+        HOUSING_BLACK,
+        RIM_ON_BLACK,
+        clips=False,
+    )
+
+
 def acl() -> Model:
     """3.8 — the small silver can that gets rigged four to a bar."""
 
@@ -954,26 +1071,59 @@ def _sealed_beam_cell(
         )
 
 
-def sunstrip() -> Model:
-    """3.12 — ten flat reflector cells on 100 centres; the whole bar stays a base part."""
+def _sunstrip(
+    name: str,
+    summary: str,
+    count: int,
+    pitch: float,
+    mouth: float,
+    depth: float,
+) -> Model:
+    """3.12 — flat reflector cells down a bar; the whole bar stays a base part.
 
-    model = Model(
-        "sunstrip",
-        "lamps",
-        "Sunstrip: 1000 x 90 x 90 bar, ten 84 reflector cells on 100 centres",
-    )
+    Cell count is the personality: a ten-lamp bar is a row of distinct sources an operator
+    chases along, and a twenty is close enough to a line that it reads as one.
+    """
+
+    model = Model(name, "lamps", summary)
     top, bottom = 45.0, -45.0
     bar = model.part("sunstrip-bar", HOUSING_BLACK)
     bar.box((1000, 90, 90), (0, 0, 0))
     bar.box((940, 60, 16), (0, 0, top + 8))
     cups = model.part("cell-cups", REFLECTOR, finish=METAL)
     filaments = model.part("cell-filaments", LENS_CLEAR, finish=GLASS)
-    for index in range(10):
-        _reflector_cell(cups, filaments, (-450 + index * 100, 0, bottom), mouth=84.0, depth=38.0)
+    first = -(count - 1) * pitch / 2
+    for index in range(count):
+        _reflector_cell(
+            cups, filaments, (first + index * pitch, 0, bottom), mouth=mouth, depth=depth
+        )
     # The arms have to stand outside the bar's ends, which is where a sunstrip's
     # brackets really are; the frame takes its span from the widest part it measures.
     hang_from_bracket(model, bar_depth=80.0, arm_thickness=14.0)
     return model
+
+
+def sunstrips() -> list[Model]:
+    """3.12 — the ten-lamp bar every rig has, and the twenty-cell one beside it."""
+
+    return [
+        _sunstrip(
+            "sunstrip",
+            "Sunstrip: 1000 x 90 x 90 bar, ten 84 reflector cells on 100 centres",
+            10,
+            100.0,
+            84.0,
+            38.0,
+        ),
+        _sunstrip(
+            "sunstrip-20",
+            "Sunstrip 20: 1000 x 90 x 90 bar, twenty 44 reflector cells on 50 centres",
+            20,
+            50.0,
+            44.0,
+            22.0,
+        ),
+    ]
 
 
 def blinders() -> list[Model]:
@@ -1278,20 +1428,133 @@ def scanners() -> list[Model]:
     ]
 
 
+def profile_spot_classic() -> Model:
+    """The older profile: a box, not a turning.
+
+    A modern ellipsoidal is a moulding over a round optical train and reads as a tube. The
+    lanterns it replaced were sheet steel folded into a case — a square lamp box, a square
+    barrel with the shutters through its sides, and a long square snoot carrying the lens. It
+    is a longer, plainer, blockier silhouette, and on a bar next to a Source Four it is
+    unmistakable, which is the only reason to draw it separately at all.
+    """
+
+    model = Model(
+        "profile-spot-classic",
+        "lamps",
+        "Classic profile: 760 long boxy ellipsoidal, folded lamp box, square lens snoot",
+    )
+    rear, front = 330.0, -430.0
+
+    housing = model.part("rear-housing", HOUSING_BLACK)
+    housing.box((236, 236, 260), (0, 0, rear - 130))
+    # Folded sheet reads as sheet because of its seams: a proud lid and a proud base flange.
+    housing.box((248, 248, 16), (0, 0, rear - 8))
+    housing.box((248, 248, 14), (0, 0, rear - 252))
+    for step in range(4):
+        housing.box((244, 20, 10), (0, 0, rear - 60 - step * 46))
+    cap = model.part("rear-cap", SILVER, BASE, housing)
+    cap.box((120, 120, 26), (0, 0, rear + 12))
+
+    barrel = model.part("shutter-barrel", HOUSING_BLACK)
+    barrel.box((206, 206, 200), (0, 0, rear - 360))
+    handles = model.part("shutter-handles", SILVER, BASE, barrel)
+    for index, (dx, dy) in enumerate(((1, 0), (-1, 0), (0, 1), (0, -1))):
+        handles.strut(
+            14,
+            (dx * 96, dy * 96, rear - 300 - index * 34),
+            (dx * 150, dy * 150, rear - 318 - index * 34),
+            segments=6,
+        )
+
+    snoot = model.part("lens-snoot", HOUSING_BLACK)
+    snoot.box((178, 178, 320), (0, 0, front + 168))
+    snoot.box((190, 190, 14), (0, 0, front + 22))
+    knob = model.part("focus-knob", SILVER, BASE, snoot)
+    knob.cylinder(40, 28, (0, 96, front + 210), segments=10, rotation=(90, 0, 0))
+
+    lens = model.part("lens", LENS_CLEAR)
+    lens.revolve(
+        [(0.0, 0.0), (76.0, 20.0), (76.0, 38.0), (0.0, 54.0)],
+        (0, 0, front + 10),
+        segments=20,
+    )
+    ring = model.part("lens-ring", RIM_ON_BLACK)
+    ring.tube(180, 156, 22, (0, 0, front + 12))
+
+    runner = model.part("colour-frame-runner", GEL_FRAME)
+    runner.polygon_frame(228, 194, 56, (0, 0, front - 18))
+    hang_from_bracket(model, bar_depth=130.0, arm_thickness=14.0)
+    return model
+
+
+def flood() -> Model:
+    """A cyc flood: a rectangular trough with an asymmetric reflector and no lens at all.
+
+    Everything else in this set puts its light through a round hole. A flood does not — its
+    aperture is a long rectangle, because what it has to cover is a cloth, and the reflector
+    behind it is deliberately lopsided so the light thrown at the top of the cloth travels
+    further than the light thrown at the bottom. Drawn as a round lantern it would be the one
+    fixture in a rig whose shape tells an operator the wrong thing about where its light goes.
+    """
+
+    model = Model(
+        "flood-asymmetric",
+        "lamps",
+        "Asymmetric cyc flood: 400 x 260 x 210 trough with a 330 x 170 rectangular aperture",
+    )
+    top, bottom = 105.0, -105.0
+
+    body = model.part("body", HOUSING_BLACK)
+    body.box((400, 260, 210), (0, 0, 0))
+    body.box((416, 276, 18), (0, 0, top - 9))
+    # The trough is open at the bottom, so the walls are drawn rather than the solid box.
+    for side in (-1, 1):
+        body.box((16, 260, 190), (side * 192, 0, -10))
+    body.box((400, 16, 190), (0, -122, -10))
+    handle = model.part("handle", SILVER, BASE, body)
+    handle.strut(16, (-110, 130, top + 30), (110, 130, top + 30), segments=6)
+
+    # Asymmetric: the reflector is a shallow ramp, deep at the back and shallow at the front,
+    # which is what throws the top of the cloth further than the bottom.
+    reflector = model.part("reflector", REFLECTOR, BASE, body, finish=METAL)
+    for step in range(6):
+        depth = 150.0 - step * 22.0
+        reflector.box((360, 34, 10), (0, -104 + step * 38, top - 30 - depth / 2), rotation=(-26, 0, 0))
+
+    burner = model.part("burner", LENS_CLEAR, BASE, body, finish=GLASS)
+    burner.cylinder(26, 300, (0, -52, top - 92), segments=12, rotation=(0, 90, 0))
+
+    # The aperture itself: a rectangle of diffusion across the mouth of the trough.
+    face = model.part("aperture", WHITE_DIFFUSER, finish=DIFFUSER)
+    face.box((330, 170, 12), (0, 14, bottom + 6))
+    lip = model.part("aperture-lip", GEL_FRAME)
+    lip.box((372, 12, 34), (0, 104, bottom + 17))
+    lip.box((372, 12, 34), (0, -76, bottom + 17))
+    for side in (-1, 1):
+        lip.box((12, 192, 34), (side * 180, 14, bottom + 17))
+
+    hang_from_bracket(model, bar_depth=110.0, arm_thickness=18.0)
+    return model
+
+
 def models() -> list[Model]:
     """Every lamp of part 3, in the brief's order, plus the mirror scanners."""
 
     built = [
-        moving_head_profile(),
-        moving_head_wash(),
+        *moving_head_profiles(),
+        *moving_head_washes(),
         *led_wash_heads(),
         *scanners(),
         profile_spot(),
-        fresnel(),
+        profile_spot_classic(),
+        *fresnels(),
+        flood(),
     ]
     built.extend(par_cans())
     built.append(acl())
-    built.extend([led_par_pizza(), led_par_x_in_1(), flat_led_par(), sunstrip()])
+    built.append(par_20())
+    built.extend([led_par_pizza(), led_par_x_in_1(), flat_led_par()])
+    built.extend(sunstrips())
     built.extend(blinders())
     built.extend([strobe(), led_strobe()])
     built.extend(led_strips())

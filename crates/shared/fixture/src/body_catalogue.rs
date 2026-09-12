@@ -27,6 +27,7 @@ pub enum BodyGroup {
     Scanner,
     Profile,
     Fresnel,
+    Flood,
     ParCan,
     LedPar,
     Blinder,
@@ -43,6 +44,7 @@ impl BodyGroup {
             Self::Scanner => "Scanners",
             Self::Profile => "Profiles",
             Self::Fresnel => "Fresnels",
+            Self::Flood => "Floods",
             Self::ParCan => "PAR cans",
             Self::LedPar => "LED PARs",
             Self::Blinder => "Blinders",
@@ -62,12 +64,22 @@ const fn body(id: &'static str, label: &'static str, group: BodyGroup) -> BodyMo
 pub const BODY_CATALOGUE: &[BodyModel] = &[
     body(
         "moving-head-profile",
-        "Profile moving light",
+        "Profile moving light, small",
+        BodyGroup::MovingLight,
+    ),
+    body(
+        "moving-head-profile-large",
+        "Profile moving light, large",
         BodyGroup::MovingLight,
     ),
     body(
         "moving-head-wash",
-        "Wash moving light",
+        "Wash moving light, small",
+        BodyGroup::MovingLight,
+    ),
+    body(
+        "moving-head-wash-large",
+        "Wash moving light, large",
         BodyGroup::MovingLight,
     ),
     body(
@@ -91,13 +103,22 @@ pub const BODY_CATALOGUE: &[BodyModel] = &[
         BodyGroup::Scanner,
     ),
     body("scanner-mirror-spot", "Mirror scanner", BodyGroup::Scanner),
-    body("profile-spot", "Profile spot", BodyGroup::Profile),
+    body("profile-spot", "Profile, modern", BodyGroup::Profile),
     body(
-        "fresnel-barn-doors",
-        "Fresnel with barn doors",
+        "profile-spot-classic",
+        "Profile, classic",
+        BodyGroup::Profile,
+    ),
+    body(
+        "fresnel-barn-doors-500w",
+        "Fresnel 500 W",
         BodyGroup::Fresnel,
     ),
+    body("fresnel-barn-doors", "Fresnel 1 kW", BodyGroup::Fresnel),
+    body("fresnel-barn-doors-2kw", "Fresnel 2 kW", BodyGroup::Fresnel),
+    body("flood-asymmetric", "Asymmetric cyc flood", BodyGroup::Flood),
     body("acl-par-16", "ACL / PAR 16", BodyGroup::ParCan),
+    body("par-20", "PAR 20 birdie", BodyGroup::ParCan),
     body("par-56-black", "PAR 56, black", BodyGroup::ParCan),
     body("par-56-silver", "PAR 56, silver", BodyGroup::ParCan),
     body(
@@ -127,6 +148,7 @@ pub const BODY_CATALOGUE: &[BodyModel] = &[
     body("blinder-4-cell", "Blinder, 4 cell", BodyGroup::Blinder),
     body("blinder-8-cell", "Blinder, 8 cell", BodyGroup::Blinder),
     body("sunstrip", "Sunstrip, ten lamps", BodyGroup::Strip),
+    body("sunstrip-20", "Sunstrip, twenty lamps", BodyGroup::Strip),
     body(
         "led-strip-rgbcct-0500",
         "LED strip, 500 mm",

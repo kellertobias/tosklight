@@ -2280,6 +2280,855 @@
       ]
     },
     {
+      "model": "flood-asymmetric-no-clamp",
+      "group": "lamps",
+      "file": "lamps/flood-asymmetric-no-clamp.glb",
+      "summary": "Asymmetric cyc flood: 400 x 260 x 210 trough with a 330 x 170 rectangular aperture; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 480.0,
+      "height_millimetres": 346.9,
+      "depth_millimetres": 276.0,
+      "triangles": 396,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "body",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "handle",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "burner",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "aperture",
+          "kind": "base",
+          "finish": "diffuser"
+        },
+        {
+          "name": "aperture-lip",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.2819,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.2131
+        }
+      ]
+    },
+    {
+      "model": "flood-asymmetric",
+      "group": "lamps",
+      "file": "lamps/flood-asymmetric.glb",
+      "summary": "Asymmetric cyc flood: 400 x 260 x 210 trough with a 330 x 170 rectangular aperture",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 480.0,
+      "height_millimetres": 473.5,
+      "depth_millimetres": 276.0,
+      "triangles": 1492,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "body",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "handle",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "burner",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "aperture",
+          "kind": "base",
+          "finish": "diffuser"
+        },
+        {
+          "name": "aperture-lip",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.2819,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.2131
+        }
+      ]
+    },
+    {
+      "model": "fresnel-barn-doors-2kw-no-clamp",
+      "group": "lamps",
+      "file": "lamps/fresnel-barn-doors-2kw-no-clamp.glb",
+      "summary": "Fresnel 2 kW: 330 x 380 x 380 with a 250 lens and four barn doors; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 646.6,
+      "height_millimetres": 918.7,
+      "depth_millimetres": 647.7,
+      "triangles": 1324,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "body",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-frame",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-hinges",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "barn-door-bottom",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-top",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-left",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-right",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "barn-door-bottom",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.6994,
+            0.196
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-top",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.6994,
+            -0.196
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-left",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "point_metres": [
+            -0.196,
+            -0.6994,
+            -0.0
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-right",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "point_metres": [
+            0.196,
+            -0.6994,
+            -0.0
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.4234,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.3418
+        }
+      ]
+    },
+    {
+      "model": "fresnel-barn-doors-2kw",
+      "group": "lamps",
+      "file": "lamps/fresnel-barn-doors-2kw.glb",
+      "summary": "Fresnel 2 kW: 330 x 380 x 380 with a 250 lens and four barn doors",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 646.6,
+      "height_millimetres": 1045.3,
+      "depth_millimetres": 647.7,
+      "triangles": 2420,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "body",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-frame",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-hinges",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "barn-door-bottom",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-top",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-left",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-right",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "barn-door-bottom",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.6994,
+            0.196
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-top",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.6994,
+            -0.196
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-left",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "point_metres": [
+            -0.196,
+            -0.6994,
+            -0.0
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-right",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "point_metres": [
+            0.196,
+            -0.6994,
+            -0.0
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.4234,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.3418
+        }
+      ]
+    },
+    {
+      "model": "fresnel-barn-doors-500w-no-clamp",
+      "group": "lamps",
+      "file": "lamps/fresnel-barn-doors-500w-no-clamp.glb",
+      "summary": "Fresnel 500 W: 200 x 230 x 230 with a 150 lens and four barn doors; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 408.2,
+      "height_millimetres": 598.9,
+      "depth_millimetres": 396.8,
+      "triangles": 1324,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "body",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-frame",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-hinges",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "barn-door-bottom",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-top",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-left",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-right",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "barn-door-bottom",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.483,
+            0.121
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-top",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.483,
+            -0.121
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-left",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "point_metres": [
+            -0.121,
+            -0.483,
+            -0.0
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-right",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "point_metres": [
+            0.121,
+            -0.483,
+            -0.0
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.282,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.2164
+        }
+      ]
+    },
+    {
+      "model": "fresnel-barn-doors-500w",
+      "group": "lamps",
+      "file": "lamps/fresnel-barn-doors-500w.glb",
+      "summary": "Fresnel 500 W: 200 x 230 x 230 with a 150 lens and four barn doors",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 408.2,
+      "height_millimetres": 725.5,
+      "depth_millimetres": 396.8,
+      "triangles": 2420,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "body",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-frame",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-hinges",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "barn-door-bottom",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-top",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-left",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "barn-door-right",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "barn-door-bottom",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.483,
+            0.121
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-top",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.483,
+            -0.121
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-left",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "point_metres": [
+            -0.121,
+            -0.483,
+            -0.0
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "barn-door-right",
+          "description": "barn-door leaf, hinged at the frame",
+          "axis": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "point_metres": [
+            0.121,
+            -0.483,
+            -0.0
+          ],
+          "range_degrees": [
+            0.0,
+            90.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.282,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.2164
+        }
+      ]
+    },
+    {
       "model": "fresnel-barn-doors-no-clamp",
       "group": "lamps",
       "file": "lamps/fresnel-barn-doors-no-clamp.glb",
@@ -4294,6 +5143,249 @@
       ]
     },
     {
+      "model": "moving-head-profile-large-no-clamp",
+      "group": "lamps",
+      "file": "lamps/moving-head-profile-large-no-clamp.glb",
+      "summary": "Moving head profile, large: 500 x 313 x 219 base, turned 375 x 600 head on a full-travel yoke; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 561.0,
+      "height_millimetres": 983.6,
+      "depth_millimetres": 330.5,
+      "triangles": 1572,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "moving-head",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "head-body",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "head-cheeks",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "lens",
+          "kind": "head",
+          "finish": "glass"
+        },
+        {
+          "name": "moving-base",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "base-display",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "base-connectors",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "moving-yoke",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-crossbar",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-left",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-right",
+          "kind": "yoke",
+          "finish": "paint"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "moving-yoke",
+          "description": "pan about the hanging axis, carrying the yoke and everything in it",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -270.0,
+            270.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "moving-head",
+          "description": "tilt about the yoke trunnions, which the arms are cut long enough to allow",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.6998,
+            -0.0
+          ],
+          "range_degrees": [
+            -135.0,
+            135.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
+      "model": "moving-head-profile-large",
+      "group": "lamps",
+      "file": "lamps/moving-head-profile-large.glb",
+      "summary": "Moving head profile, large: 500 x 313 x 219 base, turned 375 x 600 head on a full-travel yoke",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 561.0,
+      "height_millimetres": 1110.1,
+      "depth_millimetres": 330.5,
+      "triangles": 2668,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "moving-head",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "head-body",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "head-cheeks",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "lens",
+          "kind": "head",
+          "finish": "glass"
+        },
+        {
+          "name": "moving-base",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "base-display",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "base-connectors",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "moving-yoke",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-crossbar",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-left",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-right",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "moving-yoke",
+          "description": "pan about the hanging axis, carrying the yoke and everything in it",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -270.0,
+            270.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "moving-head",
+          "description": "tilt about the yoke trunnions, which the arms are cut long enough to allow",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.6998,
+            -0.0
+          ],
+          "range_degrees": [
+            -135.0,
+            135.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
       "model": "moving-head-profile-no-clamp",
       "group": "lamps",
       "file": "lamps/moving-head-profile-no-clamp.glb",
@@ -4526,6 +5618,249 @@
           "point_metres": [
             0.0,
             -0.5893,
+            -0.0
+          ],
+          "range_degrees": [
+            -135.0,
+            135.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
+      "model": "moving-head-wash-large-no-clamp",
+      "group": "lamps",
+      "file": "lamps/moving-head-wash-large-no-clamp.glb",
+      "summary": "Moving head wash, large: turned 400 x 413 head with a 263 front lens on a full-travel yoke; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 586.0,
+      "height_millimetres": 853.4,
+      "depth_millimetres": 350.0,
+      "triangles": 1340,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "moving-head",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "head-body",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "head-cheeks",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "lens",
+          "kind": "head",
+          "finish": "glass"
+        },
+        {
+          "name": "moving-base",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "base-display",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "base-connectors",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "moving-yoke",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-crossbar",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-left",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-right",
+          "kind": "yoke",
+          "finish": "paint"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "moving-yoke",
+          "description": "pan about the hanging axis, carrying the yoke and everything in it",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -270.0,
+            270.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "moving-head",
+          "description": "tilt about the yoke trunnions, which the arms are cut long enough to allow",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.6472,
+            -0.0
+          ],
+          "range_degrees": [
+            -135.0,
+            135.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
+      "model": "moving-head-wash-large",
+      "group": "lamps",
+      "file": "lamps/moving-head-wash-large.glb",
+      "summary": "Moving head wash, large: turned 400 x 413 head with a 263 front lens on a full-travel yoke",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 586.0,
+      "height_millimetres": 980.0,
+      "depth_millimetres": 350.0,
+      "triangles": 2436,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "moving-head",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "head-body",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "head-cheeks",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "head",
+          "finish": "paint"
+        },
+        {
+          "name": "lens",
+          "kind": "head",
+          "finish": "glass"
+        },
+        {
+          "name": "moving-base",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "base-display",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "base-connectors",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "moving-yoke",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-crossbar",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-left",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "yoke-right",
+          "kind": "yoke",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "moving-yoke",
+          "description": "pan about the hanging axis, carrying the yoke and everything in it",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -270.0,
+            270.0
+          ],
+          "clearance_metres": null
+        },
+        {
+          "node": "moving-head",
+          "description": "tilt about the yoke trunnions, which the arms are cut long enough to allow",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.6472,
             -0.0
           ],
           "range_degrees": [
@@ -4774,6 +6109,180 @@
           "range_degrees": [
             -135.0,
             135.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
+      "model": "par-20-no-clamp",
+      "group": "lamps",
+      "file": "lamps/par-20-no-clamp.glb",
+      "summary": "PAR 20 birdie: hollow 70 can, 150 long, single-cell frame; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 159.0,
+      "height_millimetres": 204.1,
+      "depth_millimetres": 134.9,
+      "triangles": 1664,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "par-can",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "filament",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "paint"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.1251,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.0755
+        }
+      ]
+    },
+    {
+      "model": "par-20",
+      "group": "lamps",
+      "file": "lamps/par-20.glb",
+      "summary": "PAR 20 birdie: hollow 70 can, 150 long, single-cell frame",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 159.0,
+      "height_millimetres": 330.7,
+      "depth_millimetres": 134.9,
+      "triangles": 2212,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "par-can",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "filament",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.1251,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.0755
+        },
+        {
+          "node": "truss-coupler",
+          "description": "half-coupler rotation about the hanging bolt, for aiming the fixture on the bar",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -180.0,
+            180.0
           ],
           "clearance_metres": null
         }
@@ -5884,6 +7393,210 @@
       ]
     },
     {
+      "model": "profile-spot-classic-no-clamp",
+      "group": "lamps",
+      "file": "lamps/profile-spot-classic-no-clamp.glb",
+      "summary": "Classic profile: 760 long boxy ellipsoidal, folded lamp box, square lens snoot; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 359.8,
+      "height_millimetres": 876.4,
+      "depth_millimetres": 304.4,
+      "triangles": 736,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "rear-housing",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "rear-cap",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "shutter-barrel",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "shutter-handles",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "lens-snoot",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "focus-knob",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.4404,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.378
+        }
+      ]
+    },
+    {
+      "model": "profile-spot-classic",
+      "group": "lamps",
+      "file": "lamps/profile-spot-classic.glb",
+      "summary": "Classic profile: 760 long boxy ellipsoidal, folded lamp box, square lens snoot",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 359.8,
+      "height_millimetres": 1003.0,
+      "depth_millimetres": 304.4,
+      "triangles": 1284,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "rear-housing",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "rear-cap",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "shutter-barrel",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "shutter-handles",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "lens-snoot",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "focus-knob",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.4404,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.378
+        },
+        {
+          "node": "truss-coupler",
+          "description": "half-coupler rotation about the hanging bolt, for aiming the fixture on the bar",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -180.0,
+            180.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
       "model": "profile-spot-no-clamp",
       "group": "lamps",
       "file": "lamps/profile-spot-no-clamp.glb",
@@ -6839,6 +8552,131 @@
             90.0
           ],
           "clearance_metres": 0.182
+        }
+      ]
+    },
+    {
+      "model": "sunstrip-20-no-clamp",
+      "group": "lamps",
+      "file": "lamps/sunstrip-20-no-clamp.glb",
+      "summary": "Sunstrip 20: 1000 x 90 x 90 bar, twenty 44 reflector cells on 50 centres; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 1056.0,
+      "height_millimetres": 150.8,
+      "depth_millimetres": 90.0,
+      "triangles": 9196,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "sunstrip-bar",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "cell-cups",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-filaments",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.1385,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.0761
+        }
+      ]
+    },
+    {
+      "model": "sunstrip-20",
+      "group": "lamps",
+      "file": "lamps/sunstrip-20.glb",
+      "summary": "Sunstrip 20: 1000 x 90 x 90 bar, twenty 44 reflector cells on 50 centres",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 1056.0,
+      "height_millimetres": 277.3,
+      "depth_millimetres": 114.6,
+      "triangles": 10292,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "sunstrip-bar",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "cell-cups",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-filaments",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.1385,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.0761
         }
       ]
     },
