@@ -225,7 +225,7 @@ describe("the CAD planning screen", () => {
 			within(header as HTMLElement)
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Undo", "Redo", "Print", "Meta", "⚙"]);
+		).toEqual(["Undo", "Redo", "Print", "Drawings", "Meta", "⚙"]);
 		// The group boundary — and so the divider — belongs right of Redo, not after Meta.
 		expect(
 			[...(header as HTMLElement).querySelectorAll(".ui-window-action-group")]
@@ -235,7 +235,7 @@ describe("the CAD planning screen", () => {
 						.join(" "),
 				)
 				.filter((labels) => labels.length > 0),
-		).toEqual(["Undo Redo", "Print Meta", "⚙"]);
+		).toEqual(["Undo Redo", "Print Drawings Meta", "⚙"]);
 		expect(
 			screen.getByRole("button", {
 				name: "Rotate top-down view 90 degrees counterclockwise",

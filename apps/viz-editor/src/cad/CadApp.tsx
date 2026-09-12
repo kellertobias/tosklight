@@ -8,12 +8,13 @@ import { CadTileViewBar } from "./CadTileViewBar";
 import { visibleEntities } from "./cutPlanes";
 import { CadProjectPanel } from "./CadProjectPanel";
 import { CadViewport } from "./CadViewport";
-import {
-	buildCadPdf,
-	type CadPrintDocumentInfo,
-	rotatePrintPage,
-} from "./print";
+import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
 import { cadSession } from "./session";
+import { CadUnderlayPanel } from "./CadUnderlayPanel";
+import { underlaysForView } from "./underlayGeometry";
+import type { CadUnderlay } from "./underlays";
+import { useCadPrintPages } from "./useCadPrintPages";
+import { useCadUnderlays } from "./useCadUnderlays";
 import {
 	applySelectionChange,
 	CAD_VIEW_LABELS,
@@ -43,8 +44,6 @@ import {
 const WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v2";
 const LEGACY_WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v1";
 const SETTINGS_KEY = "tosklight:viz-editor:cad-settings:v1";
-const PRINT_KEY = "tosklight:viz-editor:cad-print-pages:v2";
-const LEGACY_PRINT_KEY = "tosklight:viz-editor:cad-print-pages:v1";
 
 interface CadSettings {
 	snapToMounts: boolean;
@@ -59,6 +58,12 @@ interface CadSettings {
  * It draws no window controls of its own: it is a screen inside the Architect window rather than
  * a window, and the operator who wants it beside the patch sheet opens a second editor window.
  */
+const PANEL_TITLES = {
+	print: { title: "Prints", hint: "A4 pages" },
+	project: { title: "Meta", hint: "Printed on every page" },
+	drawings: { title: "Drawings", hint: "Placed under the plan" },
+} as const;
+
 export function CadApp() {
 	const [scene, setScene] = useState<CadSceneSnapshot | null>(null);
 	const [layout, setLayout] = useState<TileNode>(restoreLayout);
@@ -68,21 +73,21 @@ export function CadApp() {
 	// Which print-side panel is open, and nothing when neither is. Print and Meta are two
 	// independent choices rather than a mode with a tab strip inside it, so each title button
 	// opens its own panel and closes it again when it is already the one showing.
-	const [printPanel, setPrintPanel] = useState<"print" | "project" | null>(
-		null,
-	);
-	const printMode = printPanel !== null;
-	const [printPages, setPrintPages] =
-		useState<CadPrintPage[]>(restorePrintPages);
-	const [selectedPrintPageId, setSelectedPrintPageId] = useState<string | null>(
-		null,
-	);
+	const [printPanel, setPrintPanel] = useState<
+		"print" | "project" | "drawings" | null
+	>(null);
+	// Sheets belong to the Print panel; the others open the sidebar without papering the views.
+	const printMode = printPanel === "print";
+	const panelOpen = printPanel !== null;
+	const printPageState = useCadPrintPages();
+	const { pages: printPages, selectedId: selectedPrintPageId } = printPageState;
 	const [exporting, setExporting] = useState(false);
 	const [activeTileId, setActiveTileId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
 		null,
 	);
+	const underlayState = useCadUnderlays(documentInfo?.showId ?? null);
 	const [paperwork, setPaperwork] = useState({
 		lightingDesigner: "",
 		showVersion: "",
@@ -199,10 +204,6 @@ export function CadApp() {
 		localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 	}, [settings]);
 
-	useEffect(() => {
-		localStorage.setItem(PRINT_KEY, JSON.stringify(printPages));
-	}, [printPages]);
-
 	function select(change: SelectionChange) {
 		selectionQueue.current = selectionQueue.current.then(async () => {
 			const current = sceneRef.current;
@@ -252,58 +253,9 @@ export function CadApp() {
 		}
 	}
 
-	function togglePrintPanel(panel: "print" | "project") {
+	function togglePrintPanel(panel: "print" | "project" | "drawings") {
 		setPreview(null);
 		setPrintPanel((current) => (current === panel ? null : panel));
-	}
-
-	function addPrintPage(tile: ViewportTile) {
-		const pageNumber = printPages.length + 1;
-		const page: CadPrintPage = {
-			kind: "plan",
-			id: globalThis.crypto?.randomUUID?.() ?? `page-${Date.now()}-${pageNumber}`,
-			tileId: tile.id,
-			name: `Page ${pageNumber}`,
-			view: tile.view,
-			rotationQuarterTurns: tile.rotationQuarterTurns,
-			cutPlanes: tile.cutPlanes,
-			centreMillimetres: [-tile.camera.pan[0], -tile.camera.pan[1]],
-			widthMillimetres: Math.max(3000, 360 / tile.camera.zoom),
-			included: true,
-			orientation: "landscape",
-			showFixtureIds: false,
-			showDmxAddresses: false,
-		};
-		setPrintPages((current) => [...current, page]);
-		setSelectedPrintPageId(page.id);
-	}
-
-	function addFixtureList() {
-		const pageNumber = printPages.length + 1;
-		const page: CadPrintPage = {
-			kind: "fixture_list",
-			id:
-				globalThis.crypto?.randomUUID?.() ??
-				`fixture-list-${Date.now()}-${pageNumber}`,
-			tileId: "fixture-list",
-			name: "Fixture List",
-			view: "top_down",
-			rotationQuarterTurns: 0,
-			centreMillimetres: [0, 0],
-			widthMillimetres: 2970,
-			included: true,
-			orientation: "landscape",
-			showFixtureIds: true,
-			showDmxAddresses: true,
-		};
-		setPrintPages((current) => [...current, page]);
-		setSelectedPrintPageId(page.id);
-	}
-
-	function changePrintPage(id: string, change: Partial<CadPrintPage>) {
-		setPrintPages((current) =>
-			current.map((page) => (page.id === id ? { ...page, ...change } : page)),
-		);
 	}
 
 	async function exportPdf() {
@@ -321,7 +273,12 @@ export function CadApp() {
 		try {
 			await cadSession.exportPdf(
 				pdfPath,
-				buildCadPdf(scene, selected, printInfo(documentInfo, paperwork)),
+				buildCadPdf(
+					scene,
+					selected,
+					printInfo(documentInfo, paperwork),
+					underlayState.underlays,
+				),
 			);
 		} catch (reason) {
 			setError(String(reason));
@@ -434,6 +391,12 @@ export function CadApp() {
 								onPress: () => togglePrintPanel("print"),
 							},
 							{
+								id: "drawings",
+								label: "Drawings",
+								active: printPanel === "drawings",
+								onPress: () => togglePrintPanel("drawings"),
+							},
+							{
 								id: "meta",
 								label: "Meta",
 								active: printPanel === "project",
@@ -446,7 +409,7 @@ export function CadApp() {
 				onSettings={() => setSettingsOpen(true)}
 			/>
 			{error ? <output className="cad-error">{error}</output> : null}
-			<div className={`cad-print-layout ${printMode ? "is-printing" : ""}`}>
+			<div className={`cad-print-layout ${panelOpen ? "is-printing" : ""}`}>
 				<section className="cad-workspace">
 					{scene ? (
 						<CadTile
@@ -468,25 +431,30 @@ export function CadApp() {
 							onMove={move}
 							onFit={fit}
 							printMode={printMode}
+							underlays={underlayState.underlays}
 							printPages={printPages}
 							selectedPrintPageId={selectedPrintPageId}
-							onAddPrintPage={addPrintPage}
-							onSelectPrintPage={setSelectedPrintPageId}
-							onChangePrintPage={changePrintPage}
+							onAddPrintPage={printPageState.addPlanPage}
+							onSelectPrintPage={printPageState.select}
+							onChangePrintPage={printPageState.change}
 							documentInfo={printInfo(documentInfo, paperwork)}
 						/>
 					) : (
 						<div className="cad-loading">Loading the canonical rig…</div>
 					)}
 				</section>
-				{printMode ? (
+				{panelOpen ? (
 					<aside className="cad-print-sidebar" aria-label="Print pages">
 						<header>
-							<h2>{printPanel === "project" ? "Meta" : "Prints"}</h2>
-							<span>
-								{printPanel === "project" ? "Printed on every page" : "A4 pages"}
-							</span>
+							<h2>{PANEL_TITLES[printPanel].title}</h2>
+							<span>{PANEL_TITLES[printPanel].hint}</span>
 						</header>
+						{printPanel === "drawings" ? (
+							<CadUnderlayPanel
+								state={underlayState}
+								defaultView={activeTileView(layout, activeTileId)}
+							/>
+						) : null}
 						{printPanel === "project" ? (
 							<CadProjectPanel
 								paperwork={paperwork}
@@ -512,14 +480,14 @@ export function CadApp() {
 											type="checkbox"
 											checked={page.included}
 											onChange={(event) =>
-												changePrintPage(page.id, {
+												printPageState.change(page.id, {
 													included: event.currentTarget.checked,
 												})
 											}
 										/>
 										<button
 											type="button"
-											onClick={() => setSelectedPrintPageId(page.id)}
+											onClick={() => printPageState.select(page.id)}
 										>
 											<strong>
 												{index + 1}. {page.name}
@@ -537,7 +505,7 @@ export function CadApp() {
 								<p>Add a page from any view.</p>
 							)}
 						</div>
-						<Button className="cad-add-fixture-list" onClick={addFixtureList}>
+						<Button className="cad-add-fixture-list" onClick={printPageState.addFixtureList}>
 							Add Fixture List
 						</Button>
 						{selectedPrintPageId
@@ -553,15 +521,7 @@ export function CadApp() {
 											aria-label="Selected page settings"
 										>
 											<Button
-												onClick={() =>
-													setPrintPages((current) =>
-														current.map((candidate) =>
-															candidate.id === page.id
-																? rotatePrintPage(candidate)
-																: candidate,
-														),
-													)
-												}
+												onClick={() => printPageState.rotate(page.id)}
 											>
 												Rotate page
 											</Button>
@@ -657,6 +617,24 @@ function findTile(node: TileNode, id: string): ViewportTile | null {
 	return findTile(node.first, id) ?? findTile(node.second, id);
 }
 
+/** The view of the tile the operator last worked in, which a new drawing is placed on by default. */
+function activeTileView(
+	node: TileNode,
+	activeTileId: string | null,
+): CadViewDirection {
+	const tiles: ViewportTile[] = [];
+	const walk = (candidate: TileNode) => {
+		if (candidate.type === "tile") tiles.push(candidate);
+		else {
+			walk(candidate.first);
+			walk(candidate.second);
+		}
+	};
+	walk(node);
+	const active = tiles.find((tile) => tile.id === activeTileId);
+	return (active ?? tiles[0])?.view ?? "top_down";
+}
+
 export interface CadTileProps {
 	node: TileNode;
 	root: TileNode;
@@ -678,6 +656,7 @@ export interface CadTileProps {
 	): Promise<void>;
 	onFit(id: string): void;
 	printMode: boolean;
+	underlays: readonly CadUnderlay[];
 	printPages: readonly CadPrintPage[];
 	selectedPrintPageId: string | null;
 	onAddPrintPage(tile: ViewportTile): void;
@@ -799,6 +778,7 @@ function CadTile(props: CadTileProps) {
 				showDmxAddresses={props.settings.showDmxAddresses}
 				showCoordinateOrigins={props.settings.showCoordinateOrigins}
 				printMode={props.printMode}
+				underlays={underlaysForView(props.underlays, node.view)}
 				onCamera={(camera: TileCamera) =>
 					props.onTile(node.id, (tile) => ({ ...tile, camera }))
 				}
@@ -869,41 +849,6 @@ function restoreSettings(): CadSettings {
 	}
 }
 
-function restorePrintPages(): CadPrintPage[] {
-	try {
-		const current = localStorage.getItem(PRINT_KEY);
-		const legacy = current == null;
-		const stored = JSON.parse(
-			current ?? localStorage.getItem(LEGACY_PRINT_KEY) ?? "[]",
-		);
-		if (!Array.isArray(stored)) return [];
-		return stored
-			.filter(
-				(page): page is CadPrintPage =>
-					typeof page?.id === "string" &&
-					typeof page?.tileId === "string" &&
-					typeof page?.name === "string" &&
-					page?.centreMillimetres?.length === 2 &&
-					Number.isFinite(page?.widthMillimetres),
-			)
-			.map((page) => ({
-				...page,
-				centreMillimetres:
-					legacy && page.view === "top_down"
-						? legacyTopDownPlanPoint(
-								page.centreMillimetres,
-								page.rotationQuarterTurns ?? 0,
-							)
-						: page.centreMillimetres,
-				kind: page.kind === "fixture_list" ? "fixture_list" : "plan",
-				orientation: page.orientation === "portrait" ? "portrait" : "landscape",
-				showFixtureIds: page.showFixtureIds === true,
-				showDmxAddresses: page.showDmxAddresses === true,
-			}));
-	} catch {
-		return [];
-	}
-}
 
 function rotateTile(props: CadTileProps, tile: ViewportTile, delta: -1 | 1) {
 	const rotationQuarterTurns = normaliseQuarterTurns(

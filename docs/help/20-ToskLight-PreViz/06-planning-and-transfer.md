@@ -287,3 +287,37 @@ the cut takes away is also unselectable, since you cannot pick what the drawing 
 A print page added from a viewport takes that viewport's cut planes with it, so a PDF prints the
 slice you composed rather than the whole rig. A viewport saved before cut planes existed has none,
 which means the whole drawing.
+
+## Drawings under the plan
+
+A plot is drawn over the venue, so the venue's own drawing can be placed under it. **Drawings** in
+the title bar opens the panel that holds them: **Add Drawing** takes a DXF or an SVG, reads it, and
+tells you what it found — what the file says its units are, how large the drawing is in metres, and
+how many lines it holds — before anything is placed. Nothing is written into the show until you
+press **Place Drawing**.
+
+Every drawing belongs to one axis, the one it was drawn for: a ground plan to the top-down view, a
+section or a front elevation to the matching elevation. It appears on the views that show that
+axis and nowhere else, and a rotated top-down view turns its drawings with the rig rather than
+leaving the plan behind.
+
+Placement is in metres of the show, not of the file: give the drawing's origin an **X** and **Y**,
+a **Scale** if the file was not drawn at full size, and a **Rotation** if it does not face the way
+the rig does. Check the result against something you know — a stage width, a truss span — and the
+rest of the drawing follows. **Show** takes a drawing off the views without removing it; **Remove**
+deletes it from the show.
+
+What the show keeps is the drawing itself, as lines, rather than the file it came from. A placed
+drawing therefore travels with the show: save it, copy it to another machine, open it there, and
+the plan is still under the rig with no file to go looking for. Re-importing the same drawing after
+the CAD file changes places it again as a new drawing.
+
+Lines, polylines, circles, arcs and ellipses are drawn, and so are the blocks a plan is assembled
+from. Text, dimensions, hatches and splines are not: a drawing under a plot is there to say where
+the walls are, and the lettering of somebody else's title block is not part of that. Cut planes do
+not apply to drawings either, so a view cut to a slice of the rig still shows the venue it stands
+in.
+
+Each print page carries its own switches for the drawings on its axis, beside the page's cut
+planes. A page prints every drawing of its axis unless you switch one off, which is also what a
+page saved before drawings could be placed does.

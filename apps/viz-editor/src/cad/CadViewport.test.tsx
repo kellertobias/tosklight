@@ -4,13 +4,14 @@ import {
 	CadRigOverview,
 	CadViewport,
 	cadScaleForZoom,
-	cadEntityOutlineColor,
-	fitCadOverview,
 	formatCadScale,
+} from "./CadViewport";
+import {
+	cadEntityOutlineColor,
 	observeViewportResize,
 	renderDepthMaskedLinework,
-	viewportGuideRange,
-} from "./CadViewport";
+} from "./lineRenderer";
+import { fitCadOverview, viewportGuideRange } from "./planGeometry";
 import type { CadEntity } from "./types";
 
 const fixture: CadEntity = {

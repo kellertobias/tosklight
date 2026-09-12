@@ -7,6 +7,7 @@ import {
 	rotatePrintPage,
 } from "./print";
 import type { CadPrintPage, CadSceneSnapshot } from "./types";
+import type { CadUnderlay } from "./underlays";
 
 const scene: CadSceneSnapshot = {
 	showId: "show",
@@ -53,7 +54,68 @@ const page = (id: string): CadPrintPage => ({
 	showDmxAddresses: true,
 });
 
+const underlay: CadUnderlay = {
+	id: "venue",
+	name: "Ground plan.dxf",
+	sourceFormat: "dxf",
+	view: "top_down",
+	originMillimetres: [0, 0],
+	scale: 1,
+	rotationDegrees: 0,
+	visible: true,
+	units: "millimetres",
+	geometry: {
+		polylines: [
+			{
+				// A wall along the plan, well inside the page window.
+				points: [
+					[-2000, -1000],
+					[2000, -1000],
+				],
+				closed: false,
+				layer: "A-WALL",
+			},
+		],
+		extentsMillimetres: [-2000, -1000, 2000, -1000],
+		units: "millimetres",
+	},
+};
+
+/** The line work of a page, without its grid, border or title block. */
+function drawnLines(pdf: string): string[] {
+	return pdf
+		.split("\n")
+		.filter((line) => /\d+(\.\d+)? \d+(\.\d+)? m /.test(line));
+}
+
 describe("CAD PDF export", () => {
+	it("prints a placed drawing under the rig, and leaves it off a page that hides it", () => {
+		const shown = new TextDecoder().decode(
+			buildCadPdf(scene, [page("Shown")], undefined, [underlay]),
+		);
+		const hidden = new TextDecoder().decode(
+			buildCadPdf(
+				scene,
+				[{ ...page("Hidden"), hiddenUnderlayIds: [underlay.id] }],
+				undefined,
+				[underlay],
+			),
+		);
+		// The drawing's own stroke weight is only set when a drawing is printed.
+		expect(shown).toContain("0.55 G");
+		expect(hidden).not.toContain("0.55 G");
+		expect(drawnLines(shown).length).toBeGreaterThan(drawnLines(hidden).length);
+	});
+
+	it("leaves a drawing of another axis off the page", () => {
+		const pdf = new TextDecoder().decode(
+			buildCadPdf(scene, [page("Plan")], undefined, [
+				{ ...underlay, view: "front_to_back" },
+			]),
+		);
+		expect(pdf).not.toContain("0.55 G");
+	});
+
 	it("prints only the slice a page's cut planes leave", () => {
 		const upstage = {
 			...scene.entities[0],

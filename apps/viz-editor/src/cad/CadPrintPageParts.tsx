@@ -8,15 +8,23 @@ import {
 	projectPoint,
 	type TileCamera,
 } from "./types";
+import {
+	pageShowsUnderlay,
+	underlaysForView,
+	withUnderlayShown,
+} from "./underlayGeometry";
+import type { CadUnderlay } from "./underlays";
 
 /// The cogwheel in the corner of a page, and the settings it opens for that page alone.
 export function PrintPageSettings({
 	page,
 	entities,
+	underlays = [],
 	onChange,
 }: {
 	page: CadPrintPage;
 	entities: readonly CadEntity[];
+	underlays?: readonly CadUnderlay[];
 	onChange(change: Partial<CadPrintPage>): void;
 }) {
 	// Open only while an operator is working on this page. The cut applies while the menu is open
@@ -67,6 +75,24 @@ export function PrintPageSettings({
 								onChange({ showDmxAddresses: event.currentTarget.checked })
 							}
 						/>
+						{underlaysForView(underlays, page.view).map((underlay) => (
+							<SwitchField
+								key={underlay.id}
+								label={underlay.name}
+								offLabel={null}
+								onLabel={null}
+								checked={pageShowsUnderlay(page, underlay.id)}
+								onChange={(event) =>
+									onChange({
+										hiddenUnderlayIds: withUnderlayShown(
+											page,
+											underlay.id,
+											event.currentTarget.checked,
+										),
+									})
+								}
+							/>
+						))}
 					</CadDepthMenu>
 				</div>
 			) : null}

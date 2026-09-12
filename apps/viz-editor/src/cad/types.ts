@@ -157,6 +157,9 @@ export interface CadPrintPage {
 	showDmxAddresses: boolean;
 	/// The slice of depth this page prints. Absent means the whole drawing.
 	cutPlanes?: CutPlanes;
+	/// Placed drawings this page leaves off. Absent means it prints every drawing on its axis,
+	/// which is what every page saved before drawings could be placed means too.
+	hiddenUnderlayIds?: readonly string[];
 }
 
 export function printPaperSize(page: Pick<CadPrintPage, "orientation">) {
