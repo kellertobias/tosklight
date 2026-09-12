@@ -18,6 +18,21 @@ The shipped package directory currently provides an operator-focused Generic fam
 - **Generic RGBW, RGBWA, and RGBWAUV LED** — one canonical RGB-first emitter order with an 8-bit dimmer first, an 8-bit dimmer last, or a virtual dimmer. **Generic RGBCCT LED** provides the six useful placements of the RGB block, cold white, and warm white (`RGBCW`, `RGBWC`, `CRGBW`, `CWRGB`, `WRGBC`, and `WCRGB`), each with those same three dimmer choices. The library deliberately avoids factorial permutations of individual RGB emitters that do not represent normal fixture personalities.
 - **Generic Dimmer RGB Control PAR (LED PAR 56 Suedbahnhof)** — the operator-supplied five-channel personality in Fixed 0, Red, Green, Blue, Fixed 0 order. The first and fifth slots are static outputs that always transmit zero; the RGB emitters use virtual intensity because the fixture has no physical dimmer channel.
 - **Generic rare-capability references** — **Endless Pan Tilt** retains endless 16-bit axis representation on the canonical Pan and Tilt controls; **Beam Size and Edge** keeps Zoom independent from Softness; **Media Positioning** provides independent media-layer X and Y axes; **Flame Jet** supplies a ToskLight-authored single-nozzle demonstration; and **Kabuki Curtain** maps one raw slot to Reset, Hold, and a latched Release through its portable physics script. These are explicit transferable reference personalities: match their documented channel order to the device rather than treating them as manufacturer profiles.
+### Generated Venue objects
+
+A curtain's height, a truss's length and a deck's rise are measurements of the venue rather than
+personalities of a fixture. Shipping one profile per size — and a mode per size inside it — described
+the same object over and over and still only covered the sizes somebody had thought of.
+
+The trusses, curtains, decks and stairs now declare what shape they are and are built at the size
+they are placed, so a truss repeats its chords over whatever length it is given rather than being
+stretched to it. Each has one mode, and its name says the size it arrives at: **Curtain 2 m** is two
+metres wide until you say otherwise. What can be changed is what the object really is made to
+measure — a curtain's width and drop, a truss's length, a deck's rise — and a size outside what the
+object can be built at is held to what it can.
+
+A show patched before this keeps the fixture revision embedded in it and is unaffected.
+
 - **Venue** visual-only profiles — 1 × 1 m, 2 × 1 m, and 1 × 0.5 m stage elements; correctly rising stage stairs; 1 m, 2 m, 3 m, 5 m, and 6 m curtains; **Disco Ball 50 cm**; and **Crowd Area**. One-, two-, three-, and four-point truss and pipe profiles use the separate **Rigging** type. Crowd Area supplies all nine Sitting, Standing still, and Dancing × Sparse, Medium, and Dense modes and stores independent width and depth with the show. The conventional scenery archives include portable photographs and metre-authored GLB geometry; the desk displays its built-in Venue or Rigging type icon. Crowd Area is rendered procedurally from its portable crowd contract.
 - **ToskLight** product and Visualizer profiles — **Audio Player** is an Internal fixture: one independently programmable Audio service voice with a regular fixture ID and no DMX address. It is addressed through the canonical Media attributes — Media Folder, Media File, Play mode, and Volume — so the Media encoder group and the Media pane control it exactly like any other media source. Play mode carries transport and repeat together: a looping mode repeats the file, a once mode plays it through, and Stop and Pause hold the voice silent. Stop is the patched default. Play mode names every mode it can be in — Loop, Reverse, Bounce, the Once and Reverse once end states, their tempo-synced counterparts, Stop, and Pause — so the encoder and the Media pane show the mode by name instead of a percentage, and each mode can be chosen directly or generated as a preset. Media Server play mode is named the same way. Shows patched before this change keep their stored Audio Folder/File, Transport, Repeat, and Volume attributes and continue to play. **Media Server** provides two complete personalities: 119 slots for two layers and 353 slots for eight layers. Each 39-slot layer is an independently programmable logical head; the trailing 41-slot output block belongs to the shared master head and exposes Output, Geometry, Mask position, Shapers, Colour, and the fixed Layer Opacity Cycle effect. Existing shows retain their embedded 75-slot legacy or 89/323-slot mask-position snapshots, while new patches use the complete master personality with two selectable effect banks per layer. **Visualizer Camera** keeps the stable 17-slot X/Y/Z, Yaw/Pitch/Roll, and Zoom wire contract, while **Visualizer Laser** provides the packaged demo laser and its scan program. This manufacturer is reserved for implemented ToskLight-owned product fixtures; planned further Visualizer fixtures do not appear until their capabilities exist.
 
@@ -143,9 +158,8 @@ out — a wash whose zone personalities drive four heads where its plain ones dr
 that personality driving more of the same lantern.
 
 Where a profile's modes genuinely describe different geometry the profile is left exactly as it
-was. The Venue objects are the remaining case: a curtain's modes are its widths and a truss's are
-its lengths, so nothing can reconcile them into one lantern. Those are for geometry generated from
-the size an operator patches.
+was. No shipped fixture is in that position any more: the Venue objects that were are generated
+instead, described below.
 
 Choose a suitable fixture geometry and use the preview to confirm the Stage appearance. Detailed
 model hierarchy, emitter, pivot, and projection authoring is fixture-developer documentation.

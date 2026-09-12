@@ -273,6 +273,10 @@ pub struct PatchFixtureInput {
     #[serde(default)]
     pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
+    /// The size a generated Venue object was placed at, in millimetres, like every other
+    /// measurement the patch carries. Absent means the profile's own default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_size_metres: Option<PatchFixtureLocation>,
     pub rotation: PatchFixtureRotation,
     /// An operator's own note against this fixture, distinct from the profile's shared notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -356,6 +360,10 @@ pub struct PatchMultiPatchInput {
     #[schemars(length(min = 1))]
     pub split_patches: Vec<PatchSplitAssignment>,
     pub location: PatchFixtureLocation,
+    /// The size a generated Venue object was placed at, in millimetres, like every other
+    /// measurement the patch carries. Absent means the profile's own default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_size_metres: Option<PatchFixtureLocation>,
     pub rotation: PatchFixtureRotation,
     #[serde(default)]
     pub invert_pan: bool,
@@ -446,6 +454,10 @@ pub struct PatchFixtureProjection {
     #[serde(default)]
     pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
+    /// The size a generated Venue object was placed at, in millimetres, like every other
+    /// measurement the patch carries. Absent means the profile's own default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_size_metres: Option<PatchFixtureLocation>,
     pub rotation: PatchFixtureRotation,
     /// An operator's own note against this fixture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -502,6 +514,10 @@ pub struct PatchMultiPatchProjection {
     pub name: String,
     pub split_patches: Vec<PatchSplitAssignment>,
     pub location: PatchFixtureLocation,
+    /// The size a generated Venue object was placed at, in millimetres, like every other
+    /// measurement the patch carries. Absent means the profile's own default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_size_metres: Option<PatchFixtureLocation>,
     pub rotation: PatchFixtureRotation,
     pub invert_pan: bool,
     pub invert_tilt: bool,

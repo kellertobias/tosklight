@@ -268,6 +268,13 @@ pub struct FixtureInstance {
     /// canonical shaper role. A renderer must not infer support from arbitrary model node names.
     pub installed_shaper_angles_degrees: [f32; 4],
     pub body: FixtureBody,
+    /// Drawn as a generated scenery object instead of as a body.
+    ///
+    /// A Venue object whose profile declares its shape is built at the size it is placed,
+    /// which the scenery pass does. The fixture still exists here so it can be selected,
+    /// addressed and reported on; what it does not have is a second body over the top.
+    #[serde(default)]
+    pub drawn_as_scenery: bool,
     /// The 3D Point this instance is slaved to, if any. Its live pose arrives with the values
     /// rather than the scene, because an operator moves a point far more often than they repatch.
     #[serde(default)]
@@ -835,6 +842,7 @@ mod tests {
     #[test]
     fn the_bracket_angle_turns_the_fixture_about_its_own_transverse_axis() {
         let mut fixture = FixtureInstance {
+            drawn_as_scenery: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: "Lantern".into(),
@@ -872,6 +880,7 @@ mod tests {
     #[test]
     fn a_fixture_with_no_bracket_angle_keeps_its_mounting_rotation_exactly() {
         let fixture = FixtureInstance {
+            drawn_as_scenery: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: "Lantern".into(),
@@ -928,6 +937,7 @@ mod tests {
 
     fn rigged_spot(position: Vec3) -> FixtureInstance {
         FixtureInstance {
+            drawn_as_scenery: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: "Spot".into(),
@@ -987,6 +997,7 @@ mod tests {
     fn framing_ignores_a_floor_far_wider_than_the_rig() {
         let mut scene = Scene::default();
         scene.fixtures.push(FixtureInstance {
+            drawn_as_scenery: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: "Spot".into(),

@@ -145,6 +145,7 @@ pub(super) fn patched(
     let (universe, address) =
         super::default_patch(&name).expect("built-in fixture has a default patch");
     PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: Some(fixture_number),
         virtual_fixture_number: None,
@@ -196,6 +197,7 @@ pub(super) fn multipatch(
     rotation_y: f32,
 ) -> MultiPatchInstance {
     MultiPatchInstance {
+        scenery_size_metres: None,
         id: uuid::Uuid::new_v4(),
         name,
         universe: None,

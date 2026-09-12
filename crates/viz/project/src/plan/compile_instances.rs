@@ -39,8 +39,10 @@ pub(super) fn compile_instances(
         {
             instance_optics.output = output;
         }
+        let generated_scenery = generated_scenery(fixture, instance);
         let fixture_index = scene.fixtures.len() as u32;
         scene.fixtures.push(FixtureInstance {
+            drawn_as_scenery: generated_scenery.is_some(),
             instance_id: instance.instance_id,
             fixture_id: fixture.fixture_id,
             name: instance.name.clone(),
@@ -108,6 +110,9 @@ pub(super) fn compile_instances(
             });
             index
         });
+        if let Some(object) = generated_scenery {
+            scene.scenery.push(object);
+        }
         match external_camera_binding(fixture, instance, mode, &channels) {
             Ok(Some(candidate)) if external_camera.is_none() && external_camera_issue.is_none() => {
                 *external_camera = Some(candidate);
@@ -175,5 +180,100 @@ fn emitterless_fallback(
                 fixture.profile.manufacturer, fixture.profile.name, class
             ),
         )
+    })
+}
+
+/// What an operator may set, held inside what the object can actually be built at.
+fn clamp_scenery_size(size: Vec3, declared: &light_fixture::ProfileScenery) -> Vec3 {
+    let minimum = vector(declared.minimum_size_metres);
+    let maximum = vector(declared.maximum_size_metres);
+    let default = vector(declared.default_size_metres);
+    let axis = |set: bool, value: f32, low: f32, high: f32, fallback: f32| {
+        if set {
+            value.clamp(low, high)
+        } else {
+            fallback
+        }
+    };
+    Vec3::new(
+        axis(
+            declared.adjustable.width,
+            size.x,
+            minimum.x,
+            maximum.x,
+            default.x,
+        ),
+        axis(
+            declared.adjustable.height,
+            size.y,
+            minimum.y,
+            maximum.y,
+            default.y,
+        ),
+        axis(
+            declared.adjustable.depth,
+            size.z,
+            minimum.z,
+            maximum.z,
+            default.z,
+        ),
+    )
+}
+
+fn vector(value: light_fixture::Vector3) -> Vec3 {
+    Vec3::new(value.x, value.y, value.z)
+}
+
+fn scenery_kind(kind: light_fixture::ProfileSceneryKind) -> SceneryKind {
+    match kind {
+        light_fixture::ProfileSceneryKind::Riser => SceneryKind::Riser,
+        light_fixture::ProfileSceneryKind::Truss => SceneryKind::Truss,
+        light_fixture::ProfileSceneryKind::Curtain => SceneryKind::Curtain,
+        light_fixture::ProfileSceneryKind::Railing => SceneryKind::Railing,
+        light_fixture::ProfileSceneryKind::MirrorBall => SceneryKind::MirrorBall,
+        light_fixture::ProfileSceneryKind::Prop => SceneryKind::Prop,
+    }
+}
+
+/// The same materials the desk's own scenery uses, so a patched truss and a legacy one match.
+fn scenery_colour(kind: light_fixture::ProfileSceneryKind) -> [f32; 3] {
+    match kind {
+        light_fixture::ProfileSceneryKind::Truss => [0.2, 0.205, 0.215],
+        // Stage drape is black wool serge, not the generic prop grey.
+        light_fixture::ProfileSceneryKind::Curtain => [0.008, 0.008, 0.01],
+        _ => [0.14, 0.14, 0.15],
+    }
+}
+
+fn scenery_roughness(kind: light_fixture::ProfileSceneryKind) -> f32 {
+    match kind {
+        light_fixture::ProfileSceneryKind::Curtain => 0.96,
+        light_fixture::ProfileSceneryKind::Truss | light_fixture::ProfileSceneryKind::Railing => {
+            0.45
+        }
+        _ => 0.8,
+    }
+}
+
+/// A Venue object that declares its shape, built at the size it was placed rather than drawn from
+/// a model made for one size.
+fn generated_scenery(
+    fixture: &PatchedFixture,
+    instance: &PhysicalInstance,
+) -> Option<SceneryObject> {
+    let declared = fixture.profile.scenery.as_ref()?;
+    let size = instance
+        .scenery_size_metres
+        .unwrap_or_else(|| vector(declared.default_size_metres));
+    Some(SceneryObject {
+        id: instance.instance_id,
+        name: instance.name.clone(),
+        position: instance.position,
+        rotation_degrees: instance.rotation_degrees,
+        size: clamp_scenery_size(size, declared),
+        colour: scenery_colour(declared.kind),
+        roughness: scenery_roughness(declared.kind),
+        kind: scenery_kind(declared.kind),
+        chords: declared.chords,
     })
 }

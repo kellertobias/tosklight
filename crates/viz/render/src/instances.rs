@@ -590,6 +590,10 @@ fn push_bodies(
     points: &[viz_scene::PointPose],
 ) {
     for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
+        // Built at the size it was placed by the scenery pass, so it has no body here.
+        if fixture.drawn_as_scenery {
+            continue;
+        }
         let (fixture_position, fixture_orientation) = fixture.placed_by(points);
         let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
         let size = fixture.body.size;

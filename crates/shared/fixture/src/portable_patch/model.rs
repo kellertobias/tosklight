@@ -51,6 +51,9 @@ pub struct PatchedFixturePatch {
     pub internal_bindings: InternalFixtureBindings,
     #[serde(default)]
     pub location: FixtureLocation,
+    /// The size a generated Venue object was placed at, in metres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_size_metres: Option<FixtureVector>,
     #[serde(default)]
     pub rotation: FixtureVector,
     /// An operator's own note against this fixture. Absent in every show written before it
@@ -101,6 +104,7 @@ impl PatchedFixturePatch {
     pub(crate) fn from_fixture(fixture: &PatchedFixture) -> Self {
         Self {
             fixture_id: fixture.fixture_id,
+            scenery_size_metres: fixture.scenery_size_metres,
             fixture_number: fixture.fixture_number,
             virtual_fixture_number: fixture.virtual_fixture_number,
             name: fixture.name.clone(),

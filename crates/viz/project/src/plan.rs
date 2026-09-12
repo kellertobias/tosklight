@@ -41,6 +41,9 @@ pub struct PhysicalInstance {
     pub shaper_angle: Option<f32>,
     /// Portable source/filter and static blade settings for this exact physical instance.
     pub installed_appearance: InstalledFixtureAppearance,
+    /// The size this one was placed at, for a Venue object whose geometry is generated. Absent
+    /// means the profile's own default, which is what every one placed before this reads as.
+    pub scenery_size_metres: Option<Vec3>,
 }
 
 /// One logical fixture with its selected immutable profile revision.

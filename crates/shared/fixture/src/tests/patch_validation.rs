@@ -4,6 +4,7 @@ use super::*;
 fn rejects_patch_overlap_and_boundary_overflow() {
     let def = definition(10);
     let first = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: None,
         virtual_fixture_number: None,
@@ -34,6 +35,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         freeze: Default::default(),
     };
     let overlap = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: None,
         virtual_fixture_number: None,
@@ -65,6 +67,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
     };
     assert!(validate_patch(&[first.clone(), overlap]).is_err());
     let overflow = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: None,
         virtual_fixture_number: None,
@@ -100,6 +103,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
 #[test]
 fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
     let mut fixture = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: None,
         virtual_fixture_number: None,
@@ -118,6 +122,7 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
         logical_heads: vec![],
         multipatch: vec![
             MultiPatchInstance {
+                scenery_size_metres: None,
                 id: Uuid::new_v4(),
                 name: "Output".into(),
                 universe: Some(1),
@@ -132,6 +137,7 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
                 installed_appearance: Default::default(),
             },
             MultiPatchInstance {
+                scenery_size_metres: None,
                 id: Uuid::new_v4(),
                 name: "Visual".into(),
                 universe: None,
@@ -386,6 +392,7 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
     media_definition.heads[0].index = 1;
     media_definition.heads[0].shared = false;
     let parent = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: None,
         virtual_fixture_number: None,
@@ -437,6 +444,7 @@ fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
     let profile_head_id = uuid::Uuid::new_v4();
     let stale = FixtureId::new();
     let mut fixture = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: Some(100),
         virtual_fixture_number: None,

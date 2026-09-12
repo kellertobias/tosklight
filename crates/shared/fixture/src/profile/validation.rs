@@ -2,7 +2,7 @@ use super::color_model::valid_measured_xyz;
 use super::{
     CanonicalTransform, ChannelFunctionBehavior, ColorSystem, ControlActionKind,
     FIXTURE_PROFILE_SCHEMA_VERSION, FixtureChannel, FixtureMode, FixtureProfile, PatchPolicy,
-    ProfileError,
+    ProfileError, Vector3,
 };
 use std::collections::{BTreeMap, HashSet};
 use uuid::Uuid;
@@ -196,6 +196,7 @@ impl FixtureProfile {
             }
         }
         self.validate_geometry()?;
+        self.validate_scenery()?;
         let mode_ids = self.validate_modes()?;
         if let Some(crowd) = &self.crowd {
             if self.patch_policy != PatchPolicy::VisualOnly {
@@ -239,6 +240,44 @@ impl FixtureProfile {
         }
         Ok(())
     }
+    /// A generated scenery object: real sizes, in an order an operator can actually set.
+    fn validate_scenery(&self) -> Result<(), ProfileError> {
+        let Some(scenery) = &self.scenery else {
+            return Ok(());
+        };
+        if self.patch_policy != PatchPolicy::VisualOnly {
+            return Err(ProfileError::Invalid(
+                "generated scenery belongs to a visual-only fixture".into(),
+            ));
+        }
+        let axes: [(&str, fn(&Vector3) -> f32); 3] = [
+            ("width", |size| size.x),
+            ("height", |size| size.y),
+            ("depth", |size| size.z),
+        ];
+        for (name, read) in axes {
+            let (minimum, default, maximum) = (
+                read(&scenery.minimum_size_metres),
+                read(&scenery.default_size_metres),
+                read(&scenery.maximum_size_metres),
+            );
+            if ![minimum, default, maximum]
+                .iter()
+                .all(|value| value.is_finite() && *value > 0.0)
+            {
+                return Err(ProfileError::Invalid(format!(
+                    "scenery {name} must be a positive measurement"
+                )));
+            }
+            if minimum > default || default > maximum {
+                return Err(ProfileError::Invalid(format!(
+                    "scenery {name} default must sit between its minimum and maximum"
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Stable mode identities, and every mode valid for the fixture's patch policy.
     fn validate_modes(&self) -> Result<HashSet<Uuid>, ProfileError> {
         let mut mode_ids = HashSet::new();

@@ -286,6 +286,17 @@
         "rotation": {
           "$ref": "#/$defs/PatchFixtureRotation"
         },
+        "scenery_size_metres": {
+          "description": "The size a generated Venue object was placed at, in millimetres, like every other\nmeasurement the patch carries. Absent means the profile's own default.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchFixtureLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "shaper_angle": {
           "type": [
             "number",
@@ -752,6 +763,17 @@
         },
         "rotation": {
           "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "scenery_size_metres": {
+          "description": "The size a generated Venue object was placed at, in millimetres, like every other\nmeasurement the patch carries. Absent means the profile's own default.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchFixtureLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "shaper_angle": {
           "type": [

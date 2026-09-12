@@ -365,6 +365,7 @@ fn sparse_updates_apply_paired_fields_to_the_exact_root_or_copy() {
         .patch
         .multipatch
         .push(light_fixture::MultiPatchInstance {
+            scenery_size_metres: None,
             id: copy_id,
             name: "Copy".into(),
             universe: None,

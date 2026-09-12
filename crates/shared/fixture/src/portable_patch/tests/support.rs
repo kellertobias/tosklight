@@ -60,6 +60,7 @@ pub(super) fn fixture(profile: &FixtureProfile) -> PatchedFixture {
         .into_iter()
         .collect();
     PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: Some(42),
         virtual_fixture_number: None,
@@ -97,6 +98,7 @@ pub(super) fn fixture(profile: &FixtureProfile) -> PatchedFixture {
             fixture_id: child_id,
         }],
         multipatch: vec![MultiPatchInstance {
+            scenery_size_metres: None,
             id: multipatch_id,
             name: "Balcony".into(),
             universe: Some(3),

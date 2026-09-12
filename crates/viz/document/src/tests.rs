@@ -71,6 +71,7 @@ fn patch_one(show_id: ShowId, profile: PatchedFixtureProfileReference) -> PatchF
         fixtures: vec![PatchFixtureCandidate {
             profile,
             patch: PatchedFixturePatch {
+                scenery_size_metres: None,
                 fixture_id: FixtureId(Uuid::new_v4()),
                 fixture_number: Some(1),
                 virtual_fixture_number: None,

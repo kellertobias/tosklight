@@ -45,17 +45,21 @@ export async function installPlannedDemoScenery(
 			(candidate) =>
 				candidate.manufacturer === "Venue" && candidate.name === entry.profile,
 		);
-		const mode = profile?.modes.find(
-			(candidate) => candidate.name === entry.mode,
-		);
+		const generated = Boolean((profile as any)?.scenery);
+		const mode = generated
+			? profile?.modes[0]
+			: profile?.modes.find((candidate) => candidate.name === entry.mode);
 		if (!profile || !mode)
 			throw new Error(`Missing Venue profile ${entry.profile} / ${entry.mode}`);
+		const scenerySize = generated
+			? placedScenerySize((profile as any).scenery, entry.mode)
+			: undefined;
 		const existing = byVirtualNumber.get(entry.number);
 		if (
 			existing &&
 			(existing.definition.manufacturer !== "Venue" ||
 				existing.definition.model !== entry.profile ||
-				existing.definition.mode !== entry.mode)
+				existing.definition.mode !== mode.name)
 		)
 			throw new Error(
 				`Venue fixture 0.${entry.number} is not the expected ${entry.profile} / ${entry.mode}`,
@@ -71,6 +75,7 @@ export async function installPlannedDemoScenery(
 				address: null,
 			})),
 			location: millimetres(instance.location),
+			scenery_size_metres: scenerySize,
 			rotation: instance.rotation ?? { x: 0, y: 0, z: 0 },
 		}));
 		return {
@@ -93,6 +98,7 @@ export async function installPlannedDemoScenery(
 				"default",
 			direct_control: null,
 			location: millimetres(entry.location),
+			scenery_size_metres: scenerySize,
 			rotation: entry.rotation ?? { x: 0, y: 0, z: 0 },
 			multipatch,
 			move_in_black_enabled: true,
@@ -293,4 +299,27 @@ function stableUuid(namespace: number, value: number) {
 	return `00000000-0000-4000-${namespace.toString(16).padStart(4, "0")}-${value
 		.toString(16)
 		.padStart(12, "0")}`;
+}
+
+/**
+ * The size an entry asks for, in millimetres, held inside what the object can be built at.
+ *
+ * A scenery entry names its measurement where it used to name a mode — "2 m" of truss, a "50 cm"
+ * deck — and that measurement belongs to whichever axis the profile says is adjustable.
+ */
+function placedScenerySize(scenery: any, measurement: string) {
+	const metres = measurement.trim().endsWith("cm")
+		? Number.parseFloat(measurement) / 100
+		: Number.parseFloat(measurement);
+	const size = { ...scenery.default_size_metres };
+	if (Number.isFinite(metres)) {
+		// Height where a profile is made to height, otherwise length.
+		const axis = scenery.adjustable.height && !scenery.adjustable.width ? "y" : "x";
+		size[axis] = metres;
+	}
+	return {
+		x: Math.round(size.x * 1_000),
+		y: Math.round(size.y * 1_000),
+		z: Math.round(size.z * 1_000),
+	};
 }

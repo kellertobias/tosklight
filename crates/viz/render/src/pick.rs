@@ -159,6 +159,7 @@ mod tests {
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
+            drawn_as_scenery: false,
             body: FixtureBody {
                 size: Vec3::new(0.3, 0.4, 0.3),
                 kind: BodyKind::MovingHead,

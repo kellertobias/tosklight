@@ -54,6 +54,7 @@ pub(super) fn portable_fixture_with_policy(
     let fixture_id = FixtureId(Uuid::from_u128(identity_base + 10));
     let retained_head_id = FixtureId(Uuid::from_u128(identity_base + 11));
     let fixture = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id,
         fixture_number: Some(1),
         virtual_fixture_number: None,

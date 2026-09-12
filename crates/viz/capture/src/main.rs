@@ -508,6 +508,7 @@ mod tests {
         use viz_scene::{glam::Vec3, uuid::Uuid};
 
         let fixture = |name: &str, position: Vec3| FixtureInstance {
+            drawn_as_scenery: false,
             instance_id: Uuid::new_v4(),
             fixture_id: Uuid::new_v4(),
             name: name.to_owned(),
@@ -1092,22 +1093,21 @@ mod tests {
         );
     }
 
-    /// Exact fixture models live in transferable packages and the audited built-in set covers a
-    /// profile that carries none. Whichever route supplied it, every fixture must resolve to some
-    /// geometry: a fixture with no model draws as nothing, which in a still capture is
-    /// indistinguishable from a fixture that is simply unlit.
+    /// A model from a package, one of the audited built-in set, or a Venue object's declared
+    /// shape built at the size it was placed. Whichever supplied it, a fixture with no geometry
+    /// draws as nothing, which in a still capture looks exactly like one that is simply unlit.
     #[test]
     fn every_demo_fixture_resolves_to_geometry() {
         let scene = demo_scene("models");
         let shapeless: Vec<&str> = scene
             .fixtures
             .iter()
-            .filter(|fixture| fixture.model.is_none())
+            .filter(|fixture| fixture.model.is_none() && !fixture.drawn_as_scenery)
             .map(|fixture| fixture.name.as_str())
             .collect();
         assert!(
             shapeless.is_empty(),
-            "these fixtures resolved to no model at all and would draw as nothing: {shapeless:?}"
+            "these fixtures resolved to no geometry and would draw as nothing: {shapeless:?}"
         );
     }
 

@@ -147,6 +147,9 @@ pub struct PatchFixture {
     pub split_patches: Vec<SplitAssignment>,
     #[serde(default)]
     pub location: Location,
+    /// The size a generated Venue object was placed at, in metres.
+    #[serde(default, rename = "scenerySizeMetres")]
+    pub scenery_size_metres: Option<Location>,
     #[serde(default)]
     pub rotation: Rotation,
     /// The 3D Point this fixture is slaved to. Absent for a fixture placed against the stage.
@@ -210,6 +213,9 @@ pub struct MultiPatch {
     pub split_patches: Vec<SplitAssignment>,
     #[serde(default)]
     pub location: Location,
+    /// The size a generated Venue object was placed at, in metres.
+    #[serde(default, rename = "scenerySizeMetres")]
+    pub scenery_size_metres: Option<Location>,
     #[serde(default)]
     pub rotation: Rotation,
     #[serde(default)]

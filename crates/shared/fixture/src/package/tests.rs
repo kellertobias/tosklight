@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     CanonicalTransform, ChannelBehavior, ChannelResolution, ChannelScales, ColorSystem,
     EmitterLayout, FIXTURE_PROFILE_SCHEMA_VERSION, FixtureProfile, FixtureSplit, ModelUnits,
-    PatchPolicy, PositionMovementRepresentation,
+    PatchPolicy, PositionMovementRepresentation, ProfileSceneryKind,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
@@ -365,50 +365,94 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         ["Fan, Fog", "Fog, Fan"]
     );
 
-    let venue = [
-        ("venue--stage-element-1-1-m.toskfixture", 10),
-        ("venue--stage-element-2-1-m.toskfixture", 10),
-        ("venue--stage-element-1-0-5-m.toskfixture", 10),
-        ("venue--stage-stairs.toskfixture", 10),
-        ("venue--four-point-truss.toskfixture", 5),
-        ("venue--three-point-truss.toskfixture", 5),
-        ("venue--two-point-truss.toskfixture", 5),
-        ("venue--one-point-truss-pipe.toskfixture", 6),
-        ("venue--stage-railing-2-m.toskfixture", 1),
-        ("venue--curtain-1-m.toskfixture", 10),
-        ("venue--curtain-2-m.toskfixture", 10),
-        ("venue--curtain-3-m.toskfixture", 10),
-        ("venue--curtain-5-m.toskfixture", 10),
-        ("venue--curtain-6-m.toskfixture", 10),
-        ("venue--disco-ball-50-cm.toskfixture", 1),
+    // Every one of these is generated at the size it is placed, so it has one mode rather than a
+    // mode per measurement, and carries no model made for one size.
+    let generated = [
+        (
+            "venue--stage-element-1-1-m.toskfixture",
+            ProfileSceneryKind::Riser,
+            0,
+        ),
+        (
+            "venue--stage-element-2-1-m.toskfixture",
+            ProfileSceneryKind::Riser,
+            0,
+        ),
+        (
+            "venue--stage-element-1-0-5-m.toskfixture",
+            ProfileSceneryKind::Riser,
+            0,
+        ),
+        (
+            "venue--stage-stairs.toskfixture",
+            ProfileSceneryKind::Riser,
+            0,
+        ),
+        (
+            "venue--four-point-truss.toskfixture",
+            ProfileSceneryKind::Truss,
+            4,
+        ),
+        (
+            "venue--three-point-truss.toskfixture",
+            ProfileSceneryKind::Truss,
+            3,
+        ),
+        (
+            "venue--two-point-truss.toskfixture",
+            ProfileSceneryKind::Truss,
+            2,
+        ),
+        (
+            "venue--one-point-truss-pipe.toskfixture",
+            ProfileSceneryKind::Truss,
+            1,
+        ),
+        (
+            "venue--curtain-1-m.toskfixture",
+            ProfileSceneryKind::Curtain,
+            0,
+        ),
+        (
+            "venue--curtain-2-m.toskfixture",
+            ProfileSceneryKind::Curtain,
+            0,
+        ),
+        (
+            "venue--curtain-3-m.toskfixture",
+            ProfileSceneryKind::Curtain,
+            0,
+        ),
+        (
+            "venue--curtain-5-m.toskfixture",
+            ProfileSceneryKind::Curtain,
+            0,
+        ),
+        (
+            "venue--curtain-6-m.toskfixture",
+            ProfileSceneryKind::Curtain,
+            0,
+        ),
     ];
-    for (filename, mode_count) in venue {
+    for (filename, kind, chords) in generated {
         let profile = shipped_profile(filename);
-        assert_eq!(profile.manufacturer, "Venue");
-        assert_eq!(profile.patch_policy, PatchPolicy::VisualOnly);
-        assert_eq!(profile.model_units, ModelUnits::Metres);
-        assert_eq!(profile.modes.len(), mode_count);
-        assert!(
-            profile
-                .photograph_asset
-                .as_deref()
-                .is_some_and(|asset| asset.starts_with("data:image/png;base64,"))
-        );
-        assert!(profile.stage_icon_asset.is_none());
-        assert!(
-            profile
-                .model_asset
-                .as_deref()
-                .is_some_and(|asset| asset.starts_with("data:model/gltf-binary;base64,"))
-        );
-        assert!(profile.modes.iter().all(|mode| mode.splits
-            == [FixtureSplit {
-                number: 1,
-                footprint: 0
-            }]
-            && mode.channels.is_empty()));
+        assert_eq!(profile.manufacturer, "Venue", "{filename}");
+        assert_eq!(profile.patch_policy, PatchPolicy::VisualOnly, "{filename}");
+        assert_eq!(profile.modes.len(), 1, "{filename}");
+        assert!(profile.model_asset.is_none(), "{filename}");
+        assert!(profile.projection_assets.is_none(), "{filename}");
+        let scenery = profile.scenery.expect(filename);
+        assert_eq!(scenery.kind, kind, "{filename}");
+        assert_eq!(scenery.chords, chords, "{filename}");
+        // Something is adjustable, or it would not need generating.
+        let axes = scenery.adjustable;
+        assert!(axes.width || axes.height || axes.depth, "{filename}");
     }
 
+    let venue = [
+        ("venue--stage-railing-2-m.toskfixture", 1),
+        ("venue--disco-ball-50-cm.toskfixture", 1),
+    ];
     for filename in [
         "venue--four-point-truss.toskfixture",
         "venue--three-point-truss.toskfixture",
@@ -2941,27 +2985,11 @@ fn the_shipped_library_reports_which_fixtures_still_carry_geometry_per_mode() {
         }
     }
     still_per_mode.sort();
-    // What is left is the Venue objects, whose modes are their measurements: a curtain's modes are
-    // its widths and a truss's are its lengths, so their graphs genuinely differ and no reader can
-    // reconcile them. These are for geometry generated from the size the operator patches, not for
-    // the lift.
+    // Nothing is left. Geometry belongs to the fixture, and the Venue objects whose modes used to
+    // be their measurements are generated at the size they are placed instead.
     assert_eq!(
         still_per_mode,
-        [
-            "venue--curtain-1-m.toskfixture",
-            "venue--curtain-2-m.toskfixture",
-            "venue--curtain-3-m.toskfixture",
-            "venue--curtain-5-m.toskfixture",
-            "venue--curtain-6-m.toskfixture",
-            "venue--four-point-truss.toskfixture",
-            "venue--one-point-truss-pipe.toskfixture",
-            "venue--stage-element-1-0-5-m.toskfixture",
-            "venue--stage-element-1-1-m.toskfixture",
-            "venue--stage-element-2-1-m.toskfixture",
-            "venue--stage-stairs.toskfixture",
-            "venue--three-point-truss.toskfixture",
-            "venue--two-point-truss.toskfixture",
-        ],
+        Vec::<String>::new(),
         "a fixture left this list, or a new one arrived carrying a graph per mode"
     );
 }
@@ -3021,4 +3049,43 @@ fn split_blinders_carry_one_geometry_and_bind_every_lamp() {
         }
         profile.validate().unwrap();
     }
+}
+
+/// A generated Venue object is the size it is placed at, not the size somebody shipped a model of.
+///
+/// This is the whole point of generating it: a curtain is made to measure, and a truss repeats its
+/// chords over whatever length it is built to. A size an operator cannot have is held to what the
+/// object can be built at rather than silently accepted.
+#[test]
+fn generated_scenery_declares_a_size_an_operator_can_actually_set() {
+    let curtain = shipped_profile("venue--curtain-2-m.toskfixture");
+    let scenery = curtain.scenery.expect("the curtain is generated");
+    // The name says what it is out of the box.
+    assert_eq!(scenery.default_size_metres.x, 2.0);
+    assert!(scenery.adjustable.width && scenery.adjustable.height);
+    // A curtain has no adjustable thickness: it is cloth.
+    assert!(!scenery.adjustable.depth);
+    assert!(scenery.minimum_size_metres.x < scenery.default_size_metres.x);
+    assert!(scenery.maximum_size_metres.x > scenery.default_size_metres.x);
+    curtain.validate().unwrap();
+
+    // A truss keeps the cross-section it is built from and is made to length.
+    let truss = shipped_profile("venue--three-point-truss.toskfixture");
+    let scenery = truss.scenery.expect("the truss is generated");
+    assert_eq!(scenery.chords, 3);
+    assert!(scenery.adjustable.width);
+    assert!(!scenery.adjustable.height && !scenery.adjustable.depth);
+    assert_eq!(
+        scenery.minimum_size_metres.y, scenery.maximum_size_metres.y,
+        "a truss cross-section is not made to measure"
+    );
+}
+
+/// Generated scenery belongs to a fixture that emits no light; anything else would be a lantern
+/// drawn as a prop.
+#[test]
+fn generated_scenery_requires_a_visual_only_fixture() {
+    let mut profile = shipped_profile("venue--curtain-2-m.toskfixture");
+    profile.patch_policy = PatchPolicy::Dmx;
+    assert!(profile.validate().is_err());
 }

@@ -363,6 +363,9 @@ pub(super) fn resolve_model(
                         None
                     }
                 },
+                // A generated Venue object is built by the scenery pass, so it needs no body and
+                // must not be given one: a truss drawn as a lantern as well is drawn twice.
+                None if fixture.profile.scenery.is_some() => None,
                 None => {
                     let chosen = crate::default_model::choose(
                         fixture.profile.body_model.as_deref(),

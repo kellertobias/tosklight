@@ -71,6 +71,7 @@ fn highlight_scenario() -> HighlightScenario {
     let physical = FixtureId::new();
     let mut fixture = highlight_fixture(physical);
     fixture.multipatch.push(MultiPatchInstance {
+        scenery_size_metres: None,
         id: uuid::Uuid::new_v4(),
         name: "Second physical copy".into(),
         universe: Some(1),
@@ -169,6 +170,7 @@ fn highlight_fixture(physical: FixtureId) -> PatchedFixture {
     }];
     profile.modes[0].geometry = GeometryGraph::default();
     PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: physical,
         fixture_number: Some(1),
         virtual_fixture_number: None,

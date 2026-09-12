@@ -600,6 +600,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         (mode.id, head_ids)
     };
     let fixture = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: physical,
         fixture_number: None,
         virtual_fixture_number: None,

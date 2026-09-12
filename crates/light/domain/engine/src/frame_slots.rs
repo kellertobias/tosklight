@@ -357,6 +357,7 @@ pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) ->
         capabilities: vec![],
     };
     PatchedFixture {
+        scenery_size_metres: None,
         fixture_id,
         fixture_number: None,
         virtual_fixture_number: None,

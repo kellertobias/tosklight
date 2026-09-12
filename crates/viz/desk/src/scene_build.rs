@@ -72,6 +72,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
         grid_index += 1;
         placements.push(root_placement.source);
         instances.push(PhysicalInstance {
+            scenery_size_metres: placed_scenery_size(fixture.scenery_size_metres),
             instance_id: fixture.fixture_id,
             name: fixture.name.clone(),
             split_patches: split_patches(&fixture.split_patches),
@@ -99,6 +100,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
             grid_index += 1;
             placements.push(placement.source);
             instances.push(PhysicalInstance {
+                scenery_size_metres: placed_scenery_size(multipatch.scenery_size_metres),
                 instance_id: multipatch.id,
                 name: if multipatch.name.is_empty() {
                     format!("{} \u{2022} multi-patch", fixture.name)
@@ -523,7 +525,10 @@ fn decode_profiles(patch: &PatchSnapshot) -> HashMap<(Uuid, u64), Arc<FixturePro
 ///
 /// The floor exists because a beam has to land on something for its footprint to be visible.
 fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<SceneryObject> {
-    let mut scenery = Vec::with_capacity(venue.len() + 2);
+    // Scenery the patch generated from its Venue fixtures is already here; the floor and any
+    // legacy records go beside it.
+    let mut scenery = scene.scenery.clone();
+    scenery.reserve(venue.len() + 2);
     let bounds = scene.bounds;
     // The deck extends well past the rig footprint so a wide wash lands on it instead of
     // spilling off the edge into empty space, where its beam would keep going with nothing to
@@ -708,4 +713,20 @@ pub fn placement_summary(sources: &[PlacementSource]) -> String {
         count(PlacementSource::MigratedLayout2d),
         count(PlacementSource::DefaultGrid),
     )
+}
+
+/// The size a generated Venue object was placed at, when the operator set one.
+fn placed_scenery_size(stored: Option<crate::wire::Location>) -> Option<Vec3> {
+    let stored = stored?;
+    // Stored in millimetres, like every other measurement the patch carries.
+    [stored.x, stored.y, stored.z]
+        .iter()
+        .all(|value| *value > 0)
+        .then(|| {
+            Vec3::new(
+                stored.x as f32 / 1_000.0,
+                stored.y as f32 / 1_000.0,
+                stored.z as f32 / 1_000.0,
+            )
+        })
 }

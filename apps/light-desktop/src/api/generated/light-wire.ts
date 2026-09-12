@@ -640,7 +640,12 @@ export type PatchInstalledLightSource = { "type": "profile_default" } | { "type"
 export type PatchGelDefinitionSnapshot = { number: string, name: string, display_srgb: string, visualizer_srgb: string, };
 export type PatchGelAssignment = { "type": "open_white" } | { "type": "built_in", catalog_id: string, entry_id: string, embedded_fallback: PatchGelDefinitionSnapshot, } | { "type": "custom", name: string, color_srgb: string, note: string | null, };
 export type PatchInstalledFixtureAppearance = { light_source: PatchInstalledLightSource, color_temperature_kelvin: number | null, luminous_output_lumens: number | null, gel: PatchGelAssignment, shaper_angles_degrees: [number, number, number, number], };
-export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
+export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation,
+/**
+ * The size a generated Venue object was placed at, in millimetres, like every other
+ * measurement the patch carries. Absent means the profile's own default.
+ */
+scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
 export type PatchHighlightOverrideInput = { channel_id: string, raw_value: number, };
 export type PatchFixtureInput = {
 /**
@@ -650,7 +655,12 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
 /**
  * Canonical split assignments. An unpatched split has two `null` address fields.
  */
-split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation,
+split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation,
+/**
+ * The size a generated Venue object was placed at, in millimetres, like every other
+ * measurement the patch carries. Absent means the profile's own default.
+ */
+scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation,
 /**
  * An operator's own note against this fixture, distinct from the profile's shared notes.
  */
@@ -722,11 +732,21 @@ export type PatchLogicalHeadProjection = {
  * Stable semantic head identity from the selected immutable profile revision.
  */
 profile_head_id: string | null, head_index: number, fixture_id: string, };
-export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
+export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation,
+/**
+ * The size a generated Venue object was placed at, in millimetres, like every other
+ * measurement the patch carries. Absent means the profile's own default.
+ */
+scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
 export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
 export type PatchFixtureFreezeFamily = "intensity" | "color" | "position" | "beam";
 export type PatchFixtureFreezeTargetProjection = { fixture_id: string, full: boolean, families: Array<PatchFixtureFreezeFamily>, };
-export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, rotation: PatchFixtureRotation,
+export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation,
+/**
+ * The size a generated Venue object was placed at, in millimetres, like every other
+ * measurement the patch carries. Absent means the profile's own default.
+ */
+scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation,
 /**
  * An operator's own note against this fixture.
  */

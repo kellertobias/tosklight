@@ -162,6 +162,7 @@ mod tests {
                 mode_id: Uuid::new_v4(),
             },
             PatchedFixturePatch {
+                scenery_size_metres: None,
                 fixture_id,
                 fixture_number: Some(fixture_number),
                 virtual_fixture_number: None,

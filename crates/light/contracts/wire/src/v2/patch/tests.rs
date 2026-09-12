@@ -300,6 +300,7 @@ fn snapshot_carries_a_gap_repair_cursor_and_deduplicated_profile_metadata() {
 
 fn fixture_input() -> PatchFixtureInput {
     PatchFixtureInput {
+        scenery_size_metres: None,
         fixture_id: FIXTURE_ID,
         fixture_number: Some(1),
         virtual_fixture_number: None,
@@ -343,6 +344,7 @@ fn fixture_projection() -> PatchFixtureProjection {
 
 fn projection_from(input: PatchFixtureInput) -> PatchFixtureProjection {
     PatchFixtureProjection {
+        scenery_size_metres: None,
         fixture_id: input.fixture_id,
         fixture_revision: 1,
         fixture_number: input.fixture_number,

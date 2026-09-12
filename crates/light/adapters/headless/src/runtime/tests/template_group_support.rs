@@ -27,6 +27,7 @@ fn template_fixture(
     footprint: u16,
 ) -> light_fixture::PatchedFixture {
     light_fixture::PatchedFixture {
+        scenery_size_metres: None,
         name: name.clone(),
         layer_id: "default".into(),
         note: None,

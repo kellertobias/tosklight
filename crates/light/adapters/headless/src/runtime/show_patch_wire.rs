@@ -342,6 +342,7 @@ fn application_fixture(
                 output: input.internal_bindings.output,
             },
             location: application_location(input.location),
+            scenery_size_metres: input.scenery_size_metres.map(application_vector),
             rotation: application_rotation(input.rotation),
             logical_heads: Vec::new(),
             multipatch: input
@@ -395,6 +396,23 @@ fn application_location(location: wire::PatchFixtureLocation) -> fixture::Fixtur
     }
 }
 
+/// A placed size, carried in millimetres exactly as a location is.
+fn application_vector(size: wire::PatchFixtureLocation) -> fixture::FixtureVector {
+    fixture::FixtureVector {
+        x: size.x as f32,
+        y: size.y as f32,
+        z: size.z as f32,
+    }
+}
+
+fn wire_vector(size: fixture::FixtureVector) -> wire::PatchFixtureLocation {
+    wire::PatchFixtureLocation {
+        x: size.x as i32,
+        y: size.y as i32,
+        z: size.z as i32,
+    }
+}
+
 fn application_rotation(rotation: wire::PatchFixtureRotation) -> fixture::FixtureVector {
     fixture::FixtureVector {
         x: rotation.x,
@@ -405,6 +423,7 @@ fn application_rotation(rotation: wire::PatchFixtureRotation) -> fixture::Fixtur
 
 fn application_multipatch(input: wire::PatchMultiPatchInput) -> fixture::MultiPatchInstance {
     fixture::MultiPatchInstance {
+        scenery_size_metres: None,
         id: input.id,
         name: input.name,
         universe: None,
@@ -510,6 +529,7 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
             output: patch.internal_bindings.output.clone(),
         },
         location: wire_location(patch.location),
+        scenery_size_metres: patch.scenery_size_metres.map(wire_vector),
         rotation: wire_rotation(patch.rotation),
         note: patch.note.clone(),
         position_master: patch.position_master,
@@ -612,6 +632,7 @@ fn wire_multipatch(instance: &fixture::MultiPatchInstance) -> wire::PatchMultiPa
         name: instance.name.clone(),
         split_patches: instance.split_patches.iter().map(wire_split).collect(),
         location: wire_location(instance.location),
+        scenery_size_metres: instance.scenery_size_metres.map(wire_vector),
         rotation: wire_rotation(instance.rotation),
         invert_pan: instance.invert_pan,
         invert_tilt: instance.invert_tilt,

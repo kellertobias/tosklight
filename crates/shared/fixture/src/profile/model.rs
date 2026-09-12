@@ -1,4 +1,6 @@
-use super::{ControlAction, EmitterHeadBinding, FixtureChannel, GeometryGraph, HeadColorSystem};
+use super::{
+    ControlAction, EmitterHeadBinding, FixtureChannel, GeometryGraph, HeadColorSystem, Vector3,
+};
 use crate::{DirectControlProtocol, SignalLossPolicy};
 use light_core::FixtureId;
 use serde::{Deserialize, Serialize};
@@ -159,6 +161,10 @@ pub struct FixtureProfile {
     /// Package-owned DMX mapping and physical body contract for scenic elements released on cue.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub physics: Option<ProfilePhysics>,
+    /// Present on a Venue or Rigging object whose geometry is generated at the size it is
+    /// placed, instead of being drawn from a model made for one size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery: Option<ProfileScenery>,
     /// The fixture's gobo wheel, slot by slot, when the package carries one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gobos: Vec<ProfileGobo>,
@@ -269,6 +275,8 @@ struct FixtureProfileCanonical {
     effect: Option<ProfileEffect>,
     #[serde(default)]
     physics: Option<ProfilePhysics>,
+    #[serde(default)]
+    scenery: Option<ProfileScenery>,
     #[serde(default)]
     gobos: Vec<ProfileGobo>,
     modes: Vec<FixtureMode>,
@@ -460,6 +468,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             crowd: canonical.crowd,
             effect: canonical.effect,
             physics: canonical.physics,
+            scenery: canonical.scenery,
             gobos: canonical.gobos,
             modes: canonical.modes,
             hazardous: canonical.hazardous,
@@ -629,6 +638,55 @@ pub struct ProfilePhysics {
     pub scenery_collision: bool,
     #[serde(default)]
     pub self_collision: bool,
+}
+
+/// A Venue or Rigging object whose geometry is generated at the size it is placed.
+///
+/// A curtain's height, a truss's length and a deck's rise are measurements of the venue, not
+/// personalities of a fixture. Shipping one profile per size — and a mode per size inside it —
+/// described the same object over and over and still only covered the sizes somebody thought of.
+/// A profile that declares this instead says what shape it is, and the renderer draws it at
+/// whatever size it is patched at: a truss repeats its chords over the length rather than being
+/// stretched to it, which is the difference between generating a truss and scaling a picture.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProfileScenery {
+    pub kind: ProfileSceneryKind,
+    /// Chords in a truss cross-section: 1 a pipe, 2 a ladder, 3 a triangle, 4 a box. Every other
+    /// kind ignores it.
+    #[serde(default)]
+    pub chords: u8,
+    /// The size one is placed at before an operator says otherwise, in metres.
+    pub default_size_metres: Vector3,
+    /// What an operator may set. A curtain is made to measure in every direction; a truss is the
+    /// length of the sticks it is built from and keeps its cross-section.
+    #[serde(default)]
+    pub adjustable: SceneryAxes,
+    /// Bounds for what an operator may set, in metres. A size outside them is clamped.
+    pub minimum_size_metres: Vector3,
+    pub maximum_size_metres: Vector3,
+}
+
+/// Which of a scenery object's dimensions an operator sets.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SceneryAxes {
+    #[serde(default)]
+    pub width: bool,
+    #[serde(default)]
+    pub height: bool,
+    #[serde(default)]
+    pub depth: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileSceneryKind {
+    Riser,
+    Truss,
+    Curtain,
+    Railing,
+    MirrorBall,
+    #[default]
+    Prop,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]

@@ -485,6 +485,7 @@ fn fixture_candidate(
     PatchFixtureCandidate {
         profile,
         patch: PatchedFixturePatch {
+            scenery_size_metres: None,
             fixture_id: FixtureId(Uuid::from_u128(100_000 + index as u128)),
             fixture_number: Some(u32::try_from(index + 1).unwrap()),
             virtual_fixture_number: None,

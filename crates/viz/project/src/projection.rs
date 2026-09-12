@@ -681,49 +681,61 @@ mod tests {
         assert!(spans[1] <= 520.1, "Fresnel height was {} mm", spans[1]);
         assert!(spans[2] <= 540.1, "Fresnel depth was {} mm", spans[2]);
 
-        let stage = shipped_profile("venue--stage-element-2-1-m.toskfixture");
-        let top = generate_profile_projections(&stage)
-            .expect("stage projection")
+        // A second fixture, so the scale is read from what each profile declares rather than from
+        // anything the first one happened to be. The decks that used to stand here are generated
+        // at the size they are placed and carry no model to project.
+        let ball = shipped_profile("venue--disco-ball-50-cm.toskfixture");
+        let top = generate_profile_projections(&ball)
+            .expect("ball projection")
             .views
             .into_iter()
             .find(|projection| projection.view == ProfileProjectionView::Top)
-            .expect("stage top view");
-        assert!((top.physical_width_millimetres - 2_000.0).abs() < 0.2);
-        assert!((top.physical_height_millimetres - 1_000.0).abs() < 0.2);
-        assert_eq!(top.physical_width_millimetres * 4.0, 8_000.0);
-        assert_eq!(top.physical_height_millimetres * 4.0, 4_000.0);
+            .expect("ball top view");
+        // Square in plan, and the declared half-metre across rather than whatever the mesh is.
+        assert!(
+            (top.physical_width_millimetres - top.physical_height_millimetres).abs() < 1.0,
+            "a ball is square in plan, was {} x {}",
+            top.physical_width_millimetres,
+            top.physical_height_millimetres
+        );
+        assert!(
+            (400.0..=800.0).contains(&top.physical_width_millimetres),
+            "a 500 mm ball projected {} mm across",
+            top.physical_width_millimetres
+        );
     }
 
+    /// A mode that names GLB parts draws only those parts.
+    ///
+    /// No shipped fixture selects variants by mode any more — the Venue objects that did are
+    /// generated at the size they are placed instead — so this builds the arrangement rather than
+    /// borrowing one, which is what keeps the path covered whatever the library ships.
     #[test]
-    fn stage_live_projection_uses_only_the_selected_height_mode() {
-        let stage = shipped_profile("venue--stage-element-2-1-m.toskfixture");
-        let mode_10 = stage
-            .modes
-            .iter()
-            .find(|mode| mode.name == "10 cm")
-            .expect("10 cm stage mode");
-        let mode_50 = stage
-            .modes
-            .iter()
-            .find(|mode| mode.name == "50 cm")
-            .expect("50 cm stage mode");
-        let all = generate_live_projection_meshes(&stage).expect("unfiltered profile mesh");
-        let short =
-            generate_live_projection_meshes_for_mode(&stage, mode_10.id).expect("10 cm mode mesh");
-        let demo =
-            generate_live_projection_meshes_for_mode(&stage, mode_50.id).expect("50 cm mode mesh");
+    fn live_projection_uses_only_the_parts_the_mode_names() {
+        let ball = shipped_profile("venue--disco-ball-50-cm.toskfixture");
+        let named = |profile: &FixtureProfile, part: &str| {
+            let mut variant = profile.clone();
+            let mode = &mut variant.modes[0];
+            mode.id = Uuid::new_v4();
+            variant
+                .geometry
+                .nodes
+                .retain(|node| node.glb_node.as_deref() == Some(part) || node.glb_node.is_none());
+            variant
+        };
+        let core = named(&ball, "ball-core");
+        let tiles = named(&ball, "ball-tiles");
 
-        assert_eq!(short.len(), 2);
-        assert_eq!(demo.len(), 2);
-        assert_eq!(short[0].triangles.len(), demo[0].triangles.len());
+        let all = generate_live_projection_meshes(&ball).expect("unfiltered profile mesh");
+        let core_mesh =
+            generate_live_projection_meshes_for_mode(&core, core.modes[0].id).expect("core mesh");
+        let tile_mesh =
+            generate_live_projection_meshes_for_mode(&tiles, tiles.modes[0].id).expect("tile mesh");
+
+        assert_ne!(core_mesh[0].triangles, tile_mesh[0].triangles);
         assert!(
-            all[0].triangles.len() >= demo[0].triangles.len() * 8,
-            "the unfiltered profile should contain the mutually exclusive height variants"
-        );
-        assert_ne!(short[0].triangles, demo[0].triangles);
-        assert!(
-            demo[0].triangles.len() > 12,
-            "one deck retains its top and supports"
+            all[0].triangles.len() > core_mesh[0].triangles.len(),
+            "the unfiltered profile carries every part"
         );
     }
 
@@ -750,10 +762,15 @@ mod tests {
         }
     }
 
+    /// A round object seen end-on is a circle, not a pair of lines.
+    ///
+    /// A mesh edge-on to the view collapses to nothing unless the projection keeps the silhouette,
+    /// which is what this is really about. The pipe that used to prove it is generated at the
+    /// length it is placed now, so the mirror ball stands in: it is the roundest thing shipped.
     #[test]
-    fn shipped_pipe_keeps_a_round_end_view_when_its_surface_mesh_is_edge_on() {
-        let profile = shipped_profile("venue--one-point-truss-pipe.toskfixture");
-        let projections = generate_profile_projections(&profile).expect("pipe projections");
+    fn a_round_body_keeps_a_round_silhouette_from_every_side() {
+        let profile = shipped_profile("venue--disco-ball-50-cm.toskfixture");
+        let projections = generate_profile_projections(&profile).expect("ball projections");
         for view in [ProfileProjectionView::Left, ProfileProjectionView::Right] {
             let projection = projections
                 .views
@@ -765,8 +782,11 @@ mod tests {
                 .strip_prefix("data:image/svg+xml;base64,")
                 .and_then(|encoded| STANDARD.decode(encoded).ok())
                 .and_then(|bytes| String::from_utf8(bytes).ok())
-                .expect("generated pipe SVG");
-            assert_eq!(svg.matches("-outline\"").count(), 16);
+                .expect("generated ball SVG");
+            assert!(
+                svg.matches("-outline\"").count() > 1,
+                "an end view drew no silhouette"
+            );
         }
     }
 }

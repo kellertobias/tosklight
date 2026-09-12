@@ -234,6 +234,7 @@ use viz_scene::{EmitterLayoutCells, EmitterOptics, FixtureBody, LightSource, Mot
 
 fn fixture() -> FixtureInstance {
     FixtureInstance {
+        drawn_as_scenery: false,
         instance_id: viz_scene::uuid::Uuid::nil(),
         fixture_id: viz_scene::uuid::Uuid::nil(),
         name: "Test".into(),
@@ -329,6 +330,7 @@ fn shipped_profile_svg_reaches_the_literal_plan_artwork_mesh() {
         profile: std::sync::Arc::new(profile),
         mode_id,
         instances: vec![viz_project::PhysicalInstance {
+            scenery_size_metres: None,
             instance_id: uuid::Uuid::new_v4(),
             name: "Shipped Dimmer Profile".into(),
             split_patches: vec![(1, Some((1, 1)))],

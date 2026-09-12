@@ -264,6 +264,7 @@ fn dmx_lookup_resolves_footprints_splits_multipatches_and_all_logical_heads() {
         light_fixture::SplitPatch { split: 2, universe: Some(7), address: Some(300) },
     ];
     fixture.multipatch = vec![light_fixture::MultiPatchInstance {
+        scenery_size_metres: None,
         id: Uuid::new_v4(),
         name: "Mirror".into(),
         universe: Some(9),

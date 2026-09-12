@@ -23,6 +23,7 @@ fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
             name: "Test".into(),
             split_patches: vec![(1, Some((1, 1)))],
@@ -121,6 +122,7 @@ fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
             name: "Embedded Robin DLS".into(),
             split_patches: vec![(1, Some((1, 1)))],
@@ -199,6 +201,7 @@ fn shipped_jbled_a7_home_shutter_is_steady_and_open_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
             name: "JBLED A7".into(),
             split_patches: vec![(1, Some((1, 1)))],
@@ -263,6 +266,7 @@ fn shipped_moving_light_models_apply_the_profile_head_offset() {
             profile: Arc::new(profile),
             mode_id,
             instances: vec![PhysicalInstance {
+                scenery_size_metres: None,
                 instance_id: Uuid::new_v4(),
                 name: "Model check".into(),
                 split_patches: vec![(1, Some((1, 1)))],
@@ -733,32 +737,35 @@ fn visual_only_packages_are_drawn_as_bodies_that_emit_no_light() {
     );
 }
 
+/// A truss is built at the length it is placed, not chosen from the lengths somebody modelled.
+///
+/// It used to ship a model per length and this asserted there was one of each. Generating it means
+/// there is no model at all: a scenery object carrying the cross-section the truss is built from
+/// and the length it was placed at, which the renderer repeats its chords over.
 #[test]
-fn each_length_of_one_venue_truss_gets_its_own_posed_model() {
+fn a_generated_truss_is_scenery_at_its_placed_length_rather_than_a_model() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../assets/fixture-library/venue--two-point-truss.toskfixture");
     let profile =
         Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
-    assert!(profile.modes.len() >= 2, "the truss ships several lengths");
-    let fixtures: Vec<_> = profile.modes[..2]
-        .iter()
-        .map(|mode| {
-            let mut fixture = patched("rigging", ProfileOptics::default());
-            fixture.profile = Arc::clone(&profile);
-            fixture.mode_id = mode.id;
-            fixture
-        })
-        .collect();
+    assert_eq!(profile.modes.len(), 1, "one mode, not one per length");
+    let declared = profile.scenery.expect("the truss is generated");
 
-    let compiled = compile(&fixtures);
+    let mut fixture = patched("rigging", ProfileOptics::default());
+    fixture.profile = Arc::clone(&profile);
+    fixture.mode_id = profile.modes[0].id;
+    let compiled = compile(std::slice::from_ref(&fixture));
 
-    assert_eq!(compiled.scene.fixtures.len(), 2);
-    assert_eq!(
-        compiled.scene.models.len(),
-        2,
-        "one model per length, not per profile"
+    assert_eq!(compiled.scene.fixtures.len(), 1);
+    assert!(compiled.scene.models.is_empty(), "nothing is modelled");
+    assert!(compiled.scene.fixtures[0].drawn_as_scenery);
+    assert!(
+        compiled.scene.emitters.is_empty(),
+        "a truss is not a lantern"
     );
-    assert!(compiled.scene.emitters.is_empty());
+    let scenery = &compiled.scene.scenery[0];
+    assert_eq!(scenery.chords, declared.chords);
+    assert_eq!(scenery.size.x, declared.default_size_metres.x);
 }
 
 #[test]

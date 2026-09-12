@@ -220,6 +220,10 @@ pub struct PatchedFixture {
     pub internal_bindings: InternalFixtureBindings,
     #[serde(default)]
     pub location: FixtureLocation,
+    /// The size a generated Venue object was placed at, in metres. Absent means its profile's
+    /// own default, which is what every one placed before this reads as.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_size_metres: Option<FixtureVector>,
     #[serde(default)]
     pub rotation: FixtureVector,
     /// A free note an operator keeps against this fixture: a circuit, a colour call, whatever the
@@ -371,6 +375,10 @@ pub struct MultiPatchInstance {
     pub split_patches: Vec<SplitPatch>,
     #[serde(default)]
     pub location: FixtureLocation,
+    /// The size a generated Venue object was placed at, in metres. Absent means its profile's
+    /// own default, which is what every one placed before this reads as.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_size_metres: Option<FixtureVector>,
     #[serde(default)]
     pub rotation: FixtureVector,
     /// Reverse the normalized Pan request for this physical instance.

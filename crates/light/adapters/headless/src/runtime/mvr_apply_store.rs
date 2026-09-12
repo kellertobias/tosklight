@@ -131,6 +131,7 @@ fn patched_mvr_fixture(
     let mut patched = embedded
         .cloned()
         .unwrap_or_else(|| light_fixture::PatchedFixture {
+            scenery_size_metres: None,
             fixture_id,
             fixture_number: source
                 .fixture_id

@@ -736,6 +736,7 @@ pub(super) fn portable_fixture_record(
     let head_id = FixtureId(Uuid::from_u128(identity_base + 11));
     let multipatch_id = Uuid::from_u128(identity_base + 12);
     let fixture = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id,
         fixture_number: Some(fixture_number),
         virtual_fixture_number: None,
@@ -757,6 +758,7 @@ pub(super) fn portable_fixture_record(
             fixture_id: head_id,
         }],
         multipatch: vec![MultiPatchInstance {
+            scenery_size_metres: None,
             id: multipatch_id,
             name: "Balcony".into(),
             universe: None,
@@ -806,6 +808,7 @@ pub(super) fn legacy_fixture_record(
     let profile: FixtureProfile =
         serde_json::from_value(portable.profile.profile().clone()).unwrap();
     let fixture = PatchedFixture {
+        scenery_size_metres: None,
         fixture_id: portable.fixture_id,
         fixture_number: Some(fixture_number),
         virtual_fixture_number: None,

@@ -200,6 +200,7 @@ fn replace_and_reimport_preserve_reference_only_patch_settings_and_physical_copi
         shaper_angles_degrees: [1.0, 2.0, 3.0, 4.0],
     };
     retained_fixture.multipatch.push(MultiPatchInstance {
+        scenery_size_metres: None,
         id: Uuid::from_u128(305),
         name: "Retained copy".into(),
         universe: Some(2),

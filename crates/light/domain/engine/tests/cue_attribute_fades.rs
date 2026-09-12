@@ -132,6 +132,7 @@ fn media_fixture() -> (PatchedFixture, FixtureId) {
     };
     (
         PatchedFixture {
+            scenery_size_metres: None,
             fixture_id: physical,
             fixture_number: Some(1),
             virtual_fixture_number: None,

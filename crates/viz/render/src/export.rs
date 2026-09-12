@@ -147,6 +147,7 @@ mod tests {
         let nil = viz_scene::uuid::Uuid::nil();
         let mut scene = Scene::default();
         scene.fixtures.push(viz_scene::FixtureInstance {
+            drawn_as_scenery: false,
             instance_id: nil,
             fixture_id: nil,
             name: "Spot".into(),
