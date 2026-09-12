@@ -12,6 +12,9 @@ fn geometry_motion_uses_physical_range_without_changing_profile_data() {
             pivot: Vector3::default(),
             glb_node: None,
             motion: Some(GeometryMotion {
+                max_speed_per_second: None,
+                acceleration_per_second_squared: None,
+                deceleration_per_second_squared: None,
                 attribute: AttributeKey("pan".into()),
                 kind: GeometryMotionKind::Rotation,
                 axis: Vector3 {

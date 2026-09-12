@@ -36,6 +36,9 @@ impl GeometryGraph {
                     pivot: Vector3::default(),
                     glb_node: None,
                     motion: Some(GeometryMotion {
+                        max_speed_per_second: None,
+                        acceleration_per_second_squared: None,
+                        deceleration_per_second_squared: None,
                         attribute: AttributeKey("pan".into()),
                         kind: GeometryMotionKind::Rotation,
                         axis: Vector3 {
@@ -56,6 +59,9 @@ impl GeometryGraph {
                         pivot: Vector3::default(),
                         glb_node: None,
                         motion: Some(GeometryMotion {
+                            max_speed_per_second: None,
+                            acceleration_per_second_squared: None,
+                            deceleration_per_second_squared: None,
                             attribute: AttributeKey("tilt".into()),
                             kind: GeometryMotionKind::Rotation,
                             axis: Vector3 {
@@ -108,6 +114,25 @@ impl GeometryGraph {
                     .iter()
                     .find(|candidate| candidate.id == parent)
                     .and_then(|candidate| candidate.parent_id);
+            }
+        }
+        for node in &self.nodes {
+            let Some(motion) = &node.motion else { continue };
+            // A declared limit has to be a real rate. Zero would mean an axis that never arrives.
+            for figure in [
+                motion.max_speed_per_second,
+                motion.acceleration_per_second_squared,
+                motion.deceleration_per_second_squared,
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if !figure.is_finite() || figure <= 0.0 {
+                    return Err(ProfileError::Invalid(
+                        "geometry axis speed, acceleration and deceleration must be positive"
+                            .into(),
+                    ));
+                }
             }
         }
         let mut emitter_ids = HashSet::new();

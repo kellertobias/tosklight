@@ -1005,3 +1005,50 @@ fn a_written_optics_value_wins_over_the_legacy_physical_one() {
     let decoded: FixtureProfile = serde_json::from_value(encoded).unwrap();
     assert_eq!(decoded.optics.beam_angle_degrees, Some(15.0));
 }
+
+/// A yoke has a top speed and it takes time to reach it. Two fixtures told to go to the same
+/// place at the same moment arrive at different times, and that is what makes a move read as the
+/// real lantern rather than a snap.
+#[test]
+fn geometry_axis_motion_limits_round_trip_and_reject_impossible_rates() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Moving head".into();
+    let mode = &mut profile.modes[0];
+    let head = mode.heads[0].id;
+    mode.geometry = GeometryGraph::template(GeometryTemplate::MovingHead, &[head]);
+    let axis = mode
+        .geometry
+        .nodes
+        .iter_mut()
+        .find(|node| node.motion.is_some())
+        .expect("the moving-head template declares an axis");
+    let motion = axis.motion.as_mut().unwrap();
+    motion.max_speed_per_second = Some(540.0);
+    motion.acceleration_per_second_squared = Some(1_200.0);
+    motion.deceleration_per_second_squared = Some(900.0);
+    profile.validate().unwrap();
+
+    let decoded: FixtureProfile =
+        serde_json::from_value(serde_json::to_value(&profile).unwrap()).unwrap();
+    let motion = decoded.modes[0]
+        .geometry
+        .nodes
+        .iter()
+        .find_map(|node| node.motion.as_ref())
+        .unwrap();
+    assert_eq!(motion.max_speed_per_second, Some(540.0));
+    assert_eq!(motion.acceleration_per_second_squared, Some(1_200.0));
+    assert_eq!(motion.deceleration_per_second_squared, Some(900.0));
+
+    // An axis that declares nothing still moves; one that declares a standstill does not.
+    let mut stalled = profile.clone();
+    stalled.modes[0]
+        .geometry
+        .nodes
+        .iter_mut()
+        .find_map(|node| node.motion.as_mut())
+        .unwrap()
+        .max_speed_per_second = Some(0.0);
+    assert!(stalled.validate().is_err());
+}

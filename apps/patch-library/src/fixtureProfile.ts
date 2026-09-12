@@ -301,6 +301,13 @@ export interface GeometryMotion {
 	axis: Vector3Value;
 	physical_min: number;
 	physical_max: number;
+	/**
+	 * How fast this axis can actually travel, per second in its own physical unit — degrees for a
+	 * rotation, the translation's unit for a translation. Omitted means it moves as told.
+	 */
+	max_speed_per_second?: number | null;
+	acceleration_per_second_squared?: number | null;
+	deceleration_per_second_squared?: number | null;
 }
 
 export interface GeometryEmitter {

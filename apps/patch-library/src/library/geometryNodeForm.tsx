@@ -57,7 +57,48 @@ function GeometryMotionFields({
 					onChange({ ...motion, physical_max: Number(event.target.value) })
 				}
 			/>
+			<AxisMotionLimits motion={motion} onChange={onChange} />
 		</div>
+	);
+}
+
+/**
+ * How fast the axis actually travels.
+ *
+ * A yoke does not arrive instantly, and it is the difference between a move that reads as the
+ * real fixture and one that snaps. Blank means the axis moves as fast as it is told to, which is
+ * how every fixture behaved before these figures existed.
+ */
+function AxisMotionLimits({
+	motion,
+	onChange,
+}: {
+	motion: Motion;
+	onChange: (motion: Motion) => void;
+}) {
+	const unit = motion.kind === "rotation" ? "\u00b0" : "units";
+	return (
+		<>
+			{(
+				[
+					["max_speed_per_second", "Top speed", `${unit}/s`],
+					["acceleration_per_second_squared", "Acceleration", `${unit}/s\u00b2`],
+					["deceleration_per_second_squared", "Deceleration", `${unit}/s\u00b2`],
+				] as const
+			).map(([key, label, suffix]) => (
+				<NumberField
+					key={key}
+					label={`${label} (${suffix})`}
+					allowDecimal
+					min={0}
+					value={motion[key] ?? ""}
+					onChange={(event) => {
+						const raw = event.target.value.trim();
+						onChange({ ...motion, [key]: raw === "" ? null : Number(raw) });
+					}}
+				/>
+			))}
+		</>
 	);
 }
 

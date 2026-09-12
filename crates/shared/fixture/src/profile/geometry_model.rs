@@ -46,6 +46,18 @@ pub struct GeometryMotion {
     pub axis: Vector3,
     pub physical_min: f32,
     pub physical_max: f32,
+    /// How fast this axis can actually travel, and how hard it gets there.
+    ///
+    /// A yoke does not arrive instantly, and two fixtures given the same position at the same
+    /// time arrive at different moments. Every figure is per second in the axis's own physical
+    /// unit — degrees for a rotation, the translation's unit for a translation — and every one is
+    /// optional: an axis that declares nothing moves as fast as it is told to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_speed_per_second: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceleration_per_second_squared: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deceleration_per_second_squared: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

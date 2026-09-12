@@ -118,6 +118,12 @@ presets** in **Control → Special Dialog** when fixed or indexed choices should
 Choose a suitable fixture geometry and use the preview to confirm the Stage appearance. Detailed
 model hierarchy, emitter, pivot, and projection authoring is fixture-developer documentation.
 
+An axis that moves — a yoke's pan, a head's tilt — can also declare how fast it actually travels:
+**Top speed**, **Acceleration**, and **Deceleration**, in degrees per second for a rotation and in
+the translation's own unit for a translation. A real lantern does not arrive instantly, and two
+fixtures given the same position at the same moment do not arrive together. Leave the figures
+empty and the axis moves as fast as it is told to, which is how every fixture behaved before.
+
 ## Revisions and compatibility
 
 The server assigns revision numbers atomically and rejects concurrent edits. Open **Revision history** to inspect immutable revisions, edit an older revision as a new one, or delete an unused revision. Deletion warns when a patched show embeds that revision; the show's snapshot remains intact even if deletion is confirmed.
