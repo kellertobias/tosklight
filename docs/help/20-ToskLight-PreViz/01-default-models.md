@@ -4,7 +4,17 @@ A fixture profile may name its own 3D model. Most do not — the shipped library
 import and a hand-built profile all commonly arrive with nothing but channels — so the
 Visualizer chooses one of the models ToskLight ships instead of drawing a box.
 
-The choice never looks at a manufacturer or a product name. It looks at what the profile
+A profile can also name the body it wants. **Show Setup → Fixture Library → Simulation → Body**
+offers every model ToskLight ships, listed in the
+[Model Catalogue](../99-Appendix/01-model-catalogue.md), and a profile that names one is drawn as
+that. This is how a PAR 64 long nose is told apart from a PAR 16, or an eight-cell blinder from a
+two: the guess below cannot make those distinctions, because nothing in a channel set does.
+
+A profile that names no body — which is every profile written before this, and most imports — is
+guessed at exactly as before. A profile that names a body a given build does not ship, which is
+what an older desk sees of a newer show, falls back to the same guess rather than refusing to draw.
+
+The guess never looks at a manufacturer or a product name. It looks at what the profile
 says about itself, in two passes.
 
 ## First: the declared fixture type

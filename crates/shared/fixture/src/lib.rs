@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! Fixture definitions, portable fixture library, color calibration, patching, and DMX encoding.
 
+pub mod body_catalogue;
 mod definition;
 mod definition_model;
 mod encoding;

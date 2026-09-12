@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
 	AttributeDescriptor,
+	FixtureBodyModel,
 	FixtureNote,
 	FixtureProfile,
 	FixtureVisibility,
@@ -494,6 +495,9 @@ export const documentSession = {
 		invoke<boolean>("delete_library_profile_revision", { id, revision }),
 	attributeRegistry: () =>
 		invoke<AttributeDescriptor[]>("attribute_registry"),
+	/** The generic bodies this build ships, for the editor's Body picker. */
+	fixtureBodyCatalogue: () =>
+		invoke<FixtureBodyModel[]>("fixture_body_catalogue"),
 };
 
 /**

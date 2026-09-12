@@ -228,6 +228,7 @@ fn main() {
             session::save_library_profile,
             session::delete_library_profile_revision,
             session::attribute_registry,
+            session::fixture_body_catalogue,
             session::set_preview,
             session::clear_preview,
             session::preview_is_active,

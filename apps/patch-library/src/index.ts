@@ -110,6 +110,7 @@ export * from "./transport";
  */
 export type {
 	AttributeDescriptor,
+	FixtureBodyModel,
 	FixtureChannel,
 	FixtureDefinition,
 	FixtureHead,

@@ -25,6 +25,7 @@ impl FixtureProfile {
             photograph_asset: None,
             stage_icon_asset: None,
             model_asset: None,
+            body_model: None,
             model_units: ModelUnits::Auto,
             projection_assets: None,
             physical: ProfilePhysicalProperties::default(),

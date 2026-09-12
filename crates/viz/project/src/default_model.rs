@@ -68,23 +68,118 @@ shipped!(
 shipped!(HAZER, "hazer", "lamps/hazer.glb");
 shipped!(SHOW_LASER, "show-laser", "av/show-laser.glb");
 
+shipped!(ACL_PAR_16, "acl-par-16", "lamps/acl-par-16.glb");
+shipped!(BLINDER_2, "blinder-2-cell", "lamps/blinder-2-cell.glb");
+shipped!(BLINDER_8, "blinder-8-cell", "lamps/blinder-8-cell.glb");
+shipped!(FLAT_LED_PAR, "flat-led-par", "lamps/flat-led-par.glb");
+shipped!(LED_PAR_PIZZA, "led-par-pizza", "lamps/led-par-pizza.glb");
+shipped!(
+    LED_STRIP_0500,
+    "led-strip-rgbcct-0500",
+    "lamps/led-strip-rgbcct-0500.glb"
+);
+shipped!(
+    LED_STRIP_1500,
+    "led-strip-rgbcct-1500",
+    "lamps/led-strip-rgbcct-1500.glb"
+);
+shipped!(
+    LED_STRIP_2000,
+    "led-strip-rgbcct-2000",
+    "lamps/led-strip-rgbcct-2000.glb"
+);
+shipped!(
+    LED_STRIP_2500,
+    "led-strip-rgbcct-2500",
+    "lamps/led-strip-rgbcct-2500.glb"
+);
+shipped!(
+    LED_STRIP_3000,
+    "led-strip-rgbcct-3000",
+    "lamps/led-strip-rgbcct-3000.glb"
+);
+shipped!(
+    MOVING_LED_WASH_300,
+    "moving-head-led-wash-300",
+    "lamps/moving-head-led-wash-300.glb"
+);
+shipped!(
+    MOVING_LED_WASH_500,
+    "moving-head-led-wash-500",
+    "lamps/moving-head-led-wash-500.glb"
+);
+shipped!(PAR_56_BLACK, "par-56-black", "lamps/par-56-black.glb");
+shipped!(PAR_56_SILVER, "par-56-silver", "lamps/par-56-silver.glb");
+shipped!(
+    PAR_64_SHORT_SILVER,
+    "par-64-short-nose-silver",
+    "lamps/par-64-short-nose-silver.glb"
+);
+shipped!(
+    PAR_64_LONG_BLACK,
+    "par-64-long-nose-black",
+    "lamps/par-64-long-nose-black.glb"
+);
+shipped!(
+    PAR_64_LONG_SILVER,
+    "par-64-long-nose-silver",
+    "lamps/par-64-long-nose-silver.glb"
+);
+shipped!(
+    SCANNER_COMPACT,
+    "scanner-compact",
+    "lamps/scanner-compact.glb"
+);
+shipped!(STROBE_XENON, "strobe-xenon", "lamps/strobe-xenon.glb");
+shipped!(SUNSTRIP, "sunstrip", "lamps/sunstrip.glb");
+shipped!(PROJECTOR_SMALL, "projector-small", "av/projector-small.glb");
+shipped!(PROJECTOR_LARGE, "projector-large", "av/projector-large.glb");
+
 /// Every renderer-owned fallback body, in stable gallery order.
-pub fn all() -> [&'static DefaultModel; 13] {
-    [
-        &FRESNEL,
-        &PROFILE_SPOT,
-        &PAR_CAN,
+pub fn all() -> &'static [&'static DefaultModel] {
+    static ALL: &[&DefaultModel] = &[
         &MOVING_PROFILE,
         &MOVING_WASH,
+        &MOVING_LED_WASH_300,
         &MOVING_LED_WASH,
-        &LED_PAR,
-        &LED_STROBE,
-        &BLINDER,
+        &MOVING_LED_WASH_500,
+        &SCANNER_COMPACT,
         &SCANNER,
+        &PROFILE_SPOT,
+        &FRESNEL,
+        &ACL_PAR_16,
+        &PAR_56_BLACK,
+        &PAR_56_SILVER,
+        &PAR_CAN,
+        &PAR_64_SHORT_SILVER,
+        &PAR_64_LONG_BLACK,
+        &PAR_64_LONG_SILVER,
+        &LED_PAR,
+        &LED_PAR_PIZZA,
+        &FLAT_LED_PAR,
+        &BLINDER_2,
+        &BLINDER,
+        &BLINDER_8,
+        &SUNSTRIP,
+        &LED_STRIP_0500,
         &LED_STRIP,
+        &LED_STRIP_1500,
+        &LED_STRIP_2000,
+        &LED_STRIP_2500,
+        &LED_STRIP_3000,
+        &STROBE_XENON,
+        &LED_STROBE,
         &HAZER,
         &SHOW_LASER,
-    ]
+        &PROJECTOR_SMALL,
+        &PROJECTOR_LARGE,
+    ];
+    ALL
+}
+
+/// The shipped body with this name, if this build ships one.
+pub fn by_name(id: &str) -> Option<&'static DefaultModel> {
+    all().iter().copied().find(|model| model.name == id)
 }
 
 /// What a mode has channels for, which is all the rules need to know about it.
@@ -220,14 +315,26 @@ fn by_attributes(traits: FixtureTraits) -> &'static DefaultModel {
     &FRESNEL
 }
 
-/// The model a fixture is drawn with when its profile names none.
-pub fn choose(fixture_type: &str, traits: FixtureTraits) -> &'static DefaultModel {
-    by_declared_type(fixture_type, traits).unwrap_or_else(|| by_attributes(traits))
+/// The model a fixture is drawn with when its profile carries no geometry of its own.
+///
+/// A profile that names a body from the catalogue gets exactly that. One that names none — or
+/// names one this build does not ship, which is what an older desk sees of a newer show — falls
+/// back to the guess: the declared type first, then the attributes the mode has channels for.
+pub fn choose(
+    body_model: Option<&str>,
+    fixture_type: &str,
+    traits: FixtureTraits,
+) -> &'static DefaultModel {
+    body_model
+        .and_then(by_name)
+        .or_else(|| by_declared_type(fixture_type, traits))
+        .unwrap_or_else(|| by_attributes(traits))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     fn traits(attributes: &[&str]) -> FixtureTraits {
         let mut traits = FixtureTraits::default();
@@ -255,6 +362,49 @@ mod tests {
             }
         }
         (min, max)
+    }
+
+    /// The fixture crate offers the list an operator picks from; this crate holds the bytes. A
+    /// name in one and not the other is a body the picker offers and the renderer cannot draw, or
+    /// a body that ships and nothing can ask for.
+    #[test]
+    fn the_catalogue_and_the_shipped_bodies_name_the_same_set() {
+        let shipped = all().iter().map(|model| model.name).collect::<HashSet<_>>();
+        let offered = light_fixture::body_catalogue::BODY_CATALOGUE
+            .iter()
+            .map(|model| model.id)
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            shipped.difference(&offered).collect::<Vec<_>>(),
+            Vec::<&&str>::new(),
+            "shipped but not offered to an operator"
+        );
+        assert_eq!(
+            offered.difference(&shipped).collect::<Vec<_>>(),
+            Vec::<&&str>::new(),
+            "offered to an operator but not shipped"
+        );
+    }
+
+    /// A show written by a newer desk can name a body this build has never heard of. It still has
+    /// to draw, and the guess is what it falls back to.
+    #[test]
+    fn an_unknown_body_name_falls_back_to_the_guess_rather_than_failing() {
+        let guessed = choose(None, "fresnel", FixtureTraits::default());
+        assert_eq!(
+            choose(
+                Some("a-body-from-2030"),
+                "fresnel",
+                FixtureTraits::default()
+            )
+            .name,
+            guessed.name
+        );
+        // A named body outranks both the declared type and the channel set.
+        assert_eq!(
+            choose(Some("blinder-8-cell"), "fresnel", traits(&["dimmer"])).name,
+            "blinder-8-cell"
+        );
     }
 
     #[test]
@@ -383,15 +533,15 @@ mod tests {
 
     #[test]
     fn a_bare_dimmer_becomes_a_fresnel() {
-        assert_eq!(choose("", traits(&["dimmer"])).name, FRESNEL.name);
+        assert_eq!(choose(None, "", traits(&["dimmer"])).name, FRESNEL.name);
     }
 
     #[test]
     fn pan_tilt_with_a_wheel_or_a_gobo_becomes_a_profile_moving_head() {
         let wheel = traits(&["dimmer", "pan", "tilt", "color.wheel.1"]);
         let gobo = traits(&["dimmer", "pan", "tilt", "gobo.1"]);
-        assert_eq!(choose("", wheel).name, MOVING_PROFILE.name);
-        assert_eq!(choose("", gobo).name, MOVING_PROFILE.name);
+        assert_eq!(choose(None, "", wheel).name, MOVING_PROFILE.name);
+        assert_eq!(choose(None, "", gobo).name, MOVING_PROFILE.name);
     }
 
     #[test]
@@ -404,19 +554,19 @@ mod tests {
             "color.green",
             "color.blue",
         ]);
-        assert_eq!(choose("", mixed).name, MOVING_LED_WASH.name);
+        assert_eq!(choose(None, "", mixed).name, MOVING_LED_WASH.name);
     }
 
     #[test]
     fn colour_mixing_without_movement_becomes_an_led_par() {
         let par = traits(&["dimmer", "color.red", "color.green", "color.blue"]);
-        assert_eq!(choose("", par).name, LED_PAR.name);
+        assert_eq!(choose(None, "", par).name, LED_PAR.name);
     }
 
     #[test]
     fn a_strobe_channel_alone_becomes_a_strobe() {
         assert_eq!(
-            choose("", traits(&["dimmer", "strobe"])).name,
+            choose(None, "", traits(&["dimmer", "strobe"])).name,
             LED_STROBE.name
         );
     }
@@ -424,20 +574,25 @@ mod tests {
     #[test]
     fn a_fog_channel_becomes_a_hazer_whatever_else_it_has() {
         let hazer = traits(&["dimmer", "fog", "color.red", "color.green", "color.blue"]);
-        assert_eq!(choose("", hazer).name, HAZER.name);
+        assert_eq!(choose(None, "", hazer).name, HAZER.name);
     }
 
     #[test]
     fn a_declared_type_wins_over_the_channel_set() {
         // An RGB blinder is still a blinder, and a static profile is not a moving head.
         let rgb = traits(&["dimmer", "color.red", "color.green", "color.blue"]);
-        assert_eq!(choose("blinder", rgb).name, BLINDER.name);
+        assert_eq!(choose(None, "blinder", rgb).name, BLINDER.name);
         assert_eq!(
-            choose("profile", traits(&["dimmer"])).name,
+            choose(None, "profile", traits(&["dimmer"])).name,
             PROFILE_SPOT.name
         );
         assert_eq!(
-            choose("profile moving head", traits(&["dimmer", "pan", "tilt"])).name,
+            choose(
+                None,
+                "profile moving head",
+                traits(&["dimmer", "pan", "tilt"])
+            )
+            .name,
             MOVING_PROFILE.name
         );
     }
@@ -493,7 +648,7 @@ mod tests {
         ];
         for (fixture_type, attributes, expected) in cases {
             assert_eq!(
-                choose(fixture_type, traits(attributes)).name,
+                choose(None, fixture_type, traits(attributes)).name,
                 expected,
                 "{fixture_type} with {attributes:?}"
             );
@@ -503,7 +658,10 @@ mod tests {
     #[test]
     fn a_type_nobody_shipped_still_lands_on_the_channel_rules() {
         let moving = traits(&["dimmer", "pan", "tilt", "gobo.1"]);
-        assert_eq!(choose("something new", moving).name, MOVING_PROFILE.name);
+        assert_eq!(
+            choose(None, "something new", moving).name,
+            MOVING_PROFILE.name
+        );
     }
 
     #[test]
@@ -516,6 +674,6 @@ mod tests {
             "color.magenta",
             "color.yellow",
         ]);
-        assert_eq!(choose("", cmy).name, MOVING_LED_WASH.name);
+        assert_eq!(choose(None, "", cmy).name, MOVING_LED_WASH.name);
     }
 }

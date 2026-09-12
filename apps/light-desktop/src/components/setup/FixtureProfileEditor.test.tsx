@@ -256,6 +256,54 @@ describe("FixtureProfileEditor generic profile fields", () => {
 		});
 	});
 
+
+	/**
+	 * A fixture's body was always guessed from its declared type and the channels its mode has,
+	 * which cannot tell a PAR 64 from a PAR 16. Naming one is what makes the rig look like itself.
+	 */
+	it("names the generic body the Stage draws the fixture as", async () => {
+		const save = vi.fn(async (draft: FixtureProfile) => draft);
+		render(
+			<FixtureProfileEditor
+				initialProfile={validProfile()}
+				manufacturers={[]}
+				bodyCatalogue={[
+					{ id: "par-64-long-nose-black", label: "PAR 64 long nose, black", group: "PAR cans" },
+					{ id: "blinder-8-cell", label: "Blinder, 8 cell", group: "Blinders" },
+				]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Simulation" }));
+		// Unset means the guess, which is how every profile behaved before.
+		choose("Generic body", "PAR cans · PAR 64 long nose, black");
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		expect(save.mock.calls[0][0].body_model).toBe("par-64-long-nose-black");
+	});
+
+	it("keeps the fixture-type guess when no body is named", async () => {
+		const save = vi.fn(async (draft: FixtureProfile) => draft);
+		render(
+			<FixtureProfileEditor
+				initialProfile={validProfile()}
+				manufacturers={[]}
+				bodyCatalogue={[
+					{ id: "blinder-8-cell", label: "Blinder, 8 cell", group: "Blinders" },
+				]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Simulation" }));
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		expect(save.mock.calls[0][0].body_model ?? null).toBeNull();
+	});
+
 	/** A lens needs both of its dimensions; clearing one hands the fixture back to its type. */
 	it("drops a light source that has lost one of its dimensions", async () => {
 		const save = vi.fn(async (draft: FixtureProfile) => draft);

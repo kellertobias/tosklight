@@ -16,6 +16,7 @@ import type {
 } from "../../api/client/mediaOutput";
 import type {
 	FixtureDefinition,
+	FixtureBodyModel,
 	FixtureProfile,
 	PatchLayer,
 } from "../../api/types";
@@ -71,6 +72,8 @@ export interface ServerFixtureContext {
 	) => Promise<FixtureProfile>;
 	deleteFixtureProfile: (id: string, revision: number) => Promise<void>;
 	fixtureProfileRevisions: (id: string) => Promise<FixtureProfile[]>;
+	/** The generic bodies this build ships, for the profile editor's Body picker. */
+	fixtureBodyCatalogue: () => Promise<FixtureBodyModel[]>;
 	saveFixtureProfileSourceGdtf: (
 		id: string,
 		revision: number,

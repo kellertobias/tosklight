@@ -74,6 +74,14 @@ pub struct LibraryProfile {
     pub profile: serde_json::Value,
 }
 
+/// One generic body, in the shape the shared fixture-profile editor reads.
+#[derive(Debug, Serialize)]
+pub struct BodyModelDto {
+    pub id: String,
+    pub label: String,
+    pub group: String,
+}
+
 /// One canonical attribute, in the shape the shared fixture-profile editor reads.
 #[derive(Debug, Serialize)]
 pub struct AttributeDescriptorDto {
@@ -773,6 +781,19 @@ pub fn delete_library_profile_revision(
     library
         .delete_profile(id, revision)
         .map_err(|error| error.to_string())
+}
+
+/// The generic bodies a profile can be drawn as, for the editor's Body picker.
+#[tauri::command]
+pub fn fixture_body_catalogue() -> Vec<BodyModelDto> {
+    light_fixture::body_catalogue::BODY_CATALOGUE
+        .iter()
+        .map(|model| BodyModelDto {
+            id: model.id.into(),
+            label: model.label.into(),
+            group: model.group.label().into(),
+        })
+        .collect()
 }
 
 /// The canonical attribute registry a profile channel names as its role.

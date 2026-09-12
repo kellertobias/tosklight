@@ -120,6 +120,13 @@ pub struct FixtureProfile {
     pub stage_icon_asset: Option<String>,
     #[serde(default)]
     pub model_asset: Option<String>,
+    /// The generic body this fixture is drawn as, named from `body_catalogue::BODY_CATALOGUE`.
+    ///
+    /// `None` keeps the guess made from the declared type and the mode's channels, which is how
+    /// every profile behaved before a body could be chosen. A packaged `model_asset` wins over
+    /// both: a fixture that ships its own geometry is drawn with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_model: Option<String>,
     #[serde(default)]
     pub model_units: ModelUnits,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -235,6 +242,8 @@ struct FixtureProfileCanonical {
     #[serde(default)]
     model_asset: Option<String>,
     #[serde(default)]
+    body_model: Option<String>,
+    #[serde(default)]
     model_units: ModelUnits,
     #[serde(default)]
     projection_assets: Option<ProfileProjectionSet>,
@@ -309,6 +318,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             photograph_asset: canonical.photograph_asset,
             stage_icon_asset: canonical.stage_icon_asset,
             model_asset: canonical.model_asset,
+            body_model: canonical.body_model,
             model_units: canonical.model_units,
             projection_assets: canonical.projection_assets,
             physical: canonical.physical.split(&mut canonical.optics),

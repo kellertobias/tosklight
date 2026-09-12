@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn portable_appearance_uses_profile_cct_and_embedded_gel_fallback() {
         let mut profile = FixtureProfile::blank();
-        profile.physical.color_temperature_kelvin = Some(3_200.0);
+        profile.optics.color_temperature_kelvin = Some(3_200.0);
         let appearance = InstalledFixtureAppearance {
             gel: GelAssignment::BuiltIn {
                 catalog_id: "generic".into(),
@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn explicit_temperature_overrides_the_profile_default() {
         let mut profile = FixtureProfile::blank();
-        profile.physical.color_temperature_kelvin = Some(3_200.0);
+        profile.optics.color_temperature_kelvin = Some(3_200.0);
         let appearance = InstalledFixtureAppearance {
             color_temperature_kelvin: Some(10_000),
             ..InstalledFixtureAppearance::default()

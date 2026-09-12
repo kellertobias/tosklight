@@ -14,6 +14,13 @@ export interface FixtureProfile {
 	photograph_asset: string | null;
 	stage_icon_asset: string | null;
 	model_asset: string | null;
+	/**
+	 * The generic body this fixture is drawn as, named from the body catalogue.
+	 *
+	 * Null keeps the guess made from the declared type and the mode's channels. A packaged
+	 * `model_asset` wins over both.
+	 */
+	body_model?: string | null;
 	model_units?: "auto" | "metres";
 	projection_assets?: FixtureProjectionSet | null;
 	physical: FixtureProfilePhysical;
@@ -377,3 +384,10 @@ export interface AttributeDescriptor {
 	push_turn_of?: string | null;
 }
 
+
+/** One generic body an operator can draw a fixture as, as the desk offers it. */
+export interface FixtureBodyModel {
+	id: string;
+	label: string;
+	group: string;
+}

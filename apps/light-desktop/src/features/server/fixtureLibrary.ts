@@ -10,6 +10,7 @@ export function createFixtureLibraryActions(
 	| "saveFixtureProfile"
 	| "deleteFixtureProfile"
 	| "fixtureProfileRevisions"
+	| "fixtureBodyCatalogue"
 	| "saveFixtureProfileSourceGdtf"
 	| "importFixturePackage"
 	| "exportFixturePackage"
@@ -75,6 +76,7 @@ export function createFixtureLibraryActions(
 			}
 		},
 		fixtureProfileRevisions: (id) => api.fixtures.fixtureProfileRevisions(id),
+		fixtureBodyCatalogue: () => api.fixtures.fixtureBodyCatalogue(),
 		saveFixtureProfileSourceGdtf: async (id, revision, source) => {
 			try {
 				await api.fixtures.putFixtureProfileSourceGdtf(id, revision, source);

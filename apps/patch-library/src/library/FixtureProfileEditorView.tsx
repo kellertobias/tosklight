@@ -1,5 +1,9 @@
 import { Fragment } from "react";
-import type { AttributeDescriptor, FixtureProfile } from "../wire";
+import type {
+	AttributeDescriptor,
+	FixtureBodyModel,
+	FixtureProfile,
+} from "../wire";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ConfirmDialog, ManufacturerLookup } from "./dialogs";
 import {
@@ -22,6 +26,8 @@ export type FixtureProfileEditorProps = {
 	expectedRevision?: number;
 	manufacturers: string[];
 	attributeRegistry?: AttributeDescriptor[];
+	/** The generic bodies this build ships, which the Simulation tab offers. */
+	bodyCatalogue?: FixtureBodyModel[];
 	onSave: (
 		profile: FixtureProfile,
 		expectedRevision: number,
@@ -36,9 +42,11 @@ type EditorController = ReturnType<typeof useFixtureProfileEditorController>;
 function ProfileEditorBody({
 	editor,
 	attributeRegistry,
+	bodyCatalogue,
 }: {
 	editor: EditorController;
 	attributeRegistry: AttributeDescriptor[];
+	bodyCatalogue: FixtureBodyModel[];
 }) {
 	return (
 		<div className="fixture-profile-editor-body">
@@ -79,6 +87,7 @@ function ProfileEditorBody({
 				<SimulationProfileTab
 					draft={editor.draft}
 					onChange={editor.setDraft}
+					bodyCatalogue={bodyCatalogue}
 				/>
 			)}
 			{editor.tab === "modes" && (
@@ -149,6 +158,7 @@ export function FixtureProfileEditor({
 	expectedRevision = initialProfile.revision,
 	manufacturers,
 	attributeRegistry = [],
+	bodyCatalogue = [],
 	onSave,
 	onClose,
 	ports,
@@ -224,6 +234,7 @@ export function FixtureProfileEditor({
 					<ProfileEditorBody
 						editor={editor}
 						attributeRegistry={attributeRegistry}
+						bodyCatalogue={bodyCatalogue}
 					/>
 				</section>
 				{editor.editedMode && (

@@ -21,6 +21,10 @@ pub(super) fn router() -> Router<AppState> {
             get(fixture_library_warnings_snapshot),
         )
         .route(
+            "/api/v2/fixture-library/body-catalogue",
+            get(fixture_body_catalogue_snapshot),
+        )
+        .route(
             "/api/v2/fixture-library/source-mappings",
             get(fixture_source_mappings_snapshot),
         )
@@ -196,6 +200,27 @@ async fn fixture_profiles_snapshot(
                 .map_err(ApiError::fixture)?,
         )?,
     }))
+}
+
+/// The generic bodies this build ships, which a profile may name instead of being guessed at.
+///
+/// Fixed for the life of the build, so it is a plain read with no revision of its own.
+async fn fixture_body_catalogue_snapshot(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let bodies = light_fixture::body_catalogue::BODY_CATALOGUE
+        .iter()
+        .map(|model| {
+            serde_json::json!({
+                "id": model.id,
+                "label": model.label,
+                "group": model.group.label(),
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(Json(serde_json::json!({ "bodies": bodies })))
 }
 
 async fn fixture_library_warnings_snapshot(

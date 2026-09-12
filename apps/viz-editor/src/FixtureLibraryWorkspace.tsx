@@ -8,7 +8,11 @@ import {
 	type ProfileAssetPickerProps,
 } from "@tosklight/patch/library";
 import { blankFixtureProfile, cloneProfile } from "@tosklight/patch";
-import type { AttributeDescriptor, FixtureProfile } from "@tosklight/patch";
+import type {
+	AttributeDescriptor,
+	FixtureBodyModel,
+	FixtureProfile,
+} from "@tosklight/patch";
 import { FixtureLibraryBrowser } from "./fixtureLibrary/FixtureLibraryBrowser";
 import { documentSession } from "./document/session";
 import { beginWindowDrag } from "./WindowChrome";
@@ -72,6 +76,7 @@ export function FixtureLibraryWorkspace({
 	onError: (reason: unknown) => void;
 }) {
 	const [registry, setRegistry] = useState<AttributeDescriptor[]>([]);
+	const [bodies, setBodies] = useState<FixtureBodyModel[]>([]);
 	const [query, setQuery] = useState("");
 	const [manufacturer, setManufacturer] = useState<string | null>(null);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -82,6 +87,7 @@ export function FixtureLibraryWorkspace({
 
 	useEffect(() => {
 		documentSession.attributeRegistry().then(setRegistry).catch(onError);
+		documentSession.fixtureBodyCatalogue().then(setBodies).catch(onError);
 	}, [onError]);
 
 	const manufacturers = useMemo(
@@ -186,6 +192,7 @@ export function FixtureLibraryWorkspace({
 					expectedRevision={draft.expectedRevision}
 					manufacturers={manufacturers}
 					attributeRegistry={registry}
+					bodyCatalogue={bodies}
 					ports={ports}
 					onSave={save}
 					onClose={() => setDraft(null)}

@@ -9,6 +9,7 @@ import {
 import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type {
+	FixtureBodyModel,
 	FixtureProfile,
 	FixtureProfileLightSource,
 	FixtureProfileOptics,
@@ -374,6 +375,59 @@ function OpticsSection({ draft, onChange }: GenericSectionProps) {
 	);
 }
 
+/**
+ * Which generic body the Stage draws this fixture as.
+ *
+ * A fixture that ships its own GLB is drawn with it and this is only advice. Everything else was
+ * drawn from a guess — the declared type and the channels a mode happens to have — which cannot
+ * tell a PAR 64 from a PAR 16 or a two-cell blinder from an eight. Leave it unset to keep that
+ * guess; name a body and the fixture is drawn as that.
+ */
+function BodySection({
+	draft,
+	onChange,
+	bodyCatalogue,
+}: GenericSectionProps & { bodyCatalogue: FixtureBodyModel[] }) {
+	const groups: { group: string; bodies: FixtureBodyModel[] }[] = [];
+	for (const body of bodyCatalogue) {
+		const last = groups.at(-1);
+		if (last && last.group === body.group) last.bodies.push(body);
+		else groups.push({ group: body.group, bodies: [body] });
+	}
+	return (
+		<section>
+			<h3>Body</h3>
+			<p className="field-hint">
+				{draft.model_asset
+					? "This fixture ships its own 3D model, which is what the Stage draws."
+					: "Leave this unset to keep the body guessed from the fixture type and its channels."}
+			</p>
+			<FormLayout columns={2} minColumnWidth={240}>
+				<SelectField
+					label="Generic body"
+					value={draft.body_model ?? ""}
+					disabled={bodyCatalogue.length === 0}
+					options={[
+						{ value: "", label: "Guess from the fixture type" },
+						...groups.flatMap(({ group, bodies }) =>
+							bodies.map((body) => ({
+								value: body.id,
+								label: `${group} · ${body.label}`,
+							})),
+						),
+					]}
+					onChange={(body_model) =>
+						onChange((current) => ({
+							...current,
+							body_model: body_model === "" ? null : body_model,
+						}))
+					}
+				/>
+			</FormLayout>
+		</section>
+	);
+}
+
 /** Who this fixture is: what it is called, and what it looks like in the library. */
 export function IdentityProfileTab({
 	draft,
@@ -394,9 +448,18 @@ export function IdentityProfileTab({
  * Physical is how the lantern is built; Optics is what comes out of it. Colour temperature,
  * luminous output, and beam angle are the light, not the lantern, so they belong on the right.
  */
-export function SimulationProfileTab({ draft, onChange }: GenericSectionProps) {
+export function SimulationProfileTab({
+	draft,
+	onChange,
+	bodyCatalogue = [],
+}: GenericSectionProps & { bodyCatalogue?: FixtureBodyModel[] }) {
 	return (
 		<div className="fixture-generic-tab">
+			<BodySection
+				draft={draft}
+				onChange={onChange}
+				bodyCatalogue={bodyCatalogue}
+			/>
 			<PhysicalSection draft={draft} onChange={onChange} />
 			<OpticsSection draft={draft} onChange={onChange} />
 		</div>

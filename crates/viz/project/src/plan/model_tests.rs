@@ -605,6 +605,9 @@ fn declared_optics_replace_the_fallback_for_that_fixture() {
         // A wash by name, deliberately declared as something else.
         "wash",
         ProfileOptics {
+            color_temperature_kelvin: None,
+            luminous_output_lumens: None,
+            beam_angle_degrees: None,
             output: Some(2.5),
             sharpness: Some(0.95),
             uniformity: Some(0.1),

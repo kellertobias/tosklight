@@ -59,6 +59,7 @@ impl FixtureProfile {
             photograph_asset: None,
             stage_icon_asset: first.icon_asset.clone(),
             model_asset: first.model_asset.clone(),
+            body_model: None,
             model_units: ModelUnits::Auto,
             projection_assets: None,
             physical: ProfilePhysicalProperties {

@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAttributeRegistry } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
-import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
+import type {
+	FixtureBodyModel,
+	FixtureDefinition,
+	FixtureProfile,
+} from "../../../api/types";
 import { FixtureProfileEditor } from "../FixtureProfileEditor";
 import {
 	blankFixtureProfile,
@@ -51,19 +55,44 @@ interface FixtureLibraryEditorProps {
 	onClose: () => void;
 }
 
+/**
+ * The generic bodies this build ships. Fixed for the life of the build, so it is read once when
+ * the editor opens rather than carried in every desk snapshot.
+ */
+function useBodyCatalogue(
+	load: (() => Promise<FixtureBodyModel[]>) | undefined,
+) {
+	const [bodies, setBodies] = useState<FixtureBodyModel[]>([]);
+	useEffect(() => {
+		if (!load) return;
+		let cancelled = false;
+		load()
+			.then((catalogue) => {
+				if (!cancelled) setBodies(catalogue);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [load]);
+	return bodies;
+}
+
 export function FixtureLibraryEditor({
 	editor,
 	manufacturers,
 	onClose,
 }: FixtureLibraryEditorProps) {
 	const library = useFixtureLibrary();
-const attributeRegistry = useAttributeRegistry();
+	const attributeRegistry = useAttributeRegistry();
+	const bodyCatalogue = useBodyCatalogue(library?.fixtureBodyCatalogue);
 	return (
 		<FixtureProfileEditor
 			initialProfile={editor.draft}
 			expectedRevision={editor.expectedRevision}
 			manufacturers={manufacturers}
 			attributeRegistry={attributeRegistry ?? []}
+			bodyCatalogue={bodyCatalogue}
 			onSave={
 				library?.saveFixtureProfile ??
 				(async () => {

@@ -8,6 +8,7 @@ import type {
 	GelCatalogImportTarget,
 } from "../../api/client/fixtures";
 import type {
+	FixtureBodyModel,
 	FixtureDefinition,
 	FixtureProfile,
 	PatchLayer,
@@ -32,6 +33,8 @@ export interface FixtureLibraryState {
 	) => Promise<FixtureProfile>;
 	deleteFixtureProfile: (id: string, revision: number) => Promise<void>;
 	fixtureProfileRevisions: (id: string) => Promise<FixtureProfile[]>;
+	/** The generic bodies this build ships, for the profile editor's Body picker. */
+	fixtureBodyCatalogue?: () => Promise<FixtureBodyModel[]>;
 	saveFixtureProfileSourceGdtf: (
 		id: string,
 		revision: number,

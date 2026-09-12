@@ -16,7 +16,11 @@ import type {
 	GelCatalogsSnapshot,
 } from "../generated/light-wire";
 import { decodePatchSnapshot } from "../patchWire";
-import type { FixtureDefinition, FixtureProfile } from "../types";
+import type {
+	FixtureBodyModel,
+	FixtureDefinition,
+	FixtureProfile,
+} from "../types";
 import type { ClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
 
@@ -70,6 +74,15 @@ export class FixtureApiClient {
 				"/api/v2/fixture-library/warnings",
 			)
 			.then((snapshot) => snapshot.warnings);
+	}
+
+	/** The generic bodies this build ships, for the profile editor's Body picker. */
+	fixtureBodyCatalogue(): Promise<FixtureBodyModel[]> {
+		return this.transport
+			.request<{ bodies: FixtureBodyModel[] }>(
+				"/api/v2/fixture-library/body-catalogue",
+			)
+			.then((snapshot) => snapshot.bodies);
 	}
 
 	fixtureSourceMappings(): Promise<FixtureSourceMapping[]> {

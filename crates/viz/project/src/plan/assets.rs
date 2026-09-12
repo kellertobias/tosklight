@@ -362,6 +362,7 @@ pub(super) fn resolve_model(
                 },
                 None => {
                     let chosen = crate::default_model::choose(
+                        fixture.profile.body_model.as_deref(),
                         &fixture.profile.fixture_type,
                         super::traits(mode),
                     );

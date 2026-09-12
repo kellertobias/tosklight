@@ -73,7 +73,8 @@ Identity covers who the fixture is: manufacturer, full and short names, fixture 
 
 ### Simulation
 
-Simulation is what the Stage needs in order to draw the fixture, in two parts. **Physical** is how
+Simulation is what the Stage needs in order to draw the fixture. **Body** chooses the shape it is
+drawn as, **Physical** is how
 the lantern is built: dimensions, weight, power consumption, connectors, light source, colour
 rendering index, and lens. **Optics** is what comes out of it: colour temperature, luminous output,
 beam angle, relative output, edge, field uniformity, and light-source dimensions.
@@ -84,6 +85,14 @@ from where they used to be stored and belong to Optics from then on, including i
 revision a patched show has already embedded.
 
 Leave any optics field empty to use the normal appearance for the fixture type.
+
+**Generic body** names one of the bodies ToskLight ships — the full list is in the
+[Model Catalogue](../../99-Appendix/01-model-catalogue.md) — so a PAR 64 long nose is drawn as one
+rather than as whatever its declared type suggests. Leave it on *Guess from the fixture type* and
+the fixture keeps the behaviour it has always had: the body is inferred from the declared type and
+the channels the mode has, which is right for most fixtures and cannot tell a PAR 64 from a PAR 16
+or a two-cell blinder from an eight. A fixture that ships its own visualizer model is drawn with
+that model, whatever the body says.
 
 ### Modes and heads
 
