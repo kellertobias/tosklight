@@ -38,6 +38,32 @@ const NET_LOOP: f32 = 60.0;
 // A bend of +/-1 reaches this many metres at the far edge.
 const NET_BEND_HEIGHT: f32 = 8.0;
 
+/// What the sound is doing, in terms this shader can multiply by.
+///
+/// The height comes from the held levels, not the live bands. A band that is loud right now is a
+/// flicker at this scale; what an operator wants to see is the hit itself -- a bass beat raises a
+/// mountain where the bass sits, and the mountain then sinks back over as long as `decay` says.
+/// The held levels already arrive as a share of the loudest thing heard lately, so none of this
+/// depends on how anyone set their input gain, and a mountain genuinely falls rather than being
+/// renormalised back to full height the moment the rest of the music goes quiet.
+struct NetDrive {
+    /// Bass, mid and treble, each as a share of the loudest of the three.
+    tones: vec3<f32>,
+}
+
+fn net_drive() -> NetDrive {
+    let tones = vec3<f32>(bass(), mid(), treble());
+    let strongest = max(tones.x, max(tones.y, tones.z));
+    var drive: NetDrive;
+    drive.tones = tones / max(strongest, 1e-5);
+    return drive;
+}
+
+/// How high the sound is holding this position across the net, `0..1`.
+fn net_share(across: f32) -> f32 {
+    return clamp(band_held_at(clamp(across, 0.0, 1.0)), 0.0, 1.0);
+}
+
 /// One wave component: `amplitude * sin(k . position + w t)`, with a whole number of cycles per
 /// loop so the band returns to where it started.
 fn net_wave(position: vec2<f32>, travel: f32, amplitude: f32, k: vec2<f32>, cycles: f32, phase: f32) -> f32 {
@@ -54,13 +80,13 @@ fn net_wave(position: vec2<f32>, travel: f32, amplitude: f32, k: vec2<f32>, cycl
 ///
 /// This is the only definition of the surface, and the nodes stand exactly on it. That is what
 /// lets one walk of the ray answer both where the surface is and which nodes are visible there.
-fn net_height(position: vec2<f32>, travel: f32) -> f32 {
+fn net_height(position: vec2<f32>, travel: f32, drive: NetDrive) -> f32 {
     let reach = clamp(reactivity(), 0.0, 2.0);
     var across = (position.x + NET_HALF_WIDTH) / (2.0 * NET_HALF_WIDTH);
     if mirrored() {
         across = abs(position.x) / NET_HALF_WIDTH;
     }
-    let local = band_at(clamp(across, 0.0, 1.0));
+    let local = net_share(across);
     // How hard the music is working this stretch of the net. A quiet band settles its part of the
     // wave without stilling it; a loud one lifts its part well above the designed height. Capped,
     // because the camera stands 2.45 m up and a wave that swallows it is a fault, not a look.
@@ -70,9 +96,9 @@ fn net_height(position: vec2<f32>, travel: f32) -> f32 {
     // bass rolls the swells, treble ripples the detail. Scaled to hold the overall height roughly
     // where it was, so this reads as the wave changing character rather than changing size.
     let scale = amount() * here;
-    let large = scale * (0.65 + bass() * 0.70);
-    let medium = scale * (0.65 + mid() * 0.70);
-    let small = scale * (0.65 + treble() * 0.70);
+    let large = scale * (0.65 + drive.tones.x * 0.70);
+    let medium = scale * (0.65 + drive.tones.y * 0.70);
+    let small = scale * (0.65 + drive.tones.z * 0.70);
 
     var height = 0.0;
     // Big rolling swells: 0.60 m of total height, one cycle of the band per loop.
@@ -107,13 +133,13 @@ fn net_height(position: vec2<f32>, travel: f32) -> f32 {
 }
 
 /// Where one node of the lattice stands: its scattered place on the plane, and its height there.
-fn net_node(cell: vec2<i32>, spacing: f32, travel: f32) -> vec3<f32> {
+fn net_node(cell: vec2<i32>, spacing: f32, travel: f32, drive: NetDrive) -> vec3<f32> {
     let row = f32(cell.y);
     let offset = f32(cell.y & 1) * 0.5;
     let base = vec2<f32>((f32(cell.x) + offset) * spacing, row * spacing * NET_ROW_PITCH);
     let scatter = (hash22(vec2<f32>(f32(cell.x), row)) - 0.5) * 2.0 * NET_JITTER * spacing;
     let place = base + scatter;
-    return vec3<f32>(place, net_height(place, travel));
+    return vec3<f32>(place, net_height(place, travel, drive));
 }
 
 fn net_focal() -> f32 {
@@ -170,6 +196,7 @@ const NET_STEPS: i32 = 72;
 
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     let travel = seconds() * speed() / NET_LOOP;
+    let drive = net_drive();
     let focal = net_focal();
     let camera = net_camera();
     let forward = net_forward();
@@ -192,13 +219,13 @@ fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     for (var step = 0; step < NET_STEPS && near < limit; step += 1) {
         let far = min(near + 0.30 + near * 0.06, limit);
         let point = camera + ray * far;
-        if point.z < net_height(point.xy, travel) {
+        if point.z < net_height(point.xy, travel, drive) {
             var low = near;
             var high = far;
             for (var closing = 0; closing < 4; closing += 1) {
                 let middle = (low + high) * 0.5;
                 let sample = camera + ray * middle;
-                if sample.z < net_height(sample.xy, travel) {
+                if sample.z < net_height(sample.xy, travel, drive) {
                     high = middle;
                 } else {
                     low = middle;
@@ -226,7 +253,7 @@ fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
             column + index % NET_SIDE - NET_REACH,
             row + index / NET_SIDE - NET_REACH,
         );
-        screen[index] = net_project(net_node(cell, spacing, travel));
+        screen[index] = net_project(net_node(cell, spacing, travel, drive));
     }
 
     let node_size = 0.015 + size() * 0.30;
@@ -280,7 +307,7 @@ fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     if mirrored() {
         across = abs(ground.x) / NET_HALF_WIDTH;
     }
-    let local = clamp(band_at(clamp(across, 0.0, 1.0)) * clamp(reactivity(), 0.0, 2.0), 0.0, 1.0);
+    let local = clamp(net_share(across) * clamp(reactivity(), 0.0, 2.0), 0.0, 1.0);
     let colour = mix(primary(), secondary(), local);
 
     // The scene it comes from is lit, not glowing: the near net is bright and distance does the
@@ -288,7 +315,9 @@ fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     let lit = 0.45 + 0.55 * (1.0 - smoothstep(2.0, 30.0, distance));
     // The nodes ignore the lights in the scene this comes from, so nothing shadows them: here they
     // simply sit a little above the paths they join, and a beat lifts them further.
-    let flash = 1.0 + glow * (0.35 + beat() * 0.45);
-    let level = light * lit * flash * (0.80 + energy() * 0.35);
+    let flash = 1.0 + glow * (0.35 + clamp(beat(), 0.0, 1.0) * 0.45);
+    // Energy is a root-mean-square of the window, not a normalised level, so a hot input would
+    // otherwise blow the net out entirely.
+    let level = light * lit * flash * (0.80 + clamp(energy(), 0.0, 1.0) * 0.35);
     return vec4<f32>(colour * level, clamp(level, 0.0, 1.0));
 }

@@ -29,7 +29,8 @@ struct Visualizer {
 };
 
 @group(0) @binding(0) var<uniform> visualizer: Visualizer;
-// Row 0 is the 512-point waveform, row 1 holds 64 spectrum bands in its first texels.
+// Row 0 is the 512-point waveform. Row 1 holds the 64 spectrum bands in its first texels, and the
+// 64 held levels in the texels after them.
 @group(0) @binding(1) var analysis: texture_2d<f32>;
 
 const WAVEFORM_POINTS: i32 = 512;
@@ -86,6 +87,24 @@ fn band_at(position: f32) -> f32 {
     let scaled = clamp(position, 0.0, 1.0) * f32(BANDS - 1);
     let low = i32(floor(scaled));
     return mix(band(low), band(low + 1), fract(scaled));
+}
+
+/// One band's held level, `0..1`, low frequency first.
+///
+/// The band rises to its magnitude at once and falls back at the rate `decay` asks for, so a hit
+/// leaves something standing that then subsides. Unlike `band`, which is the raw magnitude the
+/// analysis produced and has no ceiling, this is a share of the loudest thing heard lately: it
+/// does not depend on how anyone set their input gain, and it does fall as the band falls.
+fn band_held(index: i32) -> f32 {
+    if index < 0 || index >= BANDS { return 0.0; }
+    return textureLoad(analysis, vec2<i32>(BANDS + index, 1), 0).x;
+}
+
+/// The held level at a normalized position, interpolated the way `band_at` interpolates a band.
+fn band_held_at(position: f32) -> f32 {
+    let scaled = clamp(position, 0.0, 1.0) * f32(BANDS - 1);
+    let low = i32(floor(scaled));
+    return mix(band_held(low), band_held(low + 1), fract(scaled));
 }
 
 /// One waveform sample, `-1..1`.

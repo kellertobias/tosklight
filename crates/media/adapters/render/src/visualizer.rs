@@ -188,6 +188,80 @@ pub enum VisualizerError {
     Texture(#[from] TextureError),
 }
 
+/// How long the reference takes to fall by a factor of e with nothing louder arriving.
+///
+/// Deliberately much slower than any decay an operator can ask for: it is what a held band is
+/// measured against, so it has to stay put while that band falls back. Slow enough that a hit
+/// visibly subsides, quick enough that a quiet passage gets its sensitivity back.
+const REFERENCE_FALL: f32 = 6.0;
+
+/// The slowest and fastest an operator can make a held band fall back, in seconds to fall by a
+/// factor of e.
+///
+/// The slow end has to stay clear of `REFERENCE_FALL`. A band falling no faster than the thing it
+/// is measured against would never sink at all: what is published is the ratio of the two, so it
+/// is their difference that an operator actually sees.
+const DECAY_FALL: std::ops::RangeInclusive<f32> = 0.10..=3.0;
+
+/// A visualizer's memory of what the music has just done.
+///
+/// A shader sees one frame and has nowhere to keep anything, so a response that outlasts the
+/// sound that triggered it has to be kept here. Each band rises to its magnitude at once and falls
+/// back at the rate the visualizer's `decay` asks for, which is what turns a bass hit into
+/// something that stands up and then subsides rather than a flicker.
+///
+/// One of these per layer, because `decay` belongs to the configured visualizer, not to the room.
+#[derive(Debug, Clone)]
+struct BandEnvelope {
+    /// Per-band peak-hold, low frequency first.
+    held: Vec<f32>,
+    /// The loudest band heard lately, falling far more slowly than the bands do. Everything is
+    /// published as a share of this, so a held band sinks as it falls back instead of being
+    /// renormalised to full height every frame, and nothing depends on how somebody set their
+    /// input gain.
+    reference: f32,
+    /// When this was last advanced, on the same clock the frame carries.
+    seconds: Option<f32>,
+}
+
+impl BandEnvelope {
+    fn new() -> Self {
+        Self {
+            held: vec![0.0; BANDS],
+            reference: 0.0,
+            seconds: None,
+        }
+    }
+
+    /// Advances to this frame and returns each band's held level as a share, `0..=1`.
+    fn advance(&mut self, analysis: &Analysis, seconds: f32, decay: f32) -> Vec<f32> {
+        // A first frame, a clock that jumped, or a stall: fall by at most a moderate step rather
+        // than emptying the envelope, so nothing flickers when frames are uneven.
+        let elapsed = match self.seconds {
+            Some(last) if seconds > last => (seconds - last).min(0.25),
+            _ => 0.0,
+        };
+        self.seconds = Some(seconds);
+
+        let fall = *DECAY_FALL.start()
+            + (1.0 - decay.clamp(0.0, 1.0)) * (*DECAY_FALL.end() - *DECAY_FALL.start());
+        let kept = (-elapsed / fall).exp();
+        let mut loudest = 0.0f32;
+        for (index, level) in self.held.iter_mut().enumerate() {
+            // Silence is a real analysis, and it arrives carrying no bands at all. Reading a
+            // missing band as zero rather than skipping it is what lets an envelope empty when the
+            // audio device goes away, instead of freezing at whatever it was holding.
+            let magnitude = analysis.spectrum.get(index).copied().unwrap_or(0.0);
+            *level = magnitude.max(*level * kept);
+            loudest = loudest.max(*level);
+        }
+
+        self.reference = loudest.max(self.reference * (-elapsed / REFERENCE_FALL).exp());
+        let against = self.reference.max(1e-5);
+        self.held.iter().map(|level| level / against).collect()
+    }
+}
+
 /// One output's visualizer pipelines and per-layer targets.
 pub struct VisualizerRenderer {
     gpu: Gpu,
@@ -198,6 +272,7 @@ pub struct VisualizerRenderer {
     analysis: wgpu::Texture,
     analysis_view: wgpu::TextureView,
     targets: HashMap<usize, SourceTexture>,
+    envelopes: HashMap<usize, BandEnvelope>,
 }
 
 impl VisualizerRenderer {
@@ -263,6 +338,7 @@ impl VisualizerRenderer {
             analysis,
             analysis_view,
             targets: HashMap::new(),
+            envelopes: HashMap::new(),
         }
     }
 
@@ -295,7 +371,12 @@ impl VisualizerRenderer {
         frame: &VisualizerFrame<'_>,
     ) -> Result<&SourceTexture, VisualizerError> {
         self.ensure_pipeline(kind)?;
-        self.upload_analysis(frame.analysis);
+        let held = self
+            .envelopes
+            .entry(layer)
+            .or_insert_with(BandEnvelope::new)
+            .advance(frame.analysis, frame.seconds, parameters.decay);
+        self.upload_analysis(frame.analysis, &held);
         self.gpu.queue.write_buffer(
             &self.uniform,
             0,
@@ -412,7 +493,7 @@ impl VisualizerRenderer {
     }
 
     /// Puts the newest analysis where the shaders can read it.
-    fn upload_analysis(&self, analysis: &Analysis) {
+    fn upload_analysis(&self, analysis: &Analysis, held: &[f32]) {
         let mut rows = vec![0.0f32; WAVEFORM_POINTS * 2];
         for (slot, value) in rows[..WAVEFORM_POINTS]
             .iter_mut()
@@ -423,6 +504,14 @@ impl VisualizerRenderer {
         for (slot, value) in rows[WAVEFORM_POINTS..WAVEFORM_POINTS + BANDS]
             .iter_mut()
             .zip(analysis.spectrum.iter())
+        {
+            *slot = *value;
+        }
+        // The held levels follow the bands along the same row. The row is 512 wide and the bands
+        // use 64 of it, so this costs nothing and no visualizer that ignores them is affected.
+        for (slot, value) in rows[WAVEFORM_POINTS + BANDS..WAVEFORM_POINTS + BANDS * 2]
+            .iter_mut()
+            .zip(held.iter())
         {
             *slot = *value;
         }
@@ -453,6 +542,118 @@ impl VisualizerRenderer {
 mod tests {
     use super::*;
     use media_domain::Tint;
+
+    fn spectrum(loud_band: usize, level: f32) -> Analysis {
+        let mut spectrum = vec![0.0; BANDS];
+        spectrum[loud_band] = level;
+        Analysis {
+            spectrum,
+            ..Analysis::default()
+        }
+    }
+
+    /// Runs the envelope forward the way a rendering output does, a frame at a time. A single
+    /// long step would be clamped, because a clamp is exactly what stops a stalled server from
+    /// emptying an envelope in one go.
+    fn play(
+        envelope: &mut BandEnvelope,
+        analysis: &Analysis,
+        from: f32,
+        seconds: f32,
+        decay: f32,
+    ) -> Vec<f32> {
+        let frame = 1.0 / 60.0;
+        let mut held = Vec::new();
+        let mut now = from;
+        while now < from + seconds {
+            now += frame;
+            held = envelope.advance(analysis, now, decay);
+        }
+        held
+    }
+
+    #[test]
+    fn a_hit_stands_after_the_sound_that_made_it_has_gone() {
+        // The whole point of holding a band: a bass beat lasts a few frames, and a response that
+        // ended with it would be a flicker rather than something an operator can watch subside.
+        let mut envelope = BandEnvelope::new();
+        let hit = envelope.advance(&spectrum(2, 40.0), 0.0, 0.2);
+        assert!(
+            hit[2] > 0.99,
+            "the band it landed in must reach full height"
+        );
+
+        let silence = Analysis::default();
+        let after = play(&mut envelope, &silence, 0.0, 0.5, 0.2);
+        assert!(
+            after[2] < hit[2],
+            "a held band must fall once the sound has gone"
+        );
+        assert!(
+            after[2] > 0.3,
+            "half a second must not empty a hit that is still visibly standing: {}",
+            after[2]
+        );
+
+        let later = play(&mut envelope, &silence, 0.5, 20.0, 0.2);
+        assert!(
+            later[2] < 0.1,
+            "the mountain has to come down eventually: {}",
+            later[2]
+        );
+    }
+
+    #[test]
+    fn decay_sets_how_long_a_hit_stands() {
+        let mut slow = BandEnvelope::new();
+        let mut quick = BandEnvelope::new();
+        slow.advance(&spectrum(2, 40.0), 0.0, 0.0);
+        quick.advance(&spectrum(2, 40.0), 0.0, 1.0);
+
+        let silence = Analysis::default();
+        let standing = play(&mut slow, &silence, 0.0, 0.4, 0.0);
+        let gone = play(&mut quick, &silence, 0.0, 0.4, 1.0);
+        assert!(
+            standing[2] > gone[2],
+            "a lower decay has to hold a hit longer: {} is not above {}",
+            standing[2],
+            gone[2]
+        );
+        assert!(
+            gone[2] < 0.05,
+            "the fastest decay has to be all but instant: {}",
+            gone[2]
+        );
+    }
+
+    #[test]
+    fn a_hit_is_measured_against_what_came_before_it_not_against_itself() {
+        // Normalising a held band by the loudest held band would pin a lone decaying mountain at
+        // full height for as long as it was the loudest thing present, which is the one thing it
+        // must not do.
+        let mut envelope = BandEnvelope::new();
+        envelope.advance(&spectrum(2, 40.0), 0.0, 0.5);
+        let after = play(&mut envelope, &Analysis::default(), 0.0, 1.0, 0.5);
+        assert!(
+            after[2] < 0.7,
+            "a sole surviving band still has to sink: {}",
+            after[2]
+        );
+    }
+
+    #[test]
+    fn a_quiet_passage_gets_its_sensitivity_back() {
+        // A loud show followed by a quiet one must not leave the quiet one flat forever.
+        let mut envelope = BandEnvelope::new();
+        envelope.advance(&spectrum(2, 400.0), 0.0, 0.5);
+        play(&mut envelope, &Analysis::default(), 0.0, 30.0, 0.5);
+        let quiet = envelope.advance(&spectrum(2, 4.0), 30.1, 0.5);
+        assert!(
+            quiet[2] > 0.9,
+            "the loudest thing in a quiet room is still the loudest thing: {}",
+            quiet[2]
+        );
+    }
 
     #[test]
     fn every_visualizer_has_its_own_shader_and_declares_one_shade_function() {

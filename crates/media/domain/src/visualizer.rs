@@ -160,7 +160,7 @@ impl VisualizerKind {
                 Speed, Count, Size, Radius, Amount, Primary, Secondary, Mode, Iterations,
             ],
             Self::TriangularNet => &[
-                Speed, Count, Size, Thickness, Amount, Reactivity, Zoom, Curvature, Primary,
+                Speed, Count, Size, Thickness, Amount, Reactivity, Decay, Zoom, Curvature, Primary,
                 Secondary, Mirror,
             ],
         }
@@ -323,6 +323,9 @@ impl VisualizerConfiguration {
             parameters.count = 32;
             parameters.size = 0.05;
             parameters.thickness = 0.01;
+            // A hit should stand as a mountain for a beat or two before it sinks, which is the
+            // slow end of the control rather than the middle.
+            parameters.decay = 0.2;
             parameters.curvature = 0.5;
             parameters.primary = Tint::new(0.90, 0.92, 0.96);
             parameters.secondary = Tint::new(0.90, 0.11, 0.0);
