@@ -218,6 +218,7 @@ fn a_visualizer_animates_without_audio() {
         VisualizerKind::RotatingShape,
         VisualizerKind::CityTunnel,
         VisualizerKind::GridLandscape,
+        VisualizerKind::TriangularNet,
         VisualizerKind::MatrixDigitalRain,
     ] {
         let early = draw(

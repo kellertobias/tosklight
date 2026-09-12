@@ -419,6 +419,9 @@ fn visualizer_preview_png(kind: VisualizerKind) -> &'static [u8] {
         VisualizerKind::GridLandscape => include_bytes!(
             "../../../../../apps/media/src/features/visualizers/previews/053-grid-landscape.png"
         ),
+        VisualizerKind::TriangularNet => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/054-triangular-net.png"
+        ),
     }
 }
 

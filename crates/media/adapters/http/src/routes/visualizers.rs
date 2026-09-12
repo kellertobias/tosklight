@@ -135,7 +135,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         let entries = body.as_array().expect("a list");
-        assert_eq!(entries.len(), 23);
+        assert_eq!(entries.len(), 24);
 
         let first = &entries[0];
         assert_eq!(first["address"]["folder"], 250);

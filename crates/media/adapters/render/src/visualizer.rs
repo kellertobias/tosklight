@@ -60,6 +60,9 @@ const fn body(kind: VisualizerKind) -> &'static str {
         VisualizerKind::GridLandscape => {
             include_str!("shaders/visualizers/grid-landscape.wgsl")
         }
+        VisualizerKind::TriangularNet => {
+            include_str!("shaders/visualizers/triangular-net.wgsl")
+        }
     }
 }
 

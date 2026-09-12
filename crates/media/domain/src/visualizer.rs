@@ -53,10 +53,11 @@ pub enum VisualizerKind {
     FractalMorph = 51,
     CityTunnel = 52,
     GridLandscape = 53,
+    TriangularNet = 54,
 }
 
 /// Every kind, in the order the shipped catalog assigns them.
-pub const ALL_KINDS: [VisualizerKind; 23] = [
+pub const ALL_KINDS: [VisualizerKind; 24] = [
     VisualizerKind::EqualizerBars,
     VisualizerKind::WaveformOscilloscope,
     VisualizerKind::CircularSpectrum,
@@ -80,6 +81,7 @@ pub const ALL_KINDS: [VisualizerKind; 23] = [
     VisualizerKind::FractalMorph,
     VisualizerKind::CityTunnel,
     VisualizerKind::GridLandscape,
+    VisualizerKind::TriangularNet,
 ];
 
 impl VisualizerKind {
@@ -117,6 +119,7 @@ impl VisualizerKind {
             Self::FractalMorph => "Fractal Morph",
             Self::CityTunnel => "City Tunnel",
             Self::GridLandscape => "Grid Landscape",
+            Self::TriangularNet => "Triangular Net",
         }
     }
 
@@ -155,6 +158,10 @@ impl VisualizerKind {
             Self::CityTunnel => &[Speed, Count, Size, Amount, Primary, Secondary],
             Self::GridLandscape => &[
                 Speed, Count, Size, Radius, Amount, Primary, Secondary, Mode, Iterations,
+            ],
+            Self::TriangularNet => &[
+                Speed, Count, Size, Thickness, Amount, Reactivity, Zoom, Curvature, Primary,
+                Secondary, Mirror,
             ],
         }
     }
@@ -310,6 +317,15 @@ impl VisualizerConfiguration {
             parameters.radius = 0.5;
             parameters.mode = 1;
             parameters.iterations = 2;
+        } else if kind == VisualizerKind::TriangularNet {
+            // The look it is modelled on: a plainly lit white net, flat rather than bent, with the
+            // accent colour reserved for whichever stretch of it the music is currently moving.
+            parameters.count = 32;
+            parameters.size = 0.05;
+            parameters.thickness = 0.01;
+            parameters.curvature = 0.5;
+            parameters.primary = Tint::new(0.90, 0.92, 0.96);
+            parameters.secondary = Tint::new(0.90, 0.11, 0.0);
         } else if kind == VisualizerKind::MatrixDigitalRain {
             parameters.count = 48;
             parameters.speed = 1.0;

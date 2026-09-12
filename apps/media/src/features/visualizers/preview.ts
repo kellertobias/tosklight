@@ -39,6 +39,7 @@ export const BUILTIN_VISUALIZER_KINDS = [
 	{ typeId: 51, label: "Fractal Morph" },
 	{ typeId: 52, label: "City Tunnel" },
 	{ typeId: 53, label: "Grid Landscape" },
+	{ typeId: 54, label: "Triangular Net" },
 ] as const;
 
 /** A representative frame rendered by the actual built-in visualizer implementation. */
