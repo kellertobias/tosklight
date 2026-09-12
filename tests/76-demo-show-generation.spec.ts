@@ -219,36 +219,43 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		),
 	).toBe(true);
 
-	const venue = await api.showObjects<any>(showId, "venue");
-	expect(venue.filter((object) => object.body.kind === "truss")).toHaveLength(
-		24,
+	// The demo's scenery is patched as Venue fixtures. A truss, a curtain and a deck are fixtures
+	// with a visual-only patch policy, carrying their own geometry and their own place in the rig,
+	// so a second standalone `venue` record for each would describe the same object twice.
+	expect(await api.showObjects<any>(showId, "venue")).toHaveLength(0);
+	// Counted as physical instances, because a truss run is one fixture with its copies rather
+	// than one record per segment.
+	const instancesOf = (matches: (model: string) => boolean) =>
+		completePatch.fixtures
+			.filter((fixture: any) => matches(fixture.definition?.model ?? ""))
+			.flatMap((fixture: any) => [
+				{ name: fixture.name, location: fixture.location },
+				...fixture.multipatch.map((copy: any) => ({
+					name: copy.name,
+					location: copy.location,
+				})),
+			]);
+	const trusses = instancesOf(
+		(model) => model.includes("Truss") || model.includes("Pipe"),
 	);
-	expect(venue.filter((object) => object.body.kind === "riser")).toHaveLength(
+	expect(trusses).toHaveLength(24);
+	expect(instancesOf((model) => model.startsWith("Stage Element"))).toHaveLength(
 		20,
 	);
-	expect(venue.filter((object) => object.body.kind === "curtain")).toHaveLength(
-		4,
-	);
+	const curtains = instancesOf((model) => model.startsWith("Curtain"));
+	expect(curtains).toHaveLength(4);
 	expect(
-		venue
-			.filter((object) => object.body.name.startsWith("Audience "))
-			.filter((object) => object.body.kind === "truss"),
+		trusses.filter((instance) => instance.name.startsWith("Audience ")),
 	).toHaveLength(8);
-	expect(
-		venue
-			.filter((object) => object.body.kind === "curtain")
-			.map((object) => object.body.name),
-	).toEqual([
+	expect(curtains.map((instance) => instance.name)).toEqual([
 		"Back Curtain 1",
 		"Back Curtain 2",
 		"Stage Left Curtain",
 		"Stage Right Curtain",
 	]);
-	expect(
-		venue.find((object) => object.body.kind === "mirror_ball")?.body,
-	).toMatchObject({
+	expect(instancesOf((model) => model === "Disco Ball")[0]).toMatchObject({
 		name: "Audience Mirror Ball",
-		position: { x: 0, y: -3, z: 4.5 },
+		location: { x: 0, y: -3_000, z: 4_500 },
 	});
 	const crowd = completePatch.fixtures.find(
 		(fixture) => fixture.name === "Dancefloor Crowd",

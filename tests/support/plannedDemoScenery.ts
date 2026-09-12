@@ -124,7 +124,7 @@ export async function installPlannedDemoScenery(
 		);
 		await options.onItem?.();
 	}
-	await installVenueObjects(api, showId, sceneryEntries(options.backCurtain));
+	await clearLegacyVenueObjects(api, showId);
 	return fixtures;
 }
 
@@ -263,11 +263,15 @@ function sceneryEntries(backCurtain?: {
 	];
 }
 
-async function installVenueObjects(
-	api: ApiDriver,
-	showId: string,
-	entries: readonly SceneryEntry[],
-) {
+/**
+ * Clears the legacy standalone venue records.
+ *
+ * The demo's scenery is patched as Venue fixtures — a truss, a curtain and a deck are fixtures
+ * with a visual-only patch policy, carrying their own geometry and their own place in the rig.
+ * Writing a second, parallel `venue` record for each of them described the same object twice, and
+ * the two could only drift. The object kind stays readable for shows that already have them.
+ */
+async function clearLegacyVenueObjects(api: ApiDriver, showId: string) {
 	for (const object of await api.showObjects<any>(showId, "venue"))
 		await api.deleteSeededShowObject(
 			showId,
@@ -275,49 +279,6 @@ async function installVenueObjects(
 			object.id,
 			object.revision,
 		);
-	for (const entry of entries) {
-		if (entry.profile === "Crowd Area") continue;
-		const instances = [
-			{ name: entry.name, location: entry.location, rotation: entry.rotation },
-			...(entry.multipatches ?? []),
-		];
-		for (const [index, instance] of instances.entries()) {
-			const id = `planned-demo-venue-${entry.number}-${index + 1}`;
-			await putPlannedDemoObject(api, showId, "venue", id, {
-				id,
-				name: instance.name,
-				kind: venueKind(entry),
-				position: instance.location,
-				rotation_degrees: instance.rotation ?? { x: 0, y: 0, z: 0 },
-				size: venueSize(entry),
-				chords: entry.profile === "Four-Point Truss" ? 4 : undefined,
-			});
-		}
-	}
-}
-
-function venueKind(entry: SceneryEntry) {
-	if (entry.profile === "Disco Ball 50 cm") return "mirror_ball";
-	if (entry.profile.startsWith("Curtain")) return "curtain";
-	if (entry.name.includes("Railing")) return "railing";
-	if (entry.profile.includes("Truss") || entry.profile.includes("Pipe"))
-		return "truss";
-	if (entry.profile.startsWith("Stage Element")) return "riser";
-	return "prop";
-}
-
-function venueSize(entry: SceneryEntry): Point {
-	if (entry.profile === "Disco Ball 50 cm") return { x: 0.5, y: 0.5, z: 0.75 };
-	if (
-		entry.name === "Stage Left Curtain" ||
-		entry.name === "Stage Right Curtain"
-	)
-		return { x: 0.12, y: 5, z: 5 };
-	if (entry.profile.startsWith("Curtain")) return { x: 5, y: 0.12, z: 5 };
-	if (entry.profile.startsWith("Stage Element")) return { x: 2, y: 1, z: 0.5 };
-	if (entry.profile.includes("Truss") || entry.profile.includes("Pipe"))
-		return { x: Number.parseFloat(entry.mode), y: 0.3, z: 0.3 };
-	return { x: 1, y: 1, z: 1 };
 }
 
 function millimetres(point: Point) {
