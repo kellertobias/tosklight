@@ -205,56 +205,47 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 						}}
 					/>
 				))}
-				<NumberField
-					label="Color temperature (K)"
-					allowDecimal
-					min={0}
-					value={draft.physical.color_temperature_kelvin ?? ""}
-					onChange={(event) => {
-						const color_temperature_kelvin = optionalNumber(event.target.value);
-						onChange((current) => ({
-							...current,
-							physical: {
-								...current.physical,
-								color_temperature_kelvin,
-							},
-						}));
-					}}
-				/>
-				<NumberField
-					label="Luminous output (lm)"
-					allowDecimal
-					min={0}
-					value={draft.physical.luminous_output_lumens ?? ""}
-					onChange={(event) => {
-						const luminous_output_lumens = optionalNumber(event.target.value);
-						onChange((current) => ({
-							...current,
-							physical: {
-								...current.physical,
-								luminous_output_lumens,
-							},
-						}));
-					}}
-				/>
-				<NumberField
-					label="Beam angle (degrees)"
-					allowDecimal
-					min={0}
-					value={draft.physical.beam_angle_degrees ?? ""}
-					onChange={(event) => {
-						const beam_angle_degrees = optionalNumber(event.target.value);
-						onChange((current) => ({
-							...current,
-							physical: {
-								...current.physical,
-								beam_angle_degrees,
-							},
-						}));
-					}}
-				/>
 			</FormLayout>
 		</section>
+	);
+}
+
+type OpticsUpdate = (
+	change: (
+		current: NonNullable<FixtureProfile["optics"]>,
+	) => NonNullable<FixtureProfile["optics"]>,
+) => void;
+
+/** The three figures a manufacturer actually prints: what the light is, not how it is shaped. */
+function MeasuredOpticalFields({
+	optics,
+	setOptics,
+}: {
+	optics: NonNullable<FixtureProfile["optics"]>;
+	setOptics: OpticsUpdate;
+}) {
+	return (
+		<>
+			{(
+				[
+					["color_temperature_kelvin", "Color temperature (K)"],
+					["luminous_output_lumens", "Luminous output (lm)"],
+					["beam_angle_degrees", "Beam angle (degrees)"],
+				] as const
+			).map(([key, label]) => (
+				<NumberField
+					key={key}
+					label={label}
+					allowDecimal
+					min={0}
+					value={optics[key] ?? ""}
+					onChange={(event) => {
+						const value = optionalNumber(event.target.value);
+						setOptics((current) => ({ ...current, [key]: value }));
+					}}
+				/>
+			))}
+		</>
 	);
 }
 
@@ -370,6 +361,7 @@ function OpticsSection({ draft, onChange }: GenericSectionProps) {
 					value={size.width}
 					onChange={(event) => setDimension("width", event.target.value)}
 				/>
+				<MeasuredOpticalFields optics={optics} setOptics={setOptics} />
 				<NumberField
 					label="Light source height (mm)"
 					allowDecimal
@@ -382,7 +374,8 @@ function OpticsSection({ draft, onChange }: GenericSectionProps) {
 	);
 }
 
-export function GenericProfileTab({
+/** Who this fixture is: what it is called, and what it looks like in the library. */
+export function IdentityProfileTab({
 	draft,
 	onChange,
 	onLookup,
@@ -391,6 +384,19 @@ export function GenericProfileTab({
 		<div className="fixture-generic-tab">
 			<IdentitySection draft={draft} onChange={onChange} onLookup={onLookup} />
 			<NotesAssetsSection draft={draft} onChange={onChange} />
+		</div>
+	);
+}
+
+/**
+ * What the fixture is made of and what its light does — the two things the Stage needs to draw it.
+ *
+ * Physical is how the lantern is built; Optics is what comes out of it. Colour temperature,
+ * luminous output, and beam angle are the light, not the lantern, so they belong on the right.
+ */
+export function SimulationProfileTab({ draft, onChange }: GenericSectionProps) {
+	return (
+		<div className="fixture-generic-tab">
 			<PhysicalSection draft={draft} onChange={onChange} />
 			<OpticsSection draft={draft} onChange={onChange} />
 		</div>

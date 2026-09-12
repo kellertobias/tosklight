@@ -265,7 +265,7 @@ fn validate_installed_appearance(
         .definition
         .profile_snapshot
         .as_ref()
-        .and_then(|profile| profile.physical.color_temperature_kelvin);
+        .and_then(|profile| profile.optics.color_temperature_kelvin);
     if explicit_source && appearance.color_temperature_kelvin.is_none() && inherited_cct.is_none() {
         return Err(invalid(format!(
             "fixture instance {instance} with an explicit installed light source requires an explicit color temperature or an embedded profile color temperature"

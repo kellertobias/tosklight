@@ -506,7 +506,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
         let mut optics = fallback::emitter_optics(
             class,
             body_size,
-            fixture.profile.physical.luminous_output_lumens,
+            fixture.profile.optics.luminous_output_lumens,
         );
         apply_declared_optics(&mut optics, &fixture.profile.optics);
         // A laser's scanner and its scan engine belong to the profile too, and the script is

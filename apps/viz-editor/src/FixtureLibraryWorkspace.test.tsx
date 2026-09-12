@@ -81,6 +81,12 @@ function touchDrag(source: HTMLElement, target: HTMLElement, pointerId: number) 
 	fireEvent.pointerUp(source, { pointerId, pointerType: "touch" });
 }
 
+/** Narrow down the three columns the way an operator does: manufacturer, then fixture. */
+async function chooseFixture(manufacturer: string, fixture: string) {
+	fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${manufacturer}`) }));
+	fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${fixture}`) }));
+}
+
 /** What the fixture browser already offers, so the list has something in it. */
 function existingProfile(): FixtureProfile {
 	return {
@@ -165,18 +171,24 @@ beforeEach(() => {
 });
 
 describe("the Architect fixture library", () => {
-	it("lists this machine's fixtures and opens the editor on a new revision", async () => {
+	it("narrows down manufacturer, fixture, then what that fixture is", async () => {
 		renderWorkspace();
-		const row = requiredElement(
-			(await screen.findByText("Planning Wash")).closest("tr"),
-		);
-		expect(row).toHaveTextContent("Acme");
-		expect(row).toHaveTextContent("Default (1)");
-		expect(row).toHaveTextContent("2");
+		// Nothing is chosen yet, so the two columns to the right say what to do rather than
+		// listing every fixture on the machine.
+		expect(await screen.findByText("Choose a manufacturer.")).toBeVisible();
+		expect(screen.getByText("Choose a fixture to see what it is.")).toBeVisible();
+		// A fixture is not offered until its manufacturer is.
+		expect(screen.queryByRole("button", { name: /^Planning Wash/ })).toBeNull();
 
-		fireEvent.click(
-			within(row).getByRole("button", { name: "Edit as new revision" }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: /^Acme/ }));
+		fireEvent.click(await screen.findByRole("button", { name: /^Planning Wash/ }));
+
+		const info = within(screen.getByRole("region", { name: "Fixture info" }));
+		expect(info.getByRole("heading", { name: "Planning Wash" })).toBeVisible();
+		expect(info.getByText(/revision 2/)).toBeVisible();
+		expect(info.getByText("Default (1)")).toBeVisible();
+
+		fireEvent.click(info.getByRole("button", { name: "Edit as new revision" }));
 		expect(
 			await screen.findByRole("dialog", { name: "Edit fixture profile" }),
 		).toBeVisible();
@@ -189,23 +201,27 @@ describe("the Architect fixture library", () => {
 		).toBeVisible();
 	});
 
-	it("filters the list as the operator types", async () => {
+	it("filters every column as the operator types", async () => {
 		renderWorkspace();
-		await screen.findByText("Planning Wash");
+		await chooseFixture("Acme", "Planning Wash");
 		fireEvent.change(screen.getByLabelText("Search fixtures"), {
 			target: { value: "beam" },
 		});
-		expect(screen.queryByText("Planning Wash")).toBeNull();
-		expect(screen.getByText(/No fixture matches/)).toBeVisible();
+		// The manufacturer column empties too, so no column can offer what search excluded.
+		expect(screen.queryByRole("button", { name: /^Acme/ })).toBeNull();
+		expect(screen.queryByRole("button", { name: /^Planning Wash/ })).toBeNull();
+		expect(screen.getByText("No fixtures yet.")).toBeVisible();
 	});
 
 	// The four things an operator has to be able to say about a channel, all in one authored
 	// fixture, because they are not independent: they are the same channel's behaviour.
 	it("authors channel order, indexed positions, virtual-dimmer response and a mixed channel", async () => {
 		renderWorkspace();
-		await screen.findByText("Planning Wash");
+		await screen.findByRole("button", { name: /^Acme/ });
 		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
-		await screen.findByRole("dialog", { name: "Create fixture profile" });
+		const editor = within(
+			await screen.findByRole("dialog", { name: "Create fixture profile" }),
+		);
 		// The registry the Architect reads is the desk's own, not a second list.
 		await waitFor(() =>
 			expect(
@@ -213,10 +229,10 @@ describe("the Architect fixture library", () => {
 			).toBe(true),
 		);
 
-		fireEvent.change(screen.getByLabelText(/^Manufacturer/), {
+		fireEvent.change(editor.getByLabelText(/^Manufacturer/), {
 			target: { value: "Acme" },
 		});
-		fireEvent.change(screen.getByLabelText(/^Fixture name/), {
+		fireEvent.change(editor.getByLabelText(/^Fixture name/), {
 			target: { value: "Planning Beam" },
 		});
 

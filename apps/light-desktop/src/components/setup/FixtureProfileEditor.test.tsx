@@ -147,7 +147,7 @@ describe("FixtureProfileEditor generic profile fields", () => {
 		);
 	});
 
-	it("authors the focused Generic physical metadata while preserving hidden legacy facts", async () => {
+	it("authors the focused physical metadata while preserving hidden legacy facts", async () => {
 		const profile = validProfile();
 		profile.physical.connectors = "powerCON TRUE1 TOP; 5-pin XLR in/out";
 		profile.physical.light_source = "600 W LED engine";
@@ -163,6 +163,7 @@ describe("FixtureProfileEditor generic profile fields", () => {
 			/>,
 		);
 
+		fireEvent.click(screen.getByRole("tab", { name: "Simulation" }));
 		expect(screen.queryByLabelText("Connectors")).not.toBeInTheDocument();
 		expect(screen.queryByLabelText("Light source")).not.toBeInTheDocument();
 		expect(
@@ -196,6 +197,7 @@ describe("FixtureProfileEditor generic profile fields", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
 
 		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		// Physical is how the lantern is built.
 		expect(save.mock.calls[0][0].physical).toEqual({
 			width_millimetres: 420,
 			height_millimetres: 680,
@@ -204,10 +206,13 @@ describe("FixtureProfileEditor generic profile fields", () => {
 			power_watts: 720,
 			connectors: "powerCON TRUE1 TOP; 5-pin XLR in/out",
 			light_source: "600 W LED engine",
-			color_temperature_kelvin: 6500,
 			color_rendering_index: 92,
-			luminous_output_lumens: 18500,
 			lens: "Fresnel zoom",
+		});
+		// What comes out of it is the light, and belongs to optics.
+		expect(save.mock.calls[0][0].optics).toMatchObject({
+			color_temperature_kelvin: 6500,
+			luminous_output_lumens: 18500,
 			beam_angle_degrees: 36,
 		});
 	});
@@ -228,6 +233,7 @@ describe("FixtureProfileEditor generic profile fields", () => {
 			/>,
 		);
 
+		fireEvent.click(screen.getByRole("tab", { name: "Simulation" }));
 		fireEvent.change(screen.getByLabelText("Sharpness (%)"), {
 			target: { value: "85" },
 		});
@@ -262,6 +268,7 @@ describe("FixtureProfileEditor generic profile fields", () => {
 			/>,
 		);
 
+		fireEvent.click(screen.getByRole("tab", { name: "Simulation" }));
 		fireEvent.change(screen.getByLabelText("Light source width (mm)"), {
 			target: { value: "200" },
 		});
@@ -579,7 +586,7 @@ describe("FixtureProfileEditor function behavior", () => {
 });
 
 describe("FixtureProfileEditor chrome and close guards", () => {
-	it("uses Generic and Modes title tabs with contextual title actions and no footer Cancel", () => {
+	it("uses Identity, Simulation and Modes title tabs with contextual title actions and no footer Cancel", () => {
 		const { container } = render(
 			<FixtureProfileEditor
 				initialProfile={validProfile()}
@@ -589,7 +596,8 @@ describe("FixtureProfileEditor chrome and close guards", () => {
 			/>,
 		);
 		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-			"Generic",
+			"Identity",
+			"Simulation",
 			"Modes",
 		]);
 		expect(
@@ -809,7 +817,8 @@ describe("FixtureProfileEditor mode and split editing", () => {
 			screen.getByRole("button", { name: "Edit channels for Default" }),
 		).toBeInTheDocument();
 		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-			"Generic",
+			"Identity",
+			"Simulation",
 			"Modes",
 		]);
 		const modeEditor = openModeEditor();

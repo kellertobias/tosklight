@@ -257,7 +257,7 @@ function appearanceFixture(): PatchedFixture {
 	const profile = fixture.definition.profile_snapshot;
 	if (!profile) throw new Error("appearance fixture profile is missing");
 	profile.physical.light_source = "LED engine";
-	profile.physical.color_temperature_kelvin = 3_200;
+	(profile.optics ??= {}).color_temperature_kelvin = 3_200;
 	fixture.installed_appearance = {
 		light_source: { type: "profile_default" },
 		luminous_output_lumens: null,
@@ -1132,7 +1132,7 @@ describe("installed light-source appearance", () => {
 		const nextProfile = structuredClone(fixture.definition.profile_snapshot);
 		if (!nextProfile) throw new Error("appearance fixture profile is missing");
 		nextProfile.revision = 2;
-		nextProfile.physical.color_temperature_kelvin = 6_500;
+		(nextProfile.optics ??= {}).color_temperature_kelvin = 6_500;
 		nextProfile.modes[0].id = "mode-touring";
 		nextProfile.modes[0].name = "Touring";
 		nextProfile.modes[0].channels = [];
@@ -1175,7 +1175,7 @@ describe("installed light-source appearance", () => {
 			mode_id: "mode-touring",
 			profile_snapshot: {
 				revision: 2,
-				physical: { color_temperature_kelvin: 6_500 },
+				optics: { color_temperature_kelvin: 6_500 },
 			},
 		});
 		expect(changes).not.toHaveProperty("installed_appearance");
@@ -1287,7 +1287,7 @@ describe("installed light-source appearance", () => {
 		const fixture = appearanceFixture();
 		const profile = fixture.definition.profile_snapshot;
 		if (!profile) throw new Error("appearance fixture profile is missing");
-		profile.physical.color_temperature_kelvin = null;
+		(profile.optics ??= {}).color_temperature_kelvin = null;
 		server.patch.fixtures = [fixture];
 		state.patchSetArmed = true;
 		render(<FixturePatchSetup />);

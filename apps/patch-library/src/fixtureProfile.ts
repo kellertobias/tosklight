@@ -87,6 +87,12 @@ export interface FixtureProfileOptics {
 	uniformity?: number | null;
 	/** The lit surface light leaves through. The same for every fixture of this type. */
 	light_source?: FixtureProfileLightSource | null;
+	/** Correlated colour temperature of the engine, in kelvin. */
+	color_temperature_kelvin?: number | null;
+	/** Total output in lumens, as the manufacturer measures it. */
+	luminous_output_lumens?: number | null;
+	/** Nominal beam angle in degrees; a zoom channel's own range overrides it while it moves. */
+	beam_angle_degrees?: number | null;
 }
 
 export interface FixtureProfileLightSource {
@@ -103,11 +109,8 @@ export interface FixtureProfilePhysical {
 	power_watts: number | null;
 	connectors?: string;
 	light_source?: string;
-	color_temperature_kelvin?: number | null;
 	color_rendering_index?: number | null;
-	luminous_output_lumens?: number | null;
 	lens?: string;
-	beam_angle_degrees?: number | null;
 }
 
 export interface FixtureMode {

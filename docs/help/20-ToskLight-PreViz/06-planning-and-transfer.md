@@ -45,16 +45,18 @@ The file keeps its name; **Save As** writes the show to a new one.
 
 ## Configure the fixtures the rig is made of
 
-**Fixtures** in the sidebar opens this machine's fixture library. It sits before **Patch** because
-that is the order the work happens in: describe the lantern, then patch it. The library belongs to
-the computer rather than to the show, so the screen is available with no document open, and every
-show planned here afterwards patches from what is in it.
+**Fixtures** sits at the foot of the dock beside **Settings**, apart from the show's own screens,
+because the fixture library belongs to the computer rather than to the document. The screen is
+available with no show open, and every show planned here afterwards patches from what is in it.
 
-The list shows each fixture's manufacturer, model, modes with their footprints, and current
-revision, and the search bar filters it as you type. **Create fixture** opens a blank profile;
-**Edit as new revision** opens an existing one. This is the same editor ToskLight Control uses, so
-a profile authored here is the one the desk reads, with the same Generic, Modes, Heads, Channels,
-Color and Geometry tabs and the same rules. Saving stores the next immutable revision: the library
+The library reads in three columns — **Manufacturer**, **Fixture**, and **Fixture info** — so each
+column offers only what the column to its left has already chosen. Choose a manufacturer to see its
+fixtures, and a fixture to read what it is: type, modes with their footprints, size, weight, power,
+connectors, light source, lens, colour temperature, luminous output, beam angle, and its
+photograph. The search bar narrows every column at once. **Create fixture** opens a blank profile;
+**Edit as new revision** opens the chosen one. This is the same editor ToskLight Control uses, so a
+profile authored here is the one the desk reads, with the same Identity, Simulation and Modes tabs
+and the same rules. Saving stores the next immutable revision: the library
 assigns the number, and a save is refused rather than silently overwriting work if another window
 has revised the same fixture in the meantime. A show already patched against an earlier revision
 keeps its own embedded snapshot and is unaffected.

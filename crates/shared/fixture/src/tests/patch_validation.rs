@@ -235,7 +235,7 @@ fn explicit_installed_sources_require_an_explicit_or_embedded_profile_cct() {
         .profile_snapshot
         .as_mut()
         .unwrap()
-        .physical
+        .optics
         .color_temperature_kelvin = Some(6_500.0);
     validate_patch(std::slice::from_ref(&fixture)).unwrap();
 
@@ -244,7 +244,7 @@ fn explicit_installed_sources_require_an_explicit_or_embedded_profile_cct() {
         .profile_snapshot
         .as_mut()
         .unwrap()
-        .physical
+        .optics
         .color_temperature_kelvin = None;
     fixture.installed_appearance = Default::default();
     fixture.multipatch[0].installed_appearance.light_source = InstalledLightSource::Halogen;

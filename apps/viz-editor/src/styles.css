@@ -242,8 +242,11 @@ body {
 	min-height: 52px;
 }
 
-.viz-editor-settings-nav {
+.viz-editor-machine-nav {
 	margin-top: auto;
+}
+
+.viz-editor-settings-nav {
 	min-height: 42px;
 }
 
@@ -2689,29 +2692,138 @@ body {
 	margin: 0 12px;
 }
 
-.viz-fixture-library-table {
-	width: calc(100% - 24px);
+/* Manufacturer, fixture, then what it is: each column lists only what the one left of it chose. */
+.viz-fixture-browser {
+	display: grid;
+	grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) minmax(260px, 1.4fr);
+	gap: 1px;
+	flex: 1;
+	min-height: 0;
 	margin: 0 12px 12px;
-	border-collapse: collapse;
-	font-size: 13px;
+	background: var(--border-subtle, #1d2530);
+	border: 1px solid var(--border-subtle, #1d2530);
+	border-radius: 6px;
+	overflow: hidden;
 }
 
-.viz-fixture-library-table th,
-.viz-fixture-library-table td {
+.viz-fixture-column {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	background: var(--surface-raised, #10151c);
+}
+
+.viz-fixture-column > h3 {
+	margin: 0;
 	padding: 8px 10px;
-	text-align: left;
-	border-bottom: 1px solid var(--line, #23303a);
-	vertical-align: middle;
-}
-
-.viz-fixture-library-table th {
-	color: var(--muted);
+	font-size: 11px;
 	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted);
+	border-bottom: 1px solid var(--border-subtle, #1d2530);
 }
 
-.viz-fixture-library-table td:last-child {
-	text-align: right;
-	white-space: nowrap;
+.viz-fixture-column-body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+.viz-fixture-column ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.viz-fixture-column li > button {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	width: 100%;
+	/* A desk surface is touched, not only clicked. */
+	min-height: 40px;
+	padding: 8px 10px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.viz-fixture-column li > button:hover,
+.viz-fixture-column li > button:focus-visible {
+	background: var(--surface-hover, #172029);
+}
+
+.viz-fixture-column li > button.is-selected {
+	background: var(--accent-muted, #1c2b38);
+	color: var(--accent, #6fd3ff);
+}
+
+.viz-fixture-column li > button > small {
+	flex: none;
+	color: var(--muted);
+	font-size: 11px;
+}
+
+.viz-fixture-column > .viz-fixture-column-body > .empty-editor-message {
+	margin: 10px;
+}
+
+.viz-fixture-info {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px;
+}
+
+.viz-fixture-info > img {
+	align-self: start;
+	max-height: 160px;
+	border-radius: 4px;
+}
+
+.viz-fixture-info > h4 {
+	margin: 0;
+	font-size: 15px;
+}
+
+.viz-fixture-info-identity {
+	margin: 0;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.viz-fixture-info > dl {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 4px 12px;
+	margin: 0;
+	font-size: 12px;
+}
+
+.viz-fixture-info > dl > dt {
+	color: var(--muted);
+}
+
+.viz-fixture-info > dl > dd {
+	margin: 0;
+}
+
+.viz-fixture-info-notes {
+	margin: 0;
+	color: var(--muted);
+	font-size: 12px;
+	white-space: pre-wrap;
+}
+
+.viz-fixture-info > .ui-button {
+	align-self: start;
+	margin-top: 4px;
 }
 
 /* The picker is a real file input, kept off screen behind the button it labels. */

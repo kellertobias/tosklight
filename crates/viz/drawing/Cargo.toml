@@ -1,0 +1,13 @@
+[package]
+name = "viz-drawing"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+quick-xml.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

@@ -6,7 +6,10 @@ import {
 	FixtureProfileEditorPortsProvider,
 	type FixtureProfileEditorPorts,
 } from "./ports";
-import { GenericProfileTab } from "./genericProfileTab";
+import {
+	IdentityProfileTab,
+	SimulationProfileTab,
+} from "./genericProfileTab";
 import { ModeEditor } from "./modeEditor";
 import { ModesTab } from "./modesTab";
 import {
@@ -62,14 +65,20 @@ function ProfileEditorBody({
 					</ul>
 				</section>
 			)}
-			{editor.tab === "generic" && (
-				<GenericProfileTab
+			{editor.tab === "identity" && (
+				<IdentityProfileTab
 					draft={editor.draft}
 					onChange={editor.setDraft}
 					onLookup={() => {
 						editor.setLookupQuery("");
 						editor.setLookup(true);
 					}}
+				/>
+			)}
+			{editor.tab === "simulation" && (
+				<SimulationProfileTab
+					draft={editor.draft}
+					onChange={editor.setDraft}
 				/>
 			)}
 			{editor.tab === "modes" && (
@@ -182,7 +191,8 @@ export function FixtureProfileEditor({
 								activeId: editor.tab,
 								onActiveChange: (id) => editor.setTab(id as ProfileEditorTab),
 								actions: [
-									{ id: "generic", label: "Generic" },
+									{ id: "identity", label: "Identity" },
+									{ id: "simulation", label: "Simulation" },
 									{ id: "modes", label: "Modes" },
 								],
 							},

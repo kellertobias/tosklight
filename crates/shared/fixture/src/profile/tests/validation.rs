@@ -789,15 +789,16 @@ fn complete_physical_metadata_round_trips_and_older_profiles_receive_safe_defaul
     profile.name = "Complete physical metadata".into();
     profile.physical.connectors = "powerCON TRUE1 TOP; 5-pin XLR in/out".into();
     profile.physical.light_source = "600 W LED engine".into();
-    profile.physical.color_temperature_kelvin = Some(6_500.0);
     profile.physical.color_rendering_index = Some(92.0);
-    profile.physical.luminous_output_lumens = Some(18_500.0);
     profile.physical.lens = "Fresnel zoom".into();
-    profile.physical.beam_angle_degrees = Some(36.0);
+    profile.optics.color_temperature_kelvin = Some(6_500.0);
+    profile.optics.luminous_output_lumens = Some(18_500.0);
+    profile.optics.beam_angle_degrees = Some(36.0);
 
     let encoded = serde_json::to_value(&profile).unwrap();
     let decoded: FixtureProfile = serde_json::from_value(encoded.clone()).unwrap();
     assert_eq!(decoded.physical, profile.physical);
+    assert_eq!(decoded.optics, profile.optics);
     decoded.validate().unwrap();
 
     let mut legacy = encoded;
@@ -903,6 +904,9 @@ fn declared_optics_round_trip_through_the_package_format() {
             width_millimetres: 200.0,
             height_millimetres: 160.0,
         }),
+        color_temperature_kelvin: Some(5_600.0),
+        luminous_output_lumens: Some(12_000.0),
+        beam_angle_degrees: Some(21.0),
     };
     profile.validate().expect("valid");
     let json = serde_json::to_string(&profile).expect("serialises");
@@ -945,4 +949,59 @@ fn optical_figures_outside_their_range_are_refused() {
             "an impossible figure must be reported: {optics:?}"
         );
     }
+}
+
+/// A profile written before colour temperature, luminous output, and beam angle described the
+/// light rather than the lantern. Every patched show carries one of these in its snapshot, so the
+/// values have to survive the move without the operator doing anything.
+#[test]
+fn optical_facts_written_under_physical_are_read_as_optics() {
+    let mut blank = FixtureProfile::blank();
+    blank.manufacturer = "Generic".into();
+    blank.name = "Legacy physical".into();
+    let mut encoded = serde_json::to_value(&blank).unwrap();
+    let physical = encoded
+        .get_mut("physical")
+        .and_then(serde_json::Value::as_object_mut)
+        .unwrap();
+    physical.insert("color_temperature_kelvin".into(), 3_200.0.into());
+    physical.insert("luminous_output_lumens".into(), 7_500.0.into());
+    physical.insert("beam_angle_degrees".into(), 26.0.into());
+    physical.insert("color_rendering_index".into(), 90.0.into());
+
+    let decoded: FixtureProfile = serde_json::from_value(encoded).unwrap();
+    assert_eq!(decoded.optics.color_temperature_kelvin, Some(3_200.0));
+    assert_eq!(decoded.optics.luminous_output_lumens, Some(7_500.0));
+    assert_eq!(decoded.optics.beam_angle_degrees, Some(26.0));
+    // How the fixture is built stays where it was.
+    assert_eq!(decoded.physical.color_rendering_index, Some(90.0));
+    decoded.validate().unwrap();
+
+    // Written back, the facts are in one place only, so nothing can drift apart later.
+    let rewritten = serde_json::to_value(&decoded).unwrap();
+    assert!(
+        rewritten["physical"]
+            .get("color_temperature_kelvin")
+            .is_none()
+    );
+    assert_eq!(rewritten["optics"]["color_temperature_kelvin"], 3_200.0);
+}
+
+/// An optics value already written is the newer statement and is not overwritten by a stale
+/// physical one left beside it.
+#[test]
+fn a_written_optics_value_wins_over_the_legacy_physical_one() {
+    let mut blank = FixtureProfile::blank();
+    blank.manufacturer = "Generic".into();
+    blank.name = "Both".into();
+    blank.optics.beam_angle_degrees = Some(15.0);
+    let mut encoded = serde_json::to_value(&blank).unwrap();
+    encoded
+        .get_mut("physical")
+        .and_then(serde_json::Value::as_object_mut)
+        .unwrap()
+        .insert("beam_angle_degrees".into(), 40.0.into());
+
+    let decoded: FixtureProfile = serde_json::from_value(encoded).unwrap();
+    assert_eq!(decoded.optics.beam_angle_degrees, Some(15.0));
 }

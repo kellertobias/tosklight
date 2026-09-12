@@ -63,19 +63,27 @@ has been investigated or the fixture has been recovered.
 
 ## Create or edit a fixture profile
 
-**Create fixture** opens a blank profile with one mode named **Default** and one editable main head. **Edit as new revision** opens the same editor with the chosen revision. The title bar contains **Generic**, **Modes**, **Save fixture**, and Close; the Modes tab also adds **Add mode** at the top right. There is no footer Cancel action.
+**Create fixture** opens a blank profile with one mode named **Default** and one editable main head. **Edit as new revision** opens the same editor with the chosen revision. The title bar contains **Identity**, **Simulation**, **Modes**, **Save fixture**, and Close; the Modes tab also adds **Add mode** at the top right. There is no footer Cancel action.
 
 Closing an unchanged editor is immediate. Closing a changed editor through Close, Escape, or the backdrop asks whether to **Stay** or **Discard changes**. Saving an existing profile first asks to **Save and create revision**. A failed or stale save keeps the editor open and explains the problem.
 
-### Generic
+### Identity
 
-Generic information includes manufacturer, full and short names, fixture type, notes, stage icon, photograph, optional visualizer GLB model, dimensions, weight, power consumption, color temperature, luminous output, and beam angle. Notes, photograph, and visualizer are shown side by side; drag the visualizer preview to inspect the GLB from another angle and scroll to zoom. Manufacturer remains free text. Use its lookup button to search the unique desk-library manufacturers with the shared full-text keyboard and fill the field without saving the editor.
+Identity covers who the fixture is: manufacturer, full and short names, fixture type, notes, stage icon, photograph, and optional visualizer GLB model. Notes, photograph, and visualizer are shown side by side; drag the visualizer preview to inspect the GLB from another angle and scroll to zoom. Manufacturer remains free text. Use its lookup button to search the unique desk-library manufacturers with the shared full-text keyboard and fill the field without saving the editor.
 
-### Optics
+### Simulation
 
-Optics optionally refine the Stage appearance. Leave them empty to use the normal appearance for
-the fixture type; set relative output, edge, field uniformity, and light-source dimensions only
-when the fixture needs a different result.
+Simulation is what the Stage needs in order to draw the fixture, in two parts. **Physical** is how
+the lantern is built: dimensions, weight, power consumption, connectors, light source, colour
+rendering index, and lens. **Optics** is what comes out of it: colour temperature, luminous output,
+beam angle, relative output, edge, field uniformity, and light-source dimensions.
+
+Colour temperature, luminous output, and beam angle describe the light rather than the lantern, so
+they are part of Optics. A profile written before that keeps working untouched: the values are read
+from where they used to be stored and belong to Optics from then on, including in the profile
+revision a patched show has already embedded.
+
+Leave any optics field empty to use the normal appearance for the fixture type.
 
 ### Modes and heads
 

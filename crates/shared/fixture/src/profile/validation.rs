@@ -33,9 +33,9 @@ impl FixtureProfile {
         validate_positive("depth", self.physical.depth_millimetres)?;
         validate_positive("weight", self.physical.weight_kilograms)?;
         validate_positive("power", self.physical.power_watts)?;
-        validate_positive("color temperature", self.physical.color_temperature_kelvin)?;
-        validate_positive("luminous output", self.physical.luminous_output_lumens)?;
-        validate_positive("beam angle", self.physical.beam_angle_degrees)?;
+        validate_positive("color temperature", self.optics.color_temperature_kelvin)?;
+        validate_positive("luminous output", self.optics.luminous_output_lumens)?;
+        validate_positive("beam angle", self.optics.beam_angle_degrees)?;
         if let Some(projections) = &self.projection_assets {
             if projections.source_model_sha256.len() != 64
                 || !projections

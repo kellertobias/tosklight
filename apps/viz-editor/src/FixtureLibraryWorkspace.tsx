@@ -7,12 +7,9 @@ import {
 	type FixtureProfileEditorPorts,
 	type ProfileAssetPickerProps,
 } from "@tosklight/patch/library";
-import {
-	blankFixtureProfile,
-	cloneProfile,
-	derivePrimarySlots,
-} from "@tosklight/patch";
+import { blankFixtureProfile, cloneProfile } from "@tosklight/patch";
 import type { AttributeDescriptor, FixtureProfile } from "@tosklight/patch";
+import { FixtureLibraryBrowser } from "./fixtureLibrary/FixtureLibraryBrowser";
 import { documentSession } from "./document/session";
 import { beginWindowDrag } from "./WindowChrome";
 
@@ -65,19 +62,6 @@ const ports: FixtureProfileEditorPorts = {
 	AssetPicker: LocalAssetPicker,
 };
 
-function modeSummary(profile: FixtureProfile) {
-	return profile.modes
-		.map((mode) => {
-			const { slots } = derivePrimarySlots(mode);
-			const footprint = mode.splits.reduce(
-				(total, split) => total + split.footprint,
-				0,
-			);
-			return `${mode.name} (${footprint || slots.size})`;
-		})
-		.join(" · ");
-}
-
 export function FixtureLibraryWorkspace({
 	profiles,
 	onReloadProfiles,
@@ -89,6 +73,8 @@ export function FixtureLibraryWorkspace({
 }) {
 	const [registry, setRegistry] = useState<AttributeDescriptor[]>([]);
 	const [query, setQuery] = useState("");
+	const [manufacturer, setManufacturer] = useState<string | null>(null);
+	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [draft, setDraft] = useState<{
 		profile: FixtureProfile;
 		expectedRevision: number;
@@ -114,13 +100,10 @@ export function FixtureLibraryWorkspace({
 			if (!held || held.revision < profile.revision)
 				latest.set(profile.id, profile);
 		}
-		return [...latest.values()].sort(
-			(left, right) =>
-				left.manufacturer.localeCompare(right.manufacturer) ||
-				left.name.localeCompare(right.name),
-		);
+		return [...latest.values()];
 	}, [profiles]);
 
+	/** Search narrows what the columns are built from, so it filters both of them at once. */
 	const shown = useMemo(() => {
 		const needle = query.trim().toLowerCase();
 		if (!needle) return current;
@@ -130,6 +113,12 @@ export function FixtureLibraryWorkspace({
 				.includes(needle),
 		);
 	}, [current, query]);
+
+	/** A fixture stays chosen only while it is still under the chosen manufacturer and search. */
+	const selected = useMemo(() => {
+		const held = shown.find((profile) => profile.id === selectedId);
+		return held?.manufacturer === manufacturer ? held : null;
+	}, [shown, selectedId, manufacturer]);
 
 	const save = useCallback(
 		async (profile: FixtureProfile, expectedRevision: number) => {
@@ -167,48 +156,28 @@ export function FixtureLibraryWorkspace({
 				placeholder="Search manufacturer or model"
 				onChange={setQuery}
 			/>
-			{shown.length === 0 ? (
+			{current.length === 0 ? (
 				<p className="empty-editor-message" role="status">
-					{current.length === 0
-						? "This machine's fixture library is empty. Create a fixture to describe the lanterns this rig is made of."
-						: `No fixture matches “${query}”.`}
+					This machine's fixture library is empty. Create a fixture to describe
+					the lanterns this rig is made of.
 				</p>
 			) : (
-				<table className="viz-fixture-library-table">
-					<thead>
-						<tr>
-							<th scope="col">Manufacturer</th>
-							<th scope="col">Fixture</th>
-							<th scope="col">Modes</th>
-							<th scope="col">Revision</th>
-							<th scope="col">
-								<span className="ui-visually-hidden">Actions</span>
-							</th>
-						</tr>
-					</thead>
-					<tbody>
-						{shown.map((profile) => (
-							<tr key={profile.id}>
-								<td>{profile.manufacturer}</td>
-								<td>{profile.name}</td>
-								<td>{modeSummary(profile)}</td>
-								<td>{profile.revision}</td>
-								<td>
-									<Button
-										onClick={() =>
-											setDraft({
-												profile: cloneProfile(profile),
-												expectedRevision: profile.revision,
-											})
-										}
-									>
-										Edit as new revision
-									</Button>
-								</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
+				<FixtureLibraryBrowser
+					profiles={shown}
+					manufacturer={manufacturer}
+					selected={selected}
+					onManufacturer={(name) => {
+						setManufacturer(name);
+						setSelectedId(null);
+					}}
+					onSelect={(profile) => setSelectedId(profile.id)}
+					onEdit={(profile) =>
+						setDraft({
+							profile: cloneProfile(profile),
+							expectedRevision: profile.revision,
+						})
+					}
+				/>
 			)}
 			{draft ? (
 				<FixtureProfileEditor

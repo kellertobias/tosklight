@@ -157,6 +157,64 @@ pub struct FixtureProfile {
     pub reserved_source: Option<String>,
 }
 
+/// The physical block as it is read, including the three optical facts it used to carry.
+///
+/// Colour temperature, luminous output, and beam angle describe the light rather than the lantern,
+/// so they now live in [`ProfileOptics`]. Every profile written before that — including the one
+/// embedded in an already-patched show — still has them here, and is lifted on read.
+#[derive(Default, Deserialize)]
+struct LegacyPhysicalProperties {
+    #[serde(default)]
+    width_millimetres: Option<f32>,
+    #[serde(default)]
+    height_millimetres: Option<f32>,
+    #[serde(default)]
+    depth_millimetres: Option<f32>,
+    #[serde(default)]
+    weight_kilograms: Option<f32>,
+    #[serde(default)]
+    power_watts: Option<f32>,
+    #[serde(default)]
+    connectors: String,
+    #[serde(default)]
+    light_source: String,
+    #[serde(default)]
+    color_rendering_index: Option<f32>,
+    #[serde(default)]
+    lens: String,
+    #[serde(default)]
+    color_temperature_kelvin: Option<f32>,
+    #[serde(default)]
+    luminous_output_lumens: Option<f32>,
+    #[serde(default)]
+    beam_angle_degrees: Option<f32>,
+}
+
+impl LegacyPhysicalProperties {
+    /// Splits the read block into how the fixture is built and what its light is like. An optics
+    /// value already written wins: it is the newer statement of the same fact.
+    fn split(self, optics: &mut ProfileOptics) -> ProfilePhysicalProperties {
+        optics.color_temperature_kelvin = optics
+            .color_temperature_kelvin
+            .or(self.color_temperature_kelvin);
+        optics.luminous_output_lumens = optics
+            .luminous_output_lumens
+            .or(self.luminous_output_lumens);
+        optics.beam_angle_degrees = optics.beam_angle_degrees.or(self.beam_angle_degrees);
+        ProfilePhysicalProperties {
+            width_millimetres: self.width_millimetres,
+            height_millimetres: self.height_millimetres,
+            depth_millimetres: self.depth_millimetres,
+            weight_kilograms: self.weight_kilograms,
+            power_watts: self.power_watts,
+            connectors: self.connectors,
+            light_source: self.light_source,
+            color_rendering_index: self.color_rendering_index,
+            lens: self.lens,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct FixtureProfileCanonical {
     schema_version: u16,
@@ -181,7 +239,7 @@ struct FixtureProfileCanonical {
     #[serde(default)]
     projection_assets: Option<ProfileProjectionSet>,
     #[serde(default)]
-    physical: ProfilePhysicalProperties,
+    physical: LegacyPhysicalProperties,
     #[serde(default)]
     optics: ProfileOptics,
     #[serde(default)]
@@ -253,7 +311,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             model_asset: canonical.model_asset,
             model_units: canonical.model_units,
             projection_assets: canonical.projection_assets,
-            physical: canonical.physical,
+            physical: canonical.physical.split(&mut canonical.optics),
             optics: canonical.optics,
             laser: canonical.laser,
             crowd: canonical.crowd,
@@ -329,6 +387,15 @@ pub struct ProfileOptics {
     /// instance: every lantern of this type has the same lens.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub light_source: Option<ProfileLightSource>,
+    /// Correlated colour temperature of the engine, in kelvin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_temperature_kelvin: Option<f32>,
+    /// Total output in lumens, as the manufacturer measures it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub luminous_output_lumens: Option<f32>,
+    /// Nominal beam angle in degrees. A zoom channel's own range overrides this while it moves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beam_angle_degrees: Option<f32>,
 }
 
 /// What a laser projector's scanner can do, and the script that decides what it draws.
@@ -509,15 +576,9 @@ pub struct ProfilePhysicalProperties {
     #[serde(default)]
     pub light_source: String,
     #[serde(default)]
-    pub color_temperature_kelvin: Option<f32>,
-    #[serde(default)]
     pub color_rendering_index: Option<f32>,
     #[serde(default)]
-    pub luminous_output_lumens: Option<f32>,
-    #[serde(default)]
     pub lens: String,
-    #[serde(default)]
-    pub beam_angle_degrees: Option<f32>,
 }
 
 #[derive(Clone, Debug, Serialize)]

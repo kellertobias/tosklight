@@ -8,7 +8,7 @@ import {
 } from "../sheet/fixtureProfileModel";
 import type { ModeEditorTab } from "./modeEditor";
 
-export type ProfileEditorTab = "generic" | "modes";
+export type ProfileEditorTab = "identity" | "simulation" | "modes";
 
 type ControllerOptions = {
 	initialProfile: FixtureProfile;
@@ -51,7 +51,7 @@ export function useFixtureProfileEditorController({
 	onClose,
 }: ControllerOptions) {
 	const [draft, setDraft] = useState(() => cloneProfile(initialProfile));
-	const [tab, setTab] = useState<ProfileEditorTab>("generic");
+	const [tab, setTab] = useState<ProfileEditorTab>("identity");
 	const [modeEditorId, setModeEditorId] = useState<string | null>(null);
 	const [modeTab, setModeTab] = useState<ModeEditorTab>("heads");
 	const [openSplit, setOpenSplit] = useState(

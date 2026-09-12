@@ -59,7 +59,7 @@ export function installedAppearanceLinearRgb(
 	appearance: InstalledFixtureAppearance | undefined,
 ) {
 	const profileCct =
-		fixture.definition.profile_snapshot?.physical.color_temperature_kelvin;
+		fixture.definition.profile_snapshot?.optics?.color_temperature_kelvin;
 	const cct = appearance?.color_temperature_kelvin ?? profileCct;
 	const source =
 		typeof cct === "number" && Number.isFinite(cct)

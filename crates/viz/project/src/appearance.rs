@@ -85,7 +85,7 @@ pub fn installed_appearance_linear_rgb(
 ) -> [f32; 3] {
     let colour_temperature_kelvin = appearance.color_temperature_kelvin.or_else(|| {
         profile
-            .physical
+            .optics
             .color_temperature_kelvin
             .filter(|kelvin| kelvin.is_finite())
             .map(|kelvin| kelvin.round())

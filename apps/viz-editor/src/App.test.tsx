@@ -276,15 +276,23 @@ describe("the Viz editor window", () => {
 		renderApp();
 
 		const fixtures = await screen.findByRole("button", { name: "Fixtures" });
-		// It sits before Patch: the lantern is described, then it is patched.
-		expect(fixtures.nextElementSibling).toBe(
-			screen.getByRole("button", { name: "Patch" }),
-		);
-		// Everything else in this list needs a document. This one does not.
+		// It sits at the foot of the dock with Settings, not among the show's own screens:
+		// the fixture library belongs to the machine.
+		expect(
+			fixtures.closest(".viz-editor-machine-nav"),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Patch" }).closest(
+				".viz-editor-machine-nav",
+			),
+		).toBeNull();
+		// Every show screen needs a document. This one does not.
 		expect(fixtures).not.toBeDisabled();
 
 		fireEvent.click(fixtures);
-		expect(await screen.findByText("Planning Wash")).toBeVisible();
+		expect(
+			await screen.findByRole("button", { name: /^Acme/ }),
+		).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
 		expect(
 			await screen.findByRole("dialog", { name: "Create fixture profile" }),

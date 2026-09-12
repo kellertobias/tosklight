@@ -229,7 +229,7 @@ export function sourceSummary(
 		appearance.color_temperature_kelvin ?? profileCct(fixture);
 	const effectiveLumens =
 		appearance.luminous_output_lumens ??
-		fixture.definition.profile_snapshot?.physical.luminous_output_lumens ??
+		fixture.definition.profile_snapshot?.optics?.luminous_output_lumens ??
 		null;
 	return [
 		source,
@@ -250,7 +250,7 @@ export function gelSummary(gel: GelAssignment) {
 
 export function profileCct(fixture: PatchedFixture) {
 	return (
-		fixture.definition.profile_snapshot?.physical.color_temperature_kelvin ??
+		fixture.definition.profile_snapshot?.optics?.color_temperature_kelvin ??
 		null
 	);
 }
@@ -264,7 +264,7 @@ export function profileTemperatureDescription(fixture: PatchedFixture) {
 
 export function profileOutputDescription(fixture: PatchedFixture) {
 	const lumens =
-		fixture.definition.profile_snapshot?.physical.luminous_output_lumens;
+		fixture.definition.profile_snapshot?.optics?.luminous_output_lumens;
 	return lumens == null
 		? "No profile output is available. Enter the installed source's measured or rated lumens."
 		: `Leave empty to inherit ${lumens.toLocaleString("en-US")} lm from the embedded profile revision.`;

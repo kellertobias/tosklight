@@ -67,11 +67,6 @@ export function EditorSidebar({
 						disabled: !hasDocument,
 					},
 					{
-						id: "fixtures",
-						label: "Fixtures",
-						icon: <span>✺</span>,
-					},
-					{
 						id: "patch",
 						label: "Patch",
 						icon: <span>⌘</span>,
@@ -101,6 +96,15 @@ export function EditorSidebar({
 						icon: <span>▣</span>,
 						disabled: !hasDocument,
 					},
+				]}
+			/>
+			<OperatorDestinationList
+				ariaLabel="Fixture library"
+				className="viz-editor-machine-nav"
+				activeId={workspace}
+				onSelect={(id) => onSelectWorkspace(id as EditorWorkspace)}
+				entries={[
+					{ id: "fixtures", label: "Fixtures", icon: <span>✺</span> },
 				]}
 			/>
 			<Button
