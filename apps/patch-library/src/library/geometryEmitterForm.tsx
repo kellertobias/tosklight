@@ -39,7 +39,7 @@ export function GeometryEmitterForm({
 			/>
 			<SelectField
 				label="Logical head"
-				value={emitter.head_id}
+				value={emitter.head_id ?? ""}
 				options={mode.heads.map((head) => ({
 					value: head.id,
 					label: head.name,

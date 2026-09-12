@@ -1,14 +1,19 @@
-import type { AttributeDescriptor, FixtureMode } from "../wire";
+import type {
+	AttributeDescriptor,
+	FixtureMode,
+	GeometryGraph,
+} from "../wire";
 import { ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ChannelsEditor } from "./channels";
 import { ColorEditor } from "./colorEditor";
-import { GeometryEditor } from "./geometryEditor";
+import { EmitterBindings } from "./emitterBindings";
 import { HeadsEditor } from "./heads";
 
-export type ModeEditorTab = "heads" | "channels" | "color" | "geometry";
+export type ModeEditorTab = "heads" | "channels" | "color" | "emitters";
 
 export function ModeEditor({
 	mode,
+	geometry,
 	tab,
 	attributeRegistry,
 	openSplit,
@@ -18,6 +23,8 @@ export function ModeEditor({
 	onClose,
 }: {
 	mode: FixtureMode;
+	/** The fixture's own graph, which this mode binds its heads to. */
+	geometry: GeometryGraph;
 	tab: ModeEditorTab;
 	attributeRegistry: AttributeDescriptor[];
 	openSplit: number;
@@ -51,7 +58,7 @@ export function ModeEditor({
 								activeId: modeTab,
 								onActiveChange: (id) => onTabChange(id as ModeEditorTab),
 								actions: (
-									["heads", "channels", "color", "geometry"] as const
+									["heads", "channels", "color", "emitters"] as const
 								).map((id) => ({
 									id,
 									label: id[0].toUpperCase() + id.slice(1),
@@ -77,8 +84,12 @@ export function ModeEditor({
 						{modeTab === "color" && (
 							<ColorEditor mode={editedMode} onChange={onChange} />
 						)}
-						{modeTab === "geometry" && (
-							<GeometryEditor mode={editedMode} onChange={onChange} />
+						{modeTab === "emitters" && (
+							<EmitterBindings
+								mode={editedMode}
+								geometry={geometry}
+								onChange={onChange}
+							/>
 						)}
 					</div>
 				</section>

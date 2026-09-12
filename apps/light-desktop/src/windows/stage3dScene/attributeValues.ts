@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { modeWithBoundGeometry } from "@tosklight/patch";
 import type {
 	AttributeValue,
 	FixtureMode,
@@ -102,10 +103,14 @@ export function profileMode(fixture: PatchedFixture) {
 	const retained = profileModes.get(fixture);
 	if (retained !== undefined) return retained;
 	const profile = fixture.definition.profile_snapshot;
-	const mode =
+	const selected =
 		profile?.modes.find((mode) => mode.id === fixture.definition.mode_id) ??
 		profile?.modes.find((mode) => mode.name === fixture.definition.mode) ??
 		null;
+	// Geometry belongs to the fixture; this mode says which of its heads owns which emitter. Bind
+	// them here, once, so everything downstream reads a mode that carries its own graph as before.
+	const mode =
+		selected && profile ? modeWithBoundGeometry(profile, selected) : selected;
 	profileModes.set(fixture, mode);
 	return mode;
 }

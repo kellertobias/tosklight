@@ -21,6 +21,16 @@ export interface FixtureProfile {
 	 * `model_asset` wins over both.
 	 */
 	body_model?: string | null;
+	/**
+	 * The fixture's parts, axes and emitters.
+	 *
+	 * Geometry belongs to the lantern rather than to one of its personalities: a moving head has
+	 * the same yoke whichever mode it is patched in. A mode says only which of its heads owns
+	 * which emitter, in `FixtureMode.emitter_heads`.
+	 *
+	 * Empty on a profile whose modes still carry their own geometry.
+	 */
+	geometry?: GeometryGraph;
 	model_units?: "auto" | "metres";
 	projection_assets?: FixtureProjectionSet | null;
 	physical: FixtureProfilePhysical;
@@ -128,6 +138,8 @@ export interface FixtureMode {
 	heads: FixtureHead[];
 	channels: FixtureChannel[];
 	color_systems: HeadColorSystem[];
+	/** Which of the fixture's emitters each of this mode's heads owns. */
+	emitter_heads?: EmitterHeadBinding[];
 	control_actions: ControlAction[];
 	geometry: GeometryGraph;
 }
@@ -321,7 +333,11 @@ export interface GeometryEmitter {
 	id: string;
 	name: string;
 	node_id: string;
-	head_id: string;
+	/**
+	 * Which head owns this emitter — a mode's answer, not the fixture's. Retained on profiles
+	 * written before geometry left the mode.
+	 */
+	head_id?: string | null;
 	origin: Vector3Value;
 	orientation_degrees: Vector3Value;
 	beam_angle_degrees: number;
@@ -390,4 +406,10 @@ export interface FixtureBodyModel {
 	id: string;
 	label: string;
 	group: string;
+}
+
+/** Which logical head owns one of the fixture's emitters, in this mode. */
+export interface EmitterHeadBinding {
+	emitter_id: string;
+	head_id: string;
 }

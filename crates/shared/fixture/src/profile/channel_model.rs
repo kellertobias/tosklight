@@ -157,6 +157,8 @@ struct FixtureModeCanonical {
     control_actions: Vec<ControlAction>,
     #[serde(default)]
     geometry: GeometryGraph,
+    #[serde(default)]
+    emitter_heads: Vec<EmitterHeadBinding>,
 }
 
 impl<'de> Deserialize<'de> for FixtureMode {
@@ -222,6 +224,7 @@ impl<'de> Deserialize<'de> for FixtureMode {
             color_systems: canonical.color_systems,
             control_actions: canonical.control_actions,
             geometry: canonical.geometry,
+            emitter_heads: canonical.emitter_heads,
         })
     }
 }
@@ -243,6 +246,16 @@ impl Default for ChannelScales {
             grand_master: 1.0,
         }
     }
+}
+
+/// Which logical head owns one of the fixture's emitters, in this mode.
+///
+/// This is the whole of what a mode says about geometry: the parts, the axes and the emitters
+/// belong to the fixture, and a personality only decides which of its heads drives which of them.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct EmitterHeadBinding {
+    pub emitter_id: Uuid,
+    pub head_id: Uuid,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

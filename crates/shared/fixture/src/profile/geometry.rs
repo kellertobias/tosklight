@@ -1,6 +1,6 @@
 use super::{
-    GeometryGraph, GeometryMotion, GeometryMotionKind, GeometryNode, GeometryTemplate,
-    ProfileError, Transform3, Vector3,
+    FixtureMode, FixtureProfile, GeometryGraph, GeometryMotion, GeometryMotionKind, GeometryNode,
+    GeometryTemplate, ProfileError, Transform3, Vector3,
 };
 use light_core::{AttributeKey, AttributeValue};
 use std::collections::{HashMap, HashSet};
@@ -139,7 +139,9 @@ impl GeometryGraph {
         for emitter in &self.emitters {
             if !emitter_ids.insert(emitter.id)
                 || !node_ids.contains(&emitter.node_id)
-                || !head_ids.contains(&emitter.head_id)
+                || emitter
+                    .head_id
+                    .is_some_and(|head| !head_ids.contains(&head))
                 || emitter.beam_angle_degrees < 0.0
                 || emitter.field_angle_degrees < emitter.beam_angle_degrees
             {
@@ -192,4 +194,32 @@ pub(crate) fn stable_uuid(value: &str) -> Uuid {
     let high = hash(0xcbf2_9ce4_8422_2325, value.as_bytes());
     let low = hash(0x8422_2325_cbf2_9ce4, value.as_bytes());
     Uuid::from_u128((u128::from(high) << 64) | u128::from(low))
+}
+
+impl FixtureProfile {
+    /// This mode's geometry: the fixture's own, with its heads bound to the emitters.
+    ///
+    /// Every consumer asks for geometry this way, so neither a lifted profile nor one whose modes
+    /// still carry their own graph needs to be special-cased anywhere but here.
+    pub fn mode_geometry(&self, mode: &FixtureMode) -> GeometryGraph {
+        // A mode that still carries its own graph is one the lift left alone, and its graph is
+        // the more specific statement. After a lift the mode's graph is empty and this is the
+        // fixture's.
+        if !mode.geometry.nodes.is_empty() || self.geometry.nodes.is_empty() {
+            return mode.geometry.clone();
+        }
+        let heads = mode
+            .emitter_heads
+            .iter()
+            .map(|binding| (binding.emitter_id, binding.head_id))
+            .collect::<HashMap<_, _>>();
+        let mut bound = self.geometry.clone();
+        bound.emitters.retain_mut(|emitter| {
+            emitter.head_id = heads.get(&emitter.id).copied();
+            // An emitter this personality drives nothing with is not lit in it. A four-lamp mode
+            // of an eight-lamp blinder is exactly that, and drawing the other four would be a lie.
+            emitter.head_id.is_some()
+        });
+        bound
+    }
 }

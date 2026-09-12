@@ -60,6 +60,7 @@ impl FixtureProfile {
             stage_icon_asset: first.icon_asset.clone(),
             model_asset: first.model_asset.clone(),
             body_model: None,
+            geometry: GeometryGraph::default(),
             model_units: ModelUnits::Auto,
             projection_assets: None,
             physical: ProfilePhysicalProperties {
@@ -275,6 +276,7 @@ impl FixtureMode {
             channels,
             color_systems,
             control_actions: Vec::new(),
+            emitter_heads: Vec::new(),
             geometry: GeometryGraph::template(GeometryTemplate::Fixed, &geometry_head_ids),
         };
         mode.apply_derived_highlight_defaults()?;

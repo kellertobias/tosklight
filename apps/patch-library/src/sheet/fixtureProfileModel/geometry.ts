@@ -1,4 +1,4 @@
-import type { GeometryGraph } from "../../wire";
+import type { FixtureMode, FixtureProfile, GeometryGraph } from "../../wire";
 import { uuid } from "./utilities";
 
 export type GeometryTemplateName =
@@ -35,9 +35,9 @@ export function blankGeometry(headIds: string[] = []): GeometryGraph {
 	const root = uuid();
 	return {
 		nodes: [geometryNode(root, "Chassis", null)],
-		emitters: headIds.map((headId, index) => ({
+		emitters: (headIds.length ? headIds : [null]).map((headId, index) => ({
 			id: uuid(),
-			name: headIds.length === 1 ? "Beam" : `Beam ${index + 1}`,
+			name: headIds.length > 1 ? `Beam ${index + 1}` : "Beam",
 			node_id: root,
 			head_id: headId,
 			origin: vector(),
@@ -128,4 +128,45 @@ export function geometryTemplate(
 		layout: emitterLayout(template),
 	}));
 	return graph;
+}
+
+/**
+ * This mode's geometry: the fixture's own, with its heads bound to the emitters.
+ *
+ * The counterpart of `FixtureProfile::mode_geometry` in the fixture crate, and the only place that
+ * has to know whether a profile has been lifted or still carries a graph on each mode. An emitter
+ * no head owns is not lit in that mode, so it is left out rather than drawn dark.
+ */
+export function modeGeometry(
+	profile: Pick<FixtureProfile, "geometry">,
+	mode: Partial<Pick<FixtureMode, "geometry" | "emitter_heads">>,
+): GeometryGraph {
+	// A mode that still carries its own graph is one the lift left alone, and its graph is the
+	// more specific statement. After a lift the mode's graph is empty and this is the fixture's.
+	// Both sides are read from stored show data, which may predate either field.
+	const own = {
+		nodes: mode.geometry?.nodes ?? [],
+		emitters: mode.geometry?.emitters ?? [],
+	};
+	const fixture = profile.geometry;
+	if (own.nodes.length || !fixture?.nodes?.length) return own;
+	const heads = new Map(
+		(mode.emitter_heads ?? []).map((binding) => [
+			binding.emitter_id,
+			binding.head_id,
+		]),
+	);
+	return {
+		...fixture,
+		emitters: fixture.emitters
+			.filter((emitter) => heads.has(emitter.id))
+			.map((emitter) => ({ ...emitter, head_id: heads.get(emitter.id) })),
+	};
+}
+
+/** The mode as the Stage reads it: its channels, with the fixture's geometry bound to its heads. */
+export function modeWithBoundGeometry<
+	T extends Partial<Pick<FixtureMode, "geometry" | "emitter_heads">>,
+>(profile: Pick<FixtureProfile, "geometry">, mode: T): T {
+	return { ...mode, geometry: modeGeometry(profile, mode) };
 }

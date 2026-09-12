@@ -25,11 +25,21 @@ export function blankMode(name = "Default"): FixtureMode {
 		channels: [],
 		color_systems: [],
 		control_actions: [],
-		geometry: blankGeometry([head.id]),
+		emitter_heads: [],
+		geometry: { nodes: [], emitters: [] },
 	};
 }
 
 export function blankFixtureProfile(): FixtureProfile {
+	// The lantern has one part and one emitter; the mode drives that emitter with its own head.
+	const mode = blankMode();
+	const geometry = blankGeometry([]);
+	const beam = geometry.emitters[0];
+	if (beam) {
+		mode.emitter_heads = [
+			{ emitter_id: beam.id, head_id: mode.heads[0].id },
+		];
+	}
 	return {
 		schema_version: 2,
 		id: uuid(),
@@ -56,7 +66,8 @@ export function blankFixtureProfile(): FixtureProfile {
 			lens: "",
 		},
 		optics: {},
-		modes: [blankMode()],
+		geometry,
+		modes: [mode],
 		hazardous: false,
 		direct_control_protocols: [],
 		signal_loss_policy: { type: "hold_last" },

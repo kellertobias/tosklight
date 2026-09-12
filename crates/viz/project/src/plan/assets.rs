@@ -348,7 +348,10 @@ pub(super) fn resolve_model(
             let resolved = match fixture.profile.model_asset.as_deref() {
                 Some(asset) => match read_model_asset(asset) {
                     Ok(mut model) => {
-                        super::apply_profile_model_pose(&mut model, mode);
+                        super::geometry_pose::apply_profile_model_pose(
+                            &mut model,
+                            &fixture.profile.mode_geometry(mode),
+                        );
                         scene.models.push(model);
                         Some(scene.models.len() as u32 - 1)
                     }

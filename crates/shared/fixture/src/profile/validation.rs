@@ -195,13 +195,8 @@ impl FixtureProfile {
                 )));
             }
         }
-        let mut mode_ids = HashSet::new();
-        for mode in &self.modes {
-            if !mode_ids.insert(mode.id) {
-                return Err(ProfileError::Invalid("mode IDs must be unique".into()));
-            }
-            mode.validate_for_patch_policy(self.patch_policy)?;
-        }
+        self.validate_geometry()?;
+        let mode_ids = self.validate_modes()?;
         if let Some(crowd) = &self.crowd {
             if self.patch_policy != PatchPolicy::VisualOnly {
                 return Err(ProfileError::Invalid(
@@ -239,6 +234,35 @@ impl FixtureProfile {
             if combinations.len() != 9 {
                 return Err(ProfileError::Invalid(
                     "a crowd fixture requires all nine posture and density combinations".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+    /// Stable mode identities, and every mode valid for the fixture's patch policy.
+    fn validate_modes(&self) -> Result<HashSet<Uuid>, ProfileError> {
+        let mut mode_ids = HashSet::new();
+        for mode in &self.modes {
+            if !mode_ids.insert(mode.id) {
+                return Err(ProfileError::Invalid("mode IDs must be unique".into()));
+            }
+            mode.validate_for_patch_policy(self.patch_policy)?;
+        }
+        Ok(mode_ids)
+    }
+
+    /// The fixture's own graph, which names no head, and every mode's bindings into it.
+    fn validate_geometry(&self) -> Result<(), ProfileError> {
+        self.geometry.validate(&HashSet::new())?;
+        for binding in self.modes.iter().flat_map(|mode| &mode.emitter_heads) {
+            if !self
+                .geometry
+                .emitters
+                .iter()
+                .any(|emitter| emitter.id == binding.emitter_id)
+            {
+                return Err(ProfileError::Invalid(
+                    "emitter binding references a missing fixture emitter".into(),
                 ));
             }
         }
@@ -410,7 +434,21 @@ impl FixtureMode {
             }
         }
         self.validate_color_systems(&head_ids, &channel_ids)?;
-        self.geometry.validate(&head_ids)?;
+        self.validate_geometry(&head_ids)?;
+        Ok(())
+    }
+
+    /// Any graph this mode still carries, and the heads its bindings name. Which emitter a
+    /// binding names is the fixture's business, and the profile checks that.
+    fn validate_geometry(&self, head_ids: &HashSet<Uuid>) -> Result<(), ProfileError> {
+        self.geometry.validate(head_ids)?;
+        for binding in &self.emitter_heads {
+            if !head_ids.contains(&binding.head_id) {
+                return Err(ProfileError::Invalid(
+                    "emitter binding references a missing head".into(),
+                ));
+            }
+        }
         Ok(())
     }
 

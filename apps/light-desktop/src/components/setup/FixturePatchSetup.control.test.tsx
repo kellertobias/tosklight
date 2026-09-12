@@ -1381,7 +1381,8 @@ describe("installed light-source appearance", () => {
 
 		const profile = fixture.definition.profile_snapshot;
 		if (!profile) throw new Error("appearance fixture profile is missing");
-		profile.modes[0].geometry.emitters = [];
+		profile.geometry = { nodes: [], emitters: [] };
+		profile.modes[0].emitter_heads = [];
 		rerender(<FixturePatchSetup />);
 		const row = screen.getByRole("row", {
 			name: /17 Split Wash 17/,

@@ -59,6 +59,7 @@ export function GeometryEditor({
 	mode,
 	onChange,
 }: {
+	/** A mode-shaped carrier for the fixture's graph, so the forms below are unchanged. */
 	mode: FixtureMode;
 	onChange: (mode: FixtureMode) => void;
 }) {

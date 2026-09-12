@@ -1,3 +1,4 @@
+import { modeGeometry } from "@tosklight/patch";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { useCallback, useState } from "react";
 import type {
@@ -227,7 +228,9 @@ export function hasGeometryEmitter(fixture: PatchedFixture) {
 	return Boolean(
 		snapshot &&
 			modeId &&
-			snapshot.modes.find((mode) => mode.id === modeId)?.geometry.emitters
-				.length,
+			(() => {
+				const mode = snapshot.modes.find((mode) => mode.id === modeId);
+				return mode ? modeGeometry(snapshot, mode).emitters.length : 0;
+			})(),
 	);
 }

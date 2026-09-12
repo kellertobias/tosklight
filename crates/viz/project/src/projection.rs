@@ -110,13 +110,18 @@ pub fn generate_live_projection_meshes_for_mode(
         .into()
         .and_then(|mode_id| profile.modes.iter().find(|mode| mode.id == mode_id))
         .map(|mode| {
-            mode.geometry
+            profile
+                .mode_geometry(mode)
                 .nodes
                 .iter()
-                .filter_map(|node| node.glb_node.as_deref())
+                .filter_map(|node| node.glb_node.clone())
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let selected_nodes = selected_nodes
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     let model = viz_scene::read_glb_nodes(&bytes, &selected_nodes)
         .map_err(|error| ProjectionError(error.0))?;
     let scale = physical_scale(profile, &model) * 1000.0;

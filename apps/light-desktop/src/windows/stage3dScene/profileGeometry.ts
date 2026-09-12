@@ -54,7 +54,7 @@ function relatedHeadsByNode(graph: GeometryGraph) {
 		let nodeId: string | null = emitter.node_id;
 		while (nodeId) {
 			const heads = result.get(nodeId) ?? new Set<string>();
-			heads.add(emitter.head_id);
+			heads.add((emitter.head_id ?? ""));
 			result.set(nodeId, heads);
 			nodeId = parentByNode.get(nodeId) ?? null;
 		}
@@ -221,9 +221,9 @@ function emitterIntensity(
 	if (options.virtualHighlight) return 1;
 	const resolved = normalized(
 		attributes.get("intensity"),
-		channelDefault(options.mode, emitter.head_id, "intensity", 1),
+		channelDefault(options.mode, (emitter.head_id ?? ""), "intensity", 1),
 	);
-	const owner = headOwnerId(options.fixture, options.mode, emitter.head_id);
+	const owner = headOwnerId(options.fixture, options.mode, (emitter.head_id ?? ""));
 	if (options.projectedOwners.has(owner)) return resolved;
 	return (
 		(options.snapshot?.blackout ? 0 : resolved) *
@@ -240,7 +240,7 @@ function mountEmitter(
 	const attributes = attributesForHead(
 		options.fixture,
 		options.mode,
-		emitter.head_id,
+		(emitter.head_id ?? ""),
 		options.byFixture,
 	);
 	const beam = buildGeometryBeam(
@@ -261,7 +261,7 @@ function mountEmitter(
 			attributes,
 			options.installedAppearance,
 			options.shaperAngle,
-			emitter.head_id,
+			(emitter.head_id ?? ""),
 		),
 	);
 	(nodes.get(emitter.node_id)?.anchor ?? root).add(beam);
@@ -337,7 +337,7 @@ export function updateFixtureProfileGeometry(
 		const attributes = attributesForHead(
 			options.fixture,
 			options.mode,
-			emitter.head_id,
+			(emitter.head_id ?? ""),
 			options.byFixture,
 		);
 		updateGeometryBeam(
@@ -359,7 +359,7 @@ export function updateFixtureProfileGeometry(
 				attributes,
 				options.installedAppearance,
 				options.shaperAngle,
-				emitter.head_id,
+				(emitter.head_id ?? ""),
 			),
 		);
 	}

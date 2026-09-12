@@ -1,3 +1,4 @@
+import { modeGeometry } from "@tosklight/patch";
 import { useEffect, useRef, useState } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../api/types";
 import { usePatch, usePatchView } from "../../features/patch/PatchContext";
@@ -316,7 +317,8 @@ function physicalVisualizationCapabilities(fixture: PatchedFixture) {
 		has(`shaper.blade.${element}.angle`),
 	) as [boolean, boolean, boolean, boolean];
 	return {
-		bracket: (mode?.geometry.emitters.length ?? 0) > 0,
+		bracket:
+			(profile && mode ? modeGeometry(profile, mode).emitters.length : 0) > 0,
 		shapers,
 		liveShaperAngles,
 		module: shapers.some(Boolean),

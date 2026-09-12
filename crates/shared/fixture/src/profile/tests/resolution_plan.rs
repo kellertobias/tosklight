@@ -54,6 +54,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
         color_systems: vec![],
         control_actions: vec![],
         geometry: GeometryGraph::default(),
+        emitter_heads: Vec::new(),
     };
     let control = FixtureMode::control_action_attribute(mode.channels[0].id);
     let cases = [

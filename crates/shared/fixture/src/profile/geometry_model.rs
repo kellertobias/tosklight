@@ -72,7 +72,18 @@ pub struct GeometryEmitter {
     pub id: Uuid,
     pub name: String,
     pub node_id: Uuid,
-    pub head_id: Uuid,
+    /// Which logical head owns this emitter — a mode's answer, not the fixture's.
+    ///
+    /// The geometry belongs to the lantern and does not change when an operator selects another
+    /// personality; what changes is how the personality's channels reach it. A ROBE LEDWash has
+    /// the same three rings of emitters in every mode: its zone modes give each ring a head of
+    /// its own, and its plain modes drive all three from one. So a profile-level emitter carries
+    /// no head, and [`FixtureMode::emitter_heads`] says who owns it in that mode.
+    ///
+    /// Retained here for profiles written before geometry left the mode, whose emitters still
+    /// name the head of the mode they were written in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_id: Option<Uuid>,
     #[serde(default)]
     pub origin: Vector3,
     #[serde(default)]

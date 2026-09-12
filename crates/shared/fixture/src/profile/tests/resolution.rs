@@ -43,6 +43,7 @@ fn exact_raw_values_encode_msb_first_at_every_supported_resolution() {
             color_systems: vec![],
             control_actions: vec![],
             geometry: GeometryGraph::default(),
+            emitter_heads: Vec::new(),
         };
         let values = HashMap::from([(
             AttributeKey::intensity(),
@@ -120,6 +121,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
         color_systems: vec![],
         control_actions: vec![],
         geometry: GeometryGraph::default(),
+        emitter_heads: Vec::new(),
     };
     mode.validate().unwrap();
     let mut values = HashMap::from([

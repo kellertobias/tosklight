@@ -1,4 +1,4 @@
-use super::{ControlAction, FixtureChannel, GeometryGraph, HeadColorSystem};
+use super::{ControlAction, EmitterHeadBinding, FixtureChannel, GeometryGraph, HeadColorSystem};
 use crate::{DirectControlProtocol, SignalLossPolicy};
 use light_core::FixtureId;
 use serde::{Deserialize, Serialize};
@@ -120,6 +120,15 @@ pub struct FixtureProfile {
     pub stage_icon_asset: Option<String>,
     #[serde(default)]
     pub model_asset: Option<String>,
+    /// The fixture's parts, axes and emitters.
+    ///
+    /// Geometry belongs to the lantern rather than to one of its personalities: a moving head has
+    /// the same yoke whichever mode it is patched in. A mode says only which of its heads owns
+    /// which emitter, in [`FixtureMode::emitter_heads`].
+    ///
+    /// Empty on a profile whose modes still carry their own geometry — see that field.
+    #[serde(default)]
+    pub geometry: GeometryGraph,
     /// The generic body this fixture is drawn as, named from `body_catalogue::BODY_CATALOGUE`.
     ///
     /// `None` keeps the guess made from the declared type and the mode's channels, which is how
@@ -244,6 +253,8 @@ struct FixtureProfileCanonical {
     #[serde(default)]
     body_model: Option<String>,
     #[serde(default)]
+    geometry: GeometryGraph,
+    #[serde(default)]
     model_units: ModelUnits,
     #[serde(default)]
     projection_assets: Option<ProfileProjectionSet>,
@@ -269,6 +280,69 @@ struct FixtureProfileCanonical {
     signal_loss_policy: SignalLossPolicy,
     #[serde(default)]
     reserved_source: Option<String>,
+}
+
+/// Lift geometry from the modes to the fixture, where a profile's modes agree about it.
+///
+/// A lantern has one set of parts, axes and emitters; a personality only decides which of its
+/// heads drives which of them. Profiles written before that carry a whole graph per mode, and
+/// almost all of them carry the *same* graph per mode, differing only in the head each emitter
+/// names — which is exactly the part that belongs to the mode.
+///
+/// Where the graphs genuinely differ the profile is left as it was. Those are real differences —
+/// a blinder family whose modes are different physical fixtures, a curtain whose modes are its
+/// widths — and they are resolved by reworking the fixture, not by a reader picking one mode's
+/// geometry and discarding the rest.
+fn lift_geometry_to_the_fixture(profile: &mut FixtureProfile) {
+    if !profile.geometry.nodes.is_empty() || profile.modes.is_empty() {
+        return;
+    }
+    let shape = |graph: &GeometryGraph| {
+        (
+            graph
+                .nodes
+                .iter()
+                .map(|node| serde_json::to_string(node).unwrap_or_default())
+                .collect::<Vec<_>>(),
+            graph
+                .emitters
+                .iter()
+                .map(|emitter| {
+                    let mut without_head = emitter.clone();
+                    without_head.head_id = None;
+                    serde_json::to_string(&without_head).unwrap_or_default()
+                })
+                .collect::<Vec<_>>(),
+        )
+    };
+    let first = shape(&profile.modes[0].geometry);
+    if profile
+        .modes
+        .iter()
+        .any(|mode| shape(&mode.geometry) != first)
+    {
+        return;
+    }
+    let mut lifted = profile.modes[0].geometry.clone();
+    for mode in &mut profile.modes {
+        mode.emitter_heads = mode
+            .geometry
+            .emitters
+            .iter()
+            .filter_map(|emitter| {
+                Some(EmitterHeadBinding {
+                    emitter_id: emitter.id,
+                    head_id: emitter.head_id?,
+                })
+            })
+            .collect();
+        mode.geometry = GeometryGraph::default();
+    }
+    // The fixture's own emitters name no head: that is the mode's answer now.
+    for emitter in &mut lifted.emitters {
+        emitter.head_id = None;
+    }
+    profile.geometry = lifted;
 }
 
 impl<'de> Deserialize<'de> for FixtureProfile {
@@ -301,7 +375,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
                 }
             }
         }
-        Ok(Self {
+        let mut profile = Self {
             schema_version: if canonical.schema_version == 2 {
                 FIXTURE_PROFILE_SCHEMA_VERSION
             } else {
@@ -319,6 +393,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             stage_icon_asset: canonical.stage_icon_asset,
             model_asset: canonical.model_asset,
             body_model: canonical.body_model,
+            geometry: canonical.geometry,
             model_units: canonical.model_units,
             projection_assets: canonical.projection_assets,
             physical: canonical.physical.split(&mut canonical.optics),
@@ -333,7 +408,9 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             direct_control_protocols: canonical.direct_control_protocols,
             signal_loss_policy: canonical.signal_loss_policy,
             reserved_source: canonical.reserved_source,
-        })
+        };
+        lift_geometry_to_the_fixture(&mut profile);
+        Ok(profile)
     }
 }
 
@@ -607,6 +684,12 @@ pub struct FixtureMode {
     pub control_actions: Vec<ControlAction>,
     #[serde(default)]
     pub geometry: GeometryGraph,
+    /// Which of the fixture's emitters each of this mode's heads owns.
+    ///
+    /// Empty while the mode still carries its own `geometry`, which is how every profile written
+    /// before the lift reads.
+    #[serde(default)]
+    pub emitter_heads: Vec<EmitterHeadBinding>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -26,6 +26,8 @@ impl FixtureProfile {
             stage_icon_asset: None,
             model_asset: None,
             body_model: None,
+            // Geometry belongs to the fixture, so a new profile starts with it here.
+            geometry: GeometryGraph::template(GeometryTemplate::Fixed, &[head_id]),
             model_units: ModelUnits::Auto,
             projection_assets: None,
             physical: ProfilePhysicalProperties::default(),
@@ -51,7 +53,8 @@ impl FixtureProfile {
                 channels: Vec::new(),
                 color_systems: Vec::new(),
                 control_actions: Vec::new(),
-                geometry: GeometryGraph::template(GeometryTemplate::Fixed, &[head_id]),
+                emitter_heads: Vec::new(),
+                geometry: GeometryGraph::default(),
             }],
             hazardous: false,
             direct_control_protocols: Vec::new(),

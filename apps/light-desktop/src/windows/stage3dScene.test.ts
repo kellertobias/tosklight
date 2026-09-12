@@ -560,10 +560,10 @@ describe("geometry emitter source layouts", () => {
 		profile.revision = 1;
 		const mode = profile.modes[0];
 		mode.channels = [{ ...blankChannel(mode), attribute: "intensity" }];
-		const nodeId = mode.geometry.nodes[0].id;
+		const nodeId = profile.geometry!.nodes[0].id;
 		const headId = mode.heads[0].id;
-		const emitter = mode.geometry.emitters[0];
-		mode.geometry.emitters = [
+		const emitter = profile.geometry!.emitters[0];
+		profile.geometry!.emitters = [
 			{
 				...emitter,
 				id: "point",
@@ -611,6 +611,11 @@ describe("geometry emitter source layouts", () => {
 				},
 			},
 		];
+		// The fixture has the emitters; this mode drives every one of them.
+		mode.emitter_heads = profile.geometry!.emitters.map((emitter) => ({
+			emitter_id: emitter.id,
+			head_id: headId,
+		}));
 		const fixture = {
 			fixture_id: profile.id,
 			universe: 1,
@@ -1147,8 +1152,9 @@ describe("fixture profile model mounting", () => {
 		profile.model_units = "metres";
 		const mode = profile.modes[0];
 		mode.splits[0].footprint = 0;
-		mode.geometry.emitters = [];
-		mode.geometry.nodes[0].glb_node = "Truss2m";
+		profile.geometry!.emitters = [];
+		mode.emitter_heads = [];
+		profile.geometry!.nodes[0].glb_node = "Truss2m";
 		const fixture = {
 			fixture_id: profile.id,
 			universe: null,
@@ -1174,7 +1180,7 @@ describe("fixture profile model mounting", () => {
 			null,
 		);
 		expect(
-			scene.getObjectByName(`geometry-node:${mode.geometry.nodes[0].id}`),
+			scene.getObjectByName(`geometry-node:${profile.geometry!.nodes[0].id}`),
 		).toBeTruthy();
 		const model = new THREE.Group();
 		const truss = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, 0.3));
@@ -1183,7 +1189,7 @@ describe("fixture profile model mounting", () => {
 		const root = fixtureObjects.get(profile.id)!;
 		expect(mountFixtureModel(root, model, fixture)).toBe(1);
 		const mounted = scene.getObjectByName(
-			`fixture-model-part:${mode.geometry.nodes[0].id}`,
+			`fixture-model-part:${profile.geometry!.nodes[0].id}`,
 		)!;
 		expect(mounted.scale.toArray()).toEqual([1, 1, 1]);
 		expect(
@@ -1196,7 +1202,8 @@ describe("fixture profile model mounting", () => {
 		profile.name = "Legacy moving light";
 		profile.revision = 1;
 		const mode = profile.modes[0];
-		mode.geometry.emitters = [];
+		profile.geometry!.emitters = [];
+		mode.emitter_heads = [];
 		const fixture = {
 			fixture_id: profile.id,
 			universe: 1,
@@ -1314,7 +1321,7 @@ describe("calibrated fixture output", () => {
 			},
 		);
 		const emitter = scene.getObjectByName(
-			`geometry-emitter:${mode.geometry.emitters[0].id}`,
+			`geometry-emitter:${profile.geometry!.emitters[0].id}`,
 		)!;
 		expect(emitter.userData.intensity).toBe(0.25);
 		expect(emitter.userData.color).toBe("#0000ff");

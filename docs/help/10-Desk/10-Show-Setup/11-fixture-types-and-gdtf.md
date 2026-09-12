@@ -96,7 +96,7 @@ that model, whatever the body says.
 
 ### Modes and heads
 
-Modes have stable identities, names, notes, and complete channel configuration. Each row in the full-width Modes list edits that mode's name and notes directly and summarizes its heads, logical channels, and splits. Add modes from the title bar; remove and reorder them with drag-and-drop or the explicit move buttons. The final mode cannot be removed. **Edit channels** opens the nested tabs in this order: **Heads**, **Channels**, **Color**, and **Geometry**.
+Modes have stable identities, names, notes, and complete channel configuration. Each row in the full-width Modes list edits that mode's name and notes directly and summarizes its heads, logical channels, and splits. Add modes from the title bar; remove and reorder them with drag-and-drop or the explicit move buttons. The final mode cannot be removed. **Edit channels** opens the nested tabs in this order: **Heads**, **Channels**, **Color**, and **Emitters**.
 
 Every head has a stable identity and an optional master/shared designation. Heads describe logical emitters, not patch blocks: one head may own channels in several independently patched splits. At most one head is master/shared. A head that still owns channels cannot be removed until those channels are reassigned or removed.
 
@@ -122,7 +122,24 @@ Highlight. A per-fixture Highlight override may replace that Highlight raw value
 Configure the fixture's additive, subtractive, or wheel color system, then use **Generate portable
 presets** in **Control → Special Dialog** when fixed or indexed choices should be added to the show.
 
-### Geometry
+### Emitters
+
+A mode says which of its heads owns which of the fixture's emitters, and that is the whole of what
+a personality says about geometry. An emitter no head owns is not lit in that mode — which is how
+one personality gives every ring of a wash a head of its own and another drives them all together,
+without either describing the lantern twice.
+
+## Geometry
+
+Geometry belongs to the fixture, not to one of its personalities: a moving head has the same yoke
+whichever mode it is patched in. It is edited once, in the profile's own **Geometry** tab, and every
+mode binds its heads to the emitters described there.
+
+A profile written before this carried a whole graph on each mode. Reading one moves the graph to
+the fixture and leaves the head each emitter named behind as that mode's binding, so nothing an
+operator authored is lost and no show needs repatching. Where a profile's modes genuinely describe
+different geometry — a blinder family whose modes are different physical fixtures, a curtain whose
+modes are its widths — the profile is left exactly as it was until that fixture is reworked.
 
 Choose a suitable fixture geometry and use the preview to confirm the Stage appearance. Detailed
 model hierarchy, emitter, pivot, and projection authoring is fixture-developer documentation.

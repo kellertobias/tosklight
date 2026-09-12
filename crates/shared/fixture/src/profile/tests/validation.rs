@@ -51,6 +51,7 @@ fn derives_primary_slots_around_reserved_component_bytes() {
         color_systems: vec![],
         control_actions: vec![],
         geometry: GeometryGraph::default(),
+        emitter_heads: Vec::new(),
     };
     let slots = mode.primary_slots().unwrap();
     assert_eq!(slots[&first.id], 1);
@@ -98,6 +99,7 @@ fn rejects_duplicate_components_and_overlapping_functions() {
         color_systems: vec![],
         control_actions: vec![],
         geometry: GeometryGraph::default(),
+        emitter_heads: Vec::new(),
     };
     assert!(
         matches!(mode.primary_slots(), Err(ProfileError::Invalid(message)) if message.contains("duplicated"))
@@ -823,13 +825,13 @@ fn complete_physical_metadata_round_trips_and_older_profiles_receive_safe_defaul
 fn legacy_geometry_emitters_default_to_directional_and_explicit_broad_sources_round_trip() {
     let mut profile = FixtureProfile::blank();
     let head_id = profile.modes[0].heads[0].id;
-    profile.modes[0].geometry = GeometryGraph::template(GeometryTemplate::Fixed, &[head_id]);
-    let node_id = profile.modes[0].geometry.nodes[0].id;
-    profile.modes[0].geometry.emitters.push(GeometryEmitter {
+    profile.geometry = GeometryGraph::template(GeometryTemplate::Fixed, &[head_id]);
+    let node_id = profile.geometry.nodes[0].id;
+    profile.geometry.emitters.push(GeometryEmitter {
         id: Uuid::new_v4(),
         name: "Beam".into(),
         node_id,
-        head_id,
+        head_id: Some(head_id),
         origin: Vector3::default(),
         orientation_degrees: Vector3::default(),
         beam_angle_degrees: 20.0,
@@ -840,16 +842,18 @@ fn legacy_geometry_emitters_default_to_directional_and_explicit_broad_sources_ro
         layout: EmitterLayout::Point,
     });
     let mut legacy = serde_json::to_value(&profile).unwrap();
-    legacy["modes"][0]["geometry"]["emitters"][0]
+    legacy["geometry"]["emitters"][0]
         .as_object_mut()
         .unwrap()
         .remove("directional");
+    // Reading also lifts the geometry off the mode and onto the fixture, which is where the
+    // emitter is from here on.
     let mut migrated: FixtureProfile = serde_json::from_value(legacy).unwrap();
-    assert!(migrated.modes[0].geometry.emitters[0].directional);
-    migrated.modes[0].geometry.emitters[0].directional = false;
+    assert!(migrated.geometry.emitters[0].directional);
+    migrated.geometry.emitters[0].directional = false;
     let restored: FixtureProfile =
         serde_json::from_value(serde_json::to_value(migrated).unwrap()).unwrap();
-    assert!(!restored.modes[0].geometry.emitters[0].directional);
+    assert!(!restored.geometry.emitters[0].directional);
 }
 
 #[test]
@@ -1014,10 +1018,9 @@ fn geometry_axis_motion_limits_round_trip_and_reject_impossible_rates() {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Generic".into();
     profile.name = "Moving head".into();
-    let mode = &mut profile.modes[0];
-    let head = mode.heads[0].id;
-    mode.geometry = GeometryGraph::template(GeometryTemplate::MovingHead, &[head]);
-    let axis = mode
+    let head = profile.modes[0].heads[0].id;
+    profile.geometry = GeometryGraph::template(GeometryTemplate::MovingHead, &[head]);
+    let axis = profile
         .geometry
         .nodes
         .iter_mut()
@@ -1031,7 +1034,7 @@ fn geometry_axis_motion_limits_round_trip_and_reject_impossible_rates() {
 
     let decoded: FixtureProfile =
         serde_json::from_value(serde_json::to_value(&profile).unwrap()).unwrap();
-    let motion = decoded.modes[0]
+    let motion = decoded
         .geometry
         .nodes
         .iter()
@@ -1043,7 +1046,7 @@ fn geometry_axis_motion_limits_round_trip_and_reject_impossible_rates() {
 
     // An axis that declares nothing still moves; one that declares a standstill does not.
     let mut stalled = profile.clone();
-    stalled.modes[0]
+    stalled
         .geometry
         .nodes
         .iter_mut()
@@ -1051,4 +1054,110 @@ fn geometry_axis_motion_limits_round_trip_and_reject_impossible_rates() {
         .unwrap()
         .max_speed_per_second = Some(0.0);
     assert!(stalled.validate().is_err());
+}
+
+/// Geometry belongs to the lantern, and a personality only says which of its heads drives which
+/// emitter. Every profile written before that carried a whole graph per mode, so reading one has
+/// to move the graph to the fixture and leave the head each emitter named behind as a binding.
+#[test]
+fn geometry_written_per_mode_is_lifted_to_the_fixture_and_the_heads_stay_with_the_mode() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Two personalities".into();
+    // Author it the way a profile was written before the lift: nothing on the fixture, a whole
+    // graph on each mode, and each mode's emitter naming that mode's own head.
+    profile.geometry = GeometryGraph::default();
+    let second = profile.modes[0].clone();
+    profile.modes.push(FixtureMode {
+        id: Uuid::new_v4(),
+        name: "Second".into(),
+        heads: vec![FixtureHead {
+            id: Uuid::new_v4(),
+            name: "Main".into(),
+            master_shared: true,
+        }],
+        ..second
+    });
+    let emitter_id = Uuid::new_v4();
+    let node_id = Uuid::new_v4();
+    for mode in &mut profile.modes {
+        let head = mode.heads[0].id;
+        let mut graph = GeometryGraph::template(GeometryTemplate::Fixed, &[head]);
+        graph.nodes[0].id = node_id;
+        graph.emitters.push(GeometryEmitter {
+            id: emitter_id,
+            name: "Beam".into(),
+            node_id,
+            head_id: Some(head),
+            origin: Vector3::default(),
+            orientation_degrees: Vector3::default(),
+            beam_angle_degrees: 20.0,
+            field_angle_degrees: 24.0,
+            feather: 0.0,
+            focus: 1.0,
+            directional: true,
+            layout: EmitterLayout::Point,
+        });
+        mode.geometry = graph;
+    }
+
+    let read: FixtureProfile =
+        serde_json::from_value(serde_json::to_value(&profile).unwrap()).unwrap();
+    read.validate().unwrap();
+
+    // One graph, on the fixture, naming no head of its own.
+    assert_eq!(read.geometry.nodes.len(), 1);
+    assert_eq!(read.geometry.emitters.len(), 1);
+    assert_eq!(read.geometry.emitters[0].head_id, None);
+    for mode in &read.modes {
+        assert!(mode.geometry.nodes.is_empty());
+        assert_eq!(mode.emitter_heads.len(), 1);
+        assert_eq!(mode.emitter_heads[0].emitter_id, emitter_id);
+        // Each personality kept the head it actually named.
+        assert_eq!(mode.emitter_heads[0].head_id, mode.heads[0].id);
+        // And asking for the mode's geometry gives the fixture's, bound to that head.
+        let bound = read.mode_geometry(mode);
+        assert_eq!(bound.nodes.len(), 1);
+        assert_eq!(bound.emitters[0].head_id, Some(mode.heads[0].id));
+    }
+}
+
+/// A personality that drives nothing with one of the fixture's emitters does not light it. This is
+/// the ROBE case: the same three rings of emitters, given a head each in a zone mode and driven
+/// from one head in the plain modes.
+#[test]
+fn an_emitter_no_head_owns_is_not_lit_in_that_mode() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Zones".into();
+    let head = profile.modes[0].heads[0].id;
+    let node_id = profile.geometry.nodes[0].id;
+    for name in ["Inner", "Outer"] {
+        profile.geometry.emitters.push(GeometryEmitter {
+            id: Uuid::new_v4(),
+            name: name.into(),
+            node_id,
+            head_id: None,
+            origin: Vector3::default(),
+            orientation_degrees: Vector3::default(),
+            beam_angle_degrees: 20.0,
+            field_angle_degrees: 24.0,
+            feather: 0.0,
+            focus: 1.0,
+            directional: true,
+            layout: EmitterLayout::Point,
+        });
+    }
+    // This personality drives only the inner ring.
+    profile.modes[0].emitter_heads = vec![EmitterHeadBinding {
+        emitter_id: profile.geometry.emitters[0].id,
+        head_id: head,
+    }];
+    profile.validate().unwrap();
+
+    let bound = profile.mode_geometry(&profile.modes[0]);
+    assert_eq!(bound.emitters.len(), 1);
+    assert_eq!(bound.emitters[0].name, "Inner");
+    // The fixture still has both: the other one is simply not driven here.
+    assert_eq!(profile.geometry.emitters.len(), 2);
 }

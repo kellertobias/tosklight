@@ -23,6 +23,7 @@ pub(super) fn compile_instances(
     effect: Option<EffectProgram>,
     physics: Option<PhysicsProgram>,
 ) {
+    let geometry = fixture.profile.mode_geometry(mode);
     let shared_addresses = fixture
         .instances
         .iter()
@@ -65,15 +66,7 @@ pub(super) fn compile_instances(
                 .find_map(|(_, address)| *address)
                 .or_else(|| shared_addresses.values().copied().min()),
             model,
-            fallback: mode.geometry.emitters.is_empty().then(|| {
-                FallbackReason::new(
-                    "fixture optics",
-                    format!(
-                        "{} {} has no emitter geometry; using the generic {:?} projector",
-                        fixture.profile.manufacturer, fixture.profile.name, class
-                    ),
-                )
-            }),
+            fallback: emitterless_fallback(fixture, &geometry, class),
         });
         // Its own address where it has one, the fixture's where it has not.
         let own = address_map(instance);
@@ -144,6 +137,7 @@ pub(super) fn compile_instances(
             bindings,
             fixture,
             mode,
+            &geometry,
             class,
             motion,
             instance,
@@ -165,4 +159,21 @@ pub(super) fn compile_instances(
             });
         }
     }
+}
+
+/// The badge the desk shows when a fixture has no emitter geometry of its own.
+fn emitterless_fallback(
+    fixture: &PatchedFixture,
+    geometry: &light_fixture::GeometryGraph,
+    class: OpticalClass,
+) -> Option<FallbackReason> {
+    geometry.emitters.is_empty().then(|| {
+        FallbackReason::new(
+            "fixture optics",
+            format!(
+                "{} {} has no emitter geometry; using the generic {:?} projector",
+                fixture.profile.manufacturer, fixture.profile.name, class
+            ),
+        )
+    })
 }

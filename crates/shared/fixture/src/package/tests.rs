@@ -87,7 +87,7 @@ fn suedbahnhof_plan_profiles_ship_with_the_explicit_venue_personalities() {
         .contains(&filename)
         {
             assert!(
-                !mode.geometry.emitters.is_empty(),
+                !profile.mode_geometry(mode).emitters.is_empty(),
                 "{filename} must emit in Architect"
             );
         }
@@ -2510,7 +2510,8 @@ fn shipped_disco_ball_is_visual_only_geometry_with_no_dmx_channels() {
     assert_eq!(mode.splits[0].footprint, 0);
     assert!(mode.channels.is_empty());
     assert_eq!(
-        mode.geometry
+        profile
+            .mode_geometry(mode)
             .nodes
             .iter()
             .filter_map(|node| node.glb_node.as_deref())
@@ -2889,4 +2890,68 @@ fn shipped_wheel_channels_name_the_manufacturer_slot_at_a_probed_value() {
             "{filename} {mode_name} {attribute} at {probe}"
         );
     }
+}
+
+/// How far the lift actually gets across the shipped library, named rather than assumed.
+///
+/// A profile whose modes agree about geometry moves it to the fixture. One whose modes genuinely
+/// differ keeps what it has, and is listed here so the families still to be reworked are visible
+/// rather than silently carrying the old shape.
+#[test]
+fn the_shipped_library_reports_which_fixtures_still_carry_geometry_per_mode() {
+    let mut still_per_mode = Vec::new();
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library");
+    for entry in fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("toskfixture") {
+            continue;
+        }
+        let profile = read_fixture_package(&fs::read(&path).unwrap()).unwrap();
+        if profile.geometry.nodes.is_empty()
+            && profile
+                .modes
+                .iter()
+                .any(|mode| !mode.geometry.nodes.is_empty())
+        {
+            still_per_mode.push(path.file_name().unwrap().to_string_lossy().to_string());
+        }
+    }
+    still_per_mode.sort();
+    // Three groups, each waiting on a different piece of work:
+    //
+    // * the Venue objects, whose modes are their measurements — a curtain's modes are its widths
+    //   and a truss's are its lengths. These are for parametric geometry driven by the patch;
+    // * the families whose modes are really different physical fixtures, the Blinder above all,
+    //   which want splitting into separate profiles;
+    // * the rest, whose modes differ only in how their channels reach the same emitters, and
+    //   which the binding table can already express once each is remapped.
+    assert_eq!(
+        still_per_mode,
+        [
+            "cameo--q-spot-40-tw.toskfixture",
+            "generic--acl.toskfixture",
+            "generic--blinder.toskfixture",
+            "generic--dimmer-fresnel.toskfixture",
+            "jb-lighting--jbled-a7.toskfixture",
+            "robe--robin-300-ledwash.toskfixture",
+            "robe--robin-600x-ledwash.toskfixture",
+            "robe--robin-dls-profile.toskfixture",
+            "venue--curtain-1-m.toskfixture",
+            "venue--curtain-2-m.toskfixture",
+            "venue--curtain-3-m.toskfixture",
+            "venue--curtain-5-m.toskfixture",
+            "venue--curtain-6-m.toskfixture",
+            "venue--four-point-truss.toskfixture",
+            "venue--one-point-truss-pipe.toskfixture",
+            "venue--stage-element-1-0-5-m.toskfixture",
+            "venue--stage-element-1-1-m.toskfixture",
+            "venue--stage-element-2-1-m.toskfixture",
+            "venue--stage-stairs.toskfixture",
+            "venue--three-point-truss.toskfixture",
+            "venue--two-point-truss.toskfixture",
+        ],
+        "a fixture left this list, or a new one arrived carrying a graph per mode"
+    );
 }

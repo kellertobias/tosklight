@@ -8,7 +8,11 @@ import {
 } from "../sheet/fixtureProfileModel";
 import type { ModeEditorTab } from "./modeEditor";
 
-export type ProfileEditorTab = "identity" | "simulation" | "modes";
+export type ProfileEditorTab =
+	| "identity"
+	| "simulation"
+	| "geometry"
+	| "modes";
 
 type ControllerOptions = {
 	initialProfile: FixtureProfile;

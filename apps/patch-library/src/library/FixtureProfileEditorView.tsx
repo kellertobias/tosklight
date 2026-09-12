@@ -16,6 +16,7 @@ import {
 } from "./genericProfileTab";
 import { ModeEditor } from "./modeEditor";
 import { ModesTab } from "./modesTab";
+import { GeometryEditor } from "./geometryEditor";
 import {
 	type ProfileEditorTab,
 	useFixtureProfileEditorController,
@@ -88,6 +89,20 @@ function ProfileEditorBody({
 					draft={editor.draft}
 					onChange={editor.setDraft}
 					bodyCatalogue={bodyCatalogue}
+				/>
+			)}
+			{editor.tab === "geometry" && (
+				<GeometryEditor
+					mode={{
+						...editor.draft.modes[0],
+						geometry: editor.draft.geometry ?? { nodes: [], emitters: [] },
+					}}
+					onChange={(carrier) =>
+						editor.setDraft((current) => ({
+							...current,
+							geometry: carrier.geometry,
+						}))
+					}
 				/>
 			)}
 			{editor.tab === "modes" && (
@@ -203,6 +218,7 @@ export function FixtureProfileEditor({
 								actions: [
 									{ id: "identity", label: "Identity" },
 									{ id: "simulation", label: "Simulation" },
+									{ id: "geometry", label: "Geometry" },
 									{ id: "modes", label: "Modes" },
 								],
 							},
@@ -240,6 +256,7 @@ export function FixtureProfileEditor({
 				{editor.editedMode && (
 					<ModeEditor
 						mode={editor.editedMode}
+						geometry={editor.draft.geometry ?? { nodes: [], emitters: [] }}
 						tab={editor.modeTab}
 						attributeRegistry={attributeRegistry}
 						openSplit={editor.openSplit}

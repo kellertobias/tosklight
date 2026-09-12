@@ -80,7 +80,7 @@ function choose(label: string, option: string) {
 }
 
 function openModeEditor(
-	tab: "Heads" | "Channels" | "Color" | "Geometry" = "Channels",
+	tab: "Heads" | "Channels" | "Color" | "Emitters" = "Channels",
 ) {
 	fireEvent.click(
 		screen.getByRole("button", { name: "Edit channels for Default" }),
@@ -634,7 +634,7 @@ describe("FixtureProfileEditor function behavior", () => {
 });
 
 describe("FixtureProfileEditor chrome and close guards", () => {
-	it("uses Identity, Simulation and Modes title tabs with contextual title actions and no footer Cancel", () => {
+	it("uses Identity, Simulation, Geometry and Modes title tabs with contextual title actions and no footer Cancel", () => {
 		const { container } = render(
 			<FixtureProfileEditor
 				initialProfile={validProfile()}
@@ -646,6 +646,7 @@ describe("FixtureProfileEditor chrome and close guards", () => {
 		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
 			"Identity",
 			"Simulation",
+			"Geometry",
 			"Modes",
 		]);
 		expect(
@@ -867,6 +868,7 @@ describe("FixtureProfileEditor mode and split editing", () => {
 		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
 			"Identity",
 			"Simulation",
+			"Geometry",
 			"Modes",
 		]);
 		const modeEditor = openModeEditor();
@@ -874,7 +876,7 @@ describe("FixtureProfileEditor mode and split editing", () => {
 			within(modeEditor)
 				.getAllByRole("tab")
 				.map((tab) => tab.textContent),
-		).toEqual(["Heads", "Channels", "Color", "Geometry"]);
+		).toEqual(["Heads", "Channels", "Color", "Emitters"]);
 		fireEvent.click(
 			within(modeEditor).getByRole("button", { name: "Close mode editor" }),
 		);
@@ -1214,6 +1216,9 @@ describe("FixtureProfileEditor color and geometry editing", () => {
 		fireEvent.click(screen.getByLabelText("Measured XYZ available"));
 		expect(screen.getAllByLabelText(/Measured XYZ [XYZ]/)).toHaveLength(3);
 
+		fireEvent.click(
+			screen.getByRole("button", { name: "Close mode editor" }),
+		);
 		fireEvent.click(screen.getByRole("tab", { name: "Geometry" }));
 		fireEvent.click(screen.getByRole("treeitem", { name: /Beam/ }));
 		choose("Source layout", "Matrix");
@@ -1233,8 +1238,7 @@ describe("FixtureProfileEditor color and geometry editing", () => {
 				onClose={vi.fn()}
 			/>,
 		);
-		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
-		openModeEditor("Geometry");
+		fireEvent.click(screen.getByRole("tab", { name: "Geometry" }));
 
 		const sourceLayout = () => {
 			const field = screen
