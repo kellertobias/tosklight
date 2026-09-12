@@ -63,6 +63,9 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
         "Rotation X",
         "Rotation Y",
         "Rotation Z",
+        "Footprint width",
+        "Footprint height",
+        "Footprint depth",
         "Layer",
       ]);
       const enabled = page.getByLabel("MIB 101: 1 s");

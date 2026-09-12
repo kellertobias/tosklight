@@ -18,6 +18,7 @@ const PATCH_HEADERS = [
 	"Rotation Y",
 	"Rotation Z",
 	"Footprint width",
+	"Footprint height",
 	"Footprint depth",
 	"Layer",
 ];
