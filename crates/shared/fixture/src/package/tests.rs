@@ -38,6 +38,7 @@ fn suedbahnhof_plan_profiles_ship_with_the_explicit_venue_personalities() {
             "Fixed 0, Red, Green, Blue, Fixed 0",
             5,
         ),
+        ("cameo--auro-spot-z300.toskfixture", "17-Channel", 17),
         ("cameo--auro-spot-z300.toskfixture", "20-Channel", 20),
         (
             "cameo--root-par-6.toskfixture",
@@ -2159,9 +2160,10 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
     }
 
     // The Stage Zoom 1200 SV carries the 1200's shared 20-slot venue personality as well, which
-    // adds one mode with Prism 1 selection and rotation.
-    assert_eq!(prism_selection_modes, 14);
-    assert_eq!(prism_rotation_modes, 12);
+    // adds one mode with Prism 1 selection and rotation, and the AURO SPOT Z300's 17-Channel
+    // personality adds another.
+    assert_eq!(prism_selection_modes, 15);
+    assert_eq!(prism_rotation_modes, 13);
     assert_eq!(generic_control_modes, 6);
     assert_eq!(position_movement_modes, 28);
     assert_eq!(
@@ -2906,6 +2908,90 @@ fn shipped_wheel_channels_name_the_manufacturer_slot_at_a_probed_value() {
             "color.wheel.1",
             224,
             "Color wheel rotation stop",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "17-Channel",
+            "color.wheel.1",
+            8,
+            "Deep Red",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "gobo.1",
+            21,
+            "Gobo 2",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "gobo.2",
+            150,
+            "Gobo 4 shake, slow to fast",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "17-Channel",
+            "gobo.2",
+            190,
+            "Open",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "gobo.1.rotation",
+            192,
+            "Gobo 1 rotation stop",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "prism.1",
+            128,
+            "Prism 2 linear",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "prism.1.rotation",
+            60,
+            "Prism position 0° to 540°",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "softness",
+            5,
+            "No frost",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "fixture.auto_program",
+            130,
+            "Program 3 slow to fast",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "fixture.pan_tilt_auto_movement",
+            181,
+            "Circle inverse, small to large",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "fixture.device_settings",
+            210,
+            "Reset pan/tilt (hold 5 s)",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "17-Channel",
+            "fixture.device_settings",
+            126,
+            "PWM frequency 800 Hz (hold 5 s)",
         ),
         (
             "claypaky--sharpy.toskfixture",
