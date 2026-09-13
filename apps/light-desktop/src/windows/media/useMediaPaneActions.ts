@@ -16,6 +16,7 @@ import {
 import {
 	mediaCmyFromRgb,
 	mediaControlNormalizedValue,
+	mediaMasterScaleIsSigned,
 } from "./mediaControlValue";
 import type {
 	MediaBrowserMode,
@@ -266,38 +267,13 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 		onChangeControl: (attribute: string, value: string | number) => {
 			if (!input.selectedFixtureId) return;
 			const fixtureId = input.selectedFixtureId;
-			if (attribute === "color.tint" && typeof value === "string") {
-				const rgb = mediaRgbFromHex(value);
-				if (!rgb) return;
-				const mutations = ["red", "green", "blue"].map((component, index) => ({
-					action: "set_fixture" as const,
-					fixtureId,
-					attribute: `color.${component}`,
-					value: { kind: "normalized" as const, value: rgb[index] ?? 0 },
-					timing: { fade: false, fadeMillis: null, delayMillis: null },
-				}));
-				void input.valuesQueue.submitLatest(
-					programmerValuesMutationKey(mutations),
-					mutations,
-				);
-				return;
-			}
-			if (attribute === "media.layer.tint" && typeof value === "string") {
-				const cmy = mediaCmyFromRgb(value);
-				if (!cmy) return;
-				const mutations = ["cyan", "magenta", "yellow"].map(
-					(component, index) => ({
-						action: "set_fixture" as const,
-						fixtureId,
-						attribute: `media.layer.${component}`,
-						value: { kind: "normalized" as const, value: cmy[index] ?? 0 },
-						timing: { fade: false, fadeMillis: null, delayMillis: null },
-					}),
-				);
-				void input.valuesQueue.submitLatest(
-					programmerValuesMutationKey(mutations),
-					mutations,
-				);
+			const tint = tintMutations(fixtureId, attribute, value);
+			if (tint !== undefined) {
+				if (tint)
+					void input.valuesQueue.submitLatest(
+						programmerValuesMutationKey(tint),
+						tint,
+					);
 				return;
 			}
 			const raw = Number(value);
@@ -313,6 +289,9 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 							attribute,
 							raw,
 							input.selectedLayerId === "master",
+							mediaMasterScaleIsSigned(
+								input.selectedServer?.master_attributes,
+							),
 						),
 					},
 					timing: { fade: false, fadeMillis: null, delayMillis: null },
@@ -355,6 +334,37 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 			persist({ rightPaneVisible: visible });
 		},
 	};
+}
+
+/**
+ * The component writes behind a colour picker: RGB for `color.tint`, CMY for `media.layer.tint`.
+ * Undefined means the attribute is not a tint; null means the picked colour could not be parsed.
+ */
+function tintMutations(
+	fixtureId: string,
+	attribute: string,
+	value: string | number,
+) {
+	if (typeof value !== "string") return undefined;
+	const tint =
+		attribute === "color.tint"
+			? { prefix: "color", components: ["red", "green", "blue"] }
+			: attribute === "media.layer.tint"
+				? { prefix: "media.layer", components: ["cyan", "magenta", "yellow"] }
+				: undefined;
+	if (!tint) return undefined;
+	const values =
+		attribute === "color.tint"
+			? mediaRgbFromHex(value)
+			: mediaCmyFromRgb(value);
+	if (!values) return null;
+	return tint.components.map((component, index) => ({
+		action: "set_fixture" as const,
+		fixtureId,
+		attribute: `${tint.prefix}.${component}`,
+		value: { kind: "normalized" as const, value: values[index] ?? 0 },
+		timing: { fade: false, fadeMillis: null, delayMillis: null },
+	}));
 }
 
 function mediaRgbFromHex(value: string): [number, number, number] | null {

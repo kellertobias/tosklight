@@ -518,7 +518,9 @@ mod attribute_registry_tests {
         );
         assert_eq!(
             upgraded.placement_for(&AttributeKey("vendor.media_surface".into())),
-            Some(EncoderPlacement::new(EncoderGroup::Media, 6, 1))
+            // Pages 6 to 9 now hold the effect-bank and visualizer parameters, In/Out points, and
+            // the 3D model, so the displaced custom choice moves to the first free Media page.
+            Some(EncoderPlacement::new(EncoderGroup::Media, 10, 1))
         );
         assert_eq!(
             upgraded
@@ -997,6 +999,69 @@ mod attribute_registry_tests {
                 Some(EncoderPlacement::new(EncoderGroup::Media, 4, slot)),
                 "unexpected effect-bank placement for {attribute}"
             );
+        }
+        for (prefix, page) in [
+            ("media.effect.bank.1.parameter", 6_u16),
+            ("media.effect.bank.2.parameter", 7),
+            ("media.visualizer.parameter", 8),
+        ] {
+            for parameter in 1..=4_u8 {
+                let attribute = format!("{prefix}.{parameter}");
+                assert_eq!(
+                    recommended.placement_for(&AttributeKey(attribute.clone().into())),
+                    Some(EncoderPlacement::new(EncoderGroup::Media, page, parameter)),
+                    "unexpected parameter placement for {attribute}"
+                );
+            }
+            for retired in [5, 6] {
+                let attribute = format!("{prefix}.{retired}");
+                assert!(
+                    !attribute_descriptor(&AttributeKey(attribute.clone().into())).built_in,
+                    "{attribute} is not a canonical attribute"
+                );
+            }
+        }
+        for (attribute, group, page, slot) in [
+            ("media.blend_mode", EncoderGroup::Media, 4, 6),
+            ("media.in_point", EncoderGroup::Media, 9, 1),
+            ("media.out_point", EncoderGroup::Media, 9, 2),
+            ("media.model", EncoderGroup::Media, 9, 3),
+            // A layer's 3D model turns on media attributes of its own beside the model, never on
+            // the moving-light pan and tilt; its roll stays the layer's rotation.
+            ("media.model.pan", EncoderGroup::Media, 9, 4),
+            ("media.model.tilt", EncoderGroup::Media, 9, 5),
+            ("pan", EncoderGroup::Position, 1, 1),
+            ("tilt", EncoderGroup::Position, 1, 2),
+            ("position.rotation", EncoderGroup::Position, 1, 4),
+        ] {
+            assert_eq!(
+                recommended.placement_for(&AttributeKey(attribute.into())),
+                Some(EncoderPlacement::new(group, page, slot)),
+                "unexpected placement for {attribute}"
+            );
+        }
+        for attribute in ["media.model.pan", "media.model.tilt"] {
+            let key = AttributeKey(attribute.into());
+            let descriptor = attribute_descriptor(&key);
+            assert_eq!(descriptor.display_unit, Some("deg"), "{attribute}");
+        }
+        for (attribute, value_type) in [
+            ("media.blend_mode", AttributeValueType::Indexed),
+            ("media.model", AttributeValueType::Indexed),
+            ("media.model.pan", AttributeValueType::Continuous),
+            ("media.model.tilt", AttributeValueType::Continuous),
+            ("media.in_point", AttributeValueType::Continuous),
+            ("media.out_point", AttributeValueType::Continuous),
+            (
+                "media.visualizer.parameter.1",
+                AttributeValueType::Continuous,
+            ),
+        ] {
+            let key = AttributeKey(attribute.into());
+            let descriptor = attribute_descriptor(&key);
+            assert!(descriptor.built_in, "{attribute}");
+            assert_eq!(descriptor.family, AttributeClass::Media, "{attribute}");
+            assert_eq!(descriptor.value_type, value_type, "{attribute}");
         }
         recommended.validate().unwrap();
     }

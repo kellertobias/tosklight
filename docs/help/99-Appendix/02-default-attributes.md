@@ -138,10 +138,28 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Media | P4/E3 | **Effect Bank 2 Select** (`media.effect.bank.2.select`) | — |
 | Media | P4/E4 | **Effect Bank 2 Strength** (`media.effect.bank.2.strength`) | — |
 | Media | P4/E5 | **Layer Opacity Cycle** (`media.master.effect.opacity_cycle`) | — |
+| Media | P4/E6 | **Blend Mode** (`media.blend_mode`) | — |
 | Media | P5/E1 | **Mask Scale X** (`media.mask.scale.x`) | — |
 | Media | P5/E2 | **Mask Scale Y** (`media.mask.scale.y`) | — |
 | Media | P5/E3 | **Mask Position X** (`media.mask.position.x`) | — |
 | Media | P5/E4 | **Mask Position Y** (`media.mask.position.y`) | — |
+| Media | P6/E1 | **Effect Bank 1 Parameter 1** (`media.effect.bank.1.parameter.1`) | — |
+| Media | P6/E2 | **Effect Bank 1 Parameter 2** (`media.effect.bank.1.parameter.2`) | — |
+| Media | P6/E3 | **Effect Bank 1 Parameter 3** (`media.effect.bank.1.parameter.3`) | — |
+| Media | P6/E4 | **Effect Bank 1 Parameter 4** (`media.effect.bank.1.parameter.4`) | — |
+| Media | P7/E1 | **Effect Bank 2 Parameter 1** (`media.effect.bank.2.parameter.1`) | — |
+| Media | P7/E2 | **Effect Bank 2 Parameter 2** (`media.effect.bank.2.parameter.2`) | — |
+| Media | P7/E3 | **Effect Bank 2 Parameter 3** (`media.effect.bank.2.parameter.3`) | — |
+| Media | P7/E4 | **Effect Bank 2 Parameter 4** (`media.effect.bank.2.parameter.4`) | — |
+| Media | P8/E1 | **Visualizer Parameter 1** (`media.visualizer.parameter.1`) | — |
+| Media | P8/E2 | **Visualizer Parameter 2** (`media.visualizer.parameter.2`) | — |
+| Media | P8/E3 | **Visualizer Parameter 3** (`media.visualizer.parameter.3`) | — |
+| Media | P8/E4 | **Visualizer Parameter 4** (`media.visualizer.parameter.4`) | — |
+| Media | P9/E1 | **In Point** (`media.in_point`) | — |
+| Media | P9/E2 | **Out Point** (`media.out_point`) | — |
+| Media | P9/E3 | **3D Model** (`media.model`) | — |
+| Media | P9/E4 | **Model Pan** (`media.model.pan`) | — |
+| Media | P9/E5 | **Model Tilt** (`media.model.tilt`) | — |
 
 ## Default attribute activation groups
 
@@ -194,6 +212,24 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | **Effect Bank 1 Strength** | **Effect Bank 1 Strength** (`media.effect.bank.1.strength`) |
 | **Effect Bank 2 Select** | **Effect Bank 2 Select** (`media.effect.bank.2.select`) |
 | **Effect Bank 2 Strength** | **Effect Bank 2 Strength** (`media.effect.bank.2.strength`) |
+| **Effect Bank 1 Parameter 1** | **Effect Bank 1 Parameter 1** (`media.effect.bank.1.parameter.1`) |
+| **Effect Bank 1 Parameter 2** | **Effect Bank 1 Parameter 2** (`media.effect.bank.1.parameter.2`) |
+| **Effect Bank 1 Parameter 3** | **Effect Bank 1 Parameter 3** (`media.effect.bank.1.parameter.3`) |
+| **Effect Bank 1 Parameter 4** | **Effect Bank 1 Parameter 4** (`media.effect.bank.1.parameter.4`) |
+| **Effect Bank 2 Parameter 1** | **Effect Bank 2 Parameter 1** (`media.effect.bank.2.parameter.1`) |
+| **Effect Bank 2 Parameter 2** | **Effect Bank 2 Parameter 2** (`media.effect.bank.2.parameter.2`) |
+| **Effect Bank 2 Parameter 3** | **Effect Bank 2 Parameter 3** (`media.effect.bank.2.parameter.3`) |
+| **Effect Bank 2 Parameter 4** | **Effect Bank 2 Parameter 4** (`media.effect.bank.2.parameter.4`) |
+| **Blend Mode** | **Blend Mode** (`media.blend_mode`) |
+| **In Point** | **In Point** (`media.in_point`) |
+| **Out Point** | **Out Point** (`media.out_point`) |
+| **Visualizer Parameter 1** | **Visualizer Parameter 1** (`media.visualizer.parameter.1`) |
+| **Visualizer Parameter 2** | **Visualizer Parameter 2** (`media.visualizer.parameter.2`) |
+| **Visualizer Parameter 3** | **Visualizer Parameter 3** (`media.visualizer.parameter.3`) |
+| **Visualizer Parameter 4** | **Visualizer Parameter 4** (`media.visualizer.parameter.4`) |
+| **3D Model** | **3D Model** (`media.model`) |
+| **Model Pan** | **Model Pan** (`media.model.pan`) |
+| **Model Tilt** | **Model Tilt** (`media.model.tilt`) |
 | **Layer Opacity Cycle** | **Layer Opacity Cycle** (`media.master.effect.opacity_cycle`) |
 | **Fixture Control** | **Fixture Control** (`fixture.control`) |
 | **Special Control** | **Special Control** (`fixture.special_control`) |

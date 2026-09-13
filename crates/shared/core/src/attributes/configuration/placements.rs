@@ -124,6 +124,28 @@ fn canonical_placements() -> Vec<PlacedAttribute> {
         ("media.effect.bank.2.select", Media, 4, 3),
         ("media.effect.bank.2.strength", Media, 4, 4),
         ("media.master.effect.opacity_cycle", Media, 4, 5),
+        ("media.blend_mode", Media, 4, 6),
+        // Each bank's four effect parameters get a page of their own, bank 1 then bank 2, and
+        // the visualizer's four follow, so the parameter number is the encoder slot.
+        ("media.effect.bank.1.parameter.1", Media, 6, 1),
+        ("media.effect.bank.1.parameter.2", Media, 6, 2),
+        ("media.effect.bank.1.parameter.3", Media, 6, 3),
+        ("media.effect.bank.1.parameter.4", Media, 6, 4),
+        ("media.effect.bank.2.parameter.1", Media, 7, 1),
+        ("media.effect.bank.2.parameter.2", Media, 7, 2),
+        ("media.effect.bank.2.parameter.3", Media, 7, 3),
+        ("media.effect.bank.2.parameter.4", Media, 7, 4),
+        ("media.visualizer.parameter.1", Media, 8, 1),
+        ("media.visualizer.parameter.2", Media, 8, 2),
+        ("media.visualizer.parameter.3", Media, 8, 3),
+        ("media.visualizer.parameter.4", Media, 8, 4),
+        // Clip trimming and the 3D model. Page 3's free slots stay clear because legacy desks
+        // relocate their Mask Opacity and Invert defaults from there.
+        ("media.in_point", Media, 9, 1),
+        ("media.out_point", Media, 9, 2),
+        ("media.model", Media, 9, 3),
+        ("media.model.pan", Media, 9, 4),
+        ("media.model.tilt", Media, 9, 5),
     ]
 }
 

@@ -952,6 +952,18 @@ const fn indexed(
     descriptor(id, label, family, AttributeValueType::Indexed, None)
 }
 
+/// A continuous media control with no physical unit: an effect or visualizer parameter, whose
+/// range means whatever the selected effect gives it, or a clip frame number.
+const fn raw_media(id: &'static str, label: &'static str) -> AttributeDescriptor {
+    descriptor(
+        id,
+        label,
+        AttributeClass::Media,
+        AttributeValueType::Continuous,
+        None,
+    )
+}
+
 const fn color(
     id: &'static str,
     label: &'static str,

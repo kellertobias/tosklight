@@ -409,6 +409,63 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
         AttributeClass::Media,
         "percent",
     ),
+    // Each bank's four effect parameters are raw bytes with no physical unit: 0 keeps the
+    // library preset's stored parameter, and 1-255 spans that parameter's range for whichever
+    // effect the bank selects.
+    raw_media(
+        "media.effect.bank.1.parameter.1",
+        "Effect Bank 1 Parameter 1",
+    ),
+    raw_media(
+        "media.effect.bank.1.parameter.2",
+        "Effect Bank 1 Parameter 2",
+    ),
+    raw_media(
+        "media.effect.bank.1.parameter.3",
+        "Effect Bank 1 Parameter 3",
+    ),
+    raw_media(
+        "media.effect.bank.1.parameter.4",
+        "Effect Bank 1 Parameter 4",
+    ),
+    raw_media(
+        "media.effect.bank.2.parameter.1",
+        "Effect Bank 2 Parameter 1",
+    ),
+    raw_media(
+        "media.effect.bank.2.parameter.2",
+        "Effect Bank 2 Parameter 2",
+    ),
+    raw_media(
+        "media.effect.bank.2.parameter.3",
+        "Effect Bank 2 Parameter 3",
+    ),
+    raw_media(
+        "media.effect.bank.2.parameter.4",
+        "Effect Bank 2 Parameter 4",
+    ),
+    // Blend modes in bands of sixteen, then strobe slow to fast, then Normal without strobe.
+    indexed("media.blend_mode", "Blend Mode", AttributeClass::Media),
+    // 16-bit frame counts: the In point from the clip's start, the Out point back from its end.
+    raw_media("media.in_point", "In Point"),
+    raw_media("media.out_point", "Out Point"),
+    // Visualizer parameters: 0 keeps the configured value, 1-255 spans the selected
+    // visualizer's parameter.
+    raw_media("media.visualizer.parameter.1", "Visualizer Parameter 1"),
+    raw_media("media.visualizer.parameter.2", "Visualizer Parameter 2"),
+    raw_media("media.visualizer.parameter.3", "Visualizer Parameter 3"),
+    raw_media("media.visualizer.parameter.4", "Visualizer Parameter 4"),
+    // 0 draws the layer flat; 1-255 selects a numbered 3D model. The model's roll is the layer's
+    // `position.rotation`; its pan and tilt are media attributes of their own, so Aim, position
+    // presets and the moving-light Pan/Tilt tools never turn a media layer.
+    indexed("media.model", "3D Model", AttributeClass::Media),
+    continuous("media.model.pan", "Model Pan", AttributeClass::Media, "deg"),
+    continuous(
+        "media.model.tilt",
+        "Model Tilt",
+        AttributeClass::Media,
+        "deg",
+    ),
     indexed(
         "media.master.effect.opacity_cycle",
         "Layer Opacity Cycle",

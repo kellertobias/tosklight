@@ -1834,7 +1834,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     let profile = shipped_profile("tosklight--media-server.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "Media Server");
-    assert_eq!(profile.revision, 7);
+    assert_eq!(profile.revision, 9);
     assert_eq!(
         profile.direct_control_protocols,
         vec![crate::DirectControlProtocol::Citp],
@@ -1843,8 +1843,8 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     assert_eq!(profile.modes.len(), 2);
 
     for (mode, layer_count, footprint) in [
-        (&profile.modes[0], 2_usize, 119_u16),
-        (&profile.modes[1], 8_usize, 353_u16),
+        (&profile.modes[0], 2_usize, 158_u16),
+        (&profile.modes[1], 8_usize, 512_u16),
     ] {
         assert_eq!(
             mode.splits,
@@ -1964,16 +1964,54 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
                         assert_eq!(control.resolution, ChannelResolution::U16);
                         let inserted_edge = attribute.starts_with("shaper.blade")
                             && attribute.ends_with(".position");
-                        assert_eq!(control.default_raw, if inserted_edge { 0 } else { 32_768 });
+                        // Master scale is signed: 32768 is 0x and 40960 is the 1x home.
+                        let signed_scale = attribute.starts_with("media.scale.");
+                        assert_eq!(
+                            control.default_raw,
+                            if inserted_edge {
+                                0
+                            } else if signed_scale {
+                                40_960
+                            } else {
+                                32_768
+                            },
+                            "Master {attribute} home"
+                        );
+                        if signed_scale {
+                            assert_eq!(control.highlight_raw, 40_960);
+                            assert_eq!(
+                                (control.physical_min, control.physical_max),
+                                (Some(-4.0), Some(4.0))
+                            );
+                        }
                     }
                 }
             }
+        }
+        for retired in [
+            "media.flip_mirror",
+            "media.playback_bpm",
+            "media.layer.playback.blur",
+            "media.effect.bank.1.parameter.5",
+            "media.effect.bank.2.parameter.6",
+        ] {
+            assert!(
+                mode.channels
+                    .iter()
+                    .all(|channel| &*channel.attribute.0 != retired),
+                "{retired} is not part of the mapping personality"
+            );
         }
 
         for attribute in [
             "media.play_mode",
             "media.playback_speed",
-            "media.playback_bpm",
+            "media.model",
+            "media.blend_mode",
+            "media.in_point",
+            "media.out_point",
+            "media.model.pan",
+            "media.model.tilt",
             "media.mask.scale.x",
             "media.mask.scale.y",
             "media.mask.invert",
@@ -1990,6 +2028,126 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
                     .count(),
                 layer_count,
                 "every layer must expose canonical {attribute} encoder ownership"
+            );
+        }
+        // Each 59-slot layer block, 1-based: 34 3D model, 35 Blend mode, 40..=47 the two banks'
+        // four parameters, 48/50 In/Out point (16-bit), 52..=55 Visualizer parameters, and
+        // 56/58 model pan/tilt (16-bit).
+        for (layer, head) in mode.heads[1..].iter().enumerate() {
+            let block_start = u16::try_from(layer).unwrap() * 59;
+            let control = |attribute: &str| {
+                mode.channels
+                    .iter()
+                    .find(|channel| {
+                        channel.head_id == head.id && &*channel.attribute.0 == attribute
+                    })
+                    .unwrap_or_else(|| panic!("{} lacks {attribute}", head.name))
+            };
+            let functions = |channel: &crate::FixtureChannel| {
+                channel
+                    .functions
+                    .iter()
+                    .map(|function| (function.name.clone(), function.dmx_from, function.dmx_to))
+                    .collect::<Vec<_>>()
+            };
+            let owned = |name: &str, from: u32, to: u32| (name.to_owned(), from, to);
+            let mut byte_parameters = Vec::new();
+            for bank in 1..=2_u16 {
+                for parameter in 1..=4_u16 {
+                    byte_parameters.push((
+                        format!("media.effect.bank.{bank}.parameter.{parameter}"),
+                        39 + (bank - 1) * 4 + parameter,
+                        "Preset value",
+                    ));
+                }
+            }
+            for parameter in 1..=4_u16 {
+                byte_parameters.push((
+                    format!("media.visualizer.parameter.{parameter}"),
+                    51 + parameter,
+                    "Configured value",
+                ));
+            }
+            for (attribute, slot, zero) in byte_parameters {
+                let channel = control(&attribute);
+                assert_eq!(
+                    primary_slots[&channel.id],
+                    block_start + slot,
+                    "{} {attribute} slot",
+                    head.name
+                );
+                assert_eq!(channel.resolution, ChannelResolution::U8);
+                assert_eq!(channel.default_raw, 0);
+                assert_eq!(
+                    functions(channel),
+                    vec![owned(zero, 0, 0), owned("Parameter", 1, 255)]
+                );
+            }
+
+            let model = control("media.model");
+            assert_eq!(primary_slots[&model.id], block_start + 34);
+            assert_eq!(
+                functions(model),
+                vec![owned("Flat", 0, 0), owned("Model", 1, 255)]
+            );
+            let blend = control("media.blend_mode");
+            assert_eq!(primary_slots[&blend.id], block_start + 35);
+            assert_eq!(blend.default_raw, 0);
+            assert_eq!(
+                functions(blend),
+                vec![
+                    owned("Normal", 0, 15),
+                    owned("Add", 16, 31),
+                    owned("Screen", 32, 47),
+                    owned("Multiply", 48, 63),
+                    owned("Overlay", 64, 79),
+                    owned("Difference", 80, 95),
+                    owned("Lighten", 96, 111),
+                    owned("Darken", 112, 127),
+                    owned("Strobe slow–fast", 128, 249),
+                    owned("Normal, no strobe", 250, 255),
+                ]
+            );
+            for (attribute, slot, default) in [
+                ("media.in_point", 48, 0),
+                ("media.out_point", 50, 0),
+                ("media.model.pan", 56, 32_768),
+                ("media.model.tilt", 58, 32_768),
+            ] {
+                let channel = control(attribute);
+                assert_eq!(channel.resolution, ChannelResolution::U16, "{attribute}");
+                assert_eq!(
+                    primary_slots[&channel.id],
+                    block_start + slot,
+                    "{attribute}"
+                );
+                assert_eq!(channel.secondary_slots, vec![block_start + slot + 1]);
+                assert_eq!(channel.default_raw, default, "{attribute}");
+            }
+            for attribute in ["media.model.pan", "media.model.tilt"] {
+                let channel = control(attribute);
+                assert_eq!(*channel.fixture_attribute.0, *attribute);
+                assert_eq!(
+                    (channel.physical_min, channel.physical_max),
+                    (Some(-360.0), Some(360.0))
+                );
+                assert!(
+                    channel
+                        .functions
+                        .iter()
+                        .all(|function| *function.attribute.0 == *attribute),
+                    "{attribute} functions"
+                );
+            }
+            // The model turns on media attributes of its own, so Aim, position presets and the
+            // moving-light Pan/Tilt tools never rotate a media layer.
+            assert!(
+                mode.channels
+                    .iter()
+                    .filter(|channel| channel.head_id == head.id)
+                    .all(|channel| !matches!(&*channel.attribute.0, "pan" | "tilt")),
+                "{} must not expose moving-light pan/tilt",
+                head.name
             );
         }
         assert_eq!(

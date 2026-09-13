@@ -4,6 +4,10 @@ import {
 	buildMediaPaneModel,
 	mediaOfflineReason,
 } from "./buildMediaPaneModel";
+import {
+	mediaControlNormalizedValue,
+	mediaControlOperatorValue,
+} from "./mediaControlValue";
 import { EMPTY_MEDIA_INSPECTION } from "./useMediaPaneData";
 
 function input(
@@ -376,16 +380,22 @@ describe("Media pane disconnected configuration", () => {
 		const playback = model.controlSections.find(
 			(section) => section.id === "playback",
 		);
+		// Controls only some channel layouts carry (Playback BPM, In/Out point) are left out
+		// rather than greyed out.
 		expect(playback?.controls.map((control) => control.id)).toEqual([
 			"media.play_mode",
 			"intensity",
 			"volume",
 			"media.playback_speed",
-			"media.playback_bpm",
 		]);
 		expect(
 			playback?.controls.map((control) => Boolean(control.disabled)),
-		).toEqual([false, true, false, true, true]);
+		).toEqual([false, true, false, true]);
+		expect(
+			model.controlSections.some((section) =>
+				["model", "visualizer"].includes(section.id),
+			),
+		).toBe(false);
 		expect(
 			model.controlSections
 				.find((section) => section.id === "frame")
@@ -621,8 +631,10 @@ describe("Media pane disconnected configuration", () => {
 		).toEqual([
 			{ id: "playback", label: "Playback" },
 			{ id: "frame", label: "Frame" },
+			{ id: "model", label: "3D model" },
 			{ id: "colour", label: "Colour" },
 			{ id: "mask-controls", label: "Mask" },
+			{ id: "visualizer", label: "Visualizer" },
 			{ id: "effects", label: "Effects" },
 		]);
 		expect(model.selectedControlSectionId).toBe("frame");
@@ -652,7 +664,7 @@ describe("Media pane disconnected configuration", () => {
 				}),
 			]),
 		);
-		expect(model.controlSections[2]?.controls[0]).toMatchObject({
+		expect(model.controlSections[3]?.controls[0]).toMatchObject({
 			id: "color.tint",
 			label: "Colour",
 			kind: "color",
@@ -680,8 +692,10 @@ describe("Media pane disconnected configuration", () => {
 		expect(model.controlSections.map((section) => section.id)).toEqual([
 			"playback",
 			"frame",
+			"model",
 			"colour",
 			"mask-controls",
+			"visualizer",
 			"effects",
 		]);
 		expect(
@@ -877,7 +891,7 @@ describe("Media pane disconnected configuration", () => {
 			}),
 		);
 
-		expect(model.controlSections[2]?.controls[0]).toMatchObject({
+		expect(model.controlSections[3]?.controls[0]).toMatchObject({
 			id: "color.tint",
 			kind: "color",
 			value: "#ff8000",
@@ -903,12 +917,31 @@ describe("Media pane disconnected configuration", () => {
 		);
 
 		const controls = model.controlSections.at(-1)?.controls ?? [];
+		const bankControls = (bank: number) => [
+			`media.effect.bank.${bank}.select`,
+			`media.effect.bank.${bank}.strength`,
+			...[1, 2, 3, 4].map(
+				(parameter) => `media.effect.bank.${bank}.parameter.${parameter}`,
+			),
+		];
 		expect(controls.map((control) => control.id)).toEqual([
-			"media.effect.bank.1.select",
-			"media.effect.bank.1.strength",
-			"media.effect.bank.2.select",
-			"media.effect.bank.2.strength",
+			...bankControls(1),
+			...bankControls(2),
 		]);
+		expect(controls[2]).toMatchObject({
+			label: "Parameter 1",
+			kind: "value",
+			value: 0,
+			minimum: 0,
+			maximum: 255,
+			step: 1,
+			display: "Preset",
+		});
+		expect(controls[11]).toMatchObject({
+			id: "media.effect.bank.2.parameter.4",
+			label: "Parameter 4",
+			display: "Preset",
+		});
 		expect(controls[0]).toMatchObject({
 			label: "Effect Select",
 			kind: "choice",
@@ -927,6 +960,313 @@ describe("Media pane disconnected configuration", () => {
 			maximum: 100,
 			display: "0%",
 		});
+	});
+
+	it("projects the mapping layer's model, blend, trimming, and visualizer controls", () => {
+		const layerAttributes = [
+			"media.play_mode",
+			"intensity",
+			"volume",
+			"media.playback_speed",
+			"media.in_point",
+			"media.out_point",
+			"media.scale.x",
+			"position.rotation",
+			"media.model",
+			"media.model.pan",
+			"media.model.tilt",
+			"color.cyan",
+			"media.blend_mode",
+			"media.visualizer.parameter.1",
+			"media.visualizer.parameter.2",
+			"media.visualizer.parameter.3",
+			"media.visualizer.parameter.4",
+			"media.effect.bank.1.select",
+			"media.effect.bank.1.parameter.1",
+		];
+		const server = {
+			fixture_id: "server-1",
+			name: "ToskLight Pixel",
+			endpoint: null,
+			layers: [
+				{ fixture_id: "layer-1", head_index: 1, attributes: layerAttributes },
+			],
+			master_attributes: ["intensity", "media.scale.x"],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const live = (attribute: string, value: number, programmerOrder: number) => ({
+			fixtureId: "layer-1",
+			attribute,
+			value: { kind: "normalized" as const, value },
+			programmerOrder,
+			fade: false,
+			fadeMillis: null,
+			delayMillis: null,
+		});
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				liveProgrammer: [
+					live("media.in_point", 1200 / 65535, 0),
+					live("media.blend_mode", 173 / 255, 1),
+					live("media.model.pan", 0.75, 2),
+					// The moving-light pan is not the model's pan and leaves it untouched.
+					live("pan", 0.25, 3),
+				],
+			}),
+		);
+		const section = (id: string) =>
+			model.controlSections.find((candidate) => candidate.id === id)
+				?.controls ?? [];
+
+		expect(model.controlSections.map(({ id, label }) => ({ id, label }))).toEqual(
+			[
+				{ id: "playback", label: "Playback" },
+				{ id: "frame", label: "Frame" },
+				{ id: "model", label: "3D model" },
+				{ id: "colour", label: "Colour" },
+				{ id: "mask-controls", label: "Mask" },
+				{ id: "visualizer", label: "Visualizer" },
+				{ id: "effects", label: "Effects" },
+			],
+		);
+		// The mapping layout has no Playback BPM, so the control is left out.
+		expect(section("playback").map((control) => control.id)).toEqual([
+			"media.play_mode",
+			"intensity",
+			"volume",
+			"media.playback_speed",
+			"media.in_point",
+			"media.out_point",
+		]);
+		expect(section("playback")[4]).toMatchObject({
+			label: "In point",
+			value: 1200,
+			minimum: 0,
+			maximum: 65535,
+			display: "Frame 1200",
+		});
+		expect(section("playback")[5]).toMatchObject({
+			label: "Out point",
+			value: 0,
+			display: "End of clip",
+		});
+		expect(section("model")).toEqual([
+			expect.objectContaining({
+				id: "media.model",
+				label: "3D model",
+				value: 0,
+				display: "Flat",
+			}),
+			expect.objectContaining({
+				id: "media.model.pan",
+				label: "Model pan",
+				value: 180,
+				minimum: -360,
+				maximum: 360,
+				display: "180°",
+			}),
+			expect.objectContaining({
+				id: "media.model.tilt",
+				label: "Model tilt",
+				value: 0,
+				display: "0°",
+			}),
+		]);
+		const blend = section("colour").find(
+			(control) => control.id === "media.blend_mode",
+		);
+		expect(blend).toMatchObject({
+			label: "Blend mode",
+			kind: "choice",
+			value: "173",
+			// Raw 173 is the "Strobe 10 Hz" option; its exact rate is 1 + 45/121 × 24 Hz.
+			description: "Strobe 9.9 Hz",
+			options: expect.arrayContaining([
+				{ value: "0", label: "Normal" },
+				{ value: "16", label: "Add" },
+				{ value: "112", label: "Darken" },
+				{ value: "128", label: "Strobe 1 Hz" },
+				{ value: "249", label: "Strobe 25 Hz" },
+				{ value: "250", label: "Normal, no strobe" },
+			]),
+		});
+		expect(section("visualizer")).toEqual(
+			[1, 2, 3, 4].map((parameter) =>
+				expect.objectContaining({
+					id: `media.visualizer.parameter.${parameter}`,
+					label: `Parameter ${parameter}`,
+					value: 0,
+					display: "Configured",
+				}),
+			),
+		);
+		expect(
+			model.controlSections.every((candidate) =>
+				candidate.controls.every(
+					(control) =>
+						!control.disabled ||
+						!["model", "visualizer"].includes(candidate.id),
+				),
+			),
+		).toBe(true);
+	});
+
+	it("keeps an effect-bank layer snapshot's controls and hides the mapping-only ones", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "ToskLight Pixel",
+			endpoint: null,
+			layers: [
+				{
+					fixture_id: "layer-1",
+					head_index: 1,
+					attributes: [
+						"media.play_mode",
+						"intensity",
+						"volume",
+						"media.playback_speed",
+						"media.playback_bpm",
+						"media.scale.x",
+						"color.cyan",
+						"media.mask.opacity",
+						"media.effect.bank.1.select",
+						"media.effect.bank.1.strength",
+					],
+				},
+			],
+			master_attributes: ["intensity", "media.flip_mirror"],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+			}),
+		);
+
+		expect(model.controlSections.map((section) => section.id)).toEqual([
+			"playback",
+			"frame",
+			"colour",
+			"mask-controls",
+			"effects",
+		]);
+		expect(
+			model.controlSections[0]?.controls.map((control) => control.id),
+		).toEqual([
+			"media.play_mode",
+			"intensity",
+			"volume",
+			"media.playback_speed",
+			"media.playback_bpm",
+		]);
+		expect(
+			model.controlSections
+				.find((section) => section.id === "colour")
+				?.controls.map((control) => control.id),
+		).toEqual(["color.tint", "media.grayscale"]);
+		expect(
+			model.controlSections.at(-1)?.controls.map((control) => control.id),
+		).toEqual([
+			"media.effect.bank.1.select",
+			"media.effect.bank.1.strength",
+			"media.effect.bank.2.select",
+			"media.effect.bank.2.strength",
+		]);
+	});
+
+	it("gives the mapping Master a signed scale and no Flip / Mirror control", () => {
+		const mapping = {
+			fixture_id: "server-1",
+			name: "ToskLight Pixel",
+			endpoint: null,
+			layers: [{ fixture_id: "layer-1", head_index: 1 }],
+			master_attributes: [
+				"intensity",
+				"volume",
+				"media.scale.x",
+				"media.scale.y",
+				"media.scaling_mode",
+				"media.position.x",
+				"media.position.y",
+				"position.rotation",
+			],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const geometry = (server: typeof mapping, liveScaleY?: number) =>
+			buildMediaPaneModel(
+				input({
+					servers: [server],
+					selectedServer: server,
+					selectedServerId: server.fixture_id,
+					selectedLayerId: "master",
+					browserMode: "mask",
+					mainSectionId: "mask",
+					draftFolderId: "1",
+					liveProgrammer:
+						liveScaleY === undefined
+							? undefined
+							: [
+									{
+										fixtureId: "master",
+										attribute: "media.scale.y",
+										value: { kind: "normalized", value: liveScaleY },
+										programmerOrder: 0,
+										fade: false,
+										fadeMillis: null,
+										delayMillis: null,
+									},
+								],
+				}),
+			).controlSections.find((section) => section.id === "frame")?.controls ??
+			[];
+
+		const signed = geometry(mapping, 0);
+		expect(signed.map((control) => control.id)).not.toContain(
+			"media.flip_mirror",
+		);
+		const scaleX = signed.find((control) => control.id === "media.scale.x");
+		expect(scaleX).toMatchObject({ minimum: -4, maximum: 4, display: "1.00×" });
+		expect(scaleX?.kind === "value" ? scaleX.value : undefined).toBeCloseTo(1);
+		expect(
+			signed.find((control) => control.id === "media.scale.y"),
+		).toMatchObject({ value: -4, display: "-4.00×" });
+
+		const effectBank = geometry({
+			...mapping,
+			master_attributes: [...mapping.master_attributes, "media.flip_mirror"],
+		});
+		expect(effectBank.map((control) => control.id)).toContain(
+			"media.flip_mirror",
+		);
+		expect(
+			effectBank.find((control) => control.id === "media.scale.x"),
+		).toMatchObject({ minimum: 0, maximum: 4, value: 1 });
+	});
+
+	it("converts signed master scale, frames, and model angles in both directions", () => {
+		expect(mediaControlNormalizedValue("media.scale.x", 1, true, true)).toBe(
+			40960 / 65535,
+		);
+		expect(mediaControlNormalizedValue("media.scale.x", 0, true, true)).toBe(
+			32768 / 65535,
+		);
+		expect(mediaControlNormalizedValue("media.scale.x", -4, true, true)).toBe(0);
+		expect(
+			mediaControlOperatorValue("media.scale.x", 24576 / 65535, true, true),
+		).toBeCloseTo(-1);
+		// Without the signed layout the older unsigned master scale is unchanged.
+		expect(mediaControlNormalizedValue("media.scale.x", 1, true)).toBe(0.5);
+		expect(mediaControlNormalizedValue("media.out_point", 65535)).toBe(1);
+		expect(mediaControlOperatorValue("media.in_point", 300 / 65535)).toBe(300);
+		expect(mediaControlNormalizedValue("media.model.tilt", -360)).toBe(0);
+		expect(mediaControlOperatorValue("media.model.tilt", 0.5)).toBe(0);
 	});
 
 	it("projects independent live select and strength values for each bank", () => {
