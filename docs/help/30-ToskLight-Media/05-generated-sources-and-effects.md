@@ -10,15 +10,13 @@ A clock, and any text derived from the clock, follows the server's own UTC offse
 
 ## Generated visualizers
 
-Generated visualizers occupy folders `250`–`255`. Each visualizer has a stable kind and only exposes parameters that affect that kind. Examples include spectra, waveforms, geometric motion, particles, rays, glitch treatments, digital rain, tunnels, landscapes, and nets. Some spread the spectrum across the picture rather
-than reacting to the level as a whole, so an operator can see which part of the sound is moving
-which part of the image.
+Generated visualizers occupy folders `250`–`255`. Each visualizer has a stable kind and only exposes parameters that affect that kind. Examples include spectra, waveforms, geometric motion, particles, rays, glitch treatments, digital rain, tunnels, landscapes, and nets.
 
 Audio-reactive visualizers follow the beat and three instruments the Media Server hears: the kick, the snare or clap, and the hi-hat. Beat Explosions and Pulsing Circles jump on each kick, Lightning Tendrils cracks with the snare, and Starfield sparkles with the hi-hats. The **Audio** page shows the same instruments as lamps over their levels, so an operator can confirm what the visualizers will react to before the show.
 
 Audio-reactive visualizers depend on the Media Server's configured audio input and analysis path. A visualizer can render correctly in the browser while reacting incorrectly to silence, the wrong device, or an unsuitable signal level; verify the live input on the production machine.
 
-Some visualizers are carried by the music rather than by a clock, and stand still when there is nothing on the input. A still picture from one of those is a dead input, not a stalled server.
+Triangular Net is carried by the beat rather than by a clock: a kick heaves its big swells and raises them into mountains, a snare shoves the mid-scale chop, and a hi-hat ripples the fine detail, each easing out at the rate **Decay** sets. Between songs it holds its shape and stands still, so a still net on a playing input means the instruments are not being heard — check the lamps on the **Audio** page.
 
 ## Effects and masks
 

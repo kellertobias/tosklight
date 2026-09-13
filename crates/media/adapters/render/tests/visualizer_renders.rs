@@ -282,12 +282,52 @@ fn the_triangular_net_stands_still_in_a_silent_room() {
 }
 
 #[test]
-fn the_triangular_net_is_carried_forward_by_the_music() {
-    // And the other half of it: given something to move it, it has to actually go somewhere, or
-    // the visualizer is just a still picture with extra steps.
+fn the_triangular_net_is_carried_forward_by_the_beat() {
+    // And the other half of it: given instruments striking, it has to actually go somewhere, or the
+    // visualizer is a still picture with extra steps.
     let gpu = gpu();
     let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
     let playing = loud();
+    let parameters = VisualizerConfiguration::new(VisualizerKind::TriangularNet).parameters;
+    let strike = media_domain::Instrument {
+        level: 1.0,
+        hit: 1.0,
+    };
+    let beating = media_domain::Instruments {
+        kick: strike,
+        snare: strike,
+        hihat: strike,
+    };
+    let at = |seconds: f32| VisualizerFrame {
+        instruments: beating,
+        ..frame(&playing, seconds, 1.0)
+    };
+
+    let kind = VisualizerKind::TriangularNet;
+    let first = draw(&gpu, &mut renderer, kind, &parameters, &at(0.5));
+    let mut last = first.clone();
+    for step in 1..120 {
+        last = draw(
+            &gpu,
+            &mut renderer,
+            kind,
+            &parameters,
+            &at(0.5 + step as f32 / 60.0),
+        );
+    }
+    assert_ne!(
+        first, last,
+        "two seconds of kicks, snares and hi-hats left Triangular Net exactly where it started"
+    );
+}
+
+#[test]
+fn the_triangular_net_ignores_a_loud_room_with_no_beat_in_it() {
+    // The thing that was wrong before: sustained energy moved it, so a held bass note kept it
+    // rolling and the beat never showed. Loud analysis with nothing striking must leave it still.
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let droning = loud();
     let parameters = VisualizerConfiguration::new(VisualizerKind::TriangularNet).parameters;
 
     let kind = VisualizerKind::TriangularNet;
@@ -296,22 +336,21 @@ fn the_triangular_net_is_carried_forward_by_the_music() {
         &mut renderer,
         kind,
         &parameters,
-        &frame(&playing, 0.5, 1.0),
+        &frame(&droning, 0.5, 0.0),
     );
     let mut last = first.clone();
     for step in 1..120 {
-        let seconds = 0.5 + step as f32 / 60.0;
         last = draw(
             &gpu,
             &mut renderer,
             kind,
             &parameters,
-            &frame(&playing, seconds, 0.0),
+            &frame(&droning, 0.5 + step as f32 / 60.0, 0.0),
         );
     }
-    assert_ne!(
+    assert_eq!(
         first, last,
-        "two seconds of music left Triangular Net exactly where it started"
+        "a loud drone with no instrument striking moved Triangular Net"
     );
 }
 

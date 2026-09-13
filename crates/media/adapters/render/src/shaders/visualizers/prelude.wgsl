@@ -29,8 +29,8 @@ struct Visualizer {
 };
 
 @group(0) @binding(0) var<uniform> visualizer: Visualizer;
-// Row 0 is the 512-point waveform. Row 1 holds the 64 spectrum bands in its first texels, the 64
-// held levels in the texels after them, and then the three accumulated tone turns.
+// Row 0 is the 512-point waveform. Row 1 holds the 64 spectrum bands in its first texels, then what
+// is held of the kick, snare and hi-hat hits, then how far each of those has carried an animation.
 @group(0) @binding(1) var analysis: texture_2d<f32>;
 
 const WAVEFORM_POINTS: i32 = 512;
@@ -89,35 +89,30 @@ fn band_at(position: f32) -> f32 {
     return mix(band(low), band(low + 1), fract(scaled));
 }
 
-/// One band's held level, `0..1`, low frequency first.
+/// What is left of the last kick, snare and hi-hat, each `0..1`.
 ///
-/// The band rises to its magnitude at once and falls back at the rate `decay` asks for, so a hit
-/// leaves something standing that then subsides. Unlike `band`, which is the raw magnitude the
-/// analysis produced and has no ceiling, this is a share of the loudest thing heard lately: it
-/// does not depend on how anyone set their input gain, and it does fall as the band falls.
-fn band_held(index: i32) -> f32 {
-    if index < 0 || index >= BANDS { return 0.0; }
-    return textureLoad(analysis, vec2<i32>(BANDS + index, 1), 0).x;
-}
-
-/// The held level at a normalized position, interpolated the way `band_at` interpolates a band.
-fn band_held_at(position: f32) -> f32 {
-    let scaled = clamp(position, 0.0, 1.0) * f32(BANDS - 1);
-    let low = i32(floor(scaled));
-    return mix(band_held(low), band_held(low + 1), fract(scaled));
-}
-
-/// How far bass, mid and treble have each carried an animation, in turns.
-///
-/// Time that only passes while there is sound to make it pass. Each tone advances at a rate set by
-/// how loud it is against the other two, scaled by `speed`, so a phase driven from this moves
-/// because of the music rather than merely alongside it -- and in a silent room it stops. Use it
-/// in place of `seconds` wherever an animation should be the music's doing and not the clock's.
-fn tone_turns() -> vec3<f32> {
+/// The detector's own hit flash, `kick()` and its siblings, is gone within about a tenth of a
+/// second, which is right for a lamp and too quick to move anything. This rises with the strike and
+/// then falls back at the rate `decay` asks for, so a hit can push something that visibly eases out.
+fn held_hits() -> vec3<f32> {
     return vec3<f32>(
-        textureLoad(analysis, vec2<i32>(BANDS * 2, 1), 0).x,
-        textureLoad(analysis, vec2<i32>(BANDS * 2 + 1, 1), 0).x,
-        textureLoad(analysis, vec2<i32>(BANDS * 2 + 2, 1), 0).x,
+        textureLoad(analysis, vec2<i32>(BANDS, 1), 0).x,
+        textureLoad(analysis, vec2<i32>(BANDS + 1, 1), 0).x,
+        textureLoad(analysis, vec2<i32>(BANDS + 2, 1), 0).x,
+    );
+}
+
+/// How far the kick, snare and hi-hat have each carried an animation, in turns.
+///
+/// Time that only passes on the beat. Each advances while its hit is held, at a rate graded from
+/// the kick down to the hi-hat and scaled by `speed`, so a phase driven from this moves because the
+/// instrument struck -- and between songs, or on a dead input, it stops. Use it in place of
+/// `seconds` wherever an animation should be the music's doing and not the clock's.
+fn hit_turns() -> vec3<f32> {
+    return vec3<f32>(
+        textureLoad(analysis, vec2<i32>(BANDS + 3, 1), 0).x,
+        textureLoad(analysis, vec2<i32>(BANDS + 4, 1), 0).x,
+        textureLoad(analysis, vec2<i32>(BANDS + 5, 1), 0).x,
     );
 }
 

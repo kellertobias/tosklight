@@ -161,7 +161,7 @@ impl VisualizerKind {
             ],
             Self::TriangularNet => &[
                 Speed, Count, Size, Thickness, Amount, Reactivity, Decay, Zoom, Curvature, Primary,
-                Secondary, Mirror,
+                Secondary,
             ],
         }
     }
@@ -323,9 +323,10 @@ impl VisualizerConfiguration {
             parameters.count = 32;
             parameters.size = 0.05;
             parameters.thickness = 0.01;
-            // A hit should stand as a mountain for a beat or two before it sinks, which is the
-            // slow end of the control rather than the middle.
-            parameters.decay = 0.2;
+            // A kick has to have mostly let go before the next one lands, or at a dance tempo the
+            // kicks pile up into one constant push and the beat vanishes from the picture. That is
+            // the quick end of the control.
+            parameters.decay = 0.9;
             parameters.curvature = 0.5;
             parameters.primary = Tint::new(0.90, 0.92, 0.96);
             parameters.secondary = Tint::new(0.90, 0.11, 0.0);

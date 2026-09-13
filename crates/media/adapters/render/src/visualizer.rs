@@ -188,63 +188,47 @@ pub enum VisualizerError {
     Texture(#[from] TextureError),
 }
 
-/// How long the reference takes to fall by a factor of e with nothing louder arriving.
-///
-/// Deliberately much slower than any decay an operator can ask for: it is what a held band is
-/// measured against, so it has to stay put while that band falls back. Slow enough that a hit
-/// visibly subsides, quick enough that a quiet passage gets its sensitivity back.
-const REFERENCE_FALL: f32 = 6.0;
-
-/// The slowest and fastest an operator can make a held band fall back, in seconds to fall by a
+/// The slowest and fastest an operator can make a held hit fall back, in seconds to fall by a
 /// factor of e.
 ///
-/// The slow end has to stay clear of `REFERENCE_FALL`. A band falling no faster than the thing it
-/// is measured against would never sink at all: what is published is the ratio of the two, so it
-/// is their difference that an operator actually sees.
+/// A hit only reads as a beat if it has visibly subsided before the next one lands, so the useful
+/// end for a beat is the quick one; the slow end is there for music with room between its hits.
 const DECAY_FALL: std::ops::RangeInclusive<f32> = 0.10..=3.0;
 
-/// Turns per second a tone carries an animation while it is at full level.
+/// Turns per second each instrument carries its band of an animation while its hit is fully held:
+/// kick, snare, hi-hat.
 ///
-/// This is the exchange rate between sound and motion. A visualizer reading the published turns
-/// moves only while there is something moving it, so this says what a beat is worth rather than
-/// what a second is worth.
-const TURNS_PER_SECOND: f32 = 0.05;
+/// Graded on purpose. A kick moves the big slow things a long way and a hi-hat moves the fine fast
+/// things a little, so the size of a movement says which instrument made it. The rates fall about
+/// as fast as the bands' own cycle counts rise, so each strike shifts its band by a comparable share
+/// of that band's own wavelength -- which is what reads as large and small rather than as fast and
+/// slow.
+const TURNS_PER_SECOND: [f32; 3] = [0.30, 0.06, 0.012];
 
-/// What the shaders are given about how the music has been going.
+/// What the shaders are given about the beat.
 struct Memory {
-    /// Each band's held level as a share, `0..=1`, low frequency first.
-    held: Vec<f32>,
-    /// How far bass, mid and treble have each carried an animation, in turns.
+    /// What is left of the last kick, snare and hi-hat, each `0..=1`.
+    held: [f32; 3],
+    /// How far each has carried an animation, in turns.
     turns: [f32; 3],
 }
 
-/// A visualizer's memory of what the music has just done.
+/// A visualizer's memory of the beat.
 ///
-/// A shader sees one frame and has nowhere to keep anything, so anything that outlasts the sound
-/// that caused it has to be kept here. Two things do. Each band rises to its magnitude at once and
-/// falls back at the rate the visualizer's `decay` asks for, which is what turns a bass hit into
-/// something that stands up and then subsides rather than a flicker. And each tone accumulates
-/// turns while it has something in it, which is what lets a visualizer move *because* of the music
-/// rather than merely alongside it: in a silent room the turns stop, and so does the picture.
+/// A shader sees one frame and has nowhere to keep anything, so anything that outlasts the strike
+/// that caused it has to be kept here. The detector's own hit flash is gone in about a tenth of a
+/// second, which is right for a lamp and too quick to move anything, so each hit is held: it rises
+/// with the strike and falls back at the rate the visualizer's `decay` asks for. And each instrument
+/// accumulates turns while its hit is held, which is what lets a visualizer move *because* of the
+/// beat rather than merely alongside the clock. Between songs the turns stop, and so does the
+/// picture.
 ///
 /// One of these per layer, because `decay` and `speed` belong to the configured visualizer, not to
 /// the room.
 #[derive(Debug, Clone)]
 struct AudioMemory {
-    /// Per-band peak-hold, low frequency first.
-    held: Vec<f32>,
-    /// Peak-held bass, mid and treble, on the analyser's own 250 Hz and 4 kHz split.
-    tones: [f32; 3],
-    /// The loudest band heard lately, falling far more slowly than the bands do. Everything is
-    /// published as a share of this, so a held band sinks as it falls back instead of being
-    /// renormalised to full height every frame, and nothing depends on how somebody set their
-    /// input gain.
-    reference: f32,
-    /// The same, for the three tones. Separate because they are means over a range rather than
-    /// single bands and so do not share a scale with them; one reference across all three, because
-    /// which tone is loudest is exactly what has to survive.
-    tone_reference: f32,
-    /// Accumulated turns per tone. Only ever goes forward.
+    held: [f32; 3],
+    /// Only ever goes forward.
     turns: [f32; 3],
     /// When this was last advanced, on the same clock the frame carries.
     seconds: Option<f32>,
@@ -253,19 +237,22 @@ struct AudioMemory {
 impl AudioMemory {
     fn new() -> Self {
         Self {
-            held: vec![0.0; BANDS],
-            tones: [0.0; 3],
-            reference: 0.0,
-            tone_reference: 0.0,
+            held: [0.0; 3],
             turns: [0.0; 3],
             seconds: None,
         }
     }
 
     /// Advances to this frame and returns what the shaders should be given.
-    fn advance(&mut self, analysis: &Analysis, seconds: f32, decay: f32, speed: f32) -> Memory {
-        // A first frame, a clock that jumped, or a stall: fall by at most a moderate step rather
-        // than emptying the envelope, so nothing flickers when frames are uneven.
+    fn advance(
+        &mut self,
+        instruments: &media_domain::Instruments,
+        seconds: f32,
+        decay: f32,
+        speed: f32,
+    ) -> Memory {
+        // A first frame, a clock that jumped, or a stall: move by at most a moderate step, so an
+        // uneven frame neither empties what is held nor throws the wave a long way at once.
         let elapsed = match self.seconds {
             Some(last) if seconds > last => (seconds - last).min(0.25),
             _ => 0.0,
@@ -275,43 +262,21 @@ impl AudioMemory {
         let fall = *DECAY_FALL.start()
             + (1.0 - decay.clamp(0.0, 1.0)) * (*DECAY_FALL.end() - *DECAY_FALL.start());
         let kept = (-elapsed / fall).exp();
-
-        let mut loudest = 0.0f32;
-        for (index, level) in self.held.iter_mut().enumerate() {
-            // Silence is a real analysis, and it arrives carrying no bands at all. Reading a
-            // missing band as zero rather than skipping it is what lets an envelope empty when the
-            // audio device goes away, instead of freezing at whatever it was holding.
-            let magnitude = analysis.spectrum.get(index).copied().unwrap_or(0.0);
-            *level = magnitude.max(*level * kept);
-            loudest = loudest.max(*level);
-        }
-        self.reference = loudest.max(self.reference * (-elapsed / REFERENCE_FALL).exp());
-
-        let mut strongest = 0.0f32;
-        for (tone, magnitude) in
-            self.tones
-                .iter_mut()
-                .zip([analysis.bass, analysis.mid, analysis.treble])
-        {
-            *tone = magnitude.max(*tone * kept);
-            strongest = strongest.max(*tone);
-        }
-        self.tone_reference =
-            strongest.max(self.tone_reference * (-elapsed / REFERENCE_FALL).exp());
-
-        let against_tones = self.tone_reference.max(1e-5);
-        let step = elapsed * TURNS_PER_SECOND * speed.max(0.0);
-        for (turns, tone) in self.turns.iter_mut().zip(self.tones) {
-            *turns += step * (tone / against_tones).clamp(0.0, 1.0);
+        let strikes = [
+            instruments.kick.hit,
+            instruments.snare.hit,
+            instruments.hihat.hit,
+        ];
+        for (index, strike) in strikes.into_iter().enumerate() {
+            // The strike is taken this frame, not the next, so a wave starts moving on the kick
+            // that moved it.
+            self.held[index] = strike.clamp(0.0, 1.0).max(self.held[index] * kept);
+            self.turns[index] +=
+                elapsed * TURNS_PER_SECOND[index] * speed.max(0.0) * self.held[index];
         }
 
-        let against_bands = self.reference.max(1e-5);
         Memory {
-            held: self
-                .held
-                .iter()
-                .map(|level| level / against_bands)
-                .collect(),
+            held: self.held,
             turns: self.turns,
         }
     }
@@ -426,16 +391,12 @@ impl VisualizerRenderer {
         frame: &VisualizerFrame<'_>,
     ) -> Result<&SourceTexture, VisualizerError> {
         self.ensure_pipeline(kind)?;
+        let tuned = parameters.clamped();
         let memory = self
             .memories
             .entry(layer)
             .or_insert_with(AudioMemory::new)
-            .advance(
-                frame.analysis,
-                frame.seconds,
-                parameters.decay,
-                parameters.speed,
-            );
+            .advance(&frame.instruments, frame.seconds, tuned.decay, tuned.speed);
         self.upload_analysis(frame.analysis, &memory);
         self.gpu.queue.write_buffer(
             &self.uniform,
@@ -567,18 +528,13 @@ impl VisualizerRenderer {
         {
             *slot = *value;
         }
-        // The held levels follow the bands along the same row. The row is 512 wide and the bands
-        // use 64 of it, so this costs nothing and no visualizer that ignores them is affected.
-        for (slot, value) in rows[WAVEFORM_POINTS + BANDS..WAVEFORM_POINTS + BANDS * 2]
+        // What is held of each hit follows the bands along the same row, and then how far each has
+        // carried an animation. The row is 512 wide and the bands use 64 of it, so this costs
+        // nothing and no visualizer that ignores them is affected.
+        let beat = WAVEFORM_POINTS + BANDS;
+        for (slot, value) in rows[beat..beat + 6]
             .iter_mut()
-            .zip(memory.held.iter())
-        {
-            *slot = *value;
-        }
-        // Then the accumulated turns, in the three texels after those.
-        for (slot, value) in rows[WAVEFORM_POINTS + BANDS * 2..WAVEFORM_POINTS + BANDS * 2 + 3]
-            .iter_mut()
-            .zip(memory.turns.iter())
+            .zip(memory.held.iter().chain(memory.turns.iter()))
         {
             *slot = *value;
         }
@@ -610,198 +566,161 @@ mod tests {
     use super::*;
     use media_domain::Tint;
 
-    fn spectrum(loud_band: usize, level: f32) -> Analysis {
-        let mut spectrum = vec![0.0; BANDS];
-        spectrum[loud_band] = level;
-        Analysis {
-            spectrum,
-            ..Analysis::default()
+    fn struck(kick: f32, snare: f32, hihat: f32) -> media_domain::Instruments {
+        let strike = |hit: f32| media_domain::Instrument { level: hit, hit };
+        media_domain::Instruments {
+            kick: strike(kick),
+            snare: strike(snare),
+            hihat: strike(hihat),
         }
     }
 
-    /// Runs the memory forward the way a rendering output does, a frame at a time. A single long
-    /// step would be clamped, because a clamp is exactly what stops a stalled server from emptying
-    /// an envelope in one go.
+    /// Runs the memory forward the way a rendering output does, a frame at a time. One long step
+    /// would be clamped, because a clamp is exactly what stops a stalled server from throwing the
+    /// wave a long way in one go.
     fn play(
         memory: &mut AudioMemory,
-        analysis: &Analysis,
+        instruments: &media_domain::Instruments,
         from: f32,
         seconds: f32,
         decay: f32,
     ) -> Memory {
         let frame = 1.0 / 60.0;
-        let mut published = memory.advance(analysis, from, decay, 1.0);
+        let mut published = memory.advance(instruments, from, decay, 1.0);
         let mut now = from;
         while now < from + seconds {
             now += frame;
-            published = memory.advance(analysis, now, decay, 1.0);
+            published = memory.advance(instruments, now, decay, 1.0);
         }
         published
     }
 
     #[test]
-    fn a_hit_stands_after_the_sound_that_made_it_has_gone() {
-        // The whole point of holding a band: a bass beat lasts a few frames, and a response that
-        // ended with it would be a flicker rather than something an operator can watch subside.
+    fn nothing_is_carried_forward_between_beats() {
+        // With nothing striking there is no time to dole out, and a visualizer reading the turns
+        // has to stand still rather than drifting on the clock.
         let mut memory = AudioMemory::new();
-        let hit = memory.advance(&spectrum(2, 40.0), 0.0, 0.2, 1.0);
-        assert!(
-            hit.held[2] > 0.99,
-            "the band it landed in must reach full height"
-        );
-
-        let silence = Analysis::default();
-        let after = play(&mut memory, &silence, 0.0, 0.5, 0.2);
-        assert!(
-            after.held[2] < hit.held[2],
-            "a held band must fall once the sound has gone"
-        );
-        assert!(
-            after.held[2] > 0.3,
-            "half a second must not empty a hit that is still visibly standing: {}",
-            after.held[2]
-        );
-
-        let later = play(&mut memory, &silence, 0.5, 20.0, 0.2);
-        assert!(
-            later.held[2] < 0.1,
-            "the mountain has to come down eventually: {}",
-            later.held[2]
-        );
-    }
-
-    #[test]
-    fn decay_sets_how_long_a_hit_stands() {
-        let mut slow = AudioMemory::new();
-        let mut quick = AudioMemory::new();
-        slow.advance(&spectrum(2, 40.0), 0.0, 0.0, 1.0);
-        quick.advance(&spectrum(2, 40.0), 0.0, 1.0, 1.0);
-
-        let silence = Analysis::default();
-        let standing = play(&mut slow, &silence, 0.0, 0.4, 0.0);
-        let gone = play(&mut quick, &silence, 0.0, 0.4, 1.0);
-        assert!(
-            standing.held[2] > gone.held[2],
-            "a lower decay has to hold a hit longer: {} is not above {}",
-            standing.held[2],
-            gone.held[2]
-        );
-        assert!(
-            gone.held[2] < 0.05,
-            "the fastest decay has to be all but instant: {}",
-            gone.held[2]
-        );
-    }
-
-    #[test]
-    fn a_hit_is_measured_against_what_came_before_it_not_against_itself() {
-        // Normalising a held band by the loudest held band would pin a lone decaying mountain at
-        // full height for as long as it was the loudest thing present, which is the one thing it
-        // must not do.
-        let mut memory = AudioMemory::new();
-        memory.advance(&spectrum(2, 40.0), 0.0, 0.5, 1.0);
-        let after = play(&mut memory, &Analysis::default(), 0.0, 1.0, 0.5);
-        assert!(
-            after.held[2] < 0.7,
-            "a sole surviving band still has to sink: {}",
-            after.held[2]
-        );
-    }
-
-    #[test]
-    fn a_quiet_passage_gets_its_sensitivity_back() {
-        // A loud show followed by a quiet one must not leave the quiet one flat forever.
-        let mut memory = AudioMemory::new();
-        memory.advance(&spectrum(2, 400.0), 0.0, 0.5, 1.0);
-        play(&mut memory, &Analysis::default(), 0.0, 30.0, 0.5);
-        let quiet = memory.advance(&spectrum(2, 4.0), 30.1, 0.5, 1.0);
-        assert!(
-            quiet.held[2] > 0.9,
-            "the loudest thing in a quiet room is still the loudest thing: {}",
-            quiet.held[2]
-        );
-    }
-
-    fn tones(bass: f32, mid: f32, treble: f32) -> Analysis {
-        Analysis {
-            spectrum: vec![0.0; BANDS],
-            bass,
-            mid,
-            treble,
-            ..Analysis::default()
-        }
-    }
-
-    #[test]
-    fn nothing_is_carried_forward_by_a_silent_room() {
-        // Turns are time as the music doles it out. With no music there is none to dole out, and a
-        // visualizer reading them has to come to a stop rather than drifting on the clock.
-        let mut memory = AudioMemory::new();
-        let quiet = Analysis::default();
-        memory.advance(&quiet, 0.0, 0.5, 1.0);
-        let published = play(&mut memory, &quiet, 0.0, 5.0, 0.5);
+        let published = play(&mut memory, &Default::default(), 0.0, 5.0, 0.5);
         assert_eq!(
             published.turns, [0.0; 3],
-            "silence carried the animation forward"
+            "silence carried the wave forward"
         );
+        assert_eq!(published.held, [0.0; 3], "silence left something held");
     }
 
     #[test]
-    fn each_tone_carries_its_own_band_and_only_its_own() {
-        // The split an operator is promised: bass moves the big slow things, treble the small fast
-        // ones, and a bass-only passage must leave the treble's band exactly where it stood.
+    fn a_kick_carries_the_swells_and_leaves_the_hi_hat_still() {
+        // The split an operator is promised: a kick-only passage moves the big band and must leave
+        // the hi-hat's band exactly where it stood.
         let mut memory = AudioMemory::new();
-        let bass_only = tones(1.0, 0.0, 0.0);
-        memory.advance(&bass_only, 0.0, 0.5, 1.0);
-        let published = play(&mut memory, &bass_only, 0.0, 2.0, 0.5);
-        assert!(
-            published.turns[0] > 0.0,
-            "bass has to carry the swells: {:?}",
-            published.turns
-        );
-        assert_eq!(
-            published.turns[2], 0.0,
-            "a bass-only passage moved the treble's band: {:?}",
-            published.turns
-        );
+        let published = play(&mut memory, &struck(1.0, 0.0, 0.0), 0.0, 2.0, 0.5);
+        assert!(published.turns[0] > 0.0, "the kick has to carry the swells");
+        assert_eq!(published.turns[2], 0.0, "a kick moved the hi-hat's band");
     }
 
     #[test]
-    fn a_tone_keeps_carrying_while_its_hit_subsides() {
-        // The turns run off the held tones, not the arriving ones, so a beat keeps pushing as it
-        // decays instead of advancing by one frame's worth and stopping dead.
+    fn a_strike_keeps_carrying_while_it_is_let_go() {
+        // The detector's flash is gone within a tenth of a second. Held, one kick keeps pushing as
+        // it subsides instead of moving the wave by a frame's worth and stopping dead.
         let mut memory = AudioMemory::new();
-        memory.advance(&tones(1.0, 0.0, 0.0), 0.0, 0.2, 1.0);
-        let hit = memory.advance(&tones(1.0, 0.0, 0.0), 1.0 / 60.0, 0.2, 1.0);
-        let after = play(&mut memory, &Analysis::default(), 1.0 / 60.0, 1.0, 0.2);
+        memory.advance(&struck(1.0, 0.0, 0.0), 0.0, 0.5, 1.0);
+        let hit = memory.advance(&struck(1.0, 0.0, 0.0), 1.0 / 60.0, 0.5, 1.0);
+        let after = play(&mut memory, &Default::default(), 1.0 / 60.0, 1.0, 0.5);
         assert!(
             after.turns[0] > hit.turns[0],
-            "the swells stopped the instant the hit did"
+            "the swells stopped with the flash"
+        );
+        assert!(
+            after.held[0] > 0.3 && after.held[0] < 1.0,
+            "a second on, a held kick is subsiding but still there: {}",
+            after.held[0]
         );
     }
 
     #[test]
-    fn speed_is_the_exchange_rate_between_sound_and_motion() {
-        let playing = tones(1.0, 1.0, 1.0);
+    fn decay_sets_how_long_a_strike_is_held() {
         let mut slow = AudioMemory::new();
         let mut quick = AudioMemory::new();
-        slow.advance(&playing, 0.0, 0.5, 0.5);
-        quick.advance(&playing, 0.0, 0.5, 2.0);
+        slow.advance(&struck(1.0, 0.0, 0.0), 0.0, 0.0, 1.0);
+        quick.advance(&struck(1.0, 0.0, 0.0), 0.0, 1.0, 1.0);
+
+        let standing = play(&mut slow, &Default::default(), 0.0, 0.4, 0.0);
+        let gone = play(&mut quick, &Default::default(), 0.0, 0.4, 1.0);
+        assert!(
+            standing.held[0] > gone.held[0],
+            "a lower decay has to hold a strike longer: {} is not above {}",
+            standing.held[0],
+            gone.held[0]
+        );
+        assert!(
+            gone.held[0] < 0.05,
+            "the quickest decay has to be all but instant: {}",
+            gone.held[0]
+        );
+    }
+
+    #[test]
+    fn a_kick_is_let_go_before_the_next_one_at_show_tempo() {
+        // Held too long, kicks at a dance tempo would pile up into one constant push and the beat
+        // would vanish from the picture. At the shipped decay a kick has to have mostly gone by the
+        // time the next lands at 128 BPM.
+        let decay = media_domain::visualizer::VisualizerConfiguration::new(
+            media_domain::visualizer::VisualizerKind::TriangularNet,
+        )
+        .parameters
+        .decay;
+        let mut memory = AudioMemory::new();
+        memory.advance(&struck(1.0, 0.0, 0.0), 0.0, decay, 1.0);
+        let next_kick = 60.0 / 128.0;
+        let before_it = play(&mut memory, &Default::default(), 0.0, next_kick, decay);
+        assert!(
+            before_it.held[0] < 0.4,
+            "a kick is still {} held when the next one lands",
+            before_it.held[0]
+        );
+    }
+
+    #[test]
+    fn a_kick_moves_its_band_further_than_a_hi_hat_moves_its_own() {
+        let mut memory = AudioMemory::new();
+        let published = play(&mut memory, &struck(1.0, 1.0, 1.0), 0.0, 1.0, 0.5);
+        let [kick, snare, hihat] = published.turns;
+        assert!(
+            kick > snare && snare > hihat,
+            "movements have to be graded from the kick down to the hi-hat: {:?}",
+            published.turns
+        );
+    }
+
+    #[test]
+    fn speed_is_the_exchange_rate_between_a_beat_and_motion() {
+        let beating = struck(1.0, 1.0, 1.0);
+        let mut slow = AudioMemory::new();
+        let mut quick = AudioMemory::new();
+        slow.advance(&beating, 0.0, 0.5, 0.5);
+        quick.advance(&beating, 0.0, 0.5, 2.0);
 
         let mut now = 0.0;
         let mut slow_turns = [0.0; 3];
         let mut quick_turns = [0.0; 3];
         for _ in 0..60 {
             now += 1.0 / 60.0;
-            slow_turns = slow.advance(&playing, now, 0.5, 0.5).turns;
-            quick_turns = quick.advance(&playing, now, 0.5, 2.0).turns;
+            slow_turns = slow.advance(&beating, now, 0.5, 0.5).turns;
+            quick_turns = quick.advance(&beating, now, 0.5, 2.0).turns;
         }
         assert!(
             quick_turns[0] > slow_turns[0] * 3.0,
-            "speed has to scale how far the same music carries the wave: {} against {}",
+            "speed has to scale how far the same beat carries the wave: {} against {}",
             quick_turns[0],
             slow_turns[0]
         );
+    }
+
+    #[test]
+    fn a_flash_past_full_is_held_at_full() {
+        let mut memory = AudioMemory::new();
+        let published = memory.advance(&struck(5.0, 0.0, 0.0), 0.0, 0.5, 1.0);
+        assert_eq!(published.held[0], 1.0);
     }
 
     #[test]
