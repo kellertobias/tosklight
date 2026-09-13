@@ -2887,6 +2887,27 @@ fn shipped_wheel_channels_name_the_manufacturer_slot_at_a_probed_value() {
             "RED",
         ),
         (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "color.wheel.1",
+            8,
+            "Deep Red",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "color.wheel.1",
+            50,
+            "Congo Blue",
+        ),
+        (
+            "cameo--auro-spot-z300.toskfixture",
+            "20-Channel",
+            "color.wheel.1",
+            224,
+            "Color wheel rotation stop",
+        ),
+        (
             "claypaky--sharpy.toskfixture",
             "Standard",
             "gobo.1",

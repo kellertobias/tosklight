@@ -49,7 +49,8 @@ A show patched before this keeps the fixture revision embedded in it and is unaf
   Highlight look.
 - **Martin MAC 250 Entour** — 16 Bit and 16 Bit Extended; **MAC 300** — Mode 4;
   **ELP CL Profile** — 10-Channel; and **ELP WW Profile** — 4-Channel.
-- **Cameo AURO SPOT Z300** — 20-Channel; **ROOT PAR 6** — D7CH with its physical
+- **Cameo AURO SPOT Z300** — 20-Channel, with its color wheel's eight named colors, open
+  position, indexed position band, and both rotation directions; **ROOT PAR 6** — D7CH with its physical
   delay channel and virtual intensity; and **Q-SPOT 40 TW** — all five 1-, 2-, 3-, and
   8-channel personalities.
 - **Prolights ECL Fresnel CT+M** — STANDARD; **Clay Paky Stage Zoom 1200** — the
