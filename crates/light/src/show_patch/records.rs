@@ -6,8 +6,9 @@ use light_core::FixtureId;
 use light_fixture::{
     PatchedFixturePatch, PatchedFixtureProfileReference, PatchedHead, PortablePatchedFixtureRecord,
 };
-use light_show::PortableShowTransaction;
-use std::collections::HashMap;
+use light_show::{PortableShowDocument, PortableShowTransaction};
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 
 type StableHeadIds = HashMap<uuid::Uuid, FixtureId>;
 type LegacyHeadIndices = HashMap<u16, FixtureId>;
@@ -58,6 +59,45 @@ pub(super) fn stage_removals(
         removed.push(*fixture_id);
     }
     removed
+}
+
+/// A fixture removed from the show leaves every stored Group in the same transaction. The
+/// remaining members keep their order, and a Group left without members stays stored as an
+/// intentionally empty Group. Returns the ids of the Groups that changed.
+pub(super) fn stage_group_pruning(
+    document: &PortableShowDocument,
+    transaction: &mut PortableShowTransaction,
+    removed: &[FixtureId],
+) -> Vec<String> {
+    if removed.is_empty() {
+        return Vec::new();
+    }
+    let removed: HashSet<String> = removed.iter().map(|id| id.0.to_string()).collect();
+    let mut pruned = Vec::new();
+    for object in document.objects_of_kind("group") {
+        let mut body = object.body().clone();
+        let mut changed = prune_fixture_ids(body.get_mut("fixtures"), &removed);
+        if let Some(source) = body.get_mut("source")
+            && source.get("type").and_then(Value::as_str) == Some("explicit")
+        {
+            changed |= prune_fixture_ids(source.get_mut("fixture_ids"), &removed);
+        }
+        if changed {
+            let object_id = object.key().id().to_owned();
+            transaction.put("group", object_id.clone(), body);
+            pruned.push(object_id);
+        }
+    }
+    pruned
+}
+
+fn prune_fixture_ids(ids: Option<&mut Value>, removed: &HashSet<String>) -> bool {
+    let Some(Value::Array(ids)) = ids else {
+        return false;
+    };
+    let before = ids.len();
+    ids.retain(|id| id.as_str().is_none_or(|id| !removed.contains(id)));
+    ids.len() != before
 }
 
 fn build_record(

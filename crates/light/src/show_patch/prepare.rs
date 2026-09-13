@@ -3,11 +3,14 @@ use super::placement::assign_placement_addresses;
 use super::profiles::ResolvedProfiles;
 use super::projection::build_change;
 use super::record_index::StoredFixtureRecords;
-use super::records::{build_records, stage_records, stage_removals};
+use super::records::{build_records, stage_group_pruning, stage_records, stage_removals};
 use super::update::resolve_fixture_updates;
 use super::vector_spread::apply_vector_spreads;
 use super::{PatchChange, PatchFixturesCommand, PatchPerformancePhase, ShowPatchPorts};
-use crate::{ActionError, ActionErrorKind, PreparedShowCandidate, prepare_show_candidate};
+use crate::{
+    ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowObjectKind,
+    PreparedShowCandidate, prepare_show_candidate,
+};
 use light_show::{PortableShowCandidate, PortableShowDocument};
 use std::{collections::BTreeSet, time::Instant};
 
@@ -24,6 +27,8 @@ pub(super) enum PreparedPatch {
 pub(super) struct PreparedMutation {
     pub(super) candidate: PreparedShowCandidate,
     pub(super) change: PatchChange,
+    /// Groups whose membership lost a removed fixture in the same transaction.
+    pub(super) group_changes: Vec<ActiveShowObjectChange>,
 }
 
 /// Resolves immutable external profile revisions against one coherent patch snapshot.
@@ -84,6 +89,7 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
     let modes = profiles.stage(&mut transaction)?;
     stage_records(&mut transaction, &fixtures);
     let removed = stage_removals(&stored, &mut transaction, &command.remove_fixture_ids);
+    let pruned_groups = stage_group_pruning(document, &mut transaction, &removed);
     if transaction.is_empty() {
         let candidate = document.candidate(&transaction).map_err(candidate_error)?;
         return build_change(candidate, &fixtures, &removed, &modes).map(PreparedPatch::Noop);
@@ -96,25 +102,53 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
     let projection = document
         .candidate(candidate.transaction())
         .map_err(candidate_error)?;
-    ensure_patch_scoped_candidate(document, projection, &assigned_command)?;
+    ensure_patch_scoped_candidate(document, projection, &assigned_command, &pruned_groups)?;
     let change = build_change(projection, &fixtures, &removed, &modes)?;
+    let group_changes = pruned_group_changes(projection, &pruned_groups)?;
     Ok(PreparedPatch::Mutation(Box::new(PreparedMutation {
         candidate,
         change,
+        group_changes,
     })))
+}
+
+fn pruned_group_changes(
+    candidate: PortableShowCandidate<'_>,
+    pruned_groups: &[String],
+) -> Result<Vec<ActiveShowObjectChange>, ActionError> {
+    pruned_groups
+        .iter()
+        .map(|group_id| {
+            let object = candidate.object("group", group_id).ok_or_else(|| {
+                ActionError::new(ActionErrorKind::Internal, "pruned Group is missing")
+            })?;
+            ActiveShowObjectChange::present(
+                ActiveShowObjectKind::Group,
+                group_id.clone(),
+                object.revision(),
+                object.body().clone(),
+            )
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))
+        })
+        .collect()
 }
 
 fn ensure_patch_scoped_candidate(
     document: &PortableShowDocument,
     candidate: PortableShowCandidate<'_>,
     command: &PatchFixturesCommand,
+    pruned_groups: &[String],
 ) -> Result<(), ActionError> {
     let fixture_ids = command_fixture_ids(command);
     let has_unrelated_write = candidate.objects().any(|object| {
         let changed = document
             .object(object.key().kind(), object.key().id())
             .is_none_or(|stored| stored.body() != object.body());
-        changed && !allowed_patch_body(object.key().kind(), object.body(), &fixture_ids)
+        let pruned_group = object.key().kind() == "group"
+            && pruned_groups.iter().any(|id| id == object.key().id());
+        changed
+            && !pruned_group
+            && !allowed_patch_body(object.key().kind(), object.body(), &fixture_ids)
     });
     let has_unrelated_delete = document.objects().any(|object| {
         candidate

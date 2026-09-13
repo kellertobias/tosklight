@@ -180,6 +180,13 @@ impl TestRig {
             .unwrap();
     }
 
+    pub fn seed_group(&self, id: &str, body: serde_json::Value) {
+        ShowStore::open(&self.ports.path)
+            .unwrap()
+            .put_object("group", id, &body, 0)
+            .unwrap();
+    }
+
     pub fn pause_profile_resolution(&self) -> Arc<ProfileResolutionPause> {
         self.ports.profile_resolution.enable()
     }

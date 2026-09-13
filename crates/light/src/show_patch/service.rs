@@ -118,6 +118,7 @@ impl ShowPatchService {
                             key,
                             envelope,
                             change,
+                            group_changes: Vec::new(),
                         }))
                     }
                     PreparedPatch::Mutation(prepared) => {
@@ -127,6 +128,7 @@ impl ShowPatchService {
                                 key,
                                 envelope,
                                 change: prepared.change,
+                                group_changes: prepared.group_changes,
                             },
                         })
                     }
@@ -159,6 +161,7 @@ struct PatchCompletion {
     key: ReplayKey,
     envelope: ActionEnvelope<PatchFixturesCommand>,
     change: PatchChange,
+    group_changes: Vec<crate::ActiveShowObjectChange>,
 }
 
 fn complete_patch<P: ShowPatchPorts>(
@@ -171,6 +174,7 @@ fn complete_patch<P: ShowPatchPorts>(
         key,
         envelope,
         mut change,
+        group_changes,
     } = completed.state;
     let event_sequence = completed.commit.map(|commit| {
         change.show_revision = commit.revision();
@@ -187,6 +191,22 @@ fn complete_patch<P: ShowPatchPorts>(
         let sequence = events
             .publish(EventDraft::patch_changed(&envelope.context, change.clone()))
             .sequence;
+        // Groups that lost a removed fixture changed in the same commit; desks see them as
+        // ordinary Group changes.
+        let sequence = if group_changes.is_empty() {
+            sequence
+        } else {
+            events
+                .publish(EventDraft::active_show_objects_changed(
+                    &envelope.context,
+                    crate::ActiveShowObjectsChange {
+                        show_id: envelope.command.show_id,
+                        show_revision: commit.revision(),
+                        changes: group_changes,
+                    },
+                ))
+                .sequence
+        };
         ports.record_patch_performance_phase(
             PatchPerformancePhase::EventPublication,
             event_started.elapsed(),

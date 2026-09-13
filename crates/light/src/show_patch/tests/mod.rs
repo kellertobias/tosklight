@@ -956,6 +956,102 @@ fn removal_uses_the_same_atomic_compile_and_event_path() {
 }
 
 #[test]
+fn removing_a_fixture_takes_it_out_of_every_group_in_the_same_commit() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let add = patch_batch(rig.ports.show_id(), reference, 3);
+    let ids: Vec<String> = add
+        .fixtures
+        .iter()
+        .map(|fixture| fixture.patch.fixture_id.0.to_string())
+        .collect();
+    let removed = add.fixtures[0].patch.fixture_id;
+    let fixture_ids: Vec<_> = add
+        .fixtures
+        .iter()
+        .map(|fixture| fixture.patch.fixture_id)
+        .collect();
+    let group = |id: &str, members: &[usize]| {
+        let members: Vec<_> = members.iter().map(|index| fixture_ids[*index]).collect();
+        serde_json::to_value(light_programmer::GroupDefinition {
+            id: id.into(),
+            name: id.into(),
+            fixtures: members.clone(),
+            source: Some(light_programmer::GroupFixtureSource::Explicit {
+                fixture_ids: members,
+            }),
+            ..Default::default()
+        })
+        .unwrap()
+    };
+    rig.seed_group("ordered", group("ordered", &[2, 0, 1]));
+    rig.seed_group("only-removed", group("only-removed", &[0]));
+    rig.seed_group("untouched", group("untouched", &[1]));
+    rig.service
+        .handle(envelope(add, "add-group-members", 0), &rig.ports)
+        .unwrap();
+    let untouched_before = rig
+        .portable_document()
+        .object("group", "untouched")
+        .cloned();
+    let events_before = rig.service.events().latest_sequence();
+    let remove = crate::PatchFixturesCommand {
+        show_id: rig.ports.show_id(),
+        fixtures: Vec::new(),
+        remove_fixture_ids: vec![removed],
+        placements: Vec::new(),
+        vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
+    };
+
+    let result = rig
+        .service
+        .handle(envelope(remove, "remove-group-member", 1), &rig.ports)
+        .unwrap();
+
+    assert_eq!(result.change.removed_fixture_ids, vec![removed]);
+    let document = rig.portable_document();
+    let ordered = document.object("group", "ordered").unwrap().body();
+    assert_eq!(ordered["fixtures"], json!([ids[2], ids[1]]));
+    assert_eq!(ordered["source"]["fixture_ids"], json!([ids[2], ids[1]]));
+    // A Group left without members is an intentionally stored empty Group, not a deleted one.
+    let only_removed = document.object("group", "only-removed").unwrap().body();
+    assert_eq!(only_removed["fixtures"], json!([]));
+    assert_eq!(only_removed["source"]["fixture_ids"], json!([]));
+    assert_eq!(
+        document.object("group", "untouched").cloned(),
+        untouched_before
+    );
+
+    let crate::EventReplay::Events(events) = rig
+        .service
+        .events()
+        .replay(events_before, &crate::EventFilter::default())
+    else {
+        panic!("removal events should be retained");
+    };
+    assert_eq!(events.len(), 2);
+    assert!(matches!(
+        events[0].payload,
+        crate::ApplicationEvent::Show(crate::ShowEvent::PatchChanged(_))
+    ));
+    let crate::ApplicationEvent::Show(crate::ShowEvent::ObjectsChanged(groups)) =
+        &events[1].payload
+    else {
+        panic!("pruned Groups should publish an objects change");
+    };
+    assert_eq!(groups.show_revision, document.revision());
+    let mut changed: Vec<&str> = groups
+        .changes
+        .iter()
+        .map(|change| change.object_id.as_str())
+        .collect();
+    changed.sort_unstable();
+    assert_eq!(changed, ["only-removed", "ordered"]);
+    assert_eq!(result.event_sequence, Some(events[1].sequence));
+}
+
+#[test]
 fn removing_an_already_absent_fixture_is_an_idempotent_noop() {
     let (profile, _) = profile_with_modes(1);
     let rig = TestRig::new(profile, FailurePoint::None);
