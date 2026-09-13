@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { artifactPaths } from "./artifact-paths.mjs";
 import {
 	installLocations,
 	keepPreviousVersion,
@@ -62,7 +62,8 @@ test("--self-contained places portable copies on the Desktop", () => {
 });
 
 test("one previous version is kept beside each install and a revert restores it", () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "install-all-"));
+	fs.mkdirSync(artifactPaths.tmp, { recursive: true });
+	const root = fs.mkdtempSync(path.join(artifactPaths.tmp, "install-all-"));
 	const installed = path.join(root, "ToskLight.app");
 	const write = (version) => {
 		fs.mkdirSync(installed, { recursive: true });
