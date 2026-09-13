@@ -67,7 +67,8 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		firstUniverse: 1,
 	});
 	expect(generated.lastUniverse).toBeGreaterThan(1);
-	expect(generated.occupiedSlots).toBe(3_466);
+	// Includes the two 2-layer Media Servers at 158 slots each (59-slot layers and a 40-slot master).
+	expect(generated.occupiedSlots).toBe(3_544);
 	const frontLights = generated.fixtures.filter(
 		(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 8,
 	);
