@@ -29,7 +29,40 @@ describe("the audio monitor", () => {
 			"80",
 		);
 		expect(screen.getByRole("img", { name: "Waveform" })).toBeInTheDocument();
-		expect(screen.getByText("128.0 BPM")).toBeInTheDocument();
+		expect(screen.getByText("128.0 BPM · 80% steady")).toBeInTheDocument();
+	});
+
+	it("shows each instrument the detector hears, and flashes the one that struck", async () => {
+		const panel = anAudioPanel();
+		panel.analysis = {
+			...panel.analysis,
+			kick: { level: 0.7, hit: 1 },
+			snare: { level: 0.2, hit: 0 },
+			hihat: { level: 0.45, hit: 0.1 },
+		};
+		stubServer({ audio: panel });
+		render(<AudioPage />);
+
+		expect(
+			await screen.findByRole("meter", { name: "Kick level" }),
+		).toHaveAttribute("aria-valuenow", "70");
+		expect(screen.getByRole("meter", { name: "Hi-hat level" })).toHaveAttribute(
+			"aria-valuenow",
+			"45",
+		);
+		expect(screen.getByText("Kick struck")).toBeInTheDocument();
+		expect(screen.getByText("Snare quiet")).toBeInTheDocument();
+	});
+
+	it("tells the operator to turn a clipping source down, since no gain here can fix it", async () => {
+		const panel = anAudioPanel();
+		panel.analysis = { ...panel.analysis, clipping: true };
+		stubServer({ audio: panel });
+		render(<AudioPage />);
+
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"Input clipping",
+		);
 	});
 
 	it("says a machine with no input is not capturing rather than showing a dead meter", async () => {
@@ -46,6 +79,7 @@ describe("the audio monitor", () => {
 			peak: 0,
 			beat: 0,
 			bpm: 0,
+			tempoConfidence: 0,
 		};
 		stubServer({ audio: panel });
 		render(<AudioPage />);
@@ -54,7 +88,7 @@ describe("the audio monitor", () => {
 		expect(
 			screen.getByText("this server is not capturing audio"),
 		).toBeInTheDocument();
-		expect(screen.getByText("not enough beats yet")).toBeInTheDocument();
+		expect(screen.getByText("listening for a tempo")).toBeInTheDocument();
 	});
 
 	it("reports that frames have stopped arriving instead of freezing quietly", async () => {
@@ -123,6 +157,21 @@ describe("the audio monitor", () => {
 				eqTreble: 5.5,
 			}),
 		);
+		expect(server.writes).toContain("/audio/update");
+	});
+
+	it("switches automatic gain live", async () => {
+		const server = stubServer();
+		render(<AudioPage />);
+
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Change audio settings" }),
+		);
+		const automatic = screen.getByRole("switch", { name: "Automatic gain" });
+		expect(automatic).toBeChecked();
+		await userEvent.click(automatic);
+
+		await waitFor(() => expect(server.audio.settings.autoGain).toBe(false));
 		expect(server.writes).toContain("/audio/update");
 	});
 

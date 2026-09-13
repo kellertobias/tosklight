@@ -102,17 +102,14 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
 
             let prepared = output.pipeline.prepare(
                 state,
-                FrameContext {
-                    catalog: &catalog,
-                    configuration: &live,
-                    analysis: &heard.analysis,
-                    now_unix_millis: unix_millis(),
-                    beat: heard.beat,
-                    bpm: heard.bpm,
-                    beat_phase: heard.beat_phase,
-                    seconds: started.elapsed().as_secs_f32(),
+                FrameContext::heard(
+                    &catalog,
+                    &live,
+                    &heard,
+                    unix_millis(),
+                    started.elapsed().as_secs_f32(),
                     now,
-                },
+                ),
                 &mut loader,
             );
             reports.extend(

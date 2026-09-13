@@ -3465,6 +3465,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "light-beat"
+version = "0.1.0"
+
+[[package]]
 name = "light-control"
 version = "0.1.0"
 dependencies = [
@@ -3901,6 +3905,7 @@ dependencies = [
  "arc-swap",
  "cpal",
  "crossbeam-queue",
+ "light-beat",
  "media-application",
  "media-domain",
  "thiserror 2.0.20",

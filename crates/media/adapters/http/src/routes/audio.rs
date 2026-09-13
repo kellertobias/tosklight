@@ -73,6 +73,7 @@ mod tests {
                 beat: 1.0,
                 bpm: 128.0,
                 beat_phase: 0.25,
+                ..AudioTelemetry::default()
             }),
             audio_devices: Arc::new(|| vec!["Built-in".to_owned(), "Desk feed".to_owned()]),
             ..Default::default()

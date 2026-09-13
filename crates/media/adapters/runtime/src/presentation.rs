@@ -734,17 +734,14 @@ impl RenderWorkerState {
             // The real path: every layer's address becomes a texture, or reports why it did not.
             let prepared = hosted.pipeline.prepare(
                 output_state,
-                crate::layer_pipeline::FrameContext {
-                    catalog: &catalog,
-                    configuration: &configuration,
-                    analysis: &heard.analysis,
-                    now_unix_millis: unix_millis(),
-                    beat: heard.beat,
-                    bpm: heard.bpm,
-                    beat_phase: heard.beat_phase,
+                crate::layer_pipeline::FrameContext::heard(
+                    &catalog,
+                    &configuration,
+                    &heard,
+                    unix_millis(),
                     seconds,
                     now,
-                },
+                ),
                 &mut self.loader,
             );
             reports.extend(

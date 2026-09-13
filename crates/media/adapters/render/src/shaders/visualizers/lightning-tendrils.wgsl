@@ -1,10 +1,12 @@
-// Bolts from the centre, their paths perturbed by noise, struck on bass.
+// Bolts from the centre, their paths perturbed by noise, struck on bass and on the snare.
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     let bolts = max(floor(count()), 1.0);
-    // A strike either exceeds the threshold or happens by chance, so the effect never goes still.
+    // A strike exceeds the threshold, cracks with a snare, or happens by chance, so the effect
+    // never goes still.
     let strike = step(threshold(), bass() * reactivity())
+        + step(0.5, snare())
         + step(0.985, hash11(floor(seconds() * 12.0)));
-    let intensity = clamp(strike, 0.0, 1.0) * (0.4 + beat() * 0.6);
+    let intensity = clamp(strike, 0.0, 1.0) * (0.4 + max(beat(), snare()) * 0.6);
 
     let distance = length(p);
     let angle = atan2(p.y, p.x);

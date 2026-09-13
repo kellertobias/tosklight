@@ -40,6 +40,26 @@ pub struct Analysis {
     pub peak: f32,
 }
 
+/// One instrument the beat detector follows, as a visual reads it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Instrument {
+    /// The instrument's band, auto-ranged to `0.0..=1.0` between its own recent floor and peak.
+    pub level: f32,
+    /// `1.0` when the instrument struck, falling toward zero afterwards.
+    pub hit: f32,
+}
+
+/// The kick, snare, and hi-hat, so an effect can flash on the one it is about rather than on
+/// whatever was loudest. The default is silence.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Instruments {
+    pub kick: Instrument,
+    pub snare: Instrument,
+    pub hihat: Instrument,
+}
+
 /// How an operator has tuned the analysis.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,8 +69,15 @@ pub struct Tuning {
     pub eq_bass: f32,
     pub eq_mid: f32,
     pub eq_treble: f32,
-    /// Scales the dynamic beat threshold. Higher means easier to trigger.
+    /// Scales the beat detector's thresholds. Higher means easier to trigger.
     pub beat_sensitivity: f32,
+    /// Level the analysis to the program automatically; the input gain then trims on top of it.
+    #[serde(default = "automatic")]
+    pub auto_gain: bool,
+}
+
+const fn automatic() -> bool {
+    true
 }
 
 impl Default for Tuning {
@@ -61,6 +88,7 @@ impl Default for Tuning {
             eq_mid: 1.0,
             eq_treble: 1.0,
             beat_sensitivity: 1.0,
+            auto_gain: automatic(),
         }
     }
 }
@@ -206,91 +234,8 @@ fn to_bands(magnitudes: &[f32], sample_rate: f32) -> Vec<f32> {
     bands
 }
 
-/// Finds beats, and estimates a tempo from the intervals between them.
-///
-/// The threshold is dynamic: a beat is energy well above the recent average, so a quiet passage
-/// and a loud one both produce beats rather than the loud one triggering constantly.
-#[derive(Debug, Clone)]
-pub struct BeatDetector {
-    history: Vec<f32>,
-    intervals: Vec<u64>,
-    last_beat: Option<u64>,
-}
-
-/// How many recent windows the dynamic threshold averages over.
-const HISTORY: usize = 43;
-
-/// The shortest gap between beats, which caps detection at 300 BPM and rejects a double trigger
-/// on one transient.
-const MINIMUM_GAP_MILLIS: u64 = 200;
-
-impl BeatDetector {
-    pub fn new() -> Self {
-        Self {
-            history: Vec::with_capacity(HISTORY),
-            intervals: Vec::new(),
-            last_beat: None,
-        }
-    }
-
-    /// Offers one window's energy. Returns whether it is a beat.
-    pub fn observe(&mut self, energy: f32, tuning: &Tuning, now_millis: u64) -> bool {
-        let average = if self.history.is_empty() {
-            0.0
-        } else {
-            self.history.iter().sum::<f32>() / self.history.len() as f32
-        };
-
-        if self.history.len() == HISTORY {
-            self.history.remove(0);
-        }
-        self.history.push(energy);
-
-        // Not enough history to know what "loud" means yet.
-        if self.history.len() < HISTORY / 4 {
-            return false;
-        }
-
-        let sensitivity = tuning.beat_sensitivity.max(0.01);
-        let threshold = average * (1.0 + 0.6 / sensitivity);
-        if energy <= threshold || energy < 0.001 {
-            return false;
-        }
-        if let Some(last) = self.last_beat
-            && now_millis.saturating_sub(last) < MINIMUM_GAP_MILLIS
-        {
-            return false;
-        }
-
-        if let Some(last) = self.last_beat {
-            if self.intervals.len() == 8 {
-                self.intervals.remove(0);
-            }
-            self.intervals.push(now_millis - last);
-        }
-        self.last_beat = Some(now_millis);
-        true
-    }
-
-    /// The tempo the recent intervals suggest, once there are enough of them to mean anything.
-    pub fn estimated_bpm(&self) -> Option<f32> {
-        if self.intervals.len() < 3 {
-            return None;
-        }
-        let mean = self.intervals.iter().sum::<u64>() as f32 / self.intervals.len() as f32;
-        (mean > 0.0).then(|| 60_000.0 / mean)
-    }
-
-    pub const fn beats_seen(&self) -> bool {
-        self.last_beat.is_some()
-    }
-}
-
-impl Default for BeatDetector {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Beats, instruments, and tempo are found by `light-beat`, which the Light desk shares: the two
+// products hear the same music the same way.
 
 #[cfg(test)]
 mod tests {
@@ -437,109 +382,12 @@ mod tests {
     }
 
     #[test]
-    fn a_steady_tone_is_not_a_beat() {
-        let mut detector = BeatDetector::new();
-        let tuning = Tuning::default();
-        let mut beats = 0;
-        for window in 0..100u64 {
-            if detector.observe(0.5, &tuning, window * 20) {
-                beats += 1;
-            }
-        }
-        assert_eq!(beats, 0, "unchanging energy is not a beat");
-    }
-
-    #[test]
-    fn a_regular_pulse_is_detected_and_its_tempo_estimated() {
-        let mut detector = BeatDetector::new();
-        let tuning = Tuning::default();
-        let mut beats = 0;
-
-        // 120 BPM: a hit every 500 ms, windows every 20 ms.
-        for window in 0..300u64 {
-            let now = window * 20;
-            let energy = if now % 500 < 20 { 0.9 } else { 0.05 };
-            if detector.observe(energy, &tuning, now) {
-                beats += 1;
-            }
-        }
-
-        assert!(beats > 5, "only {beats} beats found");
-        let bpm = detector
-            .estimated_bpm()
-            .expect("enough intervals to estimate");
-        assert!((bpm - 120.0).abs() < 5.0, "estimated {bpm} BPM");
-    }
-
-    #[test]
-    fn one_transient_cannot_trigger_twice() {
-        let mut detector = BeatDetector::new();
-        let tuning = Tuning::default();
-        for window in 0..20u64 {
-            detector.observe(0.05, &tuning, window * 20);
-        }
-
-        assert!(detector.observe(0.9, &tuning, 400));
-        assert!(
-            !detector.observe(0.9, &tuning, 420),
-            "too soon to be a second beat"
-        );
-        assert!(
-            !detector.observe(0.9, &tuning, 550),
-            "still inside the minimum gap"
-        );
-    }
-
-    #[test]
-    fn no_tempo_is_reported_before_there_is_evidence_for_one() {
-        let mut detector = BeatDetector::new();
-        assert_eq!(detector.estimated_bpm(), None);
-        assert!(!detector.beats_seen());
-
-        let tuning = Tuning::default();
-        for window in 0..20u64 {
-            detector.observe(0.05, &tuning, window * 20);
-        }
-        detector.observe(0.9, &tuning, 400);
-        assert!(detector.beats_seen());
-        assert_eq!(detector.estimated_bpm(), None, "one beat is not a tempo");
-    }
-
-    #[test]
-    fn sensitivity_moves_the_threshold() {
-        let run = |sensitivity: f32| {
-            let mut detector = BeatDetector::new();
-            let tuning = Tuning {
-                beat_sensitivity: sensitivity,
-                ..Default::default()
-            };
-            let mut beats = 0;
-            for window in 0..300u64 {
-                let now = window * 20;
-                // A gentle pulse, well under a hard transient.
-                let energy = if now % 500 < 20 { 0.12 } else { 0.1 };
-                if detector.observe(energy, &tuning, now) {
-                    beats += 1;
-                }
-            }
-            beats
-        };
-        assert!(
-            run(4.0) > run(0.25),
-            "a higher sensitivity finds more in the same signal"
-        );
-    }
-
-    #[test]
-    fn silence_never_produces_beats_however_sensitive() {
-        let mut detector = BeatDetector::new();
-        let tuning = Tuning {
-            beat_sensitivity: 100.0,
-            ..Default::default()
-        };
-        for window in 0..200u64 {
-            assert!(!detector.observe(0.0, &tuning, window * 20));
-        }
+    fn a_tuning_written_before_automatic_gain_keeps_it_on() {
+        let tuning: Tuning = serde_json::from_str(
+            r#"{"inputGain":1.0,"eqBass":1.0,"eqMid":1.0,"eqTreble":1.0,"beatSensitivity":1.0}"#,
+        )
+        .expect("a tuning");
+        assert!(tuning.auto_gain);
     }
 
     #[test]

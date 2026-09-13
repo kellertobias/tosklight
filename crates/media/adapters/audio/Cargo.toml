@@ -12,6 +12,7 @@ authors.workspace = true
 arc-swap.workspace = true
 cpal = "0.18.2"
 crossbeam-queue = "0.3"
+light-beat = { path = "../../../shared/beat" }
 media-application = { path = "../../application" }
 media-domain = { path = "../../domain" }
 thiserror.workspace = true

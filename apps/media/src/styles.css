@@ -675,12 +675,56 @@ body {
 	font-size: 0.85rem;
 }
 
-.media-audio-beat {
-	display: inline-block;
-	width: 14px;
-	height: 14px;
+.media-audio-hits {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+	gap: 0.6rem;
+}
+
+.media-audio-hit {
+	--hit-color: var(--cyan);
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	gap: 0.4rem 0.7rem;
+	padding: 0.7rem;
+	background: var(--panel2);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.media-audio-hit.is-kick {
+	--hit-color: var(--red);
+}
+
+.media-audio-hit.is-snare {
+	--hit-color: #ffb547;
+}
+
+.media-audio-hit.is-beat {
+	--hit-color: #b7f171;
+}
+
+/* Big enough to read from across a stage while the operator is not looking at the numbers. */
+.media-audio-hit-lamp {
+	grid-row: span 2;
+	width: 2.6rem;
+	height: 2.6rem;
 	border-radius: 50%;
-	background: var(--cyan);
+	background: var(--hit-color);
+}
+
+.media-audio-hit.is-struck .media-audio-hit-lamp {
+	box-shadow: 0 0 1.1rem var(--hit-color);
+}
+
+.media-audio-hit-label {
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.media-audio-hit .media-audio-bar-track > span {
+	background: var(--hit-color);
 }
 
 .media-import-header {

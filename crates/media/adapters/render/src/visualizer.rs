@@ -79,6 +79,8 @@ pub struct VisualizerFrame<'a> {
     pub bpm: f32,
     /// Where this instant sits between beats, `0.0..1.0`.
     pub beat_phase: f32,
+    /// The kick, snare, and hi-hat, each with its level and hit flash.
+    pub instruments: media_domain::Instruments,
 }
 
 #[repr(C)]
@@ -87,6 +89,8 @@ struct VisualizerUniform {
     resolution: [f32; 4],
     audio0: [f32; 4],
     audio1: [f32; 4],
+    audio2: [f32; 4],
+    audio3: [f32; 4],
     primary: [f32; 4],
     secondary: [f32; 4],
     params0: [f32; 4],
@@ -114,6 +118,18 @@ impl VisualizerUniform {
                 analysis.energy,
             ],
             audio1: [analysis.peak, frame.beat, frame.bpm, frame.beat_phase],
+            audio2: [
+                frame.instruments.kick.hit,
+                frame.instruments.snare.hit,
+                frame.instruments.hihat.hit,
+                0.0,
+            ],
+            audio3: [
+                frame.instruments.kick.level,
+                frame.instruments.snare.level,
+                frame.instruments.hihat.level,
+                0.0,
+            ],
             primary: [
                 parameters.primary.red,
                 parameters.primary.green,
@@ -468,7 +484,7 @@ mod tests {
 
     #[test]
     fn the_uniform_is_the_size_the_prelude_declares() {
-        assert_eq!(std::mem::size_of::<VisualizerUniform>(), 160);
+        assert_eq!(std::mem::size_of::<VisualizerUniform>(), 192);
     }
 
     #[test]
@@ -480,6 +496,13 @@ mod tests {
             beat: 1.0,
             bpm: 128.0,
             beat_phase: 0.25,
+            instruments: media_domain::Instruments {
+                kick: media_domain::Instrument {
+                    level: 0.6,
+                    hit: 1.0,
+                },
+                ..Default::default()
+            },
         };
         let parameters = VisualizerParameters {
             count: 0,
@@ -494,6 +517,11 @@ mod tests {
         assert!(uniform.params2[0].is_finite());
         assert_eq!(uniform.primary[0], 1.0);
         assert_eq!(uniform.flags[0], 1.0);
+        assert_eq!(
+            uniform.audio2[0], 1.0,
+            "the kick's flash reaches the shader"
+        );
+        assert_eq!(uniform.audio3[0], 0.6, "and so does its level");
         assert_eq!(uniform.resolution[3], 2.0);
         assert!((uniform.resolution[2] - 1920.0 / 1080.0).abs() < 1e-6);
     }

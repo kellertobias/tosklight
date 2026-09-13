@@ -30,8 +30,8 @@ mod time;
 mod visualizer;
 
 pub use audio::{
-    AudioBandsView, AudioEditError, AudioPanelView, AudioSettingsView, AudioView, DeskIdentityView,
-    TelemetryFrame, UpdateAudio, WaveformView,
+    AudioBandsView, AudioEditError, AudioPanelView, AudioSettingsView, AudioView, AudioVoiceView,
+    DeskIdentityView, TelemetryFrame, UpdateAudio, WaveformView,
 };
 pub use catalog::{CatalogFolderView, CatalogItemView, CatalogView};
 pub use dmx::{

@@ -1,8 +1,8 @@
-// Concentric rings whose radius follows bass, expanding on a hit.
+// Concentric rings whose radius follows bass, expanding on a kick.
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     let distance = length(p);
     let rings = max(count(), 1.0);
-    let push = bass() * reactivity() * 0.4 + beat() * (1.0 - decay()) * 0.3;
+    let push = bass() * reactivity() * 0.4 + max(beat(), kick()) * (1.0 - decay()) * 0.3;
     var alpha = 0.0;
     var index = 0.0;
     loop {

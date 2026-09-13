@@ -93,6 +93,12 @@ const audioAnalysis = {
 	beat: 0.84,
 	bpm: 124.8,
 	beatPhase: 0.32,
+	tempoConfidence: 0.62,
+	kick: { level: 0.86, hit: 0.9 },
+	snare: { level: 0.35, hit: 0 },
+	hihat: { level: 0.52, hit: 0.3 },
+	gain: 1.6,
+	clipping: false,
 } satisfies AudioView;
 
 const library = [

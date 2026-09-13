@@ -57,6 +57,7 @@ fn frame<'a>(analysis: &'a Analysis, seconds: f32, beat: f32) -> VisualizerFrame
         beat,
         bpm: 128.0,
         beat_phase: 0.0,
+        instruments: media_domain::Instruments::default(),
     }
 }
 

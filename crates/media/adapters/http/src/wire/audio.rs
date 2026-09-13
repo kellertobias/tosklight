@@ -30,6 +30,16 @@ pub struct WaveformView {
     pub points: Vec<f32>,
 }
 
+/// One instrument the beat detector follows.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioVoiceView {
+    /// The instrument's band, auto-ranged to `0..1` between its own recent floor and peak.
+    pub level: f32,
+    /// `1` on the pass it struck, falling afterwards.
+    pub hit: f32,
+}
+
 /// One instant of analysis, as the API reports it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
@@ -48,9 +58,18 @@ pub struct AudioView {
     pub peak: f32,
     /// `1.0` on the pass a beat landed, falling afterwards.
     pub beat: f32,
-    /// Zero until enough beats have been seen to mean anything.
+    /// Zero until the music has shown a tempo.
     pub bpm: f32,
     pub beat_phase: f32,
+    /// How periodic the music is right now, `0..1`. Low in a breakdown.
+    pub tempo_confidence: f32,
+    pub kick: AudioVoiceView,
+    pub snare: AudioVoiceView,
+    pub hihat: AudioVoiceView,
+    /// The gain the meters were measured with, automatic or manual.
+    pub gain: f32,
+    /// The input reached full scale recently. No gain applied here can repair that.
+    pub clipping: bool,
 }
 
 impl AudioView {
@@ -73,6 +92,21 @@ impl AudioView {
             beat: telemetry.beat,
             bpm: telemetry.bpm,
             beat_phase: telemetry.beat_phase,
+            tempo_confidence: telemetry.tempo_confidence,
+            kick: AudioVoiceView {
+                level: telemetry.kick_level,
+                hit: telemetry.kick_hit,
+            },
+            snare: AudioVoiceView {
+                level: telemetry.snare_level,
+                hit: telemetry.snare_hit,
+            },
+            hihat: AudioVoiceView {
+                level: telemetry.hihat_level,
+                hit: telemetry.hihat_hit,
+            },
+            gain: telemetry.gain,
+            clipping: telemetry.clipping,
         }
     }
 }
@@ -117,6 +151,8 @@ pub struct AudioSettingsView {
     /// The name or index the operator chose, when they chose one.
     pub device_value: Option<String>,
     pub input_gain: f32,
+    /// Whether the analysis levels itself, with the input gain as a trim on top.
+    pub auto_gain: bool,
     pub beat_sensitivity: f32,
     pub eq_bass: f32,
     pub eq_mid: f32,
@@ -139,6 +175,7 @@ impl AudioSettingsView {
             device_by: device_by.to_owned(),
             device_value,
             input_gain: audio.input_gain,
+            auto_gain: audio.auto_gain,
             beat_sensitivity: audio.beat_sensitivity,
             eq_bass: audio.eq_bass,
             eq_mid: audio.eq_mid,
@@ -171,6 +208,8 @@ pub struct UpdateAudio {
     pub device_value: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_gain: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_gain: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beat_sensitivity: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -211,6 +250,9 @@ impl UpdateAudio {
             next.device = self.selector(by)?;
         }
         next.input_gain = gain("inputGain", self.input_gain, next.input_gain)?;
+        if let Some(automatic) = self.auto_gain {
+            next.auto_gain = automatic;
+        }
         next.beat_sensitivity = gain(
             "beatSensitivity",
             self.beat_sensitivity,
@@ -322,6 +364,20 @@ mod tests {
         assert_eq!(next.eq_bass, 1.5);
         assert_eq!(next.eq_mid, current.eq_mid);
         assert_eq!(next.device, current.device);
+    }
+
+    #[test]
+    fn automatic_gain_is_switched_by_an_edit_and_reported_back() {
+        let current = AudioConfiguration {
+            auto_gain: false,
+            ..Default::default()
+        };
+        let next = edit(r#"{"requestId":"a","autoGain":true}"#)
+            .applied(&current)
+            .expect("accepted");
+        assert!(next.auto_gain);
+        assert_eq!(next.input_gain, current.input_gain);
+        assert!(AudioSettingsView::of(&next, Vec::new()).auto_gain);
     }
 
     #[test]

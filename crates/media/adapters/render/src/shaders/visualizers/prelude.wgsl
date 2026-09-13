@@ -10,6 +10,10 @@ struct Visualizer {
     audio0: vec4<f32>,
     // peak, beat (1 on the frame of a beat, decaying after), bpm, beat phase 0..1
     audio1: vec4<f32>,
+    // kick, snare, hi-hat hits (1 when the instrument strikes, decaying after), spare
+    audio2: vec4<f32>,
+    // kick, snare, hi-hat levels, each auto-ranged 0..1, spare
+    audio3: vec4<f32>,
     primary: vec4<f32>,
     secondary: vec4<f32>,
     // count, size, speed, amount
@@ -41,6 +45,12 @@ fn energy() -> f32 { return visualizer.audio0.w; }
 fn peak() -> f32 { return visualizer.audio1.x; }
 fn beat() -> f32 { return visualizer.audio1.y; }
 fn beat_phase() -> f32 { return visualizer.audio1.w; }
+fn kick() -> f32 { return visualizer.audio2.x; }
+fn snare() -> f32 { return visualizer.audio2.y; }
+fn hihat() -> f32 { return visualizer.audio2.z; }
+fn kick_level() -> f32 { return visualizer.audio3.x; }
+fn snare_level() -> f32 { return visualizer.audio3.y; }
+fn hihat_level() -> f32 { return visualizer.audio3.z; }
 
 fn count() -> f32 { return visualizer.params0.x; }
 fn size() -> f32 { return visualizer.params0.y; }

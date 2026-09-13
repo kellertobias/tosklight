@@ -146,7 +146,7 @@ pub struct AudioConfiguration {
     /// Input gain. Applied through a nonlinear curve so low settings stay precise.
     #[serde(default = "unit_gain")]
     pub input_gain: f32,
-    /// Scales the dynamic beat threshold.
+    /// Scales the beat detector's thresholds.
     #[serde(default = "unit_gain")]
     pub beat_sensitivity: f32,
     #[serde(default = "unit_gain")]
@@ -155,6 +155,12 @@ pub struct AudioConfiguration {
     pub eq_mid: f32,
     #[serde(default = "unit_gain")]
     pub eq_treble: f32,
+    /// Level the analysis to the program automatically, with the input gain as a trim on top.
+    ///
+    /// On for a new server. A document stored before the setting existed keeps it off, because
+    /// its input gain was set as the whole gain and would otherwise suddenly become a boost.
+    #[serde(default)]
+    pub auto_gain: bool,
 }
 
 const fn unit_gain() -> f32 {
@@ -170,6 +176,7 @@ impl Default for AudioConfiguration {
             eq_bass: unit_gain(),
             eq_mid: unit_gain(),
             eq_treble: unit_gain(),
+            auto_gain: true,
         }
     }
 }

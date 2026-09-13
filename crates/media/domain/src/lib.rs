@@ -39,7 +39,7 @@ pub mod timeline;
 pub mod visualizer;
 
 pub use address::{AddressClass, AssetId, MediaAddress};
-pub use audio::{Analysis, BeatDetector, Tuning};
+pub use audio::{Analysis, Instrument, Instruments, Tuning};
 pub use catalog::{
     CatalogError, CatalogFolder, CatalogItem, CatalogLocation, CatalogSnapshot, ItemKind,
 };

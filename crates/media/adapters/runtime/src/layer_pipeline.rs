@@ -68,9 +68,36 @@ pub struct FrameContext<'a> {
     pub beat: f32,
     pub bpm: f32,
     pub beat_phase: f32,
+    /// The kick, snare, and hi-hat, each with its level and hit flash.
+    pub instruments: media_domain::Instruments,
     /// Seconds since the process started, for time-driven generated sources.
     pub seconds: f32,
     pub now: Timestamp,
+}
+
+impl<'a> FrameContext<'a> {
+    /// One instant, with the music as the audio worker last published it.
+    pub fn heard(
+        catalog: &'a CatalogSnapshot,
+        configuration: &'a MediaConfiguration,
+        heard: &'a media_audio::AnalysisSnapshot,
+        now_unix_millis: i64,
+        seconds: f32,
+        now: Timestamp,
+    ) -> Self {
+        Self {
+            catalog,
+            configuration,
+            analysis: &heard.analysis,
+            now_unix_millis,
+            beat: heard.beat,
+            bpm: heard.bpm,
+            beat_phase: heard.beat_phase,
+            instruments: heard.instruments,
+            seconds,
+            now,
+        }
+    }
 }
 
 /// Everything one output needs to present this frame.
@@ -341,6 +368,7 @@ impl LayerPipeline {
             beat: context.beat,
             bpm: context.bpm,
             beat_phase: context.beat_phase,
+            instruments: context.instruments,
         };
         let parameters = visualizer_parameters(layer, &visualizer.parameters);
         match self
@@ -460,6 +488,7 @@ impl LayerPipeline {
                     beat: frame.beat,
                     bpm: frame.bpm,
                     beat_phase: frame.beat_phase,
+                    instruments: frame.instruments,
                 };
                 return self
                     .visualizers
@@ -630,6 +659,7 @@ mod tests {
             beat: 1.0,
             bpm: 128.0,
             beat_phase: 0.25,
+            instruments: media_domain::Instruments::default(),
             seconds: 1.25,
             now: Timestamp::from_millis(1_250),
         };
@@ -857,6 +887,7 @@ mod tests {
                 beat: 0.0,
                 bpm: 120.0,
                 beat_phase: 0.0,
+                instruments: media_domain::Instruments::default(),
                 seconds: 0.0,
                 now: Timestamp::from_millis(millis),
             };
@@ -951,6 +982,7 @@ mod tests {
             beat: 1.0,
             bpm: 128.0,
             beat_phase: 0.25,
+            instruments: media_domain::Instruments::default(),
             seconds: 1.25,
             now: Timestamp::from_millis(1_250),
         };

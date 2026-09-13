@@ -5,7 +5,11 @@
 // other, and the gains reach the running analysis as soon as it is stored.
 
 import { HorizontalFaderField } from "@tosklight/ui";
-import { SelectField, TextField } from "@tosklight/ui/controls";
+import {
+	SelectField,
+	SwitchField,
+	TextField,
+} from "@tosklight/ui/controls";
 import { WindowFrame } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
@@ -104,7 +108,11 @@ function StoredSettings({ settings }: { settings: AudioSettingsView }) {
 			<dt>Input</dt>
 			<dd>{describeDevice(settings)}</dd>
 			<dt>Gain</dt>
-			<dd>{settings.inputGain.toFixed(2)}×</dd>
+			<dd>
+				{settings.autoGain
+					? `automatic, trimmed ${settings.inputGain.toFixed(2)}×`
+					: `${settings.inputGain.toFixed(2)}×`}
+			</dd>
 			<dt>Beat sensitivity</dt>
 			<dd>{settings.beatSensitivity.toFixed(2)}×</dd>
 			<dt>Bass · mid · treble</dt>
@@ -129,12 +137,14 @@ const GAINS = [
 	{
 		field: "inputGain",
 		label: "Gain",
-		description: "Applied through a curve, so low settings stay precise.",
+		description:
+			"Applied through a curve, so low settings stay precise. With automatic gain on, a trim on top of it.",
 	},
 	{
 		field: "beatSensitivity",
 		label: "Beat sensitivity",
-		description: "Higher triggers more easily.",
+		description:
+			"Higher finds quieter kicks, snares, and hi-hats. Detection does not depend on the gain.",
 	},
 	{ field: "eqBass", label: "Bass", description: undefined },
 	{ field: "eqMid", label: "Mid", description: undefined },
@@ -153,6 +163,7 @@ function AudioSettings({
 	const mounted = useRef(false);
 	const [deviceBy, setDeviceBy] = useState(settings.deviceBy);
 	const [deviceValue, setDeviceValue] = useState(settings.deviceValue ?? "");
+	const [autoGain, setAutoGain] = useState(settings.autoGain);
 	const [gains, setGains] = useState<Record<GainField, number>>({
 		inputGain: settings.inputGain,
 		beatSensitivity: settings.beatSensitivity,
@@ -184,9 +195,10 @@ function AudioSettings({
 			requestId: requestId(),
 			deviceBy,
 			deviceValue: deviceBy === "system-default" ? undefined : deviceValue,
+			autoGain,
 			...gains,
 		});
-	}, [deviceBy, deviceValue, gains, onChange]);
+	}, [deviceBy, deviceValue, autoGain, gains, onChange]);
 
 	return (
 		<form className="media-settings-form">
@@ -220,6 +232,15 @@ function AudioSettings({
 					onChange={(event) => setDeviceValue(event.target.value)}
 				/>
 			)}
+
+			<SwitchField
+				label="Automatic gain"
+				description="Levels the meters and visualizers to whatever is playing, from a quiet room microphone to a hot desk feed."
+				offLabel="Manual"
+				onLabel="Auto"
+				checked={autoGain}
+				onChange={(event) => setAutoGain(event.target.checked)}
+			/>
 
 			{GAINS.map((gain) => (
 				<HorizontalFaderField

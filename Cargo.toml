@@ -34,6 +34,7 @@ members = [
   "crates/media/adapters/text",
   "crates/media/application",
   "crates/media/domain",
+  "crates/shared/beat",
   "crates/shared/core",
   "crates/shared/discovery",
   "crates/shared/dmx",

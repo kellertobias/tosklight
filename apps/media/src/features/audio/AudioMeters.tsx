@@ -5,7 +5,10 @@
 // carried and says plainly when frames have stopped, because a frozen meter that looks live is
 // worse than one that admits it is not receiving.
 
-import type { AudioView } from "../../shared/api/generated/media-wire";
+import type {
+	AudioView,
+	AudioVoiceView,
+} from "../../shared/api/generated/media-wire";
 
 export interface AudioMetersProps {
 	audio: AudioView;
@@ -24,7 +27,25 @@ export function AudioMeters({ audio, live }: AudioMetersProps) {
 				>
 					{status(audio, live)}
 				</span>
+				{audio.clipping && (
+					<span className="media-badge is-bad" role="alert">
+						Input clipping — turn the source down
+					</span>
+				)}
 			</header>
+
+			{/* What the detector hears: a lamp that flashes on each hit over the instrument's level. */}
+			<div className="media-audio-hits" aria-label="Detected instruments">
+				<Hit label="Kick" tone="kick" voice={audio.kick} />
+				<Hit label="Snare" tone="snare" voice={audio.snare} />
+				<Hit label="Hi-hat" tone="hihat" voice={audio.hihat} />
+				{/* The beat's bar is its phase: it sweeps once per beat. */}
+				<Hit
+					label="Beat"
+					tone="beat"
+					voice={{ level: audio.beatPhase, hit: audio.beat }}
+				/>
+			</div>
 
 			{audio.detail && <p className="media-state is-notice">{audio.detail}</p>}
 
@@ -41,25 +62,56 @@ export function AudioMeters({ audio, live }: AudioMetersProps) {
 			<Spectrum bands={audio.spectrum} />
 
 			<dl className="media-facts">
-				<dt>Beat</dt>
-				<dd>
-					<span
-						className="media-audio-beat"
-						style={{ opacity: Math.max(0.08, Math.min(1, audio.beat)) }}
-						aria-hidden="true"
-					/>
-					<span className="media-visually-hidden">
-						{audio.beat > 0.5 ? "on a beat" : "between beats"}
-					</span>
-				</dd>
 				<dt>Tempo</dt>
 				<dd>
 					{audio.bpm > 0
-						? `${audio.bpm.toFixed(1)} BPM`
-						: "not enough beats yet"}
+						? `${audio.bpm.toFixed(1)} BPM · ${Math.round(clamp01(audio.tempoConfidence) * 100)}% steady`
+						: "listening for a tempo"}
 				</dd>
+				<dt>Gain</dt>
+				<dd>{audio.gain.toFixed(2)}×</dd>
 			</dl>
 		</article>
+	);
+}
+
+function clamp01(value: number): number {
+	return Math.min(Math.max(value, 0), 1);
+}
+
+function Hit({
+	label,
+	tone,
+	voice,
+}: {
+	label: string;
+	tone: "kick" | "snare" | "hihat" | "beat";
+	voice: AudioVoiceView;
+}) {
+	const level = Math.round(clamp01(voice.level) * 100);
+	const struck = voice.hit > 0.5;
+	return (
+		<div className={`media-audio-hit is-${tone}${struck ? " is-struck" : ""}`}>
+			<span
+				className="media-audio-hit-lamp"
+				style={{ opacity: Math.max(0.12, clamp01(voice.hit)) }}
+				aria-hidden="true"
+			/>
+			<span className="media-audio-hit-label">{label}</span>
+			<div
+				className="media-audio-bar-track"
+				role="meter"
+				aria-label={`${label} level`}
+				aria-valuenow={level}
+				aria-valuemin={0}
+				aria-valuemax={100}
+			>
+				<span style={{ width: `${level}%` }} />
+			</div>
+			<span className="media-visually-hidden">
+				{struck ? `${label} struck` : `${label} quiet`}
+			</span>
+		</div>
 	);
 }
 

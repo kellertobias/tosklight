@@ -589,6 +589,15 @@ fn diagnostics_of(
                         beat: heard.beat,
                         bpm: heard.bpm,
                         beat_phase: heard.beat_phase,
+                        tempo_confidence: heard.tempo_confidence,
+                        kick_level: heard.instruments.kick.level,
+                        kick_hit: heard.instruments.kick.hit,
+                        snare_level: heard.instruments.snare.level,
+                        snare_hit: heard.instruments.snare.hit,
+                        hihat_level: heard.instruments.hihat.level,
+                        hihat_hit: heard.instruments.hihat.hit,
+                        gain: heard.gain,
+                        clipping: heard.clipping,
                     }
                 })
             }

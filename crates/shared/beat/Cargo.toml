@@ -1,0 +1,15 @@
+[package]
+name = "light-beat"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# Musical event detection from an audio stream: kick, snare, and hi-hat onsets, a tempo, and a beat
+# phase. Shared so the Media Server and the desk hear the same music the same way. Plain arithmetic
+# on the standard library only: no device, clock, allocation in the streaming path, or platform
+# transform library, so the same samples give the same events on every machine.
+[dependencies]
+
+[lints]
+workspace = true

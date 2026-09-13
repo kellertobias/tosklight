@@ -1,4 +1,4 @@
-// Particles thrown outward on a bass hit, pulled down by gravity, fading over a lifetime.
+// Particles thrown outward on a kick, pulled down by gravity, fading over a lifetime.
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     let particles = max(count(), 1.0);
     var glow = 0.0;
@@ -14,7 +14,7 @@ fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
         let travelled = age * velocity;
         let position = vec2<f32>(cos(angle), sin(angle)) * travelled
             - vec2<f32>(0.0, gravity() * age * age * 2.0);
-        let brightness = (1.0 - age) * (0.3 + beat() * 0.7);
+        let brightness = (1.0 - age) * (0.3 + max(beat(), kick()) * 0.7);
         glow += brightness * size() * 0.4 / (length(p - position) + size() * 0.4);
         index += 1.0;
     }

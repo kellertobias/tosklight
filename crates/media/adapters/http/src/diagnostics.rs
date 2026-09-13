@@ -32,6 +32,17 @@ pub struct AudioTelemetry {
     pub beat: f32,
     pub bpm: f32,
     pub beat_phase: f32,
+    pub tempo_confidence: f32,
+    /// Each instrument's auto-ranged level and hit flash.
+    pub kick_level: f32,
+    pub kick_hit: f32,
+    pub snare_level: f32,
+    pub snare_hit: f32,
+    pub hihat_level: f32,
+    pub hihat_hit: f32,
+    /// The gain the levels were measured with.
+    pub gain: f32,
+    pub clipping: bool,
 }
 
 impl Default for AudioTelemetry {
@@ -51,6 +62,15 @@ impl Default for AudioTelemetry {
             beat: 0.0,
             bpm: 0.0,
             beat_phase: 0.0,
+            tempo_confidence: 0.0,
+            kick_level: 0.0,
+            kick_hit: 0.0,
+            snare_level: 0.0,
+            snare_hit: 0.0,
+            hihat_level: 0.0,
+            hihat_hit: 0.0,
+            gain: 1.0,
+            clipping: false,
         }
     }
 }

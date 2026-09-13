@@ -11,7 +11,7 @@ use ts_rs::{Config, TS};
 
 use crate::error::ApiErrorBody;
 use crate::wire::{
-    AddressView, AudioBandsView, AudioPanelView, AudioSettingsView, AudioView,
+    AddressView, AudioBandsView, AudioPanelView, AudioSettingsView, AudioView, AudioVoiceView,
     AvailableMonitorView, CanvasPointView, CatalogFolderView, CatalogItemView, CatalogView,
     CreateText, CreateVisualizer, DeleteLibraryItem, DeleteLibraryItems, DeleteText,
     DeskIdentityView, DisplayRegionView, DmxChannelGroupView, DmxChannelView, DmxIngressView,
@@ -122,6 +122,7 @@ fn declarations(config: &Config) -> Vec<String> {
         TextSlotView::decl(config),
         AudioBandsView::decl(config),
         WaveformView::decl(config),
+        AudioVoiceView::decl(config),
         AudioView::decl(config),
         AudioSettingsView::decl(config),
         AudioPanelView::decl(config),

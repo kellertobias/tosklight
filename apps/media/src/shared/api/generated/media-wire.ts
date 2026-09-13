@@ -309,6 +309,15 @@ kind: string, text: string | null, durationSeconds: number | null,
 targetUnixMillis: number | null, style: TextStyleView, format: TextFormatView, };
 export type AudioBandsView = { bass: number, mid: number, treble: number, };
 export type WaveformView = { points: Array<number>, };
+export type AudioVoiceView = {
+/**
+ * The instrument's band, auto-ranged to `0..1` between its own recent floor and peak.
+ */
+level: number,
+/**
+ * `1` on the pass it struck, falling afterwards.
+ */
+hit: number, };
 export type AudioView = {
 /**
  * Whether an input device is open at all. A flat meter on a capturing device means a quiet
@@ -328,9 +337,21 @@ peak: number,
  */
 beat: number,
 /**
- * Zero until enough beats have been seen to mean anything.
+ * Zero until the music has shown a tempo.
  */
-bpm: number, beatPhase: number, };
+bpm: number, beatPhase: number,
+/**
+ * How periodic the music is right now, `0..1`. Low in a breakdown.
+ */
+tempoConfidence: number, kick: AudioVoiceView, snare: AudioVoiceView, hihat: AudioVoiceView,
+/**
+ * The gain the meters were measured with, automatic or manual.
+ */
+gain: number,
+/**
+ * The input reached full scale recently. No gain applied here can repair that.
+ */
+clipping: boolean, };
 export type AudioSettingsView = {
 /**
  * `system-default`, `name`, or `index`.
@@ -339,7 +360,11 @@ deviceBy: string,
 /**
  * The name or index the operator chose, when they chose one.
  */
-deviceValue: string | null, inputGain: number, beatSensitivity: number, eqBass: number, eqMid: number, eqTreble: number,
+deviceValue: string | null, inputGain: number,
+/**
+ * Whether the analysis levels itself, with the input gain as a trim on top.
+ */
+autoGain: boolean, beatSensitivity: number, eqBass: number, eqMid: number, eqTreble: number,
 /**
  * This machine's inputs, so an operator picks from what exists rather than typing a name.
  */
@@ -509,7 +534,7 @@ export type UpdateAudio = { requestId: string,
  * falling back to the default input would give an operator the laptop microphone instead of
  * the desk feed they asked for.
  */
-deviceBy?: string | null, deviceValue?: string | null, inputGain?: number | null, beatSensitivity?: number | null, eqBass?: number | null, eqMid?: number | null, eqTreble?: number | null, };
+deviceBy?: string | null, deviceValue?: string | null, inputGain?: number | null, autoGain?: boolean | null, beatSensitivity?: number | null, eqBass?: number | null, eqMid?: number | null, eqTreble?: number | null, };
 export type StartImport = { requestId: string, folder?: number | null, file?: number | null, };
 export type UpdateLibraryItem = { requestId: string, name?: string | null, folder?: number | null, file?: number | null,
 /**

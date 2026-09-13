@@ -45,6 +45,21 @@ fn main() -> anyhow::Result<()> {
         beat: 0.8,
         bpm: 128.0,
         beat_phase: 0.2,
+        // A kick landing with a hi-hat still ringing, so the sheet shows what they drive.
+        instruments: media_domain::Instruments {
+            kick: media_domain::Instrument {
+                level: 0.85,
+                hit: 0.9,
+            },
+            snare: media_domain::Instrument {
+                level: 0.3,
+                hit: 0.0,
+            },
+            hihat: media_domain::Instrument {
+                level: 0.5,
+                hit: 0.4,
+            },
+        },
     };
 
     for kind in ALL_KINDS {

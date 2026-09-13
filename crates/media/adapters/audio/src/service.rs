@@ -187,7 +187,6 @@ impl DeviceCapture {
                 let running = Arc::clone(&running);
                 let published = Arc::clone(&published);
                 let tuning = Arc::clone(&tuning);
-                let started = std::time::Instant::now();
                 move || {
                     let mut worker = Worker::new(**tuning.load(), sample_rate, published);
                     let mut current = **tuning.load();
@@ -199,8 +198,7 @@ impl DeviceCapture {
                             worker.retune(wanted);
                             current = wanted;
                         }
-                        let now = started.elapsed().as_millis() as u64;
-                        if worker.drain(&queue, now) == 0 {
+                        if worker.drain(&queue) == 0 {
                             // Nothing completed a window; wait rather than spin a core.
                             std::thread::sleep(std::time::Duration::from_millis(5));
                         }
@@ -313,6 +311,7 @@ pub fn tuning_of(configuration: &AudioConfiguration) -> Tuning {
         eq_mid: configuration.eq_mid,
         eq_treble: configuration.eq_treble,
         beat_sensitivity: configuration.beat_sensitivity,
+        auto_gain: configuration.auto_gain,
     }
 }
 
@@ -400,9 +399,11 @@ mod tests {
             eq_mid: 0.5,
             eq_treble: 0.25,
             beat_sensitivity: 3.0,
+            auto_gain: false,
             ..Default::default()
         };
         let tuning = tuning_of(&configuration);
+        assert!(!tuning.auto_gain);
 
         assert_eq!(tuning.input_gain, 2.0);
         assert_eq!(tuning.eq_bass, 1.5);
