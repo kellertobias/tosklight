@@ -4,13 +4,13 @@ ToskLight Control operates ToskLight Pixel through ordinary Art-Net or sACN chan
 
 ## Patch the Media Server fixture
 
-Open **Show > Show Patch**, choose the **ToskLight** manufacturer, and add the combined **Media Server** fixture in its 2-layer or 8-layer mode. Match its personality, protocol, universe, start address, and **Effect banks and full master controls** channel layout to the Media Server output under **Settings > DMX**. The 2-layer personality occupies 119 slots and the 8-layer personality occupies 353 slots. Existing shows using the earlier 89/323-slot layout remain compatible when Pixel is set to **Mask positioning (v2)**.
+Open **Show > Show Patch**, choose the **ToskLight** manufacturer, and add the combined **Media Server** fixture in its 2-layer or 8-layer mode. Match its personality, protocol, universe, start address, and **3D mapping, blend, playback range, and parameters** channel layout to the Media Server output under **Settings > DMX**. The 2-layer personality occupies 158 slots and the 8-layer personality occupies 512 slots, so an 8-layer patch fills its universe and must start at address 1. Existing shows using the earlier 119/353-slot layout remain compatible when Pixel is set to **Effect banks and full master controls**, and shows using the 89/323-slot layout when it is set to **Mask positioning (v2)**.
 
 The fixture contains independent logical heads for its layers and one shared master head. It remains a normal show fixture, so its values can be selected, programmed, stored in Presets and Cues, and assigned to playbacks. Unpatching it preserves that show programming but suppresses DMX output.
 
-The shared Master homes at 100% intensity. Every media layer homes at 0% intensity so patching a server does not unexpectedly place all layers on air; raise the selected layer's **Intensity** when it should contribute to the output. Layer heads expose the regular Desk controls for intensity, volume, RGB colour, frame position, scale, rotation, playback, mask, and two ordered effect banks. Each bank has **Effect Select** and **Effect Strength**; Blur is selected as a configured library preset rather than a separate playback fader. The RGB operator controls are translated to the Media Server personality's physical CMY channels.
+The shared Master homes at 100% intensity. Every media layer homes at 0% intensity so patching a server does not unexpectedly place all layers on air; raise the selected layer's **Intensity** when it should contribute to the output. Layer heads expose the regular Desk controls for intensity, volume, RGB colour, frame position, scale, rotation, playback with **In point** and **Out point**, **Blend mode** and strobe, mask, four **Visualizer Parameters**, **3D model** with **Model pan** and **Model tilt**, and two ordered effect banks. Each bank has **Effect Select**, **Effect Strength**, and **Parameter 1**–**Parameter 4**; Blur is selected as a configured library preset rather than a separate playback fader. The RGB operator controls are translated to the Media Server personality's physical CMY channels.
 
-Selecting **Master** in the Media pane selects **Mask** automatically because Master has no content address. Its control sections remain available in this order: **Output**, **Geometry**, **Mask position**, **Shapers**, and **Colour**. Geometry provides scale, scaling mode, position, rotation, and flip/mirror. Shapers provide independent left, right, top, and bottom insertion and rotation plus complete module rotation.
+Selecting **Master** in the Media pane selects **Mask** automatically because Master has no content address. Its control sections remain available in this order: **Output**, **Geometry**, **Mask position**, **Shapers**, and **Colour**. Geometry provides scale, scaling mode, position, and rotation. A negative scale mirrors the output along that axis; only older channel layouts have a separate flip/mirror control. Shapers provide independent left, right, top, and bottom insertion and rotation plus complete module rotation.
 
 If no Media Server fixture is patched, the Desk's Media pane shows only **No media server is patched** and **Open Patch**. Use that action to open Show Patch. The pane does not display invented layers or stale server content.
 
@@ -29,8 +29,13 @@ angle stops where the server stops it, and a count moves in whole numbers. A con
 value it is holding while you change it, and a refusal is reported as the Media Server's own
 sentence rather than a silent no-op.
 
-Effect **Select** and **Strength** stay on DMX. The library configures the shared preset; the two
-ordered banks play it. The Master exposes the fixed **Layer Opacity Cycle** beat ratio separately.
+Effect **Select**, **Strength**, and the six **Parameters** stay on DMX. The library configures the
+shared preset; the two ordered banks play it. Each parameter follows the order the Effects tab lists
+for the selected effect: **0** plays the preset's stored value, and **1–255** sweeps that parameter
+from its minimum to its maximum, in whole steps where the parameter is a count or a choice. An effect
+with more than four parameters keeps the rest at the preset's values, and one with fewer ignores the
+remaining bytes. The Master exposes the fixed
+**Layer Opacity Cycle** beat ratio separately.
 
 ## Work without CITP
 
@@ -61,14 +66,14 @@ Open Pixel’s **DMX** page and press **Connect to Console** at the top. Choose 
 same canonical channel definition used by Pixel’s decoder. The Layer file is used for every
 layer, including Layer 1; the Master is a separate fixture.
 
-Configure one output with **8 layers** and **Effect banks and full master controls** in **Settings > DMX**.
+Configure one output with **8 layers** and **3D mapping, blend, playback range, and parameters** in **Settings > DMX**.
 Restart Pixel after changing its startup configuration. Use the connection panel’s actual
 universe and patch table, which is read from the running decoder. Patch eight Layer fixtures,
 followed by one Master fixture. Do not use the current generated files with a legacy output
-layout. For the full layout, each Layer occupies 39 slots and Master occupies 41; eight layers
-and Master occupy 353 slots. Starting at address 1, the Layer starts are 1, 40, 79, 118, 157,
-196, 235, and 274; Master starts at 313 and ends at 353. A different configured start address
-shifts all these addresses equally. The complete block must fit in the configured universe.
+layout. For the full layout, each Layer occupies 59 slots and Master occupies 40; eight layers
+and Master occupy all 512 slots. The Layer starts are 1, 60, 119, 178, 237, 296, 355, and 414;
+Master starts at 473 and ends at 512. Because the block fills the universe, an eight-layer output
+must start at address 1. A two-layer output occupies 158 slots and can start anywhere up to 355.
 
 ### Import the generated files
 
@@ -140,12 +145,13 @@ encoder arrangement, and unused positions must be blank:
 
 | Page | A | B | C | D | E | F | Y | X |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Media | | | | Playback BPM | Speed Multiplier | Play Mode | Media Folder | Media File |
+| Media | In Point | Out Point | Blend Mode | 3D Model | Speed Multiplier | Play Mode | Media Folder | Media File |
 | Colour | | | | | Cyan | Magenta | Yellow | Greyscale |
-| Position | | | Scale Y | Scale X | Rotation | Scale Mode | Position Y | Position X |
+| Position | Model Pan | Model Tilt | Scale Y | Scale X | Rotation | Scale Mode | Position Y | Position X |
 | Intensity | | | | | | | Volume | Dimmer |
-| FX1 | | | | | | | FX1 Parameter | FX1 Select |
-| FX2 | | | | | | | FX2 Parameter | FX2 Select |
+| FX1 | FX1 Param 1 | FX1 Param 2 | FX1 Param 3 | FX1 Param 4 | | | FX1 Mix | FX1 Select |
+| FX2 | FX2 Param 1 | FX2 Param 2 | FX2 Param 3 | FX2 Param 4 | | | FX2 Mix | FX2 Select |
+| Visualizer | Vis Param 1 | Vis Param 2 | Vis Param 3 | Vis Param 4 | | | | |
 | Frame | Mask Position X | Mask Position Y | Mask Scale X | Mask Scale Y | Mask Invert | Mask Opacity | Mask Folder | Mask File |
 
 MagicQ’s normal preview shows the master/program output. Hold **SHIFT** and press

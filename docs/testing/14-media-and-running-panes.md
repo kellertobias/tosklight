@@ -7,8 +7,18 @@ These scenarios are the operator acceptance contract for the capability-gated Me
 Given a Media Server is patched and its Effects library assigns two distinct presets, when an
 operator selects them in Bank 1 and Bank 2 and changes each Effect Strength, then both the Media
 Server and ToskLight Control show exactly those two ordered banks with the literal controls
-**Effect Select** and **Effect Strength**. Slot 0 reads Off, missing slots remain visibly
-unassigned, and the isolated layer preview matches the final output ordering.
+**Effect Select**, **Effect Strength**, and **Parameter 1** through **Parameter 4**. Slot 0 reads
+Off, missing slots remain visibly unassigned, and the isolated layer preview and the final output
+both visibly show the selected effects in bank order.
+
+When the operator raises one bank parameter above 0, the output changes the matching parameter of the
+selected effect, in the order the Effects library lists it; returning it to 0 restores the preset's
+stored value. A parameter beyond the selected effect's own parameters has no visible effect. The
+2-layer and 8-layer personalities occupy 158 and 512 slots, and the Media Server's Connect to Console
+downloads patch the same 59-slot layer and 40-slot master.
+
+Given a Media output still configured for an older channel layout, when an operator selects a bank
+in the Media Server's own layer controls, the output visibly applies that effect.
 
 When the operator edits either preset in the Effects library, every bank selecting that slot uses
 the new settings without changing its Select or Strength value. The legacy four-amount personality

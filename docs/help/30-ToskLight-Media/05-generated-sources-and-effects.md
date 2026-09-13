@@ -22,9 +22,53 @@ Triangular Net is carried by the beat rather than by a clock: a kick heaves its 
 
 Masks are selected independently from content and can be combined with the layer's shaper and
 transform. Each layer has exactly two ordered effect banks. **Bank 1** is applied before **Bank 2**;
-each bank stores an **Effect Select** value and an **Effect Strength**. Select **0** is Off and
-**1–255** resolves the matching preset in the Library's Effects tab. A missing or unsupported
-preset is reported and bypassed instead of silently substituting another effect.
+each bank stores an **Effect Select** value, an **Effect Strength**, and four **Parameters**. Select
+**0** is Off and **1–255** resolves the matching preset in the Library's Effects tab. A missing or
+unsupported preset is reported and bypassed instead of silently substituting another effect.
+
+The bank's four parameters follow the order the Effects tab lists the selected effect's parameters
+in; an effect with more than four keeps the rest at the preset's values. A parameter at **0** plays the value the preset stores; **1–255** sweeps it from its
+minimum to its maximum. Choices and counts, such as the Rasterize mode or Kaleidoscope repetitions,
+step through their whole values across that range. A parameter the selected effect does not have is
+ignored, so a bank can change presets without the leftover bytes doing anything.
+
+A bank selected in the Media Server's own layer controls plays on every channel layout. An output
+still on an older layout, which has no effect-bank channels on the wire, keeps its directly
+configured effect slots until a bank is selected there.
+
+## Blend mode and strobe
+
+**Blend mode** decides how a layer combines with the layers below it. Values **0–127** choose
+**Normal**, **Add**, **Screen**, **Multiply**, **Overlay**, **Difference**, **Lighten**, and
+**Darken** in bands of sixteen. **128–249** strobe the layer from 1 to 25 flashes per second while it
+blends Normally; each flash is lit for half its period. **250–255** are Normal without strobe, so a
+fader pushed to full never leaves a layer flashing. The layer's dimmer and mask still weight the
+blended result, and the isolated layer preview shows the strobe.
+
+## Playback range
+
+**In point** and **Out point** are 16-bit frame counts. The In point counts frames from the clip's
+start and the Out point counts frames back from its end, so **0** on both plays the whole clip. Every
+play mode stays inside the range: a loop wraps from the Out point back to the In point, a bounce turns
+at both, and a single pass ends on the Out point. An In point beyond the clip holds its last frame,
+and an Out point that would end the range before the In point plays through to the clip's end. Changing the range while a clip plays
+keeps the playhead where it is when it is still inside the range. Stills, text, and visualizers
+ignore the range.
+
+## Visualizer parameters
+
+A layer showing a generated visualizer carries four **Visualizer Parameters**. They follow the order
+the visualizer's kind lists its parameters in the Visualizers editor. **0** keeps the configured
+value; **1–255** sweeps the parameter across its range. Colours sweep the hue wheel, switches turn on
+at 128, and variants count up from the first.
+
+## Output mirroring
+
+The Master has no Flip/mirror channel in the current channel layout. **Master scale X** and
+**Master scale Y** run from −4× to +4× with **1×** at raw value 40960; a negative axis mirrors the
+finished output along that axis. Older channel layouts keep their Flip/mirror channel.
+
+## Effect catalogue
 
 The initial catalogue includes TV/CRT/VHS Simulation, Digital Video/ Glitch Simulation, Blur
 (Gaussian, Shape, Radial, Linear, and Axial), Feedback, Beat Move, Beat Scan, Beat Scale & Turn,

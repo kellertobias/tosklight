@@ -13,6 +13,7 @@ Use these chapters in order:
 3. [Configure Outputs and Displays](03-outputs-and-displays.md) — monitor/off-screen targets, resolution, rate, audio, personalities, and network addresses.
 4. [Operate Outputs, Master, and Layers](04-playback-and-layers.md) — take control, choose content and masks, transform layers, and release them back to DMX.
 5. [Generated Sources and Effects](05-generated-sources-and-effects.md) — text, visualizers, audio-reactive content, and effect configuration.
-6. [Connect ToskLight Control to Pixel](09-connect-the-desk.md) — patch Media personalities, match DMX, configure CITP/MSEX, use previews, and diagnose no-CITP operation.
+6. [3D Model Mapping](06-3d-model-mapping.md) — the Models library, glTF import requirements, the output camera, and the pan → tilt → roll order.
+7. [Connect ToskLight Control to Pixel](09-connect-the-desk.md) — patch Media personalities, match DMX, configure CITP/MSEX, use previews, and diagnose no-CITP operation.
 
 CITP/MSEX and ToskLight show discovery are different systems. Pixel advertises CITP/MSEX for output, library, thumbnail, and preview information. ToskLight Control currently uses a manually configured Media endpoint after a Media fixture is patched; Architect's Rig Editor can discover CITP servers while configuring media surfaces.
