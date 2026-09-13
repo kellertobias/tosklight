@@ -461,6 +461,37 @@ test("the Windows Pixel release is a branded launcher installer", () => {
 	);
 });
 
+test("Windows ships a portable desk folder built against the static C runtime", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const assembler = read("tools/assemble-release-bundle.sh");
+
+	assert.match(
+		workflow,
+		/CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=\+crt-static/u,
+	);
+	assert.match(
+		workflow,
+		/cp "\$release\/light-desktop\.exe" "\$portable\/ToskLight\.exe"[\s\S]*?light-headless\.exe[\s\S]*?viz-renderer\.exe[\s\S]*?fixture-library[\s\S]*?portable\.txt[\s\S]*?tosklight-desk-portable-\$version-windows-amd64\.zip/u,
+	);
+	assert.match(
+		assembler,
+		/tosklight-desk-portable-\$VERSION-windows-amd64\.zip[\s\S]*?tosklight-desk-\$asset_slug"/u,
+	);
+	assert.match(
+		assembler,
+		/tosklight-desk-\$asset_slug-setup\.exe/u,
+		"the portable folder is an addition; the installer stays",
+	);
+	assert.match(assembler, /windows-first-start\.txt/u);
+	assert.match(assembler, /linux-first-start\.txt/u);
+	assert.match(read("docs/release/linux-first-start.txt"), /APPIMAGE_EXTRACT_AND_RUN=1/u);
+	for (const app of ["light-desktop", "viz-editor"])
+		assert.match(
+			read(`apps/${app}/src-tauri/src/portable.rs`),
+			/"portable\.txt"[\s\S]*webview_version\(\)/u,
+		);
+});
+
 test("every Architect package includes the generated MCP bridge", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const config = read("apps/viz-editor/src-tauri/tauri.conf.json");

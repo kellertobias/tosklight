@@ -1,0 +1,22 @@
+ToskLight for Linux - first start
+=================================
+
+tosklight-desk-linux_amd64.AppImage is a single self-contained file: it runs from any folder,
+including a USB stick, without installing anything.
+
+  chmod +x tosklight-desk-linux_amd64.AppImage
+  ./tosklight-desk-linux_amd64.AppImage
+
+Distributions that no longer ship libfuse2 (for example Ubuntu 24.04 and later) cannot mount an
+AppImage directly. Run it without FUSE instead; nothing needs to be installed:
+
+  APPIMAGE_EXTRACT_AND_RUN=1 ./tosklight-desk-linux_amd64.AppImage
+
+ToskLight Architect ("tosklight-architect-linux_amd64") and ToskLight Pixel
+("tosklight-media-linux_amd64") are plain folders: copy them anywhere and start the executable
+inside. Architect's folder contains portable.txt, so it keeps its shows and library in a "data"
+folder beside the executable.
+
+tosklight-desk-linux_amd64.deb installs the desk system-wide for Debian and Ubuntu instead.
+
+Verify downloads against report-checksums.txt before running them.

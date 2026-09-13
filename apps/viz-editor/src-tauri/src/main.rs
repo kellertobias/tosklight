@@ -13,6 +13,7 @@ mod discovery;
 mod dmx_input;
 mod local_api;
 mod mcp;
+mod portable;
 mod recent;
 mod session;
 mod underlay;
@@ -144,7 +145,7 @@ fn prepare_fixture_library(
 fn announce_on_the_network(app: &tauri::App) {
     let session = app.state::<session::Session>();
     let discovery = app.state::<discovery::Discovery>();
-    if let Ok(data) = app.path().app_data_dir() {
+    if let Ok(data) = crate::portable::app_data_dir(app) {
         discovery.set_downloads(data.join("shows"));
     }
     let source = session.scene_source();
@@ -187,6 +188,7 @@ fn prepare_local_visualizer(app: &tauri::App) -> Result<(), String> {
 }
 
 fn main() {
+    portable::prepare("ToskLight Architect");
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(session::Session::default())
@@ -265,7 +267,7 @@ fn main() {
                 let _ = window.set_skip_taskbar(true);
             }
             let source = fixture_library_source(app).map_err(std::io::Error::other)?;
-            let app_data = app.path().app_data_dir().map_err(std::io::Error::other)?;
+            let app_data = crate::portable::app_data_dir(app).map_err(std::io::Error::other)?;
             let library =
                 prepare_fixture_library(source, &app_data).map_err(std::io::Error::other)?;
             let session = app.state::<session::Session>();

@@ -3499,6 +3499,7 @@ dependencies = [
  "mach2 0.6.0",
  "pollster",
  "raw-window-handle",
+ "rfd 0.16.0",
  "serde",
  "serde_json",
  "tauri",
@@ -5851,6 +5852,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a15ad77d9e70a92437d8f74c35d99b4e4691128df018833e99f90bcd36152672"
 dependencies = [
+ "ashpd",
  "block2 0.6.2",
  "dispatch2",
  "glib-sys",
@@ -5862,7 +5864,9 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
+ "pollster",
  "raw-window-handle",
+ "urlencoding",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -8247,6 +8251,7 @@ dependencies = [
  "light-show",
  "parking_lot",
  "reqwest 0.12.28",
+ "rfd 0.16.0",
  "serde",
  "serde_json",
  "tauri",

@@ -53,8 +53,7 @@ pub(crate) fn open_default_copy(
     session: &Session,
 ) -> Result<DocumentSummary, String> {
     let template = template_path(app)?;
-    let shows = tauri::Manager::path(app)
-        .app_data_dir()
+    let shows = crate::portable::app_data_dir(app)
         .map_err(|error| format!("this installation has no application data folder: {error}"))?
         .join("shows");
     std::fs::create_dir_all(&shows)

@@ -94,8 +94,7 @@ async fn bind_loopback() -> std::io::Result<(tokio::net::TcpListener, SocketAddr
 }
 
 fn handle_path(app: &tauri::AppHandle) -> Option<PathBuf> {
-    app.path()
-        .app_data_dir()
+    crate::portable::app_data_dir(app)
         .ok()
         .map(|dir| dir.join(HANDLE_FILE))
 }

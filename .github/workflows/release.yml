@@ -642,6 +642,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+      # Link the MSVC C runtime statically, so every Windows executable runs on a machine with no
+      # Visual C++ redistributable installed. Only the Windows target reads it.
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
     strategy:
       fail-fast: true
       matrix:
@@ -925,6 +928,18 @@ jobs:
               # Named rather than globbed: the Viz Editor writes its own installer into the same
               # directory, and a bare *-setup.exe would pick up whichever one it found first.
               cp "$bundle"/nsis/ToskLight_*-setup.exe "$out/tosklight-$version-windows-amd64-setup.exe"
+              # The portable desk: the executable with its two helpers and fixture library beside
+              # it, and portable.txt so it keeps its data in that folder. It runs from any path.
+              portable="$stage_root/tosklight-desk-portable-$version-windows-amd64"
+              release=".artifacts/build/cargo/$TARGET/release"
+              mkdir -p "$portable"
+              cp "$release/light-desktop.exe" "$portable/ToskLight.exe"
+              cp "$release/light-headless.exe" "$release/viz-renderer.exe" "$portable/"
+              cp -R assets/fixture-library "$portable/fixture-library"
+              cp docs/release/portable.txt "$portable/portable.txt"
+              (cd "$stage_root" && 7z a -tzip \
+                "$OLDPWD/$out/tosklight-desk-portable-$version-windows-amd64.zip" \
+                "$(basename "$portable")")
               ;;
           esac
           ls -la "$out"
@@ -1056,6 +1071,7 @@ jobs:
               cp "$release/light-headless.exe" "$stage/"
               cp "$release/viz-editor.exe" "$stage/"
               cp ".artifacts/build/patch-mcp/tosklight-patch-mcp.mjs" "$stage/"
+              cp docs/release/portable.txt "$stage/portable.txt"
               (cd "$stage_root" && 7z a -tzip \
                 "$OLDPWD/$out/tosklight-architect-$version-windows-amd64.zip" \
                 "$(basename "$stage")")
@@ -1069,6 +1085,7 @@ jobs:
               cp "$release/light-headless" "$stage/"
               cp "$release/viz-editor" "$stage/"
               cp ".artifacts/build/patch-mcp/tosklight-patch-mcp.mjs" "$stage/"
+              cp docs/release/portable.txt "$stage/portable.txt"
               (cd "$stage_root" && zip -q -r \
                 "$OLDPWD/$out/tosklight-architect-$version-linux-amd64.zip" \
                 "$(basename "$stage")")

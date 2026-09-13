@@ -1,0 +1,30 @@
+ToskLight for Windows - first start
+===================================
+
+The bundle contains ToskLight both as installers and as portable folders.
+
+Portable (no installer, no administrator rights)
+------------------------------------------------
+
+1. Copy the "tosklight-desk-windows_amd64" folder anywhere: a show laptop, another drive, or a USB
+   stick. ToskLight Architect ("tosklight-architect-windows_amd64") works the same way.
+2. Open the folder and start ToskLight.exe.
+3. Windows SmartScreen may warn that the application is unrecognised, because these testing builds
+   are not yet code-signed. Choose "More info", check that the archive came from the expected
+   GitHub release, then "Run anyway".
+
+The folder contains portable.txt, so ToskLight keeps its shows, database, extensions and logs in a
+"data" folder beside ToskLight.exe; deleting the folder removes them. The WebView2 runtime still
+keeps a small browser cache under %LOCALAPPDATA%.
+
+The executables need no Visual C++ redistributable. They use the Microsoft Edge WebView2 Runtime
+that Windows 11 and current Windows 10 already include; if it is missing, ToskLight says so and
+names where to install it.
+
+Installed
+---------
+
+tosklight-desk-windows_amd64-setup.exe and tosklight-media-windows_amd64-setup.exe install per user
+under %LOCALAPPDATA%\Programs without administrator rights and add Start menu shortcuts.
+
+Verify downloads against report-checksums.txt before running them.

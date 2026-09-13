@@ -26,3 +26,7 @@ mach2 = "0.6"
 
 [lints]
 workspace = true
+
+# The missing-WebView2 message is shown before any web view exists.
+[target.'cfg(windows)'.dependencies]
+rfd = "0.16"

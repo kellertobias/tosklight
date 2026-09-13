@@ -81,6 +81,11 @@ case "$SLUG" in
       "$bundle/tosklight-media-$asset_slug-setup.exe"
     cp "$COMPONENTS/tosklight-$VERSION-windows-amd64-setup.exe" \
       "$bundle/tosklight-desk-$asset_slug-setup.exe"
+    desk_unpack="$stage_root/desk-portable"
+    extract_archive \
+      "$COMPONENTS/tosklight-desk-portable-$VERSION-windows-amd64.zip" "$desk_unpack"
+    mv "$(single_directory "$desk_unpack")" "$bundle/tosklight-desk-$asset_slug"
+    cp "$ROOT/docs/release/windows-first-start.txt" "$bundle/"
     previz_unpack="$stage_root/previz"
     extract_archive \
       "$COMPONENTS/tosklight-architect-$VERSION-windows-amd64.zip" "$previz_unpack"
@@ -98,6 +103,7 @@ case "$SLUG" in
       "$bundle/tosklight-desk-$asset_slug.AppImage"
     cp "$COMPONENTS/tosklight-$VERSION-linux-amd64.deb" \
       "$bundle/tosklight-desk-$asset_slug.deb"
+    cp "$ROOT/docs/release/linux-first-start.txt" "$bundle/"
     previz_unpack="$stage_root/previz"
     extract_archive \
       "$COMPONENTS/tosklight-architect-$VERSION-linux-amd64.zip" "$previz_unpack"

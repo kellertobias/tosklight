@@ -6,10 +6,18 @@
 //   Windows  %LOCALAPPDATA%\Programs\<Product>, with a Start menu shortcut
 //   Linux    ~/.local/opt/<product>, with a launcher in ~/.local/share/applications
 //
+// --self-contained places portable copies on the Desktop instead: the .app bundles on macOS, a
+// folder that keeps its data beside itself on Windows (portable.txt), and on Linux the desk as one
+// AppImage and Architect and Pixel as portable folders.
+//
+// Installing moves the version already there into a `.old` folder beside it, replacing whatever
+// was kept there before, so each product keeps exactly one previous version. --revert deletes the
+// current version and puts that previous one back.
+//
 // Every build is a release build for the host target, assembled the way the release workflow
 // assembles it, so what gets installed is what ships.
 //
-// usage: npm run install-all -- [--only control,architect,pixel] [--dry-run]
+// usage: npm run install-all -- [--only control,architect,pixel] [--self-contained] [--revert] [--dry-run]
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -27,7 +35,11 @@ const PRODUCT_NAMES = {
 };
 
 /** Where each product is installed on `platform`, for a user whose home is `home`. */
-export function installLocations(platform, { home, localAppData } = {}) {
+export function installLocations(
+	platform,
+	{ home, localAppData, desktop, selfContained = false } = {},
+) {
+	if (selfContained) return portableLocations(platform, { home, desktop });
 	if (platform === "darwin") {
 		const applications = path.posix.join(home, "Applications");
 		return Object.fromEntries(
@@ -73,6 +85,81 @@ export function installLocations(platform, { home, localAppData } = {}) {
 	throw new Error(`install-all supports macOS, Windows and Linux, not ${platform}`);
 }
 
+/** Where `--self-contained` places each product: on the user's Desktop. */
+function portableLocations(platform, { home, desktop }) {
+	if (platform === "darwin") {
+		const folder = desktop ?? path.posix.join(home, "Desktop");
+		return Object.fromEntries(
+			PRODUCTS.map((product) => [
+				product,
+				{ directory: path.posix.join(folder, `${PRODUCT_NAMES[product]}.app`) },
+			]),
+		);
+	}
+	if (platform === "win32") {
+		const folder = desktop ?? path.win32.join(home, "Desktop");
+		return Object.fromEntries(
+			PRODUCTS.map((product) => [
+				product,
+				{
+					directory: path.win32.join(folder, PRODUCT_NAMES[product]),
+					executable: `${PRODUCT_NAMES[product]}.exe`,
+					portable: true,
+				},
+			]),
+		);
+	}
+	if (platform === "linux") {
+		const folder = desktop ?? path.posix.join(home, "Desktop");
+		return {
+			control: { directory: path.posix.join(folder, "ToskLight.AppImage"), appImage: true },
+			architect: {
+				directory: path.posix.join(folder, "ToskLight Architect"),
+				executable: "tosklight-architect",
+				portable: true,
+			},
+			pixel: {
+				directory: path.posix.join(folder, "ToskLight Pixel"),
+				executable: "tosklight-pixel",
+				portable: true,
+			},
+		};
+	}
+	throw new Error(`install-all supports macOS, Windows and Linux, not ${platform}`);
+}
+
+/** The single previous version kept for an installed product: `.old/<name>` beside it. */
+export function previousVersionPath(installed) {
+	const pathApi = installed.includes("\\") ? path.win32 : path.posix;
+	return pathApi.join(pathApi.dirname(installed), ".old", pathApi.basename(installed));
+}
+
+/**
+ * Moves the installed version aside before a new one takes its place. The previous version kept
+ * before is deleted first: there is only ever one.
+ */
+export function keepPreviousVersion(installed, fileSystem = fs) {
+	if (!fileSystem.existsSync(installed)) return null;
+	const previous = previousVersionPath(installed);
+	fileSystem.rmSync(previous, { recursive: true, force: true });
+	fileSystem.mkdirSync(path.dirname(previous), { recursive: true });
+	fileSystem.renameSync(installed, previous);
+	return previous;
+}
+
+/** Deletes the installed version and restores the previous one kept by the last install. */
+export function revertToPreviousVersion(installed, fileSystem = fs) {
+	const previous = previousVersionPath(installed);
+	if (!fileSystem.existsSync(previous))
+		throw new Error(`there is no previous version to restore at ${previous}`);
+	fileSystem.rmSync(installed, { recursive: true, force: true });
+	fileSystem.renameSync(previous, installed);
+	const folder = path.dirname(previous);
+	if (fileSystem.existsSync(folder) && fileSystem.readdirSync(folder).length === 0)
+		fileSystem.rmdirSync(folder);
+	return previous;
+}
+
 /** The products named by `--only`, in install order. */
 export function selectedProducts(argv) {
 	const index = argv.indexOf("--only");
@@ -93,19 +180,36 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 async function main() {
 	const argv = process.argv.slice(2);
 	const dryRun = argv.includes("--dry-run");
+	const selfContained = argv.includes("--self-contained");
+	const revert = argv.includes("--revert");
 	const products = selectedProducts(argv);
 	const { artifactPaths } = await import("./artifact-paths.mjs");
 	const platform = process.platform;
 	const locations = installLocations(platform, {
 		home: os.homedir(),
 		localAppData: process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"),
+		desktop: desktopFolder(platform),
+		selfContained,
 	});
+	if (revert) {
+		for (const product of products) {
+			const installed = locations[product].directory;
+			console.log(`Reverting ${PRODUCT_NAMES[product]} in ${installed}`);
+			if (dryRun) continue;
+			quitInstalled(platform, installed);
+			revertToPreviousVersion(installed);
+			console.log(`Restored the previous ${PRODUCT_NAMES[product]}`);
+		}
+		return;
+	}
 	const target = hostTarget();
 	const exe = platform === "win32" ? ".exe" : "";
 	const release = path.join(artifactPaths.cargo, target, "release");
 	const tmp = path.join(artifactPaths.tmp, "install-all");
 
-	console.log(`Installing ${products.map((product) => PRODUCT_NAMES[product]).join(", ")} for ${target}:`);
+	console.log(
+		`Installing ${selfContained ? "self-contained " : ""}${products.map((product) => PRODUCT_NAMES[product]).join(", ")} for ${target}:`,
+	);
 	for (const product of products) console.log(`  ${PRODUCT_NAMES[product]} → ${locations[product].directory}`);
 	if (dryRun) return;
 
@@ -116,7 +220,7 @@ async function main() {
 			stdio: "inherit",
 			shell: platform === "win32",
 			...options,
-			env: { ...process.env, ...options.env },
+			env: { ...process.env, ...STATIC_RUNTIME, ...options.env },
 		});
 		if (result.status !== 0)
 			throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status}`);
@@ -152,13 +256,19 @@ async function main() {
 		run(
 			"npm",
 			["run", "--prefix", "apps/light-desktop", "tauri:build", "--", "--target", target, "--config", config,
-				...(platform === "darwin" ? ["--bundles", "app"] : ["--no-bundle"])],
+				...controlBundles(platform, selfContained)],
 			{ env },
 		);
 		if (platform === "darwin") {
 			const app = path.join(release, "bundle", "macos", "ToskLight.app");
 			run("bash", ["tools/seal-macos-app.sh", app]);
 			built.control = app;
+		}
+		if (locations.control.appImage) {
+			const images = path.join(release, "bundle", "appimage");
+			const image = fs.readdirSync(images).find((name) => name.endsWith(".AppImage"));
+			if (!image) throw new Error(`the desk build produced no AppImage in ${images}`);
+			built.control = path.join(images, image);
 		}
 	}
 
@@ -193,10 +303,55 @@ async function main() {
 
 	for (const product of products) {
 		const location = locations[product];
+		quitInstalled(platform, location.directory);
+		const previous = keepPreviousVersion(location.directory);
+		if (previous) console.log(`Kept the previous ${PRODUCT_NAMES[product]} in ${previous}`);
 		if (platform === "darwin") installMac(run, built[product], location.directory, PRODUCT_NAMES[product]);
-		else installDirectory(product, location, { release, exe, platform, artifactPaths, run });
+		else if (location.appImage) installAppImage(built[product], location.directory);
+		else installDirectory(product, location, { release, exe, platform, artifactPaths, run, selfContained });
 		console.log(`Installed ${PRODUCT_NAMES[product]} in ${location.directory}`);
 	}
+	if (products.length)
+		console.log("Revert to the previous versions with: npm run install-all -- --revert" +
+			(selfContained ? " --self-contained" : "") +
+			(products.length < PRODUCTS.length ? ` --only ${products.join(",")}` : ""));
+}
+
+/** Link the MSVC C runtime statically, so nothing needs the Visual C++ redistributable. */
+const STATIC_RUNTIME =
+	process.platform === "win32"
+		? { CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-C target-feature=+crt-static" }
+		: {};
+
+function controlBundles(platform, selfContained) {
+	if (platform === "darwin") return ["--bundles", "app"];
+	if (platform === "linux" && selfContained) return ["--bundles", "appimage"];
+	return ["--no-bundle"];
+}
+
+/** The user's Desktop folder, which Windows may have redirected (to OneDrive, for example). */
+function desktopFolder(platform) {
+	if (platform !== "win32") return undefined;
+	const result = spawnSync(
+		"powershell",
+		["-NoProfile", "-NonInteractive", "-Command", "[Environment]::GetFolderPath('Desktop')"],
+		{ encoding: "utf8" },
+	);
+	const folder = result.stdout?.trim();
+	return folder || undefined;
+}
+
+/** A running copy keeps its executable open; it is asked to quit before it is moved aside. */
+function quitInstalled(platform, installed) {
+	if (platform === "darwin" && fs.existsSync(installed))
+		spawnSync("osascript", ["-e", `quit app "${installed}"`], { stdio: "ignore" });
+}
+
+function installAppImage(image, destination) {
+	if (!image || !fs.existsSync(image)) throw new Error(`no built AppImage at ${image}`);
+	fs.mkdirSync(path.dirname(destination), { recursive: true });
+	fs.copyFileSync(image, destination);
+	fs.chmodSync(destination, 0o755);
 }
 
 function hostTarget() {
@@ -229,17 +384,12 @@ function assembleArchitectMac(run, release, tmp) {
 
 function installMac(run, app, destination, name) {
 	if (!app || !fs.existsSync(app)) throw new Error(`no built ${name}.app at ${app}`);
-	// A running copy would keep the old executable mapped while its bundle is replaced underneath,
-	// so an installed copy is quit first. Nothing is quit when there is nothing to replace.
-	if (fs.existsSync(destination))
-		spawnSync("osascript", ["-e", `quit app "${destination}"`], { stdio: "ignore" });
 	fs.mkdirSync(path.dirname(destination), { recursive: true });
-	fs.rmSync(destination, { recursive: true, force: true });
 	run("ditto", [app, destination]);
 }
 
 /** Windows and Linux: the executable with its helpers and resources beside it, and a launcher. */
-function installDirectory(product, location, { release, exe, platform, artifactPaths }) {
+function installDirectory(product, location, { release, exe, platform, artifactPaths, selfContained }) {
 	const directory = location.directory;
 	const staging = `${directory}.installing`;
 	fs.rmSync(staging, { recursive: true, force: true });
@@ -266,11 +416,16 @@ function installDirectory(product, location, { release, exe, platform, artifactP
 		if (platform === "win32") copy(path.join(release, "pixel-launcher.exe"), location.executable);
 		else fs.symlinkSync("media-server", path.join(staging, location.executable));
 	}
+	// A portable folder keeps what the application writes beside it. Pixel always does: it reads its
+	// configuration relative to the folder it is started from.
+	if (location.portable && product !== "pixel")
+		fs.copyFileSync(path.join(repositoryRoot, "docs", "release", "portable.txt"), path.join(staging, "portable.txt"));
 	fs.rmSync(directory, { recursive: true, force: true });
 	fs.renameSync(staging, directory);
 	const executable = path.join(directory, location.executable);
+	if (platform !== "win32") fs.chmodSync(fs.realpathSync(executable), 0o755);
+	if (selfContained) return;
 	if (platform === "win32") return startMenuShortcut(PRODUCT_NAMES[product], executable);
-	fs.chmodSync(fs.realpathSync(executable), 0o755);
 	writeDesktopEntry(product, location, executable);
 }
 

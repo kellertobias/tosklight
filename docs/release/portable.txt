@@ -1,0 +1,8 @@
+This folder is a portable ToskLight installation.
+
+While this file is here, the application keeps its shows, desk database, extensions and logs in
+the "data" folder beside it instead of your user profile. Move or copy the whole folder to take
+them along; delete the folder to remove them. On Windows the WebView2 runtime still keeps a small
+browser cache in your profile.
+
+Delete this file to make the application use the per-user application data folder instead.
