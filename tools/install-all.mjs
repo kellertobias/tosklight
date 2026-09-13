@@ -386,6 +386,19 @@ function installMac(run, app, destination, name) {
 	if (!app || !fs.existsSync(app)) throw new Error(`no built ${name}.app at ${app}`);
 	fs.mkdirSync(path.dirname(destination), { recursive: true });
 	run("ditto", [app, destination]);
+	// The copy has to pass the signature check macOS applies when the app is opened. The strict
+	// check is stricter than that: it also rejects Finder information on the bundle folder, which a
+	// synced folder such as an iCloud Desktop attaches again as soon as it is removed.
+	spawnSync("xattr", ["-d", "com.apple.FinderInfo", destination], { stdio: "ignore" });
+	const check = (...strict) =>
+		spawnSync("codesign", ["--verify", "--deep", ...strict, destination], { encoding: "utf8" });
+	if (check("--strict").status === 0) return;
+	const verified = check();
+	if (verified.status !== 0)
+		throw new Error(`${destination} does not pass its signature check: ${verified.stderr.trim()}`);
+	console.log(
+		`note: ${name}.app passes its signature check; only the strict check objects to the Finder information a synced folder (such as an iCloud Desktop) attaches to it.`,
+	);
 }
 
 /** Windows and Linux: the executable with its helpers and resources beside it, and a launcher. */
