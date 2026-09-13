@@ -456,7 +456,8 @@ export class BrowserProductDemo {
 				await addFixtureThroughTouchUi(desk, page, {
 					search: "4Point Truss",
 					family: "Four-Point Truss",
-					mode: "2 m",
+					// A truss is generated at its placed length and has one mode.
+					mode: "Default",
 					name:
 						truss === 1
 							? "Vectra Segment 1"
