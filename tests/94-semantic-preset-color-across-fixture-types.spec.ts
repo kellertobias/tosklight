@@ -5,19 +5,18 @@ import { StoreMode } from "./bench/groups-presets/groupScenario";
 import { PresetFamily } from "./bench/groups-presets/presetScenario";
 import { Show } from "./bench/show/showScenario";
 
-// The shipped Cameo Auro Spot Z300 profile carries its color wheel as one continuous range with
-// no named slots, so "red" has no wheel position there. The Claypaky Sharpy names its RED slot.
 const WHEEL_SPOT = {
-	manufacturer: "Claypaky",
-	profile: "Sharpy",
-	mode: "Standard",
+	manufacturer: "Cameo",
+	profile: "AURO SPOT Z300",
+	mode: "20-Channel",
 } as const;
 const RGBWA_WASH = {
 	manufacturer: "Generic",
 	profile: "RGBWA LED",
 	mode: "DRGBWA 8-bit dimmer first",
 } as const;
-const SHARPY_RED_SLOT = { between: [9, 12] as [number, number] };
+// Cameo DMX chart D002965, channel 8: Deep Red is 006–011.
+const AURO_DEEP_RED_SLOT = { between: [6, 11] as [number, number] };
 
 scenario(
 	"BENCH-PRESET-COLOR-001",
@@ -41,7 +40,7 @@ scenario(
 
 		// Color Preset 1 is red on the wheel.
 		await t.group.via.api.select(1);
-		await t.encoder.discrete.set("color.wheel.1", "red");
+		await t.encoder.discrete.set("color.wheel.1", "deep_red");
 		await t.preset.via.api.store(PresetFamily.Color, 1, { mode: "overwrite" });
 		await t.encoder.clear();
 		await t.selection.clear();
@@ -63,7 +62,7 @@ scenario(
 		await t.clock.advanceBy("5s");
 		await t.expectFixtureDMX(
 			{ fixture: 1 },
-			{ Intensity: 255, "Color wheel 1": SHARPY_RED_SLOT },
+			{ Intensity: 255, "Color wheel 1": AURO_DEEP_RED_SLOT },
 		);
 
 		await t.playback.via.api.off(playback);
