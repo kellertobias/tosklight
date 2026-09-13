@@ -178,6 +178,12 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             if let Some(value) = controls.effect_banks {
                 changed |= replace(&mut target.effect_banks, value);
             }
+            assign!(blend);
+            assign!(strobe_hz);
+            assign!(in_point);
+            assign!(out_point);
+            assign!(visualizer_controls);
+            assign!(model);
             if let Some(value) = controls.mask_address {
                 changed |= replace(&mut target.mask.address, value);
             }
@@ -675,10 +681,12 @@ mod tests {
             EffectBankState {
                 select: 7,
                 strength: 0.25,
+                ..Default::default()
             },
             EffectBankState {
                 select: 12,
                 strength: 0.75,
+                ..Default::default()
             },
         ];
         assert_eq!(

@@ -19,9 +19,11 @@ mod effects;
 mod fixtures;
 mod folder_presentations;
 mod health;
+mod layer_controls;
 mod library;
 mod library_settings;
 mod logs;
+mod models;
 mod network;
 mod output_effects;
 mod outputs;
@@ -191,6 +193,14 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/api/v2/visualizers", get(visualizers::visualizers))
         .route("/api/v2/effects", get(effects::effects))
+        .route("/api/v2/models", get(models::models))
+        .route(
+            "/api/v2/models/{slot}/upload",
+            post(models::upload_model).layer(DefaultBodyLimit::max(
+                models::MAX_MODEL_UPLOAD_BYTES + 1024 * 1024,
+            )),
+        )
+        .route("/api/v2/models/{slot}/update", post(models::update_model))
         .route(
             "/api/v2/effects/{slot}/update",
             post(effects::update_effect),

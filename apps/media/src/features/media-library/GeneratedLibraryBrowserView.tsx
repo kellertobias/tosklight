@@ -12,7 +12,12 @@ import {
 import { type ReactNode, useMemo, useState } from "react";
 import type { FolderPresentation } from "./FolderPresentationEditor";
 
-export type LibrarySourceType = "media" | "visualizers" | "text" | "effects";
+export type LibrarySourceType =
+	| "media"
+	| "visualizers"
+	| "text"
+	| "effects"
+	| "models";
 
 export interface GeneratedLibraryItem {
 	id: string;
@@ -47,6 +52,7 @@ export function librarySourceGroups({
 				{ id: "visualizers", label: "Visualizers" },
 				{ id: "text", label: "Text" },
 				{ id: "effects", label: "Effects" },
+				{ id: "models", label: "Models" },
 			],
 		},
 	];

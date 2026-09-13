@@ -20,6 +20,7 @@ mod health;
 mod library;
 mod library_settings;
 mod logs;
+mod model;
 mod network;
 mod output;
 mod output_edit;
@@ -48,6 +49,7 @@ pub use library::{
 };
 pub use library_settings::{LibrarySettingsEditError, LibrarySettingsView, UpdateLibrarySettings};
 pub use logs::{LogRecordView, LogsView, ServerLogLevelView, UpdateServerLogLevel};
+pub use model::{ClearedModelSlotView, ModelSlotView, UpdateModelSlot};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
     AvailableMonitorView, EffectBankView, LayerView, MaskView, MasterView,

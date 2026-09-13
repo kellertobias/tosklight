@@ -4,17 +4,18 @@
 //! payloads, because neither of them holds a copy of this logic.
 
 use crate::address::MediaAddress;
+use crate::blend::LayerBlend;
 use crate::color::{FlipMirror, Tint};
 use crate::dmx;
-use crate::layer::{EffectBankState, LayerState, MaskState, ScalingMode};
+use crate::layer::{EffectBankState, LayerState, MaskState, ModelMapping, ScalingMode};
 use crate::master::{MasterShaper, MasterState};
 use crate::playback::PlayMode;
 use crate::speed::SpeedMultiplier;
 
-use super::channels::{layer, master};
+use super::channels::{effect_bank_master, layer, master};
 use super::{LAYER_SLOTS, LayerPersonality, MASTER_SLOTS, PersonalityLayout};
 
-/// One layer's 35 slots.
+/// One mapping layer's slots.
 pub type LayerSlots = [u8; LAYER_SLOTS as usize];
 /// The complete master's slots.
 pub type MasterSlots = [u8; MASTER_SLOTS as usize];
@@ -35,6 +36,21 @@ pub fn layer_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> LayerS
             .map(|pair| dmx::position(dmx::sixteen_bit(pair[0], pair[1])))
             .unwrap_or_default()
     };
+    let mapping = layout == PersonalityLayout::Mapping;
+    // Only the mapping layout carries these bytes; an older layout keeps every configured value.
+    let parameters = |offset: usize| {
+        let mut bytes = [0; super::EFFECT_BANK_PARAMETERS];
+        if mapping && let Some(wire) = slots.get(offset..offset + super::EFFECT_BANK_PARAMETERS) {
+            bytes.copy_from_slice(wire);
+        }
+        bytes
+    };
+    let blend = if mapping {
+        LayerBlend::from_dmx(slots[layer::BLEND])
+    } else {
+        LayerBlend::default()
+    };
+    let mapped_sixteen = |offset: usize| if mapping { sixteen(offset) } else { 0 };
 
     LayerState {
         address: MediaAddress::new(slots[layer::FOLDER], slots[layer::FILE]),
@@ -63,21 +79,23 @@ pub fn layer_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> LayerS
             opacity: dmx::unit(slots[layer::MASK_OPACITY]),
             ..MaskState::default()
         },
-        effect_banks: if layout == PersonalityLayout::EffectBanks {
+        effect_banks: if layout.carries_effect_banks() {
             [
                 EffectBankState {
                     select: slots[layer::EFFECT_1_SELECT],
                     strength: dmx::unit(slots[layer::EFFECT_1_STRENGTH]),
+                    parameters: parameters(layer::EFFECT_1_PARAMETERS),
                 },
                 EffectBankState {
                     select: slots[layer::EFFECT_2_SELECT],
                     strength: dmx::unit(slots[layer::EFFECT_2_STRENGTH]),
+                    parameters: parameters(layer::EFFECT_2_PARAMETERS),
                 },
             ]
         } else {
             Default::default()
         },
-        effects: if layout == PersonalityLayout::EffectBanks {
+        effects: if layout.carries_effect_banks() {
             Default::default()
         } else {
             std::array::from_fn(|index| crate::layer::EffectSlot {
@@ -87,8 +105,13 @@ pub fn layer_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> LayerS
             })
         },
         speed_multiplier: SpeedMultiplier::from_dmx(slots[layer::SPEED_MULTIPLIER]),
-        playback_bpm: dmx::playback_bpm(slots[layer::PLAYBACK_BPM]),
-        blur: if layout == PersonalityLayout::EffectBanks {
+        // The mapping layout carries the 3D model where older layouts carried the BPM target.
+        playback_bpm: if mapping {
+            None
+        } else {
+            dmx::playback_bpm(slots[layer::PLAYBACK_BPM])
+        },
+        blur: if layout.carries_effect_banks() {
             0.0
         } else {
             slots
@@ -97,12 +120,81 @@ pub fn layer_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> LayerS
                 .map(dmx::unit)
                 .unwrap_or_default()
         },
+        blend: blend.mode,
+        strobe_hz: blend.strobe_hz,
+        in_point: mapped_sixteen(layer::IN_POINT),
+        out_point: mapped_sixteen(layer::OUT_POINT),
+        visualizer_controls: if mapping {
+            let mut bytes = [0; super::VISUALIZER_PARAMETERS];
+            bytes.copy_from_slice(
+                &slots[layer::VISUALIZER_PARAMETERS
+                    ..layer::VISUALIZER_PARAMETERS + super::VISUALIZER_PARAMETERS],
+            );
+            bytes
+        } else {
+            Default::default()
+        },
+        model: if mapping {
+            ModelMapping {
+                model: slots[layer::MODEL],
+                pan: dmx::rotation(sixteen(layer::MODEL_PAN)),
+                tilt: dmx::rotation(sixteen(layer::MODEL_TILT)),
+            }
+        } else {
+            ModelMapping::default()
+        },
         ..LayerState::default()
     }
 }
 
-/// Decodes the master's slots.
+/// Decodes the master's slots for a layout.
+pub fn master_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> MasterState {
+    if layout == PersonalityLayout::Mapping {
+        mapping_master_state(slots)
+    } else {
+        master_state(slots)
+    }
+}
+
+/// Decodes the mapping master. Mirroring is a negative scale, so there is no flip byte.
+fn mapping_master_state(slots: &[u8]) -> MasterState {
+    let sixteen = |offset: usize| dmx::sixteen_bit(slots[offset], slots[offset + 1]);
+    MasterState {
+        dimmer: dmx::unit(slots[master::DIMMER]),
+        volume: dmx::unit(slots[master::VOLUME]),
+        tint: Tint::from_subtractive(
+            slots[master::CYAN],
+            slots[master::MAGENTA],
+            slots[master::YELLOW],
+        ),
+        flip_mirror: FlipMirror::None,
+        mask: MediaAddress::new(1, slots[master::MASK]),
+        mask_position_x: dmx::position(sixteen(master::MASK_POSITION_X)),
+        mask_position_y: dmx::position(sixteen(master::MASK_POSITION_Y)),
+        scale_x: dmx::signed_master_scale(sixteen(master::SCALE_X)),
+        scale_y: dmx::signed_master_scale(sixteen(master::SCALE_Y)),
+        scaling_mode: ScalingMode::from_dmx(slots[master::SCALING_MODE]),
+        position_x: dmx::position(sixteen(master::POSITION_X)),
+        position_y: dmx::position(sixteen(master::POSITION_Y)),
+        rotation: dmx::master_rotation(sixteen(master::ROTATION)),
+        shaper: MasterShaper {
+            left: dmx::shaper_position(sixteen(master::SHAPER_LEFT)),
+            right: dmx::shaper_position(sixteen(master::SHAPER_RIGHT)),
+            top: dmx::shaper_position(sixteen(master::SHAPER_TOP)),
+            bottom: dmx::shaper_position(sixteen(master::SHAPER_BOTTOM)),
+            left_rotation: dmx::shaper_angle(sixteen(master::SHAPER_LEFT_ROTATION)),
+            right_rotation: dmx::shaper_angle(sixteen(master::SHAPER_RIGHT_ROTATION)),
+            top_rotation: dmx::shaper_angle(sixteen(master::SHAPER_TOP_ROTATION)),
+            bottom_rotation: dmx::shaper_angle(sixteen(master::SHAPER_BOTTOM_ROTATION)),
+            rotation: dmx::master_rotation(sixteen(master::SHAPER_ROTATION)),
+        },
+        opacity_cycle: crate::master::BeatRatio::from_dmx(slots[master::OPACITY_CYCLE]),
+    }
+}
+
+/// Decodes an effect-bank master, or any older master that is a prefix of it.
 pub fn master_state(slots: &[u8]) -> MasterState {
+    use effect_bank_master as master;
     let optional_position = |offset: usize| {
         slots
             .get(offset..=offset + 1)
@@ -237,7 +329,7 @@ pub fn frame(
 
     Ok(DecodedFrame {
         layers,
-        master: master_state(master_slots),
+        master: master_state_for_layout(master_slots, layout),
     })
 }
 
@@ -366,6 +458,86 @@ mod tests {
         assert_eq!(layer.effect_banks[1].select, 255);
         assert_eq!(layer.effect_banks[1].strength, 1.0);
         assert_eq!(layer.effects, std::array::from_fn(|_| Default::default()));
+        assert_eq!(
+            layer.effect_banks[0].parameters, [0; 4],
+            "the 39-slot bank layout carries no parameters"
+        );
+    }
+
+    #[test]
+    fn the_mapping_layout_decodes_four_parameters_per_bank() {
+        let mut slots = neutral_layer();
+        slots[layer::EFFECT_1_SELECT] = 9;
+        slots[layer::EFFECT_1_STRENGTH] = 255;
+        for index in 0..4 {
+            slots[layer::EFFECT_1_PARAMETERS + index] = index as u8 + 1;
+            slots[layer::EFFECT_2_PARAMETERS + index] = 250 - index as u8;
+        }
+
+        let layer = layer_state_for_layout(&slots, PersonalityLayout::Mapping);
+        assert_eq!(layer.effect_banks[0].select, 9);
+        assert_eq!(layer.effect_banks[0].parameters, [1, 2, 3, 4]);
+        assert_eq!(layer.effect_banks[1].parameters, [250, 249, 248, 247]);
+    }
+
+    #[test]
+    fn the_mapping_layout_decodes_blend_range_visualizer_and_model_controls() {
+        let mut slots = neutral_layer();
+        slots[layer::MODEL] = 3;
+        slots[layer::BLEND] = 200;
+        slots[layer::IN_POINT] = 0x01;
+        slots[layer::IN_POINT + 1] = 0x2c;
+        slots[layer::OUT_POINT] = 0x02;
+        slots[layer::OUT_POINT + 1] = 0x58;
+        slots[layer::VISUALIZER_PARAMETERS..layer::VISUALIZER_PARAMETERS + 4]
+            .copy_from_slice(&[9, 8, 7, 6]);
+        slots[layer::MODEL_PAN] = 0xff;
+        slots[layer::MODEL_PAN + 1] = 0xff;
+        slots[layer::MODEL_TILT] = 0x00;
+
+        let layer = layer_state_for_layout(&slots, PersonalityLayout::Mapping);
+        assert_eq!(layer.model.model, 3);
+        assert_eq!(layer.model.pan, 360.0);
+        assert_eq!(layer.model.tilt, -360.0);
+        assert_eq!(layer.blend, crate::blend::BlendMode::Normal);
+        assert!(layer.strobe_hz.is_some());
+        assert_eq!((layer.in_point, layer.out_point), (300, 600));
+        assert_eq!(layer.visualizer_controls, [9, 8, 7, 6]);
+        assert_eq!(layer.playback_bpm, None, "slot 33 is the model here");
+
+        slots[layer::BLEND] = 16;
+        let add = layer_state_for_layout(&slots, PersonalityLayout::Mapping);
+        assert_eq!(add.blend, crate::blend::BlendMode::Add);
+        assert_eq!(add.strobe_hz, None);
+
+        let older = layer_state_for_layout(&slots, PersonalityLayout::EffectBanks);
+        assert_eq!(
+            older.playback_bpm,
+            Some(3),
+            "the same byte is a BPM target there"
+        );
+        assert_eq!(older.model, ModelMapping::default());
+        assert_eq!(older.blend, crate::blend::BlendMode::Normal);
+        assert_eq!((older.in_point, older.out_point), (0, 0));
+    }
+
+    #[test]
+    fn the_mapping_master_mirrors_with_negative_scale_and_has_no_flip_byte() {
+        let mut slots = [0u8; MASTER_SLOTS as usize];
+        slots[master::DIMMER] = 255;
+        slots[master::MASK] = 5;
+        slots[master::SCALE_X] = 0x60;
+        slots[master::SCALE_Y] = 0xa0;
+        slots[master::SCALING_MODE] = 200;
+        slots[master::OPACITY_CYCLE] = 192;
+
+        let decoded = master_state_for_layout(&slots, PersonalityLayout::Mapping);
+        assert_eq!(decoded.flip_mirror, FlipMirror::None);
+        assert_eq!(decoded.mask.file, 5);
+        assert_eq!(decoded.scale_x, -1.0);
+        assert_eq!(decoded.scale_y, 1.0);
+        assert_eq!(decoded.scaling_mode, ScalingMode::Stretch);
+        assert_eq!(decoded.opacity_cycle, crate::master::BeatRatio::Multiply(4));
     }
 
     #[test]
@@ -391,7 +563,8 @@ mod tests {
 
     #[test]
     fn the_master_block_decodes() {
-        let mut slots = [0u8; MASTER_SLOTS as usize];
+        use effect_bank_master as master;
+        let mut slots = [0u8; super::super::EFFECT_BANK_MASTER_SLOTS as usize];
         slots[master::DIMMER] = 255;
         slots[master::VOLUME] = 128;
         slots[master::MAGENTA] = 255;
@@ -441,9 +614,10 @@ mod tests {
     fn universe(personality: LayerPersonality, start_address: u16) -> Vec<u8> {
         let mut payload = vec![0u8; 512];
         let offset = usize::from(start_address - 1);
+        let layer_slots = usize::from(PersonalityLayout::Current.layer_slots());
         for index in 0..usize::from(personality.layer_count()) {
-            let base = offset + index * usize::from(LAYER_SLOTS);
-            payload[base..base + usize::from(LAYER_SLOTS)].copy_from_slice(&neutral_layer());
+            let base = offset + index * layer_slots;
+            payload[base..base + layer_slots].copy_from_slice(&neutral_layer()[..layer_slots]);
             payload[base + layer::FOLDER] = 1;
             payload[base + layer::FILE] = index as u8 + 1;
         }

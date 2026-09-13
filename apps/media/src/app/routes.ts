@@ -9,6 +9,7 @@ export const ROUTES = [
 	{ path: "/visualizers", label: "Visualizers" },
 	{ path: "/text", label: "Text" },
 	{ path: "/effects", label: "Effects" },
+	{ path: "/models", label: "Models" },
 	{ path: "/audio", label: "Audio" },
 	{ path: "/dmx", label: "Diagnostics" },
 	{ path: "/settings", label: "Settings" },

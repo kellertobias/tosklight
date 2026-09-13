@@ -35,6 +35,7 @@ struct Hosted {
     pipeline: LayerPipeline,
     configuration: OutputConfiguration,
     last_preview_millis: Option<u64>,
+    models: crate::model_store::InstalledModels,
 }
 
 /// Runs every off-screen output until shutdown.
@@ -99,6 +100,11 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
             };
             let resolved_state = crate::effect_banks::resolve_output(state, &live);
             let state = &resolved_state;
+            let models = shared.models.resolve(&live.models);
+            shared.models.note_selections(&live.models, state);
+            output.models.sync(&models, state.id, |geometries| {
+                output.renderer.set_models(geometries)
+            });
 
             let prepared = output.pipeline.prepare(
                 state,
@@ -234,6 +240,7 @@ fn open(
         pipeline,
         configuration: configuration.clone(),
         last_preview_millis: None,
+        models: Default::default(),
     })
 }
 

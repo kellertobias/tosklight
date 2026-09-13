@@ -31,6 +31,7 @@ import { useMainOutputAspectRatio } from "../../shared/output/useMainOutputAspec
 import { TextSourcesPage } from "../text-sources/TextSourcesPage";
 import { VisualizersPage } from "../visualizers/VisualizersPage";
 import { EffectsPage } from "../effects/EffectsPage";
+import { ModelsPage } from "../models/ModelsPage";
 import type { FolderPresentation } from "./FolderPresentationEditor";
 import {
 	type LibrarySourceType,
@@ -66,6 +67,7 @@ export function LibraryPage({
 	if (mode === "visualizers")
 		return <VisualizersPage onModeChange={onModeChange} />;
 	if (mode === "effects") return <EffectsPage onModeChange={onModeChange} />;
+	if (mode === "models") return <ModelsPage onModeChange={onModeChange} />;
 	return <MediaLibraryPage onModeChange={onModeChange} />;
 }
 

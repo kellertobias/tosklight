@@ -9,6 +9,7 @@
 pub mod discovery;
 pub mod importer;
 pub mod jobs;
+pub mod models;
 pub mod naming;
 pub mod storage;
 pub mod thumbnails;

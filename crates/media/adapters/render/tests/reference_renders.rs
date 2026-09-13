@@ -1895,3 +1895,265 @@ fn a_regions_quarter_turn_stands_the_slice_on_its_side() {
     // And no longer left to right: both ends of the middle row agree.
     assert_eq!(image.at(8, 32), image.at(56, 32));
 }
+
+// Blend modes and strobe. A layer combines with what is below it by its blend mode, and its alpha
+// (dimmer, mask, source alpha) weights the result: mix(below, blend(below, layer), alpha).
+
+use media_domain::BlendMode;
+
+const BACKGROUND: [u8; 4] = [64, 128, 191, 255];
+const FOREGROUND: [u8; 4] = [200, 100, 30, 255];
+
+/// The standard definition of each mode, per channel, in normalized units.
+fn reference_blend(mode: BlendMode, below: f32, above: f32) -> f32 {
+    match mode {
+        BlendMode::Normal => above,
+        BlendMode::Add => (below + above).min(1.0),
+        BlendMode::Screen => 1.0 - (1.0 - below) * (1.0 - above),
+        BlendMode::Multiply => below * above,
+        BlendMode::Overlay if below < 0.5 => 2.0 * below * above,
+        BlendMode::Overlay => 1.0 - 2.0 * (1.0 - below) * (1.0 - above),
+        BlendMode::Difference => (below - above).abs(),
+        BlendMode::Lighten => below.max(above),
+        BlendMode::Darken => below.min(above),
+    }
+}
+
+fn expected_blend(mode: BlendMode, alpha: f32) -> [u8; 3] {
+    std::array::from_fn(|channel| {
+        let below = f32::from(BACKGROUND[channel]) / 255.0;
+        let above = f32::from(FOREGROUND[channel]) / 255.0;
+        let blended = reference_blend(mode, below, above);
+        ((below + (blended - below) * alpha) * 255.0).round() as u8
+    })
+}
+
+fn assert_close(actual: [u8; 4], expected: [u8; 3], context: &str) {
+    for channel in 0..3 {
+        assert!(
+            actual[channel].abs_diff(expected[channel]) <= 2,
+            "{context}: got {actual:?}, expected {expected:?}"
+        );
+    }
+    assert_eq!(actual[3], 255, "{context}: the output stays opaque");
+}
+
+fn render_over_background(bench: &mut Bench, top: &LayerState, now: Timestamp) -> Image {
+    let background = bench.solid(Size::new(4, 4), BACKGROUND);
+    let foreground = bench.solid(Size::new(4, 4), FOREGROUND);
+    let bottom = ready(LayerState::default());
+    bench.render_at(
+        &[
+            LayerDraw {
+                state: &bottom,
+                source: &background,
+                mask: None,
+            },
+            LayerDraw {
+                state: top,
+                source: &foreground,
+                mask: None,
+            },
+        ],
+        &MasterState::default(),
+        now,
+    )
+}
+
+#[test]
+fn every_blend_mode_combines_with_the_layer_below_by_its_standard_definition() {
+    let mut bench = Bench::new();
+    // The background's red lies below half and its green and blue above it, so Overlay takes both
+    // of its branches across the channels.
+    for mode in BlendMode::ALL {
+        let top = ready(LayerState {
+            blend: mode,
+            ..Default::default()
+        });
+        let image = render_over_background(&mut bench, &top, Timestamp::ZERO);
+        assert_close(image.center(), expected_blend(mode, 1.0), mode.label());
+        assert_close(image.at(0, 0), expected_blend(mode, 1.0), mode.label());
+    }
+}
+
+#[test]
+fn a_half_dimmed_blended_layer_contributes_half_of_its_blend() {
+    let mut bench = Bench::new();
+    for mode in BlendMode::ALL {
+        let top = ready(LayerState {
+            blend: mode,
+            dimmer: 0.5,
+            ..Default::default()
+        });
+        let image = render_over_background(&mut bench, &top, Timestamp::ZERO);
+        assert_close(
+            image.center(),
+            expected_blend(mode, 0.5),
+            &format!("{} at half dimmer", mode.label()),
+        );
+    }
+}
+
+#[test]
+fn normal_blending_is_the_unchanged_source_over_composite() {
+    let mut bench = Bench::new();
+    let top = ready(LayerState {
+        blend: BlendMode::Normal,
+        ..Default::default()
+    });
+    let image = render_over_background(&mut bench, &top, Timestamp::ZERO);
+    assert_eq!(image.center(), FOREGROUND);
+
+    let explicit = render_over_background(
+        &mut bench,
+        &ready(LayerState {
+            blend: BlendMode::Normal,
+            dimmer: 0.5,
+            ..Default::default()
+        }),
+        Timestamp::ZERO,
+    );
+    let default = render_over_background(
+        &mut bench,
+        &ready(LayerState {
+            dimmer: 0.5,
+            ..Default::default()
+        }),
+        Timestamp::ZERO,
+    );
+    assert_eq!(explicit.pixels, default.pixels, "Normal is byte-identical");
+}
+
+#[test]
+fn a_blended_layer_leaves_everything_outside_its_quad_untouched() {
+    let mut bench = Bench::new();
+    let top = ready(LayerState {
+        blend: BlendMode::Difference,
+        scale_x: 0.5,
+        scale_y: 0.5,
+        ..Default::default()
+    });
+    let image = render_over_background(&mut bench, &top, Timestamp::ZERO);
+    assert_close(
+        image.center(),
+        expected_blend(BlendMode::Difference, 1.0),
+        "inside",
+    );
+    assert_eq!(image.at(2, 2), BACKGROUND, "outside the quad");
+    assert_eq!(image.at(61, 61), BACKGROUND, "outside the quad");
+}
+
+#[test]
+fn blended_layers_stack_on_each_others_results() {
+    let mut bench = Bench::new();
+    let background = bench.solid(Size::new(4, 4), BACKGROUND);
+    let foreground = bench.solid(Size::new(4, 4), FOREGROUND);
+    let bottom = ready(LayerState::default());
+    let add = ready(LayerState {
+        blend: BlendMode::Add,
+        ..Default::default()
+    });
+    let difference = ready(LayerState {
+        blend: BlendMode::Difference,
+        ..Default::default()
+    });
+    let image = bench.render(
+        &[
+            LayerDraw {
+                state: &bottom,
+                source: &background,
+                mask: None,
+            },
+            LayerDraw {
+                state: &add,
+                source: &foreground,
+                mask: None,
+            },
+            LayerDraw {
+                state: &difference,
+                source: &foreground,
+                mask: None,
+            },
+        ],
+        &MasterState::default(),
+    );
+    let expected: [u8; 3] = std::array::from_fn(|channel| {
+        let below = f32::from(BACKGROUND[channel]) / 255.0;
+        let above = f32::from(FOREGROUND[channel]) / 255.0;
+        let added = (below + above).min(1.0);
+        ((added - above).abs() * 255.0).round() as u8
+    });
+    assert_close(image.center(), expected, "Add then Difference");
+}
+
+#[test]
+fn a_strobing_layer_contributes_nothing_during_its_unlit_half_period() {
+    let mut bench = Bench::new();
+    let top = ready(LayerState {
+        strobe_hz: Some(2.0),
+        ..Default::default()
+    });
+    // At 2 Hz each period is 500 ms, lit for the first 250 ms.
+    for (millis, lit) in [(100, true), (300, false), (600, true), (1_400, false)] {
+        let now = Timestamp::from_millis(millis);
+        assert_eq!(
+            media_domain::strobe_lit(top.strobe_hz, millis as f64 / 1000.0),
+            lit
+        );
+        let image = render_over_background(&mut bench, &top, now);
+        let expected = if lit { FOREGROUND } else { BACKGROUND };
+        assert_eq!(image.center(), expected, "strobe at {millis} ms");
+    }
+
+    let steady = ready(LayerState::default());
+    let image = render_over_background(&mut bench, &steady, Timestamp::from_millis(300));
+    assert_eq!(image.center(), FOREGROUND, "no strobe is always lit");
+}
+
+#[test]
+fn a_strobing_blended_layer_blends_only_while_lit() {
+    let mut bench = Bench::new();
+    let top = ready(LayerState {
+        blend: BlendMode::Multiply,
+        strobe_hz: Some(4.0),
+        ..Default::default()
+    });
+    let lit = render_over_background(&mut bench, &top, Timestamp::from_millis(50));
+    assert_close(
+        lit.center(),
+        expected_blend(BlendMode::Multiply, 1.0),
+        "lit",
+    );
+    let unlit = render_over_background(&mut bench, &top, Timestamp::from_millis(200));
+    assert_eq!(unlit.center(), BACKGROUND, "unlit");
+}
+
+#[test]
+fn the_layer_preview_strobes_and_ignores_the_blend_mode() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), FOREGROUND);
+    let state = ready(LayerState {
+        blend: BlendMode::Difference,
+        strobe_hz: Some(2.0),
+        ..Default::default()
+    });
+    let at = ((OUTPUT.height / 2 * OUTPUT.width + OUTPUT.width / 2) * 4) as usize;
+    let mut capture = |millis| {
+        let pixels = bench.renderer.capture_layer_preview(
+            OUTPUT,
+            LayerDraw {
+                state: &state,
+                source: &source,
+                mask: None,
+            },
+            Timestamp::from_millis(millis),
+        );
+        [pixels[at], pixels[at + 1], pixels[at + 2], pixels[at + 3]]
+    };
+    assert_eq!(
+        capture(100),
+        FOREGROUND,
+        "lit: the layer alone, not blended"
+    );
+    assert_eq!(capture(300), [0, 0, 0, 0], "unlit: nothing");
+}

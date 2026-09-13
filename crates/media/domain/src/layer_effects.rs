@@ -216,3 +216,71 @@ impl Default for BeatGridWaveParameters {
         }
     }
 }
+
+/// Typed Digital TV/DVB-T damage parameters, normalized to `0.0..=1.0`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DigitalTvParameters {
+    pub compression_damage: f32,
+    pub block_size: f32,
+    pub tile_displacement: f32,
+    pub chroma_damage: f32,
+    pub glitching: f32,
+}
+
+impl Default for DigitalTvParameters {
+    fn default() -> Self {
+        Self {
+            compression_damage: 0.35,
+            block_size: 0.35,
+            tile_displacement: 0.25,
+            chroma_damage: 0.20,
+            glitching: 0.15,
+        }
+    }
+}
+
+impl DigitalTvParameters {
+    pub const IDS: [&'static str; 5] = [
+        "compression-damage",
+        "block-size",
+        "tile-displacement",
+        "chroma-damage",
+        "glitching",
+    ];
+    pub const LABELS: [&'static str; 5] = [
+        "Compression damage",
+        "Block size",
+        "Tile displacement",
+        "Chroma damage",
+        "Glitching",
+    ];
+
+    pub fn from_normalized(values: &[f32]) -> Self {
+        let defaults = Self::default().as_array();
+        let mut resolved = defaults;
+        for (index, value) in values.iter().copied().take(5).enumerate() {
+            resolved[index] = if value.is_finite() {
+                value.clamp(0.0, 1.0)
+            } else {
+                defaults[index]
+            };
+        }
+        Self {
+            compression_damage: resolved[0],
+            block_size: resolved[1],
+            tile_displacement: resolved[2],
+            chroma_damage: resolved[3],
+            glitching: resolved[4],
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 5] {
+        [
+            self.compression_damage,
+            self.block_size,
+            self.tile_displacement,
+            self.chroma_damage,
+            self.glitching,
+        ]
+    }
+}

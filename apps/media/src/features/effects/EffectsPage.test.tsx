@@ -20,7 +20,7 @@ describe("the effects library", () => {
 			container.querySelectorAll(".media-effects-pool-grid .pool-card"),
 		).toHaveLength(255);
 		expect(screen.getByRole("tablist")).toHaveTextContent(
-			"MediaVisualizersTextEffects",
+			"MediaVisualizersTextEffectsModels",
 		);
 		expect(EFFECT_TYPES.map((effect) => effect.label)).toEqual([
 			"TV/CRT/VHS Simulation",

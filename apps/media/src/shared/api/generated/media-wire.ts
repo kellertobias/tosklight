@@ -42,12 +42,63 @@ minimum: number, maximum: number,
 step: number, };
 export type EffectSlotView = { index: number, effectType: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, visualizerParameters?: VisualizerParametersView | null, };
 export type EffectPresetView = { slot: number, name: string, effect: EffectSlotView, };
-export type EffectBankView = { index: number, select: number, strength: number, };
+export type EffectBankView = { index: number, select: number, strength: number,
+/**
+ * Four raw parameter bytes in the selected effect's parameter order. Zero keeps the preset's
+ * stored value; `1..=255` spans the parameter's advertised range.
+ */
+parameters: Array<number>, };
+export type ModelSlotView = { slot: number, name: string, vertices: number, triangles: number,
+/**
+ * `ready`, or `unloadable` when the stored file could not be loaded; a layer selecting an
+ * unloadable model draws flat.
+ */
+status: string,
+/**
+ * Why the model is unloadable.
+ */
+detail: string | null, };
+export type UpdateModelSlot = { requestId: string, name?: string, clear?: boolean, };
+export type ClearedModelSlotView = { slot: number, assigned: boolean, };
 export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, blur: number, sourceStatus: SourceStatusView, mask: MaskView, effects: Array<EffectSlotView>,
 /**
  * The two current personality banks. Preset definitions remain in `/api/v2/effects`.
  */
 effectBanks: Array<EffectBankView>,
+/**
+ * `normal`, `add`, `screen`, `multiply`, `overlay`, `difference`, `lighten`, or `darken`.
+ */
+blendMode: string,
+/**
+ * Flashes per second while the layer strobes.
+ */
+strobeHz: number | null,
+/**
+ * First frame of the playback range.
+ */
+inPoint: number,
+/**
+ * Frames before the clip's end where the playback range stops; zero is the last frame.
+ */
+outPoint: number,
+/**
+ * Four raw visualizer parameter bytes in the selected visualizer kind's parameter order.
+ */
+visualizerControls: Array<number>,
+/**
+ * Zero draws flat; `1..=255` maps the layer onto that numbered 3D model.
+ */
+model: number,
+/**
+ * Model pan and tilt in degrees. The layer rotation is the roll.
+ */
+modelPan: number, modelTilt: number,
+/**
+ * What the model selection resolved to: `flat` (model 0), `mapped`, `missing` (the slot holds
+ * no model), or `unloadable` (its file could not be loaded). Missing and unloadable models
+ * draw the layer flat.
+ */
+modelStatus: string,
 /**
  * Whether this layer contributes pixels right now.
  */
@@ -462,6 +513,46 @@ effectBank?: number | null,
  * Zero is Off; 1..=255 selects a persisted Effects-library slot.
  */
 effectSelect?: number | null, effectStrength?: number | null,
+/**
+ * The bank parameter changed by `effectParameterValue`, `0..=5`.
+ */
+effectParameterIndex?: number | null,
+/**
+ * Zero keeps the preset's stored value; 1..=255 spans the parameter's range.
+ */
+effectParameterValue?: number | null,
+/**
+ * The Blend mode / Strobe byte, decoded exactly as DMX decodes it.
+ */
+blendDmx?: number | null,
+/**
+ * First frame of the playback range.
+ */
+inPoint?: number | null,
+/**
+ * Frames before the clip's end where the playback range stops; zero is the last frame.
+ */
+outPoint?: number | null,
+/**
+ * The visualizer parameter changed by `visualizerParameterValue`, `0..=3`.
+ */
+visualizerParameterIndex?: number | null,
+/**
+ * Zero keeps the configured value; 1..=255 spans the parameter's range.
+ */
+visualizerParameterValue?: number | null,
+/**
+ * Zero draws flat; 1..=255 selects a numbered 3D model.
+ */
+model?: number | null,
+/**
+ * Model pan in degrees, `-360..=360`.
+ */
+modelPan?: number | null,
+/**
+ * Model tilt in degrees, `-360..=360`.
+ */
+modelTilt?: number | null,
 /**
  * The ordered slot changed by the following typed effect fields, `0..=3`.
  */

@@ -52,6 +52,12 @@ pub struct LayerControls {
     pub effects: Option<[EffectSlot; 4]>,
     /// Replaces the complete ordered current-personality bank state.
     pub effect_banks: Option<[EffectBankState; 2]>,
+    pub blend: Option<crate::blend::BlendMode>,
+    pub strobe_hz: Option<Option<f32>>,
+    pub in_point: Option<u16>,
+    pub out_point: Option<u16>,
+    pub visualizer_controls: Option<[u8; crate::personality::VISUALIZER_PARAMETERS]>,
+    pub model: Option<crate::layer::ModelMapping>,
 }
 
 /// An intent-shaped edit of the master values at the end of the network personality.

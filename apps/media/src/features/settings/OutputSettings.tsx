@@ -395,7 +395,12 @@ function DmxInputFields({
 	setUniverse: Dispatch<SetStateAction<number>>;
 	setStartAddress: Dispatch<SetStateAction<number>>;
 }) {
-	const slotsPerLayer = personalityLayout === "legacy" ? 34 : 39;
+	const slotsPerLayer =
+		personalityLayout === "legacy"
+			? 34
+			: personalityLayout === "mapping"
+				? 59
+				: 39;
 	const masterSlots =
 		personalityLayout === "legacy"
 			? 7
@@ -403,7 +408,9 @@ function DmxInputFields({
 				? 11
 				: personalityLayout === "extended"
 					? 40
-					: 41;
+					: personalityLayout === "mapping"
+						? 40
+						: 41;
 	const footprint =
 		(personality === "two-layers" ? 2 : 8) * slotsPerLayer + masterSlots;
 	const highestStartAddress = 513 - footprint;
@@ -434,6 +441,10 @@ function DmxInputFields({
 					{
 						value: "effect-banks",
 						label: "Effect banks and full master controls",
+					},
+					{
+						value: "mapping",
+						label: "3D mapping, blend, playback range, and parameters",
 					},
 				]}
 				onChange={setPersonalityLayout}

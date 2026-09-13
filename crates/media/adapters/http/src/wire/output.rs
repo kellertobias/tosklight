@@ -80,6 +80,25 @@ pub struct LayerView {
     pub effects: Vec<EffectSlotView>,
     /// The two current personality banks. Preset definitions remain in `/api/v2/effects`.
     pub effect_banks: Vec<EffectBankView>,
+    /// `normal`, `add`, `screen`, `multiply`, `overlay`, `difference`, `lighten`, or `darken`.
+    pub blend_mode: String,
+    /// Flashes per second while the layer strobes.
+    pub strobe_hz: Option<f32>,
+    /// First frame of the playback range.
+    pub in_point: u16,
+    /// Frames before the clip's end where the playback range stops; zero is the last frame.
+    pub out_point: u16,
+    /// Four raw visualizer parameter bytes in the selected visualizer kind's parameter order.
+    pub visualizer_controls: Vec<u8>,
+    /// Zero draws flat; `1..=255` maps the layer onto that numbered 3D model.
+    pub model: u8,
+    /// Model pan and tilt in degrees. The layer rotation is the roll.
+    pub model_pan: f32,
+    pub model_tilt: f32,
+    /// What the model selection resolved to: `flat` (model 0), `mapped`, `missing` (the slot holds
+    /// no model), or `unloadable` (its file could not be loaded). Missing and unloadable models
+    /// draw the layer flat.
+    pub model_status: String,
     /// Whether this layer contributes pixels right now.
     pub drawing: bool,
 }
@@ -133,8 +152,24 @@ impl LayerView {
                     index,
                     select: bank.select,
                     strength: bank.strength,
+                    parameters: bank.parameters.to_vec(),
                 })
                 .collect(),
+            blend_mode: layer.blend.wire_name().to_owned(),
+            strobe_hz: layer.strobe_hz,
+            in_point: layer.in_point,
+            out_point: layer.out_point,
+            visualizer_controls: layer.visualizer_controls.to_vec(),
+            model: layer.model.model,
+            model_pan: layer.model.pan,
+            model_tilt: layer.model.tilt,
+            // Refined against the model library by the route that has it.
+            model_status: if layer.model.is_flat() {
+                "flat"
+            } else {
+                "mapped"
+            }
+            .to_owned(),
             drawing: layer.draws(),
         }
     }
@@ -146,6 +181,9 @@ pub struct EffectBankView {
     pub index: usize,
     pub select: u8,
     pub strength: f32,
+    /// Four raw parameter bytes in the selected effect's parameter order. Zero keeps the preset's
+    /// stored value; `1..=255` spans the parameter's advertised range.
+    pub parameters: Vec<u8>,
 }
 
 /// The section that applies to the finished composite.
@@ -443,6 +481,7 @@ impl OutputConfigurationValuesView {
                 media_domain::PersonalityLayout::Current => "current",
                 media_domain::PersonalityLayout::Extended => "extended",
                 media_domain::PersonalityLayout::EffectBanks => "effect-banks",
+                media_domain::PersonalityLayout::Mapping => "mapping",
             }
             .to_owned(),
             protocol: match output.protocol {
@@ -548,6 +587,36 @@ pub struct UpdateLayer {
     pub effect_select: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_strength: Option<f32>,
+    /// The bank parameter changed by `effectParameterValue`, `0..=5`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_parameter_index: Option<u8>,
+    /// Zero keeps the preset's stored value; 1..=255 spans the parameter's range.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_parameter_value: Option<u8>,
+    /// The Blend mode / Strobe byte, decoded exactly as DMX decodes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_dmx: Option<u8>,
+    /// First frame of the playback range.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_point: Option<u16>,
+    /// Frames before the clip's end where the playback range stops; zero is the last frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_point: Option<u16>,
+    /// The visualizer parameter changed by `visualizerParameterValue`, `0..=3`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visualizer_parameter_index: Option<u8>,
+    /// Zero keeps the configured value; 1..=255 spans the parameter's range.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visualizer_parameter_value: Option<u8>,
+    /// Zero draws flat; 1..=255 selects a numbered 3D model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<u8>,
+    /// Model pan in degrees, `-360..=360`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_pan: Option<f32>,
+    /// Model tilt in degrees, `-360..=360`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_tilt: Option<f32>,
     /// The ordered slot changed by the following typed effect fields, `0..=3`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_slot: Option<u8>,
@@ -742,6 +811,14 @@ impl UpdateLayer {
             || self.blur.is_some()
             || self.effect_select.is_some()
             || self.effect_strength.is_some()
+            || self.effect_parameter_value.is_some()
+            || self.blend_dmx.is_some()
+            || self.in_point.is_some()
+            || self.out_point.is_some()
+            || self.visualizer_parameter_value.is_some()
+            || self.model.is_some()
+            || self.model_pan.is_some()
+            || self.model_tilt.is_some()
     }
 }
 

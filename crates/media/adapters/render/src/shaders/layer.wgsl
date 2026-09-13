@@ -592,6 +592,56 @@ fn drawn_image_source(uv: vec2<f32>, parameters: vec4<f32>, effect_mix: f32) -> 
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+    return layer_colour(in);
+}
+
+// A layer with a blend mode other than Normal. The pipeline has no fixed-function blending: it
+// reads what is already drawn below from a copy of the program target and writes the finished
+// pixel, `mix(below, blend(below, layer), alpha)`, so the layer's alpha always weights the result.
+struct BlendUniform {
+    // x: `media_domain::BlendMode::index()`. yzw: spare.
+    mode: vec4<u32>,
+};
+
+@group(1) @binding(0) var backdrop: texture_2d<f32>;
+@group(1) @binding(1) var<uniform> layer_blend: BlendUniform;
+
+fn overlay_channel(below: f32, above: f32) -> f32 {
+    return select(1.0 - 2.0 * (1.0 - below) * (1.0 - above), 2.0 * below * above, below < 0.5);
+}
+
+fn blended(below: vec3<f32>, above: vec3<f32>, mode: u32) -> vec3<f32> {
+    switch mode {
+        case 1u: { return min(below + above, vec3<f32>(1.0)); }
+        case 2u: { return vec3<f32>(1.0) - (vec3<f32>(1.0) - below) * (vec3<f32>(1.0) - above); }
+        case 3u: { return below * above; }
+        case 4u: {
+            return vec3<f32>(
+                overlay_channel(below.r, above.r),
+                overlay_channel(below.g, above.g),
+                overlay_channel(below.b, above.b),
+            );
+        }
+        case 5u: { return abs(below - above); }
+        case 6u: { return max(below, above); }
+        case 7u: { return min(below, above); }
+        default: { return above; }
+    }
+}
+
+@fragment
+fn fragment_blend(in: VertexOutput) -> @location(0) vec4<f32> {
+    let colour = layer_colour(in);
+    // The program target stores premultiplied colour over transparent black, which is exactly the
+    // composite below as it would appear on the black output.
+    let below = textureLoad(backdrop, vec2<i32>(floor(in.clip_position.xy)), 0);
+    let above = clamp(colour.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+    let alpha = clamp(colour.a, 0.0, 1.0);
+    let rgb = mix(below.rgb, blended(below.rgb, above, layer_blend.mode.x), alpha);
+    return vec4<f32>(rgb, alpha + below.a * (1.0 - alpha));
+}
+
+fn layer_colour(in: VertexOutput) -> vec4<f32> {
     var coordinates: EffectCoordinates;
     coordinates.uv = in.uv;
     coordinates.validity = 1.0;

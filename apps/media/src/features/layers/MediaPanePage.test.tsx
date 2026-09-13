@@ -10,7 +10,11 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KEYS } from "../../shared/api/queries";
 import { writeResource } from "../../shared/api/resource";
-import { anOutput, stubServer } from "../../testing/server";
+import {
+	anOutput,
+	anOutputConfiguration,
+	stubServer,
+} from "../../testing/server";
 import { MediaPanePage } from "./MediaPanePage";
 
 const render = (ui: Parameters<typeof rtlRender>[0]) =>
@@ -475,6 +479,7 @@ describe("the production Media pane", () => {
 				index: 0,
 				select: 2,
 				strength: 0.65,
+				parameters: [0, 0, 0, 0],
 			});
 		});
 
@@ -685,6 +690,144 @@ describe("the production Media pane", () => {
 		expect(server.writeBodies.at(-1)).toEqual(
 			expect.objectContaining({ maskFolder: 200, maskFile: 1 }),
 		);
+	});
+
+	it("writes blend, strobe, playback range, and 3D mapping through the DMX byte meanings", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		const layer = server.outputs[0].layers[0];
+
+		await userEvent.click(screen.getByRole("tab", { name: "Blend" }));
+		fireEvent.input(screen.getByRole("slider", { name: "Strobe" }), {
+			target: { value: "249" },
+		});
+		await waitFor(() => expect(layer.strobeHz).toBe(25));
+		expect(await screen.findByText("25.0 Hz")).toBeInTheDocument();
+		await chooseNamedChoice("Blend mode", "Screen");
+		await waitFor(() => expect(layer.blendMode).toBe("screen"));
+		expect(layer.strobeHz).toBeNull();
+		expect(server.writeBodies.at(-1)).toEqual({ blendDmx: 32 });
+		expect(await screen.findByText("Off")).toBeInTheDocument();
+
+		await userEvent.click(screen.getByRole("tab", { name: "Playback range" }));
+		expect(screen.getByText("End of clip")).toBeInTheDocument();
+		fireEvent.input(screen.getByRole("slider", { name: "In point" }), {
+			target: { value: "300" },
+		});
+		fireEvent.input(screen.getByRole("slider", { name: "Out point" }), {
+			target: { value: "600" },
+		});
+		await waitFor(() => {
+			expect(layer.inPoint).toBe(300);
+			expect(layer.outPoint).toBe(600);
+		});
+		expect(screen.getByText("600 frames before end")).toBeInTheDocument();
+
+		await userEvent.click(screen.getByRole("tab", { name: "3D mapping" }));
+		expect(screen.getByText("Flat")).toBeInTheDocument();
+		expect(
+			screen.getByText("Rotation on the Frame tab is the model's roll."),
+		).toBeInTheDocument();
+		fireEvent.input(screen.getByRole("slider", { name: "Model" }), {
+			target: { value: "3" },
+		});
+		fireEvent.input(screen.getByRole("slider", { name: "Pan" }), {
+			target: { value: "-90" },
+		});
+		fireEvent.input(screen.getByRole("slider", { name: "Tilt" }), {
+			target: { value: "45" },
+		});
+		await waitFor(() => {
+			expect(layer.model).toBe(3);
+			expect(layer.modelPan).toBe(-90);
+			expect(layer.modelTilt).toBe(45);
+		});
+	});
+
+	it("labels the four visualizer parameters in the shown kind's order", async () => {
+		const output = anOutput();
+		output.layers[0].address = {
+			folder: 250,
+			file: 1,
+			class: "generated-visualizer",
+		};
+		const server = stubServer({ outputs: [output] });
+		server.visualizers[0].uses = ["count", "primary"];
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Visualizer" }));
+
+		const count = await screen.findByRole("slider", {
+			name: "Parameter 1 · Count",
+		});
+		expect(count).toBeEnabled();
+		expect(
+			screen.getByRole("slider", { name: "Parameter 2 · Colour" }),
+		).toBeEnabled();
+		expect(screen.getByRole("slider", { name: "Parameter 3" })).toBeDisabled();
+		expect(screen.getByRole("slider", { name: "Parameter 4" })).toBeDisabled();
+		expect(screen.getAllByText("Configured")).toHaveLength(4);
+		fireEvent.input(count, { target: { value: "200" } });
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].visualizerControls).toEqual([
+				200, 0, 0, 0,
+			]),
+		);
+		expect(server.writeBodies.at(-1)).toEqual({
+			visualizerParameterIndex: 0,
+			visualizerParameterValue: 200,
+		});
+	});
+
+	it("disables visualizer parameters for a layer showing library media", async () => {
+		stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Visualizer" }));
+		for (const number of [1, 2, 3, 4])
+			expect(
+				screen.getByRole("slider", { name: `Parameter ${number}` }),
+			).toBeDisabled();
+	});
+
+	it("mirrors the mapping layout's master through negative scale without Flip / mirror", async () => {
+		const output = anOutput();
+		const server = stubServer({
+			outputs: [output],
+			outputConfigurations: {
+				[output.id]: anOutputConfiguration(output.id, output.name, {
+					personalityLayout: "mapping",
+				}),
+			},
+		});
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(
+			screen.getByRole("button", { name: /Master output/iu }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Colour" }));
+		await waitFor(() =>
+			expect(server.requests).toContain(`/outputs/${output.id}/configuration`),
+		);
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("radiogroup", { name: "Flip / mirror" }),
+			).not.toBeInTheDocument(),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Geometry" }));
+		const scaleX = screen.getByRole("slider", { name: "Scale X" });
+		expect(scaleX).toHaveAttribute("min", "-4");
+		fireEvent.input(scaleX, { target: { value: "-1" } });
+		await waitFor(() => expect(server.outputs[0].master.scaleX).toBe(-1));
 	});
 });
 

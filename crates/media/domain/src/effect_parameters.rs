@@ -47,7 +47,51 @@ impl EffectParameterBounds {
             clamped
         }
     }
+
+    /// What one effect-bank parameter byte asks for. Zero keeps the preset's own value, so a
+    /// fresh patch plays every preset exactly as the library stores it; `1..=255` spans the
+    /// closed range from its minimum to its maximum.
+    pub fn from_dmx(self, raw: u8) -> Option<f32> {
+        if raw == 0 {
+            return None;
+        }
+        let fraction = f32::from(raw - 1) / 254.0;
+        Some(self.resolve(self.minimum + fraction * (self.maximum - self.minimum)))
+    }
 }
+
+/// The parameter ids an effect reports, in the order its effect-bank parameter channels follow.
+pub fn effect_parameter_ids(effect_type: &str) -> &'static [&'static str] {
+    use crate::layer::{
+        ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,
+        BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
+        BeatFormFlashParameters, BeatGridWaveParameters, BeatMoveParameters,
+        BeatScaleTurnParameters, BeatScanParameters, BlurParameters, DIGITAL_TV_EFFECT,
+        DRAWN_IMAGE_EFFECT, DigitalTvParameters, DrawnImageParameters, FEEDBACK_EFFECT,
+        KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, OPACITY_CYCLE_EFFECT, RASTERIZE_EFFECT,
+        RasterizeParameters,
+    };
+    match effect_type {
+        ANALOG_TV_EFFECT => &AnalogTvParameters::IDS,
+        DIGITAL_TV_EFFECT => &DigitalTvParameters::IDS,
+        BLUR_EFFECT => &BlurParameters::IDS,
+        FEEDBACK_EFFECT => &FEEDBACK_PARAMETER_IDS,
+        OPACITY_CYCLE_EFFECT => &["cycle-interval"],
+        BEAT_MOVE_EFFECT => &BeatMoveParameters::IDS,
+        KALEIDOSCOPE_EFFECT => &KaleidoscopeParameters::IDS,
+        RASTERIZE_EFFECT => &RasterizeParameters::IDS,
+        BEAT_SCAN_EFFECT => &BeatScanParameters::IDS,
+        BEAT_SCALE_TURN_EFFECT => &BeatScaleTurnParameters::IDS,
+        BEAT_GRID_WAVE_EFFECT => &BeatGridWaveParameters::IDS,
+        BEAT_FORM_FLASH_EFFECT => &BeatFormFlashParameters::IDS,
+        DRAWN_IMAGE_EFFECT => &DrawnImageParameters::IDS,
+        _ => &[],
+    }
+}
+
+/// Feedback's parameters, which have no typed struct constant of their own.
+pub const FEEDBACK_PARAMETER_IDS: [&str; 3] =
+    ["feedback-amount", "feedback-motion", "feedback-direction"];
 
 /// One row per parameter id reported by the effects API, in no particular order.
 const BOUNDS: &[(&str, EffectParameterBounds)] = &[
@@ -192,6 +236,51 @@ mod tests {
                 "{id} has no advertised bounds"
             );
         }
+    }
+
+    #[test]
+    fn every_effect_reports_the_parameters_its_bank_channels_follow() {
+        for effect_type in [
+            crate::layer::ANALOG_TV_EFFECT,
+            crate::layer::DIGITAL_TV_EFFECT,
+            crate::layer::BLUR_EFFECT,
+            crate::layer::FEEDBACK_EFFECT,
+            crate::layer::OPACITY_CYCLE_EFFECT,
+            crate::layer::BEAT_MOVE_EFFECT,
+            crate::layer::KALEIDOSCOPE_EFFECT,
+            crate::layer::RASTERIZE_EFFECT,
+            crate::layer::BEAT_SCAN_EFFECT,
+            crate::layer::BEAT_SCALE_TURN_EFFECT,
+            crate::layer::BEAT_GRID_WAVE_EFFECT,
+            crate::layer::BEAT_FORM_FLASH_EFFECT,
+            crate::layer::DRAWN_IMAGE_EFFECT,
+        ] {
+            // A bank drives the first four; an effect with more keeps the rest at its preset.
+            let ids = effect_parameter_ids(effect_type);
+            assert!(!ids.is_empty(), "{effect_type} reports no parameters");
+            for id in ids.iter().take(crate::personality::EFFECT_BANK_PARAMETERS) {
+                assert!(
+                    BOUNDS.iter().any(|(candidate, _)| candidate == id),
+                    "{id} has no bounds to span"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_parameter_byte_keeps_the_preset_at_zero_and_spans_the_range_above() {
+        let angle = effect_parameter_bounds("kaleidoscope-angle");
+        assert_eq!(angle.from_dmx(0), None);
+        assert_eq!(angle.from_dmx(1), Some(-180.0));
+        assert_eq!(angle.from_dmx(255), Some(180.0));
+        assert_eq!(angle.from_dmx(128), Some(0.0));
+
+        let repetitions = effect_parameter_bounds("kaleidoscope-repetitions");
+        assert_eq!(repetitions.from_dmx(1), Some(0.0), "the lowest byte is Off");
+        assert_eq!(repetitions.from_dmx(255), Some(12.0));
+
+        let amount = effect_parameter_bounds("blur-amount");
+        assert_eq!(amount.from_dmx(255), Some(1.0));
     }
 
     #[test]

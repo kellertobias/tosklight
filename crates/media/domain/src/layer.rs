@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::address::MediaAddress;
 use crate::color::Tint;
 pub use crate::layer_effects::{
-    BeatFormFlashParameters, BeatGridWaveOrigin, BeatGridWaveParameters, DrawnImageParameters,
+    BeatFormFlashParameters, BeatGridWaveOrigin, BeatGridWaveParameters, DigitalTvParameters,
+    DrawnImageParameters,
 };
 use crate::playback::PlayMode;
 use crate::speed::SpeedMultiplier;
@@ -125,6 +126,29 @@ pub struct EffectBankState {
     pub select: u8,
     /// Normalized amount applied to the selected preset.
     pub strength: f32,
+    /// Raw parameter bytes in the order the selected effect reports its parameters. Zero keeps
+    /// the preset's stored value; `1..=255` spans that parameter's accepted range.
+    #[serde(default)]
+    pub parameters: [u8; crate::personality::EFFECT_BANK_PARAMETERS],
+}
+
+/// What a layer's 3D model channels select.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelMapping {
+    /// Zero draws the layer flat; `1..=255` maps it onto that numbered model.
+    pub model: u8,
+    /// Degrees around the vertical axis, applied first.
+    pub pan: f32,
+    /// Degrees around the horizontal axis, applied after pan. The layer's Rotation is the roll,
+    /// applied last around the viewing axis.
+    pub tilt: f32,
+}
+
+impl ModelMapping {
+    pub const fn is_flat(self) -> bool {
+        self.model == 0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -779,74 +803,6 @@ impl AnalogTvParameters {
     }
 }
 
-/// Typed Digital TV/DVB-T damage parameters, normalized to `0.0..=1.0`.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DigitalTvParameters {
-    pub compression_damage: f32,
-    pub block_size: f32,
-    pub tile_displacement: f32,
-    pub chroma_damage: f32,
-    pub glitching: f32,
-}
-
-impl Default for DigitalTvParameters {
-    fn default() -> Self {
-        Self {
-            compression_damage: 0.35,
-            block_size: 0.35,
-            tile_displacement: 0.25,
-            chroma_damage: 0.20,
-            glitching: 0.15,
-        }
-    }
-}
-
-impl DigitalTvParameters {
-    pub const IDS: [&'static str; 5] = [
-        "compression-damage",
-        "block-size",
-        "tile-displacement",
-        "chroma-damage",
-        "glitching",
-    ];
-    pub const LABELS: [&'static str; 5] = [
-        "Compression damage",
-        "Block size",
-        "Tile displacement",
-        "Chroma damage",
-        "Glitching",
-    ];
-
-    pub fn from_normalized(values: &[f32]) -> Self {
-        let defaults = Self::default().as_array();
-        let mut resolved = defaults;
-        for (index, value) in values.iter().copied().take(5).enumerate() {
-            resolved[index] = if value.is_finite() {
-                value.clamp(0.0, 1.0)
-            } else {
-                defaults[index]
-            };
-        }
-        Self {
-            compression_damage: resolved[0],
-            block_size: resolved[1],
-            tile_displacement: resolved[2],
-            chroma_damage: resolved[3],
-            glitching: resolved[4],
-        }
-    }
-
-    pub const fn as_array(self) -> [f32; 5] {
-        [
-            self.compression_damage,
-            self.block_size,
-            self.tile_displacement,
-            self.chroma_damage,
-            self.glitching,
-        ]
-    }
-}
-
 /// One slot in a layer's ordered effect chain.
 ///
 /// The four DMX bytes populate the primary amount of four configured slots. Effect identity and
@@ -1240,6 +1196,24 @@ pub struct LayerState {
     pub playback_bpm: Option<u8>,
     /// Blur amount from the dedicated playback fader and DMX channel.
     pub blur: f32,
+    /// How this layer combines with the layers below it.
+    #[serde(default)]
+    pub blend: crate::blend::BlendMode,
+    /// Flashes per second while the Blend mode / Strobe channel strobes the layer.
+    #[serde(default)]
+    pub strobe_hz: Option<f32>,
+    /// Frames after the clip's start where the playback range begins.
+    #[serde(default)]
+    pub in_point: u16,
+    /// Frames before the clip's end where the playback range stops, so zero is the last frame. A
+    /// range whose Out point falls before its In point plays through to the clip's end.
+    #[serde(default)]
+    pub out_point: u16,
+    /// Raw visualizer parameter bytes in the selected visualizer kind's parameter order.
+    #[serde(default)]
+    pub visualizer_controls: [u8; crate::personality::VISUALIZER_PARAMETERS],
+    #[serde(default)]
+    pub model: ModelMapping,
     pub source_status: SourceStatus,
     /// Incremented to restart media without changing the selected address.
     pub reset_trigger_id: u32,
@@ -1266,6 +1240,12 @@ impl Default for LayerState {
             speed_multiplier: SpeedMultiplier::default(),
             playback_bpm: None,
             blur: 0.0,
+            blend: crate::blend::BlendMode::Normal,
+            strobe_hz: None,
+            in_point: 0,
+            out_point: 0,
+            visualizer_controls: [0; crate::personality::VISUALIZER_PARAMETERS],
+            model: ModelMapping::default(),
             source_status: SourceStatus::default(),
             reset_trigger_id: 0,
         }

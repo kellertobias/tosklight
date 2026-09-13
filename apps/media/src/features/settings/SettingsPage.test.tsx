@@ -219,7 +219,30 @@ describe("the settings page", () => {
 		).toBeVisible();
 	});
 
-	it("offers the generated effect-bank layout with its complete 353-slot footprint", async () => {
+	it("offers the generated mapping layout that fills one universe", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("DMX");
+		await screen.findByRole("article", { name: "Main DMX input settings" });
+		await choose(
+			"Full master controls (v3)",
+			"3D mapping, blend, playback range, and parameters",
+		);
+		expect(
+			await screen.findByRole("button", { name: "8 layers (512 slots)" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				"1 to 1; the complete 512-slot personality must fit in one universe.",
+			),
+		).toBeInTheDocument();
+		await waitFor(() => expect(output.writes).toHaveLength(1));
+		expect(output.writes[0]).toMatchObject({
+			personalityLayout: "mapping",
+		});
+	});
+
+	it("keeps the earlier 353-slot effect-bank layout for existing desk patches", async () => {
 		const output = stubOutputConfiguration();
 		renderSettings();
 		await openSettings("DMX");
@@ -230,11 +253,6 @@ describe("the settings page", () => {
 		);
 		expect(
 			await screen.findByRole("button", { name: "8 layers (353 slots)" }),
-		).toBeInTheDocument();
-		expect(
-			screen.getByText(
-				"1 to 160; the complete 353-slot personality must fit in one universe.",
-			),
 		).toBeInTheDocument();
 		await waitFor(() => expect(output.writes).toHaveLength(1));
 		expect(output.writes[0]).toMatchObject({
@@ -502,7 +520,12 @@ type OutputConfigurationValues = {
 	soundOutputKind: "disabled" | "system-default" | "device";
 	soundOutputName: string | null;
 	personality: "two-layers" | "eight-layers";
-	personalityLayout: "legacy" | "current" | "extended" | "effect-banks";
+	personalityLayout:
+		| "legacy"
+		| "current"
+		| "extended"
+		| "effect-banks"
+		| "mapping";
 	protocol: "art-net" | "sacn";
 	universe: number;
 	startAddress: number;

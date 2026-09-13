@@ -52,6 +52,15 @@ pub fn master_scale(value: u16) -> f32 {
     piecewise(value, 0.0, 1.0, 4.0)
 }
 
+/// Signed master output scale for the mapping layout: `0 → -4×`, `32768 → 0×`,
+/// [`SIGNED_MASTER_SCALE_HOME`] `→ 1×`, `65535 → ~4×`. A negative axis mirrors the composite.
+pub fn signed_master_scale(value: u16) -> f32 {
+    (f32::from(value) - f32::from(MIDPOINT)) / 8192.0
+}
+
+/// The 16-bit value that is exactly `1×` on [`signed_master_scale`].
+pub const SIGNED_MASTER_SCALE_HOME: u16 = 40_960;
+
 /// Mask scale: `0 → 0×`, `32768 → 1×`, `65535 → 2×`.
 pub fn mask_scale(value: u16) -> f32 {
     piecewise(value, 0.0, 1.0, 2.0)

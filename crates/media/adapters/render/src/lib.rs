@@ -17,7 +17,7 @@ pub mod texture;
 pub mod visualizer;
 pub mod window;
 
-pub use compositor::{Compositor, LayerDraw, MAX_LAYERS, PROGRAM_FORMAT};
+pub use compositor::{Compositor, LayerDraw, MAX_LAYERS, ModelGeometries, PROGRAM_FORMAT};
 pub use gpu::{Capabilities, Gpu, GpuError, PresentationSurface};
 pub use offscreen::OffScreenOutput;
 pub use texture::{SourceTexture, TextureError, block_bytes};
@@ -97,6 +97,12 @@ impl OutputRenderer {
             region,
         );
         self.clock.record_present(now);
+    }
+
+    /// Makes exactly these 3D models available to layers on this output. Returns the slots that
+    /// could not be uploaded to this GPU and why; layers selecting them draw flat.
+    pub fn set_models(&mut self, models: &ModelGeometries) -> Vec<(u8, String)> {
+        self.compositor.set_models(models)
     }
 
     /// Reads the presented image back. Used by reference renders and by the CITP preview, which

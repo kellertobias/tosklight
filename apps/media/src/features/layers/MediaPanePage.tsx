@@ -32,6 +32,15 @@ import {
 import { textPreviewUrl } from "../text-sources/TextSourcesPage";
 import { visualizerPreviewUrl } from "../visualizers/preview";
 import { effectLayerChange } from "./effectLayerChange";
+import {
+	effectBankSection,
+	layerDmxChange,
+	layerDmxSections,
+	VISUALIZER_FLAGS,
+	VISUALIZER_NUMBERS,
+	valueControl,
+} from "./layerDmxSections";
+import { useOutputFacts } from "./useOutputFacts";
 
 const CATALOG_POLL_MS = 15_000;
 
@@ -73,9 +82,6 @@ function MediaPanePageContent() {
 		useState("playback");
 	const [rightPaneVisible, setRightPaneVisible] = useState(true);
 	const [previewRevision, setPreviewRevision] = useState(0);
-	const [previewSize, setPreviewSize] = useState<
-		{ width: number; height: number } | undefined
-	>();
 	useEffect(() => {
 		const first = layers[0];
 		if (!selectedLayerId && first) {
@@ -127,26 +133,7 @@ function MediaPanePageContent() {
 	};
 	const sourceFailure = outputSourceFailures(outputs.data ?? []);
 	useFailureToast(sourceFailure ? { message: sourceFailure } : undefined);
-	const previewOutputId = selectedOutput?.id;
-	useEffect(() => {
-		if (!previewOutputId) return;
-		let current = true;
-		void api
-			.outputConfiguration(previewOutputId)
-			.then((configuration) => {
-				if (current)
-					setPreviewSize({
-						width: configuration.width,
-						height: configuration.height,
-					});
-			})
-			.catch(() => {
-				// Output state still remains usable with the shared 16:9 preview fallback.
-			});
-		return () => {
-			current = false;
-		};
-	}, [previewOutputId]);
+	const { previewSize, personalityLayout } = useOutputFacts(selectedOutput?.id);
 	useEffect(() => {
 		const timer = window.setInterval(
 			() => setPreviewRevision((revision) => revision + 1),
@@ -343,7 +330,7 @@ function MediaPanePageContent() {
 		draftSelectionLabel: `${draftFolder}/${draftFileId ?? "Choose"}`,
 		controlSections:
 			selectedLayerId === "master" && selectedOutput
-				? masterSections(selectedOutput, takeover)
+				? masterSections(selectedOutput, takeover, personalityLayout)
 				: selected
 					? [
 							{
@@ -565,6 +552,11 @@ function MediaPanePageContent() {
 									!takeover,
 								),
 							},
+							...layerDmxSections(
+								selected.layer,
+								selected.layer.address.folder >= 250 ? selectedVisualizer : undefined,
+								!takeover,
+							),
 						]
 					: [],
 		selectedControlSectionId,
@@ -724,29 +716,6 @@ const PLAY_MODES: Array<[number, string]> = [
 	[236, "Pause"],
 ];
 
-function valueControl(
-	id: string,
-	label: string,
-	value: number,
-	minimum: number,
-	maximum: number,
-	disabled: boolean,
-	suffix = "",
-	step = 0.1,
-) {
-	return {
-		id,
-		kind: "value" as const,
-		label,
-		value,
-		minimum,
-		maximum,
-		disabled,
-		step,
-		display: `${Number(value.toFixed(2))}${suffix}`,
-	};
-}
-
 function tintHex(red: number, green: number, blue: number) {
 	return `#${[red, green, blue]
 		.map((value) =>
@@ -768,15 +737,8 @@ function tintChange(value: string) {
 
 function layerChange(id: string, value: string | number): UpdateLayer {
 	const number = Number(value);
-	const bank = /^media\.effect\.bank\.(1|2)\.(select|strength)$/.exec(id);
-	if (bank) {
-		return {
-			effectBank: Number(bank[1]) - 1,
-			...(bank[2] === "select"
-				? { effectSelect: number }
-				: { effectStrength: number / 100 }),
-		};
-	}
+	const dmx = layerDmxChange(id, value);
+	if (dmx) return dmx;
 	const effect = effectLayerChange(id, value);
 	if (effect) return effect;
 	switch (id) {
@@ -1527,158 +1489,6 @@ function effectControls(
 	});
 }
 
-function effectBankSection(
-	banks: OutputView["layers"][number]["effectBanks"],
-	presets: Awaited<ReturnType<typeof api.effects>>,
-	disabled: boolean,
-): MediaPaneModel["controlSections"][number] {
-	const names = new Map(presets.map((preset) => [preset.slot, preset.name]));
-	const options = Array.from({ length: 256 }, (_, slot) => ({
-		value: String(slot),
-		label:
-			slot === 0
-				? "Off"
-				: names.has(slot)
-					? `${slot} · ${names.get(slot)}`
-					: `${slot} · Unassigned`,
-	}));
-	return {
-		id: "effects",
-		label: "Effects",
-		controls: banks.flatMap((bank) => {
-			const number = bank.index + 1;
-			return [
-				{
-					id: `media.effect.bank.${number}.select`,
-					kind: "choice" as const,
-					label: "Effect Select",
-					value: String(bank.select),
-					options,
-					disabled,
-				},
-				valueControl(
-					`media.effect.bank.${number}.strength`,
-					"Effect Strength",
-					bank.strength * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-			];
-		}),
-	};
-}
-
-const VISUALIZER_NUMBERS: Record<
-	string,
-	{
-		field: keyof VisualizerParametersView;
-		label: string;
-		minimum: number;
-		maximum: number;
-		step: number;
-	}
-> = {
-	count: { field: "count", label: "Count", minimum: 1, maximum: 512, step: 1 },
-	size: {
-		field: "size",
-		label: "Size",
-		minimum: 0.001,
-		maximum: 1,
-		step: 0.001,
-	},
-	speed: { field: "speed", label: "Speed", minimum: 0, maximum: 8, step: 0.1 },
-	amount: {
-		field: "amount",
-		label: "Amount",
-		minimum: 0,
-		maximum: 1,
-		step: 0.01,
-	},
-	radius: {
-		field: "radius",
-		label: "Radius",
-		minimum: 0,
-		maximum: 1,
-		step: 0.01,
-	},
-	thickness: {
-		field: "thickness",
-		label: "Thickness",
-		minimum: 0.0005,
-		maximum: 0.5,
-		step: 0.0005,
-	},
-	reactivity: {
-		field: "reactivity",
-		label: "Reactivity",
-		minimum: 0,
-		maximum: 8,
-		step: 0.1,
-	},
-	decay: { field: "decay", label: "Decay", minimum: 0, maximum: 1, step: 0.01 },
-	zoom: {
-		field: "zoom",
-		label: "Zoom",
-		minimum: 0.05,
-		maximum: 16,
-		step: 0.05,
-	},
-	iterations: {
-		field: "iterations",
-		label: "Iterations",
-		minimum: 1,
-		maximum: 256,
-		step: 1,
-	},
-	threshold: {
-		field: "threshold",
-		label: "Threshold",
-		minimum: 0,
-		maximum: 1,
-		step: 0.01,
-	},
-	smoothing: {
-		field: "smoothing",
-		label: "Smoothing",
-		minimum: 0,
-		maximum: 1,
-		step: 0.01,
-	},
-	gravity: {
-		field: "gravity",
-		label: "Gravity",
-		minimum: -4,
-		maximum: 4,
-		step: 0.1,
-	},
-	lifetime: {
-		field: "lifetime",
-		label: "Lifetime",
-		minimum: 0.05,
-		maximum: 60,
-		step: 0.05,
-	},
-	curvature: {
-		field: "curvature",
-		label: "Curvature",
-		minimum: 0,
-		maximum: 1,
-		step: 0.01,
-	},
-	mode: { field: "mode", label: "Variant", minimum: 0, maximum: 255, step: 1 },
-};
-
-const VISUALIZER_FLAGS: Record<
-	string,
-	{ field: "mirror" | "filled" | "wireframe"; label: string }
-> = {
-	mirror: { field: "mirror", label: "Mirror" },
-	filled: { field: "filled", label: "Filled" },
-	wireframe: { field: "wireframe", label: "Wireframe" },
-};
-
 const DEFAULT_VISUALIZER_PARAMETERS: VisualizerParametersView = {
 	count: 32,
 	size: 0.05,
@@ -1859,11 +1669,14 @@ function masterChange(id: string, value: string | number): UpdateMaster {
 function masterSections(
 	output: OutputView,
 	takeover: boolean,
+	personalityLayout?: string,
 ): MediaPaneModel["controlSections"] {
 	return [
 		masterOutputSection(output, takeover), masterEffectsSection(output, takeover),
 		masterGeometrySection(output, takeover), masterMaskSection(output, takeover),
-		masterShapersSection(output, takeover), masterColourSection(output, takeover),
+		masterShapersSection(output, takeover),
+		// The mapping layout mirrors through negative scale instead of a Flip / mirror channel.
+		masterColourSection(output, takeover, personalityLayout !== "mapping"),
 	];
 }
 
@@ -1891,8 +1704,8 @@ function masterGeometrySection(output: OutputView, takeover: boolean): MasterSec
 	return { id: "geometry", label: "Geometry", controls: [
 		valueControl("master-position-x", "Position X", output.master.positionX, -2, 2, !takeover),
 		valueControl("master-position-y", "Position Y", output.master.positionY, -2, 2, !takeover),
-		valueControl("master-scale-x", "Scale X", output.master.scaleX, 0, 4, !takeover),
-		valueControl("master-scale-y", "Scale Y", output.master.scaleY, 0, 4, !takeover),
+		valueControl("master-scale-x", "Scale X", output.master.scaleX, -4, 4, !takeover),
+		valueControl("master-scale-y", "Scale Y", output.master.scaleY, -4, 4, !takeover),
 		valueControl("master-rotation", "Rotation", output.master.rotation, -180, 180, !takeover, "°", 1),
 		{ id: "master-scaling-mode", kind: "choice", label: "Scale mode",
 			value: output.master.scalingMode, options: [
@@ -1920,11 +1733,11 @@ function masterShapersSection(output: OutputView, takeover: boolean): MasterSect
 		valueControl("shaper-rotation", "Module rotation", output.master.shaperRotation, -180, 180, !takeover, "°", 1),
 	] };
 }
-function masterColourSection(output: OutputView, takeover: boolean): MasterSection {
+function masterColourSection(output: OutputView, takeover: boolean, flipMirror: boolean): MasterSection {
 	return { id: "colour", label: "Colour", controls: [
 		{ id: "master-tint", kind: "color", label: "Tint",
 			value: tintHex(output.master.tintRed, output.master.tintGreen, output.master.tintBlue), disabled: !takeover },
-		{ id: "flip-mirror", kind: "choice", label: "Flip / mirror", value: output.master.flipMirror,
-			options: ["none", "horizontal", "vertical", "both"].map((value) => ({ value, label: value })), disabled: !takeover },
+		...(flipMirror ? [{ id: "flip-mirror", kind: "choice" as const, label: "Flip / mirror", value: output.master.flipMirror,
+			options: ["none", "horizontal", "vertical", "both"].map((value) => ({ value, label: value })), disabled: !takeover }] : []),
 	] };
 }

@@ -554,6 +554,25 @@
 	gap: 14px;
 }
 
+.media-model-slot-editor {
+	display: grid;
+	gap: 14px;
+}
+
+.media-model-upload-progress {
+	display: grid;
+	gap: 6px;
+}
+
+.media-model-upload-progress progress {
+	width: 100%;
+	height: 10px;
+}
+
+.media-model-status-error {
+	color: var(--danger, #ff6b6b);
+}
+
 @media (max-width: 860px) {
 	.media-effects-library-layout {
 		grid-template-columns: 1fr;

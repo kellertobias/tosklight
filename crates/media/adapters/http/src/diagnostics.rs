@@ -278,6 +278,63 @@ impl std::fmt::Debug for LibraryAccess {
     }
 }
 
+/// A model file the process imported and stored for a slot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedModel {
+    /// The stored file name to record in the model library.
+    pub file: String,
+    pub vertices: u32,
+    pub triangles: u32,
+}
+
+/// Why an uploaded model was refused, as a stable code and an operator-actionable message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelRejection {
+    pub code: String,
+    pub message: String,
+}
+
+pub type ImportModel =
+    Arc<dyn Fn(u8, &[u8]) -> Result<ImportedModel, ModelRejection> + Send + Sync>;
+pub type RemoveModel = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+pub type ModelFailures = Arc<dyn Fn() -> Vec<(u8, String)> + Send + Sync>;
+
+/// The 3D model store, which belongs to the runtime and its library adapter: the API never
+/// parses a mesh or opens a model file itself.
+#[derive(Clone)]
+pub struct ModelAccess {
+    /// Validates, imports, and stores an uploaded `.glb` for a slot. Nothing is stored when the
+    /// file is refused, so a failed upload never replaces a working model.
+    pub import: ImportModel,
+    /// Removes a stored model file by name. A missing file is not an error.
+    pub remove: RemoveModel,
+    /// Assigned slots whose stored file the running process could not load, with the reason.
+    pub failures: ModelFailures,
+}
+
+impl Default for ModelAccess {
+    fn default() -> Self {
+        Self {
+            import: Arc::new(|_, _| {
+                Err(ModelRejection {
+                    code: "model-import-unavailable".to_owned(),
+                    message: "3D model import is unavailable in this process".to_owned(),
+                })
+            }),
+            remove: Arc::new(|_| Ok(())),
+            failures: Arc::new(Vec::new),
+        }
+    }
+}
+
+impl std::fmt::Debug for ModelAccess {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ModelAccess")
+            .finish_non_exhaustive()
+    }
+}
+
 /// The latest accepted DMX footprint for one configured output.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DmxTelemetry {
@@ -412,6 +469,8 @@ impl std::fmt::Debug for LogLevelControl {
 /// The diagnostics the API can read from the running process.
 #[derive(Clone)]
 pub struct Diagnostics {
+    /// The 3D model store the process owns.
+    pub models: ModelAccess,
     pub audio: AudioSource,
     pub audio_devices: DeviceLister,
     pub output_devices: DeviceLister,
@@ -432,6 +491,7 @@ impl Default for Diagnostics {
     /// route still answers — with the truth, which is that nothing is being captured or recorded.
     fn default() -> Self {
         Self {
+            models: ModelAccess::default(),
             audio: Arc::new(AudioTelemetry::default),
             audio_devices: Arc::new(Vec::new),
             output_devices: Arc::new(Vec::new),

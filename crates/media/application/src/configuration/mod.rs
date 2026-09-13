@@ -35,7 +35,7 @@ pub use validate::ConfigurationError;
 
 use media_domain::text_catalog::TextCatalog;
 use media_domain::visualizer::GeneratedCatalog;
-use media_domain::{EffectLibrary, OutputId};
+use media_domain::{EffectLibrary, ModelLibrary, OutputId};
 use serde::{Deserialize, Serialize};
 
 /// Distinguishes two Media Server processes on one host in logs, CITP announcements, and
@@ -94,6 +94,13 @@ pub struct MediaConfiguration {
     /// Addressed effect presets selected by the two banks on every layer.
     #[serde(default)]
     pub effects: EffectLibrary,
+    /// Numbered 3D models a layer's `3D model` channel maps it onto.
+    ///
+    /// Optional in the document: a configuration written before the model library existed has
+    /// no `models` section and loads as an empty library, so every layer keeps drawing flat.
+    /// No version bump is needed because nothing about an existing field changed.
+    #[serde(default)]
+    pub models: ModelLibrary,
     /// One or more logical outputs. The first release ships one; the collection is never
     /// collapsed into singleton state.
     pub outputs: Vec<OutputConfiguration>,
@@ -116,6 +123,7 @@ impl Default for MediaConfiguration {
             visualizers: GeneratedCatalog::default(),
             text: TextCatalog::default(),
             effects: EffectLibrary::default(),
+            models: ModelLibrary::default(),
             outputs: vec![main],
         }
     }
@@ -214,6 +222,62 @@ mod tests {
         let error = load("{ not json").unwrap_err();
         assert!(
             matches!(error, ConfigurationError::Malformed { .. }),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn a_current_document_without_a_model_library_loads_an_empty_one() {
+        let mut document = serde_json::to_value(ConfigurationDocument::default()).unwrap();
+        document["configuration"]
+            .as_object_mut()
+            .unwrap()
+            .remove("models")
+            .expect("the current document writes its model library");
+        let loaded = load(&document.to_string()).unwrap();
+        assert_eq!(loaded.models, ModelLibrary::default());
+        assert_eq!(loaded.outputs.len(), 1);
+    }
+
+    #[test]
+    fn a_legacy_document_migrates_to_an_empty_model_library() {
+        let legacy = r#"{ "fullMode": true, "dmxProtocol": "art-net" }"#;
+        let loaded = load(legacy).unwrap();
+        assert!(loaded.models.entries.is_empty());
+    }
+
+    #[test]
+    fn assigned_models_survive_a_save_and_load() {
+        let mut configuration = MediaConfiguration::default();
+        configuration
+            .models
+            .assign(media_domain::ModelEntry {
+                slot: 42,
+                name: "Stage cube".to_owned(),
+                file: ModelLibrary::stored_file_name(42),
+                vertices: 24,
+                triangles: 12,
+            })
+            .unwrap();
+        let loaded = load(&save(&configuration)).unwrap();
+        assert_eq!(loaded.models, configuration.models);
+        assert_eq!(loaded.models.resolve(42).unwrap().triangles, 12);
+    }
+
+    #[test]
+    fn a_duplicated_model_slot_is_refused_at_load() {
+        let mut configuration = MediaConfiguration::default();
+        let entry = media_domain::ModelEntry {
+            slot: 9,
+            name: "Twice".to_owned(),
+            file: ModelLibrary::stored_file_name(9),
+            vertices: 3,
+            triangles: 1,
+        };
+        configuration.models.entries = vec![entry.clone(), entry];
+        let error = load(&save(&configuration)).unwrap_err();
+        assert!(
+            matches!(error, ConfigurationError::ModelLibrary(_)),
             "{error:?}"
         );
     }

@@ -23,6 +23,8 @@ pub enum ConfigurationError {
     Migration(#[from] MigrationError),
     #[error("the effect library is invalid: {0}")]
     EffectLibrary(#[from] media_domain::EffectLibraryError),
+    #[error("the 3D model library is invalid: {0}")]
+    ModelLibrary(#[from] media_domain::ModelLibraryError),
     #[error("the configuration defines no outputs; a Media Server needs at least one")]
     NoOutputs,
     #[error("two outputs share the identity {id}")]
@@ -156,6 +158,7 @@ pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), Configu
         });
     }
     configuration.effects.validate()?;
+    configuration.models.validate()?;
 
     let mut seen = HashSet::new();
     for output in &configuration.outputs {
@@ -659,6 +662,7 @@ mod tests {
         let first = OutputConfiguration::new("Main");
         let mut second = OutputConfiguration::new("Second");
         second.start_address = 100;
+        second.personality = LayerPersonality::TwoLayers;
         let error = validate(&configuration(vec![first, second])).unwrap_err();
         assert!(
             matches!(error, ConfigurationError::OverlappingPatch { .. }),
@@ -671,6 +675,7 @@ mod tests {
         let first = OutputConfiguration::new("Main");
         let mut second = OutputConfiguration::new("Second");
         second.start_address = 100;
+        second.personality = LayerPersonality::TwoLayers;
         second.enabled = false;
         assert_eq!(validate(&configuration(vec![first, second])), Ok(()));
     }

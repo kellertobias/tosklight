@@ -88,6 +88,7 @@ pub fn run_event_loop(
         analysis,
         previews,
         universe_inputs,
+        models,
     } = shared;
     let event_loop = EventLoop::new()?;
     // Cocoa owns this thread. Rendering and surface reconstruction happen on the presentation
@@ -129,6 +130,7 @@ pub fn run_event_loop(
         modifiers: ModifiersState::empty(),
         entering_fullscreen: Vec::new(),
         worker: None,
+        models,
         expects_outputs: needs_a_window(configuration),
         #[cfg(feature = "tray")]
         tray: None,
@@ -156,6 +158,7 @@ pub struct Diagnostics {
 ///
 /// One value rather than four arguments, because they always travel together: the outputs present
 /// exactly the state the API writes, from exactly the catalog it publishes.
+#[derive(Clone)]
 pub struct Shared {
     pub state: SharedState,
     pub catalog: SharedCatalog,
@@ -166,6 +169,8 @@ pub struct Shared {
     pub analysis: media_audio::SharedAnalysis,
     pub previews: crate::preview::SharedPreviews,
     pub universe_inputs: crate::dmx::SharedUniverseInputs,
+    /// The 3D model library every output maps layers onto.
+    pub models: crate::model_store::Models,
 }
 
 /// The published library snapshot, shared with the services so both read one catalog.
@@ -195,6 +200,8 @@ struct HostedOutput {
     standby: Option<SourceTexture>,
     fullscreen_hint: Option<SourceTexture>,
     hint_visible_until: Option<std::time::Instant>,
+    /// This output's GPU copy of the 3D models.
+    models: crate::model_store::InstalledModels,
 }
 
 /// A clip loaded for the development `--play` affordance.
@@ -238,6 +245,8 @@ struct PresentationHost {
     /// window's current screen rather than a screen of its own.
     entering_fullscreen: Vec<(Arc<Window>, winit::monitor::MonitorHandle)>,
     worker: Option<PresentationWorker>,
+    /// The 3D model library, handed to the render worker.
+    models: crate::model_store::Models,
     /// Whether this configuration asked for output windows at all. A server with none is a normal
     /// state — it still runs, and it still has a menu bar item — so an empty output list only
     /// means failure when outputs were expected.
@@ -283,6 +292,7 @@ struct RenderWorkerState {
     direct: Option<DirectClip>,
     administration_endpoint: String,
     operator_overlay_layer: media_domain::LayerState,
+    models: crate::model_store::Models,
 }
 
 /// The diagnostic pattern's colour: unmistakably not black and unmistakably not media.
@@ -458,6 +468,7 @@ impl PresentationHost {
                     standby,
                     fullscreen_hint,
                     hint_visible_until: None,
+                    models: Default::default(),
                 });
                 self.window_modes.insert(
                     window.id(),
@@ -501,6 +512,7 @@ impl PresentationHost {
                 instance,
             },
             outputs: std::mem::take(&mut self.outputs),
+            models: self.models.clone(),
             state: self.state.clone(),
             started: self.started,
             test_pattern_layer: self.test_pattern_layer.clone(),
@@ -674,6 +686,56 @@ fn windows_command_chord(modifiers: ModifiersState) -> bool {
         && !modifiers.super_key()
 }
 
+impl HostedOutput {
+    /// Runs this output's beat- and time-driven layer effects over the prepared layers, in their
+    /// fixed order: opacity cycle, move, scale/turn, scan, grid wave, form flash.
+    fn apply_layer_effects(
+        &mut self,
+        output_state: &media_domain::OutputState,
+        prepared: &crate::layer_pipeline::Prepared,
+        seconds: f32,
+        heard: &media_audio::AnalysisSnapshot,
+    ) -> Vec<media_domain::LayerState> {
+        let effective_layers =
+            self.opacity_cycle
+                .apply(output_state, prepared, seconds, heard.bpm, heard.beat_phase);
+        let effective_layers = self.beat_move.apply(&effective_layers, seconds, heard.beat);
+        let turn = &mut self.beat_scale_turn;
+        let effective_layers = turn.apply(&effective_layers, seconds, heard.beat);
+        let effective_layers = self.beat_scan.apply(
+            &effective_layers,
+            seconds,
+            heard.beat,
+            heard.analysis.peak.max(heard.analysis.energy * 4.0),
+        );
+        let effective_layers = self.beat_grid_wave.apply(
+            &effective_layers,
+            seconds,
+            heard.beat,
+            heard.analysis.peak.max(heard.analysis.energy * 4.0),
+        );
+        self.beat_form_flash
+            .apply(&effective_layers, seconds, heard.beat)
+    }
+
+    /// Brings this output's GPU model copies in line with the model library; a missing selection
+    /// is logged once.
+    fn sync_models(
+        &mut self,
+        models: &crate::model_store::Models,
+        configuration: &MediaConfiguration,
+        output_state: &media_domain::OutputState,
+    ) {
+        // Uploads only when the model library changed.
+        let resolved = models.resolve(&configuration.models);
+        models.note_selections(&configuration.models, output_state);
+        let output = &mut self.output;
+        self.models.sync(&resolved, output_state.id, |geometries| {
+            output.set_models(geometries)
+        });
+    }
+}
+
 impl RenderWorkerState {
     fn now(&self) -> Timestamp {
         Timestamp::from_micros(self.started.elapsed().as_micros() as u64)
@@ -699,6 +761,7 @@ impl RenderWorkerState {
             };
             let resolved_output = crate::effect_banks::resolve_output(output_state, &configuration);
             let output_state = &resolved_output;
+            hosted.sync_models(&self.models, &configuration, output_state);
             let master = output_state.master;
             let region = shown_region(&configuration, output_state.id);
             let status_overlay = configuration
@@ -751,34 +814,8 @@ impl RenderWorkerState {
                     .map(|(layer, status)| (output_state.id, *layer, *status)),
             );
 
-            let effective_layers = hosted.opacity_cycle.apply(
-                output_state,
-                &prepared,
-                seconds,
-                heard.bpm,
-                heard.beat_phase,
-            );
-            let effective_layers = hosted
-                .beat_move
-                .apply(&effective_layers, seconds, heard.beat);
-            let turn = &mut hosted.beat_scale_turn;
-            let effective_layers = turn.apply(&effective_layers, seconds, heard.beat);
-            let effective_layers = hosted.beat_scan.apply(
-                &effective_layers,
-                seconds,
-                heard.beat,
-                heard.analysis.peak.max(heard.analysis.energy * 4.0),
-            );
-            let effective_layers = hosted.beat_grid_wave.apply(
-                &effective_layers,
-                seconds,
-                heard.beat,
-                heard.analysis.peak.max(heard.analysis.energy * 4.0),
-            );
             let effective_layers =
-                hosted
-                    .beat_form_flash
-                    .apply(&effective_layers, seconds, heard.beat);
+                hosted.apply_layer_effects(output_state, &prepared, seconds, &heard);
             let mut draws = hosted
                 .pipeline
                 .draws_from_layers(&effective_layers, &prepared);

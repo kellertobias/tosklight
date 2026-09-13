@@ -28,6 +28,7 @@ describe("routing", () => {
 			"Visualizers",
 			"Text",
 			"Effects",
+			"Models",
 			"Audio",
 			"Diagnostics",
 			"Settings",

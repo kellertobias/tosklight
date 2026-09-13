@@ -169,6 +169,12 @@ impl WindowedOutput {
         self.clock.reset();
     }
 
+    /// Makes exactly these 3D models available to layers on this output. Returns the slots that
+    /// could not be uploaded to this GPU and why; layers selecting them draw flat.
+    pub fn set_models(&mut self, models: &crate::ModelGeometries) -> Vec<(u8, String)> {
+        self.compositor.set_models(models)
+    }
+
     /// Composites and presents one frame.
     ///
     /// A surface that has been lost or has gone out of date is reconfigured and the frame is

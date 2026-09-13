@@ -19,6 +19,9 @@ import type {
 	ImportsView,
 	LogsView,
 	LibrarySettingsView,
+	ModelSlotView,
+	ClearedModelSlotView,
+	UpdateModelSlot,
 	NetworkView,
 	OutputConfigurationView,
 	OutputView,
@@ -105,6 +108,56 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	return (await response.json()) as T;
 }
 
+/// Fetch cannot report upload progress, so a large upload an operator waits on uses XHR. It fails
+/// exactly like `request`: a typed `ApiFailure`, including when the server never answers.
+function uploadWithProgress<T>(
+	path: string,
+	file: File,
+	onProgress?: (fraction: number) => void,
+): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open("POST", `${BASE}${path}`);
+		xhr.upload.onprogress = (event) => {
+			if (event.lengthComputable && event.total > 0)
+				onProgress?.(Math.min(1, event.loaded / event.total));
+		};
+		xhr.onerror = () =>
+			reject(
+				new ApiFailure(
+					"unreachable",
+					"the Media Server is not answering; check that it is running",
+					0,
+				),
+			);
+		xhr.onload = () => {
+			let body: unknown;
+			try {
+				body = JSON.parse(xhr.responseText);
+			} catch {
+				body = undefined;
+			}
+			if (xhr.status >= 200 && xhr.status < 300) {
+				resolve(body as T);
+				return;
+			}
+			const error = body as Partial<ApiErrorBody> | undefined;
+			reject(
+				typeof error?.code === "string" && typeof error?.message === "string"
+					? new ApiFailure(error.code, error.message, xhr.status)
+					: new ApiFailure(
+							"unexpected-response",
+							`the server answered ${xhr.status}`,
+							xhr.status,
+						),
+			);
+		};
+		const body = new FormData();
+		body.set("file", file);
+		xhr.send(body);
+	});
+}
+
 async function failureOf(response: Response): Promise<ApiFailure> {
 	// A route answers with the typed error body. Anything else — a proxy, a crash page — still
 	// has to become a failure an operator can read.
@@ -184,6 +237,26 @@ export const api = {
 		),
 	visualizers: () => request<VisualizerView[]>("/visualizers"),
 	effects: () => request<EffectLibrarySlot[]>("/effects"),
+	models: () => request<ModelSlotView[]>("/models"),
+	updateModel: (slot: number, edit: UpdateModelSlot) =>
+		request<ModelSlotView | ClearedModelSlotView>(`/models/${slot}/update`, {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	/**
+	 * Uploads one `.glb` into a model slot. `onProgress` receives the uploaded fraction; at 1 the
+	 * server is still importing, so a caller shows that as its own state.
+	 */
+	uploadModel: (
+		slot: number,
+		requestId: string,
+		model: File,
+		onProgress?: (fraction: number) => void,
+	) => uploadWithProgress<ModelSlotView>(
+		`/models/${slot}/upload?${new URLSearchParams({ requestId })}`,
+		model,
+		onProgress,
+	),
 	updateEffect: (slot: number, edit: UpdateEffectLibrarySlot) =>
 		request<EffectLibrarySlot | null>(`/effects/${slot}/update`, {
 			method: "POST",

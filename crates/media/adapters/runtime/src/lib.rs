@@ -25,6 +25,7 @@ mod layer_sources;
 mod library_runtime;
 pub mod log_buffer;
 mod logging;
+mod model_store;
 pub mod off_screen;
 mod opacity_cycle;
 pub mod pixel_output;
@@ -121,7 +122,12 @@ fn run_inner() -> anyhow::Result<()> {
 
     let live: SharedConfiguration =
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone()));
+    // One model store for every output and the API, so a mesh is parsed once and an upload
+    // reaches the outputs on their next frame.
+    let models = model_store::Models::new(&configuration.library.root);
     let diagnostics = diagnostics_of(
+        &models,
+        &live,
         audio.as_ref(),
         &logging,
         &importer,
@@ -137,55 +143,40 @@ fn run_inner() -> anyhow::Result<()> {
     let apply = applies_to(audio.as_ref());
 
     let previews = preview::SharedPreviews::configured(&configuration);
+    let shared = presentation::Shared {
+        state,
+        catalog,
+        configuration: live,
+        analysis,
+        previews,
+        universe_inputs,
+        models,
+    };
 
     // The desk drives the outputs, so the listeners come up before anything presents.
-    runtime.block_on(async {
-        let warnings = dmx::spawn(
-            &configuration,
-            state.clone(),
-            shutdown.clone(),
-            started,
-            dmx_diagnostics,
-            universe_inputs.clone(),
-        )?;
-        *network_warnings
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = warnings;
-        citp::spawn(
-            &configuration,
-            state.clone(),
-            catalog.clone(),
-            live.clone(),
-            previews.clone(),
-            shutdown.clone(),
-            console_identity,
-        );
-        anyhow::Ok(())
-    })?;
+    start_desk_listeners(
+        &runtime,
+        &configuration,
+        &shared,
+        &shutdown,
+        started,
+        dmx_diagnostics,
+        &network_warnings,
+        console_identity,
+    )?;
 
     // Off-screen outputs render on their own thread with their own device, so they run whether or
     // not this process also hosts a window. A rack server with no display is still a media server.
-    let off_screen = spawn_off_screen(
-        &configuration,
-        presentation::Shared {
-            state: state.clone(),
-            catalog: catalog.clone(),
-            configuration: live.clone(),
-            analysis: analysis.clone(),
-            previews: previews.clone(),
-            universe_inputs: universe_inputs.clone(),
-        },
-        shutdown.clone(),
-    );
+    let off_screen = spawn_off_screen(&configuration, shared.clone(), shutdown.clone());
 
     let services = Services {
-        configuration: live.clone(),
+        configuration: shared.configuration.clone(),
         shutdown: shutdown.clone(),
-        state: Some(state.clone()),
-        catalog: Some(catalog.clone()),
+        state: Some(shared.state.clone()),
+        catalog: Some(shared.catalog.clone()),
         diagnostics,
         apply,
-        previews: Some(previews.clone()),
+        previews: Some(shared.previews.clone()),
     };
     // What decides this is whether a desktop is reachable, not whether an output is configured.
     // The Media Server is an application with a menu bar item; a server with nothing assigned to a
@@ -210,14 +201,7 @@ fn run_inner() -> anyhow::Result<()> {
 
     let presented = presentation::run_event_loop(
         &configuration,
-        presentation::Shared {
-            state,
-            catalog,
-            configuration: live,
-            analysis,
-            previews,
-            universe_inputs,
-        },
+        shared,
         shutdown.clone(),
         diagnostics_arguments,
         available_monitors,
@@ -230,6 +214,44 @@ fn run_inner() -> anyhow::Result<()> {
     stop_background(importer, off_screen, audio);
     presented?;
     served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
+}
+
+/// Brings up the DMX and CITP listeners on the background runtime, recording any network warnings
+/// DMX startup raised before CITP starts.
+#[allow(clippy::too_many_arguments)]
+fn start_desk_listeners(
+    runtime: &tokio::runtime::Runtime,
+    configuration: &MediaConfiguration,
+    shared: &presentation::Shared,
+    shutdown: &Shutdown,
+    started: std::time::Instant,
+    dmx_diagnostics: dmx::SharedDiagnostics,
+    network_warnings: &std::sync::Mutex<Vec<String>>,
+    console_identity: citp::ConsoleIdentity,
+) -> anyhow::Result<()> {
+    runtime.block_on(async {
+        let warnings = dmx::spawn(
+            configuration,
+            shared.state.clone(),
+            shutdown.clone(),
+            started,
+            dmx_diagnostics,
+            shared.universe_inputs.clone(),
+        )?;
+        *network_warnings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = warnings;
+        citp::spawn(
+            configuration,
+            shared.state.clone(),
+            shared.catalog.clone(),
+            shared.configuration.clone(),
+            shared.previews.clone(),
+            shutdown.clone(),
+            console_identity,
+        );
+        anyhow::Ok(())
+    })
 }
 
 fn stop_background(
@@ -551,6 +573,8 @@ fn applies_to(audio: Option<&media_audio::AudioService>) -> media_http::ApplyCon
 /// request arrives on another.
 #[allow(clippy::too_many_arguments)]
 fn diagnostics_of(
+    models: &model_store::Models,
+    live: &SharedConfiguration,
     audio: Option<&media_audio::AudioService>,
     logging: &logging::InstalledLogging,
     importer: &media_library::Importer,
@@ -563,12 +587,26 @@ fn diagnostics_of(
     available_monitors: &std::sync::Arc<std::sync::RwLock<Vec<media_http::MonitorDevice>>>,
     started: std::time::Instant,
 ) -> media_http::Diagnostics {
+    let importing = models.clone();
+    let removing = models.clone();
+    let reading = models.clone();
+    let reading_configuration = live.clone();
     let log = logging.window.clone();
     let dmx_diagnostics = dmx_diagnostics.clone();
     let network_warnings = network_warnings.clone();
     let console_identity = console_identity.clone();
     let available_monitors = available_monitors.clone();
     media_http::Diagnostics {
+        models: media_http::ModelAccess {
+            import: std::sync::Arc::new(move |slot, bytes| importing.import(slot, bytes)),
+            remove: std::sync::Arc::new(move |file| removing.remove(file)),
+            failures: std::sync::Arc::new(move || {
+                reading
+                    .resolve(&reading_configuration.load().models)
+                    .failures
+                    .clone()
+            }),
+        },
         audio: match audio {
             Some(service) => {
                 let analysis = service.analysis();

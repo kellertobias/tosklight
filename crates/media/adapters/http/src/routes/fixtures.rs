@@ -119,7 +119,7 @@ mod tests {
         let grandma2 = bench
             .router
             .clone()
-            .oneshot(get("/api/v2/fixtures/tosklight@pixel_layer@39ch.xml".into()))
+            .oneshot(get("/api/v2/fixtures/tosklight@pixel_layer@59ch.xml".into()))
             .await
             .unwrap();
         assert_eq!(grandma2.status(), StatusCode::OK);

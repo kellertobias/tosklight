@@ -120,6 +120,7 @@ impl UpdateOutputConfiguration {
                 "current" => media_domain::PersonalityLayout::Current,
                 "extended" => media_domain::PersonalityLayout::Extended,
                 "effect-banks" => media_domain::PersonalityLayout::EffectBanks,
+                "mapping" => media_domain::PersonalityLayout::Mapping,
                 _ => return Err(OutputConfigurationEditError::Personality),
             };
         }

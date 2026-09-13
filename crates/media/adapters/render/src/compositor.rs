@@ -3,14 +3,23 @@
 //! Layers draw into a program target in order, lowest first, with normal alpha blending. The
 //! master pass then tints, dims, and flips that finished composite onto the output.
 
-use bytemuck::{Pod, Zeroable};
-use media_domain::display_region::{DisplayRegion, RegionRotation};
-use media_domain::geometry::{Size, layer_transform};
-use media_domain::{LayerState, MaskSource, MasterState, OutputId, Timestamp, geometry};
+use media_domain::display_region::DisplayRegion;
+use media_domain::geometry::Size;
+use media_domain::{BlendMode, LayerState, MasterState, OutputId, Timestamp, strobe_lit};
 
 use crate::feedback::FeedbackProcessor;
 use crate::gpu::Gpu;
 use crate::texture::SourceTexture;
+
+mod blend;
+mod model_mapping;
+mod pipelines;
+mod uniforms;
+pub use model_mapping::ModelGeometries;
+
+use blend::{backdrop_layout, backdrop_region, backdrop_target, blend_pipeline};
+use pipelines::{bind_group, layer_pass, pipeline, program_target, uniform_and_texture_layout};
+use uniforms::{LayerUniform, MasterUniform};
 
 /// The most layers one output composites. The eight-layer personality is the larger of the two
 /// supported products.
@@ -30,270 +39,6 @@ pub struct LayerDraw<'a> {
     pub mask: Option<&'a SourceTexture>,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct LayerUniform {
-    center: [f32; 2],
-    size: [f32; 2],
-    rotation: [f32; 2],
-    output: [f32; 2],
-    tint: [f32; 4],
-    controls: [f32; 4],
-    blur: [f32; 4],
-    mask: [f32; 4],
-    mask_source: [f32; 4],
-    effect_types: [u32; 4],
-    effect_mixes: [f32; 4],
-    effect_parameters: [[f32; 4]; 4],
-    /// Fifth typed parameter for effects that need it, one value per slot.
-    effect_parameter_tail: [f32; 4],
-    effect_seeds: [f32; 4],
-    /// Authoritative playback seconds, output width/height, spare.
-    effect_clock: [f32; 4],
-    /// Transient beat-scan event base positions and strength-derived line counts. Each vec4 maps
-    /// one event across effect slots 1..4; these never enter persisted layer state.
-    beat_scan_positions: [[f32; 4]; 16],
-    beat_scan_counts: [[f32; 4]; 16],
-    beat_event_x: [[f32; 4]; 16],
-    beat_event_y: [[f32; 4]; 16],
-}
-
-impl LayerUniform {
-    fn new(
-        layer: &LayerState,
-        source: Size,
-        output: Size,
-        mask: Option<&SourceTexture>,
-        output_id: OutputId,
-        now: Timestamp,
-    ) -> Self {
-        let transform = layer_transform(layer, source, output);
-        let (sin, cos) = transform.rotation_degrees.to_radians().sin_cos();
-        let mut effect_types = [0; 4];
-        let mut effect_mixes = [0.0; 4];
-        let mut effect_parameters = [[0.0; 4]; 4];
-        let mut effect_parameter_tail = [0.0; 4];
-        let mut effect_seeds = [0.0; 4];
-        let mut beat_scan_positions = [[-2.0; 4]; 16];
-        let mut beat_scan_counts = [[0.0; 4]; 16];
-        let mut beat_event_x = [[0.5; 4]; 16];
-        let mut beat_event_y = [[0.5; 4]; 16];
-        for (index, effect) in layer.effects.iter().enumerate() {
-            if let Some(parameters) = effect.analog_tv_parameters() {
-                effect_types[index] = 1;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index] = parameters.as_array();
-                effect_seeds[index] = effect_seed(output_id, effect.seed, index);
-            } else if let Some(parameters) = effect.digital_tv_parameters() {
-                let values = parameters.as_array();
-                effect_types[index] = 2;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index].copy_from_slice(&values[..4]);
-                effect_parameter_tail[index] = values[4];
-                effect_seeds[index] = effect_seed(output_id, effect.seed, index);
-            } else if let Some(parameters) = effect.blur_parameters() {
-                effect_types[index] = 3;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index][0] = parameters.amount;
-                effect_parameters[index][1] = parameters.blur_type.parameter();
-            } else if let Some(parameters) = effect.kaleidoscope_parameters() {
-                effect_types[index] = 4;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index][0] = f32::from(parameters.repetitions);
-                effect_parameters[index][1] = parameters.angle_degrees;
-            } else if let Some(parameters) = effect.rasterize_parameters() {
-                effect_types[index] = 5;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index][0] = parameters.mode.parameter();
-                effect_parameters[index][1] = parameters.dot_size;
-            } else if let Some(parameters) = effect.beat_scan_parameters() {
-                effect_types[index] = 6;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index] = parameters.as_array();
-                let (events, _) = effect.parameters[4..].as_chunks::<2>();
-                for (event, values) in events.iter().take(16).enumerate() {
-                    beat_scan_positions[event][index] = values[0];
-                    beat_scan_counts[event][index] = values[1];
-                }
-            } else if let Some(parameters) = effect.beat_grid_wave_parameters() {
-                let values = parameters.as_array();
-                effect_types[index] = 7;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index].copy_from_slice(&values[..4]);
-                effect_parameter_tail[index] = values[4];
-                effect_seeds[index] = values[5];
-                let (events, _) = effect.parameters[6..].as_chunks::<2>();
-                for (event, values) in events.iter().take(16).enumerate() {
-                    beat_scan_positions[event][index] = values[0];
-                    beat_scan_counts[event][index] = values[1];
-                }
-            } else if let Some(parameters) = effect.beat_form_flash_parameters() {
-                effect_types[index] = 8;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index] = parameters.as_array();
-                let (events, _) = effect.parameters[4..].as_chunks::<4>();
-                for (event, values) in events.iter().take(16).enumerate() {
-                    beat_scan_positions[event][index] = values[0];
-                    beat_event_x[event][index] = values[1];
-                    beat_event_y[event][index] = values[2];
-                    beat_scan_counts[event][index] = values[3];
-                }
-            } else if let Some(parameters) = effect.drawn_image_parameters() {
-                effect_types[index] = 9;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                let values = parameters.as_array();
-                effect_parameters[index][0] = values[0];
-                effect_parameters[index][1] = values[1];
-            }
-        }
-        Self {
-            center: [transform.center.x, transform.center.y],
-            size: [transform.size.0, transform.size.1],
-            rotation: [cos, sin],
-            output: [output.width as f32, output.height as f32],
-            // Layer dimmer becomes the alpha of the layer tint.
-            tint: [
-                layer.tint.red,
-                layer.tint.green,
-                layer.tint.blue,
-                layer.dimmer,
-            ],
-            controls: [layer.grayscale, 0.0, 0.0, 0.0],
-            blur: [layer.blur.clamp(0.0, 1.0), 0.0, 0.0, 0.0],
-            // A mask that is selected but not loaded reports no opacity, so the layer draws
-            // unmasked rather than vanishing while its mask is on its way.
-            mask: [
-                layer.mask.scale_x,
-                layer.mask.scale_y,
-                f32::from(u8::from(layer.mask.invert)),
-                if mask.is_some() && layer.mask.is_active() {
-                    layer.mask.opacity
-                } else {
-                    0.0
-                },
-            ],
-            mask_source: [
-                f32::from(u8::from(layer.mask.source == MaskSource::Alpha)),
-                layer.mask.position_x,
-                layer.mask.position_y,
-                0.0,
-            ],
-            effect_types,
-            effect_mixes,
-            effect_parameters,
-            effect_parameter_tail,
-            effect_seeds,
-            effect_clock: [
-                (now.as_micros() as f64 / 1_000_000.0) as f32,
-                output.width as f32,
-                output.height as f32,
-                0.0,
-            ],
-            beat_scan_positions,
-            beat_scan_counts,
-            beat_event_x,
-            beat_event_y,
-        }
-    }
-}
-
-fn effect_seed(output: OutputId, seed: u32, slot: usize) -> f32 {
-    let mut hash = 2_166_136_261_u32;
-    for byte in output
-        .as_uuid()
-        .as_bytes()
-        .iter()
-        .copied()
-        .chain(seed.to_le_bytes())
-        .chain((slot as u32).to_le_bytes())
-    {
-        hash = (hash ^ u32::from(byte)).wrapping_mul(16_777_619);
-    }
-    (hash & 0x00ff_ffff) as f32 / 0x00ff_ffff as f32
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct MasterUniform {
-    tint: [f32; 4],
-    flip_mask: [f32; 4],
-    transform: [f32; 4],
-    rotation: [f32; 4],
-    mask_transform: [f32; 4],
-    shaper_edges: [f32; 4],
-    shaper_edge_tangents: [f32; 4],
-    region: [f32; 4],
-    region_rotation: [f32; 4],
-}
-
-impl MasterUniform {
-    fn new(
-        master: &MasterState,
-        mask: Option<&SourceTexture>,
-        preserve_alpha: bool,
-        region: Option<&DisplayRegion>,
-    ) -> Self {
-        let (horizontal, vertical) = geometry::flip_signs(master.flip_mirror);
-        let (scale_x, scale_y) = master.effective_scale();
-        Self {
-            tint: [
-                master.tint.red,
-                master.tint.green,
-                master.tint.blue,
-                master.dimmer,
-            ],
-            flip_mask: [
-                horizontal,
-                vertical,
-                if mask.is_some() && master.has_mask() {
-                    1.0
-                } else {
-                    0.0
-                },
-                if preserve_alpha { -1.0 } else { 0.0 },
-            ],
-            transform: [master.position_x, master.position_y, scale_x, scale_y],
-            rotation: [
-                master.rotation.to_radians().cos(),
-                master.rotation.to_radians().sin(),
-                master.shaper.rotation.to_radians().cos(),
-                master.shaper.rotation.to_radians().sin(),
-            ],
-            mask_transform: [master.mask_position_x, master.mask_position_y, 0.0, 0.0],
-            shaper_edges: [
-                master.shaper.left,
-                master.shaper.right,
-                master.shaper.top,
-                master.shaper.bottom,
-            ],
-            shaper_edge_tangents: [
-                master.shaper.left_rotation.to_radians().tan(),
-                master.shaper.right_rotation.to_radians().tan(),
-                master.shaper.top_rotation.to_radians().tan(),
-                master.shaper.bottom_rotation.to_radians().tan(),
-            ],
-            region: region.map_or([0.0, 0.0, 1.0, 1.0], |region| {
-                let start_x = region.source.start.x.min(region.source.end.x);
-                let start_y = region.source.start.y.min(region.source.end.y);
-                [
-                    start_x,
-                    start_y,
-                    region.source.width(),
-                    region.source.height(),
-                ]
-            }),
-            // A quarter-turn is exact, so its cosine and sine are written rather than computed
-            // from an angle that would land a hair off zero.
-            region_rotation: match region.map(|region| region.rotation) {
-                Some(RegionRotation::Clockwise90) => [0.0, 1.0, 0.0, 0.0],
-                Some(RegionRotation::Half) => [-1.0, 0.0, 0.0, 0.0],
-                Some(RegionRotation::CounterClockwise90) => [0.0, -1.0, 0.0, 0.0],
-                Some(RegionRotation::None) | None => [1.0, 0.0, 0.0, 0.0],
-            },
-        }
-    }
-}
-
 /// One output's GPU pipelines and its program target.
 pub struct Compositor {
     gpu: Gpu,
@@ -305,6 +50,16 @@ pub struct Compositor {
     overlay_pipeline: wgpu::RenderPipeline,
     layer_layout: wgpu::BindGroupLayout,
     layer_uniforms: Vec<wgpu::Buffer>,
+    /// Draws a layer whose blend mode is not Normal. It replaces the pixels under the layer with
+    /// the finished blend, reading what is below from [`Compositor::backdrop`].
+    blend_pipeline: wgpu::RenderPipeline,
+    blend_layout: wgpu::BindGroupLayout,
+    blend_uniforms: Vec<wgpu::Buffer>,
+    /// A copy of the program target taken just before a blended layer draws. Only the layer's
+    /// screen bounding box is copied, and only for layers that are not Normal, so an output of
+    /// Normal layers pays nothing for blend modes.
+    backdrop: wgpu::Texture,
+    backdrop_view: wgpu::TextureView,
     /// A transient operator overlay is not one of the eight authored media layers. Keeping its
     /// uniform separate means a full eight-layer output can still explain how to leave full
     /// screen without displacing show content.
@@ -316,6 +71,8 @@ pub struct Compositor {
     /// Stands in wherever a mask is not selected. Opaque white: read as luminance or as alpha it
     /// says "let everything through", so a shader needs no branch for the common case.
     no_mask: SourceTexture,
+    /// Layers mapped onto 3D models. See [`model_mapping`].
+    models: model_mapping::ModelMapper,
 }
 
 impl Compositor {
@@ -360,6 +117,19 @@ impl Compositor {
                 })
             })
             .collect();
+        let blend_layout = backdrop_layout(device);
+        let blend_pipeline = blend_pipeline(device, &layer_layout, &blend_layout);
+        let blend_uniforms = (0..MAX_LAYERS)
+            .map(|index| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(&format!("media-layer-blend-{index}")),
+                    size: std::mem::size_of::<[u32; 4]>() as u64,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            })
+            .collect();
+        let (backdrop, backdrop_view) = backdrop_target(device, size);
         let overlay_uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("media-operator-overlay"),
             size: std::mem::size_of::<LayerUniform>() as u64,
@@ -396,13 +166,25 @@ impl Compositor {
             overlay_pipeline,
             layer_layout,
             layer_uniforms,
+            blend_pipeline,
+            blend_layout,
+            blend_uniforms,
+            backdrop,
+            backdrop_view,
             overlay_uniform,
             master_pipeline,
             master_layout,
             master_uniform,
             feedback: FeedbackProcessor::new(gpu),
             no_mask,
+            models: model_mapping::ModelMapper::new(gpu),
         }
+    }
+
+    /// Makes exactly these 3D models available to this output's layers. Returns the slots that
+    /// could not be uploaded and why; a layer selecting one draws flat.
+    pub fn set_models(&mut self, models: &ModelGeometries) -> Vec<(u8, String)> {
+        self.models.install(&self.gpu, models)
     }
 
     pub const fn size(&self) -> Size {
@@ -420,6 +202,9 @@ impl Compositor {
         let (program, view) = program_target(&self.gpu.device, size);
         self.program = program;
         self.program_view = view;
+        let (backdrop, backdrop_view) = backdrop_target(&self.gpu.device, size);
+        self.backdrop = backdrop;
+        self.backdrop_view = backdrop_view;
         self.size = size;
     }
 
@@ -520,69 +305,27 @@ impl Compositor {
         region: Option<&DisplayRegion>,
         overlay: Option<LayerDraw<'_>>,
     ) {
-        let device = &self.gpu.device;
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("media-frame"),
-        });
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("media-frame"),
+            });
         if advance_feedback {
             self.feedback.advance(&mut encoder, layers, now);
         }
-
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("media-layers"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.program_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        // Transparent black: an output with no layers shows nothing, and a
-                        // preview of it is honest rather than an error card.
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.layer_pipeline);
-
-            for (index, layer) in layers.iter().take(MAX_LAYERS).enumerate() {
-                if !layer.state.draws() {
-                    continue;
-                }
-                let uniform = LayerUniform::new(
-                    layer.state,
-                    layer.source.size(),
-                    self.size,
-                    layer.mask,
-                    output_id,
-                    now,
-                );
-                self.gpu.queue.write_buffer(
-                    &self.layer_uniforms[index],
-                    0,
-                    bytemuck::bytes_of(&uniform),
-                );
-
-                // The texture a layer samples changes whenever its source does, so the group is
-                // built per frame. Eight small groups is a rounding error next to the draw; the
-                // video slice can cache them per session if measurement says otherwise.
-                let group = bind_group(
-                    device,
-                    &self.layer_layout,
-                    &self.layer_uniforms[index],
-                    self.feedback.source(layer),
-                    &self.sampler,
-                    &layer.mask.unwrap_or(&self.no_mask).view,
-                );
-                pass.set_bind_group(0, &group, &[]);
-                pass.draw(0..6, 0..1);
-            }
-        }
-
+        // A layer mapped onto a 3D model renders its look onto the mesh first. From here on it is
+        // an ordinary flat layer, so blend mode, strobe, and opacity apply exactly as they do to
+        // any other layer.
+        self.prepare_models(&mut encoder, layers, output_id, now);
+        let mapped_layers = self.models.substitute(layers);
+        self.draw_layers(
+            &mut encoder,
+            mapped_layers.as_slice(),
+            output_id,
+            now,
+            preserve_alpha,
+        );
         self.master_pass(
             &mut encoder,
             master,
@@ -595,6 +338,189 @@ impl Compositor {
             self.overlay_pass(&mut encoder, target, output_id, now, overlay);
         }
         self.gpu.queue.submit([encoder.finish()]);
+    }
+
+    /// Renders every model-mapped layer's look onto its mesh, ready for
+    /// [`model_mapping::ModelMapper::substitute`] to swap in the flat model render.
+    fn prepare_models(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        layers: &[LayerDraw<'_>],
+        output_id: OutputId,
+        now: Timestamp,
+    ) {
+        self.models.prepare(
+            &model_mapping::MappingContext {
+                gpu: &self.gpu,
+                look_pipeline: &self.layer_pipeline,
+                layer_layout: &self.layer_layout,
+                sampler: &self.sampler,
+                feedback: &self.feedback,
+                no_mask: &self.no_mask,
+                output: self.size,
+                output_id,
+                now,
+            },
+            encoder,
+            layers,
+        );
+    }
+
+    /// Draws the layers into the program target, lowest first.
+    ///
+    /// Normal layers share one pass. A blended layer ends it, copies what is below it out of the
+    /// program target, and opens a new pass that later Normal layers continue in.
+    fn draw_layers(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        layers: &[LayerDraw<'_>],
+        output_id: OutputId,
+        now: Timestamp,
+        preserve_alpha: bool,
+    ) {
+        // Transparent black first: an output with no layers shows nothing, and a preview of it is
+        // honest rather than an error card.
+        let mut load = wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT);
+        let mut pass: Option<wgpu::RenderPass<'static>> = None;
+        // The clock the effects read, so a strobe and an effect agree on the instant.
+        let seconds = now.as_micros() as f64 / 1_000_000.0;
+
+        for (index, layer) in layers.iter().take(MAX_LAYERS).enumerate() {
+            // An unlit strobe half period contributes nothing, exactly like a layer that does not
+            // draw.
+            if !layer.state.draws() || !strobe_lit(layer.state.strobe_hz, seconds) {
+                continue;
+            }
+            // A layer preview shows the layer alone, so there is nothing to blend against.
+            let blend = if preserve_alpha {
+                BlendMode::Normal
+            } else {
+                layer.state.blend
+            };
+            let backdrop = match blend {
+                BlendMode::Normal => None,
+                _ => match backdrop_region(layer.state, layer.source.size(), self.size) {
+                    Some(region) => Some(region),
+                    // Entirely off the output: the layer covers no pixel.
+                    None => continue,
+                },
+            };
+            let group = self.layer_bind_group(index, layer, output_id, now);
+
+            let Some(region) = backdrop else {
+                let pass =
+                    pass.get_or_insert_with(|| layer_pass(encoder, &self.program_view, &mut load));
+                pass.set_pipeline(&self.layer_pipeline);
+                pass.set_bind_group(0, &group, &[]);
+                pass.draw(0..6, 0..1);
+                continue;
+            };
+
+            drop(pass.take());
+            let backdrop_group = self.capture_backdrop(encoder, &mut load, index, blend, region);
+            let pass = pass.insert(layer_pass(encoder, &self.program_view, &mut load));
+            pass.set_pipeline(&self.blend_pipeline);
+            pass.set_bind_group(0, &group, &[]);
+            pass.set_bind_group(1, &backdrop_group, &[]);
+            pass.draw(0..6, 0..1);
+        }
+        if pass.is_none() && matches!(load, wgpu::LoadOp::Clear(_)) {
+            drop(layer_pass(encoder, &self.program_view, &mut load));
+        }
+    }
+
+    /// Writes one layer's uniform into its slot and binds it with the texture and mask it samples.
+    fn layer_bind_group(
+        &self,
+        index: usize,
+        layer: &LayerDraw<'_>,
+        output_id: OutputId,
+        now: Timestamp,
+    ) -> wgpu::BindGroup {
+        let uniform = LayerUniform::new(
+            layer.state,
+            layer.source.size(),
+            self.size,
+            layer.mask,
+            output_id,
+            now,
+        );
+        self.gpu
+            .queue
+            .write_buffer(&self.layer_uniforms[index], 0, bytemuck::bytes_of(&uniform));
+
+        // The texture a layer samples changes whenever its source does, so the group is built
+        // per frame. Eight small groups is a rounding error next to the draw; the video slice can
+        // cache them per session if measurement says otherwise.
+        bind_group(
+            &self.gpu.device,
+            &self.layer_layout,
+            &self.layer_uniforms[index],
+            self.feedback.source(layer),
+            &self.sampler,
+            &layer.mask.unwrap_or(&self.no_mask).view,
+        )
+    }
+
+    /// Copies the program-target pixels under a blended layer into the backdrop and binds that
+    /// backdrop with the layer's blend mode. No layer pass may be open while this runs.
+    fn capture_backdrop(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        load: &mut wgpu::LoadOp<wgpu::Color>,
+        index: usize,
+        blend: BlendMode,
+        region: (u32, u32, u32, u32),
+    ) -> wgpu::BindGroup {
+        if matches!(load, wgpu::LoadOp::Clear(_)) {
+            // Nothing has cleared the program yet; the backdrop must not read last frame.
+            drop(layer_pass(encoder, &self.program_view, load));
+        }
+        let origin = wgpu::Origin3d {
+            x: region.0,
+            y: region.1,
+            z: 0,
+        };
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.program,
+                mip_level: 0,
+                origin,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.backdrop,
+                mip_level: 0,
+                origin,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: region.2,
+                height: region.3,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.gpu.queue.write_buffer(
+            &self.blend_uniforms[index],
+            0,
+            bytemuck::bytes_of(&[blend.index(), 0, 0, 0]),
+        );
+        self.gpu
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("media-layer-backdrop"),
+                layout: &self.blend_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&self.backdrop_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.blend_uniforms[index].as_entire_binding(),
+                    },
+                ],
+            })
     }
 
     fn overlay_pass(
@@ -717,295 +643,5 @@ impl Compositor {
     }
 }
 
-fn program_target(device: &wgpu::Device, size: Size) -> (wgpu::Texture, wgpu::TextureView) {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("media-program"),
-        size: wgpu::Extent3d {
-            width: size.width.max(1),
-            height: size.height.max(1),
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: PROGRAM_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-            | wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    (texture, view)
-}
-
-fn uniform_and_texture_layout(device: &wgpu::Device, label: &str) -> wgpu::BindGroupLayout {
-    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some(label),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-            // The mask. Always bound — a layer without one gets the white stand-in.
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-        ],
-    })
-}
-
-fn bind_group(
-    device: &wgpu::Device,
-    layout: &wgpu::BindGroupLayout,
-    uniform: &wgpu::Buffer,
-    texture: &wgpu::TextureView,
-    sampler: &wgpu::Sampler,
-    mask: &wgpu::TextureView,
-) -> wgpu::BindGroup {
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(texture),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::Sampler(sampler),
-            },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: wgpu::BindingResource::TextureView(mask),
-            },
-        ],
-    })
-}
-
-fn pipeline(
-    device: &wgpu::Device,
-    label: &str,
-    layout: &wgpu::BindGroupLayout,
-    source: &str,
-    format: wgpu::TextureFormat,
-    blend: Option<wgpu::BlendState>,
-) -> wgpu::RenderPipeline {
-    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(source.into()),
-    });
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some(label),
-        bind_group_layouts: &[Some(layout)],
-        immediate_size: 0,
-    });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some(label),
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &module,
-            entry_point: Some("vertex"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &module,
-            entry_point: Some("fragment"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format,
-                blend,
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview_mask: None,
-        cache: None,
-    })
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use media_domain::{BlurParameters, BlurType, EffectSlot, ScalingMode, Tint};
-
-    #[test]
-    fn the_layer_uniform_matches_the_geometry_the_domain_computed() {
-        let layer = LayerState {
-            scale_x: 2.0,
-            rotation: 90.0,
-            scaling_mode: ScalingMode::Original,
-            dimmer: 0.5,
-            tint: Tint::new(1.0, 0.0, 0.0),
-            grayscale: 0.25,
-            mask: media_domain::MaskState {
-                position_x: 0.5,
-                position_y: -0.75,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let source = Size::new(100, 50);
-        let output = Size::new(1920, 1080);
-        let uniform = LayerUniform::new(
-            &layer,
-            source,
-            output,
-            None,
-            OutputId::default(),
-            Timestamp::ZERO,
-        );
-        let transform = layer_transform(&layer, source, output);
-
-        assert_eq!(uniform.center, [transform.center.x, transform.center.y]);
-        assert_eq!(uniform.size, [transform.size.0, transform.size.1]);
-        assert_eq!(uniform.output, [1920.0, 1080.0]);
-        assert!(
-            (uniform.rotation[0] - 0.0).abs() < 1e-6,
-            "cosine of a quarter turn"
-        );
-        assert!(
-            (uniform.rotation[1] - 1.0).abs() < 1e-6,
-            "sine of a quarter turn"
-        );
-        assert_eq!(
-            uniform.tint,
-            [1.0, 0.0, 0.0, 0.5],
-            "dimmer rides in the tint's alpha"
-        );
-        assert_eq!(uniform.controls[0], 0.25);
-        assert_eq!(&uniform.mask_source[1..3], &[0.5, -0.75]);
-    }
-
-    #[test]
-    fn the_uniforms_are_the_size_the_shaders_declare() {
-        assert_eq!(std::mem::size_of::<LayerUniform>(), 1280);
-        // Two more vec4s than before display regions: the slice and its quarter-turn.
-        assert_eq!(std::mem::size_of::<MasterUniform>(), 144);
-    }
-
-    #[test]
-    fn blur_type_and_amount_reach_the_shader_in_their_effect_slot() {
-        let mut blur = EffectSlot::blur();
-        blur.mix = 0.8;
-        blur.parameters = BlurParameters {
-            amount: 0.65,
-            blur_type: BlurType::Axial,
-        }
-        .as_array()
-        .to_vec();
-        let mut layer = LayerState::default();
-        layer.effects[1] = blur;
-        let uniform = LayerUniform::new(
-            &layer,
-            Size::new(100, 50),
-            Size::new(1920, 1080),
-            None,
-            OutputId::default(),
-            Timestamp::ZERO,
-        );
-        assert_eq!(uniform.effect_types[1], 3);
-        assert_eq!(uniform.effect_mixes[1], 0.8);
-        assert_eq!(&uniform.effect_parameters[1][..2], &[0.65, 4.0]);
-    }
-
-    #[test]
-    fn layer_shader_with_all_blur_modes_is_valid_wgsl() {
-        let module = naga::front::wgsl::parse_str(include_str!("shaders/layer.wgsl")).unwrap();
-        naga::valid::Validator::new(
-            naga::valid::ValidationFlags::all(),
-            naga::valid::Capabilities::all(),
-        )
-        .validate(&module)
-        .unwrap();
-    }
-
-    #[test]
-    fn the_master_uniform_carries_the_flip_as_a_per_axis_sign() {
-        let master = MasterState {
-            flip_mirror: media_domain::FlipMirror::Horizontal,
-            dimmer: 0.75,
-            ..Default::default()
-        };
-        let uniform = MasterUniform::new(&master, None, false, None);
-        assert_eq!(&uniform.flip_mask[..2], &[-1.0, 1.0]);
-        assert_eq!(uniform.tint[3], 0.75);
-    }
-
-    #[test]
-    fn the_master_uniform_carries_geometry_and_all_shaper_edges() {
-        let master = MasterState {
-            position_x: 0.25,
-            position_y: -0.5,
-            scale_x: 1.5,
-            scale_y: 0.75,
-            scaling_mode: media_domain::ScalingMode::Stretch,
-            rotation: 90.0,
-            mask_position_x: -0.5,
-            mask_position_y: 0.75,
-            shaper: media_domain::MasterShaper {
-                left: 0.1,
-                right: 0.2,
-                top: 0.3,
-                bottom: 0.4,
-                left_rotation: 10.0,
-                right_rotation: -10.0,
-                top_rotation: 20.0,
-                bottom_rotation: -20.0,
-                rotation: 30.0,
-            },
-            ..Default::default()
-        };
-        let uniform = MasterUniform::new(&master, None, false, None);
-        assert_eq!(uniform.transform, [0.25, -0.5, 1.5, 0.75]);
-        assert_eq!(&uniform.mask_transform[..2], &[-0.5, 0.75]);
-        assert_eq!(uniform.shaper_edges, [0.1, 0.2, 0.3, 0.4]);
-        assert!((uniform.rotation[0]).abs() < 1e-6);
-        assert!((uniform.rotation[1] - 1.0).abs() < 1e-6);
-        assert!((uniform.rotation[2] - 30_f32.to_radians().cos()).abs() < 1e-6);
-        assert!((uniform.shaper_edge_tangents[0] - 10_f32.to_radians().tan()).abs() < 1e-6);
-    }
-
-    #[test]
-    fn a_layer_preview_requests_alpha_preservation_from_the_master_shader() {
-        let uniform = MasterUniform::new(&MasterState::default(), None, true, None);
-        assert_eq!(uniform.flip_mask[3], -1.0);
-        let program = MasterUniform::new(&MasterState::default(), None, false, None);
-        assert_eq!(program.flip_mask[3], 0.0);
-    }
-}
+mod tests;

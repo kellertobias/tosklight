@@ -370,10 +370,11 @@ impl LayerPipeline {
             beat_phase: context.beat_phase,
             instruments: context.instruments,
         };
-        let parameters = visualizer_parameters(layer, &visualizer.parameters);
+        let parameters = visualizer_parameters(layer, &visualizer.parameters)
+            .with_dmx(visualizer.kind, &layer.visualizer_controls);
         match self
             .visualizers
-            .render(index, visualizer.kind, parameters, &frame)
+            .render(index, visualizer.kind, &parameters, &frame)
         {
             Ok(_) => {
                 prepared
@@ -587,6 +588,21 @@ mod tests {
         assert_eq!(visualizer_parameters(&layer, &configured), &overridden);
         layer.effects[0].visualizer_parameters = None;
         assert_eq!(visualizer_parameters(&layer, &configured), &configured);
+    }
+
+    #[test]
+    fn visualizer_parameter_bytes_override_the_configured_block_in_kind_order() {
+        let configured = media_domain::VisualizerParameters::default();
+        let mut layer = LayerState::default();
+        layer.visualizer_controls = [255, 0, 0, 0];
+        let kind = media_domain::VisualizerKind::EqualizerBars;
+        let driven =
+            visualizer_parameters(&layer, &configured).with_dmx(kind, &layer.visualizer_controls);
+        assert_eq!(driven.count, 512, "Equalizer Bars lists Count first");
+        assert_eq!(
+            driven.size, configured.size,
+            "zero keeps the configured Size"
+        );
     }
 
     #[test]

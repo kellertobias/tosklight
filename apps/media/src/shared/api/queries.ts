@@ -10,6 +10,7 @@ import type {
 	CatalogView,
 	FolderPresentationsView,
 	Health,
+	ModelSlotView,
 	LibrarySettingsView,
 	NetworkView,
 	OutputView,
@@ -30,6 +31,7 @@ export const KEYS = {
 	outputs: "outputs",
 	visualizers: "visualizers",
 	effects: "effects",
+	models: "models",
 	network: "network",
 	librarySettings: "library-settings",
 	time: "time",
@@ -67,6 +69,11 @@ export function useVisualizers(): Resource<VisualizerView[]> {
 /** Stored effect definitions selected by the two live layer effect banks. */
 export function useEffects(): Resource<EffectLibrarySlot[]> {
 	return useResource(KEYS.effects, api.effects);
+}
+
+/// The 3D model library. Configuration, so it is read once and after each edit.
+export function useModels(): Resource<ModelSlotView[]> {
+	return useResource(KEYS.models, api.models);
 }
 
 /// Configuration. It changes when an operator saves it, so it is read once.

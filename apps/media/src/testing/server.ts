@@ -360,10 +360,29 @@ export function stubServer(
 					"grayscale",
 					"speedMultiplierDmx",
 					"playbackBpm",
+					"inPoint",
+					"outPoint",
+					"model",
+					"modelPan",
+					"modelTilt",
 				])
 					if (body[key] !== undefined)
 						(layer as unknown as Record<string, unknown>)[key] =
 							body[key] === 0 && key === "playbackBpm" ? null : body[key];
+				if (typeof body.blendDmx === "number") {
+					// Decoded exactly like the Blend mode / Strobe DMX byte.
+					const raw = body.blendDmx;
+					layer.blendMode =
+						raw < 128 ? (BLEND_MODES[Math.floor(raw / 16)] ?? "normal") : "normal";
+					layer.strobeHz =
+						raw >= 128 && raw <= 249 ? 1 + ((raw - 128) / 121) * 24 : null;
+				}
+				if (
+					typeof body.visualizerParameterIndex === "number" &&
+					typeof body.visualizerParameterValue === "number"
+				)
+					layer.visualizerControls[body.visualizerParameterIndex] =
+						body.visualizerParameterValue;
 				if (body.maskFolder !== undefined)
 					layer.mask.address.folder = body.maskFolder;
 				if (body.maskFile !== undefined)
@@ -384,6 +403,14 @@ export function stubServer(
 							bank.select = body.effectSelect;
 						if (body.effectStrength !== undefined)
 							bank.strength = body.effectStrength;
+						if (
+							body.effectParameterIndex !== undefined &&
+							body.effectParameterIndex !== null &&
+							body.effectParameterValue !== undefined &&
+							body.effectParameterValue !== null
+						)
+							bank.parameters[body.effectParameterIndex] =
+								body.effectParameterValue;
 					}
 				}
 				if (body.effectSlot !== undefined) {
@@ -1053,12 +1080,32 @@ export function aLayer(index: number): OutputView["layers"][number] {
 		},
 		effects: Array.from({ length: 4 }, (_, slot) => emptyEffect(slot)),
 		effectBanks: [
-			{ index: 0, select: 0, strength: 0 },
-			{ index: 1, select: 0, strength: 0 },
+			{ index: 0, select: 0, strength: 0, parameters: [0, 0, 0, 0] },
+			{ index: 1, select: 0, strength: 0, parameters: [0, 0, 0, 0] },
 		],
+		blendMode: "normal",
+		strobeHz: null,
+		inPoint: 0,
+		outPoint: 0,
+		visualizerControls: [0, 0, 0, 0],
+		model: 0,
+		modelPan: 0,
+		modelTilt: 0,
+		modelStatus: "flat",
 		drawing: true,
 	};
 }
+
+const BLEND_MODES = [
+	"normal",
+	"add",
+	"screen",
+	"multiply",
+	"overlay",
+	"difference",
+	"lighten",
+	"darken",
+];
 
 function emptyEffect(
 	index: number,

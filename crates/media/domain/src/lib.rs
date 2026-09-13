@@ -14,6 +14,7 @@
 pub mod address;
 pub mod audio;
 pub mod authored_tempo;
+pub mod blend;
 pub mod catalog;
 pub mod clock;
 pub mod color;
@@ -26,6 +27,8 @@ pub mod geometry;
 pub mod layer;
 mod layer_effects;
 pub mod master;
+pub mod model_library;
+pub mod model_projection;
 pub mod output;
 pub mod personality;
 pub mod pixel_map;
@@ -40,6 +43,7 @@ pub mod visualizer;
 
 pub use address::{AddressClass, AssetId, MediaAddress};
 pub use audio::{Analysis, Instrument, Instruments, Tuning};
+pub use blend::{BlendMode, LayerBlend, strobe_lit};
 pub use catalog::{
     CatalogError, CatalogFolder, CatalogItem, CatalogLocation, CatalogSnapshot, ItemKind,
 };
@@ -49,7 +53,9 @@ pub use command::{
     Command, CommandKind, CommandSource, ControlOwnership, LayerControls, MasterControls, Timestamp,
 };
 pub use effect_library::{EffectLibrary, EffectLibraryError, EffectPreset};
-pub use effect_parameters::{EffectParameterBounds, effect_parameter_bounds};
+pub use effect_parameters::{
+    EffectParameterBounds, FEEDBACK_PARAMETER_IDS, effect_parameter_bounds, effect_parameter_ids,
+};
 pub use geometry::{LayerTransform, Point, Size};
 pub use layer::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,
@@ -58,11 +64,15 @@ pub use layer::{
     BeatMoveParameters, BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters,
     BlurType, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters, DrawnImageParameters,
     EffectBankState, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters,
-    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource, MaskState,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource, MaskState, ModelMapping,
     OPACITY_CYCLE_EFFECT, OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode,
     RasterizeParameters, ScalingMode, SourceFailure, SourceStatus,
 };
 pub use master::{BeatRatio, MasterShaper, MasterState};
+pub use model_library::{
+    ModelEntry, ModelGeometry, ModelGeometryError, ModelLibrary, ModelLibraryError, ModelStatus,
+    ModelVertex,
+};
 pub use output::{OutputId, OutputName, PresentationMode};
 pub use personality::{LayerPersonality, PersonalityLayout, SlotFootprint, StartAddressError};
 pub use playback::{OnceEndState, PlayMode};

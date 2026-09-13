@@ -7,7 +7,7 @@
 use media_application::OutputConfiguration;
 use media_domain::personality::LayerPersonality;
 use media_domain::personality::channels::{
-    ChannelSpec, ChannelValueSet, LAYER_CHANNELS, MASTER_CHANNELS, Resolution,
+    ChannelSpec, ChannelValueSet, Resolution, layer_channels, master_channels,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -64,15 +64,14 @@ impl DmxMapView {
     pub fn of(output: &OutputConfiguration) -> Self {
         let footprint = output.personality.footprint_for(output.personality_layout);
         let layer_slots = output.personality_layout.layer_slots();
-        let master_slots = output.personality_layout.master_slots();
         let mut channels = Vec::with_capacity(usize::from(footprint.total()));
 
         for layer_index in 0..output.personality.layer_count() {
             let block_offset = layer_index * layer_slots;
+            // Each layout keeps the table a desk patched against it, not the newest one.
             channels.extend(
-                LAYER_CHANNELS
+                layer_channels(output.personality_layout)
                     .iter()
-                    .filter(|spec| spec.offset < layer_slots)
                     .map(|spec| {
                         DmxChannelView::of(
                             spec,
@@ -88,9 +87,8 @@ impl DmxMapView {
 
         let master_offset = footprint.master_offset();
         channels.extend(
-            MASTER_CHANNELS
+            master_channels(output.personality_layout)
                 .iter()
-                .filter(|spec| spec.offset < master_slots)
                 .map(|spec| {
                     DmxChannelView::of(
                         spec,
@@ -270,7 +268,7 @@ mod tests {
     fn eight_layer_patch_has_identical_blocks_and_an_independent_master() {
         let mut output = configured_output();
         output.personality = LayerPersonality::EightLayers;
-        output.start_address = 160; // Highest valid full-footprint start.
+        output.start_address = 1; // Eight mapping layers and the master fill the universe.
         let view = DmxMapView::of(&output);
         for layer in 0..8usize {
             for slot in 0..usize::from(LAYER_SLOTS) {
@@ -295,7 +293,7 @@ mod tests {
         }
         let master = &view.channels[usize::from(8 * LAYER_SLOTS)..];
         assert_eq!(master.len(), usize::from(MASTER_SLOTS));
-        assert_eq!(master[0].absolute_channel, 472);
+        assert_eq!(master[0].absolute_channel, 473);
         assert_eq!(master.last().unwrap().absolute_channel, 512);
         assert!(
             master
@@ -330,13 +328,36 @@ mod tests {
             ["Fit", "Fill", "Original", "Stretch"]
         );
 
-        let flip = view
+        let blend = view
+            .channels
+            .iter()
+            .find(|channel| channel.name == "Blend mode")
+            .unwrap();
+        assert_eq!(blend.value_sets.first().unwrap().name, "Normal");
+        assert!(
+            view.channels
+                .iter()
+                .all(|channel| channel.name != "Flip/mirror"),
+            "the mapping master mirrors through a negative scale"
+        );
+
+        let mut older = configured_output();
+        older.personality_layout = media_domain::PersonalityLayout::EffectBanks;
+        let older = DmxMapView::of(&older);
+        let flip = older
             .channels
             .iter()
             .find(|channel| channel.name == "Flip/mirror")
             .unwrap();
         assert_eq!(flip.value_sets.len(), 4);
         assert!(flip.value_sets.iter().all(|set| set.step == 4));
+        assert!(
+            older
+                .channels
+                .iter()
+                .any(|channel| channel.name == "Playback BPM"),
+            "an older layout keeps its own table"
+        );
     }
 
     #[test]
@@ -347,11 +368,20 @@ mod tests {
             .iter()
             .filter(|channel| channel.name.starts_with("Effect "))
             .collect();
-        assert_eq!(effects.len(), 8, "four slots on each of two layers");
+        assert_eq!(
+            effects.len(),
+            24,
+            "select, strength, and four parameters for each bank on each of two layers"
+        );
         for effect in effects {
             assert!(effect.implemented);
             assert!(effect.implementation_note.is_none());
-            assert!(effect.value_sets.is_empty());
+            if effect.name.contains("Parameter") {
+                assert_eq!(effect.value_sets[0].name, "Preset value");
+                assert_eq!((effect.value_sets[0].from, effect.value_sets[0].to), (0, 0));
+            } else {
+                assert!(effect.value_sets.is_empty());
+            }
         }
     }
 

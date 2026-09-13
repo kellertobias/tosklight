@@ -181,17 +181,23 @@ impl MasterState {
     }
 
     /// Resolves the operator's two scale values through the selected output scaling mode.
+    ///
+    /// A negative axis mirrors along that axis. The scaling mode chooses the magnitude, so Fit of
+    /// `-2×` and `1×` is a mirrored `1×` rather than a vanishing `-2×`.
     pub fn effective_scale(&self) -> (f32, f32) {
+        let sign = |value: f32| if value < 0.0 { -1.0 } else { 1.0 };
+        let (sign_x, sign_y) = (sign(self.scale_x), sign(self.scale_y));
+        let (magnitude_x, magnitude_y) = (self.scale_x.abs(), self.scale_y.abs());
         match self.scaling_mode {
             ScalingMode::Fit => {
-                let scale = self.scale_x.min(self.scale_y);
-                (scale, scale)
+                let scale = magnitude_x.min(magnitude_y);
+                (sign_x * scale, sign_y * scale)
             }
             ScalingMode::Fill => {
-                let scale = self.scale_x.max(self.scale_y);
-                (scale, scale)
+                let scale = magnitude_x.max(magnitude_y);
+                (sign_x * scale, sign_y * scale)
             }
-            ScalingMode::Original => (1.0, 1.0),
+            ScalingMode::Original => (sign_x, sign_y),
             ScalingMode::Stretch => (self.scale_x, self.scale_y),
         }
     }
@@ -200,6 +206,30 @@ impl MasterState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_negative_scale_mirrors_through_every_scaling_mode() {
+        let master = MasterState {
+            scale_x: -2.0,
+            scale_y: 1.0,
+            ..MasterState::default()
+        };
+        assert_eq!(master.effective_scale(), (-1.0, 1.0));
+        for (mode, expected) in [
+            (ScalingMode::Fill, (-2.0, 2.0)),
+            (ScalingMode::Original, (-1.0, 1.0)),
+            (ScalingMode::Stretch, (-2.0, 1.0)),
+        ] {
+            assert_eq!(
+                MasterState {
+                    scaling_mode: mode,
+                    ..master
+                }
+                .effective_scale(),
+                expected
+            );
+        }
+    }
 
     #[test]
     fn a_fresh_master_is_neutral() {

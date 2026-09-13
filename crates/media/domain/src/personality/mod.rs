@@ -10,19 +10,33 @@
 pub mod channels;
 pub mod decode;
 
-pub use channels::{ChannelSpec, LAYER_CHANNELS, MASTER_CHANNELS, Resolution};
+pub use channels::{
+    ChannelSpec, EFFECT_BANK_LAYER_CHANNELS, EFFECT_BANK_MASTER_CHANNELS, LAYER_CHANNELS,
+    MASTER_CHANNELS, Resolution, layer_channels, master_channels,
+};
 pub use decode::{DecodedFrame, FrameError};
 
 use serde::{Deserialize, Serialize};
 
-/// Slots one layer occupies in the current personality.
+/// Slots one layer occupies in the current mapping personality.
 ///
-/// Mask position uses the same 16-bit centred representation as layer position, and Blur has a
-/// dedicated playback channel rather than consuming an effect slot.
-pub const LAYER_SLOTS: u16 = 39;
+/// Eight of these layers and the master fill one universe exactly.
+pub const LAYER_SLOTS: u16 = 59;
 
-/// Slots the complete current master section occupies, including its fixed effect.
-pub const MASTER_SLOTS: u16 = 41;
+/// The effect-bank layer before blend, playback range, parameters, and 3D mapping were added.
+pub const EFFECT_BANK_LAYER_SLOTS: u16 = 39;
+
+/// Parameter bytes each effect bank carries in the current personality.
+pub const EFFECT_BANK_PARAMETERS: usize = 4;
+
+/// Visualizer parameter bytes each layer carries in the current personality.
+pub const VISUALIZER_PARAMETERS: usize = 4;
+
+/// Slots the current master section occupies. Mirroring is a negative scale, not a channel.
+pub const MASTER_SLOTS: u16 = 40;
+
+/// The effect-bank master, which still carries Flip/mirror.
+pub const EFFECT_BANK_MASTER_SLOTS: u16 = 41;
 
 /// The original published block before Blur and mask-position controls were appended.
 pub const LEGACY_LAYER_SLOTS: u16 = 34;
@@ -54,15 +68,18 @@ pub enum PersonalityLayout {
     Legacy,
     Current,
     Extended,
-    #[default]
     EffectBanks,
+    /// Blend, playback range, effect and visualizer parameters, and 3D model mapping.
+    #[default]
+    Mapping,
 }
 
 impl PersonalityLayout {
     pub const fn layer_slots(self) -> u16 {
         match self {
             Self::Legacy => LEGACY_LAYER_SLOTS,
-            Self::Current | Self::Extended | Self::EffectBanks => LAYER_SLOTS,
+            Self::Current | Self::Extended | Self::EffectBanks => EFFECT_BANK_LAYER_SLOTS,
+            Self::Mapping => LAYER_SLOTS,
         }
     }
 
@@ -71,8 +88,14 @@ impl PersonalityLayout {
             Self::Legacy => LEGACY_MASTER_SLOTS,
             Self::Current => CURRENT_MASTER_SLOTS,
             Self::Extended => EXTENDED_MASTER_SLOTS,
-            Self::EffectBanks => MASTER_SLOTS,
+            Self::EffectBanks => EFFECT_BANK_MASTER_SLOTS,
+            Self::Mapping => MASTER_SLOTS,
         }
+    }
+
+    /// Whether the wire carries the two Effect Select/Strength banks.
+    pub const fn carries_effect_banks(self) -> bool {
+        matches!(self, Self::EffectBanks | Self::Mapping)
     }
 }
 
@@ -91,7 +114,7 @@ impl LayerPersonality {
 
     /// The contiguous slot footprint this personality needs, layers followed by the master.
     pub const fn footprint(self) -> SlotFootprint {
-        self.footprint_for(PersonalityLayout::EffectBanks)
+        self.footprint_for(PersonalityLayout::Mapping)
     }
 
     pub const fn footprint_for(self, layout: PersonalityLayout) -> SlotFootprint {
@@ -181,17 +204,17 @@ mod tests {
         let two = LayerPersonality::TwoLayers.footprint();
         assert_eq!(
             (two.layer_slots, two.master_slots, two.total()),
-            (78, 41, 119)
+            (118, 40, 158)
         );
 
         let eight = LayerPersonality::EightLayers.footprint();
         assert_eq!(
             (eight.layer_slots, eight.master_slots, eight.total()),
-            (312, 41, 353)
+            (472, 40, 512)
         );
 
-        assert_eq!(SlotFootprint::SINGLE_LAYER.total(), 39);
-        assert_eq!(SlotFootprint::MASTER_ONLY.total(), 41);
+        assert_eq!(SlotFootprint::SINGLE_LAYER.total(), 59);
+        assert_eq!(SlotFootprint::MASTER_ONLY.total(), 40);
 
         assert_eq!(
             LayerPersonality::TwoLayers
@@ -199,14 +222,21 @@ mod tests {
                 .total(),
             89
         );
+        assert_eq!(
+            LayerPersonality::EightLayers
+                .footprint_for(PersonalityLayout::EffectBanks)
+                .total(),
+            353,
+            "the effect-bank layout keeps its published footprint"
+        );
     }
 
     #[test]
     fn the_master_begins_after_the_controlled_layers() {
-        assert_eq!(LayerPersonality::TwoLayers.footprint().master_offset(), 78);
+        assert_eq!(LayerPersonality::TwoLayers.footprint().master_offset(), 118);
         assert_eq!(
             LayerPersonality::EightLayers.footprint().master_offset(),
-            312
+            472
         );
     }
 
@@ -214,14 +244,14 @@ mod tests {
     fn an_eight_layer_output_must_fit_one_universe() {
         let eight = LayerPersonality::EightLayers.footprint();
         assert_eq!(eight.validate_start_address(1), Ok(()));
-        assert_eq!(eight.validate_start_address(160), Ok(()));
         assert_eq!(
-            eight.validate_start_address(161),
+            eight.validate_start_address(2),
             Err(StartAddressError::ExceedsUniverse {
-                start_address: 161,
-                required_slots: 353,
-                highest_valid_start_address: 160,
-            })
+                start_address: 2,
+                required_slots: 512,
+                highest_valid_start_address: 1,
+            }),
+            "eight mapping layers and the master fill the universe exactly"
         );
     }
 
@@ -242,9 +272,11 @@ mod tests {
 
     #[test]
     fn the_extended_blocks_include_complete_master_control() {
-        assert_eq!(LAYER_SLOTS, 39);
+        assert_eq!(LAYER_SLOTS, 59);
+        assert_eq!(EFFECT_BANK_LAYER_SLOTS, 39);
         assert_eq!(CURRENT_MASTER_SLOTS, 11);
-        assert_eq!(MASTER_SLOTS, 41);
+        assert_eq!(MASTER_SLOTS, 40);
+        assert_eq!(EFFECT_BANK_MASTER_SLOTS, 41);
         assert_eq!(EXTENDED_MASTER_SLOTS, 40);
     }
 }
