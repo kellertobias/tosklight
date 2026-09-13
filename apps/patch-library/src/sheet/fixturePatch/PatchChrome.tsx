@@ -1,3 +1,4 @@
+import { isVisualOnly } from "../patchUtils";
 import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { usePatchController } from "./controller";
@@ -78,7 +79,8 @@ export function PatchHeader() {
 						{
 							id: "multipatch",
 							label: "+ Add multi-patch",
-							disabled: !data.selected,
+							// A Venue object is placed one object at a time; it has no copies.
+							disabled: !data.selected || isVisualOnly(data.selected.definition),
 							onPress: () => void addMultipatch(controller),
 						},
 					],

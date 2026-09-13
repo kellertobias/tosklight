@@ -92,7 +92,7 @@ Multi-patch gives one logical fixture additional physical output instances. Use 
 
 Repatch a multi-patch instance through the same **Multi-patch Address** screen used for a fixture address. It shows all 512 slots of the selected universe, supports selecting a free start slot by touch, and allows dragging the pending footprint to another address. **Set Address** and Close remain together in the title bar; only the edited instance is excluded from the occupied-address display, so the fixture's primary patch and its sibling multi-patches remain protected from overlap.
 
-For a visual-only Venue profile, **+ Add multi-patch** adds another independently positioned and rotated scenic instance but deliberately provides no address action. This is useful for building a complete truss, deck, stair, pipe, or curtain arrangement from one selected library profile and mode.
+Venue objects have no multi-patch: **+ Add multi-patch** is unavailable while one is selected. Place each span of a truss run, each deck, stair, pipe, or curtain as its own Venue object, so each has its own `0.x` ID, placement, and size. A show saved with multi-patch copies of a Venue object opens with every copy turned into a Venue object of its own, keeping its name, placement, and size and numbered after the show's existing `0.x` objects.
 
 > [!danger] Missing graphic
 > Add a comparison diagram showing one logical fixture with several physical multi-patch instances beside one fixture with independently selectable logical heads.

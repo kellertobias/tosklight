@@ -1,3 +1,4 @@
+import { isVisualOnly } from "../patchUtils";
 import type { MultiPatchInstance, SplitPatch } from "../../../api/types";
 import { defaultInstalledFixtureAppearance } from "../../../features/patch/model";
 import { parsePatchAddress } from "../../input/ConsoleFields";
@@ -21,7 +22,7 @@ import {
 
 export async function addMultipatch(controller: PatchController) {
 	const selected = controller.data.selected;
-	if (!selected) return;
+	if (!selected || isVisualOnly(selected.definition)) return;
 	const installedAppearance = structuredClone(
 		selected.installed_appearance ?? defaultInstalledFixtureAppearance(),
 	);

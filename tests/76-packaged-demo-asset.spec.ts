@@ -23,7 +23,7 @@ test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and
 		(total, fixture) => total + 1 + (fixture.multipatch?.length ?? 0),
 		0,
 	);
-	expect(patch.fixtures).toHaveLength(297);
+	expect(patch.fixtures).toHaveLength(312);
 	expect(physicalInstances).toBe(345);
 	expect(await api.showObjects(show.id, "media_server")).toHaveLength(2);
 	const surfaces = await api.showObjects<any>(show.id, "media_surface");
@@ -50,7 +50,8 @@ test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and
 	expect(await api.showObjects(show.id, "venue")).toHaveLength(0);
 	const scenery = (model: string) =>
 		patch.fixtures.filter((fixture) => fixture.definition.model === model);
-	expect(scenery("Four-Point Truss")).toHaveLength(5);
+	// Every two-metre span of a truss run is its own Venue object.
+	expect(scenery("Four-Point Truss")).toHaveLength(20);
 	expect(scenery("Curtain 5 m")).toHaveLength(4);
 	expect(scenery("Stage Element 2 × 1 m")).toHaveLength(20);
 	expect(

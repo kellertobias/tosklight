@@ -3,8 +3,8 @@ import type { ApiDriver } from "../bench/core/api";
 import { ensurePlannedDemoFixtureLibrary } from "./plannedDemoFixtureLibrary";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
 
-export const PLANNED_DEMO_SCENERY_FIXTURES = 43;
-export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 296;
+export const PLANNED_DEMO_SCENERY_FIXTURES = 58;
+export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 311;
 export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES = 344;
 
 type Point = { x: number; y: number; z: number };
@@ -16,7 +16,6 @@ type SceneryEntry = {
 	layer: string;
 	location: Point;
 	rotation?: Point;
-	multipatches?: Array<{ name: string; location: Point; rotation?: Point }>;
 };
 
 export async function installPlannedDemoScenery(
@@ -64,20 +63,6 @@ export async function installPlannedDemoScenery(
 			throw new Error(
 				`Venue fixture 0.${entry.number} is not the expected ${entry.profile} / ${entry.mode}`,
 			);
-		const multipatch = (entry.multipatches ?? []).map((instance, index) => ({
-			id:
-				existing?.multipatch?.[index]?.id ??
-				stableUuid(4, entry.number * 100 + index + 1),
-			name: instance.name,
-			split_patches: mode.splits.map((split) => ({
-				split: split.number,
-				universe: null,
-				address: null,
-			})),
-			location: millimetres(instance.location),
-			scenery_size_metres: scenerySize,
-			rotation: instance.rotation ?? { x: 0, y: 0, z: 0 },
-		}));
 		return {
 			fixture_id: existing?.fixture_id ?? stableUuid(3, entry.number),
 			fixture_number: null,
@@ -100,7 +85,7 @@ export async function installPlannedDemoScenery(
 			location: millimetres(entry.location),
 			scenery_size_metres: scenerySize,
 			rotation: entry.rotation ?? { x: 0, y: 0, z: 0 },
-			multipatch,
+			multipatch: [],
 			move_in_black_enabled: true,
 			move_in_black_delay_millis: 0,
 			highlight_overrides: [],
@@ -139,22 +124,30 @@ function sceneryEntries(backCurtain?: {
 	y: number;
 	z: number;
 }): SceneryEntry[] {
+	// A truss run is one Venue object per two-metre span. The first span of each run keeps the
+	// number it always had; the others follow the rest of the scenery, from 0.44.
+	const trussRun = (
+		name: string,
+		y: number,
+		z: number,
+		first: number,
+		rest: number,
+	) =>
+		[-3, -1, 1, 3].map((x, index) => ({
+			number: index === 0 ? first : rest + index - 1,
+			name: `${name} Truss Segment ${index + 1}`,
+			profile: "Four-Point Truss",
+			mode: "2 m",
+			layer: "Trusses",
+			location: { x, y, z },
+		}));
 	const trusses = [
 		["Back", 4],
 		["Mid", 0],
 		["Front", -3],
-	].map(([name, y], row) => ({
-		number: row + 1,
-		name: `${name} Truss Segment 1`,
-		profile: "Four-Point Truss",
-		mode: "2 m",
-		layer: "Trusses",
-		location: { x: -3, y: Number(y), z: 4.15 },
-		multipatches: [-1, 1, 3].map((x, index) => ({
-			name: `${name} Truss Segment ${index + 2}`,
-			location: { x, y: Number(y), z: 4.15 },
-		})),
-	}));
+	].flatMap(([name, y], row) =>
+		trussRun(String(name), Number(y), 4.15, row + 1, 44 + row * 3),
+	);
 	// Five two-metre decks across gives the 28 stage profiles and 26 washes a credible
 	// ten-metre stage. The old eight-metre deck put the outer fixtures exactly on its edge,
 	// making correctly sized people read as giants beside a toy stage.
@@ -232,18 +225,9 @@ function sceneryEntries(backCurtain?: {
 	const audienceTrusses = [
 		["Audience Front", -1.5],
 		["Audience Rear", -4.5],
-	].map(([name, y], row) => ({
-		number: 40 + row,
-		name: `${name} Truss Segment 1`,
-		profile: "Four-Point Truss",
-		mode: "2 m",
-		layer: "Trusses",
-		location: { x: -3, y: Number(y), z: 4.2 },
-		multipatches: [-1, 1, 3].map((x, index) => ({
-			name: `${name} Truss Segment ${index + 2}`,
-			location: { x, y: Number(y), z: 4.2 },
-		})),
-	}));
+	].flatMap(([name, y], row) =>
+		trussRun(String(name), Number(y), 4.2, 40 + row, 53 + row * 3),
+	);
 	const sideCurtains = [
 		["Stage Left Curtain", -5.2],
 		["Stage Right Curtain", 5.2],

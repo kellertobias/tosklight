@@ -9,6 +9,7 @@ mod repository;
 mod schedule_occurrence;
 mod store;
 mod transaction;
+mod venue_copies;
 
 pub use cue_thumbnail::{CueThumbnail, CueThumbnailEntry};
 pub use document::{

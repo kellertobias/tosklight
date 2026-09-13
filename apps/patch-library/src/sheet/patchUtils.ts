@@ -21,6 +21,7 @@ export function compareFixtureManufacturers(a: string, b: string) {
   return rank(a) - rank(b) || a.localeCompare(b);
 }
 export function isDmxPatchable(definition: FixtureDefinition) { return definition.profile_snapshot?.patch_policy !== "visual_only"; }
+export function isVisualOnly(definition: FixtureDefinition) { return definition.profile_snapshot?.patch_policy === "visual_only"; }
 export function groupFixtureFamilies(definitions: FixtureDefinition[]) { const grouped = new Map<string, { key: string; manufacturer: string; name: string; deviceType: string; modes: FixtureDefinition[] }>(); for (const definition of definitions) { const key = `${definition.manufacturer}\0${definition.model || definition.name}`; const family = grouped.get(key) ?? { key, manufacturer: definition.manufacturer, name: definition.name || definition.model, deviceType: definition.device_type || "other", modes: [] }; family.modes.push(definition); grouped.set(key, family); } return [...grouped.values()].map((family) => ({ ...family, modes: family.modes })).sort((a,b) => compareFixtureManufacturers(a.manufacturer,b.manufacturer) || a.name.localeCompare(b.name)); }
 
 export function compatibleHighlightOverrides(

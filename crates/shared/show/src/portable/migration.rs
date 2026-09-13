@@ -2,7 +2,7 @@ use super::profile_revision::materialize_legacy_fixture_profile_revisions;
 use crate::{StoreError, set_schema_version};
 use rusqlite::{Connection, TransactionBehavior};
 
-pub(crate) const SHOW_SCHEMA_VERSION: i64 = 8;
+pub(crate) const SHOW_SCHEMA_VERSION: i64 = 9;
 
 pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -12,6 +12,9 @@ pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     }
     if schema_version(&tx)? < 8 {
         retire_superseded_demo_venue_objects(&tx)?;
+    }
+    if schema_version(&tx)? < 9 {
+        super::venue_copies::separate_venue_multipatch_copies(&tx)?;
     }
     set_schema_version(&tx, SHOW_SCHEMA_VERSION)?;
     tx.commit()?;

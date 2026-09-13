@@ -308,15 +308,18 @@ fn validate_visual_only_fixture(fixture: &PatchedFixture) -> Result<(), FixtureE
     let has_patch = fixture.direct_control.is_some()
         || fixture.universe.is_some()
         || fixture.address.is_some()
-        || has_split_patch(&fixture.split_patches)
-        || fixture.multipatch.iter().any(|instance| {
-            instance.universe.is_some()
-                || instance.address.is_some()
-                || has_split_patch(&instance.split_patches)
-        });
+        || has_split_patch(&fixture.split_patches);
     if has_patch {
         return Err(invalid(format!(
             "visual-only fixture {} cannot have a DMX or direct-control patch",
+            fixture.fixture_id.0
+        )));
+    }
+    // A Venue object is placed, and sized, one object at a time: a copy would share the primary's
+    // identity but not its size, so each span of a truss run is its own object instead.
+    if !fixture.multipatch.is_empty() {
+        return Err(invalid(format!(
+            "Venue object {} cannot have multi-patch copies; place each as its own Venue object",
             fixture.fixture_id.0
         )));
     }

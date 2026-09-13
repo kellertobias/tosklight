@@ -589,7 +589,7 @@ fn legacy_patch_defaults_freeze_empty_and_round_trips_captured_values() {
 }
 
 #[test]
-fn visual_only_fixtures_allow_addressless_multipatches_and_reject_dmx_addresses() {
+fn visual_only_fixtures_refuse_multipatch_copies_and_dmx_addresses() {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Venue".into();
     profile.name = "Truss".into();
@@ -613,6 +613,12 @@ fn visual_only_fixtures_allow_addressless_multipatches_and_reject_dmx_addresses(
     .unwrap();
     assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
     fixture.virtual_fixture_number = Some(1);
+    let copies = validate_patch(std::slice::from_ref(&fixture)).unwrap_err();
+    assert!(
+        copies.to_string().contains("multi-patch copies"),
+        "{copies}"
+    );
+    fixture.multipatch.clear();
     validate_patch(std::slice::from_ref(&fixture)).unwrap();
     let mut duplicate = fixture.clone();
     duplicate.fixture_id = FixtureId::new();

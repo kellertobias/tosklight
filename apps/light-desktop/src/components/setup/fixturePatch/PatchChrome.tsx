@@ -1,6 +1,7 @@
 import { Button } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useState } from "react";
+import { isVisualOnly } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { selectLayer, setFixtureNumber } from "./fixtureActions";
 import { addMultipatch } from "./multipatchActions";
@@ -58,7 +59,8 @@ export function PatchHeader() {
 					{
 						id: "multipatch",
 						label: "+ Add multi-patch",
-						disabled: !data.selected,
+						// A Venue object is placed one object at a time; it has no copies.
+						disabled: !selected || isVisualOnly(selected.definition),
 						onPress: () => void addMultipatch(controller),
 					},
 				] },

@@ -1,3 +1,4 @@
+import { isVisualOnly } from "../patchUtils";
 import type { MultiPatchInstance, SplitPatch } from "../../wire";
 import { parsePatchAddress } from "../fields";
 import type { MultiPatchEdit, PatchController } from "./controller";
@@ -10,7 +11,7 @@ import {
 
 export async function addMultipatch(controller: PatchController) {
 	const selected = controller.data.selected;
-	if (!selected) return;
+	if (!selected || isVisualOnly(selected.definition)) return;
 	const instance: MultiPatchInstance = {
 		id: crypto.randomUUID(),
 		name: "multi-patch",

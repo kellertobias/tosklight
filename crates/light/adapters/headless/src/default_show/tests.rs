@@ -289,7 +289,7 @@ fn installs_the_generated_product_demo_as_the_default_show() {
     let store = ShowStore::open(&path).unwrap();
     let fixtures = store.objects("patched_fixture").unwrap();
     assert_eq!(store.name().unwrap(), DEFAULT_SHOW_NAME);
-    assert_eq!(fixtures.len(), 297);
+    assert_eq!(fixtures.len(), 312);
     assert_eq!(store.objects("patch_layer").unwrap().len(), 19);
     assert_eq!(store.objects("group").unwrap().len(), 35);
     assert_eq!(store.objects("cue_list").unwrap().len(), 8);

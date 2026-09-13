@@ -2243,6 +2243,29 @@ describe("Crowd Area footprint editing", () => {
 	});
 });
 
+describe("Venue multi-patch", () => {
+	it("offers no multi-patch copy for a selected Venue object", () => {
+		const venue = splitFixture();
+		const profile = venue.definition.profile_snapshot;
+		if (!profile) throw new Error("venue fixture profile is missing");
+		profile.patch_policy = "visual_only";
+		server.patch.fixtures = [venue];
+		render(<FixturePatchSetup />);
+
+		const add = screen.getByRole("button", { name: "+ Add multi-patch" });
+		expect(add).toBeDisabled();
+		const row = document.querySelector<HTMLTableRowElement>(
+			'tr[data-fixture-id="fixture-split"]',
+		);
+		if (!row) throw new Error("venue row is missing");
+		fireEvent.click(row);
+		expect(
+			screen.getByRole("button", { name: "+ Add multi-patch" }),
+		).toBeDisabled();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	});
+});
+
 describe("Show Patch visible columns", () => {
 	afterEach(() => {
 		Object.assign(state, { patchHiddenColumns: [] });
