@@ -8,6 +8,7 @@ import {
 import type { BrowserCommands } from "../command-selection/commandScenario";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
+import { applyProgrammingUpdate } from "../../updateHighlight/v2UpdateApi";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
 import { recallPreset } from "./presetRecall";
 import {
@@ -60,6 +61,14 @@ class PresetActionSurface {
 
 	recall(family: PresetFamily, number: number) {
 		return this.owner.recallVia(this.route, family, number);
+	}
+
+	update(
+		family: PresetFamily,
+		number: number,
+		options: { mode: "update" | "all" },
+	) {
+		return this.owner.updateVia(this.route, family, number, options.mode);
 	}
 
 	edit(family: PresetFamily, number: number, properties: PresetProperties) {
@@ -204,6 +213,32 @@ export class BrowserPresets {
 		await expect
 			.poll(async () => (await this.object(family, number))?.revision ?? 0)
 			.toBeGreaterThan(before?.revision ?? 0);
+	}
+
+	/** Updates a stored Preset from the Programmer; "all" also adds addresses it does not hold. */
+	async updateVia(
+		route: PresetRoute,
+		family: PresetFamily,
+		number: number,
+		mode: "update" | "all",
+	) {
+		if (route !== "api")
+			throw new Error(`Preset Update is only proven through the api route`);
+		const preset = await this.requiredObject(family, validPresetNumber(number));
+		await this.desk.recordStep(
+			"UPDATE PRESET",
+			`Update ${family} Preset ${number} (${mode === "all" ? "Update All" : "Update"}).`,
+		);
+		await applyProgrammingUpdate(this.api, {
+			target: { family: { type: "preset" }, object_id: preset.id },
+			mode: {
+				target_type: "existing_content",
+				mode: mode === "all" ? "add_new" : "update_existing",
+			},
+		});
+		await expect
+			.poll(async () => (await this.object(family, number))?.revision ?? 0)
+			.toBeGreaterThan(preset.revision);
 	}
 
 	async recallVia(route: PresetRoute, family: PresetFamily, number: number) {
