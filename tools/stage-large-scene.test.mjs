@@ -101,6 +101,34 @@ test("fails closed when a required shipped profile or exact mode is absent", () 
 	);
 });
 
+test("places a generated Venue object in its one mode at the size the entry names", () => {
+	const generated = profiles.map((profile) =>
+		profile.name === "Stage Element 2 × 1 m"
+			? {
+					...profile,
+					scenery: {
+						kind: "riser",
+						chords: 0,
+						default_size_metres: { x: 2, y: 0.2, z: 1 },
+						adjustable: { width: false, height: true, depth: false },
+						minimum_size_metres: { x: 2, y: 0.1, z: 1 },
+						maximum_size_metres: { x: 2, y: 1, z: 1 },
+					},
+					modes: [{ ...profile.modes[0], id: "mode-stage-default", name: "Default" }],
+				}
+			: profile,
+	);
+	const { fixtures } = createDeterministicLargeStageInputs([], generated);
+	const stage = fixtures.filter((fixture) => fixture.profile_id === "profile-stage");
+	assert.equal(stage.length, 8);
+	for (const fixture of stage) {
+		assert.equal(fixture.mode_id, "mode-stage-default");
+		assert.deepEqual(fixture.scenery_size_metres, { x: 2_000, y: 400, z: 1_000 });
+	}
+	const moving = fixtures.find((fixture) => fixture.profile_id === "profile-dls");
+	assert.equal(moving.scenery_size_metres, null);
+});
+
 test("builds proportional real-profile Fixture Sheet and Stage workloads at requested sizes", () => {
 	for (const fixtureRecords of [500, 576, 1_024, 2_000, 2_048]) {
 		const built = createPerformanceFixtureInputs(profiles, fixtureRecords);

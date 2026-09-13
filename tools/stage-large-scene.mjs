@@ -186,9 +186,7 @@ function createStageInputs(profiles, layerId, manifest, expectation) {
 	const inventory = [];
 	let fixtureIndex = 0;
 	for (const entry of resolved) {
-		const mode = entry.profile.modes.find(
-			(candidate) => candidate.name === entry.mode,
-		);
+		const mode = entryMode(entry.profile, entry);
 		const footprint = mode.splits.reduce(
 			(total, split) => total + split.footprint,
 			0,
@@ -260,11 +258,43 @@ function resolveProfile(profiles, entry) {
 		throw new Error(
 			`Large Stage fixture profile is missing: ${entry.manufacturer} ${entry.name}`,
 		);
-	if (!profile.modes.some((mode) => mode.name === entry.mode))
+	if (!entryMode(profile, entry))
 		throw new Error(
 			`Large Stage fixture mode is missing: ${entry.manufacturer} ${entry.name} / ${entry.mode}`,
 		);
 	return profile;
+}
+
+/**
+ * The mode a manifest entry is patched in. A Venue object generated at its placed size has one
+ * mode, and the entry's mode name ("40 cm", "4 m") is the size it is placed at instead.
+ */
+function entryMode(profile, entry) {
+	return profile.scenery
+		? profile.modes[0]
+		: profile.modes.find((candidate) => candidate.name === entry.mode);
+}
+
+/** The placed size in millimetres for a generated Venue object, from the entry's measurement. */
+function scenerySize(profile, entry) {
+	const scenery = profile.scenery;
+	if (!scenery) return null;
+	const measurement = entry.mode.trim();
+	const metres = measurement.endsWith("cm")
+		? Number.parseFloat(measurement) / 100
+		: Number.parseFloat(measurement);
+	const size = { ...scenery.default_size_metres };
+	if (Number.isFinite(metres)) {
+		// Height where the object is made to height, otherwise its length.
+		const axis =
+			scenery.adjustable.height && !scenery.adjustable.width ? "y" : "x";
+		size[axis] = metres;
+	}
+	return {
+		x: Math.round(size.x * 1_000),
+		y: Math.round(size.y * 1_000),
+		z: Math.round(size.z * 1_000),
+	};
 }
 
 function fixtureInput({
@@ -305,6 +335,7 @@ function fixtureInput({
 		layer_id: layerId,
 		direct_control: null,
 		location,
+		scenery_size_metres: scenerySize(entry.profile, entry),
 		rotation: { x: 0, y: 0, z: 0 },
 		multipatch: withMultipatch
 			? [
@@ -317,6 +348,7 @@ function fixtureInput({
 							address: null,
 						})),
 						location: { ...location, x: location.x + 150 },
+						scenery_size_metres: scenerySize(entry.profile, entry),
 						rotation: { x: 0, y: 0, z: 0 },
 					},
 				]
@@ -330,9 +362,7 @@ function fixtureInput({
 function packPatchInstances(fixtures, resolved) {
 	const modes = new Map(
 		resolved.map((entry) => {
-			const mode = entry.profile.modes.find(
-				(candidate) => candidate.name === entry.mode,
-			);
+			const mode = entryMode(entry.profile, entry);
 			return [`${entry.profile.id}:${entry.profile.revision}:${mode.id}`, mode];
 		}),
 	);
