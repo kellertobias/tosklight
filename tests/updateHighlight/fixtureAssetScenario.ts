@@ -63,8 +63,8 @@ async function prepareFixtureAssets({ api, bench }: FixtureAssetContext) {
 		modelA: "fixture-002-model-a.glb",
 		modelB: "fixture-002-model-b.glb",
 	};
-	// The shipped packages carry a photograph and a model rather than an icon, and the curtains
-	// are the pair whose assets differ from each other.
+	// The shipped packages carry a photograph rather than an icon. Generated Venue objects ship no
+	// model, so the two differing models come from the mirror ball and the railing.
 	await extractFixtureAsset(
 		"venue--curtain-1-m.toskfixture",
 		"assets/photograph.png",
@@ -80,12 +80,12 @@ async function prepareFixtureAssets({ api, bench }: FixtureAssetContext) {
 		`${bench.dataDir}/shows/${files.icon}`,
 	);
 	await extractFixtureAsset(
-		"venue--curtain-1-m.toskfixture",
+		"venue--disco-ball-50-cm.toskfixture",
 		"assets/model.glb",
 		`${bench.dataDir}/shows/${files.modelA}`,
 	);
 	await extractFixtureAsset(
-		"venue--curtain-2-m.toskfixture",
+		"venue--stage-railing-2-m.toskfixture",
 		"assets/model.glb",
 		`${bench.dataDir}/shows/${files.modelB}`,
 	);
