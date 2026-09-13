@@ -355,6 +355,44 @@ fn the_triangular_net_ignores_a_loud_room_with_no_beat_in_it() {
 }
 
 #[test]
+fn the_triangular_net_never_goes_blank_however_hard_it_is_kicked() {
+    // The worst case the walk has to survive. At full reactivity a held kick raises the swells
+    // well above the camera, so rays start inside the net, look up at peaks, and cross it several
+    // times; a mistake in where the walk may stop turns that into an empty frame on a wall. Kick it
+    // hard for a few seconds, a frame at a time, and every single frame has to show net.
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let playing = loud();
+    let mut parameters = VisualizerConfiguration::new(VisualizerKind::TriangularNet).parameters;
+    parameters.reactivity = 2.0;
+    parameters.amount = 1.0;
+    parameters.speed = 8.0;
+    let strike = media_domain::Instrument {
+        level: 1.0,
+        hit: 1.0,
+    };
+    let pounding = media_domain::Instruments {
+        kick: strike,
+        snare: strike,
+        hihat: strike,
+    };
+
+    let kind = VisualizerKind::TriangularNet;
+    for step in 0..240 {
+        let seconds = 0.5 + step as f32 / 60.0;
+        let driven = VisualizerFrame {
+            instruments: pounding,
+            ..frame(&playing, seconds, 1.0)
+        };
+        let pixels = draw(&gpu, &mut renderer, kind, &parameters, &driven);
+        assert!(
+            brightness(&pixels) > 0.0,
+            "Triangular Net rendered an empty frame {step} frames into being kicked"
+        );
+    }
+}
+
+#[test]
 fn a_visualizer_renders_at_the_output_size_and_follows_a_resize() {
     let gpu = gpu();
     let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
