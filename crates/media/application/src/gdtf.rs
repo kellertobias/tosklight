@@ -20,7 +20,7 @@ const MASTER_ID: uuid::Uuid = uuid::Uuid::from_u128(0x746f_736b_6c69_6768_745f_6
 
 const MANUFACTURER: &str = "ToskLight";
 
-/// The layer fixture: the 39 slots one media layer occupies.
+/// The layer fixture: the slots one media layer occupies.
 pub fn layer_fixture() -> FixtureType {
     FixtureType {
         name: "ToskLight Pixel Layer".into(),
@@ -74,11 +74,11 @@ pub fn packages() -> std::io::Result<Vec<(String, Vec<u8>)>> {
             crate::magicq::ranges_csv(false).into_bytes(),
         ),
         (
-            "tosklight@pixel_layer@39ch.xml".into(),
+            format!("tosklight@pixel_layer@{}ch.xml", LAYER_CHANNELS.len()),
             grandma2_xml(&layer).into_bytes(),
         ),
         (
-            "tosklight@pixel_master@41ch.xml".into(),
+            format!("tosklight@pixel_master@{}ch.xml", MASTER_CHANNELS.len()),
             grandma2_xml(&master).into_bytes(),
         ),
     ])
@@ -368,7 +368,13 @@ mod tests {
         for expected in [
             "Effect 1 Select",
             "Effect 2 Strength",
-            "Playback BPM",
+            "Effect 1 Parameter 1",
+            "Effect 2 Parameter 4",
+            "Blend mode",
+            "3D model",
+            "In point",
+            "Visualizer Parameter 4",
+            "Model tilt",
             "Mask opacity",
         ] {
             assert!(names.contains(&expected), "{expected} is missing");
@@ -431,17 +437,29 @@ mod tests {
         assert_eq!(play.sets[0].from, 0);
         assert!(play.sets.iter().any(|set| set.name == "Once — Transparent"));
 
-        let master = master_fixture();
-        let flip = master.modes[0]
+        let blend = layer.modes[0]
             .channels
             .iter()
-            .find(|channel| channel.name == "Flip/mirror")
+            .find(|channel| channel.name == "Blend mode")
             .unwrap();
-        assert_eq!(flip.sets.len(), 256, "every modulo-four byte stays exact");
-        assert_eq!(flip.sets[0].name, "None");
-        assert_eq!(flip.sets[1].name, "Horizontal");
-        assert_eq!(flip.sets[2].name, "Vertical");
-        assert_eq!(flip.sets[3].name, "Both");
+        assert_eq!(blend.sets[0].name, "Normal");
+        assert_eq!(
+            (blend.sets[1].name.as_str(), blend.sets[1].from),
+            ("Add", 16)
+        );
+        assert_eq!(
+            blend.sets.last().map(|set| (set.name.as_str(), set.from)),
+            Some(("Normal, no strobe", 250))
+        );
+
+        let master = master_fixture();
+        assert!(
+            master.modes[0]
+                .channels
+                .iter()
+                .all(|channel| channel.name != "Flip/mirror"),
+            "mirroring is a negative master scale"
+        );
     }
 
     #[test]
@@ -471,7 +489,14 @@ mod tests {
             assert_eq!(row.split(',').next().unwrap(), (index + 1).to_string());
         }
         for mapping in [
-            "Playback BPM,LTP,13,B1D",
+            "In Point,LTP,12,B1A",
+            "Out Point,LTP,14,B1B",
+            "Blend Mode,LTP,15,B1C",
+            "3D Model,LTP,7,B1D",
+            "Model Pan,LTP,2,P1A",
+            "Model Tilt,LTP,3,P1B",
+            "Vis Param 1,LTP,20,B4A",
+            "Vis Param 4,LTP,23,B4D",
             "Speed Multiplier,LTP,11,B1E",
             "Play Mode,LTP,10,B1F",
             "Media Folder,LTP,9,B1Y",
@@ -489,9 +514,13 @@ mod tests {
             "Volume,LTP,1,I1Y",
             "Dimmer,HTP,0,I1X",
             "FX1 Select,LTP,28,B2X",
-            "FX1 Parameter,LTP,29,B2Y",
+            "FX1 Mix,LTP,29,B2Y",
+            "FX1 Param 1,LTP,30,B2A",
+            "FX1 Param 4,LTP,33,B2D",
             "FX2 Select,LTP,36,B3X",
-            "FX2 Parameter,LTP,37,B3Y",
+            "FX2 Mix,LTP,37,B3Y",
+            "FX2 Param 1,LTP,38,B3A",
+            "FX2 Param 4,LTP,41,B3D",
             "Mask Position X,LTP,52,B5A",
             "Mask Position Y,LTP,53,B5B",
             "Mask Scale X,LTP,54,B5C",
@@ -503,10 +532,6 @@ mod tests {
         ] {
             assert!(csv.contains(mapping), "missing MagicQ mapping {mapping}");
         }
-        assert!(
-            csv.contains("35,,LTP,62,,8 bit"),
-            "the ignored wire byte must not consume an encoder or change BPM resolution"
-        );
     }
 
     #[test]

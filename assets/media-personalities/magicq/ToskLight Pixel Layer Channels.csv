@@ -27,13 +27,33 @@
 27,Mask Invert,LTP,56,B5E,8 bit,no,yes,no,0,0,0,,0,no,yes,1
 28,Mask Opacity,LTP,57,B5F,8 bit,no,yes,no,0,0,0,,0,no,yes,1
 29,FX1 Select,LTP,28,B2X,8 bit,no,yes,no,0,0,0,,0,no,yes,1
-30,FX1 Parameter,LTP,29,B2Y,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+30,FX1 Mix,LTP,29,B2Y,8 bit,no,yes,no,0,0,0,,0,no,yes,1
 31,FX2 Select,LTP,36,B3X,8 bit,no,yes,no,0,0,0,,0,no,yes,1
-32,FX2 Parameter,LTP,37,B3Y,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+32,FX2 Mix,LTP,37,B3Y,8 bit,no,yes,no,0,0,0,,0,no,yes,1
 33,Speed Multiplier,LTP,11,B1E,8 bit,no,yes,no,127,127,0,,0,no,yes,1
-34,Playback BPM,LTP,13,B1D,8 bit,no,yes,no,0,0,0,,0,no,yes,1
-35,,LTP,62,,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+34,3D Model,LTP,7,B1D,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+35,Blend Mode,LTP,15,B1C,8 bit,no,yes,no,0,0,0,,0,no,yes,1
 36,Mask Position X,LTP,52,B5A,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1
 37,Mask Position X,LTP,52,B5A,16 bit lo,no,yes,no,0,0,0,,0,no,yes,1
 38,Mask Position Y,LTP,53,B5B,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1
 39,Mask Position Y,LTP,53,B5B,16 bit lo,no,yes,no,0,0,0,,0,no,yes,1
+40,FX1 Param 1,LTP,30,B2A,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+41,FX1 Param 2,LTP,31,B2B,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+42,FX1 Param 3,LTP,32,B2C,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+43,FX1 Param 4,LTP,33,B2D,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+44,FX2 Param 1,LTP,38,B3A,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+45,FX2 Param 2,LTP,39,B3B,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+46,FX2 Param 3,LTP,40,B3C,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+47,FX2 Param 4,LTP,41,B3D,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+48,In Point,LTP,12,B1A,16 bit hi,no,yes,no,0,0,0,,0,no,yes,1
+49,In Point,LTP,12,B1A,16 bit lo,no,yes,no,0,0,0,,0,no,yes,1
+50,Out Point,LTP,14,B1B,16 bit hi,no,yes,no,0,0,0,,0,no,yes,1
+51,Out Point,LTP,14,B1B,16 bit lo,no,yes,no,0,0,0,,0,no,yes,1
+52,Vis Param 1,LTP,20,B4A,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+53,Vis Param 2,LTP,21,B4B,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+54,Vis Param 3,LTP,22,B4C,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+55,Vis Param 4,LTP,23,B4D,8 bit,no,yes,no,0,0,0,,0,no,yes,1
+56,Model Pan,LTP,2,P1A,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1
+57,Model Pan,LTP,2,P1A,16 bit lo,no,yes,no,0,0,0,,0,no,yes,1
+58,Model Tilt,LTP,3,P1B,16 bit hi,no,yes,no,128,128,0,,0,no,yes,1
+59,Model Tilt,LTP,3,P1B,16 bit lo,no,yes,no,0,0,0,,0,no,yes,1

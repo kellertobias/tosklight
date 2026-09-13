@@ -21,13 +21,18 @@ fn control(name: &str, master: bool) -> Control {
             "File" => ("Media File", 8, 0xc7),
             "Play mode" => ("Play Mode", 10, 0xc5),
             "Speed multiplier" => ("Speed Multiplier", 11, 0xc4),
-            "Playback BPM" => ("Playback BPM", 13, 0xc3),
+            "In point" => ("In Point", 12, 0xc0),
+            "Out point" => ("Out Point", 14, 0xc1),
+            "Blend mode" => ("Blend Mode", 15, 0xc2),
+            "3D model" => ("3D Model", 7, 0xc3),
             "Scale Y" => ("Scale Y", 48, 0x42),
             "Scale X" => ("Scale X", 49, 0x43),
             "Rotation" => ("Rotation", 50, 0x44),
             "Scaling mode" => ("Scale Mode", 51, 0x45),
             "Position Y" => ("Position Y", 5, 0x46),
             "Position X" => ("Position X", 4, 0x47),
+            "Model pan" => ("Model Pan", 2, 0x40),
+            "Model tilt" => ("Model Tilt", 3, 0x41),
             "Dimmer" => ("Dimmer", 0, 7),
             "Volume" => ("Volume", 1, 6),
             "Cyan" => ("Cyan", 16, 0x84),
@@ -45,13 +50,22 @@ fn control(name: &str, master: bool) -> Control {
             "Mask invert" => ("Mask Invert", 56, 0xe4),
             "Mask opacity" => ("Mask Opacity", 57, 0xe5),
             "Effect 1 Select" => ("FX1 Select", 28, 0xcf),
-            "Effect 1 Strength" => ("FX1 Parameter", 29, 0xce),
+            "Effect 1 Strength" => ("FX1 Mix", 29, 0xce),
             "Effect 2 Select" => ("FX2 Select", 36, 0xd7),
-            "Effect 2 Strength" => ("FX2 Parameter", 37, 0xd6),
-            // Keep the ignored physical byte off the Reserved attribute (63) used by
-            // MagicQ for unassigned encoders. This byte owns no operator encoder;
-            // the console may still display its own grey Reserved caption on empty wheels.
-            "Legacy Blur (ignored)" => ("", 62, 0xff),
+            "Effect 2 Strength" => ("FX2 Mix", 37, 0xd6),
+            // Each bank's four parameters fill A–D of its own FX page, beside Select and Mix.
+            "Effect 1 Parameter 1" => ("FX1 Param 1", 30, 0xc8),
+            "Effect 1 Parameter 2" => ("FX1 Param 2", 31, 0xc9),
+            "Effect 1 Parameter 3" => ("FX1 Param 3", 32, 0xca),
+            "Effect 1 Parameter 4" => ("FX1 Param 4", 33, 0xcb),
+            "Effect 2 Parameter 1" => ("FX2 Param 1", 38, 0xd0),
+            "Effect 2 Parameter 2" => ("FX2 Param 2", 39, 0xd1),
+            "Effect 2 Parameter 3" => ("FX2 Param 3", 40, 0xd2),
+            "Effect 2 Parameter 4" => ("FX2 Param 4", 41, 0xd3),
+            "Visualizer Parameter 1" => ("Vis Param 1", 20, 0xd8),
+            "Visualizer Parameter 2" => ("Vis Param 2", 21, 0xd9),
+            "Visualizer Parameter 3" => ("Vis Param 3", 22, 0xda),
+            "Visualizer Parameter 4" => ("Vis Param 4", 23, 0xdb),
             _ => panic!("unmapped canonical layer control {name}"),
         }
     } else {
@@ -61,7 +75,6 @@ fn control(name: &str, master: bool) -> Control {
             "Master cyan" => ("Master Cyan", 16, 0x84),
             "Master magenta" => ("Master Magenta", 17, 0x85),
             "Master yellow" => ("Master Yellow", 18, 0x86),
-            "Flip/mirror" => ("Flip Mirror", 51, 0x41),
             "Master scale Y" => ("Scale Y", 48, 0x42),
             "Master scale X" => ("Scale X", 49, 0x43),
             "Master rotation" => ("Rotation", 50, 0x44),
@@ -408,7 +421,10 @@ mod tests {
     #[test]
     fn every_layer_uses_one_profile_with_exact_encoder_pages_and_unassigned_slots() {
         let expected = [
-            (0xc3, "Playback BPM"),
+            (0xc0, "In Point"),
+            (0xc1, "Out Point"),
+            (0xc2, "Blend Mode"),
+            (0xc3, "3D Model"),
             (0xc4, "Speed Multiplier"),
             (0xc5, "Play Mode"),
             (0xc6, "Media Folder"),
@@ -423,12 +439,26 @@ mod tests {
             (0x45, "Scale Mode"),
             (0x46, "Position Y"),
             (0x47, "Position X"),
+            (0x40, "Model Pan"),
+            (0x41, "Model Tilt"),
             (6, "Volume"),
             (7, "Dimmer"),
             (0xcf, "FX1 Select"),
-            (0xce, "FX1 Parameter"),
+            (0xce, "FX1 Mix"),
+            (0xc8, "FX1 Param 1"),
+            (0xc9, "FX1 Param 2"),
+            (0xca, "FX1 Param 3"),
+            (0xcb, "FX1 Param 4"),
             (0xd7, "FX2 Select"),
-            (0xd6, "FX2 Parameter"),
+            (0xd6, "FX2 Mix"),
+            (0xd0, "FX2 Param 1"),
+            (0xd1, "FX2 Param 2"),
+            (0xd2, "FX2 Param 3"),
+            (0xd3, "FX2 Param 4"),
+            (0xd8, "Vis Param 1"),
+            (0xd9, "Vis Param 2"),
+            (0xda, "Vis Param 3"),
+            (0xdb, "Vis Param 4"),
             (0xe0, "Mask Position X"),
             (0xe1, "Mask Position Y"),
             (0xe2, "Mask Scale X"),
@@ -456,7 +486,7 @@ mod tests {
                 );
             }
             for empty in [
-                0xc0, 0xc1, 0xc2, 0x40, 0x41, 0x80, 0x81, 0x82, 0x83, 0, 1, 2, 3, 4, 5,
+                0x80, 0x81, 0x82, 0x83, 0, 1, 2, 3, 4, 5, 0xcc, 0xcd, 0xd4, 0xd5,
             ] {
                 assert!(!assigned.iter().any(|c| c.encoder == empty));
             }
@@ -466,8 +496,6 @@ mod tests {
         // This proves the personality has no placeholder control, not that MagicQ's own UI
         // suppresses its built-in grey Reserved caption for an unassigned wheel.
         assert!(!text.contains("Reserved"));
-        assert!(text.contains("\"\",00000000,0000003e,"));
-        assert!(text.contains("000000ff,0100,0000,0000,"));
     }
 
     #[test]
@@ -541,13 +569,17 @@ mod tests {
 
     #[test]
     fn master_contains_fixed_effect_and_does_not_shift_layer_block() {
-        assert_eq!(LAYER_CHANNELS.len() * 8, 312);
-        assert_eq!(MASTER_CHANNELS.len(), 41);
+        assert_eq!(LAYER_CHANNELS.len() * 8 + MASTER_CHANNELS.len(), 512);
+        assert_eq!(MASTER_CHANNELS.len(), 40);
         let text = decode(&master());
         assert!(text.contains("\"Layer Opacity Cycle\""));
-        for set in MASTER_CHANNELS[40].values.sets() {
+        assert!(
+            !text.contains("Flip Mirror"),
+            "mirroring is a negative scale"
+        );
+        for set in MASTER_CHANNELS[39].values.sets() {
             assert!(text.contains(&format!(
-                "0028,\"{}\",{:04x},{:04x},",
+                "0027,\"{}\",{:04x},{:04x},",
                 set.name, set.from, set.to
             )));
         }
