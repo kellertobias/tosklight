@@ -1,5 +1,6 @@
 use super::{
-    ControlAction, EmitterHeadBinding, FixtureChannel, GeometryGraph, HeadColorSystem, Vector3,
+    ControlAction, EmitterHeadBinding, FixtureChannel, GeometryGraph, HeadColorSystem,
+    MotionAttributeBinding, Vector3,
 };
 use crate::{DirectControlProtocol, SignalLossPolicy};
 use light_core::FixtureId;
@@ -316,6 +317,14 @@ fn geometry_content(graph: &GeometryGraph) -> (Vec<String>, Vec<String>) {
             let mut value = serde_json::to_value(node).unwrap_or_default();
             if let Some(object) = value.as_object_mut() {
                 object.remove("id");
+                // Which attribute turns an axis is the mode's answer, like an emitter's head, so
+                // modes that name different attributes for the same axis still share the lantern.
+                if let Some(motion) = object
+                    .get_mut("motion")
+                    .and_then(serde_json::Value::as_object_mut)
+                {
+                    motion.remove("attribute");
+                }
                 object.insert(
                     "parent_id".into(),
                     serde_json::json!(position(node.parent_id)),
@@ -387,6 +396,7 @@ fn lift_geometry_to_the_fixture(profile: &mut FixtureProfile) {
         .iter()
         .map(|emitter| emitter.id)
         .collect::<Vec<_>>();
+    let lifted_nodes = lifted.nodes.iter().map(|node| node.id).collect::<Vec<_>>();
     for mode in &mut profile.modes {
         // A mode's emitters are the first n of the fixture's, so position carries the identity
         // across from whichever mode happened to be written with which UUID.
@@ -402,13 +412,72 @@ fn lift_geometry_to_the_fixture(profile: &mut FixtureProfile) {
                 })
             })
             .collect();
+        // The same holds for the axes: a mode's nodes are the first n of the fixture's, and the
+        // attribute each of them named stays with the mode that named it.
+        for (index, node) in mode.geometry.nodes.iter().enumerate() {
+            let (Some(node_id), Some(attribute)) = (
+                lifted_nodes.get(index),
+                node.motion
+                    .as_ref()
+                    .and_then(|motion| motion.attribute.clone()),
+            ) else {
+                continue;
+            };
+            if !mode
+                .motion_attributes
+                .iter()
+                .any(|binding| binding.node_id == *node_id)
+            {
+                mode.motion_attributes.push(MotionAttributeBinding {
+                    node_id: *node_id,
+                    attribute,
+                });
+            }
+        }
         mode.geometry = GeometryGraph::default();
     }
-    // The fixture's own emitters name no head: that is the mode's answer now.
+    // The fixture's own emitters name no head and its axes no attribute: those are the mode's
+    // answers now.
     for emitter in &mut lifted.emitters {
         emitter.head_id = None;
     }
+    for motion in lifted
+        .nodes
+        .iter_mut()
+        .filter_map(|node| node.motion.as_mut())
+    {
+        motion.attribute = None;
+    }
     profile.geometry = lifted;
+}
+
+/// Move the attribute an already-lifted fixture graph still names on an axis into the modes.
+///
+/// Profiles lifted before the attribute became the mode's answer carry it on the fixture's own
+/// node, where it spoke for every mode. So every mode that does not already bind that axis is
+/// given the attribute the node named, and the node stops naming one. A mode that binds the axis
+/// itself keeps its own answer.
+fn move_motion_attributes_to_the_modes(profile: &mut FixtureProfile) {
+    for node in &mut profile.geometry.nodes {
+        let Some(motion) = node.motion.as_mut() else {
+            continue;
+        };
+        let Some(attribute) = motion.attribute.take() else {
+            continue;
+        };
+        for mode in &mut profile.modes {
+            if !mode
+                .motion_attributes
+                .iter()
+                .any(|binding| binding.node_id == node.id)
+            {
+                mode.motion_attributes.push(MotionAttributeBinding {
+                    node_id: node.id,
+                    attribute: attribute.clone(),
+                });
+            }
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for FixtureProfile {
@@ -477,6 +546,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             reserved_source: canonical.reserved_source,
         };
         lift_geometry_to_the_fixture(&mut profile);
+        move_motion_attributes_to_the_modes(&mut profile);
         Ok(profile)
     }
 }
@@ -806,6 +876,11 @@ pub struct FixtureMode {
     /// before the lift reads.
     #[serde(default)]
     pub emitter_heads: Vec<EmitterHeadBinding>,
+    /// Which attribute drives each of the fixture's motion axes in this mode.
+    ///
+    /// Empty while the mode still carries its own `geometry`, whose nodes name their attributes.
+    #[serde(default)]
+    pub motion_attributes: Vec<MotionAttributeBinding>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

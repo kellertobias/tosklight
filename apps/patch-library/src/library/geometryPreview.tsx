@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { FixtureMode } from "../wire";
+import { buildFixtureProfileGeometryPreview } from "../stageGeometry";
 import { useFixtureProfileEditorPorts } from "./ports";
 import { NumberField } from "@tosklight/ui";
 
@@ -33,15 +34,14 @@ export function VectorFields({
 
 export function GeometryPreview({ mode }: { mode: FixtureMode }) {
 	const host = useRef<HTMLDivElement>(null);
-	const { buildGeometryPreview, disposeScene } = useFixtureProfileEditorPorts();
+	const { disposeScene } = useFixtureProfileEditorPorts();
 	useEffect(() => {
 		const container = host.current;
-		if (!buildGeometryPreview) return;
 		if (!container || typeof WebGLRenderingContext === "undefined") return;
 		const scene = new THREE.Scene();
 		scene.background = new THREE.Color(0x080b0e);
 		scene.add(new THREE.HemisphereLight(0xbfe9ff, 0x101820, 2));
-		scene.add(buildGeometryPreview(mode));
+		scene.add(buildFixtureProfileGeometryPreview(mode));
 		const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
 		camera.position.set(3.5, 2.5, 6.5);
 		camera.lookAt(0, -1.5, 0);
@@ -73,33 +73,23 @@ export function GeometryPreview({ mode }: { mode: FixtureMode }) {
 			renderer.dispose();
 			renderer.domElement.remove();
 		};
-	}, [mode, buildGeometryPreview, disposeScene]);
+	}, [mode, disposeScene]);
 	return (
 		<section
 			className="geometry-live-preview"
 			aria-label="Live geometry preview"
 		>
 			<h3>Live 3D preview</h3>
-			{buildGeometryPreview ? (
-				<div
-					ref={host}
-					className="geometry-preview-stage"
-					role="img"
-					aria-label="Fixture geometry hierarchy and beams in three dimensions"
-				/>
-			) : (
-				<p className="empty-editor-message" role="status">
-					This application has no Stage renderer, so the geometry cannot be
-					previewed here. The parts, transforms, and emitters below are edited
-					and saved exactly as they are on the desk.
-				</p>
-			)}
+			<div
+				ref={host}
+				className="geometry-preview-stage"
+				role="img"
+				aria-label="Fixture geometry hierarchy and beams in three dimensions"
+			/>
 			<small>
 				{mode.geometry.nodes.length} parts · {mode.geometry.emitters.length}{" "}
-				emitters.{" "}
-				{buildGeometryPreview
-					? "Preview uses the Stage renderer's hierarchy, transforms, source layouts, and beam angles."
-					: "Confirm the Stage appearance in ToskLight Control."}
+				emitters. Preview uses the Stage renderer's hierarchy, transforms,
+				source layouts, and beam angles.
 			</small>
 		</section>
 	);

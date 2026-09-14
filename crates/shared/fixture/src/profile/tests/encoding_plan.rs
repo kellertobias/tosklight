@@ -33,6 +33,7 @@ fn batch_encoding_matches_channel_encoding_for_mixed_resolutions_and_splits() {
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     let values = vec![
         (first.id, 0xabcd),
@@ -86,6 +87,7 @@ fn batch_encoding_validates_the_whole_write_before_mutating_the_frame() {
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     let plan = mode.compile_encoding_plan().unwrap();
     let mut frame = [0x55; 512];

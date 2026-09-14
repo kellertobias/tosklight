@@ -52,6 +52,7 @@ fn derives_primary_slots_around_reserved_component_bytes() {
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     let slots = mode.primary_slots().unwrap();
     assert_eq!(slots[&first.id], 1);
@@ -100,6 +101,7 @@ fn rejects_duplicate_components_and_overlapping_functions() {
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     assert!(
         matches!(mode.primary_slots(), Err(ProfileError::Invalid(message)) if message.contains("duplicated"))
@@ -1160,4 +1162,238 @@ fn an_emitter_no_head_owns_is_not_lit_in_that_mode() {
     assert_eq!(bound.emitters[0].name, "Inner");
     // The fixture still has both: the other one is simply not driven here.
     assert_eq!(profile.geometry.emitters.len(), 2);
+}
+
+/// Replace a graph's node identities, as the per-mode authoring of older profiles did, so only a
+/// node's position says two modes describe the same part.
+fn with_regenerated_node_ids(mut graph: GeometryGraph) -> GeometryGraph {
+    let ids = graph
+        .nodes
+        .iter()
+        .map(|node| (node.id, Uuid::new_v4()))
+        .collect::<HashMap<_, _>>();
+    for node in &mut graph.nodes {
+        node.id = ids[&node.id];
+        node.parent_id = node.parent_id.map(|parent| ids[&parent]);
+    }
+    for emitter in &mut graph.emitters {
+        emitter.node_id = ids[&emitter.node_id];
+    }
+    graph
+}
+
+fn motion_attribute(graph: &GeometryGraph, index: usize) -> Option<String> {
+    graph.nodes[index]
+        .motion
+        .as_ref()
+        .and_then(|motion| motion.attribute.as_ref())
+        .map(|attribute| attribute.0.to_string())
+}
+
+fn bound_attribute(mode: &FixtureMode, node_id: Uuid) -> Option<String> {
+    mode.motion_attributes
+        .iter()
+        .find(|binding| binding.node_id == node_id)
+        .map(|binding| binding.attribute.0.to_string())
+}
+
+/// Which attribute turns an axis is the personality's answer. Profiles written before that carry a
+/// whole graph per mode with the attribute on each node, and two modes that name different
+/// attributes for the same yoke still describe one lantern: the graph lifts to the fixture and
+/// each mode keeps the attributes it named as bindings.
+#[test]
+fn motion_attributes_written_per_mode_are_lifted_into_bindings_on_each_mode() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Two yokes".into();
+    profile.geometry = GeometryGraph::default();
+    let second = profile.modes[0].clone();
+    profile.modes.push(FixtureMode {
+        id: Uuid::new_v4(),
+        name: "Swapped".into(),
+        ..second
+    });
+    for (index, (yoke, head)) in [("pan", "tilt"), ("tilt", "pan")].into_iter().enumerate() {
+        let mode = &mut profile.modes[index];
+        let mut graph = with_regenerated_node_ids(GeometryGraph::template(
+            GeometryTemplate::MovingHead,
+            &[mode.heads[0].id],
+        ));
+        graph.nodes[1].motion.as_mut().unwrap().attribute = Some(AttributeKey(yoke.into()));
+        graph.nodes[2].motion.as_mut().unwrap().attribute = Some(AttributeKey(head.into()));
+        mode.geometry = graph;
+    }
+    let legacy = serde_json::to_value(&profile).unwrap();
+    assert_eq!(
+        legacy["modes"][0]["geometry"]["nodes"][1]["motion"]["attribute"], "pan",
+        "the legacy shape names the attribute on the mode's own node"
+    );
+    assert!(legacy["modes"][0].get("motion_attributes").is_some());
+    let mut legacy = legacy;
+    for mode in legacy["modes"].as_array_mut().unwrap() {
+        mode.as_object_mut().unwrap().remove("motion_attributes");
+    }
+
+    let read: FixtureProfile = serde_json::from_value(legacy).unwrap();
+    read.validate().unwrap();
+
+    assert_eq!(read.geometry.nodes.len(), 3);
+    assert!(
+        (0..3).all(|index| motion_attribute(&read.geometry, index).is_none()),
+        "the fixture's own axes name no attribute"
+    );
+    let yoke = read.geometry.nodes[1].id;
+    let head = read.geometry.nodes[2].id;
+    for (mode, (yoke_attribute, head_attribute)) in
+        read.modes.iter().zip([("pan", "tilt"), ("tilt", "pan")])
+    {
+        assert!(mode.geometry.nodes.is_empty());
+        assert_eq!(mode.motion_attributes.len(), 2);
+        assert_eq!(bound_attribute(mode, yoke).as_deref(), Some(yoke_attribute));
+        assert_eq!(bound_attribute(mode, head).as_deref(), Some(head_attribute));
+        let bound = read.mode_geometry(mode);
+        assert_eq!(motion_attribute(&bound, 1).as_deref(), Some(yoke_attribute));
+        assert_eq!(motion_attribute(&bound, 2).as_deref(), Some(head_attribute));
+    }
+
+    // The written shape: no attribute on the fixture's axis, `{node_id, attribute}` on the mode.
+    let written = serde_json::to_value(&read).unwrap();
+    assert!(
+        written["geometry"]["nodes"][1]["motion"]
+            .get("attribute")
+            .is_none()
+    );
+    assert_eq!(
+        written["modes"][0]["motion_attributes"][0],
+        serde_json::json!({ "node_id": yoke, "attribute": "pan" })
+    );
+}
+
+/// A profile lifted while the attribute still sat on the fixture's node spoke for every mode with
+/// it. Reading one gives that attribute to every mode that does not bind the axis itself.
+#[test]
+fn motion_attributes_on_an_already_lifted_fixture_graph_move_into_every_mode() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Lifted yoke".into();
+    let head = profile.modes[0].heads[0].id;
+    profile.geometry = GeometryGraph::template(GeometryTemplate::MovingHead, &[head]);
+    let yoke = profile.geometry.nodes[1].id;
+    let tilt = profile.geometry.nodes[2].id;
+    profile.geometry.nodes[1].motion.as_mut().unwrap().attribute = Some(AttributeKey("pan".into()));
+    profile.geometry.nodes[2].motion.as_mut().unwrap().attribute =
+        Some(AttributeKey("tilt".into()));
+    let second = profile.modes[0].clone();
+    profile.modes.push(FixtureMode {
+        id: Uuid::new_v4(),
+        name: "Own tilt".into(),
+        // This personality already answers for the head axis itself.
+        motion_attributes: vec![MotionAttributeBinding {
+            node_id: tilt,
+            attribute: AttributeKey("pan".into()),
+        }],
+        ..second
+    });
+    let legacy = serde_json::to_value(&profile).unwrap();
+    assert_eq!(
+        legacy["geometry"]["nodes"][2]["motion"]["attribute"],
+        "tilt"
+    );
+
+    let read: FixtureProfile = serde_json::from_value(legacy).unwrap();
+    read.validate().unwrap();
+
+    assert!((0..3).all(|index| motion_attribute(&read.geometry, index).is_none()));
+    assert_eq!(
+        bound_attribute(&read.modes[0], yoke).as_deref(),
+        Some("pan")
+    );
+    assert_eq!(
+        bound_attribute(&read.modes[0], tilt).as_deref(),
+        Some("tilt")
+    );
+    assert_eq!(
+        bound_attribute(&read.modes[1], yoke).as_deref(),
+        Some("pan")
+    );
+    assert_eq!(
+        bound_attribute(&read.modes[1], tilt).as_deref(),
+        Some("pan"),
+        "a mode's own binding is not overwritten by the fixture's"
+    );
+    assert_eq!(read.modes[1].motion_attributes.len(), 2);
+
+    // Reading what was written changes nothing further.
+    let again: FixtureProfile =
+        serde_json::from_value(serde_json::to_value(&read).unwrap()).unwrap();
+    for (before, after) in read.modes.iter().zip(&again.modes) {
+        assert_eq!(before.motion_attributes, after.motion_attributes);
+    }
+}
+
+/// A mode's binding is what turns the axis. An axis the mode binds nothing to rests at its neutral
+/// level however its attribute is set — and a mode still carrying its own graph keeps the
+/// attributes that graph names.
+#[test]
+fn a_mode_binding_drives_its_axis_and_an_unbound_axis_does_not_move() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Half-bound yoke".into();
+    let head = profile.modes[0].heads[0].id;
+    profile.geometry = GeometryGraph::template(GeometryTemplate::MovingHead, &[head]);
+    let yoke = profile.geometry.nodes[1].id;
+    let tilt = profile.geometry.nodes[2].id;
+    profile.modes[0].motion_attributes = vec![MotionAttributeBinding {
+        node_id: yoke,
+        attribute: AttributeKey("pan".into()),
+    }];
+    profile.validate().unwrap();
+
+    let values = HashMap::from([
+        (AttributeKey("pan".into()), AttributeValue::Normalized(0.75)),
+        (AttributeKey("tilt".into()), AttributeValue::Normalized(1.0)),
+    ]);
+    let bound = profile.mode_geometry(&profile.modes[0]);
+    let transforms = bound.resolved_transforms(&values);
+    assert_eq!(transforms[&yoke].rotation_degrees.y, 135.0);
+    assert_eq!(motion_attribute(&bound, 2), None);
+    assert_eq!(transforms[&tilt].rotation_degrees, Vector3::default());
+    // The fixture's own graph is not changed by being bound.
+    assert_eq!(motion_attribute(&profile.geometry, 1), None);
+
+    let mut legacy = profile.clone();
+    let mut own = GeometryGraph::template(GeometryTemplate::MovingHead, &[head]);
+    own.nodes[2].motion.as_mut().unwrap().attribute = Some(AttributeKey("tilt".into()));
+    legacy.modes[0].geometry = own;
+    legacy.modes[0].motion_attributes.clear();
+    legacy.validate().unwrap();
+    let transforms = legacy
+        .mode_geometry(&legacy.modes[0])
+        .resolved_transforms(&values);
+    assert_eq!(transforms[&tilt].rotation_degrees.x, 135.0);
+}
+
+#[test]
+fn motion_attribute_bindings_must_name_one_attribute_for_a_real_fixture_axis() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Bindings".into();
+    let head = profile.modes[0].heads[0].id;
+    profile.geometry = GeometryGraph::template(GeometryTemplate::MovingHead, &[head]);
+    let chassis = profile.geometry.nodes[0].id;
+    let yoke = profile.geometry.nodes[1].id;
+    let binding = |node_id: Uuid, attribute: &str| MotionAttributeBinding {
+        node_id,
+        attribute: AttributeKey(attribute.into()),
+    };
+    for (bindings, valid) in [
+        (vec![binding(yoke, "pan")], true),
+        (vec![binding(Uuid::new_v4(), "pan")], false),
+        (vec![binding(chassis, "pan")], false),
+        (vec![binding(yoke, "pan"), binding(yoke, "tilt")], false),
+        (vec![binding(yoke, " ")], false),
+    ] {
+        profile.modes[0].motion_attributes = bindings.clone();
+        assert_eq!(profile.validate().is_ok(), valid, "{bindings:?}");
+    }
 }

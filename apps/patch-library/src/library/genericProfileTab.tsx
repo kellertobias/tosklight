@@ -15,6 +15,7 @@ import type {
 	FixtureProfileOptics,
 } from "../wire";
 import { AssetField } from "./assets";
+import { BodyPickerField } from "./bodyPicker";
 
 const FIXTURE_TYPES = [
 	"dimmer",
@@ -388,12 +389,6 @@ function BodySection({
 	onChange,
 	bodyCatalogue,
 }: GenericSectionProps & { bodyCatalogue: FixtureBodyModel[] }) {
-	const groups: { group: string; bodies: FixtureBodyModel[] }[] = [];
-	for (const body of bodyCatalogue) {
-		const last = groups.at(-1);
-		if (last && last.group === body.group) last.bodies.push(body);
-		else groups.push({ group: body.group, bodies: [body] });
-	}
 	return (
 		<section>
 			<h3>Body</h3>
@@ -402,28 +397,13 @@ function BodySection({
 					? "This fixture ships its own 3D model, which is what the Stage draws."
 					: "Leave this unset to keep the body guessed from the fixture type and its channels."}
 			</p>
-			<FormLayout columns={2} minColumnWidth={240}>
-				<SelectField
-					label="Generic body"
-					value={draft.body_model ?? ""}
-					disabled={bodyCatalogue.length === 0}
-					options={[
-						{ value: "", label: "Guess from the fixture type" },
-						...groups.flatMap(({ group, bodies }) =>
-							bodies.map((body) => ({
-								value: body.id,
-								label: `${group} · ${body.label}`,
-							})),
-						),
-					]}
-					onChange={(body_model) =>
-						onChange((current) => ({
-							...current,
-							body_model: body_model === "" ? null : body_model,
-						}))
-					}
-				/>
-			</FormLayout>
+			<BodyPickerField
+				value={draft.body_model ?? null}
+				bodyCatalogue={bodyCatalogue}
+				onChange={(body_model) =>
+					onChange((current) => ({ ...current, body_model }))
+				}
+			/>
 		</section>
 	);
 }

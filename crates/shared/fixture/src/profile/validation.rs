@@ -305,6 +305,31 @@ impl FixtureProfile {
                 ));
             }
         }
+        for mode in &self.modes {
+            let mut bound_nodes = HashSet::new();
+            for binding in &mode.motion_attributes {
+                if !self
+                    .geometry
+                    .nodes
+                    .iter()
+                    .any(|node| node.id == binding.node_id && node.motion.is_some())
+                {
+                    return Err(ProfileError::Invalid(
+                        "motion attribute binding references a missing fixture axis".into(),
+                    ));
+                }
+                if !bound_nodes.insert(binding.node_id) {
+                    return Err(ProfileError::Invalid(
+                        "a mode binds more than one attribute to the same fixture axis".into(),
+                    ));
+                }
+                if binding.attribute.0.trim().is_empty() {
+                    return Err(ProfileError::Invalid(
+                        "motion attribute binding names no attribute".into(),
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 }

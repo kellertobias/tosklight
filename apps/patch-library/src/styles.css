@@ -1294,6 +1294,150 @@
 	margin: 0 0 10px;
 }
 
+/* Where in the fixture → mode → channel → functions stack this window is. */
+.fixture-editor-breadcrumbs > ol {
+	display: flex;
+	align-items: center;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	list-style: none;
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.fixture-editor-breadcrumbs li {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.fixture-editor-breadcrumbs li + li::before {
+	content: "›";
+	margin: 0 5px;
+	color: var(--muted);
+}
+
+.fixture-editor-breadcrumbs button {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--muted);
+	font: inherit;
+	cursor: pointer;
+}
+
+.fixture-editor-breadcrumbs button:hover {
+	color: var(--cyan);
+	text-decoration: underline;
+}
+
+.fixture-editor-breadcrumbs [aria-current="location"] {
+	color: var(--text);
+}
+
+/* The generic body is chosen by what it looks like, so the field and its picker both show it. */
+.fixture-body-field {
+	display: grid;
+	gap: 6px;
+	max-width: 480px;
+}
+
+.fixture-body-field-label {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.fixture-body-trigger.ui-button {
+	min-height: 72px;
+	justify-content: flex-start;
+	padding: 6px 14px 6px 6px;
+	gap: 12px;
+	text-align: left;
+}
+
+.fixture-body-trigger .fixture-body-picture {
+	width: 80px;
+	height: 60px;
+}
+
+.fixture-body-picture {
+	display: grid;
+	place-items: center;
+	flex: none;
+	overflow: hidden;
+	border-radius: 6px;
+	/* The renders are drawn on white; a dark tile would lose a black lantern. */
+	background: #fff;
+	color: #6b7680;
+	font-size: 22px;
+	font-weight: 700;
+}
+
+.fixture-body-picture > img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.fixture-body-picker-layer {
+	z-index: 2350;
+}
+
+.fixture-body-picker {
+	width: min(1100px, calc(100vw - 28px)) !important;
+	height: calc(100vh - 28px);
+	max-height: calc(100vh - 28px) !important;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	gap: 10px;
+	overflow: hidden;
+}
+
+.fixture-body-picker-results {
+	min-height: 0;
+	overflow: auto;
+	display: grid;
+	align-content: start;
+	gap: 14px;
+}
+
+.fixture-body-picker-results h4 {
+	margin: 0 0 8px;
+	color: var(--muted);
+	font-size: 11px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.fixture-body-picker-results [role="listbox"] {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+	gap: 8px;
+}
+
+.fixture-body-option.ui-button {
+	min-height: 0;
+	height: auto;
+	display: grid;
+	grid-template-rows: auto auto;
+	justify-items: stretch;
+	gap: 6px;
+	padding: 6px 6px 8px;
+	font-size: 12px;
+	text-align: center;
+	cursor: pointer;
+}
+
+.fixture-body-option .fixture-body-picture {
+	aspect-ratio: 4 / 3;
+}
+
+.fixture-body-option.ui-button:hover:not(.is-active) {
+	border-color: var(--cyan);
+	background: #1f2a33;
+}
+
 .fixture-manufacturer-field {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 48px;
@@ -1456,6 +1600,12 @@
 	background: var(--panel2);
 }
 
+/* A form field keeps a little air above and below itself; in this row that air would leave the
+   name's input sitting above Edit and the trash button, which align to the row's bottom edge. */
+.fixture-mode-list > article > .ui-form-field {
+	margin-block: 0;
+}
+
 .fixture-mode-list .reorder-actions {
 	display: grid;
 	grid-template-columns: repeat(3, 30px);
@@ -1548,27 +1698,82 @@
 	overflow: hidden;
 }
 
-.fixture-split-accordion-title {
-	width: 100%;
+/* One line per split: its name and channel count to open it, then its own move and remove. */
+.fixture-split-header {
 	display: flex;
-	justify-content: space-between;
-	border: 0 !important;
-	border-radius: 0 !important;
+	align-items: stretch;
+	min-height: 40px;
+	background: #111820;
+}
+
+.fixture-split-accordion-title.ui-button {
+	flex: 1;
+	min-height: 40px;
+	justify-content: flex-start;
+	gap: 10px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	font-size: 13px;
 }
 
 .fixture-split-accordion-title small {
 	color: var(--muted);
+	font-weight: 500;
 }
 
-.fixture-split-accordions > section.open > .fixture-split-accordion-title {
-	background: #0a252b;
+.fixture-split-header > .ui-button.is-icon-only {
+	width: 40px;
+	min-height: 40px;
+	border: 0;
+	border-left: 1px solid var(--line);
+	border-radius: 0;
+	background: transparent;
+	font-size: 13px;
+}
+
+.fixture-split-accordions > section.open .fixture-split-accordion-title {
 	color: var(--cyan);
+}
+
+.fixture-split-accordions > section.open > .fixture-split-header {
+	background: #0a252b;
 }
 
 .fixture-channel-split {
 	display: grid;
 	gap: 8px;
-	padding: 8px;
+}
+
+/* A slot's drag handle sits beside its number, not above it. */
+.fixture-slot-cell {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.fixture-slot-table .channel-primary-slot .drag-handle {
+	display: inline-block;
+	margin: 0;
+}
+
+/* The table ends at its last column: the actions fill it, with no blank strip after them. */
+.fixture-slot-table th:last-child,
+.fixture-slot-table td:last-child {
+	width: 1%;
+	padding-right: 0;
+	white-space: nowrap;
+}
+
+.fixture-trash-button.ui-button svg {
+	width: 18px;
+	height: 18px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
 }
 
 .fixture-channel-table-wrap {
@@ -1746,18 +1951,339 @@
 	z-index: 2350;
 }
 
+/* Title bar on top, body scrolling beneath it: the frame never scrolls, so its border and title stay
+   put however long a channel's function list grows. */
 .fixture-channel-editor-modal {
-	width: min(980px, calc(100vw - 36px)) !important;
+	width: min(1180px, calc(100vw - 36px)) !important;
 	max-height: calc(100vh - 36px) !important;
 	padding: 0 !important;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
 	overflow: hidden;
 }
 
 .fixture-channel-editor-body {
 	display: grid;
+	align-content: start;
 	gap: 14px;
+	min-height: 0;
 	padding: 14px;
 	overflow: auto;
+}
+
+.fixture-mapping-section {
+	display: grid;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel2);
+}
+
+.fixture-mapping-section > h3,
+.fixture-mapping-section > .field-hint {
+	margin: 0;
+}
+
+.fixture-mapping-fields {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	align-items: end;
+	gap: 10px;
+}
+
+.fixture-mapping-unit {
+	display: grid;
+	gap: 5px;
+	margin-block: 4px;
+	color: var(--muted);
+	font-size: 11px;
+}
+
+.fixture-mapping-unit > strong {
+	display: flex;
+	align-items: center;
+	min-height: 50px;
+	padding: 0 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	color: var(--text);
+	font-size: 15px;
+}
+
+.fixture-function-table {
+	display: grid;
+	gap: 8px;
+}
+
+.fixture-function-table > header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.fixture-function-table > header > h3 {
+	margin: 0;
+}
+
+.fixture-function-table > header > small {
+	flex: 1;
+	color: var(--muted);
+}
+
+.fixture-functions-table {
+	min-width: 1060px;
+}
+
+.fixture-function-details > td {
+	background: #0c1217;
+}
+
+.fixture-function-details-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	align-items: end;
+	gap: 8px;
+	padding: 4px 4px 8px;
+}
+
+/* Inside the details the labels are what say which field is which, so they come back. */
+.fixture-function-details-grid .ui-form-field > label {
+	display: block;
+}
+
+/* The slot table has fewer columns than the channel sheet it replaced. */
+.fixture-slot-table {
+	min-width: 1240px;
+}
+
+.fixture-slot-table td {
+	vertical-align: middle;
+}
+
+/* Row actions sit side by side, so a row is one control tall rather than three. */
+.fixture-slot-table .reorder-actions,
+.fixture-functions-table .reorder-actions {
+	display: flex;
+	gap: 4px;
+}
+
+/* The column heading already says Invert or Snap; the switch's own Off/On words only widen it. */
+.fixture-slot-table .ui-switch-states {
+	display: none;
+}
+
+/* A cell is its value as text; pressing it opens the window that changes it. */
+.fixture-channel-table .fixture-cell-value.ui-button {
+	width: 100%;
+	min-height: 40px;
+	padding: 0 10px;
+	justify-content: flex-start;
+	border-color: transparent;
+	background: transparent;
+	font-weight: 600;
+	white-space: nowrap;
+	text-align: left;
+}
+
+.fixture-channel-table .fixture-cell-value.ui-button:hover:not(:disabled) {
+	border-color: var(--line2);
+	background: #1a232b;
+}
+
+/* Room under the rows for the sideways scrollbar, so it never covers the last row's buttons. */
+.fixture-channel-table-wrap:has(> .fixture-slot-table),
+.fixture-channel-table-wrap:has(> .fixture-functions-table) {
+	padding-bottom: 12px;
+}
+
+.fixture-slot-table td,
+.fixture-functions-table td {
+	height: 48px;
+	padding-block: 2px;
+	vertical-align: middle;
+}
+
+.fixture-slot-table .reorder-actions .ui-button,
+.fixture-functions-table .reorder-actions .ui-button {
+	width: 40px;
+	min-height: 40px;
+}
+
+/* Switches keep their track but drop the chrome that made them taller than the row. */
+.fixture-cell-switch .ui-switch-control {
+	min-height: 40px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+
+.fixture-option-picker-layer {
+	z-index: 2450;
+}
+
+.fixture-option-picker {
+	width: min(420px, calc(100vw - 36px)) !important;
+	padding: 0 !important;
+	overflow: hidden;
+}
+
+.fixture-option-picker > .ui-modal-titlebar {
+	margin: 0;
+	border-bottom: 1px solid var(--line);
+	border-radius: 11px 11px 0 0;
+	background: var(--panel);
+}
+
+.fixture-option-picker-list {
+	display: grid;
+	gap: 4px;
+	max-height: min(60vh, 520px);
+	padding: 10px;
+	overflow: auto;
+}
+
+.fixture-option-picker-list .ui-button {
+	justify-content: space-between;
+	min-height: 48px;
+}
+
+.fixture-slot-table .fixture-channel-row.is-byte > td {
+	background: #0c1116;
+}
+
+.fixture-slot-number {
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
+}
+
+.fixture-slot-inherited {
+	color: var(--muted);
+	white-space: nowrap;
+}
+
+.fixture-slot-attribute.ui-button,
+.fixture-slot-mapping.ui-button {
+	justify-content: flex-start;
+	white-space: nowrap;
+}
+
+/* Choosing what a channel controls: groups on the left, their attributes on the right. */
+.fixture-attribute-picker-layer,
+.fixture-masters-layer {
+	z-index: 2450;
+}
+
+.fixture-attribute-picker {
+	width: min(860px, calc(100vw - 36px)) !important;
+	height: min(640px, calc(100vh - 36px));
+	max-height: calc(100vh - 36px) !important;
+	padding: 0 !important;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	overflow: hidden;
+}
+
+.fixture-attribute-picker-columns {
+	display: grid;
+	grid-template-columns: minmax(150px, 0.7fr) minmax(170px, 0.9fr) minmax(0, 1.2fr);
+	min-height: 0;
+}
+
+.fixture-attribute-picker-columns > [role="listbox"],
+.fixture-attribute-picker-last > [role="listbox"] {
+	display: grid;
+	align-content: start;
+	gap: 4px;
+	min-height: 0;
+	padding: 10px;
+	overflow: auto;
+}
+
+.fixture-attribute-picker-columns > [role="listbox"] {
+	border-right: 1px solid var(--line);
+}
+
+.fixture-attribute-picker-last {
+	display: grid;
+	grid-template-rows: minmax(0, 1fr);
+	min-height: 0;
+}
+
+.fixture-attribute-picker-columns .ui-button {
+	justify-content: space-between;
+	min-height: 44px;
+	text-align: left;
+}
+
+.fixture-attribute-picker-columns .ui-button > small {
+	color: var(--muted);
+	font-weight: 400;
+}
+
+.fixture-masters-modal {
+	width: min(520px, calc(100vw - 36px)) !important;
+	padding: 0 !important;
+	overflow: hidden;
+}
+
+.fixture-masters-body {
+	display: grid;
+	gap: 4px;
+	padding: 12px 16px 16px;
+}
+
+/* Virtual Intensity reads as the same row as the switches under it: name left, choice right. */
+.fixture-masters-choice {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 10px;
+	min-height: 50px;
+	margin-block: 4px;
+	color: var(--muted);
+	font-size: 11px;
+}
+
+.fixture-masters-choice > div {
+	display: flex;
+	gap: 4px;
+}
+
+.fixture-masters-choice .ui-button {
+	min-height: 40px;
+	padding: 0 12px;
+	font-size: 12px;
+}
+
+.fixture-mode-geometry-bindings {
+	display: grid;
+	gap: 14px;
+}
+
+.fixture-motion-bindings {
+	display: grid;
+	gap: 6px;
+}
+
+.fixture-motion-bindings > h3,
+.fixture-motion-bindings > .field-hint {
+	margin: 0;
+}
+
+.fixture-motion-binding {
+	display: grid;
+	grid-template-columns: minmax(140px, 0.6fr) minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+}
+
+.fixture-motion-binding .fixture-cell-value.ui-button {
+	justify-content: flex-start;
+	border-color: var(--line);
 }
 
 .fixture-functions-editor-layer {
@@ -1859,8 +2385,25 @@
 	margin: 0;
 }
 
+/*
+ * The geometry tab is exactly as tall as the editor window. The three columns share that height and
+ * each scrolls on its own, so the part list, the part being edited, and the preview stay in view
+ * together however long any one of them gets.
+ */
+.fixture-profile-editor-body:has(> .fixture-geometry-editor) {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.fixture-profile-editor-body > .fixture-geometry-editor {
+	flex: 1;
+	min-height: 0;
+	grid-template-rows: auto minmax(0, 1fr);
+}
+
 .geometry-workspace {
-	min-height: 540px;
+	min-height: 0;
 	display: grid;
 	grid-template-columns: minmax(220px, 0.7fr) minmax(300px, 1fr) minmax(
 			260px,
@@ -1928,19 +2471,58 @@
 
 .geometry-live-preview {
 	display: grid;
-	grid-template-rows: auto minmax(260px, 1fr) auto;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	overflow: hidden;
+}
+
+.geometry-part-form {
+	display: grid;
+	gap: 7px;
+}
+
+.geometry-part-form > h3 {
+	margin: 0;
+}
+
+.geometry-part-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.geometry-part-tabs > .ui-button {
+	min-height: 38px;
+	padding: 0 10px;
+	font-size: 12px;
+}
+
+.geometry-part-tab {
+	display: grid;
+	align-content: start;
+	gap: 7px;
+}
+
+/* In the narrow properties column each value gets the full width, one under the other, so a number
+   is never squeezed until its decimals do not fit. */
+.geometry-part-tab .geometry-vector,
+.geometry-part-tab .geometry-motion {
+	grid-template-columns: minmax(0, 1fr);
 }
 
 .geometry-preview-stage {
 	position: relative;
-	min-height: 260px;
+	min-height: 0;
 	overflow: hidden;
 	border: 1px solid var(--line);
 	border-radius: 7px;
 	background: #080b0e;
 }
 
+/* Out of flow, so the canvas never gives the stage a size: the renderer sizes the canvas from the
+   stage, and a canvas in flow would grow the stage, which grows the canvas, without end. */
 .geometry-preview-stage canvas {
+	position: absolute;
+	inset: 0;
 	display: block;
 	width: 100%;
 	height: 100%;
@@ -1954,9 +2536,14 @@
 /* from apps/light-desktop/src/styles/setup-and-editors.css */
 
 .fixture-profile-editor-modal > .ui-modal-titlebar,
-.fixture-mode-editor-modal > .ui-modal-titlebar {
+.fixture-mode-editor-modal > .ui-modal-titlebar,
+.fixture-channel-editor-modal > .ui-modal-titlebar,
+.fixture-attribute-picker > .ui-modal-titlebar,
+.fixture-masters-modal > .ui-modal-titlebar {
 	margin: 0;
+	border-bottom: 1px solid var(--line);
 	border-radius: 11px 11px 0 0;
+	background: var(--panel);
 }
 
 .manufacturer-lookup {

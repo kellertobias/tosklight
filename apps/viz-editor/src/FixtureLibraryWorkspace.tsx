@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
-import { Button, SearchBar } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import {
 	FixtureProfileEditor,
@@ -15,7 +14,7 @@ import type {
 } from "@tosklight/patch";
 import { FixtureLibraryBrowser } from "./fixtureLibrary/FixtureLibraryBrowser";
 import { documentSession } from "./document/session";
-import { beginWindowDrag } from "./WindowChrome";
+import { beginTitleBarDrag } from "./WindowChrome";
 
 /**
  * The fixture library belongs to this machine, not to the open document, so it is reachable with
@@ -48,7 +47,7 @@ function LocalAssetPicker({
 	);
 }
 
-/** Releases the GPU resources a preview scene holds. The Architect has no Stage renderer to ask. */
+/** Releases the GPU resources a preview scene holds. The Architect has no Stage scene cache to ask. */
 function disposeScene(scene: THREE.Object3D) {
 	scene.traverse((node) => {
 		const mesh = node as THREE.Mesh;
@@ -61,7 +60,6 @@ function disposeScene(scene: THREE.Object3D) {
 }
 
 const ports: FixtureProfileEditorPorts = {
-	// No Stage renderer here: the geometry tab edits the graph and says why it cannot draw it.
 	disposeScene,
 	AssetPicker: LocalAssetPicker,
 };
@@ -144,23 +142,30 @@ export function FixtureLibraryWorkspace({
 				title="Fixtures"
 				dragHandleProps={{
 					"data-tauri-drag-region": true,
-					onPointerDown: beginWindowDrag,
+					onPointerDown: beginTitleBarDrag,
 				}}
-				toolbar={
-					<Button
-						onClick={() =>
-							setDraft({ profile: blankFixtureProfile(), expectedRevision: 0 })
-						}
-					>
-						Create fixture
-					</Button>
-				}
-			/>
-			<SearchBar
-				value={query}
-				ariaLabel="Search fixtures"
-				placeholder="Search manufacturer or model"
-				onChange={setQuery}
+				groups={[
+					{
+						id: "fixture-library-actions",
+						actions: [
+							{
+								id: "create",
+								label: "Create fixture",
+								onPress: () =>
+									setDraft({
+										profile: blankFixtureProfile(),
+										expectedRevision: 0,
+									}),
+							},
+						],
+					},
+				]}
+				search={{
+					value: query,
+					onSearch: setQuery,
+					ariaLabel: "Search fixtures",
+					placeholder: "Search manufacturer or model",
+				}}
 			/>
 			{current.length === 0 ? (
 				<p className="empty-editor-message" role="status">

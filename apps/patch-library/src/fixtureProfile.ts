@@ -145,8 +145,20 @@ export interface FixtureMode {
 	color_systems: HeadColorSystem[];
 	/** Which of the fixture's emitters each of this mode's heads owns. */
 	emitter_heads?: EmitterHeadBinding[];
+	/**
+	 * Which attribute moves each of the fixture's moving parts in this mode.
+	 *
+	 * The part and its range belong to the lantern; what drives it belongs to the personality, so
+	 * one mode's pan can be another's tilt. A moving part no binding names rests at its centre.
+	 */
+	motion_attributes?: MotionAttributeBinding[];
 	control_actions: ControlAction[];
 	geometry: GeometryGraph;
+}
+
+export interface MotionAttributeBinding {
+	node_id: string;
+	attribute: string;
 }
 
 export interface FixtureSplit {
@@ -181,6 +193,11 @@ export interface FixtureChannel {
 	invert: boolean;
 	snap: boolean;
 	reacts_to_virtual_intensity: boolean;
+	/**
+	 * Reacts the other way round: full while virtual intensity is at zero, gone at full. Only means
+	 * anything while `reacts_to_virtual_intensity` is set; absent on profiles that predate it.
+	 */
+	virtual_intensity_inverted?: boolean;
 	reacts_to_sequence_master: boolean;
 	reacts_to_group_master: boolean;
 	reacts_to_grand_master: boolean;
@@ -320,7 +337,11 @@ export interface GeometryNode {
 }
 
 export interface GeometryMotion {
-	attribute: string;
+	/**
+	 * Only on geometry written before a mode said what drives each part; a mode's geometry carries
+	 * the attribute its `motion_attributes` binds. Fixture-level geometry leaves it out.
+	 */
+	attribute?: string | null;
 	kind: "rotation" | "translation";
 	axis: Vector3Value;
 	physical_min: number;
@@ -402,6 +423,8 @@ export interface AttributeDescriptor {
 	built_in?: boolean;
 	retired?: boolean;
 	activation_group_id?: string | null;
+	/** The group's name, when the source knows it; otherwise the editor names it from its id. */
+	activation_group_label?: string | null;
 	push_turn_of?: string | null;
 }
 

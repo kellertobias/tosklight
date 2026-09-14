@@ -15,7 +15,7 @@ fn geometry_motion_uses_physical_range_without_changing_profile_data() {
                 max_speed_per_second: None,
                 acceleration_per_second_squared: None,
                 deceleration_per_second_squared: None,
-                attribute: AttributeKey("pan".into()),
+                attribute: Some(AttributeKey("pan".into())),
                 kind: GeometryMotionKind::Rotation,
                 axis: Vector3 {
                     x: 0.0,
@@ -453,6 +453,7 @@ fn visual_only_profiles_require_zero_footprint_and_no_dmx_behavior() {
         invert: false,
         snap: false,
         reacts_to_virtual_intensity: false,
+        virtual_intensity_inverted: false,
         reacts_to_sequence_master: true,
         reacts_to_group_master: true,
         reacts_to_grand_master: true,

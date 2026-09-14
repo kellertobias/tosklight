@@ -1,20 +1,18 @@
 import { useState } from "react";
-import type {
-	AttributeDescriptor,
-	FixtureChannel,
-	FixtureMode,
-} from "../wire";
+import type { AttributeDescriptor, FixtureMode } from "../wire";
 import { derivePrimarySlots } from "../sheet/fixtureProfileModel";
-import { ChannelEditorModal } from "./channelDetails";
-import {
-	addChannel,
-	changeChannelResolution,
-	replaceChannel,
-} from "./channelOperations";
-import { ChannelSplitTable } from "./channelSplitTable";
-import { ControlActionsEditor } from "./controlActions";
-import { SplitAccordions, SplitManager } from "./splits";
+import { ChannelMappingModal } from "./channelMapping";
+import { replaceChannel } from "./channelOperations";
+import { moveChannelToSplit } from "./channelSlots";
+import { SlotTable } from "./slotTable";
+import { SplitAccordions } from "./splits";
 
+/**
+ * A mode's DMX slots, split by split.
+ *
+ * Adding a split or a channel is a title-bar button of the mode editor; control actions have a tab
+ * of their own. What is left here is the slots themselves.
+ */
 export function ChannelsEditor({
 	mode,
 	attributeRegistry,
@@ -28,43 +26,31 @@ export function ChannelsEditor({
 	onOpenSplit: (split: number) => void;
 	onChange: (mode: FixtureMode) => void;
 }) {
-	const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
+	const [mappingChannelId, setMappingChannelId] = useState<string | null>(null);
 	const primary = derivePrimarySlots(mode);
 	const activeSplit = mode.splits.some((split) => split.number === openSplit)
 		? openSplit
 		: mode.splits[0]?.number;
-	const editedChannel =
-		mode.channels.find((channel) => channel.id === editingChannelId) ?? null;
-	const setChannel = (channel: FixtureChannel) => {
-		onChange(replaceChannel(mode, channel));
-		if (channel.split !== openSplit) onOpenSplit(channel.split);
-	};
-	const addSplit = () => {
-		const number = Math.max(0, ...mode.splits.map((split) => split.number)) + 1;
-		onChange({ ...mode, splits: [...mode.splits, { number, footprint: 1 }] });
-		onOpenSplit(number);
-	};
+	const mappingChannel =
+		mode.channels.find((channel) => channel.id === mappingChannelId) ?? null;
 	const renderSplit = (split: number) => (
-		<ChannelSplitTable
+		<SlotTable
 			mode={mode}
 			split={split}
-			primarySlots={primary.slots}
 			attributeRegistry={attributeRegistry}
 			onChange={onChange}
-			onEdit={(channel) => setEditingChannelId(channel.id)}
-			onAdd={() => onChange(addChannel(mode, split))}
+			onEditMapping={(channel) => setMappingChannelId(channel.id)}
 		/>
 	);
 	return (
 		<div className="fixture-channels-editor">
-			<SplitManager mode={mode} onAdd={addSplit} onChange={onChange} />
 			<SplitAccordions
 				mode={mode}
 				activeSplit={activeSplit}
 				onOpen={onOpenSplit}
+				onChange={onChange}
 				renderSplit={renderSplit}
 			/>
-			<ControlActionsEditor mode={mode} onChange={onChange} />
 			{primary.errors.length > 0 && (
 				<div className="fixture-inline-errors" role="alert">
 					{primary.errors.map((error) => (
@@ -72,16 +58,17 @@ export function ChannelsEditor({
 					))}
 				</div>
 			)}
-			{editedChannel && (
-				<ChannelEditorModal
+			{mappingChannel && (
+				<ChannelMappingModal
 					mode={mode}
-					channel={editedChannel}
+					channel={mappingChannel}
 					attributeRegistry={attributeRegistry}
-					onChange={setChannel}
-					onResolution={(resolution) =>
-						onChange(changeChannelResolution(mode, editedChannel, resolution))
-					}
-					onClose={() => setEditingChannelId(null)}
+					onChange={(channel) => onChange(replaceChannel(mode, channel))}
+					onSplit={(split) => {
+						onChange(moveChannelToSplit(mode, mappingChannel, split));
+						onOpenSplit(split);
+					}}
+					onClose={() => setMappingChannelId(null)}
 				/>
 			)}
 		</div>

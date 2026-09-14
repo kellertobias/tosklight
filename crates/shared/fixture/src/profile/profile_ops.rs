@@ -55,6 +55,7 @@ impl FixtureProfile {
                 color_systems: Vec::new(),
                 control_actions: Vec::new(),
                 emitter_heads: Vec::new(),
+                motion_attributes: Vec::new(),
                 geometry: GeometryGraph::default(),
             }],
             hazardous: false,

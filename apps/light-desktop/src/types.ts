@@ -62,12 +62,8 @@ export type Stage2dSide = "top" | "front" | "back" | "left" | "right";
  * the view and the render quality. It remains only so a saved layout that carries one decodes
  * without complaint.
  */
-export type StageRenderQuality =
-	| "none"
-	| "lines_only"
-	| "lines_and_beams"
-	| "beams"
-	| "improved_beams";
+export type { StageRenderQuality } from "@tosklight/patch/stage-geometry";
+import type { StageRenderQuality } from "@tosklight/patch/stage-geometry";
 export type DmxDotSize = "small" | "large";
 export type ChannelDisplayMode = "intensity" | "all";
 export type TextEditorMode = "plain" | "markdown" | "split";

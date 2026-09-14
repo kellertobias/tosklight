@@ -55,6 +55,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     let control = FixtureMode::control_action_attribute(mode.channels[0].id);
     let cases = [
@@ -77,7 +78,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
         HashMap::new(),
     ];
     let scales = ChannelScales {
-        virtual_intensity: 0.8,
+        virtual_intensity: Some(0.8),
         sequence_master: 0.7,
         group_master: 0.6,
         grand_master: 0.5,
@@ -138,7 +139,7 @@ fn compiled_static_channel_uses_only_default_and_highlight_values() {
     let plan = mode.compile_resolution_plan();
     let bound = plan.bind(&mode).unwrap();
     let normal = bound.resolve_channel(0, &values, false, None, |_| ChannelScales {
-        virtual_intensity: 0.0,
+        virtual_intensity: Some(0.0),
         sequence_master: 0.0,
         group_master: 0.0,
         grand_master: 0.0,

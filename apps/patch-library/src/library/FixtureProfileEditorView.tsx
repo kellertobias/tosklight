@@ -5,6 +5,12 @@ import type {
 	FixtureProfile,
 } from "../wire";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
+import { liftMotionAttributes } from "../sheet/fixtureProfileModel";
+import {
+	EditorBreadcrumbs,
+	EditorTrailProvider,
+	useEditorTrail,
+} from "./breadcrumbs";
 import { ConfirmDialog, ManufacturerLookup } from "./dialogs";
 import {
 	FixtureProfileEditorPortsProvider,
@@ -39,6 +45,13 @@ export type FixtureProfileEditorProps = {
 };
 
 type EditorController = ReturnType<typeof useFixtureProfileEditorController>;
+
+const EDITOR_TABS: { id: ProfileEditorTab; label: string }[] = [
+	{ id: "identity", label: "Identity" },
+	{ id: "simulation", label: "Simulation" },
+	{ id: "geometry", label: "Geometry" },
+	{ id: "modes", label: "Modes" },
+];
 
 function ProfileEditorBody({
 	editor,
@@ -98,10 +111,10 @@ function ProfileEditorBody({
 						geometry: editor.draft.geometry ?? { nodes: [], emitters: [] },
 					}}
 					onChange={(carrier) =>
-						editor.setDraft((current) => ({
-							...current,
-							geometry: carrier.geometry,
-						}))
+						// A template names the attribute on its moving parts; every mode takes it over.
+						editor.setDraft((current) =>
+							liftMotionAttributes({ ...current, geometry: carrier.geometry }),
+						)
 					}
 				/>
 			)}
@@ -110,7 +123,7 @@ function ProfileEditorBody({
 					draft={editor.draft}
 					onChange={editor.updateMode}
 					onMove={editor.moveMode}
-					onDelete={editor.deleteMode}
+					onDelete={editor.requestDeleteMode}
 					onEdit={editor.openMode}
 				/>
 			)}
@@ -141,6 +154,20 @@ function EditorDialogs({
 						editor.setLookup(false);
 					}}
 					onClose={() => editor.setLookup(false)}
+				/>
+			)}
+			{editor.modePendingDelete && (
+				<ConfirmDialog
+					title={`Remove ${editor.modePendingDelete.name || "this mode"}?`}
+					description="Its heads, channels, and functions are removed from this fixture. Nothing is saved until you save the fixture."
+					primary="Remove mode"
+					danger
+					onPrimary={() =>
+						editor.modePendingDelete &&
+						editor.deleteMode(editor.modePendingDelete.id)
+					}
+					secondary="Keep mode"
+					onSecondary={editor.cancelDeleteMode}
 				/>
 			)}
 			{editor.closeConfirm && (
@@ -184,6 +211,12 @@ export function FixtureProfileEditor({
 		onSave,
 		onClose,
 	});
+	const fixtureLabel =
+		[editor.draft.manufacturer, editor.draft.name].filter(Boolean).join(" ") ||
+		"New fixture";
+	const tabLabel =
+		EDITOR_TABS.find(({ id }) => id === editor.tab)?.label ?? editor.tab;
+	const trail = useEditorTrail([fixtureLabel, tabLabel]);
 	return (
 		<FixtureProfileEditorPortsProvider ports={ports}>
 		<ModalRegistration onClose={editor.requestClose}>
@@ -209,19 +242,10 @@ export function FixtureProfileEditor({
 								? `Edit ${initialProfile.manufacturer} ${initialProfile.name}`
 								: "Create fixture"
 						}
+						details={<EditorBreadcrumbs trail={trail} />}
 						groups={[
-							{
-								id: "editor-tabs",
-								kind: "tabs",
-								activeId: editor.tab,
-								onActiveChange: (id) => editor.setTab(id as ProfileEditorTab),
-								actions: [
-									{ id: "identity", label: "Identity" },
-									{ id: "simulation", label: "Simulation" },
-									{ id: "geometry", label: "Geometry" },
-									{ id: "modes", label: "Modes" },
-								],
-							},
+							// Tab actions sit left of the tabs: the bar is right-aligned, so a button that
+							// appears for one tab would otherwise push every tab sideways when it does.
 							...(editor.tab === "modes"
 								? [
 										{
@@ -236,6 +260,13 @@ export function FixtureProfileEditor({
 										},
 									]
 								: []),
+							{
+								id: "editor-tabs",
+								kind: "tabs",
+								activeId: editor.tab,
+								onActiveChange: (id) => editor.setTab(id as ProfileEditorTab),
+								actions: EDITOR_TABS.map(({ id, label }) => ({ id, label })),
+							},
 						]}
 						accept={{
 							id: "save",
@@ -254,6 +285,7 @@ export function FixtureProfileEditor({
 					/>
 				</section>
 				{editor.editedMode && (
+					<EditorTrailProvider trail={trail}>
 					<ModeEditor
 						mode={editor.editedMode}
 						geometry={editor.draft.geometry ?? { nodes: [], emitters: [] }}
@@ -265,6 +297,7 @@ export function FixtureProfileEditor({
 						onChange={editor.updateMode}
 						onClose={editor.closeMode}
 					/>
+					</EditorTrailProvider>
 				)}
 				<EditorDialogs
 					editor={editor}

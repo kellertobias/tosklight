@@ -586,6 +586,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
                 invert: false,
                 snap: false,
                 reacts_to_virtual_intensity: false,
+                virtual_intensity_inverted: false,
                 reacts_to_sequence_master: true,
                 reacts_to_group_master: true,
                 reacts_to_grand_master: true,

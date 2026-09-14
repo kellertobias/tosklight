@@ -79,8 +79,22 @@ function choose(label: string, option: string) {
 	fireEvent.click(screen.getByRole("option", { name: option }));
 }
 
+/** Presses a table cell, which shows its value as text, and picks from the list it opens. */
+function pickCell(cell: RegExp | string, option: string) {
+	fireEvent.click(screen.getByRole("button", { name: cell }));
+	fireEvent.click(screen.getByRole("option", { name: option }));
+}
+
+/** Clears the open input window and types a value into it, as the operator's keyboard does. */
+function enterInModal(value: string) {
+	for (let index = 0; index < 24; index++)
+		fireEvent.keyDown(window, { key: "Backspace" });
+	for (const key of value) fireEvent.keyDown(window, { key });
+	fireEvent.keyDown(window, { key: "Enter" });
+}
+
 function openModeEditor(
-	tab: "Heads" | "Channels" | "Color" | "Emitters" = "Channels",
+	tab: "Heads" | "Channels" | "Color" | "Emitters & Motion" = "Channels",
 ) {
 	fireEvent.click(
 		screen.getByRole("button", { name: "Edit channels for Default" }),
@@ -277,7 +291,26 @@ describe("FixtureProfileEditor generic profile fields", () => {
 		);
 		fireEvent.click(screen.getByRole("tab", { name: "Simulation" }));
 		// Unset means the guess, which is how every profile behaved before.
-		choose("Generic body", "PAR cans · PAR 64 long nose, black");
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Generic body: Guess from the fixture type",
+			}),
+		);
+		const picker = screen.getByRole("dialog", { name: "Choose generic body" });
+		// Every body is chosen by its picture, not only its name.
+		expect(
+			within(picker)
+				.getByRole("option", { name: "PAR 64 long nose, black" })
+				.querySelector("img"),
+		).not.toBeNull();
+		fireEvent.click(
+			within(picker).getByRole("option", { name: "PAR 64 long nose, black" }),
+		);
+		expect(
+			screen.getByRole("button", {
+				name: "Generic body: PAR cans · PAR 64 long nose, black",
+			}),
+		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
 
 		await waitFor(() => expect(save).toHaveBeenCalledOnce());
@@ -561,29 +594,28 @@ describe("FixtureProfileEditor function behavior", () => {
 		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
 		openModeEditor();
 		fireEvent.click(
-			screen.getByRole("button", { name: "Edit intensity channel" }),
+			screen.getByRole("button", { name: "Edit intensity mapping" }),
 		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Channel functions (0)" }),
-		);
+		// The functions are a table under the physical range, not a further window.
 		expect(
 			screen.getByText("No functions are configured for this channel."),
 		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Add function" }));
-		expect(screen.getByLabelText("Priority")).toHaveValue("0");
+		const priority = () =>
+			screen.getByRole("button", { name: "Priority of intensity" });
+		expect(priority()).toHaveTextContent("0");
 
-		choose("Function behavior", "Named fixed value");
-		expect(screen.getByLabelText("Priority")).toHaveValue("100");
-		fireEvent.change(screen.getByLabelText("Priority"), {
-			target: { value: "137" },
-		});
-		expect(screen.getByLabelText("Priority")).toHaveValue("137");
-		choose("Function behavior", "Indexed color or gobo");
-		expect(screen.getByLabelText("Priority")).toHaveValue("100");
-		choose("Function behavior", "Control action");
-		expect(screen.getByLabelText("Priority")).toHaveValue("200");
-		choose("Function behavior", "Continuous mapping");
-		expect(screen.getByLabelText("Priority")).toHaveValue("0");
+		pickCell("Behavior of intensity", "Named fixed value");
+		expect(priority()).toHaveTextContent("100");
+		fireEvent.click(priority());
+		enterInModal("137");
+		expect(priority()).toHaveTextContent("137");
+		pickCell("Behavior of intensity", "Indexed color or gobo");
+		expect(priority()).toHaveTextContent("100");
+		pickCell("Behavior of intensity", "Control action");
+		expect(priority()).toHaveTextContent("200");
+		pickCell("Behavior of intensity", "Continuous mapping");
+		expect(priority()).toHaveTextContent("0");
 	});
 
 	it("authors absolute and velocity motion metadata on continuous functions", () => {
@@ -600,10 +632,7 @@ describe("FixtureProfileEditor function behavior", () => {
 		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
 		openModeEditor();
 		fireEvent.click(
-			screen.getByRole("button", { name: "Edit intensity channel" }),
-		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Channel functions (0)" }),
+			screen.getByRole("button", { name: "Edit intensity mapping" }),
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Add function" }));
 
@@ -626,7 +655,7 @@ describe("FixtureProfileEditor function behavior", () => {
 		expect(
 			screen.getByLabelText("Deceleration (degrees per second squared)"),
 		).toBeInTheDocument();
-		choose("Function behavior", "Named fixed value");
+		pickCell("Behavior of intensity", "Named fixed value");
 		expect(
 			screen.queryByText("Angular motion", { selector: "label" }),
 		).not.toBeInTheDocument();
@@ -704,7 +733,7 @@ describe("FixtureProfileEditor chrome and close guards", () => {
 		);
 		expect(screen.getByRole("button", { name: "Stay" })).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Stay" }));
-		fireEvent.keyDown(window, { key: "Escape" });
+		fireEvent.keyDown(document, { key: "Escape" });
 		expect(
 			screen.getByRole("button", { name: "Discard changes" }),
 		).toBeInTheDocument();
@@ -876,7 +905,13 @@ describe("FixtureProfileEditor mode and split editing", () => {
 			within(modeEditor)
 				.getAllByRole("tab")
 				.map((tab) => tab.textContent),
-		).toEqual(["Heads", "Channels", "Color", "Emitters"]);
+		).toEqual([
+			"Heads",
+			"Channels",
+			"Control actions",
+			"Color",
+			"Emitters & Motion",
+		]);
 		fireEvent.click(
 			within(modeEditor).getByRole("button", { name: "Close mode editor" }),
 		);
@@ -887,7 +922,7 @@ describe("FixtureProfileEditor mode and split editing", () => {
 			screen.getByRole("dialog", { name: "Create fixture profile" }),
 		).toBeInTheDocument();
 		openModeEditor();
-		fireEvent.keyDown(window, { key: "Escape" });
+		fireEvent.keyDown(document, { key: "Escape" });
 		expect(
 			screen.queryByRole("dialog", { name: "Edit Default mode" }),
 		).not.toBeInTheDocument();
@@ -907,13 +942,27 @@ describe("FixtureProfileEditor mode and split editing", () => {
 		expect(accordionButtons[0]).toHaveAttribute("aria-expanded", "false");
 		expect(accordionButtons[1]).toHaveAttribute("aria-expanded", "true");
 		expect(
-			within(
-				requiredElement(
-					screen.getByText("No logical channels are assigned to split 2.")
-						.parentElement,
-				),
-			).getByRole("button", { name: "Add channel" }),
+			screen.getByText(/No logical channels are assigned to split 2\./),
 		).toBeInTheDocument();
+		// A split shows how many channels it holds rather than an editable footprint.
+		expect(accordionButtons[0]).toHaveTextContent("Split 1");
+		expect(accordionButtons[0]).toHaveTextContent("0 channels");
+		expect(screen.queryByLabelText("Footprint")).not.toBeInTheDocument();
+		// Adding a split or a channel is a title-bar action of the Channels tab, left of the tabs.
+		const titleBar = requiredElement(
+			screen
+				.getByRole("dialog", { name: "Edit Default mode" })
+				.querySelector<HTMLElement>(".ui-modal-titlebar"),
+		);
+		const addSplit = within(titleBar).getByRole("button", { name: "Add split" });
+		const addChannel = within(titleBar).getByRole("button", { name: "Add channel" });
+		const firstTab = within(titleBar).getByRole("tab", { name: "Heads" });
+		for (const action of [addSplit, addChannel])
+			expect(
+				action.compareDocumentPosition(firstTab) & Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+		fireEvent.click(addChannel);
+		expect(accordionButtons[1]).toHaveTextContent("1 channel");
 	});
 
 	it("assigns channels to splits independently while retaining one logical head", () => {
@@ -939,11 +988,11 @@ describe("FixtureProfileEditor mode and split editing", () => {
 		openModeEditor();
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Edit intensity channel" }),
+			screen.getByRole("button", { name: "Edit intensity mapping" }),
 		);
 		choose("Address split", "Split 2");
 		fireEvent.click(
-			screen.getByRole("button", { name: "Close channel editor" }),
+			screen.getByRole("button", { name: "Close channel mapping" }),
 		);
 
 		expect(screen.getByRole("button", { name: /Split 2/ })).toHaveAttribute(
@@ -1025,6 +1074,35 @@ describe("FixtureProfileEditor mode layout and ordering", () => {
 				),
 			].map((row) => row.querySelector<HTMLInputElement>("input")?.value),
 		).toEqual(["Default", "Mode 2"]);
+	});
+
+	it("asks before removing a mode", () => {
+		const save = vi.fn(async (draft: FixtureProfile) => draft);
+		render(
+			<FixtureProfileEditor
+				initialProfile={validProfile()}
+				manufacturers={[]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		fireEvent.click(screen.getByRole("button", { name: "Add mode" }));
+		const modeNames = () =>
+			[
+				...document.querySelectorAll<HTMLElement>(".fixture-mode-list > article"),
+			].map((row) => row.querySelector<HTMLInputElement>("input")?.value);
+
+		fireEvent.click(screen.getByRole("button", { name: "Remove Mode 2" }));
+		expect(
+			screen.getByRole("alertdialog", { name: "Remove Mode 2?" }),
+		).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Keep mode" }));
+		expect(modeNames()).toEqual(["Default", "Mode 2"]);
+
+		fireEvent.click(screen.getByRole("button", { name: "Remove Mode 2" }));
+		fireEvent.click(screen.getByRole("button", { name: "Remove mode" }));
+		expect(modeNames()).toEqual(["Default"]);
 	});
 
 	it("uses the two-row mode layout with a trash action and multiline notes keyboard", () => {
@@ -1131,13 +1209,32 @@ describe("FixtureProfileEditor head and channel editing", () => {
 		);
 		fireEvent.click(
 			within(channelRows[1]).getByRole("button", {
-				name: "Edit intensity channel",
+				name: "Attribute for slot 2: Intensity",
 			}),
 		);
-		choose("Channel role", "position · Pan");
+		// The encoder group first, then the activation group, then the attribute inside it.
+		const picker = screen.getByRole("dialog", { name: "Attribute · slot 2" });
 		fireEvent.click(
-			screen.getByRole("button", { name: "Close channel editor" }),
+			within(within(picker).getByRole("listbox", { name: "Encoder groups" })).getByRole(
+				"option",
+				{ name: /^Position/ },
+			),
 		);
+		fireEvent.click(
+			within(within(picker).getByRole("listbox", { name: "Activation groups" })).getByRole(
+				"option",
+				{ name: /^Pan/ },
+			),
+		);
+		fireEvent.click(
+			within(within(picker).getByRole("listbox", { name: "Pan attributes" })).getByRole(
+				"option",
+				{ name: /^Pan/ },
+			),
+		);
+		expect(
+			screen.queryByRole("dialog", { name: "Attribute · slot 2" }),
+		).not.toBeInTheDocument();
 		channelRows = document.querySelectorAll<HTMLElement>(
 			".fixture-channel-row",
 		);
@@ -1167,10 +1264,205 @@ describe("FixtureProfileEditor head and channel editing", () => {
 			expect.stringContaining("Intensity"),
 		]);
 		fireEvent.click(screen.getByRole("button", { name: "Remove intensity" }));
+		// Removing a slot closes up the slots after it, so it is confirmed first.
+		expect(container.querySelectorAll(".fixture-channel-row")).toHaveLength(2);
+		fireEvent.click(screen.getByRole("button", { name: "Remove slot" }));
 		expect(container.querySelectorAll(".fixture-channel-row")).toHaveLength(1);
 		expect(container.querySelector(".fixture-channel-row")).toHaveTextContent(
 			"Pan",
 		);
+	});
+
+	it("joins a Fine slot to the coarse channel it refines, and parts it again", async () => {
+		const registry: AttributeDescriptor[] = [
+			{
+				id: "pan",
+				label: "Pan",
+				family: "position",
+				value_type: "continuous",
+				default_unit: "degrees",
+				activation_group_id: "position",
+				activation_group_label: "Position",
+			},
+			{
+				id: "tilt",
+				label: "Tilt",
+				family: "position",
+				value_type: "continuous",
+				default_unit: "degrees",
+				activation_group_id: "position",
+				activation_group_label: "Position",
+			},
+		];
+		const profile = validProfile();
+		const mode = profile.modes[0];
+		mode.splits[0].footprint = 4;
+		// The chart as a manual prints it: Pan, Pan Fine, Tilt, Tilt Fine — four 8-bit channels.
+		mode.channels = ["pan", "pan", "tilt", "tilt"].map((attribute) => ({
+			...blankChannel(mode),
+			attribute,
+			fixture_attribute: attribute,
+			default_raw: 128,
+		}));
+		const save = vi.fn(async (draft: FixtureProfile) => draft);
+		render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				attributeRegistry={registry}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		openModeEditor();
+
+		pickCell(/^Level for slot 2/, "Fine");
+		pickCell(/^Level for slot 4/, "Fine");
+		const rows = () =>
+			[...document.querySelectorAll<HTMLElement>(".fixture-channel-row")].map(
+				(row) => row.textContent,
+			);
+		expect(rows()).toHaveLength(4);
+		expect(rows()[1]).toContain("↳ Pan");
+		expect(rows()[3]).toContain("↳ Tilt");
+
+		// A Fine byte with nothing coarse to refine is refused, not silently re-labelled.
+		pickCell(/^Level for slot 1/, "Fine");
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"There is no coarse Pan on this head",
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Close mode editor" }));
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		const channels = save.mock.calls[0][0].modes[0].channels;
+		expect(channels).toHaveLength(2);
+		expect(channels[0]).toMatchObject({
+			attribute: "pan",
+			resolution: "u16",
+			secondary_slots: [2],
+			// The coarse byte keeps meaning what it meant: 128 of 255 is 32768 of 65535.
+			default_raw: 32768,
+		});
+		expect(channels[1]).toMatchObject({
+			attribute: "tilt",
+			resolution: "u16",
+			secondary_slots: [4],
+		});
+	});
+
+	it("chooses per mode which attribute moves each moving part", () => {
+		render(
+			<FixtureProfileEditor
+				initialProfile={validProfile()}
+				manufacturers={[]}
+				onSave={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		);
+		// The template builds the lantern's pan arm and tilt head under Geometry …
+		fireEvent.click(screen.getByRole("tab", { name: "Geometry" }));
+		fireEvent.click(screen.getByRole("button", { name: "Moving head" }));
+
+		// … and the mode says what drives them.
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		openModeEditor("Emitters & Motion");
+		expect(
+			screen.getByRole("button", { name: "Attribute moving Pan arm: pan" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Attribute moving Tilt head: tilt" }),
+		).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Stop driving Tilt head" }));
+		expect(
+			screen.getByRole("button", { name: "Attribute moving Tilt head: Not driven" }),
+		).toBeInTheDocument();
+	});
+
+	it("closes only the topmost window on Escape", () => {
+		const profile = validProfile();
+		profile.modes[0].channels = [blankChannel(profile.modes[0])];
+		render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				onSave={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		openModeEditor();
+		fireEvent.click(screen.getByRole("button", { name: "Edit intensity mapping" }));
+		expect(screen.getByRole("dialog", { name: "intensity mapping" })).toBeVisible();
+
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(
+			screen.queryByRole("dialog", { name: "intensity mapping" }),
+		).not.toBeInTheDocument();
+		expect(screen.getByRole("dialog", { name: "Edit Default mode" })).toBeVisible();
+
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(
+			screen.queryByRole("dialog", { name: "Edit Default mode" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("dialog", { name: "Create fixture profile" }),
+		).toBeVisible();
+	});
+
+	it("sets default, highlight and masters from the table without a channel window", () => {
+		const profile = validProfile();
+		profile.modes[0].channels = [blankChannel(profile.modes[0])];
+		render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				onSave={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		openModeEditor();
+
+		fireEvent.click(screen.getByRole("button", { name: "Masters for intensity" }));
+		const masters = screen.getByRole("dialog", { name: "Masters · intensity" });
+		expect(
+			within(masters)
+				.getAllByRole("switch")
+				.map((control) => control.getAttribute("aria-label")),
+		).toEqual([
+			"React to Sequence Master",
+			"React to Group Master",
+			"React to Grand Master",
+		]);
+		// Virtual intensity is followed, ignored, or followed the other way round.
+		const virtualIntensity = within(masters).getByRole("radiogroup", {
+			name: "React to Virtual Intensity",
+		});
+		expect(
+			within(virtualIntensity)
+				.getAllByRole("radio")
+				.map((choice) => choice.textContent),
+		).toEqual(["Ignore", "Follow", "Inverse"]);
+		fireEvent.click(within(virtualIntensity).getByRole("radio", { name: "Follow" }));
+		expect(
+			screen.getByRole("button", { name: "Masters for intensity" }),
+		).toHaveTextContent("VI · SM · GM · GR");
+		fireEvent.click(within(virtualIntensity).getByRole("radio", { name: "Inverse" }));
+		expect(
+			within(virtualIntensity).getByRole("radio", { name: "Inverse" }),
+		).toHaveAttribute("aria-checked", "true");
+		fireEvent.click(within(masters).getByRole("button", { name: "Close masters" }));
+		expect(
+			screen.getByRole("button", { name: "Masters for intensity" }),
+		).toHaveTextContent("−VI · SM · GM · GR");
+
+		fireEvent.click(screen.getByRole("button", { name: "Default for intensity" }));
+		expect(
+			screen.getByRole("dialog", { name: "intensity default (0–255)" }),
+		).toBeInTheDocument();
 	});
 
 	it("shows a single split's channel table directly without an accordion", () => {

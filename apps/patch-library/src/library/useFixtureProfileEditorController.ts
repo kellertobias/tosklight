@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { FixtureMode, FixtureProfile } from "../wire";
 import {
 	blankMode,
 	cloneProfile,
+	liftMotionAttributes,
 	reorder,
 	validateProfile,
 } from "../sheet/fixtureProfileModel";
@@ -24,37 +25,17 @@ type ControllerOptions = {
 	onClose: () => void;
 };
 
-function useEscapeClose({
-	dialogOpen,
-	modeEditorId,
-	onCloseMode,
-	onRequestClose,
-}: {
-	dialogOpen: boolean;
-	modeEditorId: string | null;
-	onCloseMode: () => void;
-	onRequestClose: () => void;
-}) {
-	useEffect(() => {
-		const keydown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape" || dialogOpen) return;
-			event.preventDefault();
-			event.stopPropagation();
-			if (modeEditorId) onCloseMode();
-			else onRequestClose();
-		};
-		window.addEventListener("keydown", keydown, true);
-		return () => window.removeEventListener("keydown", keydown, true);
-	}, [dialogOpen, modeEditorId, onCloseMode, onRequestClose]);
-}
-
 export function useFixtureProfileEditorController({
 	initialProfile,
 	expectedRevision,
 	onSave,
 	onClose,
 }: ControllerOptions) {
-	const [draft, setDraft] = useState(() => cloneProfile(initialProfile));
+	// Opened the way the desk reads it, with moving parts bound per mode, so an untouched legacy
+	// profile is not reported as changed.
+	const [draft, setDraft] = useState(() =>
+		liftMotionAttributes(cloneProfile(initialProfile)),
+	);
 	const [tab, setTab] = useState<ProfileEditorTab>("identity");
 	const [modeEditorId, setModeEditorId] = useState<string | null>(null);
 	const [modeTab, setModeTab] = useState<ModeEditorTab>("heads");
@@ -65,10 +46,12 @@ export function useFixtureProfileEditorController({
 	const [lookupQuery, setLookupQuery] = useState("");
 	const [closeConfirm, setCloseConfirm] = useState(false);
 	const [revisionConfirm, setRevisionConfirm] = useState(false);
+	/** The mode waiting for the operator to confirm its removal. */
+	const [modeDeleteId, setModeDeleteId] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [localErrors, setLocalErrors] = useState<string[]>([]);
 	const baseline = useMemo(
-		() => JSON.stringify(initialProfile),
+		() => JSON.stringify(liftMotionAttributes(cloneProfile(initialProfile))),
 		[initialProfile],
 	);
 	const dirty = JSON.stringify(draft) !== baseline;
@@ -80,13 +63,10 @@ export function useFixtureProfileEditorController({
 		() => (dirty ? setCloseConfirm(true) : onClose()),
 		[dirty, onClose],
 	);
+	// Escape is the modal stack's: it closes whichever window is on top — a channel's mapping, the
+	// mode, a confirmation — and only then the editor. A handler of the editor's own ran before the
+	// stack and closed the mode from under a window still open inside it.
 	const closeMode = useCallback(() => setModeEditorId(null), []);
-	useEscapeClose({
-		dialogOpen: lookup || closeConfirm || revisionConfirm,
-		modeEditorId,
-		onCloseMode: closeMode,
-		onRequestClose: requestClose,
-	});
 
 	const updateMode = (next: FixtureMode) =>
 		setDraft((current) => ({
@@ -131,7 +111,13 @@ export function useFixtureProfileEditorController({
 				? current
 				: { ...current, modes: reorder(current.modes, from, to) };
 		});
+	/** A mode carries every channel and function of it, so removing one is asked about first. */
+	const requestDeleteMode = (id: string) => {
+		if (draft.modes.length === 1) return;
+		setModeDeleteId(id);
+	};
 	const deleteMode = (id: string) => {
+		setModeDeleteId(null);
 		if (draft.modes.length === 1) return;
 		setDraft((current) => ({
 			...current,
@@ -139,6 +125,9 @@ export function useFixtureProfileEditorController({
 		}));
 		if (modeEditorId === id) closeMode();
 	};
+	const modePendingDelete = modeDeleteId
+		? (draft.modes.find((mode) => mode.id === modeDeleteId) ?? null)
+		: null;
 	const openMode = (mode: FixtureMode) => {
 		setModeEditorId(mode.id);
 		setOpenSplit(mode.splits[0]?.number ?? 1);
@@ -170,7 +159,10 @@ export function useFixtureProfileEditorController({
 		saveNow,
 		addMode,
 		moveMode,
+		requestDeleteMode,
 		deleteMode,
+		modePendingDelete,
+		cancelDeleteMode: () => setModeDeleteId(null),
 		openMode,
 		closeMode,
 		updateMode,

@@ -235,8 +235,15 @@ pub(super) fn scale_channel_raw(
     let max = channel.resolution.max_raw();
     let mut scale = 1.0_f64;
     if !highlighted {
-        if channel.reacts_to_virtual_intensity {
-            scale *= f64::from(scales.virtual_intensity.clamp(0.0, 1.0));
+        if channel.reacts_to_virtual_intensity
+            && let Some(virtual_intensity) = scales.virtual_intensity
+        {
+            let virtual_intensity = f64::from(virtual_intensity.clamp(0.0, 1.0));
+            scale *= if channel.virtual_intensity_inverted {
+                1.0 - virtual_intensity
+            } else {
+                virtual_intensity
+            };
         }
         if channel.reacts_to_sequence_master {
             scale *= f64::from(scales.sequence_master.clamp(0.0, 1.0));

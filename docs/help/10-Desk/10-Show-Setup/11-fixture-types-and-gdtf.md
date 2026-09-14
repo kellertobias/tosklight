@@ -113,7 +113,9 @@ Leave any optics field empty to use the normal appearance for the fixture type.
 
 **Generic body** names one of the bodies ToskLight ships — the full list is in the
 [Model Catalogue](../../99-Appendix/01-model-catalogue.md) — so a PAR 64 long nose is drawn as one
-rather than as whatever its declared type suggests. Leave it on *Guess from the fixture type* and
+rather than as whatever its declared type suggests. Press the field to open the body picker, which
+shows a picture of every body grouped by kind and can be searched by name. Leave it on *Guess from
+the fixture type* and
 the fixture keeps the behaviour it has always had: the body is inferred from the declared type and
 the channels the mode has, which is right for most fixtures and cannot tell a PAR 64 from a PAR 16
 or a two-cell blinder from an eight. A fixture that ships its own visualizer model is drawn with
@@ -121,21 +123,55 @@ that model, whatever the body says.
 
 ### Modes and heads
 
-Modes have stable identities, names, notes, and complete channel configuration. Each row in the full-width Modes list edits that mode's name and notes directly and summarizes its heads, logical channels, and splits. Add modes from the title bar; remove and reorder them with drag-and-drop or the explicit move buttons. The final mode cannot be removed. **Edit channels** opens the nested tabs in this order: **Heads**, **Channels**, **Color**, and **Emitters**.
+Modes have stable identities, names, notes, and complete channel configuration. Each row in the full-width Modes list edits that mode's name and notes directly and summarizes its heads, logical channels, and splits. Add modes from the title bar; reorder them with drag-and-drop. Removing a mode asks for confirmation first, because its heads, channels, and functions go with it; the final mode cannot be removed. **Edit channels** opens the nested tabs in this order: **Heads**, **Channels**, **Control actions**, **Color**, and **Emitters & Motion**.
+
+The path under each editor window's title — for example *Acme Orbit › Modes › Default › Channels*
+— shows where you are among the nested windows. Press an earlier step to close every window below
+it.
 
 Every head has a stable identity and an optional master/shared designation. Heads describe logical emitters, not patch blocks: one head may own channels in several independently patched splits. At most one head is master/shared. A head that still owns channels cannot be removed until those channels are reassigned or removed.
 
-A split is an independently patchable address block configured in Channels. Give each split its footprint there and assign every physical channel to a split; each split gets its own optional universe and address in Show Patch. An unpatched split remains selectable, programmable, and visible but emits no DMX.
+A split is an independently patchable address block configured in Channels. Its footprint follows the slots its channels take up, and every physical channel belongs to one split; each split gets its own optional universe and address in Show Patch. An unpatched split remains selectable, programmable, and visible but emits no DMX.
 
 ![Nested fixture mode editor with Heads, Channels, Color, and Geometry tabs](../../assets/screenshots/workflows/fixture-library-mode-editor.png)
 
 ### Channels
 
-Channels are arranged by split and use the selected attribute registry. Set the physical resolution,
-default and Highlight values, and any continuous, indexed, or control functions. The editor blocks
-invalid footprints and overlapping component slots. Choose a safe home and Highlight look, then
-verify them on the real fixture. Detailed raw-value, color-system, and control-action authoring is
-fixture-developer documentation.
+Channels are arranged by split, one row per DMX slot, in the order the manufacturer's chart lists
+them. Every cell shows its value; press it to open the list or number keypad that changes it. Each
+row has these columns:
+
+- **Attribute** opens a picker with three columns: the encoder group (Intensity, Color, Position,
+  Beam…), the activation group inside it, and the attribute itself — plus **Static** for a slot that
+  is never controlled.
+- **Level** is **Coarse**, **Fine**, **Ultra**, or **Extreme**. A channel is Coarse on its first
+  slot. To make a 16-bit Pan, give two slots the Pan attribute and set the second to **Fine**: it
+  becomes Pan's second byte, and the table shows it as *↳ Pan*. Setting it back to **Coarse** makes
+  it a channel of its own again. A Fine slot needs a coarse slot with the same attribute on the same
+  head to refine; existing default, Highlight, and function values keep their meaning when a byte is
+  added or removed.
+- **Default** and **Highlight** open a number keypad for the raw value.
+- **Mapping** opens the channel's physical range — minimum and maximum, in the unit of the chosen
+  attribute — with the channel's functions as a table underneath. A function's behavior-specific
+  values, such as a fixed value's label or angular motion, open under its row with **Details**.
+- **Invert** and **Snap** switch the channel's inversion and whether it jumps instead of fading.
+- **Masters** opens **React to Virtual Intensity** — **Ignore**, **Follow**, or **Inverse** — and
+  the switches for **React to Sequence Master**, **React to Group Master**, and **React to Grand
+  Master**. **Inverse** makes the channel full while the virtual intensity is at zero and gone at
+  full, for a slot that must do the opposite of the dimmer. The table shows it as *−VI*.
+
+Only the Coarse row carries these settings; a further byte shows a dash. Drag a row by the handle
+beside its slot number, or use its move buttons. The red bin removes a slot after asking, and the
+slots after it move up.
+
+**Add split** and **Add channel** sit in the mode editor's title bar while **Channels** is open; a
+new channel goes into the split that is open. With more than one split, each has a one-line header
+with its name and how many channels it holds — press it to open that split — and its own move and
+remove buttons. A split's footprint follows its slots, so it is never typed. Typed control actions
+have their own **Control actions** tab, with **Add control action** in the title bar. The editor blocks invalid
+footprints and overlapping slots. Choose a safe home and Highlight look, then verify them on the
+real fixture. Detailed raw-value, color-system, and control-action authoring is fixture-developer
+documentation.
 
 A **Static output** channel has no Programmer control. It transmits its authored Default raw value
 during normal output and its separately authored Highlight raw value while Highlight is active, so
@@ -147,12 +183,16 @@ Highlight. A per-fixture Highlight override may replace that Highlight raw value
 Configure the fixture's additive, subtractive, or wheel color system, then use **Generate portable
 presets** in **Control → Special Dialog** when fixed or indexed choices should be added to the show.
 
-### Emitters
+### Emitters & Motion
 
-A mode says which of its heads owns which of the fixture's emitters, and that is the whole of what
-a personality says about geometry. An emitter no head owns is not lit in that mode — which is how
-one personality gives every ring of a wash a head of its own and another drives them all together,
-without either describing the lantern twice.
+A mode says which of its heads owns which of the fixture's emitters, and which attribute moves each
+of its moving parts; that is the whole of what a personality says about geometry. An emitter no
+head owns is not lit in that mode — which is how one personality gives every ring of a wash a head
+of its own and another drives them all together, without either describing the lantern twice.
+
+Under **Moving parts**, press a part's attribute to choose what drives it in this mode, or
+**Not driven** to leave it resting at its centre. A template's pan arm and tilt head start out
+driven by Pan and Tilt in every mode.
 
 ## Geometry
 
@@ -174,9 +214,18 @@ instead, described below.
 Choose a suitable fixture geometry and use the preview to confirm the Stage appearance. Detailed
 model hierarchy, emitter, pivot, and projection authoring is fixture-developer documentation.
 
+The Geometry tab fills the editor window: the part and emitter list, the selected part's
+properties, and the live 3D preview sit side by side, and each scrolls on its own. A part's
+properties are split into tabs — **Generic** (name, parent part, GLB node binding, and **Remove
+part**), **Translation**, **Rotation**, **Scale**, **Pivot**, and **Animate**.
+
+**Animate** makes a part move and describes how: **Motion kind**, **Motion axis**, the physical
+minimum and maximum, and its speeds. It does not name the attribute that drives the part; each mode
+chooses that under **Emitters & Motion**.
+
 An axis that moves — a yoke's pan, a head's tilt — can also declare how fast it actually travels:
 **Top speed**, **Acceleration**, and **Deceleration**, in degrees per second for a rotation and in
-the translation's own unit for a translation. A real lantern does not arrive instantly, and two
+millimetres for a translation. A real lantern does not arrive instantly, and two
 fixtures given the same position at the same moment do not arrive together. Leave the figures
 empty and the axis moves as fast as it is told to, which is how every fixture behaved before.
 

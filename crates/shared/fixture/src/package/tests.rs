@@ -998,18 +998,24 @@ fn assert_moving_lamp_geometry(filename: &str) {
     assert_eq!(nodes[1].glb_node.as_deref(), Some("moving-yoke"));
     assert_eq!(nodes[2].glb_node.as_deref(), Some("moving-head"));
     assert!(nodes[0].motion.is_none());
-    assert!(
-        nodes[1]
+    // The fixture's axes name no attribute: each mode binds pan to the yoke and tilt to the head.
+    assert!(nodes[1..].iter().all(|node| {
+        node.motion
+            .as_ref()
+            .is_some_and(|motion| motion.attribute.is_none())
+    }));
+    let motion_attribute = |graph: &crate::GeometryGraph, index: usize| {
+        graph.nodes[index]
             .motion
             .as_ref()
-            .is_some_and(|motion| *motion.attribute.0 == *"pan")
-    );
-    assert!(
-        nodes[2]
-            .motion
-            .as_ref()
-            .is_some_and(|motion| *motion.attribute.0 == *"tilt")
-    );
+            .and_then(|motion| motion.attribute.clone())
+            .map(|attribute| attribute.0.to_string())
+    };
+    for mode in &mover.modes {
+        let bound = mover.mode_geometry(mode);
+        assert_eq!(motion_attribute(&bound, 1).as_deref(), Some("pan"));
+        assert_eq!(motion_attribute(&bound, 2).as_deref(), Some("tilt"));
+    }
     assert!(nodes[2].transform.translation.y < 0.0);
     assert_eq!(mover.geometry.emitters.len(), 1);
     assert_eq!(mover.geometry.emitters[0].node_id, nodes[2].id);

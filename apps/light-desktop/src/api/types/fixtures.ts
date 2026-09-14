@@ -76,45 +76,14 @@ export interface MultiPatchInstance {
 	installed_appearance?: InstalledFixtureAppearance;
 }
 
-export type InstalledLightSource =
-	| { type: "profile_default" }
-	| { type: "tungsten" }
-	| { type: "halogen" }
-	| { type: "discharge" }
-	| { type: "led" }
-	| { type: "fluorescent" }
-	| { type: "arc" }
-	| { type: "other"; label: string };
-
-export interface GelDefinitionSnapshot {
-	number: string;
-	name: string;
-	display_srgb: string;
-	visualizer_srgb: string;
-}
-
-export type GelAssignment =
-	| { type: "open_white" }
-	| {
-			type: "built_in";
-			catalog_id: string;
-			entry_id: string;
-			embedded_fallback: GelDefinitionSnapshot;
-	  }
-	| {
-			type: "custom";
-			name: string;
-			color_srgb: string;
-			note: string | null;
-	  };
-
-export interface InstalledFixtureAppearance {
-	light_source: InstalledLightSource;
-	color_temperature_kelvin: number | null;
-	luminous_output_lumens: number | null;
-	gel: GelAssignment;
-	shaper_angles_degrees: [number, number, number, number];
-}
+// How an installed copy is drawn belongs with the Stage geometry that draws it.
+export type {
+	GelAssignment,
+	GelDefinitionSnapshot,
+	InstalledFixtureAppearance,
+	InstalledLightSource,
+} from "@tosklight/patch/stage-geometry";
+import type { InstalledFixtureAppearance } from "@tosklight/patch/stage-geometry";
 
 export interface SplitPatch {
 	split: number;

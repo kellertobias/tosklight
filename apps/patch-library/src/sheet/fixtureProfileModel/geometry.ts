@@ -139,7 +139,9 @@ export function geometryTemplate(
  */
 export function modeGeometry(
 	profile: Pick<FixtureProfile, "geometry">,
-	mode: Partial<Pick<FixtureMode, "geometry" | "emitter_heads">>,
+	mode: Partial<
+		Pick<FixtureMode, "geometry" | "emitter_heads" | "motion_attributes">
+	>,
 ): GeometryGraph {
 	// A mode that still carries its own graph is one the lift left alone, and its graph is the
 	// more specific statement. After a lift the mode's graph is empty and this is the fixture's.
@@ -156,8 +158,21 @@ export function modeGeometry(
 			binding.head_id,
 		]),
 	);
+	// A moving part is driven by what this mode binds to it; one it does not bind has no attribute
+	// and rests at its centre, as an emitter no head owns is not lit.
+	const drives = new Map(
+		(mode.motion_attributes ?? []).map((binding) => [
+			binding.node_id,
+			binding.attribute,
+		]),
+	);
 	return {
 		...fixture,
+		nodes: fixture.nodes.map((node) =>
+			node.motion
+				? { ...node, motion: { ...node.motion, attribute: drives.get(node.id) ?? null } }
+				: node,
+		),
 		emitters: fixture.emitters
 			.filter((emitter) => heads.has(emitter.id))
 			.map((emitter) => ({ ...emitter, head_id: heads.get(emitter.id) })),
@@ -166,7 +181,45 @@ export function modeGeometry(
 
 /** The mode as the Stage reads it: its channels, with the fixture's geometry bound to its heads. */
 export function modeWithBoundGeometry<
-	T extends Partial<Pick<FixtureMode, "geometry" | "emitter_heads">>,
+	T extends Partial<
+		Pick<FixtureMode, "geometry" | "emitter_heads" | "motion_attributes">
+	>,
 >(profile: Pick<FixtureProfile, "geometry">, mode: T): T {
 	return { ...mode, geometry: modeGeometry(profile, mode) };
+}
+
+/**
+ * Moves an attribute still written on one of the fixture's moving parts into every mode.
+ *
+ * Profiles written before modes bound their moving parts, and parts a template has just built,
+ * name the driving attribute on the part itself. Each mode that does not already bind the part is
+ * given that attribute, and the part stops carrying it — the counterpart of the read-time migration
+ * in the fixture crate, so the editor shows and saves what the desk would read.
+ */
+export function liftMotionAttributes<T extends Pick<FixtureProfile, "geometry" | "modes">>(
+	profile: T,
+): T {
+	const nodes = profile.geometry?.nodes ?? [];
+	const named = nodes.filter((node) => node.motion?.attribute);
+	if (!named.length || !profile.geometry) return profile;
+	return {
+		...profile,
+		geometry: {
+			...profile.geometry,
+			nodes: nodes.map((node) =>
+				node.motion?.attribute
+					? { ...node, motion: { ...node.motion, attribute: null } }
+					: node,
+			),
+		},
+		modes: profile.modes.map((mode) => {
+			const bound = new Set((mode.motion_attributes ?? []).map((binding) => binding.node_id));
+			const added = named
+				.filter((node) => !bound.has(node.id))
+				.map((node) => ({ node_id: node.id, attribute: node.motion?.attribute ?? "" }));
+			return added.length
+				? { ...mode, motion_attributes: [...(mode.motion_attributes ?? []), ...added] }
+				: mode;
+		}),
+	};
 }

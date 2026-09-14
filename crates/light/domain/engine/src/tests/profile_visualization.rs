@@ -205,6 +205,7 @@ fn calibrated_channel(
         invert,
         snap: false,
         reacts_to_virtual_intensity: false,
+        virtual_intensity_inverted: false,
         reacts_to_sequence_master: false,
         reacts_to_group_master: group,
         reacts_to_grand_master: grand,

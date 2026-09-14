@@ -7,6 +7,12 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 impl GeometryGraph {
+    /// A starting graph for a kind of lantern.
+    ///
+    /// Templates build the fixture's own graph, which names no attribute on its axes: which
+    /// attribute turns an axis is a mode's answer, bound in
+    /// [`FixtureMode::motion_attributes`]. A caller seeding a mode for a template axis binds it
+    /// there.
     pub fn template(template: GeometryTemplate, heads: &[Uuid]) -> Self {
         let root = stable_uuid(&format!("geometry-root-{template:?}"));
         let mut nodes = vec![GeometryNode {
@@ -39,7 +45,7 @@ impl GeometryGraph {
                         max_speed_per_second: None,
                         acceleration_per_second_squared: None,
                         deceleration_per_second_squared: None,
-                        attribute: AttributeKey("pan".into()),
+                        attribute: None,
                         kind: GeometryMotionKind::Rotation,
                         axis: Vector3 {
                             x: 0.0,
@@ -62,7 +68,7 @@ impl GeometryGraph {
                             max_speed_per_second: None,
                             acceleration_per_second_squared: None,
                             deceleration_per_second_squared: None,
-                            attribute: AttributeKey("tilt".into()),
+                            attribute: None,
                             kind: GeometryMotionKind::Rotation,
                             axis: Vector3 {
                                 x: 1.0,
@@ -160,8 +166,10 @@ impl GeometryGraph {
             .map(|node| {
                 let mut transform = node.transform;
                 if let Some(motion) = &node.motion
-                    && let Some(level) = values
-                        .get(&motion.attribute)
+                    && let Some(level) = motion
+                        .attribute
+                        .as_ref()
+                        .and_then(|attribute| values.get(attribute))
                         .and_then(AttributeValue::normalized)
                 {
                     let physical = motion.physical_min
@@ -197,7 +205,8 @@ pub(crate) fn stable_uuid(value: &str) -> Uuid {
 }
 
 impl FixtureProfile {
-    /// This mode's geometry: the fixture's own, with its heads bound to the emitters.
+    /// This mode's geometry: the fixture's own, with its heads bound to the emitters and its
+    /// attributes bound to the axes.
     ///
     /// Every consumer asks for geometry this way, so neither a lifted profile nor one whose modes
     /// still carry their own graph needs to be special-cased anywhere but here.
@@ -220,6 +229,20 @@ impl FixtureProfile {
             // of an eight-lamp blinder is exactly that, and drawing the other four would be a lie.
             emitter.head_id.is_some()
         });
+        let attributes = mode
+            .motion_attributes
+            .iter()
+            .map(|binding| (binding.node_id, &binding.attribute))
+            .collect::<HashMap<_, _>>();
+        for node in &mut bound.nodes {
+            if let Some(motion) = &mut node.motion {
+                // An axis this personality drives with nothing rests where it is, just as an
+                // emitter it drives nothing with is not lit.
+                motion.attribute = attributes
+                    .get(&node.id)
+                    .map(|attribute| (*attribute).clone());
+            }
+        }
         bound
     }
 }

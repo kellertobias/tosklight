@@ -161,7 +161,8 @@ fn logical_heads(
             // virtual-dimmer intensity parameter the operator controls. This reverses the
             // legacy->profile migration, which drops that abstract intensity and instead marks the
             // colour channels reacts_to_virtual_intensity; the resolved definition restores it so
-            // programmer surfaces expose the derived intensity.
+            // programmer surfaces expose the derived intensity. A channel reacting inversely still
+            // reacts, and needs the same intensity to react to.
             let reacts_to_virtual = mode
                 .channels
                 .iter()

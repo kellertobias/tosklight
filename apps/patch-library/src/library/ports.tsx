@@ -1,6 +1,5 @@
 import { createContext, useContext, type ComponentType } from "react";
 import type * as THREE from "three";
-import type { FixtureMode } from "../wire";
 
 /**
  * Picking a photograph, icon, or GLB is the host's business: the desk confines the chooser to its
@@ -14,15 +13,12 @@ export type ProfileAssetPickerProps = {
 };
 
 /**
- * What the fixture-profile editor cannot own itself. Geometry preview needs the host's Stage
- * renderer so the preview and the real Stage agree about what a profile looks like.
+ * What the fixture-profile editor cannot own itself.
+ *
+ * The geometry preview is not one of them: it builds from `@tosklight/patch/stage-geometry`, the
+ * same code the desk's Stage draws a profile with, so every host previews it the same way.
  */
 export type FixtureProfileEditorPorts = {
-	/**
-	 * Absent when the host has no Stage renderer of its own. The geometry graph stays fully
-	 * editable; only the live preview of it is unavailable, and the tab says so.
-	 */
-	buildGeometryPreview?: (mode: FixtureMode) => THREE.Object3D;
 	disposeScene: (scene: THREE.Object3D) => void;
 	AssetPicker: ComponentType<ProfileAssetPickerProps>;
 };

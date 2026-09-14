@@ -423,6 +423,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             invert: false,
             snap: true,
             reacts_to_virtual_intensity: false,
+            virtual_intensity_inverted: false,
             reacts_to_sequence_master: false,
             reacts_to_group_master: false,
             reacts_to_grand_master: false,
@@ -450,6 +451,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             invert: false,
             snap: false,
             reacts_to_virtual_intensity: false,
+            virtual_intensity_inverted: false,
             reacts_to_sequence_master: false,
             reacts_to_group_master: false,
             reacts_to_grand_master: false,
@@ -859,6 +861,74 @@ fn virtual_dimmer_intensity_multiplies_reacting_channels_one_way() {
     assert_eq!(rendered.universes[&1][1], 0);
 
     // One-way: the multiply happens at output; the stored colour value stays untouched.
+    let stored = observed.get(session).unwrap();
+    let red = stored
+        .values
+        .iter()
+        .find(|value| *value.attribute.0 == *"color.red")
+        .unwrap();
+    assert_eq!(red.value, AttributeValue::Normalized(0.8));
+}
+
+/// The inverse of the virtual-dimmer multiply: a channel reacting inversely is scaled by
+/// `1 - intensity` at output, one way. A physical intensity channel flagged the same way is the
+/// virtual intensity's source rather than a reader of it, and is not scaled at all.
+#[test]
+fn inverted_virtual_dimmer_intensity_scales_reacting_channels_by_the_complement_one_way() {
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[
+        ("color.red", false, true, false, false, false),
+        ("intensity", false, true, false, false, false),
+    ]);
+    let mut profile = fixture
+        .definition
+        .profile_snapshot
+        .as_deref()
+        .expect("a test fixture carries its profile")
+        .clone();
+    let mode_id = {
+        let mode = &mut profile.modes[0];
+        for channel in &mut mode.channels {
+            channel.virtual_intensity_inverted = true;
+        }
+        mode.id
+    };
+    fixture.definition = profile.resolved_definition(mode_id).unwrap();
+
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session);
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("color.red".into()),
+        AttributeValue::Normalized(0.8),
+    );
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.25),
+    );
+    let observed = programmers.clone();
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let rendered = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(
+        rendered.universes[&1][0],
+        (0.8f32 * 0.75 * 255.0).round() as u8
+    );
+    assert_eq!(
+        rendered.universes[&1][1],
+        (0.25f32 * 255.0).round() as u8,
+        "an intensity channel is never scaled by its own virtual intensity"
+    );
+
     let stored = observed.get(session).unwrap();
     let red = stored
         .values

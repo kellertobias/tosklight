@@ -129,6 +129,12 @@ pub struct FixtureChannel {
     pub snap: bool,
     #[serde(default)]
     pub reacts_to_virtual_intensity: bool,
+    /// React to virtual intensity inversely: the channel is scaled by `1 - virtual intensity`.
+    ///
+    /// Meaningful only while `reacts_to_virtual_intensity` is set. It suits a channel that has to
+    /// close as the lantern opens, such as a douser or a mechanical blackout flag.
+    #[serde(default)]
+    pub virtual_intensity_inverted: bool,
     #[serde(default)]
     pub reacts_to_sequence_master: bool,
     #[serde(default)]
@@ -159,6 +165,8 @@ struct FixtureModeCanonical {
     geometry: GeometryGraph,
     #[serde(default)]
     emitter_heads: Vec<EmitterHeadBinding>,
+    #[serde(default)]
+    motion_attributes: Vec<MotionAttributeBinding>,
 }
 
 impl<'de> Deserialize<'de> for FixtureMode {
@@ -225,13 +233,19 @@ impl<'de> Deserialize<'de> for FixtureMode {
             control_actions: canonical.control_actions,
             geometry: canonical.geometry,
             emitter_heads: canonical.emitter_heads,
+            motion_attributes: canonical.motion_attributes,
         })
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ChannelScales {
-    pub virtual_intensity: f32,
+    /// The head's virtual intensity, or `None` where no virtual intensity applies to this channel.
+    ///
+    /// `None` is not the same as full: a channel reacting inversely is scaled by
+    /// `1 - virtual intensity`, so a neutral stand-in value would close it. The engine passes
+    /// `None` for a channel whose own active attribute is intensity.
+    pub virtual_intensity: Option<f32>,
     pub sequence_master: f32,
     pub group_master: f32,
     pub grand_master: f32,
@@ -240,7 +254,7 @@ pub struct ChannelScales {
 impl Default for ChannelScales {
     fn default() -> Self {
         Self {
-            virtual_intensity: 1.0,
+            virtual_intensity: None,
             sequence_master: 1.0,
             group_master: 1.0,
             grand_master: 1.0,
@@ -256,6 +270,16 @@ impl Default for ChannelScales {
 pub struct EmitterHeadBinding {
     pub emitter_id: Uuid,
     pub head_id: Uuid,
+}
+
+/// Which attribute drives one of the fixture's motion axes, in this mode.
+///
+/// The axes belong to the fixture; a personality only decides which of its attributes turns
+/// them. An axis a mode binds nothing to rests at its neutral level in that mode.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MotionAttributeBinding {
+    pub node_id: Uuid,
+    pub attribute: AttributeKey,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

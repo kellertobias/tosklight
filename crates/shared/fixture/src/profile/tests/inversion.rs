@@ -68,6 +68,7 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     mode.validate().unwrap();
     (mode, fixture_channel)
@@ -217,6 +218,7 @@ fn typed_control_action_owns_its_exact_channel_without_losing_function_precision
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     let action_attribute = FixtureMode::control_action_attribute(fixture_channel.id);
     let values = HashMap::from([
@@ -276,6 +278,7 @@ fn fixture_facing_cmy_can_map_to_inverted_canonical_rgb_without_reinterpreting_e
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     mode.validate().unwrap();
 

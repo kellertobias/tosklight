@@ -114,6 +114,7 @@ function existingProfile(): FixtureProfile {
 				heads: [],
 				channels: [],
 				color_systems: [],
+				control_actions: [],
 			},
 		],
 	} as unknown as FixtureProfile;
@@ -213,6 +214,72 @@ describe("the Architect fixture library", () => {
 		expect(screen.getByText("No fixtures yet.")).toBeVisible();
 	});
 
+	it("previews the fixture geometry live, as the desk does", async () => {
+		renderWorkspace();
+		await screen.findByRole("button", { name: /^Acme/ });
+		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
+		await screen.findByRole("dialog", { name: "Create fixture profile" });
+
+		fireEvent.click(screen.getByRole("tab", { name: "Geometry" }));
+		fireEvent.click(screen.getByRole("button", { name: "Fixed fixture" }));
+		// The Architect draws with the Stage's own geometry code rather than declining to draw.
+		expect(
+			screen.getByRole("img", {
+				name: "Fixture geometry hierarchy and beams in three dimensions",
+			}),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/no Stage renderer/)).toBeNull();
+	});
+
+	it("keeps the tabs still when a tab brings its own action", async () => {
+		renderWorkspace();
+		await screen.findByRole("button", { name: /^Acme/ });
+		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
+		await screen.findByRole("dialog", { name: "Create fixture profile" });
+
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		const addMode = screen.getByRole("button", { name: "Add mode" });
+		const firstTab = screen.getByRole("tab", { name: "Identity" });
+		// Left of the tabs: the bar is right-aligned, so a button after them would shove them over.
+		expect(
+			addMode.compareDocumentPosition(firstTab) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
+	it("shows where in the editing tree each window is, and walks back up it", async () => {
+		renderWorkspace();
+		await chooseFixture("Acme", "Planning Wash");
+		fireEvent.click(screen.getByRole("button", { name: "Edit as new revision" }));
+		const editor = await screen.findByRole("dialog", {
+			name: "Edit fixture profile",
+		});
+		const path = (scope: HTMLElement) =>
+			within(within(scope).getAllByRole("navigation", { name: "Editing path" })[0])
+				.getAllByRole("listitem")
+				.map((item) => item.textContent);
+		expect(path(editor)).toEqual(["Acme Planning Wash", "Identity"]);
+
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		expect(path(editor)).toEqual(["Acme Planning Wash", "Modes"]);
+
+		fireEvent.click(screen.getByRole("button", { name: "Edit channels for Default" }));
+		const mode = screen.getByRole("dialog", { name: "Edit Default mode" });
+		expect(path(mode)).toEqual([
+			"Acme Planning Wash",
+			"Modes",
+			"Default",
+			within(mode).getByRole("tab", { selected: true }).textContent,
+		]);
+
+		// Choosing an ancestor closes every window below it.
+		fireEvent.click(
+			within(mode).getByRole("button", { name: "Acme Planning Wash" }),
+		);
+		expect(screen.queryByRole("dialog", { name: "Edit Default mode" })).toBeNull();
+		expect(screen.getByRole("dialog", { name: "Edit fixture profile" })).toBeVisible();
+	});
+
 	// The four things an operator has to be able to say about a channel, all in one authored
 	// fixture, because they are not independent: they are the same channel's behaviour.
 	it("authors channel order, indexed positions, virtual-dimmer response and a mixed channel", async () => {
@@ -244,13 +311,37 @@ describe("the Architect fixture library", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Add channel" }));
 		fireEvent.click(screen.getByRole("button", { name: "Add channel" }));
 
-		// The second channel becomes Red, so the two rows are distinguishable.
+		// The second channel becomes Red, so the two rows are distinguishable. The attribute is
+		// chosen by its group first, then by name inside it.
 		let rows = document.querySelectorAll<HTMLElement>(".fixture-channel-row");
-		fireEvent.click(
-			within(rows[1]).getByRole("button", { name: "Edit intensity channel" }),
-		);
-		choose("Channel role", "color · Red");
-		fireEvent.click(screen.getByRole("button", { name: "Close channel editor" }));
+		const chooseAttribute = (slot: number, from: string, group: RegExp, attribute: RegExp) => {
+			fireEvent.click(
+				screen.getByRole("button", { name: `Attribute for slot ${slot}: ${from}` }),
+			);
+			const picker = within(
+				screen.getByRole("dialog", { name: `Attribute · slot ${slot}` }),
+			);
+			// Encoder group, then activation group, then the attribute itself.
+			fireEvent.click(
+				within(picker.getByRole("listbox", { name: "Encoder groups" })).getByRole(
+					"option",
+					{ name: group },
+				),
+			);
+			fireEvent.click(
+				within(picker.getByRole("listbox", { name: "Activation groups" })).getByRole(
+					"option",
+					{ name: attribute },
+				),
+			);
+			fireEvent.click(
+				within(picker.getByRole("listbox", { name: /attributes$/ })).getByRole(
+					"option",
+					{ name: attribute },
+				),
+			);
+		};
+		chooseAttribute(2, "Intensity", /^Color/, /^Red/);
 
 		// Reorder by dragging: Red takes slot 1 and Intensity slot 2.
 		rows = document.querySelectorAll<HTMLElement>(".fixture-channel-row");
@@ -268,43 +359,47 @@ describe("the Architect fixture library", () => {
 			expect.stringContaining("Intensity"),
 		]);
 
-		// The intensity channel reacts to the virtual dimmer, and never fades.
-		rows = document.querySelectorAll<HTMLElement>(".fixture-channel-row");
+		// The intensity channel reacts to the virtual dimmer, and never fades — both set in the table.
+		fireEvent.click(screen.getByRole("button", { name: "Masters for Intensity" }));
 		fireEvent.click(
-			within(rows[1]).getByRole("button", { name: "Edit intensity channel" }),
+			within(
+				screen.getByRole("radiogroup", { name: "React to Virtual Intensity" }),
+			).getByRole("radio", { name: "Follow" }),
 		);
-		fireEvent.click(screen.getByRole("checkbox", { name: /virtual intensity/i }));
-		fireEvent.click(screen.getByRole("checkbox", { name: /Snap/i }));
+		fireEvent.click(screen.getByRole("button", { name: "Close masters" }));
+		fireEvent.click(screen.getByRole("switch", { name: "Snap Intensity" }));
 
-		// One physical channel carrying a dimmer band and a strobe band: a mixed channel.
-		fireEvent.click(screen.getByRole("button", { name: /Channel functions/ }));
+		// One physical channel carrying a dimmer band and a strobe band: a mixed channel. Its
+		// functions are a table under its physical range.
+		// Every cell shows its value and opens a window to change it; the keyboard types into it.
+		const functionRow = (index: number) =>
+			within(document.querySelectorAll<HTMLElement>(".fixture-function-row")[index]);
+		const enter = (index: number, column: string, value: string) => {
+			fireEvent.click(
+				functionRow(index).getByRole("button", { name: new RegExp(`^${column} of`) }),
+			);
+			for (let count = 0; count < 24; count++)
+				fireEvent.keyDown(window, { key: "Backspace" });
+			for (const key of value) fireEvent.keyDown(window, { key });
+			fireEvent.keyDown(window, { key: "Enter" });
+		};
+		fireEvent.click(screen.getByRole("button", { name: "Edit intensity mapping" }));
 		fireEvent.click(screen.getByRole("button", { name: "Add function" }));
-		let names = screen.getAllByLabelText("Function name");
-		fireEvent.change(names[0], { target: { value: "Dimmer" } });
-		setNumber("DMX from", 0);
-		setNumber("DMX to", 127);
+		enter(0, "Name", "Dimmer");
+		enter(0, "DMX from", "0");
+		enter(0, "DMX to", "127");
 
 		fireEvent.click(screen.getByRole("button", { name: "Add function" }));
-		names = screen.getAllByLabelText("Function name");
-		fireEvent.change(names[1], { target: { value: "Strobe slow to fast" } });
-		const froms = screen.getAllByLabelText("DMX from");
-		const tos = screen.getAllByLabelText("DMX to");
-		fireEvent.change(froms[1], { target: { value: "128" } });
-		fireEvent.change(tos[1], { target: { value: "254" } });
+		enter(1, "Name", "Strobe slow to fast");
+		enter(1, "DMX from", "128");
+		enter(1, "DMX to", "254");
 
-		fireEvent.click(
-			screen.getByRole("button", { name: "Close channel functions" }),
-		);
-		fireEvent.click(screen.getByRole("button", { name: "Close channel editor" }));
+		fireEvent.click(screen.getByRole("button", { name: "Close channel mapping" }));
 
 		// A third channel whose DMX range is divided into named positions rather than a percentage.
 		fireEvent.click(screen.getByRole("button", { name: "Add channel" }));
-		rows = document.querySelectorAll<HTMLElement>(".fixture-channel-row");
-		fireEvent.click(
-			within(rows[2]).getByRole("button", { name: "Edit intensity channel" }),
-		);
-		choose("Channel role", "intensity · Shutter / Strobe");
-		fireEvent.click(screen.getByRole("button", { name: /Channel functions/ }));
+		chooseAttribute(3, "Intensity", /^Intensity/, /^Shutter \/ Strobe/);
+		fireEvent.click(screen.getByRole("button", { name: "Edit shutter mapping" }));
 		for (const [index, [name, from, to, raw]] of (
 			[
 				["Shutter closed", 0, 17, 0],
@@ -312,39 +407,24 @@ describe("the Architect fixture library", () => {
 			] as const
 		).entries()) {
 			fireEvent.click(screen.getByRole("button", { name: "Add function" }));
-			fireEvent.change(screen.getAllByLabelText("Function name")[index], {
-				target: { value: name },
-			});
-			fireEvent.change(screen.getAllByLabelText("DMX from")[index], {
-				target: { value: String(from) },
-			});
-			fireEvent.change(screen.getAllByLabelText("DMX to")[index], {
-				target: { value: String(to) },
-			});
-			const behaviours = screen.getAllByText("Function behavior", {
-				selector: "label",
-				exact: true,
-			});
-			const field = behaviours[index].closest(".ui-form-field");
+			enter(index, "Name", name);
+			enter(index, "DMX from", String(from));
+			enter(index, "DMX to", String(to));
 			fireEvent.click(
-				requiredElement(
-					field?.querySelector<HTMLButtonElement>(".ui-select-trigger") ?? null,
-				),
+				functionRow(index).getByRole("button", { name: /^Behavior of/ }),
 			);
 			fireEvent.click(
 				screen.getByRole("option", { name: "Indexed color or gobo" }),
 			);
-			fireEvent.change(screen.getAllByLabelText("Fixture label")[index], {
+			// Only the function just added has its details open, so its fields are the only ones shown.
+			fireEvent.change(screen.getByLabelText("Fixture label"), {
 				target: { value: name },
 			});
-			fireEvent.change(screen.getAllByLabelText("Exact raw value")[index], {
+			fireEvent.change(screen.getByLabelText("Exact raw value"), {
 				target: { value: String(raw) },
 			});
 		}
-		fireEvent.click(
-			screen.getByRole("button", { name: "Close channel functions" }),
-		);
-		fireEvent.click(screen.getByRole("button", { name: "Close channel editor" }));
+		fireEvent.click(screen.getByRole("button", { name: "Close channel mapping" }));
 		fireEvent.click(screen.getByRole("button", { name: "Close mode editor" }));
 
 		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));

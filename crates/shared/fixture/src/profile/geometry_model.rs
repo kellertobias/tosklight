@@ -41,7 +41,18 @@ pub struct Transform3 {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GeometryMotion {
-    pub attribute: AttributeKey,
+    /// Which attribute drives this axis — a mode's answer, not the fixture's.
+    ///
+    /// The yoke belongs to the lantern; which of a personality's channels turns it is the
+    /// personality's business, so a fixture-level axis carries no attribute and
+    /// [`FixtureMode::motion_attributes`](super::FixtureMode::motion_attributes) names it per mode.
+    /// [`FixtureProfile::mode_geometry`](super::FixtureProfile::mode_geometry) stamps that binding
+    /// back here, so every consumer of a mode's graph keeps reading this field.
+    ///
+    /// Retained for profiles written before the attribute left the fixture graph, and for a mode
+    /// that still carries its own graph. An axis with no attribute rests at its neutral level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribute: Option<AttributeKey>,
     pub kind: GeometryMotionKind,
     pub axis: Vector3,
     pub physical_min: f32,

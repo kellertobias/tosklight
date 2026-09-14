@@ -1,8 +1,7 @@
 import type { FixtureMode } from "../wire";
-import { Button } from "@tosklight/ui";
-import { uuid } from "../sheet/fixtureProfileModel";
 import { ControlActionCard } from "./controlActionCard";
 
+/** The mode's typed control actions. New ones are added from the mode editor's title bar. */
 export function ControlActionsEditor({
 	mode,
 	onChange,
@@ -19,29 +18,12 @@ export function ControlActionsEditor({
 		});
 	return (
 		<section className="fixture-control-actions">
-			<header>
-				<h3>Typed control actions</h3>
-				<Button
-					onClick={() =>
-						onChange({
-							...mode,
-							control_actions: [
-								...mode.control_actions,
-								{
-									id: uuid(),
-									name: `Action ${mode.control_actions.length + 1}`,
-									semantic: "custom",
-									kind: "momentary",
-									duration_millis: null,
-									assignments: [],
-								},
-							],
-						})
-					}
-				>
-					Add control action
-				</Button>
-			</header>
+			{!mode.control_actions.length && (
+				<p className="empty-editor-message">
+					This mode has no control actions. Add one — lamp on, reset, a fan setting — from
+					the title bar.
+				</p>
+			)}
 			{mode.control_actions.map((action) => (
 				<ControlActionCard
 					key={action.id}

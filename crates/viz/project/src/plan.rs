@@ -731,9 +731,9 @@ fn motion_axes(geometry: &GeometryGraph) -> MotionAxes {
             min_degrees: motion.physical_min,
             max_degrees: motion.physical_max,
         };
-        match &*motion.attribute.0 {
-            "pan" => axes.pan = Some(axis),
-            "tilt" => {
+        match motion.attribute.as_ref().map(|attribute| &*attribute.0) {
+            Some("pan") => axes.pan = Some(axis),
+            Some("tilt") => {
                 axes.tilt = Some(axis);
                 axes.tilt_node = Some(node.id);
             }

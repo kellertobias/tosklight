@@ -44,6 +44,7 @@ fn exact_raw_values_encode_msb_first_at_every_supported_resolution() {
             control_actions: vec![],
             geometry: GeometryGraph::default(),
             emitter_heads: Vec::new(),
+            motion_attributes: Vec::new(),
         };
         let values = HashMap::from([(
             AttributeKey::intensity(),
@@ -122,6 +123,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
     };
     mode.validate().unwrap();
     let mut values = HashMap::from([
@@ -159,7 +161,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             true,
             Some(220),
             ChannelScales {
-                virtual_intensity: 0.0,
+                virtual_intensity: Some(0.0),
                 sequence_master: 0.0,
                 group_master: 0.5,
                 grand_master: 0.5,
@@ -184,7 +186,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             false,
             None,
             ChannelScales {
-                virtual_intensity: 0.0,
+                virtual_intensity: Some(0.0),
                 sequence_master: 0.0,
                 group_master: 0.0,
                 grand_master: 0.0,
@@ -215,4 +217,97 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
         220,
         "a static physical slot honors its per-instance Highlight override"
     );
+}
+
+/// A channel reacting to virtual intensity inversely closes as the head opens: it is scaled by
+/// `1 - virtual intensity`, inside the function's own range and after inversion as usual.
+/// Highlight bypasses it exactly as it bypasses the ordinary reaction.
+#[test]
+fn inverted_virtual_intensity_reaction_scales_by_the_complement() {
+    let mut profile = FixtureProfile::blank();
+    let mode = &mut profile.modes[0];
+    mode.splits[0].footprint = 1;
+    let mut fixture_channel = channel(mode.heads[0].id, ChannelResolution::U8, vec![]);
+    fixture_channel.attribute = AttributeKey("color.red".into());
+    fixture_channel.fixture_attribute = AttributeKey("color.red".into());
+    fixture_channel.functions = vec![ChannelFunction::continuous(
+        "Red",
+        AttributeKey("color.red".into()),
+        u8::MAX.into(),
+    )];
+    fixture_channel.reacts_to_virtual_intensity = true;
+    fixture_channel.virtual_intensity_inverted = true;
+    fixture_channel.reacts_to_sequence_master = false;
+    fixture_channel.reacts_to_group_master = false;
+    fixture_channel.reacts_to_grand_master = false;
+    mode.channels = vec![fixture_channel.clone()];
+    let mode = mode.clone();
+    let values = HashMap::from([(
+        AttributeKey("color.red".into()),
+        AttributeValue::Normalized(1.0),
+    )]);
+    let scales = |virtual_intensity| ChannelScales {
+        virtual_intensity,
+        ..Default::default()
+    };
+    let resolve = |channel: &FixtureChannel, highlighted, scales| {
+        mode.resolve_channel_raw(channel, &values, highlighted, None, scales)
+    };
+
+    assert_eq!(resolve(&fixture_channel, false, scales(Some(0.25))), 191);
+    assert_eq!(resolve(&fixture_channel, false, scales(Some(1.0))), 0);
+    assert_eq!(resolve(&fixture_channel, false, scales(Some(0.0))), 255);
+    assert_eq!(
+        resolve(&fixture_channel, false, scales(None)),
+        255,
+        "no virtual intensity applies, so nothing scales an inverse reaction either"
+    );
+
+    let mut ordinary = fixture_channel.clone();
+    ordinary.virtual_intensity_inverted = false;
+    assert_eq!(resolve(&ordinary, false, scales(Some(0.25))), 64);
+    assert_eq!(resolve(&ordinary, false, scales(None)), 255);
+
+    let mut not_reacting = fixture_channel.clone();
+    not_reacting.reacts_to_virtual_intensity = false;
+    assert_eq!(
+        resolve(&not_reacting, false, scales(Some(0.25))),
+        255,
+        "the inverse flag means nothing unless the channel reacts"
+    );
+
+    let mut inverted_range = fixture_channel.clone();
+    inverted_range.invert = true;
+    assert_eq!(resolve(&inverted_range, false, scales(Some(0.25))), 64);
+
+    assert_eq!(
+        resolve(&fixture_channel, true, scales(Some(1.0))),
+        255,
+        "Highlight bypasses an inverse reaction to virtual intensity"
+    );
+    assert_eq!(
+        mode.resolve_channel_raw(
+            &fixture_channel,
+            &values,
+            true,
+            Some(220),
+            scales(Some(1.0))
+        ),
+        220
+    );
+}
+
+/// Every channel written before the inverse reaction existed reacts the ordinary way, and the flag
+/// is always written alongside its sibling flags.
+#[test]
+fn virtual_intensity_inversion_defaults_off_and_is_always_written() {
+    let fixture_channel = channel(Uuid::new_v4(), ChannelResolution::U8, vec![]);
+    let mut encoded = serde_json::to_value(&fixture_channel).unwrap();
+    assert_eq!(encoded["virtual_intensity_inverted"], false);
+    encoded
+        .as_object_mut()
+        .unwrap()
+        .remove("virtual_intensity_inverted");
+    let legacy: FixtureChannel = serde_json::from_value(encoded).unwrap();
+    assert!(!legacy.virtual_intensity_inverted);
 }

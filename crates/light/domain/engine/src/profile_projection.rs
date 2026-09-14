@@ -352,6 +352,7 @@ fn resolve_head_without_overlays(
                             active.key,
                         )
                     })
+                    // See `sequence_master_scale` for why a reacting channel skips this master.
                     .filter(|master| {
                         !channel.reacts_to_virtual_intensity
                             || intensity_master
@@ -360,11 +361,9 @@ fn resolve_head_without_overlays(
                     .map(|master| master.scale)
                     .unwrap_or(1.0);
                 ChannelScales {
-                    virtual_intensity: if active.is_some_and(|active| active.is_intensity) {
-                        1.0
-                    } else {
-                        virtual_intensity
-                    },
+                    // An intensity channel is the virtual intensity's source, not a reader of it.
+                    virtual_intensity: (!active.is_some_and(|active| active.is_intensity))
+                        .then_some(virtual_intensity),
                     sequence_master,
                     group_master: group_scale,
                     grand_master: grand_master(fixture, options),
@@ -676,11 +675,9 @@ fn resolve_channels(context: ChannelResolutionContext<'_>, channels: &mut Vec<(u
             |active| {
                 let sequence_master =
                     sequence_master_scale(channel, active, context.inputs, intensity_master);
-                let channel_intensity = if active.is_some_and(AttributeKey::is_intensity) {
-                    1.0
-                } else {
-                    context.virtual_intensity
-                };
+                // An intensity channel is the virtual intensity's source, not a reader of it.
+                let channel_intensity = (!active.is_some_and(AttributeKey::is_intensity))
+                    .then_some(context.virtual_intensity);
                 ChannelScales {
                     virtual_intensity: channel_intensity,
                     sequence_master,
@@ -697,6 +694,13 @@ fn resolve_channels(context: ChannelResolutionContext<'_>, channels: &mut Vec<(u
     }))
 }
 
+/// The attribute's own sequence master, unless it already reaches the channel another way.
+///
+/// A channel reacting to virtual intensity already follows the intensity sequence master through
+/// the virtual intensity, so the same master is not applied a second time directly. That holds
+/// for an inverted reaction too: the master reaches it through `1 - virtual intensity`, and
+/// applying it directly as well would pull an inverse channel down with the very master that is
+/// meant to open it.
 fn sequence_master_scale(
     channel: &FixtureChannel,
     active: Option<&AttributeKey>,

@@ -95,6 +95,12 @@ pub struct AttributeDescriptorDto {
     pub cyclic: bool,
     pub recordable: bool,
     pub built_in: bool,
+    /// The programmer tab the recommended layout puts the attribute on; the channel editor's
+    /// attribute picker narrows by it first.
+    pub encoder_group: Option<light_core::EncoderGroup>,
+    /// The recommended activation group, which the channel editor offers attributes under.
+    pub activation_group_id: Option<String>,
+    pub activation_group_label: Option<String>,
 }
 
 type Answer<T> = Result<T, String>;
@@ -802,20 +808,32 @@ pub fn fixture_body_catalogue() -> Vec<BodyModelDto> {
 /// from. Show-specific custom attributes are a desk concern and are deliberately absent.
 #[tauri::command]
 pub fn attribute_registry() -> Vec<AttributeDescriptorDto> {
+    // No show is open to have arranged its own groups, so the grouping is the recommended one.
+    let configuration = light_core::AttributeConfiguration::recommended();
     light_core::ATTRIBUTE_REGISTRY
         .iter()
         .filter(|descriptor| !light_core::built_in_attribute_is_retired(descriptor.id))
-        .map(|descriptor| AttributeDescriptorDto {
-            id: descriptor.id.into(),
-            label: descriptor.label.into(),
-            family: descriptor.family,
-            value_type: descriptor.value_type,
-            default_unit: descriptor.default_unit.map(str::to_owned),
-            display_unit: descriptor.display_unit.map(str::to_owned),
-            physical_unit: descriptor.physical_unit.map(str::to_owned),
-            cyclic: descriptor.cyclic,
-            recordable: descriptor.recordable,
-            built_in: true,
+        .map(|descriptor| {
+            let key = light_core::AttributeKey(descriptor.id.into());
+            let group = configuration.activation_group_for(&key);
+            let encoder_group = configuration
+                .placement_for(&key)
+                .map(|placement| placement.group);
+            AttributeDescriptorDto {
+                id: descriptor.id.into(),
+                label: descriptor.label.into(),
+                family: descriptor.family,
+                value_type: descriptor.value_type,
+                default_unit: descriptor.default_unit.map(str::to_owned),
+                display_unit: descriptor.display_unit.map(str::to_owned),
+                physical_unit: descriptor.physical_unit.map(str::to_owned),
+                cyclic: descriptor.cyclic,
+                recordable: descriptor.recordable,
+                built_in: true,
+                encoder_group,
+                activation_group_id: group.map(|group| group.id.clone()),
+                activation_group_label: group.map(|group| group.label.clone()),
+            }
         })
         .collect()
 }
