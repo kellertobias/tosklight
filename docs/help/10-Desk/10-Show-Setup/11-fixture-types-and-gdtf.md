@@ -190,8 +190,9 @@ of its moving parts; that is the whole of what a personality says about geometry
 head owns is not lit in that mode — which is how one personality gives every ring of a wash a head
 of its own and another drives them all together, without either describing the lantern twice.
 
-Under **Moving parts**, press a part's attribute to choose what drives it in this mode, or
-**Not driven** to leave it resting at its centre. A template's pan arm and tilt head start out
+Under **Moving parts**, press a part to choose which of this mode's channels drives it. Only
+attributes the mode's channels carry are offered, each once with the slots that carry it, plus
+**Not driven** to leave the part resting where it is drawn. A template's pan arm and tilt head start out
 driven by Pan and Tilt in every mode.
 
 ## Geometry

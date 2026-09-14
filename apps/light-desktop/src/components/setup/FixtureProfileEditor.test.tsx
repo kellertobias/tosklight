@@ -1352,10 +1352,18 @@ describe("FixtureProfileEditor head and channel editing", () => {
 		});
 	});
 
-	it("chooses per mode which attribute moves each moving part", () => {
+	it("chooses per mode which of its channels moves each moving part", () => {
+		const profile = validProfile();
+		const mode = profile.modes[0];
+		mode.splits[0].footprint = 3;
+		mode.channels = ["pan", "tilt", "intensity"].map((attribute) => ({
+			...blankChannel(mode),
+			attribute,
+			fixture_attribute: attribute,
+		}));
 		render(
 			<FixtureProfileEditor
-				initialProfile={validProfile()}
+				initialProfile={profile}
 				manufacturers={[]}
 				onSave={vi.fn()}
 				onClose={vi.fn()}
@@ -1369,15 +1377,27 @@ describe("FixtureProfileEditor head and channel editing", () => {
 		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
 		openModeEditor("Emitters & Motion");
 		expect(
-			screen.getByRole("button", { name: "Attribute moving Pan arm: pan" }),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Attribute moving Tilt head: tilt" }),
+			screen.getByRole("button", { name: "Channel moving Pan arm: pan" }),
 		).toBeInTheDocument();
 
-		fireEvent.click(screen.getByRole("button", { name: "Stop driving Tilt head" }));
+		// The choice is this mode's channels, each attribute once with where it sits — not the registry.
+		fireEvent.click(
+			screen.getByRole("button", { name: "Channel moving Tilt head: tilt" }),
+		);
+		const channels = screen.getByRole("listbox", { name: "Channel · Tilt head" });
 		expect(
-			screen.getByRole("button", { name: "Attribute moving Tilt head: Not driven" }),
+			within(channels)
+				.getAllByRole("option")
+				.map((option) => option.textContent),
+		).toEqual([
+			"Not drivenRests where it is drawn",
+			"panslot 1",
+			"tiltslot 2",
+			"intensityslot 3",
+		]);
+		fireEvent.click(within(channels).getByRole("option", { name: /^Not driven/ }));
+		expect(
+			screen.getByRole("button", { name: "Channel moving Tilt head: Not driven" }),
 		).toBeInTheDocument();
 	});
 
