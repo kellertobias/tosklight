@@ -37,7 +37,7 @@ see what the Visualizer draws, and the rig the product demonstration video is sh
 
 ## Rename the show
 
-A show has a name of its own, separate from its file. The **Show** page shows it over the rig
+A show has a name of its own, separate from its file. The **Show** page of **Settings** shows it over the rig
 overview, with a pencil beside it. Press the pencil, type the new name, and press Enter or click
 away to keep it; Escape leaves the name as it was, and an empty name changes nothing. The name is
 what a desk's **Load Show** menu offers, so a renamed show is offered under its new name at once.
@@ -45,9 +45,10 @@ The file keeps its name; **Save As** writes the show to a new one.
 
 ## Configure the fixtures the rig is made of
 
-**Fixtures** sits at the foot of the dock beside **Settings**, apart from the show's own screens,
-because the fixture library belongs to the computer rather than to the document. The screen is
-available with no show open, and every show planned here afterwards patches from what is in it.
+**Fixtures** is a page of **Settings**, at the foot of the dock, rather than one of the show's own
+screens, because the fixture library belongs to the computer rather than to the document. The page
+is available with no show open, and every show planned here afterwards patches from what is in it.
+Its **Create fixture** action and search sit left of the Settings pages in the one title.
 
 The library reads in three columns — **Manufacturer**, **Fixture**, and **Fixture info** — so each
 column offers only what the column to its left has already chosen. Choose a manufacturer to see its
@@ -78,6 +79,17 @@ its editor.
 
 ## Editing the patch sheet
 
+The dock has four screens: **CAD**, **Patch**, **Venue** and **Media**. **Patch** lists every
+fixture with a DMX address, lamps and effect devices — lasers, foggers, particle effects and
+patched scenery — alike; **Venue** lists the objects that are placed but not patched. The **Patch**
+title has two tabs: **Sheet** is the patch sheet, and **DMX** is the address grid described in
+"The Patch screen's DMX tab" below.
+
+**Settings**, below the screens, holds the pages that are not a view of the rig: **Show** (the file
+actions and the rig overview), **Visualizer**, **Fixtures**, **DMX** and **MCP**. **Visualizer** is
+one page of boxes, two to a row: **Lamp** and **Laser** atmosphere, then **Rendering**,
+**Features** and **Picture**.
+
 Click a column header to order the sheet by that column, for example **Fixture ID** or **Patch**;
 click it again to reverse the order. An arrow marks the column the sheet is ordered by. **Patch**
 orders by universe, then address. Fixtures with nothing in the column, such as unpatched fixtures
@@ -86,9 +98,9 @@ order. Shift and drag ranges follow the order the sheet shows. The sheet opens o
 Fixture ID.
 
 Choose which columns the sheet shows from the window's **Settings** (⚙) under **Columns**; the last
-visible column cannot be switched off. Patch, Venue and Effects each remember their own columns on
-this computer. The title also offers three quick views, which only the Architect has — the desk's
-Show Patch window does not:
+visible column cannot be switched off. Patch and Venue each remember their own columns on this
+computer. Above the switches, **View** offers three quick views, which only the Architect has — the
+desk's Show Patch window does not:
 
 - **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Masters, Invert Pan,
   Invert Tilt, MIB, Layer and Note.
@@ -107,8 +119,8 @@ is kept when the object is edited here or on the desk.
 top** or **Motor on bottom**; the end without the motor has a steelflex. The Visualizer draws each object with what was chosen for it, and a desk shows and edits the
 same columns in **Show Patch**.
 
-The quick view whose columns the sheet shows exactly is highlighted; changing a single column in
-Settings leaves no view highlighted.
+**View** names the quick view whose columns the sheet shows exactly; changing a single column
+leaves it reading **Custom**.
 
 **Masters** says which masters reduce a fixture: `none`, `group` (the Group Masters only), `grand`
 (the Grand Master only) or `both`. Click it to choose another value; anything short of `both`
@@ -203,18 +215,22 @@ each naming its own machine; hovering one shows the address it was found at.
 What arrives is a copy. Patching it here does not reach the desk, and the desk does not know the
 copy exists. To send work back, use **Load from Visualizer** in the desk's **Load Show** menu.
 
-## The DMX screen
+## The Patch screen's DMX tab
 
-**DMX**, at the foot of the sidebar below **Fixtures**, opens the editor's DMX screen, with four tabs across its title:
+The **DMX** tab in the **Patch** title shows every channel of every patched universe as a grid of
+numbered cells. A cell is lit when a fixture, one of its splits, or one of its multi-patches
+occupies that address and dark when nothing does. The addresses of one fixture share a single
+outline, a fixture's first address carries a mark on its left edge, so neighbouring fixtures stay
+apart, and an address two patches share is drawn in orange. Select a cell to see which fixture owns
+it, its patch range, split, fixture channel and attribute, and the address's DIP-switch setting.
+**Sheet** returns to the patch sheet.
+
+## The DMX settings page
+
+**DMX** is a page of **Settings**. Its own three tabs sit left of the Settings pages in the title:
 
 * **Network** configures where the show's DMX arrives from: the network interface this computer
   receives it on, and the live DMX inputs described below.
-* **Patch** shows every channel of every patched universe as a grid of numbered cells. A cell is
-  lit when a fixture, one of its splits, or one of its multi-patches occupies that address and dark
-  when nothing does. The addresses of one fixture share a single outline, a fixture's first address
-  carries a mark on its left edge, so neighbouring fixtures stay apart, and an address two patches
-  share is drawn in orange. Select a cell to see which fixture owns it, its patch range, split,
-  fixture channel and attribute, and the address's DIP-switch setting.
 * **Values** is the desk's **DMX Output** window applied to the DMX this machine receives. Each
   universe the show patches or listens on is a row of dots, one for every channel, that brighten
   with the received level. A patched channel's dot has a grey outline and an unpatched one a dark
@@ -249,7 +265,7 @@ while a Visualizer on the same computer is receiving Art-Net.
 
 A computer with more than one network — a lighting network beside an office or venue network, or
 two lighting networks — can receive DMX on only the one that carries it. The **Input Interfaces**
-section at the top of the **DMX** screen's **Network** tab has one choice per protocol:
+section at the top of the **DMX** settings page's **Network** tab has one choice per protocol:
 
 * **Art-Net interface** and **sACN interface** each offer **All interfaces**, the default, and
   every network interface this computer has, by its system name and IPv4 address — for example
@@ -271,7 +287,7 @@ seconds of being connected.
 
 ## Configure live DMX inputs
 
-The **DMX** screen's **Network** tab maps a logical show universe to the Art-Net or
+The **DMX** settings page's **Network** tab maps a logical show universe to the Art-Net or
 sACN universe the separate Visualizer output receives. Each mapping can be enabled or disabled
 and carries its protocol, wire universe, delivery mode, and UDP port. Art-Net offers Broadcast or
 Unicast; sACN offers Multicast or Unicast. Choose **Apply** to store the mappings in the portable
@@ -385,6 +401,19 @@ in.
 Each print page carries its own switches for the drawings on its axis, beside the page's cut
 planes. A page prints every drawing of its axis unless you switch one off, which is also what a
 page saved before drawings could be placed does.
+
+## Add venue objects from the CAD screen
+
+The **CAD** screen has a toolbar under its title for building the venue while looking at the
+drawing:
+
+* **+ Truss** opens the fixture library on rigging, searched for trusses.
+* **+ Stage element** opens it on Venue objects, searched for stage decks, stairs and railings.
+* **+ Venue element** opens it on every object that is placed but not patched, such as curtains,
+  crowds and imported models.
+
+Choosing an object places it exactly as **+ Add fixture** on the **Venue** screen does, and the
+drawing shows it at once. Clear the search to choose anything else the filter offers.
 
 ## Place your own venue models
 
