@@ -24,6 +24,8 @@ Add scenery through **Show > Show Patch**. Choose a visual-only profile from the
 
 Stage does not maintain a second scene-asset collection. Standalone MVR geometry is reported as an import warning; recreate required scenery with Venue fixtures so it remains visible and editable through Patch and the Fixture Library.
 
+A venue model that is not in the fixture library — the hall itself, a stage build, a set piece — is imported as a GLB file on the **Venue** screen of ToskLight PreViz with **+ Import 3D model**. It is still a Venue object: it lives in the show under the manufacturer **Imported models**, appears in Show Patch with its `0.x` ID, and is positioned, rotated, layered, and drawn like the shipped ones. See [Place your own venue models](../../20-ToskLight-PreViz/06-planning-and-transfer.md#place-your-own-venue-models).
+
 The Stage, the PreViz Renderer and ToskLight Architect all draw the same Venue fixtures, and hiding a patch layer hides its scenery and crowds as well as its lights. Shows copied from an older Demo Show also carried a second set of standalone scenery records that no screen listed; opening such a show removes them once its patch holds its own Venue fixtures, so the renderer no longer draws scenery that is not in the patch.
 
 ## Visualization limits

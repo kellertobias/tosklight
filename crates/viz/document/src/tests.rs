@@ -65,12 +65,47 @@ fn rig(name: &str) -> Rig {
     }
 }
 
+/// A venue model imported into a show has no library entry: the show alone carries its profile.
+#[test]
+fn a_profile_kept_only_in_the_show_patches_and_reopens_without_a_library() {
+    let path = temp_path("show-only-profile");
+    let document = PlanningDocument::create(&path, "Venue show").expect("create show");
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Imported models".into();
+    profile.name = "Hall".into();
+    profile.short_name = "Hall".into();
+    let reference = PatchedFixtureProfileReference {
+        profile_id: profile.id,
+        profile_revision: Revision::from(profile.revision),
+        mode_id: profile.modes[0].id,
+    };
+    let body = serde_json::to_value(&profile).expect("profile JSON");
+    document
+        .retain_fixture_profile(body.clone())
+        .expect("keep the profile in the show");
+    document
+        .retain_fixture_profile(body)
+        .expect("keeping the same revision again changes nothing");
+    document
+        .patch_fixtures(patch_one(document.show_id(), reference))
+        .expect("patched from the show's own profile");
+    drop(document);
+
+    let reopened = PlanningDocument::open(&path).expect("reopen without a library");
+    let snapshot = reopened.patch_snapshot().expect("snapshot");
+    assert_eq!(snapshot.fixtures.len(), 1);
+    assert_eq!(snapshot.fixtures[0].profile.profile_id, profile.id);
+    drop(reopened);
+    let _ = std::fs::remove_file(&path);
+}
+
 fn patch_one(show_id: ShowId, profile: PatchedFixtureProfileReference) -> PatchFixturesCommand {
     PatchFixturesCommand {
         show_id,
         fixtures: vec![PatchFixtureCandidate {
             profile,
             patch: PatchedFixturePatch {
+                scenery_options: Default::default(),
                 scenery_size_metres: None,
                 fixture_id: FixtureId(Uuid::new_v4()),
                 fixture_number: Some(1),

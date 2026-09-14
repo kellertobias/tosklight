@@ -1362,6 +1362,41 @@ describe("the Viz editor window", () => {
 		expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
 	});
 
+	it("imports a 3D model on the Venue screen, where only Venue offers it", async () => {
+		vi.mocked(dialog.open).mockResolvedValue("/models/Hall.glb");
+		const base = invoke.getMockImplementation();
+		invoke.mockImplementation((command: string, payload?: unknown) =>
+			command === "import_venue_model"
+				? Promise.resolve({ fixtureId: "5f0c1a5e-0000-4000-8000-000000000001", name: "Hall", triangles: 12 })
+				: base?.(command, payload),
+		);
+		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+		await screen.findByRole("columnheader", { name: "Fixture ID" });
+		expect(
+			screen.queryByRole("button", { name: "+ Import 3D model" }),
+		).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "+ Import 3D model" }),
+		);
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("import_venue_model", {
+				path: "/models/Hall.glb",
+				layerId: "default",
+			}),
+		);
+		expect(dialog.open).toHaveBeenCalledWith(
+			expect.objectContaining({
+				filters: [expect.objectContaining({ extensions: ["glb"] })],
+			}),
+		);
+		expect(
+			await screen.findByText(/3D model placed at the stage origin/),
+		).toBeInTheDocument();
+	});
+
 	it("presents Patch, Venue, and Effects through the same patch surface", async () => {
 		renderApp();
 		for (const screenName of ["Patch", "Venue", "Effects"] as const) {

@@ -282,13 +282,26 @@ pub fn decode_gobo_artwork(bytes: &[u8]) -> Result<viz_scene::GoboArtwork, Strin
 }
 
 /// Read a profile's `model_asset`, which the fixture library stores as a data URL.
+#[cfg(test)]
 pub(super) fn read_model_asset(asset: &str) -> Result<viz_scene::FixtureModel, String> {
+    read_model_asset_within(asset, None)
+}
+
+/// Read a model asset, allowing `max_triangles` when given instead of a lamp body's limit.
+pub(super) fn read_model_asset_within(
+    asset: &str,
+    max_triangles: Option<usize>,
+) -> Result<viz_scene::FixtureModel, String> {
     let encoded = asset
         .split_once(";base64,")
         .map(|(_, encoded)| encoded)
         .ok_or_else(|| "the model asset is not an inline data URL".to_owned())?;
     let bytes = decode_base64(encoded).ok_or_else(|| "the model asset is not base64".to_owned())?;
-    let model = viz_scene::read_glb(&bytes).map_err(|error| error.0)?;
+    let model = match max_triangles {
+        Some(limit) => viz_scene::read_glb_with_limit(&bytes, limit),
+        None => viz_scene::read_glb(&bytes),
+    }
+    .map_err(|error| error.0)?;
     Ok(model)
 }
 
@@ -345,8 +358,11 @@ pub(super) fn resolve_model(
     match models.entry((fixture.profile.id, mode.id)) {
         std::collections::hash_map::Entry::Occupied(entry) => *entry.get(),
         std::collections::hash_map::Entry::Vacant(entry) => {
+            // A visual-only profile's model is venue — a room or a set — not a lamp body.
+            let limit = (fixture.profile.patch_policy == light_fixture::PatchPolicy::VisualOnly)
+                .then_some(viz_scene::VENUE_MODEL_MAX_TRIANGLES);
             let resolved = match fixture.profile.model_asset.as_deref() {
-                Some(asset) => match read_model_asset(asset) {
+                Some(asset) => match read_model_asset_within(asset, limit) {
                     Ok(mut model) => {
                         super::geometry_pose::apply_profile_model_pose(
                             &mut model,

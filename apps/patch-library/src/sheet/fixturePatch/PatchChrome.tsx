@@ -24,12 +24,43 @@ import {
 	quickViewHiddenColumns,
 } from "./patchColumns";
 
+const IMPORTING_VENUE_MODEL = "Importing 3D model…";
+
+/** Bring in a 3D model the fixture library does not have, and select the object it placed. */
+async function importVenueModel(
+	controller: PatchController,
+	setStatus: (status: string) => void,
+) {
+	const { ui, props } = controller;
+	if (!props.onImportVenueModel) return;
+	const layerId =
+		ui.activeLayer === "all" || ui.activeLayer === NO_LAYER_ID
+			? "default"
+			: ui.activeLayer;
+	setStatus(IMPORTING_VENUE_MODEL);
+	try {
+		const fixtureId = await props.onImportVenueModel(layerId);
+		if (!fixtureId) {
+			setStatus("");
+			return;
+		}
+		ui.setSelectedFixture(fixtureId);
+		setStatus(
+			"3D model placed at the stage origin. Set its location and rotation in the sheet.",
+		);
+	} catch (reason) {
+		setStatus(`Could not import the 3D model: ${String(reason)}`);
+	}
+}
+
 export function PatchHeader() {
 	const controller = usePatchController();
 	const { data, ui, editArmed, props } = controller;
 	const selected = data.selected;
 	const activeLayer = data.layers.find((layer) => layer.id === ui.activeLayer);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
+	// Reading and checking a large model takes a moment, and its refusal says why: neither is silent.
+	const [importStatus, setImportStatus] = useState("");
 	return (
 		<>
 		<WindowHeader
@@ -75,33 +106,7 @@ export function PatchHeader() {
 							: []),
 					],
 				},
-				{
-					id: "patch-create",
-					actions: [
-						{
-							id: "layer",
-							label: "+ Add layer",
-							onPress: () => ui.setLayerModal("add"),
-						},
-						{
-							id: "fixture",
-							label: "+ Add fixture",
-							onPress: () => ui.setBrowserOpen(true),
-						},
-						// A Venue object is placed one object at a time and has no copies, so the Venue screen does
-						// not offer them at all.
-						...(props.scope === "venue"
-							? []
-							: [
-									{
-										id: "multipatch",
-										label: "+ Add multi-patch",
-										disabled: !data.selected || isVisualOnly(data.selected.definition),
-										onPress: () => void addMultipatch(controller),
-									},
-								]),
-					],
-				},
+				patchCreateGroup(controller, importStatus, setImportStatus),
 				{
 					id: "patch-edit",
 					actions: [
@@ -161,6 +166,11 @@ export function PatchHeader() {
 				},
 			]}
 		/>
+		{importStatus ? (
+			<p className="patch-status" role="status">
+				{importStatus}
+			</p>
+		) : null}
 		{settingsAnchor ? (
 			<PatchColumnSettings anchor={settingsAnchor} onClose={() => setSettingsAnchor(null)} />
 		) : null}
@@ -175,6 +185,52 @@ function patchHeaderInfo({ data, patch, library }: PatchController) {
 		secondary:
 			patch.error ??
 			(unresolved ? `${unresolved} unresolved MVR fixtures excluded from output` : undefined),
+	};
+}
+
+/** What the sheet adds: layers, fixtures, a Venue model from a file, and multi-patch copies. */
+function patchCreateGroup(
+	controller: PatchController,
+	importStatus: string,
+	setImportStatus: (status: string) => void,
+) {
+	const { data, ui, props } = controller;
+	return {
+		id: "patch-create",
+		actions: [
+			{
+				id: "layer",
+				label: "+ Add layer",
+				onPress: () => ui.setLayerModal("add"),
+			},
+			{
+				id: "fixture",
+				label: "+ Add fixture",
+				onPress: () => ui.setBrowserOpen(true),
+			},
+			...(props.scope === "venue" && props.onImportVenueModel
+				? [
+						{
+							id: "import-venue-model",
+							label: "+ Import 3D model",
+							disabled: importStatus === IMPORTING_VENUE_MODEL,
+							onPress: () => void importVenueModel(controller, setImportStatus),
+						},
+					]
+				: []),
+			// A Venue object is placed one object at a time and has no copies, so the Venue screen does
+			// not offer them at all.
+			...(props.scope === "venue"
+				? []
+				: [
+						{
+							id: "multipatch",
+							label: "+ Add multi-patch",
+							disabled: !data.selected || isVisualOnly(data.selected.definition),
+							onPress: () => void addMultipatch(controller),
+						},
+					]),
+		],
 	};
 }
 

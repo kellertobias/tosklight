@@ -482,6 +482,15 @@ export const documentSession = {
 	 */
 	networkSources: () => invoke<NetworkSources>("network_sources"),
 	stopNetworkSources: () => invoke<void>("stop_network_sources"),
+	/**
+	 * Import a GLB from this computer as a venue object of the open show, placed at the stage
+	 * origin on `layerId`. The model is kept in the show, not in the fixture library.
+	 */
+	importVenueModel: (path: string, layerId: string | null) =>
+		invoke<{ fixtureId: string; name: string; triangles: number }>(
+			"import_venue_model",
+			{ path, layerId },
+		),
 	/** Take a copy of that desk's show and open it here. */
 	loadFromDesk: (instance: string) =>
 		invoke<DocumentSummary>("load_from_desk", { instance }),

@@ -18,6 +18,7 @@ mod portable;
 mod recent;
 mod session;
 mod underlay;
+mod venue_models;
 mod verify;
 mod visualizer;
 mod windows;
@@ -259,6 +260,7 @@ fn main() {
             dmx_input::network_interfaces,
             network_sources::network_sources,
             network_sources::stop_network_sources,
+            venue_models::import_venue_model,
         ])
         .setup(|app| {
             // Before the window is shown, so the tile never appears and then disappears.

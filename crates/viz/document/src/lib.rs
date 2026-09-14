@@ -257,6 +257,17 @@ impl PlanningDocument {
         Ok(())
     }
 
+    /// Keeps a fixture profile revision in the show without it passing through the fixture library.
+    ///
+    /// The patch resolves a profile from the show first, so a profile that exists only here — a
+    /// venue model imported straight into the show — can be patched, saved, copied and reopened
+    /// on a machine that has never seen it. Keeping an identical revision again changes nothing.
+    pub fn retain_fixture_profile(&self, profile: serde_json::Value) -> Result<(), DocumentError> {
+        let revision = light_show::FixtureProfileRevision::from_profile(profile)?;
+        self.store()?.insert_fixture_profile_revision(&revision)?;
+        Ok(())
+    }
+
     /// Deletes one optional stored object. Missing objects are an idempotent no-op.
     pub fn delete_object(&self, kind: &str, id: &str) -> Result<bool, DocumentError> {
         Ok(self.store()?.delete_object(kind, id)?)

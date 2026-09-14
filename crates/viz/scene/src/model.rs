@@ -178,16 +178,32 @@ const CHUNK_BIN: u32 = 0x004e_4942;
 /// A lamp body is a prop, not a hero asset. Anything past this is a modelling mistake and would
 /// cost the operator frames for detail nobody can see at stage distance.
 const MAX_TRIANGLES: usize = 120_000;
+/// A venue model is the room itself — a hall, a stage, a set — drawn once rather than once per
+/// lantern, so it may carry far more detail than a lamp body.
+pub const VENUE_MODEL_MAX_TRIANGLES: usize = 2_000_000;
 
 /// Read a self-contained GLB 2.0 file.
 pub fn read_glb(bytes: &[u8]) -> Result<FixtureModel, ModelError> {
     read_glb_nodes(bytes, &[])
 }
 
+/// Read a self-contained GLB 2.0 file that may use up to `max_triangles`.
+pub fn read_glb_with_limit(bytes: &[u8], max_triangles: usize) -> Result<FixtureModel, ModelError> {
+    read_glb_nodes_limited(bytes, &[], max_triangles)
+}
+
 /// Read only the named GLB node subtrees selected by a fixture mode. An empty selection reads the
 /// authored scene as normal. This keeps mutually exclusive model variants portable in one GLB
 /// without flattening them into one impossible body.
 pub fn read_glb_nodes(bytes: &[u8], selected_roots: &[&str]) -> Result<FixtureModel, ModelError> {
+    read_glb_nodes_limited(bytes, selected_roots, MAX_TRIANGLES)
+}
+
+fn read_glb_nodes_limited(
+    bytes: &[u8],
+    selected_roots: &[&str],
+    max_triangles: usize,
+) -> Result<FixtureModel, ModelError> {
     let (json, binary) = split_chunks(bytes)?;
     let document: serde_json::Value =
         serde_json::from_slice(json).map_err(|error| fail(format!("model JSON: {error}")))?;
@@ -273,9 +289,14 @@ pub fn read_glb_nodes(bytes: &[u8], selected_roots: &[&str]) -> Result<FixtureMo
     if model.is_empty() {
         return Err(fail("model contains no triangles"));
     }
-    if model.triangle_count() > MAX_TRIANGLES {
+    if model.triangle_count() > max_triangles {
+        let subject = if max_triangles == MAX_TRIANGLES {
+            "a fixture body"
+        } else {
+            "this model"
+        };
         return Err(fail(format!(
-            "model has {} triangles, more than the {MAX_TRIANGLES} a fixture body may use",
+            "model has {} triangles, more than the {max_triangles} {subject} may use",
             model.triangle_count()
         )));
     }

@@ -13,6 +13,7 @@ import {
 	PatchViewProvider,
 	revealPatchRow,
 } from "@tosklight/patch";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Button } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { FixtureLibraryWorkspace } from "./FixtureLibraryWorkspace";
@@ -131,8 +132,26 @@ function ArchitectPatchSheet(
 			{...props}
 			quickViews
 			columnStorageKey={`viz-editor.patch-columns.${props.scope ?? "all"}`}
+			onImportVenueModel={props.scope === "venue" ? importVenueModel : undefined}
 		/>
 	);
+}
+
+/**
+ * Choose a GLB on this computer and place it in the show as a venue object.
+ *
+ * Every window's sheet and the CAD views hear the patch change the import makes, so nothing here
+ * has to reload them.
+ */
+async function importVenueModel(layerId: string) {
+	const path = await open({
+		multiple: false,
+		directory: false,
+		filters: [{ name: "3D model (GLB)", extensions: ["glb"] }],
+	});
+	if (typeof path !== "string") return null;
+	const imported = await documentSession.importVenueModel(path, layerId);
+	return imported.fixtureId;
 }
 
 /**
