@@ -109,6 +109,17 @@ export interface PatchFixtureWrite {
 	moveInBlackEnabled: boolean;
 	moveInBlackDelayMillis: number;
 	highlightOverrides: readonly PatchHighlightOverride[];
+	/**
+	 * The size a generated Venue object is placed at, in millimetres despite the name. Absent or
+	 * `null` while it is at its profile's default size, and for everything that is not generated.
+	 */
+	scenerySizeMetres?: { x: number; y: number; z: number } | null;
+	/** A generated Venue object's colour and a chain's ends; absent choices are the kind's defaults. */
+	sceneryOptions?: {
+		colourSrgb?: string | null;
+		chainTop?: "motor" | "direct" | null;
+		chainBottom?: "direct" | "steelflex_loop" | null;
+	} | null;
 }
 
 export interface PatchPlacementOverride {

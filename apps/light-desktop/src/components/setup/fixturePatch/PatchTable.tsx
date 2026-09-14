@@ -3,6 +3,13 @@ import {
 	placedSceneryMetres,
 	sceneryOf,
 } from "./scenerySize";
+import {
+	chainBottomOf,
+	chainEndLabel,
+	chainTopOf,
+	isChain,
+	sceneryOptionsOf,
+} from "./sceneryOptions";
 import { Button } from "@tosklight/ui";
 import { Fragment, type ReactNode } from "react";
 import { PATCH_COLUMNS, type PatchColumn } from "../../../types";
@@ -358,6 +365,7 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				</Shown>
 			))}
 			<FootprintCells fixture={fixture} />
+			<SceneryOptionCells fixture={fixture} />
 		</>
 	);
 }
@@ -454,6 +462,82 @@ function FootprintCells({ fixture }: { fixture: PatchedFixture }) {
 					label="Crowd depth"
 					metres={stored?.crowdDepthMetres ?? crowd.default_depth_metres}
 				/>
+			</Shown>
+		</>
+	);
+}
+
+/**
+ * A generated Venue object's colour, and a chain's top and bottom ends. Anything that is not
+ * generated has no colour to choose, and anything that is not a chain has no ends.
+ */
+function SceneryOptionCells({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const generated = Boolean(sceneryOf(fixture));
+	const chain = isChain(fixture);
+	const colour = sceneryOptionsOf(fixture).colour_srgb;
+	const option = (
+		kind: "scenery_colour" | "chain_top" | "chain_bottom",
+		label: string,
+		value: ReactNode,
+	) => (
+		<td className="patch-secondary">
+			<Button
+				className="patch-value"
+				aria-label={`${label} ${fixtureDisplayId(fixture)}`}
+				onClick={() => armEdit(controller, fixture, kind)}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					beginFixtureEditFromContextMenu(controller, fixture, kind);
+				}}
+			>
+				{value}
+			</Button>
+		</td>
+	);
+	return (
+		<>
+			<Shown column="scenery_colour">
+				{generated
+					? option(
+							"scenery_colour",
+							"Colour",
+							colour ? (
+								<>
+									<span
+										aria-hidden="true"
+										style={{
+											display: "inline-block",
+											width: "0.8em",
+											height: "0.8em",
+											marginRight: "0.35em",
+											borderRadius: 2,
+											verticalAlign: "middle",
+											background: colour,
+										}}
+									/>
+									{colour}
+								</>
+							) : (
+								"Default"
+							),
+						)
+					: NO_MEASUREMENT}
+			</Shown>
+			<Shown column="chain_top">
+				{chain
+					? option("chain_top", "Chain top", chainEndLabel(chainTopOf(fixture)))
+					: NO_MEASUREMENT}
+			</Shown>
+			<Shown column="chain_bottom">
+				{chain
+					? option(
+							"chain_bottom",
+							"Chain bottom",
+							chainEndLabel(chainBottomOf(fixture)),
+						)
+					: NO_MEASUREMENT}
 			</Shown>
 		</>
 	);
@@ -568,6 +652,10 @@ function MultiPatchRow({
 			<Shown column="footprint_width">{NO_MEASUREMENT}</Shown>
 			<Shown column="footprint_height">{NO_MEASUREMENT}</Shown>
 			<Shown column="footprint_depth">{NO_MEASUREMENT}</Shown>
+			{/* A Venue object has no copies, so a copy's row has no colour or chain ends of its own. */}
+			<Shown column="scenery_colour">{NO_MEASUREMENT}</Shown>
+			<Shown column="chain_top">{NO_MEASUREMENT}</Shown>
+			<Shown column="chain_bottom">{NO_MEASUREMENT}</Shown>
 			<Shown column="layer">
 				<td className="patch-secondary">
 					<span>—</span>

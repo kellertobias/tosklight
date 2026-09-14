@@ -1,10 +1,13 @@
 import {
+	Button,
+	ColorPickerField,
 	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
 	Select,
 	TextInput,
 } from "@tosklight/ui";
+import { CHAIN_BOTTOM_ENDS, CHAIN_TOP_ENDS } from "./sceneryOptions";
 import { ModalNumberEditor } from "@tosklight/ui/input";
 import { changedPatchFixtureCandidate } from "../../state/PatchContext";
 import type { PatchedFixture } from "../../wire";
@@ -26,6 +29,7 @@ import {
 	saveMultipatchEdit,
 } from "./multipatchActions";
 import { definitionSplits, replaceSelectedSplitPatch } from "./patchModel";
+import { type SceneryEdit, sceneryMeasurement } from "./scenerySize";
 import {
 	isMastersValue,
 	MASTERS_VALUES,
@@ -259,8 +263,12 @@ async function applyDesktopValueEntry(
 				raw,
 			);
 		if (!changes) {
+			// A size outside what the Venue object's profile allows says what it does allow.
+			const scenery = sceneryMeasurement(fixture, edit as SceneryEdit, raw);
 			controller.ui.setEditError(
-				`“${raw}” is not a valid ${desktopNumericEditLabel(edit, controller.ui.editAxis).toLowerCase()}.`,
+				scenery && "error" in scenery
+					? scenery.error
+					: `“${raw}” is not a valid ${desktopNumericEditLabel(edit, controller.ui.editAxis).toLowerCase()}.`,
 			);
 			return;
 		}
@@ -347,14 +355,20 @@ function isDesktopNumericEdit(
 	| "location"
 	| "rotation"
 	| "bracket_angle"
-	| "shaper_angle" {
+	| "shaper_angle"
+	| "scenery_width"
+	| "scenery_height"
+	| "scenery_depth" {
 	return (
 		edit === "number" ||
 		edit === "address" ||
 		edit === "location" ||
 		edit === "rotation" ||
 		edit === "bracket_angle" ||
-		edit === "shaper_angle"
+		edit === "shaper_angle" ||
+		edit === "scenery_width" ||
+		edit === "scenery_height" ||
+		edit === "scenery_depth"
 	);
 }
 
@@ -366,6 +380,9 @@ function desktopNumericEditLabel(
 	if (edit === "address") return "Patch";
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
+	if (edit === "scenery_width") return "Width";
+	if (edit === "scenery_height") return "Height";
+	if (edit === "scenery_depth") return "Depth";
 	if (edit === "location" || edit === "rotation")
 		return `${edit === "location" ? "Location" : "Rotation"} ${axis?.toUpperCase() ?? "value"}`;
 	return "Value";
@@ -374,7 +391,13 @@ function desktopNumericEditLabel(
 function desktopNumericEditUnit(
 	edit: Exclude<ReturnType<typeof usePatchController>["ui"]["edit"], null>,
 ) {
-	if (edit === "location") return "meter";
+	if (
+		edit === "location" ||
+		edit === "scenery_width" ||
+		edit === "scenery_height" ||
+		edit === "scenery_depth"
+	)
+		return "meter";
 	if (
 		edit === "rotation" ||
 		edit === "bracket_angle" ||
@@ -390,6 +413,8 @@ function numericFixtureChanges(
 	axis: ReturnType<typeof usePatchController>["ui"]["editAxis"],
 	raw: string,
 ) {
+	const scenery = sceneryMeasurement(fixture, edit as SceneryEdit, raw);
+	if (scenery) return "size" in scenery ? { scenery_size_metres: scenery.size } : null;
 	const value = Number(raw);
 	if (!Number.isFinite(value)) return null;
 	if (edit === "bracket_angle") return { bracket_angle: value };
@@ -536,6 +561,9 @@ function FixtureEditFields() {
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			/>
 		);
+	if (edit === "scenery_colour") return <SceneryColourFields />;
+	if (edit === "chain_top" || edit === "chain_bottom")
+		return <ChainEndFields end={edit} />;
 	if (edit === "masters") return <MastersFields />;
 	if (edit === "invert_pan" || edit === "invert_tilt")
 		return (
@@ -551,6 +579,57 @@ function FixtureEditFields() {
 		);
 	if (edit === "mode") return <ModeField />;
 	return null;
+}
+
+/**
+ * A generated Venue object's colour. **Default colour** returns it to its kind's own material —
+ * black serge for a curtain, raw aluminium for truss — which is what it was drawn in before.
+ */
+function SceneryColourFields() {
+	const controller = usePatchController();
+	const colour = controller.ui.editText;
+	return (
+		<>
+			<ColorPickerField
+				label="Colour"
+				value={colour || "#101010"}
+				onChange={(chosen) => controller.ui.setEditText(chosen.toUpperCase())}
+			/>
+			<Button active={!colour} onClick={() => controller.ui.setEditText("")}>
+				Default colour
+			</Button>
+			<p className="patch-policy-note">
+				{colour
+					? `Drawn in ${colour.toUpperCase()}.`
+					: "Drawn in the object's own material."}
+			</p>
+		</>
+	);
+}
+
+/** What hangs at one end of a chain. */
+function ChainEndFields({ end }: { end: "chain_top" | "chain_bottom" }) {
+	const controller = usePatchController();
+	const top = end === "chain_top";
+	const options = top ? CHAIN_TOP_ENDS : CHAIN_BOTTOM_ENDS;
+	return (
+		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
+		<label>
+			{top ? "Top end" : "Bottom end"}
+			<Select
+				autoFocus
+				aria-label={top ? "Chain top end" : "Chain bottom end"}
+				value={controller.ui.editText}
+				onChange={(event) => controller.ui.setEditText(event.target.value)}
+			>
+				{options.map((option) => (
+					<option key={option.value} value={option.value}>
+						{option.label}
+					</option>
+				))}
+			</Select>
+		</label>
+	);
 }
 
 /** What stays live when a master is pulled, for every Masters value short of `both`. */
@@ -783,6 +862,9 @@ function editTitle(
 	if (edit === "invert_tilt") return "Invert Tilt";
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
+	if (edit === "scenery_colour") return "colour";
+	if (edit === "chain_top") return "chain top";
+	if (edit === "chain_bottom") return "chain bottom";
 	if (edit === "note") return "note";
 	return edit;
 }

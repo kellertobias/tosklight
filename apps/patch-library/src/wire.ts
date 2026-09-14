@@ -36,6 +36,20 @@ export interface PatchedFixture {
 	highlight_overrides?: Record<string, number>;
 	move_in_black_enabled?: boolean;
 	move_in_black_delay_millis?: number;
+	/**
+	 * The size a generated Venue object is placed at, in millimetres despite the name, as the
+	 * patch stores it. Absent while the object is at its profile's default size.
+	 */
+	scenery_size_metres?: { x: number; y: number; z: number } | null;
+	/**
+	 * What the operator chose for a generated Venue object beyond its size: its colour as `#RRGGBB`,
+	 * and a chain's top and bottom ends. An absent choice is the kind's own default.
+	 */
+	scenery_options?: {
+		colour_srgb?: string | null;
+		chain_top?: "motor" | "direct" | null;
+		chain_bottom?: "direct" | "steelflex_loop" | null;
+	} | null;
 }
 
 export interface MultiPatchInstance {

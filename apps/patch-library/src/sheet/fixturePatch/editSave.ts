@@ -15,6 +15,8 @@ import {
 	MIB_MAX_SECONDS,
 	parseMib,
 } from "./policyValues";
+import { sceneryMeasurement } from "./scenerySize";
+import { isSceneryOptionEdit, sceneryOptionChange } from "./sceneryOptions";
 import { editTargets } from "./selection";
 
 export function saveEdit(
@@ -66,6 +68,20 @@ export function saveEdit(
 		if (!trimmed) void applyEdit(controller, { shaper_angle: null });
 		else if (Number.isFinite(degrees))
 			void applyEdit(controller, { shaper_angle: degrees });
+	}
+	if (isSceneryOptionEdit(edit)) {
+		const result = sceneryOptionChange(selected, edit, value);
+		if ("error" in result) controller.ui.setEditError(result.error);
+		else void applyEdit(controller, { scenery_options: result.options });
+	}
+	if (
+		edit === "scenery_width" ||
+		edit === "scenery_height" ||
+		edit === "scenery_depth"
+	) {
+		const result = sceneryMeasurement(selected, edit, value);
+		if (result && "error" in result) controller.ui.setEditError(result.error);
+		else if (result) void applyEdit(controller, { scenery_size_metres: result.size });
 	}
 	if (edit === "location" || edit === "rotation")
 		void applyEdit(controller, {

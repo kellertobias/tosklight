@@ -44,6 +44,12 @@ export type EditKind =
 	| "invert_tilt"
 	| "bracket_angle"
 	| "shaper_angle"
+	| "scenery_width"
+	| "scenery_height"
+	| "scenery_depth"
+	| "scenery_colour"
+	| "chain_top"
+	| "chain_bottom"
 	| null;
 
 export type VectorAxis = "x" | "y" | "z";
@@ -90,6 +96,11 @@ export type FixturePatchSetupProps = {
 	onFixturesAdded?: (
 		fixtures: readonly { fixtureId: string; name: string }[],
 	) => void | Promise<void>;
+	/**
+	 * Brings in a 3D model that is not in the fixture library and places it on `layerId`, resolving
+	 * to the placed object's fixture ID, or `null` when the operator cancelled (Architect only).
+	 */
+	onImportVenueModel?: (layerId: string) => Promise<string | null>;
 };
 
 export type PatchFixtureScope = "all" | "dmx" | "venue" | "effects" | "media";
@@ -327,11 +338,15 @@ function usePatchDerivedState(
 	);
 	const availableDefinitions = useMemo(
 		() =>
-			mergeFixtureDefinitions(
-				library?.fixtureProfiles ?? [],
-				library?.fixtureLibrary ?? [],
-			).filter((definition) => definitionMatchesScope(definition, scope)),
-		[library?.fixtureProfiles, library?.fixtureLibrary, scope],
+			mergeFixtureDefinitions(library?.fixtureProfiles ?? [], [
+				...(library?.fixtureLibrary ?? []),
+				// A Venue model imported into this show lives in the show alone, so the show is where
+				// another copy of it is found.
+				...patch.fixtures
+					.map((fixture) => fixture.definition)
+					.filter((definition) => !isDmxPatchable(definition)),
+			]).filter((definition) => definitionMatchesScope(definition, scope)),
+		[library?.fixtureProfiles, library?.fixtureLibrary, patch.fixtures, scope],
 	);
 	const selected =
 		all.find((fixture) => fixture.fixture_id === ui.selectedFixture) ?? null;
@@ -551,6 +566,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 			onStagePreview: props.onStagePreview,
 			onOpenStageWindow: props.onOpenStageWindow,
 			onFixturesAdded: props.onFixturesAdded,
+			onImportVenueModel: props.onImportVenueModel,
 			quickViews: props.quickViews ?? false,
 		},
 	};

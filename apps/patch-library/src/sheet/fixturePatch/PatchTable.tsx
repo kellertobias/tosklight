@@ -28,6 +28,15 @@ import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
 import { PATCH_SHEET_COLUMNS, type PatchSheetColumn } from "./patchColumns";
+import { placedSceneryMetres, SCENERY_AXES, sceneryOf } from "./scenerySize";
+import {
+	chainBottomOf,
+	chainEndLabel,
+	chainTopOf,
+	isChain,
+	SCENERY_OPTION_COLUMNS,
+	sceneryOptionsOf,
+} from "./sceneryOptions";
 import { formatMib, mastersValue } from "./policyValues";
 import { revealPatchRow } from "./revealRow";
 import { isPatchSortColumn, nextPatchSort } from "./tableSort";
@@ -700,6 +709,128 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				</Button>
 			</td>
 			</Shown>
+			<SceneryCells fixture={fixture} />
+			<SceneryOptionCells fixture={fixture} />
+		</>
+	);
+}
+
+/**
+ * A generated Venue object's colour, and a chain's top and bottom ends. Anything that is not
+ * generated has no colour to choose, and anything that is not a chain has no ends.
+ */
+function SceneryOptionCells({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const generated = Boolean(sceneryOf(fixture));
+	const chain = isChain(fixture);
+	const colour = sceneryOptionsOf(fixture).colour_srgb;
+	const edit = (kind: "scenery_colour" | "chain_top" | "chain_bottom") => ({
+		onClick: () => armEdit(controller, fixture, kind),
+		onContextMenu: (event: ReactMouseEvent<HTMLElement>) =>
+			openModalOnContext(event, controller, fixture, kind),
+	});
+	return (
+		<>
+			<Shown column="scenery_colour">
+				<td className="patch-secondary">
+					{generated ? (
+						<Button
+							className="patch-value"
+							aria-label={`Colour ${fixtureDisplayId(fixture)}`}
+							{...edit("scenery_colour")}
+						>
+							{colour ? (
+								<>
+									<span
+										aria-hidden="true"
+										style={{
+											display: "inline-block",
+											width: "0.8em",
+											height: "0.8em",
+											marginRight: "0.35em",
+											borderRadius: 2,
+											verticalAlign: "middle",
+											background: colour,
+										}}
+									/>
+									{colour}
+								</>
+							) : (
+								"Default"
+							)}
+						</Button>
+					) : (
+						"—"
+					)}
+				</td>
+			</Shown>
+			<Shown column="chain_top">
+				<td className="patch-secondary">
+					{chain ? (
+						<Button
+							className="patch-value"
+							aria-label={`Chain top ${fixtureDisplayId(fixture)}`}
+							{...edit("chain_top")}
+						>
+							{chainEndLabel(chainTopOf(fixture))}
+						</Button>
+					) : (
+						"—"
+					)}
+				</td>
+			</Shown>
+			<Shown column="chain_bottom">
+				<td className="patch-secondary">
+					{chain ? (
+						<Button
+							className="patch-value"
+							aria-label={`Chain bottom ${fixtureDisplayId(fixture)}`}
+							{...edit("chain_bottom")}
+						>
+							{chainEndLabel(chainBottomOf(fixture))}
+						</Button>
+					) : (
+						"—"
+					)}
+				</td>
+			</Shown>
+		</>
+	);
+}
+
+/**
+ * Width, height and depth of a generated Venue object — a truss's length, a curtain's width and
+ * drop, a stage element's height. Only the measurements its profile makes to measure are offered;
+ * anything else in the rig is the size it is and shows a dash.
+ */
+function SceneryCells({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const scenery = sceneryOf(fixture);
+	const placed = scenery ? placedSceneryMetres(fixture, scenery) : null;
+	return (
+		<>
+			{SCENERY_AXES.map((axis) => (
+				<Shown column={`footprint_${axis.axis}`} key={axis.axis}>
+					<td className="patch-secondary">
+						{scenery && placed && scenery.adjustable[axis.axis] ? (
+							<Button
+								className="patch-value"
+								aria-label={`${axis.label} ${fixtureDisplayId(fixture)}`}
+								onClick={() =>
+									armEdit(controller, fixture, axis.edit, undefined, "value_entry")
+								}
+								onContextMenu={(event) =>
+									openModalOnContext(event, controller, fixture, axis.edit)
+								}
+							>
+								{placed[axis.key].toFixed(2)} m
+							</Button>
+						) : (
+							"—"
+						)}
+					</td>
+				</Shown>
+			))}
 		</>
 	);
 }
@@ -742,6 +873,9 @@ function isContextualNumericEdit(
 		kind === "address" ||
 		kind === "bracket_angle" ||
 		kind === "shaper_angle" ||
+		kind === "scenery_width" ||
+		kind === "scenery_height" ||
+		kind === "scenery_depth" ||
 		((kind === "location" || kind === "rotation") && Boolean(axis))
 	);
 }
@@ -937,6 +1071,15 @@ function MultipatchTransformCells({
 					</Button>
 				</td>
 			</Shown>
+			{/* A Venue object has no copies, so a copy's row has no size of its own to show. */}
+			{[
+				...SCENERY_AXES.map((axis) => `footprint_${axis.axis}` as const),
+				...SCENERY_OPTION_COLUMNS,
+			].map((column) => (
+				<Shown column={column} key={column}>
+					<td className="patch-secondary">—</td>
+				</Shown>
+			))}
 		</>
 	);
 }

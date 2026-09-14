@@ -1,6 +1,8 @@
 import { SCENERY_AXES } from "./scenerySize";
+import { CHAIN_BOTTOM_ENDS, CHAIN_TOP_ENDS } from "./sceneryOptions";
 import {
 	Button,
+	ColorPickerField,
 	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
@@ -274,6 +276,9 @@ function FixtureEditFields() {
 			/>
 		);
 	if (edit === "internal_bindings") return <InternalBindingsFields />;
+	if (edit === "scenery_colour") return <SceneryColourFields />;
+	if (edit === "chain_top" || edit === "chain_bottom")
+		return <ChainEndFields end={edit} />;
 	if (edit === "masters" || edit === "pan_tilt")
 		return <CombinedPolicySelect kind={edit} />;
 	if (edit === "location" || edit === "rotation")
@@ -282,6 +287,57 @@ function FixtureEditFields() {
 		);
 	if (edit === "mode") return <ModeField />;
 	return null;
+}
+
+/**
+ * A generated Venue object's colour. **Default colour** returns it to its kind's own material —
+ * black serge for a curtain, raw aluminium for truss — which is what it was drawn in before.
+ */
+function SceneryColourFields() {
+	const controller = usePatchController();
+	const colour = controller.ui.editText;
+	return (
+		<>
+			<ColorPickerField
+				label="Colour"
+				value={colour || "#101010"}
+				onChange={(chosen) => controller.ui.setEditText(chosen.toUpperCase())}
+			/>
+			<Button active={!colour} onClick={() => controller.ui.setEditText("")}>
+				Default colour
+			</Button>
+			<small>
+				{colour
+					? `Drawn in ${colour.toUpperCase()}.`
+					: "Drawn in the object's own material."}
+			</small>
+		</>
+	);
+}
+
+/** What hangs at one end of a chain. */
+function ChainEndFields({ end }: { end: "chain_top" | "chain_bottom" }) {
+	const controller = usePatchController();
+	const top = end === "chain_top";
+	const options = top ? CHAIN_TOP_ENDS : CHAIN_BOTTOM_ENDS;
+	return (
+		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
+		<label>
+			{top ? "Top end" : "Bottom end"}
+			<Select
+				autoFocus
+				aria-label={top ? "Chain top end" : "Chain bottom end"}
+				value={controller.ui.editText}
+				onChange={(event) => controller.ui.setEditText(event.target.value)}
+			>
+				{options.map((option) => (
+					<option key={option.value} value={option.value}>
+						{option.label}
+					</option>
+				))}
+			</Select>
+		</label>
+	);
 }
 
 function InternalBindingsFields() {
@@ -514,5 +570,8 @@ function editTitle(
 	if (scenery) return scenery.label;
 	if (edit === "crowd_width") return "Crowd width";
 	if (edit === "crowd_depth") return "Crowd depth";
+	if (edit === "scenery_colour") return "Colour";
+	if (edit === "chain_top") return "Chain top";
+	if (edit === "chain_bottom") return "Chain bottom";
 	return edit;
 }

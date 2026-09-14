@@ -487,7 +487,7 @@ describe("Patch right-click SET parity", () => {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
 
-		rightClick(within(row.cells[18]).getByRole("button"));
+		rightClick(within(row.cells[21]).getByRole("button"));
 
 		expect(
 			screen.getByRole("heading", { name: "Select layer" }),
@@ -2287,8 +2287,8 @@ describe("Show Patch visible columns", () => {
 		expect(headers).not.toContain("Masters");
 		expect(headers).not.toContain("Footprint depth");
 		expect(headers).toContain("Footprint height");
-		expect(headers).toHaveLength(17);
-		expect(rowCells()).toBe(17);
+		expect(headers).toHaveLength(20);
+		expect(rowCells()).toBe(20);
 	});
 
 	it("hides a column from the header settings", () => {
@@ -2310,7 +2310,7 @@ describe("Show Patch visible columns", () => {
 		expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
 		expect(screen.getByRole("columnheader", { name: "Name" })).toBeVisible();
 		expect(screen.queryByRole("columnheader", { name: "Layer" })).toBeNull();
-		expect(rowCells()).toBe(18);
+		expect(rowCells()).toBe(21);
 	});
 });
 
@@ -2603,6 +2603,9 @@ describe("schema-v2 location and multi-patch editing", () => {
 			"Footprint width",
 			"Footprint height",
 			"Footprint depth",
+			"Colour",
+			"Chain top",
+			"Chain bottom",
 			"Layer",
 		]);
 		const primary = screen.getByRole("row", {
@@ -2611,8 +2614,8 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const multi = screen.getByRole("row", {
 			name: "Multi-patch Opposite hang",
 		}) as HTMLTableRowElement;
-		expect(primary.cells).toHaveLength(19);
-		expect(multi.cells).toHaveLength(19);
+		expect(primary.cells).toHaveLength(22);
+		expect(multi.cells).toHaveLength(22);
 		expect(multi.cells[1]).toHaveTextContent(/^—$/);
 		expect(multi.cells[2]).toHaveTextContent(/^—$/);
 		expect(multi.cells[4]).toHaveTextContent("S1 3.1 · S3 4.1");

@@ -17,6 +17,16 @@ import {
 	editTargets,
 } from "./selection";
 import { mastersValue, mibEditValue } from "./policyValues";
+import { placedSceneryMetres, sceneryAxisOf, sceneryOf } from "./scenerySize";
+import { chainBottomOf, chainTopOf, sceneryOptionsOf } from "./sceneryOptions";
+
+/** A Venue object's placed measurement, in metres, as the value an editor opens on. */
+function sceneryEditValue(fixture: PatchedFixture, kind: Exclude<EditKind, null>) {
+	const axis = sceneryAxisOf(kind);
+	const scenery = sceneryOf(fixture);
+	if (!axis || !scenery) return null;
+	return String(placedSceneryMetres(fixture, scenery)[axis.key]);
+}
 
 export function armEdit(
 	controller: PatchController,
@@ -70,7 +80,12 @@ export function armEdit(
 			const stored = fixture[kind]?.[axis] ?? 0;
 			setText(String(kind === "location" ? stored / 1000 : stored));
 		}
-	} else if (kind === "mode") selectFixtureFamily(controller, fixture);
+	} else if (sceneryAxisOf(kind)) setText(sceneryEditValue(fixture, kind) ?? "");
+	else if (kind === "scenery_colour")
+		setText(sceneryOptionsOf(fixture).colour_srgb ?? "");
+	else if (kind === "chain_top") setText(chainTopOf(fixture));
+	else if (kind === "chain_bottom") setText(chainBottomOf(fixture));
+	else if (kind === "mode") selectFixtureFamily(controller, fixture);
 	if (presentation === "value_entry") {
 		const selected = editTargets(controller, fixture);
 		if (selected.length > 1) {
@@ -100,6 +115,7 @@ function numericEditValue(
 	if (kind === "bracket_angle") return String(fixture.bracket_angle ?? 0);
 	if (kind === "shaper_angle")
 		return fixture.shaper_angle == null ? null : String(fixture.shaper_angle);
+	if (sceneryAxisOf(kind)) return sceneryEditValue(fixture, kind);
 	if ((kind === "location" || kind === "rotation") && axis) {
 		const stored = fixture[kind]?.[axis] ?? 0;
 		return String(kind === "location" ? stored / 1000 : stored);

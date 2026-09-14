@@ -3,6 +3,7 @@ import {
 	placedSceneryMetres,
 	sceneryOf,
 } from "./scenerySize";
+import { isSceneryOptionEdit, sceneryOptionChange } from "./sceneryOptions";
 import type { SplitPatch } from "../../../api/types";
 import type { PatchFixtureUpdateAction } from "../../../features/patch/contracts";
 import { parsePatchAddress } from "../../input/ConsoleFields";
@@ -100,6 +101,11 @@ export function saveEdit(
 	}
 	const sceneryAxis = SCENERY_AXES.find((entry) => entry.edit === edit);
 	if (sceneryAxis) void saveSceneryMeasurement(controller, sceneryAxis, value);
+	if (isSceneryOptionEdit(edit)) {
+		const result = sceneryOptionChange(selected, edit, value);
+		if ("error" in result) controller.ui.setEditError(result.error);
+		else void applyEdit(controller, { scenery_options: result.options });
+	}
 	if (edit === "crowd_width" || edit === "crowd_depth")
 		void saveCrowdFootprint(controller, edit, value);
 	if ((edit === "location" || edit === "rotation") && editAxis)

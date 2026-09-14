@@ -444,9 +444,18 @@ export interface EmitterHeadBinding {
 
 /** A Venue or Rigging object whose geometry is generated at the size it is placed. */
 export interface FixtureProfileScenery {
-	kind: "riser" | "truss" | "curtain" | "railing" | "mirror_ball" | "prop";
+	kind:
+		| "riser"
+		| "truss"
+		| "curtain"
+		| "railing"
+		| "mirror_ball"
+		| "chain"
+		| "prop";
 	/** Chords in a truss cross-section. Every other kind ignores it. */
 	chords: number;
+	/** A truss's bracing; absent is the standard zig-zag. Every other kind ignores it. */
+	pattern?: "standard" | "deco";
 	default_size_metres: Vector3Value;
 	/** Which of its dimensions an operator sets; the rest are what the object is. */
 	adjustable: { width: boolean; height: boolean; depth: boolean };
