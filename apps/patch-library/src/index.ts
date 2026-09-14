@@ -46,6 +46,7 @@ export {
 	reconcileModePatchChanges,
 	reconcileSplitPatchOwner,
 	replaceSelectedSplitPatch,
+	revealPatchRow,
 	splitPatchSetError,
 	UniverseMap,
 	type UniverseMapProposal,

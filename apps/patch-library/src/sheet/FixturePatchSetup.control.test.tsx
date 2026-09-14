@@ -555,39 +555,34 @@ describe("fixture output policy cells", () => {
 		).not.toBeInTheDocument();
 	});
 
-	it("shows independent effective values and only edits a master through armed SET", async () => {
+	it("shows Masters as one value and only edits it through armed SET", async () => {
 		server.patch.fixtures = [policyFixture()];
 		const { rerender } = render(<FixturePatchSetup />);
 
-		expect(
-			screen.getByRole("button", { name: "Group Masters 17" }),
-		).toHaveTextContent("Controlled");
-		expect(
-			screen.getByRole("button", { name: "Grand Master 17" }),
-		).toHaveTextContent("Controlled");
+		expect(screen.getByRole("columnheader", { name: "Masters" })).toBeInTheDocument();
+		expect(screen.queryByRole("columnheader", { name: "Group Masters" })).toBeNull();
+		expect(screen.queryByRole("columnheader", { name: "Grand Master" })).toBeNull();
+		expect(screen.getByRole("button", { name: "Masters 17" })).toHaveTextContent(
+			"both",
+		);
 		expect(
 			screen.getByRole("button", { name: "Invert Pan 17" }),
 		).toHaveTextContent("Normal");
-		expect(
-			screen.getByRole("button", { name: "Invert Tilt 17" }),
-		).toHaveTextContent("Normal");
 
-		fireEvent.click(screen.getByRole("button", { name: "Group Masters 17" }));
+		fireEvent.click(screen.getByRole("button", { name: "Masters 17" }));
 		expect(
-			screen.queryByRole("heading", { name: "Set fixture Group Masters" }),
+			screen.queryByRole("heading", { name: "Set fixture Masters" }),
 		).not.toBeInTheDocument();
 		expect(patchFeature.updatePolicy).not.toHaveBeenCalled();
 
 		state.patchSetArmed = true;
 		rerender(<FixturePatchSetup />);
-		fireEvent.click(screen.getByRole("button", { name: "Group Masters 17" }));
+		fireEvent.click(screen.getByRole("button", { name: "Masters 17" }));
 		const dialog = (
-			await screen.findByRole("heading", {
-				name: "Set fixture Group Masters",
-			})
+			await screen.findByRole("heading", { name: "Set fixture Masters" })
 		).closest("section") as HTMLElement;
-		fireEvent.click(within(dialog).getByRole("button", { name: "Controlled" }));
-		fireEvent.click(screen.getByRole("option", { name: "Ignored" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "both" }));
+		fireEvent.click(screen.getByRole("option", { name: "grand" }));
 		expect(
 			within(dialog).getByText(
 				"This fixture can remain live while the Group Masters are reduced.",
@@ -602,14 +597,55 @@ describe("fixture output policy cells", () => {
 				{ group_masters_enabled: false },
 			),
 		);
+		// The Grand Master already reduces the fixture, so only the Group Masters policy is written.
+		expect(patchFeature.updatePolicy).toHaveBeenCalledOnce();
 		expect(setEditArmed).toHaveBeenCalledWith(false);
+	});
+
+	it("shows Move in Black as Off or a delay and sets both from one MIB editor", async () => {
+		const fixture = policyFixture();
+		fixture.move_in_black_delay_millis = 2500;
+		server.patch.fixtures = [fixture];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		expect(screen.queryByRole("columnheader", { name: "MIB Delay" })).toBeNull();
+		expect(screen.getByRole("button", { name: "MIB 17" })).toHaveTextContent("2.5s");
+		fireEvent.click(screen.getByRole("button", { name: "MIB 17" }));
+		const dialog = (
+			await screen.findByRole("heading", { name: "Set fixture MIB" })
+		).closest("section") as HTMLElement;
+		fireEvent.change(within(dialog).getByRole("textbox", { name: "MIB delay (s)" }), {
+			target: { value: "12.5" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				move_in_black_enabled: true,
+				move_in_black_delay_millis: 12500,
+			}),
+		);
+	});
+
+	it("opens the note editor when the Note cell is clicked", async () => {
+		state.patchSetArmed = true;
+		state.desktopEditing = true;
+		render(<FixturePatchSetup />);
+		const row = screen.getByRole("row", { name: /Split Wash 17/ });
+		const note = screen.getByRole("button", { name: "Note 17" });
+		fireEvent.mouseDown(note, { button: 0 });
+		fireEvent.mouseUp(row);
+		fireEvent.click(note);
+		expect(
+			await screen.findByRole("textbox", { name: "Fixture note" }),
+		).toBeInTheDocument();
 	});
 
 	it("edits one physical multi-patch axis without changing its shared policy", async () => {
 		server.patch.fixtures = [policyFixture()];
 		state.patchSetArmed = true;
 		render(<FixturePatchSetup />);
-		expect(screen.getAllByText("Shared · Controlled")).toHaveLength(2);
+		expect(screen.getAllByText("Shared · both")).toHaveLength(1);
 		expect(
 			screen.getByRole("button", {
 				name: "Invert tilt Opposite hang",
@@ -950,9 +986,12 @@ describe("selected split selection and SET editing", () => {
 					.slice(1)
 					.map((row) => row.getAttribute("data-fixture-id")),
 			).toEqual(["fixture-20", "fixture-30", "fixture-10"]);
-			expect(scrolled).toHaveLength(1);
-			expect(scrolled[0].row).toHaveAttribute("data-fixture-id", "fixture-10");
-			expect(scrolled[0].options).toEqual({ block: "nearest" });
+			// The table scrolls down by the one row that was hidden, and never through scrollIntoView,
+			// which would also scroll a wide sheet sideways under the pointer.
+			const table = document.querySelector(".patch-table-wrap") as HTMLElement;
+			expect(table.scrollTop).toBe(ROW);
+			expect(table.scrollLeft).toBe(0);
+			expect(scrolled).toEqual([]);
 		});
 
 		it("leaves the scroll position alone when the fixture stays in view", async () => {
@@ -962,6 +1001,9 @@ describe("selected split selection and SET editing", () => {
 				fixture_number: 15,
 				virtual_fixture_number: null,
 			});
+			expect(
+				(document.querySelector(".patch-table-wrap") as HTMLElement).scrollTop,
+			).toBe(0);
 			expect(scrolled).toEqual([]);
 		});
 	});
@@ -2112,7 +2154,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.click(within(fixtureRow.cells[12]).getByRole("button"));
+		fireEvent.click(within(fixtureRow.cells[10]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set fixture location X" })
@@ -2155,7 +2197,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.click(within(fixtureRow.cells[16]).getByRole("button"));
+		fireEvent.click(within(fixtureRow.cells[14]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set fixture rotation Y" })
@@ -2187,7 +2229,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const instanceRow = document.querySelector(
 			"tr.multipatch-row",
 		) as HTMLTableRowElement;
-		fireEvent.click(within(instanceRow.cells[16]).getByRole("button"));
+		fireEvent.click(within(instanceRow.cells[14]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set multi-patch rotation Y" })

@@ -150,10 +150,10 @@ describe("patch sheet column headers", () => {
 	it("leaves columns that do not order the sheet as plain headers", () => {
 		server.patch.fixtures = [wash("first", 1, 1, 1)];
 		render(<FixturePatchSetup />);
-		const header = screen.getByRole("columnheader", { name: "Group Masters" });
+		const header = screen.getByRole("columnheader", { name: "Masters" });
 		expect(header).not.toHaveAttribute("aria-sort");
 		expect(
-			screen.queryByRole("button", { name: "Sort by Group Masters" }),
+			screen.queryByRole("button", { name: "Sort by Masters" }),
 		).toBeNull();
 	});
 });

@@ -27,10 +27,8 @@ describe("patch sheet quick views", () => {
 			"Manufacturer",
 			"Product / mode",
 			"Patch",
-			"Group Masters",
-			"Grand Master",
+			"Masters",
 			"MIB",
-			"MIB Delay",
 			"Layer",
 			"Note",
 		]);

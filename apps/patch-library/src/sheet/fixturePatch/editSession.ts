@@ -16,6 +16,7 @@ import {
 	fixtureSelectionIds,
 	editTargets,
 } from "./selection";
+import { mastersValue, mibEditValue } from "./policyValues";
 
 export function armEdit(
 	controller: PatchController,
@@ -49,14 +50,8 @@ export function armEdit(
 				: "",
 		);
 		ui.setEditSplitDrafts(splitDraftValues(fixture));
-	} else if (kind === "mib")
-		setText(String(fixture.move_in_black_enabled ?? true));
-	else if (kind === "mib_delay")
-		setText(String((fixture.move_in_black_delay_millis ?? 0) / 1000));
-	else if (kind === "group_masters")
-		setText(String(fixture.group_masters_enabled ?? true));
-	else if (kind === "grand_master")
-		setText(String(fixture.grand_master_enabled ?? true));
+	} else if (kind === "mib") setText(mibEditValue(fixture));
+	else if (kind === "masters") setText(mastersValue(fixture) ?? "both");
 	else if (kind === "invert_pan") setText(String(fixture.invert_pan ?? false));
 	else if (kind === "invert_tilt")
 		setText(String(fixture.invert_tilt ?? false));
@@ -102,8 +97,6 @@ function numericEditValue(
 		return fixture.universe != null && fixture.address != null
 			? `${fixture.universe}.${fixture.address}`
 			: null;
-	if (kind === "mib_delay")
-		return String((fixture.move_in_black_delay_millis ?? 0) / 1000);
 	if (kind === "bracket_angle") return String(fixture.bracket_angle ?? 0);
 	if (kind === "shaper_angle")
 		return fixture.shaper_angle == null ? null : String(fixture.shaper_angle);

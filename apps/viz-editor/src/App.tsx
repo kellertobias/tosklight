@@ -11,6 +11,7 @@ import {
 	type PatchLayer,
 	type PatchProfileRevision,
 	PatchViewProvider,
+	revealPatchRow,
 } from "@tosklight/patch";
 import { Button } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
@@ -321,7 +322,7 @@ export function App() {
 			const row = window.document.querySelector<HTMLElement>(
 				`[data-fixture-id="${selected[0]}"]`,
 			);
-			row?.scrollIntoView({ block: "nearest" });
+			if (row) revealPatchRow(row);
 		});
 		return () => window.cancelAnimationFrame(frame);
 	}, [workspace, selected]);

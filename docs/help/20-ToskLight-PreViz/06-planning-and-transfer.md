@@ -90,13 +90,21 @@ visible column cannot be switched off. Patch, Venue and Effects each remember th
 this computer. The title also offers three quick views, which only the Architect has — the desk's
 Show Patch window does not:
 
-- **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Group Masters, Grand Master,
-  MIB, MIB Delay, Layer and Note.
+- **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Masters, MIB, Layer and Note.
 - **Visualization**: Fixture ID, Name, Location, Rotation, Bracket, Shaper, Layer, 2D, 3D and Note.
 - **Compact**: Fixture ID, Name, Patch, Layer and Note.
 
 The quick view whose columns the sheet shows exactly is highlighted; changing a single column in
 Settings leaves no view highlighted.
+
+**Masters** says which masters reduce a fixture: `none`, `group` (the Group Masters only), `grand`
+(the Grand Master only) or `both`. Click it to choose another value; anything short of `both`
+warns which master the fixture stays live under. A fixture with no intensity shows `—`.
+
+**MIB** is Move in Black: `Off`, or the delay before the fixture moves while dark, from `0s` to
+`30s` with decimals such as `2.5s`. Click it to switch Move in Black off or on and set the delay.
+
+Click a fixture's **Note** to open the note editor.
 
 **No Layer Assigned**, under **All fixtures**, lists every fixture on the screen that has no layer
 of its own: fixtures still on the default layer, and fixtures whose layer no longer exists. While

@@ -26,6 +26,7 @@ import { PatchEffects } from "./fixturePatch/PatchEffects";
 import { PatchTable } from "./fixturePatch/PatchTable";
 
 export { DmxAddressField } from "./fixturePatch/DmxAddressField";
+export { revealPatchRow } from "./fixturePatch/revealRow";
 
 /**
  * The patch sheet.

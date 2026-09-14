@@ -6,9 +6,15 @@ import { applyEdit, completeEdit } from "./editSession";
 import { parseFixtureNumber, parseVirtualFixtureNumber } from "./fixtureIds";
 import {
 	definitionSplits,
+	fixturePolicyApplicability,
 	reconcileModePatchChanges,
 	replaceSelectedSplitPatch,
 } from "./patchModel";
+import {
+	isMastersValue,
+	MIB_MAX_SECONDS,
+	parseMib,
+} from "./policyValues";
 import { editTargets } from "./selection";
 
 export function saveEdit(
@@ -23,27 +29,8 @@ export function saveEdit(
 		void applyEdit(controller, { name: value.trim() || selected.name });
 	if (edit === "note") void saveFixtureNote(controller, value);
 	if (edit === "address") saveSingleAddress(controller, value);
-	if (edit === "mib")
-		void applyEdit(controller, { move_in_black_enabled: value === "true" });
-	if (edit === "mib_delay") {
-		const seconds = Number(value);
-		if (Number.isFinite(seconds))
-			void applyEdit(controller, {
-				move_in_black_delay_millis: Math.max(0, Math.round(seconds * 1000)),
-			});
-	}
-	if (edit === "group_masters")
-		void savePolicy(
-			controller,
-			{ type: "group_masters", controlled: value === "true" },
-			{ group_masters_enabled: value === "true" },
-		);
-	if (edit === "grand_master")
-		void savePolicy(
-			controller,
-			{ type: "grand_master", controlled: value === "true" },
-			{ grand_master_enabled: value === "true" },
-		);
+	if (edit === "mib") saveMib(controller, value);
+	if (edit === "masters") void saveMasters(controller, value);
 	if (edit === "invert_pan")
 		void savePolicy(
 			controller,
@@ -114,6 +101,53 @@ async function saveFixtureNote(controller: PatchController, value: string) {
 		})
 	)
 		completeEdit(controller);
+}
+
+function saveMib(controller: PatchController, value: string) {
+	const changes = parseMib(value);
+	if (changes) void applyEdit(controller, changes);
+	else
+		controller.ui.setEditError(
+			`MIB is Off or a delay from 0 s to ${MIB_MAX_SECONDS} s.`,
+		);
+}
+
+/**
+ * One Masters value sets both master policies. Each fixture only changes the policies that differ,
+ * and never one it cannot react to.
+ */
+async function saveMasters(controller: PatchController, value: string) {
+	const selected = controller.data.selected;
+	if (!selected || !isMastersValue(value)) return;
+	const group = value === "group" || value === "both";
+	const grand = value === "grand" || value === "both";
+	const targets = controller.host.desktopEditing
+		? editTargets(controller, selected)
+		: [selected];
+	for (const fixture of targets) {
+		const applicable = fixturePolicyApplicability(fixture.definition);
+		if (
+			applicable.groupMasters &&
+			(fixture.group_masters_enabled ?? true) !== group &&
+			!(await controller.patch.updatePolicy(
+				fixture.fixture_id,
+				{ type: "group_masters", controlled: group },
+				{ group_masters_enabled: group },
+			))
+		)
+			return;
+		if (
+			applicable.grandMaster &&
+			(fixture.grand_master_enabled ?? true) !== grand &&
+			!(await controller.patch.updatePolicy(
+				fixture.fixture_id,
+				{ type: "grand_master", controlled: grand },
+				{ grand_master_enabled: grand },
+			))
+		)
+			return;
+	}
+	completeEdit(controller);
 }
 
 async function savePolicy(

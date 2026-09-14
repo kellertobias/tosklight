@@ -26,6 +26,12 @@ import {
 	saveMultipatchEdit,
 } from "./multipatchActions";
 import { definitionSplits, replaceSelectedSplitPatch } from "./patchModel";
+import {
+	isMastersValue,
+	MASTERS_VALUES,
+	type MastersValue,
+	MIB_MAX_SECONDS,
+} from "./policyValues";
 import { editTargets } from "./selection";
 
 export function MultipatchVectorDialog() {
@@ -338,7 +344,6 @@ function isDesktopNumericEdit(
 ): edit is
 	| "number"
 	| "address"
-	| "mib_delay"
 	| "location"
 	| "rotation"
 	| "bracket_angle"
@@ -346,7 +351,6 @@ function isDesktopNumericEdit(
 	return (
 		edit === "number" ||
 		edit === "address" ||
-		edit === "mib_delay" ||
 		edit === "location" ||
 		edit === "rotation" ||
 		edit === "bracket_angle" ||
@@ -360,7 +364,6 @@ function desktopNumericEditLabel(
 ) {
 	if (edit === "number") return "Fixture ID";
 	if (edit === "address") return "Patch";
-	if (edit === "mib_delay") return "MIB Delay";
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
 	if (edit === "location" || edit === "rotation")
@@ -378,7 +381,6 @@ function desktopNumericEditUnit(
 		edit === "shaper_angle"
 	)
 		return "degree";
-	if (edit === "mib_delay") return "second";
 	return undefined;
 }
 
@@ -390,10 +392,6 @@ function numericFixtureChanges(
 ) {
 	const value = Number(raw);
 	if (!Number.isFinite(value)) return null;
-	if (edit === "mib_delay")
-		return {
-			move_in_black_delay_millis: Math.max(0, Math.round(value * 1000)),
-		};
 	if (edit === "bracket_angle") return { bracket_angle: value };
 	if (edit === "shaper_angle") return { shaper_angle: value };
 	if ((edit === "location" || edit === "rotation") && axis)
@@ -511,22 +509,7 @@ function FixtureEditFields() {
 				onKeyboardCommit={(value) => saveEdit(controller, value)}
 			/>
 		);
-	if (edit === "mib")
-		return (
-			// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
-			<label>
-				Move in Black
-				<Select
-					autoFocus
-					aria-label="Move in Black value"
-					value={editText}
-					onChange={(event) => controller.ui.setEditText(event.target.value)}
-				>
-					<option value="true">Enabled</option>
-					<option value="false">Disabled</option>
-				</Select>
-			</label>
-		);
+	if (edit === "mib") return <MibFields />;
 	if (edit === "bracket_angle")
 		return (
 			<NumberField
@@ -553,36 +536,7 @@ function FixtureEditFields() {
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			/>
 		);
-	if (edit === "mib_delay")
-		return (
-			<NumberField
-				autoFocus
-				label="MIB Delay (s)"
-				min={0}
-				step={0.1}
-				allowDecimal
-				value={editText}
-				onChange={(event) => controller.ui.setEditText(event.target.value)}
-			/>
-		);
-	if (edit === "group_masters" || edit === "grand_master")
-		return (
-			<>
-				<PolicySelect
-					label={edit === "group_masters" ? "Group Masters" : "Grand Master"}
-					falseLabel="Ignored"
-					trueLabel="Controlled"
-				/>
-				{editText === "false" && (
-					<p className="patch-policy-warning" role="alert">
-						This fixture can remain live while the{" "}
-						{edit === "group_masters"
-							? "Group Masters are reduced."
-							: "Grand Master is reduced."}
-					</p>
-				)}
-			</>
-		);
+	if (edit === "masters") return <MastersFields />;
 	if (edit === "invert_pan" || edit === "invert_tilt")
 		return (
 			<PolicySelect
@@ -597,6 +551,86 @@ function FixtureEditFields() {
 		);
 	if (edit === "mode") return <ModeField />;
 	return null;
+}
+
+/** What stays live when a master is pulled, for every Masters value short of `both`. */
+const MASTERS_WARNINGS: Record<Exclude<MastersValue, "both">, string> = {
+	none: "Group Masters and the Grand Master are reduced.",
+	group: "Grand Master is reduced.",
+	grand: "Group Masters are reduced.",
+};
+
+function MastersFields() {
+	const controller = usePatchController();
+	const value = controller.ui.editText;
+	return (
+		<>
+			{/* biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label. */}
+			<label>
+				Masters
+				<Select
+					autoFocus
+					aria-label="Masters value"
+					value={value}
+					onChange={(event) => controller.ui.setEditText(event.target.value)}
+				>
+					{MASTERS_VALUES.map((option) => (
+						<option key={option} value={option}>
+							{option}
+						</option>
+					))}
+				</Select>
+			</label>
+			{isMastersValue(value) && value !== "both" ? (
+				<p className="patch-policy-warning" role="alert">
+					This fixture can remain live while the {MASTERS_WARNINGS[value]}
+				</p>
+			) : null}
+		</>
+	);
+}
+
+/** Move in Black is Off, or on with a delay from 0 s to 30 s. */
+function MibFields() {
+	const controller = usePatchController();
+	const { editText, editBaseline, setEditText } = controller.ui;
+	const off = editText === "off";
+	return (
+		<>
+			{/* biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label. */}
+			<label>
+				Move in Black
+				<Select
+					autoFocus
+					aria-label="Move in Black value"
+					value={off ? "off" : "on"}
+					onChange={(event) =>
+						setEditText(
+							event.target.value === "off"
+								? "off"
+								: editBaseline !== "off"
+									? editBaseline
+									: "0",
+						)
+					}
+				>
+					<option value="off">Off</option>
+					<option value="on">On</option>
+				</Select>
+			</label>
+			{off ? null : (
+				<NumberField
+					label="MIB delay (s)"
+					min={0}
+					max={MIB_MAX_SECONDS}
+					step={0.1}
+					allowDecimal
+					value={editText}
+					onChange={(event) => setEditText(event.target.value)}
+				/>
+			)}
+		</>
+	);
 }
 
 function PolicySelect({
@@ -744,9 +778,7 @@ function editTitle(
 	edit: NonNullable<ReturnType<typeof usePatchController>["ui"]["edit"]>,
 ) {
 	if (edit === "mib") return "MIB";
-	if (edit === "mib_delay") return "MIB Delay";
-	if (edit === "group_masters") return "Group Masters";
-	if (edit === "grand_master") return "Grand Master";
+	if (edit === "masters") return "Masters";
 	if (edit === "invert_pan") return "Invert Pan";
 	if (edit === "invert_tilt") return "Invert Tilt";
 	if (edit === "bracket_angle") return "Bracket angle";

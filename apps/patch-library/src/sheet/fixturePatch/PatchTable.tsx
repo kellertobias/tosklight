@@ -28,6 +28,8 @@ import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
 import { PATCH_SHEET_COLUMNS, type PatchSheetColumn } from "./patchColumns";
+import { formatMib, mastersValue } from "./policyValues";
+import { revealPatchRow } from "./revealRow";
 import { isPatchSortColumn, nextPatchSort } from "./tableSort";
 import {
 	definitionSplits,
@@ -58,8 +60,11 @@ export function PatchTable() {
 	useLayoutEffect(() => {
 		if (!revealRequest) return;
 		setRevealRequest(null);
-		if (wrap.current)
-			revealFixtureRow(wrap.current, revealRequest.fixtureId, bottomInset);
+		const row = [
+			...(wrap.current?.querySelectorAll<HTMLElement>("tr[data-fixture-id]") ??
+				[]),
+		].find((candidate) => candidate.dataset.fixtureId === revealRequest.fixtureId);
+		if (row) revealPatchRow(row, bottomInset);
 	}, [revealRequest, setRevealRequest, bottomInset]);
 	return (
 		<section
@@ -127,26 +132,6 @@ function PatchColumnHeader({ column }: { column: string }) {
  * Scrolls a fixture's row into view unless it is already fully visible between the sticky header
  * and any stage preview covering the bottom of the table.
  */
-function revealFixtureRow(
-	container: HTMLElement,
-	fixtureId: string,
-	bottomInset: number,
-) {
-	const row = [
-		...container.querySelectorAll<HTMLElement>("tr[data-fixture-id]"),
-	].find((candidate) => candidate.dataset.fixtureId === fixtureId);
-	if (!row) return;
-	const area = container.getBoundingClientRect();
-	// Without layout there is nothing to scroll.
-	if (area.height <= 0) return;
-	const header = container.querySelector("thead")?.getBoundingClientRect();
-	const top = Math.max(area.top, header?.bottom ?? area.top);
-	const bottom = area.bottom - bottomInset;
-	const rect = row.getBoundingClientRect();
-	if (rect.top >= top && rect.bottom <= bottom) return;
-	row.scrollIntoView({ block: "nearest" });
-}
-
 function FixtureRows({ fixture }: { fixture: PatchedFixture }) {
 	return (
 		<Fragment>
@@ -298,7 +283,7 @@ function FixturePolicyCells({ fixture }: { fixture: PatchedFixture }) {
 		available: boolean,
 		label: string,
 		value: boolean,
-		kind: "group_masters" | "grand_master" | "invert_pan" | "invert_tilt",
+		kind: "invert_pan" | "invert_tilt",
 		trueLabel: string,
 		falseLabel: string,
 	) => (
@@ -325,22 +310,7 @@ function FixturePolicyCells({ fixture }: { fixture: PatchedFixture }) {
 	);
 	return (
 		<>
-			{policyCell(
-				applicable.groupMasters,
-				"Group Masters",
-				fixture.group_masters_enabled ?? true,
-				"group_masters",
-				"Controlled",
-				"Ignored",
-			)}
-			{policyCell(
-				applicable.grandMaster,
-				"Grand Master",
-				fixture.grand_master_enabled ?? true,
-				"grand_master",
-				"Controlled",
-				"Ignored",
-			)}
+			<MastersCell fixture={fixture} />
 			{policyCell(
 				applicable.pan,
 				"Invert Pan",
@@ -521,7 +491,8 @@ function DesktopEditableValue({
 	const input = useRef<HTMLInputElement>(null);
 	useEffect(() => {
 		if (!editing) return;
-		input.current?.focus();
+		// Focusing must not scroll the table sideways towards the field.
+		input.current?.focus({ preventScroll: true });
 		const outside = (event: PointerEvent) => {
 			if (editor.current?.contains(event.target as Node)) return;
 			requestFixtureEditClose(controller);
@@ -617,48 +588,53 @@ function DesktopEditableValue({
 
 function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
-	if (!isDmxPatchable(fixture.definition))
-		return (
-			<>
-				<Shown column="mib">
-					<td>—</td>
-				</Shown>
-				<Shown column="mib_delay">
-					<td>—</td>
-				</Shown>
-			</>
-		);
 	return (
-		<>
-			<Shown column="mib">
+		<Shown column="mib">
 			<td>
-				<Button
-					className="patch-value"
-					aria-label={`Move in Black ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, "mib")}
-					onContextMenu={(event) =>
-						openModalOnContext(event, controller, fixture, "mib")
-					}
-				>
-					{(fixture.move_in_black_enabled ?? true) ? "On" : "Off"}
-				</Button>
+				{isDmxPatchable(fixture.definition) ? (
+					<Button
+						className="patch-value"
+						aria-label={`MIB ${fixtureDisplayId(fixture)}`}
+						onClick={() => armEdit(controller, fixture, "mib")}
+						onContextMenu={(event) =>
+							openModalOnContext(event, controller, fixture, "mib")
+						}
+					>
+						{formatMib(fixture)}
+					</Button>
+				) : (
+					"—"
+				)}
 			</td>
-			</Shown>
-			<Shown column="mib_delay">
+		</Shown>
+	);
+}
+
+/** Which masters reduce the fixture: none, group, grand or both. */
+function MastersCell({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const value = mastersValue(fixture);
+	return (
+		<Shown column="masters">
 			<td>
-				<Button
-					className="patch-value"
-					aria-label={`MIB Delay ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, "mib_delay")}
-					onContextMenu={(event) =>
-						openModalOnContext(event, controller, fixture, "mib_delay")
-					}
-				>
-					{(fixture.move_in_black_delay_millis ?? 0) / 1000} s
-				</Button>
+				{value ? (
+					<Button
+						className="patch-value"
+						aria-label={`Masters ${fixtureDisplayId(fixture)}`}
+						onClick={() => armEdit(controller, fixture, "masters")}
+						onContextMenu={(event) =>
+							openModalOnContext(event, controller, fixture, "masters")
+						}
+					>
+						{value}
+					</Button>
+				) : (
+					<span role="img" aria-label="Masters unavailable">
+						—
+					</span>
+				)}
 			</td>
-			</Shown>
-		</>
+		</Shown>
 	);
 }
 
@@ -764,7 +740,6 @@ function isContextualNumericEdit(
 	return (
 		kind === "number" ||
 		kind === "address" ||
-		kind === "mib_delay" ||
 		kind === "bracket_angle" ||
 		kind === "shaper_angle" ||
 		((kind === "location" || kind === "rotation") && Boolean(axis))
@@ -855,18 +830,9 @@ function MultiPatchRow({
 					)}
 				</td>
 			</Shown>
-			<Shown column="group_masters">
+			<Shown column="masters">
 				<td>
-					{applicable.groupMasters
-						? `Shared · ${(fixture.group_masters_enabled ?? true) ? "Controlled" : "Ignored"}`
-						: "—"}
-				</td>
-			</Shown>
-			<Shown column="grand_master">
-				<td>
-					{applicable.grandMaster
-						? `Shared · ${(fixture.grand_master_enabled ?? true) ? "Controlled" : "Ignored"}`
-						: "—"}
+					{mastersValue(fixture) ? `Shared · ${mastersValue(fixture)}` : "—"}
 				</td>
 			</Shown>
 			<MultipatchAxisCell
@@ -882,9 +848,6 @@ function MultiPatchRow({
 				available={applicable.tilt}
 			/>
 			<Shown column="mib">
-				<td />
-			</Shown>
-			<Shown column="mib_delay">
 				<td />
 			</Shown>
 			<MultipatchTransformCells fixture={fixture} instance={instance} />
