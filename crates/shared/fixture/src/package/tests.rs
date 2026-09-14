@@ -30,6 +30,66 @@ fn shipped_profile(filename: &str) -> FixtureProfile {
     read_fixture_package(&fs::read(path).unwrap()).unwrap()
 }
 
+/// The library's two worked examples of a head's colour system: a colour wheel and additive
+/// emitters, each bound to the fixture's own channels in every mode that has them.
+#[test]
+fn shipped_color_system_examples_bind_their_own_channels() {
+    let spot = shipped_profile("cameo--auro-spot-z300.toskfixture");
+    for mode in &spot.modes {
+        let [head] = mode.color_systems.as_slice() else {
+            panic!("{} should carry exactly one colour system", mode.name);
+        };
+        assert!(
+            mode.heads
+                .iter()
+                .any(|candidate| candidate.id == head.head_id)
+        );
+        let ColorSystem::DiscreteWheel { channel_id, slots } = &head.system else {
+            panic!("{} should be a colour wheel", mode.name);
+        };
+        let wheel = mode
+            .channels
+            .iter()
+            .find(|channel| channel.id == *channel_id)
+            .unwrap_or_else(|| panic!("{} binds a channel it does not have", mode.name));
+        assert_eq!(&*wheel.attribute.0, "color.wheel.1");
+        assert_eq!(slots.len(), 9);
+        assert_eq!((slots[0].dmx_from, slots[0].dmx_to), (0, 5));
+        assert!(
+            slots
+                .windows(2)
+                .all(|pair| pair[0].dmx_to < pair[1].dmx_from),
+            "{} wheel slots overlap",
+            mode.name
+        );
+    }
+
+    let par = shipped_profile("cameo--root-par-6.toskfixture");
+    let mode = &par.modes[0];
+    let [head] = mode.color_systems.as_slice() else {
+        panic!("the Root PAR 6 should carry exactly one colour system");
+    };
+    let ColorSystem::Additive { emitters } = &head.system else {
+        panic!("the Root PAR 6 should mix additively");
+    };
+    assert_eq!(
+        emitters
+            .iter()
+            .map(|emitter| emitter.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Red", "Green", "Blue", "White", "Amber", "UV"]
+    );
+    for (emitter, channel) in emitters.iter().zip(&mode.channels[..6]) {
+        assert_eq!(
+            emitter.channel_id, channel.id,
+            "{} is bound out of order",
+            emitter.name
+        );
+    }
+    // Ultraviolet adds nothing a viewer sees, so it takes no part in the mix.
+    assert!(!emitters[5].visible);
+}
+
 #[test]
 fn suedbahnhof_plan_profiles_ship_with_the_explicit_venue_personalities() {
     let expected = [
