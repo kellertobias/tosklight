@@ -4,6 +4,7 @@ import {
 	sceneryOf,
 } from "./scenerySize";
 import { isSceneryOptionEdit, sceneryOptionChange } from "./sceneryOptions";
+import { modelScaleChange } from "./modelScale";
 import type { SplitPatch } from "../../../api/types";
 import type { PatchFixtureUpdateAction } from "../../../features/patch/contracts";
 import { parsePatchAddress } from "../../input/ConsoleFields";
@@ -105,6 +106,11 @@ export function saveEdit(
 		const result = sceneryOptionChange(selected, edit, value);
 		if ("error" in result) controller.ui.setEditError(result.error);
 		else void applyEdit(controller, { scenery_options: result.options });
+	}
+	if (edit === "model_scale") {
+		const result = modelScaleChange(value);
+		if ("error" in result) controller.ui.setEditError(result.error);
+		else void applyEdit(controller, result);
 	}
 	if (edit === "crowd_width" || edit === "crowd_depth")
 		void saveCrowdFootprint(controller, edit, value);

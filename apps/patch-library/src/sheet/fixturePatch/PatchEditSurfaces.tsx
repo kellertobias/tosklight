@@ -30,6 +30,7 @@ import {
 } from "./multipatchActions";
 import { definitionSplits, replaceSelectedSplitPatch } from "./patchModel";
 import { type SceneryEdit, sceneryMeasurement } from "./scenerySize";
+import { modelScaleChange } from "./modelScale";
 import {
 	isMastersValue,
 	MASTERS_VALUES,
@@ -263,12 +264,15 @@ async function applyDesktopValueEntry(
 				raw,
 			);
 		if (!changes) {
-			// A size outside what the Venue object's profile allows says what it does allow.
+			// A size or scale outside what the Venue object allows says what it does allow.
 			const scenery = sceneryMeasurement(fixture, edit as SceneryEdit, raw);
+			const scale = edit === "model_scale" ? modelScaleChange(raw) : null;
 			controller.ui.setEditError(
 				scenery && "error" in scenery
 					? scenery.error
-					: `“${raw}” is not a valid ${desktopNumericEditLabel(edit, controller.ui.editAxis).toLowerCase()}.`,
+					: scale && "error" in scale
+						? scale.error
+						: `“${raw}” is not a valid ${desktopNumericEditLabel(edit, controller.ui.editAxis).toLowerCase()}.`,
 			);
 			return;
 		}
@@ -358,7 +362,8 @@ function isDesktopNumericEdit(
 	| "shaper_angle"
 	| "scenery_width"
 	| "scenery_height"
-	| "scenery_depth" {
+	| "scenery_depth"
+	| "model_scale" {
 	return (
 		edit === "number" ||
 		edit === "address" ||
@@ -368,7 +373,8 @@ function isDesktopNumericEdit(
 		edit === "shaper_angle" ||
 		edit === "scenery_width" ||
 		edit === "scenery_height" ||
-		edit === "scenery_depth"
+		edit === "scenery_depth" ||
+		edit === "model_scale"
 	);
 }
 
@@ -383,6 +389,7 @@ function desktopNumericEditLabel(
 	if (edit === "scenery_width") return "Width";
 	if (edit === "scenery_height") return "Height";
 	if (edit === "scenery_depth") return "Depth";
+	if (edit === "model_scale") return "Scale";
 	if (edit === "location" || edit === "rotation")
 		return `${edit === "location" ? "Location" : "Rotation"} ${axis?.toUpperCase() ?? "value"}`;
 	return "Value";
@@ -415,6 +422,10 @@ function numericFixtureChanges(
 ) {
 	const scenery = sceneryMeasurement(fixture, edit as SceneryEdit, raw);
 	if (scenery) return "size" in scenery ? { scenery_size_metres: scenery.size } : null;
+	if (edit === "model_scale") {
+		const scale = modelScaleChange(raw);
+		return "error" in scale ? null : scale;
+	}
 	const value = Number(raw);
 	if (!Number.isFinite(value)) return null;
 	if (edit === "bracket_angle") return { bracket_angle: value };
@@ -861,6 +872,7 @@ function editTitle(
 	if (edit === "shaper_angle") return "Shaper angle";
 	if (edit === "scenery_colour") return "colour";
 	if (edit === "chain") return "chain";
+	if (edit === "model_scale") return "scale";
 	if (edit === "note") return "note";
 	return edit;
 }

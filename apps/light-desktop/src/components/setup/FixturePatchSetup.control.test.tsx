@@ -487,7 +487,7 @@ describe("Patch right-click SET parity", () => {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
 
-		rightClick(within(row.cells[20]).getByRole("button"));
+		rightClick(within(row.cells[21]).getByRole("button"));
 
 		expect(
 			screen.getByRole("heading", { name: "Select layer" }),
@@ -2241,6 +2241,48 @@ describe("Crowd Area footprint editing", () => {
 			),
 		);
 	});
+	it("scales a Venue object from the Scale column and refuses a scale outside 0.01 to 100", async () => {
+		const fixture = splitFixture();
+		const profile = fixture.definition.profile_snapshot;
+		if (!profile) throw new Error("venue fixture profile is missing");
+		profile.patch_policy = "visual_only";
+		fixture.model_scale = 2.5;
+		const plain = splitFixture();
+		plain.fixture_id = "fixture-plain";
+		plain.fixture_number = 18;
+		server.patch.fixtures = [fixture, plain];
+		render(<FixturePatchSetup />);
+
+		expect(screen.getByRole("button", { name: "Scale 17" })).toHaveTextContent(
+			"2.5×",
+		);
+		expect(screen.queryByRole("button", { name: "Scale 18" })).toBeNull();
+
+		const enterScale = (keys: string[]) => {
+			fireEvent.contextMenu(screen.getByRole("button", { name: "Scale 17" }));
+			const modal = screen.getByRole("dialog", { name: "Scale" });
+			for (const key of keys)
+				fireEvent.click(within(modal).getByRole("button", { name: key }));
+			fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
+		};
+		enterScale(["2", "0", "0"]);
+		expect(
+			await screen.findByText(
+				"Enter a scale from 0.01 to 100; 1 is the size it was built at.",
+			),
+		).toBeInTheDocument();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+
+		cleanup();
+		render(<FixturePatchSetup />);
+		enterScale(["0", ".", "5"]);
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith(
+				"fixture-split",
+				expect.objectContaining({ model_scale: 0.5 }),
+			),
+		);
+	});
 });
 
 describe("Venue multi-patch", () => {
@@ -2287,8 +2329,8 @@ describe("Show Patch visible columns", () => {
 		expect(headers).not.toContain("Masters");
 		expect(headers).not.toContain("Footprint depth");
 		expect(headers).toContain("Footprint height");
-		expect(headers).toHaveLength(19);
-		expect(rowCells()).toBe(19);
+		expect(headers).toHaveLength(20);
+		expect(rowCells()).toBe(20);
 	});
 
 	it("hides a column from the header settings", () => {
@@ -2310,7 +2352,7 @@ describe("Show Patch visible columns", () => {
 		expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
 		expect(screen.getByRole("columnheader", { name: "Name" })).toBeVisible();
 		expect(screen.queryByRole("columnheader", { name: "Layer" })).toBeNull();
-		expect(rowCells()).toBe(20);
+		expect(rowCells()).toBe(21);
 	});
 });
 
@@ -2605,6 +2647,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 			"Footprint depth",
 			"Colour",
 			"Chain",
+			"Scale",
 			"Layer",
 		]);
 		const primary = screen.getByRole("row", {
@@ -2613,8 +2656,8 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const multi = screen.getByRole("row", {
 			name: "Multi-patch Opposite hang",
 		}) as HTMLTableRowElement;
-		expect(primary.cells).toHaveLength(21);
-		expect(multi.cells).toHaveLength(21);
+		expect(primary.cells).toHaveLength(22);
+		expect(multi.cells).toHaveLength(22);
 		expect(multi.cells[1]).toHaveTextContent(/^—$/);
 		expect(multi.cells[2]).toHaveTextContent(/^—$/);
 		expect(multi.cells[4]).toHaveTextContent("S1 3.1 · S3 4.1");

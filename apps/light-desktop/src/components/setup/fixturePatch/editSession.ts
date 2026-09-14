@@ -4,6 +4,7 @@ import {
 	sceneryOf,
 } from "./scenerySize";
 import { chainModeOf, sceneryOptionsOf } from "./sceneryOptions";
+import { modelScaleOf } from "./modelScale";
 import type { PatchedFixture } from "../../../api/types";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureRanges, groupFixtureFamilies } from "../patchUtils";
@@ -93,6 +94,7 @@ function beginFixtureEdit(
 	else if (kind === "scenery_colour")
 		ui.setEditText(sceneryOptionsOf(fixture).colour_srgb ?? "");
 	else if (kind === "chain") ui.setEditText(chainModeOf(fixture));
+	else if (kind === "model_scale") ui.setEditText(String(modelScaleOf(fixture)));
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);

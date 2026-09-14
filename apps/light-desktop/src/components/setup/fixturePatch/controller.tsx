@@ -42,6 +42,7 @@ export type EditKind =
 	| "crowd_depth"
 	| "scenery_colour"
 	| "chain"
+	| "model_scale"
 	| "mode"
 	| "mib"
 	| "masters"

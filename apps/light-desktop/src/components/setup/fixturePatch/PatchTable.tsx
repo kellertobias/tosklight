@@ -9,6 +9,7 @@ import {
 	isChain,
 	sceneryOptionsOf,
 } from "./sceneryOptions";
+import { formatModelScale, hasModelScale, modelScaleOf } from "./modelScale";
 import { Button } from "@tosklight/ui";
 import { Fragment, type ReactNode } from "react";
 import { PATCH_COLUMNS, type PatchColumn } from "../../../types";
@@ -365,7 +366,38 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 			))}
 			<FootprintCells fixture={fixture} />
 			<SceneryOptionCells fixture={fixture} />
+			<ModelScaleCell fixture={fixture} />
 		</>
+	);
+}
+
+/**
+ * How many times its built size a Venue object is drawn — an imported hall modelled in the wrong
+ * unit, a set piece at half size. Anything that is not a Venue object shows a dash.
+ */
+function ModelScaleCell({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	return (
+		<Shown column="model_scale">
+			{hasModelScale(fixture) ? (
+				<td className="patch-secondary">
+					<Button
+						className="patch-value"
+						aria-label={`Scale ${fixtureDisplayId(fixture)}`}
+						onClick={() => armEdit(controller, fixture, "model_scale")}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							beginFixtureEditFromContextMenu(controller, fixture, "model_scale");
+						}}
+					>
+						{formatModelScale(modelScaleOf(fixture))}
+					</Button>
+				</td>
+			) : (
+				NO_MEASUREMENT
+			)}
+		</Shown>
 	);
 }
 
@@ -645,6 +677,7 @@ function MultiPatchRow({
 			{/* A Venue object has no copies, so a copy's row has no colour or chain rigging of its own. */}
 			<Shown column="scenery_colour">{NO_MEASUREMENT}</Shown>
 			<Shown column="chain">{NO_MEASUREMENT}</Shown>
+			<Shown column="model_scale">{NO_MEASUREMENT}</Shown>
 			<Shown column="layer">
 				<td className="patch-secondary">
 					<span>—</span>

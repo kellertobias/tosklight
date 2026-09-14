@@ -29,6 +29,7 @@ import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
 import { PATCH_SHEET_COLUMNS, type PatchSheetColumn } from "./patchColumns";
 import { placedSceneryMetres, SCENERY_AXES, sceneryOf } from "./scenerySize";
+import { formatModelScale, hasModelScale, modelScaleOf } from "./modelScale";
 import {
 	chainModeLabel,
 	chainModeOf,
@@ -710,7 +711,38 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 			</Shown>
 			<SceneryCells fixture={fixture} />
 			<SceneryOptionCells fixture={fixture} />
+			<ModelScaleCell fixture={fixture} />
 		</>
+	);
+}
+
+/**
+ * How many times its built size a Venue object is drawn — an imported hall modelled in the wrong
+ * unit, a set piece at half size. Anything that is not a Venue object shows a dash.
+ */
+function ModelScaleCell({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	return (
+		<Shown column="model_scale">
+			<td className="patch-secondary">
+				{hasModelScale(fixture) ? (
+					<Button
+						className="patch-value"
+						aria-label={`Scale ${fixtureDisplayId(fixture)}`}
+						onClick={() =>
+							armEdit(controller, fixture, "model_scale", undefined, "value_entry")
+						}
+						onContextMenu={(event) =>
+							openModalOnContext(event, controller, fixture, "model_scale")
+						}
+					>
+						{formatModelScale(modelScaleOf(fixture))}
+					</Button>
+				) : (
+					"—"
+				)}
+			</td>
+		</Shown>
 	);
 }
 
@@ -860,6 +892,7 @@ function isContextualNumericEdit(
 		kind === "scenery_width" ||
 		kind === "scenery_height" ||
 		kind === "scenery_depth" ||
+		kind === "model_scale" ||
 		((kind === "location" || kind === "rotation") && Boolean(axis))
 	);
 }
@@ -1059,6 +1092,7 @@ function MultipatchTransformCells({
 			{[
 				...SCENERY_AXES.map((axis) => `footprint_${axis.axis}` as const),
 				...SCENERY_OPTION_COLUMNS,
+				"model_scale" as const,
 			].map((column) => (
 				<Shown column={column} key={column}>
 					<td className="patch-secondary">—</td>

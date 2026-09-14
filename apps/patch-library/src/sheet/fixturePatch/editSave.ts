@@ -17,6 +17,7 @@ import {
 } from "./policyValues";
 import { sceneryMeasurement } from "./scenerySize";
 import { isSceneryOptionEdit, sceneryOptionChange } from "./sceneryOptions";
+import { modelScaleChange } from "./modelScale";
 import { editTargets } from "./selection";
 
 export function saveEdit(
@@ -73,6 +74,11 @@ export function saveEdit(
 		const result = sceneryOptionChange(selected, edit, value);
 		if ("error" in result) controller.ui.setEditError(result.error);
 		else void applyEdit(controller, { scenery_options: result.options });
+	}
+	if (edit === "model_scale") {
+		const result = modelScaleChange(value);
+		if ("error" in result) controller.ui.setEditError(result.error);
+		else void applyEdit(controller, result);
 	}
 	if (
 		edit === "scenery_width" ||

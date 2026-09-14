@@ -50,6 +50,7 @@ export type EditKind =
 	| "scenery_depth"
 	| "scenery_colour"
 	| "chain"
+	| "model_scale"
 	| null;
 
 export type VectorAxis = "x" | "y" | "z";

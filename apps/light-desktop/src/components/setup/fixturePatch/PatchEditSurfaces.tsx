@@ -174,6 +174,22 @@ export function FixtureEditDialog() {
 			/>
 		);
 	}
+	if (edit === "model_scale") {
+		return (
+			<ModalNumberEditor
+				ariaLabel="Scale"
+				title="Set scale"
+				value={controller.ui.editText}
+				onChange={controller.ui.setEditText}
+				onSubmit={(value) =>
+					saveEdit(controller, value ?? controller.ui.editText)
+				}
+				onClose={close}
+				allowDecimal
+				error={controller.ui.editError}
+			/>
+		);
+	}
 	if (edit === "crowd_width" || edit === "crowd_depth") {
 		const label = edit === "crowd_width" ? "Crowd width" : "Crowd depth";
 		return (
@@ -569,5 +585,6 @@ function editTitle(
 	if (edit === "crowd_depth") return "Crowd depth";
 	if (edit === "scenery_colour") return "Colour";
 	if (edit === "chain") return "Chain";
+	if (edit === "model_scale") return "Scale";
 	return edit;
 }

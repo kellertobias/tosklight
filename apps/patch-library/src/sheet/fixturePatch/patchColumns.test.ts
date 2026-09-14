@@ -50,6 +50,7 @@ describe("patch sheet quick views", () => {
 			"Footprint depth",
 			"Colour",
 			"Chain",
+			"Scale",
 			"Layer",
 			"2D",
 			"3D",

@@ -683,6 +683,52 @@ describe("fixture output policy cells", () => {
 	});
 });
 
+describe("Venue object model scale", () => {
+	it("scales a Venue object from the Scale column and refuses a scale outside 0.01 to 100", async () => {
+		const venue = splitFixture();
+		const profile = venue.definition.profile_snapshot;
+		if (!profile) throw new Error("venue fixture profile is missing");
+		profile.patch_policy = "visual_only";
+		venue.model_scale = 2;
+		const lamp = splitFixture();
+		lamp.fixture_id = "fixture-lamp";
+		lamp.fixture_number = 18;
+		lamp.name = "Lamp 18";
+		server.patch.fixtures = [venue, lamp];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		expect(screen.getByRole("button", { name: "Scale 17" })).toHaveTextContent(
+			"2×",
+		);
+		expect(screen.queryByRole("button", { name: "Scale 18" })).toBeNull();
+
+		const enterScale = (keys: string[]) => {
+			fireEvent.click(screen.getByRole("button", { name: "Scale 17" }));
+			const modal = screen.getByRole("dialog", { name: "Scale" });
+			for (const key of keys)
+				fireEvent.click(within(modal).getByRole("button", { name: key }));
+			fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
+		};
+		enterScale(["2", "0", "0"]);
+		expect(
+			await screen.findByText(
+				"Enter a scale from 0.01 to 100; 1 is the size it was built at.",
+			),
+		).toBeInTheDocument();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+
+		cleanup();
+		render(<FixturePatchSetup />);
+		enterScale(["0", ".", "5"]);
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				model_scale: 0.5,
+			}),
+		);
+	});
+});
+
 describe("selected split selection and SET editing", () => {
 	it("can reveal cross-scope and empty layers without changing fixture scope", () => {
 		const light = splitFixture();
