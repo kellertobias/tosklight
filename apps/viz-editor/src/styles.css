@@ -179,14 +179,20 @@ body {
 .viz-editor-shell {
 	display: grid;
 	grid-template-columns: 104px minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
 	flex: 1;
 	min-height: 0;
 }
 
+/* A short window scrolls the dock inside itself; it must never push the whole window's title bars
+   up out of reach. */
 .viz-editor-sidebar {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: none;
+	scrollbar-width: none;
 	padding: 42px 7px 10px;
 	border-right: 1px solid var(--border-subtle, #1d2530);
 	background: var(--surface-raised, #10151c);
@@ -244,6 +250,10 @@ body {
 
 .viz-editor-machine-nav {
 	margin-top: auto;
+}
+
+.viz-editor-dmx-nav {
+	margin-top: 4px;
 }
 
 .viz-editor-settings-nav {
@@ -643,68 +653,47 @@ body {
 	overflow: hidden;
 }
 
-.viz-mcp-settings {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	min-width: 0;
-	min-height: 0;
-	overflow: hidden;
-	background: var(--ui-surface, #16181c);
-}
-
+/* The MCP tab reuses the Visualizer settings layout; these only style what it adds. */
 .viz-mcp-settings-scroll {
-	display: grid;
 	box-sizing: border-box;
-	align-content: start;
 	flex: 1;
-	gap: 1rem;
-	width: 100%;
-	max-width: 58rem;
-	min-height: 0;
-	padding: 1.5rem;
-	overflow-x: hidden;
-	overflow-y: auto;
-	overscroll-behavior: contain;
 }
 
-.viz-mcp-settings-scroll > header p,
-.viz-mcp-settings-scroll section p,
-.viz-mcp-settings-scroll aside {
-	color: var(--ui-text-muted, #aeb4bf);
-	line-height: 1.5;
+.viz-mcp-settings-scroll .viz-renderer-settings-grid p {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+	line-height: 1.45;
 }
 
 .viz-mcp-settings-scroll pre {
-	padding: 1rem;
+	margin: 0;
+	padding: 10px;
 	overflow: auto;
-	border: 1px solid var(--ui-border, #3a3d43);
-	border-radius: 0.4rem;
-	background: #0d0f12;
-	color: #f2f4f8;
+	border: 1px solid var(--border-strong, #435267);
+	border-radius: 4px;
+	background: var(--surface-base, #07090c);
+	font-size: 12px;
 	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 	user-select: text;
-}
-
-.viz-mcp-settings-scroll aside {
-	padding: 0.85rem 1rem;
-	border-left: 0.25rem solid var(--ui-accent, #f2b705);
-	background: color-mix(in srgb, var(--ui-accent, #f2b705) 8%, transparent);
 }
 
 .viz-mcp-paths {
 	display: grid;
-	gap: 0.75rem;
+	gap: 8px;
+	margin: 0;
+	font-size: 12px;
 }
 
 .viz-mcp-paths div {
 	display: grid;
-	grid-template-columns: 10rem minmax(0, 1fr);
-	gap: 1rem;
+	grid-template-columns: 9rem minmax(0, 1fr);
+	gap: 14px;
 }
 
 .viz-mcp-paths dt {
-	color: var(--ui-text-muted, #aeb4bf);
+	color: var(--text-secondary, #98a4b3);
 }
 
 .viz-mcp-paths dd {
@@ -712,9 +701,10 @@ body {
 	margin: 0;
 	overflow-wrap: anywhere;
 	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	user-select: text;
 }
 
-.viz-mcp-settings-error {
+.viz-mcp-settings-scroll .viz-renderer-settings-grid p.viz-mcp-settings-error {
 	color: var(--ui-danger, #ff7373);
 }
 
@@ -971,8 +961,34 @@ body {
 .viz-editor-workspace > .show-patch-layout > .ui-window-header [role="button"],
 .viz-editor-workspace > .viz-show-settings-workspace > .ui-window-header button,
 .viz-editor-workspace > .viz-fixture-library-workspace > .ui-window-header button,
+.viz-editor-workspace > .viz-fixture-library-workspace > .ui-window-header input,
 .viz-editor-workspace > .viz-media-workspace > .ui-window-header button {
 	-webkit-app-region: no-drag;
+}
+
+/* The desk's taller bar nudges search text down to meet its buttons' labels. This bar is 31px,
+   where the same nudge leaves the text visibly low, so the text sits on the bar's true centre. */
+.viz-editor-workspace .ui-window-header-search .ui-text-control > .ui-input {
+	padding-top: 0;
+}
+
+/*
+ * The Architect is worked with a mouse, so a button says it can be pressed before it is.
+ *
+ * `:where()` keeps these at the lowest weight, so a surface that styles its own buttons — the
+ * title bars, the window controls — keeps its own hover.
+ */
+:where(.ui-button):not(:disabled) {
+	cursor: pointer;
+}
+
+:where(.ui-button):disabled {
+	cursor: not-allowed;
+}
+
+:where(.ui-button):hover:not(:disabled) {
+	border-color: #3d5260;
+	background-color: #1f2a33;
 }
 
 .viz-editor-workspace > .show-patch-layout > .patch-layers {
@@ -2687,7 +2703,6 @@ body {
 	overflow: auto;
 }
 
-.viz-fixture-library-workspace > .ui-search-bar,
 .viz-fixture-library-workspace > .empty-editor-message {
 	margin: 0 12px;
 }

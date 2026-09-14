@@ -73,12 +73,6 @@ export function EditorSidebar({
 						disabled: !hasDocument,
 					},
 					{
-						id: "dmx",
-						label: "DMX",
-						icon: <span>▦</span>,
-						disabled: !hasDocument,
-					},
-					{
 						id: "venue",
 						label: "Venue",
 						icon: <span>◇</span>,
@@ -105,6 +99,22 @@ export function EditorSidebar({
 				onSelect={(id) => onSelectWorkspace(id as EditorWorkspace)}
 				entries={[
 					{ id: "fixtures", label: "Fixtures", icon: <span>✺</span> },
+				]}
+			/>
+			{/* DMX is the wiring to the outside world rather than a screen of the show, so it sits with
+			    the other plumbing at the foot of the dock. */}
+			<OperatorDestinationList
+				ariaLabel="DMX"
+				className="viz-editor-dmx-nav"
+				activeId={workspace}
+				onSelect={(id) => onSelectWorkspace(id as EditorWorkspace)}
+				entries={[
+					{
+						id: "dmx",
+						label: "DMX",
+						icon: <span>▦</span>,
+						disabled: !hasDocument,
+					},
 				]}
 			/>
 			<Button

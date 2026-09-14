@@ -8,6 +8,7 @@ interface McpConfiguration {
 	jsonConfiguration: string;
 }
 
+/** Laid out like the Visualizer settings tabs beside it: a header over a column of cards. */
 export function McpSettingsWorkspace() {
 	const [configuration, setConfiguration] = useState<McpConfiguration | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -27,8 +28,8 @@ export function McpSettingsWorkspace() {
 	}, []);
 
 	return (
-		<section className="viz-mcp-settings">
-			<div className="viz-mcp-settings-scroll">
+		<section className="viz-renderer-settings viz-mcp-settings">
+			<div className="viz-renderer-settings-scroll viz-mcp-settings-scroll">
 				<header>
 					<h1>MCP integration</h1>
 					<p>
@@ -37,50 +38,60 @@ export function McpSettingsWorkspace() {
 						endpoint automatically.
 					</p>
 				</header>
-				{error ? (
-					<p className="viz-mcp-settings-error" role="alert">
-						{error}
-					</p>
-				) : configuration ? (
-					<>
+				<div className="viz-renderer-settings-grid">
+					{error ? (
 						<section>
-							<h2>This installation</h2>
-							<dl className="viz-mcp-paths">
-								<div>
-									<dt>Application</dt>
-									<dd>{configuration.applicationPath}</dd>
-								</div>
-								<div>
-									<dt>Bundled MCP server</dt>
-									<dd>{configuration.serverPath}</dd>
-								</div>
-							</dl>
-						</section>
-						<section>
-							<h2>Codex</h2>
-							<p>
-								Run this copy-ready command, then restart Codex so the tools become
-								available:
+							<p className="viz-mcp-settings-error" role="alert">
+								{error}
 							</p>
-							<pre aria-label="Codex MCP configuration">
-								<code>{configuration.codexCommand}</code>
-							</pre>
 						</section>
-						<section>
-							<h2>Other MCP clients</h2>
-							<p>Use the same bundled stdio server and environment setting:</p>
-							<pre aria-label="JSON MCP configuration">
-								<code>{configuration.jsonConfiguration}</code>
-							</pre>
-						</section>
-					</>
-				) : (
-					<p role="status">Locating this installation’s MCP bridge…</p>
-				)}
-				<aside>
-					The bridge can search fixture profiles, add and remove fixtures, patch DMX,
-					and edit fixture placement. It can only edit the show currently open here.
-				</aside>
+					) : configuration ? (
+						<>
+							<section>
+								<h2>This installation</h2>
+								<dl className="viz-mcp-paths">
+									<div>
+										<dt>Application</dt>
+										<dd>{configuration.applicationPath}</dd>
+									</div>
+									<div>
+										<dt>Bundled MCP server</dt>
+										<dd>{configuration.serverPath}</dd>
+									</div>
+								</dl>
+							</section>
+							<section>
+								<h2>Codex</h2>
+								<p>
+									Run this copy-ready command, then restart Codex so the tools become
+									available:
+								</p>
+								<pre aria-label="Codex MCP configuration">
+									<code>{configuration.codexCommand}</code>
+								</pre>
+							</section>
+							<section>
+								<h2>Other MCP clients</h2>
+								<p>Use the same bundled stdio server and environment setting:</p>
+								<pre aria-label="JSON MCP configuration">
+									<code>{configuration.jsonConfiguration}</code>
+								</pre>
+							</section>
+						</>
+					) : (
+						<p className="viz-renderer-settings-loading" role="status">
+							Locating this installation’s MCP bridge…
+						</p>
+					)}
+					<section>
+						<h2>Scope</h2>
+						<p>
+							The bridge can search fixture profiles, add and remove fixtures, patch
+							DMX, and edit fixture placement. It can only edit the show currently
+							open here.
+						</p>
+					</section>
+				</div>
 			</div>
 		</section>
 	);

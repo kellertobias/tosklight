@@ -14,6 +14,20 @@ export function beginWindowDrag(event: React.PointerEvent<HTMLElement>) {
 		.catch(() => undefined);
 }
 
+/// Moves the window from a title bar, but never from a control that sits in it.
+///
+/// Starting a native drag cancels the press, so a button would never click and a search field
+/// would never take focus.
+export function beginTitleBarDrag(event: React.PointerEvent<HTMLElement>) {
+	if (
+		(event.target as HTMLElement).closest(
+			"button, input, select, textarea, [role='button']",
+		)
+	)
+		return;
+	beginWindowDrag(event);
+}
+
 /// Starts a native resize from the corner grip.
 ///
 /// The window is drawn without decorations, so macOS gives it no visible corner to pull and only
@@ -125,15 +139,7 @@ export function WindowTitle({
 		<header
 			className="viz-native-window-title"
 			data-tauri-drag-region
-			onPointerDown={(event) => {
-				if (
-					(event.target as HTMLElement).closest(
-						"button, input, select, textarea, [role='button']",
-					)
-				)
-					return;
-				beginWindowDrag(event);
-			}}
+			onPointerDown={beginTitleBarDrag}
 		>
 			<span className="viz-window-title-copy">{title}</span>
 			{children}

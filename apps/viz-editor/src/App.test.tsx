@@ -912,10 +912,18 @@ describe("the Viz editor window", () => {
 			mockDmx();
 			renderApp();
 			const dmx = await screen.findByRole("button", { name: "DMX" });
-			// It sits with the show's screens, straight after Patch.
-			expect(screen.getByRole("button", { name: "Patch" }).nextElementSibling).toBe(
-				dmx,
-			);
+			// It sits at the foot of the dock, below Fixtures, not among the show's screens.
+			expect(
+				within(screen.getByRole("navigation", { name: "Visualizer screens" })).queryByRole(
+					"button",
+					{ name: "DMX" },
+				),
+			).toBeNull();
+			expect(
+				screen
+					.getByRole("button", { name: "Fixtures" })
+					.compareDocumentPosition(dmx) & Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
 			fireEvent.click(dmx);
 			await screen.findByRole("heading", { name: "Live DMX Inputs" });
 			expect(dmxHeader()).toHaveTextContent("DMX");
