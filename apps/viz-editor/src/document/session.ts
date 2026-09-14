@@ -150,6 +150,48 @@ export interface ReceivedDmx {
 	warnings: string[];
 }
 
+/** One physical port an Art-Net node reports, and the universe it carries. */
+export interface NetworkNodePort {
+	label: string;
+	universe: number;
+	/** `DMX512` for nearly every node. */
+	kind: string;
+	/** The node reports data passing through the port now. */
+	active: boolean;
+}
+
+export interface NetworkSentUniverse {
+	protocol: LiveDmxProtocol;
+	universe: number;
+	/** The node itself says it sends it, rather than only being seen sending it. */
+	announced: boolean;
+	/** Data for it from this node is arriving now. */
+	live: boolean;
+}
+
+/** Everything found at one IP address on the network. */
+export interface NetworkNode {
+	address: string;
+	name: string;
+	longName: string;
+	report: string;
+	mac: string | null;
+	protocols: LiveDmxProtocol[];
+	/** DMX inputs: the node sends each as its universe. */
+	inputs: NetworkNodePort[];
+	/** DMX outputs: the node plays each universe out of the port. */
+	outputs: NetworkNodePort[];
+	sends: NetworkSentUniverse[];
+	lastSeenMillis: number;
+}
+
+export interface NetworkSources {
+	nodes: NetworkNode[];
+	/** The broadcast addresses Art-Net polls go to. */
+	polling: string[];
+	warnings: string[];
+}
+
 export interface MediaTransform {
 	positionMetres: [number, number, number];
 	rotationDegrees: [number, number, number];
@@ -434,6 +476,12 @@ export const documentSession = {
 	/** This machine's IPv4 interfaces, for choosing where Art-Net and sACN are received. */
 	networkInterfaces: () => invoke<NetworkInterface[]>("network_interfaces"),
 	stopReceivedDmx: () => invoke<void>("stop_received_dmx"),
+	/**
+	 * Every Art-Net node and sACN source this machine can find. The first call starts polling the
+	 * network; it keeps polling until `stopNetworkSources`.
+	 */
+	networkSources: () => invoke<NetworkSources>("network_sources"),
+	stopNetworkSources: () => invoke<void>("stop_network_sources"),
 	/** Take a copy of that desk's show and open it here. */
 	loadFromDesk: (instance: string) =>
 		invoke<DocumentSummary>("load_from_desk", { instance }),

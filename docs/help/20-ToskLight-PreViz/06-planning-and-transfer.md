@@ -158,28 +158,45 @@ copy exists. To send work back, use **Load from Visualizer** in the desk's **Loa
 
 ## The DMX screen
 
-**DMX** in the sidebar opens the editor's DMX screen, with three tabs across its title:
+**DMX**, at the foot of the sidebar below **Fixtures**, opens the editor's DMX screen, with four tabs across its title:
 
 * **Network** configures where the show's DMX arrives from: the network interface this computer
   receives it on, and the live DMX inputs described below.
 * **Patch** shows every channel of every patched universe as a grid of numbered cells. A cell is
   lit when a fixture, one of its splits, or one of its multi-patches occupies that address and dark
-  when nothing does; a fixture's first address carries a mark on its left edge, so neighbouring
-  fixtures stay apart, and an address two patches share is drawn in orange. Select a cell to see
-  which fixture owns it, its patch range, split, fixture channel and attribute, and the address's
-  DIP-switch setting.
+  when nothing does. The addresses of one fixture share a single outline, a fixture's first address
+  carries a mark on its left edge, so neighbouring fixtures stay apart, and an address two patches
+  share is drawn in orange. Select a cell to see which fixture owns it, its patch range, split,
+  fixture channel and attribute, and the address's DIP-switch setting.
 * **Values** is the desk's **DMX Output** window applied to the DMX this machine receives. Each
-  universe the show listens on is a row of dots that brighten with the received level; its header
-  names the protocol and frame rate, **Holding the last frame** once a source stops, or **Waiting
-  for DMX** before anything arrived. Select a dot to read its value, fixture and DIP switches;
-  with nothing selected, the side column lists every input being listened on with its health, its
-  sender, and how many packets it accepted. The window's settings set the dot size. The editor
-  outputs no DMX, so nothing on this tab overrides a value.
+  universe the show patches or listens on is a row of dots, one for every channel, that brighten
+  with the received level. A patched channel's dot has a grey outline and an unpatched one a dark
+  red outline. A universe's header names the protocol, frame rate and sender, **Holding the last
+  frame** once a source stops, or **Waiting for DMX** before anything arrived. Select a dot to
+  read its value, fixture and DIP switches; with nothing selected, the side column lists every
+  input being listened on with its health, its sender, and how many packets it accepted. The
+  window's settings set the dot size. The editor outputs no DMX, so nothing on this tab overrides
+  a value.
+* **Sources** lists every Art-Net node and sACN source this computer finds on the network, one row
+  per IP address: its name, IP address and protocols, its **Inputs** — each DMX input and the
+  Art-Net universe it sends — and **Outputs** — each DMX output and the Art-Net universe it plays —
+  and the universes it **Sends** and **Receives**. A universe is highlighted while its data is
+  arriving. Select a node's name to read its long name, MAC address and status report.
 
 Values listens exactly where the Visualizer does: the show's output routes, the live DMX inputs
 over them, and the Art-Net and sACN defaults for every patched universe when neither names any,
 each on the interface chosen for its protocol. It only listens while the tab is open, and shares
 its ports so a Visualizer on the same computer keeps receiving beside it.
+
+Sources sends an Art-Net poll to each network every three seconds and lists the nodes that answer;
+a node that stops answering disappears after about ten seconds. sACN has no poll: a source is
+listed from the universe-discovery announcements it sends every ten seconds. The ToskLight desk
+does both, so it appears with every universe its routes send. A sender that neither answers polls
+nor announces still appears, with the universes it is seen sending: any Art-Net broadcast, and
+sACN on the show's own universes. sACN receivers announce
+nothing, so they cannot be listed. Like Values, Sources uses the interface chosen for each protocol
+and only looks while the tab is open. A node that answers polls only by unicast can be missed
+while a Visualizer on the same computer is receiving Art-Net.
 
 ## Choose the input network
 

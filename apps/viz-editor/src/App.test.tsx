@@ -857,6 +857,40 @@ describe("the Viz editor window", () => {
 			};
 		};
 
+		const networkSources = {
+			nodes: [
+				{
+					address: "10.0.0.4",
+					name: "Desk",
+					longName: "",
+					report: "",
+					mac: null,
+					protocols: ["sacn"],
+					inputs: [],
+					outputs: [],
+					sends: [
+						{ protocol: "sacn", universe: 2, announced: false, live: true },
+						{ protocol: "sacn", universe: 3, announced: true, live: false },
+					],
+					lastSeenMillis: 200,
+				},
+				{
+					address: "10.0.0.20",
+					name: "Node 4",
+					longName: "Acme Node Four",
+					report: "#0001 [0042] Power On Tests successful",
+					mac: "00:11:22:33:44:55",
+					protocols: ["artnet"],
+					inputs: [{ label: "Port 1", universe: 7, kind: "DMX512", active: true }],
+					outputs: [{ label: "Port 2", universe: 2, kind: "DMX512", active: false }],
+					sends: [{ protocol: "artnet", universe: 7, announced: true, live: true }],
+					lastSeenMillis: 800,
+				},
+			],
+			polling: ["10.0.0.255"],
+			warnings: [],
+		};
+
 		const networkInterfaces = [
 			{ name: "en0", address: "10.0.0.5", netmask: "255.255.255.0", loopback: false },
 			{ name: "lo0", address: "127.0.0.1", netmask: "255.0.0.0", loopback: true },
@@ -892,6 +926,9 @@ describe("the Viz editor window", () => {
 						return Promise.resolve(liveInputs);
 					case "received_dmx":
 						return Promise.resolve(received());
+					case "network_sources":
+						return Promise.resolve(networkSources);
+					case "stop_network_sources":
 					case "stop_received_dmx":
 						return Promise.resolve();
 					default:
@@ -931,12 +968,13 @@ describe("the Viz editor window", () => {
 				within(dmxHeader())
 					.getAllByRole("tab")
 					.map((tab) => tab.textContent),
-			).toEqual(["Network", "Patch", "Values"]);
+			).toEqual(["Network", "Patch", "Values", "Sources"]);
 			expect(
 				within(dmxHeader()).getByRole("tab", { name: "Network" }),
 			).toHaveClass("is-active");
 			// Nothing listens until Values is open.
 			expect(invoke).not.toHaveBeenCalledWith("received_dmx");
+			expect(invoke).not.toHaveBeenCalledWith("network_sources");
 		});
 
 		it("chooses the interface each protocol is received on, for this computer only", async () => {
@@ -1000,6 +1038,12 @@ describe("the Viz editor window", () => {
 			expect(cell(11)).not.toHaveClass("is-start");
 			expect(cell(12)).toHaveClass("is-patched");
 			expect(cell(13)).not.toHaveClass("is-patched");
+			// One fixture's addresses share one outline.
+			expect(cell(10)).not.toHaveClass("joins-prev");
+			expect(cell(10)).toHaveClass("joins-next");
+			expect(cell(11)).toHaveClass("joins-prev", "joins-next");
+			expect(cell(12)).toHaveClass("joins-prev");
+			expect(cell(12)).not.toHaveClass("joins-next");
 			expect(cell(13)).toHaveAccessibleName("Universe 2, address 13, not patched");
 			fireEvent.click(cell(11));
 			const info = document_root()?.querySelector(".viz-dmx-info");
@@ -1008,6 +1052,34 @@ describe("the Viz editor window", () => {
 			expect(info).toHaveTextContent("Fixture channel2 of 3");
 			expect(info).toHaveTextContent("Patch range2.10–12");
 		}, 20_000);
+
+		it("lists every Art-Net node and sACN source with its universes, and stops polling when left", async () => {
+			mockDmx();
+			renderApp();
+			fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Sources" }));
+			const table = await screen.findByRole("table", { name: "Network sources" });
+			const [, desk, node] = within(table).getAllByRole("row");
+			expect(desk).toHaveTextContent("Desk");
+			expect(desk).toHaveTextContent("10.0.0.4");
+			expect(desk).toHaveTextContent("sACN 2");
+			expect(desk).toHaveTextContent("sACN 3");
+			expect(node).toHaveTextContent("Node 4");
+			expect(node).toHaveTextContent("10.0.0.20");
+			expect(node).toHaveTextContent("Port 1 → Universe 7");
+			expect(node).toHaveTextContent("Universe 2 → Port 2");
+			expect(node).toHaveTextContent("Art-Net 7");
+			const info = document_root()?.querySelector(".viz-dmx-info");
+			expect(info).toHaveTextContent("1 Art-Net node · 1 sACN source");
+			expect(info).toHaveTextContent("Art-Net poll to 10.0.0.255");
+			fireEvent.click(within(node).getByRole("button", { name: "Node 4" }));
+			expect(info).toHaveTextContent("MAC address00:11:22:33:44:55");
+			expect(info).toHaveTextContent("Power On Tests successful");
+			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Network" }));
+			await waitFor(() =>
+				expect(invoke).toHaveBeenCalledWith("stop_network_sources"),
+			);
+		});
 
 		it("shows received DMX as the desk's DMX window shows output, and stops listening when left", async () => {
 			mockDmx();
@@ -1018,16 +1090,24 @@ describe("the Viz editor window", () => {
 				name: "Universe 2 values",
 			});
 			expect(universe).toHaveTextContent("Universe 2 · channels 1–512");
-			expect(universe).toHaveTextContent("Art-Net · 44.0 Hz");
+			expect(universe).toHaveTextContent(
+				"Art-Net · 44.0 Hz · from Desk · 10.0.0.4:6454",
+			);
 			const full = within(universe).getByRole("button", {
 				name: "Universe 2, address 10, value 255",
 			});
-			expect(full).toHaveClass("high");
+			expect(full).toHaveClass("high", "is-patched");
 			expect(
 				within(universe).getByRole("button", {
 					name: "Universe 2, address 11, value 60",
 				}),
 			).toHaveClass("low");
+			// An unpatched channel still shows its value, outlined as unpatched.
+			expect(
+				within(universe).getByRole("button", {
+					name: /^Universe 2, address 13, value /,
+				}),
+			).not.toHaveClass("is-patched");
 			const info = document_root()?.querySelector(".viz-dmx-info");
 			expect(info).toHaveTextContent("Art-Net 2 → Universe 2");
 			expect(info).toHaveTextContent("Healthy · Desk · 10.0.0.4:6454 · 88 packets");

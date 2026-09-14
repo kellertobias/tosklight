@@ -1152,10 +1152,15 @@ body {
 	cursor: pointer;
 }
 
+/* Every channel shows its value; the outline says whether the rig patches it. */
 .viz-dmx-universe.is-values .viz-dmx-row button {
-	border: 1px solid #303b43;
+	border: 1px solid #6b1f24;
 	border-radius: 50%;
 	background: #172027;
+}
+
+.viz-dmx-universe.is-values .viz-dmx-row button.is-patched {
+	border-color: #7b858d;
 }
 
 .viz-dmx-universe.is-values .viz-dmx-row button.low {
@@ -1180,9 +1185,38 @@ body {
 }
 
 .viz-dmx-universe.is-patch .viz-dmx-row button.is-patched {
+	position: relative;
 	border-color: #2f8fb0;
 	background: #14506a;
 	color: #e8f6fb;
+}
+
+/* One fixture reads as one outlined block: its inner edges open and the gaps between them fill. */
+.viz-dmx-universe.is-patch .viz-dmx-row button.joins-prev {
+	border-left-color: transparent;
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+}
+
+.viz-dmx-universe.is-patch .viz-dmx-row button.joins-next {
+	border-right-color: transparent;
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+
+.viz-dmx-universe.is-patch .viz-dmx-row button.bridges-next::after {
+	position: absolute;
+	top: -1px;
+	bottom: -1px;
+	/* This cell's right border, the 3px gap, and the next cell's left border. */
+	left: 100%;
+	width: 5px;
+	box-sizing: border-box;
+	border-top: 1px solid #2f8fb0;
+	border-bottom: 1px solid #2f8fb0;
+	background: #14506a;
+	content: "";
+	pointer-events: none;
 }
 
 /* A fixture's first address marks where one patch ends and the next begins. */
@@ -1360,6 +1394,95 @@ body {
 	display: block;
 	margin-top: 8px;
 	color: var(--status-error, #ff7575);
+}
+
+.viz-dmx-sources-wrap {
+	overflow-x: auto;
+}
+
+.viz-dmx-sources {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+
+.viz-dmx-sources th,
+.viz-dmx-sources td {
+	padding: 7px;
+	border-bottom: 1px solid var(--border-subtle, #2a3440);
+	text-align: left;
+	vertical-align: top;
+}
+
+.viz-dmx-sources th {
+	color: var(--text-secondary, #98a4b3);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.viz-dmx-sources td > button {
+	min-height: 32px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	font-weight: 600;
+	text-align: left;
+	cursor: pointer;
+}
+
+.viz-dmx-sources td > small {
+	display: block;
+	color: var(--text-secondary, #98a4b3);
+}
+
+.viz-dmx-sources tr.is-selected > td {
+	background: color-mix(in srgb, var(--accent, #4cc9f0) 14%, transparent);
+}
+
+.viz-dmx-sources code {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.viz-dmx-ports,
+.viz-dmx-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.viz-dmx-ports {
+	flex-direction: column;
+	white-space: nowrap;
+}
+
+.viz-dmx-chips li {
+	padding: 2px 6px;
+	border: 1px solid var(--border-strong, #435267);
+	border-radius: 4px;
+	color: var(--text-secondary, #98a4b3);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* Data for it is arriving now. */
+.viz-dmx-chips li.is-live {
+	border-color: #2f8fb0;
+	background: #14506a;
+	color: #e8f6fb;
+}
+
+.viz-dmx-ports li.is-live {
+	color: #67ed80;
+}
+
+.viz-dmx-none {
+	color: var(--text-secondary, #98a4b3);
 }
 
 .viz-live-inputs {
