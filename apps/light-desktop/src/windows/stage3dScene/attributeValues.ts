@@ -1,4 +1,3 @@
-import * as THREE from "three";
 import { modeWithBoundGeometry } from "@tosklight/patch";
 import type {
 	AttributeValue,
@@ -6,20 +5,23 @@ import type {
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../../api/types";
-import type { FixtureAttributeValues, FixtureValuesById } from "./types";
+import type { FixtureValuesById } from "./types";
+
+// What drawing a profile's geometry reads lives with that geometry, which the fixture-profile
+// editor previews in the Architect as well as on the desk.
+export {
+	attributesForHead,
+	channelDefault,
+	headOwnerId,
+	normalized,
+	resolvedColor,
+} from "@tosklight/patch/stage-geometry";
 
 const parameterDefaults = new WeakMap<
 	PatchedFixture["definition"],
 	Map<string, number>
 >();
 const profileModes = new WeakMap<PatchedFixture, FixtureMode | null>();
-
-export function normalized(
-	value: AttributeValue | undefined,
-	fallback: number,
-) {
-	return value?.kind === "normalized" ? value.value : fallback;
-}
 
 export function parameterDefault(
 	fixture: PatchedFixture,
@@ -56,33 +58,6 @@ export function capabilityName(
 	);
 }
 
-function xyzChannelToSrgb(channel: number) {
-	return channel <= 0.0031308
-		? 12.92 * channel
-		: 1.055 * channel ** (1 / 2.4) - 0.055;
-}
-
-function xyzColor(value: Extract<AttributeValue, { kind: "color_xyz" }>) {
-	const { x, y, z } = value.value;
-	return new THREE.Color(
-		xyzChannelToSrgb(3.2406 * x - 1.5372 * y - 0.4986 * z),
-		xyzChannelToSrgb(-0.9689 * x + 1.8758 * y + 0.0415 * z),
-		xyzChannelToSrgb(0.0557 * x - 0.204 * y + 1.057 * z),
-	);
-}
-
-export function resolvedColor(
-	value: AttributeValue | undefined,
-	attributes: FixtureAttributeValues,
-) {
-	if (value?.kind === "color_xyz") return xyzColor(value);
-	return new THREE.Color(
-		normalized(attributes.get("color.red"), 1),
-		normalized(attributes.get("color.green"), 1),
-		normalized(attributes.get("color.blue"), 1),
-	);
-}
-
 export function valuesByFixture(
 	snapshot: VisualizationSnapshot | null,
 ): FixtureValuesById {
@@ -113,54 +88,4 @@ export function profileMode(fixture: PatchedFixture) {
 		selected && profile ? modeWithBoundGeometry(profile, selected) : selected;
 	profileModes.set(fixture, mode);
 	return mode;
-}
-
-export function headOwnerId(
-	fixture: PatchedFixture,
-	mode: FixtureMode,
-	headId: string,
-) {
-	const index = mode.heads.findIndex((head) => head.id === headId);
-	const head = mode.heads[index];
-	if (!head || head.master_shared) return fixture.fixture_id;
-	return (
-		fixture.logical_heads.find((candidate) => candidate.head_index === index)
-			?.fixture_id ??
-		fixture.logical_heads.find(
-			(candidate) => candidate.head_index === index + 1,
-		)?.fixture_id ??
-		fixture.fixture_id
-	);
-}
-
-export function attributesForHead(
-	fixture: PatchedFixture,
-	mode: FixtureMode,
-	headId: string,
-	byFixture: FixtureValuesById,
-) {
-	const owner = headOwnerId(fixture, mode, headId);
-	const fixtureAttributes = byFixture.get(fixture.fixture_id);
-	if (owner === fixture.fixture_id) return fixtureAttributes ?? new Map();
-	const attributes = new Map(fixtureAttributes ?? []);
-	for (const [attribute, value] of byFixture.get(owner) ?? [])
-		attributes.set(attribute, value);
-	return attributes;
-}
-
-export function channelDefault(
-	mode: FixtureMode,
-	headId: string,
-	attribute: string,
-	fallback: number,
-) {
-	const channel = mode.channels.find(
-		(candidate) =>
-			candidate.head_id === headId && candidate.attribute === attribute,
-	);
-	if (!channel) return fallback;
-	const maximum = { u8: 0xff, u16: 0xffff, u24: 0xffffff, u32: 0xffffffff }[
-		channel.resolution
-	];
-	return channel.default_raw / maximum;
 }

@@ -1,5 +1,4 @@
 import type {
-	AttributeValue,
 	InstalledFixtureAppearance,
 	PatchedFixture,
 	VisualizationSnapshot,
@@ -29,15 +28,12 @@ export interface Stage3dFixture {
 	shaperAngle?: number | null;
 }
 
-export type FixtureAttributeValues = Map<string, AttributeValue>;
-export type FixtureValuesById = Map<string, FixtureAttributeValues>;
-
-export type StageShaperState = {
-	supported: [boolean, boolean, boolean, boolean];
-	insertions: [number, number, number, number];
-	anglesDegrees: [number, number, number, number];
-	moduleRotationDegrees: number;
-};
+export type {
+	FixtureAttributeValues,
+	FixtureValuesById,
+	StageShaperState,
+} from "@tosklight/patch/stage-geometry";
+import type { FixtureValuesById } from "@tosklight/patch/stage-geometry";
 
 export interface StageSceneContext {
 	snapshot: VisualizationSnapshot | null;

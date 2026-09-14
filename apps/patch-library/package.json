@@ -15,6 +15,7 @@
 		"./fixture-profile": "./src/fixtureProfile.ts",
 		"./fixture-profile-model": "./src/sheet/fixtureProfileModel.ts",
 		"./library": "./src/library/index.ts",
+		"./stage-geometry": "./src/stageGeometry/index.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
