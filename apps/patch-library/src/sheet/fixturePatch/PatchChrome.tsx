@@ -88,13 +88,18 @@ export function PatchHeader() {
 							label: "+ Add fixture",
 							onPress: () => ui.setBrowserOpen(true),
 						},
-						{
-							id: "multipatch",
-							label: "+ Add multi-patch",
-							// A Venue object is placed one object at a time; it has no copies.
-							disabled: !data.selected || isVisualOnly(data.selected.definition),
-							onPress: () => void addMultipatch(controller),
-						},
+						// A Venue object is placed one object at a time and has no copies, so the Venue screen does
+						// not offer them at all.
+						...(props.scope === "venue"
+							? []
+							: [
+									{
+										id: "multipatch",
+										label: "+ Add multi-patch",
+										disabled: !data.selected || isVisualOnly(data.selected.definition),
+										onPress: () => void addMultipatch(controller),
+									},
+								]),
 					],
 				},
 				{

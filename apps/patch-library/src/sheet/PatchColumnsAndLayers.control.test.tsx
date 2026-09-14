@@ -307,3 +307,18 @@ describe("deleting a layer", () => {
 		);
 	});
 });
+
+describe("patch sheet title actions", () => {
+	it("offers + Add multi-patch everywhere but the Venue screen", () => {
+		server.patch.fixtures = [wash("light", 1, 1, 1)];
+		render(<FixturePatchSetup scope="dmx" />);
+		expect(
+			screen.getByRole("button", { name: "+ Add multi-patch" }),
+		).toBeInTheDocument();
+		cleanup();
+
+		render(<FixturePatchSetup scope="venue" />);
+		expect(screen.queryByRole("button", { name: "+ Add multi-patch" })).toBeNull();
+		expect(screen.getByRole("button", { name: "+ Add fixture" })).toBeInTheDocument();
+	});
+});
