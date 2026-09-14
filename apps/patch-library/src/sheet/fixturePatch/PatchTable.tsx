@@ -4,6 +4,7 @@ import {
 	Fragment,
 	type KeyboardEvent,
 	type MouseEvent as ReactMouseEvent,
+	type ReactNode,
 	useEffect,
 	useLayoutEffect,
 	useRef,
@@ -26,6 +27,7 @@ import {
 import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
+import { PATCH_SHEET_COLUMNS, type PatchSheetColumn } from "./patchColumns";
 import { isPatchSortColumn, nextPatchSort } from "./tableSort";
 import {
 	definitionSplits,
@@ -35,32 +37,16 @@ import {
 	formatInstancePatch,
 } from "./patchModel";
 
-const columns = [
-	"Type",
-	"Fixture ID",
-	"Name",
-	"Manufacturer",
-	"Product / mode",
-	"Patch",
-	"Group Masters",
-	"Grand Master",
-	"Invert Pan",
-	"Invert Tilt",
-	"MIB",
-	"MIB Delay",
-	"Location X",
-	"Location Y",
-	"Location Z",
-	"Rotation X",
-	"Rotation Y",
-	"Rotation Z",
-	"Bracket",
-	"Shaper",
-	"Layer",
-	"2D",
-	"3D",
-	"Note",
-];
+/** Draws a column's cell only while the operator shows that column. */
+function Shown({
+	column,
+	children,
+}: {
+	column: PatchSheetColumn;
+	children: ReactNode;
+}) {
+	return usePatchController().columns.hiddenColumns.has(column) ? null : children;
+}
 
 export function PatchTable() {
 	const controller = usePatchController();
@@ -84,8 +70,10 @@ export function PatchTable() {
 			<table className="patch-table">
 				<thead>
 					<tr>
-						{columns.map((column) => (
-							<PatchColumnHeader key={column} column={column} />
+						{PATCH_SHEET_COLUMNS.filter(
+							({ id }) => !controller.columns.hiddenColumns.has(id),
+						).map(({ id, label }) => (
+							<PatchColumnHeader key={id} column={label} />
 						))}
 					</tr>
 				</thead>
@@ -239,6 +227,7 @@ function FixtureNoteCell({ fixture }: { fixture: PatchedFixture }) {
 	const note =
 		controller.library?.fixtureNotes?.get(fixture.fixture_id)?.note ?? "";
 	return (
+		<Shown column="note">
 		<td className="patch-note-cell">
 			<Button
 				className="patch-value"
@@ -248,6 +237,7 @@ function FixtureNoteCell({ fixture }: { fixture: PatchedFixture }) {
 				{note || "—"}
 			</Button>
 		</td>
+		</Shown>
 	);
 }
 
@@ -278,7 +268,8 @@ function FixtureVisibilityCells({ fixture }: { fixture: PatchedFixture }) {
 				const key = surface === "2d" ? "visible2d" : "visible3d";
 				const visible = visibility[key];
 				return (
-					<td className="patch-visibility-cell" key={surface}>
+					<Shown column={`visible_${surface}`} key={surface}>
+					<td className="patch-visibility-cell">
 						<Button
 							className="patch-visibility-toggle"
 							aria-label={`${visible ? "Hide" : "Show"} fixture ${fixtureDisplayId(fixture)} in ${surface.toUpperCase()}`}
@@ -293,6 +284,7 @@ function FixtureVisibilityCells({ fixture }: { fixture: PatchedFixture }) {
 							<EyeIcon visible={visible} />
 						</Button>
 					</td>
+					</Shown>
 				);
 			})}
 		</>
@@ -310,6 +302,7 @@ function FixturePolicyCells({ fixture }: { fixture: PatchedFixture }) {
 		trueLabel: string,
 		falseLabel: string,
 	) => (
+		<Shown column={kind}>
 		<td>
 			{available ? (
 				<Button
@@ -328,6 +321,7 @@ function FixturePolicyCells({ fixture }: { fixture: PatchedFixture }) {
 				</span>
 			)}
 		</td>
+		</Shown>
 	);
 	return (
 		<>
@@ -371,9 +365,12 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
 	return (
 		<>
+			<Shown column="type">
 			<td className="patch-type-cell">
 				<FixtureTypeIcon type={fixture.definition.device_type} />
 			</td>
+			</Shown>
+			<Shown column="fixture_id">
 			<td>
 				<DesktopEditableValue
 					fixture={fixture}
@@ -382,6 +379,8 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 					value={String(fixtureDisplayId(fixture))}
 				/>
 			</td>
+			</Shown>
+			<Shown column="name">
 			<td>
 				<DesktopEditableValue
 					fixture={fixture}
@@ -390,7 +389,11 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 					value={fixture.name || fixture.definition.name}
 				/>
 			</td>
+			</Shown>
+			<Shown column="manufacturer">
 			<td>{fixture.definition.manufacturer}</td>
+			</Shown>
+			<Shown column="mode">
 			<td>
 				<Button
 					className="patch-value"
@@ -402,11 +405,20 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 					{fixture.definition.model} · {fixture.definition.mode}
 				</Button>
 			</td>
+			</Shown>
 		</>
 	);
 }
 
 function FixturePatchCell({ fixture }: { fixture: PatchedFixture }) {
+	return (
+		<Shown column="patch">
+			<FixturePatchValue fixture={fixture} />
+		</Shown>
+	);
+}
+
+function FixturePatchValue({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
 	if (!isDmxPatchable(fixture.definition))
 		return (
@@ -608,12 +620,17 @@ function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
 	if (!isDmxPatchable(fixture.definition))
 		return (
 			<>
-				<td>—</td>
-				<td>—</td>
+				<Shown column="mib">
+					<td>—</td>
+				</Shown>
+				<Shown column="mib_delay">
+					<td>—</td>
+				</Shown>
 			</>
 		);
 	return (
 		<>
+			<Shown column="mib">
 			<td>
 				<Button
 					className="patch-value"
@@ -626,6 +643,8 @@ function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
 					{(fixture.move_in_black_enabled ?? true) ? "On" : "Off"}
 				</Button>
 			</td>
+			</Shown>
+			<Shown column="mib_delay">
 			<td>
 				<Button
 					className="patch-value"
@@ -638,6 +657,7 @@ function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
 					{(fixture.move_in_black_delay_millis ?? 0) / 1000} s
 				</Button>
 			</td>
+			</Shown>
 		</>
 	);
 }
@@ -647,7 +667,8 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 	return (
 		<>
 			{(["x", "y", "z"] as const).map((axis) => (
-				<td className="patch-secondary" key={`location-${axis}`}>
+				<Shown column={`location_${axis}`} key={`location-${axis}`}>
+				<td className="patch-secondary">
 					<Button
 						className="patch-value"
 						onClick={() => armEdit(controller, fixture, "location", axis)}
@@ -658,9 +679,11 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 						{((fixture.location?.[axis] ?? 0) / 1000).toFixed(3)} m
 					</Button>
 				</td>
+				</Shown>
 			))}
 			{(["x", "y", "z"] as const).map((axis) => (
-				<td className="patch-secondary" key={`rotation-${axis}`}>
+				<Shown column={`rotation_${axis}`} key={`rotation-${axis}`}>
+				<td className="patch-secondary">
 					<Button
 						className="patch-value"
 						onClick={() => armEdit(controller, fixture, "rotation", axis)}
@@ -671,7 +694,9 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 						{Number((fixture.rotation?.[axis] ?? 0).toFixed(3))}°
 					</Button>
 				</td>
+				</Shown>
 			))}
+			<Shown column="bracket">
 			<td className="patch-secondary">
 				<Button
 					className="patch-value"
@@ -683,6 +708,8 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 					{Number((fixture.bracket_angle ?? 0).toFixed(1))}°
 				</Button>
 			</td>
+			</Shown>
+			<Shown column="shaper">
 			<td className="patch-secondary">
 				<Button
 					className="patch-value"
@@ -696,6 +723,7 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 						: `${Number(fixture.shaper_angle.toFixed(1))}°`}
 				</Button>
 			</td>
+			</Shown>
 		</>
 	);
 }
@@ -746,6 +774,7 @@ function isContextualNumericEdit(
 function FixtureLayerCell({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
 	return (
+		<Shown column="layer">
 		<td className="patch-secondary">
 			<Button
 				className="patch-value"
@@ -770,6 +799,7 @@ function FixtureLayerCell({ fixture }: { fixture: PatchedFixture }) {
 				)?.name ?? "Default"}
 			</Button>
 		</td>
+		</Shown>
 	);
 }
 
@@ -789,19 +819,56 @@ function MultiPatchRow({
 			className="multipatch-row"
 			onClick={(event) => selectPatchFixture(controller, fixture, event)}
 		>
-			<td className="patch-tree-cell">
-				<MultiPatchBranch last={last} />
-			</td>
-			<td>
-				{applicable.groupMasters
-					? `Shared · ${(fixture.group_masters_enabled ?? true) ? "Controlled" : "Ignored"}`
-					: "—"}
-			</td>
-			<td>
-				{applicable.grandMaster
-					? `Shared · ${(fixture.grand_master_enabled ?? true) ? "Controlled" : "Ignored"}`
-					: "—"}
-			</td>
+			<Shown column="type">
+				<td className="patch-tree-cell">
+					<MultiPatchBranch last={last} />
+				</td>
+			</Shown>
+			<Shown column="fixture_id">
+				<td />
+			</Shown>
+			<Shown column="name">
+				<td className="multipatch-name">
+					<strong>{instance.name || "Multi-patch"}</strong>
+					<span>multi-patch</span>
+				</td>
+			</Shown>
+			<Shown column="manufacturer">
+				<td />
+			</Shown>
+			<Shown column="mode">
+				<td />
+			</Shown>
+			<Shown column="patch">
+				<td>
+					{isDmxPatchable(fixture.definition) ? (
+						<Button
+							className="patch-address split-patch-summary"
+							onClick={() =>
+								beginMultipatchEdit(controller, fixture, instance, "address")
+							}
+						>
+							{formatInstancePatch(fixture.definition, instance)}
+						</Button>
+					) : (
+						<span>Not patchable</span>
+					)}
+				</td>
+			</Shown>
+			<Shown column="group_masters">
+				<td>
+					{applicable.groupMasters
+						? `Shared · ${(fixture.group_masters_enabled ?? true) ? "Controlled" : "Ignored"}`
+						: "—"}
+				</td>
+			</Shown>
+			<Shown column="grand_master">
+				<td>
+					{applicable.grandMaster
+						? `Shared · ${(fixture.grand_master_enabled ?? true) ? "Controlled" : "Ignored"}`
+						: "—"}
+				</td>
+			</Shown>
 			<MultipatchAxisCell
 				fixture={fixture}
 				instance={instance}
@@ -814,92 +881,100 @@ function MultiPatchRow({
 				axis="tilt"
 				available={applicable.tilt}
 			/>
-			<td />
-			<td className="multipatch-name">
-				<strong>{instance.name || "Multi-patch"}</strong>
-				<span>multi-patch</span>
-			</td>
-			<td />
-			<td />
-			<td>
-				{isDmxPatchable(fixture.definition) ? (
-					<Button
-						className="patch-address split-patch-summary"
-						onClick={() =>
-							beginMultipatchEdit(controller, fixture, instance, "address")
-						}
-					>
-						{formatInstancePatch(fixture.definition, instance)}
-					</Button>
-				) : (
-					<span>Not patchable</span>
-				)}
-			</td>
-			<td />
-			<td />
-			{(["x", "y", "z"] as const).map((axis) => (
-				<td className="patch-secondary" key={`location-${axis}`}>
-					<Button
-						className="patch-value"
-						onClick={() =>
-							beginMultipatchEdit(
-								controller,
-								fixture,
-								instance,
-								"location",
-								axis,
-							)
-						}
-					>
-						{(instance.location[axis] / 1000).toFixed(3)} m
-					</Button>
-				</td>
+			<Shown column="mib">
+				<td />
+			</Shown>
+			<Shown column="mib_delay">
+				<td />
+			</Shown>
+			<MultipatchTransformCells fixture={fixture} instance={instance} />
+			{(["layer", "visible_2d", "visible_3d", "note"] as const).map((column) => (
+				<Shown column={column} key={column}>
+					<td />
+				</Shown>
 			))}
-			{(["x", "y", "z"] as const).map((axis) => (
-				<td className="patch-secondary" key={`rotation-${axis}`}>
-					<Button
-						className="patch-value"
-						onClick={() =>
-							beginMultipatchEdit(
-								controller,
-								fixture,
-								instance,
-								"rotation",
-								axis,
-							)
-						}
-					>
-						{Number(instance.rotation[axis].toFixed(3))}°
-					</Button>
-				</td>
-			))}
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() =>
-						beginMultipatchEdit(controller, fixture, instance, "bracket_angle")
-					}
-				>
-					{Number((instance.bracket_angle ?? 0).toFixed(1))}°
-				</Button>
-			</td>
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() =>
-						beginMultipatchEdit(controller, fixture, instance, "shaper_angle")
-					}
-				>
-					{instance.shaper_angle === undefined || instance.shaper_angle === null
-						? "\u2014"
-						: `${Number(instance.shaper_angle.toFixed(1))}°`}
-				</Button>
-			</td>
-			<td />
-			<td />
-			<td />
-			<td />
 		</tr>
+	);
+}
+
+/** A copy's own position in the rig: location, rotation, bracket and shaper. */
+function MultipatchTransformCells({
+	fixture,
+	instance,
+}: {
+	fixture: PatchedFixture;
+	instance: MultiPatchInstance;
+}) {
+	const controller = usePatchController();
+	return (
+		<>
+			{(["x", "y", "z"] as const).map((axis) => (
+				<Shown column={`location_${axis}`} key={`location-${axis}`}>
+					<td className="patch-secondary">
+						<Button
+							className="patch-value"
+							onClick={() =>
+								beginMultipatchEdit(
+									controller,
+									fixture,
+									instance,
+									"location",
+									axis,
+								)
+							}
+						>
+							{(instance.location[axis] / 1000).toFixed(3)} m
+						</Button>
+					</td>
+				</Shown>
+			))}
+			{(["x", "y", "z"] as const).map((axis) => (
+				<Shown column={`rotation_${axis}`} key={`rotation-${axis}`}>
+					<td className="patch-secondary">
+						<Button
+							className="patch-value"
+							onClick={() =>
+								beginMultipatchEdit(
+									controller,
+									fixture,
+									instance,
+									"rotation",
+									axis,
+								)
+							}
+						>
+							{Number(instance.rotation[axis].toFixed(3))}°
+						</Button>
+					</td>
+				</Shown>
+			))}
+			<Shown column="bracket">
+				<td className="patch-secondary">
+					<Button
+						className="patch-value"
+						onClick={() =>
+							beginMultipatchEdit(controller, fixture, instance, "bracket_angle")
+						}
+					>
+						{Number((instance.bracket_angle ?? 0).toFixed(1))}°
+					</Button>
+				</td>
+			</Shown>
+			<Shown column="shaper">
+				<td className="patch-secondary">
+					<Button
+						className="patch-value"
+						onClick={() =>
+							beginMultipatchEdit(controller, fixture, instance, "shaper_angle")
+						}
+					>
+						{instance.shaper_angle === undefined || instance.shaper_angle === null
+							? "\u2014"
+							: `${Number(instance.shaper_angle.toFixed(1))}°`}
+					</Button>
+				</td>
+			</Shown>
+		</>
 	);
 }
 
@@ -915,19 +990,23 @@ function MultipatchAxisCell({
 	available: boolean;
 }) {
 	const controller = usePatchController();
+	const column = axis === "pan" ? "invert_pan" : "invert_tilt";
 	if (!available)
 		return (
-			<td>
-				<span role="img" aria-label={`Invert ${axis} unavailable`}>
-					—
-				</span>
-			</td>
+			<Shown column={column}>
+				<td>
+					<span role="img" aria-label={`Invert ${axis} unavailable`}>
+						—
+					</span>
+				</td>
+			</Shown>
 		);
 	const inverted =
 		axis === "pan"
 			? (instance.invert_pan ?? false)
 			: (instance.invert_tilt ?? false);
 	return (
+		<Shown column={column}>
 		<td>
 			<Button
 				className="patch-value"
@@ -944,5 +1023,6 @@ function MultipatchAxisCell({
 				{inverted ? "Inverted" : "Normal"}
 			</Button>
 		</td>
+		</Shown>
 	);
 }

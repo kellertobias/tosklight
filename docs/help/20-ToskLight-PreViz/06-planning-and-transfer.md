@@ -85,6 +85,27 @@ or fixtures without a note, always come last, and fixtures with the same value k
 order. Shift and drag ranges follow the order the sheet shows. The sheet opens ordered by
 Fixture ID.
 
+Choose which columns the sheet shows from the window's **Settings** (⚙) under **Columns**; the last
+visible column cannot be switched off. Patch, Venue and Effects each remember their own columns on
+this computer. The title also offers three quick views, which only the Architect has — the desk's
+Show Patch window does not:
+
+- **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Group Masters, Grand Master,
+  MIB, MIB Delay, Layer and Note.
+- **Visualization**: Fixture ID, Name, Location, Rotation, Bracket, Shaper, Layer, 2D, 3D and Note.
+- **Compact**: Fixture ID, Name, Patch, Layer and Note.
+
+The quick view whose columns the sheet shows exactly is highlighted; changing a single column in
+Settings leaves no view highlighted.
+
+**No Layer Assigned**, under **All fixtures**, lists every fixture on the screen that has no layer
+of its own: fixtures still on the default layer, and fixtures whose layer no longer exists. While
+**Show all** is off, the sidebar hides every layer whose fixtures all belong to another screen —
+for example a Trusses layer on the Patch screen — and hides **No Layer Assigned** when it would be
+empty. An empty layer you created stays listed. Selecting fixtures in the drawing switches
+**Show all** on only when that selection happens; returning to the screen later does not switch it
+on again.
+
 While a layer is open, selecting stays in it: clicking, Shift and drag ranges, and Ctrl-click
 only ever select that layer's fixtures, and the sheet keeps showing the layer. A selection made in
 the drawing or another window opens **All fixtures** only when it includes fixtures outside the

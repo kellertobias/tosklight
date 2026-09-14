@@ -21,6 +21,11 @@ import {
 	groupFixtureFamilies,
 	isDmxPatchable,
 } from "../patchUtils";
+import {
+	PATCH_SHEET_COLUMNS,
+	type PatchSheetColumn,
+	parseHiddenColumns,
+} from "./patchColumns";
 import { definitionSplits } from "./patchModel";
 import { fixtureSelectionIds, usePatchSelection } from "./selection";
 import { DEFAULT_PATCH_SORT, type PatchSort, sortPatchFixtures } from "./tableSort";
@@ -80,12 +85,59 @@ export type FixturePatchSetupProps = {
 	/** External selection revisions use this to reveal entities hidden by a layer filter. */
 	showAllLayersRequest?: number;
 	initialTypeFilter?: string;
+	/** Offers the Patch, Visualization and Compact column views in the title (Architect only). */
+	quickViews?: boolean;
+	/** Remembers the visible columns on this machine under this key; without it they reset. */
+	columnStorageKey?: string;
 	onFixturesAdded?: (
 		fixtures: readonly { fixtureId: string; name: string }[],
 	) => void | Promise<void>;
 };
 
 export type PatchFixtureScope = "all" | "dmx" | "venue" | "effects" | "media";
+
+/** The sidebar entry for fixtures that belong to no stored layer of their own. */
+export const NO_LAYER_ID = "__no_layer__";
+
+/**
+ * A fixture has a layer of its own only when it names a stored layer other than the implicit
+ * default one that every new fixture starts on.
+ */
+export function fixtureHasAssignedLayer(
+	fixture: Pick<PatchedFixture, "layer_id">,
+	layerIds: ReadonlySet<string>,
+) {
+	const layerId = fixture.layer_id;
+	return !!layerId && layerId !== "default" && layerIds.has(layerId);
+}
+
+function readHiddenColumns(key: string | undefined) {
+	if (!key) return [];
+	try {
+		return parseHiddenColumns(localStorage.getItem(key));
+	} catch {
+		return [];
+	}
+}
+
+function usePatchColumns(storageKey: string | undefined) {
+	const [hidden, setHidden] = useState<readonly PatchSheetColumn[]>(() =>
+		readHiddenColumns(storageKey),
+	);
+	const hiddenColumns = useMemo(() => new Set(hidden), [hidden]);
+	const setHiddenColumns = (next: readonly PatchSheetColumn[]) => {
+		// The last visible column stays: a table with no columns has nothing to select or edit.
+		if (next.length >= PATCH_SHEET_COLUMNS.length) return;
+		setHidden(next);
+		if (!storageKey) return;
+		try {
+			localStorage.setItem(storageKey, JSON.stringify(next));
+		} catch {
+			// Unstorable columns still apply for as long as the window is open.
+		}
+	};
+	return { hiddenColumns, setHiddenColumns };
+}
 
 function usePatchUiState() {
 	const [activeLayer, setActiveLayer] = useState("all");
@@ -241,6 +293,14 @@ function usePatchDerivedState(
 	const scoped = all.filter((fixture) =>
 		definitionMatchesScope(fixture.definition, scope),
 	);
+	const layerIds = new Set(
+		(library?.patchLayers ?? []).map((item) => item.body.id),
+	);
+	const unassigned = scoped.filter(
+		(fixture) => !fixtureHasAssignedLayer(fixture, layerIds),
+	);
+	// Like any layer, the entry goes when nothing on this screen is in it, unless all are shown.
+	const showUnassigned = ui.showAllLayers || unassigned.length > 0;
 	const layers = [...(library?.patchLayers ?? [])]
 		.sort((a, b) => a.body.order - b.body.order)
 		.map((item) => item.body)
@@ -252,7 +312,9 @@ function usePatchDerivedState(
 		scoped.filter(
 			(fixture) =>
 				ui.activeLayer === "all" ||
-				(fixture.layer_id || "default") === ui.activeLayer,
+				(ui.activeLayer === NO_LAYER_ID
+					? !fixtureHasAssignedLayer(fixture, layerIds)
+					: (fixture.layer_id || "default") === ui.activeLayer),
 		),
 		ui.sort,
 		{
@@ -335,6 +397,8 @@ function usePatchDerivedState(
 			: ui.draft.patch;
 	return {
 		layers,
+		unassigned,
+		showUnassigned,
 		all,
 		scoped,
 		visible,
@@ -411,8 +475,11 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	usePatchView(props.active ?? true);
 	const selection = usePatchSelection();
 	const ui = usePatchUiState();
+	const columns = usePatchColumns(props.columnStorageKey);
 	const handledAddRequest = useRef(0);
-	const handledShowAllLayersRequest = useRef(0);
+	// A request made before this sheet was mounted is already history: opening the sheet again must
+	// not switch Show all back on for a selection the operator made on another screen long ago.
+	const handledShowAllLayersRequest = useRef(props.showAllLayersRequest ?? 0);
 	const data = usePatchDerivedState(
 		host.library,
 		patch,
@@ -454,12 +521,11 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		ui.setTypeFilter,
 	]);
 	useEffect(() => {
-		if (
-			ui.activeLayer !== "all" &&
-			!data.layers.some((layer) => layer.id === ui.activeLayer)
-		)
-			ui.setActiveLayer("all");
-	}, [data.layers, ui.activeLayer, ui.setActiveLayer]);
+		if (ui.activeLayer === "all") return;
+		if (ui.activeLayer === NO_LAYER_ID ? data.showUnassigned : data.layers.some((layer) => layer.id === ui.activeLayer))
+			return;
+		ui.setActiveLayer("all");
+	}, [data.layers, data.showUnassigned, ui.activeLayer, ui.setActiveLayer]);
 	useEffect(() => {
 		if (!data.family) return;
 		if (
@@ -477,6 +543,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		editArmed: host.editArmed,
 		ui,
 		data,
+		columns,
 		props: {
 			title: props.title ?? "Show Patch",
 			scope: props.scope ?? "all",
@@ -486,6 +553,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 			onStagePreview: props.onStagePreview,
 			onOpenStageWindow: props.onOpenStageWindow,
 			onFixturesAdded: props.onFixturesAdded,
+			quickViews: props.quickViews ?? false,
 		},
 	};
 }

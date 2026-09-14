@@ -16,6 +16,7 @@ import { Button } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { FixtureLibraryWorkspace } from "./FixtureLibraryWorkspace";
 import {
+	type ComponentProps,
 	type ReactNode,
 	useCallback,
 	useEffect,
@@ -114,6 +115,22 @@ function PatchScope({
 				{children}
 			</PatchViewProvider>
 		</PatchHostProvider>
+	);
+}
+
+/**
+ * The shared patch sheet with what only the Architect offers: the column quick views in the title,
+ * and the visible columns remembered per screen on this machine.
+ */
+function ArchitectPatchSheet(
+	props: NonNullable<ComponentProps<typeof FixturePatchSetup>>,
+) {
+	return (
+		<FixturePatchSetup
+			{...props}
+			quickViews
+			columnStorageKey={`viz-editor.patch-columns.${props.scope ?? "all"}`}
+		/>
 	);
 }
 
@@ -602,7 +619,7 @@ export function App() {
 							transport={transport}
 							onError={report}
 						>
-							<FixturePatchSetup
+							<ArchitectPatchSheet
 								title={workspaceTitle}
 								scope={workspace === "patch" ? "dmx" : workspace}
 								showAllLayersRequest={revealRequest}
