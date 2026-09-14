@@ -133,62 +133,9 @@ export function RendererSettingsWorkspace({
 						/>
 					</SettingsGroup> : null}
 
-					{page === "atmosphere" ? <SettingsGroup title="Atmosphere">
-						<NumberSetting
-							label="Fog amount"
-							value={draft.fog}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(fog) => update({ fog })}
-							format={percent}
-						/>
-						<NumberSetting
-							label="Lamp fog cloudiness"
-							value={draft.lampFogCloudiness}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(lampFogCloudiness) => update({ lampFogCloudiness })}
-							format={percent}
-						/>
-						<NumberSetting
-							label="Lamp fog turbulence"
-							value={draft.lampFogTurbulence}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(lampFogTurbulence) => update({ lampFogTurbulence })}
-							format={percent}
-						/>
-						<NumberSetting
-							label="Laser fog cloudiness"
-							value={draft.laserFogCloudiness}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(laserFogCloudiness) => update({ laserFogCloudiness })}
-							format={percent}
-						/>
-						<NumberSetting
-							label="Laser fog turbulence"
-							value={draft.laserFogTurbulence}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(laserFogTurbulence) => update({ laserFogTurbulence })}
-							format={percent}
-						/>
-						<NumberSetting
-							label="Laser brightness"
-							value={draft.laserBrightness}
-							min={0}
-							max={4}
-							step={0.05}
-							onChange={(laserBrightness) => update({ laserBrightness })}
-							format={percent}
-						/>
-					</SettingsGroup> : null}
+					{page === "atmosphere" ? (
+						<AtmosphereSettings draft={draft} update={update} />
+					) : null}
 
 					{page === "picture" ? <SettingsGroup title="Picture">
 						<NumberSetting
@@ -305,6 +252,78 @@ function SettingsGroup({
 			<h2>{title}</h2>
 			{children}
 		</section>
+	);
+}
+
+/** Lamp and laser fog are set apart, one box each. */
+function AtmosphereSettings({
+	draft,
+	update,
+}: {
+	draft: RendererSettings;
+	update: (change: Partial<RendererSettings>) => void;
+}) {
+	return (
+		<>
+			<SettingsGroup title="Lamp">
+				<NumberSetting
+					label="Fog amount"
+					value={draft.fog}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(fog) => update({ fog })}
+					format={percent}
+				/>
+				<NumberSetting
+					label="Lamp fog cloudiness"
+					value={draft.lampFogCloudiness}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(lampFogCloudiness) => update({ lampFogCloudiness })}
+					format={percent}
+				/>
+				<NumberSetting
+					label="Lamp fog turbulence"
+					value={draft.lampFogTurbulence}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(lampFogTurbulence) => update({ lampFogTurbulence })}
+					format={percent}
+				/>
+			</SettingsGroup>
+			<SettingsGroup title="Laser">
+				<NumberSetting
+					label="Laser fog cloudiness"
+					value={draft.laserFogCloudiness}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(laserFogCloudiness) => update({ laserFogCloudiness })}
+					format={percent}
+				/>
+				<NumberSetting
+					label="Laser fog turbulence"
+					value={draft.laserFogTurbulence}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(laserFogTurbulence) => update({ laserFogTurbulence })}
+					format={percent}
+				/>
+				<NumberSetting
+					label="Laser brightness"
+					value={draft.laserBrightness}
+					min={0}
+					max={4}
+					step={0.05}
+					onChange={(laserBrightness) => update({ laserBrightness })}
+					format={percent}
+				/>
+			</SettingsGroup>
+		</>
 	);
 }
 

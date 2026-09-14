@@ -1271,6 +1271,12 @@ describe("the Viz editor window", () => {
 		fireEvent.click(await screen.findByRole("tab", { name: "Atmosphere" }));
 		const fog = await screen.findByRole("slider", { name: "Fog amount" });
 		expect(fog).toHaveValue("0.15");
+		// Lamp and laser atmosphere are set in their own boxes.
+		const lamp = screen.getByRole("heading", { name: "Lamp" }).closest("section");
+		const laser = screen.getByRole("heading", { name: "Laser" }).closest("section");
+		expect(lamp).not.toBe(laser);
+		expect(within(lamp as HTMLElement).getByRole("slider", { name: "Lamp fog turbulence" })).toBeInTheDocument();
+		expect(within(laser as HTMLElement).getByRole("slider", { name: "Laser brightness" })).toBeInTheDocument();
 		await waitFor(() => expect(fog).toHaveValue("0.02"), { timeout: 1500 });
 		fireEvent.click(screen.getByRole("tab", { name: "Rendering" }));
 		expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
