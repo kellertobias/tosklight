@@ -51,23 +51,70 @@ impl SceneryOptions {
     }
 }
 
-/// The top of a chain: a hoist lifting it, or the chain made fast straight to the steel or truss.
+/// The top of a chain: a hoist lifting it, the chain made fast straight to the steel or truss, or a
+/// steelflex wrapped round the truss above a chain whose hoist hangs at its bottom.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChainTopEnd {
     #[default]
     Motor,
     Direct,
+    SteelflexLoop,
 }
 
-/// The bottom of a chain: its hook shackled straight to the load, or a steelflex loop wrapped
-/// around a beam or truss chord.
+/// The bottom of a chain: its hook shackled straight to the load, a steelflex loop wrapped around
+/// a beam or truss chord, or a hoist climbing the chain from below.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChainBottomEnd {
     #[default]
     Direct,
     SteelflexLoop,
+    Motor,
+}
+
+/// How one chain is rigged, as an operator chooses it. A hoist hangs at one end and a steelflex
+/// wraps the truss at the other; a plain chain has neither.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChainMode {
+    Plain,
+    #[default]
+    MotorTop,
+    MotorBottom,
+}
+
+impl ChainMode {
+    /// The end fittings a placement stores for this mode.
+    pub fn ends(self) -> (ChainTopEnd, ChainBottomEnd) {
+        match self {
+            Self::Plain => (ChainTopEnd::Direct, ChainBottomEnd::Direct),
+            Self::MotorTop => (ChainTopEnd::Motor, ChainBottomEnd::SteelflexLoop),
+            Self::MotorBottom => (ChainTopEnd::SteelflexLoop, ChainBottomEnd::Motor),
+        }
+    }
+}
+
+impl SceneryOptions {
+    /// How this chain is rigged. The hoist decides it: one at the top or the bottom makes that the
+    /// mode, whatever the other end stored; a chain with no hoist is plain. A chain placed before
+    /// the choice existed has a hoist at its top.
+    pub fn chain_mode(&self) -> ChainMode {
+        if self.chain_top.unwrap_or_default() == ChainTopEnd::Motor {
+            ChainMode::MotorTop
+        } else if self.chain_bottom == Some(ChainBottomEnd::Motor) {
+            ChainMode::MotorBottom
+        } else {
+            ChainMode::Plain
+        }
+    }
+
+    /// Store `mode` as this placement's end fittings, leaving its colour alone.
+    pub fn set_chain_mode(&mut self, mode: ChainMode) {
+        let (top, bottom) = mode.ends();
+        self.chain_top = Some(top);
+        self.chain_bottom = Some(bottom);
+    }
 }
 
 fn parse_srgb(value: &str) -> Option<[u8; 3]> {
@@ -131,6 +178,39 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&options).unwrap(),
             serde_json::json!({ "chain_top": "direct", "chain_bottom": "steelflex_loop" })
+        );
+    }
+
+    #[test]
+    fn a_chain_mode_is_stored_as_its_ends_and_read_back_from_the_hoist() {
+        for mode in [ChainMode::Plain, ChainMode::MotorTop, ChainMode::MotorBottom] {
+            let mut options = SceneryOptions {
+                colour_srgb: Some("#112233".into()),
+                ..SceneryOptions::default()
+            };
+            options.set_chain_mode(mode);
+            assert_eq!(options.chain_mode(), mode);
+            assert_eq!(options.colour_srgb.as_deref(), Some("#112233"));
+        }
+        let (top, bottom) = ChainMode::MotorBottom.ends();
+        assert_eq!(
+            serde_json::to_value((top, bottom)).unwrap(),
+            serde_json::json!(["steelflex_loop", "motor"])
+        );
+        // A chain placed before the modes existed, or with the earlier end choices.
+        assert_eq!(SceneryOptions::default().chain_mode(), ChainMode::MotorTop);
+        let legacy = |top, bottom| SceneryOptions {
+            chain_top: top,
+            chain_bottom: bottom,
+            ..SceneryOptions::default()
+        };
+        assert_eq!(
+            legacy(Some(ChainTopEnd::Motor), Some(ChainBottomEnd::Direct)).chain_mode(),
+            ChainMode::MotorTop
+        );
+        assert_eq!(
+            legacy(Some(ChainTopEnd::Direct), Some(ChainBottomEnd::SteelflexLoop)).chain_mode(),
+            ChainMode::Plain
         );
     }
 }

@@ -52,14 +52,16 @@
       "type": "string",
       "enum": [
         "direct",
-        "steelflex_loop"
+        "steelflex_loop",
+        "motor"
       ]
     },
     "PatchChainTopEnd": {
       "type": "string",
       "enum": [
         "motor",
-        "direct"
+        "direct",
+        "steelflex_loop"
       ]
     },
     "PatchDirectControlEndpoint": {

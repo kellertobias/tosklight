@@ -369,6 +369,7 @@ pub struct PatchSceneryOptions {
 pub enum PatchChainTopEnd {
     Motor,
     Direct,
+    SteelflexLoop,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -377,6 +378,7 @@ pub enum PatchChainTopEnd {
 pub enum PatchChainBottomEnd {
     Direct,
     SteelflexLoop,
+    Motor,
 }
 
 /// Stage rotation in degrees.

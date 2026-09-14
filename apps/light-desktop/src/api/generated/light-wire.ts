@@ -649,8 +649,8 @@ chain_top?: PatchChainTopEnd | null,
  * What the bottom of a chain holds.
  */
 chain_bottom?: PatchChainBottomEnd | null, };
-export type PatchChainTopEnd = "motor" | "direct";
-export type PatchChainBottomEnd = "direct" | "steelflex_loop";
+export type PatchChainTopEnd = "motor" | "direct" | "steelflex_loop";
+export type PatchChainBottomEnd = "direct" | "steelflex_loop" | "motor";
 export type PatchInstalledLightSource = { "type": "profile_default" } | { "type": "tungsten" } | { "type": "halogen" } | { "type": "discharge" } | { "type": "led" } | { "type": "fluorescent" } | { "type": "arc" } | { "type": "other", label: string, };
 export type PatchGelDefinitionSnapshot = { number: string, name: string, display_srgb: string, visualizer_srgb: string, };
 export type PatchGelAssignment = { "type": "open_white" } | { "type": "built_in", catalog_id: string, entry_id: string, embedded_fallback: PatchGelDefinitionSnapshot, } | { "type": "custom", name: string, color_srgb: string, note: string | null, };

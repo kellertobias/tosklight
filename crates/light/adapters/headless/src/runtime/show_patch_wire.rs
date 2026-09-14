@@ -423,10 +423,12 @@ fn application_scenery_options(input: wire::PatchSceneryOptions) -> fixture::Sce
         chain_top: input.chain_top.map(|end| match end {
             wire::PatchChainTopEnd::Motor => fixture::ChainTopEnd::Motor,
             wire::PatchChainTopEnd::Direct => fixture::ChainTopEnd::Direct,
+            wire::PatchChainTopEnd::SteelflexLoop => fixture::ChainTopEnd::SteelflexLoop,
         }),
         chain_bottom: input.chain_bottom.map(|end| match end {
             wire::PatchChainBottomEnd::Direct => fixture::ChainBottomEnd::Direct,
             wire::PatchChainBottomEnd::SteelflexLoop => fixture::ChainBottomEnd::SteelflexLoop,
+            wire::PatchChainBottomEnd::Motor => fixture::ChainBottomEnd::Motor,
         }),
     }
 }
@@ -437,10 +439,12 @@ fn wire_scenery_options(options: &fixture::SceneryOptions) -> Option<wire::Patch
         chain_top: options.chain_top.map(|end| match end {
             fixture::ChainTopEnd::Motor => wire::PatchChainTopEnd::Motor,
             fixture::ChainTopEnd::Direct => wire::PatchChainTopEnd::Direct,
+            fixture::ChainTopEnd::SteelflexLoop => wire::PatchChainTopEnd::SteelflexLoop,
         }),
         chain_bottom: options.chain_bottom.map(|end| match end {
             fixture::ChainBottomEnd::Direct => wire::PatchChainBottomEnd::Direct,
             fixture::ChainBottomEnd::SteelflexLoop => wire::PatchChainBottomEnd::SteelflexLoop,
+            fixture::ChainBottomEnd::Motor => wire::PatchChainBottomEnd::Motor,
         }),
     })
 }
