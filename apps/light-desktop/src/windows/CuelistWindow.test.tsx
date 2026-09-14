@@ -1287,9 +1287,11 @@ describe("CuelistWindow pool recording", () => {
 		mocks.playbacks.pool[0].presentation_image =
 			"data:image/png;base64,cHJldmlldw==";
 		const { container } = render(<CuelistWindow compact cueListTab="pool" />);
-		const preview = screen.getByRole("button", {
-			name: "Open Main preview",
-		});
+		// Found by its label: a role query over the whole Cuelist window computes an accessible name
+		// for every element, which alone took most of a second and pushed this test past its timeout
+		// whenever the suite ran in parallel.
+		const preview = screen.getByLabelText("Open Main preview");
+		expect(preview.tagName).toBe("BUTTON");
 		preview.focus();
 		fireEvent.click(preview);
 
