@@ -46,8 +46,8 @@ pub use renderer_settings::{
     RendererSettingsUpdate, interface_line, parse_interface,
 };
 pub use scene::{
-    Aabb, BodyKind, CrowdArea, CrowdDensity, CrowdPosture, EffectProgram, EmitterInstance,
-    EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
+    Aabb, BodyKind, ChainRig, CrowdArea, CrowdDensity, CrowdPosture, EffectProgram,
+    EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
     FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MediaCrop, MediaProjector,
     MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PhysicsBody,
     PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, Scene,

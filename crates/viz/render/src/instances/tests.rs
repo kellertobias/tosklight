@@ -823,7 +823,9 @@ fn the_cells_of_a_bar_keep_their_own_lenses() {
 /// anything is lit.
 mod lines_view {
     use super::*;
-    use viz_scene::{FixtureModel, ModelPart, ModelPartKind, SceneryKind, SceneryObject, ViewMode};
+    use viz_scene::{
+        ChainRig, FixtureModel, ModelPart, ModelPartKind, SceneryKind, SceneryObject, ViewMode,
+    };
 
     fn lines_style() -> FrameStyle {
         FrameStyle {
@@ -1035,29 +1037,124 @@ mod lines_view {
         build(&scene, &SceneValues::default(), &FrameStyle::default())
     }
 
-    /// A chain reads by what hangs at its ends: a hoist body above it, or a shackle straight to
-    /// the steel; a hook below it, or a steelflex loop.
+    fn centre(instance: &MeshInstance) -> Vec3 {
+        Vec3::new(
+            instance.model[3][0],
+            instance.model[3][1],
+            instance.model[3][2],
+        )
+    }
+
+    fn instances(frame: &FrameInstances, mesh: MeshKind) -> Vec<MeshInstance> {
+        frame
+            .meshes
+            .iter()
+            .filter(|(kind, _)| *kind == mesh)
+            .flat_map(|(_, entries)| entries.iter().copied())
+            .collect()
+    }
+
+    /// The steelflex's clear purple, which nothing else on a chain is.
+    fn is_steelflex(instance: &MeshInstance) -> bool {
+        let [red, green, blue, _] = instance.base_colour;
+        blue > 0.4 && red > green * 3.0 && blue > red * 2.0
+    }
+
+    /// A chain reads by what hangs at its ends: a plain chain is only links, a hoist hangs at the
+    /// top or the bottom, and a purple steelflex wraps whatever is at the other end.
     #[test]
-    fn a_chain_hangs_from_a_hoist_or_a_shackle_and_ends_in_a_hook_or_a_loop() {
+    fn each_chain_mode_puts_its_hoist_and_its_steelflex_at_opposite_ends() {
         let mut chain = scenery(SceneryKind::Chain);
         chain.size = Vec3::new(0.1, 3.0, 0.1);
-        chain.detail.hoist = true;
-        let hoisted = drawn(chain.clone());
-        assert_eq!(mesh_count(&hoisted, MeshKind::Cube), 1, "one hoist body");
+        let (top, bottom) = (4.5, 1.5);
+        let links = crate::instances::scenery::chain_link_count(3.0);
 
-        chain.detail.hoist = false;
-        let direct = drawn(chain.clone());
+        chain.detail.chain = ChainRig::Plain;
+        let plain = drawn(chain.clone());
+        assert_eq!(mesh_count(&plain, MeshKind::Cube), 0, "no hoist");
         assert_eq!(
-            mesh_count(&direct, MeshKind::Cube),
-            0,
-            "no hoist on a direct top"
+            mesh_count(&plain, MeshKind::Cylinder),
+            links * 6,
+            "six tubes a link"
         );
 
-        chain.detail.steelflex_loop = true;
-        let slung = drawn(chain);
-        // Sixty links of two tubes each, a shackle of three at the top, twelve loop segments.
-        assert_eq!(mesh_count(&direct, MeshKind::Cylinder), 120 + 3 + 3);
-        assert_eq!(mesh_count(&slung, MeshKind::Cylinder), 120 + 3 + 12);
+        for (rig, hoist_at_top) in [(ChainRig::MotorTop, true), (ChainRig::MotorBottom, false)] {
+            chain.detail.chain = rig;
+            let frame = drawn(chain.clone());
+            let bodies = instances(&frame, MeshKind::Cube);
+            assert_eq!(bodies.len(), 1, "one hoist body for {rig:?}");
+            let body = centre(&bodies[0]).y;
+            let slings: Vec<f32> = instances(&frame, MeshKind::Cylinder)
+                .iter()
+                .filter(|instance| is_steelflex(instance))
+                .map(|instance| centre(instance).y)
+                .collect();
+            assert!(!slings.is_empty(), "a steelflex for {rig:?}");
+            if hoist_at_top {
+                assert!(body > top, "hoist above the chain: {body}");
+                assert!(
+                    slings.iter().all(|y| *y < bottom),
+                    "steelflex below: {slings:?}"
+                );
+            } else {
+                assert!(body < bottom, "hoist below the chain: {body}");
+                assert!(
+                    slings.iter().all(|y| *y > top),
+                    "steelflex above: {slings:?}"
+                );
+            }
+        }
+    }
+
+    /// A steelflex under a truss wraps its chord rather than a tube of its own.
+    #[test]
+    fn a_steelflex_wraps_the_truss_chord_above_the_chain() {
+        let mut truss = scenery(SceneryKind::Truss);
+        truss.position = Vec3::new(0.0, 5.0, 0.0);
+        truss.size = Vec3::new(4.0, 0.29, 0.29);
+        let mut chain = scenery(SceneryKind::Chain);
+        chain.position = Vec3::new(0.5, 3.2, 0.1);
+        chain.size = Vec3::new(0.1, 3.0, 0.1);
+        chain.detail.chain = ChainRig::MotorBottom;
+        let mut scene = Scene::default();
+        scene.scenery.extend([truss, chain]);
+        let frame = build(&scene, &SceneValues::default(), &FrameStyle::default());
+        let slings: Vec<Vec3> = instances(&frame, MeshKind::Cylinder)
+            .iter()
+            .filter(|instance| is_steelflex(instance))
+            .map(centre)
+            .collect();
+        // Two legs, then the wrap; its segments sit evenly round the chord.
+        let wrap = &slings[2..];
+        let middle = wrap.iter().copied().sum::<Vec3>() / wrap.len() as f32;
+        let parts_chord_y = 5.0 - (0.29 - 0.29 * 0.17) * 0.5;
+        let parts_chord_z = (0.29 - 0.29 * 0.17) * 0.5;
+        assert!((middle.y - parts_chord_y).abs() < 0.03, "{middle}");
+        assert!((middle.z - parts_chord_z).abs() < 0.03, "{middle}");
+        assert!((middle.x - 0.5).abs() < 0.03, "{middle}");
+    }
+
+    /// A stage element stands on a scissor lift; stairs, a riser without the flag, stay a block.
+    #[test]
+    fn a_stage_element_stands_on_a_scissor_lift_and_stairs_do_not() {
+        let mut stage = scenery(SceneryKind::Riser);
+        stage.size = Vec3::new(2.0, 1.0, 1.0);
+        stage.detail.scissor_lift = true;
+        let lifted = drawn(stage.clone());
+        assert_eq!(
+            mesh_count(&lifted, MeshKind::Cube),
+            5,
+            "deck and four rails"
+        );
+        assert!(
+            mesh_count(&lifted, MeshKind::Cylinder) >= 5,
+            "arms and a pivot tube"
+        );
+
+        stage.detail.scissor_lift = false;
+        let stairs = drawn(stage);
+        assert_eq!(mesh_count(&stairs, MeshKind::Cube), 1);
+        assert_eq!(mesh_count(&stairs, MeshKind::Cylinder), 0);
     }
 
     /// Deco truss crosses its diagonals, so the same length carries more bracing.
@@ -1084,6 +1181,32 @@ mod lines_view {
             mesh_count(&drawn(truss), MeshKind::Cylinder)
         };
         assert!(tubes(0.52) < tubes(0.34));
+    }
+
+    /// Every chord end carries a conical coupler, and each end has its frame, so pieces read as
+    /// separate sticks joined end to end.
+    #[test]
+    fn a_truss_piece_has_end_frames_and_a_coupler_on_every_chord_end() {
+        let mut truss = scenery(SceneryKind::Truss);
+        truss.size = Vec3::new(3.0, 0.29, 0.29);
+        let frame = drawn(truss.clone());
+        assert_eq!(
+            mesh_count(&frame, MeshKind::Sphere),
+            8,
+            "four chords, two ends"
+        );
+        // Four chords, eight receivers, two end frames of five tubes and one zig-zag per face.
+        let cylinders = mesh_count(&frame, MeshKind::Cylinder);
+        assert_eq!(cylinders, 4 + 8 + 10 + 4 * 12, "{cylinders} tubes");
+
+        truss.chords = 1;
+        let pipe = drawn(truss);
+        assert_eq!(
+            mesh_count(&pipe, MeshKind::Sphere),
+            0,
+            "a pipe has no couplers"
+        );
+        assert_eq!(mesh_count(&pipe, MeshKind::Cylinder), 1);
     }
 
     /// An invalid package model arrives with no resolved model index. It still gets a deliberate

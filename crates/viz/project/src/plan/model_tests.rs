@@ -799,15 +799,35 @@ fn a_placed_chain_is_drawn_with_the_ends_chosen_for_it() {
         compiled.scene.scenery[0].kind,
         viz_scene::SceneryKind::Chain
     );
-    assert!(unchosen.hoist && !unchosen.steelflex_loop && !unchosen.deco);
+    assert_eq!(unchosen.chain, viz_scene::ChainRig::MotorTop);
+    assert!(!unchosen.deco && !unchosen.scissor_lift);
 
-    fixture.instances[0].scenery_options = light_fixture::SceneryOptions {
-        chain_top: Some(light_fixture::ChainTopEnd::Direct),
-        chain_bottom: Some(light_fixture::ChainBottomEnd::SteelflexLoop),
-        ..Default::default()
-    };
-    let chosen = compile(std::slice::from_ref(&fixture)).scene.scenery[0].detail;
-    assert!(!chosen.hoist && chosen.steelflex_loop);
+    for (mode, rig) in [
+        (light_fixture::ChainMode::Plain, viz_scene::ChainRig::Plain),
+        (
+            light_fixture::ChainMode::MotorTop,
+            viz_scene::ChainRig::MotorTop,
+        ),
+        (
+            light_fixture::ChainMode::MotorBottom,
+            viz_scene::ChainRig::MotorBottom,
+        ),
+    ] {
+        fixture.instances[0].scenery_options.set_chain_mode(mode);
+        let chosen = compile(std::slice::from_ref(&fixture)).scene.scenery[0].detail;
+        assert_eq!(chosen.chain, rig);
+    }
+}
+
+/// A stage element stands on a scissor lift; stage stairs are a riser too but never do.
+#[test]
+fn a_stage_element_stands_on_a_scissor_lift_and_stairs_do_not() {
+    let stage = compile(&[shipped_venue("venue--stage-element-2-1-m")]);
+    assert_eq!(stage.scene.scenery[0].kind, viz_scene::SceneryKind::Riser);
+    assert!(stage.scene.scenery[0].detail.scissor_lift);
+    let stairs = compile(&[shipped_venue("venue--stage-stairs")]);
+    assert_eq!(stairs.scene.scenery[0].kind, viz_scene::SceneryKind::Riser);
+    assert!(!stairs.scene.scenery[0].detail.scissor_lift);
 }
 
 /// A curtain is the colour chosen for it; one nobody chose a colour for stays black serge.

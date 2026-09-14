@@ -63,19 +63,40 @@ fn push_people(frame: &mut FrameInstances, crowd: &CrowdArea, count: usize) {
             } else {
                 0.0
             };
-        let height = person_height(index);
         push_person(
             frame,
             crowd.position + orientation * local,
             orientation * Quat::from_rotation_y(yaw),
             crowd.posture,
-            height,
+            person_size(crowd.seed, index),
         );
     }
 }
 
-fn person_height(index: usize) -> f32 {
-    1.60 + ((index.saturating_mul(73).saturating_add(41) % 251) as f32 / 1000.0)
+/// Height of an average person in the crowd, in metres.
+const PERSON_HEIGHT: f32 = 1.72;
+
+/// How tall and how wide one person is drawn: each scaled on its own between 0.85 and 1.15 of an
+/// average person. It follows only the crowd's seed and the person's index, so a person keeps
+/// their size from frame to frame and when the footprint, posture or amount drawn changes.
+fn person_size(seed: u64, index: usize) -> PersonSize {
+    let mut random = SplitMix64::new(
+        seed ^ (index as u64)
+            .wrapping_add(1)
+            .wrapping_mul(0xd1b5_4a32_d192_ed03),
+    );
+    PersonSize {
+        height: PERSON_HEIGHT * random.range(0.85, 1.15),
+        width: random.range(0.85, 1.15),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PersonSize {
+    /// Standing height in metres.
+    height: f32,
+    /// Width against a person of that height with average proportions.
+    width: f32,
 }
 
 fn population_seed(crowd: &CrowdArea) -> u64 {
@@ -101,19 +122,16 @@ fn push_person(
     floor: Vec3,
     orientation: Quat,
     posture: CrowdPosture,
-    height: f32,
+    size: PersonSize,
 ) {
     let posture_scale = match posture {
         CrowdPosture::Sitting => 0.72,
         CrowdPosture::StandingStill | CrowdPosture::Dancing => 1.0,
     };
-    let rendered_height = height * posture_scale;
+    let rendered_height = size.height * posture_scale;
+    let scale = Vec3::new(rendered_height * size.width, rendered_height, 1.0);
     frame.mesh(MeshKind::CrowdPerson).push(MeshInstance::new(
-        Mat4::from_scale_rotation_translation(
-            Vec3::new(rendered_height, rendered_height, 1.0),
-            orientation,
-            floor,
-        ),
+        Mat4::from_scale_rotation_translation(scale, orientation, floor),
         Vec3::splat(0.008),
         0.92,
         Vec3::ZERO,
@@ -122,11 +140,7 @@ fn push_person(
     frame
         .mesh(MeshKind::CrowdPersonOutline)
         .push(MeshInstance::new(
-            Mat4::from_scale_rotation_translation(
-                Vec3::new(rendered_height, rendered_height, 1.0),
-                orientation,
-                floor,
-            ),
+            Mat4::from_scale_rotation_translation(scale, orientation, floor),
             Vec3::splat(0.42),
             0.9,
             Vec3::ZERO,
@@ -255,7 +269,7 @@ mod tests {
                 for vertex in &silhouette.vertices {
                     let world = model.transform_point3(Vec3::from_array(vertex.position));
                     assert!((-1.0..=1.0).contains(&world.x), "x={}", world.x);
-                    assert!((0.0..=1.85).contains(&world.y), "y={}", world.y);
+                    assert!((0.0..=2.0).contains(&world.y), "y={}", world.y);
                     assert!((-0.5..=0.5).contains(&world.z), "z={}", world.z);
                 }
             }
@@ -349,7 +363,54 @@ mod tests {
         );
         for person in &silhouettes.1 {
             let height = person.model[1][1].abs();
-            assert!((1.60..=1.85).contains(&height), "height={height}");
+            assert!((1.46..=1.98).contains(&height), "height={height}");
         }
+    }
+
+    /// People differ in height and build, and each keeps their own size from frame to frame.
+    #[test]
+    fn each_person_has_their_own_stable_height_and_width() {
+        let scene = Scene {
+            crowds: vec![area()],
+            ..Scene::default()
+        };
+        let style = FrameStyle {
+            quality: RenderQuality::High,
+            crowd_amount: 1.0,
+            ..FrameStyle::default()
+        };
+        let first = super::super::build(&scene, &viz_scene::SceneValues::default(), &style);
+        let again = super::super::build(&scene, &viz_scene::SceneValues::default(), &style);
+        let people = |frame: &super::super::FrameInstances| {
+            frame
+                .meshes
+                .iter()
+                .find(|(kind, _)| *kind == MeshKind::CrowdPerson)
+                .map(|(_, people)| people.iter().map(|person| person.model).collect::<Vec<_>>())
+                .unwrap()
+        };
+        let (first, again) = (people(&first), people(&again));
+        assert_eq!(first, again, "the same people at the same sizes");
+
+        let heights: Vec<f32> = first.iter().map(|model| model[1][1]).collect();
+        let builds: Vec<f32> = first
+            .iter()
+            .map(|model| model[0][0].hypot(model[0][2]) / model[1][1])
+            .collect();
+        let spread = |values: &[f32]| {
+            let low = values.iter().copied().fold(f32::MAX, f32::min);
+            let high = values.iter().copied().fold(f32::MIN, f32::max);
+            (low, high)
+        };
+        let (short, tall) = spread(&heights);
+        assert!(short >= PERSON_HEIGHT * 0.85 - 1e-3 && tall <= PERSON_HEIGHT * 1.15 + 1e-3);
+        assert!(tall - short > 0.3, "heights {short}..{tall}");
+        let (narrow, wide) = spread(&builds);
+        assert!(narrow >= 0.85 - 1e-3 && wide <= 1.15 + 1e-3);
+        assert!(wide - narrow > 0.2, "widths {narrow}..{wide}");
+
+        assert_eq!(person_size(42, 7), person_size(42, 7));
+        assert_ne!(person_size(42, 7), person_size(43, 7));
+        assert_ne!(person_size(42, 7), person_size(42, 8));
     }
 }

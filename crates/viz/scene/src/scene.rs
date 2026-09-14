@@ -739,12 +739,23 @@ pub struct SceneryDetail {
     /// A truss braced as deco truss: crossed diagonals in every bay rather than a zig-zag.
     #[serde(default)]
     pub deco: bool,
-    /// A chain lifted by a hoist at its top, rather than fixed straight to the steel.
+    /// How a chain is rigged: where its hoist hangs and where the steelflex wraps the truss.
+    /// A snapshot written before the rig was carried reads as a plain chain.
     #[serde(default)]
-    pub hoist: bool,
-    /// A chain ending in a steelflex loop at its bottom, rather than a hook fixed to the load.
+    pub chain: ChainRig,
+    /// A stage element standing on a scissor lift rather than a solid block. Stairs never are.
     #[serde(default)]
-    pub steelflex_loop: bool,
+    pub scissor_lift: bool,
+}
+
+/// How one chain is rigged. A hoist hangs at one end and a steelflex wraps the truss at the other;
+/// a plain chain has neither.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ChainRig {
+    #[default]
+    Plain,
+    MotorTop,
+    MotorBottom,
 }
 
 /// One scalable rectangular Venue crowd footprint.

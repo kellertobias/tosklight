@@ -1,7 +1,7 @@
 //! Compile every physical instance of one selected fixture into the scene and its bindings.
 
 use super::*;
-use viz_scene::SceneryDetail;
+use viz_scene::{ChainRig, SceneryDetail};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compile_instances(
@@ -274,20 +274,30 @@ fn scenery_roughness(kind: light_fixture::ProfileSceneryKind) -> f32 {
 
 /// What the profile and the placement say beyond the kind: a truss's bracing, a chain's ends.
 ///
-/// A chain placed before its ends could be chosen hangs from a hoist by a direct hook, which is how
-/// a chain is most often rigged.
+/// A chain placed before its ends could be chosen hangs from a hoist at its top, which is how a
+/// chain is most often rigged.
 fn scenery_detail(
+    profile_name: &str,
     declared: &light_fixture::ProfileScenery,
     options: &light_fixture::SceneryOptions,
 ) -> SceneryDetail {
+    use light_fixture::ProfileSceneryKind as Kind;
+    let chain = match declared.kind {
+        Kind::Chain => match options.chain_mode() {
+            light_fixture::ChainMode::Plain => ChainRig::Plain,
+            light_fixture::ChainMode::MotorTop => ChainRig::MotorTop,
+            light_fixture::ChainMode::MotorBottom => ChainRig::MotorBottom,
+        },
+        _ => ChainRig::Plain,
+    };
     SceneryDetail {
-        deco: declared.kind == light_fixture::ProfileSceneryKind::Truss
-            && declared.pattern == light_fixture::TrussPattern::Deco,
-        hoist: declared.kind == light_fixture::ProfileSceneryKind::Chain
-            && options.chain_top.unwrap_or_default() == light_fixture::ChainTopEnd::Motor,
-        steelflex_loop: declared.kind == light_fixture::ProfileSceneryKind::Chain
-            && options.chain_bottom.unwrap_or_default()
-                == light_fixture::ChainBottomEnd::SteelflexLoop,
+        deco: declared.kind == Kind::Truss && declared.pattern == light_fixture::TrussPattern::Deco,
+        chain,
+        // Stage stairs are declared as a riser too, because they occlude and are walked on the
+        // same way, but a flight of steps is not a deck raised on a scissor lift. The profile kind
+        // cannot tell the two apart, so the name does.
+        scissor_lift: declared.kind == Kind::Riser
+            && !profile_name.to_lowercase().contains("stair"),
     }
 }
 
@@ -316,6 +326,6 @@ fn generated_scenery(
         roughness: scenery_roughness(declared.kind),
         kind: scenery_kind(declared.kind),
         chords: declared.chords,
-        detail: scenery_detail(declared, &instance.scenery_options),
+        detail: scenery_detail(&fixture.profile.name, declared, &instance.scenery_options),
     })
 }

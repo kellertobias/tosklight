@@ -15,17 +15,32 @@ pub(super) fn push_scenery(
     values: &SceneValues,
     style: &FrameStyle,
 ) {
+    // A steelflex snaps to the truss chord it wraps, so a chain needs every chord in the room.
+    let chords = if scene
+        .scenery
+        .iter()
+        .any(|object| object.kind == SceneryKind::Chain)
+    {
+        truss::chord_lines(&scene.scenery)
+    } else {
+        Vec::new()
+    };
     for object in &scene.scenery {
-        push_object(frame, object, style);
+        push_object(frame, object, style, &chords);
     }
     for (body, state) in scene.physics_scenery.iter().zip(&values.physics_frames) {
         let mut object = body.scenery.clone();
         object.position += Vec3::from_array(state.position_offset);
-        push_object(frame, &object, style);
+        push_object(frame, &object, style, &chords);
     }
 }
 
-fn push_object(frame: &mut FrameInstances, object: &SceneryObject, style: &FrameStyle) {
+fn push_object(
+    frame: &mut FrameInstances,
+    object: &SceneryObject,
+    style: &FrameStyle,
+    chords: &[truss::ChordLine],
+) {
     // Not every view draws every kind. A lines view keeps what the rig is arranged around and
     // drops the rigging and the soft goods, which would only stand between the operator and
     // the lamps hanging off them.
@@ -54,7 +69,10 @@ fn push_object(frame: &mut FrameInstances, object: &SceneryObject, style: &Frame
         SceneryKind::Curtain => push_curtain(frame, object, orientation, colour),
         SceneryKind::Railing => push_railing(frame, object, orientation, colour),
         SceneryKind::MirrorBall => push_mirror_ball(frame, object, orientation),
-        SceneryKind::Chain => push_chain(frame, object, orientation, colour),
+        SceneryKind::Chain => chain::push_chain(frame, object, orientation, colour, chords),
+        SceneryKind::Riser if object.detail.scissor_lift => {
+            riser::push_scissor_stage(frame, object, orientation, colour)
+        }
         SceneryKind::Floor | SceneryKind::Wall | SceneryKind::Riser | SceneryKind::Prop => {
             let model =
                 Mat4::from_scale_rotation_translation(object.size, orientation, object.position);
@@ -99,113 +117,16 @@ fn push_tube(
     ));
 }
 
-/// A truss as it is actually built: chords running the length, with bracing between them.
-///
-/// A box drawn where a truss hangs tells an operator nothing. What they read a rig by is the
-/// number of chords and the ladder of bracing, so that is what is drawn.
-fn push_truss(frame: &mut FrameInstances, object: &SceneryObject, orientation: Quat, colour: Vec3) {
-    let size = object.size.max(Vec3::splat(0.02));
-    // The run is the longest axis; the other two give the cross-section.
-    let (run_axis, cross) = if size.x >= size.y && size.x >= size.z {
-        (Vec3::X, Vec3::new(size.y, size.z, 0.0))
-    } else if size.y >= size.z {
-        (Vec3::Y, Vec3::new(size.x, size.z, 0.0))
-    } else {
-        (Vec3::Z, Vec3::new(size.x, size.y, 0.0))
-    };
-    let length = (size * run_axis.abs()).max_element();
-    let run = orientation * run_axis;
-    let (across, up) = truss_cross_axes(run_axis, orientation);
-    let half_across = (cross.x * 0.5).max(0.02);
-    let half_up = (cross.y * 0.5).max(0.02);
-    let centre = object.position;
-    let start = centre - run * (length * 0.5);
+// A box drawn where a truss hangs tells an operator nothing. What they read a rig by is the
+// number of chords, the bracing and where one piece couples to the next, so that is what is drawn.
+mod truss;
+use truss::push_truss;
 
-    // Where the chords sit in the cross-section.
-    let chords: Vec<Vec3> = match object.chords.clamp(1, 4) {
-        1 => vec![Vec3::ZERO],
-        2 => vec![up * half_up, -up * half_up],
-        3 => vec![
-            up * half_up,
-            -up * half_up + across * half_across,
-            -up * half_up - across * half_across,
-        ],
-        _ => vec![
-            up * half_up + across * half_across,
-            up * half_up - across * half_across,
-            -up * half_up + across * half_across,
-            -up * half_up - across * half_across,
-        ],
-    };
-    let chord_radius = (half_across.min(half_up) * 0.28).clamp(0.012, 0.06);
-    let brace_radius = chord_radius * 0.6;
-
-    for offset in &chords {
-        push_tube(
-            frame,
-            start + *offset,
-            start + run * length + *offset,
-            chord_radius,
-            colour,
-            object.roughness,
-        );
-    }
-    if chords.len() < 2 {
-        return;
-    }
-    // Bracing: a zig-zag between neighbouring chords, in bays as long as the section is deep — a
-    // 0.34 m section every third of a metre, a large 0.52 m one every half metre — so a length
-    // repeats the section's own bays rather than stretching one pattern to fit.
-    let bay_target = (half_across.max(half_up) * 2.0).clamp(0.2, 1.2);
-    let bays = ((length / bay_target).round() as usize).clamp(1, 400);
-    let bay = length / bays as f32;
-    for index in 0..chords.len() {
-        let first = chords[index];
-        let second = chords[(index + 1) % chords.len()];
-        if chords.len() == 2 && index == 1 {
-            break;
-        }
-        for bay_index in 0..bays {
-            let near = start + run * (bay * bay_index as f32);
-            let far = start + run * (bay * (bay_index + 1) as f32);
-            let (from, to) = if bay_index % 2 == 0 {
-                (near + first, far + second)
-            } else {
-                (near + second, far + first)
-            };
-            push_tube(frame, from, to, brace_radius, colour, object.roughness);
-            if object.detail.deco {
-                // Deco truss crosses its diagonals in every bay.
-                let (from, to) = if bay_index % 2 == 0 {
-                    (near + second, far + first)
-                } else {
-                    (near + first, far + second)
-                };
-                push_tube(frame, from, to, brace_radius, colour, object.roughness);
-            }
-            // An upright at each node keeps the bays square, the way a truss is welded.
-            push_tube(
-                frame,
-                near + first,
-                near + second,
-                brace_radius,
-                colour,
-                object.roughness,
-            );
-        }
-    }
-}
-
-/// The two cross-section axes for a truss running along `run_axis`.
-fn truss_cross_axes(run_axis: Vec3, orientation: Quat) -> (Vec3, Vec3) {
-    let across = if run_axis == Vec3::Y {
-        Vec3::X
-    } else {
-        Vec3::Y
-    };
-    let other = run_axis.cross(across).normalize_or(Vec3::Z);
-    (orientation * other, orientation * across)
-}
+// A chain reads by its links and what hangs at its ends; a stage element by the lift under it.
+mod chain;
+mod riser;
+#[cfg(test)]
+pub(super) use chain::link_count as chain_link_count;
 
 /// A drape, drawn as folds rather than a slab so it reads as fabric.
 fn push_curtain(
@@ -292,126 +213,4 @@ fn push_mirror_ball(frame: &mut FrameInstances, object: &SceneryObject, orientat
         Vec3::ZERO,
         1.0,
     ));
-}
-
-/// Length of one chain link, top to bottom, in metres.
-const CHAIN_LINK_METRES: f32 = 0.05;
-
-/// A rigging chain hanging the height of its size, centred on its placement: links down its
-/// length, a hoist or a shackle at the top, and a shackle or a steelflex loop at the bottom.
-fn push_chain(frame: &mut FrameInstances, object: &SceneryObject, orientation: Quat, colour: Vec3) {
-    let size = object.size.max(Vec3::splat(0.02));
-    let length = size.y.max(0.1);
-    let up = orientation * Vec3::Y;
-    let across = orientation * Vec3::X;
-    let through = orientation * Vec3::Z;
-    let top = object.position + up * (length * 0.5);
-    let bottom = object.position - up * (length * 0.5);
-    // Neighbouring links turn a quarter to each other, which is what makes a chain read as a chain
-    // rather than a rod.
-    let links = ((length / CHAIN_LINK_METRES).round() as usize).clamp(2, 400);
-    let pitch = length / links as f32;
-    for index in 0..links {
-        let from = top - up * (pitch * index as f32);
-        let to = from - up * pitch;
-        let side = if index % 2 == 0 { across } else { through } * 0.007;
-        push_tube(
-            frame,
-            from + side,
-            to + side,
-            0.005,
-            colour,
-            object.roughness,
-        );
-        push_tube(
-            frame,
-            from - side,
-            to - side,
-            0.005,
-            colour,
-            object.roughness,
-        );
-    }
-    if object.detail.hoist {
-        // A chain hoist sits above the chain it lifts: a squat motor and gearbox body, hung by
-        // its own suspension hook.
-        let body = Vec3::new(0.28, 0.42, 0.26);
-        let centre = top + up * (body.y * 0.5);
-        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-            Mat4::from_scale_rotation_translation(body, orientation, centre),
-            Vec3::new(0.06, 0.06, 0.065),
-            0.6,
-            Vec3::ZERO,
-            0.2,
-        ));
-        let hook = centre + up * (body.y * 0.5);
-        push_tube(
-            frame,
-            hook,
-            hook + up * 0.12,
-            0.012,
-            colour,
-            object.roughness,
-        );
-    } else {
-        push_shackle(frame, top, up, across, colour, object.roughness);
-    }
-    if object.detail.steelflex_loop {
-        // A steelflex sling choked into a loop below the chain, as it wraps a beam or a chord.
-        const RADIUS: f32 = 0.12;
-        const SEGMENTS: usize = 12;
-        let centre = bottom - up * RADIUS;
-        let point = |step: usize| {
-            let angle = std::f32::consts::TAU * step as f32 / SEGMENTS as f32;
-            centre + up * (RADIUS * angle.cos()) + across * (RADIUS * angle.sin())
-        };
-        for step in 0..SEGMENTS {
-            push_tube(
-                frame,
-                point(step),
-                point(step + 1),
-                0.007,
-                Vec3::splat(0.55),
-                0.3,
-            );
-        }
-    } else {
-        push_shackle(frame, bottom, -up, across, colour, object.roughness);
-    }
-}
-
-/// A shackle where a chain is made fast: a short bow and its pin, pointing `outward`.
-fn push_shackle(
-    frame: &mut FrameInstances,
-    at: Vec3,
-    outward: Vec3,
-    across: Vec3,
-    colour: Vec3,
-    roughness: f32,
-) {
-    let tip = at + outward * 0.06;
-    push_tube(
-        frame,
-        at + across * 0.02,
-        tip + across * 0.02,
-        0.006,
-        colour,
-        roughness,
-    );
-    push_tube(
-        frame,
-        at - across * 0.02,
-        tip - across * 0.02,
-        0.006,
-        colour,
-        roughness,
-    );
-    push_tube(
-        frame,
-        tip + across * 0.025,
-        tip - across * 0.025,
-        0.007,
-        colour,
-        roughness,
-    );
 }
