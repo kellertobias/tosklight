@@ -1060,17 +1060,25 @@ mod lines_view {
         blue > 0.4 && red > green * 3.0 && blue > red * 2.0
     }
 
-    /// A chain reads by what hangs at its ends: a plain chain is only links, a hoist hangs at the
-    /// top or the bottom, and a purple steelflex wraps whatever is at the other end.
-    #[test]
-    fn each_chain_mode_puts_its_hoist_and_its_steelflex_at_opposite_ends() {
+    /// Tubes of one bow shackle: two walls, the bow, the bolt, its head and its nut.
+    const SHACKLE_TUBES: usize = 2 + 6 + 3;
+
+    /// A chain hanging 3 m with nothing within reach of its ends, centred at 3 m.
+    fn lone_chain(rig: ChainRig) -> SceneryObject {
         let mut chain = scenery(SceneryKind::Chain);
         chain.size = Vec3::new(0.1, 3.0, 0.1);
+        chain.detail.chain = rig;
+        chain
+    }
+
+    /// A chain reads by what hangs at its ends: a plain chain is only links, a hoist hangs at the
+    /// top or the bottom, and with nothing to make fast to, the other end has a shackle alone.
+    #[test]
+    fn each_chain_mode_puts_its_hoist_and_its_shackle_at_opposite_ends() {
         let (top, bottom) = (4.5, 1.5);
         let links = crate::instances::scenery::chain_link_count(3.0);
 
-        chain.detail.chain = ChainRig::Plain;
-        let plain = drawn(chain.clone());
+        let plain = drawn(lone_chain(ChainRig::Plain));
         assert_eq!(mesh_count(&plain, MeshKind::Cube), 0, "no hoist");
         assert_eq!(
             mesh_count(&plain, MeshKind::Cylinder),
@@ -1079,52 +1087,53 @@ mod lines_view {
         );
 
         for (rig, hoist_at_top) in [(ChainRig::MotorTop, true), (ChainRig::MotorBottom, false)] {
-            chain.detail.chain = rig;
-            let frame = drawn(chain.clone());
+            let frame = drawn(lone_chain(rig));
             let bodies = instances(&frame, MeshKind::Cube);
-            assert_eq!(bodies.len(), 1, "one hoist body for {rig:?}");
+            assert_eq!(bodies.len(), 1, "one hoist body and no flange for {rig:?}");
             let body = centre(&bodies[0]).y;
-            let slings: Vec<f32> = instances(&frame, MeshKind::Cylinder)
+            let tubes = instances(&frame, MeshKind::Cylinder);
+            assert_eq!(tubes.len(), links * 6 + 1 + SHACKLE_TUBES, "{rig:?}");
+            assert!(!tubes.iter().any(is_steelflex), "no sling for {rig:?}");
+            // The bow hangs beyond the free end, where the hook does not reach.
+            let fitting: Vec<f32> = tubes[links * 6..]
                 .iter()
-                .filter(|instance| is_steelflex(instance))
                 .map(|instance| centre(instance).y)
                 .collect();
-            assert!(!slings.is_empty(), "a steelflex for {rig:?}");
             if hoist_at_top {
                 assert!(body > top, "hoist above the chain: {body}");
-                assert!(
-                    slings.iter().all(|y| *y < bottom),
-                    "steelflex below: {slings:?}"
-                );
+                assert!(fitting.iter().any(|y| *y < bottom - 0.03), "{fitting:?}");
             } else {
                 assert!(body < bottom, "hoist below the chain: {body}");
-                assert!(
-                    slings.iter().all(|y| *y > top),
-                    "steelflex above: {slings:?}"
-                );
+                assert!(fitting.iter().any(|y| *y > top + 0.03), "{fitting:?}");
             }
         }
     }
 
-    /// A steelflex under a truss wraps its chord rather than a tube of its own.
-    #[test]
-    fn a_steelflex_wraps_the_truss_chord_above_the_chain() {
+    /// A chain under a truss with `chords`, its free top end just below the truss.
+    fn chain_under_truss(chords: u8) -> FrameInstances {
         let mut truss = scenery(SceneryKind::Truss);
         truss.position = Vec3::new(0.0, 5.0, 0.0);
         truss.size = Vec3::new(4.0, 0.29, 0.29);
-        let mut chain = scenery(SceneryKind::Chain);
+        truss.chords = chords;
+        let mut chain = lone_chain(ChainRig::MotorBottom);
         chain.position = Vec3::new(0.5, 3.2, 0.1);
-        chain.size = Vec3::new(0.1, 3.0, 0.1);
-        chain.detail.chain = ChainRig::MotorBottom;
         let mut scene = Scene::default();
         scene.scenery.extend([truss, chain]);
-        let frame = build(&scene, &SceneValues::default(), &FrameStyle::default());
+        build(&scene, &SceneValues::default(), &FrameStyle::default())
+    }
+
+    /// A steelflex under square truss wraps its chord rather than a tube of its own, hugging it
+    /// at the chord's radius plus the sling's 11 mm.
+    #[test]
+    fn a_chain_under_four_point_truss_takes_a_steelflex_hugging_the_chord() {
+        let frame = chain_under_truss(4);
         let slings: Vec<Vec3> = instances(&frame, MeshKind::Cylinder)
             .iter()
             .filter(|instance| is_steelflex(instance))
             .map(centre)
             .collect();
         // Two legs, then the wrap; its segments sit evenly round the chord.
+        assert_eq!(slings.len(), 12);
         let wrap = &slings[2..];
         let middle = wrap.iter().copied().sum::<Vec3>() / wrap.len() as f32;
         let parts_chord_y = 5.0 - (0.29 - 0.29 * 0.17) * 0.5;
@@ -1132,6 +1141,35 @@ mod lines_view {
         assert!((middle.y - parts_chord_y).abs() < 0.03, "{middle}");
         assert!((middle.z - parts_chord_z).abs() < 0.03, "{middle}");
         assert!((middle.x - 0.5).abs() < 0.03, "{middle}");
+        let axis = Vec3::new(0.5, parts_chord_y, parts_chord_z);
+        let hugging = 0.29 * 0.17 * 0.5 + 0.011;
+        for segment in wrap {
+            let off_axis = (*segment - axis) * Vec3::new(0.0, 1.0, 1.0);
+            assert!((off_axis.length() - hugging).abs() < 1e-3, "{off_axis}");
+        }
+        assert_eq!(instances(&frame, MeshKind::Cube).len(), 1, "no flange");
+    }
+
+    /// A pipe, or a chord of two-point ladder truss, takes a pipe clamp and no purple sling.
+    #[test]
+    fn a_chain_under_a_pipe_or_ladder_takes_a_flange_and_no_sling() {
+        for chords in [1, 2] {
+            let frame = chain_under_truss(chords);
+            let tubes = instances(&frame, MeshKind::Cylinder);
+            assert!(!tubes.iter().any(is_steelflex), "{chords} chords");
+            let blocks: Vec<Vec3> = instances(&frame, MeshKind::Cube)
+                .iter()
+                .map(centre)
+                .collect();
+            // The hoist, twelve band pieces, two ears and the plate's four strips.
+            assert_eq!(blocks.len(), 1 + 12 + 2 + 4, "{chords} chords");
+            let clamp = &blocks[1..];
+            assert!(
+                clamp.iter().all(|block| (block.x - 0.5).abs() < 0.03),
+                "the clamp sits on the chord nearest the chain end: {clamp:?}"
+            );
+            assert!(clamp.iter().all(|block| block.y > 4.6), "{clamp:?}");
+        }
     }
 
     /// A stage element stands on a scissor lift; stairs, a riser without the flag, stay a block.

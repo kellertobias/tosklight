@@ -138,6 +138,9 @@ pub(super) struct ChordLine {
     pub end: Vec3,
     /// Outside radius of the chord tube, in metres.
     pub radius: f32,
+    /// How many chords the truss this chord belongs to has: 1 for a pipe, 2 for ladder truss,
+    /// 3 or 4 for a triangle or square section.
+    pub chords: u8,
 }
 
 /// Every chord of every truss in `scenery`, drawn where [`push_truss`] draws it.
@@ -149,11 +152,13 @@ pub(super) fn chord_lines(scenery: &[SceneryObject]) -> Vec<ChordLine> {
             let layout =
                 TrussLayout::new(object, viz_scene::euler_degrees(object.rotation_degrees));
             let radius = layout.parts.chord * 0.5;
+            let count = layout.parts.chords;
             let (start, end) = (layout.start, layout.end);
             layout.chords.into_iter().map(move |offset| ChordLine {
                 start: start + offset,
                 end: end + offset,
                 radius,
+                chords: count,
             })
         })
         .collect()

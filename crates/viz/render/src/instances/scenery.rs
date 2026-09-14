@@ -15,7 +15,8 @@ pub(super) fn push_scenery(
     values: &SceneValues,
     style: &FrameStyle,
 ) {
-    // A steelflex snaps to the truss chord it wraps, so a chain needs every chord in the room.
+    // A chain end is made fast to the nearest truss chord, by a steelflex or a pipe clamp as that
+    // chord's truss calls for, so a chain needs every chord in the room.
     let chords = if scene
         .scenery
         .iter()
