@@ -83,7 +83,7 @@ pub fn decode_artdmx(bytes: &[u8]) -> Result<Option<DecodedFrame>, PacketReject>
     Ok(Some(frame))
 }
 
-const SACN_ACN_IDENTIFIER: &[u8; 12] = b"ASC-E1.17\0\0\0";
+pub(crate) const SACN_ACN_IDENTIFIER: &[u8; 12] = b"ASC-E1.17\0\0\0";
 
 /// Decode an E1.31 data packet.
 ///

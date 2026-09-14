@@ -13,6 +13,7 @@ mod discovery;
 mod dmx_input;
 mod local_api;
 mod mcp;
+mod network_sources;
 mod portable;
 mod recent;
 mod session;
@@ -195,6 +196,7 @@ fn main() {
         .manage(cad::CadState::default())
         .manage(discovery::Discovery::default())
         .manage(dmx_input::DmxInputMonitor::default())
+        .manage(network_sources::NetworkSourcesMonitor::default())
         .manage(Arc::new(verify::SurfaceReady::default()))
         .invoke_handler(tauri::generate_handler![
             session::create_document,
@@ -254,6 +256,8 @@ fn main() {
             dmx_input::received_dmx,
             dmx_input::stop_received_dmx,
             dmx_input::network_interfaces,
+            network_sources::network_sources,
+            network_sources::stop_network_sources,
         ])
         .setup(|app| {
             // Before the window is shown, so the tile never appears and then disappears.

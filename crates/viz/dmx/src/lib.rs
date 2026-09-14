@@ -5,12 +5,18 @@
 //! coalesced to the newest complete frame per logical universe. Nothing here can backpressure the
 //! desk that sent the packets.
 
+mod discovery;
 mod interfaces;
 mod mapping;
 mod packet;
 mod receiver;
 mod statistics;
 
+pub use discovery::{
+    ArtNetPort, ArtPollReply, DiscoveryPlan, NetworkNode, PortDirection, SACN_DISCOVERY_UNIVERSE,
+    SacnDiscovery, SentUniverse, SourceDiscovery, artpoll, decode_artpollreply,
+    decode_sacn_discovery,
+};
 pub use interfaces::{
     ListenInterfaces, NetworkInterface, listen_on, listen_on_this_machine, network_interfaces,
 };

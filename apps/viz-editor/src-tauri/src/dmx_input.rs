@@ -233,7 +233,7 @@ fn patched_universes(document: &PlanningDocument) -> Result<Vec<u16>, String> {
 }
 
 /// The interfaces this machine receives Art-Net and sACN on, which the Visualizer shares.
-fn renderer_interfaces(session: &Session) -> ListenInterfaces {
+pub(crate) fn renderer_interfaces(session: &Session) -> ListenInterfaces {
     session
         .scene_source()
         .renderer_settings()
