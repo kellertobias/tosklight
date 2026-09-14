@@ -3715,11 +3715,13 @@ name = "light-output"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "if-addrs",
  "light-core",
  "light-dmx-wire",
  "light-usb-dmx-core",
  "serde",
  "serde_json",
+ "socket2 0.6.5",
  "tokio",
  "tokio-util",
 ]

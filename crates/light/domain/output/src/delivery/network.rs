@@ -1,17 +1,28 @@
 use super::{EncodedPacket, encode_routes, next_sequence};
 use crate::{DMX_SLOTS, DeliveryMode, DmxFrame, OutputRoute, Protocol, sacn_data_packet};
 use light_core::Universe;
+use light_dmx_wire::{
+    ARTNET_PORT, SACN_DISCOVERY_UNIVERSE, artpollreply_packets, is_artpoll, sacn_discovery_packets,
+    sacn_multicast_destination,
+};
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     io,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket as StdUdpSocket},
     sync::{
         Mutex,
         atomic::{AtomicU64, Ordering},
     },
+    time::{Duration, Instant},
 };
 use tokio::net::UdpSocket;
+
+/// E1.31 announces a source's universes every ten seconds.
+const SACN_DISCOVERY_INTERVAL: Duration = Duration::from_secs(10);
+/// Polls answered per listener per output frame, so a flood cannot stall the frame.
+const POLLS_PER_FRAME: usize = 16;
+const LONG_NAME: &str = "ToskLight lighting desk";
 
 /// Shared UDP transport for a dynamically reloadable set of show routes.
 pub struct NetworkOutput {
@@ -23,6 +34,24 @@ pub struct NetworkOutput {
     injected_failures: Mutex<HashSet<SocketAddr>>,
     send_errors: AtomicU64,
     route_send_errors: Mutex<HashMap<(Protocol, Universe, SocketAddr), u64>>,
+    /// Where controllers' ArtPolls arrive: one socket per lighting network, bound to its broadcast
+    /// address so unicast Art-Net meant for another receiver on this computer never lands here.
+    poll_listeners: Vec<PollListener>,
+    announcements: Mutex<Announcements>,
+}
+
+struct PollListener {
+    socket: StdUdpSocket,
+    /// The desk's own address on that network, as its replies name it.
+    address: Ipv4Addr,
+}
+
+#[derive(Default)]
+struct Announcements {
+    sacn_universes: Vec<Universe>,
+    sacn_announced_at: Option<Instant>,
+    sacn_destination: Option<SocketAddr>,
+    replies: u16,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -59,7 +88,35 @@ impl NetworkOutput {
             injected_failures: Mutex::new(HashSet::new()),
             send_errors: AtomicU64::new(0),
             route_send_errors: Mutex::new(HashMap::new()),
+            poll_listeners: broadcast_poll_listeners(bind_ip),
+            announcements: Mutex::new(Announcements::default()),
         })
+    }
+
+    /// Also answer ArtPolls arriving at `bind`, replying as `address`.
+    ///
+    /// Test-bench seam: loopback has no broadcast address to listen on.
+    pub fn listen_for_art_polls(mut self, bind: SocketAddr, address: Ipv4Addr) -> io::Result<Self> {
+        self.poll_listeners.push(poll_listener(bind, address)?);
+        Ok(self)
+    }
+
+    /// The addresses ArtPolls are answered on.
+    pub fn art_poll_addresses(&self) -> Vec<SocketAddr> {
+        self.poll_listeners
+            .iter()
+            .filter_map(|listener| listener.socket.local_addr().ok())
+            .collect()
+    }
+
+    /// Send sACN universe discovery to `destination` instead of its multicast group.
+    ///
+    /// Test-bench seam, like [`Self::inject_failure`].
+    pub fn redirect_sacn_discovery(&self, destination: SocketAddr) {
+        self.announcements
+            .lock()
+            .expect("output announcement mutex poisoned")
+            .sacn_destination = Some(destination);
     }
 
     /// Test-bench seam for deterministic route-scoped send failures.
@@ -105,7 +162,9 @@ impl NetworkOutput {
             &self.source_name,
             self.sacn_priority,
         )?;
-        self.send_packets(&packets).await
+        let sent = self.send_packets(&packets).await;
+        self.announce(routes).await;
+        sent
     }
 
     pub async fn terminate_routes(
@@ -122,6 +181,85 @@ impl NetworkOutput {
             }
         }
         Ok(())
+    }
+
+    /// Make the desk findable on the network: answer ArtPolls, and announce its sACN universes.
+    ///
+    /// Announcing never fails the frame: a lost announcement is repeated by the next poll or the
+    /// next interval, while a failed frame is lost light.
+    async fn announce(&self, routes: &[OutputRoute]) {
+        self.answer_art_polls(&sent_universes(routes, Protocol::ArtNet))
+            .await;
+        self.announce_sacn(sent_universes(routes, Protocol::Sacn))
+            .await;
+    }
+
+    async fn answer_art_polls(&self, universes: &[Universe]) {
+        let mut buffer = [0_u8; 512];
+        for listener in &self.poll_listeners {
+            for _ in 0..POLLS_PER_FRAME {
+                let Ok((length, from)) = listener.socket.recv_from(&mut buffer) else {
+                    break;
+                };
+                if !is_artpoll(&buffer[..length]) {
+                    continue;
+                }
+                let report = {
+                    let mut announcements = self
+                        .announcements
+                        .lock()
+                        .expect("output announcement mutex poisoned");
+                    announcements.replies = announcements.replies.wrapping_add(1) % 10_000;
+                    format!("#0001 [{:04}] Output running", announcements.replies)
+                };
+                let replies = artpollreply_packets(
+                    listener.address,
+                    &self.source_name,
+                    LONG_NAME,
+                    &report,
+                    universes,
+                );
+                // Replies belong on port 6454; a poller asking from another port hears it there too.
+                let mut destinations = vec![SocketAddr::new(from.ip(), ARTNET_PORT)];
+                if from.port() != ARTNET_PORT {
+                    destinations.push(from);
+                }
+                // Sent from the Art-Net output socket: a socket bound to a broadcast address cannot
+                // name itself as a unicast sender.
+                for destination in destinations {
+                    for reply in &replies {
+                        let _ = self.artnet.send_to(reply, destination).await;
+                    }
+                }
+            }
+        }
+    }
+
+    async fn announce_sacn(&self, universes: Vec<Universe>) {
+        let destination = {
+            let mut announcements = self
+                .announcements
+                .lock()
+                .expect("output announcement mutex poisoned");
+            let changed = announcements.sacn_universes != universes;
+            let due = announcements
+                .sacn_announced_at
+                .is_none_or(|at| at.elapsed() >= SACN_DISCOVERY_INTERVAL);
+            if !changed && !due {
+                return;
+            }
+            announcements.sacn_universes.clone_from(&universes);
+            announcements.sacn_announced_at = Some(Instant::now());
+            if universes.is_empty() {
+                return;
+            }
+            announcements
+                .sacn_destination
+                .unwrap_or_else(|| sacn_multicast_destination(SACN_DISCOVERY_UNIVERSE))
+        };
+        for packet in sacn_discovery_packets(self.cid, &self.source_name, &universes) {
+            let _ = self.sacn.send_to(&packet, destination).await;
+        }
     }
 
     async fn send_packets(&self, packets: &[EncodedPacket]) -> io::Result<u64> {
@@ -236,6 +374,59 @@ impl SendOutcome {
             (sent, _) => Ok(sent),
         }
     }
+}
+
+/// The destination universes enabled network routes send on `protocol`, each once, in order.
+fn sent_universes(routes: &[OutputRoute], protocol: Protocol) -> Vec<Universe> {
+    let mut universes: Vec<Universe> = routes
+        .iter()
+        .filter(|route| route.enabled && route.target.is_network() && route.protocol == protocol)
+        .map(|route| route.destination_universe)
+        .collect();
+    universes.sort_unstable();
+    universes.dedup();
+    universes
+}
+
+/// A poll listener on the broadcast address of every network the output may send on.
+///
+/// A socket bound to the wildcard address would share port 6454 with a Visualizer on this
+/// computer, and the system may hand it the unicast frames meant for that Visualizer. Bound to a
+/// broadcast address it hears only broadcast, which is how ArtPolls are sent.
+fn broadcast_poll_listeners(bind_ip: IpAddr) -> Vec<PollListener> {
+    let Ok(interfaces) = if_addrs::get_if_addrs() else {
+        return Vec::new();
+    };
+    interfaces
+        .into_iter()
+        .filter_map(|interface| match interface.addr {
+            if_addrs::IfAddr::V4(address)
+                if !address.ip.is_loopback()
+                    && (bind_ip.is_unspecified() || bind_ip == IpAddr::V4(address.ip)) =>
+            {
+                let broadcast = address.broadcast?;
+                poll_listener(SocketAddr::from((broadcast, ARTNET_PORT)), address.ip).ok()
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn poll_listener(bind: SocketAddr, address: Ipv4Addr) -> io::Result<PollListener> {
+    let socket = socket2::Socket::new(
+        socket2::Domain::IPV4,
+        socket2::Type::DGRAM,
+        Some(socket2::Protocol::UDP),
+    )?;
+    socket.set_reuse_address(true)?;
+    #[cfg(unix)]
+    socket.set_reuse_port(true)?;
+    socket.set_nonblocking(true)?;
+    socket.bind(&bind.into())?;
+    Ok(PollListener {
+        socket: socket.into(),
+        address,
+    })
 }
 
 fn route_diagnostic(route: &OutputRoute) -> Option<RouteDiagnostic> {

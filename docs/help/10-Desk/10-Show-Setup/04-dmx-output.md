@@ -18,6 +18,15 @@ The output bind address selects the lighting-network interface. Use a specific I
 
 New routes start with a minimum of 128 slots. Every enabled route emits a frame on every output tick even when its logical universe has no patch; that idle payload contains zeros and is at least the configured minimum size. A patched fixture extends the payload through its complete footprint, and every patched channel contains its fixture default or zero when no default is configured.
 
+## Discovery by other controllers
+
+The desk announces itself on the lighting network, so node-management tools, other consoles, and the DMX **Sources** tab in ToskLight PreViz can list it:
+
+* It answers Art-Net polls with ArtPollReply packets that name the desk and list every Art-Net universe an enabled route sends, each as an input port, four to a reply, grouped by net and sub-net. A desk without Art-Net routes still answers, with no ports.
+* It sends E1.31 universe discovery to `239.255.250.214:5568` listing every sACN universe an enabled route sends: at once when that set changes, and every ten seconds.
+
+Polls are answered within one output frame on every network the output bind address allows. The desk listens on each network's broadcast address, so Art-Net sent directly to this computer — for a Visualizer running beside the desk — still reaches that Visualizer. A consequence is that only broadcast polls are answered: a poll sent to the desk's own address or to `255.255.255.255` is not. Announcing changes no route and adds no output.
+
 ## Configure USB DMX
 
 Connect the interface, then open **Desk Setup > Outputs > Routes** and choose **Scan USB devices** beside **Add route**. Every discovered interface appears with its USB serial identity and an **Add route for device** action. That action opens the normal route editor with the device already selected. ToskLight chooses ENTTEC USB Pro or Open DMX automatically when the device metadata is conclusive; otherwise the editor asks which kind of interface is connected.

@@ -6,10 +6,12 @@ license-file.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+if-addrs.workspace = true
 light-core = { path = "../../../shared/core" }
 light-dmx-wire = { path = "../../../shared/dmx" }
 light-usb-dmx-core = { path = "../../adapters/usb-dmx-core" }
 serde.workspace = true
+socket2.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 

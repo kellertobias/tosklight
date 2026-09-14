@@ -99,6 +99,102 @@ async fn shutdown_sends_three_sacn_termination_packets_and_no_artnet_black_frame
     assert!(!sequences.contains_key(&(Protocol::ArtNet, 10)));
 }
 
+#[tokio::test]
+async fn an_art_poll_is_answered_with_every_art_net_universe_the_desk_sends() {
+    let output = NetworkOutput::bind(IpAddr::V4(Ipv4Addr::LOCALHOST), [9; 16], "Light")
+        .await
+        .unwrap()
+        .listen_for_art_polls(
+            SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
+            Ipv4Addr::LOCALHOST,
+        )
+        .unwrap();
+    let poll_address = *output.art_poll_addresses().last().unwrap();
+    let sink = local_receiver().await.local_addr().unwrap();
+    let poller = local_receiver().await;
+    let routes = [
+        unicast_route(Protocol::ArtNet, 0x21, sink),
+        unicast_route(Protocol::ArtNet, 3, sink),
+        unicast_route(Protocol::Sacn, 9, sink),
+    ];
+    let mut poll = [0_u8; 14];
+    poll[..8].copy_from_slice(b"Art-Net\0");
+    poll[8..10].copy_from_slice(&0x2000_u16.to_le_bytes());
+    poll[11] = 14;
+    poller.send_to(&poll, poll_address).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+
+    // The poll is answered on the next output frame.
+    output
+        .send_routes(
+            &routes,
+            &HashMap::new(),
+            &HashMap::new(),
+            &mut HashMap::new(),
+        )
+        .await
+        .unwrap();
+
+    let first = receive_packet(&poller).await;
+    let second = receive_packet(&poller).await;
+    for reply in [&first, &second] {
+        assert_eq!(&reply[8..10], &0x2100_u16.to_le_bytes());
+        assert_eq!(&reply[10..14], &[127, 0, 0, 1]);
+        assert_eq!(&reply[26..32], b"Light\0");
+        assert_eq!(reply[173], 1);
+        assert_eq!(reply[174], 0x40);
+    }
+    // Universe 3 on sub-net 0, then 0x21 on sub-net 2: one reply each.
+    assert_eq!((first[19], first[186], first[211]), (0, 3, 1));
+    assert_eq!((second[19], second[186], second[211]), (2, 1, 2));
+}
+
+#[tokio::test]
+async fn sacn_universes_are_announced_at_once_and_again_only_when_they_change() {
+    let output = NetworkOutput::bind(IpAddr::V4(Ipv4Addr::LOCALHOST), [10; 16], "Light")
+        .await
+        .unwrap();
+    let discovery = local_receiver().await;
+    output.redirect_sacn_discovery(discovery.local_addr().unwrap());
+    let sink = local_receiver().await.local_addr().unwrap();
+    let mut routes = vec![
+        unicast_route(Protocol::Sacn, 20, sink),
+        unicast_route(Protocol::Sacn, 7, sink),
+        unicast_route(Protocol::ArtNet, 5, sink),
+    ];
+    let mut sequences = HashMap::new();
+    let frames = HashMap::new();
+    let slots = HashMap::new();
+
+    output
+        .send_routes(&routes, &frames, &slots, &mut sequences)
+        .await
+        .unwrap();
+    let packet = receive_packet(&discovery).await;
+    assert_eq!(&packet[18..22], &8_u32.to_be_bytes());
+    assert_eq!(&packet[22..38], &[10; 16]);
+    assert_eq!(&packet[114..118], &1_u32.to_be_bytes());
+    assert_eq!(&packet[120..], &[0, 7, 0, 20]);
+
+    // Within the ten-second interval an unchanged set is not repeated.
+    output
+        .send_routes(&routes, &frames, &slots, &mut sequences)
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(30), receive_packet(&discovery))
+            .await
+            .is_err()
+    );
+
+    routes[1].enabled = false;
+    output
+        .send_routes(&routes, &frames, &slots, &mut sequences)
+        .await
+        .unwrap();
+    assert_eq!(&receive_packet(&discovery).await[120..], &[0, 20]);
+}
+
 async fn assert_payload(socket: &UdpSocket, offset: usize, value: u8) {
     let packet = receive_packet(socket).await;
     assert_eq!(packet[offset], value);

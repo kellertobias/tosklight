@@ -13,8 +13,13 @@
 mod artnet;
 mod sacn;
 
-pub use artnet::{ARTNET_PORT, artdmx_packet, artnet_broadcast_destination};
-pub use sacn::{SACN_PORT, sacn_data_packet, sacn_multicast_destination};
+pub use artnet::{
+    ARTNET_PORT, artdmx_packet, artnet_broadcast_destination, artpollreply_packets, is_artpoll,
+};
+pub use sacn::{
+    SACN_DISCOVERY_UNIVERSE, SACN_PORT, sacn_data_packet, sacn_discovery_packets,
+    sacn_multicast_destination,
+};
 
 /// One universe's worth of slots.
 pub const DMX_SLOTS: usize = 512;
