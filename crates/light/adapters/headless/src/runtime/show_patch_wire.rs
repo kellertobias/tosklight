@@ -343,6 +343,10 @@ fn application_fixture(
             },
             location: application_location(input.location),
             scenery_size_metres: input.scenery_size_metres.map(application_vector),
+            scenery_options: input
+                .scenery_options
+                .map(application_scenery_options)
+                .unwrap_or_default(),
             rotation: application_rotation(input.rotation),
             logical_heads: Vec::new(),
             multipatch: input
@@ -411,6 +415,34 @@ fn wire_vector(size: fixture::FixtureVector) -> wire::PatchFixtureLocation {
         y: size.y as i32,
         z: size.z as i32,
     }
+}
+
+fn application_scenery_options(input: wire::PatchSceneryOptions) -> fixture::SceneryOptions {
+    fixture::SceneryOptions {
+        colour_srgb: input.colour_srgb,
+        chain_top: input.chain_top.map(|end| match end {
+            wire::PatchChainTopEnd::Motor => fixture::ChainTopEnd::Motor,
+            wire::PatchChainTopEnd::Direct => fixture::ChainTopEnd::Direct,
+        }),
+        chain_bottom: input.chain_bottom.map(|end| match end {
+            wire::PatchChainBottomEnd::Direct => fixture::ChainBottomEnd::Direct,
+            wire::PatchChainBottomEnd::SteelflexLoop => fixture::ChainBottomEnd::SteelflexLoop,
+        }),
+    }
+}
+
+fn wire_scenery_options(options: &fixture::SceneryOptions) -> Option<wire::PatchSceneryOptions> {
+    (!options.is_empty()).then(|| wire::PatchSceneryOptions {
+        colour_srgb: options.colour_srgb.clone(),
+        chain_top: options.chain_top.map(|end| match end {
+            fixture::ChainTopEnd::Motor => wire::PatchChainTopEnd::Motor,
+            fixture::ChainTopEnd::Direct => wire::PatchChainTopEnd::Direct,
+        }),
+        chain_bottom: options.chain_bottom.map(|end| match end {
+            fixture::ChainBottomEnd::Direct => wire::PatchChainBottomEnd::Direct,
+            fixture::ChainBottomEnd::SteelflexLoop => wire::PatchChainBottomEnd::SteelflexLoop,
+        }),
+    })
 }
 
 fn application_rotation(rotation: wire::PatchFixtureRotation) -> fixture::FixtureVector {
@@ -530,6 +562,7 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
         },
         location: wire_location(patch.location),
         scenery_size_metres: patch.scenery_size_metres.map(wire_vector),
+        scenery_options: wire_scenery_options(&patch.scenery_options),
         rotation: wire_rotation(patch.rotation),
         note: patch.note.clone(),
         position_master: patch.position_master,

@@ -146,6 +146,7 @@ pub(super) fn patched(
     let (universe, address) =
         super::default_patch(&name).expect("built-in fixture has a default patch");
     PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: Some(fixture_number),

@@ -71,6 +71,7 @@ fn a_flat_layout_becomes_a_portable_profile_with_explicit_split_assignments() {
     });
     let instance_id = Uuid::new_v4();
     let mut fixture = PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: Some(1),

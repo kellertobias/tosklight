@@ -25,6 +25,7 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
         .unwrap();
     let fixture_id = FixtureId::new();
     let fixture = PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id,
         fixture_number: Some(1),
@@ -464,6 +465,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
     let definition = profile.resolved_definition(mode_id).unwrap();
     let physical = FixtureId::new();
     let fixture = PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: physical,
         fixture_number: Some(1),

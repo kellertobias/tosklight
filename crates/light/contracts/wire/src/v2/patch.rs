@@ -277,6 +277,10 @@ pub struct PatchFixtureInput {
     /// measurement the patch carries. Absent means the profile's own default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenery_size_metres: Option<PatchFixtureLocation>,
+    /// What an operator chose for a generated Venue object beyond its size. Absent keeps the
+    /// kind's own defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_options: Option<PatchSceneryOptions>,
     pub rotation: PatchFixtureRotation,
     /// An operator's own note against this fixture, distinct from the profile's shared notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -343,6 +347,36 @@ pub struct PatchFixtureLocation {
     pub x: i32,
     pub y: i32,
     pub z: i32,
+}
+
+/// Per-placement choices for a generated Venue object beyond its size.
+#[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchSceneryOptions {
+    /// The object's colour as `#RRGGBB` in sRGB. Absent keeps its kind's own material.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_srgb: Option<String>,
+    /// What the top of a chain hangs from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_top: Option<PatchChainTopEnd>,
+    /// What the bottom of a chain holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_bottom: Option<PatchChainBottomEnd>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum PatchChainTopEnd {
+    Motor,
+    Direct,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum PatchChainBottomEnd {
+    Direct,
+    SteelflexLoop,
 }
 
 /// Stage rotation in degrees.
@@ -458,6 +492,10 @@ pub struct PatchFixtureProjection {
     /// measurement the patch carries. Absent means the profile's own default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenery_size_metres: Option<PatchFixtureLocation>,
+    /// What an operator chose for a generated Venue object beyond its size. Absent keeps the
+    /// kind's own defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenery_options: Option<PatchSceneryOptions>,
     pub rotation: PatchFixtureRotation,
     /// An operator's own note against this fixture.
     #[serde(default, skip_serializing_if = "Option::is_none")]

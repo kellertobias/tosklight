@@ -3656,6 +3656,20 @@
         "show_id"
       ]
     },
+    "PatchChainBottomEnd": {
+      "type": "string",
+      "enum": [
+        "direct",
+        "steelflex_loop"
+      ]
+    },
+    "PatchChainTopEnd": {
+      "type": "string",
+      "enum": [
+        "motor",
+        "direct"
+      ]
+    },
     "PatchDelta": {
       "description": "Targeted post-mutation projection suitable for a Patch store and a typed patch-change event.",
       "type": "object",
@@ -3927,6 +3941,17 @@
         },
         "rotation": {
           "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "scenery_options": {
+          "description": "What an operator chose for a generated Venue object beyond its size. Absent keeps the\nkind's own defaults.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchSceneryOptions"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "scenery_size_metres": {
           "description": "The size a generated Venue object was placed at, in millimetres, like every other\nmeasurement the patch carries. Absent means the profile's own default.",
@@ -4502,6 +4527,41 @@
         "patch_policy",
         "referenced_modes"
       ]
+    },
+    "PatchSceneryOptions": {
+      "description": "Per-placement choices for a generated Venue object beyond its size.",
+      "type": "object",
+      "properties": {
+        "chain_bottom": {
+          "description": "What the bottom of a chain holds.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchChainBottomEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "chain_top": {
+          "description": "What the top of a chain hangs from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchChainTopEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "colour_srgb": {
+          "description": "The object's colour as `#RRGGBB` in sRGB. Absent keeps its kind's own material.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "PatchSplitAssignment": {
       "type": "object",

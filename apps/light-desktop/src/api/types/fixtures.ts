@@ -28,6 +28,15 @@ export interface PatchedFixture {
 	 * measurement the patch carries. Absent means the profile's own default.
 	 */
 	scenery_size_metres?: { x: number; y: number; z: number } | null;
+	/**
+	 * What an operator chose for a generated Venue object beyond its size: a curtain's colour
+	 * (`#RRGGBB` sRGB) and what hangs at each end of a chain. Absent keeps the kind's defaults.
+	 */
+	scenery_options?: {
+		colour_srgb?: string | null;
+		chain_top?: "motor" | "direct" | null;
+		chain_bottom?: "direct" | "steelflex_loop" | null;
+	} | null;
 	rotation?: { x: number; y: number; z: number };
 	multipatch?: MultiPatchInstance[];
 	group_masters_enabled?: boolean;

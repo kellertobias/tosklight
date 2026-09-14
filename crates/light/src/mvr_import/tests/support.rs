@@ -326,6 +326,7 @@ pub fn stored_fixture(
     mib: (bool, u64),
 ) -> PatchedFixture {
     PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id,
         fixture_number: None,

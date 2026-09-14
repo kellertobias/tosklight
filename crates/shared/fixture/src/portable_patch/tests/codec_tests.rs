@@ -1,9 +1,78 @@
 use super::support::{fixture, profile};
 use crate::{
-    GelAssignment, GelDefinitionSnapshot, InstalledFixtureAppearance, InstalledLightSource,
-    PatchedFixture, PatchedFixturePatch, PortablePatchError, PortablePatchedFixtureRecord,
+    ChainBottomEnd, ChainTopEnd, GelAssignment, GelDefinitionSnapshot, InstalledFixtureAppearance,
+    InstalledLightSource, PatchedFixture, PatchedFixturePatch, PortablePatchError,
+    PortablePatchedFixtureRecord, SceneryOptions,
 };
 use serde_json::{Value, json};
+
+#[test]
+fn a_patch_record_written_before_scenery_options_reads_with_nothing_chosen() {
+    let profile = profile();
+    let fixture = fixture(&profile);
+    let mut body =
+        serde_json::to_value(PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap())
+            .unwrap();
+    body.as_object_mut().unwrap().remove("scenery_options");
+
+    let record = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+    let patch = record.patch().unwrap();
+    assert!(patch.scenery_options.is_empty());
+    let rewritten = serde_json::to_value(&record).unwrap();
+    assert!(rewritten.get("scenery_options").is_none());
+    assert_eq!(rewritten, body);
+
+    // The runtime shape an older desk stored reads the same way.
+    let mut runtime = serde_json::to_value(&fixture).unwrap();
+    runtime.as_object_mut().unwrap().remove("scenery_options");
+    let read: PatchedFixture = serde_json::from_value(runtime).unwrap();
+    assert!(read.scenery_options.is_empty());
+    assert!(
+        serde_json::to_value(&read)
+            .unwrap()
+            .get("scenery_options")
+            .is_none()
+    );
+}
+
+#[test]
+fn scenery_options_round_trip_through_the_patch_record_exactly() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    fixture.scenery_options = SceneryOptions {
+        colour_srgb: Some("#2A0B3C".into()),
+        chain_top: Some(ChainTopEnd::Direct),
+        chain_bottom: Some(ChainBottomEnd::SteelflexLoop),
+    };
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    let body = serde_json::to_value(&record).unwrap();
+    assert_eq!(
+        body["scenery_options"],
+        json!({
+            "colour_srgb": "#2A0B3C",
+            "chain_top": "direct",
+            "chain_bottom": "steelflex_loop"
+        })
+    );
+    let decoded = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+    assert_eq!(
+        decoded.patch().unwrap().scenery_options,
+        fixture.scenery_options
+    );
+    assert_eq!(serde_json::to_value(&decoded).unwrap(), body);
+}
+
+#[test]
+fn patch_validation_rejects_a_scenery_colour_that_is_not_rrggbb() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    assert!(crate::patch_validation::validate_patch(std::slice::from_ref(&fixture)).is_ok());
+    fixture.scenery_options.colour_srgb = Some("black".into());
+    let error = crate::patch_validation::validate_patch(&[fixture])
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("#RRGGBB"), "{error}");
+}
 
 #[test]
 fn new_write_contains_only_profile_reference_and_patch_owned_fields() {

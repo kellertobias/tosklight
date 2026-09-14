@@ -231,6 +231,7 @@ fn with_fixtures(
         .map_err(|error| error.to_string())?;
     let fixtures = (0..count)
         .map(|index| PatchedFixture {
+            scenery_options: Default::default(),
             scenery_size_metres: None,
             fixture_id: FixtureId(Uuid::from_u128(100_000 + index as u128)),
             fixture_number: Some(index as u32 + 1),

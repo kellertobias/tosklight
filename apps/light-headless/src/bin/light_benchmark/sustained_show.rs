@@ -415,6 +415,7 @@ pub(super) fn patched_fixture(
         })
         .collect();
     PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id,
         fixture_number: Some(fixture_number),

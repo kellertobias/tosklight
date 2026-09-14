@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     CanonicalTransform, ChannelBehavior, ChannelResolution, ChannelScales, ColorSystem,
     EmitterLayout, FIXTURE_PROFILE_SCHEMA_VERSION, FixtureProfile, FixtureSplit, ModelUnits,
-    PatchPolicy, PositionMovementRepresentation, ProfileSceneryKind,
+    PatchPolicy, PositionMovementRepresentation, ProfileSceneryKind, TrussPattern,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
@@ -470,6 +470,18 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
             1,
         ),
         (
+            "venue--three-point-deco-truss.toskfixture",
+            ProfileSceneryKind::Truss,
+            3,
+        ),
+        (
+            "venue--large-four-point-truss.toskfixture",
+            ProfileSceneryKind::Truss,
+            4,
+        ),
+        ("venue--chain.toskfixture", ProfileSceneryKind::Chain, 0),
+        ("venue--curtain.toskfixture", ProfileSceneryKind::Curtain, 0),
+        (
             "venue--curtain-1-m.toskfixture",
             ProfileSceneryKind::Curtain,
             0,
@@ -519,9 +531,45 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         "venue--three-point-truss.toskfixture",
         "venue--two-point-truss.toskfixture",
         "venue--one-point-truss-pipe.toskfixture",
+        "venue--three-point-deco-truss.toskfixture",
+        "venue--large-four-point-truss.toskfixture",
+        "venue--chain.toskfixture",
     ] {
         assert_eq!(shipped_profile(filename).fixture_type, "rigging");
     }
+
+    // A deco truss says so; every other truss is braced the standard way.
+    let deco = shipped_profile("venue--three-point-deco-truss.toskfixture");
+    assert_eq!(deco.scenery.expect("deco").pattern, TrussPattern::Deco);
+    let standard = shipped_profile("venue--three-point-truss.toskfixture");
+    assert_eq!(
+        standard.scenery.expect("standard").pattern,
+        TrussPattern::Standard
+    );
+    // A large truss is braced in its own, deeper section.
+    let large = shipped_profile("venue--large-four-point-truss.toskfixture")
+        .scenery
+        .expect("large truss");
+    assert!(large.default_size_metres.y > 0.34 && large.default_size_metres.z > 0.34);
+
+    // A stage element is the base it is built on; only its rise is made to measure.
+    for filename in [
+        "venue--stage-element-1-1-m.toskfixture",
+        "venue--stage-element-2-1-m.toskfixture",
+        "venue--stage-element-1-0-5-m.toskfixture",
+    ] {
+        let scenery = shipped_profile(filename).scenery.expect(filename);
+        assert!(
+            !scenery.adjustable.width && scenery.adjustable.height && !scenery.adjustable.depth,
+            "{filename}"
+        );
+    }
+
+    // A chain is set by its length alone; its ends are chosen per placed chain.
+    let chain = shipped_profile("venue--chain.toskfixture")
+        .scenery
+        .expect("chain");
+    assert!(!chain.adjustable.width && chain.adjustable.height && !chain.adjustable.depth);
 }
 
 #[test]

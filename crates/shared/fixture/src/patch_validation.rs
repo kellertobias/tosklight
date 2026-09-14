@@ -42,6 +42,9 @@ impl PatchValidator {
         self.validate_stable_identities(fixture)?;
         self.validate_fixture_numbers(fixture)?;
         fixture.definition.validate()?;
+        fixture.scenery_options.validate().map_err(|message| {
+            FixtureError::Invalid(format!("fixture {:?}: {message}", fixture.name))
+        })?;
         validate_installed_appearance(
             &fixture.fixture_id.0.to_string(),
             &fixture.installed_appearance,

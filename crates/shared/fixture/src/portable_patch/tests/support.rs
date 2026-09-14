@@ -61,6 +61,7 @@ pub(super) fn fixture(profile: &FixtureProfile) -> PatchedFixture {
         .into_iter()
         .collect();
     PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: Some(42),

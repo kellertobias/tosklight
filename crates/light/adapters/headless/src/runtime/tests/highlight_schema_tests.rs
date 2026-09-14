@@ -95,6 +95,7 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
     let definition = profile.resolved_definition(mode_id).unwrap();
     (
         light_fixture::PatchedFixture {
+            scenery_options: Default::default(),
             scenery_size_metres: None,
             fixture_id: light_core::FixtureId::new(),
             fixture_number: Some(1),

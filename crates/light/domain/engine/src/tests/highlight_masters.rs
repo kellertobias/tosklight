@@ -171,6 +171,7 @@ fn highlight_fixture(physical: FixtureId) -> PatchedFixture {
     }];
     profile.modes[0].geometry = GeometryGraph::default();
     PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: physical,
         fixture_number: Some(1),

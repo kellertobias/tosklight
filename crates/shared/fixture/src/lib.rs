@@ -15,6 +15,7 @@ mod patch_model;
 mod patch_validation;
 mod portable_patch;
 mod profile;
+mod scenery_options;
 
 pub use definition::*;
 pub use definition_model::*;
@@ -28,6 +29,7 @@ pub use patch_model::*;
 pub use patch_validation::*;
 pub use portable_patch::*;
 pub use profile::*;
+pub use scenery_options::*;
 
 #[cfg(test)]
 mod tests;

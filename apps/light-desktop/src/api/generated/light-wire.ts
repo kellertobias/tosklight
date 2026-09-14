@@ -636,6 +636,21 @@ ip_address: string, port: number, };
 export type PatchInternalFixtureBindings = { library: string | null, output: string | null, };
 export type PatchFixtureLocation = { x: number, y: number, z: number, };
 export type PatchFixtureRotation = { x: number, y: number, z: number, };
+export type PatchSceneryOptions = {
+/**
+ * The object's colour as `#RRGGBB` in sRGB. Absent keeps its kind's own material.
+ */
+colour_srgb?: string | null,
+/**
+ * What the top of a chain hangs from.
+ */
+chain_top?: PatchChainTopEnd | null,
+/**
+ * What the bottom of a chain holds.
+ */
+chain_bottom?: PatchChainBottomEnd | null, };
+export type PatchChainTopEnd = "motor" | "direct";
+export type PatchChainBottomEnd = "direct" | "steelflex_loop";
 export type PatchInstalledLightSource = { "type": "profile_default" } | { "type": "tungsten" } | { "type": "halogen" } | { "type": "discharge" } | { "type": "led" } | { "type": "fluorescent" } | { "type": "arc" } | { "type": "other", label: string, };
 export type PatchGelDefinitionSnapshot = { number: string, name: string, display_srgb: string, visualizer_srgb: string, };
 export type PatchGelAssignment = { "type": "open_white" } | { "type": "built_in", catalog_id: string, entry_id: string, embedded_fallback: PatchGelDefinitionSnapshot, } | { "type": "custom", name: string, color_srgb: string, note: string | null, };
@@ -660,7 +675,12 @@ split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: Pa
  * The size a generated Venue object was placed at, in millimetres, like every other
  * measurement the patch carries. Absent means the profile's own default.
  */
-scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation,
+scenery_size_metres?: PatchFixtureLocation | null,
+/**
+ * What an operator chose for a generated Venue object beyond its size. Absent keeps the
+ * kind's own defaults.
+ */
+scenery_options?: PatchSceneryOptions | null, rotation: PatchFixtureRotation,
 /**
  * An operator's own note against this fixture, distinct from the profile's shared notes.
  */
@@ -746,7 +766,12 @@ export type PatchFixtureProjection = { fixture_id: string, fixture_revision: num
  * The size a generated Venue object was placed at, in millimetres, like every other
  * measurement the patch carries. Absent means the profile's own default.
  */
-scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation,
+scenery_size_metres?: PatchFixtureLocation | null,
+/**
+ * What an operator chose for a generated Venue object beyond its size. Absent keeps the
+ * kind's own defaults.
+ */
+scenery_options?: PatchSceneryOptions | null, rotation: PatchFixtureRotation,
 /**
  * An operator's own note against this fixture.
  */

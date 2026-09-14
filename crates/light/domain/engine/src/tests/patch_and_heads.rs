@@ -10,6 +10,7 @@ fn visual_only_profile_renders_without_a_dmx_encoding_plan() {
     let mode_id = profile.modes[0].id;
     let definition = profile.resolved_definition(mode_id).unwrap();
     let fixture = PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: FixtureId::new(),
         fixture_number: None,

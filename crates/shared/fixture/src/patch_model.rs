@@ -1,4 +1,4 @@
-use crate::FixtureDefinition;
+use crate::{FixtureDefinition, SceneryOptions};
 use light_core::{AttributeKey, AttributeValue, DmxAddress, FixtureId, Universe};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -224,6 +224,11 @@ pub struct PatchedFixture {
     /// own default, which is what every one placed before this reads as.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenery_size_metres: Option<FixtureVector>,
+    /// What an operator chose for a generated Venue object beyond its size: a curtain's colour, what
+    /// hangs at each end of a chain. Empty keeps the kind's own defaults, which is what every one
+    /// placed before these choices existed reads as.
+    #[serde(default, skip_serializing_if = "SceneryOptions::is_empty")]
+    pub scenery_options: SceneryOptions,
     #[serde(default)]
     pub rotation: FixtureVector,
     /// A free note an operator keeps against this fixture: a circuit, a colour call, whatever the

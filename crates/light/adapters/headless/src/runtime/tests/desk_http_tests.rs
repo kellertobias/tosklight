@@ -141,6 +141,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
     state
         .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![light_fixture::PatchedFixture {
+                scenery_options: Default::default(),
                 scenery_size_metres: None,
                 name: "Media Server".into(),
                 layer_id: "default".into(),

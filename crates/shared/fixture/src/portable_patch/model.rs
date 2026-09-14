@@ -1,7 +1,7 @@
 use crate::{
     DirectControlEndpoint, FixtureLocation, FixtureVector, InstalledFixtureAppearance,
-    InternalFixtureBindings, MultiPatchInstance, PatchedFixture, PatchedHead, SplitPatch,
-    default_patch_layer,
+    InternalFixtureBindings, MultiPatchInstance, PatchedFixture, PatchedHead, SceneryOptions,
+    SplitPatch, default_patch_layer,
 };
 use light_core::{DmxAddress, FixtureId, Revision, Universe};
 use serde::{Deserialize, Serialize};
@@ -54,6 +54,10 @@ pub struct PatchedFixturePatch {
     /// The size a generated Venue object was placed at, in metres.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenery_size_metres: Option<FixtureVector>,
+    /// What an operator chose for a generated Venue object beyond its size. Absent in every show
+    /// written before these choices existed, which reads back as the kind's own defaults.
+    #[serde(default, skip_serializing_if = "SceneryOptions::is_empty")]
+    pub scenery_options: SceneryOptions,
     #[serde(default)]
     pub rotation: FixtureVector,
     /// An operator's own note against this fixture. Absent in every show written before it
@@ -105,6 +109,7 @@ impl PatchedFixturePatch {
         Self {
             fixture_id: fixture.fixture_id,
             scenery_size_metres: fixture.scenery_size_metres,
+            scenery_options: fixture.scenery_options.clone(),
             fixture_number: fixture.fixture_number,
             virtual_fixture_number: fixture.virtual_fixture_number,
             name: fixture.name.clone(),

@@ -310,6 +310,7 @@ fn patched_fixture(
         .and_then(|object| PortablePatchedFixtureRecord::decode(object.body().clone()).ok())
         .and_then(|record| record.patch().ok());
     let mut patched = embedded.cloned().unwrap_or_else(|| PatchedFixture {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id,
         fixture_number: source

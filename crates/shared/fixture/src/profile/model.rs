@@ -734,6 +734,27 @@ pub struct ProfileScenery {
     /// Bounds for what an operator may set, in metres. A size outside them is clamped.
     pub minimum_size_metres: Vector3,
     pub maximum_size_metres: Vector3,
+    /// How a truss is braced: straight zig-zag bays, or the deco pattern. Every other kind ignores
+    /// it, and every truss written before the choice existed reads as standard.
+    #[serde(default, skip_serializing_if = "TrussPattern::is_standard")]
+    pub pattern: TrussPattern,
+}
+
+/// The bracing of a truss section.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrussPattern {
+    /// Zig-zag diagonals between the chords, bay after bay.
+    #[default]
+    Standard,
+    /// Crossed diagonals in every bay, as decorative truss is built.
+    Deco,
+}
+
+impl TrussPattern {
+    pub fn is_standard(&self) -> bool {
+        *self == Self::Standard
+    }
 }
 
 /// Which of a scenery object's dimensions an operator sets.
@@ -755,6 +776,9 @@ pub enum ProfileSceneryKind {
     Curtain,
     Railing,
     MirrorBall,
+    /// A rigging chain hanging its length, with a hoist or a direct fixing at the top and a direct
+    /// fixing or a steelflex loop at the bottom, as the placement chooses.
+    Chain,
     #[default]
     Prop,
 }

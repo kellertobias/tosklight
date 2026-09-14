@@ -478,6 +478,7 @@ fn wire_fixture(
 ) -> wire::PatchFixtureInput {
     let address = u16::try_from(index + 1).expect("fixture count stays in one universe");
     wire::PatchFixtureInput {
+        scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: Uuid::from_u128(100_000 + index as u128),
         fixture_number: Some(u32::try_from(index + 1).unwrap()),
