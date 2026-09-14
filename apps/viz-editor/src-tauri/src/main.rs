@@ -14,6 +14,7 @@ mod discovery;
 mod dmx_input;
 mod local_api;
 mod mcp;
+mod model_import;
 mod network_sources;
 mod portable;
 mod recent;

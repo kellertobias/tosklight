@@ -440,9 +440,9 @@ you draw turns with the rig. Drawing is off while the print pages are open.
 
 The **Venue** screen's title bar has **+ Import 3D model** beside **+ Add fixture**, for a venue
 the fixture library does not have: the hall you are playing, a stage build, a set piece. Choose a
-GLB file on this computer and it is placed at once, at the stage origin, on the layer that is
-open — or the default layer when **All fixtures** is. It gets the next free `0.x` ID and is
-selected, so set its **Location** and **Rotation** in the sheet like any other Venue object.
+GLB, glTF, 3MF or OBJ file on this computer and it is placed at once, at the stage origin, on the
+layer that is open — or the default layer when **All fixtures** is. It gets the next free `0.x` ID
+and is selected, so set its **Location** and **Rotation** in the sheet like any other Venue object.
 
 The model is kept in the show, not in the fixture library. It is listed under the manufacturer
 **Imported models**, travels with the show when it is saved, copied or opened on a desk, and is
@@ -450,7 +450,21 @@ drawn by the Visualizer and the desk's Stage exactly like a shipped Venue object
 of it is in the show, **+ Add fixture** on the Venue screen offers it again for another; import the
 file again to replace a model with a changed version, which is placed as a new object.
 
-The file must be a self-contained GLB 2.0 model — textures and buffers inside the file, not beside
-it — of at most 64 MB and 2,000,000 triangles, built in metres with Y up, as glTF defines. It is
-drawn at the size it was built, so a 20 m hall is 20 m wide. Surface colours are drawn and textures
-are not. A file that breaks any of these rules is refused with the reason, and nothing is added.
+Whatever format you choose, the show keeps the model as one self-contained GLB, so it needs no
+other file once it is imported and moving the originals later changes nothing.
+
+- **GLB** is kept as it is. It must be a GLB 2.0 file with its buffers and textures inside it.
+- **glTF** (`.gltf`) may keep its `.bin` buffers and its textures beside it, as most tools write
+  it; leave them in the folder they were exported to, next to the `.gltf`. A file that needs mesh
+  compression such as Draco or meshopt is refused; export it again without.
+- **3MF** is placed as its build says, with every part in its place, in the unit the file declares
+  — millimetres unless it says otherwise. It is turned upright from Z up to Y up, as the same CAD
+  tool's own glTF export would, and its base material colours are kept.
+- **OBJ** says nothing about units, so it is read as metres with Y up; scale it in the modelling
+  tool before exporting if it was built in millimetres. Its `.mtl` material library must be beside
+  it, and each material's diffuse colour is kept.
+
+glTF and GLB are read in metres with Y up, as glTF defines. A model is drawn at the size it was
+built, so a 20 m hall is 20 m wide, and it may have at most 2,000,000 triangles and 64 MB once
+packed together. Surface colours are drawn and textures are not. A file that breaks any of these
+rules, or names a file that is not beside it, is refused with the reason, and nothing is added.

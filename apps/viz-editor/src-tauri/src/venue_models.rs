@@ -1,4 +1,5 @@
-//! Venue models the operator brings in themselves: a hall, a stage, a set, as a GLB file.
+//! Venue models the operator brings in themselves: a hall, a stage, a set, as a GLB, glTF, 3MF
+//! or OBJ file, kept in the show as one GLB (see `crate::model_import`).
 //!
 //! A venue model is not a fixture-library entry. Importing one wraps the file in a visual-only
 //! profile that lives only in the open show — every Venue object already is a visual-only
@@ -31,7 +32,10 @@ pub struct VenueModelProfile {
     pub triangles: usize,
 }
 
-/// Import a GLB from the operator's disk as a venue object of the open show.
+/// Import a 3D model from the operator's disk as a venue object of the open show.
+///
+/// A glTF, 3MF or OBJ is converted to a self-contained GLB first, reading the files it names from
+/// beside it; a GLB is taken as it is.
 #[tauri::command]
 pub fn import_venue_model(
     app: tauri::AppHandle,
@@ -61,7 +65,11 @@ pub fn import_venue_model(
         .filter(|stem| !stem.is_empty())
         .unwrap_or("Venue model")
         .to_owned();
-    let model = venue_model_profile(&name, &file_name(path), &bytes)?;
+    let source = file_name(path);
+    let bytes =
+        crate::model_import::to_glb(&source, &bytes, |relative| read_sibling(path, relative))
+            .map_err(|error| error.to_string())?;
+    let model = venue_model_profile(&name, &source, &bytes)?;
     let profile_id = model.profile.id.0;
     let mode_id = model.profile.modes[0].id;
 
@@ -189,6 +197,25 @@ pub fn venue_model_profile(
 fn first_free_virtual_number(used: impl Iterator<Item = u32>) -> u32 {
     let used: std::collections::BTreeSet<u32> = used.collect();
     (1..).find(|number| !used.contains(number)).unwrap_or(1)
+}
+
+/// A file a model names — a glTF buffer or texture, an OBJ material library — beside the model.
+fn read_sibling(model: &Path, relative: &str) -> Result<Vec<u8>, String> {
+    let sibling = model
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .join(relative);
+    let size = std::fs::metadata(&sibling)
+        .map_err(|error| error.to_string())?
+        .len();
+    if size > MAX_FIXTURE_MODEL_BYTES as u64 {
+        return Err(format!(
+            "it is {} MB; a 3D model may be at most {} MB",
+            size.div_ceil(1024 * 1024),
+            MAX_FIXTURE_MODEL_BYTES / (1024 * 1024)
+        ));
+    }
+    std::fs::read(&sibling).map_err(|error| error.to_string())
 }
 
 fn file_name(path: &Path) -> String {

@@ -8252,6 +8252,7 @@ dependencies = [
  "light-mvr",
  "light-show",
  "parking_lot",
+ "quick-xml",
  "reqwest 0.12.28",
  "rfd 0.16.0",
  "serde",
@@ -8268,6 +8269,7 @@ dependencies = [
  "viz-planning",
  "viz-project",
  "viz-scene",
+ "zip",
 ]
 
 [[package]]
