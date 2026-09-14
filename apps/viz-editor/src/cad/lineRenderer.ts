@@ -17,6 +17,8 @@ import {
 	worldGeometry,
 	viewportGuideRange,
 } from "./planGeometry";
+import { annotationRuns } from "./annotationGeometry";
+import type { CadAnnotation } from "./annotations";
 import { placedPolylines } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
 import type {
@@ -52,6 +54,8 @@ export interface CadFrame {
 	showCoordinateOrigins?: boolean;
 	/** Venue drawings placed on this view, drawn under the rig. */
 	underlays?: readonly CadUnderlay[];
+	/** Lines, boxes and measurements drawn on this view, over the rig; `draft` is one in progress. */
+	annotations?: readonly CadAnnotation[];
 }
 
 /** The three vertex arrays of a frame, and the closures that append plan points to them. */
@@ -191,6 +195,24 @@ function paintUnderlays(painter: Painter, frame: CadFrame) {
 			for (let index = 1; index < run.length; index++)
 				painter.line(run[index - 1], run[index], colour);
 		}
+	}
+}
+
+/**
+ * What the operator drew on this view, over the rig: lines and boxes in a pale grey, measurements in
+ * amber, and the item still being drawn in the selection cyan.
+ */
+function paintAnnotations(painter: Painter, frame: CadFrame) {
+	for (const annotation of frame.annotations ?? []) {
+		const colour: LineColor =
+			annotation.id === "draft"
+				? [0.02, 0.82, 0.98]
+				: annotation.kind === "measure"
+					? [0.98, 0.72, 0.2]
+					: [0.86, 0.89, 0.92];
+		for (const run of annotationRuns(annotation, frame.rotationQuarterTurns))
+			for (let index = 1; index < run.length; index++)
+				painter.line(run[index - 1], run[index], colour);
 	}
 }
 
@@ -405,6 +427,7 @@ export class LineRenderer {
 		paintDatum(painter, frame, this.canvas);
 		paintUnderlays(painter, frame);
 		paintEntities(painter, frame, this.geometryCache);
+		paintAnnotations(painter, frame);
 		paintGizmo(painter, frame, this.canvas);
 		paintSelectionBox(painter, frame);
 		this.upload(painter);

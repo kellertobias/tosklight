@@ -1,10 +1,12 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
 import { beginWindowDrag } from "../WindowChrome";
 import { CadTileViewBar } from "./CadTileViewBar";
+import { CadToolbar } from "./CadToolbar";
+import { useCadTools } from "./cadTools";
 import { visibleEntities } from "./cutPlanes";
 import { CadProjectPanel } from "./CadProjectPanel";
 import { CadViewport } from "./CadViewport";
@@ -64,38 +66,6 @@ const PANEL_TITLES = {
 	drawings: { title: "Drawings", hint: "Placed under the plan" },
 } as const;
 
-/** What the CAD screen's add toolbar places: a truss, a stage element, or any other Venue object. */
-export type CadAddKind = "truss" | "stage" | "venue";
-
-const CAD_ADD_ACTIONS: readonly { kind: CadAddKind; label: string }[] = [
-	{ kind: "truss", label: "+ Truss" },
-	{ kind: "stage", label: "+ Stage element" },
-	{ kind: "venue", label: "+ Venue element" },
-];
-
-/**
- * Opens the shared fixture library for a kind of object. The host provides it; without a provider the
- * CAD screen has no add toolbar.
- */
-export const CadAddContext = createContext<((kind: CadAddKind) => void) | null>(
-	null,
-);
-
-/** What the operator adds to the drawing, one row under the title. */
-function CadAddToolbar() {
-	const onAdd = useContext(CadAddContext);
-	if (!onAdd) return null;
-	return (
-		<div className="cad-add-toolbar" role="toolbar" aria-label="Add to the drawing">
-			{CAD_ADD_ACTIONS.map(({ kind, label }) => (
-				<Button key={kind} onClick={() => onAdd(kind)}>
-					{label}
-				</Button>
-			))}
-		</div>
-	);
-}
-
 /** The camera that fits the whole rig into one tile, or null when there is nothing to fit. */
 function fitTileCamera(
 	entities: Parameters<typeof fittedCamera>[0] | undefined,
@@ -131,6 +101,7 @@ export function CadApp() {
 	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
 		null,
 	);
+	const { annotations } = useCadTools();
 	const underlayState = useCadUnderlays(documentInfo?.showId ?? null);
 	const [paperwork, setPaperwork] = useState({
 		lightingDesigner: "",
@@ -322,6 +293,7 @@ export function CadApp() {
 					selected,
 					printInfo(documentInfo, paperwork),
 					underlayState.underlays,
+					annotations,
 				),
 			);
 		} catch (reason) {
@@ -443,7 +415,7 @@ export function CadApp() {
 				settings
 				onSettings={() => setSettingsOpen(true)}
 			/>
-			<CadAddToolbar />
+			<CadToolbar />
 			{error ? <output className="cad-error">{error}</output> : null}
 			<div className={`cad-print-layout ${panelOpen ? "is-printing" : ""}`}>
 				<section className="cad-workspace">

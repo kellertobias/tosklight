@@ -65,7 +65,11 @@ Cross 1 swaps each local pair of arrows. Cross 2 swaps the complete left and rig
 
 ### Miscellaneous and instruments
 
-`drums`, `guitar`, `piano`, `truss-segment`, and `stage`.
+`drums`, `guitar`, `piano`, `truss-segment`, `stage`, `stage-element`, `curtain`, and `venue-object`. Stage element is a deck on a scissor lift; curtain is a drape gathered from its rail.
+
+### Drawing
+
+`select`, `polyline`, `box`, `text`, `measure`, and `erase` — the Architect CAD screen's drawing tools. Polyline and box mark their vertices with small squares; measure is a dimension line with arrowheads between two extension lines.
 
 ### Functionality
 

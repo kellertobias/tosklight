@@ -1442,21 +1442,33 @@ describe("the Viz editor window", () => {
 		}
 	});
 
-	it("adds a truss, a stage element or any Venue element from the CAD toolbar", async () => {
+	it("adds venue objects and picks a drawing tool from the CAD toolbar's icon buttons", async () => {
 		renderApp();
 		fireEvent.click(await screen.findByRole("button", { name: "CAD" }));
-		const toolbar = await screen.findByRole("toolbar", {
-			name: "Add to the drawing",
-		});
-		expect(
-			within(toolbar)
-				.getAllByRole("button")
-				.map((button) => button.textContent),
-		).toEqual(["+ Truss", "+ Stage element", "+ Venue element"]);
-		// It sits under the title, not in it.
+		const toolbar = await screen.findByRole("toolbar", { name: "CAD tools" });
+		const buttons = within(toolbar).getAllByRole("button");
+		expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+			"Add truss",
+			"Add stage element",
+			"Add curtain",
+			"Add venue element",
+			"Select",
+			"Draw line",
+			"Draw box",
+			"Place text",
+			"Measure",
+			"Erase",
+		]);
+		// Icons only, in the title's own button chrome, under the title rather than in it.
+		for (const button of buttons) {
+			expect(button.textContent?.trim()).toBe("");
+			expect(button.querySelector("svg")).not.toBeNull();
+			expect(button).toHaveClass("is-icon-only");
+		}
+		expect(toolbar.querySelectorAll(".ui-window-action-group")).toHaveLength(2);
 		expect(toolbar.closest(".ui-window-header")).toBeNull();
 
-		fireEvent.click(within(toolbar).getByRole("button", { name: "+ Truss" }));
+		fireEvent.click(within(toolbar).getByRole("button", { name: "Add truss" }));
 		const library = await screen.findByRole("dialog", { name: "Add fixture" });
 		expect(within(library).getByLabelText("Search")).toHaveValue("Truss");
 		fireEvent.click(screen.getByRole("button", { name: "Close Add fixture" }));
@@ -1465,15 +1477,18 @@ describe("the Viz editor window", () => {
 				screen.queryByRole("dialog", { name: "Add fixture" }),
 			).not.toBeInTheDocument(),
 		);
-
-		fireEvent.click(
-			within(toolbar).getByRole("button", { name: "+ Stage element" }),
-		);
+		fireEvent.click(within(toolbar).getByRole("button", { name: "Add curtain" }));
 		expect(
 			within(
 				await screen.findByRole("dialog", { name: "Add fixture" }),
 			).getByLabelText("Search"),
-		).toHaveValue("Stage");
+		).toHaveValue("Curtain");
+		fireEvent.click(screen.getByRole("button", { name: "Close Add fixture" }));
+
+		expect(within(toolbar).getByRole("button", { name: "Select" })).toHaveClass("is-active");
+		fireEvent.click(within(toolbar).getByRole("button", { name: "Measure" }));
+		expect(within(toolbar).getByRole("button", { name: "Measure" })).toHaveClass("is-active");
+		expect(within(toolbar).getByRole("button", { name: "Select" })).not.toHaveClass("is-active");
 	});
 
 	it("keeps Media tabs and the contextual add action in one title row", async () => {

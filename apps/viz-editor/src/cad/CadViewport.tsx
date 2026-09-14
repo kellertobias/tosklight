@@ -1,7 +1,14 @@
 import { type WheelEvent, useEffect, useMemo, useRef } from "react";
+import { annotationsForView } from "./annotationGeometry";
+import { CadAnnotationLayer } from "./CadAnnotationLayer";
+import { useCadTools } from "./cadTools";
 import { PrintFrame } from "./CadPrintFrame";
 import { CadEntityLabels, CadScaleBar } from "./CadViewportOverlays";
-import { LineRenderer, observeViewportResize } from "./lineRenderer";
+import {
+	type CadFrame,
+	LineRenderer,
+	observeViewportResize,
+} from "./lineRenderer";
 import {
 	fitCadOverview,
 	OVERVIEW_ROTATION_QUARTER_TURNS,
@@ -18,6 +25,7 @@ import type {
 	TileCamera,
 } from "./types";
 import type { CadUnderlay } from "./underlays";
+import { useCadDrawingTool } from "./useCadDrawingTool";
 import { useCadViewportInteraction } from "./useCadViewportInteraction";
 
 interface CadViewportProps {
@@ -116,6 +124,25 @@ export function CadRigOverview({
 }
 
 
+/** Draws a frame now and whenever the canvas changes size, through one renderer per canvas. */
+function useViewportRedraw(
+	canvas: React.RefObject<HTMLCanvasElement | null>,
+	frame: CadFrame,
+) {
+	const renderer = useRef<LineRenderer | null>(null);
+	const redraw = useRef<() => void>(() => undefined);
+	useEffect(() => {
+		if (!canvas.current) return;
+		renderer.current ??= LineRenderer.create(canvas.current);
+		return observeViewportResize(canvas.current, () => redraw.current());
+	}, [canvas]);
+	useEffect(() => {
+		redraw.current = () => renderer.current?.draw(frame);
+		redraw.current();
+		// A frame is a fixed set of fields; any one of them changing is a new picture.
+	}, Object.values(frame));
+}
+
 /** Zooms from a wheel gesture, mounted on the viewport rather than the canvas: print page frames
  * are siblings of the canvas, so a wheel over one never reached it and print mode did nothing. */
 function zoomFromWheel(camera: TileCamera, onCamera: (c: TileCamera) => void) {
@@ -151,13 +178,23 @@ export function CadViewport({
 	onMove,
 }: CadViewportProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
-	const renderer = useRef<LineRenderer | null>(null);
-	const redraw = useRef<() => void>(() => undefined);
 	const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 	const drawingById = useMemo(
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
 		[drawings],
 	);
+	const tools = useCadTools();
+	const drawing = useCadDrawingTool({
+		canvas,
+		view,
+		rotationQuarterTurns,
+		camera,
+		enabled: editEnabled,
+	});
+	const annotations = useMemo(() => {
+		const onView = annotationsForView(tools.annotations, view);
+		return drawing.draft ? [...onView, drawing.draft] : onView;
+	}, [tools.annotations, view, drawing.draft]);
 
 	const { guide, selectionBox, pointerDown, pointerMove, pointerUp, cancel } =
 		useCadViewportInteraction({
@@ -176,32 +213,9 @@ export function CadViewport({
 			onMove,
 		});
 
-	useEffect(() => {
-		if (!canvas.current) return;
-		renderer.current ??= LineRenderer.create(canvas.current);
-		return observeViewportResize(canvas.current, () => redraw.current());
-	}, []);
-
-	useEffect(() => {
-		redraw.current = () =>
-			renderer.current?.draw({
-				entities,
-				drawings: drawingById,
-				selected,
-				view,
-				rotationQuarterTurns,
-				camera,
-				preview,
-				editEnabled,
-				guide,
-				selectionBox,
-				showCoordinateOrigins,
-				underlays,
-			});
-		redraw.current();
-	}, [
+	useViewportRedraw(canvas, {
 		entities,
-		drawingById,
+		drawings: drawingById,
 		selected,
 		view,
 		rotationQuarterTurns,
@@ -212,22 +226,32 @@ export function CadViewport({
 		selectionBox,
 		showCoordinateOrigins,
 		underlays,
-	]);
+		annotations,
+	});
 
 	const scale = cadScaleForZoom(camera.zoom);
 
 	return (
-		<div className="cad-viewport" onWheel={zoomFromWheel(camera, onCamera)}>
+		<div
+			className={`cad-viewport ${drawing.active ? "is-drawing" : ""}`.trim()}
+			onWheel={zoomFromWheel(camera, onCamera)}
+		>
 			<canvas
 				ref={canvas}
 				className="cad-canvas"
 				aria-label={`CAD ${view.replaceAll("_", " ")} viewport`}
 				data-floor-datum={view === "top_down" ? "hidden" : "visible"}
 				data-coordinate-origins={showCoordinateOrigins ? "visible" : "hidden"}
-				onPointerDown={pointerDown}
-				onPointerMove={pointerMove}
-				onPointerUp={pointerUp}
+				onPointerDown={(event) => drawing.pointerDown(event) || pointerDown(event)}
+				onPointerMove={(event) => {
+					drawing.pointerMove(event);
+					pointerMove(event);
+				}}
+				onPointerUp={(event) => {
+					if (!drawing.pointerUp(event)) void pointerUp(event);
+				}}
 				onPointerCancel={cancel}
+				onDoubleClick={drawing.doubleClick}
 			/>
 			<CadScaleBar scale={scale} printMode={printMode} />
 			<CadEntityLabels
@@ -240,6 +264,14 @@ export function CadViewport({
 					showFixtureIds,
 					showDmxAddresses,
 				}}
+			/>
+			<CadAnnotationLayer
+				annotations={annotations}
+				rotationQuarterTurns={rotationQuarterTurns}
+				camera={camera}
+				pendingText={drawing.pendingText}
+				onCommitText={drawing.commitText}
+				onCancelText={drawing.cancelText}
 			/>
 			{printMode && printPages.length ? (
 				<div className="cad-print-frames">

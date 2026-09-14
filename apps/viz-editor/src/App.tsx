@@ -32,7 +32,8 @@ import {
 	SETTINGS_PAGES,
 	type SettingsPage,
 } from "./ArchitectSettings";
-import { CadAddContext, type CadAddKind, CadApp } from "./cad/CadApp";
+import { CadApp } from "./cad/CadApp";
+import { type CadAddKind, CadToolProvider } from "./cad/cadTools";
 import { cadSession } from "./cad/session";
 import { useCadSelection } from "./cad/useCadSelection";
 import type { CadEntity, CadSceneSnapshot } from "./cad/types";
@@ -63,12 +64,13 @@ const DEFAULT_LAYER: PatchLayer = {
 type PatchPage = "sheet" | "dmx";
 
 /**
- * What each CAD add action opens the fixture library on. Trusses are rigging, stage elements are
- * Venue objects named for the stage, and a Venue element is any object that is not patched.
+ * What each CAD add action opens the fixture library on. Trusses are rigging, stage elements and
+ * curtains are Venue objects searched by name, and a Venue element is any object that is not patched.
  */
 const CAD_ADD_PRESETS: Record<CadAddKind, { type: string; query: string }> = {
 	truss: { type: "rigging", query: "Truss" },
 	stage: { type: "venue", query: "Stage" },
+	curtain: { type: "venue", query: "Curtain" },
 	venue: { type: "", query: "" },
 };
 
@@ -604,13 +606,14 @@ export function App() {
 					) : null}
 					{document && workspace === "cad" ? (
 						<>
-							<CadAddContext.Provider
-								value={(kind) =>
+							<CadToolProvider
+								documentKey={document.showId}
+								onAdd={(kind) =>
 									setCadAdd((current) => ({ kind, request: current.request + 1 }))
 								}
 							>
 								<CadApp />
-							</CadAddContext.Provider>
+							</CadToolProvider>
 							{/* The add flow reads the patch live, so a scene change is no reason to remount
 							    it: a remount would replay the last add request and reopen the library. */}
 							<PatchScope

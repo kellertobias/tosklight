@@ -38,6 +38,7 @@ GROUP_NAMES = {
     "fixture-type": "Fixture type",
     "flash": "Flash",
     "functionality": "Functionality",
+    "drawing": "Drawing",
     "gobo": "Gobo",
     "laser-shape": "Laser shape",
     "misc": "Miscellaneous",

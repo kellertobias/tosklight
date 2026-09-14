@@ -17,6 +17,12 @@ import {
 } from "./printLayout";
 import { distance, mark, n, path, saved, text } from "./printPdfOps";
 import { entityPlanGeometry, type PlanPoint } from "./projection";
+import {
+	annotationLabels,
+	annotationRuns,
+	annotationsForView,
+} from "./annotationGeometry";
+import type { CadAnnotation } from "./annotations";
 import { placedPolylines, underlaysForPage } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
 import {
@@ -128,6 +134,33 @@ function underlayCommands(
 		commands.push("0.55 G", "0.4 w");
 		for (const run of placedPolylines(underlay, page.rotationQuarterTurns))
 			commands.push(path(run.map(point), false, false));
+	}
+	return commands;
+}
+
+/** What the operator drew on this page's view: lines and measurements over the rig, and words. */
+function annotationCommands(
+	annotations: readonly CadAnnotation[],
+	page: CadPrintPage,
+	frame: PageFrame,
+): string[] {
+	const drawn = annotationsForView(annotations, page.view);
+	if (!drawn.length) return [];
+	const commands = ["0.1 G", "0.1 g", "0.6 w"];
+	for (const annotation of drawn)
+		for (const run of annotationRuns(annotation, page.rotationQuarterTurns))
+			commands.push(path(run.map(frame.point), false, false));
+	for (const label of annotationLabels(drawn, page.rotationQuarterTurns)) {
+		const [x, y] = frame.point(label.point);
+		// Text prints at its own height on the plan; a distance at a size the page can read.
+		const size = label.heightMillimetres
+			? label.heightMillimetres * frame.scale
+			: 7;
+		commands.push(
+			label.kind === "measure"
+				? text(label.text, x - label.text.length * size * 0.25, y + 2, size)
+				: text(label.text, x, y, size),
+		);
 	}
 	return commands;
 }
@@ -285,6 +318,7 @@ export function planPageStream(
 	page: CadPrintPage,
 	info: CadPrintDocumentInfo,
 	underlays: readonly CadUnderlay[] = [],
+	annotations: readonly CadAnnotation[] = [],
 ): PrintPageStream[] {
 	const frame = pageFrame(page);
 	const commands = gridCommands(page, frame);
@@ -306,6 +340,7 @@ export function planPageStream(
 				frame.point,
 			),
 		);
+	commands.push(...annotationCommands(annotations, page, frame));
 	commands.push(...furnitureCommands(page, info, frame));
 	return [
 		{

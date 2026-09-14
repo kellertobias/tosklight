@@ -13,6 +13,7 @@ import {
 	type CadSceneSnapshot,
 	printPaperSize,
 } from "./types";
+import type { CadAnnotation } from "./annotations";
 import type { CadUnderlay } from "./underlays";
 
 export {
@@ -44,6 +45,7 @@ export function buildCadPdf(
 		universeCount: 0,
 	},
 	underlays: readonly CadUnderlay[] = [],
+	annotations: readonly CadAnnotation[] = [],
 ): Uint8Array {
 	const drawings = new Map(
 		scene.drawings.map((drawing) => [drawing.id, drawing]),
@@ -52,7 +54,7 @@ export function buildCadPdf(
 		pages.flatMap((page) =>
 			page.kind === "fixture_list"
 				? fixtureListStreams(scene, page, info)
-				: planPageStream(scene, drawings, page, info, underlays),
+				: planPageStream(scene, drawings, page, info, underlays, annotations),
 		),
 	);
 }

@@ -402,18 +402,39 @@ Each print page carries its own switches for the drawings on its axis, beside th
 planes. A page prints every drawing of its axis unless you switch one off, which is also what a
 page saved before drawings could be placed does.
 
-## Add venue objects from the CAD screen
+## The CAD toolbar
 
-The **CAD** screen has a toolbar under its title for building the venue while looking at the
-drawing:
+The **CAD** screen has a toolbar under its title. Its buttons show icons only and are grouped like
+the title's own buttons.
 
-* **+ Truss** opens the fixture library on rigging, searched for trusses.
-* **+ Stage element** opens it on Venue objects, searched for stage decks, stairs and railings.
-* **+ Venue element** opens it on every object that is placed but not patched, such as curtains,
+The first group adds venue objects from the fixture library:
+
+* **Add truss** (a truss segment) opens the library on rigging, searched for trusses.
+* **Add stage element** (a deck on a scissor lift) opens it on Venue objects, searched for stage
+  decks, stairs and railings.
+* **Add curtain** (a drape on its rail) opens it on Venue objects, searched for curtains.
+* **Add venue element** (a box) opens it on every object that is placed but not patched, such as
   crowds and imported models.
 
 Choosing an object places it exactly as **+ Add fixture** on the **Venue** screen does, and the
 drawing shows it at once. Clear the search to choose anything else the filter offers.
+
+The second group is what a press on a viewport does. **Select**, the arrow, selects and moves the
+rig as before. The others draw on the view you use them in, and what you draw is saved in the show,
+shown in every Architect window, and printed on that view's plan pages:
+
+* **Draw line**: click each point. Double-click or press Enter to finish an open line; click the
+  first point again to close it.
+* **Draw box**: drag from one corner to the opposite corner.
+* **Place text**: click where the text starts, type, and press Enter. Text is sized for the zoom it
+  was placed at and grows and shrinks with the plan.
+* **Measure**: drag from one point to another. The measurement is drawn in amber with a tick at
+  each end and its distance — in millimetres below a metre, in metres above.
+* **Erase**: click a line, box, measurement or text to remove it.
+
+Escape drops a line, box or text still in progress; pressing it again returns to **Select**. The
+middle mouse button or Alt still pans while any tool is in hand. On a rotated top-down view, what
+you draw turns with the rig. Drawing is off while the print pages are open.
 
 ## Place your own venue models
 

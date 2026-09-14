@@ -6,6 +6,7 @@
 //! visualizer renders whatever this document describes, lit by whatever console is actually on
 //! the network.
 
+mod annotation;
 mod cad;
 mod contract;
 mod demo;
@@ -249,6 +250,9 @@ fn main() {
             underlay::cad_underlays,
             underlay::save_cad_underlay,
             underlay::delete_cad_underlay,
+            annotation::cad_annotations,
+            annotation::save_cad_annotation,
+            annotation::delete_cad_annotation,
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,
