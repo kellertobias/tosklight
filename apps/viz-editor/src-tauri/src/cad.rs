@@ -5,11 +5,14 @@
 //! show data and a stale drag cannot overwrite a newer Patch edit. Every editor window shows the
 //! same scene, which is why the deltas below are broadcast rather than sent to one window.
 
+mod scenery;
+
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::Session;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use light_application::PatchSnapshot;
 use parking_lot::Mutex;
+use scenery::{CadScenery, cad_scenery, entity_size};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -90,6 +93,8 @@ pub struct CadEntity {
     pub rotation_degrees: [f32; 3],
     pub size_millimetres: [f32; 3],
     pub output_direction: [f32; 3],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scenery: Option<CadScenery>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -559,9 +564,7 @@ fn entities(
                 fixture.profile.profile_id.0,
                 fixture.profile.profile_revision,
             ));
-            let dimensions = profile
-                .map(|profile| dimensions(&profile.profile_snapshot))
-                .unwrap_or([500.0, 500.0, 500.0]);
+            let snapshot = profile.map(|profile| &profile.profile_snapshot);
             let fixture_type = profile
                 .map(|profile| profile.fixture_type.as_str())
                 .unwrap_or("fixture");
@@ -640,8 +643,9 @@ fn entities(
                 selectable: !locked_layers.contains(&fixture.patch.layer_id),
                 position_millimetres: [location.x, location.y, location.z],
                 rotation_degrees: [rotation.x, rotation.y, rotation.z],
-                size_millimetres: dimensions,
+                size_millimetres: entity_size(snapshot, &fixture.patch, id),
                 output_direction: output_direction(rotation),
+                scenery: cad_scenery(snapshot, &fixture.patch.scenery_options),
             };
             let visual_only = profile.is_some_and(|profile| {
                 profile.patch_policy == light_fixture::PatchPolicy::VisualOnly
@@ -901,23 +905,6 @@ fn drawing(id: &str, snapshot: &serde_json::Value, mode_id: Option<Uuid>) -> Opt
         projections,
         live_meshes,
     })
-}
-
-fn dimensions(profile: &serde_json::Value) -> [f32; 3] {
-    let physical = profile.get("physical").unwrap_or(profile);
-    [
-        number(physical, "width_millimetres", 500.0),
-        number(physical, "depth_millimetres", 500.0),
-        number(physical, "height_millimetres", 500.0),
-    ]
-}
-
-fn number(value: &serde_json::Value, key: &str, fallback: f32) -> f32 {
-    value
-        .get(key)
-        .and_then(serde_json::Value::as_f64)
-        .map_or(fallback, |value| value as f32)
-        .max(20.0)
 }
 
 fn output_direction(rotation: &light_fixture::FixtureVector) -> [f32; 3] {

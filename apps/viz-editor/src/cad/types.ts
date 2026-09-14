@@ -25,7 +25,23 @@ export interface CadEntity {
 	rotationDegrees: [number, number, number];
 	sizeMillimetres: [number, number, number];
 	outputDirection: [number, number, number];
+	/** How a generated Venue object is built; absent for fixtures and modelled objects. */
+	scenery?: CadScenery;
 }
+
+export interface CadScenery {
+	/** The generated kind: `truss`, `curtain`, `chain`, `riser` and so on. */
+	kind: string;
+	/** Chords in a truss section: 1 a pipe, 2 a ladder, 3 a triangle, 4 a box. */
+	chords: number;
+	/** A truss's bracing. */
+	pattern: "standard" | "deco" | string;
+	/** How a chain is rigged; only a chain carries it, and absent reads as a hoist at the top. */
+	chain?: CadChainMode;
+}
+
+/** A chain hanging free, from a hoist at its top, or pulled down by a hoist at its bottom. */
+export type CadChainMode = "plain" | "motor_top" | "motor_bottom";
 
 export interface CadTransformPreview {
 	entityIds: readonly string[];

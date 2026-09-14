@@ -1,4 +1,7 @@
 import { audienceOutlineFor, audienceStrokesFor } from "./audienceOutline";
+import { chainPlan } from "./chainPlan";
+import { curtainPlan } from "./curtainPlan";
+import { trussPlan } from "./trussPlan";
 import type {
 	CadDrawing,
 	CadEntity,
@@ -466,14 +469,41 @@ function typedGeometry(
 	const vertical = view === "top_down" ? depth : height;
 	let polygons: Polygon[];
 
-	if (/truss|pipe grid|pipe$/.test(type)) {
-		polygons = truss(horizontal, vertical, trussChordCount(type));
-	} else if (/stage element|riser|stage deck|stairs/.test(type)) {
-		polygons = stage(horizontal, vertical, view === "top_down");
-	} else if (/curtain|drape/.test(type)) {
-		polygons = curtain(horizontal, vertical);
+	const scenery = entity.scenery;
+	if (
+		scenery?.kind === "truss" ||
+		(!scenery && /truss|pipe grid|pipe$/.test(type))
+	) {
+		polygons = trussPlan(
+			entity.sizeMillimetres,
+			view,
+			scenery?.chords || trussChordCount(type),
+			scenery ? scenery.pattern === "deco" : /deco/.test(type),
+		);
+	} else if (
+		scenery?.kind === "chain" ||
+		(!scenery && /chain/.test(type))
+	) {
+		return chainPlan(entity.sizeMillimetres, view, scenery?.chain);
+	} else if (
+		scenery?.kind === "riser" ||
+		/stage element|riser|stage deck|stairs/.test(type)
+	) {
+		polygons = stage(
+			horizontal,
+			vertical,
+			view === "top_down",
+			/stair/.test(type),
+		);
+	} else if (
+		scenery?.kind === "curtain" ||
+		(!scenery && /curtain|drape/.test(type))
+	) {
+		return curtainPlan(horizontal, vertical, view);
 	} else if (/crowd/.test(type)) {
-		return fromOutlinePolygons(crowd(horizontal, vertical, view));
+		return fromOutlinePolygons(
+			crowd(horizontal, vertical, view, seedOf(entity.id)),
+		);
 	} else if (/sunstrip|pixel bar|light bar|matrix/.test(type)) {
 		polygons = bar(horizontal, vertical);
 	} else if (/media.server|media_server/.test(type)) {
@@ -649,81 +679,12 @@ function trussChordCount(type: string): 2 | 3 | 4 {
 	return 4;
 }
 
-function truss(
+function stage(
 	width: number,
 	height: number,
-	chordCount: 2 | 3 | 4,
+	top: boolean,
+	stairs: boolean,
 ): Polygon[] {
-	const crossSection = width / Math.max(1, height) < 1.7;
-	const w = Math.max(500, width);
-	const h = Math.max(180, height);
-	const diameter = Math.max(24, Math.min(70, h * 0.16));
-
-	// Looking along the truss shows its declared chord arrangement, not one filled box.
-	if (crossSection) {
-		const radius = Math.min(w, h) * 0.34;
-		const centres: PlanPoint[] =
-			chordCount === 2
-				? [
-						[0, -radius],
-						[0, radius],
-					]
-				: chordCount === 3
-					? [
-							[0, -radius],
-							[-radius * 0.86, radius * 0.55],
-							[radius * 0.86, radius * 0.55],
-						]
-					: [
-							[-radius, -radius],
-							[radius, -radius],
-							[radius, radius],
-							[-radius, radius],
-						];
-		const polygons: Polygon[] = [];
-		for (let index = 0; index < centres.length; index++) {
-			polygons.push(
-				thickLine(
-					centres[index],
-					centres[(index + 1) % centres.length],
-					diameter * 0.45,
-					BODY,
-				),
-			);
-		}
-		for (const [x, y] of centres) {
-			polygons.push(ellipse(x, y, diameter / 2, diameter / 2, DETAIL, 14));
-		}
-		return polygons;
-	}
-
-	const polygons = [
-		rect(-w / 2, -h / 2, w, diameter, DETAIL),
-		rect(-w / 2, h / 2 - diameter, w, diameter, DETAIL),
-	];
-	const bays = Math.max(2, Math.min(12, Math.round(w / Math.max(400, h))));
-	for (let index = 0; index < bays; index++) {
-		const x0 = -w / 2 + (index / bays) * w;
-		const x1 = -w / 2 + ((index + 1) / bays) * w;
-		polygons.push(
-			thickLine(
-				[x0, -h / 2 + diameter],
-				[x1, h / 2 - diameter],
-				diameter * 0.45,
-				BODY,
-			),
-			thickLine(
-				[x0, h / 2 - diameter],
-				[x1, -h / 2 + diameter],
-				diameter * 0.45,
-				BODY,
-			),
-		);
-	}
-	return polygons;
-}
-
-function stage(width: number, height: number, top: boolean): Polygon[] {
 	const w = Math.max(300, width);
 	const h = Math.max(120, height);
 	if (top)
@@ -731,39 +692,89 @@ function stage(width: number, height: number, top: boolean): Polygon[] {
 			rect(-w / 2, -h / 2, w, h, BODY),
 			rect(-w / 2 + 35, -h / 2 + 35, w - 70, h - 70, BASE),
 		];
-	return [
-		rect(-w / 2, h * 0.25, w, h * 0.22, DETAIL),
-		rect(-w * 0.44, -h * 0.48, w * 0.08, h * 0.73, BODY),
-		rect(w * 0.36, -h * 0.48, w * 0.08, h * 0.73, BODY),
-	];
+	if (stairs)
+		return [
+			rect(-w / 2, h * 0.25, w, h * 0.22, DETAIL),
+			rect(-w * 0.44, -h * 0.48, w * 0.08, h * 0.73, BODY),
+			rect(w * 0.36, -h * 0.48, w * 0.08, h * 0.73, BODY),
+		];
+	return scissorStage(w, h);
 }
 
-function curtain(width: number, height: number): Polygon[] {
-	const w = Math.max(300, width);
-	const h = Math.max(300, height);
-	const folds = 10;
-	return Array.from({ length: folds }, (_, index) => {
-		const left = -w / 2 + (index / folds) * w;
-		const right = -w / 2 + ((index + 1) / folds) * w;
-		return {
-			color: index % 2 ? BASE : BODY,
-			points: [
-				[left, -h / 2],
-				[right, -h / 2],
-				[right - (w / folds) * 0.16, h / 2],
-				[left + (w / folds) * 0.16, h / 2],
-			],
-		};
-	});
+/** Steepest a scissor arm is drawn, from horizontal; a taller rise stacks another X. */
+export const SCISSOR_MAX_DEGREES = 40;
+
+/**
+ * A stage element from the front or side: its deck on top, a base frame on the floor and scissor
+ * arms crossed between them, in as many stacked stages as keep each arm at 40° or flatter.
+ */
+function scissorStage(w: number, h: number): Polygon[] {
+	const deck = Math.min(80, h * 0.3);
+	const base = Math.min(50, h * 0.2);
+	const arm = Math.max(8, Math.min(40, h * 0.06, w * 0.03));
+	// The arms reach almost to the deck's edges, as a lift under a whole deck does.
+	const span = w - arm * 2;
+	const bottom = -h / 2 + base;
+	const top = h / 2 - deck;
+	const rise = top - bottom;
+	const tan = Math.tan((SCISSOR_MAX_DEGREES * Math.PI) / 180);
+	const stages = Math.max(1, Math.ceil(rise / (span * tan) - 1e-9));
+	const step = rise / stages;
+	const polygons: Polygon[] = [];
+	for (let stage = 0; stage < stages; stage++) {
+		const low = bottom + stage * step;
+		const high = low + step;
+		const [left, right] = [-span / 2, span / 2];
+		// An arm's ends sit inside the deck and the base frame, so they are cut where those begin
+		// and no end of an arm is drawn across either of them.
+		for (const arm_ of [
+			thickLine([left, low], [right, high], arm, BODY),
+			thickLine([left, high], [right, low], arm, BODY),
+		])
+			polygons.push({ ...arm_, points: clipBetween(arm_.points, bottom, top) });
+		polygons.push(ellipse(0, (low + high) / 2, arm * 0.45, arm * 0.45, DARK, 10));
+	}
+	polygons.push(
+		rect(-w / 2, top, w, deck, DETAIL),
+		rect(-w / 2, -h / 2, w, base, BODY),
+	);
+	return polygons;
+}
+
+/** The part of a convex polygon between two heights. */
+function clipBetween(points: PlanPoint[], low: number, high: number): PlanPoint[] {
+	const clip = (input: PlanPoint[], inside: (y: number) => boolean, edge: number) => {
+		const output: PlanPoint[] = [];
+		input.forEach((current, index) => {
+			const previous = input[(index + input.length - 1) % input.length];
+			const crossing = (): PlanPoint => {
+				const t = (edge - previous[1]) / (current[1] - previous[1]);
+				return [previous[0] + (current[0] - previous[0]) * t, edge];
+			};
+			if (inside(current[1])) {
+				if (!inside(previous[1])) output.push(crossing());
+				output.push(current);
+			} else if (inside(previous[1])) {
+				output.push(crossing());
+			}
+		});
+		return output;
+	};
+	return clip(
+		clip(points, (y) => y >= low, low),
+		(y) => y <= high,
+		high,
+	);
 }
 
 function crowd(
 	width: number,
 	height: number,
 	view: CadViewDirection,
+	seed: number,
 ): Polygon[] {
 	const w = Math.max(600, width);
-	if (view !== "top_down") return elevationCrowd(w, view);
+	if (view !== "top_down") return elevationCrowd(w, view, seed);
 
 	const h = Math.max(500, height);
 	const polygons: Polygon[] = [];
@@ -775,17 +786,28 @@ function crowd(
 		for (let column = 0; column < 6; column++) {
 			const x = -w * 0.4 + (column / 5) * w * 0.8 + (row % 2 ? w * 0.04 : 0);
 			const personWidth = Math.min(w * 0.07, h * 0.1);
+			const { width: across, height: along } = audiencePersonScale(
+				row * 6 + column,
+				seed,
+			);
 			const scale = personWidth / outlineWidth;
-			const y = -h * 0.38 + (row / 3) * h * 0.76 - (outlineHeight * scale) / 2;
+			const y =
+				-h * 0.38 + (row / 3) * h * 0.76 - (outlineHeight * scale * along) / 2;
 			polygons.push(
-				...strokes.map((stroke) => outlinePolygon(stroke, x, y, scale, false)),
+				...strokes.map((stroke) =>
+					outlinePolygon(stroke, x, y, [scale * across, scale * along], false),
+				),
 			);
 		}
 	}
 	return polygons;
 }
 
-function elevationCrowd(width: number, view: CadViewDirection): Polygon[] {
+function elevationCrowd(
+	width: number,
+	view: CadViewDirection,
+	seed: number,
+): Polygon[] {
 	const count = Math.max(6, Math.min(14, Math.round(width / 500)));
 	const spacing = width / count;
 	const side = view === "left_to_right" || view === "right_to_left";
@@ -794,11 +816,13 @@ function elevationCrowd(width: number, view: CadViewDirection): Polygon[] {
 	const strokes = audienceStrokesFor(outlineView);
 	const polygons: Polygon[] = [];
 	for (let index = 0; index < count; index++) {
-		const height = audiencePersonHeight(index);
+		const height = audiencePersonHeight(index, seed);
+		const across =
+			AUDIENCE_HEIGHT * audiencePersonScale(index, seed).width;
 		const x = -width / 2 + spacing * (index + 0.5);
 		polygons.push(
 			...strokes.map((stroke) =>
-				outlinePolygon(stroke, x, 0, height, false, mirror),
+				outlinePolygon(stroke, x, 0, [across, height], false, mirror),
 			),
 		);
 	}
@@ -809,16 +833,19 @@ function outlinePolygon(
 	outline: readonly PlanPoint[],
 	x: number,
 	y: number,
-	scale: number,
+	scale: number | readonly [number, number],
 	centerVertically: boolean,
 	mirror = false,
 ): Polygon {
-	const yOffset = centerVertically ? (outlineRange(outline, 1) * scale) / 2 : 0;
+	const [scaleX, scaleY] = typeof scale === "number" ? [scale, scale] : scale;
+	const yOffset = centerVertically
+		? (outlineRange(outline, 1) * scaleY) / 2
+		: 0;
 	return {
 		color: BODY,
 		points: outline.map(([pointX, pointY]) => [
-			x + pointX * scale * (mirror ? -1 : 1),
-			y + pointY * scale - yOffset,
+			x + pointX * scaleX * (mirror ? -1 : 1),
+			y + pointY * scaleY - yOffset,
 		]),
 	};
 }
@@ -828,9 +855,45 @@ function outlineRange(outline: readonly PlanPoint[], axis: 0 | 1): number {
 	return Math.max(...values) - Math.min(...values);
 }
 
-/** Stable pseudo-random audience stature in millimetres for repeatable technical drawings. */
-export function audiencePersonHeight(index: number): number {
-	return 1600 + ((Math.max(0, Math.trunc(index)) * 73 + 41) % 251);
+/** The stature an audience outline is scaled from before each person's own variation. */
+const AUDIENCE_HEIGHT = 1750;
+
+/**
+ * Stable pseudo-random audience stature in millimetres for repeatable technical drawings: 0.85 to
+ * 1.15 of an average person, the same for the same person of the same crowd every redraw.
+ */
+export function audiencePersonHeight(index: number, seed = 0): number {
+	return AUDIENCE_HEIGHT * audiencePersonScale(index, seed).height;
+}
+
+/** How much wider and taller than average one person in a crowd is drawn, each 0.85 to 1.15. */
+export function audiencePersonScale(
+	index: number,
+	seed = 0,
+): { width: number; height: number } {
+	const person = Math.max(0, Math.trunc(index));
+	return {
+		width: 0.85 + 0.3 * unitNoise(seed, person * 2 + 1),
+		height: 0.85 + 0.3 * unitNoise(seed, person * 2),
+	};
+}
+
+/** A stable seed from an entity id, so every crowd varies differently yet repeatably. */
+export function seedOf(id: string): number {
+	let hash = 0x811c9dc5;
+	for (let index = 0; index < id.length; index++) {
+		hash ^= id.charCodeAt(index);
+		hash = Math.imul(hash, 0x01000193);
+	}
+	return hash >>> 0;
+}
+
+/** A well-mixed number in [0, 1) from a seed and a counter. */
+function unitNoise(seed: number, counter: number): number {
+	let value = (seed ^ Math.imul(counter + 1, 0x9e3779b1)) >>> 0;
+	value = Math.imul(value ^ (value >>> 16), 0x85ebca6b);
+	value = Math.imul(value ^ (value >>> 13), 0xc2b2ae35);
+	return ((value ^ (value >>> 16)) >>> 0) / 4294967296;
 }
 
 function bar(width: number, height: number): Polygon[] {
