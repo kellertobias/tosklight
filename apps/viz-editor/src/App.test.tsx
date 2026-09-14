@@ -174,6 +174,12 @@ function renderApp(children: ReactNode = <App />) {
 	return render(<ModalProvider>{children}</ModalProvider>);
 }
 
+/** DMX is a page of Settings: the dock's Settings button, then the DMX tab in its title. */
+async function openSettingsPage(page: string) {
+	fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+	fireEvent.click(await screen.findByRole("tab", { name: page }));
+}
+
 // The CAD screen keeps its tile layout, settings and print pages in the window's own storage.
 const localStore = new Map<string, string>();
 
@@ -275,24 +281,27 @@ describe("the Viz editor window", () => {
 		});
 		renderApp();
 
-		const fixtures = await screen.findByRole("button", { name: "Fixtures" });
-		// It sits at the foot of the dock with Settings, not among the show's own screens:
-		// the fixture library belongs to the machine.
+		// The fixture library belongs to the machine, not to the show, so it is a page of Settings
+		// rather than a screen of the dock.
 		expect(
-			fixtures.closest(".viz-editor-machine-nav"),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Patch" }).closest(
-				".viz-editor-machine-nav",
-			),
-		).toBeNull();
-		// Every show screen needs a document. This one does not.
-		expect(fixtures).not.toBeDisabled();
-
-		fireEvent.click(fixtures);
+			screen.queryByRole("button", { name: "Fixtures" }),
+		).not.toBeInTheDocument();
+		await openSettingsPage("Fixtures");
 		expect(
 			await screen.findByRole("button", { name: /^Acme/ }),
 		).toBeVisible();
+		const title = document_root()?.querySelector<HTMLElement>(
+			".viz-fixture-library-workspace > .ui-window-header",
+		);
+		if (!title) throw new Error("Fixtures title was not rendered");
+		expect(title).toHaveTextContent("Settings");
+		// The library's own action sits left of the Settings pages.
+		expect(
+			within(title)
+				.getByRole("button", { name: "Create fixture" })
+				.compareDocumentPosition(within(title).getByRole("tab", { name: "Show" })) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
 		expect(
 			await screen.findByRole("dialog", { name: "Create fixture profile" }),
@@ -399,7 +408,7 @@ describe("the Viz editor window", () => {
 			".viz-show-settings-workspace > .ui-window-header",
 		);
 		if (!title) throw new Error("window title was not rendered");
-		expect(title).toHaveTextContent("Show");
+		expect(title).toHaveTextContent("Settings");
 		expect(title).toHaveAttribute("data-tauri-drag-region");
 		fireEvent.pointerDown(title, { button: 0 });
 		await waitFor(() =>
@@ -416,8 +425,17 @@ describe("the Viz editor window", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Close window" }));
 		await waitFor(() => expect(nativeWindow.close).toHaveBeenCalledOnce());
-		for (const label of ["Show", "CAD", "Patch", "Venue", "Effects", "Media"])
+		for (const label of ["CAD", "Patch", "Venue", "Media"])
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+		// Show, Fixtures and DMX are pages of Settings; Effects is part of Patch.
+		for (const label of ["Show", "Effects", "Fixtures", "DMX"])
+			expect(
+				within(screen.getByRole("navigation", { name: "Visualizer screens" })).queryByRole(
+					"button",
+					{ name: label },
+				),
+			).toBeNull();
+		expect(screen.queryByRole("button", { name: "Effects" })).not.toBeInTheDocument();
 		const openWindow = screen.getByRole("button", { name: "Open Window" });
 		const openViz = screen.getByRole("button", { name: "Open Viz" });
 		expect(openWindow).toBeEnabled();
@@ -609,7 +627,7 @@ describe("the Viz editor window", () => {
 
 	it("offers no desk when there is none on the network", async () => {
 		renderApp();
-		fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+		await openSettingsPage("DMX");
 		await screen.findByRole("heading", { name: "Live DMX Inputs" });
 		expect(screen.queryByText(/Load from Desk/)).not.toBeInTheDocument();
 		expect(
@@ -640,7 +658,7 @@ describe("the Viz editor window", () => {
 		});
 
 		renderApp();
-		fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+		await openSettingsPage("DMX");
 		await screen.findByRole("switch", { name: "Enable universe 1" });
 		const headers = screen
 			.getAllByRole("columnheader")
@@ -711,7 +729,7 @@ describe("the Viz editor window", () => {
 			}
 		});
 		renderApp();
-		fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+		await openSettingsPage("DMX");
 		fireEvent.change(await screen.findByRole("combobox", { name: "Desk" }), {
 			target: { value: "desk-backup" },
 		});
@@ -769,7 +787,7 @@ describe("the Viz editor window", () => {
 			}
 		});
 		renderApp();
-		fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+		await openSettingsPage("DMX");
 		fireEvent.click(
 			await screen.findByRole("button", {
 				name: "Take from Desk · front-of-house",
@@ -945,33 +963,39 @@ describe("the Viz editor window", () => {
 			return header;
 		}
 
-		it("is its own screen, opening on Network with Patch and Values beside it", async () => {
+		it("is a page of Settings, its own tabs left of the Settings pages, opening on Network", async () => {
 			mockDmx();
 			renderApp();
-			const dmx = await screen.findByRole("button", { name: "DMX" });
-			// It sits at the foot of the dock, below Fixtures, not among the show's screens.
-			expect(
-				within(screen.getByRole("navigation", { name: "Visualizer screens" })).queryByRole(
-					"button",
-					{ name: "DMX" },
-				),
-			).toBeNull();
-			expect(
-				screen
-					.getByRole("button", { name: "Fixtures" })
-					.compareDocumentPosition(dmx) & Node.DOCUMENT_POSITION_FOLLOWING,
-			).toBeTruthy();
-			fireEvent.click(dmx);
+			await screen.findByRole("button", { name: "Settings" });
+			// It is no screen of the dock.
+			expect(screen.queryByRole("button", { name: "DMX" })).not.toBeInTheDocument();
+			await openSettingsPage("DMX");
 			await screen.findByRole("heading", { name: "Live DMX Inputs" });
-			expect(dmxHeader()).toHaveTextContent("DMX");
+			expect(dmxHeader()).toHaveTextContent("Settings");
 			expect(
 				within(dmxHeader())
 					.getAllByRole("tab")
 					.map((tab) => tab.textContent),
-			).toEqual(["Network", "Patch", "Values", "Sources"]);
+			).toEqual([
+				"Network",
+				"Values",
+				"Sources",
+				"Show",
+				"Visualizer",
+				"Fixtures",
+				"DMX",
+				"MCP",
+			]);
 			expect(
 				within(dmxHeader()).getByRole("tab", { name: "Network" }),
 			).toHaveClass("is-active");
+			expect(within(dmxHeader()).getByRole("tab", { name: "DMX" })).toHaveClass(
+				"is-active",
+			);
+			// The two groups are apart, DMX's own first.
+			expect(
+				dmxHeader().querySelectorAll(".ui-window-action-group").length,
+			).toBeGreaterThanOrEqual(2);
 			// Nothing listens until Values is open.
 			expect(invoke).not.toHaveBeenCalledWith("received_dmx");
 			expect(invoke).not.toHaveBeenCalledWith("network_sources");
@@ -980,7 +1004,7 @@ describe("the Viz editor window", () => {
 		it("chooses the interface each protocol is received on, for this computer only", async () => {
 			mockDmx();
 			renderApp();
-			fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+			await openSettingsPage("DMX");
 			await screen.findByRole("heading", { name: "Input Interfaces" });
 			// A remembered adapter that is gone says so instead of quietly listening everywhere.
 			expect(
@@ -1021,8 +1045,12 @@ describe("the Viz editor window", () => {
 		it("lights every patched address and leaves the rest dark", async () => {
 			mockDmx();
 			renderApp();
-			fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
-			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Patch" }));
+			// Which addresses the rig occupies is the Patch screen's DMX tab.
+			fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+			fireEvent.click(await screen.findByRole("tab", { name: "DMX" }));
+			expect(
+				document_root()?.querySelector(".viz-dmx-patch-screen > .ui-window-header"),
+			).toHaveTextContent("Patch");
 			const universe = await screen.findByRole("region", {
 				name: "Universe 2 patch",
 			});
@@ -1056,7 +1084,7 @@ describe("the Viz editor window", () => {
 		it("lists every Art-Net node and sACN source with its universes, and stops polling when left", async () => {
 			mockDmx();
 			renderApp();
-			fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+			await openSettingsPage("DMX");
 			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Sources" }));
 			const table = await screen.findByRole("table", { name: "Network sources" });
 			const [, desk, node] = within(table).getAllByRole("row");
@@ -1084,7 +1112,7 @@ describe("the Viz editor window", () => {
 		it("shows received DMX as the desk's DMX window shows output, and stops listening when left", async () => {
 			mockDmx();
 			renderApp();
-			fireEvent.click(await screen.findByRole("button", { name: "DMX" }));
+			await openSettingsPage("DMX");
 			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Values" }));
 			const universe = await screen.findByRole("region", {
 				name: "Universe 2 values",
@@ -1234,33 +1262,32 @@ describe("the Viz editor window", () => {
 		const sharedTitle = document_root()?.querySelector<HTMLElement>(
 			".viz-show-settings-workspace > .ui-window-header",
 		);
-		if (!sharedTitle)
-			throw new Error("Show and Settings title was not rendered");
-		expect(sharedTitle).toHaveTextContent("Show");
+		if (!sharedTitle) throw new Error("Settings title was not rendered");
+		expect(sharedTitle).toHaveTextContent("Settings");
 		expect(
 			within(sharedTitle)
 				.getAllByRole("tab")
 				.map((tab) => tab.textContent),
-		).toEqual([
-			"Show",
-			"Rendering",
-			"Atmosphere",
-			"Picture",
-			"Features",
-			"MCP",
-		]);
-		expect(
-			within(sharedTitle).getByRole("tab", { name: "Rendering" }),
-		).toHaveClass("is-active");
-		await waitFor(() =>
-			expect(
-				document_root()?.querySelectorAll(
-					".viz-renderer-settings-grid > section",
-				),
-			).toHaveLength(1),
+		).toEqual(["Show", "Visualizer", "Fixtures", "DMX", "MCP"]);
+		expect(within(sharedTitle).getByRole("tab", { name: "Show" })).toHaveClass(
+			"is-active",
 		);
 		fireEvent.click(
-			within(sharedTitle).getByRole("tab", { name: "Atmosphere" }),
+			within(sharedTitle).getByRole("tab", { name: "Visualizer" }),
+		);
+		// Atmosphere, Rendering, Features and Picture are one page, two boxes to a row.
+		await waitFor(() =>
+			expect(
+				[
+					...(document_root()?.querySelectorAll(
+						".viz-renderer-settings-grid > section > h2",
+					) ?? []),
+				].map((heading) => heading.textContent),
+			).toEqual(["Lamp", "Laser", "Rendering", "Features", "Picture"]),
+		);
+		const grid = document_root()?.querySelector(".viz-renderer-settings-grid");
+		expect(getComputedStyle(grid as Element).gridTemplateColumns).toBe(
+			"repeat(2, minmax(0, 1fr))",
 		);
 		fireEvent.input(await screen.findByRole("slider", { name: "Fog amount" }), {
 			target: { value: "0.08" },
@@ -1285,13 +1312,8 @@ describe("the Viz editor window", () => {
 			maxWidth: "100%",
 			width: "100%",
 		});
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Picture" }));
 		expect(
-			screen.getByRole("heading", { name: "Picture" }),
-		).toBeInTheDocument();
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Features" }));
-		expect(
-			screen.getByRole("heading", { name: "Features" }),
+			screen.getByRole("slider", { name: "Environment brightness" }),
 		).toBeInTheDocument();
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "MCP" }));
 		expect(
@@ -1316,12 +1338,6 @@ describe("the Viz editor window", () => {
 		expect(
 			screen.queryByText(/build from repository/i),
 		).not.toBeInTheDocument();
-		fireEvent.click(
-			within(sharedTitle).getByRole("tab", { name: "Rendering" }),
-		);
-		expect(
-			await screen.findByRole("slider", { name: "Environment brightness" }),
-		).toBeInTheDocument();
 		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Show" }));
 		expect(
 			screen.getByRole("button", { name: "Open Demo Show" }),
@@ -1348,7 +1364,7 @@ describe("the Viz editor window", () => {
 		fireEvent.click(
 			(await screen.findAllByRole("button", { name: "Settings" }))[0],
 		);
-		fireEvent.click(await screen.findByRole("tab", { name: "Atmosphere" }));
+		fireEvent.click(await screen.findByRole("tab", { name: "Visualizer" }));
 		const fog = await screen.findByRole("slider", { name: "Fog amount" });
 		expect(fog).toHaveValue("0.15");
 		// Lamp and laser atmosphere are set in their own boxes.
@@ -1358,7 +1374,6 @@ describe("the Viz editor window", () => {
 		expect(within(lamp as HTMLElement).getByRole("slider", { name: "Lamp fog turbulence" })).toBeInTheDocument();
 		expect(within(laser as HTMLElement).getByRole("slider", { name: "Laser brightness" })).toBeInTheDocument();
 		await waitFor(() => expect(fog).toHaveValue("0.02"), { timeout: 1500 });
-		fireEvent.click(screen.getByRole("tab", { name: "Rendering" }));
 		expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
 	});
 
@@ -1397,17 +1412,68 @@ describe("the Viz editor window", () => {
 		).toBeInTheDocument();
 	});
 
-	it("presents Patch, Venue, and Effects through the same patch surface", async () => {
+	it("presents Patch, with its effects, and Venue through the same patch surface", async () => {
 		renderApp();
-		for (const screenName of ["Patch", "Venue", "Effects"] as const) {
-			fireEvent.click(await screen.findByRole("button", { name: screenName }));
+		await screen.findByRole("button", { name: "Patch" });
+		expect(screen.queryByRole("button", { name: "Effects" })).not.toBeInTheDocument();
+		for (const screenName of ["Patch", "Venue"] as const) {
+			fireEvent.click(screen.getByRole("button", { name: screenName }));
+			const title = await waitFor(() => {
+				const found = document_root()?.querySelector<HTMLElement>(
+					".show-patch-layout > .ui-window-header",
+				);
+				if (!found?.textContent?.includes(screenName))
+					throw new Error(`${screenName} title was not rendered`);
+				return found;
+			});
 			expect(
-				document_root()?.querySelector(".show-patch-layout .ui-window-title"),
-			).toHaveTextContent(screenName);
-			expect(
-				screen.getByRole("columnheader", { name: "Fixture ID" }),
+				await screen.findByRole("columnheader", { name: "Fixture ID" }),
 			).toBeInTheDocument();
+			// The column quick views are in the column settings, not in the title.
+			expect(
+				within(title).queryByRole("button", { name: "Compact" }),
+			).not.toBeInTheDocument();
+			// Only Patch has the Sheet and DMX tabs.
+			expect(
+				within(title)
+					.queryAllByRole("tab")
+					.map((tab) => tab.textContent),
+			).toEqual(screenName === "Patch" ? ["Sheet", "DMX"] : []);
 		}
+	});
+
+	it("adds a truss, a stage element or any Venue element from the CAD toolbar", async () => {
+		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "CAD" }));
+		const toolbar = await screen.findByRole("toolbar", {
+			name: "Add to the drawing",
+		});
+		expect(
+			within(toolbar)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["+ Truss", "+ Stage element", "+ Venue element"]);
+		// It sits under the title, not in it.
+		expect(toolbar.closest(".ui-window-header")).toBeNull();
+
+		fireEvent.click(within(toolbar).getByRole("button", { name: "+ Truss" }));
+		const library = await screen.findByRole("dialog", { name: "Add fixture" });
+		expect(within(library).getByLabelText("Search")).toHaveValue("Truss");
+		fireEvent.click(screen.getByRole("button", { name: "Close Add fixture" }));
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Add fixture" }),
+			).not.toBeInTheDocument(),
+		);
+
+		fireEvent.click(
+			within(toolbar).getByRole("button", { name: "+ Stage element" }),
+		);
+		expect(
+			within(
+				await screen.findByRole("dialog", { name: "Add fixture" }),
+			).getByLabelText("Search"),
+		).toHaveValue("Stage");
 	});
 
 	it("keeps Media tabs and the contextual add action in one title row", async () => {

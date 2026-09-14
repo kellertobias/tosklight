@@ -1,4 +1,5 @@
 import {
+	FixtureAddFlow,
 	type FixtureDefinition,
 	type FixtureNote,
 	FixturePatchSetup,
@@ -14,9 +15,8 @@ import {
 	revealPatchRow,
 } from "@tosklight/patch";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button } from "@tosklight/ui";
+import { Button, type TitleActionGroup } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
-import { FixtureLibraryWorkspace } from "./FixtureLibraryWorkspace";
 import {
 	type ComponentProps,
 	type ReactNode,
@@ -26,24 +26,29 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { CadApp } from "./cad/CadApp";
-import { CadRigOverview } from "./cad/CadViewport";
+import {
+	ArchitectSettings,
+	NoShowOpen,
+	SETTINGS_PAGES,
+	type SettingsPage,
+} from "./ArchitectSettings";
+import { CadAddContext, type CadAddKind, CadApp } from "./cad/CadApp";
 import { cadSession } from "./cad/session";
 import { useCadSelection } from "./cad/useCadSelection";
 import type { CadEntity, CadSceneSnapshot } from "./cad/types";
-import { type DmxPage, DmxWorkspace } from "./DmxWorkspace";
+import { type DmxPage, DmxPatchScreen } from "./DmxWorkspace";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
 import type { PatchTransport } from "@tosklight/patch/transport";
 import { type EditorWorkspace, EditorSidebar } from "./EditorSidebar";
-import { FileBar } from "./FileBar";
 import { MediaWorkspace } from "./MediaWorkspace";
-import { McpSettingsWorkspace } from "./McpSettingsWorkspace";
 import { PreviewControls } from "./PreviewControls";
-import { RendererSettingsWorkspace } from "./RendererSettingsWorkspace";
-import { ShowNameCaption } from "./ShowNameCaption";
-import { beginWindowDrag, WindowControls } from "./WindowChrome";
+import {
+	beginTitleBarDrag,
+	beginWindowDrag,
+	WindowControls,
+} from "./WindowChrome";
 
 const DEFAULT_LAYER: PatchLayer = {
 	id: "default",
@@ -53,30 +58,18 @@ const DEFAULT_LAYER: PatchLayer = {
 	visible2d: true,
 	visible3d: true,
 };
-type ShowPage =
-	| "show"
-	| "rendering"
-	| "atmosphere"
-	| "picture"
-	| "features"
-	| "mcp";
 
-// DMX has its own screen in the sidebar; its Network tab is what used to be a page here.
-const SHOW_SETTINGS_ACTIONS = [
-	{ id: "show", label: "Show" },
-	{ id: "rendering", label: "Rendering" },
-	{ id: "atmosphere", label: "Atmosphere" },
-	{ id: "picture", label: "Picture" },
-	{ id: "features", label: "Features" },
-	{ id: "mcp", label: "MCP" },
-];
+/** The Patch screen's two pages: the sheet itself, and which DMX addresses the rig occupies. */
+type PatchPage = "sheet" | "dmx";
 
-/** What the patch sheet calls itself on each screen that is built from it. */
-const WORKSPACE_TITLES: Partial<Record<EditorWorkspace, string>> = {
-	patch: "Patch",
-	venue: "Venue",
-	effects: "Effects",
-	media: "Media",
+/**
+ * What each CAD add action opens the fixture library on. Trusses are rigging, stage elements are
+ * Venue objects named for the stage, and a Venue element is any object that is not patched.
+ */
+const CAD_ADD_PRESETS: Record<CadAddKind, { type: string; query: string }> = {
+	truss: { type: "rigging", query: "Truss" },
+	stage: { type: "venue", query: "Stage" },
+	venue: { type: "", query: "" },
 };
 
 /**
@@ -121,8 +114,8 @@ function PatchScope({
 }
 
 /**
- * The shared patch sheet with what only the Architect offers: the column quick views in the title,
- * and the visible columns remembered per screen on this machine.
+ * The shared patch sheet with what only the Architect offers: the column quick views in the column
+ * settings, and the visible columns remembered per screen on this machine.
  */
 function ArchitectPatchSheet(
 	props: NonNullable<ComponentProps<typeof FixturePatchSetup>>,
@@ -131,7 +124,10 @@ function ArchitectPatchSheet(
 		<FixturePatchSetup
 			{...props}
 			quickViews
-			columnStorageKey={`viz-editor.patch-columns.${props.scope ?? "all"}`}
+			// Patch keeps the columns it remembered while it listed lamps without their effects.
+			columnStorageKey={`viz-editor.patch-columns.${
+				props.scope === "patch" ? "dmx" : (props.scope ?? "all")
+			}`}
 			onImportVenueModel={props.scope === "venue" ? importVenueModel : undefined}
 		/>
 	);
@@ -194,9 +190,15 @@ export function App() {
 		ReadonlyMap<string, FixtureNote>
 	>(new Map());
 	const [error, setError] = useState<string | null>(null);
-	const [workspace, setWorkspace] = useState<EditorWorkspace>("show");
-	const [showPage, setShowPage] = useState<ShowPage>("show");
+	const [workspace, setWorkspace] = useState<EditorWorkspace>("settings");
+	const [settingsPage, setSettingsPage] = useState<SettingsPage>("show");
 	const [dmxPage, setDmxPage] = useState<DmxPage>("network");
+	const [patchPage, setPatchPage] = useState<PatchPage>("sheet");
+	// Each press of a CAD add action is a new request, so pressing the same one again reopens it.
+	const [cadAdd, setCadAdd] = useState<{ kind: CadAddKind; request: number }>({
+		kind: "venue",
+		request: 0,
+	});
 	const [visualizerRunning, setVisualizerRunning] = useState(false);
 	// Bumped when something outside the sheet changed the document — an MVR import — so the sheet
 	// reads the new snapshot instead of showing the rig as it was before.
@@ -305,13 +307,11 @@ export function App() {
 					// Selecting in the drawing shows what was selected. On the CAD screen the
 					// drawing already is that view, so following the selection to the sheet would
 					// take the operator away from the thing they just clicked.
-					setWorkspace((current) =>
-						current === "cad"
-							? current
-							: selectedEntity?.kind === "venue"
-								? "venue"
-								: "patch",
-					);
+					setWorkspace((current) => {
+						if (current === "cad") return current;
+						setPatchPage("sheet");
+						return selectedEntity?.kind === "venue" ? "venue" : "patch";
+					});
 				}
 			})
 			.then((unlisten) => {
@@ -519,8 +519,32 @@ export function App() {
 		() => mergeFixtureDefinitions(profiles, []),
 		[profiles],
 	);
-	const workspaceTitle = WORKSPACE_TITLES[workspace] ?? "Show";
 	const filename = document ? showFileName(document.path) : "No show open";
+
+	const patchPages: TitleActionGroup = {
+		id: "patch-pages",
+		kind: "tabs",
+		activeId: patchPage,
+		onActiveChange: (id) => {
+			loadFixtures();
+			setPatchPage(id as PatchPage);
+		},
+		actions: [
+			{ id: "sheet", label: "Sheet" },
+			{ id: "dmx", label: "DMX" },
+		],
+	};
+
+	const settingsPages: TitleActionGroup = {
+		id: "settings-pages",
+		kind: "tabs",
+		activeId: settingsPage,
+		onActiveChange: (id) => {
+			if (id === "dmx") loadFixtures();
+			setSettingsPage(id as SettingsPage);
+		},
+		actions: SETTINGS_PAGES.map(({ id, label }) => ({ id, label })),
+	};
 
 	return (
 		<div className="viz-editor">
@@ -531,14 +555,10 @@ export function App() {
 					workspace={workspace}
 					hasDocument={Boolean(document)}
 					onSelectWorkspace={(id) => {
-						if (id === "venue" || id === "dmx") loadFixtures();
-						if (id === "show") setShowPage("show");
+						if (id === "patch" || id === "venue") loadFixtures();
 						setWorkspace(id);
 					}}
-					onSelectSettings={() => {
-						setShowPage("rendering");
-						setWorkspace("settings");
-					}}
+					onSelectSettings={() => setWorkspace("settings")}
 					openWindow={() =>
 						documentSession
 							.openWindow()
@@ -565,87 +585,71 @@ export function App() {
 						beginWindowDrag(event);
 					}}
 				>
-					{workspace === "show" || workspace === "settings" ? (
-						<section className="viz-show-settings-workspace">
-							<WindowHeader
-								title="Show"
-								dragHandleProps={{
-									"data-tauri-drag-region": true,
-									onPointerDown: beginWindowDrag,
-								}}
-								groups={[
-									{
-										id: "show-settings-pages",
-										kind: "tabs",
-										activeId: showPage,
-										onActiveChange: (id) => {
-											const page = id as ShowPage;
-											setShowPage(page);
-											setWorkspace(page === "show" ? "show" : "settings");
-										},
-										actions: SHOW_SETTINGS_ACTIONS,
-									},
-								]}
-							/>
-							{showPage === "show" ? (
-								<FileBar
-									document={document}
-									onDocument={setDocument}
-									onError={report}
-									onReloadProfiles={reloadProfiles}
-									onReloadDocument={reloadDocument}
-								>
-									{document && cadScene?.showId === document.showId ? (
-										<figure className="viz-show-rig-overview">
-											<ShowNameCaption
-												name={document.name}
-												onRename={(name) =>
-													documentSession
-														.rename(name)
-														.then(reloadDocument)
-														.catch(report)
-												}
-											/>
-											<CadRigOverview
-												entities={cadScene.entities}
-												drawings={cadScene.drawings}
-												showName={document.name}
-											/>
-										</figure>
-									) : null}
-								</FileBar>
-							) : showPage === "mcp" ? (
-								<McpSettingsWorkspace />
-							) : (
-								<RendererSettingsWorkspace page={showPage} onError={report} />
-							)}
-						</section>
-					) : null}
-					{workspace === "fixtures" ? (
-						<FixtureLibraryWorkspace
+					{workspace === "settings" ? (
+						<ArchitectSettings
+							page={settingsPage}
+							pages={settingsPages}
+							document={document}
+							cadScene={cadScene}
 							profiles={profiles}
+							fixtures={fixtures}
+							profileRevisions={profileRevisions}
+							dmxPage={dmxPage}
+							onDmxPage={setDmxPage}
+							onDocument={setDocument}
 							onReloadProfiles={reloadProfiles}
+							onReloadDocument={reloadDocument}
 							onError={report}
 						/>
 					) : null}
-					{document && workspace === "cad" ? <CadApp /> : null}
-					{document && workspace === "dmx" ? (
-						<DmxWorkspace
-							page={dmxPage}
-							onPage={setDmxPage}
-							document={document}
+					{document && workspace === "cad" ? (
+						<>
+							<CadAddContext.Provider
+								value={(kind) =>
+									setCadAdd((current) => ({ kind, request: current.request + 1 }))
+								}
+							>
+								<CadApp />
+							</CadAddContext.Provider>
+							{/* The add flow reads the patch live, so a scene change is no reason to remount
+							    it: a remount would replay the last add request and reopen the library. */}
+							<PatchScope
+								host={host}
+								showId={document.showId}
+								reload={0}
+								suffix="cad"
+								definitions={definitions}
+								transport={transport}
+								onError={report}
+							>
+								<FixtureAddFlow
+									scope="venue"
+									addRequest={cadAdd.request}
+									initialTypeFilter={CAD_ADD_PRESETS[cadAdd.kind].type}
+									initialQuery={CAD_ADD_PRESETS[cadAdd.kind].query}
+								/>
+							</PatchScope>
+						</>
+					) : null}
+					{document && workspace === "patch" && patchPage === "dmx" ? (
+						<DmxPatchScreen
+							header={
+								<WindowHeader
+									title="Patch"
+									dragHandleProps={{
+										"data-tauri-drag-region": true,
+										onPointerDown: beginTitleBarDrag,
+									}}
+									groups={[patchPages]}
+								/>
+							}
 							fixtures={fixtures}
 							profileRevisions={profileRevisions}
-							onError={report}
 						/>
 					) : null}
 					{document &&
-					workspace !== "show" &&
-					workspace !== "cad" &&
-					workspace !== "fixtures" &&
-					workspace !== "dmx" &&
-					workspace !== "media" &&
-					workspace !== "settings" ? (
+					((workspace === "patch" && patchPage === "sheet") ||
+						workspace === "venue") ? (
 						<PatchScope
 							host={host}
 							showId={document.showId}
@@ -655,8 +659,9 @@ export function App() {
 							onError={report}
 						>
 							<ArchitectPatchSheet
-								title={workspaceTitle}
-								scope={workspace === "patch" ? "dmx" : workspace}
+								title={workspace === "venue" ? "Venue" : "Patch"}
+								scope={workspace === "venue" ? "venue" : "patch"}
+								titleGroups={workspace === "patch" ? [patchPages] : undefined}
 								showAllLayersRequest={revealRequest}
 							/>
 							{visualizerRunning ? (
@@ -682,18 +687,7 @@ export function App() {
 							<MediaWorkspace onError={report} />
 						</PatchScope>
 					) : null}
-					{!document &&
-					workspace !== "show" &&
-					workspace !== "fixtures" &&
-					workspace !== "settings" ? (
-						<section className="viz-editor-empty">
-							<h1>No show open</h1>
-							<p>
-								Create a rig or open an existing show file. What you patch here
-								is what the visualizer draws.
-							</p>
-						</section>
-					) : null}
+					{!document && workspace !== "settings" ? <NoShowOpen /> : null}
 				</main>
 			</div>
 			{error ? (

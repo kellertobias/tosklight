@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
+import type { TitleActionGroup } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import {
 	FixtureProfileEditor,
@@ -18,7 +19,8 @@ import { beginTitleBarDrag } from "./WindowChrome";
 
 /**
  * The fixture library belongs to this machine, not to the open document, so it is reachable with
- * no show open: an operator plans a rig by first describing the lanterns it is made of.
+ * no show open: an operator plans a rig by first describing the lanterns it is made of. It is a page
+ * of Settings, so its own actions sit left of the Settings pages in the one title.
  */
 
 /** The Architect reads the operator's own filesystem; there are no configured file roots here. */
@@ -67,9 +69,12 @@ const ports: FixtureProfileEditorPorts = {
 export function FixtureLibraryWorkspace({
 	profiles,
 	onReloadProfiles,
+	settingsPages,
 	onError,
 }: {
 	profiles: readonly FixtureProfile[];
+	/** The Settings page tabs, drawn right of this page's own groups. */
+	settingsPages?: TitleActionGroup;
 	onReloadProfiles: () => void;
 	onError: (reason: unknown) => void;
 }) {
@@ -139,7 +144,7 @@ export function FixtureLibraryWorkspace({
 	return (
 		<section className="viz-fixture-library-workspace">
 			<WindowHeader
-				title="Fixtures"
+				title="Settings"
 				dragHandleProps={{
 					"data-tauri-drag-region": true,
 					onPointerDown: beginTitleBarDrag,
@@ -159,6 +164,7 @@ export function FixtureLibraryWorkspace({
 							},
 						],
 					},
+					...(settingsPages ? [settingsPages] : []),
 				]}
 				search={{
 					value: query,

@@ -2,7 +2,7 @@ import type {
 	PatchFixtureProjection,
 	PatchProfileRevision,
 } from "@tosklight/patch";
-import { Button } from "@tosklight/ui";
+import { Button, type TitleActionGroup } from "@tosklight/ui";
 import {
 	WindowHeader,
 	WindowScrollArea,
@@ -42,7 +42,7 @@ import { LiveDmxInputsPanel } from "./LiveDmxInputsPanel";
 import { useDiscoveredDesks } from "./useDiscoveredDesks";
 import { beginWindowDrag } from "./WindowChrome";
 
-export type DmxPage = "network" | "patch" | "values" | "sources";
+export type DmxPage = "network" | "values" | "sources";
 
 type DotSize = "small" | "large";
 interface Channel {
@@ -56,12 +56,14 @@ const DOT_SIZE_KEY = "tosklight.architect.dmx-dot-size";
 const DIP_WEIGHTS = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 
 /**
- * The Architect's DMX screen.
+ * The Architect's DMX settings page.
  *
- * **Network** is where the show's DMX arrives from, **Patch** is which addresses the rig occupies,
- * and **Values** is what actually arrives — the desk's DMX Output window, reading the network
- * instead of a desk. The Architect outputs nothing, so there is nothing here to override.
+ * **Network** is where the show's DMX arrives from, and **Values** is what actually arrives — the
+ * desk's DMX Output window, reading the network instead of a desk. The Architect outputs nothing, so there is nothing here to override.
  * **Sources** is who is on the network: every Art-Net node and sACN source, and their universes.
+ * Which addresses the rig occupies is the Patch screen's DMX tab, not a page here.
+ *
+ * It is a page of Settings, so its own tabs sit left of the Settings pages in the one title.
  */
 export function DmxWorkspace({
 	page,
@@ -69,8 +71,11 @@ export function DmxWorkspace({
 	document,
 	fixtures,
 	profileRevisions,
+	settingsPages,
 	onError,
 }: {
+	/** The Settings page tabs, drawn right of this page's own groups. */
+	settingsPages?: TitleActionGroup;
 	page: DmxPage;
 	onPage: (page: DmxPage) => void;
 	document: DocumentSummary;
@@ -89,7 +94,7 @@ export function DmxWorkspace({
 	return (
 		<section className="viz-dmx-workspace">
 			<WindowHeader
-				title="DMX"
+				title="Settings"
 				dragHandleProps={{
 					"data-tauri-drag-region": true,
 					onPointerDown: beginWindowDrag,
@@ -102,11 +107,11 @@ export function DmxWorkspace({
 						onActiveChange: (id) => onPage(id as DmxPage),
 						actions: [
 							{ id: "network", label: "Network" },
-							{ id: "patch", label: "Patch" },
 							{ id: "values", label: "Values" },
 							{ id: "sources", label: "Sources" },
 						],
 					},
+					...(settingsPages ? [settingsPages] : []),
 				]}
 				settings={page === "values"}
 				onSettings={(anchor) =>
@@ -156,11 +161,35 @@ export function DmxWorkspace({
 					/>
 				</div>
 			) : null}
-			{page === "patch" ? <DmxPatchView occupancy={occupancy} /> : null}
 			{page === "sources" ? <DmxSourcesView /> : null}
 			{page === "values" ? (
 				<DmxValuesView occupancy={occupancy} dotSize={dotSize} />
 			) : null}
+		</section>
+	);
+}
+
+/**
+ * The Patch screen's DMX tab: every channel of every patched universe, lit where the rig occupies
+ * it and dark where not. The host draws the title, which carries the Patch screen's tabs.
+ */
+export function DmxPatchScreen({
+	header,
+	fixtures,
+	profileRevisions,
+}: {
+	header: ReactNode;
+	fixtures: readonly PatchFixtureProjection[];
+	profileRevisions: readonly PatchProfileRevision[];
+}) {
+	const occupancy = useMemo(
+		() => dmxOccupancy(fixtures, profileRevisions),
+		[fixtures, profileRevisions],
+	);
+	return (
+		<section className="viz-dmx-workspace viz-dmx-patch-screen">
+			{header}
+			<DmxPatchView occupancy={occupancy} />
 		</section>
 	);
 }

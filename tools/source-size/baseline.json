@@ -65,7 +65,6 @@
     "apps/viz-editor/src/cad/CadApp.tsx::javascript:function:CadApp:5277956b9a1d:1": 547,
     "apps/viz-editor/src/LiveDmxInputsPanel.tsx::javascript:function:LiveDmxInputsPanel:2d7ff4eb6072:1": 202,
     "apps/viz-editor/src/MediaWorkspace.tsx::javascript:function:MediaWorkspace:ffd720049fd9:1": 405,
-    "apps/viz-editor/src/RendererSettingsWorkspace.tsx::javascript:function:RendererSettingsWorkspace:3c41215921fc:1": 237,
     "apps/viz-renderer/src/app/draw.rs::rust:function:draw_session:93a254bed8dc:1": 172,
     "apps/viz-renderer/src/embedded.rs::rust:function:run:acf29d5ab127:1": 156,
     "apps/viz-renderer/src/physics.rs::rust:function:run:962689db0059:1": 203,

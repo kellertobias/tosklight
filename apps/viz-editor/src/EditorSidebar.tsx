@@ -4,21 +4,13 @@ import { useState } from "react";
 import appIcon from "../src-tauri/icons/icon.svg";
 import { beginWindowDrag } from "./WindowChrome";
 
-export type EditorWorkspace =
-	| "show"
-	| "cad"
-	| "fixtures"
-	| "patch"
-	| "dmx"
-	| "venue"
-	| "effects"
-	| "media"
-	| "settings";
+export type EditorWorkspace = "cad" | "patch" | "venue" | "media" | "settings";
 
 /// The screens the Architect offers, in the order the operator reads them.
 ///
-/// Everything but Show needs a document, so the entries stay visible and go disabled instead of
-/// disappearing: the operator sees what opening a show would give them.
+/// Every screen needs a document, so the entries stay visible and go disabled instead of
+/// disappearing: the operator sees what opening a show would give them. The show itself, the
+/// machine's fixture library and the DMX wiring are pages of Settings, which needs no document.
 export function EditorSidebar({
 	filename,
 	workspace,
@@ -59,7 +51,6 @@ export function EditorSidebar({
 				activeId={workspace}
 				onSelect={(id) => onSelectWorkspace(id as EditorWorkspace)}
 				entries={[
-					{ id: "show", label: "Show", icon: <span>◫</span> },
 					{
 						id: "cad",
 						label: "CAD",
@@ -79,40 +70,9 @@ export function EditorSidebar({
 						disabled: !hasDocument,
 					},
 					{
-						id: "effects",
-						label: "Effects",
-						icon: <span>✦</span>,
-						disabled: !hasDocument,
-					},
-					{
 						id: "media",
 						label: "Media",
 						icon: <span>▣</span>,
-						disabled: !hasDocument,
-					},
-				]}
-			/>
-			<OperatorDestinationList
-				ariaLabel="Fixture library"
-				className="viz-editor-machine-nav"
-				activeId={workspace}
-				onSelect={(id) => onSelectWorkspace(id as EditorWorkspace)}
-				entries={[
-					{ id: "fixtures", label: "Fixtures", icon: <span>✺</span> },
-				]}
-			/>
-			{/* DMX is the wiring to the outside world rather than a screen of the show, so it sits with
-			    the other plumbing at the foot of the dock. */}
-			<OperatorDestinationList
-				ariaLabel="DMX"
-				className="viz-editor-dmx-nav"
-				activeId={workspace}
-				onSelect={(id) => onSelectWorkspace(id as EditorWorkspace)}
-				entries={[
-					{
-						id: "dmx",
-						label: "DMX",
-						icon: <span>▦</span>,
 						disabled: !hasDocument,
 					},
 				]}

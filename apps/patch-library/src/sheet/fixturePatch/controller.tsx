@@ -8,6 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import type { TitleActionGroup } from "@tosklight/ui";
 import { type PatchHost, usePatchHost } from "../../host";
 import { usePatch, usePatchView } from "../../state/PatchContext";
 import type { PatchedFixture } from "../../wire";
@@ -88,7 +89,11 @@ export type FixturePatchSetupProps = {
 	/** External selection revisions use this to reveal entities hidden by a layer filter. */
 	showAllLayersRequest?: number;
 	initialTypeFilter?: string;
-	/** Offers the Patch, Visualization and Compact column views in the title (Architect only). */
+	/** What the fixture browser opened by `addRequest` searches for, such as "Truss". */
+	initialQuery?: string;
+	/** Title groups the host puts before the sheet's own, such as the Architect's page tabs. */
+	titleGroups?: readonly TitleActionGroup[];
+	/** Offers the Patch, Visualization and Compact column views in the column settings (Architect only). */
 	quickViews?: boolean;
 	/** Remembers the visible columns on this machine under this key; without it they reset. */
 	columnStorageKey?: string;
@@ -102,7 +107,13 @@ export type FixturePatchSetupProps = {
 	onImportVenueModel?: (layerId: string) => Promise<string | null>;
 };
 
-export type PatchFixtureScope = "all" | "dmx" | "venue" | "effects" | "media";
+export type PatchFixtureScope =
+	| "all"
+	| "dmx"
+	| "patch"
+	| "venue"
+	| "effects"
+	| "media";
 
 /** The sidebar entry for fixtures that belong to no stored layer of their own. */
 export const NO_LAYER_ID = "__no_layer__";
@@ -444,6 +455,8 @@ export function definitionMatchesScope(
 		definition.device_type.trim().toLowerCase(),
 	);
 	if (scope === "venue") return !dmx;
+	// Every DMX-patchable fixture, lamps and effects alike.
+	if (scope === "patch") return dmx;
 	if (scope === "effects") return dmx && effect;
 	return dmx && !effect;
 }
@@ -516,7 +529,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		const request = props.addRequest ?? 0;
 		if (!request || request === handledAddRequest.current) return;
 		handledAddRequest.current = request;
-		ui.setQuery("");
+		ui.setQuery(props.initialQuery ?? "");
 		ui.setManufacturer("");
 		ui.setFamilyKey("");
 		ui.setDefinitionKey("");
@@ -524,6 +537,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		ui.setBrowserOpen(true);
 	}, [
 		props.addRequest,
+		props.initialQuery,
 		props.initialTypeFilter,
 		ui.setBrowserOpen,
 		ui.setDefinitionKey,
@@ -567,6 +581,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 			onFixturesAdded: props.onFixturesAdded,
 			onImportVenueModel: props.onImportVenueModel,
 			quickViews: props.quickViews ?? false,
+			titleGroups: props.titleGroups ?? [],
 		},
 	};
 }

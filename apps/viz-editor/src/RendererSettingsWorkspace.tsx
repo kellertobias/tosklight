@@ -3,10 +3,8 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { documentSession, type RendererSettings } from "./document/session";
 
 export function RendererSettingsWorkspace({
-	page,
 	onError,
 }: {
-	page: "rendering" | "atmosphere" | "picture" | "features";
 	onError: (reason: unknown) => void;
 }) {
 	const [draft, setDraft] = useState<RendererSettings | null>(null);
@@ -80,157 +78,16 @@ export function RendererSettingsWorkspace({
 					<p>
 						These controls update every Visualizer connected to this Editor live.
 						Its source is the current document; live values still arrive through
-						the inputs on the DMX screen’s Network tab.
+						the inputs on the DMX settings page’s Network tab.
 					</p>
 				</header>
-				<div className="viz-renderer-settings-grid">
-					{page === "rendering" ? <SettingsGroup title="Rendering">
-						<SelectField
-							label="Render quality"
-							value={draft.quality ?? "follow"}
-							onChange={(quality) =>
-								update({
-									quality:
-										quality === "follow"
-											? null
-											: (quality as NonNullable<RendererSettings["quality"]>),
-								})
-							}
-							options={[
-								{ value: "follow", label: "Follow source" },
-								{ value: "draft", label: "Draft" },
-								{ value: "standard", label: "Standard" },
-								{ value: "high", label: "High" },
-								{ value: "ultra", label: "Ultra" },
-							]}
-						/>
-						<SelectField
-							label="Appearance"
-							value={draft.theme}
-							onChange={(theme) => update({ theme })}
-							options={[
-								{ value: "light_on_dark", label: "Light on dark" },
-								{ value: "dark_on_light", label: "Dark on light" },
-							]}
-						/>
-						<NumberSetting
-							label="Environment brightness"
-							value={draft.ambient}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(ambient) => update({ ambient })}
-							format={percent}
-						/>
-						<NumberSetting
-							label="Exposure"
-							value={draft.exposure}
-							min={0.05}
-							max={4}
-							step={0.05}
-							onChange={(exposure) => update({ exposure })}
-							format={(value) => `${value.toFixed(2)}×`}
-						/>
-					</SettingsGroup> : null}
+				{/* One page, two columns: the atmosphere boxes first, then what the picture is made of. */}
+				<div className="viz-renderer-settings-grid is-two-column">
+					<AtmosphereSettings draft={draft} update={update} />
 
-					{page === "atmosphere" ? (
-						<AtmosphereSettings draft={draft} update={update} />
-					) : null}
-
-					{page === "picture" ? <SettingsGroup title="Picture">
-						<NumberSetting
-							label="Persistence of vision"
-							value={draft.persistence}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(persistence) => update({ persistence })}
-							format={(value) => `${value.toFixed(2)} s`}
-						/>
-						<NumberSetting
-							label="Persistence falloff"
-							value={draft.persistenceFalloff}
-							min={1}
-							max={8}
-							step={0.1}
-							onChange={(persistenceFalloff) => update({ persistenceFalloff })}
-							format={(value) => `${value.toFixed(1)}×`}
-						/>
-						<NumberSetting
-							label="Crowd amount"
-							value={draft.crowdAmount}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(crowdAmount) => update({ crowdAmount })}
-							format={percent}
-						/>
-						<label className="viz-renderer-background">
-							<span>Background color</span>
-							<input
-								type="color"
-								disabled={draft.background == null}
-								value={rgbToHex(draft.background ?? [0.03, 0.04, 0.05])}
-								onChange={(event) =>
-									update({ background: hexToRgb(event.target.value) })
-								}
-							/>
-						</label>
-						<SwitchField
-							label="Use custom background"
-							offLabel={null}
-							onLabel={null}
-							checked={draft.background != null}
-							onChange={(event) =>
-								update({
-									background: event.target.checked ? [0.03, 0.04, 0.05] : null,
-								})
-							}
-						/>
-					</SettingsGroup> : null}
-
-					{page === "features" ? <SettingsGroup title="Features">
-						<SwitchField
-							label="Fixture / plan labels"
-							offLabel={null}
-							onLabel={null}
-							checked={draft.showLabels}
-							onChange={(event) => update({ showLabels: event.target.checked })}
-						/>
-						<SwitchField
-							label="Show selection"
-							offLabel={null}
-							onLabel={null}
-							checked={draft.showSelection}
-							onChange={(event) =>
-								update({ showSelection: event.target.checked })
-							}
-						/>
-						<SelectField
-							label="Floor grid"
-							value={
-								draft.floorGrid == null ? "follow" : String(draft.floorGrid)
-							}
-							onChange={(value) =>
-								update({
-									floorGrid: value === "follow" ? null : value === "true",
-								})
-							}
-							options={[
-								{ value: "follow", label: "Follow view" },
-								{ value: "true", label: "Shown" },
-								{ value: "false", label: "Hidden" },
-							]}
-						/>
-						<label>
-							<span>Blender path</span>
-							<input
-								value={draft.blender}
-								placeholder="Find automatically"
-								onChange={(event) => update({ blender: event.target.value })}
-							/>
-						</label>
-					</SettingsGroup> : null}
+					<RenderingSettings draft={draft} update={update} />
+					<FeaturesSettings draft={draft} update={update} />
+					<PictureSettings draft={draft} update={update} />
 				</div>
 				{status ? (
 					<output className="viz-editor-status">{status}</output>
@@ -252,6 +109,183 @@ function SettingsGroup({
 			<h2>{title}</h2>
 			{children}
 		</section>
+	);
+}
+
+/** How the picture is rendered: quality, appearance and exposure. */
+function RenderingSettings({
+	draft,
+	update,
+}: {
+	draft: RendererSettings;
+	update: (change: Partial<RendererSettings>) => void;
+}) {
+	return (
+		<SettingsGroup title="Rendering">
+			<SelectField
+				label="Render quality"
+				value={draft.quality ?? "follow"}
+				onChange={(quality) =>
+					update({
+						quality:
+							quality === "follow"
+								? null
+								: (quality as NonNullable<RendererSettings["quality"]>),
+					})
+				}
+				options={[
+					{ value: "follow", label: "Follow source" },
+					{ value: "draft", label: "Draft" },
+					{ value: "standard", label: "Standard" },
+					{ value: "high", label: "High" },
+					{ value: "ultra", label: "Ultra" },
+				]}
+			/>
+			<SelectField
+				label="Appearance"
+				value={draft.theme}
+				onChange={(theme) => update({ theme })}
+				options={[
+					{ value: "light_on_dark", label: "Light on dark" },
+					{ value: "dark_on_light", label: "Dark on light" },
+				]}
+			/>
+			<NumberSetting
+				label="Environment brightness"
+				value={draft.ambient}
+				min={0}
+				max={1}
+				step={0.01}
+				onChange={(ambient) => update({ ambient })}
+				format={percent}
+			/>
+			<NumberSetting
+				label="Exposure"
+				value={draft.exposure}
+				min={0.05}
+				max={4}
+				step={0.05}
+				onChange={(exposure) => update({ exposure })}
+				format={(value) => `${value.toFixed(2)}×`}
+			/>
+		</SettingsGroup>
+	);
+}
+
+/** What the Visualizer draws besides the rig. */
+function FeaturesSettings({
+	draft,
+	update,
+}: {
+	draft: RendererSettings;
+	update: (change: Partial<RendererSettings>) => void;
+}) {
+	return (
+		<SettingsGroup title="Features">
+			<SwitchField
+				label="Fixture / plan labels"
+				offLabel={null}
+				onLabel={null}
+				checked={draft.showLabels}
+				onChange={(event) => update({ showLabels: event.target.checked })}
+			/>
+			<SwitchField
+				label="Show selection"
+				offLabel={null}
+				onLabel={null}
+				checked={draft.showSelection}
+				onChange={(event) =>
+					update({ showSelection: event.target.checked })
+				}
+			/>
+			<SelectField
+				label="Floor grid"
+				value={
+					draft.floorGrid == null ? "follow" : String(draft.floorGrid)
+				}
+				onChange={(value) =>
+					update({
+						floorGrid: value === "follow" ? null : value === "true",
+					})
+				}
+				options={[
+					{ value: "follow", label: "Follow view" },
+					{ value: "true", label: "Shown" },
+					{ value: "false", label: "Hidden" },
+				]}
+			/>
+			<label>
+				<span>Blender path</span>
+				<input
+					value={draft.blender}
+					placeholder="Find automatically"
+					onChange={(event) => update({ blender: event.target.value })}
+				/>
+			</label>
+		</SettingsGroup>
+	);
+}
+
+/** Persistence, crowds and the background. */
+function PictureSettings({
+	draft,
+	update,
+}: {
+	draft: RendererSettings;
+	update: (change: Partial<RendererSettings>) => void;
+}) {
+	return (
+		<SettingsGroup title="Picture">
+			<NumberSetting
+				label="Persistence of vision"
+				value={draft.persistence}
+				min={0}
+				max={1}
+				step={0.01}
+				onChange={(persistence) => update({ persistence })}
+				format={(value) => `${value.toFixed(2)} s`}
+			/>
+			<NumberSetting
+				label="Persistence falloff"
+				value={draft.persistenceFalloff}
+				min={1}
+				max={8}
+				step={0.1}
+				onChange={(persistenceFalloff) => update({ persistenceFalloff })}
+				format={(value) => `${value.toFixed(1)}×`}
+			/>
+			<NumberSetting
+				label="Crowd amount"
+				value={draft.crowdAmount}
+				min={0}
+				max={1}
+				step={0.01}
+				onChange={(crowdAmount) => update({ crowdAmount })}
+				format={percent}
+			/>
+			<label className="viz-renderer-background">
+				<span>Background color</span>
+				<input
+					type="color"
+					disabled={draft.background == null}
+					value={rgbToHex(draft.background ?? [0.03, 0.04, 0.05])}
+					onChange={(event) =>
+						update({ background: hexToRgb(event.target.value) })
+					}
+				/>
+			</label>
+			<SwitchField
+				label="Use custom background"
+				offLabel={null}
+				onLabel={null}
+				checked={draft.background != null}
+				onChange={(event) =>
+					update({
+						background: event.target.checked ? [0.03, 0.04, 0.05] : null,
+					})
+				}
+			/>
+		</SettingsGroup>
 	);
 }
 

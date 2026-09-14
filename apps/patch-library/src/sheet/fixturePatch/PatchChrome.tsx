@@ -1,5 +1,5 @@
 import { isVisualOnly } from "../patchUtils";
-import { Button, SwitchField } from "@tosklight/ui";
+import { Button, SelectField, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useState } from "react";
 import { TrashIcon } from "../../library/trashIcon";
@@ -69,7 +69,7 @@ export function PatchHeader() {
 			onSettings={(anchor) => setSettingsAnchor((open) => (open ? null : anchor.getBoundingClientRect()))}
 			info={patchHeaderInfo(controller)}
 			groups={[
-				quickViewGroup(controller),
+				...props.titleGroups,
 				{
 					id: "stage-preview",
 					actions: [
@@ -234,22 +234,6 @@ function patchCreateGroup(
 	};
 }
 
-/** The Architect's column quick views; a host that does not offer them gets an empty group. */
-function quickViewGroup({ columns, props }: PatchController) {
-	const active = activeQuickView(columns.hiddenColumns);
-	return {
-		id: "patch-views",
-		actions: props.quickViews
-			? PATCH_QUICK_VIEWS.map((view) => ({
-					id: `view-${view.id}`,
-					label: view.label,
-					active: active?.id === view.id,
-					onPress: () => columns.setHiddenColumns(quickViewHiddenColumns(view)),
-				}))
-			: [],
-	};
-}
-
 function PatchColumnSettings({ anchor, onClose }: { anchor: DOMRect; onClose: () => void }) {
 	return (
 		<WindowSettings
@@ -263,11 +247,37 @@ function PatchColumnSettings({ anchor, onClose }: { anchor: DOMRect; onClose: ()
 					label: "Columns",
 					content: (
 						<section>
+							<PatchQuickViewSelect />
 							<h3>Visible columns</h3>
 							<PatchColumnSwitches />
 						</section>
 					),
 				},
+			]}
+		/>
+	);
+}
+
+/**
+ * The Architect's column quick views. Choosing one shows exactly its columns; a hand-picked set
+ * matches none and reads Custom.
+ */
+function PatchQuickViewSelect() {
+	const { columns, props } = usePatchController();
+	if (!props.quickViews) return null;
+	const active = activeQuickView(columns.hiddenColumns);
+	return (
+		<SelectField
+			label="View"
+			ariaLabel="Column view"
+			value={active?.id ?? "custom"}
+			onChange={(id) => {
+				const view = PATCH_QUICK_VIEWS.find((candidate) => candidate.id === id);
+				if (view) columns.setHiddenColumns(quickViewHiddenColumns(view));
+			}}
+			options={[
+				...PATCH_QUICK_VIEWS.map(({ id, label }) => ({ value: id, label })),
+				...(active ? [] : [{ value: "custom", label: "Custom" }]),
 			]}
 		/>
 	);

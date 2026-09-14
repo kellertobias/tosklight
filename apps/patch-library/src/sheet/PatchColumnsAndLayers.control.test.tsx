@@ -174,22 +174,32 @@ describe("patch sheet columns", () => {
 		expect(headers()).not.toContain("Manufacturer");
 	});
 
-	it("offers the quick views only where the host asks for them", () => {
+	it("offers the quick views in the column settings only where the host asks for them", () => {
 		server.patch.fixtures = [wash("first", 1, 1, 1)];
+		const chooseView = (label: string) => {
+			fireEvent.click(screen.getByRole("button", { name: "Column view" }));
+			fireEvent.click(screen.getByRole("option", { name: label }));
+		};
 		render(<FixturePatchSetup />);
-		expect(screen.queryByRole("button", { name: "Compact" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		expect(screen.queryByRole("button", { name: "Column view" })).toBeNull();
 		cleanup();
 
 		render(<FixturePatchSetup quickViews />);
-		fireEvent.click(screen.getByRole("button", { name: "Compact" }));
+		// The views live in the settings, not in the title.
+		expect(screen.queryByRole("button", { name: "Compact" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		chooseView("Compact");
 		expect(headers()).toEqual(["Fixture ID", "Name", "Patch", "Layer", "Note"]);
 		expect(screen.getAllByRole("cell")).toHaveLength(5);
-		expect(screen.getByRole("button", { name: "Compact" })).toHaveClass("is-active");
+		expect(screen.getByRole("button", { name: "Column view" })).toHaveTextContent("Compact");
 
-		fireEvent.click(screen.getByRole("button", { name: "Visualization" }));
+		chooseView("Visualization");
 		expect(headers()).toContain("Bracket");
 		expect(headers()).not.toContain("Patch");
-		expect(screen.getByRole("button", { name: "Compact" })).not.toHaveClass("is-active");
+
+		fireEvent.click(screen.getByRole("switch", { name: "Bracket" }));
+		expect(screen.getByRole("button", { name: "Column view" })).toHaveTextContent("Custom");
 	});
 });
 

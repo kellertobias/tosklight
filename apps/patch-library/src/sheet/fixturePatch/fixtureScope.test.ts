@@ -55,6 +55,21 @@ describe("Visualizer patch screen scopes", () => {
 		expect(definitionMatchesScope(wash, "effects")).toBe(false);
 	});
 
+	it("lists lamps and effect devices together on the Architect's Patch screen, never Venue objects", () => {
+		for (const type of ["wash", "laser", "effect", "scenery", "fogger"])
+			expect(definitionMatchesScope(definition(type), "patch")).toBe(true);
+		expect(
+			definitionMatchesScope(definition("venue", "visual_only"), "patch"),
+		).toBe(false);
+		expect(
+			patchLayerIsVisible(
+				"effects",
+				[{ layer_id: "effects", definition: definition("laser") }],
+				"patch",
+			),
+		).toBe(true);
+	});
+
 	it("shows only empty layers or layers containing the current screen's fixtures", () => {
 		const fixtures = [
 			{ layer_id: "lights", definition: definition("wash") },

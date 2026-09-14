@@ -248,16 +248,10 @@ body {
 	min-height: 52px;
 }
 
-.viz-editor-machine-nav {
-	margin-top: auto;
-}
-
-.viz-editor-dmx-nav {
-	margin-top: 4px;
-}
-
+/* The show's screens sit at the top of the dock; Settings and the window actions at its foot. */
 .viz-editor-settings-nav {
 	min-height: 42px;
+	margin-top: auto;
 }
 
 .viz-editor-workspace {
@@ -736,6 +730,12 @@ body {
 	margin-top: 16px;
 }
 
+/* The Visualizer page is one page of boxes, two to a row. */
+.viz-renderer-settings-grid.is-two-column {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	max-width: 1180px;
+}
+
 .viz-renderer-settings-grid > section {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
@@ -1062,7 +1062,7 @@ body {
 }
 
 /*
- * The DMX screen. Values follows the desk's DMX Output window — dots that brighten with the level,
+ * The DMX settings page and the Patch screen's DMX tab. Values follows the desk's DMX Output window — dots that brighten with the level,
  * an information column beside them — and Patch uses the same rows with numbered cells that are
  * lit where the rig occupies an address and dark where nothing does.
  */
@@ -1875,6 +1875,22 @@ body {
 	flex: none;
 	height: 31px;
 	min-height: 31px;
+	font-size: 12px;
+}
+
+/* What the operator adds to the drawing, one row under the title. */
+.cad-add-toolbar {
+	display: flex;
+	flex: none;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding: 4px 6px;
+	border-bottom: 1px solid var(--border-subtle, #1d2530);
+	background: #0a0e13;
+}
+
+.cad-add-toolbar > .ui-button {
+	min-height: 32px;
 	font-size: 12px;
 }
 
