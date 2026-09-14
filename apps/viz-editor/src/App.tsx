@@ -135,6 +135,35 @@ function ArchitectPatchSheet(
 	);
 }
 
+/**
+ * Saves or deletes one patch layer in the document. The sidebar shows the change at once and takes
+ * it back, with the reason, when the document refuses it.
+ */
+async function changeSessionLayers(
+	layers: readonly PatchLayer[],
+	setLayers: (layers: readonly PatchLayer[]) => void,
+	report: (reason: unknown) => void,
+	change: { save: PatchLayer } | { remove: string },
+) {
+	if ("save" in change) {
+		const { save } = change;
+		setLayers(
+			layers.some((existing) => existing.id === save.id)
+				? layers.map((existing) => (existing.id === save.id ? save : existing))
+				: [...layers, save],
+		);
+	} else setLayers(layers.filter((layer) => layer.id !== change.remove));
+	try {
+		if ("save" in change) await documentSession.savePatchLayer(change.save);
+		else await documentSession.deletePatchLayer(change.remove);
+	} catch (reason) {
+		setLayers(layers);
+		report(reason);
+		return false;
+	}
+	return true;
+}
+
 export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
 	const [profiles, setProfiles] = useState<readonly FixtureProfile[]>([]);
@@ -408,24 +437,10 @@ export function App() {
 				fixtureVisibility,
 				fixtureNotes,
 				unresolvedMvrFixtures: [],
-				savePatchLayer: async (layer) => {
-					const previous = layers;
-					setLayers((current) =>
-						current.some((existing) => existing.id === layer.id)
-							? current.map((existing) =>
-									existing.id === layer.id ? layer : existing,
-								)
-							: [...current, layer],
-					);
-					try {
-						await documentSession.savePatchLayer(layer);
-					} catch (reason) {
-						setLayers(previous);
-						report(reason);
-						return false;
-					}
-					return true;
-				},
+				savePatchLayer: (layer) =>
+					changeSessionLayers(layers, setLayers, report, { save: layer }),
+				deletePatchLayer: (layerId) =>
+					changeSessionLayers(layers, setLayers, report, { remove: layerId }),
 				saveFixtureVisibility: async (visibility) => {
 					const previous = fixtureVisibility;
 					setFixtureVisibility((current) => {

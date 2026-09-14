@@ -39,6 +39,33 @@ export async function createLayer(
 	}
 }
 
+/**
+ * Deletes a stored layer. Its fixtures stay in the show: they move to the default layer first, as
+ * one patch change, so none is left pointing at a layer that is gone.
+ */
+export async function deleteLayer(
+	controller: PatchController,
+	layerId: string,
+) {
+	const library = controller.library;
+	if (!library?.deletePatchLayer || layerId === "default") return false;
+	const members = controller.data.all.filter(
+		(fixture) => (fixture.layer_id || "default") === layerId,
+	);
+	if (
+		members.length &&
+		!(await controller.patch.patchFixtures(
+			members.map((fixture) =>
+				changedPatchFixtureCandidate(fixture, { layer_id: "default" }),
+			),
+		))
+	)
+		return false;
+	if (!(await library.deletePatchLayer(layerId))) return false;
+	if (controller.ui.activeLayer === layerId) controller.ui.setActiveLayer("all");
+	return true;
+}
+
 export async function toggleLayerVisibility(
 	controller: PatchController,
 	layerId: string,

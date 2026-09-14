@@ -2656,3 +2656,42 @@
 .patch-layers .patch-layer-unassigned b {
 	font-style: italic;
 }
+
+.patch-layer-row {
+	position: relative;
+}
+
+.patch-layer-row.has-delete > button:first-child {
+	padding-right: 48px;
+}
+
+.patch-layers button.patch-layer-delete {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	width: 36px;
+	min-height: 36px;
+	height: 36px;
+	margin: 0;
+	padding: 0;
+	justify-content: center;
+	border-color: transparent;
+	background: transparent;
+	color: var(--muted, currentColor);
+}
+
+.patch-layers button.patch-layer-delete:hover,
+.patch-layers button.patch-layer-delete:focus-visible {
+	border-color: var(--line);
+	color: var(--red, currentColor);
+}
+
+.patch-layer-delete svg {
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}

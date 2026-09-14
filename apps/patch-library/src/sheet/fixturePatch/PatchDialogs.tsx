@@ -1,10 +1,12 @@
 import { Button, ModalRegistration, TextInput } from "@tosklight/ui";
+import type { PatchLayer } from "../../wire";
 import { fixtureRange } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { cancelEdit } from "./editSession";
 import {
 	createLayer,
 	deleteFixture,
+	deleteLayer,
 	unpatchConflictsAndApply,
 	unpatchCurrentFixture,
 	unpatchFixtureFromDeleteConfirm,
@@ -150,6 +152,57 @@ export function DeleteConfirm() {
 					</Button>
 				</footer>
 			</section>
+			</div>
+		</ModalRegistration>
+	);
+}
+
+/** Asks before a layer is deleted, and says what becomes of its fixtures. */
+export function DeleteLayerConfirm({
+	layer,
+	onClose,
+}: {
+	layer: PatchLayer;
+	onClose: () => void;
+}) {
+	const controller = usePatchController();
+	const count = controller.data.all.filter(
+		(fixture) => (fixture.layer_id || "default") === layer.id,
+	).length;
+	const question = `Delete layer ${layer.name}?`;
+	return (
+		<ModalRegistration onClose={onClose}>
+			<div className="stacked-modal-layer">
+				<section
+					className="nested-modal patch-small-modal"
+					role="alertdialog"
+					aria-modal="true"
+					aria-label={question}
+				>
+					<h3>{question}</h3>
+					<p>
+						{layer.locked
+							? "The layer is locked. Unlock it before deleting it."
+							: count
+								? `Its ${count} fixture${count === 1 ? "" : "s"} stay in the show and move to No Layer Assigned.`
+								: "The layer holds no fixtures."}
+					</p>
+					<footer>
+						<Button onClick={onClose}>Cancel</Button>
+						<Button
+							className="danger"
+							autoFocus
+							disabled={Boolean(layer.locked)}
+							onClick={() =>
+								void deleteLayer(controller, layer.id).then(
+									(deleted) => deleted && onClose(),
+								)
+							}
+						>
+							Delete layer
+						</Button>
+					</footer>
+				</section>
 			</div>
 		</ModalRegistration>
 	);

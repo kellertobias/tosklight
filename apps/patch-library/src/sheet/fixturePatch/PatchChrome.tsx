@@ -2,6 +2,8 @@ import { isVisualOnly } from "../patchUtils";
 import { Button, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useState } from "react";
+import { TrashIcon } from "../../library/trashIcon";
+import type { PatchLayer } from "../../wire";
 import {
 	NO_LAYER_ID,
 	type PatchController,
@@ -14,6 +16,7 @@ import {
 	toggleLayerVisibility,
 } from "./fixtureActions";
 import { addMultipatch } from "./multipatchActions";
+import { DeleteLayerConfirm } from "./PatchDialogs";
 import {
 	activeQuickView,
 	PATCH_QUICK_VIEWS,
@@ -242,6 +245,11 @@ function PatchColumnSwitches() {
 export function PatchLayers() {
 	const controller = usePatchController();
 	const { data, ui } = controller;
+	const [deleting, setDeleting] = useState<PatchLayer | null>(null);
+	const canDelete = (layer: PatchLayer) =>
+		Boolean(controller.library?.deletePatchLayer) &&
+		layer.id !== "default" &&
+		ui.layerModal !== "select";
 	return (
 		<aside className="patch-layers">
 			<div className="patch-layers-title">
@@ -280,28 +288,44 @@ export function PatchLayers() {
 				</Button>
 			) : null}
 			{data.layers.map((layer) => (
-				<Button
+				<div
 					key={layer.id}
-					className={ui.activeLayer === layer.id ? "active" : ""}
-					onClick={() =>
-						ui.layerModal === "select"
-							? void selectLayer(controller, layer.id)
-							: ui.setActiveLayer(layer.id)
-					}
+					className={`patch-layer-row${canDelete(layer) ? " has-delete" : ""}`}
 				>
-					<span className="patch-layer-copy">
-						<b>{layer.name}</b>
-						{layer.locked ? <small>Layer Locked</small> : null}
-					</span>
-					<span>
-						{
-							data.scoped.filter(
-								(fixture) => (fixture.layer_id || "default") === layer.id,
-							).length
+					<Button
+						className={ui.activeLayer === layer.id ? "active" : ""}
+						onClick={() =>
+							ui.layerModal === "select"
+								? void selectLayer(controller, layer.id)
+								: ui.setActiveLayer(layer.id)
 						}
-					</span>
-				</Button>
+					>
+						<span className="patch-layer-copy">
+							<b>{layer.name}</b>
+							{layer.locked ? <small>Layer Locked</small> : null}
+						</span>
+						<span>
+							{
+								data.scoped.filter(
+									(fixture) => (fixture.layer_id || "default") === layer.id,
+								).length
+							}
+						</span>
+					</Button>
+					{canDelete(layer) ? (
+						<Button
+							className="patch-layer-delete"
+							aria-label={`Delete layer ${layer.name}`}
+							onClick={() => setDeleting(layer)}
+						>
+							<TrashIcon />
+						</Button>
+					) : null}
+				</div>
 			))}
+			{deleting ? (
+				<DeleteLayerConfirm layer={deleting} onClose={() => setDeleting(null)} />
+			) : null}
 		</aside>
 	);
 }

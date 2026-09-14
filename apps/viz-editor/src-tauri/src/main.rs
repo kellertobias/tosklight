@@ -238,6 +238,7 @@ fn main() {
             session::preview_is_active,
             session::patch_layers,
             session::save_patch_layer,
+            session::delete_patch_layer,
             session::fixture_visibility,
             session::save_fixture_visibility,
             session::fixture_notes,

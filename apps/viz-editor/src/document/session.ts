@@ -513,6 +513,8 @@ export const documentSession = {
 	patchLayers: () => invoke<PatchLayer[]>("patch_layers"),
 	savePatchLayer: (layer: PatchLayer) =>
 		invoke<PatchLayer>("save_patch_layer", { layer }),
+	deletePatchLayer: (id: string) =>
+		invoke<boolean>("delete_patch_layer", { id }),
 	fixtureVisibility: () => invoke<FixtureVisibility[]>("fixture_visibility"),
 	saveFixtureVisibility: (visibility: FixtureVisibility) =>
 		invoke<FixtureVisibility>("save_fixture_visibility", { visibility }),

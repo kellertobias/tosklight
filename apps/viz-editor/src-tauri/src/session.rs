@@ -584,6 +584,32 @@ pub fn save_patch_layer(
     Ok(saved)
 }
 
+/// Remove one patch layer from the document.
+///
+/// The sheet moves the layer's fixtures to the default layer first, as one patch change, so no
+/// fixture is left pointing at a layer that is gone. The default layer itself is where they go, so it
+/// is never removed.
+#[tauri::command]
+pub fn delete_patch_layer(
+    app: tauri::AppHandle,
+    session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
+    id: String,
+) -> Answer<bool> {
+    if id == "default" {
+        return Err("the default layer cannot be deleted".to_owned());
+    }
+    let deleted = session.change(|document| {
+        document
+            .delete_object("patch_layer", &id)
+            .map_err(|error| error.to_string())
+    })?;
+    let revision =
+        session.with(|document| document.patch_revision().map_err(|error| error.to_string()))?;
+    crate::cad::emit_scene_state_delta(&app, &session, &cad, revision)?;
+    Ok(deleted)
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PatchLayerDto {
     pub id: String,

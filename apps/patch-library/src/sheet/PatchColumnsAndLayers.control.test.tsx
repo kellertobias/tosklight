@@ -23,6 +23,7 @@ const server = vi.hoisted(() => ({
 	setSelection: vi.fn(),
 	refresh: vi.fn(),
 	savePatchLayer: vi.fn(),
+	deletePatchLayer: vi.fn() as ((layerId: string) => Promise<boolean>) | undefined,
 	saveFixtureVisibility: vi.fn(),
 	saveFixtureNote: vi.fn(),
 }));
@@ -32,13 +33,15 @@ const selection = vi.hoisted(() => ({
 	replace: vi.fn(),
 }));
 
+const patchFixtures = vi.hoisted(() => vi.fn());
+
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<object>()),
 	usePatchHost: () => ({
 		library: server,
 		selection,
-		editArmed: false,
-		desktopEditing: false,
+		editArmed: true,
+		desktopEditing: true,
 		setEditArmed: vi.fn(),
 	}),
 }));
@@ -54,7 +57,7 @@ vi.mock("../state/PatchContext", async (importOriginal) => ({
 		fixtures: server.patch.fixtures,
 		pendingFixtureIds: new Set<string>(),
 		error: null,
-		patchFixtures: vi.fn(),
+		patchFixtures: patchFixtures,
 		updateFixture: vi.fn(),
 		updatePolicy: vi.fn(),
 		deleteFixture: vi.fn(),
@@ -231,5 +234,76 @@ describe("patch sheet layers", () => {
 		server.patch.fixtures = [venue("truss", 2, "trusses")];
 		render(<FixturePatchSetup scope="venue" />);
 		expect(layersSidebar().queryByRole("button", { name: /^No Layer Assigned/ })).toBeNull();
+	});
+});
+
+describe("deleting a layer", () => {
+	beforeEach(() => {
+		server.deletePatchLayer = vi.fn().mockResolvedValue(true);
+		patchFixtures.mockReset().mockResolvedValue([]);
+	});
+
+	it("offers a bin beside every stored layer but the default one", () => {
+		server.patchLayers = [
+			{ body: { id: "default", name: "Default", order: 0 } },
+			{ body: { id: "front", name: "Front", order: 1 } },
+		];
+		server.patch.fixtures = [wash("light", 1, 1, 1)];
+		render(<FixturePatchSetup showAllLayersRequest={0} />);
+		fireEvent.click(screen.getByRole("switch", { name: "Show all layers" }));
+		expect(
+			layersSidebar().getByRole("button", { name: "Delete layer Front" }),
+		).toBeInTheDocument();
+		expect(
+			layersSidebar().queryByRole("button", { name: "Delete layer Default" }),
+		).toBeNull();
+	});
+
+	it("offers no bin where the host deletes layers another way, as a desk does", () => {
+		server.deletePatchLayer = undefined;
+		server.patchLayers = [{ body: { id: "front", name: "Front", order: 1 } }];
+		const front = wash("front", 2, 1, 10);
+		front.layer_id = "front";
+		server.patch.fixtures = [front];
+		render(<FixturePatchSetup />);
+		expect(
+			layersSidebar().queryByRole("button", { name: "Delete layer Front" }),
+		).toBeNull();
+	});
+
+	it("moves the layer's fixtures to the default layer, then deletes it, after confirming", async () => {
+		server.patchLayers = [{ body: { id: "front", name: "Front", order: 1 } }];
+		const front = wash("front", 2, 1, 10);
+		front.layer_id = "front";
+		server.patch.fixtures = [wash("light", 1, 1, 1), front];
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(
+			layersSidebar().getByRole("button", { name: "Delete layer Front" }),
+		);
+		const confirm = screen.getByRole("alertdialog", {
+			name: "Delete layer Front?",
+		});
+		expect(confirm).toHaveTextContent(
+			"Its 1 fixture stay in the show and move to No Layer Assigned.",
+		);
+		expect(server.deletePatchLayer).not.toHaveBeenCalled();
+		fireEvent.click(within(confirm).getByRole("button", { name: "Delete layer" }));
+
+		await vi.waitFor(() =>
+			expect(server.deletePatchLayer).toHaveBeenCalledWith("front"),
+		);
+		expect(patchFixtures).toHaveBeenCalledOnce();
+		expect(patchFixtures.mock.calls[0][0]).toEqual([
+			expect.objectContaining({
+				fixture: expect.objectContaining({ fixture_id: "front", layer_id: "default" }),
+			}),
+		]);
+		expect(patchFixtures.mock.invocationCallOrder[0]).toBeLessThan(
+			(server.deletePatchLayer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+		);
+		await vi.waitFor(() =>
+			expect(screen.queryByRole("alertdialog", { name: "Delete layer Front?" })).toBeNull(),
+		);
 	});
 });

@@ -32,6 +32,11 @@ export interface PatchLibraryHost {
 	 */
 	unresolvedMvrFixtures: readonly unknown[];
 	savePatchLayer(layer: PatchLayer): Promise<boolean>;
+	/**
+	 * Removes a stored layer. Only a host that offers it gets a delete button beside each layer; a
+	 * desk deletes layers from its keyboard and hardware instead.
+	 */
+	deletePatchLayer?(layerId: string): Promise<boolean>;
 	saveFixtureVisibility?(visibility: FixtureVisibility): Promise<boolean>;
 	saveFixtureNote?(note: FixtureNote): Promise<boolean>;
 }

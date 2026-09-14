@@ -114,6 +114,11 @@ empty. An empty layer you created stays listed. Selecting fixtures in the drawin
 **Show all** on only when that selection happens; returning to the screen later does not switch it
 on again.
 
+To delete a layer, press the bin to the right of its fixture count and confirm. Its fixtures stay
+in the show and move to **No Layer Assigned**. A locked layer must be unlocked first, and the
+default layer has no bin. The bin is the Architect's; on the desk, delete a layer with the keyboard
+shortcut or the hardware button.
+
 While a layer is open, selecting stays in it: clicking, Shift and drag ranges, and Ctrl-click
 only ever select that layer's fixtures, and the sheet keeps showing the layer. A selection made in
 the drawing or another window opens **All fixtures** only when it includes fixtures outside the
