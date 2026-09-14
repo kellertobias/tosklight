@@ -59,6 +59,7 @@ fn document(name: &str) -> (PlanningDocument, PathBuf) {
                     mode_id,
                 },
                 patch: PatchedFixturePatch {
+                    scenery_options: Default::default(),
                     scenery_size_metres: None,
                     fixture_id: FixtureId(Uuid::new_v4()),
                     fixture_number: Some(7),
@@ -661,6 +662,7 @@ fn preview_document_with(
                     mode_id,
                 },
                 patch: PatchedFixturePatch {
+                    scenery_options: Default::default(),
                     scenery_size_metres: None,
                     fixture_id: FixtureId(fixture_id),
                     fixture_number: Some(1),

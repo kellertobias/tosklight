@@ -1185,7 +1185,6 @@ mod tests {
         FixtureLocation, FixtureProfile, FixtureVector, MultiPatchInstance, PatchedFixturePatch,
         PatchedFixtureProfileReference, SplitPatch,
     };
-    use light_show::{FixtureProfileRevision, ShowStore};
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::PathBuf;
     use uuid::Uuid;
@@ -1244,12 +1243,8 @@ mod tests {
         profile.name = "CAD light".into();
         let profile_id = profile.id;
         let mode_id = profile.modes[0].id;
-        ShowStore::open(&path)
-            .unwrap()
-            .insert_fixture_profile_revision(
-                &FixtureProfileRevision::from_profile(serde_json::to_value(profile).unwrap())
-                    .unwrap(),
-            )
+        document
+            .retain_fixture_profile(serde_json::to_value(profile).unwrap())
             .unwrap();
         let ids = [Uuid::new_v4(), Uuid::new_v4()];
         let fixtures = ids
@@ -1284,6 +1279,7 @@ mod tests {
                         mode_id,
                     },
                     patch: PatchedFixturePatch {
+                        scenery_options: Default::default(),
                         scenery_size_metres: None,
                         fixture_id: FixtureId(*id),
                         fixture_number: Some(index as u32 + 1),

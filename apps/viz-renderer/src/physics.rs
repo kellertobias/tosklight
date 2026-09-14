@@ -367,6 +367,7 @@ mod tests {
                     roughness: 0.8,
                     kind: SceneryKind::Curtain,
                     chords: 1,
+                    detail: Default::default(),
                 },
                 program: PhysicsProgram {
                     script: Some(Arc::from(

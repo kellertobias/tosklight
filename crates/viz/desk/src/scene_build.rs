@@ -73,6 +73,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
         placements.push(root_placement.source);
         instances.push(PhysicalInstance {
             scenery_size_metres: placed_scenery_size(fixture.scenery_size_metres),
+            scenery_options: fixture.scenery_options.clone(),
             instance_id: fixture.fixture_id,
             name: fixture.name.clone(),
             split_patches: split_patches(&fixture.split_patches),
@@ -101,6 +102,8 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
             placements.push(placement.source);
             instances.push(PhysicalInstance {
                 scenery_size_metres: placed_scenery_size(multipatch.scenery_size_metres),
+                // Venue objects cannot be multi-patched, so an instance never has options.
+                scenery_options: Default::default(),
                 instance_id: multipatch.id,
                 name: if multipatch.name.is_empty() {
                     format!("{} \u{2022} multi-patch", fixture.name)
@@ -564,6 +567,7 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
         roughness: 0.85,
         kind: SceneryKind::Floor,
         chords: 0,
+        detail: Default::default(),
     });
     // No backdrop is invented. A show that wants one places a `Venue` object; anything else
     // would put a surface in the picture that the operator never rigged.
@@ -603,6 +607,7 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
             },
             kind,
             chords,
+            detail: Default::default(),
         });
     }
     scenery

@@ -185,6 +185,7 @@ mod tests {
             roughness: 0.8,
             kind: SceneryKind::Floor,
             chords: 0,
+            detail: Default::default(),
         });
         scene.recompute_bounds();
         scene

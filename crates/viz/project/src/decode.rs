@@ -1280,13 +1280,12 @@ mod strobe_and_laser_tests {
             scenery: viz_scene::SceneryObject {
                 id,
                 name: "Kabuki".into(),
-                position: glam::Vec3::ZERO,
-                rotation_degrees: glam::Vec3::ZERO,
                 size: glam::Vec3::ONE,
                 colour: [0.2; 3],
                 roughness: 0.8,
                 kind: viz_scene::SceneryKind::Curtain,
                 chords: 1,
+                ..Default::default()
             },
             program: viz_scene::PhysicsProgram::default(),
             body: viz_scene::PhysicsBody {

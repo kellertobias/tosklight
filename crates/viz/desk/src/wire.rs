@@ -3,7 +3,7 @@
 //! Unknown fields are tolerated and never fatal: the desk may add fields at any time and the
 //! renderer must keep working (api-rules §5).
 
-use light_fixture::InstalledFixtureAppearance;
+use light_fixture::{InstalledFixtureAppearance, SceneryOptions};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -147,9 +147,15 @@ pub struct PatchFixture {
     pub split_patches: Vec<SplitAssignment>,
     #[serde(default)]
     pub location: Location,
-    /// The size a generated Venue object was placed at, in metres.
-    #[serde(default, rename = "scenerySizeMetres")]
+    /// The size a generated Venue object was placed at, in millimetres like every other measurement
+    /// the patch carries. A desk and the planning server both write `scenery_size_metres`; the
+    /// camelCase spelling is still accepted.
+    #[serde(default, alias = "scenerySizeMetres")]
     pub scenery_size_metres: Option<Location>,
+    /// What an operator chose for a generated Venue object beyond its size. Both the desk and the
+    /// planning server write `scenery_options`; the camelCase spelling is accepted as well.
+    #[serde(default, alias = "sceneryOptions")]
+    pub scenery_options: SceneryOptions,
     #[serde(default)]
     pub rotation: Rotation,
     /// The 3D Point this fixture is slaved to. Absent for a fixture placed against the stage.
@@ -213,8 +219,10 @@ pub struct MultiPatch {
     pub split_patches: Vec<SplitAssignment>,
     #[serde(default)]
     pub location: Location,
-    /// The size a generated Venue object was placed at, in metres.
-    #[serde(default, rename = "scenerySizeMetres")]
+    /// The size a generated Venue object was placed at, in millimetres like every other measurement
+    /// the patch carries. A desk and the planning server both write `scenery_size_metres`; the
+    /// camelCase spelling is still accepted.
+    #[serde(default, alias = "scenerySizeMetres")]
     pub scenery_size_metres: Option<Location>,
     #[serde(default)]
     pub rotation: Rotation,

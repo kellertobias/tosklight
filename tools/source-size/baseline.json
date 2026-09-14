@@ -6,14 +6,14 @@
     "apps/light-desktop/src/components/control/PlaybackConfigurationTabs.tsx": 1257,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx": 1325,
     "apps/media/src/features/layers/MediaPanePage.tsx": 1743,
-    "apps/viz-editor/src-tauri/src/cad.rs": 1576,
+    "apps/viz-editor/src-tauri/src/cad.rs": 1572,
     "apps/viz-editor/src/MediaWorkspace.tsx": 1238,
     "apps/viz-renderer/src/app.rs": 1324,
     "crates/light/adapters/headless/src/runtime/extensions_runtime.rs": 1223,
     "crates/light/adapters/headless/src/runtime/macros_v2.rs": 1654,
     "crates/media/adapters/library/src/storage.rs": 1215,
     "crates/media/domain/src/layer.rs": 1642,
-    "crates/viz/project/src/decode.rs": 1330,
+    "crates/viz/project/src/decode.rs": 1329,
     "crates/viz/project/src/plan.rs": 1254
   },
   "functions": {
@@ -61,11 +61,11 @@
     "apps/ui-library/src/playback/VirtualPlaybackGrid.tsx::javascript:function:VirtualizedPlaybackGrid:af79193287d5:1": 153,
     "apps/ui-library/src/playback/VirtualPlaybackGrid.tsx::javascript:function:VirtualPlaybackBox:e49a00a208b9:1": 154,
     "apps/viz-editor/src-tauri/src/cad.rs::rust:function:entities:c1539f6b45b7:1": 155,
-    "apps/viz-editor/src/App.tsx::javascript:function:App:47f14c277946:1": 538,
+    "apps/viz-editor/src/App.tsx::javascript:function:App:47f14c277946:1": 524,
     "apps/viz-editor/src/cad/CadApp.tsx::javascript:function:CadApp:5277956b9a1d:1": 547,
     "apps/viz-editor/src/LiveDmxInputsPanel.tsx::javascript:function:LiveDmxInputsPanel:2d7ff4eb6072:1": 202,
     "apps/viz-editor/src/MediaWorkspace.tsx::javascript:function:MediaWorkspace:ffd720049fd9:1": 405,
-    "apps/viz-editor/src/RendererSettingsWorkspace.tsx::javascript:function:RendererSettingsWorkspace:3c41215921fc:1": 290,
+    "apps/viz-editor/src/RendererSettingsWorkspace.tsx::javascript:function:RendererSettingsWorkspace:3c41215921fc:1": 237,
     "apps/viz-renderer/src/app/draw.rs::rust:function:draw_session:93a254bed8dc:1": 172,
     "apps/viz-renderer/src/embedded.rs::rust:function:run:acf29d5ab127:1": 156,
     "apps/viz-renderer/src/physics.rs::rust:function:run:962689db0059:1": 203,
@@ -83,7 +83,6 @@
     "crates/viz/desk/src/provider.rs::rust:function:watch:b47d355f1855:1": 175,
     "crates/viz/desk/src/scene_build.rs::rust:function:build_media:37efb85c7c5c:1": 169,
     "crates/viz/document/src/media.rs::rust:function:validate:b72f0c353398:1": 174,
-    "crates/viz/project/src/plan/compile_instances.rs::rust:function:compile_instances:a1f140b293b0:1": 162,
     "crates/viz/render/src/instances/media.rs::rust:function:push_media:40c036e43a0b:1": 209
   }
 }

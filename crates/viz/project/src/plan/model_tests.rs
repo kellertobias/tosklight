@@ -23,6 +23,7 @@ fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            scenery_options: Default::default(),
             scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
             name: "Test".into(),
@@ -123,6 +124,7 @@ fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            scenery_options: Default::default(),
             scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
             name: "Embedded Robin DLS".into(),
@@ -202,6 +204,7 @@ fn shipped_jbled_a7_home_shutter_is_steady_and_open_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            scenery_options: Default::default(),
             scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
             name: "JBLED A7".into(),
@@ -267,6 +270,7 @@ fn shipped_moving_light_models_apply_the_profile_head_offset() {
             profile: Arc::new(profile),
             mode_id,
             instances: vec![PhysicalInstance {
+                scenery_options: Default::default(),
                 scenery_size_metres: None,
                 instance_id: Uuid::new_v4(),
                 name: "Model check".into(),
@@ -770,6 +774,64 @@ fn a_generated_truss_is_scenery_at_its_placed_length_rather_than_a_model() {
     let scenery = &compiled.scene.scenery[0];
     assert_eq!(scenery.chords, declared.chords);
     assert_eq!(scenery.size.x, declared.default_size_metres.x);
+}
+
+fn shipped_venue(name: &str) -> PatchedFixture {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+        "../../../assets/fixture-library/{name}.toskfixture"
+    ));
+    let profile =
+        Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+    let mut fixture = patched("rigging", ProfileOptics::default());
+    fixture.mode_id = profile.modes[0].id;
+    fixture.profile = profile;
+    fixture
+}
+
+/// A chain is drawn with the ends chosen for this one, and a chain nobody chose ends for hangs from
+/// a hoist by a direct hook.
+#[test]
+fn a_placed_chain_is_drawn_with_the_ends_chosen_for_it() {
+    let mut fixture = shipped_venue("venue--chain");
+    let compiled = compile(std::slice::from_ref(&fixture));
+    let unchosen = compiled.scene.scenery[0].detail;
+    assert_eq!(
+        compiled.scene.scenery[0].kind,
+        viz_scene::SceneryKind::Chain
+    );
+    assert!(unchosen.hoist && !unchosen.steelflex_loop && !unchosen.deco);
+
+    fixture.instances[0].scenery_options = light_fixture::SceneryOptions {
+        chain_top: Some(light_fixture::ChainTopEnd::Direct),
+        chain_bottom: Some(light_fixture::ChainBottomEnd::SteelflexLoop),
+        ..Default::default()
+    };
+    let chosen = compile(std::slice::from_ref(&fixture)).scene.scenery[0].detail;
+    assert!(!chosen.hoist && chosen.steelflex_loop);
+}
+
+/// A curtain is the colour chosen for it; one nobody chose a colour for stays black serge.
+#[test]
+fn a_placed_curtain_is_drawn_in_the_colour_chosen_for_it() {
+    let mut fixture = shipped_venue("venue--curtain");
+    let serge = compile(std::slice::from_ref(&fixture)).scene.scenery[0].colour;
+    assert!(serge.iter().all(|channel| *channel < 0.05), "{serge:?}");
+
+    fixture.instances[0].scenery_options = light_fixture::SceneryOptions {
+        colour_srgb: Some("#FF0000".into()),
+        ..Default::default()
+    };
+    let red = compile(std::slice::from_ref(&fixture)).scene.scenery[0].colour;
+    assert_eq!(red, [1.0, 0.0, 0.0]);
+}
+
+/// A deco truss says so to the renderer; a standard one does not.
+#[test]
+fn a_deco_truss_is_drawn_with_crossed_bracing() {
+    let deco = compile(&[shipped_venue("venue--three-point-deco-truss")]);
+    assert!(deco.scene.scenery[0].detail.deco);
+    let standard = compile(&[shipped_venue("venue--three-point-truss")]);
+    assert!(!standard.scene.scenery[0].detail.deco);
 }
 
 #[test]

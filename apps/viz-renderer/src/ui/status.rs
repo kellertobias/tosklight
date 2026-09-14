@@ -1001,6 +1001,7 @@ mod fixture_label_tests {
             roughness: 1.0,
             kind: SceneryKind::Curtain,
             chords: 0,
+            detail: Default::default(),
         });
         hidden.recompute_bounds();
         assert!(

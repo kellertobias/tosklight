@@ -30,7 +30,10 @@ pub use diagnostics::{
     SourceProtocol, UniverseGrade, UniverseHealth,
 };
 pub use glam;
-pub use model::{FixtureModel, ModelError, ModelPart, ModelPartKind, read_glb, read_glb_nodes};
+pub use model::{
+    FixtureModel, ModelError, ModelPart, ModelPartKind, VENUE_MODEL_MAX_TRIANGLES, read_glb,
+    read_glb_nodes, read_glb_with_limit,
+};
 pub use persistence::{
     DEFAULT_DECAY_SECONDS, DEFAULT_FALLOFF, DEFAULT_THRESHOLD, PersistencePreference,
 };
@@ -48,7 +51,7 @@ pub use scene::{
     FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MediaCrop, MediaProjector,
     MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PhysicsBody,
     PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, Scene,
-    SceneryKind, SceneryObject, SourceForm, euler_degrees,
+    SceneryDetail, SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
 pub use uuid;
 pub use values::{

@@ -7,7 +7,7 @@
 
 use light_application::{PatchProfileRevisionProjection, PatchSnapshot};
 use light_fixture::{
-    InstalledFixtureAppearance, MultiPatchInstance, PatchedFixturePatch, SplitPatch,
+    InstalledFixtureAppearance, MultiPatchInstance, PatchedFixturePatch, SceneryOptions, SplitPatch,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -62,6 +62,14 @@ pub struct FixtureDto {
     pub bracket_angle: f32,
     pub shaper_angle: Option<f32>,
     pub installed_appearance: InstalledFixtureAppearance,
+    /// The size a generated Venue object was placed at, in millimetres like every other measurement
+    /// here. Absent means its profile's own default. The renderer reads it under this name, as it
+    /// does from a desk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scenery_size_metres: Option<LocationDto>,
+    /// What an operator chose for a generated Venue object beyond its size.
+    #[serde(skip_serializing_if = "SceneryOptions::is_empty")]
+    pub scenery_options: SceneryOptions,
 }
 
 #[derive(Debug, Serialize)]
@@ -170,6 +178,12 @@ fn fixture(
         bracket_angle: patch.bracket_angle,
         shaper_angle: patch.shaper_angle,
         installed_appearance: patch.installed_appearance.clone(),
+        scenery_size_metres: patch.scenery_size_metres.map(|size| LocationDto {
+            x: size.x.round() as i32,
+            y: size.y.round() as i32,
+            z: size.z.round() as i32,
+        }),
+        scenery_options: patch.scenery_options.clone(),
     }
 }
 

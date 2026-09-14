@@ -163,6 +163,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         roughness: 0.85,
         kind: SceneryKind::Floor,
         chords: 0,
+        detail: Default::default(),
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::nil(),
@@ -174,6 +175,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         roughness: 0.9,
         kind: SceneryKind::Wall,
         chords: 0,
+        detail: Default::default(),
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::nil(),
@@ -185,6 +187,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         roughness: 0.75,
         kind: SceneryKind::Riser,
         chords: 0,
+        detail: Default::default(),
     });
 }
 

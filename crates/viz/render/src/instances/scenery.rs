@@ -54,6 +54,7 @@ fn push_object(frame: &mut FrameInstances, object: &SceneryObject, style: &Frame
         SceneryKind::Curtain => push_curtain(frame, object, orientation, colour),
         SceneryKind::Railing => push_railing(frame, object, orientation, colour),
         SceneryKind::MirrorBall => push_mirror_ball(frame, object, orientation),
+        SceneryKind::Chain => push_chain(frame, object, orientation, colour),
         SceneryKind::Floor | SceneryKind::Wall | SceneryKind::Riser | SceneryKind::Prop => {
             let model =
                 Mat4::from_scale_rotation_translation(object.size, orientation, object.position);
@@ -152,8 +153,11 @@ fn push_truss(frame: &mut FrameInstances, object: &SceneryObject, orientation: Q
     if chords.len() < 2 {
         return;
     }
-    // Bracing: a zig-zag between neighbouring chords, in bays about a third of a metre long.
-    let bays = ((length / 0.34).round() as usize).clamp(1, 160);
+    // Bracing: a zig-zag between neighbouring chords, in bays as long as the section is deep — a
+    // 0.34 m section every third of a metre, a large 0.52 m one every half metre — so a length
+    // repeats the section's own bays rather than stretching one pattern to fit.
+    let bay_target = (half_across.max(half_up) * 2.0).clamp(0.2, 1.2);
+    let bays = ((length / bay_target).round() as usize).clamp(1, 400);
     let bay = length / bays as f32;
     for index in 0..chords.len() {
         let first = chords[index];
@@ -170,6 +174,15 @@ fn push_truss(frame: &mut FrameInstances, object: &SceneryObject, orientation: Q
                 (near + second, far + first)
             };
             push_tube(frame, from, to, brace_radius, colour, object.roughness);
+            if object.detail.deco {
+                // Deco truss crosses its diagonals in every bay.
+                let (from, to) = if bay_index % 2 == 0 {
+                    (near + second, far + first)
+                } else {
+                    (near + first, far + second)
+                };
+                push_tube(frame, from, to, brace_radius, colour, object.roughness);
+            }
             // An upright at each node keeps the bays square, the way a truss is welded.
             push_tube(
                 frame,
@@ -279,4 +292,126 @@ fn push_mirror_ball(frame: &mut FrameInstances, object: &SceneryObject, orientat
         Vec3::ZERO,
         1.0,
     ));
+}
+
+/// Length of one chain link, top to bottom, in metres.
+const CHAIN_LINK_METRES: f32 = 0.05;
+
+/// A rigging chain hanging the height of its size, centred on its placement: links down its
+/// length, a hoist or a shackle at the top, and a shackle or a steelflex loop at the bottom.
+fn push_chain(frame: &mut FrameInstances, object: &SceneryObject, orientation: Quat, colour: Vec3) {
+    let size = object.size.max(Vec3::splat(0.02));
+    let length = size.y.max(0.1);
+    let up = orientation * Vec3::Y;
+    let across = orientation * Vec3::X;
+    let through = orientation * Vec3::Z;
+    let top = object.position + up * (length * 0.5);
+    let bottom = object.position - up * (length * 0.5);
+    // Neighbouring links turn a quarter to each other, which is what makes a chain read as a chain
+    // rather than a rod.
+    let links = ((length / CHAIN_LINK_METRES).round() as usize).clamp(2, 400);
+    let pitch = length / links as f32;
+    for index in 0..links {
+        let from = top - up * (pitch * index as f32);
+        let to = from - up * pitch;
+        let side = if index % 2 == 0 { across } else { through } * 0.007;
+        push_tube(
+            frame,
+            from + side,
+            to + side,
+            0.005,
+            colour,
+            object.roughness,
+        );
+        push_tube(
+            frame,
+            from - side,
+            to - side,
+            0.005,
+            colour,
+            object.roughness,
+        );
+    }
+    if object.detail.hoist {
+        // A chain hoist sits above the chain it lifts: a squat motor and gearbox body, hung by
+        // its own suspension hook.
+        let body = Vec3::new(0.28, 0.42, 0.26);
+        let centre = top + up * (body.y * 0.5);
+        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+            Mat4::from_scale_rotation_translation(body, orientation, centre),
+            Vec3::new(0.06, 0.06, 0.065),
+            0.6,
+            Vec3::ZERO,
+            0.2,
+        ));
+        let hook = centre + up * (body.y * 0.5);
+        push_tube(
+            frame,
+            hook,
+            hook + up * 0.12,
+            0.012,
+            colour,
+            object.roughness,
+        );
+    } else {
+        push_shackle(frame, top, up, across, colour, object.roughness);
+    }
+    if object.detail.steelflex_loop {
+        // A steelflex sling choked into a loop below the chain, as it wraps a beam or a chord.
+        const RADIUS: f32 = 0.12;
+        const SEGMENTS: usize = 12;
+        let centre = bottom - up * RADIUS;
+        let point = |step: usize| {
+            let angle = std::f32::consts::TAU * step as f32 / SEGMENTS as f32;
+            centre + up * (RADIUS * angle.cos()) + across * (RADIUS * angle.sin())
+        };
+        for step in 0..SEGMENTS {
+            push_tube(
+                frame,
+                point(step),
+                point(step + 1),
+                0.007,
+                Vec3::splat(0.55),
+                0.3,
+            );
+        }
+    } else {
+        push_shackle(frame, bottom, -up, across, colour, object.roughness);
+    }
+}
+
+/// A shackle where a chain is made fast: a short bow and its pin, pointing `outward`.
+fn push_shackle(
+    frame: &mut FrameInstances,
+    at: Vec3,
+    outward: Vec3,
+    across: Vec3,
+    colour: Vec3,
+    roughness: f32,
+) {
+    let tip = at + outward * 0.06;
+    push_tube(
+        frame,
+        at + across * 0.02,
+        tip + across * 0.02,
+        0.006,
+        colour,
+        roughness,
+    );
+    push_tube(
+        frame,
+        at - across * 0.02,
+        tip - across * 0.02,
+        0.006,
+        colour,
+        roughness,
+    );
+    push_tube(
+        frame,
+        tip + across * 0.025,
+        tip - across * 0.025,
+        0.007,
+        colour,
+        roughness,
+    );
 }

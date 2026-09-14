@@ -1,6 +1,7 @@
 //! Compile every physical instance of one selected fixture into the scene and its bindings.
 
 use super::*;
+use viz_scene::SceneryDetail;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compile_instances(
@@ -78,38 +79,11 @@ pub(super) fn compile_instances(
             own
         };
         let channels = compile_channels(&fixture.profile, mode, primary_slots, &addresses);
-        let physics_body_index = fixture.profile.physics.as_ref().map(|declared| {
-            let index = scene.physics_scenery.len();
-            let kind = match declared.scenery_kind {
-                ProfilePhysicsSceneryKind::Curtain => SceneryKind::Curtain,
-                ProfilePhysicsSceneryKind::Prop => SceneryKind::Prop,
-            };
-            scene.physics_scenery.push(PhysicsSceneryObject {
-                fixture_instance_id: instance.instance_id,
-                scenery: SceneryObject {
-                    id: instance.instance_id,
-                    name: instance.name.clone(),
-                    position: instance.position,
-                    rotation_degrees: instance.rotation_degrees,
-                    size: Vec3::from_array(declared.size_metres),
-                    colour: [0.32, 0.08, 0.06],
-                    roughness: 0.86,
-                    kind,
-                    chords: 1,
-                },
-                program: physics.clone().unwrap_or_default(),
-                body: PhysicsBody {
-                    mass_kilograms: declared.mass_kilograms,
-                    gravity_metres_per_second_squared: declared.gravity_metres_per_second_squared,
-                },
-                constraints: PhysicsConstraints {
-                    floor_y_metres: declared.floor_y_metres,
-                    scenery_collision: declared.scenery_collision,
-                    self_collision: declared.self_collision,
-                },
-            });
-            index
-        });
+        let physics_body_index = fixture
+            .profile
+            .physics
+            .as_ref()
+            .map(|declared| push_physics_scenery(scene, instance, declared, &physics));
         if let Some(object) = generated_scenery {
             scene.scenery.push(object);
         }
@@ -164,6 +138,46 @@ pub(super) fn compile_instances(
             });
         }
     }
+}
+
+/// One DMX-driven scenic body for this instance, returning its index in the scene's physics list.
+fn push_physics_scenery(
+    scene: &mut Scene,
+    instance: &PhysicalInstance,
+    declared: &light_fixture::ProfilePhysics,
+    physics: &Option<PhysicsProgram>,
+) -> usize {
+    let index = scene.physics_scenery.len();
+    let kind = match declared.scenery_kind {
+        ProfilePhysicsSceneryKind::Curtain => SceneryKind::Curtain,
+        ProfilePhysicsSceneryKind::Prop => SceneryKind::Prop,
+    };
+    scene.physics_scenery.push(PhysicsSceneryObject {
+        fixture_instance_id: instance.instance_id,
+        scenery: SceneryObject {
+            id: instance.instance_id,
+            name: instance.name.clone(),
+            position: instance.position,
+            rotation_degrees: instance.rotation_degrees,
+            size: Vec3::from_array(declared.size_metres),
+            colour: [0.32, 0.08, 0.06],
+            roughness: 0.86,
+            kind,
+            chords: 1,
+            detail: Default::default(),
+        },
+        program: physics.clone().unwrap_or_default(),
+        body: PhysicsBody {
+            mass_kilograms: declared.mass_kilograms,
+            gravity_metres_per_second_squared: declared.gravity_metres_per_second_squared,
+        },
+        constraints: PhysicsConstraints {
+            floor_y_metres: declared.floor_y_metres,
+            scenery_collision: declared.scenery_collision,
+            self_collision: declared.self_collision,
+        },
+    });
+    index
 }
 
 /// The badge the desk shows when a fixture has no emitter geometry of its own.
@@ -231,6 +245,7 @@ fn scenery_kind(kind: light_fixture::ProfileSceneryKind) -> SceneryKind {
         light_fixture::ProfileSceneryKind::Curtain => SceneryKind::Curtain,
         light_fixture::ProfileSceneryKind::Railing => SceneryKind::Railing,
         light_fixture::ProfileSceneryKind::MirrorBall => SceneryKind::MirrorBall,
+        light_fixture::ProfileSceneryKind::Chain => SceneryKind::Chain,
         light_fixture::ProfileSceneryKind::Prop => SceneryKind::Prop,
     }
 }
@@ -241,6 +256,8 @@ fn scenery_colour(kind: light_fixture::ProfileSceneryKind) -> [f32; 3] {
         light_fixture::ProfileSceneryKind::Truss => [0.2, 0.205, 0.215],
         // Stage drape is black wool serge, not the generic prop grey.
         light_fixture::ProfileSceneryKind::Curtain => [0.008, 0.008, 0.01],
+        // Galvanised rigging chain.
+        light_fixture::ProfileSceneryKind::Chain => [0.32, 0.32, 0.33],
         _ => [0.14, 0.14, 0.15],
     }
 }
@@ -248,10 +265,29 @@ fn scenery_colour(kind: light_fixture::ProfileSceneryKind) -> [f32; 3] {
 fn scenery_roughness(kind: light_fixture::ProfileSceneryKind) -> f32 {
     match kind {
         light_fixture::ProfileSceneryKind::Curtain => 0.96,
-        light_fixture::ProfileSceneryKind::Truss | light_fixture::ProfileSceneryKind::Railing => {
-            0.45
-        }
+        light_fixture::ProfileSceneryKind::Truss
+        | light_fixture::ProfileSceneryKind::Railing
+        | light_fixture::ProfileSceneryKind::Chain => 0.45,
         _ => 0.8,
+    }
+}
+
+/// What the profile and the placement say beyond the kind: a truss's bracing, a chain's ends.
+///
+/// A chain placed before its ends could be chosen hangs from a hoist by a direct hook, which is how
+/// a chain is most often rigged.
+fn scenery_detail(
+    declared: &light_fixture::ProfileScenery,
+    options: &light_fixture::SceneryOptions,
+) -> SceneryDetail {
+    SceneryDetail {
+        deco: declared.kind == light_fixture::ProfileSceneryKind::Truss
+            && declared.pattern == light_fixture::TrussPattern::Deco,
+        hoist: declared.kind == light_fixture::ProfileSceneryKind::Chain
+            && options.chain_top.unwrap_or_default() == light_fixture::ChainTopEnd::Motor,
+        steelflex_loop: declared.kind == light_fixture::ProfileSceneryKind::Chain
+            && options.chain_bottom.unwrap_or_default()
+                == light_fixture::ChainBottomEnd::SteelflexLoop,
     }
 }
 
@@ -271,9 +307,15 @@ fn generated_scenery(
         position: instance.position,
         rotation_degrees: instance.rotation_degrees,
         size: clamp_scenery_size(size, declared),
-        colour: scenery_colour(declared.kind),
+        // The colour the operator chose for this one, when they chose one; the kind's own
+        // material otherwise.
+        colour: instance
+            .scenery_options
+            .colour_linear()
+            .unwrap_or_else(|| scenery_colour(declared.kind)),
         roughness: scenery_roughness(declared.kind),
         kind: scenery_kind(declared.kind),
         chords: declared.chords,
+        detail: scenery_detail(declared, &instance.scenery_options),
     })
 }

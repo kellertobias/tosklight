@@ -33,17 +33,17 @@ pub struct PhysicalInstance {
     pub rotation_degrees: Vec3,
     pub invert_pan: bool,
     pub invert_tilt: bool,
-    /// Degrees the mounting bracket is set to, positive nose-down. It tilts the whole fixture on
-    /// the axis its yoke or clamp turns about, on top of the placement rotation.
+    /// Degrees the bracket tilts the whole fixture about its yoke or clamp axis, positive nose-down.
     pub bracket_angle: f32,
     /// Degrees a fitted shaper or barn-door module is turned to, or `None` when none is fitted.
     /// A framing module the desk can rotate starts from here.
     pub shaper_angle: Option<f32>,
     /// Portable source/filter and static blade settings for this exact physical instance.
     pub installed_appearance: InstalledFixtureAppearance,
-    /// The size this one was placed at, for a Venue object whose geometry is generated. Absent
-    /// means the profile's own default, which is what every one placed before this reads as.
+    /// Where a generated Venue object's size was placed; absent is its profile's own default.
     pub scenery_size_metres: Option<Vec3>,
+    /// A generated Venue object's chosen colour and chain ends; empty is its kind's defaults.
+    pub scenery_options: light_fixture::SceneryOptions,
 }
 
 /// One logical fixture with its selected immutable profile revision.

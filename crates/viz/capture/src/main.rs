@@ -561,12 +561,11 @@ mod tests {
                 id: Uuid::new_v4(),
                 name: "Receiving deck".to_owned(),
                 position: Vec3::new(6.0, -0.05, 0.0),
-                rotation_degrees: Vec3::ZERO,
                 size: Vec3::new(4.0, 0.1, 4.0),
                 colour: [0.35, 0.35, 0.35],
                 roughness: 0.8,
                 kind: SceneryKind::Riser,
-                chords: 0,
+                ..SceneryObject::default()
             }],
             ..Scene::default()
         };
@@ -605,12 +604,11 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Occluder".to_owned(),
             position: Vec3::new(6.0, 2.0, 0.0),
-            rotation_degrees: Vec3::ZERO,
             size: Vec3::new(4.0, 0.4, 4.0),
             colour: [0.02, 0.02, 0.02],
             roughness: 0.95,
             kind,
-            chords: 0,
+            ..SceneryObject::default()
         });
         scene.recompute_bounds();
         (scene, values, view)

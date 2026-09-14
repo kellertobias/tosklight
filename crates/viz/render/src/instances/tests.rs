@@ -331,6 +331,7 @@ fn shipped_profile_svg_reaches_the_literal_plan_artwork_mesh() {
         mode_id,
         instances: vec![viz_project::PhysicalInstance {
             scenery_size_metres: None,
+            scenery_options: Default::default(),
             instance_id: uuid::Uuid::new_v4(),
             name: "Shipped Dimmer Profile".into(),
             split_patches: vec![(1, Some((1, 1)))],
@@ -891,6 +892,7 @@ mod lines_view {
             roughness: 0.6,
             kind,
             chords: 4,
+            detail: Default::default(),
         }
     }
 
@@ -1016,6 +1018,72 @@ mod lines_view {
             "no solid geometry in an outline view"
         );
         assert_eq!(frame.lines.len(), 24, "twelve edges, two vertices each");
+    }
+
+    fn mesh_count(frame: &FrameInstances, mesh: MeshKind) -> usize {
+        frame
+            .meshes
+            .iter()
+            .filter(|(kind, _)| *kind == mesh)
+            .map(|(_, entries)| entries.len())
+            .sum()
+    }
+
+    fn drawn(object: SceneryObject) -> FrameInstances {
+        let mut scene = Scene::default();
+        scene.scenery.push(object);
+        build(&scene, &SceneValues::default(), &FrameStyle::default())
+    }
+
+    /// A chain reads by what hangs at its ends: a hoist body above it, or a shackle straight to
+    /// the steel; a hook below it, or a steelflex loop.
+    #[test]
+    fn a_chain_hangs_from_a_hoist_or_a_shackle_and_ends_in_a_hook_or_a_loop() {
+        let mut chain = scenery(SceneryKind::Chain);
+        chain.size = Vec3::new(0.1, 3.0, 0.1);
+        chain.detail.hoist = true;
+        let hoisted = drawn(chain.clone());
+        assert_eq!(mesh_count(&hoisted, MeshKind::Cube), 1, "one hoist body");
+
+        chain.detail.hoist = false;
+        let direct = drawn(chain.clone());
+        assert_eq!(
+            mesh_count(&direct, MeshKind::Cube),
+            0,
+            "no hoist on a direct top"
+        );
+
+        chain.detail.steelflex_loop = true;
+        let slung = drawn(chain);
+        // Sixty links of two tubes each, a shackle of three at the top, twelve loop segments.
+        assert_eq!(mesh_count(&direct, MeshKind::Cylinder), 120 + 3 + 3);
+        assert_eq!(mesh_count(&slung, MeshKind::Cylinder), 120 + 3 + 12);
+    }
+
+    /// Deco truss crosses its diagonals, so the same length carries more bracing.
+    #[test]
+    fn deco_truss_crosses_its_bracing_in_every_bay() {
+        let mut truss = scenery(SceneryKind::Truss);
+        truss.size = Vec3::new(4.0, 0.34, 0.34);
+        let standard = mesh_count(&drawn(truss.clone()), MeshKind::Cylinder);
+        truss.detail.deco = true;
+        let deco = mesh_count(&drawn(truss), MeshKind::Cylinder);
+        assert!(
+            deco > standard,
+            "deco {deco} braces against standard {standard}"
+        );
+    }
+
+    /// A deeper section is braced in longer bays, the way a large truss is built, rather than
+    /// repeating a small truss's bays along it.
+    #[test]
+    fn a_larger_truss_section_is_braced_in_longer_bays() {
+        let tubes = |section: f32| {
+            let mut truss = scenery(SceneryKind::Truss);
+            truss.size = Vec3::new(6.0, section, section);
+            mesh_count(&drawn(truss), MeshKind::Cylinder)
+        };
+        assert!(tubes(0.52) < tubes(0.34));
     }
 
     /// An invalid package model arrives with no resolved model index. It still gets a deliberate

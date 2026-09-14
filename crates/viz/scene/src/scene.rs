@@ -665,7 +665,7 @@ impl MotionAxis {
 }
 
 /// Visual-only stage object that occludes and receives light.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct SceneryObject {
     pub id: Uuid,
     pub name: String,
@@ -679,6 +679,9 @@ pub struct SceneryObject {
     /// Chords in a truss cross-section: `1` is a pipe, `2` a ladder, `3` a triangle, `4` a box.
     /// Ignored by every other kind.
     pub chords: u8,
+    /// Bracing pattern and chain ends. Every kind reads only its own parts of it.
+    #[serde(default)]
+    pub detail: SceneryDetail,
 }
 
 /// One reusable constrained rigid body represented as scenery rather than as a light emitter.
@@ -711,7 +714,7 @@ pub struct PhysicsProgram {
     pub result_version: u16,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SceneryKind {
     Floor,
     Wall,
@@ -723,7 +726,25 @@ pub enum SceneryKind {
     Railing,
     /// A faceted mirror ball.
     MirrorBall,
+    /// A rigging chain hanging the height of its size, with what hangs at each end in
+    /// [`SceneryObject::detail`].
+    Chain,
+    #[default]
     Prop,
+}
+
+/// The parts of a generated object its kind alone does not say.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SceneryDetail {
+    /// A truss braced as deco truss: crossed diagonals in every bay rather than a zig-zag.
+    #[serde(default)]
+    pub deco: bool,
+    /// A chain lifted by a hoist at its top, rather than fixed straight to the steel.
+    #[serde(default)]
+    pub hoist: bool,
+    /// A chain ending in a steelflex loop at its bottom, rather than a hook fixed to the load.
+    #[serde(default)]
+    pub steelflex_loop: bool,
 }
 
 /// One scalable rectangular Venue crowd footprint.
@@ -1025,6 +1046,7 @@ mod tests {
             roughness: 0.8,
             kind: SceneryKind::Floor,
             chords: 0,
+            detail: Default::default(),
         });
         scene.recompute_bounds();
         assert!(scene.bounds.radius() > 100.0);

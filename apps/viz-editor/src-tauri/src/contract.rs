@@ -14,9 +14,10 @@ use light_application::{
 };
 use light_core::{FixtureId, ShowId};
 use light_fixture::{
-    DirectControlEndpoint, FixtureFreezeState, FixtureLocation, FixtureVector, GelAssignment,
-    GelDefinitionSnapshot, InstalledFixtureAppearance, InstalledLightSource, MultiPatchInstance,
-    PatchedFixturePatch, PatchedFixtureProfileReference, PatchedHead, SplitPatch,
+    ChainBottomEnd, ChainTopEnd, DirectControlEndpoint, FixtureFreezeState, FixtureLocation,
+    FixtureVector, GelAssignment, GelDefinitionSnapshot, InstalledFixtureAppearance,
+    InstalledLightSource, MultiPatchInstance, PatchedFixturePatch, PatchedFixtureProfileReference,
+    PatchedHead, SceneryOptions, SplitPatch,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -239,6 +240,14 @@ pub struct FixtureDto {
     pub highlight_overrides: Vec<HighlightOverrideDto>,
     #[serde(default)]
     pub freeze: FixtureFreezeState,
+    /// The size a generated Venue object is placed at, in millimetres, as the patch stores it.
+    /// Absent for everything else, and for a Venue object still at its profile's default size.
+    #[serde(default)]
+    pub scenery_size_metres: Option<VectorDto>,
+    /// What an operator chose for a generated Venue object beyond its size. Empty, and absent
+    /// from every payload written before these choices existed, keeps the kind's own defaults.
+    #[serde(default, skip_serializing_if = "SceneryOptionsDto::is_empty")]
+    pub scenery_options: SceneryOptionsDto,
     /// Read-only projections the sheet displays but never writes.
     #[serde(default, skip_deserializing)]
     pub fixture_revision: u64,
@@ -248,6 +257,44 @@ pub struct FixtureDto {
 
 const fn yes() -> bool {
     true
+}
+
+/// A curtain's colour and a chain's end fittings, as the sheet reads and writes them.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryOptionsDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_srgb: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_top: Option<ChainTopEnd>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_bottom: Option<ChainBottomEnd>,
+}
+
+impl SceneryOptionsDto {
+    fn is_empty(&self) -> bool {
+        self.colour_srgb.is_none() && self.chain_top.is_none() && self.chain_bottom.is_none()
+    }
+}
+
+impl From<&SceneryOptions> for SceneryOptionsDto {
+    fn from(options: &SceneryOptions) -> Self {
+        Self {
+            colour_srgb: options.colour_srgb.clone(),
+            chain_top: options.chain_top,
+            chain_bottom: options.chain_bottom,
+        }
+    }
+}
+
+impl From<SceneryOptionsDto> for SceneryOptions {
+    fn from(dto: SceneryOptionsDto) -> Self {
+        Self {
+            colour_srgb: dto.colour_srgb,
+            chain_top: dto.chain_top,
+            chain_bottom: dto.chain_bottom,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -404,6 +451,8 @@ impl From<PatchFixtureProjection> for FixtureDto {
                 })
                 .collect(),
             freeze: patch.freeze,
+            scenery_size_metres: patch.scenery_size_metres.as_ref().map(VectorDto::from),
+            scenery_options: SceneryOptionsDto::from(&patch.scenery_options),
             fixture_revision: projection.fixture_revision,
             logical_heads: patch
                 .logical_heads
@@ -586,7 +635,14 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                 mode_id: dto.mode_id,
             },
             patch: PatchedFixturePatch {
-                scenery_size_metres: None,
+                // Written back exactly as read: a Venue object edited here keeps the size it was
+                // given on the desk or in this sheet.
+                scenery_size_metres: dto.scenery_size_metres.as_ref().map(|size| FixtureVector {
+                    x: size.x,
+                    y: size.y,
+                    z: size.z,
+                }),
+                scenery_options: SceneryOptions::from(dto.scenery_options),
                 fixture_id: FixtureId(dto.fixture_id),
                 fixture_number: dto.fixture_number,
                 virtual_fixture_number: dto.virtual_fixture_number,
@@ -815,6 +871,124 @@ mod tests {
         );
         let decoded: InstalledAppearanceDto = serde_json::from_value(value).unwrap();
         assert_eq!(InstalledFixtureAppearance::from(decoded), appearance);
+    }
+
+    #[test]
+    fn a_venue_object_keeps_its_placed_size_through_the_sheet() {
+        let fixture: FixtureDto = serde_json::from_value(serde_json::json!({
+            "fixtureId": Uuid::new_v4(),
+            "fixtureNumber": null,
+            "virtualFixtureNumber": 3,
+            "name": "Truss",
+            "profileId": Uuid::new_v4(),
+            "profileRevision": 1,
+            "modeId": Uuid::new_v4(),
+            "splitPatches": [{ "split": 1, "universe": null, "address": null }],
+            "layerId": "default",
+            "location": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scenerySizeMetres": { "x": 6000.0, "y": 340.0, "z": 340.0 }
+        }))
+        .expect("fixture DTO");
+        let candidate = PatchFixtureCandidate::from(fixture);
+        assert_eq!(
+            candidate.patch.scenery_size_metres,
+            Some(FixtureVector {
+                x: 6000.0,
+                y: 340.0,
+                z: 340.0
+            })
+        );
+
+        // A fixture written before sizes travelled through this sheet still reads as default size.
+        let legacy: FixtureDto = serde_json::from_value(serde_json::json!({
+            "fixtureId": Uuid::new_v4(),
+            "fixtureNumber": 1,
+            "virtualFixtureNumber": null,
+            "name": "Wash",
+            "profileId": Uuid::new_v4(),
+            "profileRevision": 1,
+            "modeId": Uuid::new_v4(),
+            "splitPatches": [],
+            "layerId": "default",
+            "location": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
+        }))
+        .expect("legacy fixture DTO");
+        assert_eq!(
+            PatchFixtureCandidate::from(legacy)
+                .patch
+                .scenery_size_metres,
+            None
+        );
+    }
+
+    #[test]
+    fn a_venue_object_keeps_its_scenery_options_through_the_sheet() {
+        let fixture: FixtureDto = serde_json::from_value(serde_json::json!({
+            "fixtureId": Uuid::new_v4(),
+            "fixtureNumber": null,
+            "virtualFixtureNumber": 4,
+            "name": "Chain",
+            "profileId": Uuid::new_v4(),
+            "profileRevision": 1,
+            "modeId": Uuid::new_v4(),
+            "splitPatches": [{ "split": 1, "universe": null, "address": null }],
+            "layerId": "default",
+            "location": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "sceneryOptions": {
+                "colourSrgb": "#1A2B3C",
+                "chainTop": "direct",
+                "chainBottom": "steelflex_loop"
+            }
+        }))
+        .expect("fixture DTO");
+        let options = PatchFixtureCandidate::from(fixture).patch.scenery_options;
+        assert_eq!(
+            options,
+            SceneryOptions {
+                colour_srgb: Some("#1A2B3C".into()),
+                chain_top: Some(ChainTopEnd::Direct),
+                chain_bottom: Some(ChainBottomEnd::SteelflexLoop),
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(SceneryOptionsDto::from(&options)).unwrap(),
+            serde_json::json!({
+                "colourSrgb": "#1A2B3C",
+                "chainTop": "direct",
+                "chainBottom": "steelflex_loop"
+            })
+        );
+
+        // A payload written before options travelled through this sheet reads as nothing chosen.
+        let legacy: FixtureDto = serde_json::from_value(serde_json::json!({
+            "fixtureId": Uuid::new_v4(),
+            "fixtureNumber": null,
+            "virtualFixtureNumber": 5,
+            "name": "Curtain",
+            "profileId": Uuid::new_v4(),
+            "profileRevision": 1,
+            "modeId": Uuid::new_v4(),
+            "splitPatches": [],
+            "layerId": "default",
+            "location": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
+        }))
+        .expect("legacy fixture DTO");
+        assert!(
+            serde_json::to_value(&legacy)
+                .unwrap()
+                .get("sceneryOptions")
+                .is_none()
+        );
+        assert!(
+            PatchFixtureCandidate::from(legacy)
+                .patch
+                .scenery_options
+                .is_empty()
+        );
     }
 
     #[test]

@@ -6,6 +6,40 @@ use serde_json::json;
 use std::io::Read;
 use viz_scene::{BodyKind, EmitterKind, euler_degrees};
 
+/// A desk sends a Venue object's size and choices under its own snake_case names. Reading only the
+/// camelCase spelling left every truss at its default length in the Visualizer.
+#[test]
+fn a_venue_objects_size_and_choices_arrive_from_the_desk_patch() {
+    let fixture: crate::wire::PatchFixture = serde_json::from_value(json!({
+        "fixture_id": "44444444-4444-4444-8444-444444444444",
+        "profile_id": "55555555-5555-4555-8555-555555555555",
+        "mode_id": "66666666-6666-4666-8666-666666666666",
+        "scenery_size_metres": { "x": 6000, "y": 340, "z": 340 },
+        "scenery_options": { "colour_srgb": "#112233", "chain_top": "direct" }
+    }))
+    .expect("desk patch fixture");
+    let size = fixture.scenery_size_metres.expect("size");
+    assert_eq!((size.x, size.y, size.z), (6000, 340, 340));
+    assert_eq!(
+        fixture.scenery_options.colour_srgb.as_deref(),
+        Some("#112233")
+    );
+    assert_eq!(
+        fixture.scenery_options.chain_top,
+        Some(light_fixture::ChainTopEnd::Direct)
+    );
+
+    // The spelling read before still works.
+    let camel: crate::wire::PatchFixture = serde_json::from_value(json!({
+        "fixture_id": "44444444-4444-4444-8444-444444444444",
+        "profile_id": "55555555-5555-4555-8555-555555555555",
+        "mode_id": "66666666-6666-4666-8666-666666666666",
+        "scenerySizeMetres": { "x": 2000, "y": 340, "z": 340 }
+    }))
+    .expect("camelCase patch fixture");
+    assert_eq!(camel.scenery_size_metres.expect("size").x, 2000);
+}
+
 #[test]
 fn shipped_dls_legacy_gobo_and_prism_names_reach_native_bindings() {
     let profile = shipped_profile("robe--robin-dls-profile");
