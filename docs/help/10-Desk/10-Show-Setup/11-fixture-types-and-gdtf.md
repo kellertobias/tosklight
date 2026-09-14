@@ -63,6 +63,14 @@ A chain nobody chose a mode for has its motor on top. A chain whose ends were ch
 modes existed keeps its hoist where it was and gets its fixing at the other end. Anything the
 column does not apply to — a lamp, a truss, a multi-patch copy — shows a dash.
 
+**Scale** draws a Venue object at a multiple of the size it was built at — an imported hall that
+was modelled in centimetres, a set piece brought in at half size. Type any scale from `0.01` to
+`100`; `1`, or an empty entry, returns the object to its built size, which is what every object
+placed before this reads as. A scale outside that range is refused with the range. The Visualizer,
+the ToskLight PreViz plan and the desk's Stage all draw the object at its scale, and the PreViz
+**Venue** screen shows and edits the same column. A lamp, a Crowd Area and a multi-patch copy
+show a dash.
+
 A chain is drawn as real hoist chain, in the Visualizer and in the PreViz plan and elevations: links
 of 7 mm wire, 35 mm long, each turned a quarter to the next and overlapping it by the wire's
 thickness. From above, a chain is two crossed rounded rectangles, and a motor on top hides it. In

@@ -104,8 +104,8 @@ desk's Show Patch window does not:
 
 - **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Masters, Invert Pan,
   Invert Tilt, MIB, Layer and Note.
-- **Visualization**: Fixture ID, Name, Location, Rotation, Bracket, Shaper, Footprint, Layer, 2D, 3D
-  and Note.
+- **Visualization**: Fixture ID, Name, Location, Rotation, Bracket, Shaper, Footprint, Colour,
+  Chain, Scale, Layer, 2D, 3D and Note.
 - **Compact**: Fixture ID, Name, Patch, Layer and Note.
 
 **Footprint width**, **Footprint height** and **Footprint depth** size a generated Venue object — a
@@ -118,6 +118,11 @@ is kept when the object is edited here or on the desk.
 **Default colour** returning it to its own material. **Chain** chooses **Plain chain**, **Motor on
 top** or **Motor on bottom**; the end without the motor has a steelflex. The Visualizer draws each object with what was chosen for it, and a desk shows and edits the
 same columns in **Show Patch**.
+
+**Scale** draws a Venue object — an imported model above all — at a multiple of the size it was
+built at, from `0.01` to `100`. `1`, or an empty entry, is its built size; anything outside the
+range is refused with the range. The plan, the Visualizer and a desk's Stage all draw it at that
+scale, and everything that is not a Venue object shows a dash.
 
 **View** names the quick view whose columns the sheet shows exactly; changing a single column
 leaves it reading **Custom**.
