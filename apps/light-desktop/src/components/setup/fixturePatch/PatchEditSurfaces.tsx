@@ -1,5 +1,5 @@
 import { SCENERY_AXES } from "./scenerySize";
-import { CHAIN_BOTTOM_ENDS, CHAIN_TOP_ENDS } from "./sceneryOptions";
+import { CHAIN_MODES } from "./sceneryOptions";
 import {
 	Button,
 	ColorPickerField,
@@ -277,8 +277,7 @@ function FixtureEditFields() {
 		);
 	if (edit === "internal_bindings") return <InternalBindingsFields />;
 	if (edit === "scenery_colour") return <SceneryColourFields />;
-	if (edit === "chain_top" || edit === "chain_bottom")
-		return <ChainEndFields end={edit} />;
+	if (edit === "chain") return <ChainModeFields />;
 	if (edit === "masters" || edit === "pan_tilt")
 		return <CombinedPolicySelect kind={edit} />;
 	if (edit === "location" || edit === "rotation")
@@ -315,22 +314,20 @@ function SceneryColourFields() {
 	);
 }
 
-/** What hangs at one end of a chain. */
-function ChainEndFields({ end }: { end: "chain_top" | "chain_bottom" }) {
+/** How a chain is rigged; each choice stores both of its end fittings. */
+function ChainModeFields() {
 	const controller = usePatchController();
-	const top = end === "chain_top";
-	const options = top ? CHAIN_TOP_ENDS : CHAIN_BOTTOM_ENDS;
 	return (
 		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
 		<label>
-			{top ? "Top end" : "Bottom end"}
+			Chain
 			<Select
 				autoFocus
-				aria-label={top ? "Chain top end" : "Chain bottom end"}
+				aria-label="Chain mode"
 				value={controller.ui.editText}
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			>
-				{options.map((option) => (
+				{CHAIN_MODES.map((option) => (
 					<option key={option.value} value={option.value}>
 						{option.label}
 					</option>
@@ -571,7 +568,6 @@ function editTitle(
 	if (edit === "crowd_width") return "Crowd width";
 	if (edit === "crowd_depth") return "Crowd depth";
 	if (edit === "scenery_colour") return "Colour";
-	if (edit === "chain_top") return "Chain top";
-	if (edit === "chain_bottom") return "Chain bottom";
+	if (edit === "chain") return "Chain";
 	return edit;
 }

@@ -30,9 +30,8 @@ import { beginMultipatchEdit } from "./multipatchActions";
 import { PATCH_SHEET_COLUMNS, type PatchSheetColumn } from "./patchColumns";
 import { placedSceneryMetres, SCENERY_AXES, sceneryOf } from "./scenerySize";
 import {
-	chainBottomOf,
-	chainEndLabel,
-	chainTopOf,
+	chainModeLabel,
+	chainModeOf,
 	isChain,
 	SCENERY_OPTION_COLUMNS,
 	sceneryOptionsOf,
@@ -716,15 +715,15 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 }
 
 /**
- * A generated Venue object's colour, and a chain's top and bottom ends. Anything that is not
- * generated has no colour to choose, and anything that is not a chain has no ends.
+ * A generated Venue object's colour, and how a chain is rigged. Anything that is not generated has
+ * no colour to choose, and anything that is not a chain has no rigging.
  */
 function SceneryOptionCells({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
 	const generated = Boolean(sceneryOf(fixture));
 	const chain = isChain(fixture);
 	const colour = sceneryOptionsOf(fixture).colour_srgb;
-	const edit = (kind: "scenery_colour" | "chain_top" | "chain_bottom") => ({
+	const edit = (kind: "scenery_colour" | "chain") => ({
 		onClick: () => armEdit(controller, fixture, kind),
 		onContextMenu: (event: ReactMouseEvent<HTMLElement>) =>
 			openModalOnContext(event, controller, fixture, kind),
@@ -764,30 +763,15 @@ function SceneryOptionCells({ fixture }: { fixture: PatchedFixture }) {
 					)}
 				</td>
 			</Shown>
-			<Shown column="chain_top">
+			<Shown column="chain">
 				<td className="patch-secondary">
 					{chain ? (
 						<Button
 							className="patch-value"
-							aria-label={`Chain top ${fixtureDisplayId(fixture)}`}
-							{...edit("chain_top")}
+							aria-label={`Chain ${fixtureDisplayId(fixture)}`}
+							{...edit("chain")}
 						>
-							{chainEndLabel(chainTopOf(fixture))}
-						</Button>
-					) : (
-						"—"
-					)}
-				</td>
-			</Shown>
-			<Shown column="chain_bottom">
-				<td className="patch-secondary">
-					{chain ? (
-						<Button
-							className="patch-value"
-							aria-label={`Chain bottom ${fixtureDisplayId(fixture)}`}
-							{...edit("chain_bottom")}
-						>
-							{chainEndLabel(chainBottomOf(fixture))}
+							{chainModeLabel(chainModeOf(fixture))}
 						</Button>
 					) : (
 						"—"

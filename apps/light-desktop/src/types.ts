@@ -354,8 +354,7 @@ export const PATCH_COLUMNS = [
 	{ id: "footprint_height", label: "Footprint height" },
 	{ id: "footprint_depth", label: "Footprint depth" },
 	{ id: "scenery_colour", label: "Colour" },
-	{ id: "chain_top", label: "Chain top" },
-	{ id: "chain_bottom", label: "Chain bottom" },
+	{ id: "chain", label: "Chain" },
 	{ id: "layer", label: "Layer" },
 ] as const;
 export type PatchColumn = (typeof PATCH_COLUMNS)[number]["id"];

@@ -4,9 +4,8 @@ import {
 	sceneryOf,
 } from "./scenerySize";
 import {
-	chainBottomOf,
-	chainEndLabel,
-	chainTopOf,
+	chainModeLabel,
+	chainModeOf,
 	isChain,
 	sceneryOptionsOf,
 } from "./sceneryOptions";
@@ -468,8 +467,8 @@ function FootprintCells({ fixture }: { fixture: PatchedFixture }) {
 }
 
 /**
- * A generated Venue object's colour, and a chain's top and bottom ends. Anything that is not
- * generated has no colour to choose, and anything that is not a chain has no ends.
+ * A generated Venue object's colour, and how a chain is rigged. Anything that is not generated has
+ * no colour to choose, and anything that is not a chain has no rigging.
  */
 function SceneryOptionCells({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
@@ -477,7 +476,7 @@ function SceneryOptionCells({ fixture }: { fixture: PatchedFixture }) {
 	const chain = isChain(fixture);
 	const colour = sceneryOptionsOf(fixture).colour_srgb;
 	const option = (
-		kind: "scenery_colour" | "chain_top" | "chain_bottom",
+		kind: "scenery_colour" | "chain",
 		label: string,
 		value: ReactNode,
 	) => (
@@ -525,18 +524,9 @@ function SceneryOptionCells({ fixture }: { fixture: PatchedFixture }) {
 						)
 					: NO_MEASUREMENT}
 			</Shown>
-			<Shown column="chain_top">
+			<Shown column="chain">
 				{chain
-					? option("chain_top", "Chain top", chainEndLabel(chainTopOf(fixture)))
-					: NO_MEASUREMENT}
-			</Shown>
-			<Shown column="chain_bottom">
-				{chain
-					? option(
-							"chain_bottom",
-							"Chain bottom",
-							chainEndLabel(chainBottomOf(fixture)),
-						)
+					? option("chain", "Chain", chainModeLabel(chainModeOf(fixture)))
 					: NO_MEASUREMENT}
 			</Shown>
 		</>
@@ -652,10 +642,9 @@ function MultiPatchRow({
 			<Shown column="footprint_width">{NO_MEASUREMENT}</Shown>
 			<Shown column="footprint_height">{NO_MEASUREMENT}</Shown>
 			<Shown column="footprint_depth">{NO_MEASUREMENT}</Shown>
-			{/* A Venue object has no copies, so a copy's row has no colour or chain ends of its own. */}
+			{/* A Venue object has no copies, so a copy's row has no colour or chain rigging of its own. */}
 			<Shown column="scenery_colour">{NO_MEASUREMENT}</Shown>
-			<Shown column="chain_top">{NO_MEASUREMENT}</Shown>
-			<Shown column="chain_bottom">{NO_MEASUREMENT}</Shown>
+			<Shown column="chain">{NO_MEASUREMENT}</Shown>
 			<Shown column="layer">
 				<td className="patch-secondary">
 					<span>—</span>

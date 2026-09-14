@@ -3,7 +3,7 @@ import {
 	placedSceneryMetres,
 	sceneryOf,
 } from "./scenerySize";
-import { chainBottomOf, chainTopOf, sceneryOptionsOf } from "./sceneryOptions";
+import { chainModeOf, sceneryOptionsOf } from "./sceneryOptions";
 import type { PatchedFixture } from "../../../api/types";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureRanges, groupFixtureFamilies } from "../patchUtils";
@@ -92,8 +92,7 @@ function beginFixtureEdit(
 	}
 	else if (kind === "scenery_colour")
 		ui.setEditText(sceneryOptionsOf(fixture).colour_srgb ?? "");
-	else if (kind === "chain_top") ui.setEditText(chainTopOf(fixture));
-	else if (kind === "chain_bottom") ui.setEditText(chainBottomOf(fixture));
+	else if (kind === "chain") ui.setEditText(chainModeOf(fixture));
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);

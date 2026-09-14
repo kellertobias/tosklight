@@ -7,7 +7,7 @@ import {
 	Select,
 	TextInput,
 } from "@tosklight/ui";
-import { CHAIN_BOTTOM_ENDS, CHAIN_TOP_ENDS } from "./sceneryOptions";
+import { CHAIN_MODES } from "./sceneryOptions";
 import { ModalNumberEditor } from "@tosklight/ui/input";
 import { changedPatchFixtureCandidate } from "../../state/PatchContext";
 import type { PatchedFixture } from "../../wire";
@@ -562,8 +562,7 @@ function FixtureEditFields() {
 			/>
 		);
 	if (edit === "scenery_colour") return <SceneryColourFields />;
-	if (edit === "chain_top" || edit === "chain_bottom")
-		return <ChainEndFields end={edit} />;
+	if (edit === "chain") return <ChainModeFields />;
 	if (edit === "masters") return <MastersFields />;
 	if (edit === "invert_pan" || edit === "invert_tilt")
 		return (
@@ -607,22 +606,20 @@ function SceneryColourFields() {
 	);
 }
 
-/** What hangs at one end of a chain. */
-function ChainEndFields({ end }: { end: "chain_top" | "chain_bottom" }) {
+/** How a chain is rigged; each choice stores both of its end fittings. */
+function ChainModeFields() {
 	const controller = usePatchController();
-	const top = end === "chain_top";
-	const options = top ? CHAIN_TOP_ENDS : CHAIN_BOTTOM_ENDS;
 	return (
 		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
 		<label>
-			{top ? "Top end" : "Bottom end"}
+			Chain
 			<Select
 				autoFocus
-				aria-label={top ? "Chain top end" : "Chain bottom end"}
+				aria-label="Chain mode"
 				value={controller.ui.editText}
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			>
-				{options.map((option) => (
+				{CHAIN_MODES.map((option) => (
 					<option key={option.value} value={option.value}>
 						{option.label}
 					</option>
@@ -863,8 +860,7 @@ function editTitle(
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
 	if (edit === "scenery_colour") return "colour";
-	if (edit === "chain_top") return "chain top";
-	if (edit === "chain_bottom") return "chain bottom";
+	if (edit === "chain") return "chain";
 	if (edit === "note") return "note";
 	return edit;
 }

@@ -4,20 +4,28 @@ import { sceneryOf } from "./scenerySize";
 export type SceneryOptions = NonNullable<PatchedFixture["scenery_options"]>;
 export type ChainTopEnd = NonNullable<SceneryOptions["chain_top"]>;
 export type ChainBottomEnd = NonNullable<SceneryOptions["chain_bottom"]>;
-export type SceneryOptionEdit = "scenery_colour" | "chain_top" | "chain_bottom";
+export type ChainMode = "plain" | "motor_top" | "motor_bottom";
+export type SceneryOptionEdit = "scenery_colour" | "chain";
 
-/** What can hang at the top of a chain, as a rigger calls it. */
-export const CHAIN_TOP_ENDS: readonly { value: ChainTopEnd; label: string }[] = [
-	{ value: "motor", label: "Hoist" },
-	{ value: "direct", label: "Direct" },
+/**
+ * How a chain is rigged, and the end fittings each way stores. A hoist at one end hangs the chain
+ * from a steelflex loop at the other; a plain chain is hooked directly at both.
+ */
+export const CHAIN_MODES: readonly {
+	value: ChainMode;
+	label: string;
+	top: ChainTopEnd;
+	bottom: ChainBottomEnd;
+}[] = [
+	{ value: "plain", label: "Plain chain", top: "direct", bottom: "direct" },
+	{ value: "motor_top", label: "Motor on top", top: "motor", bottom: "steelflex_loop" },
+	{
+		value: "motor_bottom",
+		label: "Motor on bottom",
+		top: "steelflex_loop",
+		bottom: "motor",
+	},
 ];
-
-/** What a chain can end in at the bottom. */
-export const CHAIN_BOTTOM_ENDS: readonly { value: ChainBottomEnd; label: string }[] =
-	[
-		{ value: "direct", label: "Direct" },
-		{ value: "steelflex_loop", label: "Steelflex loop" },
-	];
 
 const SRGB = /^#[0-9a-fA-F]{6}$/;
 
@@ -29,25 +37,22 @@ export function isChain(fixture: PatchedFixture) {
 	return sceneryOf(fixture)?.kind === "chain";
 }
 
-/** A chain placed before its ends could be chosen hangs from a hoist by a direct hook. */
-export function chainTopOf(fixture: PatchedFixture): ChainTopEnd {
-	return sceneryOptionsOf(fixture).chain_top ?? "motor";
+/**
+ * How a chain is rigged, read from the hoist: one at the top or the bottom decides it, whatever the
+ * other end stored. A chain placed before the choice existed has no top and hangs from a hoist.
+ */
+export function chainModeOf(fixture: PatchedFixture): ChainMode {
+	const { chain_top, chain_bottom } = sceneryOptionsOf(fixture);
+	if ((chain_top ?? "motor") === "motor") return "motor_top";
+	return chain_bottom === "motor" ? "motor_bottom" : "plain";
 }
 
-export function chainBottomOf(fixture: PatchedFixture): ChainBottomEnd {
-	return sceneryOptionsOf(fixture).chain_bottom ?? "direct";
-}
-
-export function chainEndLabel(value: ChainTopEnd | ChainBottomEnd) {
-	return (
-		[...CHAIN_TOP_ENDS, ...CHAIN_BOTTOM_ENDS].find(
-			(option) => option.value === value,
-		)?.label ?? value
-	);
+export function chainModeLabel(mode: ChainMode) {
+	return CHAIN_MODES.find((option) => option.value === mode)?.label ?? mode;
 }
 
 export function isSceneryOptionEdit(edit: string | null): edit is SceneryOptionEdit {
-	return edit === "scenery_colour" || edit === "chain_top" || edit === "chain_bottom";
+	return edit === "scenery_colour" || edit === "chain";
 }
 
 /**
@@ -67,14 +72,9 @@ export function sceneryOptionChange(
 			return { error: "Enter a colour as #RRGGBB, or clear it for the default." };
 		return { options: { ...current, colour_srgb: colour.toUpperCase() } };
 	}
-	if (edit === "chain_top") {
-		const end = CHAIN_TOP_ENDS.find((option) => option.value === value);
-		return end
-			? { options: { ...current, chain_top: end.value } }
-			: { error: "Choose Hoist or Direct for the top of the chain." };
-	}
-	const end = CHAIN_BOTTOM_ENDS.find((option) => option.value === value);
-	return end
-		? { options: { ...current, chain_bottom: end.value } }
-		: { error: "Choose Direct or Steelflex loop for the bottom of the chain." };
+	// Both ends are always written, so the stored fittings can never disagree with the mode.
+	const mode = CHAIN_MODES.find((option) => option.value === value);
+	return mode
+		? { options: { ...current, chain_top: mode.top, chain_bottom: mode.bottom } }
+		: { error: "Choose Plain chain, Motor on top or Motor on bottom." };
 }

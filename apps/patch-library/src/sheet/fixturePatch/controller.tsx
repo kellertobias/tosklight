@@ -48,8 +48,7 @@ export type EditKind =
 	| "scenery_height"
 	| "scenery_depth"
 	| "scenery_colour"
-	| "chain_top"
-	| "chain_bottom"
+	| "chain"
 	| null;
 
 export type VectorAxis = "x" | "y" | "z";

@@ -47,8 +47,8 @@ export interface PatchedFixture {
 	 */
 	scenery_options?: {
 		colour_srgb?: string | null;
-		chain_top?: "motor" | "direct" | null;
-		chain_bottom?: "direct" | "steelflex_loop" | null;
+		chain_top?: "motor" | "direct" | "steelflex_loop" | null;
+		chain_bottom?: "direct" | "steelflex_loop" | "motor" | null;
 	} | null;
 }
 

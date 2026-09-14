@@ -117,8 +117,8 @@ export interface PatchFixtureWrite {
 	/** A generated Venue object's colour and a chain's ends; absent choices are the kind's defaults. */
 	sceneryOptions?: {
 		colourSrgb?: string | null;
-		chainTop?: "motor" | "direct" | null;
-		chainBottom?: "direct" | "steelflex_loop" | null;
+		chainTop?: "motor" | "direct" | "steelflex_loop" | null;
+		chainBottom?: "direct" | "steelflex_loop" | "motor" | null;
 	} | null;
 }
 

@@ -18,7 +18,7 @@ import {
 } from "./selection";
 import { mastersValue, mibEditValue } from "./policyValues";
 import { placedSceneryMetres, sceneryAxisOf, sceneryOf } from "./scenerySize";
-import { chainBottomOf, chainTopOf, sceneryOptionsOf } from "./sceneryOptions";
+import { chainModeOf, sceneryOptionsOf } from "./sceneryOptions";
 
 /** A Venue object's placed measurement, in metres, as the value an editor opens on. */
 function sceneryEditValue(fixture: PatchedFixture, kind: Exclude<EditKind, null>) {
@@ -83,8 +83,7 @@ export function armEdit(
 	} else if (sceneryAxisOf(kind)) setText(sceneryEditValue(fixture, kind) ?? "");
 	else if (kind === "scenery_colour")
 		setText(sceneryOptionsOf(fixture).colour_srgb ?? "");
-	else if (kind === "chain_top") setText(chainTopOf(fixture));
-	else if (kind === "chain_bottom") setText(chainBottomOf(fixture));
+	else if (kind === "chain") setText(chainModeOf(fixture));
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);
 	if (presentation === "value_entry") {
 		const selected = editTargets(controller, fixture);
