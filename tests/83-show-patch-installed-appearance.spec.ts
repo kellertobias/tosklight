@@ -20,6 +20,8 @@ const PATCH_HEADERS = [
 	"Footprint width",
 	"Footprint height",
 	"Footprint depth",
+	"Colour",
+	"Chain",
 	"Layer",
 ];
 

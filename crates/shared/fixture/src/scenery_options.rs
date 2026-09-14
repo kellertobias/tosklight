@@ -183,7 +183,11 @@ mod tests {
 
     #[test]
     fn a_chain_mode_is_stored_as_its_ends_and_read_back_from_the_hoist() {
-        for mode in [ChainMode::Plain, ChainMode::MotorTop, ChainMode::MotorBottom] {
+        for mode in [
+            ChainMode::Plain,
+            ChainMode::MotorTop,
+            ChainMode::MotorBottom,
+        ] {
             let mut options = SceneryOptions {
                 colour_srgb: Some("#112233".into()),
                 ..SceneryOptions::default()
@@ -209,7 +213,11 @@ mod tests {
             ChainMode::MotorTop
         );
         assert_eq!(
-            legacy(Some(ChainTopEnd::Direct), Some(ChainBottomEnd::SteelflexLoop)).chain_mode(),
+            legacy(
+                Some(ChainTopEnd::Direct),
+                Some(ChainBottomEnd::SteelflexLoop)
+            )
+            .chain_mode(),
             ChainMode::Plain
         );
     }
