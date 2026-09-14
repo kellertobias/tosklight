@@ -18,6 +18,13 @@ choices existed open unchanged.
 4. Open the Visualizer. Confirm every truss is drawn at its length with its own number of chords,
    that the large truss is braced in visibly longer bays than the four-point truss, and that the
    deco truss crosses its diagonals in every bay.
+5. Confirm each truss's diagonals run at close to 45°, that each piece has an end frame just inside
+   both ends, and that every chord end carries a receiver with a conical coupler centred on the
+   joint.
+6. Open the Architect plan and a front elevation. Confirm each truss is drawn at its placed length
+   with the same bracing: an X in every bay of a four-point truss, an end frame at each end, and a
+   coupler at every chord end. Open a side elevation looking down a truss and confirm its chords,
+   its end frame and, on a four-point truss, the end frame's diagonal.
 
 ## Curtains
 
@@ -30,23 +37,37 @@ choices existed open unchanged.
 
 ## Chains
 
-1. Add **Chain** and set **Footprint height** to 3 m. Confirm **Chain top** reads **Hoist** and
-   **Chain bottom** reads **Direct**, and that the Visualizer draws a hoist body above the chain and
-   a shackle below it.
-2. Set **Chain top** to **Direct** and **Chain bottom** to **Steelflex loop**. Confirm the hoist is
-   replaced by a shackle and a loop hangs below the chain.
-3. Confirm **Chain top** and **Chain bottom** show a dash on a truss, a curtain and a lamp.
+1. Add **Chain** and set **Footprint height** to 3 m. Confirm **Chain** reads **Motor on top**, and
+   that the Visualizer draws a hoist body above the chain and a purple steelflex below it: a wrap,
+   two legs meeting at 45° and a shackle on the end link.
+2. Hang the chain so its bottom end is on a four-point truss's top chord. Confirm the steelflex
+   wraps round that chord.
+3. Set **Chain** to **Motor on bottom**. Confirm the hoist moves to the bottom and the steelflex to
+   the top. Set **Plain chain** and confirm only the chain is drawn.
+4. In the PreViz plan, confirm the chain is two crossed rounded rectangles from above, and that a
+   motor on top hides it. In a front and a side elevation, confirm links alternate between a link
+   seen face-on — two nested rounded rectangles — and one seen edge-on, overlapping by the wire's
+   thickness.
+5. Confirm **Chain** shows a dash on a truss, a curtain and a lamp.
 
 ## Stage elements
 
 1. Add **Stage Element 2 × 1 m**. Confirm **Footprint width** and **Footprint depth** show a dash and
    **Footprint height** can be set between 0.1 m and 1.2 m.
+2. Set the rise to 0.2 m and then 1.2 m. Confirm the Visualizer and the PreViz front and side
+   elevations draw a deck on a scissor lift over a base frame, with more stages of arms at 1.2 m.
+3. Add **Stage Stairs** and confirm it has no scissor lift.
+
+## Crowds
+
+1. Add **Crowd Area**. Confirm its people differ in size in the Visualizer and in every PreViz view,
+   and that reopening the show draws the same sizes again.
 
 ## The same objects in PreViz
 
 1. Open the show in ToskLight PreViz and choose **Venue**. Confirm the **Footprint** columns,
-   **Colour**, **Chain top** and **Chain bottom** show exactly what the desk set.
-2. Change a truss's length, the curtain's colour and the chain's bottom end there, and rename one
+   **Colour** and **Chain** show exactly what the desk set.
+2. Change a truss's length, the curtain's colour and the chain's mode there, and rename one
    object. Save, and load the show on the desk. Confirm every change arrived and nothing set earlier
    was reset — in particular, renaming an object does not return its size to the default.
 3. Select three trusses and enter `2 THRU 6` in **Footprint width**. Confirm they are 2, 4 and 6 m.

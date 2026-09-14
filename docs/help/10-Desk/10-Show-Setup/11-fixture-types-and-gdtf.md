@@ -51,18 +51,36 @@ Three more columns hold what each placed object is made of, in **Show Patch** an
   in the picker, or **Default colour** to return the object to its own material — black serge for
   a curtain, raw aluminium for truss, grey for staging. Every object placed before this keeps its
   default.
-- **Chain top** — a chain's top end: **Hoist**, a chain motor lifting it, or **Direct**, the chain
-  made fast straight to the steel or truss with a shackle.
-- **Chain bottom** — a chain's bottom end: **Direct**, a shackle to the load, or **Steelflex loop**,
-  a wire-rope sling wrapped around a beam or a chord.
+- **Chain** — how a chain is rigged: **Plain chain**, just the chain; **Motor on top**, a chain
+  hoist hanging at its top; or **Motor on bottom**, the hoist at its bottom. The end without the
+  hoist has a steelflex: a sling wrapped round the truss chord it connects to, whose two legs meet
+  at 45° in a shackle on the chain's end link.
 
-A chain nobody chose ends for hangs from a hoist by a direct shackle. Anything the column does not
-apply to — a lamp, a truss's chain ends, a multi-patch copy — shows a dash.
+A chain nobody chose a mode for has its motor on top. A chain whose ends were chosen before the
+modes existed keeps its hoist where it was and gets the steelflex at its other end. Anything the
+column does not apply to — a lamp, a truss, a multi-patch copy — shows a dash.
 
-The trusses are braced in bays as long as their section is deep, so a large truss is braced in
-longer bays than a standard one of the same length, and a deco truss crosses its diagonals in every
-bay. A stage element is the base it is built on: its width and depth are fixed, and only its rise
-is set, from 0.1 to 1.2 m. A stage element already placed at another base size keeps it.
+A chain is drawn as real hoist chain, in the Visualizer and in the PreViz plan and elevations: links
+of 7 mm wire, 35 mm long, each turned a quarter to the next and overlapping it by the wire's
+thickness. From above, a chain is two crossed rounded rectangles, and a motor on top hides it. In
+the Visualizer the steelflex is purple and snaps round the nearest chord of a truss at that end of
+the chain.
+
+The trusses are drawn the way square truss is built, in the Visualizer and in the PreViz plan and
+elevations alike. The diagonals run at close to 45°, with a node about every chord spacing, so a
+large truss is braced in longer bays than a standard one of the same length. Opposite faces run the
+other way, so a side view shows an X in every bay, and a deco truss crosses its diagonals in every
+bay of every face. Each piece has an end frame just inside each end, a coupler receiver on every
+chord end, and the conical coupler centred on the joint, so a run of pieces reads as separate
+sticks coupled end to end. In the PreViz plan a curtain is a wavy line along its track, four
+waves per fold, and in a front or back elevation it is the rectangle it covers with a dotted line down
+each fold, its dashes leaning 10–20° off vertical, alternating sides.
+
+A stage element is the base it is built on: its width and depth are fixed, and only its rise is
+set, from 0.1 to 1.2 m. A stage element already placed at another base size keeps it. It stands on
+a scissor lift — a deck on crossed arms over a base frame, with more stages of arms as it rises —
+in the Visualizer and in the PreViz elevations; stage stairs keep their own shape. The people in a
+Crowd Area differ in size, the same way every time the show is drawn.
 
 A show patched before this keeps the fixture revision embedded in it and is unaffected.
 

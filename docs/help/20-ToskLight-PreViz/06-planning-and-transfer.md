@@ -103,9 +103,8 @@ it in metres; a size the object cannot be built at is refused with the range it 
 is kept when the object is edited here or on the desk.
 
 **Colour** sets a generated Venue object's colour — a curtain's serge, a black truss — with
-**Default colour** returning it to its own material. **Chain top** chooses **Hoist** or **Direct**
-for a chain's top end, and **Chain bottom** chooses **Direct** or **Steelflex loop** for its bottom
-end. The Visualizer draws each object with what was chosen for it, and a desk shows and edits the
+**Default colour** returning it to its own material. **Chain** chooses **Plain chain**, **Motor on
+top** or **Motor on bottom**; the end without the motor has a steelflex. The Visualizer draws each object with what was chosen for it, and a desk shows and edits the
 same columns in **Show Patch**.
 
 The quick view whose columns the sheet shows exactly is highlighted; changing a single column in
