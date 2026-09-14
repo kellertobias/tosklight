@@ -53,18 +53,21 @@ Three more columns hold what each placed object is made of, in **Show Patch** an
   default.
 - **Chain** — how a chain is rigged: **Plain chain**, just the chain; **Motor on top**, a chain
   hoist hanging at its top; or **Motor on bottom**, the hoist at its bottom. The end without the
-  hoist has a steelflex: a sling wrapped round the truss chord it connects to, whose two legs meet
-  at 45° in a shackle on the chain's end link.
+  hoist is fixed by what it hangs from: on a three- or four-point truss, a 22 mm steelflex wrapped
+  round the nearest chord, its two legs meeting at 45°; on a pipe or a two-point truss, a flange
+  clamped round the tube; with nothing within half a metre, just the shackle. Every fixing ends in
+  a bow shackle — a U with its walls drawn out and a bolt straight through their ends — and the
+  chain's last link hangs on that bolt.
 
 A chain nobody chose a mode for has its motor on top. A chain whose ends were chosen before the
-modes existed keeps its hoist where it was and gets the steelflex at its other end. Anything the
+modes existed keeps its hoist where it was and gets its fixing at the other end. Anything the
 column does not apply to — a lamp, a truss, a multi-patch copy — shows a dash.
 
 A chain is drawn as real hoist chain, in the Visualizer and in the PreViz plan and elevations: links
 of 7 mm wire, 35 mm long, each turned a quarter to the next and overlapping it by the wire's
 thickness. From above, a chain is two crossed rounded rectangles, and a motor on top hides it. In
-the Visualizer the steelflex is purple and snaps round the nearest chord of a truss at that end of
-the chain.
+the Visualizer the steelflex is purple and snaps round the nearest chord of the truss at that end of
+the chain, and the flange clamps the nearest pipe.
 
 The trusses are drawn the way square truss is built, in the Visualizer and in the PreViz plan and
 elevations alike. The diagonals run at close to 45°, with a node about every chord spacing, so a
@@ -72,7 +75,9 @@ large truss is braced in longer bays than a standard one of the same length. Opp
 other way, so a side view shows an X in every bay, and a deco truss crosses its diagonals in every
 bay of every face. Each piece has an end frame just inside each end, a coupler receiver on every
 chord end, and the conical coupler centred on the joint, so a run of pieces reads as separate
-sticks coupled end to end. In the PreViz plan a curtain is a wavy line along its track, four
+sticks coupled end to end. The PreViz plan and elevations leave out every line hidden behind
+another part — a brace behind a chord, a chain link's end wire behind the link passing through it,
+a scissor arm behind the one crossing it — the way a technical drawing does, on screen and in print. In the PreViz plan a curtain is a wavy line along its track, four
 waves per fold, and in a front or back elevation it is the rectangle it covers with a dotted line down
 each fold, its dashes leaning 10–20° off vertical, alternating sides.
 
