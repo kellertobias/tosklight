@@ -90,7 +90,8 @@ visible column cannot be switched off. Patch, Venue and Effects each remember th
 this computer. The title also offers three quick views, which only the Architect has — the desk's
 Show Patch window does not:
 
-- **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Masters, MIB, Layer and Note.
+- **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Masters, Invert Pan,
+  Invert Tilt, MIB, Layer and Note.
 - **Visualization**: Fixture ID, Name, Location, Rotation, Bracket, Shaper, Layer, 2D, 3D and Note.
 - **Compact**: Fixture ID, Name, Patch, Layer and Note.
 

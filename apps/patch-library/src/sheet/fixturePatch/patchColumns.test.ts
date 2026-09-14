@@ -28,6 +28,8 @@ describe("patch sheet quick views", () => {
 			"Product / mode",
 			"Patch",
 			"Masters",
+			"Invert Pan",
+			"Invert Tilt",
 			"MIB",
 			"Layer",
 			"Note",

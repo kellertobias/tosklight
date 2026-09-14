@@ -41,6 +41,8 @@ export const PATCH_QUICK_VIEWS = [
 			"mode",
 			"patch",
 			"masters",
+			"invert_pan",
+			"invert_tilt",
 			"mib",
 			"layer",
 			"note",
