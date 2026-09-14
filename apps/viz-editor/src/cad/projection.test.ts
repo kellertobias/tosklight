@@ -3,7 +3,9 @@ import { audienceOutline } from "./audienceOutline";
 import {
 	CHAIN_PITCH,
 	CHAIN_WIRE,
+	SHACKLE,
 	STEELFLEX_LEG_DEGREES,
+	STEELFLEX_WIDTH,
 } from "./chainPlan";
 import {
 	audiencePersonHeight,
@@ -213,7 +215,8 @@ describe("CAD plan projections", () => {
 		);
 
 		expect(geometry.source).toBe("typed");
-		expect(geometry.outlines.length).toBeGreaterThan(4);
+		// Braces run behind the chords, so most of a truss is drawn as the lines that show.
+		expect(geometry.outlines.length + geometry.lines.length).toBeGreaterThan(4);
 	});
 
 	it("shows the declared three- and four-point chord arrangement in truss end views", () => {
@@ -233,10 +236,17 @@ describe("CAD plan projections", () => {
 		const threePoint = endView("Three-Point Truss 4 m");
 		const fourPoint = endView("Four-Point Truss 4 m");
 		expect(threePoint.source).toBe("typed");
-		// Each chord shows its receiver, chord and coupler rings; the end frame links them, and a
-		// box's frame carries one diagonal across it.
-		expect(threePoint.outlines).toHaveLength(3 * 3 + 3);
-		expect(fourPoint.outlines).toHaveLength(4 * 3 + 5);
+		// Looking down a truss, each chord end is its receiver ring with the coupler inside; the
+		// receiver hides the chord behind it. The end frame links the receivers, and a box's frame
+		// carries one diagonal across it, drawn where the receivers leave it showing.
+		expect(threePoint.outlines).toHaveLength(3 * 2);
+		expect(fourPoint.outlines).toHaveLength(4 * 2);
+		const frame = (geometry: typeof threePoint) =>
+			geometry.lines.filter(
+				({ points: [[ax, ay], [bx, by]] }) => Math.hypot(bx - ax, by - ay) > 100,
+			);
+		expect(frame(threePoint)).toHaveLength(3 * 2);
+		expect(frame(fourPoint)).toHaveLength(5 * 2);
 	});
 
 	it("draws a truss from its declared build: 45° bays, end frames, receivers and couplers", () => {
@@ -263,28 +273,42 @@ describe("CAD plan projections", () => {
 		expect(bays).toBe(12);
 		const bay = (3000 - parts.endFrame * 2) / bays;
 		expect((Math.atan(parts.spacing / bay) * 180) / Math.PI).toBeCloseTo(45, 0);
-		// Near and far faces cross in every bay, two end frames, two chords with two receivers and
-		// two couplers each.
-		expect(side.outlines).toHaveLength(2 * bays + 2 + 2 + 4 + 4);
+		// Near and far faces cross in every bay. The near diagonal hides the far one where it passes
+		// behind, so every drawn diagonal runs at the bay's angle and each X shows six long edges.
+		const diagonals = side.lines.filter(
+			({ points: [[ax, ay], [bx, by]] }) => Math.abs(bx - ax) > 1 && Math.abs(by - ay) > 1,
+		);
+		const degrees = ({ points: [[ax, ay], [bx, by]] }: (typeof diagonals)[number]) =>
+			(Math.atan2(Math.abs(by - ay), Math.abs(bx - ax)) * 180) / Math.PI;
+		expect(diagonals.every((line) => Math.abs(degrees(line) - 45) < 2)).toBe(true);
+		const long = diagonals.filter(
+			({ points: [[ax, ay], [bx, by]] }) => Math.hypot(bx - ax, by - ay) > 40,
+		);
+		expect(long).toHaveLength(6 * bays);
+		// Only the couplers, in front of everything at the four chord ends, stay whole.
+		expect(side.outlines).toHaveLength(4);
 		const couplers = side.triangles.filter(
 			({ color }) => color.join() === "0.72,0.75,0.79",
 		);
 		expect(couplers.length).toBeGreaterThan(0);
-		const xs = side.outlines.flat().map(([x]) => x);
+		const xs = [...side.outlines.flat(), ...side.lines.flatMap(({ points }) => points)].map(
+			([x]) => x,
+		);
 		expect(Math.min(...xs)).toBeLessThan(-1500);
 		expect(Math.max(...xs)).toBeGreaterThan(1500);
 
+		const drawn = (geometry: typeof side) => geometry.outlines.length + geometry.lines.length;
 		const deco = truss({ kind: "truss", chords: 4, pattern: "deco" }, "top_down");
 		const standardTop = truss(
 			{ kind: "truss", chords: 4, pattern: "standard" },
 			"top_down",
 		);
-		expect(deco.outlines.length).toBe(standardTop.outlines.length);
+		expect(drawn(deco)).toBe(drawn(standardTop));
 		const ladderTop = truss(
 			{ kind: "truss", chords: 2, pattern: "standard" },
 			"top_down",
 		);
-		expect(ladderTop.outlines.length).toBeLessThan(standardTop.outlines.length);
+		expect(drawn(ladderTop)).toBeLessThan(drawn(standardTop));
 	});
 
 	it("draws a curtain as a wave from above and a dotted-fold rectangle from the front", () => {
@@ -490,6 +514,7 @@ describe("CAD plan projections", () => {
 		view: CadViewDirection,
 		chainMode?: "plain" | "motor_top" | "motor_bottom",
 		height = 3000,
+		anchor?: "steelflex" | "flange" | "shackle",
 	) =>
 		entityPlanGeometry(
 			{
@@ -498,7 +523,7 @@ describe("CAD plan projections", () => {
 				kind: "venue",
 				fixtureType: "rigging",
 				sizeMillimetres: [300, 300, height],
-				scenery: { kind: "chain", chords: 0, pattern: "standard", chain: chainMode },
+				scenery: { kind: "chain", chords: 0, pattern: "standard", chain: chainMode, anchor },
 			},
 			undefined,
 			view,
@@ -527,20 +552,28 @@ describe("CAD plan projections", () => {
 		});
 	};
 
-	it("draws a chain from above as its two link orientations crossed", () => {
+	const samples = (lines: { points: [[number, number], [number, number]] }[]) =>
+		lines.flatMap(({ points: [[ax, ay], [bx, by]] }) =>
+			[0, 0.25, 0.5, 0.75, 1].map(
+				(t) => [ax + (bx - ax) * t, ay + (by - ay) * t] as [number, number],
+			),
+		);
+
+	it("draws a chain from above as its two links crossed, the upper hiding the lower", () => {
 		for (const mode of ["plain", "motor_bottom"] as const) {
 			const top = chain("top_down", mode);
-			expect(top.outlines).toHaveLength(2);
-			expect(top.outlines.every(isStadium)).toBe(true);
-			const sizes = top.outlines.map(extent).map(({ width, height }) => [
-				Math.round(width),
-				Math.round(height),
-			]);
-			expect(sizes).toEqual([
-				[24, 7],
-				[7, 24],
-			]);
-			expect(top.lines).toHaveLength(0);
+			// The top link runs across and stays whole; the link through it runs along, beneath.
+			expect(top.outlines).toHaveLength(1);
+			expect(isStadium(top.outlines[0])).toBe(true);
+			const { width, height } = extent(top.outlines[0]);
+			expect([Math.round(width), Math.round(height)]).toEqual([24, 7]);
+			const lower = samples(top.lines);
+			expect(Math.max(...lower.map(([, y]) => y))).toBeCloseTo(12, 6);
+			expect(Math.min(...lower.map(([, y]) => y))).toBeCloseTo(-12, 6);
+			// Nothing of the lower link is drawn where the upper one lies over it.
+			expect(
+				lower.some(([x, y]) => Math.abs(x) < 12 - 1e-6 && Math.abs(y) < CHAIN_WIRE / 2 - 1e-6),
+			).toBe(false);
 			expect(top.triangles.length).toBeGreaterThan(0);
 		}
 	});
@@ -555,96 +588,120 @@ describe("CAD plan projections", () => {
 		expect(chain("front_to_back", undefined)).toEqual(chain("front_to_back", "motor_top"));
 	});
 
-	it("alternates face-on and edge-on links 21 mm apart, swapped between front and side", () => {
-		const plain = chain("front_to_back", "plain", 1000);
-		const side = chain("left_to_right", "plain", 1000);
+	it("alternates face-on and edge-on links 21 mm apart, hiding the end wires the edge-on links cross", () => {
 		expect(CHAIN_PITCH).toBe(21);
-		const links = (geometry: typeof plain) => {
+		const count = Math.floor((1000 - 35) / 21) + 1;
+		const first = (35 + (count - 1) * 21) / 2 - 35 / 2;
+		const centreOf = (index: number) => first - index * 21;
+		for (const [view, faceParity] of [
+			["front_to_back", 0],
+			["left_to_right", 1],
+		] as const) {
+			const geometry = chain(view, "plain", 1000);
+			// Edge-on links pass in front where links cross, so each stays a whole 7 × 35 stadium.
+			const edgeOn = Array.from({ length: count }, (_, index) => index).filter(
+				(index) => index % 2 !== faceParity,
+			);
+			expect(geometry.outlines.every(isStadium)).toBe(true);
 			const shapes = geometry.outlines.map(extent);
-			const found: { kind: "face" | "edge"; centre: number }[] = [];
-			for (let index = 0; index < shapes.length; index++) {
-				const shape = shapes[index];
-				expect(isStadium(geometry.outlines[index])).toBe(true);
-				if (Math.round(shape.width) === 24) {
-					expect(Math.round(shape.height)).toBe(35);
-					const opening = shapes[index + 1];
-					expect([Math.round(opening.width), Math.round(opening.height)]).toEqual([10, 21]);
-					expect(opening.centre).toBeCloseTo(shape.centre, 6);
-					found.push({ kind: "face", centre: shape.centre });
-					index++;
-				} else {
-					expect([Math.round(shape.width), Math.round(shape.height)]).toEqual([CHAIN_WIRE, 35]);
-					found.push({ kind: "edge", centre: shape.centre });
-				}
+			expect(shapes.map(({ width, height }) => [Math.round(width), Math.round(height)])).toEqual(
+				edgeOn.map(() => [CHAIN_WIRE, 35]),
+			);
+			edgeOn.forEach((index, at) => expect(shapes[at].centre).toBeCloseTo(centreOf(index), 6));
+			// A face-on link shows its outside and its opening at the sides…
+			const drawn = samples(geometry.lines);
+			for (let index = faceParity; index < count; index += 2) {
+				const y = centreOf(index);
+				const drawnAt = (x: number) =>
+					drawn.some(([px, py]) => Math.abs(px - x) < 1e-6 && Math.abs(py - y) < 1e-6);
+				expect(drawnAt(12)).toBe(true);
+				expect(drawnAt(-5)).toBe(true);
+				// …but not its end wires where an edge-on link passes in front of them.
+				if (index > 0 && index < count - 1)
+					expect(
+						drawn.some(
+							([px, py]) =>
+								Math.abs(px) < CHAIN_WIRE / 2 - 1e-6 &&
+								Math.abs(py - y) > 10.5 - 1e-6 &&
+								Math.abs(py - y) < 17.5 + 1e-6,
+						),
+					).toBe(false);
 			}
-			return found;
-		};
-		const front = links(plain);
-		const sideLinks = links(side);
-		expect(front.length).toBe(Math.floor((1000 - 35) / 21) + 1);
-		front.forEach((link, index) => {
-			expect(link.kind).toBe(index % 2 ? "edge" : "face");
-			expect(sideLinks[index].kind).toBe(index % 2 ? "face" : "edge");
-			if (index) expect(front[index - 1].centre - link.centre).toBeCloseTo(21, 6);
-		});
-		// An edge-on link reaches a wire's depth into the face-on link's opening at each end.
-		const edgeTop = front[1].centre + 35 / 2;
-		const edgeBottom = front[1].centre - 35 / 2;
-		expect(edgeTop - (front[0].centre - 21 / 2)).toBeCloseTo(CHAIN_WIRE, 6);
-		expect(front[2].centre + 21 / 2 - edgeBottom).toBeCloseTo(CHAIN_WIRE, 6);
-		expect(plain.lines).toHaveLength(0);
+		}
 	});
 
-	it("shackles the chain end to a steelflex whose legs meet at 45° from a wrap round the chord", () => {
+	it("fixes the chain's free end by what it hangs from, in a shackle whose bolt the last link bears on", () => {
+		const slantDegrees = ({ points: [[ax, ay], [bx, by]] }: { points: [[number, number], [number, number]] }) =>
+			(Math.atan2(Math.abs(bx - ax), Math.abs(by - ay)) * 180) / Math.PI;
 		for (const [mode, sign] of [
 			["motor_top", 1],
 			["motor_bottom", -1],
 		] as const)
-			for (const view of ["front_to_back", "left_to_right"] as const) {
-				const geometry = chain(view, mode);
-				const legs = geometry.lines.filter(({ points: [[ax, ay], [bx, by]] }) => {
+			for (const anchor of ["steelflex", "flange", "shackle"] as const) {
+				const front = chain("front_to_back", mode, 3000, anchor);
+				const shapes = front.outlines.map(extent);
+				// The bolt's head stands proud of the shackle's wall: 8 × 28.
+				const head = shapes.find(
+					({ width, height }) => Math.round(width) === 8 && Math.round(height) === 28,
+				);
+				expect(head).toBeDefined();
+				// The last link hangs edge-on on the bolt, its end wire bearing on it.
+				const links = shapes.filter(
+					({ width, height }) => Math.round(width) === CHAIN_WIRE && Math.round(height) === 35,
+				);
+				const last = links.reduce((best, link) =>
+					link.centre * sign < best.centre * sign ? link : best,
+				);
+				// Its end wire's inside meets the bolt's underside, so its centre is this far past the bolt.
+				expect((last.centre - head!.centre) * -sign).toBeCloseTo(
+					CHAIN_WIRE + SHACKLE.bolt / 2 - 35 / 2,
+					6,
+				);
+				expect(sign * head!.centre).toBeLessThan(0);
+				// Seen from the side, the bolt ends in its nut at the same height.
+				const nut = chain("left_to_right", mode, 3000, anchor).outlines.find(
+					(outline) => outline.length === 6,
+				);
+				expect(extent(nut!).centre).toBeCloseTo(head!.centre, 6);
+
+				const legs = front.lines.filter(
+					({ points: [[ax, ay], [bx, by]] }) =>
+						Math.abs(bx - ax) > 1 && Math.abs(by - ay) > 1 && Math.hypot(bx - ax, by - ay) > 40,
+				);
+				const round = (size: number) =>
+					shapes.some(({ width, height }) => Math.round(width) === size && Math.round(height) === size);
+				if (anchor === "steelflex") {
+					// Two legs 45° apart, each a sling 22 mm wide, round a 50 mm truss chord.
+					expect(legs.length).toBeGreaterThanOrEqual(4);
+					expect(legs.every((leg) => Math.abs(slantDegrees(leg) - STEELFLEX_LEG_DEGREES) < 1e-3)).toBe(true);
+					const left = legs.filter(({ points }) => points[0][0] + points[1][0] < 0);
+					const [[ax, ay], [bx, by]] = left[0].points;
 					const length = Math.hypot(bx - ax, by - ay);
-					return length > 20 && Math.abs(Math.abs(ax) - Math.abs(bx)) > 10;
-				});
-				expect(legs).toHaveLength(2);
-				for (const {
-					points: [[ax, ay], [bx, by]],
-				} of legs) {
-					const degrees = (Math.atan2(Math.abs(bx - ax), Math.abs(by - ay)) * 180) / Math.PI;
-					expect(degrees).toBeCloseTo(STEELFLEX_LEG_DEGREES, 6);
-					// The legs sit at the end away from the hoist: the bottom for a hoist on top.
-					expect(Math.sign(ay + by)).toBe(-sign);
+					const apart = Math.max(
+						...left.map(({ points: [[px, py]] }) => Math.abs((bx - ax) * (py - ay) - (by - ay) * (px - ax)) / length),
+					);
+					expect(apart).toBeCloseTo(STEELFLEX_WIDTH, 3);
+					expect(round(50)).toBe(true);
+				} else {
+					expect(legs).toHaveLength(0);
+					expect(round(50)).toBe(false);
 				}
-				const apexes = legs.map(({ points }) => points[1]);
-				expect(apexes[0]).toEqual(apexes[1]);
-				// The chord the steelflex wraps is a 50 mm circle at the very end of the object.
-				const chord = geometry.outlines
-					.map(extent)
-					.find(({ width, height }) => Math.round(width) === 50 && Math.round(height) === 50);
-				expect(chord).toBeDefined();
-				expect(Math.abs(chord!.centre)).toBeCloseTo(1500 - 28, 0);
+				// A flange's clamp rings the pipe; nothing else has one.
+				expect(round(64)).toBe(anchor === "flange");
 				// The hoist is at the other end.
-				const body = geometry.outlines
-					.map(extent)
-					.find(({ height }) => Math.round(height) === 420);
+				const body = shapes.find(({ height }) => Math.round(height) === 420);
 				expect(Math.sign(body!.centre)).toBe(sign);
 			}
-		expect(chain("front_to_back", "plain").lines).toHaveLength(0);
+		// A plain chain draws no fixing and no hoist: nothing longer than one link.
+		expect(
+			chain("front_to_back", "plain").lines.every(
+				({ points: [[ax, ay], [bx, by]] }) => Math.hypot(bx - ax, by - ay) <= 35,
+			),
+		).toBe(true);
 	});
 
 	it("leaves the opening of a face-on chain link hollow", () => {
-		const geometry = entityPlanGeometry(
-			{
-				...movingLight,
-				name: "Chain",
-				kind: "venue",
-				fixtureType: "rigging",
-				sizeMillimetres: [100, 100, 500],
-				scenery: { kind: "chain", chords: 0, pattern: "standard", chain: "plain" },
-			},
-			undefined,
-			"front_to_back",
-		);
+		const geometry = chain("front_to_back", "plain", 500);
 		const covered = ([x, y]: [number, number]) =>
 			geometry.triangles.some(({ points: [a, b, c] }) => {
 				const side = (p: [number, number], q: [number, number]) =>
@@ -652,22 +709,14 @@ describe("CAD plan projections", () => {
 				const [ab, bc, ca] = [side(a, b), side(b, c), side(c, a)];
 				return (ab >= 0 && bc >= 0 && ca >= 0) || (ab <= 0 && bc <= 0 && ca <= 0);
 			});
-		const faceOn = geometry.outlines
-			.map((outline) => {
-				const xs = outline.map(([x]) => x);
-				const ys = outline.map(([, y]) => y);
-				return {
-					width: Math.max(...xs) - Math.min(...xs),
-					height: Math.max(...ys) - Math.min(...ys),
-					centre: [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2] as [number, number],
-				};
-			})
-			.filter(({ width, height }) => Math.round(width) === 24 && Math.round(height) === 35);
-		expect(faceOn.length).toBeGreaterThan(5);
-		for (const { centre } of faceOn) {
+		const count = Math.floor((500 - 35) / 21) + 1;
+		const first = (35 + (count - 1) * 21) / 2 - 35 / 2;
+		expect(count).toBeGreaterThan(10);
+		for (let index = 0; index < count; index += 2) {
+			const centre: [number, number] = [0, first - index * 21];
 			expect(covered(centre)).toBe(false);
 			// The wire at the side of the opening is still solid.
-			expect(covered([centre[0] + 12 - CHAIN_WIRE / 2, centre[1]])).toBe(true);
+			expect(covered([12 - CHAIN_WIRE / 2, centre[1]])).toBe(true);
 		}
 	});
 
@@ -685,40 +734,41 @@ describe("CAD plan projections", () => {
 				undefined,
 				view,
 			);
-		// An arm is the only slanted straight-sided shape: a clipped band of at most six corners with
-		// an edge that runs neither across nor up. The round pivot has more corners.
-		const arms = (geometry: ReturnType<typeof riser>) =>
-			geometry.outlines.filter((outline) =>
-				outline.length <= 6 &&
-				outline.some(([ax, ay], index) => {
-					const [bx, by] = outline[(index + 1) % outline.length];
-					return Math.abs(by - ay) > 1 && Math.abs(bx - ax) > 1;
-				}),
+		// Every arm is slanted; the deck, the base frame and the stairs are square to the page. Arms
+		// cross and end inside the deck and the base, so they are drawn only as their visible lines.
+		type Geometry = ReturnType<typeof riser>;
+		const slanted = (geometry: Geometry) =>
+			geometry.lines.filter(
+				({ points: [[ax, ay], [bx, by]] }) => Math.abs(by - ay) > 1 && Math.abs(bx - ax) > 1,
 			);
-		const angle = (outline: [number, number][]) => {
-			const edges = outline.map(([ax, ay], index) => {
-				const [bx, by] = outline[(index + 1) % outline.length];
-				return [bx - ax, by - ay];
-			});
-			const [dx, dy] = edges.reduce((longest, edge) =>
-				Math.hypot(...edge) > Math.hypot(...longest) ? edge : longest,
-			);
-			return (Math.atan2(Math.abs(dy), Math.abs(dx)) * 180) / Math.PI;
-		};
+		const pivots = (geometry: Geometry) =>
+			geometry.outlines.filter((outline) => outline.length === 10);
 		const low = riser("Stage element 2x1", "front_to_back", 200);
-		expect(arms(low)).toHaveLength(2);
 		const tallFront = riser("Stage element 2x1", "front_to_back", 1200);
 		const tallSide = riser("Stage element 2x1", "left_to_right", 1200);
-		expect(arms(tallFront)).toHaveLength(2);
+		expect(pivots(low)).toHaveLength(1);
+		expect(pivots(tallFront)).toHaveLength(1);
 		// From the side the deck is only 1 m deep, so the same rise needs a second X.
-		expect(arms(tallSide)).toHaveLength(4);
-		for (const [geometry, width, height] of [
-			[low, 2000, 200],
-			[tallFront, 2000, 1200],
-			[tallSide, 1000, 1200],
+		expect(pivots(tallSide)).toHaveLength(2);
+		for (const [geometry, width, height, stages] of [
+			[low, 2000, 200, 1],
+			[tallFront, 2000, 1200, 1],
+			[tallSide, 1000, 1200, 2],
 		] as const) {
-			expect(arms(geometry).every((arm) => angle(arm) <= SCISSOR_MAX_DEGREES + 0.5)).toBe(true);
-			const points = arms(geometry).flat();
+			const arms = slanted(geometry);
+			const angle = ({ points: [[ax, ay], [bx, by]] }: (typeof arms)[number]) =>
+				(Math.atan2(Math.abs(by - ay), Math.abs(bx - ax)) * 180) / Math.PI;
+			
+			// Where two arms cross, the front one hides the one behind: its two long edges are each
+			// cut in two, and the front arm's stay whole — six long lines to an X.
+			const long = arms.filter(
+				({ points: [[ax, ay], [bx, by]] }) => Math.hypot(bx - ax, by - ay) > width * 0.2 / stages,
+			);
+			// The long edges run at the arm's angle; only the arms' cut ends, a few millimetres long, are steeper.
+			expect(long.every((arm) => angle(arm) <= SCISSOR_MAX_DEGREES + 0.5)).toBe(true);
+			if (stages === 1) expect(long).toHaveLength(6);
+			else expect(long.length).toBeGreaterThanOrEqual(6 * stages);
+			const points = arms.flatMap(({ points }) => points);
 			const xs = points.map(([x]) => x);
 			const ys = points.map(([, y]) => y);
 			// The arms span nearly the whole deck and stop where the deck and the base frame begin.
@@ -726,16 +776,33 @@ describe("CAD plan projections", () => {
 			expect(Math.max(...xs)).toBeLessThanOrEqual(width / 2 + 1e-6);
 			const deck = Math.min(80, height * 0.3);
 			const base = Math.min(50, height * 0.2);
-			expect(Math.max(...ys)).toBeCloseTo(height / 2 - deck, 6);
-			expect(Math.min(...ys)).toBeCloseTo(-height / 2 + base, 6);
+			const top = height / 2 - deck;
+			const bottom = -height / 2 + base;
+			expect(Math.max(...ys)).toBeCloseTo(top, 3);
+			expect(Math.min(...ys)).toBeCloseTo(bottom, 3);
+			// The deck and the base frame are drawn whole, and nothing of an arm is drawn along
+			// their edges or inside them.
+			const rects = geometry.outlines.filter((outline) => outline.length === 4).map(extent);
+			expect(rects.map(({ width: w, height: h }) => [Math.round(w), Math.round(h)])).toEqual([
+				[width, Math.round(deck)],
+				[width, Math.round(base)],
+			]);
+			expect(
+				samples(geometry.lines).some(([, y]) => y > top + 1e-3 || y < bottom - 1e-3),
+			).toBe(false);
+			expect(
+				geometry.lines.some(({ points }) =>
+					points.every(([, y]) => Math.abs(y - top) < 1e-3 || Math.abs(y - bottom) < 1e-3),
+				),
+			).toBe(false);
 		}
-		const top = riser("Stage element 2x1", "top_down", 1200);
-		expect(arms(top)).toHaveLength(0);
-		expect(top.outlines).toHaveLength(2);
+		const plan = riser("Stage element 2x1", "top_down", 1200);
+		expect(slanted(plan)).toHaveLength(0);
+		expect(plan.outlines).toHaveLength(2);
 
 		const stairs = riser("Stage Stairs", "front_to_back", 1200);
-		expect(arms(stairs)).toHaveLength(0);
-		expect(stairs.outlines).toHaveLength(3);
-		expect(arms(riser("Treppe", "left_to_right", 1200, "stage_stairs"))).toHaveLength(0);
+		expect(slanted(stairs)).toHaveLength(0);
+		expect(pivots(stairs)).toHaveLength(0);
+		expect(slanted(riser("Treppe", "left_to_right", 1200, "stage_stairs"))).toHaveLength(0);
 	});
 });

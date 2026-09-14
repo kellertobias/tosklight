@@ -38,7 +38,12 @@ export interface CadScenery {
 	pattern: "standard" | "deco" | string;
 	/** How a chain is rigged; only a chain carries it, and absent reads as a hoist at the top. */
 	chain?: CadChainMode;
+	/** What a rigged chain's end away from its hoist is fixed with; absent reads as a steelflex. */
+	anchor?: CadChainAnchor;
 }
+
+/** A steelflex round a three- or four-point truss, a flange on a pipe, or a shackle to the steel. */
+export type CadChainAnchor = "steelflex" | "flange" | "shackle";
 
 /** A chain hanging free, from a hoist at its top, or pulled down by a hoist at its bottom. */
 export type CadChainMode = "plain" | "motor_top" | "motor_bottom";

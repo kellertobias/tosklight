@@ -1,6 +1,7 @@
 import { audienceOutlineFor, audienceStrokesFor } from "./audienceOutline";
 import { chainPlan } from "./chainPlan";
 import { curtainPlan } from "./curtainPlan";
+import { hideCoveredEdges } from "./hiddenLines";
 import { trussPlan } from "./trussPlan";
 import type {
 	CadDrawing,
@@ -484,7 +485,7 @@ function typedGeometry(
 		scenery?.kind === "chain" ||
 		(!scenery && /chain/.test(type))
 	) {
-		return chainPlan(entity.sizeMillimetres, view, scenery?.chain);
+		return chainPlan(entity.sizeMillimetres, view, scenery?.chain, scenery?.anchor);
 	} else if (
 		scenery?.kind === "riser" ||
 		/stage element|riser|stage deck|stairs/.test(type)
@@ -552,11 +553,18 @@ function fromPolygons(
 			});
 		}
 	}
+	// A typed symbol is painted back to front, so a later polygon hides whatever earlier edges it
+	// covers and nothing hidden is drawn.
 	return {
 		source,
 		triangles,
-		outlines: polygons.map((polygon) => polygon.points),
-		lines: [],
+		...hideCoveredEdges(
+			polygons.map((polygon) => ({
+				kind: "solid" as const,
+				edges: [polygon.points],
+				area: [polygon.points],
+			})),
+		),
 	};
 }
 

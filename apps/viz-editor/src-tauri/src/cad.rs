@@ -12,7 +12,7 @@ use crate::session::Session;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use light_application::PatchSnapshot;
 use parking_lot::Mutex;
-use scenery::{CadScenery, cad_scenery, entity_size};
+use scenery::{CadScenery, cad_scenery, connect_chains, entity_size};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -454,7 +454,7 @@ pub fn emit_scene_state_delta(
     let hidden_fixtures = hidden_fixture_ids(session, "visible2d")?;
     let hidden_layers = hidden_layers(session, "visible2d")?;
     let notes = fixture_notes(session)?;
-    let all_entities = entities(&patch, &locked, &notes);
+    let all_entities = connect_chains(entities(&patch, &locked, &notes));
     let removed_ids = all_entities
         .iter()
         .filter(|entity| {
@@ -537,7 +537,7 @@ fn visible_entities(
     hidden_layers: &BTreeSet<String>,
     notes: &HashMap<Uuid, String>,
 ) -> Vec<CadEntity> {
-    entities(snapshot, locked_layers, notes)
+    connect_chains(entities(snapshot, locked_layers, notes))
         .into_iter()
         .filter(|entity| {
             !hidden_fixtures.contains(&entity.logical_fixture_id)

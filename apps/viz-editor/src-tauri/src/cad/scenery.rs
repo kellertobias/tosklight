@@ -3,6 +3,8 @@
 //! name.
 
 use light_fixture::{ChainMode, FixtureVector, PatchedFixturePatch, SceneryOptions};
+
+use super::CadEntity;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -20,6 +22,103 @@ pub struct CadScenery {
     /// one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chain: Option<ChainMode>,
+    /// What a rigged chain's end away from its hoist is fixed with. Only a chain has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<ChainAnchor>,
+}
+
+/// What the end of a chain away from its hoist is fixed with, decided by what hangs there.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChainAnchor {
+    /// A steelflex wrapped round a chord of a three- or four-point truss.
+    Steelflex,
+    /// A flange clamped round a pipe or a ladder truss's tube.
+    Flange,
+    /// A shackle made fast straight to the steel: nothing to wrap or clamp within reach.
+    Shackle,
+}
+
+/// How far from a chain's free end a truss or pipe still counts as what that end hangs from.
+const ANCHOR_REACH_MILLIMETRES: f32 = 500.0;
+
+/// Give every rigged chain the fixing its free end needs: a steelflex on a three- or four-point
+/// truss within reach, a flange on a pipe or ladder truss, and a plain shackle otherwise. A truss's
+/// run is read from its size and its yaw, which is how trusses are flown.
+pub fn connect_chains(mut entities: Vec<CadEntity>) -> Vec<CadEntity> {
+    let rigging: Vec<Rigging> = entities.iter().filter_map(Rigging::of).collect();
+    for entity in &mut entities {
+        let end = match entity.scenery.as_ref().and_then(|scenery| scenery.chain) {
+            Some(ChainMode::MotorTop) => -1.0,
+            Some(ChainMode::MotorBottom) => 1.0,
+            Some(ChainMode::Plain) | None => continue,
+        };
+        let [x, y, z] = entity.position_millimetres.map(|value| value as f32);
+        let point = [x, y, z + end * entity.size_millimetres[2] / 2.0];
+        let nearest = rigging
+            .iter()
+            .filter_map(|rigging| {
+                let distance = rigging.distance(point);
+                (distance <= ANCHOR_REACH_MILLIMETRES).then_some((distance, rigging.chords))
+            })
+            .min_by(|left, right| left.0.total_cmp(&right.0));
+        if let Some(scenery) = entity.scenery.as_mut() {
+            scenery.anchor = Some(match nearest {
+                Some((_, chords)) if chords >= 3 => ChainAnchor::Steelflex,
+                Some(_) => ChainAnchor::Flange,
+                None => ChainAnchor::Shackle,
+            });
+        }
+    }
+    entities
+}
+
+/// A truss or pipe as a chain end reaches for it: the line it runs along and how thick it is.
+struct Rigging {
+    centre: [f32; 3],
+    along: [f32; 3],
+    length: f32,
+    section: f32,
+    chords: u8,
+}
+
+impl Rigging {
+    fn of(entity: &CadEntity) -> Option<Self> {
+        let scenery = entity
+            .scenery
+            .as_ref()
+            .filter(|scenery| scenery.kind == "truss")?;
+        let [width, depth, height] = entity.size_millimetres;
+        let yaw = entity.rotation_degrees[2].to_radians();
+        let (along, length, section) = if width >= depth && width >= height {
+            ([yaw.cos(), yaw.sin(), 0.0], width, depth.max(height))
+        } else if depth >= height {
+            ([-yaw.sin(), yaw.cos(), 0.0], depth, width.max(height))
+        } else {
+            ([0.0, 0.0, 1.0], height, width.max(depth))
+        };
+        Some(Self {
+            centre: entity.position_millimetres.map(|value| value as f32),
+            along,
+            length,
+            section,
+            chords: scenery.chords,
+        })
+    }
+
+    /// How far `point` is from the outside of this run, in millimetres.
+    fn distance(&self, point: [f32; 3]) -> f32 {
+        let offset: [f32; 3] = std::array::from_fn(|axis| point[axis] - self.centre[axis]);
+        let t = (0..3)
+            .map(|axis| offset[axis] * self.along[axis])
+            .sum::<f32>()
+            .clamp(-self.length / 2.0, self.length / 2.0);
+        let gap = (0..3)
+            .map(|axis| (offset[axis] - self.along[axis] * t).powi(2))
+            .sum::<f32>()
+            .sqrt();
+        gap - self.section / 2.0
+    }
 }
 
 /// The generated object one placement shows, with how the operator rigged it, or `None` for a
@@ -53,6 +152,7 @@ fn profile_scenery(profile: &serde_json::Value) -> Option<CadScenery> {
             .map_or(0, |chords| chords.min(4) as u8),
         pattern: text("pattern", "standard"),
         chain: None,
+        anchor: None,
     })
 }
 
@@ -116,6 +216,7 @@ mod tests {
                 chords: 3,
                 pattern: "deco".into(),
                 chain: None,
+                anchor: None,
             })
         );
         let standard = json!({ "scenery": { "kind": "truss", "chords": 4 } });
@@ -157,5 +258,85 @@ mod tests {
             [6000.0, 340.0, 290.0]
         );
         assert_eq!(dimensions(&profile), [4000.0, 340.0, 340.0]);
+    }
+
+    fn placed(
+        kind: &str,
+        chords: u8,
+        chain: Option<ChainMode>,
+        z: i32,
+        size: [f32; 3],
+    ) -> CadEntity {
+        CadEntity {
+            id: Uuid::new_v4(),
+            logical_fixture_id: Uuid::new_v4(),
+            name: kind.into(),
+            fixture_number: None,
+            fixture_display_id: "0.1".into(),
+            dmx_address: "Visual only".into(),
+            fixture_profile: String::new(),
+            mode: String::new(),
+            note: String::new(),
+            kind: "venue".into(),
+            fixture_type: "rigging".into(),
+            drawing_id: String::new(),
+            layer_id: String::new(),
+            selectable: true,
+            position_millimetres: [0, 0, z],
+            rotation_degrees: [0.0; 3],
+            size_millimetres: size,
+            output_direction: [0.0; 3],
+            scenery: Some(CadScenery {
+                kind: kind.into(),
+                chords,
+                pattern: "standard".into(),
+                chain,
+                anchor: None,
+            }),
+        }
+    }
+
+    #[test]
+    fn a_chain_is_fixed_by_what_its_free_end_hangs_from() {
+        let chain = |mode| placed("chain", 0, Some(mode), 3000, [100.0, 100.0, 2000.0]);
+        let anchor_of = |entities: Vec<CadEntity>| {
+            connect_chains(entities)
+                .into_iter()
+                .find(|entity| entity.name == "chain")
+                .and_then(|entity| entity.scenery)
+                .and_then(|scenery| scenery.anchor)
+        };
+        // The hoist is on top, so the free end is 2 m up, 55 mm above a box truss's top.
+        let truss = placed("truss", 4, None, 1800, [4000.0, 290.0, 290.0]);
+        assert_eq!(
+            anchor_of(vec![chain(ChainMode::MotorTop), truss.clone()]),
+            Some(ChainAnchor::Steelflex)
+        );
+        let pipe = placed("truss", 1, None, 1900, [3000.0, 50.0, 50.0]);
+        assert_eq!(
+            anchor_of(vec![chain(ChainMode::MotorTop), pipe]),
+            Some(ChainAnchor::Flange)
+        );
+        let ladder = placed("truss", 2, None, 1800, [3000.0, 290.0, 290.0]);
+        assert_eq!(
+            anchor_of(vec![chain(ChainMode::MotorTop), ladder]),
+            Some(ChainAnchor::Flange)
+        );
+        let far = placed("truss", 4, None, 0, [4000.0, 290.0, 290.0]);
+        assert_eq!(
+            anchor_of(vec![chain(ChainMode::MotorTop), far]),
+            Some(ChainAnchor::Shackle)
+        );
+        // With the hoist at the bottom, the free end is the top one.
+        let above = placed("truss", 3, None, 4200, [4000.0, 290.0, 290.0]);
+        assert_eq!(
+            anchor_of(vec![chain(ChainMode::MotorBottom), above, truss]),
+            Some(ChainAnchor::Steelflex)
+        );
+        assert_eq!(anchor_of(vec![chain(ChainMode::Plain)]), None);
+        assert_eq!(
+            serde_json::to_value(ChainAnchor::Steelflex).unwrap(),
+            "steelflex"
+        );
     }
 }
