@@ -147,6 +147,9 @@
 }
 
 .ui-window-header-search .ui-text-control > .ui-input {
+	/* The padding sits inside the bar's height; a host without a global border-box reset would
+	   otherwise grow the field past the title bar and push its text below centre. */
+	box-sizing: border-box;
 	padding-top: 4px;
 	padding-bottom: 0;
 }

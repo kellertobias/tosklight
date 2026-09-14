@@ -217,6 +217,35 @@ function normalizeNumberText(
 	return valid ? filtered : current;
 }
 
+/**
+ * The text as typed, while it still means the number the caller holds.
+ *
+ * Most callers store a parsed number, so "1." comes back as 1 and would redraw as "1" — the point
+ * could never be typed, nor "0.05" reached through "0.0", nor a negative begun with "-". The typed
+ * text stands until it means something else or the field is left.
+ */
+function useTypedNumberText(value: NumberInputProps["value"]) {
+	const [typed, setTyped] = useState<string | null>(null);
+	const shown =
+		value !== undefined && typed !== null && typedMeans(typed, value)
+			? typed
+			: value;
+	return { shown, setTyped };
+}
+
+/** Whether typed text is an in-progress spelling of the value the caller now holds. */
+function typedMeans(
+	typed: string,
+	value: string | number | readonly string[],
+) {
+	const held = String(value);
+	if (typed === held) return true;
+	if (typed === "" || typed === "-" || typed === "." || typed === "-.")
+		return held === "" || held === "0" || held === "NaN";
+	const parsed = Number(typed);
+	return !Number.isNaN(parsed) && held !== "" && parsed === Number(held);
+}
+
 function committedNumberText(
 	next: string,
 	min: NumberInputProps["min"],
@@ -402,24 +431,21 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 		const [open, setOpen] = useState(false);
 		const lastKeyboardRequest = useRef(keyboardRequest);
 		const [modalValue, setModalValue] = useState("");
+		const { shown, setTyped } = useTypedNumberText(value);
 		const native = useRef<HTMLInputElement>(null);
 		useImperativeHandle(ref, () => native.current!);
-		const current = String(
-			value ?? native.current?.value ?? defaultValue ?? "",
-		);
+		const current = String(shown ?? native.current?.value ?? defaultValue ?? "");
 		useEffect(() => {
 			if (keyboardRequest === lastKeyboardRequest.current) return;
 			lastKeyboardRequest.current = keyboardRequest;
 			setModalValue(current);
 			setOpen(true);
 		}, [keyboardRequest, current]);
-		const update = (next: string) =>
-			emitInputValue(
-				native.current,
-				normalizeNumberText(next, allowDecimal, current),
-				onChange,
-				onValueChange,
-			);
+		const update = (next: string) => {
+			setTyped(null);
+			const text = normalizeNumberText(next, allowDecimal, current);
+			emitInputValue(native.current, text, onChange, onValueChange);
+		};
 		const commit = (next: string) => {
 			const committed = committedNumberText(next, min, max);
 			update(committed);
@@ -466,7 +492,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 					ref={native}
 					type="text"
 					inputMode={allowDecimal ? "decimal" : "numeric"}
-					value={value}
+					value={shown}
 					defaultValue={defaultValue}
 					disabled={disabled}
 					readOnly={readOnly}
@@ -478,6 +504,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 							current,
 						);
 						if (next !== event.target.value) event.target.value = next;
+						setTyped(next);
 						onValueChange?.(next);
 						onChange?.(event);
 					}}

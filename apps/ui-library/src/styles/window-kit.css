@@ -89,7 +89,11 @@
 
 .ui-title-chrome-group + .ui-title-chrome-group::before,
 .ui-title-chrome-terminals::before,
-.ui-window-action-group + .ui-window-action-group::before {
+.ui-window-action-group + .ui-window-action-group::before,
+/* Search is not a group, but the buttons after it are a new set of controls all the same. */
+.ui-title-chrome-search
+	~ .ui-title-chrome-groups
+	> .ui-title-chrome-group:first-child::before {
 	content: "";
 	flex: none;
 	align-self: stretch;
@@ -122,7 +126,16 @@
 .ui-title-chrome-group + .ui-title-chrome-group > :first-child > :first-child,
 .ui-title-chrome-terminals > :first-child,
 .ui-title-chrome-terminals > :first-child > :first-child,
-.ui-window-action-group + .ui-window-action-group > :first-child {
+.ui-window-action-group + .ui-window-action-group > :first-child,
+.ui-title-chrome-search
+	~ .ui-title-chrome-groups
+	> .ui-title-chrome-group:first-child
+	> :first-child,
+.ui-title-chrome-search
+	~ .ui-title-chrome-groups
+	> .ui-title-chrome-group:first-child
+	> :first-child
+	> :first-child {
 	border-left: 0;
 }
 

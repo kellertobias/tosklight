@@ -94,6 +94,43 @@ describe("shared controls", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Decrease value" }));
 		expect(change).toHaveBeenCalledWith("2");
 	});
+	it("lets a decimal be typed into a field whose owner keeps the parsed number", () => {
+		// The shape weight, beam angle and part transforms use: the text is parsed on every change.
+		let stored = 0;
+		function Parsed() {
+			const [value, setValue] = useState(0);
+			return (
+				<NumberField
+					label="Weight"
+					allowDecimal
+					value={value}
+					onChange={(event) => {
+						stored = Number(event.target.value);
+						setValue(stored);
+					}}
+				/>
+			);
+		}
+		render(<Parsed />);
+		const input = screen.getByLabelText("Weight") as HTMLInputElement;
+
+		fireEvent.change(input, { target: { value: "1." } });
+		expect(input.value).toBe("1.");
+		fireEvent.change(input, { target: { value: "1.5" } });
+		expect(input.value).toBe("1.5");
+		expect(stored).toBe(1.5);
+
+		// A negative is begun with its sign, and a trailing zero survives being typed.
+		fireEvent.change(input, { target: { value: "-" } });
+		expect(input.value).toBe("-");
+		fireEvent.change(input, { target: { value: "-2.20" } });
+		expect(input.value).toBe("-2.20");
+		expect(stored).toBe(-2.2);
+
+		// Leaving the field shows the number as it is stored.
+		fireEvent.blur(input);
+		expect(input.value).toBe("-2.2");
+	});
 	it("snaps step buttons to adjacent increments and wraps at bounds", () => {
 		const commit = vi.fn();
 		const { rerender } = render(
