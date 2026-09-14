@@ -28,11 +28,21 @@ function normalizedModelScale(model: THREE.Object3D, fixture: PatchedFixture) {
 	return desiredHeight / Math.max(size.y, size.x, size.z, 0.001);
 }
 
-function modelScale(model: THREE.Object3D, fixture: PatchedFixture) {
+/** How many times its built size the operator placed this object at; 1 when none is stored. */
+function placedModelScale(fixture: PatchedFixture) {
+	const stored = fixture.model_scale;
+	return typeof stored === "number" && Number.isFinite(stored) && stored > 0
+		? stored
+		: 1;
+}
+
+export function modelScale(model: THREE.Object3D, fixture: PatchedFixture) {
 	// Venue packages author visual-only GLBs in metres to retain their real size.
-	return fixture.definition.profile_snapshot?.model_units === "metres"
-		? 1
-		: normalizedModelScale(model, fixture);
+	const fitted =
+		fixture.definition.profile_snapshot?.model_units === "metres"
+			? 1
+			: normalizedModelScale(model, fixture);
+	return fitted * placedModelScale(fixture);
 }
 
 function removeNestedBoundParts(

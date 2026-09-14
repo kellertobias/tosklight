@@ -70,6 +70,9 @@ pub struct FixtureDto {
     /// What an operator chose for a generated Venue object beyond its size.
     #[serde(skip_serializing_if = "SceneryOptions::is_empty")]
     pub scenery_options: SceneryOptions,
+    /// How many times its built size a placed Venue object is drawn. Absent is its built size.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_scale: Option<f32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -184,6 +187,7 @@ fn fixture(
             z: size.z.round() as i32,
         }),
         scenery_options: patch.scenery_options.clone(),
+        model_scale: patch.model_scale,
     }
 }
 

@@ -133,6 +133,7 @@ fn media_fixture() -> (PatchedFixture, FixtureId) {
     };
     (
         PatchedFixture {
+            model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,
             fixture_id: physical,

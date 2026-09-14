@@ -330,6 +330,7 @@ fn shipped_profile_svg_reaches_the_literal_plan_artwork_mesh() {
         profile: std::sync::Arc::new(profile),
         mode_id,
         instances: vec![viz_project::PhysicalInstance {
+            model_scale: 1.0,
             scenery_size_metres: None,
             scenery_options: Default::default(),
             instance_id: uuid::Uuid::new_v4(),

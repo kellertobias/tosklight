@@ -75,6 +75,64 @@ fn patch_validation_rejects_a_scenery_colour_that_is_not_rrggbb() {
 }
 
 #[test]
+fn a_patch_record_written_before_model_scale_reads_at_its_built_size() {
+    let profile = profile();
+    let fixture = fixture(&profile);
+    let body =
+        serde_json::to_value(PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap())
+            .unwrap();
+    assert!(body.get("model_scale").is_none());
+
+    let record = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+    let patch = record.patch().unwrap();
+    assert_eq!(patch.model_scale, None);
+    assert_eq!(crate::resolved_model_scale(patch.model_scale), 1.0);
+    assert_eq!(serde_json::to_value(&record).unwrap(), body);
+
+    // The runtime shape an older desk stored reads the same way.
+    let mut runtime = serde_json::to_value(&fixture).unwrap();
+    runtime.as_object_mut().unwrap().remove("model_scale");
+    let read: PatchedFixture = serde_json::from_value(runtime).unwrap();
+    assert_eq!(read.model_scale, None);
+    assert!(
+        serde_json::to_value(&read)
+            .unwrap()
+            .get("model_scale")
+            .is_none()
+    );
+}
+
+#[test]
+fn a_model_scale_round_trips_and_is_refused_outside_its_range() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    fixture.model_scale = Some(2.5);
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    let body = serde_json::to_value(&record).unwrap();
+    assert_eq!(body["model_scale"], json!(2.5));
+    let decoded = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+    assert_eq!(decoded.patch().unwrap().model_scale, Some(2.5));
+    assert_eq!(serde_json::to_value(&decoded).unwrap(), body);
+
+    for accepted in [0.01, 1.0, 100.0] {
+        fixture.model_scale = Some(accepted);
+        assert!(
+            crate::patch_validation::validate_patch(std::slice::from_ref(&fixture)).is_ok(),
+            "{accepted} was refused"
+        );
+        assert_eq!(crate::resolved_model_scale(Some(accepted)), accepted);
+    }
+    for refused in [0.0, -1.0, 0.009, 100.5, f32::NAN, f32::INFINITY] {
+        fixture.model_scale = Some(refused);
+        let error = crate::patch_validation::validate_patch(std::slice::from_ref(&fixture))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("must be from 0.01 to 100"), "{error}");
+        assert_eq!(crate::resolved_model_scale(Some(refused)), 1.0);
+    }
+}
+
+#[test]
 fn new_write_contains_only_profile_reference_and_patch_owned_fields() {
     let profile = profile();
     let fixture = fixture(&profile);

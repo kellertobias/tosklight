@@ -680,7 +680,12 @@ scenery_size_metres?: PatchFixtureLocation | null,
  * What an operator chose for a generated Venue object beyond its size. Absent keeps the
  * kind's own defaults.
  */
-scenery_options?: PatchSceneryOptions | null, rotation: PatchFixtureRotation,
+scenery_options?: PatchSceneryOptions | null,
+/**
+ * How many times its built size a placed Venue object is drawn, from 0.01 to 100. Absent is
+ * the size it was built at.
+ */
+model_scale?: number | null, rotation: PatchFixtureRotation,
 /**
  * An operator's own note against this fixture, distinct from the profile's shared notes.
  */
@@ -771,7 +776,12 @@ scenery_size_metres?: PatchFixtureLocation | null,
  * What an operator chose for a generated Venue object beyond its size. Absent keeps the
  * kind's own defaults.
  */
-scenery_options?: PatchSceneryOptions | null, rotation: PatchFixtureRotation,
+scenery_options?: PatchSceneryOptions | null,
+/**
+ * How many times its built size a placed Venue object is drawn. Absent is the size it was
+ * built at.
+ */
+model_scale?: number | null, rotation: PatchFixtureRotation,
 /**
  * An operator's own note against this fixture.
  */

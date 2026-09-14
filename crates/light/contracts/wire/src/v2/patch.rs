@@ -281,6 +281,10 @@ pub struct PatchFixtureInput {
     /// kind's own defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenery_options: Option<PatchSceneryOptions>,
+    /// How many times its built size a placed Venue object is drawn, from 0.01 to 100. Absent is
+    /// the size it was built at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_scale: Option<f32>,
     pub rotation: PatchFixtureRotation,
     /// An operator's own note against this fixture, distinct from the profile's shared notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -498,6 +502,10 @@ pub struct PatchFixtureProjection {
     /// kind's own defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenery_options: Option<PatchSceneryOptions>,
+    /// How many times its built size a placed Venue object is drawn. Absent is the size it was
+    /// built at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_scale: Option<f32>,
     pub rotation: PatchFixtureRotation,
     /// An operator's own note against this fixture.
     #[serde(default, skip_serializing_if = "Option::is_none")]

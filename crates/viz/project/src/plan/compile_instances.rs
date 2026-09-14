@@ -58,8 +58,10 @@ pub(super) fn compile_instances(
                 &instance.installed_appearance,
             ),
             installed_shaper_angles_degrees: instance.installed_appearance.shaper_angles_degrees,
+            // Scaled here, once, so the drawn model, picking and the plan symbol all read the
+            // same size from the body.
             body: FixtureBody {
-                size: body_size,
+                size: body_size * instance.model_scale,
                 kind: class.body_kind(moving),
             },
             patched: !shared_addresses.is_empty(),
@@ -123,7 +125,7 @@ pub(super) fn compile_instances(
             fixture_index,
             &channels,
             instance_optics,
-            mount,
+            mount.scaled(instance.model_scale),
             laser.clone(),
             effect.clone(),
         );
@@ -234,8 +236,20 @@ fn clamp_scenery_size(size: Vec3, declared: &light_fixture::ProfileScenery) -> V
     )
 }
 
-fn vector(value: light_fixture::Vector3) -> Vec3 {
+pub(super) fn vector(value: light_fixture::Vector3) -> Vec3 {
     Vec3::new(value.x, value.y, value.z)
+}
+
+impl EmitterMount {
+    /// The same mount on a body drawn `scale` times its size: the lens and trunnions move with it.
+    fn scaled(self, scale: f32) -> Self {
+        Self {
+            origin: self.origin * scale,
+            pivot: self.pivot * scale,
+            face: self.face.map(|face| face * scale),
+            aim: self.aim,
+        }
+    }
 }
 
 fn scenery_kind(kind: light_fixture::ProfileSceneryKind) -> SceneryKind {
@@ -316,7 +330,8 @@ fn generated_scenery(
         name: instance.name.clone(),
         position: instance.position,
         rotation_degrees: instance.rotation_degrees,
-        size: clamp_scenery_size(size, declared),
+        // Held to what the object can be built at first, then drawn at its model scale.
+        size: clamp_scenery_size(size, declared) * instance.model_scale,
         // The colour the operator chose for this one, when they chose one; the kind's own
         // material otherwise.
         colour: instance

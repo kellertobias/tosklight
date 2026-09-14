@@ -74,6 +74,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
         instances.push(PhysicalInstance {
             scenery_size_metres: placed_scenery_size(fixture.scenery_size_metres),
             scenery_options: fixture.scenery_options.clone(),
+            model_scale: light_fixture::resolved_model_scale(fixture.model_scale),
             instance_id: fixture.fixture_id,
             name: fixture.name.clone(),
             split_patches: split_patches(&fixture.split_patches),
@@ -104,6 +105,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
                 scenery_size_metres: placed_scenery_size(multipatch.scenery_size_metres),
                 // Venue objects cannot be multi-patched, so an instance never has options.
                 scenery_options: Default::default(),
+                model_scale: 1.0,
                 instance_id: multipatch.id,
                 name: if multipatch.name.is_empty() {
                     format!("{} \u{2022} multi-patch", fixture.name)

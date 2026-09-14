@@ -1143,6 +1143,29 @@ describe("fixture profile model mounting", () => {
 		).toBeCloseTo(THREE.MathUtils.degToRad(135));
 	});
 
+	it("mounts a metre-authored model at the model scale it was placed at", () => {
+		const fixture = {
+			fixture_id: "venue-model",
+			model_scale: 2.5,
+			definition: {
+				mode: "Model",
+				mode_id: "mode-model",
+				physical: { height_millimetres: 600 },
+				profile_snapshot: { model_units: "metres", modes: [] },
+			},
+		} as unknown as PatchedFixture;
+		const mount = () => {
+			const model = new THREE.Group();
+			model.add(new THREE.Mesh(new THREE.BoxGeometry(4, 2, 1)));
+			expect(mountFixtureModel(new THREE.Group(), model, fixture)).toBe(1);
+			return model.scale.x;
+		};
+		expect(mount()).toBeCloseTo(2.5);
+		// An object placed before the scale existed is drawn at the size it was built.
+		fixture.model_scale = null;
+		expect(mount()).toBeCloseTo(1);
+	});
+
 	it("mounts metre-authored visual-only geometry without emitters or normalization", () => {
 		const profile = blankFixtureProfile();
 		profile.manufacturer = "Venue";

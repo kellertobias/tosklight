@@ -211,6 +211,7 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
     let definition = profile.resolved_definition(mode_id).unwrap();
     let fixture_id = FixtureId::new();
     let fixture = PatchedFixture {
+        model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id,
@@ -350,6 +351,7 @@ fn selected_logical_head_highlights_independently_while_parent_identifies_all_he
     let first = FixtureId::new();
     let second = FixtureId::new();
     let fixture = PatchedFixture {
+        model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: parent,

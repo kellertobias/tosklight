@@ -343,6 +343,7 @@ fn application_fixture(
             },
             location: application_location(input.location),
             scenery_size_metres: input.scenery_size_metres.map(application_vector),
+            model_scale: input.model_scale,
             scenery_options: input
                 .scenery_options
                 .map(application_scenery_options)
@@ -567,6 +568,7 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
         location: wire_location(patch.location),
         scenery_size_metres: patch.scenery_size_metres.map(wire_vector),
         scenery_options: wire_scenery_options(&patch.scenery_options),
+        model_scale: patch.model_scale,
         rotation: wire_rotation(patch.rotation),
         note: patch.note.clone(),
         position_master: patch.position_master,

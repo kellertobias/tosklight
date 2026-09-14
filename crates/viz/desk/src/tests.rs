@@ -38,6 +38,41 @@ fn a_venue_objects_size_and_choices_arrive_from_the_desk_patch() {
     }))
     .expect("camelCase patch fixture");
     assert_eq!(camel.scenery_size_metres.expect("size").x, 2000);
+    assert_eq!(camel.model_scale, None, "a patch written before the scale");
+}
+
+/// The desk's Stage is drawn by the renderer from this scene: a placement's model scale has to
+/// reach the body it draws, under either spelling, and a scale no patch could store draws nothing
+/// odd.
+#[test]
+fn a_placed_model_scale_reaches_the_stage_body() {
+    for spelling in ["model_scale", "modelScale"] {
+        let fixture: crate::wire::PatchFixture = serde_json::from_value(json!({
+            "fixture_id": "44444444-4444-4444-8444-444444444444",
+            "profile_id": "55555555-5555-4555-8555-555555555555",
+            "mode_id": "66666666-6666-4666-8666-666666666666",
+            spelling: 2.5
+        }))
+        .expect("desk patch fixture");
+        assert_eq!(fixture.model_scale, Some(2.5), "{spelling}");
+    }
+
+    let profile = shipped_profile("robe--robin-dls-profile");
+    let built = scene_build::build(&models(profile.clone(), StageLayoutBody::default()))
+        .scene
+        .fixtures[0]
+        .body
+        .size;
+    let mut input = models(profile, StageLayoutBody::default());
+    input.patch.fixtures[0].model_scale = Some(3.0);
+    let scaled = scene_build::build(&input).scene.fixtures[0].body.size;
+    assert!(
+        (scaled - built * 3.0).length() < 1e-5,
+        "{scaled} from {built}"
+    );
+    input.patch.fixtures[0].model_scale = Some(-1.0);
+    let refused = scene_build::build(&input).scene.fixtures[0].body.size;
+    assert!((refused - built).length() < 1e-5, "{refused} from {built}");
 }
 
 #[test]

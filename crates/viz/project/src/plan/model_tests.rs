@@ -23,6 +23,7 @@ fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
@@ -124,6 +125,7 @@ fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
@@ -204,6 +206,7 @@ fn shipped_jbled_a7_home_shutter_is_steady_and_open_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
@@ -270,6 +273,7 @@ fn shipped_moving_light_models_apply_the_profile_head_offset() {
             profile: Arc::new(profile),
             mode_id,
             instances: vec![PhysicalInstance {
+                model_scale: 1.0,
                 scenery_options: Default::default(),
                 scenery_size_metres: None,
                 instance_id: Uuid::new_v4(),
@@ -774,6 +778,36 @@ fn a_generated_truss_is_scenery_at_its_placed_length_rather_than_a_model() {
     let scenery = &compiled.scene.scenery[0];
     assert_eq!(scenery.chords, declared.chords);
     assert_eq!(scenery.size.x, declared.default_size_metres.x);
+}
+
+/// A placement's model scale is applied once, to the body every consumer reads — the drawn model,
+/// picking and the plan symbol — and to a generated object after it is held to its buildable size.
+#[test]
+fn a_model_scale_multiplies_the_drawn_body_and_a_generated_objects_size() {
+    let mut venue = patched("venue", ProfileOptics::default());
+    Arc::get_mut(&mut venue.profile)
+        .expect("sole profile owner")
+        .patch_policy = PatchPolicy::VisualOnly;
+    let built = compile(std::slice::from_ref(&venue)).scene.fixtures[0]
+        .body
+        .size;
+    venue.instances[0].model_scale = 2.5;
+    let scaled = compile(std::slice::from_ref(&venue)).scene.fixtures[0]
+        .body
+        .size;
+    assert!(
+        (scaled - built * 2.5).length() < 1e-5,
+        "{scaled} from {built}"
+    );
+
+    let mut truss = shipped_venue("venue--two-point-truss");
+    let placed = compile(std::slice::from_ref(&truss)).scene.scenery[0].size;
+    truss.instances[0].model_scale = 0.5;
+    let halved = compile(std::slice::from_ref(&truss)).scene.scenery[0].size;
+    assert!(
+        (halved - placed * 0.5).length() < 1e-5,
+        "{halved} from {placed}"
+    );
 }
 
 fn shipped_venue(name: &str) -> PatchedFixture {

@@ -107,6 +107,7 @@ fn fixture() -> (PatchedFixture, FixtureId) {
     let definition = profile.resolved_definition(mode_id).unwrap();
     (
         PatchedFixture {
+            model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,
             fixture_id: FixtureId::new(),
@@ -252,6 +253,7 @@ fn schema_v2_fixture(
     let fixture_id = FixtureId::new();
     (
         PatchedFixture {
+            model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,
             fixture_id,

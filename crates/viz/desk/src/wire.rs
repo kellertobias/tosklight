@@ -156,6 +156,10 @@ pub struct PatchFixture {
     /// planning server write `scenery_options`; the camelCase spelling is accepted as well.
     #[serde(default, alias = "sceneryOptions")]
     pub scenery_options: SceneryOptions,
+    /// How many times its built size a placed Venue object is drawn. Absent is the size it was
+    /// built at; the camelCase spelling is accepted as well.
+    #[serde(default, alias = "modelScale")]
+    pub model_scale: Option<f32>,
     #[serde(default)]
     pub rotation: Rotation,
     /// The 3D Point this fixture is slaved to. Absent for a fixture placed against the stage.

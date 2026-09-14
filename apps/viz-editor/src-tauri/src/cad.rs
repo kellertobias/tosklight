@@ -1266,6 +1266,7 @@ mod tests {
                         mode_id,
                     },
                     patch: PatchedFixturePatch {
+                        model_scale: None,
                         scenery_options: Default::default(),
                         scenery_size_metres: None,
                         fixture_id: FixtureId(*id),

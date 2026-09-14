@@ -61,10 +61,15 @@ impl FixtureModel {
     /// Anything read out of the model in model space — the lens, the tilt pivot — has to go
     /// through this before it can sit beside a fixture's own metres, and it has to be the same
     /// number the geometry is drawn with or the beam leaves from beside the lamp.
+    ///
+    /// The bounds only catch a degenerate model. They are wide enough for a model fitted 1:1 to
+    /// its profile and then placed at an operator's model scale anywhere from 0.01 to 100, so a
+    /// hall imported at a hundredth of its size is drawn at exactly that rather than held at a
+    /// twentieth.
     pub fn scale_to(&self, size: Vec3) -> f32 {
-        (size.max(Vec3::splat(0.02)) / (self.extent * 2.0).max(Vec3::splat(0.001)))
+        (size.max(Vec3::splat(0.0002)) / (self.extent * 2.0).max(Vec3::splat(0.001)))
             .min_element()
-            .clamp(0.05, 20.0)
+            .clamp(0.0005, 2000.0)
     }
 
     pub fn triangle_count(&self) -> usize {
@@ -916,6 +921,24 @@ mod tests {
         glb.extend_from_slice(&CHUNK_BIN.to_le_bytes());
         glb.extend_from_slice(&binary);
         glb
+    }
+
+    /// A venue model is fitted 1:1 to its own bounds and then placed at the operator's model scale.
+    /// Neither end of the scale range may be quietly held to something else.
+    #[test]
+    fn a_venue_model_placed_at_any_model_scale_is_fitted_at_exactly_that_scale() {
+        let hall = FixtureModel {
+            extent: Vec3::new(10.0, 2.0, 5.0),
+            ..FixtureModel::default()
+        };
+        let built = Vec3::new(20.0, 4.0, 10.0);
+        for scale in [0.01_f32, 0.05, 1.0, 20.0, 100.0] {
+            let fitted = hall.scale_to(built * scale);
+            assert!(
+                (fitted - scale).abs() <= scale * 1e-4,
+                "placed at {scale}, drawn at {fitted}"
+            );
+        }
     }
 
     #[test]

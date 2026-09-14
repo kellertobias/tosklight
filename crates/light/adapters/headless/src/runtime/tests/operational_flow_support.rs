@@ -1,5 +1,6 @@
 fn operational_fixture(fixture_id: light_core::FixtureId) -> light_fixture::PatchedFixture {
     light_fixture::PatchedFixture {
+        model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
         name: "Media Server".into(),

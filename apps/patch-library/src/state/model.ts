@@ -178,6 +178,7 @@ export function patchedFixtureCandidate(
 						chainBottom: fixture.scenery_options.chain_bottom ?? null,
 					}
 				: null,
+			modelScale: fixture.model_scale ?? null,
 		},
 	};
 }
@@ -291,6 +292,7 @@ export function projectionToPatchedFixture(
 					chain_bottom: projection.sceneryOptions.chainBottom ?? null,
 				}
 			: null,
+		model_scale: projection.modelScale ?? null,
 	};
 }
 

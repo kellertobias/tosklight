@@ -329,6 +329,7 @@ fn into_runtime_fixture(
         location: patch.location,
         scenery_size_metres: patch.scenery_size_metres,
         scenery_options: patch.scenery_options,
+        model_scale: patch.model_scale,
         rotation: patch.rotation,
         logical_heads: patch.logical_heads,
         multipatch: patch.multipatch,

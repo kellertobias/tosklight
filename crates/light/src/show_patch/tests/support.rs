@@ -492,6 +492,7 @@ fn fixture_candidate(
     PatchFixtureCandidate {
         profile,
         patch: PatchedFixturePatch {
+            model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,
             fixture_id: FixtureId(Uuid::from_u128(100_000 + index as u128)),

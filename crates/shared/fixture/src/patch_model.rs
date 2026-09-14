@@ -186,6 +186,27 @@ fn validate_srgb(value: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The smallest uniform model scale a placed object may be drawn at.
+pub const MIN_MODEL_SCALE: f32 = 0.01;
+/// The largest uniform model scale a placed object may be drawn at.
+pub const MAX_MODEL_SCALE: f32 = 100.0;
+
+/// Why a stored model scale cannot be drawn, if it cannot.
+pub fn model_scale_error(scale: Option<f32>) -> Option<String> {
+    let scale = scale?;
+    (!scale.is_finite() || !(MIN_MODEL_SCALE..=MAX_MODEL_SCALE).contains(&scale))
+        .then(|| format!("model scale {scale} must be from {MIN_MODEL_SCALE} to {MAX_MODEL_SCALE}"))
+}
+
+/// The uniform scale a placed object is drawn at: its stored scale, or 1 — the size it was built
+/// at — when none is stored or the stored one could never have passed validation.
+pub fn resolved_model_scale(scale: Option<f32>) -> f32 {
+    match scale {
+        Some(scale) if model_scale_error(Some(scale)).is_none() => scale,
+        _ => 1.0,
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PatchedFixture {
     pub fixture_id: FixtureId,
@@ -229,6 +250,11 @@ pub struct PatchedFixture {
     /// placed before these choices existed reads as.
     #[serde(default, skip_serializing_if = "SceneryOptions::is_empty")]
     pub scenery_options: SceneryOptions,
+    /// How many times its built size a placed Venue object is drawn: an imported hall modelled in
+    /// the wrong unit, or a set piece brought in at half size. Absent is the size it was built at,
+    /// which is what every object placed before this reads as.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_scale: Option<f32>,
     #[serde(default)]
     pub rotation: FixtureVector,
     /// A free note an operator keeps against this fixture: a circuit, a colour call, whatever the

@@ -120,6 +120,8 @@ export interface PatchFixtureWrite {
 		chainTop?: "motor" | "direct" | "steelflex_loop" | null;
 		chainBottom?: "direct" | "steelflex_loop" | "motor" | null;
 	} | null;
+	/** How many times its built size a placed Venue object is drawn; `null` is its built size. */
+	modelScale?: number | null;
 }
 
 export interface PatchPlacementOverride {

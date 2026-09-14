@@ -139,6 +139,8 @@ export interface PatchFixtureWrite {
 	scenerySizeMetres?: PatchScenerySize | null;
 	/** A generated Venue object's colour and a chain's ends, carried back on every write likewise. */
 	sceneryOptions?: PatchSceneryOptions | null;
+	/** How many times its built size a placed Venue object is drawn; `null` is its built size. */
+	modelScale?: number | null;
 }
 
 export interface PatchPlacementOverride {

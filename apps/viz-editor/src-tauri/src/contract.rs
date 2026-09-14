@@ -248,6 +248,10 @@ pub struct FixtureDto {
     /// from every payload written before these choices existed, keeps the kind's own defaults.
     #[serde(default, skip_serializing_if = "SceneryOptionsDto::is_empty")]
     pub scenery_options: SceneryOptionsDto,
+    /// How many times its built size a placed Venue object is drawn. Absent, and absent from every
+    /// payload written before it existed, is the size it was built at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_scale: Option<f32>,
     /// Read-only projections the sheet displays but never writes.
     #[serde(default, skip_deserializing)]
     pub fixture_revision: u64,
@@ -453,6 +457,7 @@ impl From<PatchFixtureProjection> for FixtureDto {
             freeze: patch.freeze,
             scenery_size_metres: patch.scenery_size_metres.as_ref().map(VectorDto::from),
             scenery_options: SceneryOptionsDto::from(&patch.scenery_options),
+            model_scale: patch.model_scale,
             fixture_revision: projection.fixture_revision,
             logical_heads: patch
                 .logical_heads
@@ -643,6 +648,7 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                     z: size.z,
                 }),
                 scenery_options: SceneryOptions::from(dto.scenery_options),
+                model_scale: dto.model_scale,
                 fixture_id: FixtureId(dto.fixture_id),
                 fixture_number: dto.fixture_number,
                 virtual_fixture_number: dto.virtual_fixture_number,
@@ -921,6 +927,45 @@ mod tests {
                 .scenery_size_metres,
             None
         );
+    }
+
+    #[test]
+    fn a_venue_object_keeps_its_model_scale_through_the_sheet() {
+        let sheet = |extra: serde_json::Value| -> FixtureDto {
+            let mut body = serde_json::json!({
+                "fixtureId": Uuid::new_v4(),
+                "fixtureNumber": null,
+                "virtualFixtureNumber": 6,
+                "name": "Hall",
+                "profileId": Uuid::new_v4(),
+                "profileRevision": 1,
+                "modeId": Uuid::new_v4(),
+                "splitPatches": [{ "split": 1, "universe": null, "address": null }],
+                "layerId": "default",
+                "location": { "x": 0, "y": 0, "z": 0 },
+                "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
+            });
+            body.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            serde_json::from_value(body).expect("fixture DTO")
+        };
+        let scaled = sheet(serde_json::json!({ "modelScale": 2.5 }));
+        assert_eq!(serde_json::to_value(&scaled).unwrap()["modelScale"], 2.5);
+        assert_eq!(
+            PatchFixtureCandidate::from(scaled).patch.model_scale,
+            Some(2.5)
+        );
+
+        // A payload written before the scale existed is at its built size and writes none back.
+        let legacy = sheet(serde_json::json!({}));
+        assert!(
+            serde_json::to_value(&legacy)
+                .unwrap()
+                .get("modelScale")
+                .is_none()
+        );
+        assert_eq!(PatchFixtureCandidate::from(legacy).patch.model_scale, None);
     }
 
     #[test]

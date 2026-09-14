@@ -150,6 +150,7 @@ function mapFixtureProjection(
 		bracketAngle: fixture.bracket_angle,
 		shaperAngle: fixture.shaper_angle,
 		installedAppearance: mapInstalledAppearance(fixture.installed_appearance),
+		modelScale: fixture.model_scale ?? null,
 		moveInBlackEnabled: fixture.move_in_black_enabled,
 		moveInBlackDelayMillis: fixture.move_in_black_delay_millis,
 		highlightOverrides: fixture.highlight_overrides.map((override) => ({

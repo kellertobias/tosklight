@@ -44,6 +44,8 @@ pub struct PhysicalInstance {
     pub scenery_size_metres: Option<Vec3>,
     /// A generated Venue object's chosen colour and chain ends; empty is its kind's defaults.
     pub scenery_options: light_fixture::SceneryOptions,
+    /// How many times its built size this placement is drawn. `1.0` is the size it was built at.
+    pub model_scale: f32,
 }
 
 /// One logical fixture with its selected immutable profile revision.
@@ -743,10 +745,6 @@ fn motion_axes(geometry: &GeometryGraph) -> MotionAxes {
     axes
 }
 
-fn vector(value: Vector3) -> Vec3 {
-    Vec3::new(value.x, value.y, value.z)
-}
-
 /// Millimetres in the profile's own space to metres in renderer space.
 pub(super) fn millimetres(value: Vector3) -> Vec3 {
     Vec3::new(value.x, value.y, value.z) / 1000.0
@@ -1247,7 +1245,7 @@ mod head_geometry;
 pub use assets::{GOBO_ARTWORK_EDGE, decode_gobo_artwork};
 use assets::{decode_script, gobo_wheel, resolve_model, script_key};
 use bindings::{build_binding, cell_bindings, group_by_head, layout_cells};
-use compile_instances::compile_instances;
+use compile_instances::{compile_instances, vector};
 use head_geometry::{fitted_to_head_pitch, head_offset, head_span, pan_axis, tilt_axis};
 
 #[cfg(test)]

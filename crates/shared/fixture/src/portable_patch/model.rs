@@ -58,6 +58,10 @@ pub struct PatchedFixturePatch {
     /// written before these choices existed, which reads back as the kind's own defaults.
     #[serde(default, skip_serializing_if = "SceneryOptions::is_empty")]
     pub scenery_options: SceneryOptions,
+    /// How many times its built size a placed Venue object is drawn. Absent in every show written
+    /// before it existed, which reads back as the size the object was built at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_scale: Option<f32>,
     #[serde(default)]
     pub rotation: FixtureVector,
     /// An operator's own note against this fixture. Absent in every show written before it
@@ -110,6 +114,7 @@ impl PatchedFixturePatch {
             fixture_id: fixture.fixture_id,
             scenery_size_metres: fixture.scenery_size_metres,
             scenery_options: fixture.scenery_options.clone(),
+            model_scale: fixture.model_scale,
             fixture_number: fixture.fixture_number,
             virtual_fixture_number: fixture.virtual_fixture_number,
             name: fixture.name.clone(),

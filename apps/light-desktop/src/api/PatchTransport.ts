@@ -399,6 +399,7 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 		installed_appearance: toWireInstalledAppearance(
 			fixture.installedAppearance,
 		),
+		model_scale: fixture.modelScale ?? null,
 		move_in_black_enabled: fixture.moveInBlackEnabled,
 		move_in_black_delay_millis: fixture.moveInBlackDelayMillis,
 		highlight_overrides: fixture.highlightOverrides.map((override) => ({

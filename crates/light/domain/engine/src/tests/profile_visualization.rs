@@ -87,6 +87,7 @@ fn calibrated_visual_engine() -> (Engine, FixtureId) {
 
 fn calibrated_visual_fixture(fixture_id: FixtureId) -> PatchedFixture {
     PatchedFixture {
+        model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id,

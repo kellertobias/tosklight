@@ -50,6 +50,11 @@ export interface PatchedFixture {
 		chain_top?: "motor" | "direct" | "steelflex_loop" | null;
 		chain_bottom?: "direct" | "steelflex_loop" | "motor" | null;
 	} | null;
+	/**
+	 * How many times its built size a placed Venue object is drawn, from 0.01 to 100. Absent or
+	 * `null` is the size it was built at.
+	 */
+	model_scale?: number | null;
 }
 
 export interface MultiPatchInstance {

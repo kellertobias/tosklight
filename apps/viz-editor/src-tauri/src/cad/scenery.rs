@@ -157,8 +157,17 @@ fn profile_scenery(profile: &serde_json::Value) -> Option<CadScenery> {
 }
 
 /// The size one placed object is drawn at, as width, depth and height in millimetres: the size
-/// the operator placed it at, or its profile's own.
+/// the operator placed it at, or its profile's own, times the model scale it was placed at.
 pub fn entity_size(
+    profile: Option<&serde_json::Value>,
+    fixture: &PatchedFixturePatch,
+    instance: Uuid,
+) -> [f32; 3] {
+    let scale = light_fixture::resolved_model_scale(fixture.model_scale);
+    unscaled_entity_size(profile, fixture, instance).map(|value| value * scale)
+}
+
+fn unscaled_entity_size(
     profile: Option<&serde_json::Value>,
     fixture: &PatchedFixturePatch,
     instance: Uuid,
@@ -258,6 +267,39 @@ mod tests {
             [6000.0, 340.0, 290.0]
         );
         assert_eq!(dimensions(&profile), [4000.0, 340.0, 340.0]);
+    }
+
+    #[test]
+    fn a_model_scale_multiplies_the_placed_or_profile_size_in_the_plan() {
+        let hall = json!({ "physical": {
+            "width_millimetres": 20000.0, "depth_millimetres": 10000.0, "height_millimetres": 4000.0
+        } });
+        let id = Uuid::new_v4();
+        let patch = |value: serde_json::Value| -> PatchedFixturePatch {
+            serde_json::from_value(value).expect("patch")
+        };
+        let built = patch(json!({ "fixture_id": id }));
+        assert_eq!(
+            entity_size(Some(&hall), &built, id),
+            [20000.0, 10000.0, 4000.0]
+        );
+        let half = patch(json!({ "fixture_id": id, "model_scale": 0.5 }));
+        assert_eq!(
+            entity_size(Some(&hall), &half, id),
+            [10000.0, 5000.0, 2000.0]
+        );
+        let placed = patch(json!({
+            "fixture_id": id,
+            "model_scale": 2.0,
+            "scenery_size_metres": { "x": 6000.0, "y": 290.0, "z": 340.0 }
+        }));
+        assert_eq!(entity_size(None, &placed, id), [12000.0, 680.0, 580.0]);
+        // A scale no patch could have stored draws the object at the size it was built.
+        let broken = patch(json!({ "fixture_id": id, "model_scale": 0.0 }));
+        assert_eq!(
+            entity_size(Some(&hall), &broken, id),
+            [20000.0, 10000.0, 4000.0]
+        );
     }
 
     fn placed(

@@ -184,6 +184,14 @@
           "type": "string",
           "format": "uuid"
         },
+        "model_scale": {
+          "description": "How many times its built size a placed Venue object is drawn, from 0.01 to 100. Absent is\nthe size it was built at.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
         "move_in_black_delay_millis": {
           "type": "integer",
           "format": "uint64",

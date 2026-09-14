@@ -118,6 +118,7 @@ fn intensity_fixture(default_raw: u32) -> (PatchedFixture, FixtureId) {
     let fixture_id = FixtureId::new();
     (
         PatchedFixture {
+            model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,
             fixture_id,

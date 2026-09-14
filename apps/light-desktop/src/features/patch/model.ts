@@ -178,6 +178,8 @@ export function patchedFixtureCandidate(
 			bracketAngle: fixture.bracket_angle ?? 0,
 			shaperAngle: fixture.shaper_angle ?? null,
 			installedAppearance: patchAppearance(fixture.installed_appearance),
+			// Every write carries the scale back, so editing anything else never resets it.
+			modelScale: fixture.model_scale ?? null,
 			moveInBlackEnabled: fixture.move_in_black_enabled ?? true,
 			moveInBlackDelayMillis: fixture.move_in_black_delay_millis ?? 0,
 			highlightOverrides: Object.entries(fixture.highlight_overrides ?? {}).map(
@@ -294,6 +296,7 @@ export function projectionToPatchedFixture(
 		bracket_angle: projection.bracketAngle ?? 0,
 		shaper_angle: projection.shaperAngle ?? null,
 		installed_appearance: fixtureAppearance(projection.installedAppearance),
+		model_scale: projection.modelScale ?? null,
 		move_in_black_enabled: projection.moveInBlackEnabled,
 		move_in_black_delay_millis: projection.moveInBlackDelayMillis,
 		highlight_overrides: Object.fromEntries(

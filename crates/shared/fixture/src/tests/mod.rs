@@ -53,6 +53,7 @@ fn schema_v2_two_split_fixture() -> PatchedFixture {
     });
     let definition = profile.resolved_definition(mode_id).unwrap();
     let mut fixture = PatchedFixture {
+        model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id: FixtureId::new(),
