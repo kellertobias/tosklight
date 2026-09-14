@@ -92,8 +92,21 @@ Show Patch window does not:
 
 - **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Masters, Invert Pan,
   Invert Tilt, MIB, Layer and Note.
-- **Visualization**: Fixture ID, Name, Location, Rotation, Bracket, Shaper, Layer, 2D, 3D and Note.
+- **Visualization**: Fixture ID, Name, Location, Rotation, Bracket, Shaper, Footprint, Layer, 2D, 3D
+  and Note.
 - **Compact**: Fixture ID, Name, Patch, Layer and Note.
+
+**Footprint width**, **Footprint height** and **Footprint depth** size a generated Venue object — a
+truss's length, a curtain's width and drop, a stage element's rise — and show a dash for the
+measurements the object is not made to, and for everything else in the rig. Click a size to type
+it in metres; a size the object cannot be built at is refused with the range it can take. The size
+is kept when the object is edited here or on the desk.
+
+**Colour** sets a generated Venue object's colour — a curtain's serge, a black truss — with
+**Default colour** returning it to its own material. **Chain top** chooses **Hoist** or **Direct**
+for a chain's top end, and **Chain bottom** chooses **Direct** or **Steelflex loop** for its bottom
+end. The Visualizer draws each object with what was chosen for it, and a desk shows and edits the
+same columns in **Show Patch**.
 
 The quick view whose columns the sheet shows exactly is highlighted; changing a single column in
 Settings leaves no view highlighted.
@@ -373,3 +386,22 @@ in.
 Each print page carries its own switches for the drawings on its axis, beside the page's cut
 planes. A page prints every drawing of its axis unless you switch one off, which is also what a
 page saved before drawings could be placed does.
+
+## Place your own venue models
+
+The **Venue** screen's title bar has **+ Import 3D model** beside **+ Add fixture**, for a venue
+the fixture library does not have: the hall you are playing, a stage build, a set piece. Choose a
+GLB file on this computer and it is placed at once, at the stage origin, on the layer that is
+open — or the default layer when **All fixtures** is. It gets the next free `0.x` ID and is
+selected, so set its **Location** and **Rotation** in the sheet like any other Venue object.
+
+The model is kept in the show, not in the fixture library. It is listed under the manufacturer
+**Imported models**, travels with the show when it is saved, copied or opened on a desk, and is
+drawn by the Visualizer and the desk's Stage exactly like a shipped Venue object. While one copy
+of it is in the show, **+ Add fixture** on the Venue screen offers it again for another; import the
+file again to replace a model with a changed version, which is placed as a new object.
+
+The file must be a self-contained GLB 2.0 model — textures and buffers inside the file, not beside
+it — of at most 64 MB and 2,000,000 triangles, built in metres with Y up, as glTF defines. It is
+drawn at the size it was built, so a 20 m hall is 20 m wide. Surface colours are drawn and textures
+are not. A file that breaks any of these rules is refused with the reason, and nothing is added.

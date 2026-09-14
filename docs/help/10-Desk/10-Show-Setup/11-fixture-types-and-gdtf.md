@@ -39,9 +39,34 @@ its own size, so every segment of a truss run can differ. A size outside what th
 built at is refused with the range it can take. The same columns set a Crowd
 Area's width and depth.
 
+The **Venue** screen of ToskLight PreViz has the same **Footprint width**, **Footprint height**, and
+**Footprint depth** columns for generated Venue objects, and editing an object there — its name,
+position, layer, or size — keeps the size it was given on the desk. A selection takes one size or a
+`THRU` spread, exactly like **Location**.
+
+Three more columns hold what each placed object is made of, in **Show Patch** and on the PreViz
+**Venue** screen alike:
+
+- **Colour** — any generated Venue object: a curtain in red serge, a truss in black. Choose a colour
+  in the picker, or **Default colour** to return the object to its own material — black serge for
+  a curtain, raw aluminium for truss, grey for staging. Every object placed before this keeps its
+  default.
+- **Chain top** — a chain's top end: **Hoist**, a chain motor lifting it, or **Direct**, the chain
+  made fast straight to the steel or truss with a shackle.
+- **Chain bottom** — a chain's bottom end: **Direct**, a shackle to the load, or **Steelflex loop**,
+  a wire-rope sling wrapped around a beam or a chord.
+
+A chain nobody chose ends for hangs from a hoist by a direct shackle. Anything the column does not
+apply to — a lamp, a truss's chain ends, a multi-patch copy — shows a dash.
+
+The trusses are braced in bays as long as their section is deep, so a large truss is braced in
+longer bays than a standard one of the same length, and a deco truss crosses its diagonals in every
+bay. A stage element is the base it is built on: its width and depth are fixed, and only its rise
+is set, from 0.1 to 1.2 m. A stage element already placed at another base size keeps it.
+
 A show patched before this keeps the fixture revision embedded in it and is unaffected.
 
-- **Venue** visual-only profiles — 1 × 1 m, 2 × 1 m, and 1 × 0.5 m stage elements; correctly rising stage stairs; 1 m, 2 m, 3 m, 5 m, and 6 m curtains; **Disco Ball 50 cm**; and **Crowd Area**. One-, two-, three-, and four-point truss and pipe profiles use the separate **Rigging** type. Crowd Area supplies all nine Sitting, Standing still, and Dancing × Sparse, Medium, and Dense modes and stores independent width and depth with the show. The conventional scenery archives include portable photographs and metre-authored GLB geometry; the desk displays its built-in Venue or Rigging type icon. Crowd Area is rendered procedurally from its portable crowd contract.
+- **Venue** visual-only profiles — 1 × 1 m, 2 × 1 m, and 1 × 0.5 m stage elements with an adjustable rise; correctly rising stage stairs; **Curtain**, made to any width, drop and colour, beside the 1 m, 2 m, 3 m, 5 m, and 6 m curtains; **Disco Ball 50 cm**; and **Crowd Area**. The pipe, **Two-Point Truss**, **Three-Point Truss**, **Three-Point Deco Truss**, **Four-Point Truss** and **Large Four-Point Truss** profiles, and **Chain**, use the separate **Rigging** type. Crowd Area supplies all nine Sitting, Standing still, and Dancing × Sparse, Medium, and Dense modes and stores independent width and depth with the show. The conventional scenery archives include portable photographs and metre-authored GLB geometry; the desk displays its built-in Venue or Rigging type icon. Crowd Area is rendered procedurally from its portable crowd contract.
 - **ToskLight** product and Visualizer profiles — **Audio Player** is an Internal fixture: one independently programmable Audio service voice with a regular fixture ID and no DMX address. It is addressed through the canonical Media attributes — Media Folder, Media File, Play mode, and Volume — so the Media encoder group and the Media pane control it exactly like any other media source. Play mode carries transport and repeat together: a looping mode repeats the file, a once mode plays it through, and Stop and Pause hold the voice silent. Stop is the patched default. Play mode names every mode it can be in — Loop, Reverse, Bounce, the Once and Reverse once end states, their tempo-synced counterparts, Stop, and Pause — so the encoder and the Media pane show the mode by name instead of a percentage, and each mode can be chosen directly or generated as a preset. Media Server play mode is named the same way. Shows patched before this change keep their stored Audio Folder/File, Transport, Repeat, and Volume attributes and continue to play. **Media Server** provides two complete personalities: 158 slots for two layers and 512 slots for eight layers. Each 59-slot layer is an independently programmable logical head; the trailing 40-slot output block belongs to the shared master head and exposes Output, Geometry, Mask position, Shapers, Colour, and the fixed Layer Opacity Cycle effect. Existing shows retain their embedded 75-slot legacy, 89/323-slot mask-position, or 119/353-slot effect-bank snapshots, while new patches use the complete master personality with two selectable effect banks per layer, each carrying Effect Select, Effect Strength, and four effect parameters, plus blend mode and strobe, in and out points, four visualizer parameters, and 3D model mapping with pan and tilt. The output block mirrors through a negative scale instead of a Flip/mirror channel. **Visualizer Camera** keeps the stable 17-slot X/Y/Z, Yaw/Pitch/Roll, and Zoom wire contract, while **Visualizer Laser** provides the packaged demo laser and its scan program. This manufacturer is reserved for implemented ToskLight-owned product fixtures; planned further Visualizer fixtures do not appear until their capabilities exist.
 
 - **JB-Lighting JBLED A7** — Standard and Compressed RGB personalities in 8-bit and 16-bit color,
