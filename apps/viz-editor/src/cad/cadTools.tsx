@@ -32,6 +32,16 @@ export interface CadTools {
 	/** Why the show refused the last drawn item, until the operator dismisses it. */
 	error: string | null;
 	clearError(): void;
+	/** The object an add button placed last, so the CAD screen can select it and open Info. */
+	placed: CadPlaced | null;
+	/** Tells the CAD screen an add flow has just placed this object. */
+	announcePlaced(fixtureId: string): void;
+}
+
+/** One placement from an add button; `request` tells two placements of the same object apart. */
+export interface CadPlaced {
+	fixtureId: string;
+	request: number;
 }
 
 const NO_TOOLS: CadTools = {
@@ -43,6 +53,8 @@ const NO_TOOLS: CadTools = {
 	remove: async () => undefined,
 	error: null,
 	clearError: () => undefined,
+	placed: null,
+	announcePlaced: () => undefined,
 };
 
 export const CadToolContext = createContext<CadTools>(NO_TOOLS);
@@ -61,6 +73,7 @@ export function CadToolProvider({
 	onAdd: (kind: CadAddKind) => void;
 	children: ReactNode;
 }) {
+	const [placed, setPlaced] = useState<CadPlaced | null>(null);
 	const [tool, setTool] = useState<CadDrawTool>("select");
 	const [annotations, setAnnotations] = useState<CadAnnotation[]>([]);
 	const [error, setError] = useState<string | null>(null);
@@ -93,12 +106,15 @@ export function CadToolProvider({
 			setTool,
 			annotations,
 			error,
+			placed,
+			announcePlaced: (fixtureId) =>
+				setPlaced((current) => ({ fixtureId, request: (current?.request ?? 0) + 1 })),
 			clearError: () => setError(null),
 			save: (annotation) =>
 				annotationSession.save(annotation).then(() => undefined, report),
 			remove: (id) => annotationSession.remove(id).then(() => undefined, report),
 		};
-	}, [onAdd, tool, annotations, error]);
+	}, [onAdd, tool, annotations, error, placed]);
 
 	return <CadToolContext.Provider value={value}>{children}</CadToolContext.Provider>;
 }

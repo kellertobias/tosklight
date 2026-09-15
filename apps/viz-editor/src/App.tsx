@@ -1,5 +1,4 @@
 import {
-	FixtureAddFlow,
 	type FixtureDefinition,
 	type FixtureNote,
 	FixturePatchSetup,
@@ -33,6 +32,7 @@ import {
 	type SettingsPage,
 } from "./ArchitectSettings";
 import { CadApp } from "./cad/CadApp";
+import { CadAddFlows } from "./cad/CadAddFlows";
 import { type CadAddKind, CadToolProvider } from "./cad/cadTools";
 import { VENUE_MODEL_EXTENSIONS } from "./cad/venueModelFormats";
 import { cadSession } from "./cad/session";
@@ -69,13 +69,6 @@ type PatchPage = "sheet" | "dmx";
  * What each CAD add action opens the fixture library on. Trusses are rigging, stage elements and
  * curtains are Venue objects searched by name, and a Venue element is any object that is not patched.
  */
-const CAD_ADD_PRESETS: Record<CadAddKind, { type: string; query: string }> = {
-	truss: { type: "rigging", query: "Truss" },
-	stage: { type: "venue", query: "Stage" },
-	curtain: { type: "venue", query: "Curtain" },
-	venue: { type: "", query: "" },
-};
-
 /**
  * The patch sheet's two providers, which every screen built on the sheet needs in the same shape.
  *
@@ -623,17 +616,15 @@ export function App() {
 						/>
 					) : null}
 					{document && workspace === "cad" ? (
-						<>
-							<CadToolProvider
-								documentKey={document.showId}
-								onAdd={(kind) =>
-									setCadAdd((current) => ({ kind, request: current.request + 1 }))
-								}
-							>
-								<CadApp />
-							</CadToolProvider>
-							{/* The add flow reads the patch live, so a scene change is no reason to remount
-							    it: a remount would replay the last add request and reopen the library. */}
+						<CadToolProvider
+							documentKey={document.showId}
+							onAdd={(kind) =>
+								setCadAdd((current) => ({ kind, request: current.request + 1 }))
+							}
+						>
+							<CadApp />
+							{/* The add flows read the patch live, so a scene change is no reason to remount
+							    them: a remount would replay the last add request and reopen the library. */}
 							<PatchScope
 								host={host}
 								showId={document.showId}
@@ -643,14 +634,9 @@ export function App() {
 								transport={transport}
 								onError={report}
 							>
-								<FixtureAddFlow
-									scope="venue"
-									addRequest={cadAdd.request}
-									initialTypeFilter={CAD_ADD_PRESETS[cadAdd.kind].type}
-									initialQuery={CAD_ADD_PRESETS[cadAdd.kind].query}
-								/>
+								<CadAddFlows add={cadAdd} definitions={definitions} onError={report} />
 							</PatchScope>
-						</>
+						</CadToolProvider>
 					) : null}
 					{document && workspace === "patch" && patchPage === "dmx" ? (
 						<DmxPatchScreen

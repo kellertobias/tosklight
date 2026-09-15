@@ -223,6 +223,17 @@ export function CadApp() {
 
 	const [focusedEntityId, setFocusedEntityId] = useState<string | null>(null);
 
+	// An object an add button just placed is selected as soon as the drawing shows it, which opens Info.
+	const handledPlacement = useRef(tools.placed?.request ?? 0);
+	useEffect(() => {
+		const placed = tools.placed;
+		if (!placed || placed.request === handledPlacement.current || !scene) return;
+		if (!scene.entities.some((entity) => entity.logicalFixtureId === placed.fixtureId)) return;
+		handledPlacement.current = placed.request;
+		setFocusedEntityId(placed.fixtureId);
+		select({ type: "replace", ids: [placed.fixtureId] });
+	});
+
 	function select(change: SelectionChange) {
 		selectionQueue.current = selectionQueue.current.then(async () => {
 			const current = sceneRef.current;

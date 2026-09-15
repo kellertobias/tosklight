@@ -483,13 +483,20 @@ title's buttons. Rest the pointer on a button, or reach it with the keyboard, an
 a tooltip just below it. From left to right:
 
 * **Undo** and **Redo** step back and forward through changes to the drawing.
-* The add group places venue objects from the fixture library:
-  * **Add truss** (a truss segment) opens the library on rigging, searched for trusses.
-  * **Add stage element** (a deck on a scissor lift) opens it on Venue objects, searched for stage
-    decks, stairs and railings.
-  * **Add curtain** (a drape on its rail) opens it on Venue objects, searched for curtains.
-  * **Add venue element** (a box) opens it on every object that is placed but not patched, such as
-    crowds and imported models.
+* The add group places venue objects:
+  * **Add truss** (a truss segment) opens a dialog. Choose the section first — **Pipe**, **2-point**,
+    **3-point deco**, **3-point regular**, **4-point** or **4-point large** — and then the part: the
+    straight truss, or one of the corner pieces made for that section. Each is shown by its picture.
+  * **Add stage element** (a deck on a scissor lift) opens the same dialog: choose **Regular feet**,
+    **Scissor feet** or **Stairs**, then the platform size.
+  * **Add curtain** (a drape on its rail) places a parametric curtain at once, with no dialog.
+  * **Add venue element** (a box) opens the fixture library on every object that is placed but not
+    patched, such as crowds and imported models.
+
+A chosen part is placed at the stage origin with the next free virtual ID, the drawing shows it at
+once, and it is selected so **Info** opens to place it and set its size. A part whose profile is not in
+this computer's fixture library is shown but cannot be chosen. A choice with a single option, such as
+the stairs, is placed without the second step.
 * The drawing group is what a press on a viewport does. **Select**, the arrow, selects and moves the
   rig as before; the others draw on the view you use them in.
 * **Plans** and **Elements** open their side panels, and **Settings** (⚙) the CAD settings.
@@ -504,8 +511,12 @@ for the next time.
 
 **Info** follows the selection. Select one element in a view and it opens at the foot of the side
 panel; with no panel open, it is the whole side panel. It edits the element's **Name**, **Notes**,
-**Position** (X, Y and Z in metres), **Rotation** (X, Y and Z in degrees) and, for placed Venue objects
-other than crowd areas, **Scale**. The fields take typing from the keyboard: a change is written when
+**Position** (X, Y and Z in metres) and **Rotation** (X, Y and Z in degrees). A generated Venue object —
+a truss, a curtain, a stage element — shows its **Size** instead of a scale: only the measurements its
+profile lets you set, such as a truss's width (its length), a curtain's width and height or a stage
+element's height, in metres within the range the profile allows. A size outside that range is put
+back rather than written. A placed 3D model shows **Scale**. Every number field names its unit inside
+the field. The fields take typing from the keyboard: a change is written when
 you press Enter or leave the field, and Escape puts back what was there. With several elements
 selected, Info says how many.
 
@@ -526,9 +537,6 @@ Architect window follows a change at once, and a show carried to another machine
 machine's grid. **Show sub-grid** adds small plus
 signs at the scale indicator's quarter steps between the lines. A grid too dense to read at the
 current zoom is left out until you zoom in.
-
-Choosing an object from an add button places it exactly as **+ Add fixture** on the **Venue** screen
-does, and the drawing shows it at once. Clear the search to choose anything else the filter offers.
 
 What the drawing tools draw is saved in the show, shown in every Architect window, and printed on that
 view's plan pages:

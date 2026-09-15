@@ -1,0 +1,91 @@
+/* The Add truss and Add stage element dialog: a grid of parts, each pictured on a dark ground. */
+.cad-add-part-modal {
+	display: flex;
+	flex-direction: column;
+	width: min(880px, calc(100vw - 48px));
+	max-height: min(720px, calc(100vh - 48px));
+	overflow: hidden;
+	border: 1px solid #34404c;
+	background: #0b0f14;
+	color: #edf1f5;
+}
+
+.cad-add-part-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-height: 0;
+	padding: 14px 16px 16px;
+	overflow-y: auto;
+}
+
+.cad-add-part-step {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+}
+
+.cad-add-part-step h3 {
+	margin: 0;
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #98a4b3;
+}
+
+.cad-part-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+	gap: 12px;
+}
+
+.cad-part-tile {
+	display: grid;
+	gap: 4px;
+	width: 100%;
+	padding: 8px;
+	border: 1px solid #2b3642;
+	border-radius: 4px;
+	background: #121820;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.cad-part-tile:hover:not(:disabled),
+.cad-part-tile:focus-visible {
+	border-color: #05d1fa;
+	outline: none;
+}
+
+.cad-part-tile:disabled {
+	cursor: not-allowed;
+	opacity: 0.45;
+}
+
+.cad-part-preview {
+	display: grid;
+	place-items: center;
+	aspect-ratio: 4 / 3;
+	overflow: hidden;
+	border-radius: 3px;
+	background: #05070a;
+	color: #5c6873;
+	font-size: 11px;
+}
+
+.cad-part-preview img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.cad-part-tile strong {
+	font-size: 13px;
+}
+
+.cad-part-tile small {
+	color: #98a4b3;
+	font-size: 11px;
+}

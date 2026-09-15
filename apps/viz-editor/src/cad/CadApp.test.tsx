@@ -475,6 +475,84 @@ describe("the CAD planning screen", () => {
 		expect(renamed.multipatch[0].name).toBe("Profile Stage 1 SR");
 	});
 
+	it("sizes a generated Venue object in Info by its profile's measurements instead of a scale", async () => {
+		const curtainId = "55555555-5555-4555-8555-555555555555";
+		const [original] = snapshot.entities;
+		mocks.snapshot.mockResolvedValue({
+			...snapshot,
+			selectedIds: [curtainId],
+			entities: [
+				{
+					...original,
+					id: curtainId,
+					logicalFixtureId: curtainId,
+					name: "Curtain (parametric)",
+					kind: "venue",
+					scenery: { kind: "curtain", chords: 0, pattern: "standard" },
+				},
+			],
+		});
+		documentMocks.patchSnapshot.mockResolvedValue({
+			fixtures: [
+				{
+					fixtureId: curtainId,
+					name: "Curtain (parametric)",
+					profileId: "curtain-profile",
+					profileRevision: 1,
+					location: { x: 0, y: 0, z: 0 },
+					rotation: { x: 0, y: 0, z: 0 },
+					multipatch: [],
+					scenerySizeMetres: null,
+				},
+			],
+			profileRevisions: [
+				{
+					profileId: "curtain-profile",
+					profileRevision: 1,
+					profileSnapshot: {
+						scenery: {
+							kind: "curtain",
+							chords: 0,
+							default_size_metres: { x: 4, y: 6, z: 0.06 },
+							adjustable: { width: true, height: true, depth: false },
+							minimum_size_metres: { x: 0.5, y: 1, z: 0.06 },
+							maximum_size_metres: { x: 30, y: 20, z: 0.06 },
+						},
+					},
+				},
+			],
+		});
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const info = await screen.findByRole("region", { name: "Info" });
+		const width = await within(info).findByLabelText("Width");
+		expect(width).toHaveValue("4");
+		expect(within(info).getByLabelText("Height")).toHaveValue("6");
+		// Only the measurements the profile lets the operator set, and no scale beside them.
+		expect(within(info).queryByLabelText("Depth")).toBeNull();
+		expect(within(info).queryByLabelText("Scale")).toBeNull();
+		// The unit is shown inside each field.
+		expect(width.parentElement?.querySelector(".cad-field-unit")?.textContent).toBe("m");
+
+		// A size outside the profile's range is put back rather than written.
+		fireEvent.change(width, { target: { value: "40" } });
+		fireEvent.keyDown(width, { key: "Enter" });
+		expect(width).toHaveValue("4");
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+
+		fireEvent.change(width, { target: { value: "8.5" } });
+		fireEvent.keyDown(width, { key: "Enter" });
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(transportMocks.patchFixtures.mock.calls[0][2].fixtures[0].scenerySizeMetres).toEqual({
+			x: 8500,
+			y: 6000,
+			z: 60,
+		});
+	});
+
 	it("fits automatically when the view changes and rotates only top down", async () => {
 		render(
 			<ModalProvider>

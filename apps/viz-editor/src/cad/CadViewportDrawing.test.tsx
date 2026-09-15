@@ -26,6 +26,8 @@ function setup({
 		remove: vi.fn().mockResolvedValue(undefined),
 		error: null,
 		clearError: vi.fn(),
+		placed: null,
+		announcePlaced: vi.fn(),
 	};
 	const onSelection = vi.fn();
 	render(

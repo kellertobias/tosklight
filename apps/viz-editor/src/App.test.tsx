@@ -1544,22 +1544,36 @@ describe("the Viz editor window", () => {
 			expect(button).toHaveClass("is-icon-only");
 		}
 
+		// A truss is chosen by its section first, in its own dialog rather than the fixture library.
 		fireEvent.click(within(toolbar).getByRole("button", { name: "Add truss" }));
-		const library = await screen.findByRole("dialog", { name: "Add fixture" });
-		expect(within(library).getByLabelText("Search")).toHaveValue("Truss");
+		const trussDialog = await screen.findByRole("dialog", { name: "Add truss" });
+		expect(
+			within(trussDialog)
+				.getAllByRole("listitem")
+				.map((item) => item.querySelector("strong")?.textContent),
+		).toEqual([
+			"Pipe",
+			"2-point",
+			"3-point deco",
+			"3-point regular",
+			"4-point",
+			"4-point large",
+		]);
+		expect(screen.queryByRole("dialog", { name: "Add fixture" })).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Close Add truss" }));
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Add truss" })).not.toBeInTheDocument(),
+		);
+		// Any other Venue object still comes from the library.
+		fireEvent.click(within(toolbar).getByRole("button", { name: "Add venue element" }));
+		expect(await screen.findByRole("dialog", { name: "Add fixture" })).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Close Add fixture" }));
 		await waitFor(() =>
-			expect(
-				screen.queryByRole("dialog", { name: "Add fixture" }),
-			).not.toBeInTheDocument(),
+			expect(screen.queryByRole("dialog", { name: "Add fixture" })).not.toBeInTheDocument(),
 		);
+		// A curtain is placed at once, so it opens no dialog at all.
 		fireEvent.click(within(toolbar).getByRole("button", { name: "Add curtain" }));
-		expect(
-			within(
-				await screen.findByRole("dialog", { name: "Add fixture" }),
-			).getByLabelText("Search"),
-		).toHaveValue("Curtain");
-		fireEvent.click(screen.getByRole("button", { name: "Close Add fixture" }));
+		expect(screen.queryByRole("dialog", { name: "Add fixture" })).not.toBeInTheDocument();
 
 		expect(within(toolbar).getByRole("button", { name: "Select" })).toHaveClass("is-active");
 		fireEvent.click(within(toolbar).getByRole("button", { name: "Measure" }));

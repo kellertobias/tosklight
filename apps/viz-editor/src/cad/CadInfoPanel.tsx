@@ -1,16 +1,21 @@
 /**
  * The Info panel: the element selected in the drawing, edited directly.
  *
- * Name, notes, where it stands and how it is turned are the element's own; scale only for the Venue
- * objects that can be drawn larger or smaller. Each change is written as soon as its field is left,
- * and the drawing redraws from the show like any other change, so the panel never holds a second copy
- * of the element.
+ * Name, notes, where it stands and how it is turned are the element's own. A generated Venue object —
+ * a truss, a curtain, a stage element — is sized by the measurements its profile lets the operator
+ * set, in metres within the profile's range; a placed 3D model is drawn larger or smaller by its scale.
+ * Each change is written as soon as its field is left, and the drawing redraws from the show like any
+ * other change, so the panel never holds a second copy of the element.
  *
  * A multi-patched fixture stands in several places. Each copy has its own name, position and
  * rotation, so Info edits the copy that was clicked — or the one chosen under **Copy** — and leaves
- * the others where they are. Notes and scale belong to the fixture and so to every copy.
+ * the others where they are. Notes, size and scale belong to the fixture and so to every copy.
  */
-import type { PatchFixtureProjection, PatchMultiPatch } from "@tosklight/patch";
+import type {
+	FixtureProfileScenery,
+	PatchFixtureProjection,
+	PatchMultiPatch,
+} from "@tosklight/patch";
 import { useEffect, useState } from "react";
 import { documentSession } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
@@ -20,9 +25,21 @@ import type { CadEntity } from "./types";
 type Axis = "x" | "y" | "z";
 const AXES: readonly Axis[] = ["x", "y", "z"];
 
+/** The measurements of a generated object, with the key the patch stores each under. */
+const SIZE_AXES = [
+	{ axis: "width", key: "x", label: "Width" },
+	{ axis: "height", key: "y", label: "Height" },
+	{ axis: "depth", key: "z", label: "Depth" },
+] as const;
+
 /** Whether an element can be drawn at another size: placed Venue objects, except crowd areas. */
 export function supportsScale(entity: CadEntity): boolean {
 	return entity.kind === "venue" && entity.scenery?.kind !== "crowd";
+}
+
+/** Whether a generated object has any measurement the operator sets. */
+export function hasAdjustableSize(scenery: FixtureProfileScenery | null | undefined) {
+	return Boolean(scenery && SIZE_AXES.some(({ axis }) => scenery.adjustable[axis]));
 }
 
 type Placement = Pick<PatchMultiPatch, "name" | "location" | "rotation">;
@@ -42,7 +59,56 @@ export function withPlacement(
 	};
 }
 
+/** The size an object is placed at in metres: what the patch stores, else its profile's default. */
+export function placedSize(
+	fixture: PatchFixtureProjection,
+	scenery: FixtureProfileScenery,
+): Record<Axis, number> {
+	const stored = fixture.scenerySizeMetres;
+	const axis = (key: Axis) =>
+		stored && Number.isFinite(stored[key]) && stored[key] > 0
+			? stored[key] / 1000
+			: scenery.default_size_metres[key];
+	return { x: axis("x"), y: axis("y"), z: axis("z") };
+}
+
 const transport = new TauriPatchTransport();
+
+/** The selected fixture as the patch holds it, with its note and what its profile generates. */
+function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
+	const [fixture, setFixture] = useState<PatchFixtureProjection | null>(null);
+	const [scenery, setScenery] = useState<FixtureProfileScenery | null>(null);
+	const [note, setNote] = useState("");
+	useEffect(() => {
+		let current = true;
+		if (!fixtureId) {
+			setFixture(null);
+			setScenery(null);
+			return;
+		}
+		Promise.resolve()
+			.then(() =>
+				Promise.all([documentSession.patchSnapshot(), documentSession.fixtureNotes()]),
+			)
+			.then(([snapshot, notes]) => {
+				if (!current) return;
+				const found = snapshot.fixtures.find((each) => each.fixtureId === fixtureId) ?? null;
+				setFixture(found);
+				const revision = snapshot.profileRevisions?.find(
+					(each) =>
+						each.profileId === found?.profileId &&
+						each.profileRevision === found?.profileRevision,
+				);
+				setScenery(revision?.profileSnapshot?.scenery ?? null);
+				setNote(notes.find((each) => each.fixtureId === fixtureId)?.note ?? "");
+			})
+			.catch(() => current && setFixture(null));
+		return () => {
+			current = false;
+		};
+	}, [fixtureId, sceneRevision]);
+	return { fixture, setFixture, scenery, note, setNote };
+}
 
 function PlacementChooser({
 	entity,
@@ -107,6 +173,49 @@ function VectorFields({
 	);
 }
 
+/** The measurements a generated object's profile lets the operator set, in metres within its range. */
+function SizeFields({
+	fixture,
+	scenery,
+	shared,
+	onWrite,
+}: {
+	fixture: PatchFixtureProjection;
+	scenery: FixtureProfileScenery;
+	shared: string;
+	onWrite(next: PatchFixtureProjection): void;
+}) {
+	const size = placedSize(fixture, scenery);
+	const axes = SIZE_AXES.filter(({ axis }) => scenery.adjustable[axis]);
+	return (
+		<div className="cad-info-vector" role="group" aria-label="Size">
+			<span>Size{shared}</span>
+			{axes.map(({ key, label }) => (
+				<CommitNumber
+					key={key}
+					label={label}
+					ariaLabel={label}
+					unit="m"
+					min={scenery.minimum_size_metres[key]}
+					max={scenery.maximum_size_metres[key]}
+					value={size[key]}
+					onCommit={(metres) => {
+						const next = { ...size, [key]: metres };
+						onWrite({
+							...fixture,
+							scenerySizeMetres: {
+								x: Math.round(next.x * 1000),
+								y: Math.round(next.y * 1000),
+								z: Math.round(next.z * 1000),
+							},
+						});
+					}}
+				/>
+			))}
+		</div>
+	);
+}
+
 export function CadInfoPanel({
 	entity,
 	placements = [],
@@ -125,30 +234,10 @@ export function CadInfoPanel({
 	sceneRevision: number;
 	onError(reason: unknown): void;
 }) {
-	const [fixture, setFixture] = useState<PatchFixtureProjection | null>(null);
-	const [note, setNote] = useState("");
-	const fixtureId = entity?.logicalFixtureId ?? null;
-
-	useEffect(() => {
-		let current = true;
-		if (!fixtureId) {
-			setFixture(null);
-			return;
-		}
-		Promise.resolve()
-			.then(() =>
-				Promise.all([documentSession.patchSnapshot(), documentSession.fixtureNotes()]),
-			)
-			.then(([snapshot, notes]) => {
-				if (!current) return;
-				setFixture(snapshot.fixtures.find((each) => each.fixtureId === fixtureId) ?? null);
-				setNote(notes.find((each) => each.fixtureId === fixtureId)?.note ?? "");
-			})
-			.catch(() => current && setFixture(null));
-		return () => {
-			current = false;
-		};
-	}, [fixtureId, sceneRevision]);
+	const { fixture, setFixture, scenery, note, setNote } = useInfoFixture(
+		entity?.logicalFixtureId ?? null,
+		sceneRevision,
+	);
 
 	if (!entity)
 		return (
@@ -191,22 +280,15 @@ export function CadInfoPanel({
 	};
 	const shared = placements.length > 1 ? " (all copies)" : "";
 	// A copy with no name of its own is shown under the fixture's name.
-	const name = copyId ? copy?.name.trim() || (fixture?.name ?? entity.name) : (fixture?.name ?? entity.name);
+	const fixtureName = fixture?.name ?? entity.name;
+	const name = copyId ? copy?.name.trim() || fixtureName : fixtureName;
 
 	return (
 		<section className="cad-info" aria-label="Info">
 			<h3>Info</h3>
-			<PlacementChooser
-				entity={entity}
-				placements={placements}
-				onChoose={(id) => onChoosePlacement?.(id)}
-			/>
+			<PlacementChooser entity={entity} placements={placements} onChoose={(id) => onChoosePlacement?.(id)} />
 			<fieldset disabled={!placement}>
-				<CommitText
-					label="Name"
-					value={name}
-					onCommit={(next) => next.trim() && place({ name: next.trim() })}
-				/>
+				<CommitText label="Name" value={name} onCommit={(next) => next.trim() && place({ name: next.trim() })} />
 				<CommitTextArea
 					label={`Notes${shared}`}
 					value={note}
@@ -234,7 +316,9 @@ export function CadInfoPanel({
 					show={(degrees) => degrees}
 					onCommit={(axis, degrees) => place({ rotation: { ...rotation, [axis]: degrees } })}
 				/>
-				{supportsScale(entity) ? (
+				{fixture && scenery && hasAdjustableSize(scenery) ? (
+					<SizeFields fixture={fixture} scenery={scenery} shared={shared} onWrite={(next) => void write(next)} />
+				) : supportsScale(entity) ? (
 					<CommitNumber
 						label={`Scale${shared}`}
 						ariaLabel="Scale"
