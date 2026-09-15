@@ -573,6 +573,79 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
 }
 
 #[test]
+fn shipped_truss_corners_and_legged_decks_carry_their_catalogue_models() {
+    // A corner block and a deck on fixed legs are single parts, not made to measure, so each
+    // is its own visual-only profile with the shipped model and its catalogue render.
+    let parts = [
+        ("Corner 2-Way", "corner-2-way"),
+        ("T-Piece 3-Way", "t-piece-3-way"),
+        ("Corner 3-Way Down", "corner-3-way-down"),
+        ("Cross 4-Way", "cross-4-way"),
+        ("T-Piece 4-Way Down", "t-piece-4-way-down"),
+        ("Cross 5-Way Down", "cross-5-way-down"),
+        ("Node 6-Way", "node-6-way"),
+    ];
+    let mut expected = Vec::new();
+    for (section, slug) in [("Three-Point", "three-point"), ("Four-Point", "four-point")] {
+        for (part, part_slug) in parts {
+            expected.push((
+                format!("venue--{slug}-truss-{part_slug}.toskfixture"),
+                format!("{section} Truss {part}"),
+                "rigging",
+            ));
+        }
+    }
+    for (size, size_slug) in [
+        ("1 × 0.5 m", "1-0-5-m"),
+        ("1 × 1 m", "1-1-m"),
+        ("2 × 1 m", "2-1-m"),
+    ] {
+        for (legs, legs_slug) in [
+            ("0.2 m", "0-2-m"),
+            ("0.4 m", "0-4-m"),
+            ("0.6 m", "0-6-m"),
+            ("0.8 m", "0-8-m"),
+            ("1 m", "1-m"),
+        ] {
+            expected.push((
+                format!("venue--stage-deck-{size_slug}-legs-{legs_slug}.toskfixture"),
+                format!("Stage Deck {size}, Legs {legs}"),
+                "venue",
+            ));
+        }
+    }
+    assert_eq!(expected.len(), 29);
+    let mut identities = std::collections::HashSet::new();
+    for (filename, name, fixture_type) in &expected {
+        let profile = shipped_profile(filename);
+        assert_eq!(profile.manufacturer, "Venue", "{filename}");
+        assert_eq!(&profile.name, name, "{filename}");
+        assert_eq!(profile.fixture_type, *fixture_type, "{filename}");
+        assert_eq!(profile.patch_policy, PatchPolicy::VisualOnly, "{filename}");
+        assert_eq!(profile.model_units, ModelUnits::Metres, "{filename}");
+        assert!(profile.scenery.is_none(), "{filename}");
+        assert!(identities.insert(profile.id), "{filename}");
+        let model = profile.model_asset.as_deref().expect(filename);
+        assert!(model.starts_with("data:model/gltf-binary"), "{filename}");
+        let photograph = profile.photograph_asset.as_deref().expect(filename);
+        assert!(photograph.starts_with("data:image/png"), "{filename}");
+        assert_eq!(profile.modes.len(), 1, "{filename}");
+        let mode = &profile.modes[0];
+        assert_eq!(mode.name, "Default", "{filename}");
+        assert_eq!(mode.splits.len(), 1, "{filename}");
+        assert_eq!(mode.splits[0].footprint, 0, "{filename}");
+        assert!(mode.channels.is_empty(), "{filename}");
+    }
+    let corner = shipped_profile("venue--four-point-truss-corner-2-way.toskfixture");
+    assert_eq!(corner.physical.width_millimetres, Some(679.0));
+    assert_eq!(corner.physical.height_millimetres, Some(290.0));
+    let deck = shipped_profile("venue--stage-deck-2-1-m-legs-0-4-m.toskfixture");
+    assert_eq!(deck.physical.width_millimetres, Some(2000.0));
+    assert_eq!(deck.physical.height_millimetres, Some(440.0));
+    assert_eq!(deck.physical.depth_millimetres, Some(1000.0));
+}
+
+#[test]
 fn shipped_fixture_library_uses_built_in_type_icons() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
