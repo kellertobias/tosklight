@@ -876,7 +876,7 @@ fn a_model_scale_multiplies_the_drawn_body_and_a_generated_objects_size() {
     );
 }
 
-fn shipped_venue(name: &str) -> PatchedFixture {
+pub(super) fn shipped_venue(name: &str) -> PatchedFixture {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
         "../../../assets/fixture-library/{name}.toskfixture"
     ));

@@ -1645,6 +1645,7 @@ describe("the Viz editor window", () => {
 			"Add truss",
 			"Add stage element",
 			"Add curtain",
+			"Add primitive",
 			"Add venue element",
 			"Select",
 			"Draw line",

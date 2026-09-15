@@ -746,6 +746,12 @@ pub enum SceneryKind {
     /// A rigging chain hanging the height of its size, with what hangs at each end in
     /// [`SceneryObject::detail`].
     Chain,
+    /// A plain block filling its size.
+    Box,
+    /// An upright cylinder filling its size: the height is its length.
+    Cylinder,
+    /// A ball filling its size.
+    Sphere,
     #[default]
     Prop,
 }

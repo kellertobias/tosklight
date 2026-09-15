@@ -260,6 +260,9 @@ fn scenery_kind(kind: light_fixture::ProfileSceneryKind) -> SceneryKind {
         light_fixture::ProfileSceneryKind::Railing => SceneryKind::Railing,
         light_fixture::ProfileSceneryKind::MirrorBall => SceneryKind::MirrorBall,
         light_fixture::ProfileSceneryKind::Chain => SceneryKind::Chain,
+        light_fixture::ProfileSceneryKind::Box => SceneryKind::Box,
+        light_fixture::ProfileSceneryKind::Cylinder => SceneryKind::Cylinder,
+        light_fixture::ProfileSceneryKind::Sphere => SceneryKind::Sphere,
         light_fixture::ProfileSceneryKind::Prop => SceneryKind::Prop,
     }
 }
@@ -272,6 +275,10 @@ fn scenery_colour(kind: light_fixture::ProfileSceneryKind) -> [f32; 3] {
         light_fixture::ProfileSceneryKind::Curtain => [0.008, 0.008, 0.01],
         // Galvanised rigging chain.
         light_fixture::ProfileSceneryKind::Chain => [0.32, 0.32, 0.33],
+        // A primitive is a stand-in shape an operator colours; neutral grey until they do.
+        light_fixture::ProfileSceneryKind::Box
+        | light_fixture::ProfileSceneryKind::Cylinder
+        | light_fixture::ProfileSceneryKind::Sphere => [0.3, 0.3, 0.3],
         _ => [0.14, 0.14, 0.15],
     }
 }

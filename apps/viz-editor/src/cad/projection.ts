@@ -509,6 +509,12 @@ function typedGeometry(
 
 	const scenery = entity.scenery;
 	if (
+		scenery?.kind === "box" ||
+		scenery?.kind === "cylinder" ||
+		scenery?.kind === "sphere"
+	) {
+		polygons = [primitive(scenery.kind, horizontal, vertical, view === "top_down")];
+	} else if (
 		scenery?.kind === "truss" ||
 		(!scenery && /truss|pipe grid|pipe$/.test(type))
 	) {
@@ -1038,6 +1044,23 @@ function generalFixture(width: number, height: number): Polygon[] {
 		ellipse(0, h * 0.06, w * 0.25, h * 0.25, DETAIL),
 		ellipse(0, h * 0.08, w * 0.12, h * 0.12, DARK),
 	];
+}
+
+/**
+ * A primitive shape at its own size, filling the box it is placed at: a box is its rectangle in
+ * every view, an upright cylinder is its ellipse from above and a rectangle from any side, and a ball
+ * is its ellipse in every view.
+ */
+function primitive(
+	kind: "box" | "cylinder" | "sphere",
+	width: number,
+	height: number,
+	top: boolean,
+): Polygon {
+	const round = kind === "sphere" || (kind === "cylinder" && top);
+	return round
+		? ellipse(0, 0, width / 2, height / 2, BODY, 32)
+		: rect(-width / 2, -height / 2, width, height, BODY);
 }
 
 function venueProp(width: number, height: number): Polygon[] {

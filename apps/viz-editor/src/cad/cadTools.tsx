@@ -15,8 +15,11 @@ import {
 } from "react";
 import { type CadAnnotation, annotationSession } from "./annotations";
 
-/** What the add buttons place: a truss, a stage element, a curtain, or any other Venue object. */
-export type CadAddKind = "truss" | "stage" | "curtain" | "venue";
+/**
+ * What the add buttons place: a truss, a stage element, a curtain, a primitive shape (box, cylinder
+ * or ball), or any other Venue object.
+ */
+export type CadAddKind = "truss" | "stage" | "curtain" | "primitive" | "venue";
 
 /** What a press on a viewport does. */
 export type CadDrawTool = "select" | "polyline" | "box" | "text" | "measure" | "erase";

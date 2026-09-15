@@ -779,6 +779,13 @@ pub enum ProfileSceneryKind {
     /// A rigging chain hanging its length, with a hoist or a direct fixing at the top and a direct
     /// fixing or a steelflex loop at the bottom, as the placement chooses.
     Chain,
+    /// A plain rectangular block filling its width, height and depth.
+    Box,
+    /// A cylinder standing upright: its height is its length, and its width and depth are the
+    /// diameters across it, so equal ones make it round.
+    Cylinder,
+    /// A ball filling its width, height and depth, round when all three are equal.
+    Sphere,
     #[default]
     Prop,
 }

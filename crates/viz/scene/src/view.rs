@@ -160,7 +160,13 @@ impl ViewMode {
         }
         matches!(
             kind,
-            SceneryKind::Floor | SceneryKind::Wall | SceneryKind::Riser | SceneryKind::Prop
+            SceneryKind::Floor
+                | SceneryKind::Wall
+                | SceneryKind::Riser
+                | SceneryKind::Prop
+                | SceneryKind::Box
+                | SceneryKind::Cylinder
+                | SceneryKind::Sphere
         )
     }
 

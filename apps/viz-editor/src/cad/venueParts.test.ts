@@ -3,10 +3,27 @@ import { describe, expect, it } from "vitest";
 import {
 	definitionForProfile,
 	nextVirtualNumber,
+	PRIMITIVE_TYPES,
 	previewOf,
 	STAGE_TYPES,
 	TRUSS_TYPES,
 } from "./venueParts";
+
+describe("the Add primitive dialog", () => {
+	it("offers a box, a cylinder and a ball, each placed from its own profile in one step", () => {
+		expect(PRIMITIVE_TYPES.map((type) => type.label)).toEqual(["Box", "Cylinder", "Ball"]);
+		for (const type of PRIMITIVE_TYPES) expect(type.parts).toHaveLength(1);
+		expect(PRIMITIVE_TYPES.map((type) => type.parts[0].profileId)).toEqual([
+			"0087038f-6a2f-5d74-9185-8d14d7e1ee48",
+			"a692c6db-7456-5b70-b681-50af57db2c28",
+			"269ae83e-4ea8-5639-9d34-418fc8a08d23",
+		]);
+		const ids = [...TRUSS_TYPES, ...STAGE_TYPES, ...PRIMITIVE_TYPES].flatMap((type) =>
+			type.parts.map((part) => part.profileId),
+		);
+		expect(new Set(ids).size).toBe(ids.length);
+	});
+});
 
 const definition = (profileId: string, revision: number, photograph: string | null = null) =>
 	({

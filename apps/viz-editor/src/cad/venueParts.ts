@@ -166,6 +166,21 @@ export const STAGE_TYPES: readonly VenuePartGroup[] = [
 /** The parametric curtain: placed at once, then sized in Info. */
 export const PARAMETRIC_CURTAIN_PROFILE_ID = "6f34b81e-3f71-5d35-b8fb-b4b0b7cce859";
 
+/**
+ * The primitive shapes: each one parametric profile, placed at once from its tile and sized in Info.
+ * Each fills its width, height and depth; a cylinder stands upright.
+ */
+export const PRIMITIVE_TYPES: readonly VenuePartGroup[] = [
+	["box", "Box", "0087038f-6a2f-5d74-9185-8d14d7e1ee48"],
+	["cylinder", "Cylinder", "a692c6db-7456-5b70-b681-50af57db2c28"],
+	["ball", "Ball", "269ae83e-4ea8-5639-9d34-418fc8a08d23"],
+].map(([id, label, profileId]) => ({
+	id,
+	label,
+	partsLabel: "Shape",
+	parts: [{ id, label: label.toLowerCase(), detail: "Sized in Info", profileId }],
+}));
+
 /** The newest revision of a profile in the library, or undefined when this machine does not have it. */
 export function definitionForProfile(
 	definitions: readonly FixtureDefinition[],

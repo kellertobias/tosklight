@@ -37,6 +37,49 @@ const movingLight: CadEntity = {
 };
 
 describe("CAD plan projections", () => {
+	it("draws a box, a cylinder and a ball filling their size in every view", () => {
+		const shape = (kind: string, view: CadViewDirection) => {
+			const geometry = entityPlanGeometry(
+				{
+					...movingLight,
+					name: kind,
+					kind: "venue",
+					fixtureType: "venue",
+					// Width, depth and height.
+					sizeMillimetres: [2000, 1000, 3000],
+					scenery: { kind, chords: 0, pattern: "standard" },
+				},
+				undefined,
+				view,
+			);
+			const points = geometry.triangles.flatMap((triangle) => triangle.points);
+			const extent = (axis: 0 | 1) => Math.max(...points.map((point) => Math.abs(point[axis])));
+			return { corners: new Set(points.map((point) => point.join(","))).size, x: extent(0), y: extent(1) };
+		};
+		const close = (actual: { x: number; y: number }, x: number, y: number) => {
+			expect(actual.x).toBeCloseTo(x, 0);
+			expect(actual.y).toBeCloseTo(y, 0);
+		};
+		// From above the plan is width by depth; from the front width by height; from the side
+		// depth by height.
+		for (const [view, x, y] of [
+			["top_down", 1000, 500],
+			["front_to_back", 1000, 1500],
+			["left_to_right", 500, 1500],
+		] as const) {
+			const box = shape("box", view);
+			expect(box.corners).toBe(4);
+			close(box, x, y);
+			const ball = shape("sphere", view);
+			expect(ball.corners).toBeGreaterThan(16);
+			close(ball, x, y);
+			// An upright cylinder is round from above and a rectangle from any side.
+			const cylinder = shape("cylinder", view);
+			expect(cylinder.corners).toBe(view === "top_down" ? 32 : 4);
+			close(cylinder, x, y);
+		}
+	});
+
 	it("maps every CAD direction to its fixture projection", () => {
 		expect(projectionViewForCad("top_down")).toBe("top");
 		expect(projectionViewForCad("left_to_right")).toBe("left");

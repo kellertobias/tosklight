@@ -13,6 +13,7 @@ import selectSvg from "../../../../assets/icons/drawing/select.svg?raw";
 import textSvg from "../../../../assets/icons/drawing/text.svg?raw";
 import undoSvg from "../../../../assets/icons/drawing/undo.svg?raw";
 import curtainSvg from "../../../../assets/icons/misc/curtain.svg?raw";
+import primitiveSvg from "../../../../assets/icons/misc/primitive.svg?raw";
 import stageElementSvg from "../../../../assets/icons/misc/stage-element.svg?raw";
 import trussSvg from "../../../../assets/icons/misc/truss-segment.svg?raw";
 import venueObjectSvg from "../../../../assets/icons/misc/venue-object.svg?raw";
@@ -27,6 +28,7 @@ export const CAD_ADD_ACTIONS: readonly {
 	{ kind: "truss", label: "Add truss", svg: trussSvg },
 	{ kind: "stage", label: "Add stage element", svg: stageElementSvg },
 	{ kind: "curtain", label: "Add curtain", svg: curtainSvg },
+	{ kind: "primitive", label: "Add primitive", svg: primitiveSvg },
 	{ kind: "venue", label: "Add venue element", svg: venueObjectSvg },
 ];
 

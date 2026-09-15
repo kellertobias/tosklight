@@ -1235,3 +1235,5 @@ use head_geometry::{fitted_to_head_pitch, head_offset, head_span, pan_axis, tilt
 
 #[cfg(test)]
 mod model_tests;
+#[cfg(test)]
+mod primitive_tests;

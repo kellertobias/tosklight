@@ -15,6 +15,7 @@ const CAD_ADD_PRESETS: Record<CadAddKind, { type: string; query: string }> = {
 	truss: { type: "rigging", query: "Truss" },
 	stage: { type: "venue", query: "Stage" },
 	curtain: { type: "venue", query: "Curtain" },
+	primitive: { type: "venue", query: "" },
 	venue: { type: "", query: "" },
 };
 

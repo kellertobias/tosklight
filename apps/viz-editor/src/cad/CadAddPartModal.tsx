@@ -1,10 +1,11 @@
 /**
- * The dialog behind **Add truss** and **Add stage element**, and the direct add behind **Add curtain**.
+ * The dialog behind **Add truss**, **Add stage element** and **Add primitive**, and the direct add
+ * behind **Add curtain**.
  *
  * Choosing takes two steps: the truss section or what a stage element stands on, then the part or
  * platform size, each shown by its picture on a dark ground. The chosen part is placed at the stage
  * origin like any other Venue object, and the CAD screen selects it so Info opens to place and size
- * it. A step with a single choice is skipped.
+ * it. A step with a single choice is skipped, so a primitive — box, cylinder or ball — is one step.
  *
  * The dialog reads the fixture library itself each time it opens and writes the placement straight to
  * the show, so it offers what this computer's library holds now and a refusal carries the show's own
@@ -23,6 +24,7 @@ import {
 	definitionForProfile,
 	nextVirtualNumber,
 	PARAMETRIC_CURTAIN_PROFILE_ID,
+	PRIMITIVE_TYPES,
 	previewOf,
 	STAGE_TYPES,
 	TRUSS_TYPES,
@@ -32,13 +34,20 @@ import {
 import "./cadAddParts.css";
 
 /** What the add buttons ask for; `venue` is any other object and is left to the fixture library. */
-export type CadPartKind = "truss" | "stage" | "curtain" | "venue";
+export type CadPartKind = "truss" | "stage" | "curtain" | "primitive" | "venue";
 
-type ChosenKind = "truss" | "stage";
+type ChosenKind = "truss" | "stage" | "primitive";
 
 const TITLES: Record<ChosenKind, { title: string; groupsLabel: string }> = {
 	truss: { title: "Add truss", groupsLabel: "Truss type" },
 	stage: { title: "Add stage element", groupsLabel: "Feet" },
+	primitive: { title: "Add primitive", groupsLabel: "Shape" },
+};
+
+const GROUPS: Record<ChosenKind, readonly VenuePartGroup[]> = {
+	truss: TRUSS_TYPES,
+	stage: STAGE_TYPES,
+	primitive: PRIMITIVE_TYPES,
 };
 
 const transport = new TauriPatchTransport();
@@ -147,7 +156,7 @@ function PartGrid({
 								label={each.label}
 								detail={
 									each.parts.length === 1
-										? each.parts[0].label
+										? (each.parts[0].detail ?? each.parts[0].label)
 										: `${each.parts.length} ${each.partsLabel.toLowerCase()}s`
 								}
 								library={library}
@@ -227,7 +236,7 @@ export function CadAddPartModal({
 	});
 
 	if (!open) return null;
-	const groups = open === "truss" ? TRUSS_TYPES : STAGE_TYPES;
+	const groups = GROUPS[open];
 	const close = () => {
 		setOpen(null);
 		setGroup(null);

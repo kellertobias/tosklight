@@ -74,18 +74,34 @@ fn push_object(
         SceneryKind::Riser if object.detail.scissor_lift => {
             riser::push_scissor_stage(frame, object, orientation, colour)
         }
-        SceneryKind::Floor | SceneryKind::Wall | SceneryKind::Riser | SceneryKind::Prop => {
-            let model =
-                Mat4::from_scale_rotation_translation(object.size, orientation, object.position);
-            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                model,
-                colour,
-                object.roughness,
-                Vec3::ZERO,
-                0.0,
-            ));
-        }
+        SceneryKind::Cylinder => push_primitive(frame, object, orientation, MeshKind::Cylinder),
+        SceneryKind::Sphere => push_primitive(frame, object, orientation, MeshKind::Sphere),
+        SceneryKind::Floor
+        | SceneryKind::Wall
+        | SceneryKind::Riser
+        | SceneryKind::Prop
+        | SceneryKind::Box => push_primitive(frame, object, orientation, MeshKind::Cube),
     }
+}
+
+/// One unit mesh stretched to fill the object's size: a block, an upright cylinder or a ball.
+///
+/// The unit cube, cylinder and sphere are all one metre across and centred, and the cylinder
+/// stands on `Y`, so scaling by the size makes each fill exactly the box its size describes.
+fn push_primitive(
+    frame: &mut FrameInstances,
+    object: &SceneryObject,
+    orientation: Quat,
+    mesh: MeshKind,
+) {
+    let model = Mat4::from_scale_rotation_translation(object.size, orientation, object.position);
+    frame.mesh(mesh).push(MeshInstance::new(
+        model,
+        Vec3::from(object.colour),
+        object.roughness,
+        Vec3::ZERO,
+        0.0,
+    ));
 }
 
 /// One tube between two points, for a truss chord or a brace.
@@ -125,6 +141,8 @@ use truss::push_truss;
 
 // A chain reads by its links and what hangs at its ends; a stage element by the lift under it.
 mod chain;
+#[cfg(test)]
+mod primitive_tests;
 mod riser;
 #[cfg(test)]
 pub(super) use chain::link_count as chain_link_count;

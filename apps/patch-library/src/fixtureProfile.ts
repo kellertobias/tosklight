@@ -451,6 +451,9 @@ export interface FixtureProfileScenery {
 		| "railing"
 		| "mirror_ball"
 		| "chain"
+		| "box"
+		| "cylinder"
+		| "sphere"
 		| "prop";
 	/** Chords in a truss cross-section. Every other kind ignores it. */
 	chords: number;

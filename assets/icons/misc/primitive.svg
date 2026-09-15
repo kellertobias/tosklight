@@ -1,0 +1,4 @@
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>misc primitive</title>
+  <path d="M6 30h22v26H6z"/><circle cx="46" cy="18" r="12"/><path d="M36 46c0-3 4.5-5 10-5s10 2 10 5v8c0 3-4.5 5-10 5s-10-2-10-5v-8Z"/><path d="M36 46c0 3 4.5 5 10 5s10-2 10-5"/>
+</svg>
