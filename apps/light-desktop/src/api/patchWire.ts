@@ -141,6 +141,7 @@ function mapFixtureProjection(
 			installedAppearance: mapInstalledAppearance(
 				instance.installed_appearance,
 			),
+			scenerySizeMetres: mapScenerySize(instance.scenery_size_metres),
 		})),
 		groupMastersEnabled: fixture.group_masters_enabled,
 		grandMasterEnabled: fixture.grand_master_enabled,
@@ -160,7 +161,22 @@ function mapFixtureProjection(
 			full: target.full,
 			families: [...target.families],
 		})),
+		scenerySizeMetres: mapScenerySize(fixture.scenery_size_metres),
+		sceneryOptions: fixture.scenery_options
+			? {
+					colourSrgb: fixture.scenery_options.colour_srgb ?? null,
+					chainTop: fixture.scenery_options.chain_top ?? null,
+					chainBottom: fixture.scenery_options.chain_bottom ?? null,
+				}
+			: null,
 	};
+}
+
+/** A generated Venue object's placed size, or `null` while it keeps its profile's default. */
+function mapScenerySize(
+	size: PatchFixtureProjection["scenery_size_metres"],
+): FeatureFixtureProjection["scenerySizeMetres"] {
+	return size ? { ...size } : null;
 }
 
 function mapInstalledAppearance(

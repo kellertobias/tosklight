@@ -81,6 +81,22 @@ export interface PatchMultiPatch {
 	bracketAngle?: number;
 	shaperAngle?: number | null;
 	installedAppearance?: PatchInstalledFixtureAppearance;
+	/** The size this copy of a generated Venue object is placed at, in millimetres; absent keeps its default. */
+	scenerySizeMetres?: PatchScenerySize | null;
+}
+
+/** A generated Venue object's placed size, in millimetres despite the name, as the wire carries it. */
+export interface PatchScenerySize {
+	x: number;
+	y: number;
+	z: number;
+}
+
+/** A generated Venue object's colour and a chain's ends; absent choices are the kind's defaults. */
+export interface PatchSceneryOptions {
+	colourSrgb?: string | null;
+	chainTop?: "motor" | "direct" | "steelflex_loop" | null;
+	chainBottom?: "direct" | "steelflex_loop" | "motor" | null;
 }
 
 export interface PatchHighlightOverride {
@@ -115,6 +131,14 @@ export interface PatchFixtureWrite {
 	moveInBlackEnabled: boolean;
 	moveInBlackDelayMillis: number;
 	highlightOverrides: readonly PatchHighlightOverride[];
+	/**
+	 * The size a generated Venue object is placed at. Absent or `null` while it is at its profile's
+	 * default size, and for everything that is not generated. Every write carries it back, so editing
+	 * anything else never resets it.
+	 */
+	scenerySizeMetres?: PatchScenerySize | null;
+	/** A generated Venue object's colour and a chain's ends, carried back on every write likewise. */
+	sceneryOptions?: PatchSceneryOptions | null;
 }
 
 export interface PatchPlacementOverride {

@@ -169,6 +169,7 @@ export function patchedFixtureCandidate(
 				bracketAngle: instance.bracket_angle ?? 0,
 				shaperAngle: instance.shaper_angle ?? null,
 				installedAppearance: patchAppearance(instance.installed_appearance),
+				scenerySizeMetres: instance.scenery_size_metres ?? null,
 			})),
 			groupMastersEnabled: fixture.group_masters_enabled ?? true,
 			grandMasterEnabled: fixture.grand_master_enabled ?? true,
@@ -182,6 +183,15 @@ export function patchedFixtureCandidate(
 			highlightOverrides: Object.entries(fixture.highlight_overrides ?? {}).map(
 				([channelId, rawValue]) => ({ channelId, rawValue }),
 			),
+			// Every write carries the size and options back, so editing anything else never resets them.
+			scenerySizeMetres: fixture.scenery_size_metres ?? null,
+			sceneryOptions: fixture.scenery_options
+				? {
+						colourSrgb: fixture.scenery_options.colour_srgb ?? null,
+						chainTop: fixture.scenery_options.chain_top ?? null,
+						chainBottom: fixture.scenery_options.chain_bottom ?? null,
+					}
+				: null,
 		},
 	};
 }
@@ -274,6 +284,7 @@ export function projectionToPatchedFixture(
 				bracket_angle: instance.bracketAngle ?? 0,
 				shaper_angle: instance.shaperAngle ?? null,
 				installed_appearance: fixtureAppearance(instance.installedAppearance),
+				scenery_size_metres: instance.scenerySizeMetres ?? null,
 			};
 		}),
 		group_masters_enabled: projection.groupMastersEnabled ?? true,
@@ -296,6 +307,14 @@ export function projectionToPatchedFixture(
 			full: target.full,
 			families: [...target.families],
 		})),
+		scenery_size_metres: projection.scenerySizeMetres ?? null,
+		scenery_options: projection.sceneryOptions
+			? {
+					colour_srgb: projection.sceneryOptions.colourSrgb ?? null,
+					chain_top: projection.sceneryOptions.chainTop ?? null,
+					chain_bottom: projection.sceneryOptions.chainBottom ?? null,
+				}
+			: null,
 	};
 }
 

@@ -386,6 +386,9 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 			installed_appearance: toWireInstalledAppearance(
 				instance.installedAppearance,
 			),
+			scenery_size_metres: instance.scenerySizeMetres
+				? { ...instance.scenerySizeMetres }
+				: null,
 		})),
 		group_masters_enabled: fixture.groupMastersEnabled ?? true,
 		grand_master_enabled: fixture.grandMasterEnabled ?? true,
@@ -402,6 +405,17 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 			channel_id: override.channelId,
 			raw_value: override.rawValue,
 		})),
+		// A Venue object's size and options go back on every write, so an unrelated edit keeps them.
+		scenery_size_metres: fixture.scenerySizeMetres
+			? { ...fixture.scenerySizeMetres }
+			: null,
+		scenery_options: fixture.sceneryOptions
+			? {
+					colour_srgb: fixture.sceneryOptions.colourSrgb ?? null,
+					chain_top: fixture.sceneryOptions.chainTop ?? null,
+					chain_bottom: fixture.sceneryOptions.chainBottom ?? null,
+				}
+			: null,
 	};
 }
 
