@@ -560,6 +560,44 @@ describe("the CAD planning screen", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("sets the grid colour as a setting of this computer, never of the show", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		const settings = screen.getByRole("dialog", { name: "Architect Settings" });
+		fireEvent.click(within(settings).getByRole("tab", { name: "Grid" }));
+		const stored = () =>
+			JSON.parse(localStorage.getItem("tosklight:viz-editor:cad-settings:v1") ?? "{}")
+				.gridColour;
+
+		const hex = within(settings).getByRole("textbox", { name: "Grid colour" });
+		expect(hex).toHaveValue("#c9d1d9");
+		fireEvent.change(hex, { target: { value: "ABC" } });
+		fireEvent.keyDown(hex, { key: "Enter" });
+		expect(stored()).toBe("#aabbcc");
+		expect(hex).toHaveValue("#aabbcc");
+
+		// Something that is not a colour is put back rather than saved.
+		fireEvent.change(hex, { target: { value: "blue-ish" } });
+		fireEvent.blur(hex);
+		expect(hex).toHaveValue("#aabbcc");
+		expect(stored()).toBe("#aabbcc");
+
+		fireEvent.click(within(settings).getByRole("button", { name: "Amber" }));
+		expect(stored()).toBe("#e3b341");
+		expect(within(settings).getByRole("button", { name: "Amber" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		// The show is not touched: nothing is written into the document.
+		expect(documentMocks.savePaperwork).not.toHaveBeenCalled();
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+	});
+
 	it("recursively adds adjacent viewports from all four tile edges", async () => {
 		render(
 			<ModalProvider>

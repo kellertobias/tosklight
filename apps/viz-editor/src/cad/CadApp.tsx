@@ -9,6 +9,7 @@ import {
 	DEFAULT_GRID,
 	GRID_SPACINGS_MILLIMETRES,
 } from "./cadGrid";
+import { CadGridColour } from "./CadGridColour";
 import { CadSidePanels } from "./CadSidePanels";
 import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
@@ -210,6 +211,15 @@ export function CadApp() {
 	useEffect(() => {
 		localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 	}, [settings]);
+
+	// The CAD settings belong to this computer's Architect, so another open window follows a change.
+	useEffect(() => {
+		const follow = (event: StorageEvent) => {
+			if (event.key === SETTINGS_KEY) setSettings(restoreSettings());
+		};
+		window.addEventListener("storage", follow);
+		return () => window.removeEventListener("storage", follow);
+	}, []);
 
 	const [focusedEntityId, setFocusedEntityId] = useState<string | null>(null);
 
@@ -767,15 +777,10 @@ function GridSettings({
 				checked={settings.showGrid}
 				onChange={(event) => onChange({ showGrid: event.currentTarget.checked })}
 			/>
-			<label className="cad-settings-colour">
-				<span>Grid colour</span>
-				<input
-					type="color"
-					aria-label="Grid colour"
-					value={settings.gridColour}
-					onChange={(event) => onChange({ gridColour: event.currentTarget.value })}
-				/>
-			</label>
+			<CadGridColour
+				value={settings.gridColour}
+				onChange={(gridColour) => onChange({ gridColour })}
+			/>
 			<SelectField
 				label="Grid spacing"
 				value={String(settings.gridSpacingMillimetres ?? "scale")}

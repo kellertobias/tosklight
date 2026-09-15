@@ -155,3 +155,67 @@
 	height: 100%;
 	pointer-events: none;
 }
+
+/* The grid colour in CAD Settings: picker and hex field on one row, presets below. */
+.cad-grid-colour {
+	display: grid;
+	gap: 6px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.cad-grid-colour legend {
+	margin-bottom: 4px;
+	padding: 0;
+	font-size: 12px;
+	color: var(--text-secondary, #98a4b3);
+}
+
+.cad-grid-colour-row {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.cad-grid-colour-row input[type="color"] {
+	flex: none;
+	width: 40px;
+	height: 32px;
+	padding: 2px;
+	border: 1px solid #34404c;
+	border-radius: 4px;
+	background: #0b0f14;
+	cursor: pointer;
+}
+
+.cad-grid-colour-row .ui-input {
+	width: 110px;
+	min-height: 32px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.cad-grid-colour-presets {
+	display: flex;
+	gap: 6px;
+}
+
+.cad-grid-colour-swatch {
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid #34404c;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.cad-grid-colour-swatch[aria-pressed="true"] {
+	outline: 2px solid #05d1fa;
+	outline-offset: 1px;
+}
+
+.cad-grid-colour small {
+	color: var(--text-secondary, #98a4b3);
+	font-size: 11px;
+}

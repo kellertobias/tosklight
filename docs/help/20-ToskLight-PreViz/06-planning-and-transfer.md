@@ -519,7 +519,11 @@ plan still moves the fixture with all its copies.
 
 A pale grey grid is drawn over every view. Its lines are one step of the scale indicator apart, so
 zooming changes the grid with the scale. **Settings (⚙) → Grid** switches it off, sets its colour, or
-fixes its spacing to a length that no longer follows the scale. **Show sub-grid** adds small plus
+fixes its spacing to a length that no longer follows the scale. Type the colour as a hex value such as
+`#c9d1d9` and press Enter, pick it from the colour panel, or choose one of the presets. The grid is a
+setting of this computer's Architect, not of the show: every show opened here uses it, every open
+Architect window follows a change at once, and a show carried to another machine is drawn with that
+machine's grid. **Show sub-grid** adds small plus
 signs at the scale indicator's quarter steps between the lines. A grid too dense to read at the
 current zoom is left out until you zoom in.
 
