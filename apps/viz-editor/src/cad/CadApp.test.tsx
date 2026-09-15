@@ -55,7 +55,11 @@ const mocks = vi.hoisted(() => ({
 const documentMocks = vi.hoisted(() => ({
 	current: vi.fn(),
 	savePaperwork: vi.fn(),
+	patchSnapshot: vi.fn(),
+	fixtureNotes: vi.fn(),
+	saveFixtureNote: vi.fn(),
 }));
+const transportMocks = vi.hoisted(() => ({ patchFixtures: vi.fn() }));
 const nativeWindow = vi.hoisted(() => ({
 	close: vi.fn().mockResolvedValue(undefined),
 	isFullscreen: vi.fn().mockResolvedValue(false),
@@ -77,6 +81,11 @@ vi.mock("@tauri-apps/api/event", () => ({
 	listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 vi.mock("../document/session", () => ({ documentSession: documentMocks }));
+vi.mock("../document/transport", () => ({
+	TauriPatchTransport: class {
+		patchFixtures = transportMocks.patchFixtures;
+	},
+}));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
 	save: vi.fn().mockResolvedValue("/tmp/rig-plan.pdf"),
 }));
@@ -182,6 +191,21 @@ beforeEach(() => {
 			universeCount: 1,
 		}),
 	);
+	documentMocks.patchSnapshot.mockReset().mockResolvedValue({
+		fixtures: [
+			{
+				fixtureId,
+				name: "Profile Stage 1",
+				location: { x: 0, y: 0, z: 4000 },
+				rotation: { x: 0, y: 0, z: 0 },
+			},
+		],
+	});
+	documentMocks.fixtureNotes
+		.mockReset()
+		.mockResolvedValue([{ fixtureId, note: "Use secondary safety" }]);
+	documentMocks.saveFixtureNote.mockReset().mockResolvedValue(undefined);
+	transportMocks.patchFixtures.mockReset().mockResolvedValue(undefined);
 	for (const action of Object.values(nativeWindow)) action.mockClear();
 });
 
@@ -236,7 +260,7 @@ describe("the CAD planning screen", () => {
 			button.getAttribute("aria-label") ?? button.textContent ?? "";
 		expect(
 			within(header as HTMLElement).getAllByRole("button").map(named),
-		).toEqual(["Undo", "Redo", "Print", "Elements", "Settings"]);
+		).toEqual(["Undo", "Redo", "Plans", "Elements", "Settings"]);
 		// Undo and Redo are icons that name themselves, like the other title tools.
 		for (const name of ["Undo", "Redo"]) {
 			const button = within(header as HTMLElement).getByRole("button", { name });
@@ -248,7 +272,7 @@ describe("the CAD planning screen", () => {
 			[...(header as HTMLElement).querySelectorAll(".ui-window-action-group")]
 				.map((group) => [...group.querySelectorAll("button")].map(named).join(" "))
 				.filter((labels) => labels.length > 0),
-		).toEqual(["Undo Redo", "Print Elements", "Settings"]);
+		).toEqual(["Undo Redo", "Plans Elements", "Settings"]);
 		expect(
 			screen.getByRole("button", {
 				name: "Rotate top-down view 90 degrees counterclockwise",
@@ -271,14 +295,15 @@ describe("the CAD planning screen", () => {
 		expect(
 			screen.queryByRole("button", { name: "Add New Page" }),
 		).not.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Print" }));
+		fireEvent.click(screen.getByRole("button", { name: "Plans" }));
 		fireEvent.click(screen.getByRole("button", { name: "Add New Page" }));
-		fireEvent.click(screen.getByRole("button", { name: "Add Fixture List" }));
+		fireEvent.click(screen.getByRole("button", { name: "Add plan page" }));
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Fixture list" }));
 		expect(
-			screen.getByRole("complementary", { name: "Print pages" }),
+			screen.getByRole("complementary", { name: "Plans" }),
 		).toHaveTextContent("1. Page 1");
 		expect(
-			screen.getByRole("complementary", { name: "Print pages" }),
+			screen.getByRole("complementary", { name: "Plans" }),
 		).toHaveTextContent("2. Fixture List");
 		expect(screen.getByText("Fixture table")).toBeInTheDocument();
 		expect(screen.getAllByText("A4 landscape")).toHaveLength(2);
@@ -300,7 +325,7 @@ describe("the CAD planning screen", () => {
 		);
 	});
 
-	it("opens print pages and elements from their own window title buttons", async () => {
+	it("opens plans and elements from their own window title buttons", async () => {
 		render(
 			<ModalProvider>
 				<CadApp />
@@ -308,32 +333,82 @@ describe("the CAD planning screen", () => {
 		);
 		await screen.findByTestId("cad-canvas");
 		expect(screen.queryByRole("button", { name: "Meta" })).not.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Print" }));
+		fireEvent.click(screen.getByRole("button", { name: "Plans" }));
 		expect(screen.getByRole("button", { name: "Export to PDF" })).toBeVisible();
 
-		// Elements is its own title button, with Drawings and Objects as its tabs.
+		// Elements is its own title button; Drawings, Objects and + share the panel's title row.
 		fireEvent.click(screen.getByRole("button", { name: "Elements" }));
+		const panel = screen.getByRole("complementary", { name: "Elements" });
 		expect(
 			screen.queryByRole("button", { name: "Export to PDF" }),
 		).not.toBeInTheDocument();
+		const titleRow = panel.querySelector(".cad-sidebar-header") as HTMLElement;
+		expect(within(titleRow).getByRole("heading", { name: "Elements" })).toBeVisible();
 		expect(
-			screen.getAllByRole("tab").map((tab) => tab.textContent),
+			within(titleRow).getAllByRole("tab").map((tab) => tab.textContent),
 		).toEqual(["Drawings", "Objects"]);
-		expect(await screen.findByRole("button", { name: "New folder" })).toBeVisible();
-		expect(screen.getByRole("button", { name: "Add Drawing" })).toBeVisible();
+		// Adding lives only behind +, never as buttons in the panel.
+		expect(within(panel).queryByRole("button", { name: "New folder" })).toBeNull();
+		expect(within(panel).queryByRole("button", { name: "Add Drawing" })).toBeNull();
+		fireEvent.click(within(titleRow).getByRole("button", { name: "Add drawing" }));
+		expect(
+			(await screen.findAllByRole("menuitem")).map((item) => item.textContent),
+		).toEqual(["Import drawing (DXF, SVG)…", "New folder"]);
+		fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
 
-		fireEvent.click(screen.getByRole("tab", { name: "Objects" }));
+		fireEvent.click(within(titleRow).getByRole("tab", { name: "Objects" }));
 		expect(screen.getByRole("region", { name: "Venue items" })).toBeVisible();
 		expect(screen.getByRole("region", { name: "3D models" })).toBeVisible();
-		expect(screen.getByRole("button", { name: "Import 3D model" })).toBeVisible();
-		// The rig's lamps are not venue objects.
-		expect(screen.queryByText("Profile Stage 1")).not.toBeInTheDocument();
+		expect(within(panel).queryByRole("button", { name: "Import 3D model" })).toBeNull();
+		fireEvent.click(within(titleRow).getByRole("button", { name: "Add object" }));
+		expect(
+			await screen.findByRole("menuitem", { name: "Import 3D model…" }),
+		).toBeInTheDocument();
 
-		// Pressing the open panel's own button closes it again.
+		// Pressing the open panel's own button closes it; the selection keeps Info open alone.
 		fireEvent.click(screen.getByRole("button", { name: "Elements" }));
 		expect(
-			screen.queryByRole("complementary", { name: "Print pages" }),
+			screen.queryByRole("complementary", { name: "Elements" }),
 		).not.toBeInTheDocument();
+		expect(screen.getByRole("complementary", { name: "Info" })).toBeVisible();
+	});
+
+	it("edits the selected element in the Info panel and remembers the panel width", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		const info = await screen.findByRole("region", { name: "Info" });
+		await waitFor(() =>
+			expect(within(info).getByLabelText("Notes")).toHaveValue("Use secondary safety"),
+		);
+		expect(within(info).getByLabelText("Position Z")).toHaveValue("4");
+		// A lamp cannot be drawn at another size.
+		expect(within(info).queryByLabelText("Scale")).toBeNull();
+
+		// Typing does not write; Enter does, in whole millimetres.
+		const x = within(info).getByLabelText("Position X");
+		fireEvent.change(x, { target: { value: "1.25" } });
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+		fireEvent.keyDown(x, { key: "Enter" });
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(transportMocks.patchFixtures.mock.calls[0][2].fixtures[0]).toMatchObject({
+			fixtureId,
+			location: { x: 1250, y: 0, z: 4000 },
+		});
+
+		const notes = within(info).getByLabelText("Notes");
+		fireEvent.change(notes, { target: { value: "Check clamp" } });
+		fireEvent.blur(notes);
+		expect(documentMocks.saveFixtureNote).toHaveBeenCalledWith({ fixtureId, note: "Check clamp" });
+
+		const aside = screen.getByRole("complementary", { name: "Info" });
+		const handle = within(aside).getByRole("separator", { name: "Resize side panel" });
+		fireEvent.keyDown(handle, { key: "ArrowLeft" });
+		expect(aside.style.width).toBe("320px");
+		expect(workspace.get("tosklight:viz-editor:cad-sidebar-width:v1")).toBe("320");
 	});
 
 	it("fits automatically when the view changes and rotates only top down", async () => {

@@ -434,8 +434,9 @@ which means the whole drawing.
 ## Drawings under the plan
 
 A plot is drawn over the venue, so the venue's own drawing can be placed under it. **Elements** in
-the CAD title opens a panel with two tabs, **Drawings** and **Objects**. On **Drawings**, **Add
-Drawing** takes a DXF or an SVG, reads it, and
+the CAD title opens a side panel whose title row carries its two tabs, **Drawings** and **Objects**,
+and a **+** button that adds to the open tab. On **Drawings**, **+ → Import drawing (DXF, SVG)…**
+takes a DXF or an SVG, reads it, and
 tells you what it found — what the file says its units are, how large the drawing is in metres, and
 how many lines it holds — before anything is placed. Nothing is written into the show until you
 press **Place Drawing**.
@@ -463,12 +464,11 @@ not apply to drawings either, so a view cut to a slice of the rig still shows th
 in.
 
 **Drawings** lists every placed drawing and every line, box, text and measurement drawn on a view,
-as a tree you arrange freely. **New folder** adds a folder — inside the selected folder, or at the top
-level — and **Rename** names it; **Delete folder** removes a folder and hands what it held to the folder
-around it, so no drawing is lost. Drag a row onto a folder to put it inside, or onto another row to put
-it before that row. Because the desk surface is touched rather than dragged, the same moves are
-buttons too: **↑** and **↓** move the selected row among its neighbours, and **⇤** takes it out of its
-folder. The arrangement is saved in the show and every Architect window follows it; a show saved
+as a tree you arrange freely. **+ → New folder** adds a folder — inside the selected folder, or at the
+top level — ready to be named. Drag a row onto a folder to put it inside, or onto another row to put it
+before that row. The selected row carries the same moves as buttons: **↑** and **↓** move it among its
+neighbours, and **⇤** takes it out of its folder. A selected folder also shows **✎** to rename it and
+**✕** to delete it, which hands what it held to the folder around it, so no drawing is lost. The arrangement is saved in the show and every Architect window follows it; a show saved
 before folders existed opens with every drawing at the top level. Select a placed drawing to set its
 **X**, **Y**, **Scale** and **Rotation** below the tree, or a drawn item to **Erase** it.
 
@@ -492,7 +492,30 @@ a tooltip just below it. From left to right:
     crowds and imported models.
 * The drawing group is what a press on a viewport does. **Select**, the arrow, selects and moves the
   rig as before; the others draw on the view you use them in.
-* **Print** and **Elements** open their side panels, and **Settings** (⚙) the CAD settings.
+* **Plans** and **Elements** open their side panels, and **Settings** (⚙) the CAD settings.
+
+## The side panel
+
+**Plans**, **Elements** and **Info** share the side panel at the right of the drawing. Each panel's
+title row holds its name, its tabs and a **+** button whose menu lists what can be added there: on
+**Plans** a **Fixture list** page, on **Elements** the drawings or objects of the open tab. Drag the
+panel's left edge to make it wider or narrower, or focus the edge and use ← and →; the width is kept
+for the next time.
+
+**Info** follows the selection. Select one element in a view and it opens at the foot of the side
+panel; with no panel open, it is the whole side panel. It edits the element's **Name**, **Notes**,
+**Position** (X, Y and Z in metres), **Rotation** (X, Y and Z in degrees) and, for placed Venue objects
+other than crowd areas, **Scale**. The fields take typing from the keyboard: a change is written when
+you press Enter or leave the field, and Escape puts back what was there. With several elements
+selected, Info says how many.
+
+## The grid
+
+A pale grey grid is drawn over every view. Its lines are one step of the scale indicator apart, so
+zooming changes the grid with the scale. **Settings (⚙) → Grid** switches it off, sets its colour, or
+fixes its spacing to a length that no longer follows the scale. **Show sub-grid** adds small plus
+signs at the scale indicator's quarter steps between the lines. A grid too dense to read at the
+current zoom is left out until you zoom in.
 
 Choosing an object from an add button places it exactly as **+ Add fixture** on the **Venue** screen
 does, and the drawing shows it at once. Clear the search to choose anything else the filter offers.
@@ -520,12 +543,10 @@ information** on the **Show** screen.
 
 **Objects**, the second tab of **Elements**, lists what the venue is built from apart from the lamps:
 **Venue items** — trusses, stage elements, curtains and the other generated objects — and **3D
-models**. Each row names the object, its ID, its kind and its size in metres. Its buttons add more:
-the same **Add truss**, **Add stage element**, **Add curtain** and **Add venue element** as the title,
-and **Import 3D model**, which places a GLB, glTF, 3MF or OBJ file as described below and selects it.
-Select a row to select the object in the views and set where it stands — **X**, **Y** and **Z** in
-metres — as if you had dragged it there. How large a placed model is drawn is its **Scale** in the
-**Venue** sheet.
+models**. Each row names the object, its ID, its kind and its size in metres. **+** adds more: the same
+truss, stage element, curtain and venue element as the title, and **Import 3D model…**, which places a
+GLB, glTF, 3MF or OBJ file as described below and selects it. Select a row to select the object in the
+views; **Info** below then sets its position, rotation and scale.
 
 ## Place your own venue models
 

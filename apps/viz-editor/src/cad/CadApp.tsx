@@ -1,11 +1,15 @@
 import { save } from "@tauri-apps/plugin-dialog";
-import { Button, SwitchField } from "@tosklight/ui";
+import { Button, SelectField, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
 import { beginWindowDrag } from "../WindowChrome";
 import { CadTileViewBar } from "./CadTileViewBar";
-import { CadElementsPanel } from "./CadElementsPanel";
+import {
+	DEFAULT_GRID,
+	GRID_SPACINGS_MILLIMETRES,
+} from "./cadGrid";
+import { CadSidePanels } from "./CadSidePanels";
 import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
 import { visibleEntities } from "./cutPlanes";
@@ -51,6 +55,11 @@ interface CadSettings {
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
 	showCoordinateOrigins: boolean;
+	showGrid: boolean;
+	gridColour: string;
+	/** Fixed grid spacing in millimetres; null follows the scale indicator. */
+	gridSpacingMillimetres: number | null;
+	showSubGrid: boolean;
 }
 
 /**
@@ -59,10 +68,6 @@ interface CadSettings {
  * It draws no window controls of its own: it is a screen inside the Architect window rather than
  * a window, and the operator who wants it beside the patch sheet opens a second editor window.
  */
-const PANEL_TITLES = {
-	print: { title: "Prints", hint: "A4 pages" },
-	elements: { title: "Elements", hint: "Drawings and objects" },
-} as const;
 
 /** Paperwork before the document has been read; the Show screen edits the real one. */
 const NO_PAPERWORK = {
@@ -333,7 +338,7 @@ export function CadApp() {
 						actions: [
 							{
 								id: "print",
-								label: "Print",
+								label: "Plans",
 								active: printPanel === "print",
 								onPress: () => togglePrintPanel("print"),
 							},
@@ -385,102 +390,19 @@ export function CadApp() {
 						<div className="cad-loading">Loading the canonical rig…</div>
 					)}
 				</section>
-				{panelOpen ? (
-					<aside className="cad-print-sidebar" aria-label="Print pages">
-						<header>
-							<h2>{PANEL_TITLES[printPanel].title}</h2>
-							<span>{PANEL_TITLES[printPanel].hint}</span>
-						</header>
-						{printPanel === "elements" && scene ? (
-							<CadElementsPanel
-								documentKey={documentInfo?.showId ?? null}
-								underlayState={underlayState}
-								tools={tools}
-								defaultView={activeTileView(layout, activeTileId)}
-								entities={scene.entities}
-								selectedIds={scene.selectedIds}
-								onSelect={(ids) => select({ type: "replace", ids })}
-								onMove={(delta, ids) => void move(delta, ids, false)}
-							/>
-						) : null}
-						{printPanel === "print" ? (
-							<>
-						<div className="cad-print-list">
-							{printPages.length ? (
-								printPages.map((page, index) => (
-									<div
-										key={page.id}
-										className={`cad-print-row ${
-											page.id === selectedPrintPageId ? "is-selected" : ""
-										}`}
-									>
-										<input
-											aria-label={`Include ${page.name}`}
-											type="checkbox"
-											checked={page.included}
-											onChange={(event) =>
-												printPageState.change(page.id, {
-													included: event.currentTarget.checked,
-												})
-											}
-										/>
-										<button
-											type="button"
-											onClick={() => printPageState.select(page.id)}
-										>
-											<strong>
-												{index + 1}. {page.name}
-											</strong>
-											<small>
-												{page.kind === "fixture_list"
-													? "Fixture table"
-													: CAD_VIEW_LABELS[page.view]}
-											</small>
-											<small>A4 {page.orientation}</small>
-										</button>
-									</div>
-								))
-							) : (
-								<p>Add a page from any view.</p>
-							)}
-						</div>
-						<Button className="cad-add-fixture-list" onClick={printPageState.addFixtureList}>
-							Add Fixture List
-						</Button>
-						{selectedPrintPageId
-							? (() => {
-									const page = printPages.find(
-										(candidate) => candidate.id === selectedPrintPageId,
-									);
-									if (!page) return null;
-									if (page.kind === "fixture_list") return null;
-									return (
-										<section
-											className="cad-print-page-settings"
-											aria-label="Selected page settings"
-										>
-											<Button
-												onClick={() => printPageState.rotate(page.id)}
-											>
-												Rotate page
-											</Button>
-										</section>
-									);
-								})()
-							: null}
-								<Button
-									className="cad-export-pdf"
-									disabled={
-										exporting || !printPages.some((page) => page.included)
-									}
-									onClick={() => void exportPdf()}
-								>
-									{exporting ? "Exporting…" : "Export to PDF"}
-								</Button>
-							</>
-						) : null}
-					</aside>
-				) : null}
+				<CadSidePanels
+					panel={printPanel}
+					scene={scene}
+					tools={tools}
+					underlayState={underlayState}
+					defaultView={activeTileView(layout, activeTileId)}
+					documentKey={documentInfo?.showId ?? null}
+					printPages={printPageState}
+					exporting={exporting}
+					onExport={() => void exportPdf()}
+					onSelect={(ids) => select({ type: "replace", ids })}
+					onError={(reason) => setError(String(reason))}
+				/>
 			</div>
 			{settingsOpen ? (
 				<WindowSettings
@@ -542,6 +464,18 @@ export function CadApp() {
 										}}
 									/>
 								</div>
+							),
+						},
+						{
+							id: "grid",
+							label: "Grid",
+							content: (
+								<GridSettings
+									settings={settings}
+									onChange={(change) =>
+										setSettings((current) => ({ ...current, ...change }))
+									}
+								/>
 							),
 						},
 					]}
@@ -716,6 +650,12 @@ function CadTile(props: CadTileProps) {
 				showFixtureIds={props.settings.showFixtureIds}
 				showDmxAddresses={props.settings.showDmxAddresses}
 				showCoordinateOrigins={props.settings.showCoordinateOrigins}
+				grid={{
+					show: props.settings.showGrid,
+					colour: props.settings.gridColour,
+					spacingMillimetres: props.settings.gridSpacingMillimetres,
+					subGrid: props.settings.showSubGrid,
+				}}
 				printMode={props.printMode}
 				underlays={underlaysForView(props.underlays, node.view)}
 				onCamera={(camera: TileCamera) =>
@@ -778,6 +718,16 @@ function restoreSettings(): CadSettings {
 			showFixtureIds: stored?.showFixtureIds === true,
 			showDmxAddresses: stored?.showDmxAddresses === true,
 			showCoordinateOrigins: stored?.showCoordinateOrigins === true,
+			// Settings saved before the grid existed show it, in its default colour and spacing.
+			showGrid: stored?.showGrid !== false,
+			gridColour:
+				typeof stored?.gridColour === "string" && /^#[0-9a-f]{6}$/iu.test(stored.gridColour)
+					? stored.gridColour
+					: DEFAULT_GRID.colour,
+			gridSpacingMillimetres: GRID_SPACINGS_MILLIMETRES.includes(stored?.gridSpacingMillimetres)
+				? stored.gridSpacingMillimetres
+				: null,
+			showSubGrid: stored?.showSubGrid === true,
 		};
 	} catch {
 		return {
@@ -785,8 +735,63 @@ function restoreSettings(): CadSettings {
 			showFixtureIds: false,
 			showDmxAddresses: false,
 			showCoordinateOrigins: false,
+			showGrid: DEFAULT_GRID.show,
+			gridColour: DEFAULT_GRID.colour,
+			gridSpacingMillimetres: DEFAULT_GRID.spacingMillimetres,
+			showSubGrid: DEFAULT_GRID.subGrid,
 		};
 	}
+}
+
+/** The Grid tab of the CAD settings: whether the grid shows, its colour, spacing and sub-grid. */
+function GridSettings({
+	settings,
+	onChange,
+}: {
+	settings: CadSettings;
+	onChange(change: Partial<CadSettings>): void;
+}) {
+	return (
+		<div className="cad-settings-fields">
+			<SwitchField
+				label="Show grid"
+				offLabel={null}
+				onLabel={null}
+				checked={settings.showGrid}
+				onChange={(event) => onChange({ showGrid: event.currentTarget.checked })}
+			/>
+			<label className="cad-settings-colour">
+				<span>Grid colour</span>
+				<input
+					type="color"
+					aria-label="Grid colour"
+					value={settings.gridColour}
+					onChange={(event) => onChange({ gridColour: event.currentTarget.value })}
+				/>
+			</label>
+			<SelectField
+				label="Grid spacing"
+				value={String(settings.gridSpacingMillimetres ?? "scale")}
+				onChange={(value) =>
+					onChange({ gridSpacingMillimetres: value === "scale" ? null : Number(value) })
+				}
+				options={[
+					{ value: "scale", label: "Follow the scale indicator" },
+					...GRID_SPACINGS_MILLIMETRES.map((millimetres) => ({
+						value: String(millimetres),
+						label: millimetres < 1000 ? `${millimetres / 10} cm` : `${millimetres / 1000} m`,
+					})),
+				]}
+			/>
+			<SwitchField
+				label="Show sub-grid"
+				offLabel={null}
+				onLabel={null}
+				checked={settings.showSubGrid}
+				onChange={(event) => onChange({ showSubGrid: event.currentTarget.checked })}
+			/>
+		</div>
+	);
 }
 
 

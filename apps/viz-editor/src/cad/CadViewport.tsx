@@ -1,5 +1,6 @@
 import { type WheelEvent, useEffect, useMemo, useRef } from "react";
 import { annotationsForView } from "./annotationGeometry";
+import { CadGrid, type CadGridSettings, DEFAULT_GRID } from "./cadGrid";
 import { CadAnnotationLayer } from "./CadAnnotationLayer";
 import { useCadTools } from "./cadTools";
 import { PrintFrame } from "./CadPrintFrame";
@@ -43,6 +44,8 @@ interface CadViewportProps {
 	printMode?: boolean;
 	/** Venue drawings placed on this view, drawn under the rig. */
 	underlays?: readonly CadUnderlay[];
+	/** The grid over the plan, as Settings chose it. */
+	grid?: CadGridSettings;
 	printPages?: readonly CadPrintPage[];
 	selectedPrintPageId?: string | null;
 	onSelectPrintPage?(id: string): void;
@@ -167,6 +170,7 @@ export function CadViewport({
 	editEnabled = true,
 	printMode = false,
 	underlays = [],
+	grid = DEFAULT_GRID,
 	printPages = [],
 	selectedPrintPageId = null,
 	onSelectPrintPage,
@@ -252,6 +256,11 @@ export function CadViewport({
 				}}
 				onPointerCancel={cancel}
 				onDoubleClick={drawing.doubleClick}
+			/>
+			<CadGrid
+				camera={camera}
+				settings={grid}
+				stepMillimetres={grid.spacingMillimetres ?? scale.distanceMillimetres}
 			/>
 			<CadScaleBar scale={scale} printMode={printMode} />
 			<CadEntityLabels

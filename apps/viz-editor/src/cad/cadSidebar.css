@@ -1,0 +1,157 @@
+/* The CAD side panel: resizable from its left edge, a title row that carries its tabs and add
+   button, contents held in from the edges, and the Info panel at its foot. */
+/* Doubled to outrank the shared print sidebar's fixed basis, so the dragged width is the width. */
+.cad-sidebar.cad-sidebar {
+	position: relative;
+	display: flex;
+	flex: 0 0 auto;
+	flex-direction: column;
+	padding: 0;
+	gap: 0;
+	min-width: 240px;
+	max-width: 640px;
+}
+
+.cad-sidebar-resize {
+	position: absolute;
+	z-index: 5;
+	top: 0;
+	bottom: 0;
+	left: -4px;
+	width: 8px;
+	cursor: col-resize;
+	touch-action: none;
+}
+
+.cad-sidebar-resize:hover,
+.cad-sidebar-resize:focus-visible {
+	background: rgb(5 209 250 / 35%);
+	outline: none;
+}
+
+.cad-sidebar .cad-sidebar-header {
+	justify-content: flex-start;
+	padding: 0;
+	gap: 0;
+	display: flex;
+	flex: none;
+	align-items: stretch;
+	min-height: 36px;
+	border-bottom: 1px solid #222d37;
+}
+
+.cad-sidebar .cad-sidebar-header h2 {
+	align-self: center;
+	margin: 0;
+	padding: 0 12px;
+	font-size: 14px;
+	white-space: nowrap;
+}
+
+/* The tabs and the add button reach the row's edges; everything else in the panel is held in. */
+.cad-sidebar .cad-sidebar-header .ui-title-chrome {
+	margin-left: auto;
+}
+
+.cad-sidebar .cad-sidebar-header .ui-button {
+	min-height: 36px;
+	border-radius: 0;
+}
+
+.cad-sidebar-body {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 10px;
+	min-height: 0;
+	padding: 12px;
+	overflow-y: auto;
+}
+
+.cad-sidebar-body > .cad-print-list {
+	padding: 0;
+}
+
+.cad-sidebar-info {
+	flex: 0 1 auto;
+	max-height: 55%;
+	padding: 12px;
+	overflow-y: auto;
+	border-top: 1px solid #222d37;
+}
+
+.cad-sidebar.is-info-only .cad-sidebar-info {
+	flex: 1 1 auto;
+	max-height: none;
+	border-top: 0;
+}
+
+.cad-info {
+	display: grid;
+	gap: 10px;
+}
+
+.cad-info h3 {
+	margin: 0;
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-secondary, #98a4b3);
+}
+
+.cad-info fieldset {
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.cad-info > p {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+}
+
+.cad-field {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+	font-size: 12px;
+}
+
+.cad-field > span {
+	color: var(--text-secondary, #98a4b3);
+}
+
+.cad-field .ui-input,
+.cad-field textarea {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	min-height: 30px;
+	font-size: 13px;
+}
+
+.cad-info-vector {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 6px;
+}
+
+.cad-info-vector > span {
+	grid-column: 1 / -1;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+}
+
+/* The grid layer sits over the linework and never takes the pointer. */
+.cad-grid {
+	position: absolute;
+	z-index: 1;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}

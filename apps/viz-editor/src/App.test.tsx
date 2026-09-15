@@ -1533,7 +1533,7 @@ describe("the Viz editor window", () => {
 			"Place text",
 			"Measure",
 			"Erase",
-			"Print",
+			"Plans",
 			"Elements",
 			"Settings",
 		]);

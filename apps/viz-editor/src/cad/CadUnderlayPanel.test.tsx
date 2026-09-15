@@ -121,6 +121,8 @@ describe("the Drawings panel", () => {
 		render(<CadUnderlayPanel state={current} defaultView="top_down" />);
 
 		fireEvent.change(screen.getByLabelText("X (m)"), { target: { value: "3" } });
+		expect(current.change).not.toHaveBeenCalled();
+		fireEvent.blur(screen.getByLabelText("X (m)"));
 
 		expect(current.change).toHaveBeenCalledWith(
 			expect.objectContaining({ originMillimetres: [3000, 2000] }),

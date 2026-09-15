@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, NumberField, SwitchField } from "@tosklight/ui";
-import { useState } from "react";
+import { Button, SwitchField } from "@tosklight/ui";
+import { useEffect, useRef, useState } from "react";
+import { CommitNumber } from "./cadFields";
 import {
 	CAD_VIEW_LABELS,
 	type CadViewDirection,
@@ -118,56 +119,31 @@ function UnderlayRow({
 					onChange({ ...underlay, visible: event.currentTarget.checked })
 				}
 			/>
-			<NumberField
+			<CommitNumber
 				label="X (m)"
-				step={0.01}
 				value={metres(underlay.originMillimetres[0])}
-				onChange={(event) =>
-					onChange({
-						...underlay,
-						originMillimetres: [
-							Number(event.currentTarget.value) * 1000,
-							underlay.originMillimetres[1],
-						],
-					})
+				onCommit={(x) =>
+					onChange({ ...underlay, originMillimetres: [x * 1000, underlay.originMillimetres[1]] })
 				}
 			/>
-			<NumberField
+			<CommitNumber
 				label="Y (m)"
-				step={0.01}
 				value={metres(underlay.originMillimetres[1])}
-				onChange={(event) =>
-					onChange({
-						...underlay,
-						originMillimetres: [
-							underlay.originMillimetres[0],
-							Number(event.currentTarget.value) * 1000,
-						],
-					})
+				onCommit={(y) =>
+					onChange({ ...underlay, originMillimetres: [underlay.originMillimetres[0], y * 1000] })
 				}
 			/>
-			<NumberField
+			<CommitNumber
 				label="Scale"
-				step={0.01}
 				min={0.001}
 				value={underlay.scale}
-				onChange={(event) =>
-					onChange({
-						...underlay,
-						scale: Number(event.currentTarget.value) || underlay.scale,
-					})
-				}
+				onCommit={(scale) => onChange({ ...underlay, scale })}
 			/>
-			<NumberField
+			<CommitNumber
 				label="Rotation (°)"
-				step={1}
+				digits={1}
 				value={underlay.rotationDegrees}
-				onChange={(event) =>
-					onChange({
-						...underlay,
-						rotationDegrees: Number(event.currentTarget.value) || 0,
-					})
-				}
+				onCommit={(rotationDegrees) => onChange({ ...underlay, rotationDegrees })}
 			/>
 			<Button
 				className="cad-underlay-remove"
@@ -190,6 +166,7 @@ export function CadUnderlayPanel({
 	state,
 	defaultView,
 	only,
+	chooseRequest = 0,
 }: {
 	state: CadUnderlays;
 	defaultView: CadViewDirection;
@@ -198,6 +175,8 @@ export function CadUnderlayPanel({
 	 * when none is. Absent, the panel lists every drawing itself.
 	 */
 	only?: string | null;
+	/** Counts presses of the side panel's Import drawing; each opens the file chooser once. */
+	chooseRequest?: number;
 }) {
 	const [pending, setPending] = useState<{
 		path: string;
@@ -206,6 +185,12 @@ export function CadUnderlayPanel({
 	const [view, setView] = useState<CadViewDirection>(defaultView);
 	const [reading, setReading] = useState(false);
 	const [readError, setReadError] = useState<string | null>(null);
+	const handledChoose = useRef(chooseRequest);
+	useEffect(() => {
+		if (chooseRequest === handledChoose.current) return;
+		handledChoose.current = chooseRequest;
+		void choose();
+	});
 
 	async function choose() {
 		const path = await open({ filters: DRAWING_FILTER, multiple: false });
@@ -236,13 +221,17 @@ export function CadUnderlayPanel({
 
 	return (
 		<div className="cad-underlay-panel">
-			<Button
-				className="cad-add-underlay"
-				disabled={reading || state.busy}
-				onClick={() => void choose()}
-			>
-				{reading ? "Reading drawing…" : "Add Drawing"}
-			</Button>
+			{only === undefined ? (
+				<Button
+					className="cad-add-underlay"
+					disabled={reading || state.busy}
+					onClick={() => void choose()}
+				>
+					{reading ? "Reading drawing…" : "Add Drawing"}
+				</Button>
+			) : reading ? (
+				<p role="status">Reading drawing…</p>
+			) : null}
 			{readError ? <output className="cad-error">{readError}</output> : null}
 			{state.error ? <output className="cad-error">{state.error}</output> : null}
 			{pending ? (

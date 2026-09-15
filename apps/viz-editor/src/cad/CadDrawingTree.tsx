@@ -1,12 +1,12 @@
 /**
  * The Elements panel's Drawings tab: every drawing in folders the operator arranges freely.
  *
- * Rows drag onto a folder to go inside it, or onto another row to go before it. Because a desk
- * surface is touched rather than dragged with a mouse, every move is also a button: up, down, and
- * out of the folder it is in.
+ * Rows drag onto a folder to go inside it, or onto another row to go before it. The selected row also
+ * carries its moves as buttons — up, down, and out of the folder it is in — and a folder its rename and
+ * delete. New folders come from the side panel's **+**.
  */
 import { Button } from "@tosklight/ui";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
 	addFolder,
 	buildDrawingTree,
@@ -41,6 +41,8 @@ interface RowContext {
 	onRenamed(): void;
 	onDragStart(node: Selected): void;
 	onDrop(target: DrawingNode): void;
+	/** The selected row's own buttons. */
+	rowActions: ReactNode;
 }
 
 function FolderName({
@@ -102,6 +104,7 @@ function TreeRow({
 				}}
 				onClick={() => context.onSelect(key)}
 			>
+				{isSelected && context.rowActions ? context.rowActions : null}
 				{node.type === "folder" ? (
 					<>
 						<button
@@ -141,79 +144,74 @@ function TreeRow({
 	);
 }
 
-/** New folder, rename, and the touch moves for whatever is selected. */
-function TreeActions({
+/** The selected row's moves, and a folder's rename and delete. */
+function RowActions({
 	tree,
 	leaves,
 	selected,
-	newId,
 	onSelect,
 	onChange,
 	onRename,
 }: {
 	tree: DrawingTree;
 	leaves: readonly DrawingLeaf[];
-	selected: Selected | null;
-	newId: () => string;
+	selected: Selected;
 	onSelect(selected: Selected | null): void;
 	onChange(tree: DrawingTree): void;
 	onRename(id: string): void;
 }) {
-	const position = selected ? positionOf(tree, leaves, selected) : null;
-	const folderId = selected?.isFolder ? selected.id : null;
+	const position = positionOf(tree, leaves, selected);
 	const move = (parentId: string | null, index: number) =>
-		selected && onChange(moveNode(tree, leaves, selected, parentId, index));
+		onChange(moveNode(tree, leaves, selected, parentId, index));
+	const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
 	return (
-		<div className="cad-drawing-tree-actions">
+		<span className="cad-drawing-tree-row-actions" onClick={stop} onPointerDown={stop}>
+			{selected.isFolder ? (
+				<Button size="compact" aria-label="Rename folder" onClick={() => onRename(selected.id)}>
+					✎
+				</Button>
+			) : null}
 			<Button
-				onClick={() => {
-					const id = newId();
-					onChange(addFolder(tree, { id, name: "New folder", parentId: folderId }));
-					onSelect({ id, isFolder: true });
-					onRename(id);
-				}}
-			>
-				New folder
-			</Button>
-			<Button disabled={!folderId} onClick={() => folderId && onRename(folderId)}>
-				Rename
-			</Button>
-			<Button
+				size="compact"
 				aria-label="Move up"
-				disabled={!position || position.index <= 0}
-				onClick={() => position && move(position.parentId, position.index - 1)}
+				disabled={position.index <= 0}
+				onClick={() => move(position.parentId, position.index - 1)}
 			>
 				↑
 			</Button>
 			<Button
+				size="compact"
 				aria-label="Move down"
-				disabled={!position || position.index >= position.count - 1}
-				onClick={() => position && move(position.parentId, position.index + 1)}
+				disabled={position.index >= position.count - 1}
+				onClick={() => move(position.parentId, position.index + 1)}
 			>
 				↓
 			</Button>
 			<Button
+				size="compact"
 				aria-label="Move out of folder"
-				disabled={!position?.parentId}
+				disabled={!position.parentId}
 				onClick={() => {
-					if (!position?.parentId) return;
+					if (!position.parentId) return;
 					const outer = positionOf(tree, leaves, { id: position.parentId, isFolder: true });
 					move(outer.parentId, outer.index + 1);
 				}}
 			>
 				⇤
 			</Button>
-			<Button
-				disabled={!folderId}
-				onClick={() => {
-					if (!folderId) return;
-					onChange(removeFolder(tree, folderId));
-					onSelect(null);
-				}}
-			>
-				Delete folder
-			</Button>
-		</div>
+			{selected.isFolder ? (
+				<Button
+					size="compact"
+					aria-label="Delete folder"
+					onClick={() => {
+						onChange(removeFolder(tree, selected.id));
+						onSelect(null);
+					}}
+				>
+					✕
+				</Button>
+			) : null}
+		</span>
 	);
 }
 
@@ -224,6 +222,7 @@ export function CadDrawingTree({
 	onSelect,
 	onChange,
 	newId = () => crypto.randomUUID(),
+	newFolderRequest = 0,
 	children,
 }: {
 	tree: DrawingTree;
@@ -232,10 +231,22 @@ export function CadDrawingTree({
 	onSelect(selected: Selected | null): void;
 	onChange(tree: DrawingTree): void;
 	newId?: () => string;
+	/** Counts presses of the side panel's New folder; each adds one where the selection is. */
+	newFolderRequest?: number;
 	/** What the selected drawing can be changed by, shown under the tree. */
 	children?: ReactNode;
 }) {
 	const [renaming, setRenaming] = useState<string | null>(null);
+	const handledFolderRequest = useRef(newFolderRequest);
+	useEffect(() => {
+		if (newFolderRequest === handledFolderRequest.current) return;
+		handledFolderRequest.current = newFolderRequest;
+		const id = newId();
+		const parentId = selected?.isFolder ? selected.id : null;
+		onChange(addFolder(tree, { id, name: "New folder", parentId }));
+		onSelect({ id, isFolder: true });
+		setRenaming(id);
+	});
 	const [dragging, setDragging] = useState<Selected | null>(null);
 	const nodes = buildDrawingTree(tree, leaves);
 
@@ -252,6 +263,16 @@ export function CadDrawingTree({
 		onChange,
 		onRenamed: () => setRenaming(null),
 		onDragStart: setDragging,
+		rowActions: selected ? (
+			<RowActions
+				tree={tree}
+				leaves={leaves}
+				selected={selected}
+				onSelect={onSelect}
+				onChange={onChange}
+				onRename={setRenaming}
+			/>
+		) : null,
 		onDrop: (target) => {
 			if (!dragging) return;
 			if (target.type === "folder")
@@ -263,15 +284,6 @@ export function CadDrawingTree({
 
 	return (
 		<div className="cad-drawing-tree">
-			<TreeActions
-				tree={tree}
-				leaves={leaves}
-				selected={selected}
-				newId={newId}
-				onSelect={onSelect}
-				onChange={onChange}
-				onRename={setRenaming}
-			/>
 			{nodes.length ? (
 				<ul
 					className="cad-drawing-tree-list"
@@ -294,7 +306,7 @@ export function CadDrawingTree({
 					))}
 				</ul>
 			) : (
-				<p>No drawings yet. Place a DXF or SVG, or draw on a view with the title tools.</p>
+				<p>No drawings yet. Import a DXF or SVG with +, or draw on a view with the title tools.</p>
 			)}
 			{children}
 		</div>

@@ -131,3 +131,16 @@
 	border: 1px solid var(--border-subtle, #1d2530);
 	border-radius: 3px;
 }
+
+.cad-drawing-tree-row-actions {
+	display: inline-flex;
+	order: 10;
+	gap: 2px;
+	margin-left: auto;
+}
+
+.cad-drawing-tree-row-actions .ui-button {
+	min-width: 28px;
+	min-height: 28px;
+	padding: 0 6px;
+}

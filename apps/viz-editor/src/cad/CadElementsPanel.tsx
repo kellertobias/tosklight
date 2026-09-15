@@ -3,11 +3,12 @@
  *
  * **Drawings** lists every placed DXF or SVG and every line, box, text and measurement drawn on a
  * view, in folders the operator arranges freely. **Objects** lists the placed Venue items and 3D
- * models, adds more, and places the chosen one.
+ * models. The tabs and the **+** that adds to the open tab live in the side panel's title row, so
+ * this panel receives which tab is open and each add as a request.
  */
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, NumberField, TitleChrome } from "@tosklight/ui";
-import { useState } from "react";
+import type { TitleDropdownItem } from "@tosklight/ui";
+import { useEffect, useRef, useState } from "react";
 import { documentSession } from "../document/session";
 import type { CadAnnotation } from "./annotations";
 import { formatMeasurement, measurementLength } from "./annotationGeometry";
@@ -23,9 +24,51 @@ import { useCadDrawingTree } from "./useCadDrawingTree";
 import { VENUE_MODEL_EXTENSIONS } from "./venueModelFormats";
 import "./cadElements.css";
 
-type ElementsTab = "drawings" | "objects";
+export type ElementsTab = "drawings" | "objects";
+
+/** Each add the title row's **+** asks for, as a counter the panel answers once per press. */
+export interface ElementsRequests {
+	newFolder: number;
+	chooseDrawing: number;
+	importModel: number;
+}
 
 const IMPORTING = "Importing 3D model…";
+
+/** What the **+** in the title row offers for the open tab. */
+export function elementsAddItems(
+	tab: ElementsTab,
+	tools: CadTools,
+	request: (kind: keyof ElementsRequests) => void,
+): TitleDropdownItem[] {
+	if (tab === "drawings")
+		return [
+			{
+				kind: "action",
+				id: "import-drawing",
+				label: "Import drawing (DXF, SVG)…",
+				onPress: () => request("chooseDrawing"),
+			},
+			{ kind: "action", id: "new-folder", label: "New folder", onPress: () => request("newFolder") },
+		];
+	return [
+		...CAD_ADD_ACTIONS.map(
+			({ kind, label }): TitleDropdownItem => ({
+				kind: "action",
+				id: `add-${kind}`,
+				label: label.replace(/^Add /u, "").replace(/^./u, (first) => first.toUpperCase()),
+				disabled: !tools.onAdd,
+				onPress: () => tools.onAdd?.(kind),
+			}),
+		),
+		{
+			kind: "action",
+			id: "import-model",
+			label: "Import 3D model…",
+			onPress: () => request("importModel"),
+		},
+	];
+}
 
 function annotationName(annotation: CadAnnotation): string {
 	switch (annotation.kind) {
@@ -79,23 +122,36 @@ function venueObjects(entities: readonly CadEntity[]) {
 	});
 }
 
+/** Runs `action` once for every press after the first render, never for the count it started with. */
+function useRequest(count: number, action: () => void) {
+	const handled = useRef(count);
+	useEffect(() => {
+		if (count === handled.current) return;
+		handled.current = count;
+		action();
+	});
+}
+
 function DrawingsTab({
 	documentKey,
 	underlayState,
 	tools,
 	defaultView,
+	requests,
 }: {
 	documentKey: string | null;
 	underlayState: CadUnderlays;
 	tools: CadTools;
 	defaultView: CadViewDirection;
+	requests: ElementsRequests;
 }) {
 	const { tree, change, error } = useCadDrawingTree(documentKey);
 	const [selected, setSelected] = useState<{ id: string; isFolder: boolean } | null>(null);
 	const leaves = drawingLeaves(underlayState.underlays, tools.annotations);
-	const leaf = selected && !selected.isFolder
-		? leaves.find((candidate) => candidate.id === selected.id)
-		: undefined;
+	const leaf =
+		selected && !selected.isFolder
+			? leaves.find((candidate) => candidate.id === selected.id)
+			: undefined;
 	return (
 		<CadDrawingTree
 			tree={tree}
@@ -103,25 +159,29 @@ function DrawingsTab({
 			selected={selected}
 			onSelect={setSelected}
 			onChange={change}
+			newFolderRequest={requests.newFolder}
 		>
 			{error ? <output className="cad-error">{error}</output> : null}
 			<CadUnderlayPanel
 				state={underlayState}
 				defaultView={defaultView}
 				only={leaf?.kind === "underlay" ? leaf.id : null}
+				chooseRequest={requests.chooseDrawing}
 			/>
 			{leaf?.kind === "annotation" ? (
 				<section className="cad-elements-selected" aria-label="Selected drawing">
 					<strong>{leaf.name}</strong>
 					<small>{leaf.detail}</small>
-					<Button
+					<button
+						type="button"
+						className="ui-button"
 						onClick={() => {
 							void tools.remove(leaf.id);
 							setSelected(null);
 						}}
 					>
 						Erase
-					</Button>
+					</button>
 				</section>
 			) : null}
 		</CadDrawingTree>
@@ -154,57 +214,21 @@ function ObjectRow({
 	);
 }
 
-/** Where the chosen object stands, in metres; a change moves it like dragging it in a view. */
-function ObjectPlacement({
-	entity,
-	onMove,
-}: {
-	entity: CadEntity;
-	onMove(delta: [number, number, number]): void;
-}) {
-	return (
-		<section className="cad-elements-selected" aria-label="Selected object">
-			<strong>{entity.name}</strong>
-			{(["X", "Y", "Z"] as const).map((axis, index) => (
-				<NumberField
-					key={axis}
-					label={`${axis} (m)`}
-					step={0.01}
-					value={metres(entity.positionMillimetres[index])}
-					onChange={(event) => {
-						const target = Number(event.currentTarget.value) * 1000;
-						if (!Number.isFinite(target)) return;
-						const delta: [number, number, number] = [0, 0, 0];
-						delta[index] = target - entity.positionMillimetres[index];
-						if (Math.abs(delta[index]) >= 1) onMove(delta);
-					}}
-				/>
-			))}
-		</section>
-	);
-}
-
 function ObjectsTab({
 	entities,
 	selectedIds,
-	tools,
+	requests,
 	onSelect,
-	onMove,
 }: {
 	entities: readonly CadEntity[];
 	selectedIds: readonly string[];
-	tools: CadTools;
+	requests: ElementsRequests;
 	onSelect(ids: string[]): void;
-	onMove(delta: [number, number, number], ids: readonly string[]): void;
 }) {
 	const [status, setStatus] = useState("");
 	const objects = venueObjects(entities);
-	const items = objects.filter((entity) => entity.scenery);
-	const models = objects.filter((entity) => !entity.scenery);
-	const chosen =
-		selectedIds.length === 1
-			? objects.find((entity) => entity.logicalFixtureId === selectedIds[0])
-			: undefined;
+
+	useRequest(requests.importModel, () => void importModel());
 
 	async function importModel() {
 		const path = await open({
@@ -243,38 +267,28 @@ function ObjectsTab({
 
 	return (
 		<div className="cad-elements-objects">
-			<div className="cad-elements-actions">
-				{CAD_ADD_ACTIONS.map(({ kind, label }) => (
-					<Button
-						key={kind}
-						disabled={!tools.onAdd}
-						onClick={() => tools.onAdd?.(kind)}
-					>
-						{label}
-					</Button>
-				))}
-				<Button disabled={status === IMPORTING} onClick={() => void importModel()}>
-					{status === IMPORTING ? IMPORTING : "Import 3D model"}
-				</Button>
-			</div>
-			{status && status !== IMPORTING ? (
+			{status ? (
 				<p className="cad-elements-status" role="status">
 					{status}
 				</p>
 			) : null}
-			{list("Venue items", items, "No trusses, stage elements or curtains placed yet.")}
-			{list("3D models", models, "No 3D models placed yet.")}
-			{chosen ? (
-				<ObjectPlacement
-					entity={chosen}
-					onMove={(delta) => onMove(delta, [chosen.logicalFixtureId])}
-				/>
-			) : null}
+			{list(
+				"Venue items",
+				objects.filter((entity) => entity.scenery),
+				"No trusses, stage elements or curtains placed yet.",
+			)}
+			{list(
+				"3D models",
+				objects.filter((entity) => !entity.scenery),
+				"No 3D models placed yet.",
+			)}
 		</div>
 	);
 }
 
 export function CadElementsPanel({
+	tab,
+	requests,
 	documentKey,
 	underlayState,
 	tools,
@@ -282,8 +296,9 @@ export function CadElementsPanel({
 	entities,
 	selectedIds,
 	onSelect,
-	onMove,
 }: {
+	tab: ElementsTab;
+	requests: ElementsRequests;
 	documentKey: string | null;
 	underlayState: CadUnderlays;
 	tools: CadTools;
@@ -291,42 +306,23 @@ export function CadElementsPanel({
 	entities: readonly CadEntity[];
 	selectedIds: readonly string[];
 	onSelect(ids: string[]): void;
-	onMove(delta: [number, number, number], ids: readonly string[]): void;
 }) {
-	const [tab, setTab] = useState<ElementsTab>("drawings");
 	return (
 		<div className="cad-elements-panel">
-			<TitleChrome
-				className="ui-window-action-groups cad-elements-tabs"
-				groupClassName="ui-window-action-group"
-				terminalActions={[]}
-				groups={[
-					{
-						id: "elements-tabs",
-						kind: "tabs",
-						activeId: tab,
-						onActiveChange: (id) => setTab(id as ElementsTab),
-						actions: [
-							{ id: "drawings", label: "Drawings" },
-							{ id: "objects", label: "Objects" },
-						],
-					},
-				]}
-			/>
 			{tab === "drawings" ? (
 				<DrawingsTab
 					documentKey={documentKey}
 					underlayState={underlayState}
 					tools={tools}
 					defaultView={defaultView}
+					requests={requests}
 				/>
 			) : (
 				<ObjectsTab
 					entities={entities}
 					selectedIds={selectedIds}
-					tools={tools}
+					requests={requests}
 					onSelect={onSelect}
-					onMove={onMove}
 				/>
 			)}
 		</div>
