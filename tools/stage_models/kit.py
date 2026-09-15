@@ -807,6 +807,33 @@ class Model:
         ]
         return max(widths) if widths else 0.0
 
+    def surface_samples(self, skip: tuple[str, ...] = (), step: float = 5.0) -> list[Vector3]:
+        """Points spread over every measured face, no further than about ``step`` apart.
+
+        Vertices alone say where a surface starts and stops, not where it is: a can's wall has
+        vertices only at its rims, so a bracket arm standing level with the middle of the wall
+        measures nothing there. A frame sized to hug a body has to measure the faces.
+        """
+
+        samples: list[Vector3] = []
+        for part in self.parts:
+            if skip and part.name.startswith(skip):
+                continue
+            vertices = part.vertices
+            for face in part.faces:
+                for corner in range(1, len(face) - 1):
+                    a, b, c = vertices[face[0]], vertices[face[corner]], vertices[face[corner + 1]]
+                    longest = max(math.dist(a, b), math.dist(b, c), math.dist(c, a))
+                    count = max(1, min(60, math.ceil(longest / step)))
+                    for i in range(count + 1):
+                        for j in range(count + 1 - i):
+                            u, v = i / count, j / count
+                            w = 1.0 - u - v
+                            samples.append(
+                                tuple(a[k] * w + b[k] * u + c[k] * v for k in range(3))  # type: ignore[misc]
+                            )
+        return samples
+
     def bounds(self) -> tuple[Vector3, Vector3]:
         points = [vertex for part in self.parts for vertex in part.vertices]
         if not points:

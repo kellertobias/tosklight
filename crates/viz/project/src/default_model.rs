@@ -71,6 +71,11 @@ shipped!(SHOW_LASER, "show-laser", "av/show-laser.glb");
 shipped!(ACL_PAR_16, "acl-par-16", "lamps/acl-par-16.glb");
 shipped!(BLINDER_2, "blinder-2-cell", "lamps/blinder-2-cell.glb");
 shipped!(BLINDER_8, "blinder-8-cell", "lamps/blinder-8-cell.glb");
+shipped!(
+    BLINDER_8_HORIZONTAL,
+    "blinder-8-cell-horizontal",
+    "lamps/blinder-8-cell-horizontal.glb"
+);
 shipped!(FLAT_LED_PAR, "flat-led-par", "lamps/flat-led-par.glb");
 shipped!(LED_PAR_PIZZA, "led-par-pizza", "lamps/led-par-pizza.glb");
 shipped!(
@@ -136,6 +141,17 @@ shipped!(PROJECTOR_SMALL, "projector-small", "av/projector-small.glb");
 shipped!(PROJECTOR_LARGE, "projector-large", "av/projector-large.glb");
 
 shipped!(PAR_20, "par-20", "lamps/par-20.glb");
+shipped!(PAR_16, "par-16", "lamps/par-16.glb");
+shipped!(
+    PAR_56_SHORT_BLACK,
+    "par-56-short-nose-black",
+    "lamps/par-56-short-nose-black.glb"
+);
+shipped!(
+    PAR_56_SHORT_SILVER,
+    "par-56-short-nose-silver",
+    "lamps/par-56-short-nose-silver.glb"
+);
 shipped!(
     FRESNEL_500W,
     "fresnel-barn-doors-500w",
@@ -183,7 +199,10 @@ pub fn all() -> &'static [&'static DefaultModel] {
         &FRESNEL_2KW,
         &FLOOD,
         &ACL_PAR_16,
+        &PAR_16,
         &PAR_20,
+        &PAR_56_SHORT_BLACK,
+        &PAR_56_SHORT_SILVER,
         &PAR_56_BLACK,
         &PAR_56_SILVER,
         &PAR_CAN,
@@ -196,6 +215,7 @@ pub fn all() -> &'static [&'static DefaultModel] {
         &BLINDER_2,
         &BLINDER,
         &BLINDER_8,
+        &BLINDER_8_HORIZONTAL,
         &SUNSTRIP,
         &SUNSTRIP_20,
         &LED_STRIP_0500,
@@ -421,6 +441,32 @@ mod tests {
             Vec::<&&str>::new(),
             "offered to an operator but not shipped"
         );
+    }
+
+    /// The conventional PAR set an operator rigs from: PAR 16, PAR 20, PAR 56 short and long, and
+    /// PAR 64 short and long. The short-nose PAR 56 is its own body and has to be shorter than the
+    /// long one every older show already names as `par-56-*`.
+    #[test]
+    fn the_conventional_par_set_ships_short_and_long_noses() {
+        for name in [
+            "par-16",
+            "par-20",
+            "par-56-short-nose-black",
+            "par-56-short-nose-silver",
+            "par-56-black",
+            "par-56-silver",
+            "par-64-short-nose-black",
+            "par-64-long-nose-black",
+        ] {
+            assert!(by_name(name).is_some(), "{name} is not shipped");
+        }
+        let length = |model: &DefaultModel| {
+            let read = viz_scene::read_glb(model.bytes).expect("the model reads");
+            let (min, max) = bounds(&read);
+            max.y - min.y
+        };
+        assert!(length(&PAR_56_SHORT_BLACK) < length(&PAR_56_BLACK) - 0.04);
+        assert!(length(&PAR_16) < length(&PAR_20));
     }
 
     /// A show written by a newer desk can name a body this build has never heard of. It still has

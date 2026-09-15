@@ -1462,7 +1462,7 @@
       "file": "lamps/acl-par-16-no-clamp.glb",
       "summary": "ACL / PAR 16 narrow: hollow 55 can, 130 long, single-cell frame; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 97.0,
+      "width_millimetres": 87.0,
       "height_millimetres": 145.6,
       "depth_millimetres": 73.0,
       "triangles": 1536,
@@ -1527,7 +1527,7 @@
       "file": "lamps/acl-par-16.glb",
       "summary": "ACL / PAR 16 narrow: hollow 55 can, 130 long, single-cell frame",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 97.0,
+      "width_millimetres": 87.0,
       "height_millimetres": 272.1,
       "depth_millimetres": 114.6,
       "triangles": 2084,
@@ -1911,10 +1911,10 @@
       ]
     },
     {
-      "model": "blinder-8-cell-no-clamp",
+      "model": "blinder-8-cell-horizontal-no-clamp",
       "group": "lamps",
-      "file": "lamps/blinder-8-cell-no-clamp.glb",
-      "summary": "Blinder 8 cell: frame 800 x 400 x 155, sealed beams in chromed rings; no mounting hardware",
+      "file": "lamps/blinder-8-cell-horizontal-no-clamp.glb",
+      "summary": "Blinder 8 cell, horizontal 4 x 2: frame 800 x 400 x 155, sealed beams in chromed rings; no mounting hardware",
       "origin": "mounting point at the top, body below",
       "width_millimetres": 868.0,
       "height_millimetres": 371.7,
@@ -2001,10 +2001,10 @@
       ]
     },
     {
-      "model": "blinder-8-cell",
+      "model": "blinder-8-cell-horizontal",
       "group": "lamps",
-      "file": "lamps/blinder-8-cell.glb",
-      "summary": "Blinder 8 cell: frame 800 x 400 x 155, sealed beams in chromed rings",
+      "file": "lamps/blinder-8-cell-horizontal.glb",
+      "summary": "Blinder 8 cell, horizontal 4 x 2: frame 800 x 400 x 155, sealed beams in chromed rings",
       "origin": "mounting point at the top, body below",
       "width_millimetres": 868.0,
       "height_millimetres": 498.2,
@@ -2106,12 +2106,207 @@
       ]
     },
     {
+      "model": "blinder-8-cell-no-clamp",
+      "group": "lamps",
+      "file": "lamps/blinder-8-cell-no-clamp.glb",
+      "summary": "Blinder 8 cell, upright 2 x 4: frame 400 x 800 x 155, sealed beams in chromed rings; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 468.0,
+      "height_millimetres": 564.5,
+      "depth_millimetres": 800.0,
+      "triangles": 7532,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "body",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "cell-lenses",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "cell-1",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-2",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-3",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-4",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-5",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-6",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-7",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-8",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.4975,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.4255
+        }
+      ]
+    },
+    {
+      "model": "blinder-8-cell",
+      "group": "lamps",
+      "file": "lamps/blinder-8-cell.glb",
+      "summary": "Blinder 8 cell, upright 2 x 4: frame 400 x 800 x 155, sealed beams in chromed rings",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 468.0,
+      "height_millimetres": 691.1,
+      "depth_millimetres": 800.0,
+      "triangles": 8628,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "body",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "cell-lenses",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "cell-1",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-2",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-3",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-4",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-5",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-6",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-7",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "cell-8",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.4975,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.4255
+        }
+      ]
+    },
+    {
       "model": "flat-led-par-no-clamp",
       "group": "lamps",
       "file": "lamps/flat-led-par-no-clamp.glb",
       "summary": "Flat LED PAR: 230 disc, 95 deep, 18 proud emitters; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 284.9,
+      "width_millimetres": 287.2,
       "height_millimetres": 205.4,
       "depth_millimetres": 232.0,
       "triangles": 1836,
@@ -2181,7 +2376,7 @@
       "file": "lamps/flat-led-par.glb",
       "summary": "Flat LED PAR: 230 disc, 95 deep, 18 proud emitters",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 284.9,
+      "width_millimetres": 287.2,
       "height_millimetres": 331.9,
       "depth_millimetres": 232.0,
       "triangles": 2384,
@@ -2283,12 +2478,12 @@
       "model": "flood-asymmetric-no-clamp",
       "group": "lamps",
       "file": "lamps/flood-asymmetric-no-clamp.glb",
-      "summary": "Asymmetric cyc flood: 400 x 260 x 210 trough with a 330 x 170 rectangular aperture; no mounting hardware",
+      "summary": "Asymmetric cyc flood: 400 x 360 x 140 trough with a 330 x 270 rectangular aperture; no mounting hardware",
       "origin": "mounting point at the top, body below",
       "width_millimetres": 480.0,
-      "height_millimetres": 346.9,
-      "depth_millimetres": 276.0,
-      "triangles": 396,
+      "height_millimetres": 330.7,
+      "depth_millimetres": 376.0,
+      "triangles": 444,
       "coupler_node": null,
       "nodes": [
         {
@@ -2338,14 +2533,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.2819,
+            -0.3007,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.2131
+          "clearance_metres": 0.2319
         }
       ]
     },
@@ -2353,12 +2548,12 @@
       "model": "flood-asymmetric",
       "group": "lamps",
       "file": "lamps/flood-asymmetric.glb",
-      "summary": "Asymmetric cyc flood: 400 x 260 x 210 trough with a 330 x 170 rectangular aperture",
+      "summary": "Asymmetric cyc flood: 400 x 360 x 140 trough with a 330 x 270 rectangular aperture",
       "origin": "mounting point at the top, body below",
       "width_millimetres": 480.0,
-      "height_millimetres": 473.5,
-      "depth_millimetres": 276.0,
-      "triangles": 1492,
+      "height_millimetres": 457.3,
+      "depth_millimetres": 376.0,
+      "triangles": 1540,
       "coupler_node": "truss-coupler",
       "nodes": [
         {
@@ -2423,14 +2618,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.2819,
+            -0.3007,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.2131
+          "clearance_metres": 0.2319
         }
       ]
     },
@@ -2440,9 +2635,9 @@
       "file": "lamps/fresnel-barn-doors-2kw-no-clamp.glb",
       "summary": "Fresnel 2 kW: 330 x 380 x 380 with a 250 lens and four barn doors; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 646.6,
-      "height_millimetres": 918.7,
-      "depth_millimetres": 647.7,
+      "width_millimetres": 566.6,
+      "height_millimetres": 935.4,
+      "depth_millimetres": 625.7,
       "triangles": 1324,
       "coupler_node": null,
       "nodes": [
@@ -2513,7 +2708,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.6994,
+            -0.7049,
             0.196
           ],
           "range_degrees": [
@@ -2532,7 +2727,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.6994,
+            -0.7049,
             -0.196
           ],
           "range_degrees": [
@@ -2551,7 +2746,7 @@
           ],
           "point_metres": [
             -0.196,
-            -0.6994,
+            -0.7049,
             -0.0
           ],
           "range_degrees": [
@@ -2570,7 +2765,7 @@
           ],
           "point_metres": [
             0.196,
-            -0.6994,
+            -0.7049,
             -0.0
           ],
           "range_degrees": [
@@ -2589,14 +2784,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.4234,
+            -0.4289,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.3418
+          "clearance_metres": 0.3473
         }
       ]
     },
@@ -2606,9 +2801,9 @@
       "file": "lamps/fresnel-barn-doors-2kw.glb",
       "summary": "Fresnel 2 kW: 330 x 380 x 380 with a 250 lens and four barn doors",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 646.6,
-      "height_millimetres": 1045.3,
-      "depth_millimetres": 647.7,
+      "width_millimetres": 566.6,
+      "height_millimetres": 1062.0,
+      "depth_millimetres": 625.7,
       "triangles": 2420,
       "coupler_node": "truss-coupler",
       "nodes": [
@@ -2694,7 +2889,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.6994,
+            -0.7049,
             0.196
           ],
           "range_degrees": [
@@ -2713,7 +2908,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.6994,
+            -0.7049,
             -0.196
           ],
           "range_degrees": [
@@ -2732,7 +2927,7 @@
           ],
           "point_metres": [
             -0.196,
-            -0.6994,
+            -0.7049,
             -0.0
           ],
           "range_degrees": [
@@ -2751,7 +2946,7 @@
           ],
           "point_metres": [
             0.196,
-            -0.6994,
+            -0.7049,
             -0.0
           ],
           "range_degrees": [
@@ -2770,14 +2965,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.4234,
+            -0.4289,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.3418
+          "clearance_metres": 0.3473
         }
       ]
     },
@@ -2787,9 +2982,9 @@
       "file": "lamps/fresnel-barn-doors-500w-no-clamp.glb",
       "summary": "Fresnel 500 W: 200 x 230 x 230 with a 150 lens and four barn doors; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 408.2,
-      "height_millimetres": 598.9,
-      "depth_millimetres": 396.8,
+      "width_millimetres": 348.2,
+      "height_millimetres": 609.0,
+      "depth_millimetres": 383.7,
       "triangles": 1324,
       "coupler_node": null,
       "nodes": [
@@ -2860,7 +3055,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.483,
+            -0.4863,
             0.121
           ],
           "range_degrees": [
@@ -2879,7 +3074,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.483,
+            -0.4863,
             -0.121
           ],
           "range_degrees": [
@@ -2898,7 +3093,7 @@
           ],
           "point_metres": [
             -0.121,
-            -0.483,
+            -0.4863,
             -0.0
           ],
           "range_degrees": [
@@ -2917,7 +3112,7 @@
           ],
           "point_metres": [
             0.121,
-            -0.483,
+            -0.4863,
             -0.0
           ],
           "range_degrees": [
@@ -2936,14 +3131,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.282,
+            -0.2853,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.2164
+          "clearance_metres": 0.2197
         }
       ]
     },
@@ -2953,10 +3148,10 @@
       "file": "lamps/fresnel-barn-doors-500w.glb",
       "summary": "Fresnel 500 W: 200 x 230 x 230 with a 150 lens and four barn doors",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 408.2,
-      "height_millimetres": 725.5,
-      "depth_millimetres": 396.8,
-      "triangles": 2420,
+      "width_millimetres": 348.2,
+      "height_millimetres": 735.5,
+      "depth_millimetres": 383.7,
+      "triangles": 1872,
       "coupler_node": "truss-coupler",
       "nodes": [
         {
@@ -3041,7 +3236,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.483,
+            -0.4863,
             0.121
           ],
           "range_degrees": [
@@ -3060,7 +3255,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.483,
+            -0.4863,
             -0.121
           ],
           "range_degrees": [
@@ -3079,7 +3274,7 @@
           ],
           "point_metres": [
             -0.121,
-            -0.483,
+            -0.4863,
             -0.0
           ],
           "range_degrees": [
@@ -3098,7 +3293,7 @@
           ],
           "point_metres": [
             0.121,
-            -0.483,
+            -0.4863,
             -0.0
           ],
           "range_degrees": [
@@ -3117,14 +3312,33 @@
           ],
           "point_metres": [
             0.0,
-            -0.282,
+            -0.2853,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.2164
+          "clearance_metres": 0.2197
+        },
+        {
+          "node": "truss-coupler",
+          "description": "half-coupler rotation about the hanging bolt, for aiming the fixture on the bar",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -180.0,
+            180.0
+          ],
+          "clearance_metres": null
         }
       ]
     },
@@ -3134,9 +3348,9 @@
       "file": "lamps/fresnel-barn-doors-no-clamp.glb",
       "summary": "Fresnel 260 x 300 x 300 with four barn doors; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 520.4,
-      "height_millimetres": 752.2,
-      "depth_millimetres": 517.2,
+      "width_millimetres": 452.4,
+      "height_millimetres": 765.6,
+      "depth_millimetres": 499.7,
       "triangles": 1324,
       "coupler_node": null,
       "nodes": [
@@ -3207,7 +3421,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.5846,
+            -0.589,
             0.156
           ],
           "range_degrees": [
@@ -3226,7 +3440,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.5846,
+            -0.589,
             -0.156
           ],
           "range_degrees": [
@@ -3245,7 +3459,7 @@
           ],
           "point_metres": [
             -0.156,
-            -0.5846,
+            -0.589,
             -0.0
           ],
           "range_degrees": [
@@ -3264,7 +3478,7 @@
           ],
           "point_metres": [
             0.156,
-            -0.5846,
+            -0.589,
             -0.0
           ],
           "range_degrees": [
@@ -3283,14 +3497,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.3486,
+            -0.353,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.2766
+          "clearance_metres": 0.281
         }
       ]
     },
@@ -3300,10 +3514,10 @@
       "file": "lamps/fresnel-barn-doors.glb",
       "summary": "Fresnel 260 x 300 x 300 with four barn doors",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 520.4,
-      "height_millimetres": 878.8,
-      "depth_millimetres": 517.2,
-      "triangles": 2420,
+      "width_millimetres": 452.4,
+      "height_millimetres": 892.1,
+      "depth_millimetres": 499.7,
+      "triangles": 1872,
       "coupler_node": "truss-coupler",
       "nodes": [
         {
@@ -3388,7 +3602,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.5846,
+            -0.589,
             0.156
           ],
           "range_degrees": [
@@ -3407,7 +3621,7 @@
           ],
           "point_metres": [
             0.0,
-            -0.5846,
+            -0.589,
             -0.156
           ],
           "range_degrees": [
@@ -3426,7 +3640,7 @@
           ],
           "point_metres": [
             -0.156,
-            -0.5846,
+            -0.589,
             -0.0
           ],
           "range_degrees": [
@@ -3445,7 +3659,7 @@
           ],
           "point_metres": [
             0.156,
-            -0.5846,
+            -0.589,
             -0.0
           ],
           "range_degrees": [
@@ -3464,14 +3678,33 @@
           ],
           "point_metres": [
             0.0,
-            -0.3486,
+            -0.353,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.2766
+          "clearance_metres": 0.281
+        },
+        {
+          "node": "truss-coupler",
+          "description": "half-coupler rotation about the hanging bolt, for aiming the fixture on the bar",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -180.0,
+            180.0
+          ],
+          "clearance_metres": null
         }
       ]
     },
@@ -3526,19 +3759,14 @@
       "file": "lamps/led-par-pizza-no-clamp.glb",
       "summary": "LED PAR pizza lamp: hollow 180 can, 230 long, 18 + 12 + 1 domed sources; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 254.0,
-      "height_millimetres": 302.1,
-      "depth_millimetres": 200.0,
-      "triangles": 5044,
+      "width_millimetres": 236.0,
+      "height_millimetres": 287.3,
+      "depth_millimetres": 196.0,
+      "triangles": 4468,
       "coupler_node": null,
       "nodes": [
         {
           "name": "par-can",
-          "kind": "base",
-          "finish": "paint"
-        },
-        {
-          "name": "heatsink",
           "kind": "base",
           "finish": "paint"
         },
@@ -3574,14 +3802,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.2191,
+            -0.2043,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.1503
+          "clearance_metres": 0.1355
         }
       ]
     },
@@ -3591,19 +3819,14 @@
       "file": "lamps/led-par-pizza.glb",
       "summary": "LED PAR pizza lamp: hollow 180 can, 230 long, 18 + 12 + 1 domed sources",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 254.0,
-      "height_millimetres": 428.7,
-      "depth_millimetres": 200.0,
-      "triangles": 5592,
+      "width_millimetres": 236.0,
+      "height_millimetres": 413.8,
+      "depth_millimetres": 196.0,
+      "triangles": 5016,
       "coupler_node": "truss-coupler",
       "nodes": [
         {
           "name": "par-can",
-          "kind": "base",
-          "finish": "paint"
-        },
-        {
-          "name": "heatsink",
           "kind": "base",
           "finish": "paint"
         },
@@ -3654,14 +3877,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.2191,
+            -0.2043,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.1503
+          "clearance_metres": 0.1355
         },
         {
           "node": "truss-coupler",
@@ -3690,19 +3913,14 @@
       "file": "lamps/led-par-x-in-1-no-clamp.glb",
       "summary": "LED PAR x-in-1: hollow 180 can, 18 emitters of 20 in shallow cups; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 254.0,
-      "height_millimetres": 294.1,
-      "depth_millimetres": 200.0,
-      "triangles": 3732,
+      "width_millimetres": 236.0,
+      "height_millimetres": 279.3,
+      "depth_millimetres": 196.0,
+      "triangles": 3156,
       "coupler_node": null,
       "nodes": [
         {
           "name": "par-can",
-          "kind": "base",
-          "finish": "paint"
-        },
-        {
-          "name": "heatsink",
           "kind": "base",
           "finish": "paint"
         },
@@ -3743,14 +3961,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.2191,
+            -0.2043,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.1503
+          "clearance_metres": 0.1355
         }
       ]
     },
@@ -3760,19 +3978,14 @@
       "file": "lamps/led-par-x-in-1.glb",
       "summary": "LED PAR x-in-1: hollow 180 can, 18 emitters of 20 in shallow cups",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 254.0,
-      "height_millimetres": 420.7,
-      "depth_millimetres": 200.0,
-      "triangles": 4280,
+      "width_millimetres": 236.0,
+      "height_millimetres": 405.8,
+      "depth_millimetres": 196.0,
+      "triangles": 3704,
       "coupler_node": "truss-coupler",
       "nodes": [
         {
           "name": "par-can",
-          "kind": "base",
-          "finish": "paint"
-        },
-        {
-          "name": "heatsink",
           "kind": "base",
           "finish": "paint"
         },
@@ -3828,14 +4041,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.2191,
+            -0.2043,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.1503
+          "clearance_metres": 0.1355
         },
         {
           "node": "truss-coupler",
@@ -4312,11 +4525,11 @@
       "model": "led-strobe-no-clamp",
       "group": "lamps",
       "file": "lamps/led-strobe-no-clamp.glb",
-      "summary": "LED strobe: 500 x 130 x 200, flat diffusion plane; no mounting hardware",
+      "summary": "LED strobe: 500 x 190 x 130, flat diffusion plane; no mounting hardware",
       "origin": "mounting point at the top, body below",
       "width_millimetres": 560.0,
-      "height_millimetres": 313.5,
-      "depth_millimetres": 130.0,
+      "height_millimetres": 247.0,
+      "depth_millimetres": 190.0,
       "triangles": 216,
       "coupler_node": null,
       "nodes": [
@@ -4357,14 +4570,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.2335,
+            -0.202,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.1679
+          "clearance_metres": 0.1364
         }
       ]
     },
@@ -4372,11 +4585,11 @@
       "model": "led-strobe",
       "group": "lamps",
       "file": "lamps/led-strobe.glb",
-      "summary": "LED strobe: 500 x 130 x 200, flat diffusion plane",
+      "summary": "LED strobe: 500 x 190 x 130, flat diffusion plane",
       "origin": "mounting point at the top, body below",
       "width_millimetres": 560.0,
-      "height_millimetres": 440.0,
-      "depth_millimetres": 130.0,
+      "height_millimetres": 373.6,
+      "depth_millimetres": 190.0,
       "triangles": 1312,
       "coupler_node": "truss-coupler",
       "nodes": [
@@ -4432,14 +4645,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.2335,
+            -0.202,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.1679
+          "clearance_metres": 0.1364
         }
       ]
     },
@@ -6115,12 +6328,186 @@
       ]
     },
     {
+      "model": "par-16-no-clamp",
+      "group": "lamps",
+      "file": "lamps/par-16-no-clamp.glb",
+      "summary": "PAR 16 birdie: hollow 62 can, 120 long, single-cell frame; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 127.5,
+      "height_millimetres": 180.2,
+      "depth_millimetres": 127.5,
+      "triangles": 1664,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "par-can",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "filament",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "paint"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.121,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.0714
+        }
+      ]
+    },
+    {
+      "model": "par-16",
+      "group": "lamps",
+      "file": "lamps/par-16.glb",
+      "summary": "PAR 16 birdie: hollow 62 can, 120 long, single-cell frame",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 127.5,
+      "height_millimetres": 306.7,
+      "depth_millimetres": 127.5,
+      "triangles": 2212,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "par-can",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "filament",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.121,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.0714
+        },
+        {
+          "node": "truss-coupler",
+          "description": "half-coupler rotation about the hanging bolt, for aiming the fixture on the bar",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -180.0,
+            180.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
       "model": "par-20-no-clamp",
       "group": "lamps",
       "file": "lamps/par-20-no-clamp.glb",
       "summary": "PAR 20 birdie: hollow 70 can, 150 long, single-cell frame; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 159.0,
+      "width_millimetres": 134.9,
       "height_millimetres": 204.1,
       "depth_millimetres": 134.9,
       "triangles": 1664,
@@ -6190,7 +6577,7 @@
       "file": "lamps/par-20.glb",
       "summary": "PAR 20 birdie: hollow 70 can, 150 long, single-cell frame",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 159.0,
+      "width_millimetres": 134.9,
       "height_millimetres": 330.7,
       "depth_millimetres": 134.9,
       "triangles": 2212,
@@ -6294,7 +6681,7 @@
       "file": "lamps/par-56-black-no-clamp.glb",
       "summary": "PAR 56, black: hollow 180 can, 260 long, octagonal gel frame; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 274.0,
+      "width_millimetres": 236.5,
       "height_millimetres": 337.0,
       "depth_millimetres": 236.5,
       "triangles": 1712,
@@ -6369,7 +6756,7 @@
       "file": "lamps/par-56-black.glb",
       "summary": "PAR 56, black: hollow 180 can, 260 long, octagonal gel frame",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 274.0,
+      "width_millimetres": 236.5,
       "height_millimetres": 463.6,
       "depth_millimetres": 236.5,
       "triangles": 2260,
@@ -6473,12 +6860,380 @@
       ]
     },
     {
+      "model": "par-56-short-nose-black-no-clamp",
+      "group": "lamps",
+      "file": "lamps/par-56-short-nose-black-no-clamp.glb",
+      "summary": "PAR 56 short nose, black: hollow 180 can, 185 long, octagonal gel frame; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 236.5,
+      "height_millimetres": 287.5,
+      "depth_millimetres": 236.5,
+      "triangles": 1712,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "par-can",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "filament",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "spring-clips",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "paint"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.1854,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.1324
+        }
+      ]
+    },
+    {
+      "model": "par-56-short-nose-black",
+      "group": "lamps",
+      "file": "lamps/par-56-short-nose-black.glb",
+      "summary": "PAR 56 short nose, black: hollow 180 can, 185 long, octagonal gel frame",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 236.5,
+      "height_millimetres": 414.1,
+      "depth_millimetres": 236.5,
+      "triangles": 2260,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "par-can",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "filament",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "spring-clips",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.1854,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.1324
+        },
+        {
+          "node": "truss-coupler",
+          "description": "half-coupler rotation about the hanging bolt, for aiming the fixture on the bar",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -180.0,
+            180.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
+      "model": "par-56-short-nose-silver-no-clamp",
+      "group": "lamps",
+      "file": "lamps/par-56-short-nose-silver-no-clamp.glb",
+      "summary": "PAR 56 short nose, silver: hollow 180 can, 185 long, octagonal gel frame; no mounting hardware",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 236.5,
+      "height_millimetres": 287.5,
+      "depth_millimetres": 236.5,
+      "triangles": 1712,
+      "coupler_node": null,
+      "nodes": [
+        {
+          "name": "par-can",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "filament",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "spring-clips",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.1854,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.1324
+        }
+      ]
+    },
+    {
+      "model": "par-56-short-nose-silver",
+      "group": "lamps",
+      "file": "lamps/par-56-short-nose-silver.glb",
+      "summary": "PAR 56 short nose, silver: hollow 180 can, 185 long, octagonal gel frame",
+      "origin": "mounting point at the top, body below",
+      "width_millimetres": 236.5,
+      "height_millimetres": 414.1,
+      "depth_millimetres": 236.5,
+      "triangles": 2260,
+      "coupler_node": "truss-coupler",
+      "nodes": [
+        {
+          "name": "par-can",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "reflector",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "filament",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "lens-ring",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "spring-clips",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "colour-frame-runner",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "hanging-frame",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler",
+          "kind": "base",
+          "finish": "metal"
+        },
+        {
+          "name": "truss-coupler-bolt",
+          "kind": "base",
+          "finish": "paint"
+        },
+        {
+          "name": "truss-coupler-bond",
+          "kind": "base",
+          "finish": "metal"
+        }
+      ],
+      "swivels": [
+        {
+          "node": "hanging-frame",
+          "description": "tilt about the bracket bolts; the arms are cut so the body swings clear of the crossbar",
+          "axis": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            -0.1854,
+            -0.0
+          ],
+          "range_degrees": [
+            -90.0,
+            90.0
+          ],
+          "clearance_metres": 0.1324
+        },
+        {
+          "node": "truss-coupler",
+          "description": "half-coupler rotation about the hanging bolt, for aiming the fixture on the bar",
+          "axis": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "point_metres": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "range_degrees": [
+            -180.0,
+            180.0
+          ],
+          "clearance_metres": null
+        }
+      ]
+    },
+    {
       "model": "par-56-silver-no-clamp",
       "group": "lamps",
       "file": "lamps/par-56-silver-no-clamp.glb",
       "summary": "PAR 56, silver: hollow 180 can, 260 long, octagonal gel frame; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 274.0,
+      "width_millimetres": 236.5,
       "height_millimetres": 337.0,
       "depth_millimetres": 236.5,
       "triangles": 1712,
@@ -6553,7 +7308,7 @@
       "file": "lamps/par-56-silver.glb",
       "summary": "PAR 56, silver: hollow 180 can, 260 long, octagonal gel frame",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 274.0,
+      "width_millimetres": 236.5,
       "height_millimetres": 463.6,
       "depth_millimetres": 236.5,
       "triangles": 2260,
@@ -6662,7 +7417,7 @@
       "file": "lamps/par-64-long-nose-black-no-clamp.glb",
       "summary": "PAR 64 long nose, black: hollow 205 can, 400 long, octagonal gel frame; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 301.4,
+      "width_millimetres": 259.6,
       "height_millimetres": 451.1,
       "depth_millimetres": 259.6,
       "triangles": 1712,
@@ -6737,7 +7492,7 @@
       "file": "lamps/par-64-long-nose-black.glb",
       "summary": "PAR 64 long nose, black: hollow 205 can, 400 long, octagonal gel frame",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 301.4,
+      "width_millimetres": 259.6,
       "height_millimetres": 577.6,
       "depth_millimetres": 259.6,
       "triangles": 2260,
@@ -6846,7 +7601,7 @@
       "file": "lamps/par-64-long-nose-silver-no-clamp.glb",
       "summary": "PAR 64 long nose, silver: hollow 205 can, 400 long, octagonal gel frame; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 301.4,
+      "width_millimetres": 259.6,
       "height_millimetres": 451.1,
       "depth_millimetres": 259.6,
       "triangles": 1712,
@@ -6921,7 +7676,7 @@
       "file": "lamps/par-64-long-nose-silver.glb",
       "summary": "PAR 64 long nose, silver: hollow 205 can, 400 long, octagonal gel frame",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 301.4,
+      "width_millimetres": 259.6,
       "height_millimetres": 577.6,
       "depth_millimetres": 259.6,
       "triangles": 2260,
@@ -7030,7 +7785,7 @@
       "file": "lamps/par-64-short-nose-black-no-clamp.glb",
       "summary": "PAR 64 short nose, black: hollow 205 can, 280 long, octagonal gel frame; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 301.4,
+      "width_millimetres": 259.6,
       "height_millimetres": 364.9,
       "depth_millimetres": 259.6,
       "triangles": 1712,
@@ -7105,7 +7860,7 @@
       "file": "lamps/par-64-short-nose-black.glb",
       "summary": "PAR 64 short nose, black: hollow 205 can, 280 long, octagonal gel frame",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 301.4,
+      "width_millimetres": 259.6,
       "height_millimetres": 491.5,
       "depth_millimetres": 259.6,
       "triangles": 2260,
@@ -7214,7 +7969,7 @@
       "file": "lamps/par-64-short-nose-silver-no-clamp.glb",
       "summary": "PAR 64 short nose, silver: hollow 205 can, 280 long, octagonal gel frame; no mounting hardware",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 301.4,
+      "width_millimetres": 259.6,
       "height_millimetres": 364.9,
       "depth_millimetres": 259.6,
       "triangles": 1712,
@@ -7289,7 +8044,7 @@
       "file": "lamps/par-64-short-nose-silver.glb",
       "summary": "PAR 64 short nose, silver: hollow 205 can, 280 long, octagonal gel frame",
       "origin": "mounting point at the top, body below",
-      "width_millimetres": 301.4,
+      "width_millimetres": 259.6,
       "height_millimetres": 491.5,
       "depth_millimetres": 259.6,
       "triangles": 2260,
@@ -8414,11 +9169,11 @@
       "model": "strobe-xenon-no-clamp",
       "group": "lamps",
       "file": "lamps/strobe-xenon-no-clamp.glb",
-      "summary": "Strobe: 420 x 200 x 260, straight xenon tube in a white reflector well; no mounting hardware",
+      "summary": "Strobe: 420 x 300 x 170, straight xenon tube in a white reflector well; no mounting hardware",
       "origin": "mounting point at the top, body below",
       "width_millimetres": 488.0,
-      "height_millimetres": 349.0,
-      "depth_millimetres": 200.0,
+      "height_millimetres": 312.4,
+      "depth_millimetres": 300.0,
       "triangles": 404,
       "coupler_node": null,
       "nodes": [
@@ -8464,14 +9219,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.254,
+            -0.2624,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.182
+          "clearance_metres": 0.1904
         }
       ]
     },
@@ -8479,11 +9234,11 @@
       "model": "strobe-xenon",
       "group": "lamps",
       "file": "lamps/strobe-xenon.glb",
-      "summary": "Strobe: 420 x 200 x 260, straight xenon tube in a white reflector well",
+      "summary": "Strobe: 420 x 300 x 170, straight xenon tube in a white reflector well",
       "origin": "mounting point at the top, body below",
       "width_millimetres": 488.0,
-      "height_millimetres": 475.6,
-      "depth_millimetres": 200.0,
+      "height_millimetres": 439.0,
+      "depth_millimetres": 300.0,
       "triangles": 1500,
       "coupler_node": "truss-coupler",
       "nodes": [
@@ -8544,14 +9299,14 @@
           ],
           "point_metres": [
             0.0,
-            -0.254,
+            -0.2624,
             -0.0
           ],
           "range_degrees": [
             -90.0,
             90.0
           ],
-          "clearance_metres": 0.182
+          "clearance_metres": 0.1904
         }
       ]
     },

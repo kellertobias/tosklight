@@ -130,6 +130,7 @@ def hang_from_bracket(
     colour: str = SILVER,
     finish: str = METAL,
     margin: float | None = None,
+    hug: bool = False,
 ) -> float:
     """Hang the body built about ``z = 0`` in a U-frame it can actually turn in.
 
@@ -141,6 +142,11 @@ def hang_from_bracket(
     ninety degrees of tilt either way swings clear of it, the arms are set outside the
     widest part, and the body is then dropped so the crossbar sits under the coupler.
     Returns the height the bolts ended up at, for anything that has to line up with them.
+
+    ``hug`` sets the arms the way a conventional stirrup is: a hand's breadth of nothing
+    between arm and can, not outside a colour frame or barn door that never comes near
+    them. The arms then stand outside only what actually swings past them — see
+    :func:`_swept_half_width` — with 10 to 16 mm of air.
     """
 
     above, depth, width = model.reach(skip=(COUPLER,))
@@ -151,15 +157,26 @@ def hang_from_bracket(
     swing = reach + (margin if margin is not None else max(6.0, min(SWING_MARGIN, reach * 0.12)))
     bar = arm_thickness * 1.6
     pivot = FRAME_TOP - bar - swing
-    half_span = width + arm_thickness / 2 + max(6.0, min(14.0, width * 0.09))
-    # What the bolts actually land on: the body's own width level with them, which on a can
-    # with a colour frame is a good deal narrower than the arms standing outside that frame.
-    trunnion = model.girth(arm_thickness * 2.0, skip=(COUPLER,))
+    foot_below = arm_thickness * 2.4
+    if hug:
+        samples = model.surface_samples(skip=(COUPLER,))
+        swept = _swept_half_width(samples, bar_depth / 2, -foot_below, swing)
+        half_span = swept + max(10.0, min(16.0, swept * 0.1)) + arm_thickness / 2
+        band = arm_thickness * 2.0
+        trunnion = max(
+            (abs(x) for x, y, z in samples if abs(z) <= band and abs(y) <= band),
+            default=0.0,
+        )
+    else:
+        half_span = width + arm_thickness / 2 + max(6.0, min(14.0, width * 0.09))
+        # What the bolts actually land on: the body's own width level with them, which on a
+        # can with a colour frame is a good deal narrower than the arms outside that frame.
+        trunnion = model.girth(arm_thickness * 2.0, skip=(COUPLER,))
     model.shift((0.0, 0.0, pivot), skip=(COUPLER,))
 
     frame = model.part("hanging-frame", colour, BASE, None, finish)
     frame.box((half_span * 2 + arm_thickness, bar_depth, bar), (0, 0, FRAME_TOP - bar / 2))
-    foot = pivot - arm_thickness * 2.4
+    foot = pivot - foot_below
     outer = half_span + arm_thickness / 2
     inner = min(trunnion, outer - arm_thickness - 2.0)
     for side in (-1, 1):
@@ -186,6 +203,45 @@ def hang_from_bracket(
     )
     rig(model, half_span * 2 + arm_thickness)
     return pivot
+
+
+def _swept_half_width(
+    samples: list[tuple[float, float, float]],
+    half_depth: float,
+    low: float,
+    high: float,
+    travel: float = 90.0,
+) -> float:
+    """How wide the body is where it passes the arms, anywhere in its tilt.
+
+    The body turns about ``x`` through ``±travel`` degrees and an arm stands still in the slab
+    ``|y| <= half_depth``, ``low <= z <= high`` about the bolts. Turning keeps ``x``, so the arm
+    only has to stand outside the widest point that ever enters that slab. A PAR's colour frame
+    hangs well below the foot of its arms and swings out in front of them, never through them,
+    which is why a stirrup on a real can hugs the tube and lets the frame stand wider.
+    """
+
+    import numpy
+
+    points = numpy.asarray(samples, dtype=float)
+    if len(points) == 0:
+        return 0.0
+    order = numpy.argsort(-numpy.abs(points[:, 0]))
+    points = points[order]
+    angles = numpy.radians(numpy.linspace(-travel, travel, 121))
+    cos, sin = numpy.cos(angles), numpy.sin(angles)
+    # Between two sampled angles a point moves at most r * step / 2 from the nearer sample.
+    slack = 2.0 + numpy.hypot(points[:, 1], points[:, 2]) * numpy.radians(travel / 120.0)
+    for start in range(0, len(points), 2048):
+        chunk = points[start : start + 2048]
+        pad = slack[start : start + 2048, None]
+        y = chunk[:, 1, None] * cos - chunk[:, 2, None] * sin
+        z = chunk[:, 1, None] * sin + chunk[:, 2, None] * cos
+        inside = (numpy.abs(y) <= half_depth + pad) & (z >= low - pad) & (z <= high + pad)
+        hits = numpy.flatnonzero(inside.any(axis=1))
+        if len(hits):
+            return float(abs(chunk[hits[0], 0]))
+    return 0.0
 
 
 def _head_cheeks(model: Model, head: Part, half_width: float, length: float) -> Part:
@@ -570,7 +626,7 @@ def _fresnel(
     runner = model.part("colour-frame-runner", GEL_FRAME)
     runner.polygon_frame(width + 80, depth - 4, 46, (0, 0, bottom - 34))
     barn_doors(model, aperture=lens, at=bottom - 60, hinge_span=height / 2)
-    hang_from_bracket(model, bar_depth=depth * 0.3, arm_thickness=arm_thickness)
+    hang_from_bracket(model, bar_depth=depth * 0.3, arm_thickness=arm_thickness, hug=True)
     return model
 
 
@@ -640,11 +696,22 @@ def barn_doors(model: Model, aperture: float, at: float, hinge_span: float) -> N
             hinges.box((20, 26, 22), (side * (hinge_span + 6), offset, at - 16))
 
     splay = 26.0
+    # The long pair are trapezoids narrowing away from the hinge, and the top one is the
+    # shorter of the two: a full-length top leaf would foul the bar the lantern hangs from.
     for side, name, width, length in (
-        (-1, "barn-door-bottom", hinge_span * 2 + 20, aperture * 1.15),
-        (1, "barn-door-top", hinge_span * 2 + 20, aperture * 1.15),
+        (-1, "barn-door-bottom", hinge_span * 2 + 20, aperture * 1.2),
+        (1, "barn-door-top", hinge_span * 2 + 20, aperture * 0.9),
     ):
-        _barn_leaf(model, name, (0.0, side * (hinge_span + 6), at - 26), width, length, side * splay, True)
+        _barn_leaf(
+            model,
+            name,
+            (0.0, side * (hinge_span + 6), at - 26),
+            width,
+            length,
+            side * splay,
+            True,
+            tip_width=width * 0.6,
+        )
     for side, name in ((-1, "barn-door-left"), (1, "barn-door-right")):
         _barn_leaf(
             model,
@@ -742,18 +809,34 @@ def _barn_leaf(
     length: float,
     splay: float,
     across: bool,
+    tip_width: float | None = None,
 ) -> None:
-    """One leaf, hanging from ``hinge`` and splayed outwards by ``splay`` degrees."""
+    """One leaf, hanging from ``hinge`` and splayed outwards by ``splay`` degrees.
+
+    ``tip_width`` makes it a trapezoid: ``width`` along the hinge, narrowing to ``tip_width``
+    at the free edge. The hinge edge is the leaf's ``+z`` end before it is splayed.
+    """
 
     angle = math.radians(abs(splay))
     reach = length / 2 * math.cos(angle)
     offset = length / 2 * math.sin(angle) * (1 if splay >= 0 else -1)
+    tip = width if tip_width is None else tip_width
     leaf = model.part(name, HOUSING_BLACK)
     if across:
-        leaf.box((width, 4, length), (hinge[0], hinge[1] + offset, hinge[2] - reach), rotation=(splay, 0, 0))
+        leaf.taper(
+            (tip, 4, length),
+            (width, 4),
+            (hinge[0], hinge[1] + offset, hinge[2] - reach),
+            rotation=(splay, 0, 0),
+        )
         axis = (1.0, 0.0, 0.0)
     else:
-        leaf.box((4, width, length), (hinge[0] - offset, hinge[1], hinge[2] - reach), rotation=(0, splay, 0))
+        leaf.taper(
+            (4, tip, length),
+            (4, width),
+            (hinge[0] - offset, hinge[1], hinge[2] - reach),
+            rotation=(0, splay, 0),
+        )
         axis = (0.0, 1.0, 0.0)
     model.swivel(name, axis, hinge, (0.0, 90.0), "barn-door leaf, hinged at the frame")
 
@@ -838,12 +921,17 @@ def _par_can(
         arm_thickness=max(6.0, diameter * 0.045),
         colour=body_colour,
         finish=PAINT if body_colour != SILVER else METAL,
+        hug=True,
     )
     return model
 
 
 def par_cans() -> list[Model]:
-    """3.5 – 3.7 — PAR 64 long and short nose, and the PAR 56, black and silver."""
+    """3.5 – 3.7 — PAR 64 long and short nose, and the PAR 56 long and short nose, black and silver.
+
+    ``par-56-*`` is the long PAR 56 every existing show already names; the short nose is the
+    stubby can round a PAR 56 lamp that barely clears its reflector.
+    """
 
     built: list[Model] = []
     for finish, body, rim in (
@@ -880,7 +968,31 @@ def par_cans() -> list[Model]:
                 rim,
             )
         )
+        built.append(
+            _par_can(
+                f"par-56-short-nose-{finish}",
+                f"PAR 56 short nose, {finish}: hollow 180 can, 185 long, octagonal gel frame",
+                180.0,
+                185.0,
+                body,
+                rim,
+            )
+        )
     return built
+
+
+def par_16() -> Model:
+    """The PAR 16 birdie: a 50 mm lamp in a black can smaller than the PAR 20's."""
+
+    return _par_can(
+        "par-16",
+        "PAR 16 birdie: hollow 62 can, 120 long, single-cell frame",
+        62.0,
+        120.0,
+        HOUSING_BLACK,
+        RIM_ON_BLACK,
+        clips=False,
+    )
 
 
 def par_20() -> Model:
@@ -918,15 +1030,16 @@ def acl() -> Model:
 
 
 def _led_par_shell(name: str, summary: str, diameter: float, length: float) -> tuple[Model, float]:
-    """The open can an LED PAR's source plate sits inside. Returns the front rim height."""
+    """The open can an LED PAR's source plate sits inside. Returns the front rim height.
+
+    A plain can: the rings of cooling fin this used to carry stood proud of the tube like
+    collars and read as nothing an LED PAR actually has on the outside.
+    """
 
     model = Model(name, "lamps", summary)
-    rear, front = length * 0.5, -length * 0.5
+    front = -length * 0.5
     can = model.part("par-can", HOUSING_DARK)
     can.hollow_can(diameter, diameter - 20, length, 44, (0, 0, front), segments=24)
-    fins = model.part("heatsink", HOUSING_DARK, BASE, can)
-    for step in range(3):
-        fins.tube(diameter + 20, diameter - 2, 9, (0, 0, rear - 30 - step * 26), segments=24)
     rim = model.part("lens-ring", RIM_ON_DARK)
     rim.tube(diameter + 16, diameter - 6, 24, (0, 0, front + 12))
     return model, front
@@ -949,7 +1062,7 @@ def led_par_pizza() -> Model:
             # Domes standing clear of the plate and just proud of the rim, not spheres
             # half sunk into it: the separate sources are the whole point of this front.
             sources.dome(16, 22, (x, y, front + 14), segments=8, rotation=(180, 0, 0))
-    hang_from_bracket(model, bar_depth=54.0, arm_thickness=18.0, colour=HOUSING_DARK, finish=PAINT)
+    hang_from_bracket(model, bar_depth=54.0, arm_thickness=18.0, colour=HOUSING_DARK, finish=PAINT, hug=True)
     return model
 
 
@@ -972,7 +1085,7 @@ def led_par_x_in_1() -> Model:
         for x, y in _ring_positions(radius, count):
             cups.cup(34, 22, 24, 2, (x, y, front + 20), segments=10, rotation=(180, 0, 0))
             emitters.cylinder(20, 10, (x, y, front + 26), segments=10)
-    hang_from_bracket(model, bar_depth=54.0, arm_thickness=18.0, colour=HOUSING_DARK, finish=PAINT)
+    hang_from_bracket(model, bar_depth=54.0, arm_thickness=18.0, colour=HOUSING_DARK, finish=PAINT, hug=True)
     return model
 
 
@@ -995,7 +1108,7 @@ def flat_led_par() -> Model:
     for radius, count in ((36.0, 6), (72.0, 12)):
         for x, y in _ring_positions(radius, count):
             emitters.cylinder(24, 30, (x, y, front + 13), segments=10)
-    hang_from_bracket(model, bar_depth=70.0, arm_thickness=16.0, colour=HOUSING_DARK, finish=PAINT)
+    hang_from_bracket(model, bar_depth=70.0, arm_thickness=16.0, colour=HOUSING_DARK, finish=PAINT, hug=True)
     return model
 
 
@@ -1127,19 +1240,24 @@ def sunstrips() -> list[Model]:
 
 
 def blinders() -> list[Model]:
-    """3.13 — 2, 4 and 8 cell blinders sharing one 180 sealed-beam cell."""
+    """3.13 — 2, 4 and 8 cell blinders sharing one 180 sealed-beam cell.
+
+    ``x`` is across the face and ``y`` is its height once the blinder is tilted up to face the
+    house. The 8 cell is hung upright, two columns of four, which is how nearly every one on a
+    rig is used; the four-wide layout stays as its own body for the ones flown on their side.
+    """
 
     built: list[Model] = []
-    for name, columns, rows, frame in (
-        ("blinder-2-cell", 2, 1, (400.0, 200.0)),
-        ("blinder-4-cell", 2, 2, (400.0, 400.0)),
-        ("blinder-8-cell", 4, 2, (800.0, 400.0)),
+    for name, title, columns, rows, frame in (
+        ("blinder-2-cell", "Blinder 2 cell", 2, 1, (400.0, 200.0)),
+        ("blinder-4-cell", "Blinder 4 cell", 2, 2, (400.0, 400.0)),
+        ("blinder-8-cell", "Blinder 8 cell, upright 2 x 4", 2, 4, (400.0, 800.0)),
+        ("blinder-8-cell-horizontal", "Blinder 8 cell, horizontal 4 x 2", 4, 2, (800.0, 400.0)),
     ):
         model = Model(
             name,
             "lamps",
-            f"Blinder {columns * rows} cell: frame {frame[0]:.0f} x {frame[1]:.0f} x 155, "
-            f"sealed beams in chromed rings",
+            f"{title}: frame {frame[0]:.0f} x {frame[1]:.0f} x 155, sealed beams in chromed rings",
         )
         top, bottom = 78.0, -78.0
         # A tray, not a solid block: the cells have to be visible from in front, and the
@@ -1169,9 +1287,12 @@ def strobe() -> Model:
     model = Model(
         "strobe-xenon",
         "lamps",
-        "Strobe: 420 x 200 x 260, straight xenon tube in a white reflector well",
+        "Strobe: 420 x 300 x 170, straight xenon tube in a white reflector well",
     )
-    top, bottom = 130.0, -130.0
+    # A stage strobe is a shallow slab, not a deep box: 170 along the beam and 300 high.
+    height, depth = 300.0, 170.0
+    half = height / 2
+    top, bottom = depth / 2, -depth / 2
     # The window is an opening, not a pane: the reader throws away alpha, so a sheet of
     # glass in front of the tube would simply hide the one feature that says "strobe".
     #
@@ -1180,19 +1301,19 @@ def strobe() -> Model:
     # three-quarter angle a rig is actually looked at, the front wall hides everything and
     # the fixture is a black box with nothing in it.
     body = model.part("body", HOUSING_BLACK)
-    body.box((420, 200, 195), (0, 0, top - 97.5))
+    body.box((420, height, depth - 65), (0, 0, top - (depth - 65) / 2))
     for side in (-1, 1):
-        body.box((24, 200, 65), (side * 198, 0, bottom + 32.5))
-        body.box((420, 24, 65), (0, side * 88, bottom + 32.5))
+        body.box((24, height, 65), (side * 198, 0, bottom + 32.5))
+        body.box((420, 24, 65), (0, side * (half - 12), bottom + 32.5))
 
     # The well is lined, not just backed. A strobe is white inside — that is what makes the
     # flash come out of the whole aperture instead of off one plate — and a black slot with
     # a silver floor at the bottom of it reads as a hole in a box.
     reflector = model.part("reflector-well", REFLECTOR, finish=METAL)
-    reflector.box((372, 152, 8), (0, 0, bottom + 30))
+    reflector.box((372, height - 48, 8), (0, 0, bottom + 30))
     for side in (-1, 1):
-        reflector.box((372, 6, 30), (0, side * 72, bottom + 13), rotation=(side * 12, 0, 0))
-        reflector.box((6, 152, 30), (side * 182, 0, bottom + 13), rotation=(0, -side * 12, 0))
+        reflector.box((372, 6, 30), (0, side * (half - 28), bottom + 13), rotation=(side * 12, 0, 0))
+        reflector.box((6, height - 48, 30), (side * 182, 0, bottom + 13), rotation=(0, -side * 12, 0))
 
     # One straight tube on the axis of the well, level with the bezel. Real strobes of this
     # size are a single linear flashtube between two electrode blocks; the folded tube this
@@ -1205,8 +1326,8 @@ def strobe() -> Model:
 
     bezel = model.part("lens-ring", RIM_ON_BLACK)
     for side in (-1, 1):
-        bezel.box((14, 200, 26), (side * 203, 0, bottom + 13))
-        bezel.box((420, 14, 26), (0, side * 93, bottom + 13))
+        bezel.box((14, height, 26), (side * 203, 0, bottom + 13))
+        bezel.box((420, 14, 26), (0, side * (half - 7), bottom + 13))
     hang_from_bracket(model, bar_depth=90.0, arm_thickness=20.0)
     return model
 
@@ -1214,20 +1335,23 @@ def strobe() -> Model:
 def led_strobe() -> Model:
     """3.15 — a flat diffusion plane where 3.14 has a tube."""
 
-    model = Model("led-strobe", "lamps", "LED strobe: 500 x 130 x 200, flat diffusion plane")
-    top, bottom = 100.0, -100.0
+    model = Model("led-strobe", "lamps", "LED strobe: 500 x 190 x 130, flat diffusion plane")
+    # Slim along the beam and taller across the face, the way LED strobe panels are built.
+    height, depth = 190.0, 130.0
+    half = height / 2
+    top, bottom = depth / 2, -depth / 2
     body = model.part("body", HOUSING_DARK)
-    body.box((500, 130, 200), (0, 0, 0))
+    body.box((500, height, depth), (0, 0, 0))
     housing = model.part("driver-housing", HOUSING_DARK, BASE, body)
-    housing.box((320, 90, 46), (0, 0, top + 20))
+    housing.box((320, height - 60, 40), (0, 0, top + 18))
     # Proud of the housing, not inside it. The flat white plane is the whole difference
     # between this and 3.14, and set flush into a solid body it is simply not there.
     diffuser = model.part("diffuser", WHITE_DIFFUSER, finish=DIFFUSER)
-    diffuser.box((464, 96, 18), (0, 0, bottom - 5))
+    diffuser.box((464, height - 34, 18), (0, 0, bottom - 5))
     bezel = model.part("lens-ring", RIM_ON_DARK)
     for side in (-1, 1):
-        bezel.box((14, 120, 30), (side * 239, 0, bottom - 5))
-        bezel.box((492, 14, 30), (0, side * 54, bottom - 5))
+        bezel.box((14, height - 10, 30), (side * 239, 0, bottom - 5))
+        bezel.box((492, 14, 30), (0, side * (half - 11), bottom - 5))
     hang_from_bracket(model, bar_depth=70.0, arm_thickness=16.0)
     return model
 
@@ -1500,38 +1624,50 @@ def flood() -> Model:
     model = Model(
         "flood-asymmetric",
         "lamps",
-        "Asymmetric cyc flood: 400 x 260 x 210 trough with a 330 x 170 rectangular aperture",
+        "Asymmetric cyc flood: 400 x 360 x 140 trough with a 330 x 270 rectangular aperture",
     )
-    top, bottom = 105.0, -105.0
+    # A cyc light is a tall, shallow box: 140 along the beam, 360 high across the face.
+    height, depth = 360.0, 140.0
+    half = height / 2
+    top, bottom = depth / 2, -depth / 2
 
     body = model.part("body", HOUSING_BLACK)
-    body.box((400, 260, 210), (0, 0, 0))
-    body.box((416, 276, 18), (0, 0, top - 9))
+    body.box((400, height, depth), (0, 0, 0))
+    body.box((416, height + 16, 18), (0, 0, top - 9))
     # The trough is open at the bottom, so the walls are drawn rather than the solid box.
     for side in (-1, 1):
-        body.box((16, 260, 190), (side * 192, 0, -10))
-    body.box((400, 16, 190), (0, -122, -10))
+        body.box((16, height, depth - 20), (side * 192, 0, -10))
+    body.box((400, 16, depth - 20), (0, -(half - 8), -10))
     handle = model.part("handle", SILVER, BASE, body)
-    handle.strut(16, (-110, 130, top + 30), (110, 130, top + 30), segments=6)
+    handle.strut(16, (-110, half, top + 30), (110, half, top + 30), segments=6)
+    # The grip stands off the back on two legs; without them it floats beside the trough.
+    for side in (-1, 1):
+        handle.strut(16, (side * 110, half, top), (side * 110, half, top + 30), segments=6)
 
     # Asymmetric: the reflector is a shallow ramp, deep at the back and shallow at the front,
     # which is what throws the top of the cloth further than the bottom.
     reflector = model.part("reflector", REFLECTOR, BASE, body, finish=METAL)
+    pitch = (height - 80) / 5
     for step in range(6):
-        depth = 150.0 - step * 22.0
-        reflector.box((360, 34, 10), (0, -104 + step * 38, top - 30 - depth / 2), rotation=(-26, 0, 0))
+        drop = (depth - 60) * (1.0 - step * 0.15)
+        reflector.box(
+            (360, pitch * 0.9, 10),
+            (0, -(half - 26) + step * pitch, top - 20 - drop / 2),
+            rotation=(-26, 0, 0),
+        )
 
     burner = model.part("burner", LENS_CLEAR, BASE, body, finish=GLASS)
-    burner.cylinder(26, 300, (0, -52, top - 92), segments=12, rotation=(0, 90, 0))
+    burner.cylinder(26, 300, (0, -half * 0.55, bottom + depth * 0.36), segments=12, rotation=(0, 90, 0))
 
     # The aperture itself: a rectangle of diffusion across the mouth of the trough.
+    aperture, centre = height - 90, 18.0
     face = model.part("aperture", WHITE_DIFFUSER, finish=DIFFUSER)
-    face.box((330, 170, 12), (0, 14, bottom + 6))
+    face.box((330, aperture, 12), (0, centre, bottom + 6))
     lip = model.part("aperture-lip", GEL_FRAME)
-    lip.box((372, 12, 34), (0, 104, bottom + 17))
-    lip.box((372, 12, 34), (0, -76, bottom + 17))
+    lip.box((372, 12, 34), (0, centre + aperture / 2 + 5, bottom + 17))
+    lip.box((372, 12, 34), (0, centre - aperture / 2 - 5, bottom + 17))
     for side in (-1, 1):
-        lip.box((12, 192, 34), (side * 180, 14, bottom + 17))
+        lip.box((12, aperture + 22, 34), (side * 180, centre, bottom + 17))
 
     hang_from_bracket(model, bar_depth=110.0, arm_thickness=18.0)
     return model
@@ -1552,6 +1688,7 @@ def models() -> list[Model]:
     ]
     built.extend(par_cans())
     built.append(acl())
+    built.append(par_16())
     built.append(par_20())
     built.extend([led_par_pizza(), led_par_x_in_1(), flat_led_par()])
     built.extend(sunstrips())

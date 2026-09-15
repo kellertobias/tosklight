@@ -118,7 +118,18 @@ pub const BODY_CATALOGUE: &[BodyModel] = &[
     body("fresnel-barn-doors-2kw", "Fresnel 2 kW", BodyGroup::Fresnel),
     body("flood-asymmetric", "Asymmetric cyc flood", BodyGroup::Flood),
     body("acl-par-16", "ACL / PAR 16", BodyGroup::ParCan),
+    body("par-16", "PAR 16 birdie", BodyGroup::ParCan),
     body("par-20", "PAR 20 birdie", BodyGroup::ParCan),
+    body(
+        "par-56-short-nose-black",
+        "PAR 56 short nose, black",
+        BodyGroup::ParCan,
+    ),
+    body(
+        "par-56-short-nose-silver",
+        "PAR 56 short nose, silver",
+        BodyGroup::ParCan,
+    ),
     body("par-56-black", "PAR 56, black", BodyGroup::ParCan),
     body("par-56-silver", "PAR 56, silver", BodyGroup::ParCan),
     body(
@@ -147,6 +158,11 @@ pub const BODY_CATALOGUE: &[BodyModel] = &[
     body("blinder-2-cell", "Blinder, 2 cell", BodyGroup::Blinder),
     body("blinder-4-cell", "Blinder, 4 cell", BodyGroup::Blinder),
     body("blinder-8-cell", "Blinder, 8 cell", BodyGroup::Blinder),
+    body(
+        "blinder-8-cell-horizontal",
+        "Blinder 8 cell, horizontal",
+        BodyGroup::Blinder,
+    ),
     body("sunstrip", "Sunstrip, ten lamps", BodyGroup::Strip),
     body("sunstrip-20", "Sunstrip, twenty lamps", BodyGroup::Strip),
     body(
