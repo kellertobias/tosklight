@@ -1442,12 +1442,25 @@ describe("the Viz editor window", () => {
 		}
 	});
 
-	it("adds venue objects and picks a drawing tool from the CAD toolbar's icon buttons", async () => {
+	it("adds venue objects and picks a drawing tool from icon buttons in the CAD title", async () => {
 		renderApp();
 		fireEvent.click(await screen.findByRole("button", { name: "CAD" }));
-		const toolbar = await screen.findByRole("toolbar", { name: "CAD tools" });
+		const toolbar = await waitFor(() => {
+			const header = document_root()?.querySelector<HTMLElement>(
+				".cad-app > .ui-window-header",
+			);
+			if (!header?.querySelector('[aria-label="Add truss"]'))
+				throw new Error("CAD title tools were not rendered");
+			return header;
+		});
+		// No separate row under the title: the tools are the title's own buttons.
+		expect(screen.queryByRole("toolbar", { name: "CAD tools" })).not.toBeInTheDocument();
+		const named = (button: Element) =>
+			button.getAttribute("aria-label") ?? button.textContent ?? "";
 		const buttons = within(toolbar).getAllByRole("button");
-		expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+		expect(buttons.map(named)).toEqual([
+			"Undo",
+			"Redo",
 			"Add truss",
 			"Add stage element",
 			"Add curtain",
@@ -1458,15 +1471,16 @@ describe("the Viz editor window", () => {
 			"Place text",
 			"Measure",
 			"Erase",
+			"Print",
+			"Elements",
+			"Settings",
 		]);
-		// Icons only, in the title's own button chrome, under the title rather than in it.
-		for (const button of buttons) {
+		// Icons only; each names itself, and that name is the tooltip shown below it.
+		for (const button of buttons.slice(0, 12)) {
 			expect(button.textContent?.trim()).toBe("");
 			expect(button.querySelector("svg")).not.toBeNull();
 			expect(button).toHaveClass("is-icon-only");
 		}
-		expect(toolbar.querySelectorAll(".ui-window-action-group")).toHaveLength(2);
-		expect(toolbar.closest(".ui-window-header")).toBeNull();
 
 		fireEvent.click(within(toolbar).getByRole("button", { name: "Add truss" }));
 		const library = await screen.findByRole("dialog", { name: "Add fixture" });

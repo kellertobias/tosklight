@@ -375,8 +375,9 @@ which means the whole drawing.
 
 ## Drawings under the plan
 
-A plot is drawn over the venue, so the venue's own drawing can be placed under it. **Drawings** in
-the title bar opens the panel that holds them: **Add Drawing** takes a DXF or an SVG, reads it, and
+A plot is drawn over the venue, so the venue's own drawing can be placed under it. **Elements** in
+the CAD title opens a panel with two tabs, **Drawings** and **Objects**. On **Drawings**, **Add
+Drawing** takes a DXF or an SVG, reads it, and
 tells you what it found — what the file says its units are, how large the drawing is in metres, and
 how many lines it holds — before anything is placed. Nothing is written into the show until you
 press **Place Drawing**.
@@ -403,30 +404,43 @@ the walls are, and the lettering of somebody else's title block is not part of t
 not apply to drawings either, so a view cut to a slice of the rig still shows the venue it stands
 in.
 
+**Drawings** lists every placed drawing and every line, box, text and measurement drawn on a view,
+as a tree you arrange freely. **New folder** adds a folder — inside the selected folder, or at the top
+level — and **Rename** names it; **Delete folder** removes a folder and hands what it held to the folder
+around it, so no drawing is lost. Drag a row onto a folder to put it inside, or onto another row to put
+it before that row. Because the desk surface is touched rather than dragged, the same moves are
+buttons too: **↑** and **↓** move the selected row among its neighbours, and **⇤** takes it out of its
+folder. The arrangement is saved in the show and every Architect window follows it; a show saved
+before folders existed opens with every drawing at the top level. Select a placed drawing to set its
+**X**, **Y**, **Scale** and **Rotation** below the tree, or a drawn item to **Erase** it.
+
 Each print page carries its own switches for the drawings on its axis, beside the page's cut
 planes. A page prints every drawing of its axis unless you switch one off, which is also what a
 page saved before drawings could be placed does.
 
-## The CAD toolbar
+## The CAD title's tools
 
-The **CAD** screen has a toolbar under its title. Its buttons show icons only and are grouped like
-the title's own buttons.
+The **CAD** screen's own title holds its tools, as icon buttons grouped and divided like every other
+title's buttons. Rest the pointer on a button, or reach it with the keyboard, and its name appears in
+a tooltip just below it. From left to right:
 
-The first group adds venue objects from the fixture library:
+* **Undo** and **Redo** step back and forward through changes to the drawing.
+* The add group places venue objects from the fixture library:
+  * **Add truss** (a truss segment) opens the library on rigging, searched for trusses.
+  * **Add stage element** (a deck on a scissor lift) opens it on Venue objects, searched for stage
+    decks, stairs and railings.
+  * **Add curtain** (a drape on its rail) opens it on Venue objects, searched for curtains.
+  * **Add venue element** (a box) opens it on every object that is placed but not patched, such as
+    crowds and imported models.
+* The drawing group is what a press on a viewport does. **Select**, the arrow, selects and moves the
+  rig as before; the others draw on the view you use them in.
+* **Print** and **Elements** open their side panels, and **Settings** (⚙) the CAD settings.
 
-* **Add truss** (a truss segment) opens the library on rigging, searched for trusses.
-* **Add stage element** (a deck on a scissor lift) opens it on Venue objects, searched for stage
-  decks, stairs and railings.
-* **Add curtain** (a drape on its rail) opens it on Venue objects, searched for curtains.
-* **Add venue element** (a box) opens it on every object that is placed but not patched, such as
-  crowds and imported models.
+Choosing an object from an add button places it exactly as **+ Add fixture** on the **Venue** screen
+does, and the drawing shows it at once. Clear the search to choose anything else the filter offers.
 
-Choosing an object places it exactly as **+ Add fixture** on the **Venue** screen does, and the
-drawing shows it at once. Clear the search to choose anything else the filter offers.
-
-The second group is what a press on a viewport does. **Select**, the arrow, selects and moves the
-rig as before. The others draw on the view you use them in, and what you draw is saved in the show,
-shown in every Architect window, and printed on that view's plan pages:
+What the drawing tools draw is saved in the show, shown in every Architect window, and printed on that
+view's plan pages:
 
 * **Draw line**: click each point. Double-click or press Enter to finish an open line; click the
   first point again to close it.
@@ -440,6 +454,20 @@ shown in every Architect window, and printed on that view's plan pages:
 Escape drops a line, box or text still in progress; pressing it again returns to **Select**. The
 middle mouse button or Alt still pans while any tool is in hand. On a rotated top-down view, what
 you draw turns with the rig. Drawing is off while the print pages are open.
+
+The project paperwork printed on every page is no longer a CAD panel: set it under **Show
+information** on the **Show** screen.
+
+## Objects in the Elements panel
+
+**Objects**, the second tab of **Elements**, lists what the venue is built from apart from the lamps:
+**Venue items** — trusses, stage elements, curtains and the other generated objects — and **3D
+models**. Each row names the object, its ID, its kind and its size in metres. Its buttons add more:
+the same **Add truss**, **Add stage element**, **Add curtain** and **Add venue element** as the title,
+and **Import 3D model**, which places a GLB, glTF, 3MF or OBJ file as described below and selects it.
+Select a row to select the object in the views and set where it stands — **X**, **Y** and **Z** in
+metres — as if you had dragged it there. How large a placed model is drawn is its **Scale** in the
+**Venue** sheet.
 
 ## Place your own venue models
 

@@ -5,14 +5,13 @@ import { useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
 import { beginWindowDrag } from "../WindowChrome";
 import { CadTileViewBar } from "./CadTileViewBar";
-import { CadToolbar } from "./CadToolbar";
+import { CadElementsPanel } from "./CadElementsPanel";
+import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
 import { visibleEntities } from "./cutPlanes";
-import { CadProjectPanel } from "./CadProjectPanel";
 import { CadViewport } from "./CadViewport";
 import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
 import { cadSession } from "./session";
-import { CadUnderlayPanel } from "./CadUnderlayPanel";
 import { underlaysForView } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
 import { useCadPrintPages } from "./useCadPrintPages";
@@ -62,9 +61,19 @@ interface CadSettings {
  */
 const PANEL_TITLES = {
 	print: { title: "Prints", hint: "A4 pages" },
-	project: { title: "Meta", hint: "Printed on every page" },
-	drawings: { title: "Drawings", hint: "Placed under the plan" },
+	elements: { title: "Elements", hint: "Drawings and objects" },
 } as const;
+
+/** Paperwork before the document has been read; the Show screen edits the real one. */
+const NO_PAPERWORK = {
+	lightingDesigner: "",
+	showVersion: "",
+	venue: "",
+	contactEmail: "",
+	contactPhone: "",
+	project: "",
+	showDate: "",
+};
 
 /** The camera that fits the whole rig into one tile, or null when there is nothing to fit. */
 function fitTileCamera(
@@ -84,12 +93,12 @@ export function CadApp() {
 	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [preview, setPreview] = useState<CadTransformPreview | null>(null);
-	// Which print-side panel is open, and nothing when neither is. Print and Meta are two
-	// independent choices rather than a mode with a tab strip inside it, so each title button
-	// opens its own panel and closes it again when it is already the one showing.
-	const [printPanel, setPrintPanel] = useState<
-		"print" | "project" | "drawings" | null
-	>(null);
+	// Which side panel is open, and nothing when neither is. Print and Elements are two independent
+	// choices rather than a mode with a tab strip inside it, so each title button opens its own
+	// panel and closes it again when it is already the one showing.
+	const [printPanel, setPrintPanel] = useState<"print" | "elements" | null>(
+		null,
+	);
 	// Sheets belong to the Print panel; the others open the sidebar without papering the views.
 	const printMode = printPanel === "print";
 	const panelOpen = printPanel !== null;
@@ -101,18 +110,8 @@ export function CadApp() {
 	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
 		null,
 	);
-	const { annotations } = useCadTools();
+	const tools = useCadTools();
 	const underlayState = useCadUnderlays(documentInfo?.showId ?? null);
-	const [paperwork, setPaperwork] = useState({
-		lightingDesigner: "",
-		showVersion: "",
-		venue: "",
-		contactEmail: "",
-		contactPhone: "",
-		project: "",
-		showDate: "",
-	});
-	const [savingPaperwork, setSavingPaperwork] = useState(false);
 	const sceneRef = useRef<CadSceneSnapshot | null>(null);
 	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
 
@@ -185,19 +184,7 @@ export function CadApp() {
 		const refreshDocument = () =>
 			documentSession
 				.current()
-				.then((summary) => {
-					setDocumentInfo(summary);
-					if (summary)
-						setPaperwork({
-							lightingDesigner: summary.lightingDesigner,
-							showVersion: summary.showVersion,
-							venue: summary.venue,
-							contactEmail: summary.contactEmail,
-							contactPhone: summary.contactPhone,
-							project: summary.project,
-							showDate: summary.showDate,
-						});
-				})
+				.then(setDocumentInfo)
 				.catch((reason) => setError(String(reason)));
 		const refreshFocusedWindow = () => {
 			refreshDocument();
@@ -268,7 +255,7 @@ export function CadApp() {
 		}
 	}
 
-	function togglePrintPanel(panel: "print" | "project" | "drawings") {
+	function togglePrintPanel(panel: "print" | "elements") {
 		setPreview(null);
 		setPrintPanel((current) => (current === panel ? null : panel));
 	}
@@ -291,9 +278,9 @@ export function CadApp() {
 				buildCadPdf(
 					scene,
 					selected,
-					printInfo(documentInfo, paperwork),
+					printInfo(documentInfo, documentInfo ?? NO_PAPERWORK),
 					underlayState.underlays,
-					annotations,
+					tools.annotations,
 				),
 			);
 		} catch (reason) {
@@ -301,41 +288,6 @@ export function CadApp() {
 		} finally {
 			setExporting(false);
 		}
-	}
-
-	async function savePaperwork() {
-		setSavingPaperwork(true);
-		try {
-			const summary = await documentSession.savePaperwork(paperwork);
-			setDocumentInfo(summary);
-			setPaperwork({
-				lightingDesigner: summary.lightingDesigner,
-				showVersion: summary.showVersion,
-				venue: summary.venue,
-				contactEmail: summary.contactEmail,
-				contactPhone: summary.contactPhone,
-				project: summary.project,
-				showDate: summary.showDate,
-			});
-		} catch (reason) {
-			setError(String(reason));
-		} finally {
-			setSavingPaperwork(false);
-		}
-	}
-
-	function changePaperwork(
-		field:
-			| "lightingDesigner"
-			| "showVersion"
-			| "venue"
-			| "contactEmail"
-			| "contactPhone"
-			| "project"
-			| "showDate",
-		value: string,
-	) {
-		setPaperwork((current) => ({ ...current, [field]: value }));
 	}
 
 	async function history(direction: "undo" | "redo") {
@@ -369,25 +321,13 @@ export function CadApp() {
 					onPointerDown: beginWindowDrag,
 				}}
 				groups={[
-					{
-						// Editing the drawing and describing the print are two different jobs, so the
-						// title bar parts them: the boundary belongs right of Redo.
-						id: "cad-history",
-						actions: [
-							{
-								id: "undo",
-								label: "Undo",
-								disabled: !scene,
-								onPress: () => void history("undo"),
-							},
-							{
-								id: "redo",
-								label: "Redo",
-								disabled: !scene,
-								onPress: () => void history("redo"),
-							},
-						],
-					},
+					// Editing the drawing and describing the print are two different jobs, so the tool
+					// groups come first and the side panels after them.
+					...cadTitleGroups(tools, {
+						disabled: !scene,
+						onUndo: () => void history("undo"),
+						onRedo: () => void history("redo"),
+					}),
 					{
 						id: "cad-print",
 						actions: [
@@ -398,16 +338,10 @@ export function CadApp() {
 								onPress: () => togglePrintPanel("print"),
 							},
 							{
-								id: "drawings",
-								label: "Drawings",
-								active: printPanel === "drawings",
-								onPress: () => togglePrintPanel("drawings"),
-							},
-							{
-								id: "meta",
-								label: "Meta",
-								active: printPanel === "project",
-								onPress: () => togglePrintPanel("project"),
+								id: "elements",
+								label: "Elements",
+								active: printPanel === "elements",
+								onPress: () => togglePrintPanel("elements"),
 							},
 						],
 					},
@@ -415,7 +349,7 @@ export function CadApp() {
 				settings
 				onSettings={() => setSettingsOpen(true)}
 			/>
-			<CadToolbar />
+			<CadToolError tools={tools} />
 			{error ? <output className="cad-error">{error}</output> : null}
 			<div className={`cad-print-layout ${panelOpen ? "is-printing" : ""}`}>
 				<section className="cad-workspace">
@@ -445,7 +379,7 @@ export function CadApp() {
 							onAddPrintPage={printPageState.addPlanPage}
 							onSelectPrintPage={printPageState.select}
 							onChangePrintPage={printPageState.change}
-							documentInfo={printInfo(documentInfo, paperwork)}
+							documentInfo={printInfo(documentInfo, documentInfo ?? NO_PAPERWORK)}
 						/>
 					) : (
 						<div className="cad-loading">Loading the canonical rig…</div>
@@ -457,19 +391,16 @@ export function CadApp() {
 							<h2>{PANEL_TITLES[printPanel].title}</h2>
 							<span>{PANEL_TITLES[printPanel].hint}</span>
 						</header>
-						{printPanel === "drawings" ? (
-							<CadUnderlayPanel
-								state={underlayState}
+						{printPanel === "elements" && scene ? (
+							<CadElementsPanel
+								documentKey={documentInfo?.showId ?? null}
+								underlayState={underlayState}
+								tools={tools}
 								defaultView={activeTileView(layout, activeTileId)}
-							/>
-						) : null}
-						{printPanel === "project" ? (
-							<CadProjectPanel
-								paperwork={paperwork}
-								documentInfo={documentInfo}
-								saving={savingPaperwork}
-								onChange={changePaperwork}
-								onSave={() => void savePaperwork()}
+								entities={scene.entities}
+								selectedIds={scene.selectedIds}
+								onSelect={(ids) => select({ type: "replace", ids })}
+								onMove={(delta, ids) => void move(delta, ids, false)}
 							/>
 						) : null}
 						{printPanel === "print" ? (

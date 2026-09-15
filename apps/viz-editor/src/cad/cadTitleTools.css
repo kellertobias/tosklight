@@ -1,0 +1,43 @@
+/* The CAD title's icon buttons: a compact icon, and its name in a tooltip just below the button
+   while the pointer rests on it or keyboard focus is on it. The tooltip only repeats the button's
+   accessible name, so nothing an operator needs is hover-only. */
+.cad-app > .ui-window-header {
+	overflow: visible;
+}
+
+.cad-app > .ui-window-header .ui-button.is-icon-only {
+	position: relative;
+	width: 36px;
+	overflow: visible;
+}
+
+.cad-app > .ui-window-header .cad-tool-icon {
+	display: inline-flex;
+	width: 18px;
+	height: 18px;
+}
+
+.cad-tool-icon svg {
+	width: 100%;
+	height: 100%;
+	color: inherit;
+}
+
+.cad-app > .ui-window-header .ui-button.is-icon-only[aria-label]:is(:hover, :focus-visible)::after {
+	content: attr(aria-label);
+	position: absolute;
+	z-index: 80;
+	top: calc(100% + 6px);
+	left: 50%;
+	padding: 3px 7px;
+	border: 1px solid var(--border-strong, #34404c);
+	border-radius: 3px;
+	background: #05070a;
+	color: #edf1f5;
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.2;
+	white-space: nowrap;
+	pointer-events: none;
+	transform: translateX(-50%);
+}

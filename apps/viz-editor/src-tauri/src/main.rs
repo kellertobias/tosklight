@@ -12,6 +12,7 @@ mod contract;
 mod demo;
 mod discovery;
 mod dmx_input;
+mod drawing_tree;
 mod local_api;
 mod mcp;
 mod model_import;
@@ -254,6 +255,8 @@ fn main() {
             annotation::cad_annotations,
             annotation::save_cad_annotation,
             annotation::delete_cad_annotation,
+            drawing_tree::cad_drawing_tree,
+            drawing_tree::save_cad_drawing_tree,
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,

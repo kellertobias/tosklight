@@ -69,7 +69,7 @@ Cross 1 swaps each local pair of arrows. Cross 2 swaps the complete left and rig
 
 ### Drawing
 
-`select`, `polyline`, `box`, `text`, `measure`, and `erase` — the Architect CAD screen's drawing tools. Polyline and box mark their vertices with small squares; measure is a dimension line with arrowheads between two extension lines.
+`select`, `polyline`, `box`, `text`, `measure`, `erase`, `undo`, and `redo` — the Architect CAD screen's drawing tools. Polyline and box mark their vertices with small squares; measure is a dimension line with arrowheads between two extension lines.
 
 ### Functionality
 

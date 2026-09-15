@@ -65,6 +65,17 @@ const nativeWindow = vi.hoisted(() => ({
 const workspace = new Map<string, string>();
 
 vi.mock("./session", () => ({ cadSession: mocks }));
+// The Elements panel reads the drawing arrangement straight from the show.
+vi.mock("@tauri-apps/api/core", () => ({
+	invoke: vi.fn((command: string) =>
+		command === "cad_drawing_tree"
+			? Promise.resolve({ folders: [], items: {} })
+			: Promise.reject(new Error(`unexpected command ${command}`)),
+	),
+}));
+vi.mock("@tauri-apps/api/event", () => ({
+	listen: vi.fn(() => Promise.resolve(() => undefined)),
+}));
 vi.mock("../document/session", () => ({ documentSession: documentMocks }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
 	save: vi.fn().mockResolvedValue("/tmp/rig-plan.pdf"),
@@ -221,21 +232,23 @@ describe("the CAD planning screen", () => {
 		const header = title.closest(".ui-window-header");
 		if (!header)
 			throw new Error("CAD title was not rendered in a window header");
+		const named = (button: Element) =>
+			button.getAttribute("aria-label") ?? button.textContent ?? "";
 		expect(
-			within(header as HTMLElement)
-				.getAllByRole("button")
-				.map((button) => button.textContent),
-		).toEqual(["Undo", "Redo", "Print", "Drawings", "Meta", "⚙"]);
-		// The group boundary — and so the divider — belongs right of Redo, not after Meta.
+			within(header as HTMLElement).getAllByRole("button").map(named),
+		).toEqual(["Undo", "Redo", "Print", "Elements", "Settings"]);
+		// Undo and Redo are icons that name themselves, like the other title tools.
+		for (const name of ["Undo", "Redo"]) {
+			const button = within(header as HTMLElement).getByRole("button", { name });
+			expect(button.textContent?.trim()).toBe("");
+			expect(button.querySelector("svg")).not.toBeNull();
+		}
+		// The group boundary — and so the divider — belongs right of Redo; Meta is gone.
 		expect(
 			[...(header as HTMLElement).querySelectorAll(".ui-window-action-group")]
-				.map((group) =>
-					[...group.querySelectorAll("button")]
-						.map((button) => button.textContent)
-						.join(" "),
-				)
+				.map((group) => [...group.querySelectorAll("button")].map(named).join(" "))
 				.filter((labels) => labels.length > 0),
-		).toEqual(["Undo Redo", "Print Drawings Meta", "⚙"]);
+		).toEqual(["Undo Redo", "Print Elements", "Settings"]);
 		expect(
 			screen.getByRole("button", {
 				name: "Rotate top-down view 90 degrees counterclockwise",
@@ -287,84 +300,40 @@ describe("the CAD planning screen", () => {
 		);
 	});
 
-	it("opens print pages and meta from their own window title buttons", async () => {
+	it("opens print pages and elements from their own window title buttons", async () => {
 		render(
 			<ModalProvider>
 				<CadApp />
 			</ModalProvider>,
 		);
 		await screen.findByTestId("cad-canvas");
+		expect(screen.queryByRole("button", { name: "Meta" })).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Print" }));
-
-		// Print first: the paperwork must not be taking room from the page list. "Add New Page"
-		// is a toolbar control and stays put, so the sidebar's own Export button is the tell.
 		expect(screen.getByRole("button", { name: "Export to PDF" })).toBeVisible();
-		expect(
-			screen.queryByRole("textbox", { name: "Lighting designer" }),
-		).not.toBeInTheDocument();
 
-		// Meta is its own title button, not a tab that appears once Print is on.
-		fireEvent.click(screen.getByRole("button", { name: "Meta" }));
-		expect(
-			screen.getByRole("textbox", { name: "Lighting designer" }),
-		).toBeVisible();
-		// ...and the page list is not competing for the same shallow window.
+		// Elements is its own title button, with Drawings and Objects as its tabs.
+		fireEvent.click(screen.getByRole("button", { name: "Elements" }));
 		expect(
 			screen.queryByRole("button", { name: "Export to PDF" }),
 		).not.toBeInTheDocument();
+		expect(
+			screen.getAllByRole("tab").map((tab) => tab.textContent),
+		).toEqual(["Drawings", "Objects"]);
+		expect(await screen.findByRole("button", { name: "New folder" })).toBeVisible();
+		expect(screen.getByRole("button", { name: "Add Drawing" })).toBeVisible();
 
-		fireEvent.click(screen.getByRole("button", { name: "Print" }));
-		expect(screen.getByRole("button", { name: "Export to PDF" })).toBeVisible();
+		fireEvent.click(screen.getByRole("tab", { name: "Objects" }));
+		expect(screen.getByRole("region", { name: "Venue items" })).toBeVisible();
+		expect(screen.getByRole("region", { name: "3D models" })).toBeVisible();
+		expect(screen.getByRole("button", { name: "Import 3D model" })).toBeVisible();
+		// The rig's lamps are not venue objects.
+		expect(screen.queryByText("Profile Stage 1")).not.toBeInTheDocument();
 
 		// Pressing the open panel's own button closes it again.
-		fireEvent.click(screen.getByRole("button", { name: "Print" }));
+		fireEvent.click(screen.getByRole("button", { name: "Elements" }));
 		expect(
 			screen.queryByRole("complementary", { name: "Print pages" }),
 		).not.toBeInTheDocument();
-	});
-
-	it("keeps the CAD screen mounted while editing and saving project information", async () => {
-		render(
-			<ModalProvider>
-				<CadApp />
-			</ModalProvider>,
-		);
-		await screen.findByTestId("cad-canvas");
-		// Meta opens straight from the window title, without going through Print first.
-		fireEvent.click(screen.getByRole("button", { name: "Meta" }));
-
-		const lightingDesigner = screen.getByRole("textbox", {
-			name: "Lighting designer",
-		});
-		const showVersion = screen.getByRole("textbox", { name: "Show version" });
-		fireEvent.change(lightingDesigner, { target: { value: "T" } });
-		fireEvent.change(showVersion, { target: { value: "v" } });
-
-		expect(lightingDesigner).toHaveValue("T");
-		expect(showVersion).toHaveValue("v");
-		expect(screen.getByTestId("cad-canvas")).toBeInTheDocument();
-		expect(
-			screen.getByRole("complementary", { name: "Print pages" }),
-		).toBeInTheDocument();
-
-		fireEvent.change(lightingDesigner, {
-			target: { value: "Tobias Keller" },
-		});
-		fireEvent.change(showVersion, { target: { value: "1.2" } });
-		fireEvent.click(screen.getByRole("button", { name: "Save project info" }));
-
-		await waitFor(() =>
-			expect(documentMocks.savePaperwork).toHaveBeenCalledWith({
-				lightingDesigner: "Tobias Keller",
-				showVersion: "1.2",
-				venue: "",
-				contactEmail: "",
-				contactPhone: "",
-				project: "",
-				showDate: "",
-			}),
-		);
-		expect(screen.getByTestId("cad-canvas")).toBeInTheDocument();
 	});
 
 	it("fits automatically when the view changes and rotates only top down", async () => {

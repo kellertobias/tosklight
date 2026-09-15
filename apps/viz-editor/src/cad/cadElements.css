@@ -1,0 +1,133 @@
+/* The Elements panel: its Drawings and Objects tabs, the drawings tree, and the objects list. */
+.cad-elements-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-height: 0;
+}
+
+.cad-elements-tabs {
+	flex: none;
+	height: 34px;
+}
+
+.cad-drawing-tree,
+.cad-elements-objects {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-height: 0;
+}
+
+.cad-drawing-tree-actions,
+.cad-elements-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.cad-drawing-tree-actions > .ui-button,
+.cad-elements-actions > .ui-button {
+	min-height: 36px;
+	font-size: 12px;
+}
+
+.cad-drawing-tree-list,
+.cad-drawing-tree-list ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.cad-drawing-tree-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 36px;
+	padding-right: 8px;
+	border-radius: 3px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.cad-drawing-tree-row.is-selected {
+	background: rgb(5 209 250 / 16%);
+	outline: 1px solid rgb(5 209 250 / 55%);
+}
+
+.cad-drawing-tree-disclosure {
+	flex: none;
+	width: 28px;
+	min-height: 28px;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-size: 14px;
+}
+
+.cad-drawing-tree-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cad-drawing-tree-detail {
+	margin-left: auto;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.cad-elements-group {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.cad-elements-group h3 {
+	margin: 4px 0 0;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-secondary, #98a4b3);
+}
+
+.cad-elements-group p,
+.cad-elements-status {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+}
+
+.cad-elements-object {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	min-height: 44px;
+	padding: 6px 8px;
+	border: 1px solid var(--border-subtle, #1d2530);
+	border-radius: 3px;
+	background: none;
+	color: inherit;
+	text-align: left;
+}
+
+.cad-elements-object.is-selected {
+	border-color: rgb(5 209 250 / 70%);
+	background: rgb(5 209 250 / 12%);
+}
+
+.cad-elements-object small,
+.cad-elements-selected small {
+	color: var(--text-secondary, #98a4b3);
+	font-size: 11px;
+}
+
+.cad-elements-selected {
+	display: grid;
+	gap: 6px;
+	padding: 8px;
+	border: 1px solid var(--border-subtle, #1d2530);
+	border-radius: 3px;
+}

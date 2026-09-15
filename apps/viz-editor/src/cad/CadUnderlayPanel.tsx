@@ -189,9 +189,15 @@ function UnderlayRow({
 export function CadUnderlayPanel({
 	state,
 	defaultView,
+	only,
 }: {
 	state: CadUnderlays;
 	defaultView: CadViewDirection;
+	/**
+	 * Where a tree lists the drawings, the panel edits only the one chosen there: its ID, or null
+	 * when none is. Absent, the panel lists every drawing itself.
+	 */
+	only?: string | null;
 }) {
 	const [pending, setPending] = useState<{
 		path: string;
@@ -223,6 +229,11 @@ export function CadUnderlayPanel({
 		setPending(null);
 	}
 
+	const listed =
+		only === undefined
+			? state.underlays
+			: state.underlays.filter((underlay) => underlay.id === only);
+
 	return (
 		<div className="cad-underlay-panel">
 			<Button
@@ -245,8 +256,8 @@ export function CadUnderlayPanel({
 				/>
 			) : null}
 			<div className="cad-underlay-list">
-				{state.underlays.length ? (
-					state.underlays.map((underlay) => (
+				{listed.length ? (
+					listed.map((underlay) => (
 						<UnderlayRow
 							key={underlay.id}
 							underlay={underlay}
@@ -255,11 +266,11 @@ export function CadUnderlayPanel({
 							onRemove={() => void state.remove(underlay.id)}
 						/>
 					))
-				) : (
+				) : only === undefined ? (
 					<p>
 						Place a DXF or SVG of the venue and the plan is drawn under the rig.
 					</p>
-				)}
+				) : null}
 			</div>
 		</div>
 	);

@@ -1878,37 +1878,6 @@ body {
 	font-size: 12px;
 }
 
-/* What the operator adds to the venue and draws with, one row of title-style icon buttons under
-   the title. */
-.cad-toolbar {
-	position: relative;
-	display: flex;
-	flex: none;
-	height: 36px;
-	min-height: 36px;
-	border-bottom: 1px solid var(--border-subtle, #1d2530);
-	background: #11161b;
-}
-
-.cad-toolbar .ui-button.is-icon-only {
-	width: 44px;
-	height: 100%;
-	min-height: 100%;
-	border-radius: 0;
-}
-
-.cad-tool-icon {
-	display: inline-flex;
-	width: 22px;
-	height: 22px;
-}
-
-.cad-tool-icon svg {
-	width: 100%;
-	height: 100%;
-	color: inherit;
-}
-
 .cad-viewport.is-drawing .cad-canvas {
 	cursor: crosshair;
 }
