@@ -5,67 +5,12 @@
  * and a transport is not needed to do it.
  */
 
-import {
-	type PatchBackend,
-	type PatchedFixture,
-	UnsupportedByProduct,
-} from "./backend";
+import { type PatchBackend, UnsupportedByProduct } from "./backend";
+import { mediaTools } from "./mediaTools";
+import { appearanceWithGel, fixtureNumber, gel, type Tool } from "./toolSchema";
+import { addFixture, addFixtureSchema, listFixtures, venueTools } from "./venueTools";
 
-export interface Tool {
-	name: string;
-	description: string;
-	inputSchema: {
-		type: "object";
-		properties: Record<string, unknown>;
-		required?: string[];
-	};
-	run(desk: PatchBackend, input: Record<string, any>): Promise<unknown>;
-}
-
-const fixtureNumber = {
-	type: "number",
-	description: "The fixture number an operator would say out loud.",
-};
-
-/** A gel, in the two shapes the patch accepts. */
-const gel = {
-	type: "object",
-	description:
-		"Open white when omitted. A built-in gel names a catalog entry; a custom gel carries its own sRGB colour.",
-	properties: {
-		catalog_id: { type: "string" },
-		entry_id: { type: "string" },
-		name: { type: "string" },
-		color_srgb: {
-			type: "string",
-			description: "`#rrggbb`, for a custom gel.",
-		},
-	},
-};
-
-function appearanceWithGel(
-	fixture: PatchedFixture,
-	input: Record<string, any>,
-): Record<string, unknown> {
-	const appearance = {
-		...((fixture.installed_appearance as Record<string, unknown>) ?? {}),
-	};
-	if (input.gel) {
-		appearance.gel = input.gel.catalog_id
-			? {
-					type: "built_in",
-					catalog_id: input.gel.catalog_id,
-					entry_id: input.gel.entry_id,
-				}
-			: {
-					type: "custom",
-					name: input.gel.name ?? "Custom",
-					color_srgb: input.gel.color_srgb,
-					note: null,
-				};
-	}
-	return appearance;
-}
+export type { Tool } from "./toolSchema";
 
 /** One past the last layer's order, so a new layer lands at the end rather than on top of one. */
 async function nextLayerOrder(desk: PatchBackend): Promise<number> {
@@ -73,7 +18,7 @@ async function nextLayerOrder(desk: PatchBackend): Promise<number> {
 	return layers.reduce((highest, layer) => Math.max(highest, layer.order), -1) + 1;
 }
 
-export const tools: Tool[] = [
+const patchTools: Tool[] = [
 	{
 		name: "search_fixture_library",
 		description:
@@ -112,6 +57,9 @@ export const tools: Tool[] = [
 				profile_revision: profile.revision,
 				manufacturer: profile.manufacturer,
 				name: profile.name,
+				patch_policy: profile.patch_policy ?? null,
+				venue_kind:
+					(profile.scenery as { kind?: string } | undefined)?.kind ?? null,
 				modes: ((profile.modes as Array<Record<string, unknown>>) ?? []).map(
 					(mode) => ({
 						mode_id: mode.id,
@@ -127,101 +75,16 @@ export const tools: Tool[] = [
 	{
 		name: "list_fixtures",
 		description:
-			"Every fixture in the show, with the fields these tools can change.",
+			"Every fixture and Venue object in the show, with the fields these tools can change. A Venue object reports its kind, size in metres, colour, chain ends and model scale.",
 		inputSchema: { type: "object", properties: {} },
-		async run(desk) {
-			const { fixtures } = await desk.patch();
-			return fixtures.map((fixture) => ({
-				fixture_number: fixture.fixture_number,
-				name: fixture.name,
-				note: fixture.note ?? null,
-				layer_id: fixture.layer_id,
-				location: fixture.location,
-				rotation: fixture.rotation,
-				bracket_angle: fixture.bracket_angle,
-				shaper_angle: fixture.shaper_angle,
-				invert_pan: fixture.invert_pan,
-				invert_tilt: fixture.invert_tilt,
-				position_master: fixture.position_master ?? null,
-				split_patches: fixture.split_patches,
-				multipatch: (fixture.multipatch as unknown[])?.length ?? 0,
-			}));
-		},
+		run: (desk) => listFixtures(desk),
 	},
 	{
 		name: "add_fixture",
 		description:
-			"Add a fixture to the show, with its address, placement and gel.",
-		inputSchema: {
-			type: "object",
-			properties: {
-				profile_id: { type: "string" },
-				profile_revision: { type: "number" },
-				mode_id: { type: "string" },
-				fixture_number: fixtureNumber,
-				name: { type: "string" },
-				note: { type: "string" },
-				layer_id: { type: "string", description: "Defaults to `default`." },
-				universe: { type: "number" },
-				address: { type: "number" },
-				x: { type: "number", description: "Millimetres across the stage." },
-				y: { type: "number", description: "Millimetres upstage." },
-				z: { type: "number", description: "Millimetres up." },
-				rotation_x: { type: "number" },
-				rotation_y: { type: "number" },
-				rotation_z: { type: "number" },
-				gel,
-			},
-			required: [
-				"profile_id",
-				"profile_revision",
-				"mode_id",
-				"fixture_number",
-				"name",
-			],
-		},
-		async run(desk, input) {
-			const snapshot = await desk.patch();
-			const fixture = {
-				fixture_id: crypto.randomUUID(),
-				fixture_number: input.fixture_number,
-				virtual_fixture_number: null,
-				name: input.name,
-				note: input.note ?? null,
-				profile_id: input.profile_id,
-				profile_revision: input.profile_revision,
-				mode_id: input.mode_id,
-				split_patches: [
-					{
-						split: 1,
-						universe: input.universe ?? null,
-						address: input.address ?? null,
-					},
-				],
-				layer_id: input.layer_id ?? "default",
-				direct_control: null,
-				location: {
-					x: input.x ?? 0,
-					y: input.y ?? 0,
-					z: input.z ?? 0,
-				},
-				rotation: {
-					x: input.rotation_x ?? 0,
-					y: input.rotation_y ?? 0,
-					z: input.rotation_z ?? 0,
-				},
-				multipatch: [],
-				move_in_black_enabled: false,
-				move_in_black_delay_millis: 0,
-				highlight_overrides: [],
-			} as unknown as PatchedFixture;
-			if (input.gel) {
-				(fixture as Record<string, unknown>).installed_appearance =
-					appearanceWithGel(fixture, input);
-			}
-			await desk.putFixtures(snapshot.patch_revision, [fixture]);
-			return { fixture_number: input.fixture_number, added: true };
-		},
+			"Add a fixture or a Venue object (curtain, truss, riser, chain, railing…) to the show. Name the profile by profile_name — its newest revision and first mode unless told otherwise — or by the ids search_fixture_library returns. A visual-only Venue object gets the next free 0.N number and no DMX address; a patchable fixture the next free fixture number when none is given.",
+		inputSchema: addFixtureSchema,
+		run: (desk, input) => addFixture(desk, input),
 	},
 	{
 		name: "remove_fixture",
@@ -435,7 +298,7 @@ export const tools: Tool[] = [
 			properties: {
 				fixture_number: fixtureNumber,
 				master_fixture_number: {
-					type: "number",
+					...fixtureNumber,
 					description: "The 3D Point's fixture number. Omit to unslave.",
 				},
 			},
@@ -572,3 +435,5 @@ export const tools: Tool[] = [
 		},
 	},
 ];
+
+export const tools: Tool[] = [...patchTools, ...venueTools, ...mediaTools];

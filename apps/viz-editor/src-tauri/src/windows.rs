@@ -13,6 +13,8 @@ use tauri::{Emitter, EventTarget, Manager};
 pub const DOCUMENT_CHANGED_EVENT: &str = "document-changed";
 /// One patch mutation, as the sheet's own transport delivers it.
 pub const PATCH_CHANGE_EVENT: &str = "patch-change";
+/// The media layout changed. Carries nothing: a listening window reads the layout again.
+pub const MEDIA_LAYOUT_CHANGED_EVENT: &str = "media-layout-changed";
 
 /// Tell every window except the one that caused the change.
 ///

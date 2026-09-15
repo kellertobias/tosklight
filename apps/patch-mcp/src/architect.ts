@@ -15,11 +15,15 @@
  * editor the operator is running — and why a program that was not started by them cannot.
  */
 
-import type {
-	PatchBackend,
-	PatchLayer,
-	PatchSnapshot,
-	PatchedFixture,
+import {
+	type FixtureRef,
+	findFixture,
+	type MediaLayoutWire,
+	type MediaOutcomeWire,
+	type PatchBackend,
+	type PatchLayer,
+	type PatchSnapshot,
+	type PatchedFixture,
 } from "./backend";
 import { DeskError } from "./desk";
 
@@ -157,12 +161,10 @@ export class Architect implements PatchBackend {
 		return toSnake(snapshot) as PatchSnapshot;
 	}
 
-	async fixture(number: number) {
+	async fixture(ref: FixtureRef) {
 		const snapshot = await this.patch();
-		const fixture = snapshot.fixtures.find(
-			(candidate) => candidate.fixture_number === number,
-		);
-		if (!fixture) throw new DeskError(`no fixture numbered ${number}`);
+		const fixture = findFixture(snapshot, ref);
+		if (!fixture) throw new DeskError(`no fixture numbered ${ref}`);
 		return { snapshot, fixture };
 	}
 
@@ -184,10 +186,10 @@ export class Architect implements PatchBackend {
 	}
 
 	async editFixture(
-		number: number,
+		ref: FixtureRef,
 		change: (fixture: PatchedFixture) => PatchedFixture,
 	): Promise<PatchedFixture> {
-		const { snapshot, fixture } = await this.fixture(number);
+		const { snapshot, fixture } = await this.fixture(ref);
 		const edited = change(structuredClone(fixture));
 		await this.putFixtures(snapshot.patch_revision, [edited]);
 		return edited;
@@ -233,6 +235,29 @@ export class Architect implements PatchBackend {
 
 	// No saveLayer: the Architect has no route that names or reorders a layer. Leaving it out is
 	// what lets the tool say so plainly instead of failing somewhere in an HTTP call.
+
+	/**
+	 * The media layout, left in the editor's own spelling.
+	 *
+	 * Unlike the patch it is not respelled here: a surface section's kind fields are stored in
+	 * snake_case beside camelCase ones, so a blanket conversion would send back keys the editor does
+	 * not read. The media tools own that mapping instead.
+	 */
+	mediaLayout(): Promise<MediaLayoutWire> {
+		return this.request<MediaLayoutWire>("GET", "/api/v2/media/layout");
+	}
+
+	applyMediaIntent(
+		kind: string,
+		id: string,
+		intent: Record<string, unknown>,
+	): Promise<MediaOutcomeWire> {
+		return this.request<MediaOutcomeWire>(
+			"POST",
+			`/api/v2/media/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/update`,
+			intent,
+		);
+	}
 }
 
 /** Where the Architect writes its handle, per platform. */

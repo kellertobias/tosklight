@@ -13,6 +13,8 @@ import type {
 
 /** One window's document was replaced or renamed; every other window reloads. */
 export const DOCUMENT_CHANGED_EVENT = "document-changed";
+/** The media layout changed in another window or through the local editing API. */
+export const MEDIA_LAYOUT_CHANGED_EVENT = "media-layout-changed";
 /** One window patched the rig; every other window's patch sheet applies the delta. */
 export const PATCH_CHANGE_EVENT = "patch-change";
 
@@ -521,6 +523,13 @@ export const documentSession = {
 	/** The rig as it currently stands, for surfaces outside the sheet that need the fixtures. */
 	patchSnapshot: () => invoke<PatchSnapshot>("patch_snapshot"),
 	mediaLayout: () => invoke<MediaLayoutSnapshot>("media_layout"),
+	/**
+	 * Another window, or a program using the local editing API, changed the media layout.
+	 *
+	 * Carries nothing: a window that hears it reads the layout again.
+	 */
+	onMediaLayoutChanged: (handler: () => void): Promise<UnlistenFn> =>
+		listen<unknown>(MEDIA_LAYOUT_CHANGED_EVENT, () => handler()),
 	inspectCitpServer: (host: string, port: number) =>
 		invoke<
 			Array<{

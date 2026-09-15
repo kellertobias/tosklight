@@ -15,7 +15,8 @@ profiles and PAR cans, moving washes and profiles, beams, strobes, scanners, Sun
 hazer, three lasers, six cold-spark fountains, four flame jets and two media servers — as an
 ordinary show of your own. The venue includes its trusses, stage decks, curtains, a dancing crowd
 and a disco ball over the dancefloor. One media server feeds the two projection screens at the
-stage sides; the other feeds the three LED panels around the Sunstrips.
+stage sides and the header screen flown above the back truss; the other feeds the three LED panels
+around the Sunstrips.
 
 On a new installation the editor opens a writable copy of this Demo Show immediately. The Desk's
 **Default Stage Show**, the editor copy, **Open Demo Show**, and Visualizer demo mode all come from
@@ -66,6 +67,57 @@ copied from a desk or opened from the demo keep their own. Press it again whenev
 
 **MCP** in the Show screen's title opens the MCP integration in its place; press it again to return
 to the file actions.
+
+### MCP tools
+
+The MCP server edits the show that is open in the Architect, the same way its own windows do. Each
+edit is written against the revision it read, so a change you make in a window at the same time is
+refused, not overwritten. Fixtures are named by the number an operator says out loud; a Venue object
+is named by its `0.N` number (pass `"0.10"` as text, because the number 0.10 is 0.1). Anything
+outside what the Architect allows — a size outside a profile's range, a DMX address on a Venue
+object, a source for a server that is not there — is refused with the reason.
+
+**Fixtures and Venue objects**
+
+* `search_fixture_library` — profiles by manufacturer, name or mode, with their ids, modes, patch
+  policy and Venue kind.
+* `list_fixtures` — every fixture and Venue object, with placement, patch and layer. A Venue object
+  also reports its kind, its size in metres, which measurements can be set, its colour, a chain's
+  ends and its model scale.
+* `add_fixture` — adds a fixture or a Venue object. Name the profile by `profile_name`, plus
+  `manufacturer` when two makers use the name, for its newest revision and first mode; or pass the
+  ids `search_fixture_library` returns. A Venue object gets the next free `0.N` number and no DMX
+  address. `size_metres`, `colour`, `chain_mode` (or `chain_top` and `chain_bottom`) and
+  `model_scale` set its size and look as it is placed.
+* `remove_fixture`, `set_fixture_placement`, `set_fixture_shaper_and_gel`, `set_fixture_identity`,
+  `set_fixture_patch`, `add_multipatch` and `assign_position_master` — edit one fixture. Nothing
+  else about the fixture changes.
+* `set_venue_size` — sets a Venue object's width, height or depth in metres. Only the measurements
+  its profile makes adjustable can be set, within the profile's minimum and maximum, as in the patch
+  sheet.
+* `set_venue_options` — sets a Venue object's colour as `#RRGGBB`; `null` gives it its kind's own
+  material back. On a chain it also sets the ends: `chain_mode` is `plain`, `motor_top` or
+  `motor_bottom`, or set `chain_top` and `chain_bottom` one at a time.
+* `set_model_scale` — draws an object at 0.01 to 100 times the size it was built at; `null` draws it
+  at its built size.
+* `list_layers`, `remove_layer` and `set_fixture_layer` — list the patch layers, empty one onto
+  another, and move one fixture. `save_layer` works on a desk only; the Architect has no route that
+  creates or renames a layer.
+
+**Media layout**
+
+These tools edit the Media workspace's layout. A desk has no media layout, so there they are
+refused.
+
+* `get_media_layout` — media servers, sources, LED module types, surfaces with their sections, and
+  projectors, each with its id and revision.
+* `put_media_server`, `put_media_source`, `put_led_module_type`, `put_media_surface` and
+  `put_media_projector` — create an object when no `id` is given, or update the one named. An
+  update changes only the fields given. A surface's `sections` replace its sections. Each section
+  is a `projection_screen`, `tv` or `led` section, and an LED section without `occupied_cells`
+  fills every cell of its grid.
+* `delete_media_object` — deletes one object by `kind` and `id`. Deleting a server removes its
+  sources; a surface that showed one keeps its fallback image.
 
 ## Rename the show
 
@@ -506,6 +558,10 @@ a tooltip just below it. From left to right:
   * **Add stage element** (a deck on a scissor lift) opens the same dialog: choose **Regular feet**,
     **Scissor feet** or **Stairs**, then the platform size.
   * **Add curtain** (a drape on its rail) places a parametric curtain at once, with no dialog.
+  * **Add primitive** (a box, a ball and a cylinder) opens the same dialog on **Box**, **Cylinder**
+    and **Ball**; choosing one places it at once. Each fills the width, height and depth set in
+    **Info** — a cylinder stands upright, so its height is its length — and takes the **Colour** set
+    for it, neutral grey until you choose one.
   * **Add venue element** (a box) opens the fixture library on every object that is placed but not
     patched, such as crowds and imported models.
 
@@ -618,7 +674,7 @@ information** on the **Show** screen.
 **Objects**, the second tab of **Elements**, lists what the venue is built from apart from the lamps:
 **Venue items** — trusses, stage elements, curtains and the other generated objects — and **3D
 models**. Each row names the object, its ID, its kind and its size in metres. **+** adds more: the same
-truss, stage element, curtain and venue element as the title, and **Import 3D model…**, which places a
+truss, stage element, curtain, primitive and venue element as the title, and **Import 3D model…**, which places a
 GLB, glTF, 3MF or OBJ file as described below and selects it. Select a row to select the object in the
 views; **Info** below then sets its position, rotation and scale.
 

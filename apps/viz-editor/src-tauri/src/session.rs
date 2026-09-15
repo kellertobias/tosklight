@@ -510,7 +510,18 @@ pub async fn discover_citp_servers() -> Result<Vec<light_media::DiscoveredCitpSe
 /// One revision-safe and replay-safe media object mutation.
 #[tauri::command]
 pub fn apply_media_intent(
+    app: tauri::AppHandle,
+    window: tauri::Window,
     session: tauri::State<'_, Session>,
+    intent: MediaObjectIntent,
+) -> Answer<MediaLayoutOutcome> {
+    apply_media_object_intent(&app, &session, Some(window.label()), intent)
+}
+
+/// The media layout edit itself, with no window to tell. Separate so it can be exercised without a
+/// running application.
+pub(crate) fn change_media_layout(
+    session: &Session,
     intent: MediaObjectIntent,
 ) -> Answer<MediaLayoutOutcome> {
     session.change(|document| {
@@ -518,6 +529,34 @@ pub fn apply_media_intent(
             .apply_media_intent(intent)
             .map_err(|error| error.to_string())
     })
+}
+
+/// One media layout edit, applied the same way whether a window or the local editing API asked.
+///
+/// Every other window hears that the layout moved and reads it again, so a server added by an
+/// external tool appears in an open Media workspace without reopening it. A call with no
+/// originating window — the local API — tells every window.
+pub(crate) fn apply_media_object_intent(
+    app: &tauri::AppHandle,
+    session: &Session,
+    origin: Option<&str>,
+    intent: MediaObjectIntent,
+) -> Answer<MediaLayoutOutcome> {
+    let outcome = change_media_layout(session, intent)?;
+    if outcome.changed {
+        match origin {
+            Some(origin) => crate::windows::broadcast(
+                app,
+                origin,
+                crate::windows::MEDIA_LAYOUT_CHANGED_EVENT,
+                (),
+            )?,
+            None => {
+                crate::windows::broadcast_all(app, crate::windows::MEDIA_LAYOUT_CHANGED_EVENT, ())?
+            }
+        }
+    }
+    Ok(outcome)
 }
 
 #[derive(Serialize)]

@@ -7,11 +7,13 @@
  * that in one place is what stops a tool quietly dropping a field it did not know about.
  */
 
-import type {
-	PatchBackend,
-	PatchLayer,
-	PatchSnapshot,
-	PatchedFixture,
+import {
+	type FixtureRef,
+	findFixture,
+	type PatchBackend,
+	type PatchLayer,
+	type PatchSnapshot,
+	type PatchedFixture,
 } from "./backend";
 
 export interface DeskOptions {
@@ -100,15 +102,13 @@ export class Desk implements PatchBackend {
 	 * Fixture numbers are what an operator says out loud, so they are what the tools take. The
 	 * internal id is never asked for and never has to be guessed at.
 	 */
-	async fixture(number: number): Promise<{
+	async fixture(ref: FixtureRef): Promise<{
 		snapshot: PatchSnapshot;
 		fixture: PatchedFixture;
 	}> {
 		const snapshot = await this.patch();
-		const fixture = snapshot.fixtures.find(
-			(candidate) => candidate.fixture_number === number,
-		);
-		if (!fixture) throw new DeskError(`no fixture numbered ${number}`);
+		const fixture = findFixture(snapshot, ref);
+		if (!fixture) throw new DeskError(`no fixture numbered ${ref}`);
 		return { snapshot, fixture };
 	}
 
@@ -138,10 +138,10 @@ export class Desk implements PatchBackend {
 	 * moved is refused by the desk rather than silently overwriting someone else's work.
 	 */
 	async editFixture(
-		number: number,
+		ref: FixtureRef,
 		change: (fixture: PatchedFixture) => PatchedFixture,
 	): Promise<PatchedFixture> {
-		const { snapshot, fixture } = await this.fixture(number);
+		const { snapshot, fixture } = await this.fixture(ref);
 		const edited = change(structuredClone(fixture));
 		await this.putFixtures(snapshot.patch_revision, [edited]);
 		return edited;

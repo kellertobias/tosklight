@@ -38,6 +38,9 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use tauri::Manager;
 use uuid::Uuid;
+use viz_document::{
+    MediaIntentAction, MediaLayoutOutcome, MediaLayoutSnapshot, MediaObject, MediaObjectIntent,
+};
 
 /// What a program needs to find and open this API.
 ///
@@ -115,7 +118,88 @@ fn router(state: ApiState) -> Router {
         .route("/api/v2/patch/fixtures", post(patch_fixtures))
         .route("/api/v2/fixture-library/profiles", get(library_profiles))
         .route("/api/v2/objects/{kind}", get(objects))
+        .route("/api/v2/media/layout", get(media_layout))
+        .route(
+            "/api/v2/media/objects/{kind}/{id}/update",
+            post(media_object_update),
+        )
         .with_state(state)
+}
+
+/// The whole media layout: servers, sources, LED module types, surfaces and projectors, each with
+/// its revision — the snapshot the Media workspace itself reads.
+async fn media_layout(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<MediaLayoutSnapshot>, ApiFailure> {
+    authorize(&state, &headers)?;
+    let session = state.app.state::<Session>();
+    session
+        .with(|document| document.media_layout().map_err(|error| error.to_string()))
+        .map(Json)
+        .map_err(ApiFailure::from)
+}
+
+/// One media object put or delete, applied through the function the Media workspace's own command
+/// uses, so validation, request replay and the window broadcast cannot differ between the two.
+///
+/// The body is the editor's existing `MediaObjectIntent`: a whole object guarded by the revision it
+/// was read at and a request identity a retry replays instead of re-applying. The path names the
+/// object the intent is about, and a body that is about another one is refused rather than guessed
+/// at.
+async fn media_object_update(
+    State(state): State<ApiState>,
+    axum::extract::Path((kind, id)): axum::extract::Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(intent): Json<MediaObjectIntent>,
+) -> Result<Json<MediaLayoutOutcome>, ApiFailure> {
+    authorize(&state, &headers)?;
+    check_media_target(&kind, id, &intent)?;
+    let session = state.app.state::<Session>();
+    crate::session::apply_media_object_intent(&state.app, &session, None, intent)
+        .map(Json)
+        .map_err(media_failure)
+}
+
+/// The kind and id an intent acts on.
+fn media_target(intent: &MediaObjectIntent) -> (&str, Uuid) {
+    match &intent.action {
+        MediaIntentAction::Delete { kind, id } => (kind.as_str(), *id),
+        MediaIntentAction::Put { object } => match object {
+            MediaObject::MediaFallbackAsset(body) => ("media_fallback_asset", body.id),
+            MediaObject::MediaServer(body) => ("media_server", body.id),
+            MediaObject::MediaSource(body) => ("media_source", body.id),
+            MediaObject::LedModuleType(body) => ("led_module_type", body.id),
+            MediaObject::MediaSurface(body) => ("media_surface", body.id),
+            MediaObject::MediaProjector(body) => ("media_projector", body.id),
+        },
+    }
+}
+
+fn check_media_target(kind: &str, id: Uuid, intent: &MediaObjectIntent) -> Result<(), ApiFailure> {
+    let (body_kind, body_id) = media_target(intent);
+    if body_kind == kind && body_id == id {
+        Ok(())
+    } else {
+        Err(ApiFailure(
+            StatusCode::BAD_REQUEST,
+            format!("the path names {kind} {id} but the body is about {body_kind} {body_id}"),
+        ))
+    }
+}
+
+/// A stale revision or a reused request identity is a conflict the caller resolves by reading
+/// again; anything else is a layout the editor refuses, and says why.
+fn media_failure(error: String) -> ApiFailure {
+    let status = if error.contains("revision conflict")
+        || error.contains("already used")
+        || error.contains("no document is open")
+    {
+        StatusCode::CONFLICT
+    } else {
+        StatusCode::UNPROCESSABLE_ENTITY
+    };
+    ApiFailure(status, error)
 }
 
 /// Names the product as well as the state, because a tool pointed at the wrong port should find
@@ -266,5 +350,93 @@ impl From<String> for ApiFailure {
 impl IntoResponse for ApiFailure {
     fn into_response(self) -> axum::response::Response {
         (self.0, Json(serde_json::json!({ "error": self.1 }))).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{check_media_target, media_failure};
+    use crate::session::{Session, change_media_layout};
+    use axum::http::StatusCode;
+    use std::path::PathBuf;
+    use uuid::Uuid;
+    use viz_document::{MediaObjectIntent, PlanningDocument};
+
+    fn open_session() -> (Session, PathBuf) {
+        let root = std::env::var_os("LIGHT_TMP_DIR").map_or_else(
+            || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/tmp"),
+            PathBuf::from,
+        );
+        let directory = root.join("viz-editor-local-api-tests");
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join(format!("media-{}.show", Uuid::new_v4()));
+        drop(PlanningDocument::create(&path, "Local API media").unwrap());
+        let session = Session::default();
+        session.open(&path).unwrap();
+        (session, path)
+    }
+
+    /// The body a program sends: the same camelCase intent the Media workspace invokes with.
+    fn intent(request: &str, expected: u64, action: serde_json::Value) -> MediaObjectIntent {
+        serde_json::from_value(serde_json::json!({
+            "requestId": request,
+            "expectedRevision": expected,
+            "action": action,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_program_puts_replays_validates_and_deletes_media_objects() {
+        let (session, path) = open_session();
+        let server = Uuid::new_v4();
+        let source = Uuid::new_v4();
+        let put_server = serde_json::json!({ "type": "put", "object": {
+            "kind": "media_server",
+            "body": { "id": server, "name": "Pixel", "citp": { "host": "10.0.0.5", "port": 4809 } },
+        }});
+
+        let outcome = change_media_layout(&session, intent("r1", 0, put_server.clone())).unwrap();
+        assert!(outcome.changed && !outcome.replayed);
+        assert_eq!(outcome.snapshot.servers.len(), 1);
+        // A retry of the same request is replayed, not applied a second time.
+        let replay = change_media_layout(&session, intent("r1", 0, put_server)).unwrap();
+        assert!(replay.replayed && !replay.changed);
+
+        // A source that names a server the layout does not have is refused with the reason.
+        let orphan = serde_json::json!({ "type": "put", "object": { "kind": "media_source", "body": {
+            "id": source, "serverId": Uuid::new_v4(), "advertisedSourceId": 1, "name": "Out 1",
+        }}});
+        let refused = change_media_layout(&session, intent("r2", 0, orphan)).unwrap_err();
+        assert!(refused.contains("missing server"), "{refused}");
+        assert_eq!(media_failure(refused).0, StatusCode::UNPROCESSABLE_ENTITY);
+
+        // A stale revision is a conflict the caller resolves by reading again.
+        let stale = serde_json::json!({ "type": "put", "object": {
+            "kind": "media_server", "body": { "id": server, "name": "Renamed" },
+        }});
+        let conflict = change_media_layout(&session, intent("r3", 0, stale)).unwrap_err();
+        assert_eq!(media_failure(conflict).0, StatusCode::CONFLICT);
+
+        let delete = serde_json::json!({ "type": "delete", "kind": "media_server", "id": server });
+        let deleted = change_media_layout(&session, intent("r4", 1, delete)).unwrap();
+        assert!(deleted.snapshot.servers.is_empty());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn the_path_must_name_the_object_the_body_is_about() {
+        let id = Uuid::new_v4();
+        let delete = intent(
+            "r",
+            1,
+            serde_json::json!({ "type": "delete", "kind": "media_surface", "id": id }),
+        );
+        assert!(check_media_target("media_surface", id, &delete).is_ok());
+        let refused = check_media_target("media_projector", id, &delete)
+            .err()
+            .unwrap();
+        assert_eq!(refused.0, StatusCode::BAD_REQUEST);
+        assert!(check_media_target("media_surface", Uuid::new_v4(), &delete).is_err());
     }
 }

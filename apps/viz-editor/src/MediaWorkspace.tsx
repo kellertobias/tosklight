@@ -22,16 +22,8 @@ import {
 	type VersionedMediaObject,
 } from "./document/session";
 import { Field, NumberInput, TransformEditor } from "./mediaFields";
+import { useMediaLayout } from "./useMediaLayout";
 import { beginWindowDrag } from "./WindowChrome";
-
-const EMPTY: MediaLayoutSnapshot = {
-	fallbackAssets: [],
-	servers: [],
-	sources: [],
-	ledModuleTypes: [],
-	surfaces: [],
-	projectors: [],
-};
 
 type WorkspaceTab = "servers" | "surfaces" | "modules" | "projectors";
 
@@ -76,17 +68,13 @@ export function MediaWorkspace({
 }: {
 	onError: (reason: unknown) => void;
 }) {
-	const [layout, setLayout] = useState(EMPTY);
+	const [layout, setLayout] = useMediaLayout(onError);
 	const [tab, setTab] = useState<WorkspaceTab>("servers");
 	const [selected, setSelected] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [addServerRequest, setAddServerRequest] = useState(0);
 	const [addressRequest, setAddressRequest] = useState(0);
 	const [serverToLink, setServerToLink] = useState<string | null>(null);
-
-	useEffect(() => {
-		documentSession.mediaLayout().then(setLayout).catch(onError);
-	}, [onError]);
 
 	const entries = useMemo(() => {
 		switch (tab) {
