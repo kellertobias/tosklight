@@ -664,18 +664,18 @@ function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {
 	if (entry.family === "led") {
 		const centers = [-3, -1, 1, 3];
 		const center = centers[Math.floor(index / 4)] ?? 0;
-		return { x: center + ((index % 4) - 1.5) * 0.2, y: 2.4, z: 0.25 };
+		return { x: center + ((index % 4) - 1.5) * 0.2, y: 2.4, z: 0.5 };
 	}
 	if (entry.roles.includes("Sunstrips"))
 		return {
-			x: -1.5 + Math.floor(index / 2),
+			x: -1.5 + Math.floor((entry.number - 501) / 2),
 			y: 4.15,
-			z: 1.7 + (index % 2) * 1.15,
+			z: 1.7 + ((entry.number - 501) % 2) * 1.15,
 		};
 	if (entry.roles.includes("Blinders"))
-		return { x: index ? 2 : -2, y: -3, z: 4 };
+		return { x: entry.number === 701 ? -2 : 2, y: -3, z: 4 };
 	if (entry.roles.includes("Hazers"))
-		return { x: index ? 3.5 : -3.5, y: 3.5, z: 0.2 };
+		return { x: entry.number === 801 ? -3.5 : 3.5, y: 3.5, z: 0.45 };
 	if (entry.name.startsWith("Fresnel")) {
 		const fresnelIndex = entry.number - 1;
 		return {
