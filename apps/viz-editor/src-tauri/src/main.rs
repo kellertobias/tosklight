@@ -80,12 +80,7 @@ fn opened_by_the_visualizer() -> bool {
 
 /// Where the shipped fixture packages live, so the fixture browser has something to offer.
 fn fixture_library_source(app: &tauri::App) -> Result<Option<FixtureLibrarySource>, String> {
-    let bundled = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|dir| dir.join("fixture-library"))
-        .filter(|path| path.is_dir());
+    let bundled = bundled_fixture_packages(app);
     if let Some(configured) = std::env::var_os("LIGHT_FIXTURE_LIBRARY") {
         let path = PathBuf::from(configured);
         return if path.is_dir() {
@@ -102,15 +97,39 @@ fn fixture_library_source(app: &tauri::App) -> Result<Option<FixtureLibrarySourc
     if let Some(path) = bundled {
         return Ok(Some(FixtureLibrarySource::Packages(path)));
     }
-    // Development: the desk's own runtime library, if this checkout has one.
+    // Development: the desk's own runtime library, if this checkout has one. The desk installs the
+    // checkout's packages only when it starts, so this editor installs them too; otherwise a part
+    // added to the library since the desk last ran is missing here.
     Ok(option_env!("LIGHT_RUNTIME_DATA_DIR")
         .map(PathBuf::from)
         .map(|dir| dir.join("fixtures.sqlite"))
         .filter(|path| path.exists())
         .map(|path| FixtureLibrarySource::Database {
             path,
-            bundled: None,
+            bundled: checkout_fixture_packages(),
         }))
+}
+
+/// The packages an installed bundle carries in its resources, or a development build beside its
+/// executable, where the resource directory does not look.
+fn bundled_fixture_packages(app: &tauri::App) -> Option<PathBuf> {
+    app.path()
+        .resource_dir()
+        .ok()
+        .map(|dir| dir.join("fixture-library"))
+        .into_iter()
+        .chain(
+            std::env::current_exe()
+                .ok()
+                .and_then(|executable| executable.parent().map(|dir| dir.join("fixture-library"))),
+        )
+        .find(|path| path.is_dir())
+}
+
+/// This checkout's own shipped packages, for a development build that patches from the desk library.
+fn checkout_fixture_packages() -> Option<PathBuf> {
+    Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../assets/fixture-library"))
+        .filter(|path| path.is_dir())
 }
 
 /// Install the packages this editor ships into a library it was pointed at.
