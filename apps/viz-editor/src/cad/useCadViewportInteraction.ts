@@ -35,6 +35,8 @@ interface Drag {
 	deltaMillimetres?: [number, number, number];
 	spread?: boolean;
 	hitId?: string;
+	/** The placement under the pointer: the fixture itself, or one of its multi-patch copies. */
+	hitEntityId?: string;
 	marquee?: boolean;
 }
 
@@ -61,6 +63,11 @@ export interface CadViewportContext {
 	editEnabled: boolean;
 	onCamera(camera: TileCamera): void;
 	onSelection(change: SelectionChange): void;
+	/**
+	 * Which placement a click picked. The selection names whole fixtures, so this is how a panel
+	 * that edits one copy of a multi-patched fixture knows which copy was meant.
+	 */
+	onFocusEntity?(entityId: string | null): void;
 	onPreview(preview: CadTransformPreview | null): void;
 	onMove(
 		deltaMillimetres: [number, number, number],
@@ -166,6 +173,7 @@ function beginDrag(
 		axis: "plane",
 		additive: event.shiftKey,
 		hitId: hit?.logicalFixtureId,
+		hitEntityId: hit?.id,
 		marquee: false,
 	};
 }
@@ -261,6 +269,7 @@ export function useCadViewportInteraction(
 		if (active?.type === "box") {
 			setSelectionBox(null);
 			active.last = [event.clientX, event.clientY];
+			if (!active.marquee) context.onFocusEntity?.(active.hitEntityId ?? null);
 			context.onSelection({
 				type: active.marquee
 					? active.additive

@@ -411,6 +411,70 @@ describe("the CAD planning screen", () => {
 		expect(workspace.get("tosklight:viz-editor:cad-sidebar-width:v1")).toBe("320");
 	});
 
+	it("edits one multi-patch copy in Info without moving the fixture or its other copies", async () => {
+		const copyId = "44444444-4444-4444-8444-444444444444";
+		const [original] = snapshot.entities;
+		mocks.snapshot.mockResolvedValue({
+			...snapshot,
+			entities: [
+				original,
+				{ ...original, id: copyId, dmxAddress: "2.1", positionMillimetres: [2000, 0, 4000] },
+			],
+		});
+		const copy = {
+			id: copyId,
+			name: "",
+			splitPatches: [],
+			location: { x: 2000, y: 0, z: 4000 },
+			rotation: { x: 0, y: 0, z: 0 },
+		};
+		documentMocks.patchSnapshot.mockResolvedValue({
+			fixtures: [
+				{
+					fixtureId,
+					name: "Profile Stage 1",
+					location: { x: 0, y: 0, z: 4000 },
+					rotation: { x: 0, y: 0, z: 0 },
+					multipatch: [copy],
+				},
+			],
+		});
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const info = await screen.findByRole("region", { name: "Info" });
+		const chooser = within(info).getByRole("combobox", { name: "Copy" });
+		expect(within(chooser).getAllByRole("option").map((option) => option.textContent)).toEqual([
+			"Original · 1.1",
+			"Copy 1 · 2.1",
+		]);
+		// Notes belong to the fixture, so they say they change every copy.
+		expect(within(info).getByLabelText("Notes (all copies)")).toBeInTheDocument();
+
+		fireEvent.change(chooser, { target: { value: copyId } });
+		await waitFor(() =>
+			expect(within(info).getByLabelText("Position X")).toHaveValue("2"),
+		);
+		const x = within(info).getByLabelText("Position X");
+		fireEvent.change(x, { target: { value: "3.5" } });
+		fireEvent.keyDown(x, { key: "Enter" });
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		const written = transportMocks.patchFixtures.mock.calls[0][2].fixtures[0];
+		expect(written.location).toEqual({ x: 0, y: 0, z: 4000 });
+		expect(written.multipatch).toEqual([{ ...copy, location: { x: 3500, y: 0, z: 4000 } }]);
+
+		// A copy's name is its own; the fixture keeps its name.
+		const name = within(info).getByLabelText("Name");
+		fireEvent.change(name, { target: { value: "Profile Stage 1 SR" } });
+		fireEvent.blur(name);
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(2));
+		const renamed = transportMocks.patchFixtures.mock.calls[1][2].fixtures[0];
+		expect(renamed.name).toBe("Profile Stage 1");
+		expect(renamed.multipatch[0].name).toBe("Profile Stage 1 SR");
+	});
+
 	it("fits automatically when the view changes and rotates only top down", async () => {
 		render(
 			<ModalProvider>

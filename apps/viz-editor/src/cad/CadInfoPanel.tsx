@@ -5,8 +5,12 @@
  * objects that can be drawn larger or smaller. Each change is written as soon as its field is left,
  * and the drawing redraws from the show like any other change, so the panel never holds a second copy
  * of the element.
+ *
+ * A multi-patched fixture stands in several places. Each copy has its own name, position and
+ * rotation, so Info edits the copy that was clicked — or the one chosen under **Copy** — and leaves
+ * the others where they are. Notes and scale belong to the fixture and so to every copy.
  */
-import type { PatchFixtureProjection } from "@tosklight/patch";
+import type { PatchFixtureProjection, PatchMultiPatch } from "@tosklight/patch";
 import { useEffect, useState } from "react";
 import { documentSession } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
@@ -21,16 +25,102 @@ export function supportsScale(entity: CadEntity): boolean {
 	return entity.kind === "venue" && entity.scenery?.kind !== "crowd";
 }
 
+type Placement = Pick<PatchMultiPatch, "name" | "location" | "rotation">;
+
+/** The fixture with one placement changed: its own when `copyId` is null, else that copy's. */
+export function withPlacement(
+	fixture: PatchFixtureProjection,
+	copyId: string | null,
+	change: Partial<Placement>,
+): PatchFixtureProjection {
+	if (!copyId) return { ...fixture, ...change };
+	return {
+		...fixture,
+		multipatch: fixture.multipatch.map((copy) =>
+			copy.id === copyId ? { ...copy, ...change } : copy,
+		),
+	};
+}
+
 const transport = new TauriPatchTransport();
+
+function PlacementChooser({
+	entity,
+	placements,
+	onChoose,
+}: {
+	entity: CadEntity;
+	placements: readonly CadEntity[];
+	onChoose(entityId: string): void;
+}) {
+	if (placements.length < 2) return null;
+	return (
+		<label className="cad-field">
+			<span>Copy</span>
+			<select
+				className="ui-input"
+				aria-label="Copy"
+				value={entity.id}
+				onChange={(event) => onChoose(event.currentTarget.value)}
+			>
+				{placements.map((placement, index) => (
+					<option key={placement.id} value={placement.id}>
+						{index === 0 ? "Original" : `Copy ${index}`} · {placement.dmxAddress}
+					</option>
+				))}
+			</select>
+		</label>
+	);
+}
+
+/** X, Y and Z of a position or rotation, each committed on its own. */
+function VectorFields({
+	label,
+	unit,
+	digits,
+	value,
+	show,
+	onCommit,
+}: {
+	label: string;
+	unit: string;
+	digits?: number;
+	value: Record<Axis, number>;
+	show(stored: number): number;
+	onCommit(axis: Axis, shown: number): void;
+}) {
+	return (
+		<div className="cad-info-vector" role="group" aria-label={label}>
+			<span>
+				{label} ({unit})
+			</span>
+			{AXES.map((axis) => (
+				<CommitNumber
+					key={axis}
+					label={axis.toUpperCase()}
+					ariaLabel={`${label} ${axis.toUpperCase()}`}
+					digits={digits}
+					value={show(value[axis])}
+					onCommit={(next) => onCommit(axis, next)}
+				/>
+			))}
+		</div>
+	);
+}
 
 export function CadInfoPanel({
 	entity,
+	placements = [],
+	onChoosePlacement,
 	selectionCount,
 	sceneRevision,
 	onError,
 }: {
-	/** The one selected element, or null when several or none are. */
+	/** The one selected placement, or null when several fixtures or none are selected. */
 	entity: CadEntity | null;
+	/** Every placement of the selected fixture: the fixture first, then its multi-patch copies. */
+	placements?: readonly CadEntity[];
+	onChoosePlacement?(entityId: string): void;
 	selectionCount: number;
 	/** Bumped whenever the drawing changes, so the panel reads the element again. */
 	sceneRevision: number;
@@ -69,9 +159,9 @@ export function CadInfoPanel({
 			</section>
 		);
 
-	async function write(change: Partial<PatchFixtureProjection>) {
+	async function write(next: PatchFixtureProjection) {
 		if (!fixture) return;
-		const next = { ...fixture, ...change };
+		const before = fixture;
 		setFixture(next);
 		try {
 			await transport.patchFixtures("", 0, {
@@ -80,34 +170,46 @@ export function CadInfoPanel({
 				removeFixtureIds: [],
 			});
 		} catch (reason) {
-			setFixture(fixture);
+			setFixture(before);
 			onError(reason);
 		}
 	}
 
-	const position = fixture?.location ?? {
+	const copyId = entity.id === entity.logicalFixtureId ? null : entity.id;
+	const copy = copyId ? fixture?.multipatch?.find((each) => each.id === copyId) : undefined;
+	const placement: Placement | null = fixture ? (copyId ? (copy ?? null) : fixture) : null;
+	const place = (change: Partial<Placement>) =>
+		fixture && placement && void write(withPlacement(fixture, copyId, change));
+	const position = placement?.location ?? {
 		x: entity.positionMillimetres[0],
 		y: entity.positionMillimetres[1],
 		z: entity.positionMillimetres[2],
 	};
-	const rotation = fixture?.rotation ?? {
+	const rotation = placement?.rotation ?? {
 		x: entity.rotationDegrees[0],
 		y: entity.rotationDegrees[1],
 		z: entity.rotationDegrees[2],
 	};
-	const editable = Boolean(fixture);
+	const shared = placements.length > 1 ? " (all copies)" : "";
+	// A copy with no name of its own is shown under the fixture's name.
+	const name = copyId ? copy?.name.trim() || (fixture?.name ?? entity.name) : (fixture?.name ?? entity.name);
 
 	return (
 		<section className="cad-info" aria-label="Info">
 			<h3>Info</h3>
-			<fieldset disabled={!editable}>
+			<PlacementChooser
+				entity={entity}
+				placements={placements}
+				onChoose={(id) => onChoosePlacement?.(id)}
+			/>
+			<fieldset disabled={!placement}>
 				<CommitText
 					label="Name"
-					value={fixture?.name ?? entity.name}
-					onCommit={(name) => name.trim() && void write({ name: name.trim() })}
+					value={name}
+					onCommit={(next) => next.trim() && place({ name: next.trim() })}
 				/>
 				<CommitTextArea
-					label="Notes"
+					label={`Notes${shared}`}
 					value={note}
 					onCommit={(next) => {
 						setNote(next);
@@ -116,42 +218,33 @@ export function CadInfoPanel({
 							.catch(onError);
 					}}
 				/>
-				<div className="cad-info-vector" role="group" aria-label="Position">
-					<span>Position (m)</span>
-					{AXES.map((axis) => (
-						<CommitNumber
-							key={axis}
-							label={axis.toUpperCase()}
-							ariaLabel={`Position ${axis.toUpperCase()}`}
-							value={position[axis] / 1000}
-							onCommit={(metres) =>
-								void write({
-									location: { ...position, [axis]: Math.round(metres * 1000) },
-								})
-							}
-						/>
-					))}
-				</div>
-				<div className="cad-info-vector" role="group" aria-label="Rotation">
-					<span>Rotation (°)</span>
-					{AXES.map((axis) => (
-						<CommitNumber
-							key={axis}
-							label={axis.toUpperCase()}
-							ariaLabel={`Rotation ${axis.toUpperCase()}`}
-							digits={1}
-							value={rotation[axis]}
-							onCommit={(degrees) => void write({ rotation: { ...rotation, [axis]: degrees } })}
-						/>
-					))}
-				</div>
+				<VectorFields
+					label="Position"
+					unit="m"
+					value={position}
+					show={(millimetres) => millimetres / 1000}
+					onCommit={(axis, metres) =>
+						place({ location: { ...position, [axis]: Math.round(metres * 1000) } })
+					}
+				/>
+				<VectorFields
+					label="Rotation"
+					unit="°"
+					digits={1}
+					value={rotation}
+					show={(degrees) => degrees}
+					onCommit={(axis, degrees) => place({ rotation: { ...rotation, [axis]: degrees } })}
+				/>
 				{supportsScale(entity) ? (
 					<CommitNumber
-						label="Scale"
+						label={`Scale${shared}`}
+						ariaLabel="Scale"
 						value={fixture?.modelScale ?? 1}
 						min={0.01}
 						max={100}
-						onCommit={(scale) => void write({ modelScale: scale === 1 ? null : scale })}
+						onCommit={(scale) =>
+							fixture && void write({ ...fixture, modelScale: scale === 1 ? null : scale })
+						}
 					/>
 				) : null}
 			</fieldset>

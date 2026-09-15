@@ -211,6 +211,8 @@ export function CadApp() {
 		localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 	}, [settings]);
 
+	const [focusedEntityId, setFocusedEntityId] = useState<string | null>(null);
+
 	function select(change: SelectionChange) {
 		selectionQueue.current = selectionQueue.current.then(async () => {
 			const current = sceneRef.current;
@@ -374,6 +376,7 @@ export function CadApp() {
 							activeTileId={activeTileId}
 							onActivate={setActiveTileId}
 							onSelection={select}
+							onFocusEntity={setFocusedEntityId}
 							onPreview={setPreview}
 							onMove={move}
 							onFit={fit}
@@ -401,6 +404,8 @@ export function CadApp() {
 					exporting={exporting}
 					onExport={() => void exportPdf()}
 					onSelect={(ids) => select({ type: "replace", ids })}
+					focusedEntityId={focusedEntityId}
+					onFocusEntity={setFocusedEntityId}
 					onError={(reason) => setError(String(reason))}
 				/>
 			</div>
@@ -521,6 +526,7 @@ export interface CadTileProps {
 	activeTileId: string | null;
 	onActivate(id: string): void;
 	onSelection(change: SelectionChange): void;
+	onFocusEntity?(entityId: string | null): void;
 	onPreview(preview: CadTransformPreview | null): void;
 	onMove(
 		delta: [number, number, number],
@@ -662,6 +668,7 @@ function CadTile(props: CadTileProps) {
 					props.onTile(node.id, (tile) => ({ ...tile, camera }))
 				}
 				onSelection={props.onSelection}
+				onFocusEntity={props.onFocusEntity}
 				onPreview={props.onPreview}
 				onMove={props.onMove}
 				editEnabled={!props.printMode}

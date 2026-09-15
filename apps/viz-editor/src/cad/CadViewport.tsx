@@ -53,6 +53,8 @@ interface CadViewportProps {
 	documentInfo?: CadPrintDocumentInfo;
 	onCamera(camera: TileCamera): void;
 	onSelection(change: SelectionChange): void;
+	/** Which placement a click picked, so a multi-patch copy can be edited on its own. */
+	onFocusEntity?(entityId: string | null): void;
 	onPreview(preview: CadTransformPreview | null): void;
 	onMove(
 		deltaMillimetres: [number, number, number],
@@ -178,6 +180,7 @@ export function CadViewport({
 	documentInfo,
 	onCamera,
 	onSelection,
+	onFocusEntity,
 	onPreview,
 	onMove,
 }: CadViewportProps) {
@@ -213,6 +216,7 @@ export function CadViewport({
 			editEnabled,
 			onCamera,
 			onSelection,
+			onFocusEntity,
 			onPreview,
 			onMove,
 		});

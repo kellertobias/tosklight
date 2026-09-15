@@ -509,6 +509,12 @@ other than crowd areas, **Scale**. The fields take typing from the keyboard: a c
 you press Enter or leave the field, and Escape puts back what was there. With several elements
 selected, Info says how many.
 
+A multi-patched fixture stands in the plan once for each copy. Click a copy and Info edits that copy
+alone: its name, position and rotation change, and the fixture and its other copies stay where they
+are. **Copy** at the top of Info switches between the original and each copy, named by its DMX
+address. Notes and scale belong to the fixture, so their labels say **(all copies)**. Dragging in the
+plan still moves the fixture with all its copies.
+
 ## The grid
 
 A pale grey grid is drawn over every view. Its lines are one step of the scale indicator apart, so

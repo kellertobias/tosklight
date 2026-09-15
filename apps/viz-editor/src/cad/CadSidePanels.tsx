@@ -148,15 +148,19 @@ function PlansPanel({
 	);
 }
 
-/** The element the selection names, when it names exactly one. */
-function selectedEntity(scene: CadSceneSnapshot | null): CadEntity | null {
-	if (!scene || scene.selectedIds.length !== 1) return null;
+/** Every placement of the one fixture the selection names: the fixture itself first, then its copies. */
+function selectedPlacements(scene: CadSceneSnapshot | null): CadEntity[] {
+	if (!scene || scene.selectedIds.length !== 1) return [];
 	const id = scene.selectedIds[0];
-	return (
-		scene.entities.find((entity) => entity.logicalFixtureId === id) ??
-		scene.entities.find((entity) => entity.id === id) ??
-		null
-	);
+	const seen = new Set<string>();
+	return scene.entities
+		.filter((entity) => entity.logicalFixtureId === id && !seen.has(entity.id) && seen.add(entity.id))
+		.sort((a, b) => Number(b.id === id) - Number(a.id === id));
+}
+
+/** The placement Info edits: the copy last clicked when it belongs to the selection, else the fixture. */
+function selectedEntity(placements: readonly CadEntity[], focusedId: string | null): CadEntity | null {
+	return placements.find((entity) => entity.id === focusedId) ?? placements[0] ?? null;
 }
 
 const addGroup = (label: string, items: TitleDropdownItem[]): TitleActionGroup => ({
@@ -183,6 +187,8 @@ export function CadSidePanels({
 	exporting,
 	onExport,
 	onSelect,
+	focusedEntityId,
+	onFocusEntity,
 	onError,
 }: {
 	panel: CadPanel;
@@ -195,6 +201,9 @@ export function CadSidePanels({
 	exporting: boolean;
 	onExport(): void;
 	onSelect(ids: string[]): void;
+	/** The placement last clicked, which picks the copy Info edits. */
+	focusedEntityId: string | null;
+	onFocusEntity(entityId: string | null): void;
 	onError(reason: unknown): void;
 }) {
 	const [width, setWidth] = useStoredWidth();
@@ -205,6 +214,7 @@ export function CadSidePanels({
 		importModel: 0,
 	});
 	const selectionCount = scene?.selectedIds.length ?? 0;
+	const placements = selectedPlacements(scene);
 	if (!panel && selectionCount === 0) return null;
 
 	const request = (kind: keyof ElementsRequests) =>
@@ -282,7 +292,9 @@ export function CadSidePanels({
 			{selectionCount > 0 && scene ? (
 				<div className="cad-sidebar-info">
 					<CadInfoPanel
-						entity={selectedEntity(scene)}
+						entity={selectedEntity(placements, focusedEntityId)}
+						placements={placements}
+						onChoosePlacement={onFocusEntity}
 						selectionCount={selectionCount}
 						sceneRevision={scene.sceneRevision}
 						onError={onError}
