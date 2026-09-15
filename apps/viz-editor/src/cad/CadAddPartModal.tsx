@@ -10,6 +10,7 @@ import {
 	type FixtureDefinition,
 	newPatchFixtureCandidate,
 	usePatch,
+	usePatchView,
 } from "@tosklight/patch";
 import { Button, ModalFrame } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
@@ -77,6 +78,9 @@ export function CadAddPartModal({
 	onPlaced(fixtureId: string): void;
 	onError(reason: unknown): void;
 }) {
+	// The patch is read and written only while a view holds it open, so the dialog holds it for as
+	// long as the CAD screen is up: a curtain is placed the moment its button is pressed.
+	usePatchView();
 	const patch = usePatch();
 	const [open, setOpen] = useState<ChosenKind | null>(null);
 	const [group, setGroup] = useState<VenuePartGroup | null>(null);
@@ -87,6 +91,10 @@ export function CadAddPartModal({
 		const definition = definitionForProfile(definitions, part.profileId);
 		if (!definition) {
 			onError(`${part.label} is not in this machine's fixture library.`);
+			return;
+		}
+		if (patch.status !== "ready") {
+			onError(`The patch is still loading; add the ${part.label} again in a moment.`);
 			return;
 		}
 		setPlacing(true);
@@ -103,7 +111,10 @@ export function CadAddPartModal({
 				layer_id: "default",
 			});
 			const placed = await patch.patchFixtures([candidate]);
-			if (!placed?.length) throw new Error(`The show did not take the ${part.label}.`);
+			if (!placed?.length)
+				throw new Error(
+					`The show refused the ${part.label}${patch.error ? `: ${patch.error}` : "."}`,
+				);
 			setOpen(null);
 			setGroup(null);
 			onPlaced(placed[0].fixtureId);

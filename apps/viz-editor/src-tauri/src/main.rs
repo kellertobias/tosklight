@@ -34,7 +34,11 @@ use tauri::Manager;
 
 enum FixtureLibrarySource {
     Packages(PathBuf),
-    Database(PathBuf),
+    /// An existing library, such as the desk's own, with the packages this editor ships beside it.
+    Database {
+        path: PathBuf,
+        bundled: Option<PathBuf>,
+    },
 }
 
 /// Where to serve the open document for a visualizer that launched this window.
@@ -76,12 +80,18 @@ fn opened_by_the_visualizer() -> bool {
 
 /// Where the shipped fixture packages live, so the fixture browser has something to offer.
 fn fixture_library_source(app: &tauri::App) -> Result<Option<FixtureLibrarySource>, String> {
+    let bundled = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|dir| dir.join("fixture-library"))
+        .filter(|path| path.is_dir());
     if let Some(configured) = std::env::var_os("LIGHT_FIXTURE_LIBRARY") {
         let path = PathBuf::from(configured);
         return if path.is_dir() {
             Ok(Some(FixtureLibrarySource::Packages(path)))
         } else if path.is_file() {
-            Ok(Some(FixtureLibrarySource::Database(path)))
+            Ok(Some(FixtureLibrarySource::Database { path, bundled }))
         } else {
             Err(format!(
                 "LIGHT_FIXTURE_LIBRARY names {}, which is neither a fixture-package directory nor a fixture database",
@@ -89,12 +99,7 @@ fn fixture_library_source(app: &tauri::App) -> Result<Option<FixtureLibrarySourc
             ))
         };
     }
-    let bundled = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|dir| dir.join("fixture-library"));
-    if let Some(path) = bundled.filter(|path| path.exists()) {
+    if let Some(path) = bundled {
         return Ok(Some(FixtureLibrarySource::Packages(path)));
     }
     // Development: the desk's own runtime library, if this checkout has one.
@@ -102,7 +107,28 @@ fn fixture_library_source(app: &tauri::App) -> Result<Option<FixtureLibrarySourc
         .map(PathBuf::from)
         .map(|dir| dir.join("fixtures.sqlite"))
         .filter(|path| path.exists())
-        .map(FixtureLibrarySource::Database))
+        .map(|path| FixtureLibrarySource::Database {
+            path,
+            bundled: None,
+        }))
+}
+
+/// Install the packages this editor ships into a library it was pointed at.
+///
+/// The desk installs its shipped packages when it starts, so a desk library lags an editor built
+/// later with new ones until the desk runs again. Installing them here is what the desk would do: an
+/// unchanged package is skipped and an operator's own revision is kept. A library that cannot take
+/// them is still opened, only without the new packages.
+fn install_bundled_packages(database: &std::path::Path, bundled: &std::path::Path) {
+    let installed = light_fixture::FixtureLibrary::open(database)
+        .and_then(|library| library.load_fixture_package_directory(bundled));
+    if let Err(error) = installed {
+        eprintln!(
+            "could not install the shipped fixture packages from {} into {}: {error}",
+            bundled.display(),
+            database.display()
+        );
+    }
 }
 
 fn prepare_fixture_library(
@@ -113,7 +139,12 @@ fn prepare_fixture_library(
         return Ok(None);
     };
     match source {
-        FixtureLibrarySource::Database(path) => Ok(Some(path)),
+        FixtureLibrarySource::Database { path, bundled } => {
+            if let Some(bundled) = bundled {
+                install_bundled_packages(&path, &bundled);
+            }
+            Ok(Some(path))
+        }
         FixtureLibrarySource::Packages(packages) => {
             std::fs::create_dir_all(app_data).map_err(|error| {
                 format!(
@@ -415,6 +446,46 @@ mod tests {
                 .len(),
             profiles.len()
         );
+    }
+
+    /// A desk library the editor is pointed at gets the packages this editor ships, so a part added
+    /// to the fixture library after the desk last ran can still be placed.
+    #[test]
+    fn an_existing_library_receives_the_packages_this_editor_ships() {
+        let root = workspace("existing-database");
+        let database = root.join("desk/fixtures.sqlite");
+        std::fs::create_dir_all(database.parent().unwrap()).unwrap();
+        drop(light_fixture::FixtureLibrary::open(&database).expect("desk library"));
+        let bundled = root.join("Resources/fixture-library");
+        std::fs::create_dir_all(&bundled).unwrap();
+        let corner = "venue--four-point-truss-corner-2-way.toskfixture";
+        std::fs::copy(shipped_packages().join(corner), bundled.join(corner)).unwrap();
+        let has_corner = || {
+            light_fixture::FixtureLibrary::open(&database)
+                .unwrap()
+                .profiles()
+                .unwrap()
+                .iter()
+                .any(|profile| profile.name == "Four-Point Truss Corner 2-Way")
+        };
+        assert!(!has_corner(), "the desk has not installed the new part");
+
+        let source = || FixtureLibrarySource::Database {
+            path: database.clone(),
+            bundled: Some(bundled.clone()),
+        };
+        let opened = prepare_fixture_library(Some(source()), &root.join("Application Support"))
+            .expect("existing library")
+            .expect("fixture database path");
+
+        assert_eq!(
+            opened, database,
+            "the desk's library stays the one the editor uses"
+        );
+        assert!(has_corner(), "the shipped part is now in the library");
+        prepare_fixture_library(Some(source()), &root.join("Application Support"))
+            .expect("repeat startup is idempotent");
+        assert!(has_corner());
     }
 
     #[test]
