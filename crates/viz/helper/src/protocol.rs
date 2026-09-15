@@ -12,9 +12,11 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Picture gained a beam-guideline field. That changes the postcard shape, so a stale helper
-// must be refused instead of accepting a message it cannot decode.
-pub const PROTOCOL_MAJOR: u16 = 3;
+// Plan artwork gained drawn edge lines alongside its filled silhouette. That changes the postcard
+// shape of a scene, so a stale helper must be refused instead of accepting a message it cannot
+// decode.
+pub const PROTOCOL_MAJOR: u16 = 4;
+// Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 1;
 
 /// How a rendered pane gets from the helper to the desk.

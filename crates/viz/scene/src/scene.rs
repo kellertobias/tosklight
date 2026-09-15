@@ -311,6 +311,23 @@ pub struct PlanArtwork {
     pub vertices: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub indices: Vec<u32>,
+    /// Visible edges as pairs of segment ends, in the same local space as `vertices`. Only a line
+    /// drawing has them; a filled projection leaves this empty.
+    #[serde(default)]
+    pub lines: Vec<[f32; 3]>,
+}
+
+impl PlanArtwork {
+    /// The local direction the artwork faces: towards whoever looks at it from its view.
+    pub fn facing(&self) -> Vec3 {
+        match self.view {
+            crate::ProjectionView::Top => Vec3::Y,
+            crate::ProjectionView::Left => Vec3::NEG_X,
+            crate::ProjectionView::Right => Vec3::X,
+            crate::ProjectionView::Front => Vec3::Z,
+            crate::ProjectionView::Back => Vec3::NEG_Z,
+        }
+    }
 }
 
 impl FixtureInstance {

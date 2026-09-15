@@ -265,6 +265,7 @@ fn plot_prefers_packaged_artwork_before_renderer_fallbacks() {
             vertices: vec![[-0.1, 0.0, -0.1], [0.1, 0.0, -0.1], [0.0, 0.0, 0.1]],
             normals: vec![[0.0, 1.0, 0.0]; 3],
             indices: vec![0, 1, 2],
+            lines: Vec::new(),
         }],
         fixture_plan: vec![viz_scene::FixturePlanBinding {
             fixture_id,
@@ -311,6 +312,47 @@ fn plot_prefers_packaged_artwork_before_renderer_fallbacks() {
             .any(|(kind, _)| *kind == MeshKind::Cube)
     );
     assert_ne!(unknown.lines.len(), generic_lines);
+}
+
+#[test]
+fn a_line_drawing_is_plotted_as_its_silhouette_with_its_edges_in_front() {
+    let fixture = fixture();
+    let fixture_id = fixture.fixture_id;
+    let position = fixture.position;
+    let scene = Scene {
+        fixtures: vec![fixture],
+        plan_artwork: vec![viz_scene::PlanArtwork {
+            view: viz_scene::ProjectionView::Top,
+            vertices: vec![[-0.1, 0.0, -0.1], [0.1, 0.0, -0.1], [0.0, 0.0, 0.1]],
+            normals: vec![[0.0, 1.0, 0.0]; 3],
+            indices: vec![0, 1, 2],
+            lines: vec![[-0.1, 0.0, -0.1], [0.1, 0.0, -0.1]],
+        }],
+        fixture_plan: vec![viz_scene::FixturePlanBinding {
+            fixture_id,
+            artwork: [Some(0), None, None, None, None],
+            fallback: viz_scene::PlanFallback::GenericType,
+        }],
+        ..Scene::default()
+    };
+    let style = FrameStyle {
+        plot: true,
+        projection_view: viz_scene::ProjectionView::Top,
+        ..FrameStyle::default()
+    };
+
+    let frame = build(&scene, &SceneValues::default(), &style);
+
+    assert!(
+        frame
+            .meshes
+            .iter()
+            .any(|(kind, instances)| *kind == MeshKind::PlanArtwork(0) && instances.len() == 1)
+    );
+    assert_eq!(frame.lines.len(), 2, "one segment, and no fallback symbol");
+    let start = Vec3::from(frame.lines[0].position);
+    assert!((start.x - (position.x - 0.1)).abs() < 1e-5);
+    assert!(start.y > position.y, "edges stand in front of the fill");
 }
 
 #[test]

@@ -95,15 +95,7 @@ pub(super) fn push_plot(
         let (fixture_position, fixture_orientation) = fixture.placed_by(points);
         let transform = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
         if let Some(artwork) = packaged {
-            frame
-                .mesh(MeshKind::PlanArtwork(artwork))
-                .push(MeshInstance::new(
-                    transform,
-                    Vec3::ZERO,
-                    1.0,
-                    ink * 0.72,
-                    0.0,
-                ));
+            push_plan_artwork(frame, scene, artwork, transform, ink, opacity);
             if selected {
                 push_symbol(frame, fixture, style, style.selected_ink, 1.0);
             }
@@ -151,6 +143,48 @@ pub(super) fn push_plot(
         // Every beam on a plan is the same colour, so the eye reads them as beams rather than
         // trying to read a colour off a line. The lamp's real colour is shown beside the symbol.
         push_aim_line(frame, pose.origin, pose, intensity, style.beam_ink);
+    }
+}
+
+/// How far a line drawing's edges stand in front of its silhouette, so the fill never hides them.
+const LINEWORK_LIFT_METRES: f32 = 0.004;
+
+/// One fixture's plan artwork: its filled silhouette, and a line drawing's visible edges over it.
+fn push_plan_artwork(
+    frame: &mut FrameInstances,
+    scene: &Scene,
+    index: u32,
+    transform: Mat4,
+    ink: Vec3,
+    alpha: f32,
+) {
+    let fill = ink * 0.72;
+    let Some(artwork) = scene.plan_artwork.get(index as usize) else {
+        return;
+    };
+    if !artwork.indices.is_empty() {
+        frame
+            .mesh(MeshKind::PlanArtwork(index))
+            .push(MeshInstance::new(transform, Vec3::ZERO, 1.0, fill, 0.0));
+    }
+    // The drawing's own convention, light edges over a dark body, turned round where the body is
+    // light, so the edges always read against the fill they are drawn on.
+    let luminance = fill.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+    let edge = if luminance < 0.5 {
+        fill.lerp(Vec3::ONE, 0.5)
+    } else {
+        fill * 0.4
+    };
+    let colour = edge.extend(alpha).to_array();
+    let lift = artwork.facing() * LINEWORK_LIFT_METRES;
+    for point in &artwork.lines {
+        frame.lines.push(LineVertex {
+            position: transform
+                .transform_point3(Vec3::from(*point) + lift)
+                .to_array(),
+            _pad: 0.0,
+            colour,
+        });
     }
 }
 
