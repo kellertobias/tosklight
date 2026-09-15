@@ -545,7 +545,8 @@ With several elements selected, **Generic** lists them by **ID**, **Name**, **Mo
 a multi-patched fixture says how many copies it has. Click one to select only that element.
 **Placement** edits them together: **X**, **Y**, **Z**, **Rot X**, **Rot Y** and **Rot Z**, and for the
 lamps among them **Bracket angle** and **Barndoors**. A field shows the value they share, or the ends of
-an even spread as `1 THRU 5`, and is empty with **Mixed** when the values follow no such line. Type one
+an even spread as `1 THRU 5`. When the values follow no such line the field is empty and shows the range
+they cover, lowest to highest, in the field's unit, such as `-1.2m THRU 1.2m`. Type one
 value to set every element, or a range — `1 THRU 5`, `1 … 5` or `1 ... 5` — to spread it evenly from the
 first selected element to the last. **Placement Assistant** lays the selection out in the order it was
 selected: along a **Line** from a start to an end, in a **Grid** from a start with a number of columns

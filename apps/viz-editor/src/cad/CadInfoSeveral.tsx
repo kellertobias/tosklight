@@ -15,7 +15,7 @@ import { TauriPatchTransport } from "../document/transport";
 import type { SelectedElement } from "./CadDeleteSelection";
 import { CommitText } from "./cadFields";
 import { CadPlacementAssistant } from "./CadPlacementAssistant";
-import { describeThru, parseThru, spreadThru } from "./thruValues";
+import { describeRange, describeThru, parseThru, spreadThru } from "./thruValues";
 import "./cadInfo.css";
 
 const transport = new TauriPatchTransport();
@@ -65,6 +65,8 @@ interface ThruFieldSpec {
 	label: string;
 	ariaLabel: string;
 	digits: number;
+	/** The unit a mixed field names its range in. */
+	unit: string;
 	/** Only a lamp has it; Venue objects in the selection are left out of the spread. */
 	lampsOnly?: boolean;
 	/** Empty is a value of its own — no barn doors fitted — rather than a refused edit. */
@@ -82,6 +84,7 @@ const THRU_FIELDS: readonly ThruFieldSpec[] = [
 			label: `${axis.toUpperCase()} (m)`,
 			ariaLabel: `Position ${axis.toUpperCase()}`,
 			digits: 3,
+			unit: "m",
 			read: (fixture) => fixture.location[axis] / 1000,
 			write: (fixture, metres) => ({
 				...fixture,
@@ -95,6 +98,7 @@ const THRU_FIELDS: readonly ThruFieldSpec[] = [
 			label: `Rot ${axis.toUpperCase()} (°)`,
 			ariaLabel: `Rotation ${axis.toUpperCase()}`,
 			digits: 1,
+			unit: "°",
 			read: (fixture) => fixture.rotation[axis],
 			write: (fixture, degrees) => ({
 				...fixture,
@@ -107,6 +111,7 @@ const THRU_FIELDS: readonly ThruFieldSpec[] = [
 		label: "Bracket angle (°)",
 		ariaLabel: "Bracket angle",
 		digits: 1,
+		unit: "°",
 		lampsOnly: true,
 		read: (fixture) => fixture.bracketAngle ?? 0,
 		write: (fixture, degrees) => ({ ...fixture, bracketAngle: degrees ?? 0 }),
@@ -116,6 +121,7 @@ const THRU_FIELDS: readonly ThruFieldSpec[] = [
 		label: "Barndoors (°)",
 		ariaLabel: "Barndoors",
 		digits: 1,
+		unit: "°",
 		lampsOnly: true,
 		optional: true,
 		read: (fixture) => fixture.shaperAngle ?? null,
@@ -154,12 +160,14 @@ function ThruField({
 	targets: readonly PatchFixtureProjection[];
 	onWrite(next: PatchFixtureProjection[]): void;
 }) {
-	const { text, mixed } = describeThru(targets.map(spec.read), spec.digits);
+	const { text, range } = describeThru(targets.map(spec.read), spec.digits);
 	return (
 		<CommitText
 			label={spec.label}
 			ariaLabel={spec.ariaLabel}
-			placeholder={mixed ? "Mixed" : spec.optional ? "None" : undefined}
+			placeholder={
+				range ? describeRange(range, spec.digits, spec.unit) : spec.optional ? "None" : undefined
+			}
 			value={text}
 			accepts={(draft) => (spec.optional && draft.trim() === "") || parseThru(draft) != null}
 			onCommit={(draft) => {

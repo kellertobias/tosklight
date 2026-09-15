@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeThru, parseThru, spreadThru } from "./thruValues";
+import { describeRange, describeThru, parseThru, spreadThru } from "./thruValues";
 
 describe("THRU values", () => {
 	it("reads one value, or two ends joined by THRU, an ellipsis or three dots", () => {
@@ -21,11 +21,22 @@ describe("THRU values", () => {
 		expect(spreadThru({ first: 7, last: 9 }, 1)).toEqual([7]);
 	});
 
-	it("shows a shared value, an even spread as a range, and nothing for mixed values", () => {
+	it("shows a shared value, an even spread as a range, and the covered range for mixed values", () => {
 		expect(describeThru([2, 2, 2], 3)).toEqual({ text: "2", mixed: false });
 		expect(describeThru([0, 1.5, 3], 3)).toEqual({ text: "0 THRU 3", mixed: false });
-		expect(describeThru([0, 2, 3], 3)).toEqual({ text: "", mixed: true });
+		// Mixed values leave nothing to type over, but still say where the selection stands.
+		expect(describeThru([0.4, -1.2, 1.2], 3)).toEqual({
+			text: "",
+			mixed: true,
+			range: { min: -1.2, max: 1.2 },
+		});
 		expect(describeThru([null, null], 1)).toEqual({ text: "", mixed: false });
-		expect(describeThru([null, 20], 1)).toEqual({ text: "", mixed: true });
+		expect(describeThru([null, 20], 1)).toEqual({ text: "", mixed: true, range: { min: 20, max: 20 } });
+	});
+
+	it("names a mixed range lowest to highest in the field's unit", () => {
+		expect(describeRange({ min: -1.2, max: 1.2 }, 3, "m")).toBe("-1.2m THRU 1.2m");
+		expect(describeRange({ min: 15, max: 90 }, 1, "°")).toBe("15° THRU 90°");
+		expect(describeRange({ min: 20, max: 20 }, 1, "°")).toBe("20°");
 	});
 });

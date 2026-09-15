@@ -245,8 +245,13 @@ pub struct FixtureDto {
     #[serde(default)]
     pub scenery_size_metres: Option<VectorDto>,
     /// What an operator chose for a generated Venue object beyond its size. Empty, and absent
-    /// from every payload written before these choices existed, keeps the kind's own defaults.
-    #[serde(default, skip_serializing_if = "SceneryOptionsDto::is_empty")]
+    /// from every payload written before these choices existed, keeps the kind's own defaults. A
+    /// sheet that has chosen nothing sends `null`, which reads the same as absent.
+    #[serde(
+        default,
+        deserialize_with = "null_as_default",
+        skip_serializing_if = "SceneryOptionsDto::is_empty"
+    )]
     pub scenery_options: SceneryOptionsDto,
     /// How many times its built size a placed Venue object is drawn. Absent, and absent from every
     /// payload written before it existed, is the size it was built at.
@@ -261,6 +266,15 @@ pub struct FixtureDto {
 
 const fn yes() -> bool {
     true
+}
+
+/// Reads an explicit `null` as the field's default, the same as a field that is not there at all.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 /// A curtain's colour and a chain's end fittings, as the sheet reads and writes them.
@@ -966,6 +980,36 @@ mod tests {
                 .is_none()
         );
         assert_eq!(PatchFixtureCandidate::from(legacy).patch.model_scale, None);
+    }
+
+    /// A part added from the CAD dialog is written by the patch sheet's own candidate, which sends
+    /// `null` for every choice it has not made. That is nothing chosen, not a malformed mutation.
+    #[test]
+    fn a_new_venue_object_with_no_choices_sent_as_null_is_accepted() {
+        let fixture: FixtureDto = serde_json::from_value(serde_json::json!({
+            "fixtureId": Uuid::new_v4(),
+            "fixtureNumber": null,
+            "virtualFixtureNumber": 3,
+            "name": "Four-Point Truss Corner 2-Way",
+            "profileId": Uuid::new_v4(),
+            "profileRevision": 1,
+            "modeId": Uuid::new_v4(),
+            "splitPatches": [{ "split": 1, "universe": null, "address": null }],
+            "layerId": "default",
+            "directControl": null,
+            "location": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0, "y": 0, "z": 0 },
+            "multipatch": [],
+            "shaperAngle": null,
+            "scenerySizeMetres": null,
+            "sceneryOptions": null,
+            "modelScale": null
+        }))
+        .expect("a new part's fixture DTO");
+        assert!(fixture.scenery_options.is_empty());
+        let patch = PatchFixtureCandidate::from(fixture).patch;
+        assert_eq!(patch.scenery_options, SceneryOptions::default());
+        assert_eq!(patch.model_scale, None);
     }
 
     #[test]
