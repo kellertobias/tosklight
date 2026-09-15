@@ -110,12 +110,21 @@
 	padding: 0;
 }
 
+/* Info's title row reaches both edges; everything under it is held in like the panel body. */
 .cad-sidebar-info {
 	flex: 0 1 auto;
 	max-height: 55%;
-	padding: 12px;
+	padding: 0 0 12px;
 	overflow-y: auto;
-	border-top: 1px solid #222d37;
+	border-top: 1px solid var(--cad-title-line, #34404c);
+}
+
+.cad-sidebar-info > .cad-info > :not(.cad-info-header) {
+	margin-inline: 12px;
+}
+
+.cad-sidebar.is-info-only .cad-sidebar-info {
+	padding-top: 12px;
 }
 
 .cad-sidebar.is-info-only .cad-sidebar-info {

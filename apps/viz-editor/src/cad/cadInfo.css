@@ -1,13 +1,45 @@
 /* Info's tabs, its multi-selection placement fields and the Placement Assistant. */
 
-/* Info at the foot of an open panel: its tabs sit between the heading and the trash button. */
+/* Info at the foot of an open panel has a title row of its own, built like the side panel's: the
+   same height and bottom line, the heading held in from the edge, and its tabs and trash button
+   reaching the row's edges. It stays at the top while Info scrolls. */
+.cad-sidebar-info .cad-info-header {
+	position: sticky;
+	z-index: 2;
+	top: 0;
+	box-sizing: border-box;
+	display: flex;
+	align-items: stretch;
+	height: var(--cad-title-height, 32px);
+	min-height: var(--cad-title-height, 32px);
+	border-bottom: 1px solid var(--cad-title-line, #34404c);
+	background: #0b0f14;
+}
+
+.cad-sidebar-info .cad-info-header h3 {
+	align-self: center;
+	margin: 0;
+	padding: 0 12px;
+	color: inherit;
+	font-size: 14px;
+	letter-spacing: normal;
+	text-transform: none;
+	white-space: nowrap;
+}
+
 .cad-info-header .ui-title-chrome {
 	margin-left: auto;
 }
 
-.cad-info-header .ui-title-chrome .ui-button {
-	min-height: 28px;
-	height: 28px;
+.cad-sidebar-info .cad-info-header .ui-button {
+	height: 100%;
+	min-height: 0;
+	border-radius: 0;
+}
+
+/* With no panel open the side panel's own title row already names Info and carries its tabs. */
+.cad-sidebar.is-info-only .cad-info-header {
+	display: none;
 }
 
 /* With no panel open the tabs push the trash button to the edge themselves. */
