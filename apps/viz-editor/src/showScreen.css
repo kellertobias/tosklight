@@ -38,18 +38,75 @@
 
 .viz-show-paperwork .cad-print-project-info {
 	display: grid;
+	gap: 12px;
+	max-width: 900px;
+}
+
+.viz-show-paperwork .cad-print-project-info > h3 {
+	margin: 0;
+}
+
+/* The show on the left, its lighting designer on the right. */
+.cad-project-columns {
+	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 10px 14px;
-	max-width: 760px;
+	gap: 14px;
 }
 
-.viz-show-paperwork .cad-print-project-info > h3,
-.viz-show-paperwork .cad-print-project-info > dl,
-.viz-show-paperwork .cad-print-project-info > .ui-button {
-	grid-column: 1 / -1;
+.cad-project-columns > fieldset {
+	display: grid;
+	align-content: start;
+	gap: 10px;
+	min-width: 0;
+	margin: 0;
+	padding: 12px;
+	border: 1px solid var(--border-subtle, #1d2530);
+	border-radius: 3px;
 }
 
-.viz-show-paperwork .cad-print-project-info label {
+.cad-project-columns legend {
+	padding: 0 4px;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.cad-project-columns label {
 	display: grid;
 	gap: 4px;
+}
+
+.cad-project-logo {
+	display: grid;
+	gap: 6px;
+}
+
+.cad-project-logo img {
+	max-width: 100%;
+	max-height: 96px;
+	justify-self: start;
+	padding: 6px;
+	border-radius: 3px;
+	background: #fff;
+	object-fit: contain;
+}
+
+.cad-project-logo p,
+.cad-project-status {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+}
+
+.cad-project-logo-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.cad-project-logo-actions > .ui-button,
+.cad-project-make-default {
+	min-height: 36px;
 }

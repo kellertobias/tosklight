@@ -43,10 +43,26 @@ because it is where a show is created or opened. Its file actions run across the
 **Save As**, **Import MVR** and **Export MVR**.
 
 Below them the show is seen from both sides at once. The left half draws the rig from above, with the
-show's name over it. The right half is **Show information**: the project, lighting designer, venue,
-contact email and phone, show date and show version that title every printed CAD page, beside the
-show's name, when it was last saved, and how many fixtures and universes it uses. Change a field and
-press **Save project info** to write it into the show; nothing is saved until you do.
+show's name over it. The right half is **Show information**, which titles every printed CAD page, in
+two columns:
+
+* **Show**, on the left: **Project**, **Venue**, **Show date** and **Version**.
+* **Lighting designer**, on the right: **Name**, **Phone**, **Email** and the **Company logo**.
+
+Below both columns are the show's name, when it was last saved, and how many fixtures and universes it
+uses. Change a field and press **Save project info** to write it into the show; nothing is saved
+until you do.
+
+**Upload logo** takes a PNG, JPEG or WebP. The show keeps it as one small JPEG, flattened onto white
+and fitted within 800 × 400 pixels, so it travels with the show and needs no file beside it. Every
+printed page — plan pages, fixture lists and the page frames on the CAD screen — shows the logo in
+the title block where the ToskLight mark is otherwise drawn. **Replace logo** chooses another one and
+**Remove logo** takes it off; either change is kept once you press **Save project info**. A logo file
+that is not one of these formats, or is larger than 10 MB, is refused with the reason.
+
+**Make Default** keeps the lighting designer's name, phone, email and logo on this computer, not in
+the show. Every show created afterwards with **New Show** starts with them; shows that are opened,
+copied from a desk or opened from the demo keep their own. Press it again whenever the details change.
 
 **MCP** in the Show screen's title opens the MCP integration in its place; press it again to return
 to the file actions.

@@ -94,6 +94,9 @@ const CONTACT_EMAIL_KEY: &str = "architect.contact_email";
 const CONTACT_PHONE_KEY: &str = "architect.contact_phone";
 const PROJECT_KEY: &str = "architect.project";
 const SHOW_DATE_KEY: &str = "architect.show_date";
+/// The lighting designer's company logo, as the JSON the Architect stores; absent in shows written
+/// before logos existed, which read as no logo.
+const COMPANY_LOGO_KEY: &str = "architect.company_logo";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PaperworkMetadata {
@@ -104,6 +107,9 @@ pub struct PaperworkMetadata {
     pub contact_phone: String,
     pub project: String,
     pub show_date: String,
+    /// The lighting designer's company logo: its media type, pixel size and base64 image data as
+    /// JSON, or empty when the show has none.
+    pub company_logo: String,
 }
 
 impl PlanningDocument {
@@ -167,6 +173,7 @@ impl PlanningDocument {
             contact_phone: store.metadata_value(CONTACT_PHONE_KEY)?.unwrap_or_default(),
             project: store.metadata_value(PROJECT_KEY)?.unwrap_or_default(),
             show_date: store.metadata_value(SHOW_DATE_KEY)?.unwrap_or_default(),
+            company_logo: store.metadata_value(COMPANY_LOGO_KEY)?.unwrap_or_default(),
         })
     }
 
@@ -182,6 +189,7 @@ impl PlanningDocument {
             (CONTACT_PHONE_KEY, metadata.contact_phone.trim()),
             (PROJECT_KEY, metadata.project.trim()),
             (SHOW_DATE_KEY, metadata.show_date.trim()),
+            (COMPANY_LOGO_KEY, metadata.company_logo.trim()),
         ])?;
         Ok(())
     }

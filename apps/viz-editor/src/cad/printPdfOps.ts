@@ -4,6 +4,7 @@
  * content-stream syntax directly.
  */
 import architectIconSvg from "../../../../assets/branding/tosklight-icon-print.svg?raw";
+import { type CompanyLogo, companyLogoHex } from "../document/companyLogo";
 import type { PlanPoint } from "./projection";
 
 export function mark(x: number, y: number) {
@@ -26,6 +27,24 @@ export function mark(x: number, y: number) {
 		"1.1301 0 0 1.10327 -91.1666 -52.8747 cm",
 		"2.27038 0 0 2.27038 489.721 673.347 cm",
 		`${whitePath} f`,
+		"Q",
+	];
+}
+
+/**
+ * The title block's corner mark: the company logo when the show has one, fitted into the same
+ * 52-point square and kept in proportion, and the ToskLight mark otherwise.
+ */
+export function titleMark(logo: CompanyLogo | null, x: number, y: number) {
+	if (!logo) return mark(x, y);
+	const box = 52;
+	const scale = Math.min(box / logo.width, box / logo.height);
+	const width = logo.width * scale;
+	const height = logo.height * scale;
+	return [
+		"q",
+		`${n(width)} 0 0 ${n(height)} ${n(x + (box - width) / 2)} ${n(y - 2 + (box - height) / 2)} cm`,
+		"/CompanyLogo Do",
 		"Q",
 	];
 }
@@ -85,9 +104,13 @@ export function n(value: number) {
 }
 export function pdfDocument(
 	streams: readonly { content: string; width: number; height: number }[],
+	logo: CompanyLogo | null = null,
 ) {
 	const objects: string[] = [];
 	const ids = streams.map((_, index) => 3 + index * 2);
+	// The logo is one image object after the pages, which every page may draw by name.
+	const logoId = 3 + streams.length * 2;
+	const images = logo ? ` /XObject << /CompanyLogo ${logoId} 0 R >>` : "";
 	objects.push(
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		`<< /Type /Pages /Count ${streams.length} /Kids [${ids.map((id) => `${id} 0 R`).join(" ")}] >>`,
@@ -95,8 +118,14 @@ export function pdfDocument(
 	for (let i = 0; i < streams.length; i++) {
 		const contentId = ids[i] + 1;
 		objects.push(
-			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(streams[i].width)} ${n(streams[i].height)}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> /Contents ${contentId} 0 R >>`,
+			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(streams[i].width)} ${n(streams[i].height)}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >>${images} >> /Contents ${contentId} 0 R >>`,
 			`<< /Length ${new TextEncoder().encode(streams[i].content).length} >>\nstream\n${streams[i].content}\nendstream`,
+		);
+	}
+	if (logo) {
+		const hex = `${companyLogoHex(logo)}>`;
+		objects.push(
+			`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${hex.length} >>\nstream\n${hex}\nendstream`,
 		);
 	}
 	let output = "%PDF-1.4\n%ToskLight Architect\n";

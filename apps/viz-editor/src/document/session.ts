@@ -16,6 +16,17 @@ export const DOCUMENT_CHANGED_EVENT = "document-changed";
 /** One window patched the rig; every other window's patch sheet applies the delta. */
 export const PATCH_CHANGE_EVENT = "patch-change";
 
+import type { CompanyLogo } from "./companyLogo";
+
+/** The lighting designer a computer keeps for the shows it creates. */
+export interface LightingDesignerDefault {
+	lightingDesigner: string;
+	contactPhone: string;
+	contactEmail: string;
+	/** The logo as the show stores it (JSON), or empty. */
+	companyLogo: string;
+}
+
 export interface DocumentSummary {
 	showId: string;
 	name: string;
@@ -29,6 +40,8 @@ export interface DocumentSummary {
 	contactPhone: string;
 	project: string;
 	showDate: string;
+	/** The lighting designer's company logo as the show stores it; absent or empty for none. */
+	companyLogo?: string;
 	lastSavedAt: number;
 	universeCount: number;
 }
@@ -452,7 +465,18 @@ export const documentSession = {
 		contactPhone: string;
 		project: string;
 		showDate: string;
+		companyLogo?: string;
 	}) => invoke<DocumentSummary>("save_document_paperwork", { paperwork }),
+	/** Read an image file and return the logo the show would keep: a fitted JPEG. */
+	readCompanyLogo: (path: string) =>
+		invoke<CompanyLogo>("read_company_logo", { path }),
+	/** The lighting designer this computer fills into a new show, if one was made the default. */
+	lightingDesignerDefault: () =>
+		invoke<LightingDesignerDefault | null>("lighting_designer_default"),
+	saveLightingDesignerDefault: (value: LightingDesignerDefault) =>
+		invoke<LightingDesignerDefault>("save_lighting_designer_default", {
+			default: value,
+		}),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
 	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),

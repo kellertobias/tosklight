@@ -1,5 +1,6 @@
 import { Fragment, useRef } from "react";
 import architectIconUrl from "../../../../assets/branding/tosklight-icon-print.svg";
+import { companyLogoUrl, parseCompanyLogo } from "../document/companyLogo";
 import { PrintPageLabels, PrintPageSettings } from "./CadPrintPageParts";
 import {
 	type CadPrintDocumentInfo,
@@ -104,6 +105,7 @@ function PrintTitleBlock({
 	page,
 	documentInfo,
 }: Pick<PrintFrameProps, "page" | "documentInfo">) {
+	const logo = parseCompanyLogo(documentInfo?.companyLogo);
 	const rows: [string, string][] = [
 		...(documentInfo?.showName ? [["Show", documentInfo.showName] as [string, string]] : []),
 		...(documentInfo?.lightingDesigner
@@ -128,7 +130,11 @@ function PrintTitleBlock({
 	];
 	return (
 		<div className="cad-print-title-block">
-			<img src={architectIconUrl} alt="ToskLight application icon" />
+			{logo ? (
+				<img src={companyLogoUrl(logo)} alt="Company logo" />
+			) : (
+				<img src={architectIconUrl} alt="ToskLight application icon" />
+			)}
 			<div className="cad-print-brand">
 				<strong>ToskLight Architect</strong>
 				{documentInfo?.project ? <span>{documentInfo.project}</span> : null}

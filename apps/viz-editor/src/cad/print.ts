@@ -1,5 +1,6 @@
 import { planPageStream } from "./printPlanPage";
-import { mark, n, pdfDocument, saved, text } from "./printPdfOps";
+import { n, pdfDocument, saved, text, titleMark } from "./printPdfOps";
+import { parseCompanyLogo } from "../document/companyLogo";
 import {
 	BORDER,
 	PRINT_BORDER_MM,
@@ -56,6 +57,7 @@ export function buildCadPdf(
 				? fixtureListStreams(scene, page, info)
 				: planPageStream(scene, drawings, page, info, underlays, annotations),
 		),
+		parseCompanyLogo(info.companyLogo),
 	);
 }
 
@@ -126,7 +128,7 @@ function fixtureListStreams(
 			"0.08 G",
 			"0.7 w",
 			`${n(BORDER)} ${n(BORDER)} ${n(W - BORDER * 2)} ${n(H - BORDER * 2)} re S`,
-			...mark(BORDER + 4, H - BORDER - 54),
+			...titleMark(parseCompanyLogo(info.companyLogo), BORDER + 4, H - BORDER - 54),
 			text("ToskLight Architect", BORDER + 64, H - BORDER - 18, 13, true),
 			text(
 				`${info.project || info.showName || "Show"} - Fixture List${chunks.length > 1 ? ` ${pageIndex + 1}/${chunks.length}` : ""}`,

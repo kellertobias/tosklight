@@ -8,6 +8,7 @@
 
 mod annotation;
 mod cad;
+mod company_logo;
 mod contract;
 mod demo;
 mod discovery;
@@ -192,6 +193,74 @@ fn prepare_local_visualizer(app: &tauri::App) -> Result<(), String> {
     Ok(())
 }
 
+/// Everything the editor prepares before its window appears: the fixture library, the recent or
+/// default show, the local visualizer and API, and the `--verify` watch.
+fn setup_editor(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    // Before the window is shown, so the tile never appears and then disappears.
+    #[cfg(target_os = "macos")]
+    if opened_by_the_visualizer() {
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    }
+    if opened_by_the_visualizer()
+        && let Some(window) = app.get_webview_window("main")
+    {
+        let _ = window.set_skip_taskbar(true);
+    }
+    let source = fixture_library_source(app).map_err(std::io::Error::other)?;
+    let app_data = crate::portable::app_data_dir(app).map_err(std::io::Error::other)?;
+    let library = prepare_fixture_library(source, &app_data).map_err(std::io::Error::other)?;
+    let session = app.state::<session::Session>();
+    session.set_library_path(library);
+    if let Ok(config) = app.path().app_config_dir() {
+        let legacy = config
+            .parent()
+            .map(|parent| parent.join("de.tokenet.tosklight.viz-editor/recent-show"));
+        session.set_recent_store(match legacy {
+            Some(legacy) => recent::RecentShow::migrating_from(config.join("recent-show"), legacy),
+            None => recent::RecentShow::at(config.join("recent-show")),
+        });
+        session.reopen_recent();
+    }
+    if session.document_name().is_none()
+        && let Err(error) = demo::open_default_copy(app.handle(), &session)
+    {
+        eprintln!("open the default Demo Show: {error}");
+    }
+    prepare_local_visualizer(app).map_err(std::io::Error::other)?;
+    announce_on_the_network(app);
+    // An editor whose local API will not start is still an editor. Say so and carry on
+    // rather than refusing to open a window over a port an operator may never use.
+    match local_api::start(app) {
+        Ok(handle) => println!("local editing API on 127.0.0.1:{}", handle.port),
+        Err(error) => eprintln!("{error}"),
+    }
+    if let Some(address) = scene_address() {
+        let source = session.scene_source();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = viz_planning::serve(source, address).await {
+                eprintln!("scene source on {address}: {error}");
+            }
+        });
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+    }
+    // `--verify` opens the window, waits for the interface to report itself, and exits
+    // with the verdict. Nothing in the build catches a window that opens white.
+    if verify::requested() {
+        let window = app.get_webview_window("main");
+        verify::watch(
+            app.state::<Arc<verify::SurfaceReady>>().inner().clone(),
+            move || match window.as_ref().map(tauri::WebviewWindow::url) {
+                Some(Ok(url)) => url.to_string(),
+                Some(Err(error)) => format!("no readable URL: {error}"),
+                None => "no main window".into(),
+            },
+        );
+    }
+    Ok(())
+}
+
 fn main() {
     portable::prepare("ToskLight Architect");
     tauri::Builder::default()
@@ -257,6 +326,9 @@ fn main() {
             annotation::delete_cad_annotation,
             drawing_tree::cad_drawing_tree,
             drawing_tree::save_cad_drawing_tree,
+            company_logo::read_company_logo,
+            company_logo::lighting_designer_default,
+            company_logo::save_lighting_designer_default,
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,
@@ -270,74 +342,7 @@ fn main() {
             network_sources::stop_network_sources,
             venue_models::import_venue_model,
         ])
-        .setup(|app| {
-            // Before the window is shown, so the tile never appears and then disappears.
-            #[cfg(target_os = "macos")]
-            if opened_by_the_visualizer() {
-                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-            }
-            if opened_by_the_visualizer()
-                && let Some(window) = app.get_webview_window("main")
-            {
-                let _ = window.set_skip_taskbar(true);
-            }
-            let source = fixture_library_source(app).map_err(std::io::Error::other)?;
-            let app_data = crate::portable::app_data_dir(app).map_err(std::io::Error::other)?;
-            let library =
-                prepare_fixture_library(source, &app_data).map_err(std::io::Error::other)?;
-            let session = app.state::<session::Session>();
-            session.set_library_path(library);
-            if let Ok(config) = app.path().app_config_dir() {
-                let legacy = config
-                    .parent()
-                    .map(|parent| parent.join("de.tokenet.tosklight.viz-editor/recent-show"));
-                session.set_recent_store(match legacy {
-                    Some(legacy) => {
-                        recent::RecentShow::migrating_from(config.join("recent-show"), legacy)
-                    }
-                    None => recent::RecentShow::at(config.join("recent-show")),
-                });
-                session.reopen_recent();
-            }
-            if session.document_name().is_none()
-                && let Err(error) = demo::open_default_copy(app.handle(), &session)
-            {
-                eprintln!("open the default Demo Show: {error}");
-            }
-            prepare_local_visualizer(app).map_err(std::io::Error::other)?;
-            announce_on_the_network(app);
-            // An editor whose local API will not start is still an editor. Say so and carry on
-            // rather than refusing to open a window over a port an operator may never use.
-            match local_api::start(app) {
-                Ok(handle) => println!("local editing API on 127.0.0.1:{}", handle.port),
-                Err(error) => eprintln!("{error}"),
-            }
-            if let Some(address) = scene_address() {
-                let source = session.scene_source();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(error) = viz_planning::serve(source, address).await {
-                        eprintln!("scene source on {address}: {error}");
-                    }
-                });
-            }
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-            }
-            // `--verify` opens the window, waits for the interface to report itself, and exits
-            // with the verdict. Nothing in the build catches a window that opens white.
-            if verify::requested() {
-                let window = app.get_webview_window("main");
-                verify::watch(
-                    app.state::<Arc<verify::SurfaceReady>>().inner().clone(),
-                    move || match window.as_ref().map(tauri::WebviewWindow::url) {
-                        Some(Ok(url)) => url.to_string(),
-                        Some(Err(error)) => format!("no readable URL: {error}"),
-                        None => "no main window".into(),
-                    },
-                );
-            }
-            Ok(())
-        })
+        .setup(setup_editor)
         .run(tauri::generate_context!())
         .expect("failed to run the ToskLight Viz editor")
 }

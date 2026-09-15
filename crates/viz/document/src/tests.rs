@@ -172,6 +172,7 @@ fn legacy_documents_default_to_blank_paperwork_and_round_trip_authored_values() 
             contact_phone: "  +49 123  ".into(),
             project: "  Summer Show  ".into(),
             show_date: "  2026-08-17  ".into(),
+            company_logo: "  {\"mediaType\":\"image/jpeg\"}  ".into(),
         })
         .expect("save paperwork");
     let reopened = PlanningDocument::open(&rig.path).expect("reopen document");
@@ -185,6 +186,7 @@ fn legacy_documents_default_to_blank_paperwork_and_round_trip_authored_values() 
             contact_phone: "+49 123".into(),
             project: "Summer Show".into(),
             show_date: "2026-08-17".into(),
+            company_logo: "{\"mediaType\":\"image/jpeg\"}".into(),
         }
     );
 }

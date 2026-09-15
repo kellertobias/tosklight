@@ -15,7 +15,15 @@ import {
 	TITLE_H,
 	TITLE_W,
 } from "./printLayout";
-import { distance, mark, n, path, saved, text } from "./printPdfOps";
+import {
+	distance,
+	n,
+	path,
+	saved,
+	text,
+	titleMark,
+} from "./printPdfOps";
+import { parseCompanyLogo } from "../document/companyLogo";
 import { entityPlanGeometry, type PlanPoint } from "./projection";
 import {
 	annotationLabels,
@@ -271,7 +279,7 @@ function furnitureCommands(
 		`${n(tx)} ${n(BORDER)} ${n(TITLE_W)} ${n(TITLE_H)} re S`,
 		`${n(tx + 70)} ${n(BORDER)} 0 ${n(TITLE_H)} re S`,
 		`${n(tx + 70)} ${n(BORDER + TITLE_H / 2)} ${n(TITLE_W - 70)} 0 re S`,
-		...mark(tx + 12, BORDER + 18),
+		...titleMark(parseCompanyLogo(info.companyLogo), tx + 12, BORDER + 18),
 		text("ToskLight Architect", tx + 76, BORDER + TITLE_H - 15, 10, true),
 		...details
 			.slice(0, 4)

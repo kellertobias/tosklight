@@ -763,6 +763,7 @@ function printInfo(
 		contactPhone: draft.contactPhone,
 		project: draft.project,
 		showDate: draft.showDate,
+		companyLogo: summary?.companyLogo ?? "",
 		lastSavedAt: summary?.lastSavedAt ?? 0,
 		fixtureCount: summary?.fixtureCount ?? 0,
 		universeCount: summary?.universeCount ?? 0,

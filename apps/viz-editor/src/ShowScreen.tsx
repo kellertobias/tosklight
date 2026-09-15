@@ -6,6 +6,7 @@
  * is seen from both sides at once: its rig drawn on one half, and what describes it on paper — the
  * project, lighting designer, venue and contacts every printed page carries — on the other.
  */
+import { open } from "@tauri-apps/plugin-dialog";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useEffect, useState } from "react";
 import { CadProjectPanel, type CadPaperwork } from "./cad/CadProjectPanel";
@@ -27,8 +28,11 @@ function paperworkOf(document: DocumentSummary | null): CadPaperwork {
 		contactPhone: document?.contactPhone ?? "",
 		showDate: document?.showDate ?? "",
 		showVersion: document?.showVersion ?? "",
+		companyLogo: document?.companyLogo ?? "",
 	};
 }
+
+const LOGO_FILTER = [{ name: "Logo image", extensions: ["png", "jpg", "jpeg", "webp"] }];
 
 /** The show's paperwork, edited as a draft and saved into the show on request. */
 function ShowPaperwork({
@@ -42,6 +46,7 @@ function ShowPaperwork({
 }) {
 	const [draft, setDraft] = useState(() => paperworkOf(document));
 	const [saving, setSaving] = useState(false);
+	const [status, setStatus] = useState("");
 	// Another show, or the same show saved from elsewhere, replaces the draft with what it says.
 	useEffect(() => {
 		setDraft(paperworkOf(document));
@@ -59,6 +64,37 @@ function ShowPaperwork({
 				paperwork={draft}
 				documentInfo={document}
 				saving={saving}
+				status={status}
+				onUploadLogo={async () => {
+					const path = await open({ multiple: false, filters: LOGO_FILTER });
+					if (typeof path !== "string") return;
+					setStatus("Reading logo…");
+					try {
+						const logo = await documentSession.readCompanyLogo(path);
+						setDraft((current) => ({ ...current, companyLogo: JSON.stringify(logo) }));
+						setStatus("Logo ready. Save project info to keep it in the show.");
+					} catch (reason) {
+						setStatus("");
+						onError(reason);
+					}
+				}}
+				onRemoveLogo={() => {
+					setDraft((current) => ({ ...current, companyLogo: "" }));
+					setStatus("Logo removed. Save project info to keep the change.");
+				}}
+				onMakeDefault={async () => {
+					try {
+						await documentSession.saveLightingDesignerDefault({
+							lightingDesigner: draft.lightingDesigner,
+							contactPhone: draft.contactPhone,
+							contactEmail: draft.contactEmail,
+							companyLogo: draft.companyLogo,
+						});
+						setStatus("Saved as the lighting designer for new shows on this computer.");
+					} catch (reason) {
+						onError(reason);
+					}
+				}}
 				onChange={(field, value) =>
 					setDraft((current) => ({ ...current, [field]: value }))
 				}
@@ -66,6 +102,7 @@ function ShowPaperwork({
 					setSaving(true);
 					try {
 						onDocument(await documentSession.savePaperwork(draft));
+						setStatus("");
 					} catch (reason) {
 						onError(reason);
 					} finally {

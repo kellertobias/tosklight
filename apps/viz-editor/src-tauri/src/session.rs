@@ -47,6 +47,8 @@ pub struct DocumentSummary {
     pub contact_phone: String,
     pub project: String,
     pub show_date: String,
+    /// The lighting designer's company logo as the show stores it, or empty.
+    pub company_logo: String,
     pub last_saved_at: u64,
     pub universe_count: usize,
 }
@@ -61,6 +63,9 @@ pub struct PaperworkInput {
     pub contact_phone: String,
     pub project: String,
     pub show_date: String,
+    /// Absent from a window that predates logos, which leaves no logo.
+    #[serde(default)]
+    pub company_logo: String,
 }
 
 /// One fixture profile the operator can patch from.
@@ -230,9 +235,37 @@ fn summarize(document: &PlanningDocument) -> Answer<DocumentSummary> {
         contact_phone: paperwork.contact_phone,
         project: paperwork.project,
         show_date: paperwork.show_date,
+        company_logo: paperwork.company_logo,
         last_saved_at,
         universe_count: universes.len(),
     })
+}
+
+/// A show created on this computer starts with the lighting designer **Make Default** kept here.
+///
+/// Nothing is filled in when no designer was made the default, or when the file keeping it cannot be
+/// read; the show is created either way.
+fn with_lighting_designer_default(
+    app: &tauri::AppHandle,
+    session: &Session,
+) -> Option<DocumentSummary> {
+    let dir = crate::portable::app_data_dir(app).ok()?;
+    let default = crate::company_logo::read_default(&dir).ok()??;
+    session
+        .change(|document| {
+            let mut paperwork = document
+                .paperwork_metadata()
+                .map_err(|error| error.to_string())?;
+            paperwork.lighting_designer = default.lighting_designer.clone();
+            paperwork.contact_phone = default.contact_phone.clone();
+            paperwork.contact_email = default.contact_email.clone();
+            paperwork.company_logo = default.company_logo.clone();
+            document
+                .save_paperwork_metadata(&paperwork)
+                .map_err(|error| error.to_string())?;
+            summarize(document)
+        })
+        .ok()
 }
 
 #[tauri::command]
@@ -245,6 +278,7 @@ pub fn create_document(
     name: String,
 ) -> Answer<DocumentSummary> {
     let summary = session.open_path(Path::new(&path), Some(&name))?;
+    let summary = with_lighting_designer_default(&app, &session).unwrap_or(summary);
     discovery.announce_document(Some(summary.name.clone()));
     announce_document_change(&app, &window)?;
     Ok(summary)
@@ -286,6 +320,7 @@ pub fn save_document_paperwork(
                 contact_phone: paperwork.contact_phone,
                 project: paperwork.project,
                 show_date: paperwork.show_date,
+                company_logo: paperwork.company_logo,
             })
             .map_err(|error| error.to_string())?;
         summarize(document)

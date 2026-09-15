@@ -24,6 +24,8 @@ export interface CadPrintDocumentInfo {
 	contactPhone: string;
 	project: string;
 	showDate: string;
+	/** The lighting designer's company logo as the show stores it; printed in place of the mark. */
+	companyLogo?: string;
 	lastSavedAt: number;
 	fixtureCount: number;
 	universeCount: number;

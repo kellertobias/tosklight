@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 axum.workspace = true
 base64.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 light-application = { path = "../../../crates/light" }

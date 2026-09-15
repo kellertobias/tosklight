@@ -510,7 +510,7 @@ describe("the Viz editor window", () => {
 		).toBeTruthy();
 		// The show's metadata is no longer a panel of the CAD screen.
 		fireEvent.change(
-			within(information).getByRole("textbox", { name: "Lighting designer" }),
+			within(information).getByLabelText("Lighting designer name"),
 			{ target: { value: "Tobias Keller" } },
 		);
 		fireEvent.click(within(information).getByRole("button", { name: "Save project info" }));
