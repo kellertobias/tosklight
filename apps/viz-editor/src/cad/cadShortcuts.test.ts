@@ -1,0 +1,57 @@
+import { describe, expect, it } from "vitest";
+import {
+	CAD_MAX_ZOOM,
+	CAD_MIN_ZOOM,
+	cadShortcutFor,
+	pannedCamera,
+	zoomedCamera,
+} from "./cadShortcuts";
+
+const press = (key: string, modifiers: Partial<Record<"ctrlKey" | "metaKey" | "altKey", boolean>> = {}) =>
+	cadShortcutFor({ key, ctrlKey: false, metaKey: false, altKey: false, ...modifiers });
+
+describe("CAD keyboard shortcuts", () => {
+	it("picks each drawing tool by its letter, in either case", () => {
+		expect(
+			["v", "l", "p", "t", "m", "r"].map((key) => press(key)),
+		).toEqual(
+			["select", "polyline", "box", "text", "measure", "erase"].map((tool) => ({ type: "tool", tool })),
+		);
+		expect(press("L")).toEqual({ type: "tool", tool: "polyline" });
+	});
+
+	it("chooses the five views by 1 to 5, in the order the view menu lists them", () => {
+		expect(["1", "2", "3", "4", "5"].map((key) => press(key))).toEqual(
+			["top_down", "left_to_right", "right_to_left", "front_to_back", "back_to_front"].map((view) => ({
+				type: "view",
+				view,
+			})),
+		);
+		expect(press("6")).toBeNull();
+	});
+
+	it("zooms with + and − and pans with W, A, S and D", () => {
+		expect(press("+")).toMatchObject({ type: "zoom" });
+		expect(press("=")).toMatchObject({ type: "zoom" });
+		expect((press("+") as { factor: number }).factor).toBeGreaterThan(1);
+		expect((press("-") as { factor: number }).factor).toBeLessThan(1);
+		expect(press("w")).toEqual({ type: "pan", horizontal: 0, vertical: 1 });
+		expect(press("a")).toEqual({ type: "pan", horizontal: -1, vertical: 0 });
+		expect(press("s")).toEqual({ type: "pan", horizontal: 0, vertical: -1 });
+		expect(press("d")).toEqual({ type: "pan", horizontal: 1, vertical: 0 });
+	});
+
+	it("leaves keys with Ctrl, Cmd or Alt to the window", () => {
+		expect(press("v", { metaKey: true })).toBeNull();
+		expect(press("s", { ctrlKey: true })).toBeNull();
+		expect(press("1", { altKey: true })).toBeNull();
+	});
+
+	it("keeps zoom within the viewport's range and pans by the same screen distance at every zoom", () => {
+		expect(zoomedCamera({ pan: [0, 0], zoom: CAD_MAX_ZOOM }, 2).zoom).toBe(CAD_MAX_ZOOM);
+		expect(zoomedCamera({ pan: [0, 0], zoom: CAD_MIN_ZOOM }, 0.5).zoom).toBe(CAD_MIN_ZOOM);
+		// Looking right or up moves the plan's centre, which is minus the pan, that way.
+		expect(pannedCamera({ pan: [0, 0], zoom: 0.1 }, 1, 0).pan).toEqual([-800, 0]);
+		expect(pannedCamera({ pan: [0, 0], zoom: 0.2 }, 0, 1).pan).toEqual([0, -400]);
+	});
+});

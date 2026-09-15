@@ -524,14 +524,14 @@ describe("CAD fixture interaction", () => {
 
 	it("moves only from the gizmo and constrains an axis-arrow drag", async () => {
 		const { canvas, onMove, onPreview } = setup([fixture.id]);
-		// The right arrow starts at the gizmo origin, 36 screen pixels right and above the fixture.
+		// The gizmo stands on the fixture's origin; the press is on its right arrow, clear of the square.
 		fireEvent.pointerDown(canvas, {
 			pointerId: 1,
 			button: 0,
-			clientX: 558,
-			clientY: 364,
+			clientX: 537,
+			clientY: 400,
 		});
-		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 598, clientY: 390 });
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 577, clientY: 426 });
 		expect(onPreview).toHaveBeenCalledWith({
 			entityIds: [fixture.id],
 			deltaMillimetres: [400, 0, 0],
@@ -540,12 +540,22 @@ describe("CAD fixture interaction", () => {
 		fireEvent.pointerUp(canvas, {
 			pointerId: 1,
 			button: 0,
-			clientX: 598,
-			clientY: 390,
+			clientX: 577,
+			clientY: 426,
 		});
 		await waitFor(() =>
 			expect(onMove).toHaveBeenCalledWith([400, 0, 0], [fixture.id], false),
 		);
+	});
+
+	it("selects the element under the gizmo square when a press there never moves", async () => {
+		const { canvas, onMove, onSelection } = setup([fixture.id]);
+		fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 500, clientY: 400 });
+		fireEvent.pointerUp(canvas, { pointerId: 2, button: 0, clientX: 500, clientY: 400 });
+		await waitFor(() =>
+			expect(onSelection).toHaveBeenCalledWith({ type: "replace", ids: [fixture.id] }),
+		);
+		expect(onMove).not.toHaveBeenCalled();
 	});
 
 	it("spreads an axis drag in selection order while Shift is held", async () => {
@@ -571,13 +581,13 @@ describe("CAD fixture interaction", () => {
 		fireEvent.pointerDown(canvas, {
 			pointerId: 1,
 			button: 0,
-			clientX: 558,
-			clientY: 364,
+			clientX: 537,
+			clientY: 400,
 		});
 		fireEvent.pointerMove(canvas, {
 			pointerId: 1,
-			clientX: 598,
-			clientY: 390,
+			clientX: 577,
+			clientY: 426,
 			shiftKey: true,
 		});
 		expect(onPreview).toHaveBeenLastCalledWith({
@@ -602,8 +612,8 @@ describe("CAD fixture interaction", () => {
 		fireEvent.pointerUp(canvas, {
 			pointerId: 1,
 			button: 0,
-			clientX: 598,
-			clientY: 390,
+			clientX: 577,
+			clientY: 426,
 			shiftKey: true,
 		});
 		await waitFor(() =>

@@ -81,8 +81,9 @@ export function RendererSettingsWorkspace({
 						the inputs on the DMX settings page’s Network tab.
 					</p>
 				</header>
-				{/* One page, two columns: the atmosphere boxes first, then what the picture is made of. */}
-				<div className="viz-renderer-settings-grid is-two-column">
+				{/* One page of boxes filling the width, two to four to a row: the atmosphere boxes first,
+				    then what the picture is made of. */}
+				<div className="viz-renderer-settings-grid is-responsive">
 					<AtmosphereSettings draft={draft} update={update} />
 
 					<RenderingSettings draft={draft} update={update} />

@@ -9,6 +9,8 @@ export interface DmxOccupant {
 	fixture: PatchFixtureProjection;
 	/** "Fixture patch", or the multi-patch copy's name. */
 	owner: string;
+	/** Which multi-patch copy occupies the address, or `null` for the fixture's own patch. */
+	instance: number | null;
 	split: number;
 	/** First address of the range this split occupies. */
 	start: number;
@@ -48,15 +50,19 @@ export function dmxOccupancy(
 			).map((split) => [split.split, split.footprint]),
 		);
 		const labels = slotLabels(fixture, revision);
-		const owners: Array<{ owner: string; splits: readonly PatchSplitAssignment[] }> =
-			[
-				{ owner: "Fixture patch", splits: fixture.splitPatches },
-				...fixture.multipatch.map((copy, index) => ({
-					owner: copy.name.trim() || `Multi-patch ${index + 1}`,
-					splits: copy.splitPatches,
-				})),
-			];
-		for (const { owner, splits } of owners) {
+		const owners: Array<{
+			owner: string;
+			instance: number | null;
+			splits: readonly PatchSplitAssignment[];
+		}> = [
+			{ owner: "Fixture patch", instance: null, splits: fixture.splitPatches },
+			...fixture.multipatch.map((copy, index) => ({
+				owner: copy.name.trim() || `Multi-patch ${index + 1}`,
+				instance: index,
+				splits: copy.splitPatches,
+			})),
+		];
+		for (const { owner, instance, splits } of owners) {
 			for (const patch of splits) {
 				if (patch.universe == null || patch.address == null) continue;
 				const footprint = Math.max(1, footprints.get(patch.split) ?? 1);
@@ -70,6 +76,7 @@ export function dmxOccupancy(
 					occupants.push({
 						fixture,
 						owner,
+						instance,
 						split: patch.split,
 						start: patch.address,
 						footprint,

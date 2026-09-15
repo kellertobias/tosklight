@@ -164,6 +164,7 @@ export function PatchHeader() {
 						},
 					],
 				},
+				...props.trailingTitleGroups,
 			]}
 		/>
 		{importStatus ? (
@@ -208,7 +209,9 @@ function patchCreateGroup(
 				label: "+ Add fixture",
 				onPress: () => ui.setBrowserOpen(true),
 			},
-			...(props.scope === "venue" && props.onImportVenueModel
+			...((props.scope === "venue" ||
+				(props.scope === "patch" && ui.showAllLayers)) &&
+			props.onImportVenueModel
 				? [
 						{
 							id: "import-venue-model",

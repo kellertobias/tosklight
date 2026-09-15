@@ -7,20 +7,28 @@
  * Each change is written as soon as its field is left, and the drawing redraws from the show like any
  * other change, so the panel never holds a second copy of the element.
  *
- * A multi-patched fixture stands in several places. Each copy has its own name, position and
- * rotation, so Info edits the copy that was clicked — or the one chosen under **Copy** — and leaves
- * the others where they are. Notes, size and scale belong to the fixture and so to every copy.
+ * Two tabs divide it. **Generic** holds the name, notes and, for a lamp, where it is patched.
+ * **Placement** holds position and rotation, a generated object's size and parameters or a model's
+ * scale, and a lamp's bracket angle and barn doors.
+ *
+ * A multi-patched fixture stands in several places. Each copy has its own name, patch, position,
+ * rotation, bracket and barn doors, so Info edits the copy that was clicked — or the one chosen under
+ * **Copy** — and leaves the others where they are. Notes, size, parameters and scale belong to the
+ * fixture and so to every copy.
  */
 import type {
 	FixtureProfileScenery,
 	PatchFixtureProjection,
 	PatchMultiPatch,
 } from "@tosklight/patch";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { documentSession } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import { CommitNumber, CommitText, CommitTextArea } from "./cadFields";
+import { MountingFields, PatchFields, SceneryParameters } from "./CadInfoFields";
 import type { CadEntity } from "./types";
+
+export type InfoTab = "generic" | "placement";
 
 type Axis = "x" | "y" | "z";
 const AXES: readonly Axis[] = ["x", "y", "z"];
@@ -42,7 +50,10 @@ export function hasAdjustableSize(scenery: FixtureProfileScenery | null | undefi
 	return Boolean(scenery && SIZE_AXES.some(({ axis }) => scenery.adjustable[axis]));
 }
 
-type Placement = Pick<PatchMultiPatch, "name" | "location" | "rotation">;
+type Placement = Pick<
+	PatchMultiPatch,
+	"name" | "location" | "rotation" | "splitPatches" | "bracketAngle" | "shaperAngle"
+>;
 
 /** The fixture with one placement changed: its own when `copyId` is null, else that copy's. */
 export function withPlacement(
@@ -223,7 +234,12 @@ export function CadInfoPanel({
 	selectionCount,
 	sceneRevision,
 	onError,
+	action,
+	several,
+	tab = "generic",
 }: {
+	/** Which of Info's tabs is open. */
+	tab?: InfoTab;
 	/** The one selected placement, or null when several fixtures or none are selected. */
 	entity: CadEntity | null;
 	/** Every placement of the selected fixture: the fixture first, then its multi-patch copies. */
@@ -233,17 +249,27 @@ export function CadInfoPanel({
 	/** Bumped whenever the drawing changes, so the panel reads the element again. */
 	sceneRevision: number;
 	onError(reason: unknown): void;
+	/** A button beside the heading, such as delete. */
+	action?: ReactNode;
+	/** What Info shows while several elements are selected; a count when absent. */
+	several?: ReactNode;
 }) {
 	const { fixture, setFixture, scenery, note, setNote } = useInfoFixture(
 		entity?.logicalFixtureId ?? null,
 		sceneRevision,
 	);
+	const heading = (
+		<header className="cad-info-header">
+			<h3>Info</h3>
+			{action}
+		</header>
+	);
 
 	if (!entity)
 		return (
 			<section className="cad-info" aria-label="Info">
-				<h3>Info</h3>
-				<p>{selectionCount} elements selected.</p>
+				{heading}
+				{several ?? <p>{selectionCount} elements selected.</p>}
 			</section>
 		);
 
@@ -266,8 +292,71 @@ export function CadInfoPanel({
 	const copyId = entity.id === entity.logicalFixtureId ? null : entity.id;
 	const copy = copyId ? fixture?.multipatch?.find((each) => each.id === copyId) : undefined;
 	const placement: Placement | null = fixture ? (copyId ? (copy ?? null) : fixture) : null;
-	const place = (change: Partial<Placement>) =>
-		fixture && placement && void write(withPlacement(fixture, copyId, change));
+	const place = (change: Partial<Placement>) => {
+		if (fixture && placement) void write(withPlacement(fixture, copyId, change));
+	};
+	const shared = placements.length > 1 ? " (all copies)" : "";
+	// A copy with no name of its own is shown under the fixture's name.
+	const fixtureName = fixture?.name ?? entity.name;
+	const name = copyId ? copy?.name.trim() || fixtureName : fixtureName;
+
+	return (
+		<section className="cad-info" aria-label="Info">
+			{heading}
+			<PlacementChooser entity={entity} placements={placements} onChoose={(id) => onChoosePlacement?.(id)} />
+			{tab === "generic" ? (
+				<fieldset disabled={!placement}>
+					<CommitText label="Name" value={name} onCommit={(next) => next.trim() && place({ name: next.trim() })} />
+					<CommitTextArea
+						label={`Notes${shared}`}
+						value={note}
+						onCommit={(next) => {
+							setNote(next);
+							documentSession
+								.saveFixtureNote({ fixtureId: entity.logicalFixtureId, note: next })
+								.catch(onError);
+						}}
+					/>
+					{entity.kind !== "venue" ? (
+						<PatchFields
+							splits={placement?.splitPatches ?? []}
+							onCommit={(splitPatches) => place({ splitPatches })}
+						/>
+					) : null}
+				</fieldset>
+			) : (
+				<PlacementFields
+					entity={entity}
+					fixture={fixture}
+					scenery={scenery}
+					placement={placement}
+					shared={shared}
+					place={place}
+					write={(next) => void write(next)}
+				/>
+			)}
+		</section>
+	);
+}
+
+/** The Placement tab for one element: where it stands, how it is built or scaled, how it is hung. */
+function PlacementFields({
+	entity,
+	fixture,
+	scenery,
+	placement,
+	shared,
+	place,
+	write,
+}: {
+	entity: CadEntity;
+	fixture: PatchFixtureProjection | null;
+	scenery: FixtureProfileScenery | null;
+	placement: Placement | null;
+	shared: string;
+	place(change: Partial<Placement>): void;
+	write(next: PatchFixtureProjection): void;
+}) {
 	const position = placement?.location ?? {
 		x: entity.positionMillimetres[0],
 		y: entity.positionMillimetres[1],
@@ -278,60 +367,55 @@ export function CadInfoPanel({
 		y: entity.rotationDegrees[1],
 		z: entity.rotationDegrees[2],
 	};
-	const shared = placements.length > 1 ? " (all copies)" : "";
-	// A copy with no name of its own is shown under the fixture's name.
-	const fixtureName = fixture?.name ?? entity.name;
-	const name = copyId ? copy?.name.trim() || fixtureName : fixtureName;
-
 	return (
-		<section className="cad-info" aria-label="Info">
-			<h3>Info</h3>
-			<PlacementChooser entity={entity} placements={placements} onChoose={(id) => onChoosePlacement?.(id)} />
-			<fieldset disabled={!placement}>
-				<CommitText label="Name" value={name} onCommit={(next) => next.trim() && place({ name: next.trim() })} />
-				<CommitTextArea
-					label={`Notes${shared}`}
-					value={note}
-					onCommit={(next) => {
-						setNote(next);
-						documentSession
-							.saveFixtureNote({ fixtureId: entity.logicalFixtureId, note: next })
-							.catch(onError);
-					}}
-				/>
-				<VectorFields
-					label="Position"
-					unit="m"
-					value={position}
-					show={(millimetres) => millimetres / 1000}
-					onCommit={(axis, metres) =>
-						place({ location: { ...position, [axis]: Math.round(metres * 1000) } })
+		<fieldset disabled={!placement}>
+			<VectorFields
+				label="Position"
+				unit="m"
+				value={position}
+				show={(millimetres) => millimetres / 1000}
+				onCommit={(axis, metres) =>
+					place({ location: { ...position, [axis]: Math.round(metres * 1000) } })
+				}
+			/>
+			<VectorFields
+				label="Rotation"
+				unit="°"
+				digits={1}
+				value={rotation}
+				show={(degrees) => degrees}
+				onCommit={(axis, degrees) => place({ rotation: { ...rotation, [axis]: degrees } })}
+			/>
+			{fixture && scenery && hasAdjustableSize(scenery) ? (
+				<SizeFields fixture={fixture} scenery={scenery} shared={shared} onWrite={write} />
+			) : supportsScale(entity) ? (
+				<CommitNumber
+					label={`Scale${shared}`}
+					ariaLabel="Scale"
+					unit="×"
+					value={fixture?.modelScale ?? 1}
+					min={0.01}
+					max={100}
+					onCommit={(scale) =>
+						fixture && write({ ...fixture, modelScale: scale === 1 ? null : scale })
 					}
 				/>
-				<VectorFields
-					label="Rotation"
-					unit="°"
-					digits={1}
-					value={rotation}
-					show={(degrees) => degrees}
-					onCommit={(axis, degrees) => place({ rotation: { ...rotation, [axis]: degrees } })}
+			) : null}
+			{fixture && scenery ? (
+				<SceneryParameters
+					scenery={scenery}
+					options={fixture.sceneryOptions}
+					shared={shared}
+					onCommit={(sceneryOptions) => write({ ...fixture, sceneryOptions })}
 				/>
-				{fixture && scenery && hasAdjustableSize(scenery) ? (
-					<SizeFields fixture={fixture} scenery={scenery} shared={shared} onWrite={(next) => void write(next)} />
-				) : supportsScale(entity) ? (
-					<CommitNumber
-						label={`Scale${shared}`}
-						ariaLabel="Scale"
-						unit="×"
-						value={fixture?.modelScale ?? 1}
-						min={0.01}
-						max={100}
-						onCommit={(scale) =>
-							fixture && void write({ ...fixture, modelScale: scale === 1 ? null : scale })
-						}
-					/>
-				) : null}
-			</fieldset>
-		</section>
+			) : null}
+			{entity.kind !== "venue" ? (
+				<MountingFields
+					bracketAngle={placement?.bracketAngle ?? entity.bracketAngle ?? 0}
+					shaperAngle={placement?.shaperAngle ?? null}
+					onCommit={place}
+				/>
+			) : null}
+		</fieldset>
 	);
 }

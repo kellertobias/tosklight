@@ -3,11 +3,7 @@ import type {
 	PatchProfileRevision,
 } from "@tosklight/patch";
 import { Button, type TitleActionGroup } from "@tosklight/ui";
-import {
-	WindowHeader,
-	WindowScrollArea,
-	WindowSettings,
-} from "@tosklight/ui/window-kit";
+import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import {
 	type CSSProperties,
 	type ReactNode,
@@ -44,22 +40,21 @@ import { beginWindowDrag } from "./WindowChrome";
 
 export type DmxPage = "network" | "values" | "sources";
 
-type DotSize = "small" | "large";
-interface Channel {
+export interface Channel {
 	universe: number;
 	address: number;
 }
 
-/** A patch cell carries its address, so it is sized to read one. */
-const PATCH_CELL = 34;
-const DOT_SIZE_KEY = "tosklight.architect.dmx-dot-size";
+/** A received value is a dot. */
+const VALUE_DOT = 9;
 const DIP_WEIGHTS = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 
 /**
  * The Architect's DMX settings page.
  *
  * **Network** is where the show's DMX arrives from, and **Values** is what actually arrives — the
- * desk's DMX Output window, reading the network instead of a desk. The Architect outputs nothing, so there is nothing here to override.
+ * desk's DMX Output window, reading the network instead of a desk. The Architect outputs nothing, so
+ * there is nothing here to override, and Values has no window settings.
  * **Sources** is who is on the network: every Art-Net node and sACN source, and their universes.
  * Which addresses the rig occupies is the Patch screen's DMX tab, not a page here.
  *
@@ -88,8 +83,6 @@ export function DmxWorkspace({
 		() => dmxOccupancy(fixtures, profileRevisions),
 		[fixtures, profileRevisions],
 	);
-	const [dotSize, setDotSize] = useDotSize();
-	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 
 	return (
 		<section className="viz-dmx-workspace">
@@ -113,44 +106,7 @@ export function DmxWorkspace({
 					},
 					...(settingsPages ? [settingsPages] : []),
 				]}
-				settings={page === "values"}
-				onSettings={(anchor) =>
-					setSettingsAnchor(anchor.getBoundingClientRect())
-				}
 			/>
-			{settingsAnchor && page === "values" ? (
-				<WindowSettings
-					modal={false}
-					anchor={settingsAnchor}
-					title="DMX Settings"
-					onClose={() => setSettingsAnchor(null)}
-					tabs={[
-						{
-							id: "display",
-							label: "Display",
-							content: (
-								<>
-									<h3>DMX dot size</h3>
-									<div className="button-group">
-										<Button
-											active={dotSize === "small"}
-											onClick={() => setDotSize("small")}
-										>
-											Small
-										</Button>
-										<Button
-											active={dotSize === "large"}
-											onClick={() => setDotSize("large")}
-										>
-											Large
-										</Button>
-									</div>
-								</>
-							),
-						},
-					]}
-				/>
-			) : null}
 			{page === "network" ? (
 				<div className="viz-dmx-network">
 					<DmxInterfacesPanel onError={onError} />
@@ -163,148 +119,18 @@ export function DmxWorkspace({
 			) : null}
 			{page === "sources" ? <DmxSourcesView /> : null}
 			{page === "values" ? (
-				<DmxValuesView occupancy={occupancy} dotSize={dotSize} />
+				<DmxValuesView occupancy={occupancy} />
 			) : null}
 		</section>
 	);
 }
 
-/**
- * The Patch screen's DMX tab: every channel of every patched universe, lit where the rig occupies
- * it and dark where not. The host draws the title, which carries the Patch screen's tabs.
- */
-export function DmxPatchScreen({
-	header,
-	fixtures,
-	profileRevisions,
-}: {
-	header: ReactNode;
-	fixtures: readonly PatchFixtureProjection[];
-	profileRevisions: readonly PatchProfileRevision[];
-}) {
-	const occupancy = useMemo(
-		() => dmxOccupancy(fixtures, profileRevisions),
-		[fixtures, profileRevisions],
-	);
-	return (
-		<section className="viz-dmx-workspace viz-dmx-patch-screen">
-			{header}
-			<DmxPatchView occupancy={occupancy} />
-		</section>
-	);
-}
-
-/** Every channel of every patched universe: lit where the rig occupies it, dark where not. */
-function DmxPatchView({ occupancy }: { occupancy: DmxOccupancy }) {
-	const [selected, setSelected] = useState<Channel | null>(null);
-	const host = useRef<HTMLElement>(null);
-	const columns = dmxChannelsPerRow(useWidth(host), PATCH_CELL);
-	const patched = patchedUniverses(occupancy);
-	const universes = patched.length ? patched : [1];
-
-	return (
-		<div className="viz-dmx-content">
-			<WindowScrollArea>
-				<main ref={host} style={gridStyle(columns, PATCH_CELL)}>
-					{universes.map((universe) => {
-						const addresses = occupancy.get(universe);
-						return (
-							<section
-								className="viz-dmx-universe is-patch"
-								key={universe}
-								aria-label={`Universe ${universe} patch`}
-							>
-								<header>
-									<b>Universe {universe}</b>
-									<small>
-										{addresses?.size ?? 0} of {DMX_SLOTS} channels patched
-									</small>
-								</header>
-								{rows(columns, (address) => {
-									const occupants = addresses?.get(address) ?? [];
-									const isSelected =
-										selected?.universe === universe &&
-										selected.address === address;
-									return (
-										<button
-											type="button"
-											key={address}
-											className={classes({
-												"is-patched": occupants.length > 0,
-												"is-start": occupants.some(
-													(occupant) => occupant.channel === 1,
-												),
-												"is-conflict": occupants.length > 1,
-												"joins-prev": sameFixture(
-													occupants,
-													addresses?.get(address - 1),
-												),
-												"joins-next": sameFixture(
-													occupants,
-													addresses?.get(address + 1),
-												),
-												// A row's last cell continues on the next row: no gap to bridge.
-												"bridges-next":
-													address % columns !== 0 &&
-													sameFixture(occupants, addresses?.get(address + 1)),
-												"is-selected": isSelected,
-											})}
-											aria-pressed={isSelected}
-											aria-label={`Universe ${universe}, address ${address}, ${
-												occupants.length
-													? occupants.map(occupantLabel).join("; ")
-													: "not patched"
-											}`}
-											title={
-												occupants.length
-													? occupants.map(occupantLabel).join("\n")
-													: undefined
-											}
-											onClick={() => setSelected({ universe, address })}
-										>
-											{address}
-										</button>
-									);
-								})}
-							</section>
-						);
-					})}
-					{patched.length ? null : (
-						<p className="viz-dmx-empty">
-							No fixture is patched to a DMX address yet.
-						</p>
-					)}
-				</main>
-			</WindowScrollArea>
-			<aside className="viz-dmx-info">
-				{selected ? (
-					<ChannelInfo
-						channel={selected}
-						occupants={
-							occupancy.get(selected.universe)?.get(selected.address) ?? []
-						}
-						onDeselect={() => setSelected(null)}
-					/>
-				) : (
-					<PatchSummary occupancy={occupancy} />
-				)}
-			</aside>
-		</div>
-	);
-}
-
 /** The desk's DMX Output window, reading what arrives over Art-Net and sACN instead. */
-function DmxValuesView({
-	occupancy,
-	dotSize,
-}: {
-	occupancy: DmxOccupancy;
-	dotSize: DotSize;
-}) {
+function DmxValuesView({ occupancy }: { occupancy: DmxOccupancy }) {
 	const received = useReceivedDmx();
 	const [selected, setSelected] = useState<Channel | null>(null);
 	const host = useRef<HTMLElement>(null);
-	const dot = dotSize === "large" ? 42 : 9;
+	const dot = VALUE_DOT;
 	const columns = dmxChannelsPerRow(useWidth(host), dot);
 	const universes = valueUniverses(received.value, occupancy);
 	const selectedUniverse = selected
@@ -317,7 +143,7 @@ function DmxValuesView({
 				<main ref={host} style={gridStyle(columns, dot)}>
 					{universes.map((frame) => (
 						<section
-							className={`viz-dmx-universe is-values dots-${dotSize}`}
+							className="viz-dmx-universe is-values dots-small"
 							key={frame.universe}
 							aria-label={`Universe ${frame.universe} values`}
 						>
@@ -700,7 +526,7 @@ function count(amount: number, noun: string) {
 	return `${amount} ${noun}${amount === 1 ? "" : "s"}`;
 }
 
-function ChannelInfo({
+export function ChannelInfo({
 	channel,
 	occupants,
 	value,
@@ -793,7 +619,7 @@ function ChannelInfo({
 	);
 }
 
-function PatchSummary({ occupancy }: { occupancy: DmxOccupancy }) {
+export function PatchSummary({ occupancy }: { occupancy: DmxOccupancy }) {
 	const universes = patchedUniverses(occupancy);
 	const conflicts = universes.reduce(
 		(count, universe) =>
@@ -907,7 +733,7 @@ function valueUniverses(
 }
 
 /** Two neighbouring addresses belong to one fixture: each has that fixture as its only occupant. */
-function sameFixture(
+export function sameFixture(
 	here: readonly DmxOccupant[],
 	there: readonly DmxOccupant[] | undefined,
 ) {
@@ -939,7 +765,7 @@ function protocolLabel(protocol: LiveDmxProtocol) {
 	return protocol === "sacn" ? "sACN" : "Art-Net";
 }
 
-function occupantLabel(occupant: DmxOccupant) {
+export function occupantLabel(occupant: DmxOccupant) {
 	const attribute = occupant.attribute ? ` ${occupant.attribute}` : "";
 	return `${fixtureTitle(occupant.fixture)} channel ${occupant.channel}${attribute}`;
 }
@@ -949,7 +775,7 @@ function hexAddress(address: number) {
 }
 
 /** Rows of `columns` channels, each labelled with its first address. */
-function rows(
+export function rows(
 	columns: number,
 	cell: (address: number) => ReactNode,
 	label: (address: number) => ReactNode = String,
@@ -970,21 +796,21 @@ function rows(
 	});
 }
 
-function gridStyle(columns: number, cell: number) {
+export function gridStyle(columns: number, cell: number) {
 	return {
 		"--viz-dmx-columns": columns,
 		"--viz-dmx-cell": `${cell}px`,
 	} as CSSProperties;
 }
 
-function classes(flags: Record<string, boolean>) {
+export function classes(flags: Record<string, boolean>) {
 	return Object.entries(flags)
 		.filter(([, on]) => on)
 		.map(([name]) => name)
 		.join(" ");
 }
 
-function useWidth(host: RefObject<HTMLElement | null>) {
+export function useWidth(host: RefObject<HTMLElement | null>) {
 	const [width, setWidth] = useState(900);
 	useEffect(() => {
 		const node = host.current;
@@ -997,26 +823,4 @@ function useWidth(host: RefObject<HTMLElement | null>) {
 		return () => observer.disconnect();
 	}, [host]);
 	return width;
-}
-
-/** The dot size is this window's preference, not the show's. */
-function useDotSize(): [DotSize, (size: DotSize) => void] {
-	const [size, setSize] = useState<DotSize>(() => {
-		try {
-			return localStorage.getItem(DOT_SIZE_KEY) === "large" ? "large" : "small";
-		} catch {
-			return "small";
-		}
-	});
-	return [
-		size,
-		(next) => {
-			setSize(next);
-			try {
-				localStorage.setItem(DOT_SIZE_KEY, next);
-			} catch {
-				// A window that cannot store it still shows the size chosen now.
-			}
-		},
-	];
 }

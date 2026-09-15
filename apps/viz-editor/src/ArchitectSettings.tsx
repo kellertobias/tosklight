@@ -18,11 +18,11 @@ export type SettingsPage = "visualizer" | "fixtures" | "dmx";
 // Show screen, and MCP is reached from that screen's title.
 export const SETTINGS_PAGES: readonly { id: SettingsPage; label: string }[] = [
 	{ id: "visualizer", label: "Visualizer" },
-	{ id: "fixtures", label: "Fixtures" },
+	{ id: "fixtures", label: "Library" },
 	{ id: "dmx", label: "DMX" },
 ];
 
-/** One Settings title for every page; Fixtures and DMX add their own groups left of the pages. */
+/** One Settings title for every page; Library and DMX add their own groups left of the pages. */
 export function ArchitectSettings({
 	page,
 	pages,

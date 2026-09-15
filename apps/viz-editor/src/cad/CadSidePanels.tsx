@@ -13,7 +13,9 @@ import {
 } from "@tosklight/ui";
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react";
 import { CadElementsPanel, type ElementsRequests, type ElementsTab, elementsAddItems } from "./CadElementsPanel";
-import { CadInfoPanel } from "./CadInfoPanel";
+import { DeleteSelectionButton, selectedElements, useDeleteSelection } from "./CadDeleteSelection";
+import { CadInfoPanel, type InfoTab } from "./CadInfoPanel";
+import { SelectedElementList, SeveralPlacement } from "./CadInfoSeveral";
 import type { CadTools } from "./cadTools";
 import { CAD_VIEW_LABELS, type CadEntity, type CadSceneSnapshot, type CadViewDirection } from "./types";
 import type { CadUnderlays } from "./useCadUnderlays";
@@ -180,6 +182,61 @@ const addGroup = (label: string, items: TitleDropdownItem[]): TitleActionGroup =
 	],
 });
 
+/** Info's **Generic** and **Placement** tabs. */
+function infoTabsGroup(active: InfoTab, onChange: (tab: InfoTab) => void): TitleActionGroup {
+	return {
+		id: "info-tabs",
+		kind: "tabs",
+		activeId: active,
+		onActiveChange: (id) => onChange(id as InfoTab),
+		actions: [
+			{ id: "generic", label: "Generic" },
+			{ id: "placement", label: "Placement" },
+		],
+	};
+}
+
+/** What the side panel's title row carries: the open panel's tabs and add menu, or Info's tabs. */
+function titleGroups({
+	panel,
+	tab,
+	onTab,
+	tools,
+	request,
+	printPages,
+	infoTabs,
+}: {
+	panel: CadPanel;
+	tab: ElementsTab;
+	onTab(tab: ElementsTab): void;
+	tools: CadTools;
+	request(kind: keyof ElementsRequests): void;
+	printPages: PrintPages;
+	infoTabs: TitleActionGroup;
+}): TitleActionGroup[] {
+	if (panel === "elements")
+		return [
+			{
+				id: "elements-tabs",
+				kind: "tabs",
+				activeId: tab,
+				onActiveChange: (id) => onTab(id as ElementsTab),
+				actions: [
+					{ id: "drawings", label: "Drawings" },
+					{ id: "objects", label: "Objects" },
+				],
+			},
+			addGroup(tab === "drawings" ? "Add drawing" : "Add object", elementsAddItems(tab, tools, request)),
+		];
+	if (panel === "print")
+		return [
+			addGroup("Add plan page", [
+				{ kind: "action", id: "fixture-list", label: "Fixture list", onPress: printPages.addFixtureList },
+			]),
+		];
+	return [infoTabs];
+}
+
 export function CadSidePanels({
 	panel,
 	scene,
@@ -212,6 +269,8 @@ export function CadSidePanels({
 }) {
 	const [width, setWidth] = useStoredWidth();
 	const [tab, setTab] = useState<ElementsTab>("drawings");
+	// Kept while the selection changes, so stepping through lamps stays on the same tab.
+	const [infoTab, setInfoTab] = useState<InfoTab>("generic");
 	const [requests, setRequests] = useState<ElementsRequests>({
 		newFolder: 0,
 		chooseDrawing: 0,
@@ -219,41 +278,22 @@ export function CadSidePanels({
 	});
 	const selectionCount = scene?.selectedIds.length ?? 0;
 	const placements = selectedPlacements(scene);
-	if (!panel && selectionCount === 0) return null;
+	const elements = scene ? selectedElements(scene.entities, scene.selectedIds) : [];
+	const deletion = useDeleteSelection({
+		elements,
+		onDeleted: () => onSelect([]),
+		onError,
+	});
+	if (!panel && selectionCount === 0) return deletion.dialog;
+	const deleteButton = (
+		<DeleteSelectionButton count={elements.length} onPress={(event) => deletion.request(event)} />
+	);
 
+	const infoTabs = infoTabsGroup(infoTab, setInfoTab);
 	const request = (kind: keyof ElementsRequests) =>
 		setRequests((current) => ({ ...current, [kind]: current[kind] + 1 }));
 	const title = panel === "print" ? "Plans" : panel === "elements" ? "Elements" : "Info";
-	const groups: TitleActionGroup[] =
-		panel === "elements"
-			? [
-					{
-						id: "elements-tabs",
-						kind: "tabs",
-						activeId: tab,
-						onActiveChange: (id) => setTab(id as ElementsTab),
-						actions: [
-							{ id: "drawings", label: "Drawings" },
-							{ id: "objects", label: "Objects" },
-						],
-					},
-					addGroup(
-						tab === "drawings" ? "Add drawing" : "Add object",
-						elementsAddItems(tab, tools, request),
-					),
-				]
-			: panel === "print"
-				? [
-						addGroup("Add plan page", [
-							{
-								kind: "action",
-								id: "fixture-list",
-								label: "Fixture list",
-								onPress: printPages.addFixtureList,
-							},
-						]),
-					]
-				: [];
+	const groups = titleGroups({ panel, tab, onTab: setTab, tools, request, printPages, infoTabs });
 
 	return (
 		<aside
@@ -272,6 +312,8 @@ export function CadSidePanels({
 						groups={groups}
 					/>
 				) : null}
+				{/* With no panel open this row is Info's own title, so its trash button sits here. */}
+				{panel ? null : deleteButton}
 			</header>
 			{panel ? (
 				<div className="cad-sidebar-body">
@@ -302,9 +344,35 @@ export function CadSidePanels({
 						selectionCount={selectionCount}
 						sceneRevision={scene.sceneRevision}
 						onError={onError}
+						tab={infoTab}
+						action={
+							panel ? (
+								<>
+									<TitleChrome
+										className="ui-window-action-groups"
+										groupClassName="ui-window-action-group"
+										terminalActions={[]}
+										groups={[infoTabs]}
+									/>
+									{deleteButton}
+								</>
+							) : null
+						}
+						several={
+							elements.length < 2 ? undefined : infoTab === "generic" ? (
+								<SelectedElementList elements={elements} onSelect={(id) => onSelect([id])} />
+							) : (
+								<SeveralPlacement
+									elements={elements}
+									sceneRevision={scene.sceneRevision}
+									onError={onError}
+								/>
+							)
+						}
 					/>
 				</div>
 			) : null}
+			{deletion.dialog}
 		</aside>
 	);
 }

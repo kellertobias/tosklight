@@ -714,6 +714,12 @@ pub(crate) fn apply(
             revision: actual.saturating_add(1),
         });
     }
+    // A server's outputs go with it, and a surface that showed one of them keeps its fallback.
+    let outputs = if deleting && kind == "media_server" {
+        remove_server_outputs(&mut candidate, id)?
+    } else {
+        ServerOutputs::default()
+    };
     validate(&candidate)?;
 
     let ledger = serde_json::json!({ "fingerprint": fingerprint });
@@ -725,13 +731,16 @@ pub(crate) fn apply(
     };
     let id_text = id.to_string();
     if deleting {
-        let delete = AtomicObjectDelete {
+        let mut writes = vec![ledger_write];
+        writes.extend(outputs.surface_writes());
+        let mut deletes = outputs.source_deletes();
+        deletes.push(AtomicObjectDelete {
             kind: &kind,
             id: &id_text,
             expected: actual,
-        };
+        });
         store
-            .mutate_objects_atomically(&[ledger_write], &[delete])
+            .mutate_objects_atomically(&writes, &deletes)
             .map_err(|error| error.to_string())?;
     } else {
         let body = body.as_ref().expect("put intent has a body");
@@ -751,6 +760,76 @@ pub(crate) fn apply(
         changed: true,
         snapshot: snapshot(store)?,
     })
+}
+
+/// What deleting a server takes with it: its outputs, and the surfaces that showed one of them.
+#[derive(Default)]
+struct ServerOutputs {
+    /// Each removed output's identity and stored revision.
+    sources: Vec<(String, u64)>,
+    /// Each surface that no longer names a source: its identity, new body and stored revision.
+    surfaces: Vec<(String, Value, u64)>,
+}
+
+impl ServerOutputs {
+    fn source_deletes(&self) -> Vec<AtomicObjectDelete<'_>> {
+        self.sources
+            .iter()
+            .map(|(id, revision)| AtomicObjectDelete {
+                kind: "media_source",
+                id,
+                expected: *revision,
+            })
+            .collect()
+    }
+
+    fn surface_writes(&self) -> impl Iterator<Item = AtomicObjectWrite<'_>> {
+        self.surfaces
+            .iter()
+            .map(|(id, body, revision)| AtomicObjectWrite {
+                kind: "media_surface",
+                id,
+                body,
+                expected: *revision,
+            })
+    }
+}
+
+/// Removes a server's outputs from the layout and clears every surface's reference to one of them.
+fn remove_server_outputs(
+    layout: &mut MediaLayoutSnapshot,
+    server_id: Uuid,
+) -> Result<ServerOutputs, String> {
+    let mut outputs = ServerOutputs::default();
+    let mut removed = BTreeSet::new();
+    layout.sources.retain(|entry| match &entry.object {
+        MediaObject::MediaSource(source) if source.server_id == server_id => {
+            removed.insert(source.id);
+            outputs
+                .sources
+                .push((source.id.to_string(), entry.revision));
+            false
+        }
+        _ => true,
+    });
+    for entry in &mut layout.surfaces {
+        let MediaObject::MediaSurface(surface) = &mut entry.object else {
+            continue;
+        };
+        if !surface
+            .source_id
+            .is_some_and(|source| removed.contains(&source))
+        {
+            continue;
+        }
+        surface.source_id = None;
+        let surface_id = surface.id.to_string();
+        outputs
+            .surfaces
+            .push((surface_id, entry.object.body()?, entry.revision));
+        entry.revision = entry.revision.saturating_add(1);
+    }
+    Ok(outputs)
 }
 
 #[cfg(test)]
@@ -864,6 +943,30 @@ mod tests {
         .unwrap_err();
         assert!(error.contains("missing source"));
         assert_eq!(snapshot(&store).unwrap().sources.len(), 1);
+
+        // Deleting the server takes its outputs with it, and the surfaces keep only their fallback.
+        let deleted = apply(
+            &store,
+            MediaObjectIntent {
+                request_id: "delete-server".into(),
+                expected_revision: 1,
+                action: MediaIntentAction::Delete {
+                    kind: "media_server".into(),
+                    id: server_id,
+                },
+            },
+        )
+        .unwrap();
+        assert!(deleted.snapshot.servers.is_empty());
+        assert!(deleted.snapshot.sources.is_empty());
+        assert_eq!(deleted.snapshot.surfaces.len(), 2);
+        for entry in &deleted.snapshot.surfaces {
+            let MediaObject::MediaSurface(surface) = &entry.object else {
+                unreachable!()
+            };
+            assert_eq!(surface.source_id, None);
+            assert_eq!(entry.revision, 2);
+        }
     }
 
     #[test]

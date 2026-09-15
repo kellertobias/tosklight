@@ -20,15 +20,22 @@ export function CommitText({
 	value,
 	onCommit,
 	ariaLabel,
+	placeholder,
+	accepts,
 }: {
 	label: string;
 	value: string;
 	onCommit(value: string): void;
 	ariaLabel?: string;
+	placeholder?: string;
+	/** Whether a finished edit can be written; one that cannot is put back. */
+	accepts?(draft: string): boolean;
 }) {
 	const [draft, setDraft] = useDraft(value);
 	const commit = () => {
-		if (draft !== value) onCommit(draft);
+		if (draft === value) return;
+		if (accepts && !accepts(draft)) setDraft(value);
+		else onCommit(draft);
 	};
 	return (
 		<label className="cad-field">
@@ -36,6 +43,7 @@ export function CommitText({
 			<Input
 				type="text"
 				aria-label={ariaLabel ?? label}
+				placeholder={placeholder}
 				value={draft}
 				onChange={(event) => setDraft(event.currentTarget.value)}
 				onBlur={commit}

@@ -384,6 +384,15 @@ describe("the CAD planning screen", () => {
 		await waitFor(() =>
 			expect(within(info).getByLabelText("Notes")).toHaveValue("Use secondary safety"),
 		);
+		// Generic holds what the element is; where it stands is under Placement.
+		expect(within(info).queryByLabelText("Position X")).toBeNull();
+		const notes = within(info).getByLabelText("Notes");
+		fireEvent.change(notes, { target: { value: "Check clamp" } });
+		fireEvent.blur(notes);
+		expect(documentMocks.saveFixtureNote).toHaveBeenCalledWith({ fixtureId, note: "Check clamp" });
+
+		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
+		expect(within(info).queryByLabelText("Notes")).toBeNull();
 		expect(within(info).getByLabelText("Position Z")).toHaveValue("4");
 		// A lamp cannot be drawn at another size.
 		expect(within(info).queryByLabelText("Scale")).toBeNull();
@@ -399,16 +408,166 @@ describe("the CAD planning screen", () => {
 			location: { x: 1250, y: 0, z: 4000 },
 		});
 
-		const notes = within(info).getByLabelText("Notes");
-		fireEvent.change(notes, { target: { value: "Check clamp" } });
-		fireEvent.blur(notes);
-		expect(documentMocks.saveFixtureNote).toHaveBeenCalledWith({ fixtureId, note: "Check clamp" });
-
 		const aside = screen.getByRole("complementary", { name: "Info" });
 		const handle = within(aside).getByRole("separator", { name: "Resize side panel" });
 		fireEvent.keyDown(handle, { key: "ArrowLeft" });
 		expect(aside.style.width).toBe("320px");
 		expect(workspace.get("tosklight:viz-editor:cad-sidebar-width:v1")).toBe("320");
+	});
+
+	it("switches view, zooms and pans the viewport from the keyboard, but not while typing", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const canvas = await screen.findByTestId("cad-canvas");
+		const zoom = () => Number(screen.getByTestId("cad-canvas").getAttribute("data-zoom"));
+		const before = zoom();
+		fireEvent.keyDown(window, { key: "+" });
+		expect(zoom()).toBeCloseTo(before * 1.25);
+		fireEvent.keyDown(window, { key: "-" });
+		expect(zoom()).toBeCloseTo(before);
+
+		const pan = () => screen.getByTestId("cad-canvas").getAttribute("data-pan");
+		const panned = pan();
+		fireEvent.keyDown(window, { key: "d" });
+		expect(pan()).not.toBe(panned);
+
+		fireEvent.keyDown(window, { key: "2" });
+		expect(canvas).toHaveTextContent("left_to_right");
+		expect(screen.getByRole("combobox", { name: "View direction" })).toHaveValue("left_to_right");
+
+		// A key typed into a field belongs to the field.
+		const info = await screen.findByRole("region", { name: "Info" });
+		fireEvent.keyDown(within(info).getByLabelText("Name"), { key: "1" });
+		expect(screen.getByTestId("cad-canvas")).toHaveTextContent("left_to_right");
+	});
+
+	it("deletes the selected element from Info after asking, or at once with Shift", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		const aside = await screen.findByRole("complementary", { name: "Info" });
+		fireEvent.click(within(aside).getByRole("button", { name: "Delete selected element" }));
+		const confirm = await screen.findByRole("dialog", { name: "Delete Profile Stage 1?" });
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+		fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Delete Profile Stage 1?" })).toBeNull(),
+		);
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+
+		fireEvent.click(within(aside).getByRole("button", { name: "Delete selected element" }));
+		fireEvent.click(
+			within(await screen.findByRole("dialog", { name: "Delete Profile Stage 1?" })).getByRole(
+				"button",
+				{ name: "Delete" },
+			),
+		);
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(transportMocks.patchFixtures.mock.calls[0][2]).toMatchObject({
+			fixtures: [],
+			removeFixtureIds: [fixtureId],
+		});
+		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, []));
+	});
+
+	it("deletes a single element without asking when the trash button is Shift-clicked", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		const aside = await screen.findByRole("complementary", { name: "Info" });
+		fireEvent.click(within(aside).getByRole("button", { name: "Delete selected element" }), {
+			shiftKey: true,
+		});
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(transportMocks.patchFixtures.mock.calls[0][2].removeFixtureIds).toEqual([fixtureId]);
+	});
+
+	it("lists several selected elements in Info and always confirms deleting them, even with Shift", async () => {
+		mocks.snapshot.mockResolvedValue({
+			...snapshot,
+			selectedIds: [fixtureId, secondFixtureId],
+			entities: [
+				...snapshot.entities,
+				{
+					...snapshot.entities[0],
+					id: secondFixtureId,
+					logicalFixtureId: secondFixtureId,
+					name: "Wash Left",
+					fixtureDisplayId: "102",
+				},
+			],
+		});
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const list = await screen.findByRole("list", { name: "Selected elements" });
+		expect(
+			within(list)
+				.getAllByRole("button")
+				.map((row) => [...row.children].map((cell) => cell.textContent)),
+		).toEqual([
+			["101", "Profile Stage 1", "Robe Robin DLS Profile", "1.1"],
+			["102", "Wash Left", "Robe Robin DLS Profile", "1.1"],
+		]);
+		const aside = screen.getByRole("complementary", { name: "Info" });
+		// The trash button is how a selection is deleted; the list offers no second way.
+		expect(within(aside).queryByRole("button", { name: /Delete all/ })).toBeNull();
+		fireEvent.click(within(aside).getByRole("button", { name: "Delete 2 selected elements" }), {
+			shiftKey: true,
+		});
+		const confirm = await screen.findByRole("dialog", { name: "Delete 2 elements?" });
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+		fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+		fireEvent.click(within(aside).getByRole("button", { name: "Delete 2 selected elements" }));
+		fireEvent.click(
+			within(await screen.findByRole("dialog", { name: "Delete 2 elements?" })).getByRole("button", {
+				name: "Delete all 2",
+			}),
+		);
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(transportMocks.patchFixtures.mock.calls[0][2].removeFixtureIds).toEqual([
+			fixtureId,
+			secondFixtureId,
+		]);
+	});
+
+	it("selects only the element a row of the selection list names", async () => {
+		mocks.snapshot.mockResolvedValue({
+			...snapshot,
+			selectedIds: [fixtureId, secondFixtureId],
+			entities: [
+				...snapshot.entities,
+				{
+					...snapshot.entities[0],
+					id: secondFixtureId,
+					logicalFixtureId: secondFixtureId,
+					name: "Wash Left",
+					fixtureDisplayId: "102",
+				},
+			],
+		});
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const list = await screen.findByRole("list", { name: "Selected elements" });
+		fireEvent.click(within(list).getByRole("button", { name: /Wash Left/ }));
+		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, [secondFixtureId]));
 	});
 
 	it("edits one multi-patch copy in Info without moving the fixture or its other copies", async () => {
@@ -454,6 +613,7 @@ describe("the CAD planning screen", () => {
 		expect(within(info).getByLabelText("Notes (all copies)")).toBeInTheDocument();
 
 		fireEvent.change(chooser, { target: { value: copyId } });
+		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
 		await waitFor(() =>
 			expect(within(info).getByLabelText("Position X")).toHaveValue("2"),
 		);
@@ -466,6 +626,7 @@ describe("the CAD planning screen", () => {
 		expect(written.multipatch).toEqual([{ ...copy, location: { x: 3500, y: 0, z: 4000 } }]);
 
 		// A copy's name is its own; the fixture keeps its name.
+		fireEvent.click(screen.getByRole("tab", { name: "Generic" }));
 		const name = within(info).getByLabelText("Name");
 		fireEvent.change(name, { target: { value: "Profile Stage 1 SR" } });
 		fireEvent.blur(name);
@@ -528,6 +689,7 @@ describe("the CAD planning screen", () => {
 			</ModalProvider>,
 		);
 		const info = await screen.findByRole("region", { name: "Info" });
+		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
 		const width = await within(info).findByLabelText("Width");
 		expect(width).toHaveValue("4");
 		expect(within(info).getByLabelText("Height")).toHaveValue("6");
@@ -551,6 +713,130 @@ describe("the CAD planning screen", () => {
 			y: 6000,
 			z: 60,
 		});
+	});
+
+	it("patches a lamp under Generic and sets its bracket and barn doors under Placement", async () => {
+		documentMocks.patchSnapshot.mockResolvedValue({
+			fixtures: [
+				{
+					fixtureId,
+					name: "Profile Stage 1",
+					splitPatches: [{ split: 1, universe: 1, address: 1 }],
+					location: { x: 0, y: 0, z: 4000 },
+					rotation: { x: 0, y: 0, z: 0 },
+					multipatch: [],
+					bracketAngle: 0,
+					shaperAngle: null,
+				},
+			],
+		});
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const info = await screen.findByRole("region", { name: "Info" });
+		const patch = await within(info).findByLabelText("Patch");
+		await waitFor(() => expect(patch).toHaveValue("1.1"));
+		// An address outside a universe is put back rather than written.
+		fireEvent.change(patch, { target: { value: "2.600" } });
+		fireEvent.keyDown(patch, { key: "Enter" });
+		expect(patch).toHaveValue("1.1");
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+		fireEvent.change(patch, { target: { value: "2.17" } });
+		fireEvent.keyDown(patch, { key: "Enter" });
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(transportMocks.patchFixtures.mock.calls[0][2].fixtures[0].splitPatches).toEqual([
+			{ split: 1, universe: 2, address: 17 },
+		]);
+
+		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
+		const barndoors = within(info).getByLabelText("Barndoors");
+		expect(barndoors).toHaveValue("");
+		fireEvent.change(barndoors, { target: { value: "15" } });
+		fireEvent.keyDown(barndoors, { key: "Enter" });
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(2));
+		expect(transportMocks.patchFixtures.mock.calls[1][2].fixtures[0].shaperAngle).toBe(15);
+		const bracket = within(info).getByLabelText("Bracket angle");
+		fireEvent.change(bracket, { target: { value: "-30" } });
+		fireEvent.keyDown(bracket, { key: "Enter" });
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(3));
+		expect(transportMocks.patchFixtures.mock.calls[2][2].fixtures[0].bracketAngle).toBe(-30);
+	});
+
+	it("spreads a THRU range over several selected lamps and lays them out with the assistant", async () => {
+		const second = {
+			...snapshot.entities[0],
+			id: secondFixtureId,
+			logicalFixtureId: secondFixtureId,
+			name: "Wash Left",
+			fixtureDisplayId: "102",
+		};
+		mocks.snapshot.mockResolvedValue({
+			...snapshot,
+			selectedIds: [fixtureId, secondFixtureId],
+			entities: [...snapshot.entities, second],
+		});
+		const lamp = (id: string, x: number) => ({
+			fixtureId: id,
+			name: id,
+			splitPatches: [],
+			location: { x, y: 0, z: 4000 },
+			rotation: { x: 0, y: 0, z: 0 },
+			multipatch: [],
+			shaperAngle: null,
+		});
+		documentMocks.patchSnapshot.mockResolvedValue({
+			fixtures: [lamp(secondFixtureId, 2000), lamp(fixtureId, 0)],
+		});
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const info = await screen.findByRole("region", { name: "Info" });
+		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
+		const x = await within(info).findByLabelText("Position X");
+		// The values are read in selection order, so an even spread shows as its two ends.
+		await waitFor(() => expect(x).toHaveValue("0 THRU 2"));
+		expect(within(info).getByLabelText("Position Z")).toHaveValue("4");
+		expect(within(info).getByLabelText("Barndoors")).toHaveAttribute("placeholder", "None");
+
+		fireEvent.change(x, { target: { value: "1 … 3" } });
+		fireEvent.keyDown(x, { key: "Enter" });
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(
+			transportMocks.patchFixtures.mock.calls[0][2].fixtures.map(
+				(fixture: { fixtureId: string; location: { x: number } }) => [fixture.fixtureId, fixture.location.x],
+			),
+		).toEqual([
+			[fixtureId, 1000],
+			[secondFixtureId, 3000],
+		]);
+
+		const rotation = within(info).getByLabelText("Rotation Z");
+		fireEvent.change(rotation, { target: { value: "not a range" } });
+		fireEvent.keyDown(rotation, { key: "Enter" });
+		expect(rotation).toHaveValue("0");
+
+		fireEvent.click(within(info).getByRole("button", { name: "Placement Assistant" }));
+		const assistant = await screen.findByRole("dialog", { name: "Placement Assistant" });
+		fireEvent.click(within(assistant).getByRole("button", { name: "Circle" }));
+		const radius = within(assistant).getByLabelText("Radius");
+		fireEvent.change(radius, { target: { value: "5" } });
+		fireEvent.keyDown(radius, { key: "Enter" });
+		fireEvent.click(within(assistant).getByRole("button", { name: "Apply" }));
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(2));
+		// A whole circle of two, around the middle of where they stood.
+		expect(
+			transportMocks.patchFixtures.mock.calls[1][2].fixtures.map(
+				(fixture: { location: unknown }) => fixture.location,
+			),
+		).toEqual([
+			{ x: 7000, y: 0, z: 4000 },
+			{ x: -3000, y: 0, z: 4000 },
+		]);
+		expect(screen.queryByRole("dialog", { name: "Placement Assistant" })).toBeNull();
 	});
 
 	it("fits automatically when the view changes and rotates only top down", async () => {

@@ -77,16 +77,17 @@ The file keeps its name; **Save As** writes the show to a new one.
 
 ## Configure the fixtures the rig is made of
 
-**Fixtures** is a page of **Settings**, at the foot of the dock, rather than one of the show's own
+**Library** is a page of **Settings**, at the foot of the dock, rather than one of the show's own
 screens, because the fixture library belongs to the computer rather than to the document. The page
 is available with no show open, and every show planned here afterwards patches from what is in it.
-Its **Create fixture** action and search sit left of the Settings pages in the one title.
+Its **Create Fixture** action, marked with a plus, and search sit left of the Settings pages in the
+one title.
 
 The library reads in three columns — **Manufacturer**, **Fixture**, and **Fixture info** — so each
 column offers only what the column to its left has already chosen. Choose a manufacturer to see its
 fixtures, and a fixture to read what it is: type, modes with their footprints, size, weight, power,
 connectors, light source, lens, colour temperature, luminous output, beam angle, and its
-photograph. The search bar narrows every column at once. **Create fixture** opens a blank profile;
+photograph. The search bar narrows every column at once. **Create Fixture** opens a blank profile;
 **Edit as new revision** opens the chosen one. This is the same editor ToskLight Control uses, so a
 profile authored here is the one the desk reads, with the same Identity, Simulation and Modes tabs
 and the same rules. Saving stores the next immutable revision: the library
@@ -111,15 +112,18 @@ its editor.
 
 ## Editing the patch sheet
 
-The dock has five screens: **Show**, **CAD**, **Patch**, **Venue** and **Media**. **Patch** lists every
+The dock has four screens: **Show**, **CAD**, **Patch** and **Media**. **Patch** lists every
 fixture with a DMX address, lamps and effect devices — lasers, foggers, particle effects and
-patched scenery — alike; **Venue** lists the objects that are placed but not patched. The **Patch**
-title has two tabs: **Sheet** is the patch sheet, and **DMX** is the address grid described in
-"The Patch screen's DMX tab" below.
+patched scenery — alike. Switch on **Show all** above its layers and it also lists the Venue
+objects that are placed but not patched — trusses, stage elements, curtains and imported models —
+and **+ Add fixture** offers them. Selecting a Venue object in a view switches **Show all** on. The **Patch**
+title has two tabs at its right end, directly left of the window's **Settings** (⚙): **Sheet** is
+the patch sheet, and **DMX** is the address grid described in "The Patch screen's DMX tab" below.
 
 **Settings**, below the screens, holds the pages that are not a view of the rig: **Visualizer**,
-**Fixtures** and **DMX**. It opens on **Visualizer**. **Visualizer** is one page of boxes, two to a row: **Lamp** and **Laser** atmosphere, then **Rendering**,
-**Features** and **Picture**.
+**Library** and **DMX**. It opens on **Visualizer**. **Visualizer** is one page of boxes that fill the window's width — two to a row, three or four once
+the window is wide enough: **Lamp** and **Laser** atmosphere, then **Rendering**, **Features** and
+**Picture**.
 
 Click a column header to order the sheet by that column, for example **Fixture ID** or **Patch**;
 click it again to reverse the order. An arrow marks the column the sheet is ordered by. **Patch**
@@ -261,6 +265,18 @@ apart, and an address two patches share is drawn in orange. Select a cell to see
 it, its patch range, split, fixture channel and attribute, and the address's DIP-switch setting.
 **Sheet** returns to the patch sheet.
 
+The tab's only window setting (⚙) is **Show sidebar**, which shows or hides the side column; this
+computer remembers the choice.
+
+To repatch a fixture, drag its block by any of its cells to the new addresses. The block keeps the
+cell you took it by under the pointer, stops at the start and end of the universe, and can be
+dropped into another patched universe. A split or a multi-patch copy moves on its own. Moved blocks
+are outlined with a dashed line, and **Pending patch** at the top of the side column lists every
+move with its old and new address. Nothing is written until **Apply Patch**, which writes every
+moved fixture as one patch change; **Discard** puts the blocks back. A refused change stays pending
+and shows the reason. Dragging back to the stored address takes a move off the list. Because
+**Apply Patch** is in the side column, blocks can only be dragged while **Show sidebar** is on.
+
 ## The DMX settings page
 
 **DMX** is a page of **Settings**. Its own three tabs sit left of the Settings pages in the title:
@@ -273,9 +289,8 @@ it, its patch range, split, fixture channel and attribute, and the address's DIP
   red outline. A universe's header names the protocol, frame rate and sender, **Holding the last
   frame** once a source stops, or **Waiting for DMX** before anything arrived. Select a dot to
   read its value, fixture and DIP switches; with nothing selected, the side column lists every
-  input being listened on with its health, its sender, and how many packets it accepted. The
-  window's settings set the dot size. The editor outputs no DMX, so nothing on this tab overrides
-  a value.
+  input being listened on with its health, its sender, and how many packets it accepted. Values
+  has no window settings. The editor outputs no DMX, so nothing on this tab overrides a value.
 * **Sources** lists every Art-Net node and sACN source this computer finds on the network, one row
   per IP address: its name, IP address and protocols, its **Inputs** — each DMX input and the
   Art-Net universe it sends — and **Outputs** — each DMX output and the Art-Net universe it plays —
@@ -393,7 +408,8 @@ are drawn from the front looking straight at you.
 Each lamp's direction indicator starts where its light leaves it — the lens of the body it is
 drawn with — and points where the lamp points: its bracket angle and its rotation, as the
 Visualizer aims it, with moving heads at their home pan and tilt. A lamp with no known lens starts
-its indicator at its position. The viewports and printed pages draw the same indicator.
+its indicator at its position. The viewports and printed pages draw the same indicator; a viewport
+draws it in a half-transparent yellow, so it stands apart from the lamp's outline.
 
 A print page's cogwheel has a **Mounting hardware** switch. It is on for a new page and for a page
 saved before the switch existed; switched off, that page prints every fixture without its clamp
@@ -510,15 +526,39 @@ panel's left edge to make it wider or narrower, or focus the edge and use ← an
 for the next time.
 
 **Info** follows the selection. Select one element in a view and it opens at the foot of the side
-panel; with no panel open, it is the whole side panel. It edits the element's **Name**, **Notes**,
+panel; with no panel open, it is the whole side panel. Its title row has two tabs, **Generic** and
+**Placement**; the tab you chose stays open as the selection changes.
+
+For one element, **Generic** edits its **Name** and **Notes** and, for a lamp, its **Patch** as
+`universe.address` — one field per split, and an empty field unpatches it. **Placement** edits its
 **Position** (X, Y and Z in metres) and **Rotation** (X, Y and Z in degrees). A generated Venue object —
 a truss, a curtain, a stage element — shows its **Size** instead of a scale: only the measurements its
 profile lets you set, such as a truss's width (its length), a curtain's width and height or a stage
 element's height, in metres within the range the profile allows. A size outside that range is put
-back rather than written. A placed 3D model shows **Scale**. Every number field names its unit inside
-the field. The fields take typing from the keyboard: a change is written when
-you press Enter or leave the field, and Escape puts back what was there. With several elements
-selected, Info says how many.
+back rather than written. Its **Parameters** follow: a **Colour** as a hex value, empty for the kind's
+default, and for a chain its **Chain top** and **Chain bottom**. A placed 3D model shows **Scale**. A
+lamp shows its **Bracket angle** and **Barndoors** angle, empty when none are fitted. Every number
+field names its unit. The fields take typing from the keyboard: a change is written when you press
+Enter or leave the field, and Escape puts back what was there.
+
+With several elements selected, **Generic** lists them by **ID**, **Name**, **Model** and **Patch**, and
+a multi-patched fixture says how many copies it has. Click one to select only that element.
+**Placement** edits them together: **X**, **Y**, **Z**, **Rot X**, **Rot Y** and **Rot Z**, and for the
+lamps among them **Bracket angle** and **Barndoors**. A field shows the value they share, or the ends of
+an even spread as `1 THRU 5`, and is empty with **Mixed** when the values follow no such line. Type one
+value to set every element, or a range — `1 THRU 5`, `1 … 5` or `1 ... 5` — to spread it evenly from the
+first selected element to the last. **Placement Assistant** lays the selection out in the order it was
+selected: along a **Line** from a start to an end, in a **Grid** from a start with a number of columns
+and a spacing across and deep, or around a **Circle** from its centre, radius, start angle and arc,
+where 360° spaces the elements evenly around the whole circle. Nothing moves until **Apply**.
+
+The move gizmo stands on the selected element's own origin, or on the centre of a selected group.
+Drag an arrow to move along that axis, or the square to move freely.
+
+The trash button at the top of Info deletes the selection from the show, with every multi-patch copy
+of each fixture. It asks first. Shift-click it to delete a single selected element without being
+asked; several selected elements are always confirmed. **Undo** in the CAD title brings a deletion
+back.
 
 A multi-patched fixture stands in the plan once for each copy. Click a copy and Info edits that copy
 alone: its name, position and rotation change, and the fixture and its other copies stay where they
@@ -554,6 +594,21 @@ Escape drops a line, box or text still in progress; pressing it again returns to
 middle mouse button or Alt still pans while any tool is in hand. On a rotated top-down view, what
 you draw turns with the rig. Drawing is off while the print pages are open.
 
+Single keys work the CAD screen without the pointer. They act on the viewport you last clicked in,
+and are ignored while you type in a field or a dialog is open:
+
+| Key | Does |
+| --- | --- |
+| **V** | **Select** |
+| **L** | **Draw line** |
+| **P** | **Draw box** |
+| **T** | **Place text** |
+| **M** | **Measure** |
+| **R** | **Erase** |
+| **1** to **5** | **Top down**, **Left to right**, **Right to left**, **Front to back**, **Back to front**, framed on the rig |
+| **+** and **−** | Zoom in and out |
+| **W**, **A**, **S**, **D** | Move the view up, left, down and right |
+
 The project paperwork printed on every page is no longer a CAD panel: set it under **Show
 information** on the **Show** screen.
 
@@ -568,7 +623,7 @@ views; **Info** below then sets its position, rotation and scale.
 
 ## Place your own venue models
 
-The **Venue** screen's title bar has **+ Import 3D model** beside **+ Add fixture**, for a venue
+With **Show all** on, the **Patch** sheet's title bar has **+ Import 3D model** beside **+ Add fixture**, for a venue
 the fixture library does not have: the hall you are playing, a stage build, a set piece. Choose a
 GLB, glTF, 3MF or OBJ file on this computer and it is placed at once, at the stage origin, on the
 layer that is open — or the default layer when **All fixtures** is. It gets the next free `0.x` ID
@@ -577,7 +632,7 @@ and is selected, so set its **Location** and **Rotation** in the sheet like any 
 The model is kept in the show, not in the fixture library. It is listed under the manufacturer
 **Imported models**, travels with the show when it is saved, copied or opened on a desk, and is
 drawn by the Visualizer and the desk's Stage exactly like a shipped Venue object. While one copy
-of it is in the show, **+ Add fixture** on the Venue screen offers it again for another; import the
+of it is in the show, **+ Add fixture** on the Patch sheet offers it again for another; import the
 file again to replace a model with a changed version, which is placed as a new object.
 
 Whatever format you choose, the show keeps the model as one self-contained GLB, so it needs no

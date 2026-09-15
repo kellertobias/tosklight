@@ -2,6 +2,7 @@ import { type WheelEvent, useEffect, useMemo, useRef } from "react";
 import { annotationsForView } from "./annotationGeometry";
 import { CadGrid, type CadGridSettings, DEFAULT_GRID } from "./cadGrid";
 import { CadAnnotationLayer } from "./CadAnnotationLayer";
+import { clampZoom } from "./cadShortcuts";
 import { useCadTools } from "./cadTools";
 import { PrintFrame } from "./CadPrintFrame";
 import { CadEntityLabels, CadScaleBar } from "./CadViewportOverlays";
@@ -154,7 +155,7 @@ function zoomFromWheel(camera: TileCamera, onCamera: (c: TileCamera) => void) {
 	return (event: WheelEvent<HTMLDivElement>) => {
 		event.preventDefault();
 		const zoom = camera.zoom * Math.exp(-event.deltaY * 0.0015);
-		onCamera({ ...camera, zoom: Math.min(2.5, Math.max(0.004, zoom)) });
+		onCamera({ ...camera, zoom: clampZoom(zoom) });
 	};
 }
 

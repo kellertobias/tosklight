@@ -39,13 +39,13 @@ its own size, so every segment of a truss run can differ. A size outside what th
 built at is refused with the range it can take. The same columns set a Crowd
 Area's width and depth.
 
-The **Venue** screen of ToskLight PreViz has the same **Footprint width**, **Footprint height**, and
-**Footprint depth** columns for generated Venue objects, and editing an object there — its name,
-position, layer, or size — keeps the size it was given on the desk. A selection takes one size or a
-`THRU` spread, exactly like **Location**.
+The **Patch** sheet of ToskLight PreViz, with **Show all** on, has the same **Footprint width**,
+**Footprint height**, and **Footprint depth** columns for generated Venue objects, and editing an
+object there — its name, position, layer, or size — keeps the size it was given on the desk. A
+selection takes one size or a `THRU` spread, exactly like **Location**.
 
 Three more columns hold what each placed object is made of, in **Show Patch** and on the PreViz
-**Venue** screen alike:
+**Patch** sheet alike:
 
 - **Colour** — any generated Venue object: a curtain in red serge, a truss in black. Choose a colour
   in the picker, or **Default colour** to return the object to its own material — black serge for
@@ -68,7 +68,7 @@ was modelled in centimetres, a set piece brought in at half size. Type any scale
 `100`; `1`, or an empty entry, returns the object to its built size, which is what every object
 placed before this reads as. A scale outside that range is refused with the range. The Visualizer,
 the ToskLight PreViz plan and the desk's Stage all draw the object at its scale, and the PreViz
-**Venue** screen shows and edits the same column. A lamp, a Crowd Area and a multi-patch copy
+**Patch** sheet, with **Show all** on, shows and edits the same column. A lamp, a Crowd Area and a multi-patch copy
 show a dash.
 
 A chain is drawn as real hoist chain, in the Visualizer and in the PreViz plan and elevations: links

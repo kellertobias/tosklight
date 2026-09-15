@@ -164,6 +164,11 @@ function beginDrag(
 			axis,
 			entityIds: selectedIds.filter((id) => selectable.has(id)),
 			spread: axis !== "plane" && event.shiftKey,
+			// The gizmo stands on the selection's origin, so a press there that never moves is
+			// still a click on the element beneath it.
+			additive: event.shiftKey,
+			hitId: hit?.logicalFixtureId,
+			hitEntityId: hit?.id,
 		};
 	}
 	return {
@@ -292,7 +297,16 @@ export function useCadViewportInteraction(
 		context.onPreview(null);
 		setGuide(null);
 		// Under a millimetre is a click that slipped, not a move the operator meant.
-		if (Math.hypot(...current) < 1) return;
+		if (Math.hypot(...current) < 1) {
+			if (active.axis === "plane" && active.hitId) {
+				context.onFocusEntity?.(active.hitEntityId ?? null);
+				context.onSelection({
+					type: active.additive ? "toggle" : "replace",
+					ids: [active.hitId],
+				});
+			}
+			return;
+		}
 		await context.onMove(
 			current,
 			active.entityIds ?? context.selectedIds,

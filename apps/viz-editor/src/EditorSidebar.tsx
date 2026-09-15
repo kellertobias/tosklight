@@ -8,7 +8,6 @@ export type EditorWorkspace =
 	| "show"
 	| "cad"
 	| "patch"
-	| "venue"
 	| "media"
 	| "settings";
 
@@ -69,12 +68,6 @@ export function EditorSidebar({
 						id: "patch",
 						label: "Patch",
 						icon: <span>⌘</span>,
-						disabled: !hasDocument,
-					},
-					{
-						id: "venue",
-						label: "Venue",
-						icon: <span>◇</span>,
 						disabled: !hasDocument,
 					},
 					{

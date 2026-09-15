@@ -1,12 +1,12 @@
 /**
- * What the CAD title's add buttons open, inside the patch scope the placement writes through.
+ * What the CAD title's add buttons open, inside the patch scope the library flow writes through.
  *
  * Trusses, stage elements and curtains are chosen from their own parts; any other Venue object still
  * comes from the fixture library, searched for its kind. Both stay mounted for the life of the CAD
  * screen, so the press that opens one is never mistaken for a press it already handled. A placed part
  * is announced to the CAD screen, which selects it and opens Info.
  */
-import { type FixtureDefinition, FixtureAddFlow } from "@tosklight/patch";
+import { FixtureAddFlow } from "@tosklight/patch";
 import { CadAddPartModal } from "./CadAddPartModal";
 import { type CadAddKind, useCadTools } from "./cadTools";
 
@@ -20,12 +20,10 @@ const CAD_ADD_PRESETS: Record<CadAddKind, { type: string; query: string }> = {
 
 export function CadAddFlows({
 	add,
-	definitions,
 	onError,
 }: {
 	/** The last add button pressed, and how many presses there have been. */
 	add: { kind: CadAddKind; request: number };
-	definitions: readonly FixtureDefinition[];
 	onError(reason: unknown): void;
 }) {
 	const tools = useCadTools();
@@ -34,7 +32,6 @@ export function CadAddFlows({
 			<CadAddPartModal
 				kind={add.kind}
 				request={add.request}
-				definitions={definitions}
 				onPlaced={tools.announcePlaced}
 				onError={onError}
 			/>

@@ -12,7 +12,14 @@ Under **Servers & outputs**, use **Discover servers** for running CITP peers, or
 server's host and port manually. **Enumerate outputs** asks
 that server for its current numeric output list and stores the selected output identity, name,
 resolution, and aspect ratio in the show. A manually entered output remains available for servers
-that cannot be reached while planning. The standalone Visualizer reconnects and renews its preview
+that cannot be reached while planning.
+
+The server table fills the height of the window. Select a server to configure it in the sidebar on
+the right: its DMX patch, name, CITP host and port, and discovery identity. **Delete** in the sidebar
+removes the server together with its outputs and its patched Media Server fixture; a surface that
+showed one of those outputs keeps only its fallback picture.
+
+The standalone Visualizer reconnects and renews its preview
 subscription automatically; it never silently changes a missing numeric output to another one.
 
 ToskLight Pixel publishes each enabled logical output as its own stable CITP preview source. More

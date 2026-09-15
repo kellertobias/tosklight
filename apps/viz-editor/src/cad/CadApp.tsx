@@ -15,6 +15,7 @@ import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
 import { visibleEntities } from "./cutPlanes";
 import { CadViewport } from "./CadViewport";
+import { pannedCamera, useCadShortcuts, zoomedCamera } from "./cadShortcuts";
 import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
 import { cadSession } from "./session";
 import { underlaysForView } from "./underlayGeometry";
@@ -340,6 +341,37 @@ export function CadApp() {
 		if (camera) updateTile(id, (tile) => ({ ...tile, camera }));
 	}
 
+	useCadShortcuts((shortcut) => {
+		if (shortcut.type === "tool") {
+			// Drawing is off while the print pages are open, and a host without tools offers none.
+			if (tools.onAdd && !printMode) tools.setTool(shortcut.tool);
+			return;
+		}
+		const tileId = activeTile(layout, activeTileId)?.id;
+		if (!tileId) return;
+		updateTile(tileId, (tile) => {
+			switch (shortcut.type) {
+				case "view":
+					// As the view menu does: the new direction starts unrotated and framed on the rig.
+					return {
+						...tile,
+						view: shortcut.view,
+						rotationQuarterTurns: 0,
+						camera: scene
+							? fittedCamera(scene.entities, shortcut.view, 0)
+							: tile.camera,
+					};
+				case "zoom":
+					return { ...tile, camera: zoomedCamera(tile.camera, shortcut.factor) };
+				case "pan":
+					return {
+						...tile,
+						camera: pannedCamera(tile.camera, shortcut.horizontal, shortcut.vertical),
+					};
+			}
+		});
+	});
+
 	return (
 		<main className="cad-app">
 			<WindowHeader
@@ -521,6 +553,14 @@ function activeTileView(
 	node: TileNode,
 	activeTileId: string | null,
 ): CadViewDirection {
+	return activeTile(node, activeTileId)?.view ?? "top_down";
+}
+
+/** The tile the operator last worked in, or the first one before they have used any. */
+function activeTile(
+	node: TileNode,
+	activeTileId: string | null,
+): ViewportTile | null {
 	const tiles: ViewportTile[] = [];
 	const walk = (candidate: TileNode) => {
 		if (candidate.type === "tile") tiles.push(candidate);
@@ -530,8 +570,7 @@ function activeTileView(
 		}
 	};
 	walk(node);
-	const active = tiles.find((tile) => tile.id === activeTileId);
-	return (active ?? tiles[0])?.view ?? "top_down";
+	return tiles.find((tile) => tile.id === activeTileId) ?? tiles[0] ?? null;
 }
 
 export interface CadTileProps {

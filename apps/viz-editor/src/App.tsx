@@ -6,6 +6,7 @@ import {
 	type FixtureVisibility,
 	mergeFixtureDefinitions,
 	type PatchFixtureProjection,
+	type PatchFixtureWrite,
 	type PatchHost,
 	PatchHostProvider,
 	type PatchLayer,
@@ -15,7 +16,6 @@ import {
 } from "@tosklight/patch";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button, type TitleActionGroup } from "@tosklight/ui";
-import { WindowHeader } from "@tosklight/ui/window-kit";
 import {
 	type ComponentProps,
 	type ReactNode,
@@ -38,7 +38,8 @@ import { VENUE_MODEL_EXTENSIONS } from "./cad/venueModelFormats";
 import { cadSession } from "./cad/session";
 import { useCadSelection } from "./cad/useCadSelection";
 import type { CadEntity, CadSceneSnapshot } from "./cad/types";
-import { type DmxPage, DmxPatchScreen } from "./DmxWorkspace";
+import { DmxPatchScreen } from "./DmxPatchScreen";
+import type { DmxPage } from "./DmxWorkspace";
 import type { DocumentSummary } from "./document/session";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
@@ -47,11 +48,7 @@ import { type EditorWorkspace, EditorSidebar } from "./EditorSidebar";
 import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { ShowScreen } from "./ShowScreen";
-import {
-	beginTitleBarDrag,
-	beginWindowDrag,
-	WindowControls,
-} from "./WindowChrome";
+import { beginWindowDrag, WindowControls } from "./WindowChrome";
 
 const DEFAULT_LAYER: PatchLayer = {
 	id: "default",
@@ -125,7 +122,7 @@ function ArchitectPatchSheet(
 			columnStorageKey={`viz-editor.patch-columns.${
 				props.scope === "patch" ? "dmx" : (props.scope ?? "all")
 			}`}
-			onImportVenueModel={props.scope === "venue" ? importVenueModel : undefined}
+			onImportVenueModel={props.scope === "patch" ? importVenueModel : undefined}
 		/>
 	);
 }
@@ -192,6 +189,19 @@ function patchPageTabs(
 			{ id: "dmx", label: "DMX" },
 		],
 	};
+}
+
+/** Writes the fixtures the DMX grid moved, as one patch change. */
+function writeMovedPatch(
+	transport: PatchTransport,
+	showId: string,
+	fixtures: readonly PatchFixtureWrite[],
+) {
+	return transport.patchFixtures(showId, 0, {
+		requestId: crypto.randomUUID(),
+		fixtures,
+		removeFixtureIds: [],
+	});
 }
 
 export function App() {
@@ -316,16 +326,14 @@ export function App() {
 				);
 				receiveSelection(delta.selectedIds, delta.revision);
 				if (delta.selectedIds.length) {
-					const selectedEntity = cadEntitiesRef.current.get(
-						delta.selectedIds[0],
-					);
 					// Selecting in the drawing shows what was selected. On the CAD screen the
 					// drawing already is that view, so following the selection to the sheet would
-					// take the operator away from the thing they just clicked.
+					// take the operator away from the thing they just clicked. A Venue object is on the
+					// Patch sheet too, once the reveal has switched Show all on.
 					setWorkspace((current) => {
 						if (current === "cad") return current;
 						setPatchPage("sheet");
-						return selectedEntity?.kind === "venue" ? "venue" : "patch";
+						return "patch";
 					});
 				}
 			})
@@ -379,8 +387,7 @@ export function App() {
 	}, []);
 
 	useEffect(() => {
-		if ((workspace !== "patch" && workspace !== "venue") || !selected.length)
-			return;
+		if (workspace !== "patch" || !selected.length) return;
 		const frame = window.requestAnimationFrame(() => {
 			const row = window.document.querySelector<HTMLElement>(
 				`[data-fixture-id="${selected[0]}"]`,
@@ -392,7 +399,7 @@ export function App() {
 
 	/// The preview controls drive fixtures, so they need the rig the sheet is showing.
 	function loadFixtures() {
-		documentSession
+		return documentSession
 			.patchSnapshot()
 			.then((snapshot) => {
 				setFixtures(snapshot.fixtures);
@@ -561,7 +568,7 @@ export function App() {
 					workspace={workspace}
 					hasDocument={Boolean(document)}
 					onSelectWorkspace={(id) => {
-						if (id === "patch" || id === "venue") loadFixtures();
+						if (id === "patch") loadFixtures();
 						setWorkspace(id);
 					}}
 					onSelectSettings={() => setWorkspace("settings")}
@@ -634,29 +641,23 @@ export function App() {
 								transport={transport}
 								onError={report}
 							>
-								<CadAddFlows add={cadAdd} definitions={definitions} onError={report} />
+								<CadAddFlows add={cadAdd} onError={report} />
 							</PatchScope>
 						</CadToolProvider>
 					) : null}
 					{document && workspace === "patch" && patchPage === "dmx" ? (
 						<DmxPatchScreen
-							header={
-								<WindowHeader
-									title="Patch"
-									dragHandleProps={{
-										"data-tauri-drag-region": true,
-										onPointerDown: beginTitleBarDrag,
-									}}
-									groups={[patchPages]}
-								/>
-							}
+							pages={patchPages}
 							fixtures={fixtures}
 							profileRevisions={profileRevisions}
+							onApplyPatch={async (moved) => {
+								await writeMovedPatch(transport, document.showId, moved);
+								await loadFixtures(); // The move stays drawn until the rig reads back.
+								setReload((current) => current + 1);
+							}}
 						/>
 					) : null}
-					{document &&
-					((workspace === "patch" && patchPage === "sheet") ||
-						workspace === "venue") ? (
+					{document && workspace === "patch" && patchPage === "sheet" ? (
 						<PatchScope
 							host={host}
 							showId={document.showId}
@@ -666,9 +667,9 @@ export function App() {
 							onError={report}
 						>
 							<ArchitectPatchSheet
-								title={workspace === "venue" ? "Venue" : "Patch"}
-								scope={workspace === "venue" ? "venue" : "patch"}
-								titleGroups={workspace === "patch" ? [patchPages] : undefined}
+								title="Patch"
+								scope="patch"
+								trailingTitleGroups={[patchPages]}
 								showAllLayersRequest={revealRequest}
 							/>
 							{visualizerRunning ? (

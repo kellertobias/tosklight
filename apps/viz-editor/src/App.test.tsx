@@ -286,7 +286,7 @@ describe("the Viz editor window", () => {
 		expect(
 			screen.queryByRole("button", { name: "Fixtures" }),
 		).not.toBeInTheDocument();
-		await openSettingsPage("Fixtures");
+		await openSettingsPage("Library");
 		expect(
 			await screen.findByRole("button", { name: /^Acme/ }),
 		).toBeVisible();
@@ -298,11 +298,17 @@ describe("the Viz editor window", () => {
 		// The library's own action sits left of the Settings pages.
 		expect(
 			within(title)
-				.getByRole("button", { name: "Create fixture" })
+				.getByRole("button", { name: "Create Fixture" })
 				.compareDocumentPosition(within(title).getByRole("tab", { name: "Visualizer" })) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
+		// The action carries a plus icon beside its label.
+		expect(
+			within(title)
+				.getByRole("button", { name: "Create Fixture" })
+				.querySelector("svg.viz-plus-icon"),
+		).not.toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Create Fixture" }));
 		expect(
 			await screen.findByRole("dialog", { name: "Create fixture profile" }),
 		).toBeVisible();
@@ -404,11 +410,11 @@ describe("the Viz editor window", () => {
 		expect(screen.getByRole("button", { name: "Move window" })).toHaveAttribute(
 			"data-tauri-drag-region",
 		);
+		// The window opens on the Show screen, its own dock entry rather than a page of Settings.
 		const title = document_root()?.querySelector<HTMLElement>(
 			".viz-show-screen > .ui-window-header",
 		);
 		if (!title) throw new Error("window title was not rendered");
-		// The window opens on the Show screen, its own dock entry rather than a page of Settings.
 		expect(title).toHaveTextContent("Show");
 		expect(title).toHaveAttribute("data-tauri-drag-region");
 		fireEvent.pointerDown(title, { button: 0 });
@@ -430,9 +436,9 @@ describe("the Viz editor window", () => {
 			within(screen.getByRole("navigation", { name: "Visualizer screens" }))
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["◫Show", "⊞CAD", "⌘Patch", "◇Venue", "▣Media"]);
+		).toEqual(["◫Show", "⊞CAD", "⌘Patch", "▣Media"]);
 		// The fixture library and DMX are pages of Settings; Effects is part of Patch.
-		for (const label of ["Effects", "Fixtures", "DMX"])
+		for (const label of ["Effects", "Fixtures", "Library", "DMX"])
 			expect(
 				within(screen.getByRole("navigation", { name: "Visualizer screens" })).queryByRole(
 					"button",
@@ -1030,7 +1036,7 @@ describe("the Viz editor window", () => {
 				"Values",
 				"Sources",
 				"Visualizer",
-				"Fixtures",
+				"Library",
 				"DMX",
 			]);
 			expect(
@@ -1128,6 +1134,112 @@ describe("the Viz editor window", () => {
 			expect(info).toHaveTextContent("Patch range2.10–12");
 		}, 20_000);
 
+		function titleLabels(header: Element) {
+			return [...header.querySelectorAll("button")].map(
+				(button) => button.getAttribute("aria-label") ?? button.textContent,
+			);
+		}
+
+		it("puts Sheet and DMX directly left of the settings on both Patch pages", async () => {
+			mockDmx();
+			renderApp();
+			fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+			await waitFor(() => {
+				const sheet = document_root()?.querySelector(
+					".show-patch-layout > .ui-window-header",
+				);
+				expect(sheet && titleLabels(sheet).slice(-3)).toEqual([
+					"Sheet",
+					"DMX",
+					"Settings",
+				]);
+			});
+			fireEvent.click(screen.getByRole("tab", { name: "DMX" }));
+			const header = document_root()?.querySelector(
+				".viz-dmx-patch-screen > .ui-window-header",
+			);
+			if (!header) throw new Error("DMX patch title was not rendered");
+			expect(titleLabels(header)).toEqual(["Sheet", "DMX", "Settings"]);
+		});
+
+		it("repatches a fixture by dragging its block and applies it from the sidebar", async () => {
+			mockDmx();
+			renderApp();
+			fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+			fireEvent.click(await screen.findByRole("tab", { name: "DMX" }));
+			const universe = await screen.findByRole("region", {
+				name: "Universe 2 patch",
+			});
+			const cell = (address: number) =>
+				within(universe).getByRole("button", {
+					name: new RegExp(`^Universe 2, address ${address}, `),
+				});
+			// Taken by its second channel, the block starts one address before where it is let go.
+			fireEvent.pointerDown(cell(11));
+			fireEvent.pointerEnter(cell(21));
+			fireEvent.pointerUp(window);
+			expect(cell(20)).toHaveClass("is-patched", "is-start", "is-moved");
+			expect(cell(22)).toHaveClass("is-patched", "is-moved");
+			expect(cell(10)).not.toHaveClass("is-patched");
+			const pending = screen.getByRole("region", { name: "Pending patch" });
+			expect(pending).toHaveTextContent("101 · Wash Left");
+			expect(pending).toHaveTextContent("2.10 → 2.20");
+			// Nothing is written until Apply Patch.
+			expect(invoke).not.toHaveBeenCalledWith("patch_fixtures", expect.anything());
+			fireEvent.click(within(pending).getByRole("button", { name: "Apply Patch" }));
+			await waitFor(() =>
+				expect(invoke).toHaveBeenCalledWith("patch_fixtures", {
+					mutation: expect.objectContaining({
+						removeFixtureIds: [],
+						fixtures: [
+							expect.objectContaining({
+								fixtureId: "44444444-4444-4444-8444-444444444444",
+								splitPatches: [{ split: 1, universe: 2, address: 20 }],
+							}),
+						],
+					}),
+				}),
+			);
+			const written = invoke.mock.calls.find(
+				([command]) => command === "patch_fixtures",
+			)?.[1] as { mutation: { fixtures: object[] } };
+			expect(written.mutation.fixtures[0]).not.toHaveProperty("logicalHeads");
+			await waitFor(() =>
+				expect(
+					screen.queryByRole("region", { name: "Pending patch" }),
+				).not.toBeInTheDocument(),
+			);
+		}, 20_000);
+
+		it("hides the sidebar from the DMX settings, and then nothing can be dragged", async () => {
+			mockDmx();
+			renderApp();
+			fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
+			fireEvent.click(await screen.findByRole("tab", { name: "DMX" }));
+			const header = document_root()?.querySelector<HTMLElement>(
+				".viz-dmx-patch-screen > .ui-window-header",
+			);
+			if (!header) throw new Error("DMX patch title was not rendered");
+			const universe = await screen.findByRole("region", {
+				name: "Universe 2 patch",
+			});
+			expect(document_root()?.querySelector(".viz-dmx-info")).not.toBeNull();
+			fireEvent.click(within(header).getByRole("button", { name: "Settings" }));
+			fireEvent.click(await screen.findByLabelText("Show sidebar"));
+			expect(document_root()?.querySelector(".viz-dmx-info")).toBeNull();
+			const cell = (address: number) =>
+				within(universe).getByRole("button", {
+					name: new RegExp(`^Universe 2, address ${address}, `),
+				});
+			expect(cell(10)).not.toHaveClass("is-draggable");
+			fireEvent.pointerDown(cell(10));
+			fireEvent.pointerEnter(cell(30));
+			fireEvent.pointerUp(window);
+			expect(cell(10)).toHaveClass("is-patched", "is-start");
+			expect(cell(30)).not.toHaveClass("is-patched");
+			expect(localStore.get("tosklight.architect.dmx-patch-sidebar")).toBe("false");
+		}, 20_000);
+
 		it("lists every Art-Net node and sACN source with its universes, and stops polling when left", async () => {
 			mockDmx();
 			renderApp();
@@ -1164,6 +1276,10 @@ describe("the Viz editor window", () => {
 			const universe = await screen.findByRole("region", {
 				name: "Universe 2 values",
 			});
+			// Values has no window settings in the Architect.
+			expect(
+				within(dmxHeader()).queryByRole("button", { name: "Settings" }),
+			).not.toBeInTheDocument();
 			expect(universe).toHaveTextContent("Universe 2 · channels 1–512");
 			expect(universe).toHaveTextContent(
 				"Art-Net · 44.0 Hz · from Desk · 10.0.0.4:6454",
@@ -1315,7 +1431,7 @@ describe("the Viz editor window", () => {
 			within(sharedTitle)
 				.getAllByRole("tab")
 				.map((tab) => tab.textContent),
-		).toEqual(["Visualizer", "Fixtures", "DMX"]);
+		).toEqual(["Visualizer", "Library", "DMX"]);
 		expect(
 			within(sharedTitle).getByRole("tab", { name: "Visualizer" }),
 		).toHaveClass("is-active");
@@ -1364,14 +1480,15 @@ describe("the Viz editor window", () => {
 		).toBeInTheDocument();
 		// MCP is no page of Settings: it opens from the Show screen's own title.
 		expect(
-			within(sharedTitle).queryByRole("tab", { name: "MCP" }),
+			within(sharedTitle).queryByRole("button", { name: "MCP" }),
 		).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Show" }));
 		const showTitle = document_root()?.querySelector<HTMLElement>(
 			".viz-show-screen > .ui-window-header",
 		);
 		if (!showTitle) throw new Error("Show title was not rendered");
-		fireEvent.click(within(showTitle).getByRole("button", { name: "MCP" }));
+		const mcpButton = within(showTitle).getByRole("button", { name: "MCP" });
+		fireEvent.click(mcpButton);
 		expect(
 			within(showTitle).getByRole("button", { name: "MCP" }),
 		).toHaveClass("is-active");
@@ -1437,7 +1554,7 @@ describe("the Viz editor window", () => {
 		expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
 	});
 
-	it("imports a 3D model on the Venue screen, where only Venue offers it", async () => {
+	it("imports a 3D model on the Patch sheet once Show all lists the Venue objects", async () => {
 		vi.mocked(dialog.open).mockResolvedValue("/models/Hall.glb");
 		const base = invoke.getMockImplementation();
 		invoke.mockImplementation((command: string, payload?: unknown) =>
@@ -1452,7 +1569,8 @@ describe("the Viz editor window", () => {
 			screen.queryByRole("button", { name: "+ Import 3D model" }),
 		).not.toBeInTheDocument();
 
-		fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+		expect(screen.queryByRole("button", { name: "Venue" })).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("switch", { name: "Show all layers" }));
 		fireEvent.click(
 			await screen.findByRole("button", { name: "+ Import 3D model" }),
 		);
@@ -1474,11 +1592,12 @@ describe("the Viz editor window", () => {
 		).toBeInTheDocument();
 	});
 
-	it("presents Patch, with its effects, and Venue through the same patch surface", async () => {
+	it("presents Patch, with its effects, and no separate Venue screen", async () => {
 		renderApp();
 		await screen.findByRole("button", { name: "Patch" });
 		expect(screen.queryByRole("button", { name: "Effects" })).not.toBeInTheDocument();
-		for (const screenName of ["Patch", "Venue"] as const) {
+		expect(screen.queryByRole("button", { name: "Venue" })).not.toBeInTheDocument();
+		for (const screenName of ["Patch"] as const) {
 			fireEvent.click(screen.getByRole("button", { name: screenName }));
 			const title = await waitFor(() => {
 				const found = document_root()?.querySelector<HTMLElement>(
@@ -1747,6 +1866,87 @@ describe("the Viz editor window", () => {
 		expect(
 			await screen.findByRole("dialog", { name: "Fixture Address" }),
 		).toBeInTheDocument();
+	});
+
+	it("configures a media server in the sidebar and deletes it with its patched fixture", async () => {
+		const fixtureId = "99999999-9999-4999-8999-999999999999";
+		const server = {
+			revision: 3,
+			object: {
+				kind: "media_server",
+				body: {
+					id: "server-1",
+					name: "Media Server 1",
+					fixtureId,
+					citp: { host: "127.0.0.1", port: 4809 },
+				},
+			},
+		};
+		const emptyLayout = {
+			fallbackAssets: [],
+			servers: [],
+			sources: [],
+			ledModuleTypes: [],
+			surfaces: [],
+			projectors: [],
+		};
+		invoke.mockImplementation((command: string, payload?: unknown) => {
+			if (command === "document_summary") return Promise.resolve(document);
+			if (command === "patch_snapshot") return Promise.resolve(snapshot);
+			if (command === "live_dmx_inputs") return Promise.resolve(liveInputs);
+			if (command === "media_layout")
+				return Promise.resolve({ ...emptyLayout, servers: [server] });
+			if (command === "apply_media_intent")
+				return Promise.resolve({
+					requestId: "delete",
+					replayed: false,
+					changed: true,
+					snapshot: emptyLayout,
+				});
+			if (command === "patch_fixtures")
+				return Promise.resolve({
+					...snapshot,
+					requestId: (payload as { mutation: { requestId: string } }).mutation
+						.requestId,
+					replayed: false,
+					eventSequence: null,
+					fixtures: [],
+					removedFixtureIds: [fixtureId],
+				});
+			return Promise.resolve([]);
+		});
+
+		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "Media" }));
+		const sidebar = await screen.findByRole("complementary", {
+			name: "Media server configuration",
+		});
+		const layout = sidebar.parentElement as HTMLElement;
+		expect(layout).toHaveClass("viz-media-server-patch");
+		expect(getComputedStyle(layout).gridTemplateColumns).toBe(
+			"minmax(0, 1fr) auto",
+		);
+		expect(layout.firstElementChild).toHaveClass("viz-media-server-table-wrap");
+		fireEvent.click(within(sidebar).getByRole("button", { name: "Delete" }));
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("apply_media_intent", {
+				intent: expect.objectContaining({
+					expectedRevision: 3,
+					action: { type: "delete", kind: "media_server", id: "server-1" },
+				}),
+			}),
+		);
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("patch_fixtures", {
+				mutation: expect.objectContaining({ removeFixtureIds: [fixtureId] }),
+			}),
+		);
+		expect(
+			await screen.findByRole("heading", { name: "No media servers patched" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("complementary", { name: "Media server configuration" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("can patch a CITP-discovered media server from its own editor section", async () => {

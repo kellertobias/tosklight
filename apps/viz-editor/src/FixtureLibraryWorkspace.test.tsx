@@ -217,7 +217,7 @@ describe("the Architect fixture library", () => {
 	it("previews the fixture geometry live, as the desk does", async () => {
 		renderWorkspace();
 		await screen.findByRole("button", { name: /^Acme/ });
-		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
+		fireEvent.click(screen.getByRole("button", { name: "Create Fixture" }));
 		await screen.findByRole("dialog", { name: "Create fixture profile" });
 
 		fireEvent.click(screen.getByRole("tab", { name: "Geometry" }));
@@ -234,7 +234,7 @@ describe("the Architect fixture library", () => {
 	it("keeps the tabs still when a tab brings its own action", async () => {
 		renderWorkspace();
 		await screen.findByRole("button", { name: /^Acme/ });
-		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
+		fireEvent.click(screen.getByRole("button", { name: "Create Fixture" }));
 		await screen.findByRole("dialog", { name: "Create fixture profile" });
 
 		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
@@ -285,7 +285,7 @@ describe("the Architect fixture library", () => {
 	it("authors channel order, indexed positions, virtual-dimmer response and a mixed channel", async () => {
 		renderWorkspace();
 		await screen.findByRole("button", { name: /^Acme/ });
-		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
+		fireEvent.click(screen.getByRole("button", { name: "Create Fixture" }));
 		const editor = within(
 			await screen.findByRole("dialog", { name: "Create fixture profile" }),
 		);

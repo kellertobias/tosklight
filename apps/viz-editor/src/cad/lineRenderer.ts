@@ -36,7 +36,17 @@ import {
 	viewAxes,
 } from "./types";
 
-export type LineColor = [number, number, number];
+/** Red, green, blue and an optional opacity, which defaults to opaque. */
+export type LineColor =
+	| [number, number, number]
+	| [number, number, number, number];
+
+/** One vertex: a clip-space position and an RGBA colour. */
+const VERTEX_FLOATS = 7;
+const VERTEX_BYTES = VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT;
+
+/** A fixture's beam direction: yellow at half strength, so it reads without outshouting the rig. */
+const DIRECTION_COLOR: LineColor = [0.98, 0.85, 0.2, 0.5];
 
 /** The marquee rectangle in plan millimetres, while a selection drag is in flight. */
 export interface SelectionBox {
@@ -68,6 +78,10 @@ interface Painter {
 	fillVertices: number[];
 	depthLineVertices: number[];
 	lineVertices: number[];
+	/** Filled shapes drawn over everything, such as the move gizmo's arrows. */
+	overlayVertices: number[];
+	/** One device pixel, in plan millimetres at this camera. */
+	pixel: number;
 	vertex(
 		vertices: number[],
 		point: PlanPoint,
@@ -75,6 +89,10 @@ interface Painter {
 		depth?: number,
 	): void;
 	line(a: PlanPoint, b: PlanPoint, color: LineColor): void;
+	/** A filled triangle over everything. */
+	triangle(a: PlanPoint, b: PlanPoint, c: PlanPoint, color: LineColor): void;
+	/** A line `width` plan millimetres wide, drawn as a filled strip over everything. */
+	stroke(a: PlanPoint, b: PlanPoint, color: LineColor, width: number): void;
 	depthLine(
 		a: PlanPoint,
 		b: PlanPoint,
@@ -88,6 +106,7 @@ function painterFor(canvas: HTMLCanvasElement, camera: TileCamera): Painter {
 	const fillVertices: number[] = [];
 	const depthLineVertices: number[] = [];
 	const lineVertices: number[] = [];
+	const overlayVertices: number[] = [];
 	const vertex = (
 		vertices: number[],
 		point: PlanPoint,
@@ -98,17 +117,39 @@ function painterFor(canvas: HTMLCanvasElement, camera: TileCamera): Painter {
 			((point[0] + camera.pan[0]) * camera.zoom * 2) / canvas.clientWidth,
 			((point[1] + camera.pan[1]) * camera.zoom * 2) / canvas.clientHeight,
 			Math.max(-0.999, Math.min(0.999, depth / 100_000)),
-			...color,
+			color[0],
+			color[1],
+			color[2],
+			color[3] ?? 1,
 		);
+	};
+	const triangle = (a: PlanPoint, b: PlanPoint, c: PlanPoint, color: LineColor) => {
+		vertex(overlayVertices, a, color);
+		vertex(overlayVertices, b, color);
+		vertex(overlayVertices, c, color);
 	};
 	return {
 		fillVertices,
 		depthLineVertices,
 		lineVertices,
+		overlayVertices,
+		pixel: 1 / ((window.devicePixelRatio || 1) * camera.zoom),
 		vertex,
 		line: (a, b, color) => {
 			vertex(lineVertices, a, color);
 			vertex(lineVertices, b, color);
+		},
+		triangle,
+		stroke: (a, b, color, width) => {
+			const length = Math.max(0.0001, Math.hypot(b[0] - a[0], b[1] - a[1]));
+			const nx = (-(b[1] - a[1]) / length) * (width / 2);
+			const ny = ((b[0] - a[0]) / length) * (width / 2);
+			const a1: PlanPoint = [a[0] + nx, a[1] + ny];
+			const a2: PlanPoint = [a[0] - nx, a[1] - ny];
+			const b1: PlanPoint = [b[0] + nx, b[1] + ny];
+			const b2: PlanPoint = [b[0] - nx, b[1] - ny];
+			triangle(a1, a2, b1, color);
+			triangle(b1, a2, b2, color);
 		},
 		depthLine: (a, b, color, firstDepth, secondDepth) => {
 			vertex(depthLineVertices, a, color, firstDepth - 1);
@@ -153,7 +194,7 @@ export function renderDepthMaskedLinework(
 	gl.disable(gl.DEPTH_TEST);
 }
 
-/** The datum guide of an elevation, and the coordinate arrows when they are switched on. */
+/** The datum guide of an elevation, and the coordinate axes when they are switched on. */
 function paintDatum(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement) {
 	const { view, rotationQuarterTurns, camera } = frame;
 	const worldOrigin = projectPoint([0, 0, 0], view, rotationQuarterTurns);
@@ -168,22 +209,18 @@ function paintDatum(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement
 		);
 	}
 	if (!frame.showCoordinateOrigins) return;
+	// Plain lines with no heads, so the origin never reads as the move gizmo.
 	const axes = viewAxes(view, rotationQuarterTurns);
-	const length = 54 / camera.zoom;
-	const head = 5 / camera.zoom;
-	drawArrow(
-		painter.line,
+	const length = 27 / camera.zoom;
+	painter.line(
 		worldOrigin,
 		[worldOrigin[0] + length * axes.horizontal.sign, worldOrigin[1]],
 		axisColor(axes.horizontal.axis),
-		head,
 	);
-	drawArrow(
-		painter.line,
+	painter.line(
 		worldOrigin,
 		[worldOrigin[0], worldOrigin[1] + length * axes.vertical.sign],
 		axisColor(axes.vertical.axis),
-		head,
 	);
 }
 
@@ -304,12 +341,15 @@ function paintEntities(
 				view,
 				rotationQuarterTurns,
 			);
-			painter.line(start, end, outlineColor);
+			painter.line(start, end, DIRECTION_COLOR);
 		}
 	}
 }
 
-/** The move gizmo beside the selection, and the axis guide a constrained drag follows. */
+/**
+ * The move gizmo at the selection's origin, and the axis guide a constrained drag follows. Its
+ * arrows are two pixels wide with filled heads, so they stand out from the one-pixel rig.
+ */
 function paintGizmo(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement) {
 	const { view, rotationQuarterTurns, camera, preview, guide } = frame;
 	const gizmo = frame.editEnabled
@@ -330,28 +370,18 @@ function paintGizmo(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement
 	const vertical = axisColor(axes.vertical.axis);
 	const { origin, length, square } = gizmo;
 	const handle: LineColor = [0.75, 0.8, 0.84];
-	painter.line(
+	const width = 2 * painter.pixel;
+	const corners: PlanPoint[] = [
 		[origin[0] - square, origin[1] - square],
 		[origin[0] + square, origin[1] - square],
-		handle,
-	);
-	painter.line(
-		[origin[0] + square, origin[1] - square],
-		[origin[0] + square, origin[1] + square],
-		handle,
-	);
-	painter.line(
 		[origin[0] + square, origin[1] + square],
 		[origin[0] - square, origin[1] + square],
-		handle,
+	];
+	corners.forEach((corner, index) =>
+		painter.line(corner, corners[(index + 1) % corners.length], handle),
 	);
-	painter.line(
-		[origin[0] - square, origin[1] + square],
-		[origin[0] - square, origin[1] - square],
-		handle,
-	);
-	drawArrow(painter.line, origin, [origin[0] + length, origin[1]], horizontal, square);
-	drawArrow(painter.line, origin, [origin[0], origin[1] + length], vertical, square);
+	drawGizmoArrow(painter, origin, [origin[0] + length, origin[1]], horizontal, square, width);
+	drawGizmoArrow(painter, origin, [origin[0], origin[1] + length], vertical, square, width);
 	if (guide === "horizontal")
 		dottedGuide(painter.line, origin, true, horizontal, camera, canvas);
 	if (guide === "vertical")
@@ -385,15 +415,15 @@ export class LineRenderer {
 			gl,
 			gl.VERTEX_SHADER,
 			`#version 300 es
-			in vec3 position; in vec3 color; out vec3 lineColor;
+			in vec3 position; in vec4 color; out vec4 lineColor;
 			void main(){ gl_Position=vec4(position,1.0); lineColor=color; }`,
 		);
 		const fragment = shader(
 			gl,
 			gl.FRAGMENT_SHADER,
 			`#version 300 es
-			precision mediump float; in vec3 lineColor; out vec4 outputColor;
-			void main(){ outputColor=vec4(lineColor,1.0); }`,
+			precision mediump float; in vec4 lineColor; out vec4 outputColor;
+			void main(){ outputColor=lineColor; }`,
 		);
 		if (!vertex || !fragment) return null;
 		const program = gl.createProgram();
@@ -440,9 +470,12 @@ export class LineRenderer {
 		const position = gl.getAttribLocation(this.program, "position");
 		const color = gl.getAttribLocation(this.program, "color");
 		gl.enableVertexAttribArray(position);
-		gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 24, 0);
+		gl.vertexAttribPointer(position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
 		gl.enableVertexAttribArray(color);
-		gl.vertexAttribPointer(color, 3, gl.FLOAT, false, 24, 12);
+		gl.vertexAttribPointer(color, 4, gl.FLOAT, false, VERTEX_BYTES, 12);
+		// Only the beam direction is translucent; everything else is opaque and blends to itself.
+		gl.enable(gl.BLEND);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		renderDepthMaskedLinework(
 			gl,
 			() => {
@@ -451,7 +484,7 @@ export class LineRenderer {
 					new Float32Array(painter.fillVertices),
 					gl.DYNAMIC_DRAW,
 				);
-				gl.drawArrays(gl.TRIANGLES, 0, painter.fillVertices.length / 6);
+				gl.drawArrays(gl.TRIANGLES, 0, painter.fillVertices.length / VERTEX_FLOATS);
 			},
 			() => {
 				gl.bufferData(
@@ -459,7 +492,7 @@ export class LineRenderer {
 					new Float32Array(painter.depthLineVertices),
 					gl.DYNAMIC_DRAW,
 				);
-				gl.drawArrays(gl.LINES, 0, painter.depthLineVertices.length / 6);
+				gl.drawArrays(gl.LINES, 0, painter.depthLineVertices.length / VERTEX_FLOATS);
 			},
 		);
 		gl.bufferData(
@@ -467,7 +500,13 @@ export class LineRenderer {
 			new Float32Array(painter.lineVertices),
 			gl.DYNAMIC_DRAW,
 		);
-		gl.drawArrays(gl.LINES, 0, painter.lineVertices.length / 6);
+		gl.drawArrays(gl.LINES, 0, painter.lineVertices.length / VERTEX_FLOATS);
+		gl.bufferData(
+			gl.ARRAY_BUFFER,
+			new Float32Array(painter.overlayVertices),
+			gl.DYNAMIC_DRAW,
+		);
+		gl.drawArrays(gl.TRIANGLES, 0, painter.overlayVertices.length / VERTEX_FLOATS);
 	}
 }
 
@@ -487,25 +526,28 @@ function axisColor(axis: WorldAxis): LineColor {
 	return [0.18, 0.46, 1];
 }
 
-function drawArrow(
-	line: (a: [number, number], b: [number, number], color: LineColor) => void,
-	origin: [number, number],
-	end: [number, number],
+/** A wide shaft from `origin` to the base of a filled head whose tip is `end`. */
+function drawGizmoArrow(
+	painter: Painter,
+	origin: PlanPoint,
+	end: PlanPoint,
 	color: LineColor,
 	head: number,
+	width: number,
 ) {
-	line(origin, end, color);
 	const dx = end[0] - origin[0];
 	const dy = end[1] - origin[1];
 	const length = Math.max(0.0001, Math.hypot(dx, dy));
 	const unitX = dx / length;
 	const unitY = dy / length;
-	const back: [number, number] = [
-		end[0] - unitX * head * 1.8,
-		end[1] - unitY * head * 1.8,
-	];
-	line(end, [back[0] - unitY * head, back[1] + unitX * head], color);
-	line(end, [back[0] + unitY * head, back[1] - unitX * head], color);
+	const back: PlanPoint = [end[0] - unitX * head * 1.8, end[1] - unitY * head * 1.8];
+	painter.stroke(origin, back, color, width);
+	painter.triangle(
+		end,
+		[back[0] - unitY * head, back[1] + unitX * head],
+		[back[0] + unitY * head, back[1] - unitX * head],
+		color,
+	);
 }
 
 function dottedGuide(

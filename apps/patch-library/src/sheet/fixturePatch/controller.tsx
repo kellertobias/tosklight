@@ -94,6 +94,8 @@ export type FixturePatchSetupProps = {
 	initialQuery?: string;
 	/** Title groups the host puts before the sheet's own, such as the Architect's page tabs. */
 	titleGroups?: readonly TitleActionGroup[];
+	/** Title groups the host puts after the sheet's own, directly left of the settings button. */
+	trailingTitleGroups?: readonly TitleActionGroup[];
 	/** Offers the Patch, Visualization and Compact column views in the column settings (Architect only). */
 	quickViews?: boolean;
 	/** Remembers the visible columns on this machine under this key; without it they reset. */
@@ -310,8 +312,11 @@ function usePatchDerivedState(
 	scope: PatchFixtureScope,
 ) {
 	const all = [...patch.fixtures];
+	// Patch lists what has a DMX address; Show all adds the placed Venue objects beside it.
+	const shownScope: PatchFixtureScope =
+		scope === "patch" && ui.showAllLayers ? "all" : scope;
 	const scoped = all.filter((fixture) =>
-		definitionMatchesScope(fixture.definition, scope),
+		definitionMatchesScope(fixture.definition, shownScope),
 	);
 	const layerIds = new Set(
 		(library?.patchLayers ?? []).map((item) => item.body.id),
@@ -356,8 +361,8 @@ function usePatchDerivedState(
 				...patch.fixtures
 					.map((fixture) => fixture.definition)
 					.filter((definition) => !isDmxPatchable(definition)),
-			]).filter((definition) => definitionMatchesScope(definition, scope)),
-		[library?.fixtureProfiles, library?.fixtureLibrary, patch.fixtures, scope],
+			]).filter((definition) => definitionMatchesScope(definition, shownScope)),
+		[library?.fixtureProfiles, library?.fixtureLibrary, patch.fixtures, shownScope],
 	);
 	const selected =
 		all.find((fixture) => fixture.fixture_id === ui.selectedFixture) ?? null;
@@ -583,6 +588,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 			onImportVenueModel: props.onImportVenueModel,
 			quickViews: props.quickViews ?? false,
 			titleGroups: props.titleGroups ?? [],
+			trailingTitleGroups: props.trailingTitleGroups ?? [],
 		},
 	};
 }

@@ -189,7 +189,10 @@ export function viewPositionDepth(
 	}
 }
 
-/** The move gizmo's placement beside the selection, in plan millimetres. */
+/**
+ * The move gizmo's placement in plan millimetres: at one element's own origin, or at the centre of
+ * the box around a selected group's origins.
+ */
 export function gizmoGeometry(
 	entities: readonly CadEntity[],
 	selected: ReadonlySet<string>,
@@ -206,17 +209,12 @@ export function gizmoGeometry(
 			projectPoint(entity.positionMillimetres, view, rotationQuarterTurns),
 		);
 	if (!points.length) return null;
-	const centre: [number, number] = [
-		points.reduce((sum, point) => sum + point[0], 0) / points.length +
-			preview[0],
-		points.reduce((sum, point) => sum + point[1], 0) / points.length +
-			preview[1],
-	];
+	const middle = (axis: 0 | 1) =>
+		(Math.min(...points.map((point) => point[axis])) +
+			Math.max(...points.map((point) => point[axis]))) /
+		2;
 	return {
-		origin: [centre[0] + 36 / camera.zoom, centre[1] + 36 / camera.zoom] as [
-			number,
-			number,
-		],
+		origin: [middle(0) + preview[0], middle(1) + preview[1]] as [number, number],
 		length: 48 / camera.zoom,
 		square: 7 / camera.zoom,
 	};

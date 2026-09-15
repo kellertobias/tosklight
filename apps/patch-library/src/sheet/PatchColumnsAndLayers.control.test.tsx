@@ -234,6 +234,16 @@ describe("patch sheet layers", () => {
 		expect(layersSidebar().getByRole("button", { name: /^Trusses/ })).toBeInTheDocument();
 	});
 
+	it("lists placed Venue objects on the Patch sheet only while Show all is on", () => {
+		server.patchLayers = [{ body: { id: "default", name: "Default", order: 0 } }];
+		server.patch.fixtures = [wash("light", 1, 1, 1), venue("truss", 2, "default")];
+		render(<FixturePatchSetup scope="patch" showAllLayersRequest={0} />);
+		expect(rowOrder()).toEqual(["light"]);
+
+		fireEvent.click(screen.getByRole("switch", { name: "Show all layers" }));
+		expect(rowOrder()).toEqual(["light", "truss"]);
+	});
+
 	it("hides No Layer Assigned when this screen has nothing without a layer", () => {
 		server.patchLayers = [{ body: { id: "trusses", name: "Trusses", order: 1 } }];
 		server.patch.fixtures = [venue("truss", 2, "trusses"), venue("loose", 3, "")];

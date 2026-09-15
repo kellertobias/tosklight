@@ -5,15 +5,20 @@
  * platform size, each shown by its picture on a dark ground. The chosen part is placed at the stage
  * origin like any other Venue object, and the CAD screen selects it so Info opens to place and size
  * it. A step with a single choice is skipped.
+ *
+ * The dialog reads the fixture library itself each time it opens and writes the placement straight to
+ * the show, so it offers what this computer's library holds now and a refusal carries the show's own
+ * reason.
  */
 import {
 	type FixtureDefinition,
+	mergeFixtureDefinitions,
 	newPatchFixtureCandidate,
-	usePatch,
-	usePatchView,
 } from "@tosklight/patch";
-import { Button, ModalFrame } from "@tosklight/ui";
+import { ModalFrame } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
+import { documentSession } from "../document/session";
+import { TauriPatchTransport } from "../document/transport";
 import {
 	definitionForProfile,
 	nextVirtualNumber,
@@ -36,18 +41,60 @@ const TITLES: Record<ChosenKind, { title: string; groupsLabel: string }> = {
 	stage: { title: "Add stage element", groupsLabel: "Feet" },
 };
 
+const transport = new TauriPatchTransport();
+
+/** The library as the dialog last read it: still reading, read, or refused with a reason. */
+type Library =
+	| { state: "loading" }
+	| { state: "ready"; definitions: readonly FixtureDefinition[] }
+	| { state: "failed"; reason: string };
+
+async function readLibrary(): Promise<readonly FixtureDefinition[]> {
+	return mergeFixtureDefinitions(await documentSession.fixtureProfiles(), []);
+}
+
+/** Places one part at the stage origin with the first free virtual ID, and returns its fixture ID. */
+async function placePart(definition: FixtureDefinition): Promise<string> {
+	const snapshot = await documentSession.patchSnapshot();
+	const candidate = newPatchFixtureCandidate({
+		name: definition.name,
+		fixture_number: null,
+		virtual_fixture_number: nextVirtualNumber(
+			snapshot.fixtures.map((fixture) => fixture.virtualFixtureNumber),
+		),
+		definition,
+		universe: null,
+		address: null,
+		layer_id: "default",
+	});
+	await transport.patchFixtures(snapshot.showId, snapshot.patchRevision, {
+		requestId: crypto.randomUUID(),
+		fixtures: [candidate.input],
+		removeFixtureIds: [],
+	});
+	return candidate.fixture.fixture_id;
+}
+
 function PartTile({
 	label,
 	detail,
 	definition,
+	library,
 	onChoose,
 }: {
 	label: string;
 	detail?: string;
 	definition: FixtureDefinition | undefined;
+	library: Library;
 	onChoose(): void;
 }) {
 	const preview = previewOf(definition);
+	const missing =
+		library.state === "loading"
+			? "Loading the fixture library…"
+			: library.state === "failed"
+				? "The fixture library could not be read"
+				: "Not in this library";
 	return (
 		<button
 			type="button"
@@ -59,82 +106,124 @@ function PartTile({
 				{preview ? <img src={preview} alt="" /> : <span aria-hidden="true">No picture</span>}
 			</span>
 			<strong>{label}</strong>
-			<small>{definition ? (detail ?? definition.name) : "Not in this library"}</small>
+			<small>{definition ? (detail ?? definition.name) : missing}</small>
 		</button>
+	);
+}
+
+/** The step's choices: the groups first, then the parts of the chosen group. */
+function PartGrid({
+	group,
+	groups,
+	library,
+	onPlace,
+	onChooseGroup,
+}: {
+	group: VenuePartGroup | null;
+	groups: readonly VenuePartGroup[];
+	library: Library;
+	onPlace(part: VenuePart): void;
+	onChooseGroup(group: VenuePartGroup): void;
+}) {
+	const find = (profileId: string) =>
+		library.state === "ready" ? definitionForProfile(library.definitions, profileId) : undefined;
+	return (
+		<div className="cad-part-grid" role="list">
+			{group
+				? group.parts.map((part) => (
+						<div role="listitem" key={part.id}>
+							<PartTile
+								label={part.label}
+								detail={part.detail}
+								library={library}
+								definition={find(part.profileId)}
+								onChoose={() => onPlace(part)}
+							/>
+						</div>
+					))
+				: groups.map((each) => (
+						<div role="listitem" key={each.id}>
+							<PartTile
+								label={each.label}
+								detail={
+									each.parts.length === 1
+										? each.parts[0].label
+										: `${each.parts.length} ${each.partsLabel.toLowerCase()}s`
+								}
+								library={library}
+								definition={each.parts.length ? find(each.parts[0].profileId) : undefined}
+								onChoose={() => onChooseGroup(each)}
+							/>
+						</div>
+					))}
+		</div>
 	);
 }
 
 export function CadAddPartModal({
 	kind,
 	request,
-	definitions,
 	onPlaced,
 	onError,
 }: {
 	kind: CadPartKind;
 	/** Bumped on every press of an add button; each press opens or places once. */
 	request: number;
-	definitions: readonly FixtureDefinition[];
 	onPlaced(fixtureId: string): void;
 	onError(reason: unknown): void;
 }) {
-	// The patch is read and written only while a view holds it open, so the dialog holds it for as
-	// long as the CAD screen is up: a curtain is placed the moment its button is pressed.
-	usePatchView();
-	const patch = usePatch();
 	const [open, setOpen] = useState<ChosenKind | null>(null);
 	const [group, setGroup] = useState<VenuePartGroup | null>(null);
+	const [library, setLibrary] = useState<Library>({ state: "loading" });
 	const [placing, setPlacing] = useState(false);
 	const handled = useRef(request);
 
-	async function place(part: Pick<VenuePart, "profileId" | "label">) {
-		const definition = definitionForProfile(definitions, part.profileId);
+	async function place(part: Pick<VenuePart, "profileId" | "label">, known?: Library) {
+		const current = known ?? library;
+		const definition =
+			current.state === "ready" ? definitionForProfile(current.definitions, part.profileId) : undefined;
 		if (!definition) {
-			onError(`${part.label} is not in this machine's fixture library.`);
-			return;
-		}
-		if (patch.status !== "ready") {
-			onError(`The patch is still loading; add the ${part.label} again in a moment.`);
+			onError(`The ${part.label} is not in this computer's fixture library.`);
 			return;
 		}
 		setPlacing(true);
 		try {
-			const candidate = newPatchFixtureCandidate({
-				name: definition.name,
-				fixture_number: null,
-				virtual_fixture_number: nextVirtualNumber(
-					patch.fixtures.map((fixture) => fixture.virtual_fixture_number),
-				),
-				definition,
-				universe: null,
-				address: null,
-				layer_id: "default",
-			});
-			const placed = await patch.patchFixtures([candidate]);
-			if (!placed?.length)
-				throw new Error(
-					`The show refused the ${part.label}${patch.error ? `: ${patch.error}` : "."}`,
-				);
+			const fixtureId = await placePart(definition);
 			setOpen(null);
 			setGroup(null);
-			onPlaced(placed[0].fixtureId);
+			onPlaced(fixtureId);
 		} catch (reason) {
-			onError(reason);
+			onError(`The show refused the ${part.label}: ${String(reason)}`);
 		} finally {
 			setPlacing(false);
 		}
+	}
+
+	/** Reads the library afresh, and hands what it read to the caller as well as the dialog. */
+	async function refreshLibrary(): Promise<Library> {
+		setLibrary({ state: "loading" });
+		const next: Library = await readLibrary().then(
+			(definitions) => ({ state: "ready", definitions }),
+			(reason) => ({ state: "failed", reason: String(reason) }),
+		);
+		setLibrary(next);
+		if (next.state === "failed") onError(`The fixture library could not be read: ${next.reason}`);
+		return next;
 	}
 
 	useEffect(() => {
 		if (request === handled.current) return;
 		handled.current = request;
 		if (kind === "venue") return;
-		if (kind === "curtain")
-			void place({ profileId: PARAMETRIC_CURTAIN_PROFILE_ID, label: "curtain" });
-		else {
-			setGroup(null);
-			setOpen(kind);
+		if (kind === "curtain") {
+			void refreshLibrary().then((read) =>
+				place({ profileId: PARAMETRIC_CURTAIN_PROFILE_ID, label: "curtain" }, read),
+			);
+			return;
 		}
+		setGroup(null);
+		setOpen(kind);
+		void refreshLibrary();
 	});
 
 	if (!open) return null;
@@ -153,46 +242,41 @@ export function CadAddPartModal({
 			dialogClassName="cad-add-part-modal"
 			title={group ? `${TITLES[open].title} · ${group.label}` : TITLES[open].title}
 			closeLabel={`Close ${TITLES[open].title}`}
+			// The second step returns to the first from the title, beside the close button.
+			groups={
+				group
+					? [
+							{
+								id: "cad-add-part-back",
+								actions: [
+									{
+										id: "back",
+										label: "Back",
+										icon: (
+											<svg className="cad-add-part-back-icon" viewBox="0 0 16 16" aria-hidden="true">
+												<path d="M10 3 5 8l5 5" />
+											</svg>
+										),
+										onPress: () => setGroup(null),
+									},
+								],
+							},
+						]
+					: undefined
+			}
 			onClose={close}
 		>
-			<div className="cad-add-part-body" aria-busy={placing || undefined}>
+			<div className="cad-add-part-body" aria-busy={placing || library.state === "loading" || undefined}>
 				<header className="cad-add-part-step">
-					{group ? (
-						<Button onClick={() => setGroup(null)}>Back</Button>
-					) : null}
 					<h3>{group ? group.partsLabel : TITLES[open].groupsLabel}</h3>
 				</header>
-				<div className="cad-part-grid" role="list">
-					{group
-						? group.parts.map((part) => (
-								<div role="listitem" key={part.id}>
-									<PartTile
-										label={part.label}
-										detail={part.detail}
-										definition={definitionForProfile(definitions, part.profileId)}
-										onChoose={() => void place(part)}
-									/>
-								</div>
-							))
-						: groups.map((each) => (
-								<div role="listitem" key={each.id}>
-									<PartTile
-										label={each.label}
-										detail={
-											each.parts.length === 1
-												? each.parts[0].label
-												: `${each.parts.length} ${each.partsLabel.toLowerCase()}s`
-										}
-										definition={
-											each.parts.length
-												? definitionForProfile(definitions, each.parts[0].profileId)
-												: undefined
-										}
-										onChoose={() => chooseGroup(each)}
-									/>
-								</div>
-							))}
-				</div>
+				<PartGrid
+					group={group}
+					groups={groups}
+					library={library}
+					onPlace={(part) => void place(part)}
+					onChooseGroup={chooseGroup}
+				/>
 			</div>
 		</ModalFrame>
 	);

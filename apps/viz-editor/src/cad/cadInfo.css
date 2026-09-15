@@ -1,0 +1,97 @@
+/* Info's tabs, its multi-selection placement fields and the Placement Assistant. */
+
+/* Info at the foot of an open panel: its tabs sit between the heading and the trash button. */
+.cad-info-header .ui-title-chrome {
+	margin-left: auto;
+}
+
+.cad-info-header .ui-title-chrome .ui-button {
+	min-height: 28px;
+	height: 28px;
+}
+
+/* With no panel open the tabs push the trash button to the edge themselves. */
+.cad-sidebar .cad-sidebar-header > .ui-title-chrome + .cad-sidebar-delete {
+	margin-left: 0;
+}
+
+.cad-info-parameters {
+	display: grid;
+	gap: 8px;
+}
+
+.cad-info-parameters > span {
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+}
+
+.cad-several-placement {
+	display: grid;
+	gap: 10px;
+}
+
+.cad-thru-fields {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px 6px;
+}
+
+/* Bracket angle and barn doors take a whole row each, so a range fits in them. */
+.cad-thru-fields > .cad-field:nth-child(n + 7) {
+	grid-column: span 3;
+}
+
+/* The selection list reads as a table: ID, name, model and patch in fixed columns. */
+.cad-selected-list .cad-selected-row {
+	display: grid;
+	grid-template-columns: 40px minmax(0, 1.4fr) minmax(0, 1fr) 52px;
+	gap: 8px;
+}
+
+.cad-selected-list .cad-selected-head {
+	padding: 0 9px;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 11px;
+}
+
+.cad-selected-list .cad-selected-row > * {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cad-thru-hint {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 11px;
+}
+
+.cad-placement-assistant-body {
+	display: grid;
+	gap: 12px;
+	width: min(420px, 90vw);
+	padding: 16px;
+}
+
+.cad-placement-assistant-body > p {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+}
+
+.cad-placement-assistant-shapes {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 6px;
+}
+
+.cad-placement-assistant-shapes .ui-button[aria-pressed="true"] {
+	border-color: #05d1fa;
+	color: #05d1fa;
+}
+
+.cad-placement-assistant-body footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}

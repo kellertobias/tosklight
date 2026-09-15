@@ -490,28 +490,62 @@ body {
 	min-height: 0;
 }
 
+/* The server table takes the window's full height; the chosen server's configuration is a sidebar. */
 .viz-media-server-patch {
 	position: relative;
 	display: grid;
-	grid-template-rows: minmax(150px, 0.8fr) minmax(180px, 1.2fr);
+	grid-template-columns: minmax(0, 1fr) auto;
 	flex: 1;
 	min-height: 0;
 }
 
 .viz-media-server-table-wrap,
 .viz-media-server-editor {
+	position: relative;
 	min-height: 0;
 	overflow: auto;
 	scrollbar-gutter: stable;
 }
 
+.viz-media-server-table-wrap > .viz-media-empty-state {
+	inset: 0;
+}
+
 .viz-media-server-editor {
-	border-top: 1px solid var(--border-strong, #435267);
+	box-sizing: border-box;
+	width: 380px;
+	border-left: 1px solid var(--border-strong, #435267);
 	background: var(--surface-raised, #10151c);
 }
 
-.viz-media-server-editor:empty {
-	display: none;
+.viz-media-server-editor > .viz-media-object-editor {
+	max-width: none;
+	margin: 0;
+	border: 0;
+	background: transparent;
+}
+
+.viz-media-server-editor .viz-media-form {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.viz-media-server-editor .viz-media-object-editor > header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+
+.viz-media-server-editor .viz-media-object-editor > header h2 {
+	margin: 0;
+	font-size: 16px;
+}
+
+.viz-media-server-editor .viz-media-object-editor > header > div {
+	display: flex;
+	gap: 6px;
 }
 
 .viz-media-object-editor {
@@ -730,10 +764,26 @@ body {
 	margin-top: 16px;
 }
 
-/* The Visualizer page is one page of boxes, two to a row. */
-.viz-renderer-settings-grid.is-two-column {
+/* The Visualizer page is one page of boxes that fill the width: two to a row, three or four once
+   the window is wide enough for them. */
+.viz-renderer-settings-scroll {
+	container-type: inline-size;
+}
+
+.viz-renderer-settings-grid.is-responsive {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
-	max-width: 1180px;
+}
+
+@container (min-width: 1180px) {
+	.viz-renderer-settings-grid.is-responsive {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+@container (min-width: 1560px) {
+	.viz-renderer-settings-grid.is-responsive {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
 }
 
 .viz-renderer-settings-grid > section {
@@ -950,6 +1000,7 @@ body {
 .viz-editor-workspace > .show-patch-layout > .ui-window-header,
 .viz-editor-workspace > .viz-show-settings-workspace > .ui-window-header,
 .viz-editor-workspace > .viz-fixture-library-workspace > .ui-window-header,
+.viz-editor-workspace > .viz-dmx-workspace > .ui-window-header,
 .viz-editor-workspace > .viz-media-workspace > .ui-window-header {
 	height: 31px;
 	min-height: 31px;
@@ -962,6 +1013,7 @@ body {
 .viz-editor-workspace > .viz-show-settings-workspace > .ui-window-header button,
 .viz-editor-workspace > .viz-fixture-library-workspace > .ui-window-header button,
 .viz-editor-workspace > .viz-fixture-library-workspace > .ui-window-header input,
+.viz-editor-workspace > .viz-dmx-workspace > .ui-window-header button,
 .viz-editor-workspace > .viz-media-workspace > .ui-window-header button {
 	-webkit-app-region: no-drag;
 }
@@ -1078,9 +1130,12 @@ body {
 	flex: none;
 }
 
+/* Laid out like the other Settings pages: its cards sit inside the window's margins. */
 .viz-dmx-network {
+	box-sizing: border-box;
 	flex: 1;
 	min-height: 0;
+	padding: 18px;
 	overflow: auto;
 	scrollbar-gutter: stable;
 }
@@ -1090,6 +1145,10 @@ body {
 	flex: 1;
 	grid-template-columns: minmax(0, 1fr) 260px;
 	min-height: 0;
+}
+
+.viz-dmx-content.is-without-sidebar {
+	grid-template-columns: minmax(0, 1fr);
 }
 
 .viz-dmx-content > .ui-window-scroll-area,
@@ -1227,6 +1286,30 @@ body {
 .viz-dmx-universe.is-patch .viz-dmx-row button.is-conflict {
 	border-color: #ff9d4d;
 	background: #6a3614;
+}
+
+/* With the sidebar shown, a fixture's block is taken by any of its cells and dragged elsewhere. */
+.viz-dmx-universe.is-patch .viz-dmx-row button.is-draggable {
+	cursor: grab;
+	touch-action: none;
+	user-select: none;
+}
+
+/* Dragged but not yet applied. */
+.viz-dmx-universe.is-patch .viz-dmx-row button.is-moved {
+	border-style: dashed;
+	border-color: #7fdcff;
+}
+
+.viz-dmx-pending {
+	border-color: #2f8fb0 !important;
+}
+
+.viz-dmx-pending-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+	margin-top: 9px;
 }
 
 .viz-dmx-row button.is-selected {

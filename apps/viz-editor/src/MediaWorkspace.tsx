@@ -3,6 +3,7 @@ import {
 	DmxAddressField,
 	FixtureAddFlow,
 	FixtureAddressFlow,
+	usePatch,
 	usePatchFixture,
 } from "@tosklight/patch";
 import { Button } from "@tosklight/ui";
@@ -20,6 +21,7 @@ import {
 	type MediaSurfaceSection,
 	type VersionedMediaObject,
 } from "./document/session";
+import { Field, NumberInput, TransformEditor } from "./mediaFields";
 import { beginWindowDrag } from "./WindowChrome";
 
 const EMPTY: MediaLayoutSnapshot = {
@@ -48,29 +50,25 @@ function label(entry: VersionedMediaObject) {
 	return entry.object.body.name;
 }
 
-function NumberInput({
-	value,
-	onChange,
-	min,
-	max,
-	step = 0.01,
-}: {
-	value: number;
-	onChange: (value: number) => void;
-	min?: number;
-	max?: number;
-	step?: number;
-}) {
-	return (
-		<input
-			type="number"
-			value={value}
-			min={min}
-			max={max}
-			step={step}
-			onChange={(event) => onChange(Number(event.target.value))}
-		/>
-	);
+const ADD_LABELS: Record<WorkspaceTab, string> = {
+	servers: "Add server",
+	surfaces: "Add surface",
+	modules: "Add LED module",
+	projectors: "Add projector",
+};
+
+function newLedModuleType(): LedModuleType {
+	return {
+		id: id(),
+		name: "500 mm LED module",
+		widthMetres: 0.5,
+		heightMetres: 0.5,
+		pixelPitchMillimetres: 3.9,
+		horizontalGapMetres: 0.005,
+		verticalGapMetres: 0.005,
+		pixelWidth: 128,
+		pixelHeight: 128,
+	};
 }
 
 export function MediaWorkspace({
@@ -109,6 +107,7 @@ export function MediaWorkspace({
 			? (current.object.body.fixtureId ?? null)
 			: null;
 	const linkedFixture = usePatchFixture(linkedFixtureId);
+	const { deleteFixture } = usePatch();
 
 	async function apply(object: MediaObject, revision: number) {
 		setBusy(true);
@@ -231,6 +230,14 @@ export function MediaWorkspace({
 			});
 			setLayout(outcome.snapshot);
 			setSelected(null);
+			// A media server is a patched fixture: deleting the server takes the fixture with it, so
+			// nothing of it is left behind in the patch.
+			const fixtureId =
+				entry.object.kind === "media_server" ? entry.object.body.fixtureId : null;
+			if (fixtureId && !(await deleteFixture(fixtureId)))
+				onError(
+					`Deleted ${label(entry)}, but its patched fixture could not be removed from the patch.`,
+				);
 		} catch (reason) {
 			onError(reason);
 		} finally {
@@ -243,18 +250,7 @@ export function MediaWorkspace({
 			setServerToLink(null);
 			setAddServerRequest((request) => request + 1);
 		} else if (tab === "modules") {
-			const module: LedModuleType = {
-				id: id(),
-				name: "500 mm LED module",
-				widthMetres: 0.5,
-				heightMetres: 0.5,
-				pixelPitchMillimetres: 3.9,
-				horizontalGapMetres: 0.005,
-				verticalGapMetres: 0.005,
-				pixelWidth: 128,
-				pixelHeight: 128,
-			};
-			void apply({ kind: "led_module_type", body: module }, 0);
+			void apply({ kind: "led_module_type", body: newLedModuleType() }, 0);
 		} else if (tab === "surfaces") {
 			const surface: MediaSurface = {
 				id: id(),
@@ -356,13 +352,6 @@ export function MediaWorkspace({
 			0,
 		);
 	}
-	const addLabel = {
-		servers: "Add server",
-		surfaces: "Add surface",
-		modules: "Add LED module",
-		projectors: "Add projector",
-	}[tab];
-
 	return (
 		<section className="viz-media-workspace">
 			<WindowHeader
@@ -399,7 +388,7 @@ export function MediaWorkspace({
 								: []),
 							{
 								id: "add",
-								label: addLabel,
+								label: ADD_LABELS[tab],
 								disabled: busy,
 								onPress: add,
 							},
@@ -527,8 +516,8 @@ function ServerPatch({
 }) {
 	return (
 		<div className="viz-media-server-patch">
-			{layout.servers.length ? (
-				<div className="viz-media-server-table-wrap">
+			<div className="viz-media-server-table-wrap">
+				{layout.servers.length ? (
 					<table className="viz-media-server-table">
 						<thead>
 							<tr>
@@ -567,19 +556,23 @@ function ServerPatch({
 							})}
 						</tbody>
 					</table>
-				</div>
-			) : (
-				<div className="viz-media-empty-state">
-					<h2>No media servers patched</h2>
-					<p>
-						Media Servers are patched DMX fixtures that control layers and
-						outputs. CITP discovery then finds their live preview sources
-						independently.
-					</p>
-				</div>
-			)}
-			<div className="viz-media-server-editor">
-				{current ? (
+				) : (
+					<div className="viz-media-empty-state">
+						<h2>No media servers patched</h2>
+						<p>
+							Media Servers are patched DMX fixtures that control layers and
+							outputs. CITP discovery then finds their live preview sources
+							independently.
+						</p>
+					</div>
+				)}
+			</div>
+			{/* The table takes the window's height; the chosen server's configuration is its sidebar. */}
+			{current ? (
+				<aside
+					className="viz-media-server-editor"
+					aria-label="Media server configuration"
+				>
 					<ObjectEditor
 						entry={current}
 						layout={layout}
@@ -591,8 +584,8 @@ function ServerPatch({
 						onOpenAddress={onOpenAddress}
 						onPatchServer={onPatchServer}
 					/>
-				) : null}
-			</div>
+				</aside>
+			) : null}
 		</div>
 	);
 }
@@ -693,22 +686,6 @@ function ObjectEditor({
 				</p>
 			) : null}
 		</form>
-	);
-}
-
-function Field({
-	label,
-	children,
-}: {
-	label: string;
-	children: React.ReactNode;
-}) {
-	return (
-		// biome-ignore lint/a11y/noLabelWithoutControl: Every caller supplies its input control as the nested child.
-		<label className="viz-media-field">
-			<span>{label}</span>
-			{children}
-		</label>
 	);
 }
 
@@ -1176,53 +1153,6 @@ function ProjectorEditor({
 				/>
 			</Field>
 		</div>
-	);
-}
-
-function TransformEditor({
-	value,
-	onChange,
-}: {
-	value: MediaSurfaceSection["transform"];
-	onChange: (value: MediaSurfaceSection["transform"]) => void;
-}) {
-	return (
-		<fieldset className="viz-media-transform">
-			<legend>3D transform</legend>
-			{(["X", "Y", "Z"] as const).map((axis, index) => (
-				<Field key={`position-${axis}`} label={`${axis} (m)`}>
-					<NumberInput
-						value={value.positionMetres[index]}
-						onChange={(next) => {
-							const positionMetres = [...value.positionMetres] as [
-								number,
-								number,
-								number,
-							];
-							positionMetres[index] = next;
-							onChange({ ...value, positionMetres });
-						}}
-					/>
-				</Field>
-			))}
-			{(["X", "Y", "Z"] as const).map((axis, index) => (
-				<Field key={`rotation-${axis}`} label={`${axis} rotation`}>
-					<NumberInput
-						step={1}
-						value={value.rotationDegrees[index]}
-						onChange={(next) => {
-							const rotationDegrees = [...value.rotationDegrees] as [
-								number,
-								number,
-								number,
-							];
-							rotationDegrees[index] = next;
-							onChange({ ...value, rotationDegrees });
-						}}
-					/>
-				</Field>
-			))}
-		</fieldset>
 	);
 }
 

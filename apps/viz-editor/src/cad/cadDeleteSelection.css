@@ -1,0 +1,102 @@
+/* With no tabs or add menu in the row, the trash button is pushed to the row's right edge. */
+.cad-sidebar .cad-sidebar-header > .cad-sidebar-delete {
+	margin-left: auto;
+}
+
+/* Info at the foot of an open panel: its heading and the trash button share one row. */
+.cad-info-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	min-height: 28px;
+}
+
+.cad-info-header .cad-sidebar-delete {
+	box-sizing: border-box;
+	width: 36px;
+	min-width: 36px;
+	height: 28px;
+	min-height: 28px;
+	padding: 0;
+	justify-content: center;
+}
+
+.cad-selected-list {
+	display: grid;
+	gap: 8px;
+}
+
+.cad-selected-list > p {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+}
+
+.cad-selected-list ul {
+	display: grid;
+	gap: 2px;
+	max-height: 320px;
+	margin: 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+}
+
+.cad-selected-list li button {
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 32px;
+	padding: 4px 8px;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.cad-selected-list li button:hover,
+.cad-selected-list li button:focus-visible {
+	border-color: var(--line2, #2b3540);
+	background: var(--surface-raised, #1a2129);
+}
+
+.cad-selected-list li span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cad-selected-list li small {
+	color: var(--text-secondary, #98a4b3);
+}
+
+.cad-delete-confirm-body {
+	display: grid;
+	gap: 10px;
+	padding: 16px;
+	max-width: 420px;
+}
+
+.cad-delete-confirm-body p,
+.cad-delete-confirm-body ul {
+	margin: 0;
+}
+
+.cad-delete-confirm-body ul {
+	padding-left: 18px;
+}
+
+.cad-delete-confirm-body footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 6px;
+}

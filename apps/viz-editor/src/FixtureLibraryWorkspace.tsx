@@ -61,6 +61,25 @@ function disposeScene(scene: THREE.Object3D) {
 	});
 }
 
+function PlusIcon() {
+	return (
+		<svg
+			className="viz-plus-icon"
+			viewBox="0 0 16 16"
+			width="14"
+			height="14"
+			aria-hidden="true"
+		>
+			<path
+				d="M8 3v10M3 8h10"
+				stroke="currentColor"
+				strokeWidth="1.8"
+				strokeLinecap="round"
+			/>
+		</svg>
+	);
+}
+
 const ports: FixtureProfileEditorPorts = {
 	disposeScene,
 	AssetPicker: LocalAssetPicker,
@@ -155,7 +174,8 @@ export function FixtureLibraryWorkspace({
 						actions: [
 							{
 								id: "create",
-								label: "Create fixture",
+								label: "Create Fixture",
+								icon: <PlusIcon />,
 								onPress: () =>
 									setDraft({
 										profile: blankFixtureProfile(),
