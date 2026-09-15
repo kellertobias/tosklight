@@ -5,27 +5,21 @@ import type {
 } from "@tosklight/patch";
 import type { TitleActionGroup } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
-import { CadRigOverview } from "./cad/CadViewport";
-import type { CadSceneSnapshot } from "./cad/types";
 import { type DmxPage, DmxWorkspace } from "./DmxWorkspace";
-import { type DocumentSummary, documentSession } from "./document/session";
-import { FileBar } from "./FileBar";
+import type { DocumentSummary } from "./document/session";
 import { FixtureLibraryWorkspace } from "./FixtureLibraryWorkspace";
-import { McpSettingsWorkspace } from "./McpSettingsWorkspace";
 import { RendererSettingsWorkspace } from "./RendererSettingsWorkspace";
-import { ShowNameCaption } from "./ShowNameCaption";
 import { beginWindowDrag } from "./WindowChrome";
 
-export type SettingsPage = "show" | "visualizer" | "fixtures" | "dmx" | "mcp";
+export type SettingsPage = "visualizer" | "fixtures" | "dmx";
 
-// The show, the machine's fixture library and the DMX wiring are pages of Settings rather than
-// screens of the dock: none of them is a view of the rig being planned.
+// The Visualizer, the machine's fixture library and the DMX wiring are pages of Settings rather than
+// screens of the dock: none of them is a view of the rig being planned. The show itself is its own
+// Show screen, and MCP is reached from that screen's title.
 export const SETTINGS_PAGES: readonly { id: SettingsPage; label: string }[] = [
-	{ id: "show", label: "Show" },
 	{ id: "visualizer", label: "Visualizer" },
 	{ id: "fixtures", label: "Fixtures" },
 	{ id: "dmx", label: "DMX" },
-	{ id: "mcp", label: "MCP" },
 ];
 
 /** One Settings title for every page; Fixtures and DMX add their own groups left of the pages. */
@@ -33,29 +27,23 @@ export function ArchitectSettings({
 	page,
 	pages,
 	document,
-	cadScene,
 	profiles,
 	fixtures,
 	profileRevisions,
 	dmxPage,
 	onDmxPage,
-	onDocument,
 	onReloadProfiles,
-	onReloadDocument,
 	onError,
 }: {
 	page: SettingsPage;
 	pages: TitleActionGroup;
 	document: DocumentSummary | null;
-	cadScene: CadSceneSnapshot | null;
 	profiles: readonly FixtureProfile[];
 	fixtures: readonly PatchFixtureProjection[];
 	profileRevisions: readonly PatchProfileRevision[];
 	dmxPage: DmxPage;
 	onDmxPage: (page: DmxPage) => void;
-	onDocument: (document: DocumentSummary | null) => void;
 	onReloadProfiles: () => void;
-	onReloadDocument: () => void;
 	onError: (reason: unknown) => void;
 }) {
 	if (page === "fixtures")
@@ -89,36 +77,7 @@ export function ArchitectSettings({
 				}}
 				groups={[pages]}
 			/>
-			{page === "show" ? (
-				<FileBar
-					document={document}
-					onDocument={onDocument}
-					onError={onError}
-					onReloadProfiles={onReloadProfiles}
-					onReloadDocument={onReloadDocument}
-				>
-					{document && cadScene?.showId === document.showId ? (
-						<figure className="viz-show-rig-overview">
-							<ShowNameCaption
-								name={document.name}
-								onRename={(name) =>
-									documentSession
-										.rename(name)
-										.then(onReloadDocument)
-										.catch(onError)
-								}
-							/>
-							<CadRigOverview
-								entities={cadScene.entities}
-								drawings={cadScene.drawings}
-								showName={document.name}
-							/>
-						</figure>
-					) : null}
-				</FileBar>
-			) : page === "mcp" ? (
-				<McpSettingsWorkspace />
-			) : page === "visualizer" ? (
+			{page === "visualizer" ? (
 				<RendererSettingsWorkspace onError={onError} />
 			) : (
 				// DMX is the wiring of an open show.

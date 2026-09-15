@@ -34,6 +34,7 @@ import {
 } from "./ArchitectSettings";
 import { CadApp } from "./cad/CadApp";
 import { type CadAddKind, CadToolProvider } from "./cad/cadTools";
+import { VENUE_MODEL_EXTENSIONS } from "./cad/venueModelFormats";
 import { cadSession } from "./cad/session";
 import { useCadSelection } from "./cad/useCadSelection";
 import type { CadEntity, CadSceneSnapshot } from "./cad/types";
@@ -45,6 +46,7 @@ import type { PatchTransport } from "@tosklight/patch/transport";
 import { type EditorWorkspace, EditorSidebar } from "./EditorSidebar";
 import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
+import { ShowScreen } from "./ShowScreen";
 import {
 	beginTitleBarDrag,
 	beginWindowDrag,
@@ -136,7 +138,8 @@ function ArchitectPatchSheet(
 }
 
 /**
- * Choose a GLB on this computer and place it in the show as a venue object.
+ * Choose a 3D model on this computer — GLB, glTF, 3MF or OBJ — and place it in the show as a venue
+ * object. Whatever the format, the show keeps it as one GLB.
  *
  * Every window's sheet and the CAD views hear the patch change the import makes, so nothing here
  * has to reload them.
@@ -145,7 +148,7 @@ async function importVenueModel(layerId: string) {
 	const path = await open({
 		multiple: false,
 		directory: false,
-		filters: [{ name: "3D model (GLB)", extensions: ["glb"] }],
+		filters: [{ name: "3D model", extensions: [...VENUE_MODEL_EXTENSIONS] }],
 	});
 	if (typeof path !== "string") return null;
 	const imported = await documentSession.importVenueModel(path, layerId);
@@ -181,6 +184,23 @@ async function changeSessionLayers(
 	return true;
 }
 
+/** The Patch title's Sheet and DMX tabs. */
+function patchPageTabs(
+	active: PatchPage,
+	onChange: (page: PatchPage) => void,
+): TitleActionGroup {
+	return {
+		id: "patch-pages",
+		kind: "tabs",
+		activeId: active,
+		onActiveChange: (id) => onChange(id as PatchPage),
+		actions: [
+			{ id: "sheet", label: "Sheet" },
+			{ id: "dmx", label: "DMX" },
+		],
+	};
+}
+
 export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
 	const [profiles, setProfiles] = useState<readonly FixtureProfile[]>([]);
@@ -192,8 +212,8 @@ export function App() {
 		ReadonlyMap<string, FixtureNote>
 	>(new Map());
 	const [error, setError] = useState<string | null>(null);
-	const [workspace, setWorkspace] = useState<EditorWorkspace>("settings");
-	const [settingsPage, setSettingsPage] = useState<SettingsPage>("show");
+	const [workspace, setWorkspace] = useState<EditorWorkspace>("show");
+	const [settingsPage, setSettingsPage] = useState<SettingsPage>("visualizer");
 	const [dmxPage, setDmxPage] = useState<DmxPage>("network");
 	const [patchPage, setPatchPage] = useState<PatchPage>("sheet");
 	// Each press of a CAD add action is a new request, so pressing the same one again reopens it.
@@ -523,19 +543,10 @@ export function App() {
 	);
 	const filename = document ? showFileName(document.path) : "No show open";
 
-	const patchPages: TitleActionGroup = {
-		id: "patch-pages",
-		kind: "tabs",
-		activeId: patchPage,
-		onActiveChange: (id) => {
-			loadFixtures();
-			setPatchPage(id as PatchPage);
-		},
-		actions: [
-			{ id: "sheet", label: "Sheet" },
-			{ id: "dmx", label: "DMX" },
-		],
-	};
+	const patchPages = patchPageTabs(patchPage, (page) => {
+		loadFixtures();
+		setPatchPage(page);
+	});
 
 	const settingsPages: TitleActionGroup = {
 		id: "settings-pages",
@@ -587,20 +598,27 @@ export function App() {
 						beginWindowDrag(event);
 					}}
 				>
+					{workspace === "show" ? (
+						<ShowScreen
+							document={document}
+							cadScene={cadScene}
+							onDocument={setDocument}
+							onReloadProfiles={reloadProfiles}
+							onReloadDocument={reloadDocument}
+							onError={report}
+						/>
+					) : null}
 					{workspace === "settings" ? (
 						<ArchitectSettings
 							page={settingsPage}
 							pages={settingsPages}
 							document={document}
-							cadScene={cadScene}
 							profiles={profiles}
 							fixtures={fixtures}
 							profileRevisions={profileRevisions}
 							dmxPage={dmxPage}
 							onDmxPage={setDmxPage}
-							onDocument={setDocument}
 							onReloadProfiles={reloadProfiles}
-							onReloadDocument={reloadDocument}
 							onError={report}
 						/>
 					) : null}
@@ -690,7 +708,9 @@ export function App() {
 							<MediaWorkspace onError={report} />
 						</PatchScope>
 					) : null}
-					{!document && workspace !== "settings" ? <NoShowOpen /> : null}
+					{!document && workspace !== "settings" && workspace !== "show" ? (
+						<NoShowOpen />
+					) : null}
 				</main>
 			</div>
 			{error ? (

@@ -299,7 +299,7 @@ describe("the Viz editor window", () => {
 		expect(
 			within(title)
 				.getByRole("button", { name: "Create fixture" })
-				.compareDocumentPosition(within(title).getByRole("tab", { name: "Show" })) &
+				.compareDocumentPosition(within(title).getByRole("tab", { name: "Visualizer" })) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Create fixture" }));
@@ -405,10 +405,11 @@ describe("the Viz editor window", () => {
 			"data-tauri-drag-region",
 		);
 		const title = document_root()?.querySelector<HTMLElement>(
-			".viz-show-settings-workspace > .ui-window-header",
+			".viz-show-screen > .ui-window-header",
 		);
 		if (!title) throw new Error("window title was not rendered");
-		expect(title).toHaveTextContent("Settings");
+		// The window opens on the Show screen, its own dock entry rather than a page of Settings.
+		expect(title).toHaveTextContent("Show");
 		expect(title).toHaveAttribute("data-tauri-drag-region");
 		fireEvent.pointerDown(title, { button: 0 });
 		await waitFor(() =>
@@ -425,10 +426,13 @@ describe("the Viz editor window", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Close window" }));
 		await waitFor(() => expect(nativeWindow.close).toHaveBeenCalledOnce());
-		for (const label of ["CAD", "Patch", "Venue", "Media"])
-			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-		// Show, Fixtures and DMX are pages of Settings; Effects is part of Patch.
-		for (const label of ["Show", "Effects", "Fixtures", "DMX"])
+		expect(
+			within(screen.getByRole("navigation", { name: "Visualizer screens" }))
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["◫Show", "⊞CAD", "⌘Patch", "◇Venue", "▣Media"]);
+		// The fixture library and DMX are pages of Settings; Effects is part of Patch.
+		for (const label of ["Effects", "Fixtures", "DMX"])
 			expect(
 				within(screen.getByRole("navigation", { name: "Visualizer screens" })).queryByRole(
 					"button",
@@ -476,6 +480,45 @@ describe("the Viz editor window", () => {
 		]) {
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
 		}
+	});
+
+	it("describes the show beside its rig, under the file actions, on the Show screen", async () => {
+		const base = invoke.getMockImplementation();
+		invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+			if (command === "save_document_paperwork")
+				return Promise.resolve({
+					...document,
+					...(args?.paperwork as Record<string, string>),
+					lastSavedAt: 1_787_000_001,
+				});
+			return base?.(command, args);
+		});
+		renderApp();
+		const overview = await screen.findByRole("img", {
+			name: "Read-only rig overview for Planning show",
+		});
+		const information = screen.getByRole("region", { name: "Show information" });
+		// One half draws the rig, the other describes it, and the file actions run above both.
+		const halves = overview.closest(".viz-show-halves");
+		expect(halves).not.toBeNull();
+		expect(information.closest(".viz-show-halves")).toBe(halves);
+		expect(
+			screen
+				.getByRole("button", { name: "Open Demo Show" })
+				.compareDocumentPosition(halves as Element) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		// The show's metadata is no longer a panel of the CAD screen.
+		fireEvent.change(
+			within(information).getByRole("textbox", { name: "Lighting designer" }),
+			{ target: { value: "Tobias Keller" } },
+		);
+		fireEvent.click(within(information).getByRole("button", { name: "Save project info" }));
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("save_document_paperwork", {
+				paperwork: expect.objectContaining({ lightingDesigner: "Tobias Keller" }),
+			}),
+		);
 	});
 
 	it("shows the layers the document itself carries", async () => {
@@ -621,7 +664,7 @@ describe("the Viz editor window", () => {
 				"Opened Demo Show 2, a copy of the packaged Demo Show, at /data/shows/demo-show-2.show",
 			),
 		).toBeInTheDocument();
-		expect(await screen.findByText("Demo Show 2")).toBeInTheDocument();
+		expect(await screen.findByText("Demo Show 2", { selector: "strong" })).toBeInTheDocument();
 		expect(cadReads).toBeGreaterThanOrEqual(2);
 	});
 
@@ -651,6 +694,8 @@ describe("the Viz editor window", () => {
 			],
 		};
 		invoke.mockImplementation((command: string) => {
+			if (command === "renderer_settings")
+				return Promise.resolve(rendererSettings);
 			if (command === "document_summary") return Promise.resolve(document);
 			if (command === "live_dmx_inputs") return Promise.resolve(configured);
 			if (command === "patch_snapshot") return Promise.resolve(snapshot);
@@ -712,6 +757,8 @@ describe("the Viz editor window", () => {
 		];
 		invoke.mockImplementation((command: string) => {
 			switch (command) {
+				case "renderer_settings":
+					return Promise.resolve(rendererSettings);
 				case "document_summary":
 					return Promise.resolve(document);
 				case "library_profiles":
@@ -768,6 +815,8 @@ describe("the Viz editor window", () => {
 		};
 		invoke.mockImplementation((command: string) => {
 			switch (command) {
+				case "renderer_settings":
+					return Promise.resolve(rendererSettings);
 				case "document_summary":
 					return Promise.resolve(document);
 				case "library_profiles":
@@ -980,11 +1029,9 @@ describe("the Viz editor window", () => {
 				"Network",
 				"Values",
 				"Sources",
-				"Show",
 				"Visualizer",
 				"Fixtures",
 				"DMX",
-				"MCP",
 			]);
 			expect(
 				within(dmxHeader()).getByRole("tab", { name: "Network" }),
@@ -1268,10 +1315,10 @@ describe("the Viz editor window", () => {
 			within(sharedTitle)
 				.getAllByRole("tab")
 				.map((tab) => tab.textContent),
-		).toEqual(["Show", "Visualizer", "Fixtures", "DMX", "MCP"]);
-		expect(within(sharedTitle).getByRole("tab", { name: "Show" })).toHaveClass(
-			"is-active",
-		);
+		).toEqual(["Visualizer", "Fixtures", "DMX"]);
+		expect(
+			within(sharedTitle).getByRole("tab", { name: "Visualizer" }),
+		).toHaveClass("is-active");
 		fireEvent.click(
 			within(sharedTitle).getByRole("tab", { name: "Visualizer" }),
 		);
@@ -1315,7 +1362,19 @@ describe("the Viz editor window", () => {
 		expect(
 			screen.getByRole("slider", { name: "Environment brightness" }),
 		).toBeInTheDocument();
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "MCP" }));
+		// MCP is no page of Settings: it opens from the Show screen's own title.
+		expect(
+			within(sharedTitle).queryByRole("tab", { name: "MCP" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Show" }));
+		const showTitle = document_root()?.querySelector<HTMLElement>(
+			".viz-show-screen > .ui-window-header",
+		);
+		if (!showTitle) throw new Error("Show title was not rendered");
+		fireEvent.click(within(showTitle).getByRole("button", { name: "MCP" }));
+		expect(
+			within(showTitle).getByRole("button", { name: "MCP" }),
+		).toHaveClass("is-active");
 		expect(
 			screen.getByRole("heading", { name: "MCP integration" }),
 		).toBeInTheDocument();
@@ -1338,7 +1397,8 @@ describe("the Viz editor window", () => {
 		expect(
 			screen.queryByText(/build from repository/i),
 		).not.toBeInTheDocument();
-		fireEvent.click(within(sharedTitle).getByRole("tab", { name: "Show" }));
+		// Pressing MCP again returns to the show's file actions.
+		fireEvent.click(within(showTitle).getByRole("button", { name: "MCP" }));
 		expect(
 			screen.getByRole("button", { name: "Open Demo Show" }),
 		).toBeInTheDocument();
@@ -1404,7 +1464,9 @@ describe("the Viz editor window", () => {
 		);
 		expect(dialog.open).toHaveBeenCalledWith(
 			expect.objectContaining({
-				filters: [expect.objectContaining({ extensions: ["glb"] })],
+				filters: [
+					expect.objectContaining({ extensions: ["glb", "gltf", "3mf", "obj"] }),
+				],
 			}),
 		);
 		expect(

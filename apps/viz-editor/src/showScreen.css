@@ -1,0 +1,55 @@
+/* The Show screen: file actions on top, then the rig drawn on one half and its paperwork on the
+   other. */
+.viz-editor-workspace > .viz-show-screen {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.viz-show-halves {
+	display: grid;
+	flex: 1 1 0;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	min-height: 0;
+	border-top: 1px solid var(--border-subtle, #1d2530);
+}
+
+.viz-show-halves > .viz-show-rig-overview {
+	height: 100%;
+	border-top: 0;
+}
+
+.viz-show-paperwork {
+	min-height: 0;
+	padding: 18px 20px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	border-left: 1px solid var(--border-subtle, #1d2530);
+	background: #0b0f14;
+}
+
+.viz-show-paperwork > p {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+}
+
+.viz-show-paperwork .cad-print-project-info {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px 14px;
+	max-width: 760px;
+}
+
+.viz-show-paperwork .cad-print-project-info > h3,
+.viz-show-paperwork .cad-print-project-info > dl,
+.viz-show-paperwork .cad-print-project-info > .ui-button {
+	grid-column: 1 / -1;
+}
+
+.viz-show-paperwork .cad-print-project-info label {
+	display: grid;
+	gap: 4px;
+}

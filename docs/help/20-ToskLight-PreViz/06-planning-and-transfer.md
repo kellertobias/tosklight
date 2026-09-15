@@ -35,9 +35,25 @@ The demo is built from the fixture packages this version of ToskLight ships, so 
 the same profile revisions, models and modes the fixture library does. It is the quickest way to
 see what the Visualizer draws, and the rig the product demonstration video is shot from.
 
+## The Show screen
+
+**Show**, at the top of the dock, is the open show as a document. It is available with no show open,
+because it is where a show is created or opened. Its file actions run across the top: **New Show**,
+**Load Show from Disk**, **Open Demo Show**, **Load from Desk** for each desk found on the network,
+**Save As**, **Import MVR** and **Export MVR**.
+
+Below them the show is seen from both sides at once. The left half draws the rig from above, with the
+show's name over it. The right half is **Show information**: the project, lighting designer, venue,
+contact email and phone, show date and show version that title every printed CAD page, beside the
+show's name, when it was last saved, and how many fixtures and universes it uses. Change a field and
+press **Save project info** to write it into the show; nothing is saved until you do.
+
+**MCP** in the Show screen's title opens the MCP integration in its place; press it again to return
+to the file actions.
+
 ## Rename the show
 
-A show has a name of its own, separate from its file. The **Show** page of **Settings** shows it over the rig
+A show has a name of its own, separate from its file. The **Show** screen shows it over the rig
 overview, with a pencil beside it. Press the pencil, type the new name, and press Enter or click
 away to keep it; Escape leaves the name as it was, and an empty name changes nothing. The name is
 what a desk's **Load Show** menu offers, so a renamed show is offered under its new name at once.
@@ -79,15 +95,14 @@ its editor.
 
 ## Editing the patch sheet
 
-The dock has four screens: **CAD**, **Patch**, **Venue** and **Media**. **Patch** lists every
+The dock has five screens: **Show**, **CAD**, **Patch**, **Venue** and **Media**. **Patch** lists every
 fixture with a DMX address, lamps and effect devices — lasers, foggers, particle effects and
 patched scenery — alike; **Venue** lists the objects that are placed but not patched. The **Patch**
 title has two tabs: **Sheet** is the patch sheet, and **DMX** is the address grid described in
 "The Patch screen's DMX tab" below.
 
-**Settings**, below the screens, holds the pages that are not a view of the rig: **Show** (the file
-actions and the rig overview), **Visualizer**, **Fixtures**, **DMX** and **MCP**. **Visualizer** is
-one page of boxes, two to a row: **Lamp** and **Laser** atmosphere, then **Rendering**,
+**Settings**, below the screens, holds the pages that are not a view of the rig: **Visualizer**,
+**Fixtures** and **DMX**. It opens on **Visualizer**. **Visualizer** is one page of boxes, two to a row: **Lamp** and **Laser** atmosphere, then **Rendering**,
 **Features** and **Picture**.
 
 Click a column header to order the sheet by that column, for example **Fixture ID** or **Patch**;
