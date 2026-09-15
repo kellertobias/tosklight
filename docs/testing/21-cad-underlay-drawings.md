@@ -46,6 +46,24 @@ show.
 4. Add a second page and confirm it starts with the drawing switched on.
 5. Press **Export to PDF** and confirm the first page prints the rig without the venue, the second
    prints both, and the drawing is behind the fixtures on the page that prints it.
+6. On a front elevation page with flown lamps whose profiles carry no model of their own, confirm
+   each lamp is drawn from its shipped model's drawing with its clamp. Open the cogwheel, confirm
+   **Mounting hardware** sits beside **DMX patch** and is switched on, switch it off, and confirm
+   the exported page draws the lamps without their clamps while the viewport still shows them.
+7. In a left-to-right viewport, look at a flown blinder whose **Bracket** is 0. Confirm it hangs
+   face-down with its hanging frame upright and its direction indicator leaving the face straight
+   down. Set **Bracket** to 45 and then 90. Confirm the body turns about its hinge to the pose the
+   Visualizer shows for the same fixture each time, the indicator still leaves the face, the frame
+   and clamp stay where they were and are drawn over the body, and the right-to-left viewport shows
+   the same turn mirrored.
+8. In front and side viewports, look at a PAR with **Bracket** 0 and then 45. Confirm its direction
+   indicator starts at the lens rather than at the clamp, turns with the bracket, and matches the
+   direction the Visualizer shows for the same fixture; export a page and confirm the printed
+   indicator matches the viewport.
+9. Patch a moving head and a PAR downstage of centre, turned to face the audience. Confirm the
+   plan draws their fronts and indicators toward the bottom (downstage), the left-to-right view
+   toward the right and the right-to-left view toward the left, and that the Visualizer's plan,
+   left-to-right and right-to-left views show them on the same sides.
 
 ## A file that cannot be placed
 

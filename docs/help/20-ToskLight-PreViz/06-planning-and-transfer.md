@@ -369,8 +369,35 @@ through **Open** or **Show from USB** is the same show file either button would 
 
 The Visualizer and rigging-document consumers use the same named top, left, right, front, and back
 SVG drawings carried by an immutable fixture-package revision. The SVG's millimetre coordinate
-space, origin, and orientation place it at physical scale. If that package has no usable drawing,
-the renderer's fixture-type vector is used, followed by a plain box for an unknown type.
+space, origin, and orientation place it at physical scale. A fixture whose package carries no model
+of its own is drawn in the CAD from the line drawing of the shipped model the Visualizer shows for
+it, at the fixture's size; generated Venue objects keep their own drawing. The Visualizer's own
+plan and elevation views draw such a fixture from the same line drawings, its top drawing on the
+plan and its front and side drawings on the elevations, mirrored for the back and the right, and
+fall back to the model's generated silhouette for a view it has no drawing of. Only if neither exists
+is the renderer's fixture-type vector used, followed by a plain box for an unknown type.
+
+Every CAD view shows the stage the way the Visualizer's own views do: the plan has downstage at
+the bottom, **Left to right** (standing house left) has downstage on the right, **Right to left**
+has it on the left, and the front elevation is seen from the audience. A fixture's front, its lens
+and its direction indicator land on the same side of the stage as in the 3D view.
+
+Blinders, flat LED PARs, strobes and floods are drawn facing the audience from above and from the
+front, and PARs and Fresnels point forward from above. From the side, every lamp that hangs in a
+frame is drawn exactly as the Visualizer poses it for the fixture's **Bracket** angle, 0
+included: the body turns about its hinge, the clamp and the hanging frame stay where they are and
+are drawn in front of it. At 0 a blinder hangs face-down like any other lamp; turn the bracket to
+point it at the audience. A multi-patch instance uses its own bracket angle. LED wash moving heads
+are drawn from the front looking straight at you.
+
+Each lamp's direction indicator starts where its light leaves it — the lens of the body it is
+drawn with — and points where the lamp points: its bracket angle and its rotation, as the
+Visualizer aims it, with moving heads at their home pan and tilt. A lamp with no known lens starts
+its indicator at its position. The viewports and printed pages draw the same indicator.
+
+A print page's cogwheel has a **Mounting hardware** switch. It is on for a new page and for a page
+saved before the switch existed; switched off, that page prints every fixture without its clamp
+wherever the model has a drawing without one. The viewports always show the hardware.
 
 SVG remains the source for both on-screen and printable plans. HTML retains the vector artwork;
 PDF or PNG output rasterizes that SVG at the requested output size rather than maintaining a
