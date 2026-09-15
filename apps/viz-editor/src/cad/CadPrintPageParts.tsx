@@ -75,6 +75,15 @@ export function PrintPageSettings({
 								onChange({ showDmxAddresses: event.currentTarget.checked })
 							}
 						/>
+						<SwitchField
+							label="Mounting hardware"
+							offLabel={null}
+							onLabel={null}
+							checked={page.showMountingHardware !== false}
+							onChange={(event) =>
+								onChange({ showMountingHardware: event.currentTarget.checked })
+							}
+						/>
 						{underlaysForView(underlays, page.view).map((underlay) => (
 							<SwitchField
 								key={underlay.id}

@@ -52,6 +52,7 @@ const page = (id: string): CadPrintPage => ({
 	orientation: "landscape",
 	showFixtureIds: true,
 	showDmxAddresses: true,
+	showMountingHardware: true,
 });
 
 const underlay: CadUnderlay = {

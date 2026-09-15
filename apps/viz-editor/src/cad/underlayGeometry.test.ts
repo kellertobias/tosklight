@@ -55,6 +55,7 @@ function page(overrides: Partial<CadPrintPage> = {}): CadPrintPage {
 		orientation: "landscape",
 		showFixtureIds: false,
 		showDmxAddresses: false,
+		showMountingHardware: true,
 		...overrides,
 	};
 }

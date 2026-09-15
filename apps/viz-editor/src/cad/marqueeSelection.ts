@@ -1,4 +1,4 @@
-import { rotateModelPoint } from "./projection";
+import { rotateDeskPoint } from "./projection";
 import { type CadEntity, type CadViewDirection, projectPoint } from "./types";
 
 export interface PlaneBounds {
@@ -58,7 +58,7 @@ export function entityBounds(
 	for (const x of [-width / 2, width / 2])
 		for (const y of [-depth / 2, depth / 2])
 			for (const z of [-height / 2, height / 2]) {
-				const turned = rotateModelPoint([x, y, z], entity.rotationDegrees);
+				const turned = rotateDeskPoint([x, y, z], entity.rotationDegrees);
 				const corner = projectPoint(
 					[
 						entity.positionMillimetres[0] + turned[0],

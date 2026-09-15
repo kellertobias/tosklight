@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { rotateModelPoint } from "./projection";
+import { rotateDeskPoint } from "./projection";
 import type { CadEntity, CadViewDirection } from "./types";
 
 /**
@@ -54,7 +54,7 @@ export function entityDepthRange(
 			for (const z of [-height / 2, height / 2])
 				half = Math.max(
 					half,
-					Math.abs(viewDepth(rotateModelPoint([x, y, z], entity.rotationDegrees), view)),
+					Math.abs(viewDepth(rotateDeskPoint([x, y, z], entity.rotationDegrees), view)),
 				);
 	return { near: centre - half, far: centre + half };
 }

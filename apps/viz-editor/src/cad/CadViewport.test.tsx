@@ -662,6 +662,7 @@ describe("CAD fixture interaction", () => {
 						orientation: "landscape",
 						showFixtureIds: false,
 						showDmxAddresses: false,
+						showMountingHardware: true,
 					},
 				]}
 				selectedPrintPageId="page-1"
@@ -711,6 +712,7 @@ describe("CAD fixture interaction", () => {
 						orientation: "landscape",
 						showFixtureIds: false,
 						showDmxAddresses: false,
+						showMountingHardware: true,
 					},
 				]}
 				selectedPrintPageId="page-1"
@@ -781,6 +783,7 @@ describe("CAD fixture interaction", () => {
 						orientation: "landscape",
 						showFixtureIds: false,
 						showDmxAddresses: false,
+						showMountingHardware: true,
 					},
 				]}
 				onCamera={() => undefined}

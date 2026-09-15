@@ -24,7 +24,19 @@ export interface CadEntity {
 	positionMillimetres: [number, number, number];
 	rotationDegrees: [number, number, number];
 	sizeMillimetres: [number, number, number];
+	/**
+	 * Where the lamp points, as a unit vector in plan axes (x across, y deep, z up): its emitter's
+	 * axis turned by the bracket angle and then the placement's rotation, as the Visualizer aims it.
+	 */
 	outputDirection: [number, number, number];
+	/**
+	 * Where the light leaves the lamp, in millimetres from its position in plan axes, after scale,
+	 * bracket and rotation; absent when neither the fixture nor a shipped model says, and the
+	 * direction indicator then starts at the position.
+	 */
+	emitterOffsetMillimetres?: [number, number, number];
+	/** Degrees this placement's mounting bracket is set to, positive nose-down; absent reads as 0. */
+	bracketAngle?: number;
 	/** How a generated Venue object is built; absent for fixtures and modelled objects. */
 	scenery?: CadScenery;
 }
@@ -84,6 +96,23 @@ export interface CadDrawing {
 	id: string;
 	projections: CadProjection[];
 	liveMeshes?: CadLiveMesh[];
+	/** The shipped model's line drawings, for a profile that carries no model of its own. */
+	modelDrawing?: CadModelDrawing;
+}
+
+export interface CadModelDrawing {
+	/** The shipped model's id in `assets/models`. */
+	model: string;
+	/** From the drawing's millimetres to the fixture's physical size. */
+	scale: number;
+	views: CadModelDrawingView[];
+}
+
+export interface CadModelDrawingView {
+	view: "top" | "front" | "side";
+	svg: string;
+	/** The same view without the clamp or other mounting hardware, when the model has one. */
+	noClampSvg?: string;
 }
 
 export interface CadLiveMesh {
@@ -176,6 +205,9 @@ export interface CadPrintPage {
 	orientation: "landscape" | "portrait";
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
+	/// Whether fixtures print with their clamps and other mounting hardware. Pages saved before
+	/// the switch existed print them.
+	showMountingHardware: boolean;
 	/// The slice of depth this page prints. Absent means the whole drawing.
 	cutPlanes?: CutPlanes;
 	/// Placed drawings this page leaves off. Absent means it prints every drawing on its axis,
@@ -261,12 +293,12 @@ function baseViewAxes(view: CadViewDirection): ViewAxes {
 			};
 		case "left_to_right":
 			return {
-				horizontal: { axis: "y", sign: 1 },
+				horizontal: { axis: "y", sign: -1 },
 				vertical: { axis: "z", sign: 1 },
 			};
 		case "right_to_left":
 			return {
-				horizontal: { axis: "y", sign: -1 },
+				horizontal: { axis: "y", sign: 1 },
 				vertical: { axis: "z", sign: 1 },
 			};
 		case "front_to_back":
@@ -309,6 +341,34 @@ export function projectPoint(
 	return rotatePlane(projected, rotationQuarterTurns);
 }
 
+/** How long a lamp's direction indicator is drawn, in millimetres. */
+export const DIRECTION_INDICATOR_MILLIMETRES = 420;
+
+/**
+ * A lamp's direction indicator on the page, from `centre` (its projected position): it starts at
+ * the lamp's emitter, where that is known, and runs along where the lamp points. The screen and
+ * printed pages both draw it from here.
+ */
+export function directionIndicator(
+	entity: Pick<CadEntity, "outputDirection" | "emitterOffsetMillimetres">,
+	centre: readonly [number, number],
+	view: CadViewDirection,
+	rotationQuarterTurns = 0,
+): [[number, number], [number, number]] {
+	const offset = entity.emitterOffsetMillimetres
+		? projectPoint(entity.emitterOffsetMillimetres, view, rotationQuarterTurns)
+		: [0, 0];
+	const start: [number, number] = [centre[0] + offset[0], centre[1] + offset[1]];
+	const direction = projectPoint(
+		entity.outputDirection.map(
+			(value) => value * DIRECTION_INDICATOR_MILLIMETRES,
+		) as [number, number, number],
+		view,
+		rotationQuarterTurns,
+	);
+	return [start, [start[0] + direction[0], start[1] + direction[1]]];
+}
+
 function projectPointUnrotated(
 	point: readonly [number, number, number],
 	view: CadViewDirection,
@@ -316,10 +376,12 @@ function projectPointUnrotated(
 	switch (view) {
 		case "top_down":
 			return [point[0], point[1]];
+		// The side views are the Visualizer's: from house left (left to right) downstage is on the
+		// right, from house right it is on the left. Desk y runs upstage.
 		case "left_to_right":
-			return [point[1], point[2]];
-		case "right_to_left":
 			return [-point[1], point[2]];
+		case "right_to_left":
+			return [point[1], point[2]];
 		case "front_to_back":
 			return [point[0], point[2]];
 		case "back_to_front":
@@ -340,9 +402,9 @@ export function planeDelta(
 		case "top_down":
 			return [resolved[0], resolved[1], 0];
 		case "left_to_right":
-			return [0, resolved[0], resolved[1]];
-		case "right_to_left":
 			return [0, negate(resolved[0]), resolved[1]];
+		case "right_to_left":
+			return [0, resolved[0], resolved[1]];
 		case "front_to_back":
 			return [resolved[0], 0, resolved[1]];
 		case "back_to_front":

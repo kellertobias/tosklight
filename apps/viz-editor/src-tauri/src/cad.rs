@@ -5,14 +5,18 @@
 //! show data and a stale drag cannot overwrite a newer Patch edit. Every editor window shows the
 //! same scene, which is why the deltas below are broadcast rather than sent to one window.
 
+mod aim;
+mod profile_drawing;
 mod scenery;
 
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::Session;
+use aim::{CadAim, aim_lamps};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use light_application::PatchSnapshot;
 use parking_lot::Mutex;
-use scenery::{CadScenery, cad_scenery, connect_chains, entity_size};
+use profile_drawing::{CadDrawing, drawing_id, drawings};
+use scenery::{CadScenery, cad_scenery, connect_chains, entity_size, profile_label};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -93,39 +97,10 @@ pub struct CadEntity {
     pub rotation_degrees: [f32; 3],
     pub size_millimetres: [f32; 3],
     pub output_direction: [f32; 3],
+    #[serde(flatten)]
+    pub aim: CadAim,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scenery: Option<CadScenery>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CadProjection {
-    pub view: String,
-    pub svg: String,
-    pub view_box_millimetres: [f32; 4],
-    pub origin_millimetres: [f32; 2],
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CadDrawing {
-    pub id: String,
-    pub projections: Vec<CadProjection>,
-    pub live_meshes: Vec<CadLiveMesh>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CadLiveMesh {
-    pub pose: String,
-    pub triangles: Vec<CadLiveTriangle>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CadLiveTriangle {
-    pub points_millimetres: [[f32; 3]; 3],
-    pub colour: [f32; 3],
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -454,7 +429,7 @@ pub fn emit_scene_state_delta(
     let hidden_fixtures = hidden_fixture_ids(session, "visible2d")?;
     let hidden_layers = hidden_layers(session, "visible2d")?;
     let notes = fixture_notes(session)?;
-    let all_entities = connect_chains(entities(&patch, &locked, &notes));
+    let all_entities = aim_lamps(connect_chains(entities(&patch, &locked, &notes)), &patch);
     let removed_ids = all_entities
         .iter()
         .filter(|entity| {
@@ -537,13 +512,16 @@ fn visible_entities(
     hidden_layers: &BTreeSet<String>,
     notes: &HashMap<Uuid, String>,
 ) -> Vec<CadEntity> {
-    connect_chains(entities(snapshot, locked_layers, notes))
-        .into_iter()
-        .filter(|entity| {
-            !hidden_fixtures.contains(&entity.logical_fixture_id)
-                && !hidden_layers.contains(&entity.layer_id)
-        })
-        .collect()
+    aim_lamps(
+        connect_chains(entities(snapshot, locked_layers, notes)),
+        snapshot,
+    )
+    .into_iter()
+    .filter(|entity| {
+        !hidden_fixtures.contains(&entity.logical_fixture_id)
+            && !hidden_layers.contains(&entity.layer_id)
+    })
+    .collect()
 }
 
 fn entities(
@@ -576,21 +554,10 @@ fn entities(
                 .unwrap_or(fixture_type)
                 .to_owned();
             let logical_fixture_id = fixture.patch.fixture_id.0;
-            let fixture_profile = profile
-                .map(|profile| {
-                    let manufacturer = profile
-                        .profile_snapshot
-                        .get("manufacturer")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default();
-                    let name = profile
-                        .profile_snapshot
-                        .get("name")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("Unknown fixture");
-                    format!("{manufacturer} {name}").trim().to_owned()
-                })
-                .unwrap_or_else(|| "Unknown fixture".to_owned());
+            let fixture_profile = profile.map_or_else(
+                || "Unknown fixture".to_owned(),
+                |profile| profile_label(&profile.profile_snapshot),
+            );
             let mode_id = fixture.profile.mode_id.to_string();
             let mode = profile
                 .and_then(|profile| {
@@ -645,6 +612,7 @@ fn entities(
                 rotation_degrees: [rotation.x, rotation.y, rotation.z],
                 size_millimetres: entity_size(snapshot, &fixture.patch, id),
                 output_direction: output_direction(rotation),
+                aim: CadAim::default(),
                 scenery: cad_scenery(snapshot, &fixture.patch.scenery_options),
             };
             let visual_only = profile.is_some_and(|profile| {
@@ -817,93 +785,6 @@ fn selectable_ids(session: &Session) -> Result<BTreeSet<Uuid>, String> {
                     .collect()
             })
             .map_err(|error| error.to_string())
-    })
-}
-
-fn drawing_id(
-    profile: &light_application::PatchProfileRevisionProjection,
-    mode_id: Uuid,
-) -> String {
-    format!(
-        "{}:{}:{}:{}",
-        profile.profile_id.0, profile.profile_revision, profile.content_digest, mode_id
-    )
-}
-
-fn drawings(snapshot: &PatchSnapshot, cad: &CadState) -> Vec<CadDrawing> {
-    let mut cache = cad.drawings.lock();
-    let profiles = snapshot
-        .profile_revisions
-        .iter()
-        .map(|profile| ((profile.profile_id.0, profile.profile_revision), profile))
-        .collect::<HashMap<_, _>>();
-    snapshot
-        .fixtures
-        .iter()
-        .filter_map(|fixture| {
-            let stored = profiles.get(&(
-                fixture.profile.profile_id.0,
-                fixture.profile.profile_revision,
-            ))?;
-            let id = drawing_id(stored, fixture.profile.mode_id);
-            cache
-                .entry(id.clone())
-                .or_insert_with(|| {
-                    drawing(&id, &stored.profile_snapshot, Some(fixture.profile.mode_id))
-                })
-                .clone()
-        })
-        .collect()
-}
-
-fn drawing(id: &str, snapshot: &serde_json::Value, mode_id: Option<Uuid>) -> Option<CadDrawing> {
-    let profile = serde_json::from_value::<light_fixture::FixtureProfile>(snapshot.clone()).ok()?;
-    let live_meshes = viz_project::generate_live_projection_meshes_for_mode(&profile, mode_id)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|mesh| CadLiveMesh {
-            pose: match mesh.pose {
-                viz_project::LiveProjectionPose::Top => "top",
-                viz_project::LiveProjectionPose::Elevation => "elevation",
-            }
-            .to_owned(),
-            triangles: mesh
-                .triangles
-                .into_iter()
-                .map(|triangle| CadLiveTriangle {
-                    points_millimetres: triangle.points_millimetres,
-                    colour: triangle.colour,
-                })
-                .collect(),
-        })
-        .collect();
-    let generated;
-    let projections = if let Some(projections) = profile.projection_assets.as_ref() {
-        projections
-    } else {
-        generated = viz_project::generate_profile_projections(&profile).ok()?;
-        &generated
-    };
-    let projections = projections
-        .views
-        .iter()
-        .filter_map(|projection| {
-            let encoded = projection
-                .artwork_asset
-                .strip_prefix("data:image/svg+xml;base64,")?;
-            let svg = String::from_utf8(STANDARD.decode(encoded).ok()?).ok()?;
-            Some(CadProjection {
-                view: projection.view.wire().to_owned(),
-                svg,
-                view_box_millimetres: projection.view_box_millimetres,
-                origin_millimetres: projection.origin_millimetres,
-            })
-        })
-        .collect::<Vec<_>>();
-    (!projections.is_empty()).then(|| CadDrawing {
-        id: id.to_owned(),
-        projections,
-        live_meshes,
     })
 }
 
@@ -1161,8 +1042,9 @@ fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(
 
 #[cfg(test)]
 mod tests {
+    use super::profile_drawing::drawing;
     use super::{
-        EntityTransform, apply_transforms, drawing, entities, fixture_notes, locked_layers,
+        EntityTransform, apply_transforms, entities, fixture_notes, locked_layers,
         moved_transforms, output_direction, selectable_ids,
     };
     use crate::session::Session;

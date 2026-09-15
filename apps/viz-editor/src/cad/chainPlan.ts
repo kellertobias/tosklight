@@ -76,7 +76,8 @@ export function chainPlan(
 	if (view === "top_down") return finish(topView(mode));
 	const side = view === "left_to_right" || view === "right_to_left";
 	const shapes = elevation(height, side, mode, anchor);
-	const mirror = view === "back_to_front" || view === "right_to_left";
+	// Drawn for a view with upstage on the right; left to right (house left) has it on the left.
+	const mirror = view === "back_to_front" || view === "left_to_right";
 	return finish(mirror ? transform(shapes, ([x, y]) => [-x, y]) : shapes);
 }
 

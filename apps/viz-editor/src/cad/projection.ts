@@ -2,6 +2,7 @@ import { audienceOutlineFor, audienceStrokesFor } from "./audienceOutline";
 import { chainPlan } from "./chainPlan";
 import { curtainPlan } from "./curtainPlan";
 import { hideCoveredEdges } from "./hiddenLines";
+import { modelDrawingGeometry } from "./modelDrawing";
 import { trussPlan } from "./trussPlan";
 import type {
 	CadDrawing,
@@ -24,7 +25,7 @@ export interface PlanLine {
 }
 
 export interface PlanGeometry {
-	source: "live_model" | "model" | "typed" | "unknown";
+	source: "live_model" | "model_drawing" | "model" | "typed" | "unknown";
 	triangles: PlanTriangle[];
 	outlines: PlanPoint[][];
 	lines: PlanLine[];
@@ -57,16 +58,29 @@ export function projectionViewForCad(
 	}
 }
 
+export interface PlanGeometryOptions {
+	/** Draw clamps and other mounting hardware; a print page can leave them off. Default true. */
+	mountingHardware?: boolean;
+}
+
 export function entityPlanGeometry(
 	entity: CadEntity,
 	drawing: CadDrawing | undefined,
 	view: CadViewDirection,
+	options: PlanGeometryOptions = {},
 ): PlanGeometry {
-	const geometry = orientedPlanGeometry(entity, drawing, view);
-	// Symbols and supplied SVG projections are drawn with the page's y running down, which in a
-	// plan is world −Y. The top-down plan shows +Y up, so they are mirrored into it; a live model is
-	// projected from world coordinates and is already the right way round.
-	return view === "top_down" && geometry.source !== "live_model"
+	const geometry = orientedPlanGeometry(
+		entity,
+		drawing,
+		view,
+		options.mountingHardware !== false,
+	);
+	// Typed symbols are authored with a fixture's front toward +y and are mirrored so the front faces
+	// downstage (plan −y, desk y running upstage). A model drawing or projection SVG from above has
+	// the model's +Z (downstage, as in the Visualizer) down the page, which reading its page y
+	// upward already puts at plan −y; a live model is projected from model coordinates directly.
+	return view === "top_down" &&
+		(geometry.source === "typed" || geometry.source === "unknown")
 		? mirrorVertically(geometry)
 		: geometry;
 }
@@ -91,6 +105,7 @@ function orientedPlanGeometry(
 	entity: CadEntity,
 	drawing: CadDrawing | undefined,
 	view: CadViewDirection,
+	mountingHardware: boolean,
 ): PlanGeometry {
 	const type = entityType(entity);
 	// Crowd-area models describe a procedural volume and read as an unexplained block in plan.
@@ -98,6 +113,12 @@ function orientedPlanGeometry(
 	if (isSemanticPlanSymbol(type)) return typedGeometry(entity, view, type);
 	const live = liveModelGeometry(entity, drawing, view);
 	if (live) return live;
+	// A lamp without a model of its own is drawn from the shipped model the Visualizer shows;
+	// generated scenery is built, not drawn from a body, and keeps its own drawing.
+	const modelDrawing = entity.scenery
+		? null
+		: modelDrawingGeometry(drawing, view, mountingHardware, entity.bracketAngle);
+	if (modelDrawing) return modelDrawing;
 	const projection = drawing?.projections.find(
 		(candidate) => candidate.view === projectionViewForCad(view),
 	);
@@ -315,13 +336,29 @@ export function rotateModelPoint(
 	];
 }
 
+/**
+ * A point in model axes (x across, y up, z toward the audience — the Visualizer's renderer axes)
+ * turned into desk axes (x across, y upstage, z up): `(x, −z, y)`.
+ */
+export function rotateDeskPoint(
+	point: readonly [number, number, number],
+	rotation: readonly [number, number, number],
+): [number, number, number] {
+	const turned = rotateModelPoint([point[0], point[2], -point[1]], rotation);
+	return [turned[0], -turned[2], turned[1]];
+}
+
+/**
+ * A model point on a CAD view's page, matching `projectPoint` for the same point in desk axes: the
+ * model's +Z is downstage, as the Visualizer places it (desk y = −z).
+ */
 function projectModelPoint(
 	point: readonly [number, number, number],
 	view: CadViewDirection,
 ): PlanPoint {
 	switch (view) {
 		case "top_down":
-			return [point[0], point[2]];
+			return [point[0], -point[2]];
 		case "left_to_right":
 			return [point[2], point[1]];
 		case "right_to_left":
@@ -819,7 +856,8 @@ function elevationCrowd(
 	const count = Math.max(6, Math.min(14, Math.round(width / 500)));
 	const spacing = width / count;
 	const side = view === "left_to_right" || view === "right_to_left";
-	const mirror = view === "right_to_left";
+	// Seen from house left the stage is on the left, so the audience faces that way.
+	const mirror = view === "left_to_right";
 	const outlineView = side ? "side" : "front";
 	const strokes = audienceStrokesFor(outlineView);
 	const polygons: Polygon[] = [];

@@ -27,8 +27,9 @@ describe("CAD workspace model", () => {
 
 	it("maps screen-plane movement back onto the correct world axes", () => {
 		expect(planeDelta([120, -40], "top_down")).toEqual([120, -40, 0]);
-		expect(planeDelta([120, -40], "left_to_right")).toEqual([0, 120, -40]);
-		expect(planeDelta([120, -40], "right_to_left")).toEqual([0, -120, -40]);
+		// As in the Visualizer: from house left downstage (−y) is to the right, from house right to the left.
+		expect(planeDelta([120, -40], "left_to_right")).toEqual([0, -120, -40]);
+		expect(planeDelta([120, -40], "right_to_left")).toEqual([0, 120, -40]);
 		expect(planeDelta([120, -40], "front_to_back")).toEqual([120, 0, -40]);
 		expect(planeDelta([120, -40], "back_to_front")).toEqual([-120, 0, -40]);
 		expect(projectPoint([10, 20, 30], "top_down")).toEqual([10, 20]);

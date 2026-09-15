@@ -187,6 +187,27 @@ fn unscaled_entity_size(
     }
 }
 
+/// The degrees one placement's mounting bracket is set to: a multi-patch instance's own, or the
+/// fixture's for the root placement.
+pub fn bracket_angle(fixture: &PatchedFixturePatch, instance: Uuid) -> f32 {
+    fixture
+        .multipatch
+        .iter()
+        .find(|candidate| candidate.id == instance)
+        .map_or(fixture.bracket_angle, |candidate| candidate.bracket_angle)
+}
+
+/// A profile's "Manufacturer Name" as the plan labels it.
+pub fn profile_label(profile: &serde_json::Value) -> String {
+    let text = |key: &str| profile.get(key).and_then(serde_json::Value::as_str);
+    let label = format!(
+        "{} {}",
+        text("manufacturer").unwrap_or_default(),
+        text("name").unwrap_or("Unknown fixture")
+    );
+    label.trim().to_owned()
+}
+
 /// A placed size is stored in millimetres as x across, y up and z deep, like every other
 /// measurement the patch carries.
 fn placed_millimetres(size: FixtureVector) -> [f32; 3] {
@@ -328,6 +349,7 @@ mod tests {
             rotation_degrees: [0.0; 3],
             size_millimetres: size,
             output_direction: [0.0; 3],
+            aim: Default::default(),
             scenery: Some(CadScenery {
                 kind: kind.into(),
                 chords,

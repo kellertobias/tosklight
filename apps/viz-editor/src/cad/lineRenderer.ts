@@ -29,7 +29,12 @@ import type {
 	TileCamera,
 	WorldAxis,
 } from "./types";
-import { previewDeltaForEntity, projectPoint, viewAxes } from "./types";
+import {
+	directionIndicator,
+	previewDeltaForEntity,
+	projectPoint,
+	viewAxes,
+} from "./types";
 
 export type LineColor = [number, number, number];
 
@@ -238,7 +243,9 @@ function paintEntities(
 			rotationQuarterTurns,
 		);
 		const drawing = drawings.get(entity.drawingId);
-		const key = `${entity.drawingId}:${view}:${entity.sizeMillimetres.join(",")}:${entity.rotationDegrees.join(",")}`;
+		// The viewport always draws mounting hardware; the key says so, because a print page's
+		// geometry for the same fixture can differ in exactly that.
+		const key = `${entity.drawingId}:${view}:${entity.sizeMillimetres.join(",")}:${entity.rotationDegrees.join(",")}:hardware`;
 		let geometry = geometryCache.get(key);
 		if (!geometry) {
 			geometry = entityPlanGeometry(entity, drawing, view);
@@ -291,20 +298,13 @@ function paintEntities(
 		centre[0] += entityPreview[0];
 		centre[1] += entityPreview[1];
 		if (entity.kind !== "venue") {
-			const direction = projectPoint(
-				entity.outputDirection.map((value) => value * 420) as [
-					number,
-					number,
-					number,
-				],
+			const [start, end] = directionIndicator(
+				entity,
+				centre,
 				view,
 				rotationQuarterTurns,
 			);
-			painter.line(
-				centre,
-				[centre[0] + direction[0], centre[1] + direction[1]],
-				outlineColor,
-			);
+			painter.line(start, end, outlineColor);
 		}
 	}
 }

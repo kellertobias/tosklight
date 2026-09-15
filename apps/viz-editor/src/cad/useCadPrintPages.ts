@@ -59,6 +59,7 @@ export function restorePrintPages(): CadPrintPage[] {
 				orientation: page.orientation === "portrait" ? "portrait" : "landscape",
 				showFixtureIds: page.showFixtureIds === true,
 				showDmxAddresses: page.showDmxAddresses === true,
+				showMountingHardware: page.showMountingHardware !== false,
 			}));
 	} catch {
 		return [];
@@ -109,6 +110,7 @@ export function useCadPrintPages(): CadPrintPages {
 				orientation: "landscape",
 				showFixtureIds: false,
 				showDmxAddresses: false,
+				showMountingHardware: true,
 			});
 		},
 		addFixtureList() {
@@ -126,6 +128,7 @@ export function useCadPrintPages(): CadPrintPages {
 				orientation: "landscape",
 				showFixtureIds: true,
 				showDmxAddresses: true,
+				showMountingHardware: true,
 			});
 		},
 		change(id, change) {

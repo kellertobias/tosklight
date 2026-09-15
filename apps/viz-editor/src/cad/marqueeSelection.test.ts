@@ -72,7 +72,8 @@ describe("the rectangle an entity covers", () => {
 		);
 		expect(straight.maximum[0] - straight.minimum[0]).toBeCloseTo(4_000);
 		const turned = entityBounds(
-			entity([0, 0, 0], [4_000, 200, 200], [0, 90, 0]),
+			// Desk rotation z is the yaw, as the plan, the rig and the Visualizer read it.
+			entity([0, 0, 0], [4_000, 200, 200], [0, 0, 90]),
 			"top_down",
 		);
 		// Turned a quarter turn it runs the other way, so the plot must see it that way too.

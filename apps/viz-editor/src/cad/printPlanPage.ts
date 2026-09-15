@@ -38,6 +38,7 @@ import {
 	type CadEntity,
 	type CadPrintPage,
 	type CadSceneSnapshot,
+	directionIndicator,
 	printPageHeight,
 	projectPoint,
 } from "./types";
@@ -180,7 +181,9 @@ function entityCommands(
 	page: CadPrintPage,
 	point: PageFrame["point"],
 ): string[] {
-	const geometry = entityPlanGeometry(entity, drawing, page.view);
+	const geometry = entityPlanGeometry(entity, drawing, page.view, {
+		mountingHardware: page.showMountingHardware !== false,
+	});
 	const centre = projectPoint(
 		entity.positionMillimetres,
 		page.view,
@@ -214,18 +217,13 @@ function entityCommands(
 			),
 		);
 	if (entity.kind === "venue") return commands;
-	const direction = projectPoint(
-		entity.outputDirection.map((v) => v * 420) as [number, number, number],
+	const [start, end] = directionIndicator(
+		entity,
+		centre,
 		page.view,
 		page.rotationQuarterTurns,
 	);
-	commands.push(
-		path(
-			[point(centre), point([centre[0] + direction[0], centre[1] + direction[1]])],
-			false,
-			false,
-		),
-	);
+	commands.push(path([point(start), point(end)], false, false));
 	const labels = [
 		page.showFixtureIds ? `ID ${entity.fixtureDisplayId}` : "",
 		page.showDmxAddresses && entity.dmxAddress !== "—"
