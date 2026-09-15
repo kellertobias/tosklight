@@ -743,11 +743,13 @@ function stage(
 			rect(-w / 2, -h / 2, w, h, BODY),
 			rect(-w / 2 + 35, -h / 2 + 35, w - 70, h - 70, BASE),
 		];
+	// In an elevation a stage element stands on its origin, the floor its feet are on, and rises
+	// its height from there, as it does in the Visualizer.
 	if (stairs)
 		return [
-			rect(-w / 2, h * 0.25, w, h * 0.22, DETAIL),
-			rect(-w * 0.44, -h * 0.48, w * 0.08, h * 0.73, BODY),
-			rect(w * 0.36, -h * 0.48, w * 0.08, h * 0.73, BODY),
+			rect(-w / 2, h * 0.75, w, h * 0.22, DETAIL),
+			rect(-w * 0.44, 0, w * 0.08, h * 0.75, BODY),
+			rect(w * 0.36, 0, w * 0.08, h * 0.75, BODY),
 		];
 	return scissorStage(w, h);
 }
@@ -757,7 +759,8 @@ export const SCISSOR_MAX_DEGREES = 40;
 
 /**
  * A stage element from the front or side: its deck on top, a base frame on the floor and scissor
- * arms crossed between them, in as many stacked stages as keep each arm at 40° or flatter.
+ * arms crossed between them, in as many stacked stages as keep each arm at 40° or flatter. The base
+ * frame stands on the origin and the deck's top is the element's height above it.
  */
 function scissorStage(w: number, h: number): Polygon[] {
 	const deck = Math.min(80, h * 0.3);
@@ -765,8 +768,8 @@ function scissorStage(w: number, h: number): Polygon[] {
 	const arm = Math.max(8, Math.min(40, h * 0.06, w * 0.03));
 	// The arms reach almost to the deck's edges, as a lift under a whole deck does.
 	const span = w - arm * 2;
-	const bottom = -h / 2 + base;
-	const top = h / 2 - deck;
+	const bottom = base;
+	const top = h - deck;
 	const rise = top - bottom;
 	const tan = Math.tan((SCISSOR_MAX_DEGREES * Math.PI) / 180);
 	const stages = Math.max(1, Math.ceil(rise / (span * tan) - 1e-9));
@@ -787,7 +790,7 @@ function scissorStage(w: number, h: number): Polygon[] {
 	}
 	polygons.push(
 		rect(-w / 2, top, w, deck, DETAIL),
-		rect(-w / 2, -h / 2, w, base, BODY),
+		rect(-w / 2, 0, w, base, BODY),
 	);
 	return polygons;
 }

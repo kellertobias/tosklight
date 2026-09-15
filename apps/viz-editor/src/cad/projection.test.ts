@@ -819,8 +819,8 @@ describe("CAD plan projections", () => {
 			expect(Math.max(...xs)).toBeLessThanOrEqual(width / 2 + 1e-6);
 			const deck = Math.min(80, height * 0.3);
 			const base = Math.min(50, height * 0.2);
-			const top = height / 2 - deck;
-			const bottom = -height / 2 + base;
+			const top = height - deck;
+			const bottom = base;
 			expect(Math.max(...ys)).toBeCloseTo(top, 3);
 			expect(Math.min(...ys)).toBeCloseTo(bottom, 3);
 			// The deck and the base frame are drawn whole, and nothing of an arm is drawn along
@@ -847,5 +847,44 @@ describe("CAD plan projections", () => {
 		expect(slanted(stairs)).toHaveLength(0);
 		expect(pivots(stairs)).toHaveLength(0);
 		expect(slanted(riser("Treppe", "left_to_right", 1200, "stage_stairs"))).toHaveLength(0);
+	});
+
+	it("stands a stage element and stairs on their origin and raises the deck with the height", () => {
+		const elevation = (name: string, view: CadViewDirection, height: number) => {
+			const geometry = entityPlanGeometry(
+				{
+					...movingLight,
+					name,
+					kind: "venue",
+					fixtureType: "venue",
+					sizeMillimetres: [2000, 1000, height],
+					scenery: { kind: "riser", chords: 0, pattern: "standard" },
+				},
+				undefined,
+				view,
+			);
+			const ys = [
+				...geometry.triangles.flatMap(({ points }) => points),
+				...geometry.outlines.flat(),
+				...geometry.lines.flatMap(({ points }) => points),
+			].map(([, y]) => y);
+			return { bottom: Math.min(...ys), top: Math.max(...ys) };
+		};
+		for (const name of ["Stage element 2x1", "Stage Stairs"])
+			for (const view of ["front_to_back", "back_to_front", "left_to_right", "right_to_left"] as const) {
+				const low = elevation(name, view, 300);
+				const high = elevation(name, view, 1100);
+				// The feet stay on the origin; only the deck moves.
+				expect(low.bottom, `${name} ${view}`).toBeCloseTo(0, 3);
+				expect(high.bottom, `${name} ${view}`).toBeCloseTo(0, 3);
+				if (name.startsWith("Stage element")) {
+					expect(low.top, `${name} ${view}`).toBeCloseTo(300, 3);
+					expect(high.top, `${name} ${view}`).toBeCloseTo(1100, 3);
+				} else expect(high.top - low.top, `${name} ${view}`).toBeCloseTo(800 * 0.97, 3);
+			}
+		// From above, the footprint stays centred on the origin.
+		const plan = elevation("Stage element 2x1", "top_down", 1100);
+		expect(plan.bottom).toBeCloseTo(-500, 3);
+		expect(plan.top).toBeCloseTo(500, 3);
 	});
 });

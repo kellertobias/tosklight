@@ -591,7 +591,10 @@ For one element, **Generic** edits its **Name** and **Notes** and, for a lamp, i
 a truss, a curtain, a stage element — shows its **Size** instead of a scale: only the measurements its
 profile lets you set, such as a truss's width (its length), a curtain's width and height or a stage
 element's height, in metres within the range the profile allows. A size outside that range is put
-back rather than written. Its **Parameters** follow: a **Colour** as a hex value, empty for the kind's
+back rather than written. A stage element's or stairs' **Position** is where its feet stand — the
+middle of its footprint on the floor — so Z 0 stands on the stage floor, and changing its height
+raises or lowers the deck without moving the feet. Every other generated object is positioned by
+its centre. Its **Parameters** follow: a **Colour** as a hex value, empty for the kind's
 default, and for a chain its **Chain top** and **Chain bottom**. A placed 3D model shows **Scale**. A
 lamp shows its **Bracket angle** and **Barndoors** angle, empty when none are fitted. Every number
 field names its unit. The fields take typing from the keyboard: a change is written when you press

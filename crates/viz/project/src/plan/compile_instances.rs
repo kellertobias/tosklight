@@ -322,6 +322,26 @@ fn scenery_detail(
     }
 }
 
+/// Where a generated object's box is centred, from where it was placed.
+///
+/// A stage element — a deck on a scissor lift, or a flight of stairs — is placed by its feet: the
+/// placement is the middle of its footprint on the floor it stands on, the same origin the shipped
+/// decks on fixed legs have in their models. Its height then raises or lowers the deck while the
+/// feet stay where they are. Every other generated kind is placed by the centre of its box.
+pub(super) fn scenery_centre(
+    instance: &PhysicalInstance,
+    kind: light_fixture::ProfileSceneryKind,
+    size: Vec3,
+) -> Vec3 {
+    match kind {
+        light_fixture::ProfileSceneryKind::Riser => {
+            let up = viz_scene::euler_degrees(instance.rotation_degrees) * Vec3::Y;
+            instance.position + up * (size.y * 0.5)
+        }
+        _ => instance.position,
+    }
+}
+
 /// A Venue object that declares its shape, built at the size it was placed rather than drawn from
 /// a model made for one size.
 fn generated_scenery(
@@ -332,13 +352,14 @@ fn generated_scenery(
     let size = instance
         .scenery_size_metres
         .unwrap_or_else(|| vector(declared.default_size_metres));
+    // Held to what the object can be built at first, then drawn at its model scale.
+    let size = clamp_scenery_size(size, declared) * instance.model_scale;
     Some(SceneryObject {
         id: instance.instance_id,
         name: instance.name.clone(),
-        position: instance.position,
+        position: scenery_centre(instance, declared.kind, size),
         rotation_degrees: instance.rotation_degrees,
-        // Held to what the object can be built at first, then drawn at its model scale.
-        size: clamp_scenery_size(size, declared) * instance.model_scale,
+        size,
         // The colour the operator chose for this one, when they chose one; the kind's own
         // material otherwise.
         colour: instance

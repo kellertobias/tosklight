@@ -92,7 +92,10 @@ each fold, its dashes leaning 10–20° off vertical, alternating sides.
 A stage element is the base it is built on: its width and depth are fixed, and only its rise is
 set, from 0.1 to 1.2 m. A stage element already placed at another base size keeps it. It stands on
 a scissor lift — a deck on crossed arms over a base frame, with more stages of arms as it rises —
-in the Visualizer and in the PreViz elevations; stage stairs keep their own shape. The people in a
+in the Visualizer and in the PreViz elevations; stage stairs keep their own shape. A stage element
+and stage stairs are placed by their feet, as the decks on fixed legs are: the position is the middle
+of the footprint on the floor they stand on, so Z 0 stands on the stage floor, and changing the rise
+raises or lowers the deck while the feet stay put. The people in a
 Crowd Area differ in size, the same way every time the show is drawn.
 
 A show patched before this keeps the fixture revision embedded in it and is unaffected.
