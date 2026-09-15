@@ -21,6 +21,8 @@ import { CAD_VIEW_LABELS, type CadEntity, type CadViewDirection } from "./types"
 import type { CadUnderlay } from "./underlays";
 import type { CadUnderlays } from "./useCadUnderlays";
 import { useCadDrawingTree } from "./useCadDrawingTree";
+import { useCadVenueGroups } from "./useCadVenueGroups";
+import { groupOf, type VenueGroup, venueGroupAction } from "./venueGroups";
 import { VENUE_MODEL_EXTENSIONS } from "./venueModelFormats";
 import "./cadElements.css";
 
@@ -195,7 +197,8 @@ function ObjectRow({
 }: {
 	entity: CadEntity;
 	selected: boolean;
-	onSelect(): void;
+	/** `individual` is true when Shift was held, which picks this element rather than its group. */
+	onSelect(individual: boolean): void;
 }) {
 	const [width, depth, height] = entity.sizeMillimetres.map(metres);
 	return (
@@ -203,7 +206,7 @@ function ObjectRow({
 			type="button"
 			className={`cad-elements-object ${selected ? "is-selected" : ""}`.trim()}
 			aria-pressed={selected}
-			onClick={onSelect}
+			onClick={(event) => onSelect(event.shiftKey)}
 		>
 			<strong>{entity.name}</strong>
 			<small>
@@ -214,19 +217,94 @@ function ObjectRow({
 	);
 }
 
+function GroupRows({
+	group,
+	members,
+	selectedIds,
+	onSelect,
+}: {
+	group: VenueGroup;
+	members: readonly CadEntity[];
+	selectedIds: readonly string[];
+	onSelect(ids: string[]): void;
+}) {
+	const [open, setOpen] = useState(false);
+	const selected =
+		members.length > 0 &&
+		members.every((member) => selectedIds.includes(member.logicalFixtureId));
+	return (
+		<div className="cad-elements-venue-group" role="group" aria-label={group.name}>
+			<div className={`cad-elements-group-row ${selected ? "is-selected" : ""}`.trim()}>
+				<button
+					type="button"
+					className="cad-elements-group-toggle"
+					aria-expanded={open}
+					aria-label={`${open ? "Collapse" : "Expand"} ${group.name}`}
+					onClick={() => setOpen(!open)}
+				>
+					{open ? "▾" : "▸"}
+				</button>
+				<button
+					type="button"
+					className="cad-elements-object"
+					aria-pressed={selected}
+					onClick={() => onSelect(members.map((member) => member.logicalFixtureId))}
+				>
+					<strong>{group.name}</strong>
+					<small>
+						Group · {members.length} {members.length === 1 ? "element" : "elements"}
+					</small>
+				</button>
+			</div>
+			{open ? (
+				<div className="cad-elements-group-members">
+					{members.map((member) => (
+						<ObjectRow
+							key={member.logicalFixtureId}
+							entity={member}
+							selected={selectedIds.includes(member.logicalFixtureId)}
+							onSelect={(individual) =>
+								onSelect(
+									individual
+										? [member.logicalFixtureId]
+										: members.map((each) => each.logicalFixtureId),
+								)
+							}
+						/>
+					))}
+				</div>
+			) : null}
+		</div>
+	);
+}
+
 function ObjectsTab({
+	documentKey,
 	entities,
 	selectedIds,
 	requests,
 	onSelect,
 }: {
+	documentKey: string | null;
 	entities: readonly CadEntity[];
 	selectedIds: readonly string[];
 	requests: ElementsRequests;
 	onSelect(ids: string[]): void;
 }) {
 	const [status, setStatus] = useState("");
-	const objects = venueObjects(entities);
+	const venueGroups = useCadVenueGroups(documentKey);
+	const { groups } = venueGroups;
+	const all = venueObjects(entities);
+	const byId = new Map(all.map((entity) => [entity.logicalFixtureId, entity]));
+	const shownGroups = groups.groups
+		.map((group) => ({
+			group,
+			members: group.memberIds.flatMap((id) => byId.get(id) ?? []),
+		}))
+		.filter(({ members }) => members.length);
+	const objects = all.filter((entity) => !groupOf(groups, entity.logicalFixtureId));
+	const grouping = venueGroupAction(groups, entities, selectedIds, "group");
+	const ungrouping = venueGroupAction(groups, entities, selectedIds, "ungroup");
 
 	useRequest(requests.importModel, () => void importModel());
 
@@ -272,14 +350,49 @@ function ObjectsTab({
 					{status}
 				</p>
 			) : null}
+			<div className="cad-elements-actions">
+				<button
+					type="button"
+					className="ui-button"
+					disabled={!grouping}
+					title="Group the selected Venue elements (⌘G)"
+					onClick={() => grouping && venueGroups.change(grouping)}
+				>
+					Group
+				</button>
+				<button
+					type="button"
+					className="ui-button"
+					disabled={!ungrouping}
+					title="Ungroup the selected groups (⇧⌘G)"
+					onClick={() => ungrouping && venueGroups.change(ungrouping)}
+				>
+					Ungroup
+				</button>
+			</div>
+			{venueGroups.error ? <output className="cad-error">{venueGroups.error}</output> : null}
+			{shownGroups.length ? (
+				<section className="cad-elements-group" aria-label="Groups">
+					<h3>Groups</h3>
+					{shownGroups.map(({ group, members }) => (
+						<GroupRows
+							key={group.id}
+							group={group}
+							members={members}
+							selectedIds={selectedIds}
+							onSelect={onSelect}
+						/>
+					))}
+				</section>
+			) : null}
 			{list(
 				"Venue items",
-				objects.filter((entity) => entity.scenery),
+				objects.filter((entity) => !entity.importedModel),
 				"No trusses, stage elements or curtains placed yet.",
 			)}
 			{list(
 				"3D models",
-				objects.filter((entity) => !entity.scenery),
+				objects.filter((entity) => entity.importedModel),
 				"No 3D models placed yet.",
 			)}
 		</div>
@@ -319,6 +432,7 @@ export function CadElementsPanel({
 				/>
 			) : (
 				<ObjectsTab
+					documentKey={documentKey}
 					entities={entities}
 					selectedIds={selectedIds}
 					requests={requests}

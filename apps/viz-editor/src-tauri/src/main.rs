@@ -22,6 +22,7 @@ mod portable;
 mod recent;
 mod session;
 mod underlay;
+mod venue_groups;
 mod venue_models;
 mod verify;
 mod visualizer;
@@ -376,6 +377,8 @@ fn main() {
             annotation::delete_cad_annotation,
             drawing_tree::cad_drawing_tree,
             drawing_tree::save_cad_drawing_tree,
+            venue_groups::cad_venue_groups,
+            venue_groups::save_cad_venue_groups,
             company_logo::read_company_logo,
             company_logo::lighting_designer_default,
             company_logo::save_lighting_designer_default,

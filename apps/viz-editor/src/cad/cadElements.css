@@ -132,6 +132,40 @@
 	border-radius: 3px;
 }
 
+/* A group of Venue elements: its row selects the whole group, the disclosure shows its members. */
+.cad-elements-group-row {
+	display: flex;
+	align-items: stretch;
+	gap: 4px;
+}
+
+.cad-elements-group-row > .cad-elements-object {
+	flex: 1;
+}
+
+.cad-elements-group-row.is-selected > .cad-elements-object {
+	border-color: rgb(5 209 250 / 70%);
+	background: rgb(5 209 250 / 12%);
+}
+
+.cad-elements-group-toggle {
+	flex: none;
+	width: 36px;
+	min-height: 44px;
+	border: 1px solid var(--border-subtle, #1d2530);
+	border-radius: 3px;
+	background: none;
+	color: inherit;
+	font-size: 14px;
+}
+
+.cad-elements-group-members {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 4px 0 0 40px;
+}
+
 .cad-drawing-tree-row-actions {
 	display: inline-flex;
 	order: 10;

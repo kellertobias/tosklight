@@ -114,6 +114,10 @@ function setup(
 	selectedIds: readonly string[] = [],
 	entity: CadEntity | readonly CadEntity[] = fixture,
 	labels = { fixtureIds: false, dmxAddresses: false },
+	options: {
+		snapping?: boolean;
+		expandSelection?: (ids: readonly string[]) => string[];
+	} = {},
 ) {
 	const onSelection = vi.fn();
 	const onPreview = vi.fn();
@@ -134,6 +138,7 @@ function setup(
 			onSelection={onSelection}
 			onPreview={onPreview}
 			onMove={onMove}
+			{...options}
 		/>,
 	);
 	const canvas = screen.getByLabelText(
@@ -544,7 +549,7 @@ describe("CAD fixture interaction", () => {
 			clientY: 426,
 		});
 		await waitFor(() =>
-			expect(onMove).toHaveBeenCalledWith([400, 0, 0], [fixture.id], false),
+			expect(onMove).toHaveBeenCalledWith([400, 0, 0], [fixture.id], false, true),
 		);
 	});
 
@@ -617,9 +622,76 @@ describe("CAD fixture interaction", () => {
 			shiftKey: true,
 		});
 		await waitFor(() =>
-			expect(onMove).toHaveBeenCalledWith([400, 0, 0], orderedSelection, true),
+			expect(onMove).toHaveBeenCalledWith([400, 0, 0], orderedSelection, true, false),
 		);
 		expect(onMove).toHaveBeenCalledTimes(1);
+	});
+
+	it("selects a grouped element's whole group, and the element alone with Shift", () => {
+		const second = {
+			...fixture,
+			id: "22222222-2222-4222-8222-222222222222",
+			logicalFixtureId: "22222222-2222-4222-8222-222222222222",
+			positionMillimetres: [600, 0, 4000] as [number, number, number],
+		};
+		const group = [fixture.id, second.id];
+		const { canvas, onSelection } = setup([], [fixture, second], undefined, {
+			expandSelection: (ids) => (ids.some((id) => group.includes(id)) ? group : [...ids]),
+		});
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 500, clientY: 400 });
+		fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 500, clientY: 400 });
+		expect(onSelection).toHaveBeenLastCalledWith({ type: "replace", ids: group });
+		fireEvent.pointerDown(canvas, {
+			pointerId: 2,
+			button: 0,
+			shiftKey: true,
+			clientX: 500,
+			clientY: 400,
+		});
+		fireEvent.pointerUp(canvas, {
+			pointerId: 2,
+			button: 0,
+			shiftKey: true,
+			clientX: 500,
+			clientY: 400,
+		});
+		expect(onSelection).toHaveBeenLastCalledWith({ type: "toggle", ids: [fixture.id] });
+	});
+
+	it("snaps a dragged truss onto the next one's connector unless Shift is held", async () => {
+		const truss = (id: string, x: number): CadEntity => ({
+			...fixture,
+			id,
+			logicalFixtureId: id,
+			kind: "venue",
+			fixtureType: "rigging",
+			positionMillimetres: [x, 0, 0],
+			sizeMillimetres: [4000, 340, 340],
+			scenery: { kind: "truss", chords: 4, pattern: "standard" },
+		});
+		const still = truss("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", 0);
+		const moving = truss("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", 4100);
+		const { canvas, onPreview, onMove } = setup([moving.id], [still, moving], undefined, {
+			snapping: true,
+		});
+		// The gizmo square stands on the moving truss's origin, 410 px right of the centre.
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 910, clientY: 400 });
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 905, clientY: 402 });
+		expect(onPreview).toHaveBeenLastCalledWith({
+			entityIds: [moving.id],
+			deltaMillimetres: [-100, 0, 0],
+			spread: false,
+		});
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 905, clientY: 402, shiftKey: true });
+		expect(onPreview).toHaveBeenLastCalledWith({
+			entityIds: [moving.id],
+			deltaMillimetres: [-50, -20, 0],
+			spread: false,
+		});
+		fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 905, clientY: 402 });
+		await waitFor(() =>
+			expect(onMove).toHaveBeenCalledWith([-100, 0, 0], [moving.id], false, true),
+		);
 	});
 
 	it("does not select locked entities and renders optional operator labels", () => {

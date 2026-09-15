@@ -101,6 +101,9 @@ pub struct CadEntity {
     pub aim: CadAim,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scenery: Option<CadScenery>,
+    /// A 3D model the operator imported into this show, rather than a shipped Venue object.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub imported_model: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -154,6 +157,8 @@ pub struct TransformIntent {
     pub expected_scene_revision: u64,
     pub entity_ids: Vec<Uuid>,
     pub delta_millimetres: [i32; 3],
+    /// Whether snapping was on for this move: a moved lamp near a truss is then recorded as mounted
+    /// on it. The position itself arrives already snapped from the CAD view.
     #[serde(default)]
     pub snap_to_mounts: bool,
     #[serde(default)]
@@ -249,28 +254,14 @@ pub fn cad_transform(
         .into_iter()
         .filter(|attachment| ids.contains(&attachment.fixture_id))
         .collect::<Vec<_>>();
-    let mut after = moved_transforms(
+    // The CAD view snaps the move before it sends it (see `snapping.ts`), so the delta already lands
+    // a clamp on its pipe; moving it again here would pull it off the pipe it was snapped onto.
+    let after = moved_transforms(
         &before,
         &ordered_ids,
         intent.delta_millimetres,
         intent.spread,
     );
-    let anchor = (intent.spread && ordered_ids.len() > 1)
-        .then(|| {
-            before
-                .iter()
-                .find(|item| item.id == ordered_ids[0])
-                .cloned()
-        })
-        .flatten();
-    if intent.snap_to_mounts {
-        snap_transforms(&session, &mut after)?;
-        if let Some(anchor) = anchor
-            && let Some(first) = after.iter_mut().find(|item| item.id == anchor.id)
-        {
-            *first = anchor;
-        }
-    }
     let revision = apply_transforms(&session, intent.expected_scene_revision, &after)?;
     let changed_attachments = if intent.snap_to_mounts {
         snap_attachments(&session, &after)?
@@ -614,6 +605,7 @@ fn entities(
                 output_direction: output_direction(rotation),
                 aim: CadAim::default(),
                 scenery: cad_scenery(snapshot, &fixture.patch.scenery_options),
+                imported_model: snapshot.is_some_and(imported_model),
             };
             let visual_only = profile.is_some_and(|profile| {
                 profile.patch_policy == light_fixture::PatchPolicy::VisualOnly
@@ -667,6 +659,14 @@ fn entities(
             .collect::<Vec<_>>()
         })
         .collect()
+}
+
+/// Whether a profile wraps a 3D model the operator imported into this show.
+fn imported_model(profile: &serde_json::Value) -> bool {
+    profile
+        .get("manufacturer")
+        .and_then(serde_json::Value::as_str)
+        == Some(crate::venue_models::IMPORTED_MANUFACTURER)
 }
 
 fn locked_layers(session: &Session) -> Result<BTreeSet<String>, String> {
@@ -994,48 +994,6 @@ fn restore_attachments(
                 )
                 .map_err(|error| error.to_string())
         })?;
-    }
-    Ok(())
-}
-
-/// Snap only to declared member identities and keep the relationship explicit. The 500 mm
-/// attraction radius is intentionally conservative; advanced spacing/distribution belongs to a
-/// later Rig Planner slice.
-fn snap_transforms(session: &Session, moved: &mut [EntityTransform]) -> Result<(), String> {
-    let scene =
-        session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
-    let entities = entities(&scene, &BTreeSet::new(), &fixture_notes(session)?);
-    let trusses = entities
-        .iter()
-        .filter(|entity| {
-            entity.kind == "venue"
-                && (entity.name.to_lowercase().contains("truss")
-                    || entity.name.to_lowercase().contains("pipe"))
-        })
-        .collect::<Vec<_>>();
-    for fixture in moved {
-        if trusses
-            .iter()
-            .any(|truss| truss.logical_fixture_id == fixture.id)
-        {
-            continue;
-        }
-        let Some(truss) = trusses.iter().min_by_key(|truss| {
-            let dy = fixture.position_millimetres[1] - truss.position_millimetres[1];
-            let dz = fixture.position_millimetres[2] - truss.position_millimetres[2];
-            i64::from(dy).pow(2) + i64::from(dz).pow(2)
-        }) else {
-            continue;
-        };
-        let dy = fixture.position_millimetres[1] - truss.position_millimetres[1];
-        let dz = fixture.position_millimetres[2] - truss.position_millimetres[2];
-        let offset = fixture.position_millimetres[0] - truss.position_millimetres[0];
-        if i64::from(dy).pow(2) + i64::from(dz).pow(2) <= 500_i64.pow(2)
-            && offset.abs() as f32 <= truss.size_millimetres[0] / 2.0 + 250.0
-        {
-            fixture.position_millimetres[1] = truss.position_millimetres[1];
-            fixture.position_millimetres[2] = truss.position_millimetres[2];
-        }
     }
     Ok(())
 }

@@ -144,7 +144,7 @@ export function trussPlan(
 }
 
 /** Where each chord sits in the section, as (across, up), in order round it so neighbours share a face. */
-function chordOffsets(parts: Parts): Point[] {
+export function chordOffsets(parts: Parts): Point[] {
 	const half = parts.spacing / 2;
 	switch (parts.chords) {
 		case 1:

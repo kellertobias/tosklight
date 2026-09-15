@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { rotateDeskPoint } from "./projection";
 import type { CadEntity, CadViewDirection } from "./types";
+import { boxCentre } from "./venueShapes";
 
 /**
  * How far into the drawing an element sits, from the viewer of one view.
@@ -43,11 +44,13 @@ export function entityDepthRange(
 	entity: Pick<
 		CadEntity,
 		"positionMillimetres" | "rotationDegrees" | "sizeMillimetres"
-	>,
+	> &
+		Partial<Pick<CadEntity, "scenery" | "fixtureProfile">>,
 	view: CadViewDirection,
 ): DepthRange {
 	const [width, depth, height] = entity.sizeMillimetres;
-	const centre = viewDepth(entity.positionMillimetres, view);
+	// A stage element stands on its position, so its box is centred half its height above it.
+	const centre = viewDepth(boxCentre(entity), view);
 	let half = 0;
 	for (const x of [-width / 2, width / 2])
 		for (const y of [-depth / 2, depth / 2])

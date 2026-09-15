@@ -39,6 +39,8 @@ export interface CadEntity {
 	bracketAngle?: number;
 	/** How a generated Venue object is built; absent for fixtures and modelled objects. */
 	scenery?: CadScenery;
+	/** A 3D model imported into this show (manufacturer "Imported models"), not a shipped Venue object. */
+	importedModel?: boolean;
 }
 
 export interface CadScenery {

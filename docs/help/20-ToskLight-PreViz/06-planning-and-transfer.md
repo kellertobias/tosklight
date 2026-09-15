@@ -548,29 +548,42 @@ page saved before drawings could be placed does.
 
 The **CAD** screen's own title holds its tools, as icon buttons grouped and divided like every other
 title's buttons. Rest the pointer on a button, or reach it with the keyboard, and its name appears in
-a tooltip just below it. From left to right:
+a tooltip just below it, above the side panel and the viewports. A drawing tool's tooltip also shows
+the key that picks it, such as **Draw line · L**. From left to right:
 
 * **Undo** and **Redo** step back and forward through changes to the drawing.
-* The add group places venue objects:
-  * **Add truss** (a truss segment) opens a dialog. Choose the section first — **Pipe**, **2-point**,
-    **3-point deco**, **3-point regular**, **4-point** or **4-point large** — and then the part: the
-    straight truss, or one of the corner pieces made for that section. Each is shown by its picture.
-  * **Add stage element** (a deck on a scissor lift) opens the same dialog: choose **Regular feet**,
-    **Scissor feet** or **Stairs**, then the platform size.
-  * **Add curtain** (a drape on its rail) places a parametric curtain at once, with no dialog.
-  * **Add primitive** (a box, a ball and a cylinder) opens the same dialog on **Box**, **Cylinder**
-    and **Ball**; choosing one places it at once. Each fills the width, height and depth set in
-    **Info** — a cylinder stands upright, so its height is its length — and takes the **Colour** set
-    for it, neutral grey until you choose one.
-  * **Add venue element** (a box) opens the fixture library on every object that is placed but not
-    patched, such as crowds and imported models.
+* The add group places venue objects. **Add truss**, **Add stage element**, **Add curtain** and
+  **Add primitive** each place their part at once when pressed. A small caret in the button's
+  bottom-right corner opens a menu of the parts that button can place, each shown by its picture; the
+  part the button places now is highlighted. Choosing a part places it and makes it the part the
+  button places from then on, and this computer remembers that choice for the next time you open the
+  CAD screen.
+  * **Add truss** (a truss segment) lists the sections — **Pipe**, **2-point**, **3-point deco**,
+    **3-point regular**, **4-point** and **4-point large** — with the straight truss and, for
+    **3-point regular** and **4-point**, the corner pieces made for that section. It places a
+    **3-point regular** straight truss until you choose another.
+  * **Add stage element** (a deck on a scissor lift) lists the decks on **Regular feet** by platform
+    size and leg height, the decks on **Scissor feet** by platform size, and the **Stairs**. It places
+    a 2 × 1 m deck on scissor feet until you choose another.
+  * **Add curtain** (a drape on its rail) lists the parametric curtain, sized in **Info**, and the
+    curtains made at a fixed width of 1, 2, 3, 5 and 6 m. It places the parametric curtain until you
+    choose another.
+  * **Add primitive** (a box, a ball and a cylinder) lists **Box**, **Cylinder** and **Ball**. Each
+    fills the width, height and depth set in **Info** — a cylinder stands upright, so its height is its
+    length — and takes the **Colour** set for it, neutral grey until you choose one.
+  * **Add venue element** (a box) opens a dialog listing every Venue object in this computer's fixture
+    library — trusses, decks, curtains, crowds, railings and imported venue models — each shown by its
+    picture on a dark ground. Type in the dialog's search to narrow the list by name or type, and
+    choose an object to place it.
 
-A chosen part is placed at the stage origin with the next free virtual ID, the drawing shows it at
-once, and it is selected so **Info** opens to place it and set its size. A part whose profile is not in
-this computer's fixture library is shown but cannot be chosen. A choice with a single option, such as
-the stairs, is placed without the second step.
-* The drawing group is what a press on a viewport does. **Select**, the arrow, selects and moves the
-  rig as before; the others draw on the view you use them in.
+A placed part goes to the stage origin with the next free virtual ID, the drawing shows it at once,
+and it is selected so **Info** opens to place it and set its size. A part whose profile is not in this
+computer's fixture library is listed but cannot be chosen, and pressing a button whose part is missing
+says so instead of placing anything. When the show refuses a placement, the reason appears at the top
+right of the drawing.
+* The drawing group is what a press on a viewport does. **Select** (**V**), the arrow, selects and
+  moves the rig as before; **Draw line** (**L**), **Draw box** (**P**), **Place text** (**T**),
+  **Measure** (**M**) and **Erase** (**R**) draw on the view you use them in.
 * **Plans** and **Elements** open their side panels, and **Settings** (⚙) the CAD settings.
 
 ## The side panel
@@ -613,7 +626,29 @@ and a spacing across and deep, or around a **Circle** from its centre, radius, s
 where 360° spaces the elements evenly around the whole circle. Nothing moves until **Apply**.
 
 The move gizmo stands on the selected element's own origin, or on the centre of a selected group.
-Drag an arrow to move along that axis, or the square to move freely.
+Drag an arrow to move along that axis, or the square to move freely. Holding Shift while dragging an
+arrow spreads the selection along it, from the first selected element to the last.
+
+### Snapping
+
+With **Settings (⚙) → Enable snapping** on, a moved object that comes within about 12 pixels of a fit
+lands exactly on it, and a magenta diamond marks the fit while the drag holds it:
+
+* **Trusses** join where their connectors meet: the ends of a straight truss, and the end of each
+  500 mm arm of a corner, T-piece, cross or node, where the coupler egg sits.
+* **Stage elements** — decks on scissor lifts, stairs and decks on fixed legs — put their corners
+  on another's corners, and in a side or front view their feet on another stage element's top. A
+  stage element stands on its position: the position is the floor under the middle of its feet.
+* **Curtains** hang their rail just under a truss or pipe, and line their ends up with the ends of
+  the next curtain.
+* **Lamps** clamp onto the nearest pipe of a truss; with snapping on, a lamp dropped onto a truss is
+  also recorded as mounted on it.
+
+Only the axes the drag can move change, so a plan view never changes heights, and a truss, pipe or
+rail more than half a metre off the view's plane — a truss 6 m above a lamp on the floor, seen from
+above — is out of reach. **Measure** snaps its ends in the same way, onto connectors, stage corners,
+curtain ends and the centre of every object. Hold **Shift** to place freely: while it is held, a drag
+or a measurement snaps to nothing and a moved lamp is not mounted.
 
 The trash button at the top of Info deletes the selection from the show, with every multi-patch copy
 of each fixture. It asks first. Shift-click it to delete a single selected element without being
@@ -647,7 +682,9 @@ view's plan pages:
 * **Place text**: click where the text starts, type, and press Enter. Text is sized for the zoom it
   was placed at and grows and shrinks with the plan.
 * **Measure**: drag from one point to another. The measurement is drawn in amber with a tick at
-  each end and its distance — in millimetres below a metre, in metres above.
+  each end and its distance — in millimetres below a metre, in metres above. With snapping on, each
+  end snaps onto the nearest connector, stage corner, curtain end or object centre; hold Shift to
+  measure from exactly where you press.
 * **Erase**: click a line, box, measurement or text to remove it.
 
 Escape drops a line, box or text still in progress; pressing it again returns to **Select**. The
@@ -668,6 +705,8 @@ and are ignored while you type in a field or a dialog is open:
 | **1** to **5** | **Top down**, **Left to right**, **Right to left**, **Front to back**, **Back to front**, framed on the rig |
 | **+** and **−** | Zoom in and out |
 | **W**, **A**, **S**, **D** | Move the view up, left, down and right |
+| **⌘G** (Ctrl+G) | **Group** the selected Venue elements |
+| **⇧⌘G** (Shift+Ctrl+G) | **Ungroup** the selected groups |
 
 The project paperwork printed on every page is no longer a CAD panel: set it under **Show
 information** on the **Show** screen.
@@ -675,8 +714,25 @@ information** on the **Show** screen.
 ## Objects in the Elements panel
 
 **Objects**, the second tab of **Elements**, lists what the venue is built from apart from the lamps:
-**Venue items** — trusses, stage elements, curtains and the other generated objects — and **3D
-models**. Each row names the object, its ID, its kind and its size in metres. **+** adds more: the same
+**Venue items** — every shipped Venue object, generated like trusses, curtains and stage elements or
+drawn from a model like truss corners, decks on legs and the disco ball — and **3D models**, which
+lists only the models imported into this show. Each row names the object, its ID, its kind and its
+size in metres.
+
+### Groups
+
+Select two or more Venue elements — the trusses of one rig, the decks of a stage — and press
+**Group** at the top of **Objects**, or ⌘G. The group is saved in the show as **Group 1**, **Group 2**
+and so on, and is listed under **Groups** above the other objects; its elements move there from the
+lists below. **▸** opens a group to show its members.
+
+A click selects the whole group: its row, one of its members in the list, or any of its elements in a
+view, and so does a selection rectangle that catches one of them. Hold **Shift** to take elements one
+at a time instead — Shift-click in a view adds or removes just that element, and Shift-click on a
+member in the list selects only that member. A selected group moves together with the gizmo, like any
+selection. **Ungroup**, or ⇧⌘G, dissolves every group the selection touches and leaves its elements
+where they are. An element is in one group at most: grouping it again takes it out of its old group. A
+deleted element leaves its group, and a group with no element left goes with it. **+** adds more: the same
 truss, stage element, curtain, primitive and venue element as the title, and **Import 3D model…**, which places a
 GLB, glTF, 3MF or OBJ file as described below and selects it. Select a row to select the object in the
 views; **Info** below then sets its position, rotation and scale.

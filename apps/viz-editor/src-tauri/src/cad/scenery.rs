@@ -357,6 +357,7 @@ mod tests {
                 chain,
                 anchor: None,
             }),
+            imported_model: false,
         }
     }
 

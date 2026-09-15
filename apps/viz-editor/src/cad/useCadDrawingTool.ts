@@ -17,7 +17,8 @@ import {
 } from "./annotationGeometry";
 import { useCadTools } from "./cadTools";
 import type { PlanPoint } from "./projection";
-import type { CadViewDirection, TileCamera } from "./types";
+import { snapPlanPoint, snapThreshold } from "./snapping";
+import type { CadEntity, CadViewDirection, TileCamera } from "./types";
 
 /** How near, in screen pixels, a click must be to close a line or to erase an item. */
 const CATCH_PIXELS = 8;
@@ -35,6 +36,8 @@ export interface CadDrawingTool {
 	draft: CadAnnotation | null;
 	/** Where text is about to be placed on the tile, while its words are typed. */
 	pendingText: PlanPoint | null;
+	/** Where the measurement's point under the pointer has snapped, on the tile's plan. */
+	snapMarker: PlanPoint | null;
 	/** Handles a press; false leaves it to selection and panning. */
 	pointerDown(event: Pointer): boolean;
 	pointerMove(event: Pointer): void;
@@ -52,6 +55,9 @@ export interface DrawingViewport {
 	camera: TileCamera;
 	/** Print mode draws nothing. */
 	enabled: boolean;
+	/** What a measurement's ends snap onto, when `snapping` is on; Shift turns it off while held. */
+	entities?: readonly CadEntity[];
+	snapping?: boolean;
 }
 
 function newAnnotation(
@@ -82,6 +88,39 @@ function withoutRepeats(points: readonly StoredPoint[]): StoredPoint[] {
 	);
 }
 
+/** Where the pointer is on the tile's plan, in millimetres. */
+function planPointOf(viewport: DrawingViewport, event: Pointer): PlanPoint {
+	const { camera } = viewport;
+	const bounds = viewport.canvas.current?.getBoundingClientRect();
+	if (!bounds) return [0, 0];
+	return [
+		(event.clientX - bounds.left - bounds.width / 2) / camera.zoom - camera.pan[0],
+		-(event.clientY - bounds.top - bounds.height / 2) / camera.zoom - camera.pan[1],
+	];
+}
+
+/**
+ * Where a measurement's point snaps — onto the nearest snap point in reach, unless snapping is off
+ * or Shift is held — and the marker that shows the fit under the pointer.
+ */
+function useMeasureSnap(viewport: DrawingViewport, measuring: boolean) {
+	const [marker, setMarker] = useState<PlanPoint | null>(null);
+	const snap = (event: Pointer): PlanPoint | null =>
+		measuring && viewport.snapping && !event.shiftKey
+			? snapPlanPoint(
+					viewport.entities ?? [],
+					planPointOf(viewport, event),
+					viewport.view,
+					viewport.rotationQuarterTurns,
+					snapThreshold(viewport.camera.zoom),
+				)
+			: null;
+	const show = (point: PlanPoint | null) => {
+		if (point?.[0] !== marker?.[0] || point?.[1] !== marker?.[1]) setMarker(point);
+	};
+	return { marker, snap, show };
+}
+
 export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 	const tools = useCadTools();
 	const { view, rotationQuarterTurns, camera } = viewport;
@@ -89,29 +128,23 @@ export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 	const [points, setPoints] = useState<StoredPoint[]>([]);
 	const [cursor, setCursor] = useState<StoredPoint | null>(null);
 	const [pendingText, setPendingText] = useState<StoredPoint | null>(null);
+	const measure = useMeasureSnap(viewport, tools.tool === "measure");
 	const dragging = useRef(false);
 
 	function reset() {
 		setPoints([]);
 		setCursor(null);
 		setPendingText(null);
+		measure.show(null);
 		dragging.current = false;
 	}
 
 	// Another tool, view or turn starts over rather than finishing a shape drawn for the last one.
 	useEffect(reset, [tools.tool, view, rotationQuarterTurns]);
 
-	function planPoint(event: Pointer): PlanPoint {
-		const bounds = viewport.canvas.current?.getBoundingClientRect();
-		if (!bounds) return [0, 0];
-		return [
-			(event.clientX - bounds.left - bounds.width / 2) / camera.zoom - camera.pan[0],
-			-(event.clientY - bounds.top - bounds.height / 2) / camera.zoom - camera.pan[1],
-		];
-	}
-
+	const planPoint = (event: Pointer) => planPointOf(viewport, event);
 	const stored = (event: Pointer) =>
-		storedPoint(view, planPoint(event), rotationQuarterTurns);
+		storedPoint(view, measure.snap(event) ?? planPoint(event), rotationQuarterTurns);
 	const pixelsApart = (a: StoredPoint, b: StoredPoint) =>
 		Math.hypot(a[0] - b[0], a[1] - b[1]) * camera.zoom;
 
@@ -173,6 +206,7 @@ export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 
 	function pointerMove(event: Pointer) {
 		if (!active) return;
+		if (tools.tool === "measure") measure.show(measure.snap(event));
 		if (dragging.current || (tools.tool === "polyline" && points.length))
 			setCursor(stored(event));
 	}
@@ -217,6 +251,7 @@ export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 		pendingText: pendingText
 			? viewPoint(view, pendingText, rotationQuarterTurns)
 			: null,
+		snapMarker: active && tools.tool === "measure" ? measure.marker : null,
 		pointerDown,
 		pointerMove,
 		pointerUp,

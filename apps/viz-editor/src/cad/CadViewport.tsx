@@ -28,7 +28,10 @@ import type {
 } from "./types";
 import type { CadUnderlay } from "./underlays";
 import { useCadDrawingTool } from "./useCadDrawingTool";
-import { useCadViewportInteraction } from "./useCadViewportInteraction";
+import {
+	type CadViewportContext,
+	useCadViewportInteraction,
+} from "./useCadViewportInteraction";
 
 interface CadViewportProps {
 	entities: readonly CadEntity[];
@@ -42,6 +45,8 @@ interface CadViewportProps {
 	showDmxAddresses: boolean;
 	showCoordinateOrigins?: boolean;
 	editEnabled?: boolean;
+	/** Whether moves and measurements snap onto a fit; Shift turns it off while held. */
+	snapping?: boolean;
 	printMode?: boolean;
 	/** Venue drawings placed on this view, drawn under the rig. */
 	underlays?: readonly CadUnderlay[];
@@ -54,6 +59,11 @@ interface CadViewportProps {
 	documentInfo?: CadPrintDocumentInfo;
 	onCamera(camera: TileCamera): void;
 	onSelection(change: SelectionChange): void;
+	/**
+	 * Widens a plain click's or marquee's pick to whole Venue element groups; Shift skips it so one
+	 * element is picked alone. Absent picks exactly what was hit.
+	 */
+	expandSelection?(ids: readonly string[]): string[];
 	/** Which placement a click picked, so a multi-patch copy can be edited on its own. */
 	onFocusEntity?(entityId: string | null): void;
 	onPreview(preview: CadTransformPreview | null): void;
@@ -61,6 +71,8 @@ interface CadViewportProps {
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
 		spread: boolean,
+		/** False while Shift is held, so nothing snapped. */
+		snap: boolean,
 	): Promise<void>;
 }
 
@@ -159,6 +171,32 @@ function zoomFromWheel(camera: TileCamera, onCamera: (c: TileCamera) => void) {
 	};
 }
 
+/** The drawing tool and the pointer gestures of one viewport, and the snapped fits both mark. */
+function useViewportGestures(context: CadViewportContext) {
+	const tools = useCadTools();
+	const { canvas, view, rotationQuarterTurns, camera, entities, snapping } = context;
+	const drawing = useCadDrawingTool({
+		canvas,
+		view,
+		rotationQuarterTurns,
+		camera,
+		enabled: context.editEnabled,
+		entities,
+		snapping,
+	});
+	const annotations = useMemo(() => {
+		const onView = annotationsForView(tools.annotations, view);
+		return drawing.draft ? [...onView, drawing.draft] : onView;
+	}, [tools.annotations, view, drawing.draft]);
+	const interaction = useCadViewportInteraction(context);
+	const moveMarkers = interaction.snapMarkers;
+	const snapMarkers = useMemo(
+		() => (drawing.snapMarker ? [...moveMarkers, drawing.snapMarker] : moveMarkers),
+		[moveMarkers, drawing.snapMarker],
+	);
+	return { drawing, annotations, interaction, snapMarkers };
+}
+
 export function CadViewport({
 	entities,
 	drawings,
@@ -171,6 +209,7 @@ export function CadViewport({
 	showDmxAddresses,
 	showCoordinateOrigins = false,
 	editEnabled = true,
+	snapping = false,
 	printMode = false,
 	underlays = [],
 	grid = DEFAULT_GRID,
@@ -181,6 +220,7 @@ export function CadViewport({
 	documentInfo,
 	onCamera,
 	onSelection,
+	expandSelection,
 	onFocusEntity,
 	onPreview,
 	onMove,
@@ -191,36 +231,25 @@ export function CadViewport({
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
 		[drawings],
 	);
-	const tools = useCadTools();
-	const drawing = useCadDrawingTool({
+	const { drawing, annotations, interaction, snapMarkers } = useViewportGestures({
 		canvas,
+		entities,
+		drawingById,
+		selected,
+		selectedIds,
 		view,
 		rotationQuarterTurns,
 		camera,
-		enabled: editEnabled,
+		editEnabled,
+		snapping,
+		onCamera,
+		onSelection,
+		expandSelection,
+		onFocusEntity,
+		onPreview,
+		onMove,
 	});
-	const annotations = useMemo(() => {
-		const onView = annotationsForView(tools.annotations, view);
-		return drawing.draft ? [...onView, drawing.draft] : onView;
-	}, [tools.annotations, view, drawing.draft]);
-
-	const { guide, selectionBox, pointerDown, pointerMove, pointerUp, cancel } =
-		useCadViewportInteraction({
-			canvas,
-			entities,
-			drawingById,
-			selected,
-			selectedIds,
-			view,
-			rotationQuarterTurns,
-			camera,
-			editEnabled,
-			onCamera,
-			onSelection,
-			onFocusEntity,
-			onPreview,
-			onMove,
-		});
+	const { guide, selectionBox, pointerDown, pointerMove, pointerUp, cancel } = interaction;
 
 	useViewportRedraw(canvas, {
 		entities,
@@ -236,6 +265,7 @@ export function CadViewport({
 		showCoordinateOrigins,
 		underlays,
 		annotations,
+		snapMarkers,
 	});
 
 	const scale = cadScaleForZoom(camera.zoom);

@@ -71,6 +71,8 @@ export interface CadFrame {
 	underlays?: readonly CadUnderlay[];
 	/** Lines, boxes and measurements drawn on this view, over the rig; `draft` is one in progress. */
 	annotations?: readonly CadAnnotation[];
+	/** Where a move or a measurement has snapped onto a fit, marked over everything. */
+	snapMarkers?: readonly PlanPoint[];
 }
 
 /** The three vertex arrays of a frame, and the closures that append plan points to them. */
@@ -398,6 +400,23 @@ function paintSelectionBox(painter: Painter, frame: CadFrame) {
 	painter.line([start[0], end[1]], [start[0], start[1]], color);
 }
 
+/** A snapped fit: a magenta diamond eight pixels across, so it reads apart from the cyan selection. */
+function paintSnapMarkers(painter: Painter, frame: CadFrame) {
+	const color: LineColor = [1, 0.3, 0.85];
+	const size = 8 * painter.pixel * (window.devicePixelRatio || 1);
+	for (const [x, y] of frame.snapMarkers ?? []) {
+		const corners: PlanPoint[] = [
+			[x, y + size],
+			[x + size, y],
+			[x, y - size],
+			[x - size, y],
+		];
+		corners.forEach((corner, index) =>
+			painter.stroke(corner, corners[(index + 1) % corners.length], color, 2 * painter.pixel),
+		);
+	}
+}
+
 export class LineRenderer {
 	private readonly geometryCache = new Map<string, PlanGeometry>();
 
@@ -460,6 +479,7 @@ export class LineRenderer {
 		paintAnnotations(painter, frame);
 		paintGizmo(painter, frame, this.canvas);
 		paintSelectionBox(painter, frame);
+		paintSnapMarkers(painter, frame);
 		this.upload(painter);
 	}
 

@@ -22,6 +22,8 @@ import { underlaysForView } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
 import { useCadPrintPages } from "./useCadPrintPages";
 import { useCadUnderlays } from "./useCadUnderlays";
+import { useCadVenueGroups } from "./useCadVenueGroups";
+import { expandToGroups } from "./venueGroups";
 import {
 	applySelectionChange,
 	CAD_VIEW_LABELS,
@@ -119,6 +121,7 @@ export function CadApp() {
 	);
 	const tools = useCadTools();
 	const underlayState = useCadUnderlays(documentInfo?.showId ?? null);
+	const venueGroups = useCadVenueGroups(documentInfo?.showId ?? null);
 	const sceneRef = useRef<CadSceneSnapshot | null>(null);
 	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
 
@@ -266,6 +269,7 @@ export function CadApp() {
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
 		spread: boolean,
+		snap = true,
 	) {
 		if (!scene || !entityIds.length || printMode) return;
 		setPreview(null);
@@ -274,7 +278,7 @@ export function CadApp() {
 				scene.sceneRevision,
 				entityIds,
 				deltaMillimetres.map(Math.round) as [number, number, number],
-				settings.snapToMounts,
+				settings.snapToMounts && snap,
 				spread,
 			);
 			applyScene(await cadSession.snapshot());
@@ -342,6 +346,10 @@ export function CadApp() {
 	}
 
 	useCadShortcuts((shortcut) => {
+		if (shortcut.type === "group" || shortcut.type === "ungroup") {
+			if (scene && !printMode) venueGroups.run(shortcut.type, scene.entities, scene.selectedIds);
+			return;
+		}
 		if (shortcut.type === "tool") {
 			// Drawing is off while the print pages are open, and a host without tools offers none.
 			if (tools.onAdd && !printMode) tools.setTool(shortcut.tool);
@@ -429,6 +437,7 @@ export function CadApp() {
 							activeTileId={activeTileId}
 							onActivate={setActiveTileId}
 							onSelection={select}
+							expandSelection={(ids) => expandToGroups(venueGroups.groups, ids)}
 							onFocusEntity={setFocusedEntityId}
 							onPreview={setPreview}
 							onMove={move}
@@ -586,12 +595,14 @@ export interface CadTileProps {
 	activeTileId: string | null;
 	onActivate(id: string): void;
 	onSelection(change: SelectionChange): void;
+	expandSelection(ids: readonly string[]): string[];
 	onFocusEntity?(entityId: string | null): void;
 	onPreview(preview: CadTransformPreview | null): void;
 	onMove(
 		delta: [number, number, number],
 		entityIds: readonly string[],
 		spread: boolean,
+		snap?: boolean,
 	): Promise<void>;
 	onFit(id: string): void;
 	printMode: boolean;
@@ -716,6 +727,7 @@ function CadTile(props: CadTileProps) {
 				showFixtureIds={props.settings.showFixtureIds}
 				showDmxAddresses={props.settings.showDmxAddresses}
 				showCoordinateOrigins={props.settings.showCoordinateOrigins}
+				snapping={props.settings.snapToMounts && !props.printMode}
 				grid={{
 					show: props.settings.showGrid,
 					colour: props.settings.gridColour,
@@ -728,6 +740,7 @@ function CadTile(props: CadTileProps) {
 					props.onTile(node.id, (tile) => ({ ...tile, camera }))
 				}
 				onSelection={props.onSelection}
+				expandSelection={props.expandSelection}
 				onFocusEntity={props.onFocusEntity}
 				onPreview={props.onPreview}
 				onMove={props.onMove}

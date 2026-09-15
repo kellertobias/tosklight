@@ -14,6 +14,8 @@ import {
 	marqueeMode,
 } from "./marqueeSelection";
 import { type MoveAxis, pickEntity, pickGizmo } from "./planGeometry";
+import type { PlanPoint } from "./projection";
+import { type FreeAxes, snapMove, snapThreshold } from "./snapping";
 import type {
 	CadDrawing,
 	CadEntity,
@@ -22,7 +24,7 @@ import type {
 	SelectionChange,
 	TileCamera,
 } from "./types";
-import { planeDelta } from "./types";
+import { planeDelta, projectPoint } from "./types";
 
 interface Drag {
 	type: "pan" | "move" | "box";
@@ -33,6 +35,8 @@ interface Drag {
 	startCamera?: TileCamera;
 	additive?: boolean;
 	deltaMillimetres?: [number, number, number];
+	/** The drag as the pointer moved it, before snapping: under a millimetre is still a click. */
+	rawDeltaMillimetres?: [number, number, number];
 	spread?: boolean;
 	hitId?: string;
 	/** The placement under the pointer: the fixture itself, or one of its multi-patch copies. */
@@ -43,6 +47,8 @@ interface Drag {
 export interface CadViewportInteraction {
 	guide: MoveAxis | null;
 	selectionBox: SelectionBox | null;
+	/** Where the move in flight has snapped onto a fit, on this tile's plan. */
+	snapMarkers: readonly PlanPoint[];
 	pointerDown(event: React.PointerEvent<HTMLCanvasElement>): void;
 	pointerMove(event: React.PointerEvent<HTMLCanvasElement>): void;
 	pointerUp(event: React.PointerEvent<HTMLCanvasElement>): Promise<void>;
@@ -61,8 +67,12 @@ export interface CadViewportContext {
 	rotationQuarterTurns: number;
 	camera: TileCamera;
 	editEnabled: boolean;
+	/** Whether a move snaps onto a fit (Settings → Enable snapping); Shift turns it off while held. */
+	snapping?: boolean;
 	onCamera(camera: TileCamera): void;
 	onSelection(change: SelectionChange): void;
+	/** Widens a plain pick to whole Venue element groups; Shift picks elements alone. */
+	expandSelection?(ids: readonly string[]): string[];
 	/**
 	 * Which placement a click picked. The selection names whole fixtures, so this is how a panel
 	 * that edits one copy of a multi-patched fixture knows which copy was meant.
@@ -73,6 +83,8 @@ export interface CadViewportContext {
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
 		spread: boolean,
+		/** False while Shift is held: nothing snaps and a lamp is not mounted onto a truss. */
+		snap: boolean,
 	): Promise<void>;
 }
 
@@ -91,13 +103,33 @@ function screenToPlane(
 	];
 }
 
-/** What a drag of the gizmo has moved the selection by, and the preview that shows it. */
+/** The plan axes a drag along `axis` of this tile can change. */
+export function freeAxes(
+	axis: MoveAxis,
+	view: CadViewDirection,
+	rotationQuarterTurns: number,
+): FreeAxes {
+	const free = [false, false, false];
+	const reach = (local: [number, number]) =>
+		planeDelta(local, view, rotationQuarterTurns).forEach((value, index) => {
+			if (value !== 0) free[index] = true;
+		});
+	if (axis !== "vertical") reach([1, 0]);
+	if (axis !== "horizontal") reach([0, 1]);
+	return free as unknown as FreeAxes;
+}
+
+/**
+ * What a drag of the gizmo has moved the selection by, and the preview that shows it. Shift spreads
+ * an arrow drag and, on any drag, turns snapping off.
+ */
 function updateMovePreview(
 	context: CadViewportContext,
 	active: Drag,
 	clientX: number,
 	clientY: number,
-	spread: boolean,
+	shift: boolean,
+	showSnap: (markers: PlanPoint[]) => void,
 ) {
 	const { camera, view, rotationQuarterTurns, selectedIds, onPreview } = context;
 	const dx = clientX - active.start[0];
@@ -106,12 +138,26 @@ function updateMovePreview(
 		active.axis === "vertical" ? 0 : dx / camera.zoom,
 		active.axis === "horizontal" ? 0 : -dy / camera.zoom,
 	];
-	const deltaMillimetres = planeDelta(localDelta, view, rotationQuarterTurns);
-	active.deltaMillimetres = deltaMillimetres;
-	active.spread = active.axis !== "plane" && spread;
+	const raw = planeDelta(localDelta, view, rotationQuarterTurns);
+	const entityIds = active.entityIds ?? selectedIds;
+	active.rawDeltaMillimetres = raw;
+	active.spread = active.axis !== "plane" && shift;
+	// A spread move fans the selection out, so there is no one fit for it to snap onto.
+	const snapped =
+		context.snapping && !shift && !active.spread && Math.hypot(...raw) >= 1
+			? snapMove(
+					context.entities,
+					entityIds,
+					raw,
+					freeAxes(active.axis, view, rotationQuarterTurns),
+					snapThreshold(camera.zoom),
+				)
+			: { delta: raw, targets: [] };
+	active.deltaMillimetres = snapped.delta;
+	showSnap(snapped.targets.map((target) => projectPoint(target, view, rotationQuarterTurns)));
 	onPreview({
-		entityIds: active.entityIds ?? selectedIds,
-		deltaMillimetres,
+		entityIds,
+		deltaMillimetres: snapped.delta,
 		spread: active.spread,
 	});
 }
@@ -218,12 +264,21 @@ export function useCadViewportInteraction(
 	const drag = useRef<Drag | null>(null);
 	const [guide, setGuide] = useState<MoveAxis | null>(null);
 	const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
+	const [snapMarkers, setSnapMarkers] = useState<readonly PlanPoint[]>([]);
+	const shownSnap = useRef<string>("[]");
+	// Set only when the markers change, so a drag that stays snapped does not re-render every move.
+	function showSnap(markers: PlanPoint[]) {
+		const key = JSON.stringify(markers);
+		if (key === shownSnap.current) return;
+		shownSnap.current = key;
+		setSnapMarkers(markers);
+	}
 	useEffect(() => {
-		const shift = (spread: boolean) => (event: KeyboardEvent) => {
+		const shift = (held: boolean) => (event: KeyboardEvent) => {
 			if (event.key !== "Shift") return;
 			const active = drag.current;
-			if (active?.type !== "move" || active.axis === "plane") return;
-			updateMovePreview(context, active, ...active.last, spread);
+			if (active?.type !== "move" || !active.rawDeltaMillimetres) return;
+			updateMovePreview(context, active, ...active.last, held, showSnap);
 		};
 		const keyDown = shift(true);
 		const keyUp = shift(false);
@@ -264,7 +319,12 @@ export function useCadViewportInteraction(
 			});
 			return;
 		}
-		updateMovePreview(context, active, event.clientX, event.clientY, event.shiftKey);
+		updateMovePreview(context, active, event.clientX, event.clientY, event.shiftKey, showSnap);
+	}
+
+	/** A plain pick takes whole groups; with Shift (`additive`) each element is taken alone. */
+	function picked(ids: string[], additive: boolean | undefined): string[] {
+		return additive || !context.expandSelection ? ids : context.expandSelection(ids);
 	}
 
 	async function pointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -283,26 +343,33 @@ export function useCadViewportInteraction(
 					: active.additive
 						? "toggle"
 						: "replace",
-				ids: active.marquee
-					? marqueeSelection(context, active, event.clientX)
-					: active.hitId
-						? [active.hitId]
-						: [],
+				ids: picked(
+					active.marquee
+						? marqueeSelection(context, active, event.clientX)
+						: active.hitId
+							? [active.hitId]
+							: [],
+					active.additive,
+				),
 			});
 			return;
 		}
 		if (active?.type !== "move") return;
+		// Shift may have been pressed or let go since the last move; the release decides.
+		if (active.rawDeltaMillimetres)
+			updateMovePreview(context, active, event.clientX, event.clientY, event.shiftKey, showSnap);
 		active.spread = active.axis !== "plane" && event.shiftKey;
 		const current = active.deltaMillimetres ?? [0, 0, 0];
 		context.onPreview(null);
 		setGuide(null);
+		showSnap([]);
 		// Under a millimetre is a click that slipped, not a move the operator meant.
-		if (Math.hypot(...current) < 1) {
+		if (Math.hypot(...(active.rawDeltaMillimetres ?? [0, 0, 0])) < 1) {
 			if (active.axis === "plane" && active.hitId) {
 				context.onFocusEntity?.(active.hitEntityId ?? null);
 				context.onSelection({
 					type: active.additive ? "toggle" : "replace",
-					ids: [active.hitId],
+					ids: picked([active.hitId], active.additive),
 				});
 			}
 			return;
@@ -311,6 +378,7 @@ export function useCadViewportInteraction(
 			current,
 			active.entityIds ?? context.selectedIds,
 			active.spread ?? false,
+			!event.shiftKey,
 		);
 	}
 
@@ -319,7 +387,8 @@ export function useCadViewportInteraction(
 		context.onPreview(null);
 		setGuide(null);
 		setSelectionBox(null);
+		showSnap([]);
 	}
 
-	return { guide, selectionBox, pointerDown, pointerMove, pointerUp, cancel };
+	return { guide, selectionBox, snapMarkers, pointerDown, pointerMove, pointerUp, cancel };
 }
