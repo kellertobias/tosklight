@@ -27,7 +27,7 @@ test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and
 	expect(physicalInstances).toBe(345);
 	expect(await api.showObjects(show.id, "media_server")).toHaveLength(2);
 	const surfaces = await api.showObjects<any>(show.id, "media_surface");
-	expect(surfaces).toHaveLength(2);
+	expect(surfaces).toHaveLength(3);
 	expect(
 		surfaces.find((surface) => surface.body.name === "Projection Screens")?.body
 			.sections,
@@ -46,6 +46,10 @@ test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and
 		surfaces.find((surface) => surface.body.name === "Sunstrip LED Panels")
 			?.body.sections,
 	).toHaveLength(3);
+	expect(
+		surfaces.find((surface) => surface.body.name === "Upstage Header Screen")
+			?.body.sections,
+	).toHaveLength(1);
 	// The scenery lives in the patch as Venue fixtures; no standalone venue records remain.
 	expect(await api.showObjects(show.id, "venue")).toHaveLength(0);
 	const scenery = (model: string) =>

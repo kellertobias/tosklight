@@ -185,10 +185,11 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		"00000000-0000-4001-8000-0000000003e9",
 		"00000000-0000-4001-8000-0000000003ea",
 	]);
-	expect(mediaSources).toHaveLength(2);
-	expect(mediaSources.map((source) => source.body.serverId).sort()).toEqual(
-		mediaServers.map((server) => server.id).sort(),
-	);
+	expect(mediaSources).toHaveLength(3);
+	expect(
+		[...new Set(mediaSources.map((source) => source.body.serverId))].sort(),
+	).toEqual(mediaServers.map((server) => server.id).sort());
+	expect(mediaSurfaces).toHaveLength(3);
 	expect(ledModules).toHaveLength(1);
 	const projection = mediaSurfaces.find(
 		(surface) => surface.body.name === "Projection Screens",
@@ -219,6 +220,29 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 				section.type === "led" && section.module_type_id === ledModules[0].id,
 		),
 	).toBe(true);
+	const header = mediaSurfaces.find(
+		(surface) => surface.body.name === "Upstage Header Screen",
+	);
+	const headerSource = mediaSources.find(
+		(source) => source.id === header.body.sourceId,
+	);
+	expect(headerSource.body).toMatchObject({
+		serverId: mediaSources.find(
+			(source) => source.id === projection.body.sourceId,
+		).body.serverId,
+		advertisedSourceId: 2,
+		width: 1920,
+		height: 1080,
+	});
+	expect(header.body.sections).toMatchObject([
+		{
+			name: "Upstage Header Screen",
+			type: "projection_screen",
+			widthMetres: 4.8,
+			heightMetres: 2.7,
+			transform: { positionMetres: [0, 6, -4.3] },
+		},
+	]);
 
 	// The demo's scenery is patched as Venue fixtures. A truss, a curtain and a deck are fixtures
 	// with a visual-only patch policy, carrying their own geometry and their own place in the rig,

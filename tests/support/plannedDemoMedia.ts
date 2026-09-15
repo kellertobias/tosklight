@@ -5,9 +5,11 @@ const SCREEN_SERVER_ID = "00000000-0000-4005-8000-000000000001";
 const LED_SERVER_ID = "00000000-0000-4005-8000-000000000002";
 const SCREEN_SOURCE_ID = "00000000-0000-4005-8000-000000000011";
 const LED_SOURCE_ID = "00000000-0000-4005-8000-000000000012";
+const HEADER_SOURCE_ID = "00000000-0000-4005-8000-000000000013";
 const LED_MODULE_ID = "00000000-0000-4005-8000-000000000021";
 const SCREEN_SURFACE_ID = "00000000-0000-4005-8000-000000000031";
 const LED_SURFACE_ID = "00000000-0000-4005-8000-000000000032";
+const HEADER_SURFACE_ID = "00000000-0000-4005-8000-000000000033";
 
 export async function installPlannedDemoMedia(api: ApiDriver, showId: string) {
 	for (const kind of [
@@ -63,6 +65,17 @@ export async function installPlannedDemoMedia(api: ApiDriver, showId: string) {
 			height: 1080,
 			aspectRatio: 16 / 3,
 		},
+		{
+			// The projection server's second advertised output: one server, two feeds.
+			id: HEADER_SOURCE_ID,
+			serverId: SCREEN_SERVER_ID,
+			advertisedSourceId: 2,
+			name: "Upstage Header Screen",
+			outputName: "Header Screen",
+			width: 1920,
+			height: 1080,
+			aspectRatio: 16 / 9,
+		},
 	];
 	const ledModuleType = {
 		id: LED_MODULE_ID,
@@ -117,6 +130,13 @@ export async function installPlannedDemoMedia(api: ApiDriver, showId: string) {
 				),
 			],
 		},
+		{
+			id: HEADER_SURFACE_ID,
+			name: "Upstage Header Screen",
+			sourceId: HEADER_SOURCE_ID,
+			fallback: null,
+			sections: [headerSection("00000000-0000-4005-8000-000000000043")],
+		},
 	];
 
 	for (const server of servers)
@@ -152,6 +172,25 @@ function projectionSection(id: string, name: string, x: number) {
 		},
 		widthMetres: 4,
 		heightMetres: 2.25,
+		crop: { left: 0, top: 0, width: 1, height: 1 },
+		type: "projection_screen",
+		material: { type: "white" },
+		edge_feather: 0.02,
+	};
+}
+
+// Flown centre stage above the back truss (top 4.3 m) and just in front of the back curtains
+// (4.35 m upstage), clear of the LED panels, the Sunstrips and the ACL bars below it.
+function headerSection(id: string) {
+	return {
+		id,
+		name: "Upstage Header Screen",
+		transform: {
+			positionMetres: [0, 6.0, -4.3],
+			rotationDegrees: [0, 0, 0],
+		},
+		widthMetres: 4.8,
+		heightMetres: 2.7,
 		crop: { left: 0, top: 0, width: 1, height: 1 },
 		type: "projection_screen",
 		material: { type: "white" },

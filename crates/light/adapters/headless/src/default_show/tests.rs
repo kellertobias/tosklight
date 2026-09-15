@@ -298,8 +298,8 @@ fn installs_the_generated_product_demo_as_the_default_show() {
     assert_eq!(store.objects("dynamic").unwrap().len(), 30);
     assert_eq!(store.objects("user_layout").unwrap().len(), 1);
     assert_eq!(store.objects("media_server").unwrap().len(), 2);
-    assert_eq!(store.objects("media_source").unwrap().len(), 2);
-    assert_eq!(store.objects("media_surface").unwrap().len(), 2);
+    assert_eq!(store.objects("media_source").unwrap().len(), 3);
+    assert_eq!(store.objects("media_surface").unwrap().len(), 3);
     assert_eq!(store.objects("led_module_type").unwrap().len(), 1);
     assert!(
         store.objects("venue").unwrap().is_empty(),
