@@ -1,4 +1,5 @@
-import { type WheelEvent, useEffect, useMemo, useRef } from "react";
+import { type WheelEvent, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
 import { annotationsForView } from "./annotationGeometry";
 import { CadGrid, type CadGridSettings, DEFAULT_GRID } from "./cadGrid";
 import { CadAnnotationLayer } from "./CadAnnotationLayer";
@@ -32,6 +33,11 @@ import {
 	type CadViewportContext,
 	useCadViewportInteraction,
 } from "./useCadViewportInteraction";
+import { useLiveCamera } from "./useLiveCamera";
+
+/** Stable empty defaults, so a frame without them does not count as a new picture every render. */
+const NO_UNDERLAYS: readonly CadUnderlay[] = [];
+const NO_PRINT_PAGES: readonly CadPrintPage[] = [];
 
 interface CadViewportProps {
 	entities: readonly CadEntity[];
@@ -142,19 +148,25 @@ export function CadRigOverview({
 }
 
 
-/** Draws a frame now and whenever the canvas changes size, through one renderer per canvas. */
+/**
+ * Draws a frame now and whenever the canvas changes size, through one renderer per canvas.
+ *
+ * The frame is drawn in a layout effect, before the browser paints, so the canvas lands in the same
+ * frame as the grid, labels and scale bar React has just written; drawn after paint, the linework
+ * trailed the grid by a frame while panning.
+ */
 function useViewportRedraw(
 	canvas: React.RefObject<HTMLCanvasElement | null>,
 	frame: CadFrame,
 ) {
 	const renderer = useRef<LineRenderer | null>(null);
 	const redraw = useRef<() => void>(() => undefined);
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (!canvas.current) return;
 		renderer.current ??= LineRenderer.create(canvas.current);
 		return observeViewportResize(canvas.current, () => redraw.current());
 	}, [canvas]);
-	useEffect(() => {
+	useLayoutEffect(() => {
 		redraw.current = () => renderer.current?.draw(frame);
 		redraw.current();
 		// A frame is a fixed set of fields; any one of them changing is a new picture.
@@ -163,11 +175,13 @@ function useViewportRedraw(
 
 /** Zooms from a wheel gesture, mounted on the viewport rather than the canvas: print page frames
  * are siblings of the canvas, so a wheel over one never reached it and print mode did nothing. */
-function zoomFromWheel(camera: TileCamera, onCamera: (c: TileCamera) => void) {
+function zoomFromWheel(latest: () => TileCamera, settle: (c: TileCamera) => void) {
 	return (event: WheelEvent<HTMLDivElement>) => {
 		event.preventDefault();
+		const camera = latest();
 		const zoom = camera.zoom * Math.exp(-event.deltaY * 0.0015);
-		onCamera({ ...camera, zoom: clampZoom(zoom) });
+		// Rendered before the event returns, so the zoom shows in the very next frame.
+		flushSync(() => settle({ ...camera, zoom: clampZoom(zoom) }));
 	};
 }
 
@@ -203,7 +217,7 @@ export function CadViewport({
 	selectedIds,
 	view,
 	rotationQuarterTurns,
-	camera,
+	camera: committedCamera,
 	preview,
 	showFixtureIds,
 	showDmxAddresses,
@@ -211,9 +225,9 @@ export function CadViewport({
 	editEnabled = true,
 	snapping = false,
 	printMode = false,
-	underlays = [],
+	underlays = NO_UNDERLAYS,
 	grid = DEFAULT_GRID,
-	printPages = [],
+	printPages = NO_PRINT_PAGES,
 	selectedPrintPageId = null,
 	onSelectPrintPage,
 	onChangePrintPage,
@@ -226,6 +240,10 @@ export function CadViewport({
 	onMove,
 }: CadViewportProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
+	// Everything drawn below — canvas, grid, labels, scale bar, print frames — reads this one camera,
+	// which is the pan or zoom in flight, so they all move together.
+	const liveCamera = useLiveCamera(committedCamera, onCamera);
+	const { camera } = liveCamera;
 	const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 	const drawingById = useMemo(
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
@@ -242,7 +260,8 @@ export function CadViewport({
 		camera,
 		editEnabled,
 		snapping,
-		onCamera,
+		onCamera: liveCamera.show,
+		onCameraEnd: liveCamera.commit,
 		onSelection,
 		expandSelection,
 		onFocusEntity,
@@ -273,7 +292,7 @@ export function CadViewport({
 	return (
 		<div
 			className={`cad-viewport ${drawing.active ? "is-drawing" : ""}`.trim()}
-			onWheel={zoomFromWheel(camera, onCamera)}
+			onWheel={zoomFromWheel(liveCamera.latest, liveCamera.settle)}
 		>
 			<canvas
 				ref={canvas}
@@ -282,10 +301,14 @@ export function CadViewport({
 				data-floor-datum={view === "top_down" ? "hidden" : "visible"}
 				data-coordinate-origins={showCoordinateOrigins ? "visible" : "hidden"}
 				onPointerDown={(event) => drawing.pointerDown(event) || pointerDown(event)}
-				onPointerMove={(event) => {
-					drawing.pointerMove(event);
-					pointerMove(event);
-				}}
+				onPointerMove={(event) =>
+					// A pointer move is not urgent to React and would render after the next frame;
+					// rendering it inside the event puts the pan or drag on screen in that frame.
+					flushSync(() => {
+						drawing.pointerMove(event);
+						pointerMove(event);
+					})
+				}
 				onPointerUp={(event) => {
 					if (!drawing.pointerUp(event)) void pointerUp(event);
 				}}
@@ -329,7 +352,7 @@ export function CadViewport({
 							selected={page.id === selectedPrintPageId}
 							onSelect={() => onSelectPrintPage?.(page.id)}
 							onChange={(change) => onChangePrintPage?.(page.id, change)}
-							onCamera={onCamera}
+							onCamera={(next) => flushSync(() => liveCamera.settle(next))}
 							documentInfo={documentInfo}
 						/>
 					))}

@@ -143,11 +143,18 @@ export function CadGrid({
 			aria-hidden="true"
 			data-grid-step={settings.show ? stepMillimetres : undefined}
 		>
-			<g stroke={settings.colour} strokeOpacity={0.22} strokeWidth={1} shapeRendering="crispEdges">
-				{geometry.lines.map((line) => (
-					<line key={`${line.x1},${line.y1},${line.x2},${line.y2}`} {...line} />
-				))}
-			</g>
+			{/* One path rather than an element per line: panning moves every line, and keyed
+			    elements would all be torn down and rebuilt on each frame of the pan. */}
+			<path
+				className="cad-grid-lines"
+				stroke={settings.colour}
+				strokeOpacity={0.22}
+				strokeWidth={1}
+				shapeRendering="crispEdges"
+				d={geometry.lines
+					.map((line) => `M${line.x1} ${line.y1}L${line.x2} ${line.y2}`)
+					.join("")}
+			/>
 			{geometry.crosses.length ? (
 				<path
 					stroke={settings.colour}

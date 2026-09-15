@@ -10,16 +10,16 @@ import {
 	GRID_SPACINGS_MILLIMETRES,
 } from "./cadGrid";
 import { CadGridColour } from "./CadGridColour";
+import type { CadPreviewStore } from "./cadPreviewStore";
 import { CadSidePanels } from "./CadSidePanels";
+import { CadTileViewport } from "./CadTileViewport";
 import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
-import { visibleEntities } from "./cutPlanes";
-import { CadViewport } from "./CadViewport";
 import { pannedCamera, useCadShortcuts, zoomedCamera } from "./cadShortcuts";
 import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
 import { cadSession } from "./session";
-import { underlaysForView } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
+import { useCadMove } from "./useCadMove";
 import { useCadPrintPages } from "./useCadPrintPages";
 import { useCadUnderlays } from "./useCadUnderlays";
 import { useCadVenueGroups } from "./useCadVenueGroups";
@@ -101,7 +101,6 @@ export function CadApp() {
 	const [layout, setLayout] = useState<TileNode>(restoreLayout);
 	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [preview, setPreview] = useState<CadTransformPreview | null>(null);
 	// Which side panel is open, and nothing when neither is. Print and Elements are two independent
 	// choices rather than a mode with a tab strip inside it, so each title button opens its own
 	// panel and closes it again when it is already the one showing.
@@ -265,31 +264,16 @@ export function CadApp() {
 		});
 	}
 
-	async function move(
-		deltaMillimetres: [number, number, number],
-		entityIds: readonly string[],
-		spread: boolean,
-		snap = true,
-	) {
-		if (!scene || !entityIds.length || printMode) return;
-		setPreview(null);
-		try {
-			await cadSession.transform(
-				scene.sceneRevision,
-				entityIds,
-				deltaMillimetres.map(Math.round) as [number, number, number],
-				settings.snapToMounts && snap,
-				spread,
-			);
-			applyScene(await cadSession.snapshot());
-		} catch (reason) {
-			setError(String(reason));
-			applyScene(await cadSession.snapshot());
-		}
-	}
+	const { previewStore, onPreview, move } = useCadMove({
+		sceneRef,
+		applyScene,
+		onError: setError,
+		snapToMounts: settings.snapToMounts,
+		blocked: printMode,
+	});
 
 	function togglePrintPanel(panel: "print" | "elements") {
-		setPreview(null);
+		previewStore.clear();
 		setPrintPanel((current) => (current === panel ? null : panel));
 	}
 
@@ -428,7 +412,7 @@ export function CadApp() {
 							closeActions={{}}
 							scene={scene}
 							settings={settings}
-							preview={preview}
+							previewStore={previewStore}
 							onLayout={setLayout}
 							onTile={updateTile}
 							onSplitRatio={(id, ratio) =>
@@ -439,7 +423,7 @@ export function CadApp() {
 							onSelection={select}
 							expandSelection={(ids) => expandToGroups(venueGroups.groups, ids)}
 							onFocusEntity={setFocusedEntityId}
-							onPreview={setPreview}
+							onPreview={onPreview}
 							onMove={move}
 							onFit={fit}
 							printMode={printMode}
@@ -588,7 +572,8 @@ export interface CadTileProps {
 	closeActions: Partial<Record<TileEdge, ClosePaneAction>>;
 	scene: CadSceneSnapshot;
 	settings: CadSettings;
-	preview: CadTransformPreview | null;
+	/** The move in flight, which only the viewports read. */
+	previewStore: CadPreviewStore;
 	onLayout(layout: TileNode): void;
 	onTile(id: string, change: (tile: ViewportTile) => ViewportTile): void;
 	onSplitRatio(id: string, ratio: number): void;
@@ -618,11 +603,6 @@ export interface CadTileProps {
 interface ClosePaneAction {
 	splitId: string;
 	remove: "first" | "second";
-}
-
-/** The elements one tile shows, once its own cut planes are applied. */
-function tileEntities(scene: { entities: readonly CadEntity[] }, tile: ViewportTile) {
-	return visibleEntities(scene.entities, tile.view, tile.cutPlanes);
 }
 
 function CadTile(props: CadTileProps) {
@@ -716,47 +696,7 @@ function CadTile(props: CadTileProps) {
 					</div>
 				);
 			})}
-			<CadViewport
-				entities={tileEntities(props.scene, node)}
-				drawings={props.scene.drawings}
-				selectedIds={props.scene.selectedIds}
-				preview={props.preview}
-				view={node.view}
-				rotationQuarterTurns={node.rotationQuarterTurns}
-				camera={node.camera}
-				showFixtureIds={props.settings.showFixtureIds}
-				showDmxAddresses={props.settings.showDmxAddresses}
-				showCoordinateOrigins={props.settings.showCoordinateOrigins}
-				snapping={props.settings.snapToMounts && !props.printMode}
-				grid={{
-					show: props.settings.showGrid,
-					colour: props.settings.gridColour,
-					spacingMillimetres: props.settings.gridSpacingMillimetres,
-					subGrid: props.settings.showSubGrid,
-				}}
-				printMode={props.printMode}
-				underlays={underlaysForView(props.underlays, node.view)}
-				onCamera={(camera: TileCamera) =>
-					props.onTile(node.id, (tile) => ({ ...tile, camera }))
-				}
-				onSelection={props.onSelection}
-				expandSelection={props.expandSelection}
-				onFocusEntity={props.onFocusEntity}
-				onPreview={props.onPreview}
-				onMove={props.onMove}
-				editEnabled={!props.printMode}
-				printPages={props.printPages.filter(
-					(page) =>
-						page.kind !== "fixture_list" &&
-						page.tileId === node.id &&
-						page.view === node.view &&
-						page.rotationQuarterTurns === node.rotationQuarterTurns,
-				)}
-				selectedPrintPageId={props.selectedPrintPageId}
-				onSelectPrintPage={props.onSelectPrintPage}
-				onChangePrintPage={props.onChangePrintPage}
-				documentInfo={props.documentInfo}
-			/>
+			<CadTileViewport props={props} node={node} />
 		</section>
 	);
 }

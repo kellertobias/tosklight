@@ -5,8 +5,10 @@
  * background colour, hidden-line-aware linework, and finally the overlay linework — gizmo, guides
  * and marquee — which is drawn without the depth test so it is never occluded by the rig.
  *
- * Vertices reach the shader already in clip space, so every painter below works in plan
- * millimetres and the camera is applied once, in `painterFor`.
+ * Vertices reach the shader in plan millimetres and the camera is applied there, as two uniforms.
+ * Panning or zooming therefore rebuilds nothing: the rig's vertex arrays are kept between frames
+ * and rebuilt only when the rig, the selection or the view changes, and a drag rebuilds just the
+ * elements it moves.
  */
 import { entityPlanGeometry, type PlanGeometry, type PlanPoint } from "./projection";
 import {
@@ -104,7 +106,7 @@ interface Painter {
 	): void;
 }
 
-function painterFor(canvas: HTMLCanvasElement, camera: TileCamera): Painter {
+function painterFor(camera: TileCamera): Painter {
 	const fillVertices: number[] = [];
 	const depthLineVertices: number[] = [];
 	const lineVertices: number[] = [];
@@ -116,8 +118,8 @@ function painterFor(canvas: HTMLCanvasElement, camera: TileCamera): Painter {
 		depth = 0,
 	) => {
 		vertices.push(
-			((point[0] + camera.pan[0]) * camera.zoom * 2) / canvas.clientWidth,
-			((point[1] + camera.pan[1]) * camera.zoom * 2) / canvas.clientHeight,
+			point[0],
+			point[1],
 			Math.max(-0.999, Math.min(0.999, depth / 100_000)),
 			color[0],
 			color[1],
@@ -417,14 +419,113 @@ function paintSnapMarkers(painter: Painter, frame: CadFrame) {
 	}
 }
 
-export class LineRenderer {
+/** The rig's part of a frame, as vertex arrays in plan millimetres. */
+export interface EntityLayer {
+	fill: Float32Array;
+	depthLines: Float32Array;
+	lines: Float32Array;
+}
+
+const EMPTY_LAYER: EntityLayer = {
+	fill: new Float32Array(0),
+	depthLines: new Float32Array(0),
+	lines: new Float32Array(0),
+};
+
+function buildEntityLayer(
+	entities: readonly CadEntity[],
+	frame: CadFrame,
+	geometryCache: Map<string, PlanGeometry>,
+): EntityLayer {
+	if (!entities.length) return EMPTY_LAYER;
+	const painter = painterFor(frame.camera);
+	paintEntities(painter, { ...frame, entities }, geometryCache);
+	return {
+		fill: new Float32Array(painter.fillVertices),
+		depthLines: new Float32Array(painter.depthLineVertices),
+		lines: new Float32Array(painter.lineVertices),
+	};
+}
+
+function keyChanged(previous: readonly unknown[], next: readonly unknown[]) {
+	return (
+		previous.length !== next.length ||
+		previous.some((value, index) => !Object.is(value, next[index]))
+	);
+}
+
+/**
+ * The rig's vertex arrays, kept between frames.
+ *
+ * The elements standing still form one layer, rebuilt only when the rig, drawings, selection, view
+ * or the set of dragged elements changes; the dragged elements form another, rebuilt as the
+ * preview moves. The camera is not part of either, so a pan or zoom reuses both.
+ */
+export class EntityLayerCache {
 	private readonly geometryCache = new Map<string, PlanGeometry>();
+	private stillKey: readonly unknown[] = [];
+	private still: EntityLayer = EMPTY_LAYER;
+	private movingKey: readonly unknown[] = [];
+	private moving: EntityLayer = EMPTY_LAYER;
+	/** How often each layer was rebuilt. */
+	readonly builds = { still: 0, moving: 0 };
+
+	layers(frame: CadFrame): { still: EntityLayer; moving: EntityLayer } {
+		const { preview } = frame;
+		const movingIds = new Set(preview?.entityIds ?? []);
+		const base = [
+			frame.entities,
+			frame.drawings,
+			frame.selected,
+			frame.view,
+			frame.rotationQuarterTurns,
+		];
+		const stillKey = [...base, preview?.entityIds.join("\n") ?? ""];
+		if (keyChanged(this.stillKey, stillKey)) {
+			this.still = buildEntityLayer(
+				frame.entities.filter((entity) => !movingIds.has(entity.logicalFixtureId)),
+				{ ...frame, preview: null },
+				this.geometryCache,
+			);
+			this.stillKey = stillKey;
+			this.builds.still += 1;
+		}
+		const movingKey = [...base, preview];
+		if (keyChanged(this.movingKey, movingKey)) {
+			this.moving = movingIds.size
+				? buildEntityLayer(
+						frame.entities.filter((entity) => movingIds.has(entity.logicalFixtureId)),
+						frame,
+						this.geometryCache,
+					)
+				: EMPTY_LAYER;
+			this.movingKey = movingKey;
+			if (movingIds.size) this.builds.moving += 1;
+		}
+		return { still: this.still, moving: this.moving };
+	}
+}
+
+interface ShaderLocations {
+	position: number;
+	color: number;
+	pan: WebGLUniformLocation | null;
+	scale: WebGLUniformLocation | null;
+}
+
+export class LineRenderer {
+	readonly layers = new EntityLayerCache();
+	/** One GPU buffer per vertex array, re-uploaded only when that array is a new one. */
+	private readonly slots = new Map<
+		string,
+		{ buffer: WebGLBuffer; data: Float32Array | null }
+	>();
 
 	private constructor(
 		private readonly canvas: HTMLCanvasElement,
 		private readonly gl: WebGL2RenderingContext,
 		private readonly program: WebGLProgram,
-		private readonly buffer: WebGLBuffer,
+		private readonly locations: ShaderLocations,
 	) {}
 
 	static create(canvas: HTMLCanvasElement): LineRenderer | null {
@@ -434,8 +535,8 @@ export class LineRenderer {
 			gl,
 			gl.VERTEX_SHADER,
 			`#version 300 es
-			in vec3 position; in vec4 color; out vec4 lineColor;
-			void main(){ gl_Position=vec4(position,1.0); lineColor=color; }`,
+			in vec3 position; in vec4 color; uniform vec2 pan; uniform vec2 scale; out vec4 lineColor;
+			void main(){ gl_Position=vec4((position.xy+pan)*scale,position.z,1.0); lineColor=color; }`,
 		);
 		const fragment = shader(
 			gl,
@@ -446,13 +547,17 @@ export class LineRenderer {
 		);
 		if (!vertex || !fragment) return null;
 		const program = gl.createProgram();
-		const buffer = gl.createBuffer();
-		if (!program || !buffer) return null;
+		if (!program) return null;
 		gl.attachShader(program, vertex);
 		gl.attachShader(program, fragment);
 		gl.linkProgram(program);
 		if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return null;
-		return new LineRenderer(canvas, gl, program, buffer);
+		return new LineRenderer(canvas, gl, program, {
+			position: gl.getAttribLocation(program, "position"),
+			color: gl.getAttribLocation(program, "color"),
+			pan: gl.getUniformLocation(program, "pan"),
+			scale: gl.getUniformLocation(program, "scale"),
+		});
 	}
 
 	resize() {
@@ -472,61 +577,76 @@ export class LineRenderer {
 		gl.clearColor(0.018, 0.024, 0.032, 1);
 		gl.clearDepth(1);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-		const painter = painterFor(this.canvas, frame.camera);
-		paintDatum(painter, frame, this.canvas);
-		paintUnderlays(painter, frame);
-		paintEntities(painter, frame, this.geometryCache);
-		paintAnnotations(painter, frame);
-		paintGizmo(painter, frame, this.canvas);
-		paintSelectionBox(painter, frame);
-		paintSnapMarkers(painter, frame);
-		this.upload(painter);
+		const { still, moving } = this.layers.layers(frame);
+		// Under the rig: the datum and the venue drawings. Over it: what the operator draws and edits.
+		const under = painterFor(frame.camera);
+		paintDatum(under, frame, this.canvas);
+		paintUnderlays(under, frame);
+		const over = painterFor(frame.camera);
+		paintAnnotations(over, frame);
+		paintGizmo(over, frame, this.canvas);
+		paintSelectionBox(over, frame);
+		paintSnapMarkers(over, frame);
+		this.upload(frame.camera, still, moving, under, over);
 	}
 
-	private upload(painter: Painter) {
+	private upload(
+		camera: TileCamera,
+		still: EntityLayer,
+		moving: EntityLayer,
+		under: Painter,
+		over: Painter,
+	) {
 		const gl = this.gl;
 		gl.useProgram(this.program);
-		gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-		const position = gl.getAttribLocation(this.program, "position");
-		const color = gl.getAttribLocation(this.program, "color");
-		gl.enableVertexAttribArray(position);
-		gl.vertexAttribPointer(position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-		gl.enableVertexAttribArray(color);
-		gl.vertexAttribPointer(color, 4, gl.FLOAT, false, VERTEX_BYTES, 12);
+		gl.uniform2f(this.locations.pan, camera.pan[0], camera.pan[1]);
+		gl.uniform2f(
+			this.locations.scale,
+			(camera.zoom * 2) / Math.max(1, this.canvas.clientWidth),
+			(camera.zoom * 2) / Math.max(1, this.canvas.clientHeight),
+		);
 		// Only the beam direction is translucent; everything else is opaque and blends to itself.
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		renderDepthMaskedLinework(
 			gl,
 			() => {
-				gl.bufferData(
-					gl.ARRAY_BUFFER,
-					new Float32Array(painter.fillVertices),
-					gl.DYNAMIC_DRAW,
-				);
-				gl.drawArrays(gl.TRIANGLES, 0, painter.fillVertices.length / VERTEX_FLOATS);
+				this.drawSlot("still-fill", still.fill, gl.TRIANGLES);
+				this.drawSlot("moving-fill", moving.fill, gl.TRIANGLES);
 			},
 			() => {
-				gl.bufferData(
-					gl.ARRAY_BUFFER,
-					new Float32Array(painter.depthLineVertices),
-					gl.DYNAMIC_DRAW,
-				);
-				gl.drawArrays(gl.LINES, 0, painter.depthLineVertices.length / VERTEX_FLOATS);
+				this.drawSlot("still-depth-lines", still.depthLines, gl.LINES);
+				this.drawSlot("moving-depth-lines", moving.depthLines, gl.LINES);
 			},
 		);
-		gl.bufferData(
-			gl.ARRAY_BUFFER,
-			new Float32Array(painter.lineVertices),
-			gl.DYNAMIC_DRAW,
-		);
-		gl.drawArrays(gl.LINES, 0, painter.lineVertices.length / VERTEX_FLOATS);
-		gl.bufferData(
-			gl.ARRAY_BUFFER,
-			new Float32Array(painter.overlayVertices),
-			gl.DYNAMIC_DRAW,
-		);
-		gl.drawArrays(gl.TRIANGLES, 0, painter.overlayVertices.length / VERTEX_FLOATS);
+		this.drawSlot("under-lines", new Float32Array(under.lineVertices), gl.LINES);
+		this.drawSlot("still-lines", still.lines, gl.LINES);
+		this.drawSlot("moving-lines", moving.lines, gl.LINES);
+		this.drawSlot("over-lines", new Float32Array(over.lineVertices), gl.LINES);
+		this.drawSlot("over-triangles", new Float32Array(over.overlayVertices), gl.TRIANGLES);
+	}
+
+	private drawSlot(name: string, data: Float32Array, mode: number) {
+		if (!data.length) return;
+		const gl = this.gl;
+		let slot = this.slots.get(name);
+		if (!slot) {
+			const buffer = gl.createBuffer();
+			if (!buffer) return;
+			slot = { buffer, data: null };
+			this.slots.set(name, slot);
+		}
+		gl.bindBuffer(gl.ARRAY_BUFFER, slot.buffer);
+		if (slot.data !== data) {
+			gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+			slot.data = data;
+		}
+		const { position, color } = this.locations;
+		gl.enableVertexAttribArray(position);
+		gl.vertexAttribPointer(position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+		gl.enableVertexAttribArray(color);
+		gl.vertexAttribPointer(color, 4, gl.FLOAT, false, VERTEX_BYTES, 12);
+		gl.drawArrays(mode, 0, data.length / VERTEX_FLOATS);
 	}
 }
 

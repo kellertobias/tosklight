@@ -507,7 +507,12 @@ describe("CAD fixture interaction", () => {
 	});
 
 	it("always pans the whole view with a middle-button drag", () => {
-		const { canvas, onCamera, onSelection } = setup();
+		const { canvas, onCamera, onSelection } = setup([], fixture, {
+			fixtureIds: true,
+			dmxAddresses: false,
+		});
+		const label = screen.getByText("ID 101");
+		expect(label.style.left).toBe("calc(50% + 0px)");
 		fireEvent.pointerDown(canvas, {
 			pointerId: 4,
 			button: 1,
@@ -520,6 +525,13 @@ describe("CAD fixture interaction", () => {
 			clientX: 530,
 			clientY: 420,
 		});
+		// The pan in flight is drawn at once by the viewport — labels with it — without handing every
+		// move to the layout, which hears of the camera once the drag ends.
+		expect(label.style.left).toBe("calc(50% + 30px)");
+		expect(label.style.top).toBe("calc(50% + 20px)");
+		expect(onCamera).not.toHaveBeenCalled();
+		fireEvent.pointerUp(canvas, { pointerId: 4, button: 1, clientX: 530, clientY: 420 });
+		expect(onCamera).toHaveBeenCalledOnce();
 		expect(onCamera).toHaveBeenLastCalledWith({
 			pan: [300, -200],
 			zoom: 0.1,
@@ -716,7 +728,7 @@ describe("CAD fixture interaction", () => {
 		expect(onSelection).toHaveBeenCalledWith({ type: "replace", ids: [] });
 	});
 
-	it("zooms when the wheel turns over a print page frame", () => {
+	it("zooms when the wheel turns over a print page frame", async () => {
 		const onCamera = vi.fn();
 		render(
 			<CadViewport
@@ -760,11 +772,14 @@ describe("CAD fixture interaction", () => {
 		// that sits on the viewport they share.
 		const frame = screen.getByText("Page 1").parentElement as HTMLElement;
 		fireEvent.wheel(frame, { deltaY: -120 });
-		expect(onCamera).toHaveBeenCalledTimes(1);
+		// The zoom shows at once; the layout is told once the wheel has come to rest.
+		expect(screen.getByLabelText("Scale 1 m").style.width).not.toBe("100px");
+		expect(onCamera).not.toHaveBeenCalled();
+		await waitFor(() => expect(onCamera).toHaveBeenCalledTimes(1));
 		expect(onCamera.mock.calls[0][0].zoom).toBeGreaterThan(camera.zoom);
 	});
 
-	it("moves and uniformly scales print frames while rig editing is disabled", () => {
+	it("moves and uniformly scales print frames while rig editing is disabled", async () => {
 		const onSelection = vi.fn();
 		const onChangePrintPage = vi.fn();
 		const onCamera = vi.fn();
@@ -835,7 +850,9 @@ describe("CAD fixture interaction", () => {
 			clientX: 120,
 			clientY: 110,
 		});
-		expect(onCamera).toHaveBeenLastCalledWith({ pan: [200, -100], zoom: 0.1 });
+		await waitFor(() =>
+			expect(onCamera).toHaveBeenLastCalledWith({ pan: [200, -100], zoom: 0.1 }),
+		);
 		expect(onChangePrintPage).not.toHaveBeenCalled();
 	});
 

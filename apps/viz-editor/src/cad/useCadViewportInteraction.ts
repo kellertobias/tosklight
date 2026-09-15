@@ -69,7 +69,9 @@ export interface CadViewportContext {
 	editEnabled: boolean;
 	/** Whether a move snaps onto a fit (Settings → Enable snapping); Shift turns it off while held. */
 	snapping?: boolean;
+	/** The camera while a pan is in flight; `onCameraEnd` hands the last one on when it finishes. */
 	onCamera(camera: TileCamera): void;
+	onCameraEnd?(): void;
 	onSelection(change: SelectionChange): void;
 	/** Widens a plain pick to whole Venue element groups; Shift picks elements alone. */
 	expandSelection?(ids: readonly string[]): string[];
@@ -331,6 +333,10 @@ export function useCadViewportInteraction(
 		const active = drag.current;
 		drag.current = null;
 		context.canvas.current?.releasePointerCapture(event.pointerId);
+		if (active?.type === "pan") {
+			context.onCameraEnd?.();
+			return;
+		}
 		if (active?.type === "box") {
 			setSelectionBox(null);
 			active.last = [event.clientX, event.clientY];
@@ -360,11 +366,11 @@ export function useCadViewportInteraction(
 			updateMovePreview(context, active, event.clientX, event.clientY, event.shiftKey, showSnap);
 		active.spread = active.axis !== "plane" && event.shiftKey;
 		const current = active.deltaMillimetres ?? [0, 0, 0];
-		context.onPreview(null);
 		setGuide(null);
 		showSnap([]);
 		// Under a millimetre is a click that slipped, not a move the operator meant.
 		if (Math.hypot(...(active.rawDeltaMillimetres ?? [0, 0, 0])) < 1) {
+			context.onPreview(null);
 			if (active.axis === "plane" && active.hitId) {
 				context.onFocusEntity?.(active.hitEntityId ?? null);
 				context.onSelection({
@@ -374,6 +380,8 @@ export function useCadViewportInteraction(
 			}
 			return;
 		}
+		// The preview stays where the operator let go: the move clears it once the show has answered,
+		// in the same render that draws the committed positions.
 		await context.onMove(
 			current,
 			active.entityIds ?? context.selectedIds,
@@ -383,6 +391,7 @@ export function useCadViewportInteraction(
 	}
 
 	function cancel() {
+		if (drag.current?.type === "pan") context.onCameraEnd?.();
 		drag.current = null;
 		context.onPreview(null);
 		setGuide(null);

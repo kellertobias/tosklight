@@ -92,11 +92,24 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("@tauri-apps/api/window", () => ({
 	getCurrentWindow: () => nativeWindow,
 }));
+const renderCounts = vi.hoisted(() => ({ viewBar: 0 }));
+vi.mock("./CadTileViewBar", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./CadTileViewBar")>();
+	return {
+		CadTileViewBar: (props: Parameters<typeof actual.CadTileViewBar>[0]) => {
+			renderCounts.viewBar += 1;
+			return actual.CadTileViewBar(props);
+		},
+	};
+});
+/** Where each render of the mocked viewports drew the first fixture, preview included, along X. */
+const drawnX = vi.hoisted(() => [] as number[]);
 vi.mock("./CadViewport", () => ({
 	CadViewport: ({
 		view,
 		rotationQuarterTurns,
 		camera,
+		entities,
 		onSelection,
 		preview,
 		onPreview,
@@ -106,6 +119,7 @@ vi.mock("./CadViewport", () => ({
 		view: string;
 		rotationQuarterTurns: number;
 		camera: { pan: [number, number]; zoom: number };
+		entities: readonly { positionMillimetres: [number, number, number] }[];
 		onSelection(change: unknown): void;
 		preview: { deltaMillimetres: [number, number, number] } | null;
 		onPreview(preview: unknown): void;
@@ -115,36 +129,38 @@ vi.mock("./CadViewport", () => ({
 			spread: boolean,
 		): void;
 		showCoordinateOrigins: boolean;
-	}) => (
-		<button
-			type="button"
-			data-testid="cad-canvas"
-			data-rotation={rotationQuarterTurns}
-			data-pan={camera.pan.join(",")}
-			data-zoom={camera.zoom}
-			data-preview={preview?.deltaMillimetres.join(",") ?? "none"}
-			data-coordinate-origins={showCoordinateOrigins ? "visible" : "hidden"}
-			onPointerMove={() =>
-				onPreview({
-					entityIds: [fixtureId],
-					deltaMillimetres: [250, 0, 0],
-					spread: false,
-				})
-			}
-			onPointerUp={() => {
-				onPreview(null);
-				onMove([250, 0, 0], [fixtureId], false);
-			}}
-			onClick={() =>
-				onSelection({
-					type: "replace",
-					ids: [view === "top_down" ? fixtureId : secondFixtureId],
-				})
-			}
-		>
-			{view}
-		</button>
-	),
+	}) => {
+		if (entities[0])
+			drawnX.push(entities[0].positionMillimetres[0] + (preview?.deltaMillimetres[0] ?? 0));
+		return (
+			<button
+				type="button"
+				data-testid="cad-canvas"
+				data-rotation={rotationQuarterTurns}
+				data-pan={camera.pan.join(",")}
+				data-zoom={camera.zoom}
+				data-preview={preview?.deltaMillimetres.join(",") ?? "none"}
+				data-coordinate-origins={showCoordinateOrigins ? "visible" : "hidden"}
+				onPointerMove={() =>
+					onPreview({
+						entityIds: [fixtureId],
+						deltaMillimetres: [250, 0, 0],
+						spread: false,
+					})
+				}
+				// As the real viewport does, a release keeps the preview and hands the move on.
+				onPointerUp={() => onMove([250, 0, 0], [fixtureId], false)}
+				onClick={() =>
+					onSelection({
+						type: "replace",
+						ids: [view === "top_down" ? fixtureId : secondFixtureId],
+					})
+				}
+			>
+				{view}
+			</button>
+		);
+	},
 }));
 
 beforeEach(() => {
@@ -1084,6 +1100,85 @@ describe("the CAD planning screen", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("re-renders only the viewports, not the CAD around them, while a drag previews", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Add viewport right" }),
+		);
+		const viewports = screen.getAllByTestId("cad-canvas");
+		renderCounts.viewBar = 0;
+		drawnX.length = 0;
+		for (let index = 0; index < 10; index++) fireEvent.pointerMove(viewports[0]);
+		// Before the preview store, ten moves re-rendered both tiles' chrome twenty times.
+		expect(renderCounts.viewBar).toBe(0);
+		// Both viewports follow each move, and nothing else does.
+		expect(drawnX).toEqual(Array(20).fill(250));
+		expect(viewports[1]).toHaveAttribute("data-preview", "250,0,0");
+	});
+
+	it("never draws a released element back at its old position while the move commits", async () => {
+		let finishTransform: (outcome: unknown) => void = () => undefined;
+		mocks.transform.mockReturnValue(
+			new Promise((resolve) => {
+				finishTransform = resolve;
+			}),
+		);
+		let sceneDelta: (delta: unknown) => void = () => undefined;
+		mocks.onSceneDelta.mockImplementation(async (handler) => {
+			sceneDelta = handler;
+			return () => undefined;
+		});
+		const moved = {
+			...snapshot,
+			sceneRevision: 10,
+			entities: [{ ...snapshot.entities[0], positionMillimetres: [250, 0, 4000] }],
+		};
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const viewport = await screen.findByTestId("cad-canvas");
+		mocks.snapshot.mockResolvedValue(moved);
+		fireEvent.pointerMove(viewport);
+		drawnX.length = 0;
+
+		fireEvent.pointerUp(viewport);
+		await waitFor(() => expect(mocks.transform).toHaveBeenCalledOnce());
+		expect(viewport).toHaveAttribute("data-preview", "250,0,0");
+		// The show broadcasts the committed scene before the transform call returns: the preview is
+		// not added on top of the new position.
+		sceneDelta({
+			sceneRevision: 10,
+			drawings: [],
+			upserted: moved.entities,
+			attachments: [],
+		});
+		finishTransform({ sceneRevision: 10, transforms: [], attachments: [] });
+		await waitFor(() => expect(viewport).toHaveAttribute("data-preview", "none"));
+		expect(drawnX.length).toBeGreaterThan(0);
+		expect(drawnX.every((x) => x === 250)).toBe(true);
+	});
+
+	it("returns a refused move to its old position and says why", async () => {
+		mocks.transform.mockRejectedValue(new Error("The fixture is locked"));
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const viewport = await screen.findByTestId("cad-canvas");
+		fireEvent.pointerMove(viewport);
+		fireEvent.pointerUp(viewport);
+		expect(await screen.findByText("Error: The fixture is locked")).toBeInTheDocument();
+		expect(viewport).toHaveAttribute("data-preview", "none");
+		expect(drawnX.at(-1)).toBe(0);
+	});
+
 	it("shares a live world transform across tiles and commits once on release", async () => {
 		mocks.transform.mockResolvedValue({ sceneRevision: 10 });
 		render(
@@ -1109,9 +1204,11 @@ describe("the CAD planning screen", () => {
 			true,
 			false,
 		);
-		expect(screen.getAllByTestId("cad-canvas")[1]).toHaveAttribute(
-			"data-preview",
-			"none",
+		await waitFor(() =>
+			expect(screen.getAllByTestId("cad-canvas")[1]).toHaveAttribute(
+				"data-preview",
+				"none",
+			),
 		);
 	});
 });
