@@ -1,0 +1,57 @@
+/* A viewport's own controls are low: the view dropdown, Fit, the range button and Add New Page share
+   one small height, so they sit in the corner of the drawing rather than over it. Doubled selectors
+   outrank the shared rules in styles.css and the desk-sized button defaults. */
+.cad-tile {
+	--cad-view-control-height: 24px;
+}
+
+.cad-view-control.cad-view-control {
+	height: var(--cad-view-control-height);
+}
+
+.cad-view-control.cad-view-control select,
+.cad-view-control.cad-view-control .cad-fit-view.ui-button,
+.cad-view-control.cad-view-control .cad-view-settings.ui-button,
+.cad-tile .cad-add-print-page.cad-add-print-page.ui-button {
+	box-sizing: border-box;
+	height: var(--cad-view-control-height);
+	min-height: var(--cad-view-control-height);
+	font-size: 11px;
+	line-height: 1;
+}
+
+.cad-view-control.cad-view-control select {
+	padding: 0 24px 0 8px;
+}
+
+.cad-view-control.cad-view-control .cad-fit-view.ui-button {
+	min-width: 36px;
+	padding: 0 8px;
+}
+
+.cad-view-control.cad-view-control .cad-view-settings.ui-button {
+	width: var(--cad-view-control-height);
+	min-width: var(--cad-view-control-height);
+	padding: 0;
+	justify-content: center;
+}
+
+.cad-view-control.cad-view-control .cad-view-settings svg {
+	width: 12px;
+	height: 12px;
+}
+
+.cad-tile .cad-add-print-page.cad-add-print-page.ui-button {
+	padding: 0 10px;
+}
+
+/* The rotate arrows are placed by their own geometry, each button no larger than its arrow. */
+.cad-orientation-wrap .cad-rotate-view.cad-rotate-view.ui-button {
+	right: auto;
+	bottom: auto;
+}
+
+.cad-orientation-wrap .cad-rotate-view.cad-rotate-view svg {
+	width: 100%;
+	height: 100%;
+}

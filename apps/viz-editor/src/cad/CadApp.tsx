@@ -822,6 +822,58 @@ function rotateTile(props: CadTileProps, tile: ViewportTile, delta: -1 | 1) {
 	}));
 }
 
+/** Centre of the orientation circle and the radius its rotate arrows run along, in its wrap's pixels. */
+const ROTATE_CENTRE = 52;
+const ROTATE_RADIUS = 47;
+
+/**
+ * A short arc just outside the orientation circle from one angle to another, with its head at the
+ * end. Angles are degrees counterclockwise from the right, as on a protractor, so 20° to 40° lies at
+ * the circle's top right; the head therefore points the way the view turns.
+ */
+export function rotateArrowGeometry(fromDegrees: number, toDegrees: number) {
+	const point = (degrees: number): [number, number] => {
+		const radians = (degrees * Math.PI) / 180;
+		return [
+			ROTATE_CENTRE + ROTATE_RADIUS * Math.cos(radians),
+			ROTATE_CENTRE - ROTATE_RADIUS * Math.sin(radians),
+		];
+	};
+	const [x1, y1] = point(fromDegrees);
+	const [x2, y2] = point(toDegrees);
+	const clockwise = toDegrees < fromDegrees;
+	const end = (toDegrees * Math.PI) / 180;
+	// The direction the arc is travelling at its end, on screen.
+	const [vx, vy] = clockwise
+		? [Math.sin(end), Math.cos(end)]
+		: [-Math.sin(end), -Math.cos(end)];
+	const barb = (turnDegrees: number): [number, number] => {
+		const turn = (turnDegrees * Math.PI) / 180;
+		const [bx, by] = [-vx, -vy];
+		return [
+			x2 + 6 * (bx * Math.cos(turn) - by * Math.sin(turn)),
+			y2 + 6 * (bx * Math.sin(turn) + by * Math.cos(turn)),
+		];
+	};
+	const left = barb(-32);
+	const right = barb(32);
+	const xs = [x1, x2, left[0], right[0]];
+	const ys = [y1, y2, left[1], right[1]];
+	const pad = 5;
+	const box = {
+		x: Math.floor(Math.min(...xs) - pad),
+		y: Math.floor(Math.min(...ys) - pad),
+		width: Math.ceil(Math.max(...xs) - Math.min(...xs) + pad * 2),
+		height: Math.ceil(Math.max(...ys) - Math.min(...ys) + pad * 2),
+	};
+	const f = (value: number) => value.toFixed(2);
+	return {
+		box,
+		arc: `M ${f(x1)} ${f(y1)} A ${ROTATE_RADIUS} ${ROTATE_RADIUS} 0 0 ${clockwise ? 1 : 0} ${f(x2)} ${f(y2)}`,
+		head: `M ${f(left[0])} ${f(left[1])} L ${f(x2)} ${f(y2)} L ${f(right[0])} ${f(right[1])}`,
+	};
+}
+
 function RotateViewButton({
 	direction,
 	onRotate,
@@ -829,26 +881,22 @@ function RotateViewButton({
 	direction: "clockwise" | "counterclockwise";
 	onRotate(): void;
 }) {
+	// Both arrows sit at the circle's top right: clockwise from 40° down to 20°, counterclockwise from
+	// 50° up to 70°, each with its head at the end further from the other.
+	const { box, arc, head } =
+		direction === "clockwise" ? rotateArrowGeometry(40, 20) : rotateArrowGeometry(50, 70);
 	return (
 		<Button
 			className={`cad-rotate-view is-${direction}`}
 			aria-label={`Rotate top-down view 90 degrees ${direction}`}
 			title={`Rotate 90 degrees ${direction}`}
+			style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
 			onPointerDown={(event) => event.stopPropagation()}
 			onClick={onRotate}
 		>
-			<svg aria-hidden="true" viewBox="0 0 56 56">
-				{direction === "counterclockwise" ? (
-					<>
-						<path d="M 54 9 A 45 45 0 0 0 9 54" />
-						<path d="M 9 54 L 8 43 M 9 54 L 20 53" />
-					</>
-				) : (
-					<>
-						<path d="M 2 47 A 45 45 0 0 0 47 2" />
-						<path d="M 47 2 L 36 3 M 47 2 L 48 13" />
-					</>
-				)}
+			<svg aria-hidden="true" viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`}>
+				<path d={arc} />
+				<path d={head} />
 			</svg>
 		</Button>
 	);

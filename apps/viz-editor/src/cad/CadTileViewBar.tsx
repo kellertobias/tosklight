@@ -2,6 +2,7 @@ import { Button } from "@tosklight/ui";
 import { CadDepthMenu } from "./CadDepthMenu";
 import { type CadTileProps, fittedCamera } from "./CadApp";
 import { CAD_VIEW_LABELS, type ViewportTile } from "./types";
+import "./cadViewControls.css";
 
 /// A viewport's own controls: which way it looks, how it frames the rig, and the slice it shows.
 ///

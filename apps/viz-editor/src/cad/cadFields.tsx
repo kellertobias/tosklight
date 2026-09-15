@@ -57,12 +57,15 @@ export function CommitNumber({
 	digits = 3,
 	min,
 	max,
+	unit,
 }: {
 	label: string;
 	value: number;
 	onCommit(value: number): void;
 	ariaLabel?: string;
 	digits?: number;
+	/** The unit the number is typed in, shown inside the field after the value. */
+	unit?: string;
 	min?: number;
 	max?: number;
 }) {
@@ -83,8 +86,9 @@ export function CommitNumber({
 		onCommit(next);
 	};
 	return (
-		<label className="cad-field">
+		<label className={`cad-field ${unit ? "has-unit" : ""}`.trim()}>
 			<span>{label}</span>
+			<span className="cad-field-control">
 			<Input
 				type="text"
 				inputMode="decimal"
@@ -97,6 +101,12 @@ export function CommitNumber({
 					if (event.key === "Escape") setDraft(shown);
 				}}
 			/>
+			{unit ? (
+				<span className="cad-field-unit" aria-hidden="true">
+					{unit}
+				</span>
+			) : null}
+			</span>
 		</label>
 	);
 }

@@ -91,15 +91,14 @@ function VectorFields({
 }) {
 	return (
 		<div className="cad-info-vector" role="group" aria-label={label}>
-			<span>
-				{label} ({unit})
-			</span>
+			<span>{label}</span>
 			{AXES.map((axis) => (
 				<CommitNumber
 					key={axis}
 					label={axis.toUpperCase()}
 					ariaLabel={`${label} ${axis.toUpperCase()}`}
 					digits={digits}
+					unit={unit}
 					value={show(value[axis])}
 					onCommit={(next) => onCommit(axis, next)}
 				/>
@@ -239,6 +238,7 @@ export function CadInfoPanel({
 					<CommitNumber
 						label={`Scale${shared}`}
 						ariaLabel="Scale"
+						unit="×"
 						value={fixture?.modelScale ?? 1}
 						min={0.01}
 						max={100}

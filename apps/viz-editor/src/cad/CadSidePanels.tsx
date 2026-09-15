@@ -169,7 +169,11 @@ const addGroup = (label: string, items: TitleDropdownItem[]): TitleActionGroup =
 		{
 			id: "add",
 			kind: "dropdown",
-			icon: <span aria-hidden="true">+</span>,
+			icon: (
+				<svg className="cad-sidebar-add-icon" viewBox="0 0 16 16" aria-hidden="true">
+					<path d="M8 2.5v11M2.5 8h11" />
+				</svg>
+			),
 			ariaLabel: label,
 			dropdown: { kind: "items", ariaLabel: label, items },
 		},

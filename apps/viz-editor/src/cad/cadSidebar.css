@@ -1,5 +1,22 @@
 /* The CAD side panel: resizable from its left edge, a title row that carries its tabs and add
    button, contents held in from the edges, and the Info panel at its foot. */
+/* The CAD title bar and the side panel's title row are one height, and the title bar's bottom line
+   runs the full width of the screen — over the side panel too — so the panel never reads as part of
+   the title. Doubled selectors outrank the shared header rules in styles.css. */
+.cad-app.cad-app {
+	--cad-title-height: 32px;
+	--cad-title-line: #34404c;
+}
+
+.cad-app.cad-app > .ui-window-header {
+	position: relative;
+	z-index: 2;
+	box-sizing: border-box;
+	height: var(--cad-title-height);
+	min-height: var(--cad-title-height);
+	border-bottom: 1px solid var(--cad-title-line);
+}
+
 /* Doubled to outrank the shared print sidebar's fixed basis, so the dragged width is the width. */
 .cad-sidebar.cad-sidebar {
 	position: relative;
@@ -30,14 +47,16 @@
 }
 
 .cad-sidebar .cad-sidebar-header {
+	box-sizing: border-box;
 	justify-content: flex-start;
 	padding: 0;
 	gap: 0;
 	display: flex;
 	flex: none;
 	align-items: stretch;
-	min-height: 36px;
-	border-bottom: 1px solid #222d37;
+	height: var(--cad-title-height, 32px);
+	min-height: var(--cad-title-height, 32px);
+	border-bottom: 1px solid var(--cad-title-line, #34404c);
 }
 
 .cad-sidebar .cad-sidebar-header h2 {
@@ -54,8 +73,27 @@
 }
 
 .cad-sidebar .cad-sidebar-header .ui-button {
-	min-height: 36px;
+	height: 100%;
+	min-height: 0;
 	border-radius: 0;
+}
+
+/* The add button is exactly as wide as the cogwheel in the title bar, with an icon of the same size. */
+.cad-sidebar .cad-sidebar-header .ui-button:has(.cad-sidebar-add-icon) {
+	box-sizing: border-box;
+	width: 44px;
+	min-width: 44px;
+	padding: 0;
+	justify-content: center;
+}
+
+.cad-sidebar-add-icon {
+	width: 18px;
+	height: 18px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
 }
 
 .cad-sidebar-body {
@@ -218,4 +256,25 @@
 .cad-grid-colour small {
 	color: var(--text-secondary, #98a4b3);
 	font-size: 11px;
+}
+
+/* A number field names its unit inside the field, after the value. */
+.cad-field-control {
+	position: relative;
+	display: block;
+	min-width: 0;
+}
+
+.cad-field.has-unit .cad-field-control .ui-input {
+	padding-right: 26px;
+}
+
+.cad-field-unit {
+	position: absolute;
+	top: 50%;
+	right: 8px;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+	pointer-events: none;
+	transform: translateY(-50%);
 }
