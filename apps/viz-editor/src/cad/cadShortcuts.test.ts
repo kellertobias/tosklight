@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	CAD_MAX_ZOOM,
 	CAD_MIN_ZOOM,
+	CAD_TOOL_SHORTCUTS,
 	cadShortcutFor,
 	pannedCamera,
 	zoomedCamera,
@@ -18,6 +19,19 @@ describe("CAD keyboard shortcuts", () => {
 			["select", "polyline", "box", "text", "measure", "erase"].map((tool) => ({ type: "tool", tool })),
 		);
 		expect(press("L")).toEqual({ type: "tool", tool: "polyline" });
+	});
+
+	it("names each tool's key for the title's tooltips from the keys it actually handles", () => {
+		expect(CAD_TOOL_SHORTCUTS).toEqual({
+			select: "V",
+			polyline: "L",
+			box: "P",
+			text: "T",
+			measure: "M",
+			erase: "R",
+		});
+		for (const [tool, key] of Object.entries(CAD_TOOL_SHORTCUTS))
+			expect(press(key.toLowerCase())).toEqual({ type: "tool", tool });
 	});
 
 	it("chooses the five views by 1 to 5, in the order the view menu lists them", () => {
@@ -45,6 +59,15 @@ describe("CAD keyboard shortcuts", () => {
 		expect(press("v", { metaKey: true })).toBeNull();
 		expect(press("s", { ctrlKey: true })).toBeNull();
 		expect(press("1", { altKey: true })).toBeNull();
+	});
+
+	it("groups with Cmd or Ctrl+G and ungroups with Shift added", () => {
+		expect(press("g", { metaKey: true })).toEqual({ type: "group" });
+		expect(press("g", { ctrlKey: true })).toEqual({ type: "group" });
+		expect(
+			cadShortcutFor({ key: "G", metaKey: true, ctrlKey: false, altKey: false, shiftKey: true }),
+		).toEqual({ type: "ungroup" });
+		expect(press("g", { metaKey: true, altKey: true })).toBeNull();
 	});
 
 	it("keeps zoom within the viewport's range and pans by the same screen distance at every zoom", () => {

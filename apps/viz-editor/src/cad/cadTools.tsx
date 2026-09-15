@@ -25,8 +25,11 @@ export type CadAddKind = "truss" | "stage" | "curtain" | "primitive" | "venue";
 export type CadDrawTool = "select" | "polyline" | "box" | "text" | "measure" | "erase";
 
 export interface CadTools {
-	/** Opens the shared fixture library for a kind of object; null hides the toolbar. */
-	onAdd: ((kind: CadAddKind) => void) | null;
+	/**
+	 * Adds a kind of object: the named profile, or else the part the button places now (a Venue
+	 * element opens its picture list). Null hides the toolbar.
+	 */
+	onAdd: ((kind: CadAddKind, profileId?: string) => void) | null;
 	tool: CadDrawTool;
 	setTool(tool: CadDrawTool): void;
 	annotations: readonly CadAnnotation[];
@@ -73,7 +76,7 @@ export function CadToolProvider({
 	children,
 }: {
 	documentKey: string;
-	onAdd: (kind: CadAddKind) => void;
+	onAdd: (kind: CadAddKind, profileId?: string) => void;
 	children: ReactNode;
 }) {
 	const [placed, setPlaced] = useState<CadPlaced | null>(null);

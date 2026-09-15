@@ -227,6 +227,63 @@ export const ContentContracts: Story = {
 	render: () => <ContentContractsExample />,
 };
 
+function SplitActionExample() {
+	const [part, setPart] = useState("Straight truss");
+	const [status, setStatus] = useState("Nothing added yet");
+	const parts = ["Straight truss", "Corner 2-way", "T-piece 3-way"];
+	const groups: TitleActionGroup[] = [
+		{
+			id: "add",
+			actions: [
+				{
+					id: "add-truss",
+					icon: <Icon>▭</Icon>,
+					ariaLabel: "Add truss",
+					onPress: () => setStatus(`Added ${part}`),
+					dropdownPlacement: "corner",
+					dropdown: {
+						kind: "items",
+						ariaLabel: "Choose truss",
+						items: parts.map((each) => ({
+							kind: "action",
+							id: each,
+							label: each === part ? `✓ ${each}` : each,
+							onPress: () => {
+								setPart(each);
+								setStatus(`Added ${each}`);
+							},
+						})),
+					},
+				},
+			],
+		},
+		{
+			id: "draw",
+			actions: [
+				{
+					id: "line",
+					icon: <Icon>╱</Icon>,
+					ariaLabel: "Draw line",
+					shortcut: "L",
+					onPress: () => setStatus("Drawing a line"),
+				},
+			],
+		},
+	];
+	return (
+		<div>
+			<WindowHeader title="CAD" groups={groups} settings onSettings={() => undefined} />
+			<p aria-live="polite" style={{ padding: 16 }}>
+				{status}; the button adds “{part}”
+			</p>
+		</div>
+	);
+}
+
+export const SplitActionAndShortcut: Story = {
+	render: () => <SplitActionExample />,
+};
+
 function SearchSettingsExample() {
 	const [query, setQuery] = useState("");
 	return (

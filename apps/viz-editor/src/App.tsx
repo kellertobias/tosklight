@@ -32,8 +32,8 @@ import {
 	type SettingsPage,
 } from "./ArchitectSettings";
 import { CadApp } from "./cad/CadApp";
-import { CadAddFlows } from "./cad/CadAddFlows";
-import { type CadAddKind, CadToolProvider } from "./cad/cadTools";
+import { CadAddFlows, type CadAddRequest } from "./cad/CadAddFlows";
+import { CadToolProvider } from "./cad/cadTools";
 import { VENUE_MODEL_EXTENSIONS } from "./cad/venueModelFormats";
 import { cadSession } from "./cad/session";
 import { useCadSelection } from "./cad/useCadSelection";
@@ -220,7 +220,7 @@ export function App() {
 	const [dmxPage, setDmxPage] = useState<DmxPage>("network");
 	const [patchPage, setPatchPage] = useState<PatchPage>("sheet");
 	// Each press of a CAD add action is a new request, so pressing the same one again reopens it.
-	const [cadAdd, setCadAdd] = useState<{ kind: CadAddKind; request: number }>({
+	const [cadAdd, setCadAdd] = useState<CadAddRequest>({
 		kind: "venue",
 		request: 0,
 	});
@@ -625,24 +625,14 @@ export function App() {
 					{document && workspace === "cad" ? (
 						<CadToolProvider
 							documentKey={document.showId}
-							onAdd={(kind) =>
-								setCadAdd((current) => ({ kind, request: current.request + 1 }))
+							onAdd={(kind, profileId) =>
+								setCadAdd((current) => ({ kind, profileId, request: current.request + 1 }))
 							}
 						>
 							<CadApp />
-							{/* The add flows read the patch live, so a scene change is no reason to remount
-							    them: a remount would replay the last add request and reopen the library. */}
-							<PatchScope
-								host={host}
-								showId={document.showId}
-								reload={0}
-								suffix="cad"
-								definitions={definitions}
-								transport={transport}
-								onError={report}
-							>
-								<CadAddFlows add={cadAdd} onError={report} />
-							</PatchScope>
+							{/* The add flows write to the show themselves, so a scene change is no reason to
+							    remount them: a remount would replay the last add request. */}
+							<CadAddFlows add={cadAdd} onError={report} />
 						</CadToolProvider>
 					) : null}
 					{document && workspace === "patch" && patchPage === "dmx" ? (

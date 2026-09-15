@@ -29,10 +29,24 @@ type TitleActionBase = TitleActionContent & {
 	onLongPress?: () => void;
 	className?: string;
 	type?: "button" | "submit";
+	/**
+	 * The keyboard shortcut the host handles for this action, as `aria-keyshortcuts` writes it
+	 * (e.g. "L"). It is announced and exposed as `data-shortcut` so a host tooltip can show it.
+	 */
+	shortcut?: string;
 };
 
 export type TitleAction =
-	| (TitleActionBase & { kind?: "button"; dropdown?: TitleDropdown })
+	| (TitleActionBase & {
+			kind?: "button";
+			dropdown?: TitleDropdown;
+			/**
+			 * Where the dropdown's trigger sits: its own button beside the action (default), or a
+			 * small caret in the action's bottom-right corner, making the action a split button whose
+			 * body still presses the action.
+			 */
+			dropdownPlacement?: "beside" | "corner";
+	  })
 	| (TitleActionBase & { kind: "dropdown"; dropdown: TitleDropdown });
 
 export type TitleActionGroup =
@@ -281,13 +295,17 @@ function TitleActionControl({
 			/>
 		);
 	}
+	const cornerDropdown =
+		action.dropdown != null && action.dropdownPlacement === "corner";
 	return (
 		<span
-			className={`ui-title-chrome-action ${action.dropdown ? "has-dropdown" : ""}`}
+			className={`ui-title-chrome-action ${action.dropdown ? "has-dropdown" : ""} ${cornerDropdown ? "has-corner-dropdown" : ""}`.trim()}
 		>
 			<Button
 				{...buttonProps}
 				aria-label={action.ariaLabel}
+				aria-keyshortcuts={action.shortcut}
+				data-shortcut={action.shortcut}
 				disabled={action.disabled}
 				variant={action.variant}
 				active={action.active}
@@ -325,9 +343,20 @@ function TitleActionControl({
 				<TitleDropdownTrigger
 					dropdown={action.dropdown}
 					ariaLabel={`${action.ariaLabel ?? String(action.label)} options`}
+					disabled={cornerDropdown ? action.disabled : undefined}
+					className={cornerDropdown ? "ui-title-chrome-corner-caret" : ""}
+					label={cornerDropdown ? <TitleCornerCaret /> : undefined}
 				/>
 			)}
 		</span>
+	);
+}
+
+function TitleCornerCaret() {
+	return (
+		<svg viewBox="0 0 8 8" aria-hidden="true">
+			<path d="M8 2 8 8 2 8Z" />
+		</svg>
 	);
 }
 

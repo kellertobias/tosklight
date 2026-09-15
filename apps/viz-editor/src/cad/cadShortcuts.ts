@@ -13,7 +13,10 @@ export type CadShortcut =
 	| { type: "tool"; tool: CadDrawTool }
 	| { type: "view"; view: CadViewDirection }
 	| { type: "zoom"; factor: number }
-	| { type: "pan"; horizontal: -1 | 0 | 1; vertical: -1 | 0 | 1 };
+	| { type: "pan"; horizontal: -1 | 0 | 1; vertical: -1 | 0 | 1 }
+	/** ⌘G (Ctrl+G) groups the selected Venue elements; ⇧⌘G ungroups them. */
+	| { type: "group" }
+	| { type: "ungroup" };
 
 export const CAD_MIN_ZOOM = 0.004;
 export const CAD_MAX_ZOOM = 2.5;
@@ -31,6 +34,11 @@ const TOOL_KEYS: Readonly<Record<string, CadDrawTool>> = {
 	r: "erase",
 };
 
+/** The key that picks each drawing tool, as the title's tooltips and `aria-keyshortcuts` name it. */
+export const CAD_TOOL_SHORTCUTS = Object.fromEntries(
+	Object.entries(TOOL_KEYS).map(([key, tool]) => [tool, key.toUpperCase()]),
+) as Readonly<Record<CadDrawTool, string>>;
+
 const PAN_KEYS: Readonly<Record<string, [-1 | 0 | 1, -1 | 0 | 1]>> = {
 	w: [0, 1],
 	a: [-1, 0],
@@ -42,8 +50,12 @@ const PAN_KEYS: Readonly<Record<string, [-1 | 0 | 1, -1 | 0 | 1]>> = {
 const VIEW_ORDER = Object.keys(CAD_VIEW_LABELS) as CadViewDirection[];
 
 export function cadShortcutFor(
-	event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">,
+	event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey"> & {
+		shiftKey?: boolean;
+	},
 ): CadShortcut | null {
+	if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "g")
+		return { type: event.shiftKey ? "ungroup" : "group" };
 	if (event.ctrlKey || event.metaKey || event.altKey) return null;
 	const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 	const tool = TOOL_KEYS[key];

@@ -1,47 +1,74 @@
 /**
- * What the CAD title's add buttons open, inside the patch scope the library flow writes through.
+ * What a press of a CAD add button does.
  *
- * Trusses, stage elements and curtains are chosen from their own parts; any other Venue object still
- * comes from the fixture library, searched for its kind. Both stay mounted for the life of the CAD
- * screen, so the press that opens one is never mistaken for a press it already handled. A placed part
- * is announced to the CAD screen, which selects it and opens Info.
+ * **Add truss**, **Add stage element**, **Add curtain** and **Add primitive** place a part at once:
+ * the part a press names — chosen from the button's caret menu, which the button then remembers — or
+ * else the part the button last placed. **Add venue element** opens the picture list of every Venue
+ * profile. This stays mounted for the life of the CAD screen, so the press that opened or placed
+ * something is never mistaken for a new one. A placed object is announced to the CAD screen, which
+ * selects it and opens Info.
  */
-import { FixtureAddFlow } from "@tosklight/patch";
-import { CadAddPartModal } from "./CadAddPartModal";
+import { useEffect, useRef, useState } from "react";
+import { CadVenueElementModal } from "./CadVenueElementModal";
+import { chosenPart, rememberPart } from "./cadAddChoice";
+import { type FixtureLibrary, placeProfile } from "./cadPlacement";
 import { type CadAddKind, useCadTools } from "./cadTools";
+import { findPart, partLabel } from "./venueParts";
 
-/** The library search each add button opens when it is the library that answers it. */
-const CAD_ADD_PRESETS: Record<CadAddKind, { type: string; query: string }> = {
-	truss: { type: "rigging", query: "Truss" },
-	stage: { type: "venue", query: "Stage" },
-	curtain: { type: "venue", query: "Curtain" },
-	primitive: { type: "venue", query: "" },
-	venue: { type: "", query: "" },
-};
+/** One press of an add button: what it adds, the part it names, and how many presses there have been. */
+export interface CadAddRequest {
+	kind: CadAddKind;
+	profileId?: string;
+	request: number;
+}
 
 export function CadAddFlows({
 	add,
 	onError,
 }: {
-	/** The last add button pressed, and how many presses there have been. */
-	add: { kind: CadAddKind; request: number };
+	add: CadAddRequest;
 	onError(reason: unknown): void;
 }) {
 	const tools = useCadTools();
-	return (
-		<>
-			<CadAddPartModal
-				kind={add.kind}
-				request={add.request}
-				onPlaced={tools.announcePlaced}
-				onError={onError}
-			/>
-			<FixtureAddFlow
-				scope="venue"
-				addRequest={add.kind === "venue" ? add.request : 0}
-				initialTypeFilter={CAD_ADD_PRESETS[add.kind].type}
-				initialQuery={CAD_ADD_PRESETS[add.kind].query}
-			/>
-		</>
-	);
+	const [venueOpen, setVenueOpen] = useState(false);
+	const [placing, setPlacing] = useState(false);
+	const handled = useRef(add.request);
+
+	async function place(profileId: string, label: string, known?: FixtureLibrary) {
+		setPlacing(true);
+		const result = await placeProfile(profileId, label, known);
+		setPlacing(false);
+		if (!result.ok) {
+			onError(result.reason);
+			return false;
+		}
+		tools.announcePlaced(result.fixtureId);
+		return true;
+	}
+
+	useEffect(() => {
+		if (add.request === handled.current) return;
+		handled.current = add.request;
+		if (add.kind === "venue") {
+			if (add.profileId) void place(add.profileId, "venue element");
+			else setVenueOpen(true);
+			return;
+		}
+		const named = add.profileId ? findPart(add.kind, add.profileId) : undefined;
+		if (named) rememberPart(add.kind, named.part.profileId);
+		const found = named ?? chosenPart(add.kind);
+		void place(found.part.profileId, partLabel(found));
+	});
+
+	return venueOpen ? (
+		<CadVenueElementModal
+			placing={placing}
+			onClose={() => setVenueOpen(false)}
+			onChoose={(profileId, name, library) =>
+				void place(profileId, name, library).then((placed) => {
+					if (placed) setVenueOpen(false);
+				})
+			}
+		/>
+	) : null;
 }

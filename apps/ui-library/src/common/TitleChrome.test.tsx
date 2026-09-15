@@ -157,6 +157,64 @@ describe("TitleChrome", () => {
 		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 	});
 
+	it("exposes an action's shortcut and splits a corner-dropdown action into body and caret", () => {
+		const add = vi.fn();
+		const choose = vi.fn();
+		const { container } = renderChrome(
+			<TitleChrome
+				groups={[
+					{
+						id: "tools",
+						actions: [
+							{
+								id: "line",
+								icon: "/",
+								ariaLabel: "Draw line",
+								shortcut: "L",
+								onPress: vi.fn(),
+							},
+							{
+								id: "add",
+								icon: "+",
+								ariaLabel: "Add truss",
+								onPress: add,
+								dropdownPlacement: "corner",
+								dropdown: {
+									kind: "items",
+									items: [
+										{ kind: "action", id: "pipe", label: "Pipe", onPress: choose },
+									],
+								},
+							},
+						],
+					},
+				]}
+				terminalActions={[]}
+			/>,
+		);
+		const line = screen.getByRole("button", { name: "Draw line" });
+		expect(line).toHaveAttribute("aria-keyshortcuts", "L");
+		expect(line).toHaveAttribute("data-shortcut", "L");
+		expect(
+			screen.getByRole("button", { name: "Add truss" }),
+		).not.toHaveAttribute("data-shortcut");
+
+		const split = container.querySelector(".has-corner-dropdown");
+		expect(split).not.toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Add truss" }));
+		expect(add).toHaveBeenCalledTimes(1);
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+		const caret = screen.getByRole("button", { name: "Add truss options" });
+		expect(caret).toHaveClass("ui-title-chrome-corner-caret");
+		expect(split).toContainElement(caret);
+		fireEvent.click(caret);
+		fireEvent.click(screen.getByRole("menuitem", { name: "Pipe" }));
+		expect(choose).toHaveBeenCalledTimes(1);
+		expect(add).toHaveBeenCalledTimes(1);
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+	});
+
 	it("enforces action content and icon-only accessible names", () => {
 		expect(() => validateTitleAction({ label: null })).toThrow(
 			"require a label, an icon, or both",

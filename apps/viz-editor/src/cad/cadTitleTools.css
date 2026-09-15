@@ -1,11 +1,19 @@
-/* The CAD title's icon buttons: a compact icon, and its name in a tooltip just below the button
-   while the pointer rests on it or keyboard focus is on it. The tooltip only repeats the button's
-   accessible name, so nothing an operator needs is hover-only. */
+/* The CAD title's icon buttons: a compact icon, and its name — with the key that picks it, when the
+   CAD handles one — in a tooltip just below the button while the pointer rests on it or keyboard
+   focus is on it. The tooltip only repeats the button's accessible name and `aria-keyshortcuts`, so
+   nothing an operator needs is hover-only. */
 .cad-app > .ui-window-header {
 	overflow: visible;
 }
 
-.cad-app > .ui-window-header .ui-button.is-icon-only {
+/* The title is its own stacking context (it draws its bottom line over the side panel), so its
+   tooltips can only rise as high as the title itself does: above the side panel's resize handle,
+   the viewports' controls and the error banner, and still below dialogs and dropdown menus. */
+.cad-app.cad-app.cad-app > .ui-window-header {
+	z-index: 50;
+}
+
+.cad-app > .ui-window-header .ui-button.is-icon-only:not(.ui-title-chrome-corner-caret) {
 	position: relative;
 	width: 36px;
 	overflow: visible;
@@ -37,7 +45,18 @@
 	font-size: 11px;
 	font-weight: 500;
 	line-height: 1.2;
-	white-space: nowrap;
+	white-space: pre;
 	pointer-events: none;
 	transform: translateX(-50%);
+}
+
+.cad-app > .ui-window-header .ui-button.is-icon-only[aria-label][data-shortcut]:is(:hover, :focus-visible)::after {
+	content: attr(aria-label) "  ·  " attr(data-shortcut);
+}
+
+/* The last buttons sit against the window's right edge, so their tooltips open leftwards. */
+.cad-app > .ui-window-header .ui-title-chrome-terminals .ui-button.is-icon-only[aria-label]:is(:hover, :focus-visible)::after {
+	right: 0;
+	left: auto;
+	transform: none;
 }

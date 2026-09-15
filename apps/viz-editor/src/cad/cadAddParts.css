@@ -1,4 +1,4 @@
-/* The Add truss and Add stage element dialog: a grid of parts, each pictured on a dark ground. */
+/* The Add venue element dialog: a scrolling grid of Venue profiles, each pictured on a dark ground. */
 .cad-add-part-modal {
 	display: flex;
 	flex-direction: column;
@@ -17,30 +17,6 @@
 	min-height: 0;
 	padding: 14px 16px 16px;
 	overflow-y: auto;
-}
-
-.cad-add-part-step {
-	display: flex;
-	gap: 10px;
-	align-items: center;
-}
-
-.cad-add-part-back-icon {
-	width: 14px;
-	height: 14px;
-	fill: none;
-	stroke: currentColor;
-	stroke-width: 2;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-}
-
-.cad-add-part-step h3 {
-	margin: 0;
-	font-size: 12px;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: #98a4b3;
 }
 
 .cad-part-grid {
@@ -96,6 +72,107 @@
 }
 
 .cad-part-tile small {
+	color: #98a4b3;
+	font-size: 11px;
+}
+
+.cad-add-part-note {
+	margin: 0;
+	color: #98a4b3;
+	font-size: 12px;
+}
+
+/* The caret menu of a part button: each part a row with its picture on a dark ground. The menu is
+   taller than the title's ordinary dropdowns, since a truss section lists all its corner pieces. */
+.ui-title-chrome-dropdown:has(> .cad-part-menu) {
+	width: 18rem;
+	max-height: min(34rem, calc(100vh - 48px));
+}
+
+.cad-part-menu {
+	display: grid;
+	gap: 2px;
+}
+
+.cad-part-menu-group {
+	display: grid;
+	gap: 2px;
+	padding-top: 4px;
+}
+
+.cad-part-menu-heading,
+.cad-part-menu-note {
+	margin: 0;
+	padding: 2px 6px;
+	color: #98a4b3;
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.cad-part-menu-item {
+	display: grid;
+	grid-template-columns: 52px minmax(0, 1fr);
+	gap: 10px;
+	align-items: center;
+	width: 100%;
+	min-height: 44px;
+	padding: 4px 6px;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	background: transparent;
+	color: #edf1f5;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.cad-part-menu-item:hover:not(:disabled),
+.cad-part-menu-item:focus-visible {
+	border-color: #05d1fa;
+	outline: none;
+}
+
+.cad-part-menu-item[aria-checked="true"] {
+	background: rgb(5 209 250 / 14%);
+}
+
+.cad-part-menu-item:disabled {
+	cursor: not-allowed;
+	opacity: 0.45;
+}
+
+.cad-part-menu-preview {
+	display: grid;
+	place-items: center;
+	width: 52px;
+	height: 39px;
+	overflow: hidden;
+	border-radius: 2px;
+	background: #05070a;
+}
+
+.cad-part-menu-preview img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.cad-part-menu-text {
+	display: grid;
+	gap: 1px;
+	min-width: 0;
+}
+
+.cad-part-menu-text strong {
+	overflow: hidden;
+	font-size: 12px;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cad-part-menu-text small {
 	color: #98a4b3;
 	font-size: 11px;
 }

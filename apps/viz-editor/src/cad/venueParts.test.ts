@@ -1,12 +1,21 @@
 import type { FixtureDefinition } from "@tosklight/patch";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { chosenPart, rememberPart } from "./cadAddChoice";
 import {
+	CAD_PART_CATALOGUE,
+	CURTAIN_TYPES,
+	DEFAULT_PART_PROFILE_IDS,
 	definitionForProfile,
+	findPart,
+	matchesVenueQuery,
 	nextVirtualNumber,
+	PARAMETRIC_CURTAIN_PROFILE_ID,
 	PRIMITIVE_TYPES,
+	partLabel,
 	previewOf,
 	STAGE_TYPES,
 	TRUSS_TYPES,
+	venueProfiles,
 } from "./venueParts";
 
 describe("the Add primitive dialog", () => {
@@ -88,5 +97,95 @@ describe("the CAD add dialogs' parts", () => {
 		expect(nextVirtualNumber([])).toBe(1);
 		expect(nextVirtualNumber([1, 2, null, 4])).toBe(3);
 		expect(nextVirtualNumber([2, undefined])).toBe(1);
+	});
+});
+
+describe("the CAD part buttons' catalogue", () => {
+	it("offers the parametric curtain first, then the fixed widths", () => {
+		expect(CURTAIN_TYPES.map((type) => type.label)).toEqual(["Any width", "Fixed width"]);
+		expect(CURTAIN_TYPES[0].parts[0].profileId).toBe(PARAMETRIC_CURTAIN_PROFILE_ID);
+		expect(CURTAIN_TYPES[1].parts.map((part) => part.label)).toEqual(["1 m", "2 m", "3 m", "5 m", "6 m"]);
+		const ids = Object.values(CAD_PART_CATALOGUE).flatMap((groups) =>
+			groups.flatMap((group) => group.parts.map((part) => part.profileId)),
+		);
+		expect(new Set(ids).size).toBe(ids.length);
+	});
+
+	it("defaults every button to one of its own parts and names parts with their group", () => {
+		for (const [kind, profileId] of Object.entries(DEFAULT_PART_PROFILE_IDS))
+			expect(findPart(kind as keyof typeof DEFAULT_PART_PROFILE_IDS, profileId)).toBeDefined();
+		expect(findPart("truss", PARAMETRIC_CURTAIN_PROFILE_ID)).toBeUndefined();
+		const corner = findPart("truss", "3ea0f8ad-c38d-5ec6-a4f7-6d918a1e974e");
+		expect(corner && partLabel(corner)).toBe("Corner 2-way (4-point)");
+		const pipe = findPart("truss", "6eb48efc-34c9-568a-be7a-c4611fb94996");
+		expect(pipe && partLabel(pipe)).toBe("Straight pipe");
+	});
+});
+
+describe("the remembered part of each button", () => {
+	const store = new Map<string, string>();
+	beforeEach(() => {
+		store.clear();
+		vi.stubGlobal("localStorage", {
+			getItem: (key: string) => store.get(key) ?? null,
+			setItem: (key: string, value: string) => store.set(key, value),
+		});
+	});
+
+	it("keeps a choice per button and falls back to the default for anything else", () => {
+		expect(chosenPart("truss").part.profileId).toBe(DEFAULT_PART_PROFILE_IDS.truss);
+		rememberPart("truss", "3ea0f8ad-c38d-5ec6-a4f7-6d918a1e974e");
+		expect(chosenPart("truss").part.label).toBe("Corner 2-way");
+		expect(chosenPart("stage").part.profileId).toBe(DEFAULT_PART_PROFILE_IDS.stage);
+		// A profile the button does not offer is not the button's part.
+		rememberPart("curtain", DEFAULT_PART_PROFILE_IDS.truss);
+		expect(chosenPart("curtain").part.profileId).toBe(PARAMETRIC_CURTAIN_PROFILE_ID);
+	});
+
+	it("still answers when storage refuses", () => {
+		vi.stubGlobal("localStorage", {
+			getItem: () => {
+				throw new Error("blocked");
+			},
+			setItem: () => {
+				throw new Error("blocked");
+			},
+		});
+		expect(() => rememberPart("primitive", PRIMITIVE_TYPES[2].parts[0].profileId)).not.toThrow();
+		expect(chosenPart("primitive").part.profileId).toBe(DEFAULT_PART_PROFILE_IDS.primitive);
+	});
+});
+
+describe("the Add venue element list", () => {
+	const profiled = (
+		profileId: string,
+		name: string,
+		revision: number,
+		profile: Record<string, unknown>,
+	) =>
+		({
+			id: `${profileId}:mode`,
+			revision,
+			name,
+			manufacturer: String(profile.manufacturer ?? ""),
+			profile_snapshot: { id: profileId, short_name: name, ...profile },
+		}) as unknown as FixtureDefinition;
+
+	it("lists each Venue or visual-only profile once at its newest revision, by name, and searches it", () => {
+		const library = [
+			profiled("truss", "Truss", 1, { manufacturer: "Venue", fixture_type: "rigging" }),
+			profiled("truss", "Truss", 2, { manufacturer: "Venue", fixture_type: "rigging" }),
+			profiled("model", "Balcony model", 1, { manufacturer: "Imported", patch_policy: "visual_only", fixture_type: "venue" }),
+			profiled("par", "LED Par", 1, { manufacturer: "Generic", patch_policy: "dmx", fixture_type: "par" }),
+		];
+		const listed = venueProfiles(library);
+		expect(listed.map((entry) => [entry.profileId, entry.definition.revision])).toEqual([
+			["model", 1],
+			["truss", 2],
+		]);
+		expect(matchesVenueQuery(listed[0].definition, "  BALC ")).toBe(true);
+		expect(matchesVenueQuery(listed[1].definition, "rigging")).toBe(true);
+		expect(matchesVenueQuery(listed[1].definition, "balcony")).toBe(false);
+		expect(matchesVenueQuery(listed[1].definition, "")).toBe(true);
 	});
 });

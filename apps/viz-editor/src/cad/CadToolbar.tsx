@@ -1,9 +1,11 @@
 /**
  * The CAD window title's tool buttons: Undo and Redo, what to add to the venue, and what the pointer
  * draws. They are ordinary window title groups, so they look, group and divide exactly like the
- * title's other buttons, and they show icons only — each names itself in a tooltip below it.
+ * title's other buttons, and they show icons only — each names itself, and the key that picks it, in
+ * a tooltip below it. The part buttons are split: the button places its part, a caret in its corner
+ * chooses which part that is.
  */
-import type { TitleActionGroup } from "@tosklight/ui";
+import type { TitleAction, TitleActionGroup } from "@tosklight/ui";
 import boxSvg from "../../../../assets/icons/drawing/box.svg?raw";
 import eraseSvg from "../../../../assets/icons/drawing/erase.svg?raw";
 import measureSvg from "../../../../assets/icons/drawing/measure.svg?raw";
@@ -17,7 +19,9 @@ import primitiveSvg from "../../../../assets/icons/misc/primitive.svg?raw";
 import stageElementSvg from "../../../../assets/icons/misc/stage-element.svg?raw";
 import trussSvg from "../../../../assets/icons/misc/truss-segment.svg?raw";
 import venueObjectSvg from "../../../../assets/icons/misc/venue-object.svg?raw";
+import { CAD_TOOL_SHORTCUTS } from "./cadShortcuts";
 import type { CadAddKind, CadDrawTool, CadTools } from "./cadTools";
+import { CadPartMenu } from "./CadPartMenu";
 import "./cadTitleTools.css";
 
 export const CAD_ADD_ACTIONS: readonly {
@@ -88,12 +92,34 @@ export function cadTitleGroups(
 			? [
 					{
 						id: "cad-add",
-						actions: CAD_ADD_ACTIONS.map(({ kind, label, svg }) => ({
-							id: `add-${kind}`,
-							icon: <ToolIcon svg={svg} />,
-							ariaLabel: label,
-							onPress: () => onAdd(kind),
-						})),
+						actions: CAD_ADD_ACTIONS.map(
+							({ kind, label, svg }): TitleAction => ({
+								id: `add-${kind}`,
+								icon: <ToolIcon svg={svg} />,
+								ariaLabel: label,
+								onPress: () => onAdd(kind),
+								// A part button's caret chooses the part it places; a Venue element is chosen from its
+								// own picture list on every press.
+								...(kind === "venue"
+									? {}
+									: {
+											dropdownPlacement: "corner" as const,
+											dropdown: {
+												kind: "content" as const,
+												ariaLabel: label.replace(/^Add /u, "Choose "),
+												render: ({ close }: { close(): void }) => (
+													<CadPartMenu
+														kind={kind}
+														onChoose={(profileId) => {
+															close();
+															onAdd(kind, profileId);
+														}}
+													/>
+												),
+											},
+										}),
+							}),
+						),
 					},
 					{
 						id: "cad-draw",
@@ -101,6 +127,7 @@ export function cadTitleGroups(
 							id: `tool-${tool}`,
 							icon: <ToolIcon svg={svg} />,
 							ariaLabel: label,
+							shortcut: CAD_TOOL_SHORTCUTS[tool],
 							active: tools.tool === tool,
 							onPress: () => tools.setTool(tool),
 						})),

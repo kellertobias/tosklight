@@ -1643,9 +1643,13 @@ describe("the Viz editor window", () => {
 			"Undo",
 			"Redo",
 			"Add truss",
+			"Add truss options",
 			"Add stage element",
+			"Add stage element options",
 			"Add curtain",
+			"Add curtain options",
 			"Add primitive",
+			"Add primitive options",
 			"Add venue element",
 			"Select",
 			"Draw line",
@@ -1658,42 +1662,69 @@ describe("the Viz editor window", () => {
 			"Settings",
 		]);
 		// Icons only; each names itself, and that name is the tooltip shown below it.
-		for (const button of buttons.slice(0, 12)) {
+		for (const button of buttons.slice(0, 16)) {
 			expect(button.textContent?.trim()).toBe("");
 			expect(button.querySelector("svg")).not.toBeNull();
 			expect(button).toHaveClass("is-icon-only");
 		}
-
-		// A truss is chosen by its section first, in its own dialog rather than the fixture library.
-		fireEvent.click(within(toolbar).getByRole("button", { name: "Add truss" }));
-		const trussDialog = await screen.findByRole("dialog", { name: "Add truss" });
+		// The tooltip names the key that picks a drawing tool; tools without a handled key show none.
+		const shortcutOf = (name: string) =>
+			within(toolbar).getByRole("button", { name }).getAttribute("aria-keyshortcuts");
 		expect(
-			within(trussDialog)
-				.getAllByRole("listitem")
-				.map((item) => item.querySelector("strong")?.textContent),
-		).toEqual([
-			"Pipe",
-			"2-point",
-			"3-point deco",
-			"3-point regular",
-			"4-point",
-			"4-point large",
-		]);
-		expect(screen.queryByRole("dialog", { name: "Add fixture" })).not.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close Add truss" }));
-		await waitFor(() =>
-			expect(screen.queryByRole("dialog", { name: "Add truss" })).not.toBeInTheDocument(),
+			["Select", "Draw line", "Draw box", "Place text", "Measure", "Erase"].map(shortcutOf),
+		).toEqual(["V", "L", "P", "T", "M", "R"]);
+		expect(within(toolbar).getByRole("button", { name: "Draw line" })).toHaveAttribute(
+			"data-shortcut",
+			"L",
 		);
-		// Any other Venue object still comes from the library.
-		fireEvent.click(within(toolbar).getByRole("button", { name: "Add venue element" }));
-		expect(await screen.findByRole("dialog", { name: "Add fixture" })).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close Add fixture" }));
+		expect(shortcutOf("Undo")).toBeNull();
+		expect(shortcutOf("Add truss")).toBeNull();
+
+		// Each part button is split: a caret in its corner chooses the part the button places.
+		expect(
+			within(toolbar)
+				.getByRole("button", { name: "Add truss options" })
+				.closest(".has-corner-dropdown"),
+		).toContainElement(within(toolbar).getByRole("button", { name: "Add truss" }));
+		expect(
+			within(toolbar)
+				.getByRole("button", { name: "Add venue element" })
+				.closest(".has-corner-dropdown"),
+		).toBeNull();
+		fireEvent.click(within(toolbar).getByRole("button", { name: "Add truss options" }));
+		const trussMenu = await screen.findByRole("menu", { name: "Choose truss" });
+		expect(
+			within(trussMenu)
+				.getAllByRole("group")
+				.map((group) => group.getAttribute("aria-label")),
+		).toEqual(["3-point regular", "4-point"]);
+		// This library holds no truss, so every part is listed but none can be chosen.
 		await waitFor(() =>
-			expect(screen.queryByRole("dialog", { name: "Add fixture" })).not.toBeInTheDocument(),
+			expect(within(trussMenu).getByRole("menuitemradio", { name: /^Pipe/u })).toHaveTextContent(
+				"Not in this library",
+			),
 		);
-		// A curtain is placed at once, so it opens no dialog at all.
+		expect(within(trussMenu).getByRole("menuitemradio", { name: /^Pipe/u })).toBeDisabled();
+		fireEvent.keyDown(window, { key: "Escape" });
+		await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+		// Pressing the button places its part at once, so no dialog opens; a missing part says so.
 		fireEvent.click(within(toolbar).getByRole("button", { name: "Add curtain" }));
+		expect(
+			await screen.findByText("The curtain is not in this computer's fixture library."),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+		// Any other Venue object is chosen from its picture list, not the fixture library browser.
+		fireEvent.click(within(toolbar).getByRole("button", { name: "Add venue element" }));
+		const venueDialog = await screen.findByRole("dialog", { name: "Add venue element" });
+		expect(
+			await within(venueDialog).findByText("This computer's fixture library holds no venue elements."),
+		).toBeInTheDocument();
 		expect(screen.queryByRole("dialog", { name: "Add fixture" })).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Close Add venue element" }));
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Add venue element" })).not.toBeInTheDocument(),
+		);
 
 		expect(within(toolbar).getByRole("button", { name: "Select" })).toHaveClass("is-active");
 		fireEvent.click(within(toolbar).getByRole("button", { name: "Measure" }));

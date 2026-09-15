@@ -2,9 +2,10 @@
  * What the CAD add buttons offer: the shipped Venue profiles a truss, a stage element or a curtain is
  * placed from, grouped the way the operator chooses them.
  *
- * A truss is chosen by its section first and then the part — the straight run at any length, or one
- * of the corner pieces made for that section. A stage element is chosen by what it stands on and then
- * its platform size. A curtain is one parametric profile and needs no choosing.
+ * A truss is listed by its section and then the part — the straight run at any length, or one of the
+ * corner pieces made for that section. A stage element is listed by what it stands on and then its
+ * platform size. A curtain is the parametric profile or one made at a fixed width. Each add button
+ * places one of its parts at once, and its caret menu chooses which.
  *
  * Profiles are named by their fixed ids, so a renamed profile still lands in the right place. A part
  * whose profile is missing from this machine's library is offered but cannot be placed.
@@ -163,8 +164,37 @@ export const STAGE_TYPES: readonly VenuePartGroup[] = [
 	},
 ];
 
-/** The parametric curtain: placed at once, then sized in Info. */
+/** The parametric curtain: placed at any width, then sized in Info. */
 export const PARAMETRIC_CURTAIN_PROFILE_ID = "6f34b81e-3f71-5d35-b8fb-b4b0b7cce859";
+
+/** The parametric curtain first, then the drapes made at a fixed width. */
+export const CURTAIN_TYPES: readonly VenuePartGroup[] = [
+	{
+		id: "parametric",
+		label: "Any width",
+		partsLabel: "Curtain",
+		parts: [
+			{
+				id: "parametric",
+				label: "curtain",
+				detail: "Sized in Info",
+				profileId: PARAMETRIC_CURTAIN_PROFILE_ID,
+			},
+		],
+	},
+	{
+		id: "fixed",
+		label: "Fixed width",
+		partsLabel: "Curtain",
+		parts: [
+			["1", "6c1cd6ef-d230-5afd-974c-4d18698b81a2"],
+			["2", "db730b89-b3f0-5920-8c79-177193785459"],
+			["3", "2def7a39-ebb2-5028-9f81-1f2d916597fe"],
+			["5", "69cd8d74-d92b-5b9e-b004-bb179d95a5e1"],
+			["6", "b2e36256-402c-5fc1-bab8-fb63c329ceb6"],
+		].map(([metres, profileId]) => ({ id: `${metres}-m`, label: `${metres} m`, profileId })),
+	},
+];
 
 /**
  * The primitive shapes: each one parametric profile, placed at once from its tile and sized in Info.
@@ -180,6 +210,84 @@ export const PRIMITIVE_TYPES: readonly VenuePartGroup[] = [
 	partsLabel: "Shape",
 	parts: [{ id, label: label.toLowerCase(), detail: "Sized in Info", profileId }],
 }));
+
+/** The title buttons that add a chosen part, each with a caret choosing which part it adds. */
+export type CadPartKind = "truss" | "stage" | "curtain" | "primitive";
+
+export const CAD_PART_CATALOGUE: Readonly<Record<CadPartKind, readonly VenuePartGroup[]>> = {
+	truss: TRUSS_TYPES,
+	stage: STAGE_TYPES,
+	curtain: CURTAIN_TYPES,
+	primitive: PRIMITIVE_TYPES,
+};
+
+/** What each button adds until the operator chooses otherwise. */
+export const DEFAULT_PART_PROFILE_IDS: Readonly<Record<CadPartKind, string>> = {
+	truss: "44097b39-11b4-5bd4-af61-8adb97d426b1", // 3-point regular, straight
+	stage: "6ad1c9f3-5024-543e-8478-f34ae63d338b", // 2 × 1 m on scissor feet
+	curtain: PARAMETRIC_CURTAIN_PROFILE_ID,
+	primitive: "0087038f-6a2f-5d74-9185-8d14d7e1ee48", // box
+};
+
+export interface FoundPart {
+	group: VenuePartGroup;
+	part: VenuePart;
+}
+
+/** A button's part by its profile, or undefined when the button does not offer that profile. */
+export function findPart(kind: CadPartKind, profileId: string): FoundPart | undefined {
+	for (const group of CAD_PART_CATALOGUE[kind]) {
+		const part = group.parts.find((each) => each.profileId === profileId);
+		if (part) return { group, part };
+	}
+	return undefined;
+}
+
+/** How a message names a part: a group's only part by itself, any other with its group. */
+export function partLabel({ group, part }: FoundPart): string {
+	return group.parts.length === 1 ? part.label : `${part.label} (${group.label})`;
+}
+
+/**
+ * Whether a library profile is a Venue object: the shipped Venue manufacturer, or any profile that
+ * is placed but never patched to DMX, such as an imported venue model.
+ */
+export function isVenueDefinition(definition: FixtureDefinition): boolean {
+	const profile = definition.profile_snapshot;
+	return (
+		(profile?.manufacturer ?? definition.manufacturer) === "Venue" ||
+		profile?.patch_policy === "visual_only"
+	);
+}
+
+export interface VenueProfile {
+	profileId: string;
+	definition: FixtureDefinition;
+}
+
+/** Every Venue profile in the library once, at its newest revision, in name order. */
+export function venueProfiles(definitions: readonly FixtureDefinition[]): VenueProfile[] {
+	const newest = new Map<string, FixtureDefinition>();
+	for (const definition of definitions) {
+		if (!isVenueDefinition(definition)) continue;
+		const profileId = definition.profile_snapshot?.id ?? definition.id;
+		const current = newest.get(profileId);
+		if (!current || definition.revision > current.revision) newest.set(profileId, definition);
+	}
+	return [...newest]
+		.map(([profileId, definition]) => ({ profileId, definition }))
+		.sort((a, b) => a.definition.name.localeCompare(b.definition.name));
+}
+
+/** Whether a Venue profile matches what the operator typed, by name, short name or type. */
+export function matchesVenueQuery(definition: FixtureDefinition, query: string): boolean {
+	const wanted = query.trim().toLowerCase();
+	if (!wanted) return true;
+	const profile = definition.profile_snapshot;
+	return [definition.name, profile?.short_name, profile?.fixture_type].some((text) =>
+		text?.toLowerCase().includes(wanted),
+	);
+}
 
 /** The newest revision of a profile in the library, or undefined when this machine does not have it. */
 export function definitionForProfile(
