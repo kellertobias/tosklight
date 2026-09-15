@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-321.18 -618.18 642.36 636.36" width="642.36mm" height="636.36mm" data-model="subwoofer" data-view="front" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>subwoofer — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-303 -439.98 L-303 -400.21 L-299.97 -399.83 L-299.78 -0.06 L299.97 -0.25 L299.97 -399.83 L303 -400.21 L303 -439.98 L299.97 -440.36 L299.78 -600 L-299.78 -600 L-299.97 -440.36 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.51" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M30 -600 L-7.76 -600"/>
+      <path d="M-30 -600 L-8.14 -600"/>
+      <path d="M-299.98 -440 L-303 -440 L-303 -400 L-299.98 -400"/>
+      <path d="M299.98 -400 L303 -400 L303 -440 L299.98 -440"/>
+      <path d="M74.6 -335.93 L82.8 -300 L74.6 -264.07 L51.62 -235.26 L18.42 -219.28 L-18.42 -219.28 L-51.62 -235.26 L-74.6 -264.07 L-82.8 -300 L-74.6 -335.93 L-51.62 -364.74 L-18.42 -380.72 L18.42 -380.72 L51.62 -364.74 Z"/>
+      <path d="M-300 0 L300 0 L300 -600 L-300 -600 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.51"><path d="M-18.18 0 H18.18 M0 -18.18 V18.18"/></g>
+</svg>

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-207.76 28.24 415.52 327.88" width="415.52mm" height="327.88mm" data-model="show-laser-no-clamp" data-view="front" data-pose="authored-home" data-hinge="0 259.4" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>show-laser-no-clamp — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path id="silhouette-body" fill-rule="evenodd" d="M-170.03 174.38 L-169.91 344.29 L170.03 344.17 L169.91 174.26 L140.26 174.26 L140.02 170.34 L-140.02 170.34 L-140.26 174.26 Z"/><path id="silhouette-hardware" fill-rule="evenodd" d="M-196 40.12 L-195.88 288.18 L-184.12 288.18 L-183.87 278.63 L-156.07 278.51 L-156.07 240.29 L-183.99 240.04 L-183.87 59.11 L183.87 59.11 L184 240.04 L156.07 240.29 L156.07 278.51 L183.87 278.63 L184.12 288.18 L196 288.06 L195.88 40 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="0.98" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M87 219.53 L156 259.36 L87 299.2 Z"/>
+      <path d="M-49.88 209.36 L49.88 209.36"/>
+      <path d="M-60 319.36 L-50 319.36 L-50 199.36 L-60 199.36 L-60 319.36 L60 319.36 L60 309.36 L-60 309.36 Z"/>
+      <path d="M-60 199.36 L60 199.36 L60 319.36 L50 319.36 L50 199.36 L60 199.36 L60 209.36 L-60 209.36 Z"/>
+      <path d="M-170 344.36 L170 344.36 L170 174.36 L-170 174.36 Z"/>
+      <path d="M-140 174.15 L-140 170.36 L140 170.36 L140 174.15"/>
+    </g>
+    <g id="hardware">
+      <path d="M-196 59.2 L196 59.2 L196 40 L-196 40 L-196 288.16 L-184 288.16 L-184 59.2 Z"/>
+      <path d="M196 59.2 L196 288.16 L184 288.16 L184 59.2 Z"/>
+      <path d="M-183.89 278.56 L-156 278.56 L-156 240.16 L-183.89 240.16"/>
+      <path d="M-196 278.56 L-196 269.69"/>
+      <path d="M-196 240.16 L-196 243.22"/>
+      <path d="M-196 243.46 L-196 249.89"/>
+      <path d="M-196 250.13 L-196 251.95"/>
+      <path d="M-196 252.2 L-196 252.56"/>
+      <path d="M-196 252.8 L-196 259.49"/>
+      <path d="M-196 259.73 L-196 261.55"/>
+      <path d="M-196 261.8 L-196 262.16"/>
+      <path d="M-196 262.4 L-196 269.45"/>
+      <path d="M183.89 240.16 L156 240.16 L156 278.56 L183.89 278.56"/>
+      <path d="M196 278.56 L196 240.16"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="0.98"><path d="M-11.76 0 H11.76 M0 -11.76 V11.76"/></g>
+</svg>

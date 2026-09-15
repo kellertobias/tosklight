@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-49.02 -1030 98.04 1060" width="98.04mm" height="1060mm" data-model="railing-1000" data-view="side" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>railing-1000 — side</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-19.02 -999.69 L-19.02 -0.31 L18.79 0 L19.1 -999.69 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M6 0 L-6 0"/>
+      <path d="M-19.02 0 L-19.02 -1000 L-11.76 -1000 L-11.76 0 L-19.02 0 L0 0 L0 -1000 L-11.76 -1000"/>
+      <path d="M-11.76 0 L11.76 0 L11.76 -1000 L0 -1000"/>
+      <path d="M0 0 L19.02 0 L19.02 -1000 L11.76 -1000"/>
+      <path d="M11.76 0 L19.02 0"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

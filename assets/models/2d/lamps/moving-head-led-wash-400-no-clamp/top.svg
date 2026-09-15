@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-310.58 -152.58 621.16 303.16" width="621.16mm" height="303.16mm" data-model="moving-head-led-wash-400-no-clamp" data-view="top" data-pose="moving-forward" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>moving-head-led-wash-400-no-clamp — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-293 -74.75 L-293 74.68 L-200.16 74.86 L-199.79 125.04 L51.82 125.04 L52.19 133.09 L147.78 133.09 L148.15 125.04 L199.97 124.85 L200.16 74.86 L293 74.68 L293 -74.75 L200.16 -74.94 L199.79 -125.11 L110.06 -125.11 L109.69 -135 L-109.69 -135 L-110.06 -125.11 L-199.79 -125.11 L-200.16 -74.94 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.46" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-200 125 L200 125 L200 -125 L-200 -125 Z"/>
+      <path d="M52 125.18 L52 133 L148 133 L148 125.18"/>
+      <path d="M-110 -125.18 L-110 -135 L110 -135 L110 -125.18"/>
+    </g>
+    <g id="yoke">
+      <path d="M227 75 L293 75 L293 74.82"/>
+      <path d="M227 -75 L293 -75 L293 -74.82"/>
+      <path d="M-293 73.73 L-293 75 L-227 75"/>
+      <path d="M-293 73.36 L-293 57.72"/>
+      <path d="M-293 -73.73 L-293 -75 L-227 -75"/>
+      <path d="M-293 -73.36 L-293 51.5"/>
+      <path d="M-293 57.35 L-293 56.62"/>
+      <path d="M-293 56.26 L-293 55.34"/>
+      <path d="M-293 54.98 L-293 51.87"/>
+      <path d="M-199.97 -75 L-293 -75 L-293 75 L-199.97 75"/>
+      <path d="M199.97 75 L293 75 L293 -75 L199.97 -75"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.46"><path d="M-17.58 0 H17.58 M0 -17.58 V17.58"/></g>
+</svg>

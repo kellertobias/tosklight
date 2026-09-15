@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-63.6 -63.6 127.2 127.2" width="127.2mm" height="127.2mm" data-model="mirror-ball-motor-no-clamp" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>mirror-ball-motor-no-clamp — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-60 -59.96 L-59.96 60 L59.96 60 L60 -59.96 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="0.3" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-60 60 L60 60 L60 -60 L-60 -60 Z"/>
+      <path d="M-45 45 L45 45 L45 -45 L-45 -45 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="0.3"><path d="M-3.6 0 H3.6 M0 -3.6 V3.6"/></g>
+</svg>

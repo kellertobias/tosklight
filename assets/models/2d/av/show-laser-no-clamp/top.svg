@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-207.76 -161.76 415.52 345.52" width="415.52mm" height="345.52mm" data-model="show-laser-no-clamp" data-view="top" data-pose="authored-home" data-hinge="0 0" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>show-laser-no-clamp — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path id="silhouette-body" fill-rule="evenodd" d="M-170.03 -149.88 L-169.91 150.12 L-60.15 150.12 L-59.9 171.93 L59.9 171.93 L60.15 150.12 L170.03 150 L169.91 -150 Z M86.98 152.21 L87.1 155.03 L156.07 154.9 L155.94 152.09 Z"/><path id="silhouette-hardware" fill-rule="evenodd" d="M-196 -82.5 L-195.88 82.51 L196 82.38 L195.88 -82.62 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="0.98" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M87 152 L156 152 L156 155 L87 155 Z"/>
+      <path d="M-60 150.15 L-60 172 L-50 172 L-50 150.15"/>
+      <path d="M-60 172 L60 172 Z"/>
+      <path d="M50 150.15 L50 172 L60 172 L60 150.15"/>
+      <path d="M-170 150 L170 150 L170 -150 L-170 -150 Z"/>
+      <path d="M-140 120 L140 120 L140 -120 L-140 -120 Z"/>
+    </g>
+    <g id="hardware">
+      <path d="M196 82.5 L196 -82.5 L196 82.5 L-196 82.5 L-196 81.77"/>
+      <path d="M-196 81.52 L-196 79.32"/>
+      <path d="M-196 79.07 L-196 78.83"/>
+      <path d="M-196 78.58 L-196 76.87"/>
+      <path d="M-196 76.62 L-196 76.38"/>
+      <path d="M-196 76.01 L-196 73.8"/>
+      <path d="M-196 73.44 L-196 71.35"/>
+      <path d="M-196 70.99 L-196 68.9"/>
+      <path d="M-196 68.54 L-196 66.33"/>
+      <path d="M-196 66.09 L-196 63.88"/>
+      <path d="M-196 63.64 L-196 61.43"/>
+      <path d="M-196 61.19 L-196 58.49"/>
+      <path d="M-196 58.25 L-196 55.92"/>
+      <path d="M-196 55.55 L-196 53.96"/>
+      <path d="M-196 53.71 L-196 53.35"/>
+      <path d="M-196 53.1 L-196 51.02"/>
+      <path d="M-196 50.77 L-196 48.45"/>
+      <path d="M-196 48.2 L-196 43.55"/>
+      <path d="M-196 43.3 L-196 42.93"/>
+      <path d="M-196 42.57 L-196 38.03"/>
+      <path d="M-196 37.79 L-196 36.07"/>
+      <path d="M-196 35.83 L-196 35.46"/>
+      <path d="M-196 35.22 L-196 33.13"/>
+      <path d="M-196 32.89 L-196 30.56"/>
+      <path d="M-196 30.32 L-196 29.95"/>
+      <path d="M-196 29.7 L-196 27.99"/>
+      <path d="M-196 27.74 L-196 82.5"/>
+      <path d="M196 -82.5 L-196 -82.5"/>
+      <path d="M-196 -19.2 L-196 -16.14"/>
+      <path d="M-196 -15.9 L-196 -9.48"/>
+      <path d="M-196 -9.24 L-196 -7.41"/>
+      <path d="M-196 -7.17 L-196 -6.81"/>
+      <path d="M-196 -6.56 L-196 0.12"/>
+      <path d="M-196 0.36 L-196 2.19"/>
+      <path d="M-196 2.43 L-196 2.79"/>
+      <path d="M-196 3.04 L-196 10.08"/>
+      <path d="M-196 10.33 L-196 19.2"/>
+      <path d="M196 -19.2 L196 19.2"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="0.98"><path d="M-11.76 0 H11.76 M0 -11.76 V11.76"/></g>
+</svg>

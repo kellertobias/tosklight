@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-33.43 20.57 66.86 85.86" width="66.86mm" height="85.86mm" data-model="led-strip-rgbcct-0500-no-clamp" data-view="side" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>led-strip-rgbcct-0500-no-clamp — side</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-31 23.03 L-31 37 L-25.03 37.05 L-25.03 69.95 L-17.03 70.01 L-17.03 79.98 L16.97 80 L16.99 70.01 L24.99 69.95 L24.99 37.05 L31.02 37 L31.02 23.03 Z M-21.99 90 L-21.96 104 L22 103.97 L21.98 89.98 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="0.3" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-25.03 37 L-31 37 L-31 23 L31 23 L31 37 L25 37 L25 70 L-25 70 L-25 37 L25 37"/>
+      <path d="M-31 36.95 L-31 36.52"/>
+      <path d="M-31 36.47 L-31 36.39"/>
+      <path d="M-31 36.34 L-31 36.27"/>
+      <path d="M-31 36.22 L-31 36.04"/>
+      <path d="M-31 35.99 L-31 35.96"/>
+      <path d="M-31 35.91 L-31 35.48"/>
+      <path d="M-31 35.43 L-31 35"/>
+      <path d="M-31 34.95 L-31 34.88"/>
+      <path d="M-31 34.83 L-31 34.4"/>
+      <path d="M-31 34.35 L-31 34.32"/>
+      <path d="M-31 34.27 L-31 33.84"/>
+      <path d="M-31 33.79 L-31 33.71"/>
+      <path d="M-31 33.66 L-31 32.32"/>
+      <path d="M-31 32.27 L-31 31.36"/>
+      <path d="M-31 31.31 L-31 31.16"/>
+      <path d="M-31 31.11 L-31 30.68"/>
+      <path d="M-31 30.63 L-31 23 L13.59 23"/>
+      <path d="M31 23 L30.92 23"/>
+      <path d="M30.87 23 L30.29 23"/>
+      <path d="M30.22 23 L29.81 23"/>
+      <path d="M29.76 23 L29.15 23"/>
+      <path d="M29.08 23 L28.67 23"/>
+      <path d="M28.62 23 L28.52 23"/>
+      <path d="M28.42 23 L28.01 23"/>
+      <path d="M27.96 23 L27.56 23"/>
+      <path d="M27.51 23 L27.38 23"/>
+      <path d="M27.28 23 L26.9 23"/>
+      <path d="M26.85 23 L26.27 23"/>
+      <path d="M26.17 23 L25.76 23"/>
+      <path d="M25.71 23 L25.1 23"/>
+      <path d="M25.05 23 L24.65 23"/>
+      <path d="M24.6 23 L23.99 23"/>
+      <path d="M23.94 23 L22.19 23"/>
+      <path d="M22.12 23 L21.74 23"/>
+      <path d="M21.69 23 L21.11 23"/>
+      <path d="M21 23 L18.85 23"/>
+      <path d="M18.78 23 L18.2 23"/>
+      <path d="M18.09 23 L17.03 23"/>
+      <path d="M16.96 23 L16.58 23"/>
+      <path d="M16.52 23 L15.94 23"/>
+      <path d="M15.87 23 L13.69 23"/>
+      <path d="M22 104 L-22 104 L-22 90 L22 90 Z"/>
+      <path d="M17 80 L-17 80 L-17 70 L17 70 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="0.3"><path d="M-3 0 H3 M0 -3 V3"/></g>
+</svg>

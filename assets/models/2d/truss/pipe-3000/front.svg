@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1626.04 -123.19 3252.08 246.38" width="3252.08mm" height="246.38mm" data-model="pipe-3000" data-view="front" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>pipe-3000 — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-1534 -16.77 L-1534 15.83 L-1531.12 18.7 L-1504.28 22.54 L-1499.48 25.42 L-1498.53 30.21 L-1488.94 30.21 L-1487.02 24.46 L1487.02 24.46 L1488.94 30.21 L1498.53 30.21 L1499.49 25.42 L1504.28 22.54 L1531.12 18.7 L1534 15.83 L1534 -16.77 L1527.29 -19.65 L1519.62 -19.65 L1517.7 -21.56 L1500.44 -23.48 L1498.53 -31.15 L1488.94 -31.15 L1487.02 -23.48 L-1487.02 -23.48 L-1488.94 -31.15 L-1498.53 -31.15 L-1500.44 -23.48 L-1508.11 -23.48 L-1510.03 -21.56 L-1527.29 -19.65 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-1500 -18.06 L-1500 -24.15 L-1534 -17.39 L-1534 17.39 L-1500 24.15 L-1500 23.22"/>
+      <path d="M-1487.54 -24.15 L1487.54 -24.15"/>
+      <path d="M-1500 19.01 L-1500 24.15"/>
+      <path d="M-1500 10.22 L-1500 20.91"/>
+      <path d="M-1500 -10.22 L-1500 12.08"/>
+      <path d="M-1487.54 24.15 L1487.54 24.15"/>
+      <path d="M-1500 -12.08 L-1500 -20.91"/>
+      <path d="M-1500 31.15 L-1488 31.15 L-1488 -31.15 L-1500 -31.15 Z"/>
+      <path d="M1500 23.22 L1500 24.15 L1534 17.39 L1534 -17.39 L1500 -24.15 L1500 -18.06"/>
+      <path d="M1500 24.15 L1500 19.01"/>
+      <path d="M1500 -10.22 L1500 -20.91"/>
+      <path d="M1500 10.22 L1500 -12.08"/>
+      <path d="M1500 12.08 L1500 20.91"/>
+      <path d="M1488 31.15 L1500 31.15 L1500 -31.15 L1488 -31.15 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

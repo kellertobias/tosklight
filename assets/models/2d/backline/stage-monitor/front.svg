@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-299.98 -362.5 599.96 379.48" width="599.96mm" height="379.48mm" data-model="stage-monitor" data-view="front" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>stage-monitor — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-283 -271.76 L-283 -232.14 L-280.17 -231.79 L-279.99 0.09 L280.17 -0.08 L280.17 -231.79 L283 -232.14 L283 -271.76 L280.17 -272.12 L279.99 -345.52 L-279.99 -345.52 L-280.17 -272.12 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.41" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-280.18 -272 L-283 -272 L-283 -232 L-280.18 -232"/>
+      <path d="M280.18 -232 L283 -232 L283 -272 L280.18 -272"/>
+      <path d="M280 -336.38 L280 0 L-280 0 L-280 -345.52 L280 -345.52 L280 -336.38 L-280 -336.38"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.41"><path d="M-16.98 0 H16.98 M0 -16.98 V16.98"/></g>
+</svg>

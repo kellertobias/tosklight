@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-159.66 30.34 341.32 323.68" width="341.32mm" height="323.68mm" data-model="show-laser-no-clamp" data-view="side" data-pose="authored-home" data-hinge="0 259.4" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>show-laser-no-clamp — side</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path id="silhouette-body" fill-rule="evenodd" d="M-150 174.54 L-149.9 344.29 L149.96 344.29 L150.06 319.44 L172 319.23 L172 199.49 L150.06 199.29 L149.96 174.43 L120.18 174.43 L119.98 170.41 L-119.91 170.41 L-120.11 174.43 Z"/><path id="silhouette-hardware" fill-rule="evenodd" d="M-82.58 40.1 L-82.58 288.04 L82.34 288.14 L82.44 40.1 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="0.81" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M150.12 309.36 L172 309.36 L172 319.36 L150.12 319.36 L172 319.36 L172 199.36 L150.12 199.36 L172 199.36 L172 209.36 L150.12 209.36"/>
+      <path d="M172 319.36 L150.12 319.36"/>
+      <path d="M172 199.36 L150.12 199.36"/>
+      <path d="M150 344.36 L-150 344.36 L-150 174.36 L150 174.36 Z"/>
+      <path d="M120 174.36 L120 170.36 L-120 170.36 L-120 174.36"/>
+    </g>
+    <g id="hardware">
+      <path d="M-82.5 288.16 L82.5 288.16 L82.5 59.2 L-82.5 59.2 L-82.5 40 L82.5 40 L82.5 288.16 L-82.5 288.16 L-82.5 59.2"/>
+      <path d="M0 278.56 L-9.6 275.99 L-16.63 268.96 L-19.2 259.36 L-16.63 249.76 L-9.6 242.74 L0 240.16 L9.6 242.74 L16.63 249.76 L19.2 259.36 L16.63 268.96 L9.6 275.99 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="0.81"><path d="M-9.66 0 H9.66 M0 -9.66 V9.66"/></g>
+</svg>

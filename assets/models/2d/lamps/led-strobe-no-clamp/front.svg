@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-296.8 23.2 593.6 290.6" width="593.6mm" height="290.6mm" data-model="led-strobe-no-clamp" data-view="front" data-pose="tilted" data-hinge="0 202" data-bracket="-90" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>led-strobe-no-clamp — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path id="silhouette-body" fill-rule="evenodd" d="M-249.9 107.03 L-249.73 296.9 L249.9 296.72 L249.73 106.85 Z"/><path id="silhouette-hardware" fill-rule="evenodd" d="M-280 40.18 L-279.83 240.55 L-264.08 240.55 L-263.73 227.6 L263.73 227.6 L264.07 240.55 L280 240.38 L279.82 40 Z M-263.9 65.72 L-263.73 176.5 L263.9 176.33 L263.73 65.55 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-246 112 L-246 292 L-232 292 L-232 112 Z"/>
+      <path d="M-246 111 L-246 125 L246 125 L246 111 Z"/>
+      <path d="M232 112 L232 292 L246 292 L246 112 Z"/>
+      <path d="M-246 279 L-246 293 L246 293 L246 279 Z"/>
+      <path d="M-232 125.22 L-232 278.95"/>
+      <path d="M232 278.95 L232 125.22"/>
+      <path d="M-250 107 L-250 297 L250 297 L250 107 Z"/>
+    </g>
+    <g id="hardware">
+      <path d="M-280 65.6 L280 65.6 L280 40 L-280 40 L-280 240.41 L-264 240.41 L-264 65.6 Z"/>
+      <path d="M280 65.6 L280 240.41 L264 240.41 L264 65.6 Z"/>
+      <path d="M-263.9 227.61 L0 227.61 L0 227.26"/>
+      <path d="M263.73 227.61 L0 227.61 L0 223.48"/>
+      <path d="M0 176.76 L0 176.41 L-263.9 176.41"/>
+      <path d="M0 180.54 L0 176.41 L263.73 176.41"/>
+      <path d="M0 189.73 L0 179.84"/>
+      <path d="M0 214.29 L0 189.21"/>
+      <path d="M0 214.81 L0 224.18"/>
+      <path d="M280 227.61 L280 176.41"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.4"><path d="M-16.8 0 H16.8 M0 -16.8 V16.8"/></g>
+</svg>

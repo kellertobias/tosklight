@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2156.04 -154.04 4312.08 308.08" width="4312.08mm" height="308.08mm" data-model="truss-2-point-4000" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>truss-2-point-4000 — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-2034 -18.02 L-2034 17.58 L-2002.22 23.93 L-1999.68 31.56 L-1989.51 31.56 L-1986.96 23.93 L1986.96 23.93 L1989.51 31.56 L1999.68 31.56 L2002.22 23.93 L2034 17.58 L2034 -18.02 L2002.22 -24.37 L1999.68 -32 L1989.51 -32 L1986.96 -24.37 L-1986.96 -24.37 L-1989.51 -32 L-1999.68 -32 L-2002.22 -24.37 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-2002.43 -24.5 L-2034 -18 L-2034 18 L-2004.86 24"/>
+      <path d="M-1987.29 -25 L1987.29 -25 Z"/>
+      <path d="M-1987.29 25 L1987.29 25 Z"/>
+      <path d="M-2000 -32 L-1988 -32 L-1988 32 L-2000 32 L-2000 -32 L-1988 -32 L-1988 -25.37"/>
+      <path d="M2002.43 -24.5 L2034 -18 L2034 18 L2004.86 24"/>
+      <path d="M1988 -25.37 L1988 -32 L2000 -32 L2000 32 L1988 32 L1988 -32 L2000 -32"/>
+      <path d="M-2034 -18 L-2034 -6.75"/>
+      <path d="M-2034 -2.25 L-2034 2.25"/>
+      <path d="M-2034 6.75 L-2034 18"/>
+      <path d="M-2009.71 -23 L-2014.57 -22"/>
+      <path d="M-2021.86 -20.5 L-2026.71 -19.5"/>
+      <path d="M-2012.14 22.5 L-2017 21.5"/>
+      <path d="M-2024.29 20 L-2029.14 19"/>
+      <path d="M-1988 24.2 L-1988 32 L-2000 32"/>
+      <path d="M2009.71 -23 L2014.57 -22"/>
+      <path d="M2021.86 -20.5 L2026.71 -19.5"/>
+      <path d="M2034 -18 L2034 -6.75"/>
+      <path d="M2034 -2.25 L2034 2.25"/>
+      <path d="M2034 6.75 L2034 18"/>
+      <path d="M2012.14 22.5 L2017 21.5"/>
+      <path d="M2024.29 20 L2029.14 19"/>
+      <path d="M1988 24.2 L1988 32 L2000 32"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

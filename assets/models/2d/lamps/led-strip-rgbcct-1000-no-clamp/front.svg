@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-530 -7 1060 141" width="1060mm" height="141mm" data-model="led-strip-rgbcct-1000-no-clamp" data-view="front" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>led-strip-rgbcct-1000-no-clamp — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-500 37.06 L-499.69 79.88 L500 79.56 L500 37.06 L455.31 36.75 L454.69 23 L385.31 23 L384.69 36.75 L-384.69 36.75 L-385.31 23 L-454.69 23 L-455.31 36.75 Z M-496.25 90.19 L-495.94 104.25 L496.25 103.94 L495.94 89.88 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-455 37 L-385 37 L-385 23 L-455 23 Z"/>
+      <path d="M385 37 L455 37 L455 23 L385 23 Z"/>
+      <path d="M-496 104 L496 104 L496 90 L-496 90 Z"/>
+      <path d="M-500 70 L500 70 L500 37 L-500 37 L-500 80 L500 80 L500 70 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

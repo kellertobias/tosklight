@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-211.6 -638.6 423.2 657.2" width="423.2mm" height="657.2mm" data-model="speaker-top" data-view="front" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>speaker-top — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-193 -453.96 L-193 -414.04 L-189.9 -413.66 L-189.9 -0.19 L189.66 0 L189.85 -413.66 L192.95 -414.04 L192.95 -453.96 L189.85 -454.34 L189.85 -619.81 L-189.71 -620 L-189.9 -454.34 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-189.9 -454 L-193 -454 L-193 -414 L-189.9 -414"/>
+      <path d="M189.9 -414 L193 -414 L193 -454 L189.9 -454"/>
+      <path d="M48.65 -263.43 L54 -240 L48.65 -216.57 L33.67 -197.78 L12.02 -187.35 L-12.02 -187.35 L-33.67 -197.78 L-48.65 -216.57 L-54 -240 L-48.65 -263.43 L-33.67 -282.22 L-12.02 -292.65 L12.02 -292.65 L33.67 -282.22 Z"/>
+      <path d="M21.08 -490.15 L23.4 -480 L21.08 -469.85 L14.59 -461.71 L5.21 -457.19 L-5.21 -457.19 L-14.59 -461.71 L-21.08 -469.85 L-23.4 -480 L-21.08 -490.15 L-14.59 -498.29 L-5.21 -502.81 L5.21 -502.81 L14.59 -498.29 Z"/>
+      <path d="M-190 0 L190 0 L190 -620 L-190 -620 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.55"><path d="M-18.6 0 H18.6 M0 -18.6 V18.6"/></g>
+</svg>

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-330.31 -350.31 660.62 717.62" width="660.62mm" height="717.62mm" data-model="rack-18u-wheels" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>rack-18u-wheels — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-310 -329.79 L-310 -270.13 L-300.27 -269.7 L-300.27 269.78 L-310 270.2 L-310 329.86 L-299.85 330.29 L-299.85 346.79 L-180.31 347 L-179.89 343.19 L-105 343.19 L-104.57 319.92 L104.87 319.92 L105.3 343.19 L179.77 343.19 L180.19 347 L299.93 347 L300.15 330.29 L309.88 329.86 L309.88 270.2 L300.15 269.78 L300.15 -269.7 L309.88 -270.13 L309.88 -329.79 L250.01 -330 L249.58 -320.27 L-249.7 -320.27 L-250.13 -330 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.69" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M195.31 320 L-195.1 320"/>
+      <path d="M-104.58 320 L105.01 320"/>
+      <path d="M-300 269.87 L-300 269.84"/>
+      <path d="M-249.84 -320 L-249.88 -320"/>
+      <path d="M-300 330.1 L-300 347 L-180 347 L-180 343.2"/>
+      <path d="M-195 319.96 L-195 343 L-105 343 L-105 319.96"/>
+      <path d="M180 343.2 L180 347 L300 347 L300 330.1"/>
+      <path d="M105 319.96 L105 343 L195 343 L195 319.96"/>
+      <path d="M-104.72 320 L104.93 320"/>
+      <path d="M-249.84 320 L249.63 320"/>
+      <path d="M249.63 298 L-249.84 298"/>
+      <path d="M-278 269.84 L-278 -269.84"/>
+      <path d="M-249.84 -298 L249.63 -298"/>
+      <path d="M278 269.84 L278 -269.84"/>
+      <path d="M300 269.84 L300 -269.84"/>
+      <path d="M-310 327.46 L-310 327.25"/>
+      <path d="M-310 330 L-250 330 L-250 270 L-310 270 Z"/>
+      <path d="M-310 -272.54 L-310 -272.75"/>
+      <path d="M-310 -270 L-250 -270 L-250 -330 L-310 -330 Z"/>
+      <path d="M310 330 L310 270 L310 330 L250 330 L250 270 L310 270"/>
+      <path d="M310 -270 L310 -330 L310 -270 L250 -270 L250 -330 L310 -330"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.69"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

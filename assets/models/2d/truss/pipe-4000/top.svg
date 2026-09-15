@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2156.04 -153.19 4312.08 306.38" width="4312.08mm" height="306.38mm" data-model="pipe-4000" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>pipe-4000 — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-2034 -17.17 L-2034 15.89 L-2027.64 19.7 L-2004.76 22.24 L-2000.95 26.06 L-1999.68 32.41 L-1989.51 32.41 L-1986.96 24.78 L1986.96 24.78 L1989.51 32.41 L1999.68 32.41 L2000.95 26.06 L2004.76 22.24 L2027.64 19.7 L2034 15.89 L2034 -17.17 L2002.22 -23.52 L1999.68 -31.15 L1989.51 -31.15 L1986.96 -23.52 L-1986.96 -23.52 L-1989.51 -31.15 L-1999.68 -31.15 L-2002.22 -23.52 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-2001.21 -23.91 L-2034 -17.39 L-2034 17.39 L-2001.21 23.91"/>
+      <path d="M-1987.29 -24.15 L1987.29 -24.15"/>
+      <path d="M-1987.29 24.15 L1987.29 24.15"/>
+      <path d="M-2000 -31.15 L-1988 -31.15 L-1988 31.15 L-2000 31.15 Z"/>
+      <path d="M2001.21 -23.91 L2034 -17.39 L2034 17.39 L2001.21 23.91"/>
+      <path d="M1988 -31.15 L2000 -31.15 L2000 31.15 L1988 31.15 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

@@ -5,7 +5,7 @@ rest of what stands on a stage, built with Blender and exported as self-containe
 glTF 2.0 binaries.
 
 ```
-lamps/     63 files   moving heads, scanners, profile spot, PARs, LED PARs, blinders, strobes, strips, hazer
+lamps/     87 files   moving heads, scanners, profile spot, PARs, LED PARs, blinders, strobes, strips, hazer
 truss/     46 files   2-, 3- and 4-point sections, pipes, the corner set, a ground-support base,
                       a chain hoist, a half-metre of load chain, a wind-up truss lift
 stage/     60 files   decks, railings, curtains, mirror balls and their motor
@@ -16,7 +16,7 @@ people/     4 files   singer, guitarist, pianist, deejay
 ```
 
 Anything that flies appears twice: `<model>.glb` with its mounting hardware and
-`<model>-no-clamp.glb` without. Forty of the models are flown, so the set is 199 files.
+`<model>-no-clamp.glb` without. Fifty-two of the models are flown, so the set is 223 files.
 
 `manifest.json` lists every model with its bounding size in millimetres, its triangle
 count, where its origin sits, its node list with each node's classification, which node is
@@ -24,6 +24,10 @@ its truss coupler, and the hinges its hardware swivels on.
 
 `docs/help/20-ToskLight-PreViz/` shows the whole set with a render of each model; both the
 renders and that catalogue page come from `npm run models:render`.
+
+`2d/` holds an editable SVG line drawing of every model from above, the front and the side, as
+the starting point for the symbols the PreViz plan draws. `npm run models:2d` regenerates them
+without overwriting a drawing that has been edited; see `2d/README.md`.
 
 ## Using one in a fixture package
 

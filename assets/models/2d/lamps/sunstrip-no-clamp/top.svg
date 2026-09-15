@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-559.68 -76.68 1119.36 153.36" width="1119.36mm" height="153.36mm" data-model="sunstrip-no-clamp" data-view="top" data-pose="authored-home" data-hinge="0 0" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>sunstrip-no-clamp — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path id="silhouette-body" fill-rule="evenodd" d="M-500.28 -44.67 L-499.95 44.76 L500.28 44.43 L499.95 -45 Z"/><path id="silhouette-hardware" fill-rule="evenodd" d="M-528 -39.39 L-527.67 40.14 L528 39.81 L527.67 -39.72 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-500 45 L500 45 L500 -45 L-500 -45 Z"/>
+      <path d="M-470 30 L470 30 L470 -30 L-470 -30 Z"/>
+    </g>
+    <g id="hardware">
+      <path d="M514 -40 L528 -40 L528 40 L-528 40 L-528 -40 L-514 -40"/>
+      <path d="M-528 40 L-528 -40 L528 -40"/>
+      <path d="M-528 -22.4 L-528 22.4"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

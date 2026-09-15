@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-551.2 -50.22 1102.4 100.44" width="1102.4mm" height="100.44mm" data-model="railing-1000" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>railing-1000 — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-520 -0.5 L-520 0.8 L-519.35 1.45 L-516.1 11.85 L-506.03 19.33 L506.02 19.33 L516.1 11.85 L519.35 1.45 L520 0.8 L516.75 -10.9 L514.47 -13.17 L506.02 -19.02 L-506.03 -19.02 L-514.48 -13.17 L-516.75 -10.9 L-516.75 -9.6 L-518.05 -7 L-518.05 -5.05 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-500 -19.02 L500 -19.02"/>
+      <path d="M-483.43 -11.76 L483.43 -11.76"/>
+      <path d="M-500 -5.4 L-500 0 L500 0 L500 -5.4"/>
+      <path d="M-500 0 L-500 5.4"/>
+      <path d="M500 0 L500 5.4"/>
+      <path d="M-484.08 11.76 L484.08 11.76"/>
+      <path d="M-493.83 19.02 L493.83 19.02"/>
+      <path d="M-483.82 -11.76 L-480 0 L-483.82 11.76 L-493.82 19.02 L-506.18 19.02 L-516.18 11.76 L-520 0 L-516.18 -11.76 L-506.18 -19.02 L-493.82 -19.02 Z"/>
+      <path d="M516.18 -11.76 L520 0 L516.18 11.76 L506.18 19.02 L493.82 19.02 L483.82 11.76 L480 0 L483.82 -11.76 L493.82 -19.02 L506.18 -19.02 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

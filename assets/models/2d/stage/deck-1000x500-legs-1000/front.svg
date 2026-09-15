@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-531.2 -1071.2 1062.4 1102.4" width="1062.4mm" height="1102.4mm" data-model="deck-1000x500-legs-1000" data-view="front" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>deck-1000x500-legs-1000 — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-500 -1039.68 L-499.67 -999.7 L-453.85 -999.38 L-453.85 -24.38 L-464.9 -23.73 L-464.9 -0.33 L-394.7 -0.33 L-394.7 -23.73 L-405.75 -24.38 L-405.75 -999.38 L405.77 -999.7 L406.1 -24.38 L395.05 -23.73 L395.05 -0.33 L464.92 0 L465.25 -23.73 L454.2 -24.38 L454.2 -999.38 L500.02 -999.7 L500.35 -1039.68 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-465 -24 L-465 0 L-395 0 L-395 -24 L-465 -24 L-465 0 L-458.32 0 L-458.32 -24"/>
+      <path d="M-458.32 0 L-440.82 0 L-440.82 -24"/>
+      <path d="M-440.82 0 L-419.18 0 L-419.18 -24"/>
+      <path d="M-395 0 L-401.68 0 L-401.68 -24"/>
+      <path d="M-419.18 0 L-401.68 0"/>
+      <path d="M395 -24 L395 0 L465 0 L465 -24 L395 -24 L395 0 L401.68 0 L401.68 -24"/>
+      <path d="M401.68 0 L419.18 0 L419.18 -24"/>
+      <path d="M419.18 0 L440.82 0 L440.82 -24"/>
+      <path d="M465 0 L458.32 0 L458.32 -24"/>
+      <path d="M440.82 0 L458.32 0"/>
+      <path d="M-406 -24.32 L-406 -999.68"/>
+      <path d="M-454 -24.32 L-454 -999.68 Z"/>
+      <path d="M-449.42 -24.32 L-449.42 -999.68"/>
+      <path d="M-437.42 -24.32 L-437.42 -999.68"/>
+      <path d="M-422.58 -24.32 L-422.58 -999.68"/>
+      <path d="M-410.58 -24.32 L-410.58 -999.68"/>
+      <path d="M454 -24.32 L454 -999.68"/>
+      <path d="M406 -24.32 L406 -999.68 Z"/>
+      <path d="M410.58 -24.32 L410.58 -999.68"/>
+      <path d="M422.58 -24.32 L422.58 -999.68"/>
+      <path d="M437.42 -24.32 L437.42 -999.68"/>
+      <path d="M449.42 -24.32 L449.42 -999.68"/>
+      <path d="M-500 -1000 L500 -1000 L500 -1040 L-500 -1040 Z"/>
+      <path d="M-500 -1001.94 L-500 -1003.55 Z"/>
+      <path d="M-500 -1005.16 L-500 -1013.87 Z"/>
+      <path d="M-500 -1014.52 L-500 -1040 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-65.42 12.59 130.83 191.33" width="130.83mm" height="191.33mm" data-model="mirror-ball-motor-no-clamp" data-view="front" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>mirror-ball-motor-no-clamp — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-60 30.01 L-60 119.93 L-12.96 120.04 L-12.96 148.92 L-3.93 149.03 L-3.93 196.19 L-2.63 197.03 L-2.07 197.26 L-1.85 197.48 L0.07 198.5 L0.3 198.27 L0.86 198.05 L1.09 197.82 L1.65 197.6 L1.88 197.37 L2.44 197.15 L3.23 196.58 L3.85 196.3 L3.85 149.03 L12.99 148.92 L12.99 120.04 L60.03 119.93 L60.03 30.01 L45.08 29.96 L44.97 18 L-44.94 18 L-45.05 29.96 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M3.9 191.75 L3.9 149 L13 149 L13 120.02"/>
+      <path d="M-10.52 120.02 L-10.52 149 L-13 149 L-13 120.02"/>
+      <path d="M-10.52 149 L-4.02 149 L-4.02 120.02"/>
+      <path d="M-4.02 149 L-3.96 149"/>
+      <path d="M4.02 149 L4.02 120.02"/>
+      <path d="M10.52 149 L10.52 120.02"/>
+      <path d="M-3.9 142.92 L-3.9 196.25 L0 198.5 L3.9 196.25 L3.9 142.92"/>
+      <path d="M0 198.5 L0 140.63"/>
+      <path d="M-60 120 L60 120 L60 30 L-60 30 Z"/>
+      <path d="M-45 29.94 L-45 18 L45 18 L45 29.94"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="0.45"><path d="M-5.41 0 H5.41 M0 -5.41 V5.41"/></g>
+</svg>

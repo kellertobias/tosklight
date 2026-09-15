@@ -87,6 +87,7 @@ pub(super) fn read_plan_artwork(
         vertices,
         normals,
         indices,
+        lines: Vec::new(),
     })
 }
 
@@ -113,6 +114,36 @@ fn parse_path_numbers(value: &str) -> Result<Vec<f32>, String> {
         })
         .collect::<String>();
     parse_numbers(&numeric)
+}
+
+/// A renderer-owned default body's plan artwork: the line drawings of its shipped model `name` at
+/// `scale`, and for a view the model has no drawing of, the model's generated silhouette.
+pub(super) fn default_plan_artwork(
+    profile: &light_fixture::FixtureProfile,
+    model: &viz_scene::FixtureModel,
+    name: &str,
+    scale: f32,
+    warnings: &mut Vec<String>,
+) -> Vec<viz_scene::PlanArtwork> {
+    let mut artwork = crate::plan_drawing::model_drawing_artwork(name, scale);
+    for view in light_fixture::ProfileProjectionView::ALL {
+        if artwork.iter().any(|drawn| drawn.view == plan_view(view)) {
+            continue;
+        }
+        match crate::generate_default_model_projection(model, view)
+            .map_err(|error| error.to_string())
+            .and_then(|projection| read_plan_artwork(&projection))
+        {
+            Ok(generated) => artwork.push(generated),
+            Err(reason) => warnings.push(format!(
+                "{} {} default {} projection: {reason}; using renderer fallback",
+                profile.manufacturer,
+                profile.name,
+                view.wire()
+            )),
+        }
+    }
+    artwork
 }
 
 fn plan_view(view: light_fixture::ProfileProjectionView) -> viz_scene::ProjectionView {

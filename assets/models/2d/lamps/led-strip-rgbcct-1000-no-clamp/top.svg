@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-530 -61 1060 122" width="1060mm" height="122mm" data-model="led-strip-rgbcct-1000-no-clamp" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>led-strip-rgbcct-1000-no-clamp — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-500 -24.44 L-500 24.94 L-455.31 25.25 L-454.69 30.88 L-385.31 30.88 L-384.69 25.25 L384.69 25.25 L385.31 30.88 L454.69 30.88 L455.31 25.25 L500 24.94 L500 -24.44 L455.31 -24.75 L454.69 -31 L385.31 -31 L384.69 -24.75 L-384.69 -24.75 L-385.31 -31 L-454.69 -31 L-455.31 -24.75 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-455 31 L-385 31 L-385 -31 L-455 -31 Z"/>
+      <path d="M385 31 L455 31 L455 -31 L385 -31 Z"/>
+      <path d="M-455.31 -25 L-500 -25 L-500 25 L-455.31 25"/>
+      <path d="M-385 25 L384.69 25"/>
+      <path d="M455 25 L500 25 L500 -25 L455 -25"/>
+      <path d="M384.69 -25 L-385 -25"/>
+      <path d="M500 17 L500 -17"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-254.4 25.6 508.8 477.5" width="508.8mm" height="477.5mm" data-model="flood-asymmetric-no-clamp" data-view="front" data-pose="tilted" data-hinge="0 300.7" data-bracket="-90" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>flood-asymmetric-no-clamp — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path id="silhouette-body" fill-rule="evenodd" d="M-207.9 112.75 L-207.75 488.8 L207.9 488.65 L207.75 112.6 Z"/><path id="silhouette-hardware" fill-rule="evenodd" d="M-240 40.15 L-239.85 343.9 L-222.15 343.9 L-221.85 329.5 L-186 329.35 L-186 272.05 L-222 271.75 L-221.85 68.8 L221.85 68.8 L222 271.75 L186 272.05 L186 329.35 L221.85 329.5 L222.15 343.9 L240 343.75 L239.85 40 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-186 452.7 L-186 464.7 L186 464.7 L186 452.7 Z"/>
+      <path d="M-186 464.7 L-186 172.7 L-186 184.7 L186 184.7 L186 172.7 L186 464.7 L174 464.7 L174 172.7 L-186 172.7 L-174 172.7 L-174 464.7 Z"/>
+      <path d="M-165 183.7 L-165 453.7 L165 453.7 L165 183.7 Z"/>
+      <path d="M200 480.7 L184 480.7 L184 120.7 L200 120.7 L200 136.7 L-200 136.7 L-200 120.7 L-200 480.7 L200 480.7 L200 120.7 L-200 120.7 L-184 120.7 L-184 480.7 L-200 480.7"/>
+      <path d="M-208 112.7 L-208 488.7 L208 488.7 L208 112.7 Z"/>
+    </g>
+    <g id="hardware">
+      <path d="M-240 68.8 L240 68.8 L240 40 L-240 40 L-240 343.91 L-222 343.91 L-222 68.8 Z"/>
+      <path d="M240 68.8 L240 343.91 L222 343.91 L222 68.8 Z"/>
+      <path d="M-222 329.51 L-186 329.51 L-186 271.91 L-222 271.91"/>
+      <path d="M222 271.91 L186 271.91 L186 329.51 L222 329.51"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.2"><path d="M-14.4 0 H14.4 M0 -14.4 V14.4"/></g>
+</svg>

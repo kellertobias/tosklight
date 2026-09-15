@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-369.94 -170.94 739.88 339.88" width="739.88mm" height="339.88mm" data-model="moving-head-led-wash-500-no-clamp" data-view="top" data-pose="moving-forward" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>moving-head-led-wash-500-no-clamp — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-349 -74.75 L-349 74.89 L-230.12 75.1 L-229.69 140.11 L66.96 140.11 L67.4 147.96 L162.94 147.96 L163.38 140.11 L229.9 139.89 L230.12 75.1 L349 74.89 L349 -74.75 L230.12 -74.96 L229.69 -139.97 L110.15 -139.97 L109.72 -150 L-109.72 -150 L-110.15 -139.97 L-229.69 -139.97 L-230.12 -74.96 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-230 140 L230 140 L230 -140 L-230 -140 Z"/>
+      <path d="M67 140.22 L67 148 L163 148 L163 140.22"/>
+      <path d="M-110 -140 L110 -140 L110 -150 L-110 -150 Z"/>
+    </g>
+    <g id="yoke">
+      <path d="M271 -75 L349 -75 L349 28.68"/>
+      <path d="M229.9 75 L349 75 L349 55.29"/>
+      <path d="M349 54.86 L349 53.11"/>
+      <path d="M349 52.67 L349 50.93"/>
+      <path d="M349 50.49 L349 49.62"/>
+      <path d="M349 49.18 L349 48.75"/>
+      <path d="M349 48.31 L349 36.75"/>
+      <path d="M349 36.32 L349 34.79"/>
+      <path d="M349 34.35 L349 32.61"/>
+      <path d="M349 32.17 L349 29.12"/>
+      <path d="M-230.12 75 L-349 75 L-349 55.29"/>
+      <path d="M-349 28.68 L-349 -75 L-271 -75"/>
+      <path d="M-349 54.86 L-349 53.11"/>
+      <path d="M-349 52.67 L-349 50.93"/>
+      <path d="M-349 50.49 L-349 49.62"/>
+      <path d="M-349 49.18 L-349 48.75"/>
+      <path d="M-349 48.31 L-349 36.75"/>
+      <path d="M-349 36.32 L-349 34.79"/>
+      <path d="M-349 34.35 L-349 32.61"/>
+      <path d="M-349 32.17 L-349 29.12"/>
+      <path d="M-349 75 L-349 -75 L-229.9 -75"/>
+      <path d="M349 75 L349 -75 L230.12 -75"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.75"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

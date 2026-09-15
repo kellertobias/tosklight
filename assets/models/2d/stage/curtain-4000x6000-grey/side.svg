@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-269.25 -257.25 591.5 6439.5" width="591.5mm" height="6439.5mm" data-model="curtain-4000x6000-grey" data-view="side" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>curtain-4000x6000-grey — side</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-87 59.79 L-87 5967.73 L-20.55 5969.62 L-16.76 6000 L17.41 6000 L21.21 5969.62 L140.81 5967.73 L140.81 59.79 L11.72 55.99 L11.72 18.02 L19.31 14.23 L17.41 -75 L11.72 -73.1 L11.72 -0.96 L-22.45 2.84 L-22.45 55.99 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M20 6000 L-20 6000 L-20 5930 L20 5930 Z"/>
+      <path d="M18 15 L10 15 L10 -75 L18 -75 Z"/>
+      <path d="M10 0 L10 -75 L11.6 -75 L10 -75 L10 0 L10 -75 L11.6 -75 L10 -75 L10 0 L10 -75 L11.6 -75 L10 -75 L10 0 L10 -75 L11.6 -75 L10 -75 L10 0 L10 -75 L11.6 -75 L10 -75 L10 0 L10 -75 L11.6 -75 L10 -75 L10 0 L10 -75 L11.6 -75"/>
+      <path d="M11 60 L-23 60 L-23 0 L11 0 Z"/>
+      <path d="M20.62 5970 L120 5970 L20.62 5970 L120 5970 L120 60 L0 60 L0 5970 L11.25 5970"/>
+      <path d="M0 60 L-35.68 60"/>
+      <path d="M0 5970 L-67.2 5970"/>
+      <path d="M20.17 5970 L55 5970"/>
+      <path d="M20.31 5970 L96 5970"/>
+      <path d="M20.74 5970 L38 5970"/>
+      <path d="M20.81 5970 L140 5970 L20.81 5970 L140 5970 L140 60 L123.12 60"/>
+      <path d="M20.84 5970 L72 5970"/>
+      <path d="M-87 5554.36 L-87 5552.47 Z"/>
+      <path d="M-87 5495.53 L-87 5493.63 Z"/>
+      <path d="M-87 5379.76 L-87 5377.86 Z"/>
+      <path d="M-87 5205.15 L-87 5203.26 Z"/>
+      <path d="M-48.75 5970 L-78 5970"/>
+      <path d="M-56.4 5970 L-24 5970 L-87 5970 L-87 60 L-42.53 60"/>
+      <path d="M-41.1 5970 L-24 5970 L-24 60"/>
+      <path d="M-39.95 60 L-38.81 60"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

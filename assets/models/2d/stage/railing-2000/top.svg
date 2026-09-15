@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1081.2 -80.22 2162.4 160.44" width="2162.4mm" height="160.44mm" data-model="railing-2000" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>railing-2000 — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-1020 -1.81 L-1018.73 5.84 L-1016.18 12.22 L-1010.44 15.4 L-1006.61 19.23 L1006.61 19.23 L1010.44 15.4 L1016.17 12.22 L1018.72 5.84 L1018.72 2.02 L1020 0.74 L1016.17 -12.01 L1006.61 -19.02 L-1006.61 -19.02 L-1016.18 -12.01 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-1000 -19.02 L-7.01 -19.02"/>
+      <path d="M-5.74 -19.02 L-1.27 -19.02"/>
+      <path d="M0 -19.02 L1000 -19.02"/>
+      <path d="M-984.07 -11.76 L-15.93 -11.76"/>
+      <path d="M15.93 -11.76 L984.07 -11.76"/>
+      <path d="M-1000 -9.28 L-1000 0 L1000 0 L1000 -9.28"/>
+      <path d="M-1000 0 L-1000 9.28"/>
+      <path d="M1000 0 L1000 9.28"/>
+      <path d="M-984.07 11.76 L-15.93 11.76"/>
+      <path d="M15.93 11.76 L984.07 11.76"/>
+      <path d="M-992.99 19.02 L-7.01 19.02"/>
+      <path d="M7.01 19.02 L992.99 19.02"/>
+      <path d="M-983.82 -11.76 L-980 0 L-983.82 11.76 L-993.82 19.02 L-1006.18 19.02 L-1016.18 11.76 L-1020 0 L-1016.18 -11.76 L-1006.18 -19.02 L-993.82 -19.02 Z"/>
+      <path d="M16.18 -11.76 L20 0 L16.18 11.76 L6.18 19.02 L-6.18 19.02 L-16.18 11.76 L-20 0 L-16.18 -11.76 L-6.18 -19.02 L6.18 -19.02 Z"/>
+      <path d="M1016.18 -11.76 L1020 0 L1016.18 11.76 L1006.18 19.02 L993.82 19.02 L983.82 11.76 L980 0 L983.82 -11.76 L993.82 -19.02 L1006.18 -19.02 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

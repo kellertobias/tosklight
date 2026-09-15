@@ -325,7 +325,7 @@ fn generate_view(
     })
 }
 
-fn head_rotation(model: &FixtureModel, target_axis: Option<Vec3>) -> Quat {
+pub(crate) fn head_rotation(model: &FixtureModel, target_axis: Option<Vec3>) -> Quat {
     target_axis.map_or(Quat::IDENTITY, |target| {
         Quat::from_rotation_arc(
             model
@@ -367,7 +367,7 @@ fn end_on_bounds_fallback(
         .collect())
 }
 
-fn simplified_away(name: &str) -> bool {
+pub(crate) fn simplified_away(name: &str) -> bool {
     let folded = name.to_ascii_lowercase();
     [
         "glass", "grille", "grill", "hole", "screw", "bolt", "washer", "texture",
@@ -376,7 +376,7 @@ fn simplified_away(name: &str) -> bool {
     .any(|detail| folded.contains(detail))
 }
 
-fn project(point: Vec3, view: ProfileProjectionView) -> Vec2 {
+pub(crate) fn project(point: Vec3, view: ProfileProjectionView) -> Vec2 {
     match view {
         ProfileProjectionView::Top => Vec2::new(point.x, point.z),
         ProfileProjectionView::Left => Vec2::new(point.z, -point.y),
@@ -386,7 +386,7 @@ fn project(point: Vec3, view: ProfileProjectionView) -> Vec2 {
     }
 }
 
-fn depth(point: Vec3, view: ProfileProjectionView) -> f32 {
+pub(crate) fn depth(point: Vec3, view: ProfileProjectionView) -> f32 {
     match view {
         ProfileProjectionView::Top => -point.y,
         ProfileProjectionView::Left => point.x,

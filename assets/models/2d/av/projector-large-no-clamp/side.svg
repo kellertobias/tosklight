@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-299.02 20.98 672.04 581.35" width="672.04mm" height="581.35mm" data-model="projector-large-no-clamp" data-view="side" data-pose="authored-home" data-hinge="0 451.3" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>projector-large-no-clamp — side</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path id="silhouette-body" fill-rule="evenodd" d="M-280 321.54 L-279.8 581.28 L279.7 581.28 L280.1 583.26 L299.91 583.26 L300.31 572.16 L354 571.97 L353.8 330.45 L300.31 330.45 L299.91 319.36 L280.1 319.36 L279.7 321.34 L250.38 321.34 L249.98 317.38 L243.25 317.38 L242.85 316.19 L197.28 316.19 L196.89 317.38 L-196.99 317.38 L-197.38 316.19 L-242.95 316.19 L-243.35 317.38 L-249.69 317.38 L-250.08 321.34 Z"/><path id="silhouette-hardware" fill-rule="evenodd" d="M-153.99 40.2 L-153.99 480.04 L153.7 480.23 L153.89 40.2 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M300.18 330.31 L354 330.31 L354 333.45"/>
+      <path d="M354 334.23 L354 568.38"/>
+      <path d="M354 569.56 L354 572.31 L300.18 572.31"/>
+      <path d="M280 319.31 L300 319.31 L300 583.31 L280 583.31 Z"/>
+      <path d="M280 581.31 L-280 581.31 L-280 321.31 L280 321.31 Z"/>
+      <path d="M250 321.26 L250 317.31 L-250 317.31 L-250 321.26"/>
+      <path d="M197 316.31 L197 317.3 L197 316.31 L203.74 316.31 L203.74 317.3"/>
+      <path d="M203.74 316.31 L220 316.31 L220 317.3"/>
+      <path d="M220 316.31 L236.26 316.31 L236.26 317.3"/>
+      <path d="M236.26 316.31 L243 316.31 L243 317.3"/>
+      <path d="M-243 317.3 L-243 316.31 L-236.26 316.31 L-236.26 317.3"/>
+      <path d="M-236.26 316.31 L-220 316.31 L-220 317.3"/>
+      <path d="M-220 316.31 L-203.74 316.31 L-203.74 317.3"/>
+      <path d="M-203.74 316.31 L-197 316.31 L-197 317.3 L-197 316.31"/>
+    </g>
+    <g id="hardware">
+      <path d="M154 480.11 L154 59.2 L-154 59.2 L-154 40 L154 40 L154 480.11 L-154 480.11 L-154 59.2 L-154 480.11"/>
+      <path d="M0 470.51 L-9.6 467.94 L-16.63 460.91 L-19.2 451.31 L-16.63 441.71 L-9.6 434.68 L0 432.11 L9.6 434.68 L16.63 441.71 L19.2 451.31 L16.63 460.91 L9.6 467.94 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.58"><path d="M-19.02 0 H19.02 M0 -19.02 V19.02"/></g>
+</svg>

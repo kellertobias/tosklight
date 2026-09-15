@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-172.6 -222.6 345.2 445.2" width="345.2mm" height="445.2mm" data-model="dj-player" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>dj-player — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-160 -209.87 L-160 209.87 L159.86 210 L159.99 -209.87 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.05" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-135 -23 L-75 -23 L-75 -57 L-135 -57 Z"/>
+      <path d="M-5 -33.46 L-5 -57 L-65 -57 L-65 -23 L-45.09 -23"/>
+      <path d="M45.09 -23 L65 -23 L65 -57 L5 -57 L5 -33.46"/>
+      <path d="M75 -23 L135 -23 L135 -57 L75 -57 Z"/>
+      <path d="M-120 -85 L120 -85 L120 -195 L-120 -195 Z"/>
+      <path d="M100.46 43.08 L104 70 L100.46 96.92 L90.07 122 L73.54 143.54 L52 160.07 L26.92 170.46 L0 174 L-26.92 170.46 L-52 160.07 L-73.54 143.54 L-90.07 122 L-100.46 96.92 L-104 70 L-100.46 43.08 L-90.07 18 L-73.54 -3.54 L-52 -20.07 L-26.92 -30.46 L0 -34 L26.92 -30.46 L52 -20.07 L73.54 -3.54 L90.07 18 Z"/>
+      <path d="M96.59 44.12 L100 70 L96.59 95.88 L86.6 120 L70.71 140.71 L50 156.6 L25.88 166.59 L0 170 L-25.88 166.59 L-50 156.6 L-70.71 140.71 L-86.6 120 L-96.59 95.88 L-100 70 L-96.59 44.12 L-86.6 20 L-70.71 -0.71 L-50 -16.6 L-25.88 -26.59 L0 -30 L25.88 -26.59 L50 -16.6 L70.71 -0.71 L86.6 20 Z"/>
+      <path d="M-160 210 L160 210 L160 -210 L-160 -210 Z"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.05"><path d="M-12.6 0 H12.6 M0 -12.6 V12.6"/></g>
+</svg>

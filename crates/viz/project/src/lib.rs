@@ -8,10 +8,12 @@
 
 mod appearance;
 mod binding;
+mod cad_default_model;
 mod colour;
 mod decode;
 mod default_model;
 mod fallback;
+mod model_drawing;
 mod plan;
 mod projection;
 
@@ -20,12 +22,19 @@ pub use appearance::{
     colour_temperature_linear_rgb, installed_appearance_linear_rgb, parse_srgb_hex_linear,
 };
 pub use binding::ChannelRef;
+pub use cad_default_model::{ProfileDefaultModel, profile_default_model};
 pub use colour::{ResolvedColour, named_colour};
 pub use decode::Decoder;
 pub use default_model::{
     DefaultModel, FixtureTraits, all as all_default_models, choose as choose_default_model,
 };
-pub use fallback::{OpticalClass, classify};
+pub use fallback::{OpticalClass, body_size, classify};
+pub use model_drawing::{
+    BodyTilt, DEFAULT_LEAN_DEGREES, DRAWING_GENERATOR_ID, DRAWING_GENERATOR_VERSION, DRAWING_VIEWS,
+    DrawingPose, ModelDrawing, drawing_pose, drawing_svg, faces_forward, lean_target,
+    model_drawing, model_drawing_posed, model_drawing_svg, model_drawing_svg_posed,
+    model_drawing_svg_with, model_drawing_with,
+};
 pub use plan::{
     ColourBinding, EmitterBinding, ExternalCameraBinding, GOBO_ARTWORK_EDGE, PatchedFixture,
     PhysicalInstance, ScenePlan, compile, decode_gobo_artwork,
@@ -37,3 +46,5 @@ pub use projection::{
     generate_live_projection_meshes, generate_live_projection_meshes_for_mode,
     generate_profile_projections, projection_cache_is_current,
 };
+mod plan_drawing;
+pub use plan_drawing::has_model_drawing;

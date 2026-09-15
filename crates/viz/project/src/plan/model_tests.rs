@@ -720,6 +720,72 @@ fn fallback_strip_cells_fit_inside_their_body() {
 }
 
 #[test]
+fn a_default_model_fixture_is_planned_from_its_model_drawings() {
+    let compiled = compile(&[patched("profile", ProfileOptics::default())]);
+
+    for (view, index) in compiled.scene.fixture_plan[0].artwork.iter().enumerate() {
+        let artwork = &compiled.scene.plan_artwork[index.expect("every view is drawn") as usize];
+        assert_eq!(artwork.view.index(), view);
+        // Only a line drawing carries linework; a generated projection is fill alone.
+        assert!(
+            !artwork.lines.is_empty(),
+            "{:?} is the line drawing",
+            artwork.view
+        );
+        assert!(
+            !artwork.indices.is_empty(),
+            "{:?} keeps its silhouette",
+            artwork.view
+        );
+    }
+}
+
+#[test]
+fn a_view_with_no_model_drawing_falls_back_to_the_generated_projection() {
+    let fixture = patched("profile", ProfileOptics::default());
+    let model = viz_scene::read_glb(crate::default_model::PROFILE_SPOT.bytes).expect("shipped");
+    let mut warnings = Vec::new();
+
+    let artwork = assets::default_plan_artwork(
+        &fixture.profile,
+        &model,
+        "no-such-drawing",
+        1.0,
+        &mut warnings,
+    );
+
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(artwork.len(), 5, "every view is still drawn");
+    assert!(
+        artwork
+            .iter()
+            .all(|view| view.lines.is_empty() && !view.indices.is_empty())
+    );
+}
+
+#[test]
+fn a_profile_with_its_own_model_is_not_drawn_from_a_shipped_drawing() {
+    use base64::Engine as _;
+    let mut fixture = patched("profile", ProfileOptics::default());
+    Arc::get_mut(&mut fixture.profile)
+        .expect("sole profile owner")
+        .model_asset = Some(format!(
+        "data:model/gltf-binary;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(crate::default_model::PROFILE_SPOT.bytes)
+    ));
+
+    let compiled = compile(&[fixture]);
+
+    assert!(
+        compiled
+            .scene
+            .plan_artwork
+            .iter()
+            .all(|artwork| artwork.lines.is_empty())
+    );
+}
+
+#[test]
 fn default_profile_model_supplies_all_orthographic_plan_views() {
     let compiled = compile(&[patched("profile", ProfileOptics::default())]);
 

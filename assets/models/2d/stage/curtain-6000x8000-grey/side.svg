@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-329.25 -317.25 711.5 8559.5" width="711.5mm" height="8559.5mm" data-model="curtain-6000x8000-grey" data-view="side" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>curtain-6000x8000-grey — side</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-87 63.79 L-87 7967.2 L-23.91 7969.72 L-18.87 8000 L16.46 8000 L21.51 7969.72 L140.11 7967.2 L140.11 63.79 L8.89 58.74 L8.89 18.37 L18.98 13.32 L16.46 -75 L8.89 -72.48 L8.89 -1.82 L-21.39 3.23 L-21.39 58.74 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M20 8000 L-20 8000 L-20 7930 L20 7930 Z"/>
+      <path d="M18 15 L10 15 L10 -75 L18 -75 Z"/>
+      <path d="M11 60 L-23 60 L-23 0 L11 0 Z"/>
+      <path d="M140 60 L10 60 L140 60 L10 60 L140 60 L140 7970 L20 7970 L120 7970 L120 60 L0 60 L0 7970 L15 7970"/>
+      <path d="M0 60 L-56.4 60"/>
+      <path d="M0 7970 L-56.4 7970"/>
+      <path d="M19.2 7970 L96 7970"/>
+      <path d="M9.6 60 L96 60"/>
+      <path d="M9.5 60 L38 60 Z"/>
+      <path d="M19 7970 L38 7970 Z"/>
+      <path d="M55 7970 L140 7970"/>
+      <path d="M10 60 L55 60"/>
+      <path d="M-41.1 7970 L-87 7970 L-87 60 L-41.1 60"/>
+      <path d="M-24 7970 L-24 60"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

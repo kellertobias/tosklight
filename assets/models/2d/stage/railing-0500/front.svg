@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-300 -1030 600 1060" width="600mm" height="1060mm" data-model="railing-0500" data-view="front" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>railing-0500 — front</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-270 -999.69 L-270 -0.31 L269.69 0 L270 -999.69 Z M-230 -959.69 L-229.69 -536.25 L230 -536.56 L229.69 -960 Z M-230 -503.44 L-229.69 -100 L230 -100.31 L229.69 -503.75 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-250 0 L250 0"/>
+      <path d="M-232.5 -100 L232.19 -100"/>
+      <path d="M-230.62 -960 L230.31 -960"/>
+      <path d="M-230.62 -1000 L230.31 -1000"/>
+      <path d="M-236.25 -996.18 L235.94 -996.18"/>
+      <path d="M-250 -988.37 L-250 -986.18 L250 -986.18 L250 -988.37"/>
+      <path d="M-250 -986.18 L-250 -973.82 L250 -973.82 L250 -986.18"/>
+      <path d="M-250 -973.82 L-250 -971.63"/>
+      <path d="M250 -973.82 L250 -971.63"/>
+      <path d="M-236.25 -963.82 L235.94 -963.82"/>
+      <path d="M-230.62 -504 L230.31 -504"/>
+      <path d="M-230.62 -536 L230.31 -536"/>
+      <path d="M-233.75 -532.94 L233.44 -532.94"/>
+      <path d="M-241.25 -524.94 L240.94 -524.94"/>
+      <path d="M-241.25 -515.06 L240.94 -515.06"/>
+      <path d="M-233.75 -507.06 L233.44 -507.06"/>
+      <path d="M-230 -100.31 L-230 -504.37"/>
+      <path d="M-230 -535.94 L-230 -960.62"/>
+      <path d="M-230 -999.69 L-230 -1000 L-270 -1000 L-270 0 L-266.18 0 L-266.18 -1000"/>
+      <path d="M-230 0 L-266.18 0"/>
+      <path d="M-256.18 0 L-256.18 -1000"/>
+      <path d="M-243.82 0 L-243.82 -1000"/>
+      <path d="M-233.82 0 L-233.82 -512.5"/>
+      <path d="M-233.82 -527.81 L-233.82 -966.25"/>
+      <path d="M-233.82 -994.06 L-233.82 -1000"/>
+      <path d="M230 0 L270 0 L270 -1000 L230 -1000 L230 -999.69"/>
+      <path d="M230 -100.31 L230 -504.37"/>
+      <path d="M230 -535.94 L230 -960.62"/>
+      <path d="M233.82 0 L233.82 -512.5"/>
+      <path d="M233.82 -527.81 L233.82 -966.25"/>
+      <path d="M233.82 -994.06 L233.82 -1000"/>
+      <path d="M243.82 0 L243.82 -1000"/>
+      <path d="M256.18 0 L256.18 -1000"/>
+      <path d="M266.18 0 L266.18 -1000"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

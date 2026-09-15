@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1325 -106 2650 212" width="2650mm" height="212mm" data-model="led-strip-rgbcct-2500-no-clamp" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>led-strip-rgbcct-2500-no-clamp — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-1250 -23.97 L-1250 24.47 L-1205.47 25.25 L-1203.91 31.5 L-1135.16 31.5 L-1133.59 25.25 L-35.16 25.25 L-33.59 31.5 L33.59 31.5 L35.16 25.25 L1133.59 25.25 L1135.16 31.5 L1203.91 31.5 L1205.47 25.25 L1250 24.47 L1250 -23.97 L1205.47 -24.75 L1203.91 -31 L1135.16 -31 L1133.59 -24.75 L35.16 -24.75 L33.59 -31 L-33.59 -31 L-35.16 -24.75 L-1133.59 -24.75 L-1135.16 -31 L-1203.91 -31 L-1205.47 -24.75 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-1205 31 L-1135 31 L-1135 -31 L-1205 -31 Z"/>
+      <path d="M-35 31 L35 31 L35 -31 L-35 -31 Z"/>
+      <path d="M1135 31 L1205 31 L1205 -31 L1135 -31 Z"/>
+      <path d="M-1205.47 -25 L-1250 -25 L-1250 25 L-1205.47 25"/>
+      <path d="M-1134.38 25 L-35.16 25"/>
+      <path d="M34.38 25 L1133.59 25"/>
+      <path d="M1204.69 25 L1250 25 L1250 -25 L1204.69 -25"/>
+      <path d="M1133.59 -25 L34.37 -25"/>
+      <path d="M-35.16 -25 L-1134.38 -25"/>
+      <path d="M1250 17 L1250 -17"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="2"><path d="M-20 0 H20 M0 -20 V20"/></g>
+</svg>

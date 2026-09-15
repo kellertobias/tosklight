@@ -255,23 +255,20 @@ pub struct ScenePlan {
 
 fn resolve_plan_artwork(
     fixture: &PatchedFixture,
+    mode: &FixtureMode,
+    (model, body_size): (Option<u32>, Vec3),
     scene: &mut Scene,
-    cache: &mut HashMap<light_core::FixtureId, [Option<u32>; 5]>,
-    default_model: Option<&viz_scene::FixtureModel>,
+    cache: &mut HashMap<(light_core::FixtureId, Uuid), [Option<u32>; 5]>,
     warnings: &mut Vec<String>,
 ) -> [Option<u32>; 5] {
-    if let Some(indices) = cache.get(&fixture.profile.id) {
+    if let Some(indices) = cache.get(&(fixture.profile.id, mode.id)) {
         return *indices;
     }
-    let mut indices = [None; 5];
+    let mut artwork = Vec::new();
     if let Some(projections) = fixture.profile.projection_assets.as_ref() {
         for projection in &projections.views {
             match assets::read_plan_artwork(projection) {
-                Ok(artwork) => {
-                    let index = scene.plan_artwork.len() as u32;
-                    indices[artwork.view.index()] = Some(index);
-                    scene.plan_artwork.push(artwork);
-                }
+                Ok(read) => artwork.push(read),
                 Err(reason) => warnings.push(format!(
                     "{} {} {} projection: {reason}; using renderer fallback",
                     fixture.profile.manufacturer,
@@ -280,33 +277,27 @@ fn resolve_plan_artwork(
                 )),
             }
         }
+    } else if fixture.profile.model_asset.is_none()
+        && let Some(body) = model.and_then(|index| scene.models.get(index as usize))
+    {
+        // A renderer-owned default body is drawn from the line drawings of the shipped model
+        // `resolve_model` chose, at the size that body is drawn at. Keep this transient: package
+        // projections remain the portable source of truth whenever a package carries them.
+        let profile = &fixture.profile;
+        let chosen = crate::default_model::choose(
+            profile.body_model.as_deref(),
+            &profile.fixture_type,
+            traits(mode),
+        );
+        let scale = body.scale_to(body_size);
+        artwork = assets::default_plan_artwork(profile, body, chosen.name, scale, warnings);
     }
-    // A renderer-owned default body still needs its real silhouette in every orthographic
-    // Stage view. Keep this transient: package projections remain the portable source of truth
-    // whenever a package actually carries them.
-    if fixture.profile.projection_assets.is_none() {
-        if let Some(model) = default_model {
-            for view in light_fixture::ProfileProjectionView::ALL {
-                match crate::generate_default_model_projection(model, view)
-                    .map_err(|error| error.to_string())
-                    .and_then(|projection| assets::read_plan_artwork(&projection))
-                {
-                    Ok(artwork) => {
-                        let index = scene.plan_artwork.len() as u32;
-                        indices[artwork.view.index()] = Some(index);
-                        scene.plan_artwork.push(artwork);
-                    }
-                    Err(reason) => warnings.push(format!(
-                        "{} {} default {} projection: {reason}; using renderer fallback",
-                        fixture.profile.manufacturer,
-                        fixture.profile.name,
-                        view.wire()
-                    )),
-                }
-            }
-        }
+    let mut indices = [None; 5];
+    for view in artwork {
+        indices[view.view.index()] = Some(scene.plan_artwork.len() as u32);
+        scene.plan_artwork.push(view);
     }
-    cache.insert(fixture.profile.id, indices);
+    cache.insert((fixture.profile.id, mode.id), indices);
     indices
 }
 
@@ -327,7 +318,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     // decodes each piece of glass once.
     let mut artwork: std::collections::HashMap<String, Option<u32>> =
         std::collections::HashMap::new();
-    let mut plan_artwork: HashMap<light_core::FixtureId, [Option<u32>; 5]> = HashMap::new();
+    let mut plan_artwork: HashMap<(light_core::FixtureId, Uuid), [Option<u32>; 5]> = HashMap::new();
 
     for fixture in fixtures {
         // A crowd is an area the desk's crowd path draws, not a body. Every other visual-only
@@ -353,18 +344,19 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             &mut defaults,
             &mut warnings,
         );
-        let default_plan_model = if fixture.profile.model_asset.is_none()
-            && fixture.profile.projection_assets.is_none()
-        {
-            model.and_then(|index| scene.models.get(index as usize).cloned())
-        } else {
-            None
-        };
+        let body_size = fallback::body_size(
+            class,
+            moving,
+            fixture.profile.physical.width_millimetres,
+            fixture.profile.physical.height_millimetres,
+            fixture.profile.physical.depth_millimetres,
+        );
         let plan_projections = resolve_plan_artwork(
             fixture,
+            mode,
+            (model, body_size),
             &mut scene,
             &mut plan_artwork,
-            default_plan_model.as_ref(),
             &mut warnings,
         );
         let plan_fallback = if fallback::has_generic_plan_type(&fixture.profile.fixture_type) {
@@ -378,13 +370,6 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             fallback: plan_fallback,
         });
 
-        let body_size = fallback::body_size(
-            class,
-            moving,
-            fixture.profile.physical.width_millimetres,
-            fixture.profile.physical.height_millimetres,
-            fixture.profile.physical.depth_millimetres,
-        );
         // What light out of this fixture looks like. Profile optics are resolved once; an
         // installed source may override only its physical instance's rated output below.
         let mut optics = fallback::emitter_optics(

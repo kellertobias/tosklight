@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-290 -120 530 243" width="530mm" height="243mm" data-model="chain-motor" data-view="top" data-pose="authored-home" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>chain-motor — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-275 -104.84 L-274.84 105 L-115.16 105 L-114.84 100 L-45.16 100 L-44.84 108.12 L104.84 108.12 L105.16 103.44 L225 103.28 L224.84 -103.44 L75.16 -103.44 L74.84 -100 L-114.84 -100 L-115.16 -105 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-115 -100.16 L-115 -105 L-275 -105 L-275 105 L-115 105 L-114.98 100 L-45 100 L-45 108 L105 108 L105 100 L-45 100"/>
+      <path d="M35.75 -100 L35.6 -100"/>
+      <path d="M15.92 -100 L15.76 -100"/>
+      <path d="M-8.14 -100 L-8.3 -100"/>
+      <path d="M-10.17 -100 L-10.33 -100"/>
+      <path d="M-215 100 L215 100 L215 -100 L-215 -100 Z"/>
+      <path d="M75 -100.13 L75 -103.4 L225 -103.4 L225 103.4 L105 103.4"/>
+      <path d="M-132 12 L-132 -12"/>
+      <path d="M132 12 L132 -12"/>
+      <path d="M-22.03 -15 L-132 -15 L-132 15 L-22.03 15"/>
+      <path d="M22.03 15 L132 15 L132 -15 L22.03 -15"/>
+      <path d="M10.94 -46.65 L11 -15.08"/>
+      <path d="M11 15.08 L11 -46.8 L7.78 -54.38 L0 -57.52 L-7.78 -54.38 L-11 -46.8 L-11 -15.08"/>
+      <path d="M-11 15.08 L-10.94 -46.65"/>
+      <path d="M0 -57.52 L0 57.52 L7.78 54.38 L7.78 -54.38"/>
+      <path d="M-7.78 -54.38 L-7.78 54.38 L0 57.52"/>
+      <path d="M10.94 46.65 L11 20.83 L11 46.8 L7.78 54.38"/>
+      <path d="M-10.94 46.65 L-11 20.83 L-11 46.8 L-7.78 54.38"/>
+      <path d="M11.05 -14.91 L16.45 -9.5 L19 0 L16.45 9.5 L11.05 14.91"/>
+      <path d="M-11.05 -14.91 L-16.45 -9.5 L-19 0 L-16.45 9.5 L-11.05 14.91"/>
+      <path d="M-11.08 -37 L-22 -37 L-22 37 L-11.08 37"/>
+      <path d="M11.08 37 L22 37 L22 -37 L11.08 -37"/>
+      <path d="M-22 -7.05 L-39 -7.05 L-39 -11.41 L-22 -11.41"/>
+      <path d="M22 -11.41 L39 -11.41 L39 -7.05 L22 -7.05"/>
+      <path d="M-39 -7.05 L-39 0 L-22 0"/>
+      <path d="M39 -7.05 L39 0 L22 0"/>
+      <path d="M-39 0 L-39 7.05 L-22 7.05"/>
+      <path d="M39 0 L39 7.05 L22 7.05"/>
+      <path d="M-39 7.05 L-39 11.41 L-22 11.41"/>
+      <path d="M39 7.05 L39 11.41 L22 11.41"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.25"><path d="M-15 0 H15 M0 -15 V15"/></g>
+</svg>

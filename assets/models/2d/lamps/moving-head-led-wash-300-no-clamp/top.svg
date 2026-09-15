@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-250.16 -129.16 500.32 256.32" width="500.32mm" height="256.32mm" data-model="moving-head-led-wash-300-no-clamp" data-view="top" data-pose="moving-forward" data-generator="tosklight.model-drawing" data-generator-version="2">
+  <title>moving-head-led-wash-300-no-clamp — top</title>
+  <g id="silhouette" fill="#1b1f24" stroke="none"><path fill-rule="evenodd" d="M-236 -74.73 L-236 74.83 L-170.07 74.98 L-169.77 105.07 L36.73 105.07 L37.02 113.03 L132.9 113.03 L133.19 105.07 L169.92 104.92 L170.07 74.98 L236 74.83 L236 -74.73 L170.07 -74.88 L169.77 -104.97 L110.18 -104.97 L109.89 -115 L-109.89 -115 L-110.18 -104.97 L-169.77 -104.97 L-170.07 -74.88 Z"/></g>
+  <g id="lines" fill="none" stroke="#d7dde4" stroke-width="1.18" stroke-linecap="round" stroke-linejoin="round">
+    <g id="base">
+      <path d="M-170 105 L170 105 L170 -105 L-170 -105 Z"/>
+      <path d="M37 105.15 L37 113 L133 113 L133 105.15"/>
+      <path d="M-110 -105 L110 -105 L110 -115 L-110 -115 Z"/>
+    </g>
+    <g id="yoke">
+      <path d="M184 75 L236 75 L236 -75 L184 -75"/>
+      <path d="M-236 73.09 L-236 75 L-184 75"/>
+      <path d="M-236 72.8 L-236 72.5"/>
+      <path d="M-236 72.21 L-236 70.01"/>
+      <path d="M-236 69.72 L-236 54.43"/>
+      <path d="M-236 -73.09 L-236 -75 L-184 -75"/>
+      <path d="M-236 -72.8 L-236 -72.5"/>
+      <path d="M-236 -72.21 L-236 -70.01"/>
+      <path d="M-236 -69.72 L-236 7.59"/>
+      <path d="M-236 52.96 L-236 52.81"/>
+      <path d="M-236 52.52 L-236 52.37"/>
+      <path d="M-236 52.08 L-236 51.93"/>
+      <path d="M-236 51.63 L-236 51.49"/>
+      <path d="M-236 51.19 L-236 45.3"/>
+      <path d="M-236 45 L-236 44.42"/>
+      <path d="M-236 44.12 L-236 35.28"/>
+      <path d="M-236 34.69 L-236 34.55"/>
+      <path d="M-236 34.25 L-236 34.1"/>
+      <path d="M-236 33.81 L-236 33.66"/>
+      <path d="M-236 33.37 L-236 33.22"/>
+      <path d="M-236 32.93 L-236 27.92"/>
+      <path d="M-236 27.62 L-236 27.47"/>
+      <path d="M-236 27.18 L-236 22.02"/>
+      <path d="M-236 21.73 L-236 21.58"/>
+      <path d="M-236 21.29 L-236 15.39"/>
+      <path d="M-236 15.1 L-236 14.95"/>
+      <path d="M-236 14.66 L-236 14.51"/>
+      <path d="M-236 14.22 L-236 8.32"/>
+      <path d="M-236 8.03 L-236 7.88"/>
+      <path d="M-169.94 -75 L-236 -75 L-236 75 L-169.94 75"/>
+      <path d="M169.94 75 L236 75 L236 -75 L169.94 -75"/>
+    </g>
+  </g>
+  <g id="origin" fill="none" stroke="#e5484d" stroke-width="1.18"><path d="M-14.16 0 H14.16 M0 -14.16 V14.16"/></g>
+</svg>

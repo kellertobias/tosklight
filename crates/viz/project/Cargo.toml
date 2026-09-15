@@ -22,5 +22,9 @@ viz-scene.workspace = true
 name = "fixture-projection"
 path = "src/bin/fixture-projection.rs"
 
+[[bin]]
+name = "model-drawings"
+path = "src/bin/model-drawings.rs"
+
 [lints]
 workspace = true
