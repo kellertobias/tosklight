@@ -208,7 +208,25 @@ function useViewportGestures(context: CadViewportContext) {
 		() => (drawing.snapMarker ? [...moveMarkers, drawing.snapMarker] : moveMarkers),
 		[moveMarkers, drawing.snapMarker],
 	);
-	return { drawing, annotations, interaction, snapMarkers };
+	// The drawing tool is asked first; what it leaves goes to selection, moves and panning.
+	const canvasHandlers = {
+		onPointerDown: (event: React.PointerEvent<HTMLCanvasElement>) =>
+			drawing.pointerDown(event) || interaction.pointerDown(event),
+		onPointerMove: (event: React.PointerEvent<HTMLCanvasElement>) =>
+			// A pointer move is not urgent to React and would render after the next frame;
+			// rendering it inside the event puts the pan or drag on screen in that frame.
+			flushSync(() => {
+				drawing.pointerMove(event);
+				interaction.pointerMove(event);
+			}),
+		onPointerUp: (event: React.PointerEvent<HTMLCanvasElement>) => {
+			if (!drawing.pointerUp(event)) void interaction.pointerUp(event);
+		},
+		onPointerCancel: interaction.cancel,
+		onDoubleClick: drawing.doubleClick,
+		onContextMenu: drawing.contextMenu,
+	};
+	return { drawing, annotations, interaction, snapMarkers, canvasHandlers };
 }
 
 export function CadViewport({
@@ -249,7 +267,7 @@ export function CadViewport({
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
 		[drawings],
 	);
-	const { drawing, annotations, interaction, snapMarkers } = useViewportGestures({
+	const { drawing, annotations, interaction, snapMarkers, canvasHandlers } = useViewportGestures({
 		canvas,
 		entities,
 		drawingById,
@@ -268,7 +286,7 @@ export function CadViewport({
 		onPreview,
 		onMove,
 	});
-	const { guide, selectionBox, pointerDown, pointerMove, pointerUp, cancel } = interaction;
+	const { guide, selectionBox } = interaction;
 
 	useViewportRedraw(canvas, {
 		entities,
@@ -300,20 +318,7 @@ export function CadViewport({
 				aria-label={`CAD ${view.replaceAll("_", " ")} viewport`}
 				data-floor-datum={view === "top_down" ? "hidden" : "visible"}
 				data-coordinate-origins={showCoordinateOrigins ? "visible" : "hidden"}
-				onPointerDown={(event) => drawing.pointerDown(event) || pointerDown(event)}
-				onPointerMove={(event) =>
-					// A pointer move is not urgent to React and would render after the next frame;
-					// rendering it inside the event puts the pan or drag on screen in that frame.
-					flushSync(() => {
-						drawing.pointerMove(event);
-						pointerMove(event);
-					})
-				}
-				onPointerUp={(event) => {
-					if (!drawing.pointerUp(event)) void pointerUp(event);
-				}}
-				onPointerCancel={cancel}
-				onDoubleClick={drawing.doubleClick}
+				{...canvasHandlers}
 			/>
 			<CadGrid
 				camera={camera}

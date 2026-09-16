@@ -685,9 +685,14 @@ current zoom is left out until you zoom in.
 What the drawing tools draw is saved in the show, shown in every Architect window, and printed on that
 view's plan pages:
 
-* **Draw line**: click each point. Double-click or press Enter to finish an open line; click the
-  first point again to close it.
-* **Draw box**: drag from one corner to the opposite corner.
+* **Draw line**: click each point. The length of the segment you are drawing is shown on it until
+  you click. Double-click, press Enter or right-click to finish an open line — a right-click adds no
+  point where the pointer is; click the first point again to close it.
+* **Draw box**: click one corner, then click the opposite corner.
+* With snapping on, a line's and a box's points snap: onto a corner of a truss (its box or a
+  connector) or of a stage element in reach; otherwise a line's next point that is nearly level with
+  or plumb over the last one is made exactly horizontal or vertical; and every coordinate left free
+  lands on whole 10 cm. Hold Shift to draw exactly where the pointer is.
 * **Place text**: click where the text starts, type, and press Enter. Text is sized for the zoom it
   was placed at and grows and shrinks with the plan.
 * **Measure**: drag from one point to another. The measurement is drawn in amber with a tick at

@@ -115,15 +115,19 @@ export function formatMeasurement(millimetres: number): string {
 
 export interface AnnotationLabel {
 	id: string;
-	kind: "text" | "measure";
-	/** For text, the anchor its baseline starts at; for a measurement, its midpoint. */
+	/** `length` is the live length of the segment a line in progress is drawing. */
+	kind: "text" | "measure" | "length";
+	/** For text, the anchor its baseline starts at; for a measurement or a length, its midpoint. */
 	point: PlanPoint;
 	text: string;
 	/** Text's own height; a measurement's label follows the screen instead. */
 	heightMillimetres: number | null;
 }
 
-/** The words the items on a tile show: their text, and each measurement's distance. */
+/**
+ * The words the items on a tile show: their text, each measurement's distance, and the length of
+ * the segment a line in progress (the `draft`) is drawing up to the pointer.
+ */
 export function annotationLabels(
 	annotations: readonly CadAnnotation[],
 	rotationQuarterTurns = 0,
@@ -149,6 +153,18 @@ export function annotationLabels(
 					kind: "measure",
 					point: [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2],
 					text: formatMeasurement(measurementLength(annotation)),
+					heightMillimetres: null,
+				},
+			];
+		}
+		if (annotation.id === "draft" && annotation.kind === "polyline" && annotation.points.length >= 2) {
+			const [start, end] = annotation.points.slice(-2).map(place);
+			return [
+				{
+					id: annotation.id,
+					kind: "length",
+					point: [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2],
+					text: formatMeasurement(Math.hypot(end[0] - start[0], end[1] - start[1])),
 					heightMillimetres: null,
 				},
 			];

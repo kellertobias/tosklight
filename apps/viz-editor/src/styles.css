@@ -1981,7 +1981,8 @@ body {
 	transform: translateY(-100%);
 }
 
-.cad-annotation-label.is-measure {
+.cad-annotation-label.is-measure,
+.cad-annotation-label.is-length {
 	padding: 1px 4px;
 	border-radius: 2px;
 	background: rgb(5 7 10 / 75%);

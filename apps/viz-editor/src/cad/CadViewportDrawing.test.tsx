@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CadAnnotation } from "./annotations";
+import type { CadEntity } from "./types";
 import { type CadDrawTool, CadToolContext, type CadTools } from "./cadTools";
 import { CadViewport } from "./CadViewport";
 
@@ -12,10 +13,14 @@ function setup({
 	tool,
 	annotations = [],
 	rotationQuarterTurns = 0,
+	entities = [],
+	snapping = false,
 }: {
 	tool: CadDrawTool;
 	annotations?: CadAnnotation[];
 	rotationQuarterTurns?: number;
+	entities?: CadEntity[];
+	snapping?: boolean;
 }) {
 	const tools: CadTools = {
 		onAdd: vi.fn(),
@@ -33,7 +38,8 @@ function setup({
 	render(
 		<CadToolContext.Provider value={tools}>
 			<CadViewport
-				entities={[]}
+				entities={entities}
+				snapping={snapping}
 				drawings={[]}
 				selectedIds={[]}
 				view="top_down"
@@ -55,9 +61,10 @@ function setup({
 	});
 	Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
 	Object.defineProperty(canvas, "releasePointerCapture", { value: vi.fn() });
-	const click = (clientX: number, clientY: number) => {
-		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX, clientY });
-		fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX, clientY });
+	const click = (clientX: number, clientY: number, shiftKey = false) => {
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX, clientY, shiftKey });
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX, clientY, shiftKey });
+		fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX, clientY, shiftKey });
 	};
 	const drag = (from: [number, number], to: [number, number]) => {
 		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: from[0], clientY: from[1] });
@@ -119,14 +126,21 @@ describe("drawing on a CAD viewport", () => {
 		]);
 	});
 
-	it("draws a box and a measurement by dragging, stored before the tile's rotation", () => {
-		const box = setup({ tool: "box" });
-		box.drag([500, 400], [700, 300]);
-		expect(saved(box.tools)).toEqual([
+	it("draws a box from a click on one corner and a click on the opposite one", () => {
+		const { tools, canvas, click } = setup({ tool: "box" });
+		click(500, 400);
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 650, clientY: 350 });
+		expect(tools.save).not.toHaveBeenCalled();
+		click(700, 300);
+		expect(saved(tools)).toEqual([
 			expect.objectContaining({ kind: "box", points: [[0, 0], [2000, 1000]] }),
 		]);
+		// The next click starts a new box rather than finishing the last one again.
+		click(500, 400);
+		expect(tools.save).toHaveBeenCalledTimes(1);
+	});
 
-		cleanup();
+	it("draws a measurement by dragging, stored before the tile's rotation", () => {
 		const measure = setup({ tool: "measure", rotationQuarterTurns: 1 });
 		measure.drag([500, 400], [600, 400]);
 		expect(saved(measure.tools)).toEqual([
@@ -134,10 +148,17 @@ describe("drawing on a CAD viewport", () => {
 		]);
 	});
 
-	it("does not draw a box from a click that never travelled", () => {
-		const { tools, click } = setup({ tool: "box" });
+	it("does not draw a box from a drag, nor from a second click on its first corner", () => {
+		const { tools, drag, click } = setup({ tool: "box" });
+		drag([500, 400], [700, 300]);
+		expect(tools.save).not.toHaveBeenCalled();
+		// The drag's press put the first corner down; its release did not finish the box.
 		click(500, 400);
 		expect(tools.save).not.toHaveBeenCalled();
+		click(600, 300);
+		expect(saved(tools)).toEqual([
+			expect.objectContaining({ kind: "box", points: [[0, 0], [1000, 1000]] }),
+		]);
 	});
 
 	it("places typed text where the operator clicked, at a size that reads at that zoom", () => {
@@ -181,5 +202,155 @@ describe("drawing on a CAD viewport", () => {
 		expect(tools.save).not.toHaveBeenCalled();
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(tools.setTool).toHaveBeenCalledWith("select");
+	});
+
+	it("shows the length of the segment being drawn before the line is finished", () => {
+		const { tools, canvas, click } = setup({ tool: "polyline" });
+		click(500, 400);
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 650, clientY: 400 });
+		expect(screen.getByText("1.50 m")).toBeInTheDocument();
+		click(650, 400);
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 650, clientY: 395 });
+		expect(screen.getByText("50 mm")).toBeInTheDocument();
+		expect(screen.queryByText("1.50 m")).toBeNull();
+		expect(tools.save).not.toHaveBeenCalled();
+	});
+
+	it("finishes a line on a right-click without adding the point under the pointer", () => {
+		const { tools, canvas, click } = setup({ tool: "polyline" });
+		click(500, 400);
+		click(600, 400);
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 700, clientY: 200 });
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 2, clientX: 700, clientY: 200 });
+		fireEvent.pointerUp(canvas, { pointerId: 1, button: 2, clientX: 700, clientY: 200 });
+		const menuShown = fireEvent.contextMenu(canvas, { clientX: 700, clientY: 200 });
+		expect(menuShown).toBe(false);
+		expect(saved(tools)).toEqual([
+			expect.objectContaining({ kind: "polyline", closed: false, points: [[0, 0], [1000, 0]] }),
+		]);
+		expect(screen.queryByText("2.24 m")).toBeNull();
+	});
+});
+
+const venue = (id: string, extra: Partial<CadEntity>): CadEntity => ({
+	id,
+	logicalFixtureId: id,
+	name: id,
+	fixtureNumber: null,
+	fixtureDisplayId: "0.1",
+	dmxAddress: "Visual only",
+	kind: "venue",
+	fixtureType: "venue",
+	drawingId: id,
+	layerId: "default",
+	selectable: true,
+	positionMillimetres: [0, 0, 0],
+	rotationDegrees: [0, 0, 0],
+	sizeMillimetres: [1000, 1000, 1000],
+	outputDirection: [0, 1, 0],
+	...extra,
+});
+
+/** A 4 m truss at 5 m, its box reaching x ±2000 and y ±145, and a 2 × 1 m riser left of it. */
+const RIG = [
+	venue("truss", {
+		positionMillimetres: [0, 0, 5000],
+		sizeMillimetres: [4000, 290, 290],
+		scenery: { kind: "truss", chords: 4, pattern: "standard" },
+	}),
+	venue("riser", {
+		positionMillimetres: [-3000, 0, 0],
+		sizeMillimetres: [2000, 1000, 400],
+		scenery: { kind: "riser", chords: 0, pattern: "standard" },
+	}),
+];
+
+describe("snapping while drawing", () => {
+	it("snaps a line's points onto truss and stage-element corners", () => {
+		const { tools, click } = setup({ tool: "polyline", entities: RIG, snapping: true });
+		// 10 mm and 15 mm off the truss's back-right corner.
+		click(701, 384);
+		// 20 mm and 10 mm off the riser's back-right corner.
+		click(302, 351);
+		// On the truss's connector at its left end, reached past the grid.
+		click(301, 401);
+		fireEvent.keyDown(window, { key: "Enter" });
+		expect(saved(tools)).toEqual([
+			expect.objectContaining({
+				points: [
+					[2000, 145],
+					[-2000, 500],
+					[-2000, 0],
+				],
+			}),
+		]);
+	});
+
+	it("keeps a line level or plumb with its last point, and every free coordinate on 10 cm", () => {
+		const { tools, click } = setup({ tool: "polyline", entities: RIG, snapping: true });
+		// (330, 330) lands on the grid.
+		click(533, 367);
+		// (2400, 360) is 60 mm off level with the last point, so it levels.
+		click(740, 364);
+		// (2430, 2500) is 30 mm off plumb over it, so it stands straight above.
+		click(743, 150);
+		// (1260, 2640) is near neither, so both coordinates land on the grid.
+		click(626, 136);
+		fireEvent.keyDown(window, { key: "Enter" });
+		expect(saved(tools)).toEqual([
+			expect.objectContaining({
+				points: [
+					[300, 300],
+					[2400, 300],
+					[2400, 2500],
+					[1300, 2600],
+				],
+			}),
+		]);
+	});
+
+	it("snaps both corners of a box", () => {
+		const { tools, click } = setup({ tool: "box", entities: RIG, snapping: true });
+		click(302, 351);
+		click(533, 367);
+		expect(saved(tools)).toEqual([
+			expect.objectContaining({ kind: "box", points: [[-2000, 500], [300, 300]] }),
+		]);
+	});
+
+	it("draws exactly where the pointer is while Shift is held", () => {
+		const { tools, click } = setup({ tool: "polyline", entities: RIG, snapping: true });
+		click(701, 384, true);
+		click(740, 364, true);
+		// Released, Shift gives snapping back: (330, 330) levels with the unsnapped point before it.
+		click(533, 367);
+		fireEvent.keyDown(window, { key: "Enter" });
+		expect(saved(tools)).toEqual([
+			expect.objectContaining({
+				points: [
+					[2010, 160],
+					[2400, 360],
+					[300, 360],
+				],
+			}),
+		]);
+
+		cleanup();
+		const box = setup({ tool: "box", entities: RIG, snapping: true });
+		box.click(302, 351, true);
+		box.click(533, 367, true);
+		expect(saved(box.tools)).toEqual([
+			expect.objectContaining({ kind: "box", points: [[-1980, 490], [330, 330]] }),
+		]);
+	});
+
+	it("draws exactly where the pointer is with snapping switched off", () => {
+		const { tools, click } = setup({ tool: "polyline", entities: RIG });
+		click(701, 384);
+		click(533, 367);
+		fireEvent.keyDown(window, { key: "Enter" });
+		expect(saved(tools)).toEqual([
+			expect.objectContaining({ points: [[2010, 160], [330, 330]] }),
+		]);
 	});
 });
