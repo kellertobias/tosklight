@@ -109,12 +109,6 @@ pub fn model_drawing_svg_with(
     ))
 }
 
-/// Whether a part is the hardware a lamp hangs by rather than the lamp itself.
-fn mounting_hardware(name: &str) -> bool {
-    let folded = name.to_ascii_lowercase();
-    folded.contains("hanging-frame") || folded.contains("truss-coupler")
-}
-
 /// Reduce `model` seen from `view`, with its body turned by `tilt`, to its silhouette and edges.
 pub fn model_drawing_with(
     model: &FixtureModel,
@@ -294,7 +288,7 @@ fn gather_faces(
             continue;
         }
         let head = part.kind == ModelPartKind::Head;
-        let hardware = !head && mounting_hardware(&part.name);
+        let hardware = !head && viz_scene::is_mounting_hardware(&part.name);
         let turned = turn.filter(|_| !head && !hardware);
         let place = |point: Vec3| {
             (if head {
@@ -913,6 +907,7 @@ mod tests {
             emitter_size: None,
             emitter_axis: None,
             has_head: false,
+            bracket_hinge: None,
             warnings: Vec::new(),
         }
     }

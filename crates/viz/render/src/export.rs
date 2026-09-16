@@ -156,6 +156,7 @@ mod tests {
             rotation_degrees: viz_scene::glam::Vec3::ZERO,
             position_master: None,
             bracket_degrees: 0.0,
+            bracket_hinge: None,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],

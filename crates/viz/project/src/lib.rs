@@ -8,6 +8,7 @@
 
 mod appearance;
 mod binding;
+mod bracket_hinge;
 mod cad_default_model;
 mod colour;
 mod decode;
@@ -22,6 +23,7 @@ pub use appearance::{
     colour_temperature_linear_rgb, installed_appearance_linear_rgb, parse_srgb_hex_linear,
 };
 pub use binding::ChannelRef;
+pub use bracket_hinge::{bracket_hinge, manifest_bracket_hinge, read_shipped_model};
 pub use cad_default_model::{ProfileDefaultModel, profile_default_model};
 pub use colour::{ResolvedColour, named_colour};
 pub use decode::Decoder;

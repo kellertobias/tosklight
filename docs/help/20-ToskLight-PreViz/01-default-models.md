@@ -78,7 +78,9 @@ a bar can have that part hidden without touching the rest of the model.
 
 Fixtures also declare where their hardware swivels — the bracket bolts a static lantern
 tilts on, and the hinge of each barn-door leaf — so those parts can be aimed rather than
-being frozen where they were modelled.
+being frozen where they were modelled. A lantern's **Bracket** angle turns its body about
+those bracket bolts while the hanging frame and the coupler stay where they hang, in the
+Visualizer and in the Viz editor's side views alike.
 
 ## Where the light leaves the fixture
 

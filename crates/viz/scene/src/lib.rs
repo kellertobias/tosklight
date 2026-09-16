@@ -14,6 +14,7 @@
 //! - `+Z` points towards the audience (downstage/front).
 
 mod atmosphere;
+mod bracket;
 mod diagnostics;
 mod model;
 mod persistence;
@@ -25,6 +26,7 @@ mod values;
 mod view;
 
 pub use atmosphere::{Atmosphere, AtmospherePreference, DEFAULT_DENSITY};
+pub use bracket::{bracket_turned, is_mounting_hardware};
 pub use diagnostics::{
     ConnectionState, FallbackReason, InputHealth, InputMappingStatus, ProviderDiagnostics,
     SourceProtocol, UniverseGrade, UniverseHealth,

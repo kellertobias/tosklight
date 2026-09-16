@@ -80,6 +80,7 @@ fn tilt_turns_the_head_about_its_trunnions_and_leaves_the_base_alone() {
         emitter_size: None,
         emitter_axis: None,
         has_head: true,
+        bracket_hinge: None,
         warnings: Vec::new(),
     };
 
@@ -243,6 +244,7 @@ fn fixture() -> FixtureInstance {
         rotation_degrees: Vec3::ZERO,
         position_master: None,
         bracket_degrees: 0.0,
+        bracket_hinge: None,
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
@@ -902,6 +904,7 @@ mod lines_view {
             emitter_size: None,
             emitter_axis: None,
             has_head: false,
+            bracket_hinge: None,
             warnings: Vec::new(),
         }
     }
@@ -1408,6 +1411,7 @@ mod selection {
             emitter_size: None,
             emitter_axis: None,
             has_head: false,
+            bracket_hinge: None,
             warnings: Vec::new(),
         }
     }

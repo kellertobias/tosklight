@@ -42,6 +42,11 @@ pub(super) fn compile_instances(
         }
         let generated_scenery = generated_scenery(fixture, instance);
         let fixture_index = scene.fixtures.len() as u32;
+        let size = body_size * instance.model_scale;
+        // The hinge sits in the model at the scale the model is drawn, as the lens does.
+        let bracket_hinge = model
+            .and_then(|index| scene.models.get(index as usize))
+            .and_then(|drawn| Some(drawn.bracket_hinge? * drawn.scale_to(size)));
         scene.fixtures.push(FixtureInstance {
             drawn_as_scenery: generated_scenery.is_some(),
             instance_id: instance.instance_id,
@@ -52,6 +57,7 @@ pub(super) fn compile_instances(
             rotation_degrees: instance.rotation_degrees,
             position_master: None,
             bracket_degrees: instance.bracket_angle,
+            bracket_hinge,
             shaper_degrees: instance.shaper_angle,
             installed_colour: crate::installed_appearance_linear_rgb(
                 &fixture.profile,
@@ -61,7 +67,7 @@ pub(super) fn compile_instances(
             // Scaled here, once, so the drawn model, picking and the plan symbol all read the
             // same size from the body.
             body: FixtureBody {
-                size: body_size * instance.model_scale,
+                size,
                 kind: class.body_kind(moving),
             },
             patched: !shared_addresses.is_empty(),

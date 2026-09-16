@@ -13,7 +13,6 @@
 //! way, so the indicator leaves the lens the plan draws and points where the 3D view aims it.
 
 use super::CadEntity;
-use super::profile_drawing::model_drawing_views;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use light_application::PatchSnapshot;
 use serde::Serialize;
@@ -136,14 +135,19 @@ fn emitter_frame_cached(
 }
 
 /// The emitter of the body a profile is drawn with: its own model at its body size, or the
-/// shipped default model at the scale the CAD draws it, turned about the hinge its drawings record.
+/// shipped default model at the scale the CAD draws it, turned about the hinge its manifest records
+/// (the same hinge its drawings and the Visualizer turn the body about).
 pub fn emitter_frame(
     profile: &light_fixture::FixtureProfile,
     mode_id: Option<uuid::Uuid>,
 ) -> Option<EmitterFrame> {
     if let Some(chosen) = viz_project::profile_default_model(profile, mode_id) {
         let model = viz_scene::read_glb(chosen.model.bytes).ok()?;
-        return frame(&model, chosen.scale, drawing_hinge(chosen.model.name));
+        return frame(
+            &model,
+            chosen.scale,
+            viz_project::bracket_hinge(chosen.model.name),
+        );
     }
     if profile.scenery.is_some() || profile.crowd.is_some() {
         return None;
@@ -169,24 +173,8 @@ fn frame(model: &viz_scene::FixtureModel, scale: f32, hinge: Option<Vec3>) -> Op
             .emitter_axis
             .unwrap_or(Vec3::NEG_Y)
             .normalize_or(Vec3::NEG_Y),
-        hinge: hinge.map_or(Vec3::ZERO, |hinge| hinge * scale),
+        hinge: hinge.map_or(Vec3::ZERO, |hinge| hinge * millimetres),
     })
-}
-
-/// The hinge a shipped model's side drawing records, in model millimetres: the page's x is the
-/// model's z and the page's y runs down the model's y. The model is symmetric across x.
-fn drawing_hinge(model: &str) -> Option<Vec3> {
-    let side = model_drawing_views(model)
-        .into_iter()
-        .find(|view| view.view == "side")?;
-    let root = side.svg.split_once('>')?.0;
-    let (_, rest) = root.split_once("data-hinge=\"")?;
-    let (value, _) = rest.split_once('"')?;
-    let mut numbers = value.split_whitespace().map(str::parse::<f32>);
-    let (Some(Ok(z)), Some(Ok(down))) = (numbers.next(), numbers.next()) else {
-        return None;
-    };
-    Some(Vec3::new(0.0, -down, z))
 }
 
 #[cfg(test)]
@@ -283,5 +271,36 @@ mod tests {
         let (level, _) = frame.aimed([0.0; 3], 0.0);
         let (bracketed, _) = frame.aimed([0.0; 3], 45.0);
         assert!(!close(level, bracketed), "the lens moves with the bracket");
+    }
+
+    /// The regression the bracket work names: a Fresnel at 45°. The CAD's aim turns its lens about
+    /// the same hinge, by the same turn, as the Visualizer's body frame does, in any orientation.
+    #[test]
+    fn a_fresnel_at_45_degrees_is_aimed_exactly_as_the_visualizer_poses_it() {
+        let mut profile = light_fixture::FixtureProfile::blank();
+        profile.fixture_type = "fresnel".into();
+        let chosen = viz_project::profile_default_model(&profile, None).expect("a shipped body");
+        assert_eq!(chosen.model.name, "fresnel-barn-doors");
+        let frame = emitter_frame(&profile, None).expect("the Fresnel has a lens");
+        let hinge = viz_project::bracket_hinge(chosen.model.name).expect("and a hinge");
+        assert!((frame.hinge - hinge * chosen.scale * 1000.0).length() < 1e-3);
+        for rotation in [[0.0, 0.0, 0.0], [0.0, 0.0, 90.0], [-20.0, 0.0, -135.0]] {
+            let (offset, direction) = frame.aimed(rotation, 45.0);
+            let fixture = viz_scene::FixtureInstance {
+                // Desk (rx, ry, rz) is the renderer's (rx, rz, ry).
+                rotation_degrees: Vec3::new(rotation[0], rotation[2], rotation[1]),
+                bracket_degrees: 45.0,
+                bracket_hinge: Some(hinge * chosen.scale),
+                ..viz_scene::FixtureInstance::default()
+            };
+            let (position, orientation) = fixture.placed_by(&[]);
+            let lens = position + orientation * (frame.anchor / 1000.0);
+            assert!(
+                close(offset, to_plan(lens * 1000.0)),
+                "{rotation:?}: {offset:?} vs {lens:?}"
+            );
+            let beam = orientation * frame.axis;
+            assert!(close(direction, to_plan(beam)), "{rotation:?}");
+        }
     }
 }

@@ -364,7 +364,10 @@ patch records them and the visualizer draws them:
 - **Bracket angle** — how far the fixture is tilted in the clamp or yoke it hangs from, positive
   nose-down. It turns the fixture about its own transverse axis *after* its mounting rotation, so a
   lantern faced across the stage and then angled down in its bracket points where both of those
-  say.
+  say. A shipped lantern with a hanging frame turns only its body, about the bracket bolts its model
+  manifest records; the hanging frame and the truss coupler stay where they hang. This is the same
+  hinge and the same turn the Viz editor's CAD side views draw (`viz_scene::FixtureInstance::placed_by`
+  and `viz_project::bracket_hinge`).
 - **Shaper angle** — how far a fitted shaper or barn-door module is turned. A framing module the
   desk can also rotate over DMX starts from this angle rather than replacing it, and a barn door,
   which nothing turns but a hand, only ever has this one. A fixture with no module fitted has no

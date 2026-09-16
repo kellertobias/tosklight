@@ -260,6 +260,11 @@ pub struct FixtureInstance {
     /// is what a clamp or a yoke does: the bar decides which way the lantern faces and the bracket
     /// decides how far down it looks.
     pub bracket_degrees: f32,
+    /// Where the bracket turns the lamp's body, in fixture-local metres, when its model records a
+    /// hinge. The model's mounting hardware then stays where it hangs while the body turns about
+    /// this point; without one the whole fixture turns about its origin.
+    #[serde(default)]
+    pub bracket_hinge: Option<Vec3>,
     /// Degrees a fitted shaper or barn-door module is turned to, or `None` when none is fitted.
     pub shaper_degrees: Option<f32>,
     /// Installed source/CCT/gel multiplier in linear RGB for this exact physical instance.
@@ -327,46 +332,6 @@ impl PlanArtwork {
             crate::ProjectionView::Front => Vec3::Z,
             crate::ProjectionView::Back => Vec3::NEG_Z,
         }
-    }
-}
-
-impl FixtureInstance {
-    /// Mounting rotation as a quaternion, with the bracket angle on top of it.
-    ///
-    /// The bracket turns in the fixture's own frame, so it is composed after the placement
-    /// rotation rather than added to it: a lantern turned to face across the stage and then
-    /// angled down in its clamp points where both of those say, in that order.
-    pub fn orientation(&self) -> Quat {
-        euler_degrees(self.rotation_degrees) * self.bracket_rotation()
-    }
-
-    /// Where this instance actually stands, once the 3D Point it is slaved to has been applied.
-    ///
-    /// Every draw path asks this rather than reading `position` and `orientation` directly, so a
-    /// slaved lantern's body, its yoke and its beam can never disagree about where it is.
-    pub fn placed_by(&self, points: &[crate::PointPose]) -> (Vec3, Quat) {
-        let Some(master) = self.position_master else {
-            return (self.position, self.orientation());
-        };
-        let Some(pose) = points.iter().find(|pose| pose.fixture_id == master) else {
-            // The point is gone or has not reported yet: stand where the rig put it rather than
-            // guessing at an offset.
-            return (self.position, self.orientation());
-        };
-        let (position, rotation_degrees) =
-            crate::slaved_to_point(self.position, self.rotation_degrees, pose);
-        (
-            position,
-            euler_degrees(rotation_degrees) * self.bracket_rotation(),
-        )
-    }
-
-    /// The bracket's own rotation, about the fixture's transverse axis.
-    pub fn bracket_rotation(&self) -> Quat {
-        if self.bracket_degrees.abs() < f32::EPSILON {
-            return Quat::IDENTITY;
-        }
-        Quat::from_rotation_x(self.bracket_degrees.to_radians())
     }
 }
 
@@ -906,6 +871,7 @@ mod tests {
             rotation_degrees: Vec3::new(0.0, 90.0, 0.0),
             position_master: None,
             bracket_degrees: 0.0,
+            bracket_hinge: None,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
@@ -944,6 +910,7 @@ mod tests {
             rotation_degrees: Vec3::new(12.0, 34.0, 56.0),
             position_master: None,
             bracket_degrees: 0.0,
+            bracket_hinge: None,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
@@ -1001,6 +968,7 @@ mod tests {
             rotation_degrees: Vec3::ZERO,
             position_master: None,
             bracket_degrees: 0.0,
+            bracket_hinge: None,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
@@ -1061,6 +1029,7 @@ mod tests {
             rotation_degrees: Vec3::ZERO,
             position_master: None,
             bracket_degrees: 0.0,
+            bracket_hinge: None,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],

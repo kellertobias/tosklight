@@ -87,6 +87,29 @@ export function modelDrawingViewForCad(view: CadViewDirection): {
 	}
 }
 
+/** The elevation views in the order a quarter turn of yaw (desk z) steps a lamp through them. */
+const ELEVATION_RING: readonly CadViewDirection[] = [
+	"front_to_back",
+	"left_to_right",
+	"back_to_front",
+	"right_to_left",
+];
+
+/**
+ * The view a CAD elevation shows of a lamp yawed `yawDegrees` (its desk z rotation), to the
+ * nearest quarter turn: a lamp turned 90° shows its side to the front elevation, so its bracket
+ * turn is seen there. The top view is unchanged; it turns the drawing by the yaw itself.
+ */
+export function lampRelativeView(
+	view: CadViewDirection,
+	yawDegrees = 0,
+): CadViewDirection {
+	const index = ELEVATION_RING.indexOf(view);
+	if (index < 0 || !Number.isFinite(yawDegrees)) return view;
+	const quarters = Math.round(yawDegrees / 90);
+	return ELEVATION_RING[(((index + quarters) % 4) + 4) % 4];
+}
+
 /**
  * Read a drawing's silhouette into triangles and its linework into segments. Everything under a
  * `silhouette…` group or with a `silhouette…` id is area, everything under `lines` is linework, and
@@ -253,17 +276,21 @@ function arranged(
 /**
  * A fixture's shipped model drawing for one CAD view, at the fixture's size, or `null` when its
  * profile is not drawn from a shipped model. Without mounting hardware the `-no-clamp` drawing is
- * used wherever the model has one. A side view turns a hinged body by `bracketAngle`.
+ * used wherever the model has one. An elevation shows the drawing of the side the lamp's yaw turns
+ * toward it, and wherever that is the lamp's side, a hinged body is turned by `bracketAngle` while
+ * its hanging hardware stays put.
  */
 export function modelDrawingGeometry(
 	drawing: CadDrawing | undefined,
 	view: CadViewDirection,
 	mountingHardware = true,
 	bracketAngle = 0,
+	yawDegrees = 0,
 ): PlanGeometry | null {
 	const model = drawing?.modelDrawing;
 	if (!model) return null;
-	const { view: name, mirrored } = modelDrawingViewForCad(view);
+	const seen = lampRelativeView(view, yawDegrees);
+	const { view: name, mirrored } = modelDrawingViewForCad(seen);
 	const entry = model.views.find((candidate) => candidate.view === name);
 	if (!entry) return null;
 	const svg =
@@ -273,7 +300,7 @@ export function modelDrawingGeometry(
 	const posed = arranged(
 		svg,
 		parsed,
-		bodyTurnDegrees(parsed, view, bracketAngle),
+		bodyTurnDegrees(parsed, seen, bracketAngle),
 	);
 	const scale = model.scale > 0 ? model.scale : 1;
 	const place = (point: PlanPoint): PlanPoint => [

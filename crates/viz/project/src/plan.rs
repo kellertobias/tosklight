@@ -1234,6 +1234,8 @@ use compile_instances::{compile_instances, vector};
 use head_geometry::{fitted_to_head_pitch, head_offset, head_span, pan_axis, tilt_axis};
 
 #[cfg(test)]
+mod bracket_tests;
+#[cfg(test)]
 mod model_tests;
 #[cfg(test)]
 mod primitive_tests;

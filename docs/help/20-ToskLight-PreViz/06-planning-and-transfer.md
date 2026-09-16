@@ -456,9 +456,14 @@ Blinders, flat LED PARs, strobes and floods are drawn facing the audience from a
 front, and PARs and Fresnels point forward from above. From the side, every lamp that hangs in a
 frame is drawn exactly as the Visualizer poses it for the fixture's **Bracket** angle, 0
 included: the body turns about its hinge, the clamp and the hanging frame stay where they are and
-are drawn in front of it. At 0 a blinder hangs face-down like any other lamp; turn the bracket to
-point it at the audience. A multi-patch instance uses its own bracket angle. LED wash moving heads
-are drawn from the front looking straight at you.
+are drawn in front of it. A Fresnel at 45° is drawn with its body turned 45° nose-down about the
+bracket bolts while its hanging frame and coupler do not move, and the 3D view shows it the same.
+An elevation shows whichever side of the lamp its rotation turns toward it, to the nearest quarter
+turn: a lamp turned 90° shows its side, and its bracket angle, on the front elevation. At 0 a
+blinder hangs face-down like any other lamp; turn the bracket to point it at the audience. A
+multi-patch instance uses its own bracket angle. A fixture drawn from its own 3D model turns as a
+whole by its bracket angle in every view. The plan (top) view keeps each drawing's own pose. LED
+wash moving heads are drawn from the front looking straight at you.
 
 Each lamp's direction indicator starts where its light leaves it — the lens of the body it is
 drawn with — and points where the lamp points: its bracket angle and its rotation, as the

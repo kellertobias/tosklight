@@ -76,7 +76,12 @@ fn run(manifest: &Path, output: &Path, force: bool, only: &[String]) -> Result<u
     let root = manifest.parent().unwrap_or(Path::new("."));
     let hinges: HashMap<&str, Vec3> = models
         .iter()
-        .filter_map(|entry| Some((entry["model"].as_str()?, hinge(entry)?)))
+        .filter_map(|entry| {
+            Some((
+                entry["model"].as_str()?,
+                viz_project::manifest_bracket_hinge(entry)?,
+            ))
+        })
         .collect();
     let audience = std::fs::read_to_string(root.join("../viz/crowd/audience-outline.json"))
         .ok()
@@ -155,20 +160,6 @@ fn run(manifest: &Path, output: &Path, force: bool, only: &[String]) -> Result<u
         tally.written, tally.unchanged, tally.kept, tally.failed
     );
     Ok(tally.failed)
-}
-
-/// Where a lamp's body turns in its hanging frame, from the manifest's swivels.
-fn hinge(entry: &serde_json::Value) -> Option<Vec3> {
-    let swivel = entry["swivels"]
-        .as_array()?
-        .iter()
-        .find(|swivel| swivel["node"] == "hanging-frame")?;
-    let point = swivel["point_metres"].as_array()?;
-    Some(Vec3::new(
-        point.first()?.as_f64()? as f32,
-        point.get(1)?.as_f64()? as f32,
-        point.get(2)?.as_f64()? as f32,
-    ))
 }
 
 /// A person drawn as the audience figure, scaled to the model's own height or width.

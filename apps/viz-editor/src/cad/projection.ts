@@ -117,7 +117,13 @@ function orientedPlanGeometry(
 	// generated scenery is built, not drawn from a body, and keeps its own drawing.
 	const modelDrawing = entity.scenery
 		? null
-		: modelDrawingGeometry(drawing, view, mountingHardware, entity.bracketAngle);
+		: modelDrawingGeometry(
+				drawing,
+				view,
+				mountingHardware,
+				entity.bracketAngle,
+				entity.rotationDegrees[2],
+			);
 	if (modelDrawing) return modelDrawing;
 	const projection = drawing?.projections.find(
 		(candidate) => candidate.view === projectionViewForCad(view),
@@ -145,7 +151,10 @@ function liveModelGeometry(
 	const faces = mesh.triangles
 		.map((triangle, index) => {
 			const world = triangle.pointsMillimetres.map((point) =>
-				rotateModelPoint(point, entity.rotationDegrees),
+				rotateModelPoint(
+					bracketTurnedPoint(point, entity.bracketAngle ?? 0),
+					entity.rotationDegrees,
+				),
 			) as [
 				[number, number, number],
 				[number, number, number],
@@ -333,6 +342,25 @@ export function rotateModelPoint(
 		afterY[0],
 		afterY[1] * cosX - afterY[2] * sinX,
 		afterY[1] * sinX + afterY[2] * cosX,
+	];
+}
+
+/**
+ * A model point turned by a bracket angle about the model's transverse axis (+X), positive
+ * nose-down, as the Visualizer turns a fixture without a recorded hinge (`Quat::from_rotation_x`).
+ * It applies before the placement's rotation, in the lamp's own frame.
+ */
+export function bracketTurnedPoint(
+	point: readonly [number, number, number],
+	bracketAngle: number,
+): [number, number, number] {
+	if (!bracketAngle) return [point[0], point[1], point[2]];
+	const cos = Math.cos((bracketAngle * Math.PI) / 180);
+	const sin = Math.sin((bracketAngle * Math.PI) / 180);
+	return [
+		point[0],
+		point[1] * cos - point[2] * sin,
+		point[1] * sin + point[2] * cos,
 	];
 }
 

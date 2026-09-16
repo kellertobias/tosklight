@@ -688,7 +688,7 @@ fn build_perspective_fixture_labels(
         }
         let fixture = &scene.fixtures[index];
         // Label the fixture where it is drawn, so a label follows a fixture its 3D Point moved.
-        let (position, _) = fixture.placed_by(points);
+        let (position, _) = fixture.mounted_by(points);
         let Some((x, y)) = camera.project(position, width, height) else {
             continue;
         };
@@ -869,6 +869,7 @@ mod fixture_label_tests {
             rotation_degrees: Vec3::ZERO,
             position_master: None,
             bracket_degrees: 0.0,
+            bracket_hinge: None,
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],

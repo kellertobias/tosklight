@@ -422,7 +422,7 @@ pub(super) fn resolve_model(
                     match defaults.entry(chosen.name) {
                         std::collections::hash_map::Entry::Occupied(cached) => Some(*cached.get()),
                         std::collections::hash_map::Entry::Vacant(cached) => {
-                            match viz_scene::read_glb(chosen.bytes) {
+                            match crate::read_shipped_model(chosen) {
                                 Ok(model) => {
                                     scene.models.push(model);
                                     let index = scene.models.len() as u32 - 1;

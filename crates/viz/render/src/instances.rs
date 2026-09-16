@@ -534,6 +534,12 @@ fn push_model(
     let (fixture_position, fixture_orientation) = fixture.placed_by(points);
     let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position)
         * Mat4::from_scale(Vec3::splat(scale));
+    // With a hinge the bracket turns only the body: the hanging frame and the coupler stay in the
+    // mount's frame, exactly as the CAD's side drawing keeps them.
+    let mounted = fixture.bracket_hinge.map(|_| {
+        let (position, mount) = fixture.mounted_by(points);
+        Mat4::from_rotation_translation(mount, position) * Mat4::from_scale(Vec3::splat(scale))
+    });
 
     // The yoke turns about the axis the fixture hangs on; the head turns about its own
     // trunnions. Tilting about the hanging point instead would swing the head through the air.
@@ -543,7 +549,10 @@ fn push_model(
         * Mat4::from_translation(-pivot);
     for (part_index, part) in model.parts.iter().enumerate() {
         let transform = match part.kind {
-            viz_scene::ModelPartKind::Base => base,
+            viz_scene::ModelPartKind::Base => match mounted {
+                Some(mounted) if viz_scene::is_mounting_hardware(&part.name) => mounted,
+                _ => base,
+            },
             viz_scene::ModelPartKind::Yoke => base * Mat4::from_quat(pan_rotation),
             viz_scene::ModelPartKind::Head => {
                 base * Mat4::from_quat(pan_rotation) * tilt_about_trunnions
@@ -1167,5 +1176,7 @@ mod laser;
 mod plot;
 mod scenery;
 
+#[cfg(test)]
+mod bracket_tests;
 #[cfg(test)]
 mod tests;

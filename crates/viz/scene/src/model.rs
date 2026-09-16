@@ -47,6 +47,11 @@ pub struct FixtureModel {
     pub emitter_axis: Option<Vec3>,
     /// Whether anything in the model tilts, so a caller knows [`Self::head_pivot`] means something.
     pub has_head: bool,
+    /// Where the mounting bracket turns the body, in model space, when the model's manifest
+    /// records a hinge for its hanging frame. A GLB does not carry it, so the reader leaves it
+    /// unset and whoever knows the model (`viz_project::bracket_hinge`) fills it in.
+    #[serde(default)]
+    pub bracket_hinge: Option<Vec3>,
     /// What the reader had to skip, for the diagnostics surface.
     pub warnings: Vec<String>,
 }
