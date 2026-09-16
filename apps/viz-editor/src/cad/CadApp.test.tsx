@@ -504,6 +504,76 @@ describe("the CAD planning screen", () => {
 		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, []));
 	});
 
+	it("opens Duplicate and Delete for the selection from the Menu key, deleting only after asking", async () => {
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		await screen.findByRole("complementary", { name: "Info" });
+		fireEvent.keyDown(window, { key: "ContextMenu" });
+		const menu = await screen.findByRole("menu", { name: "Actions for the selected element" });
+		expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+			"Duplicate",
+			"Delete",
+		]);
+		fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
+		expect(screen.queryByRole("menu")).toBeNull();
+		const confirm = await screen.findByRole("dialog", { name: "Delete Profile Stage 1?" });
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+		fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+		await waitFor(() =>
+			expect(transportMocks.patchFixtures.mock.calls[0]?.[2]).toMatchObject({
+				fixtures: [],
+				removeFixtureIds: [fixtureId],
+			}),
+		);
+	});
+
+	it("duplicates the selection from its menu as a new, unpatched element a step to the right, and selects it", async () => {
+		documentMocks.patchSnapshot.mockResolvedValue({
+			showId: snapshot.showId,
+			patchRevision: 3,
+			fixtures: [
+				{
+					fixtureId,
+					fixtureNumber: 101,
+					virtualFixtureNumber: null,
+					name: "Profile Stage 1",
+					splitPatches: [{ split: 1, universe: 1, address: 1 }],
+					location: { x: 0, y: 0, z: 4000 },
+					rotation: { x: 0, y: 0, z: 0 },
+					multipatch: [],
+					logicalHeads: [],
+				},
+			],
+		});
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		await screen.findByRole("complementary", { name: "Info" });
+		// A key typed into a field is the field's.
+		fireEvent.keyDown(within(await screen.findByRole("region", { name: "Info" })).getByLabelText("Name"), {
+			key: "ContextMenu",
+		});
+		expect(screen.queryByRole("menu")).toBeNull();
+		fireEvent.keyDown(window, { key: "F10", shiftKey: true });
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Duplicate" }));
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		const [written] = transportMocks.patchFixtures.mock.calls[0][2].fixtures;
+		expect(written.fixtureId).not.toBe(fixtureId);
+		expect(written).toMatchObject({
+			fixtureNumber: 102,
+			splitPatches: [{ split: 1, universe: null, address: null }],
+			location: { x: 500, y: 0, z: 4000 },
+		});
+		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, [written.fixtureId]));
+	});
+
 	it("deletes a single element without asking when the trash button is Shift-clicked", async () => {
 		render(
 			<ModalProvider>

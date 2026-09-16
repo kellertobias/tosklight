@@ -664,6 +664,21 @@ of each fixture. It asks first. Shift-click it to delete a single selected eleme
 asked; several selected elements are always confirmed. **Undo** in the CAD title brings a deletion
 back.
 
+With **Select** in hand, right-click an element in a viewport for its menu: **Duplicate** and
+**Delete**. Lamps, trusses, stage parts and imported models all offer the same two. Right-clicking an
+element that belongs to the selection keeps the selection, so the menu acts on all of it; right-clicking
+another element selects it (with its group) first. A right-click on empty plan opens nothing, and while a
+drawing tool is in hand a right-click still finishes the line instead. From the keyboard, press the Menu
+key or Shift+F10 to open the menu for the selection, the arrow keys to move, Enter to choose and
+Escape to close it.
+
+* **Duplicate** adds a copy of each selected element half a metre to the right of it, as the viewport
+  you opened the menu in shows right. A copy is a new element with its own identity and the next free
+  fixture (or virtual) number above its original's, keeps its profile, mode, size, rotation and name,
+  and is not patched — give it a DMX address in Info when it needs one. The copies become the
+  selection. **Undo** takes them away again.
+* **Delete** is the trash button's delete: it always asks first, and **Undo** brings the elements back.
+
 A multi-patched fixture stands in the plan once for each copy. Click a copy and Info edits that copy
 alone: its name, position and rotation change, and the fixture and its other copies stay where they
 are. **Copy** at the top of Info switches between the original and each copy, named by its DMX

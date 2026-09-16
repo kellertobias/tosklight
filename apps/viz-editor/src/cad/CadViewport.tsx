@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import { annotationsForView } from "./annotationGeometry";
 import { CadGrid, type CadGridSettings, DEFAULT_GRID } from "./cadGrid";
 import { CadAnnotationLayer } from "./CadAnnotationLayer";
+import type { CadObjectMenuRequest } from "./CadObjectMenu";
 import { clampZoom } from "./cadShortcuts";
 import { useCadTools } from "./cadTools";
 import { PrintFrame } from "./CadPrintFrame";
@@ -73,6 +74,8 @@ interface CadViewportProps {
 	/** Which placement a click picked, so a multi-patch copy can be edited on its own. */
 	onFocusEntity?(entityId: string | null): void;
 	onPreview(preview: CadTransformPreview | null): void;
+	/** Opens the Duplicate / Delete menu for the selection a right-click picked. */
+	onObjectMenu?(request: CadObjectMenuRequest): void;
 	onMove(
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
@@ -224,7 +227,9 @@ function useViewportGestures(context: CadViewportContext) {
 		},
 		onPointerCancel: interaction.cancel,
 		onDoubleClick: drawing.doubleClick,
-		onContextMenu: drawing.contextMenu,
+		// With a drawing tool in hand a right-click finishes the line; with Select it opens the menu.
+		onContextMenu: (event: React.MouseEvent<HTMLCanvasElement>) =>
+			drawing.active ? drawing.contextMenu(event) : interaction.contextMenu(event),
 	};
 	return { drawing, annotations, interaction, snapMarkers, canvasHandlers };
 }
@@ -255,6 +260,7 @@ export function CadViewport({
 	expandSelection,
 	onFocusEntity,
 	onPreview,
+	onObjectMenu,
 	onMove,
 }: CadViewportProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
@@ -284,6 +290,7 @@ export function CadViewport({
 		expandSelection,
 		onFocusEntity,
 		onPreview,
+		onObjectMenu,
 		onMove,
 	});
 	const { guide, selectionBox } = interaction;

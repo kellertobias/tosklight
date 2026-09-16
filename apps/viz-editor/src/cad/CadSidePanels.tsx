@@ -13,7 +13,14 @@ import {
 } from "@tosklight/ui";
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react";
 import { CadElementsPanel, type ElementsRequests, type ElementsTab, elementsAddItems } from "./CadElementsPanel";
-import { DeleteSelectionButton, selectedElements, useDeleteSelection } from "./CadDeleteSelection";
+import { duplicateSelection } from "./cadDuplicate";
+import { CadObjectMenu, type CadObjectMenuRequest } from "./CadObjectMenu";
+import {
+	DeleteSelectionButton,
+	type SelectedElement,
+	selectedElements,
+	useDeleteSelection,
+} from "./CadDeleteSelection";
 import { CadInfoPanel, type InfoTab } from "./CadInfoPanel";
 import { SelectedElementList, SeveralPlacement } from "./CadInfoSeveral";
 import type { CadTools } from "./cadTools";
@@ -243,6 +250,52 @@ function titleGroups({
 	return [infoTabs];
 }
 
+/** The right-click menu of the selection, while it is open and something is selected. */
+function SelectionMenu({
+	objectMenu,
+	elements,
+	onDelete,
+	onSelect,
+	onFocusEntity,
+	onError,
+}: {
+	objectMenu: ObjectMenuState | undefined;
+	elements: readonly SelectedElement[];
+	onDelete(): void;
+	onSelect(ids: string[]): void;
+	onFocusEntity(entityId: string | null): void;
+	onError(reason: unknown): void;
+}) {
+	const request = objectMenu?.request;
+	if (!objectMenu || !request || !elements.length) return null;
+	const duplicate = () =>
+		duplicateSelection(
+			elements.map((element) => element.id),
+			request.duplicateOffset,
+		)
+			.then((ids) => {
+				if (!ids.length) return;
+				// The copies become the selection, so the next move or delete is theirs alone.
+				onFocusEntity(ids[0]);
+				onSelect(ids);
+			})
+			.catch(onError);
+	return (
+		<CadObjectMenu
+			request={request}
+			count={elements.length}
+			onClose={objectMenu.close}
+			onDelete={onDelete}
+			onDuplicate={() => void duplicate()}
+		/>
+	);
+}
+
+interface ObjectMenuState {
+	request: CadObjectMenuRequest | null;
+	close(): void;
+}
+
 export function CadSidePanels({
 	panel,
 	scene,
@@ -256,6 +309,7 @@ export function CadSidePanels({
 	onSelect,
 	focusedEntityId,
 	onFocusEntity,
+	objectMenu,
 	onError,
 }: {
 	panel: CadPanel;
@@ -271,6 +325,8 @@ export function CadSidePanels({
 	/** The placement last clicked, which picks the copy Info edits. */
 	focusedEntityId: string | null;
 	onFocusEntity(entityId: string | null): void;
+	/** The right-click menu of the selection, which runs its Delete through the same confirmation. */
+	objectMenu?: ObjectMenuState;
 	onError(reason: unknown): void;
 }) {
 	const [width, setWidth] = useStoredWidth();
@@ -290,7 +346,13 @@ export function CadSidePanels({
 		onDeleted: () => onSelect([]),
 		onError,
 	});
-	if (!panel && selectionCount === 0) return deletion.dialog;
+	const overlays = (
+		<>
+			{deletion.dialog}
+			<SelectionMenu {...{ objectMenu, elements, onSelect, onFocusEntity, onError }} onDelete={deletion.request} />
+		</>
+	);
+	if (!panel && selectionCount === 0) return overlays;
 	const deleteButton = (
 		<DeleteSelectionButton count={elements.length} onPress={(event) => deletion.request(event)} />
 	);
@@ -378,7 +440,7 @@ export function CadSidePanels({
 					/>
 				</div>
 			) : null}
-			{deletion.dialog}
+			{overlays}
 		</aside>
 	);
 }

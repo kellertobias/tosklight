@@ -13,6 +13,8 @@ import { CadGridColour } from "./CadGridColour";
 import type { CadPreviewStore } from "./cadPreviewStore";
 import { CadSidePanels } from "./CadSidePanels";
 import { CadTileViewport } from "./CadTileViewport";
+import type { CadObjectMenuRequest } from "./CadObjectMenu";
+import { useCadObjectMenu } from "./useCadObjectMenu";
 import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
 import { pannedCamera, useCadShortcuts, zoomedCamera } from "./cadShortcuts";
@@ -225,6 +227,15 @@ export function CadApp() {
 	}, []);
 
 	const [focusedEntityId, setFocusedEntityId] = useState<string | null>(null);
+	const shownTile = activeTile(layout, activeTileId);
+	const objectMenu = useCadObjectMenu({
+		enabled: !printMode && tools.tool === "select",
+		hasSelection: Boolean(scene?.selectedIds.length),
+		activeView: {
+			view: shownTile?.view ?? "top_down",
+			rotationQuarterTurns: shownTile?.rotationQuarterTurns ?? 0,
+		},
+	});
 
 	// An object an add button just placed is selected as soon as the drawing shows it, which opens Info.
 	const handledPlacement = useRef(tools.placed?.request ?? 0);
@@ -424,6 +435,7 @@ export function CadApp() {
 							expandSelection={(ids) => expandToGroups(venueGroups.groups, ids)}
 							onFocusEntity={setFocusedEntityId}
 							onPreview={onPreview}
+							onObjectMenu={objectMenu.open}
 							onMove={move}
 							onFit={fit}
 							printMode={printMode}
@@ -452,6 +464,7 @@ export function CadApp() {
 					onSelect={(ids) => select({ type: "replace", ids })}
 					focusedEntityId={focusedEntityId}
 					onFocusEntity={setFocusedEntityId}
+					objectMenu={objectMenu}
 					onError={(reason) => setError(String(reason))}
 				/>
 			</div>
@@ -583,6 +596,7 @@ export interface CadTileProps {
 	expandSelection(ids: readonly string[]): string[];
 	onFocusEntity?(entityId: string | null): void;
 	onPreview(preview: CadTransformPreview | null): void;
+	onObjectMenu?(request: CadObjectMenuRequest): void;
 	onMove(
 		delta: [number, number, number],
 		entityIds: readonly string[],

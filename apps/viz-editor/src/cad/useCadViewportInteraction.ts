@@ -6,6 +6,8 @@
  * needs to draw — the axis guide and the marquee rectangle — is state, and nothing else is.
  */
 import { useEffect, useRef, useState } from "react";
+import { DUPLICATE_OFFSET_MILLIMETRES } from "./cadDuplicate";
+import type { CadObjectMenuRequest } from "./CadObjectMenu";
 import type { SelectionBox } from "./lineRenderer";
 import {
 	boundsOf,
@@ -54,6 +56,8 @@ export interface CadViewportInteraction {
 	pointerUp(event: React.PointerEvent<HTMLCanvasElement>): Promise<void>;
 	/** Abandon a drag the pointer left behind, leaving the rig where it started. */
 	cancel(): void;
+	/** A right-click: opens the object menu over a selectable element, selecting it first. */
+	contextMenu(event: React.MouseEvent<HTMLCanvasElement>): void;
 }
 
 /** Everything a gesture needs to read the viewport and report what it did. */
@@ -81,6 +85,8 @@ export interface CadViewportContext {
 	 */
 	onFocusEntity?(entityId: string | null): void;
 	onPreview(preview: CadTransformPreview | null): void;
+	/** Opens the Duplicate / Delete menu for the selection. */
+	onObjectMenu?(request: CadObjectMenuRequest): void;
 	onMove(
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
@@ -260,6 +266,39 @@ function marqueeSelection(
 	];
 }
 
+/**
+ * A right-click over a selectable element opens the object menu. Inside the selection it keeps the
+ * selection, so a whole selection can be duplicated or deleted; outside it, the element under the
+ * pointer (with its group, unless Shift is held) becomes the selection first.
+ */
+function openObjectMenu(context: CadViewportContext, event: React.MouseEvent<HTMLCanvasElement>) {
+	event.preventDefault();
+	// A Control-click is a click here, not a right-click; only the right button opens the menu.
+	if (event.button !== 2 || event.ctrlKey || !context.editEnabled || !context.onObjectMenu) return;
+	const hit = pickEntity(
+		screenToPlane(context, event.clientX, event.clientY),
+		context.entities,
+		context.drawingById,
+		context.view,
+		context.rotationQuarterTurns,
+		context.camera,
+	);
+	if (!hit) return;
+	if (!context.selected.has(hit.logicalFixtureId)) {
+		const ids = [hit.logicalFixtureId];
+		context.onFocusEntity?.(hit.id);
+		context.onSelection({
+			type: "replace",
+			ids: event.shiftKey || !context.expandSelection ? ids : context.expandSelection(ids),
+		});
+	}
+	context.onObjectMenu({
+		x: event.clientX,
+		y: event.clientY,
+		duplicateOffset: planeDelta([DUPLICATE_OFFSET_MILLIMETRES, 0], context.view, context.rotationQuarterTurns),
+	});
+}
+
 export function useCadViewportInteraction(
 	context: CadViewportContext,
 ): CadViewportInteraction {
@@ -293,6 +332,8 @@ export function useCadViewportInteraction(
 	});
 
 	function pointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
+		// The right button picks for the object menu, which `contextMenu` handles; it drags nothing.
+		if (event.button === 2) return;
 		context.canvas.current?.setPointerCapture(event.pointerId);
 		drag.current = beginDrag(context, event, setGuide);
 	}
@@ -399,5 +440,6 @@ export function useCadViewportInteraction(
 		showSnap([]);
 	}
 
-	return { guide, selectionBox, snapMarkers, pointerDown, pointerMove, pointerUp, cancel };
+	const contextMenu = (event: React.MouseEvent<HTMLCanvasElement>) => openObjectMenu(context, event);
+	return { guide, selectionBox, snapMarkers, pointerDown, pointerMove, pointerUp, cancel, contextMenu };
 }

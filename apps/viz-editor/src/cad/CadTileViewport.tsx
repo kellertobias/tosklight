@@ -77,6 +77,7 @@ export function CadTileViewport({
 			expandSelection={props.expandSelection}
 			onFocusEntity={props.onFocusEntity}
 			onPreview={props.onPreview}
+			onObjectMenu={printMode ? undefined : props.onObjectMenu}
 			onMove={props.onMove}
 			editEnabled={!printMode}
 			printPages={printPages}
