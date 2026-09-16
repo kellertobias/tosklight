@@ -7,7 +7,8 @@
 
 use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind};
 use glam::{Mat4, Quat, Vec3};
-use viz_scene::{Scene, SceneValues, SceneryKind, SceneryObject, euler_degrees};
+use std::collections::HashSet;
+use viz_scene::{Scene, SceneValues, SceneryKind, SceneryObject, euler_degrees, uuid::Uuid};
 
 pub(super) fn push_scenery(
     frame: &mut FrameInstances,
@@ -26,14 +27,32 @@ pub(super) fn push_scenery(
     } else {
         Vec::new()
     };
+    let selected = selected_instances(scene, values);
     for object in &scene.scenery {
-        push_object(frame, object, style, &chords);
+        push_object(frame, object, style, &chords, selected.contains(&object.id));
     }
     for (body, state) in scene.physics_scenery.iter().zip(&values.physics_frames) {
         let mut object = body.scenery.clone();
         object.position += Vec3::from_array(state.position_offset);
-        push_object(frame, &object, style, &chords);
+        let chosen = selected.contains(&body.fixture_instance_id);
+        push_object(frame, &object, style, &chords, chosen);
     }
+}
+
+/// Physical instances of the fixtures the shared Architect/Patch selection names.
+///
+/// A generated Venue object is a fixture the scenery pass builds instead of a body, so the
+/// selection — which names logical fixtures — reaches its drawn object through the instance id.
+fn selected_instances(scene: &Scene, values: &SceneValues) -> HashSet<Uuid> {
+    if values.selected_fixtures.is_empty() {
+        return HashSet::new();
+    }
+    scene
+        .fixtures
+        .iter()
+        .filter(|fixture| values.selected_fixtures.contains(&fixture.fixture_id))
+        .map(|fixture| fixture.instance_id)
+        .collect()
 }
 
 fn push_object(
@@ -41,6 +60,7 @@ fn push_object(
     object: &SceneryObject,
     style: &FrameStyle,
     chords: &[truss::ChordLine],
+    selected: bool,
 ) {
     // Not every view draws every kind. A lines view keeps what the rig is arranged around and
     // drops the rigging and the soft goods, which would only stand between the operator and
@@ -54,16 +74,19 @@ fn push_object(
     // reason a fixture is one: nothing here is lit, so a solid is a black shape in a black
     // room. The stage floor is the exception — the ground already has the grid on it, and a
     // box around the ground is a box around everything.
+    let bounds = Mat4::from_scale_rotation_translation(object.size, orientation, object.position);
     if !style.scenery_surfaces {
-        if object.kind != SceneryKind::Floor {
-            super::push_box_outline(
-                frame,
-                Mat4::from_scale_rotation_translation(object.size, orientation, object.position),
-                style.faint_ink,
-                0.8,
-            );
+        if selected {
+            super::push_box_outline(frame, bounds, style.selected_ink, 1.0);
+        } else if object.kind != SceneryKind::Floor {
+            super::push_box_outline(frame, bounds, style.faint_ink, 0.8);
         }
         return;
+    }
+    // A selected object keeps its own material; the mark is an additive cage just outside it,
+    // exactly as a selected lamp gets, so the Visualizer shows what the Architect has selected.
+    if selected {
+        push_selection_cage(frame, object, orientation, style.selected_ink);
     }
     match object.kind {
         SceneryKind::Truss => push_truss(frame, object, orientation, colour),
@@ -82,6 +105,20 @@ fn push_object(
         | SceneryKind::Prop
         | SceneryKind::Box => push_primitive(frame, object, orientation, MeshKind::Cube),
     }
+}
+
+/// The selection outline of a Venue object: its own box, opened by a small gap.
+fn push_selection_cage(
+    frame: &mut FrameInstances,
+    object: &SceneryObject,
+    orientation: Quat,
+    selected_ink: Vec3,
+) {
+    const RELATIVE_GAP: f32 = 1.02;
+    const MINIMUM_GAP_METRES: f32 = 0.04;
+    let size = object.size * RELATIVE_GAP + Vec3::splat(MINIMUM_GAP_METRES);
+    let cage = Mat4::from_scale_rotation_translation(size, orientation, object.position);
+    super::push_box_outline(frame, cage, selected_ink, 1.0);
 }
 
 /// One unit mesh stretched to fill the object's size: a block, an upright cylinder or a ball.
@@ -144,6 +181,8 @@ mod chain;
 #[cfg(test)]
 mod primitive_tests;
 mod riser;
+#[cfg(test)]
+mod selection_tests;
 #[cfg(test)]
 pub(super) use chain::link_count as chain_link_count;
 

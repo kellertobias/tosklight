@@ -30,7 +30,7 @@ fn temp_path(name: &str) -> PathBuf {
 }
 
 /// A document with one patched fixture at 1.1, three metres up.
-fn document(name: &str) -> (PlanningDocument, PathBuf) {
+pub(crate) fn document(name: &str) -> (PlanningDocument, PathBuf) {
     let path = temp_path(name);
     let document = PlanningDocument::create(&path, "Planning show").expect("create");
     let mut profile = FixtureProfile::blank();
@@ -39,12 +39,32 @@ fn document(name: &str) -> (PlanningDocument, PathBuf) {
     profile.name = "Planning Wash".into();
     profile.short_name = "Wash".into();
     profile.fixture_type = "wash".into();
+    patch_one(
+        &document,
+        &path,
+        profile,
+        FixtureId(Uuid::new_v4()),
+        "Wash 7",
+        Some(1),
+    );
+    (document, path)
+}
+
+/// Retain `profile` in the show and patch one fixture of it at 1.`address`, or unpatched.
+pub(crate) fn patch_one(
+    document: &PlanningDocument,
+    path: &std::path::Path,
+    profile: FixtureProfile,
+    fixture_id: FixtureId,
+    name: &str,
+    address: Option<u16>,
+) {
     let profile_id = profile.id;
     let profile_revision = u64::from(profile.revision);
     let mode_id = profile.modes[0].id;
     let stored =
         FixtureProfileRevision::from_profile(serde_json::to_value(profile).unwrap()).unwrap();
-    ShowStore::open(&path)
+    ShowStore::open(path)
         .unwrap()
         .insert_fixture_profile_revision(&stored)
         .expect("retain profile");
@@ -62,16 +82,16 @@ fn document(name: &str) -> (PlanningDocument, PathBuf) {
                     model_scale: None,
                     scenery_options: Default::default(),
                     scenery_size_metres: None,
-                    fixture_id: FixtureId(Uuid::new_v4()),
-                    fixture_number: Some(7),
+                    fixture_id,
+                    fixture_number: address.map(|_| 7),
                     virtual_fixture_number: None,
-                    name: "Wash 7".into(),
-                    universe: Some(1),
-                    address: Some(1),
+                    name: name.into(),
+                    universe: address.map(|_| 1),
+                    address,
                     split_patches: vec![SplitPatch {
                         split: 1,
-                        universe: Some(1),
-                        address: Some(1),
+                        universe: address.map(|_| 1),
+                        address,
                     }],
                     layer_id: "default".into(),
                     note: None,
@@ -109,7 +129,6 @@ fn document(name: &str) -> (PlanningDocument, PathBuf) {
             fixture_updates: Vec::new(),
         })
         .expect("patch one fixture");
-    (document, path)
 }
 
 async fn get<T: DeserializeOwned>(source: &SceneSource, path: &str) -> T {

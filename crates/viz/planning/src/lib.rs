@@ -12,6 +12,8 @@ pub mod preview;
 pub mod wire;
 
 #[cfg(test)]
+mod selection_tests;
+#[cfg(test)]
 mod tests;
 
 pub use preview::{PreviewParameter, PreviewSet, PreviewSnapshot, PreviewState, PreviewUniverse};

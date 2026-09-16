@@ -172,6 +172,13 @@ and **+ Add fixture** offers them. Selecting a Venue object in a view switches *
 title has two tabs at its right end, directly left of the window's **Settings** (⚙): **Sheet** is
 the patch sheet, and **DMX** is the address grid described in "The Patch screen's DMX tab" below.
 
+The Visualizer follows the selection of **CAD** and **Patch**. Every selected fixture, imported model
+and Venue object — trusses, stage elements and curtains included — is outlined in blue there, in the
+3D views and on the plan and elevations alike. Selecting more, deselecting and changing the selection
+update the outline at once; clearing the selection removes it. The outline only marks the object: its
+light output, position and material stay as they are, and clicking in the Visualizer picks as it
+always does.
+
 **Settings**, below the screens, holds the pages that are not a view of the rig: **Visualizer**,
 **Library** and **DMX**. It opens on **Visualizer**. **Visualizer** is one page of boxes that fill the window's width — two to a row, three or four once
 the window is wide enough, and one to a row in a narrow window: **Lamp** and **Laser** atmosphere,
