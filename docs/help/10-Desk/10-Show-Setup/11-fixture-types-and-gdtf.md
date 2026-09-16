@@ -170,6 +170,21 @@ revision a patched show has already embedded.
 
 Leave any optics field empty to use the normal appearance for the fixture type.
 
+Every physical figure is entered in a fixed unit and precision:
+
+| Field | Unit | Precision |
+| --- | --- | --- |
+| Width, Height, Depth | millimetres (mm) | whole numbers |
+| Weight | kilograms (kg) | up to two decimal places |
+| Power consumption | watts (W) | whole numbers |
+| Sharpness, Uniformity | percent (%), 0 to 100 | one decimal place, always shown as e.g. `85.0` |
+
+A figure beyond its precision — `420.5` mm, `24.555` kg — is kept on screen and named under the
+field, and **Save fixture** lists it instead of saving. Nothing is rounded for you. A profile
+written before these rules, including a shipped one with a dimension such as `498.2` mm, still
+loads and patches unchanged; its off-precision figures are named when you open it in the editor and
+must be corrected before that revision can be saved.
+
 **Generic body** names one of the bodies ToskLight ships — the full list is in the
 [Model Catalogue](../../99-Appendix/01-model-catalogue.md) — so a PAR 64 long nose is drawn as one
 rather than as whatever its declared type suggests. Press the field to open the body picker, which

@@ -4,6 +4,7 @@ import type {
 	FixtureProfile,
 } from "../../wire";
 import { derivePrimarySlots } from "./channels";
+import { validatePrecision } from "./physicalPrecision";
 import { maxRaw } from "./rawValues";
 
 function validatePhysical(profile: FixtureProfile, errors: string[]) {
@@ -225,6 +226,7 @@ export function validateProfile(profile: FixtureProfile) {
 	if (!profile.name.trim()) errors.push("Fixture name is required");
 	if (!profile.modes.length) errors.push("At least one mode is required");
 	validatePhysical(profile, errors);
+	validatePrecision(profile, errors);
 	const modeIds = new Set<string>();
 	for (const mode of profile.modes) {
 		if (!mode.name.trim()) errors.push("Every mode needs a name");

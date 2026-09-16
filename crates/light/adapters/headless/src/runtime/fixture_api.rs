@@ -984,8 +984,14 @@ fn gel_catalog_import_signature(
     Ok(Sha256::digest(bytes).into())
 }
 
+/// Encodes through JSON text rather than `serde_json::to_value`.
+///
+/// A profile keeps its figures as `f32`; `to_value` widens each to `f64` and a stored `1.98` kg
+/// would reach the editor as `1.9800000190734863`, which it rightly names as off-precision. The
+/// text encoder writes the shortest `f32` spelling, so the value read back is the one authored.
 fn encode_value<T: Serialize>(value: T, label: &str) -> Result<serde_json::Value, ApiError> {
-    serde_json::to_value(value)
+    serde_json::to_vec(&value)
+        .and_then(|bytes| serde_json::from_slice(&bytes))
         .map_err(|error| ApiError::internal(format!("{label} encoding failed: {error}")))
 }
 
@@ -999,4 +1005,28 @@ fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::encode_value;
+
+    #[test]
+    fn profile_figures_reach_the_client_as_authored() {
+        #[derive(serde::Serialize)]
+        struct Physical {
+            weight_kilograms: f32,
+            sharpness: f32,
+        }
+        let value = encode_value(
+            Physical {
+                weight_kilograms: 1.98,
+                sharpness: 0.289,
+            },
+            "test",
+        )
+        .unwrap();
+        assert_eq!(value["weight_kilograms"].as_f64(), Some(1.98));
+        assert_eq!(value["sharpness"].as_f64(), Some(0.289));
+    }
 }

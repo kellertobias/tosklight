@@ -14,6 +14,14 @@ import type {
 	FixtureProfileLightSource,
 	FixtureProfileOptics,
 } from "../wire";
+import {
+	OPTICS_PERCENT_PRECISION,
+	opticsPercentMessage,
+	PHYSICAL_PRECISION,
+	percentFraction,
+	percentText,
+	precisionMessage,
+} from "../sheet/fixtureProfileModel";
 import { AssetField } from "./assets";
 import { BodyPickerField } from "./bodyPicker";
 
@@ -40,18 +48,6 @@ type GenericSectionProps = {
 
 function optionalNumber(value: string) {
 	return value === "" ? null : Number(value);
-}
-
-/** A stored `0..1` figure as the percentage an operator reads and types. */
-function percentOf(value: number | null | undefined) {
-	return value === null || value === undefined ? "" : Math.round(value * 100);
-}
-
-function fractionOf(value: string) {
-	if (value === "") {
-		return null;
-	}
-	return Math.min(Math.max(Number(value) / 100, 0), 1);
 }
 
 function IdentitySection({
@@ -180,33 +176,39 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 		<section>
 			<h3>Physical</h3>
 			<FormLayout columns={5} minColumnWidth={145}>
-				{(
-					[
-						["width_millimetres", "Width", "mm"],
-						["height_millimetres", "Height", "mm"],
-						["depth_millimetres", "Depth", "mm"],
-						["weight_kilograms", "Weight", "kg"],
-						["power_watts", "Power consumption", "W"],
-					] as const
-				).map(([key, label, unit]) => (
-					<NumberField
-						key={key}
-						label={`${label} (${unit})`}
-						allowDecimal
-						min={0}
-						value={draft.physical[key] ?? ""}
-						onChange={(event) => {
-							const value = optionalNumber(event.target.value);
-							onChange((current) => ({
-								...current,
-								physical: {
-									...current.physical,
-									[key]: value,
-								},
-							}));
-						}}
-					/>
-				))}
+				{PHYSICAL_PRECISION.map(({ key, label, unit, decimals }) => {
+					const error = precisionMessage(
+						label,
+						unit,
+						decimals,
+						draft.physical[key],
+					);
+					return (
+						<NumberField
+							key={key}
+							label={`${label} (${unit})`}
+							// A point is always typeable so a decimal is named as wrong, not silently
+							// dropped into a different whole number.
+							allowDecimal
+							inputMode={decimals === 0 ? "numeric" : "decimal"}
+							step={decimals === 0 ? 1 : 0.01}
+							min={0}
+							value={draft.physical[key] ?? ""}
+							error={error}
+							aria-invalid={error ? true : undefined}
+							onChange={(event) => {
+								const value = optionalNumber(event.target.value);
+								onChange((current) => ({
+									...current,
+									physical: {
+										...current.physical,
+										[key]: value,
+									},
+								}));
+							}}
+						/>
+					);
+				})}
 			</FormLayout>
 		</section>
 	);
@@ -312,30 +314,27 @@ function OpticsSection({ draft, onChange }: GenericSectionProps) {
 						}))
 					}
 				/>
-				<NumberField
-					label="Sharpness (%)"
-					min={0}
-					max={100}
-					value={percentOf(optics.sharpness)}
-					onChange={(event) =>
-						setOptics((current) => ({
-							...current,
-							sharpness: fractionOf(event.target.value),
-						}))
-					}
-				/>
-				<NumberField
-					label="Uniformity (%)"
-					min={0}
-					max={100}
-					value={percentOf(optics.uniformity)}
-					onChange={(event) =>
-						setOptics((current) => ({
-							...current,
-							uniformity: fractionOf(event.target.value),
-						}))
-					}
-				/>
+				{OPTICS_PERCENT_PRECISION.map(({ key, label }) => {
+					const error = opticsPercentMessage(label, optics[key]);
+					return (
+						<NumberField
+							key={key}
+							label={`${label} (%)`}
+							allowDecimal
+							inputMode="decimal"
+							step={0.1}
+							min={0}
+							max={100}
+							value={percentText(optics[key])}
+							error={error}
+							aria-invalid={error ? true : undefined}
+							onChange={(event) => {
+								const value = percentFraction(event.target.value);
+								setOptics((current) => ({ ...current, [key]: value }));
+							}}
+						/>
+					);
+				})}
 				<SelectField
 					label="Light source shape"
 					value={source?.form ?? "round"}

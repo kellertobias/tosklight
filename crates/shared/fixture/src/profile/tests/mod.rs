@@ -134,6 +134,7 @@ mod color_geometry;
 mod definition_projection;
 mod encoding_plan;
 mod inversion;
+mod physical_precision;
 mod resolution;
 mod resolution_plan;
 mod validation;

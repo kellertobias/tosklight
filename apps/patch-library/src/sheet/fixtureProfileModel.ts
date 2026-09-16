@@ -4,6 +4,7 @@ export * from "./fixtureProfileModel/defaults";
 export * from "./fixtureProfileModel/definitionCatalog";
 export * from "./fixtureProfileModel/definitions";
 export * from "./fixtureProfileModel/geometry";
+export * from "./fixtureProfileModel/physicalPrecision";
 export * from "./fixtureProfileModel/rawValues";
 export * from "./fixtureProfileModel/utilities";
 export * from "./fixtureProfileModel/validation";
