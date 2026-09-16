@@ -119,14 +119,20 @@ function PlansPanel({
 									printPages.change(page.id, { included: event.currentTarget.checked })
 								}
 							/>
-							<button type="button" onClick={() => printPages.select(page.id)}>
-								<strong>
-									{index + 1}. {page.name}
-								</strong>
-								<small>
+							<button
+								type="button"
+								aria-label={`${index + 1}. ${page.name}`}
+								aria-pressed={page.id === selectedId}
+								onClick={() => printPages.select(page.id)}
+							>
+								<span className="cad-print-row-number">{index + 1}</span>
+								<strong title={page.name}>{page.name}</strong>
+								<small className="cad-print-row-view">
 									{page.kind === "fixture_list" ? "Fixture table" : CAD_VIEW_LABELS[page.view]}
 								</small>
-								<small>A4 {page.orientation}</small>
+								<small className="cad-print-row-paper">
+									A4 {page.orientation === "landscape" ? "Landscape" : "Portrait"}
+								</small>
 							</button>
 						</div>
 					))

@@ -94,6 +94,27 @@ describe("Elements › Objects", () => {
 		expect(names(screen.getByRole("region", { name: "3D models" }))).toEqual(["Hall"]);
 	});
 
+	it("shows each object on one compact row with its name, kind and size but no fixture ID", () => {
+		renderObjects([
+			venue("7", "Four-Point Truss", {
+				scenery: { kind: "truss", chords: 4, pattern: "standard" },
+				sizeMillimetres: [3000, 290, 290],
+			}),
+		]);
+		const row = within(screen.getByRole("region", { name: "Venue items" })).getByRole(
+			"button",
+			{ name: /Four-Point Truss/ },
+		);
+		expect(row).toHaveClass("cad-elements-object");
+		expect(row.querySelector("strong")).toHaveTextContent("Four-Point Truss");
+		expect(row.querySelector(".cad-elements-object-kind")).toHaveTextContent("truss");
+		expect(row.querySelector(".cad-elements-object-size")).toHaveTextContent(
+			"3 × 0.29 × 0.29 m",
+		);
+		expect(row).not.toHaveTextContent("0.7");
+		expect(row.textContent).not.toContain("·");
+	});
+
 	it("says there are no 3D models when only shipped Venue objects are placed", () => {
 		renderObjects([venue("2", "Stage Railing 2 m")]);
 		expect(

@@ -208,9 +208,11 @@ function ObjectRow({
 			aria-pressed={selected}
 			onClick={(event) => onSelect(event.shiftKey)}
 		>
-			<strong>{entity.name}</strong>
-			<small>
-				{entity.fixtureDisplayId} · {entity.scenery?.kind ?? entity.fixtureProfile ?? "model"} ·{" "}
+			<strong title={entity.name}>{entity.name}</strong>
+			<small className="cad-elements-object-kind">
+				{entity.scenery?.kind ?? entity.fixtureProfile ?? "model"}
+			</small>
+			<small className="cad-elements-object-size">
 				{width} × {depth} × {height} m
 			</small>
 		</button>
@@ -250,9 +252,10 @@ function GroupRows({
 					aria-pressed={selected}
 					onClick={() => onSelect(members.map((member) => member.logicalFixtureId))}
 				>
-					<strong>{group.name}</strong>
-					<small>
-						Group · {members.length} {members.length === 1 ? "element" : "elements"}
+					<strong title={group.name}>{group.name}</strong>
+					<small className="cad-elements-object-kind">Group</small>
+					<small className="cad-elements-object-size">
+						{members.length} {members.length === 1 ? "element" : "elements"}
 					</small>
 				</button>
 			</div>

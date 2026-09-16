@@ -2149,12 +2149,15 @@ body {
 	white-space: nowrap;
 }
 
+/* One dense line per plan: include, number, name, then its view and paper in fixed columns. */
 .cad-print-row {
 	display: flex;
-	gap: 9px;
-	align-items: flex-start;
-	padding: 9px;
+	gap: 8px;
+	align-items: center;
+	min-height: 32px;
+	padding: 0 8px;
 	border: 1px solid transparent;
+	border-bottom-color: #1d2530;
 	border-radius: 3px;
 	cursor: pointer;
 }
@@ -2164,16 +2167,47 @@ body {
 	background: #102a32;
 }
 
+.cad-print-row > input {
+	flex: none;
+	margin: 0;
+}
+
 .cad-print-row > button {
 	display: grid;
+	grid-template-columns: 2.5ch minmax(0, 1fr) minmax(0, max-content) max-content;
+	align-items: center;
+	column-gap: 8px;
 	flex: 1;
-	gap: 3px;
+	min-width: 0;
+	min-height: 30px;
 	padding: 0;
 	border: 0;
 	background: transparent;
 	color: inherit;
 	text-align: left;
 	cursor: pointer;
+}
+
+.cad-print-row > button > * {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cad-print-row > button > strong {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.cad-print-row-number {
+	color: #89949e;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.cad-print-row-view {
+	max-width: 14ch;
 }
 
 .cad-export-pdf.ui-button {

@@ -99,18 +99,41 @@
 	font-size: 12px;
 }
 
+/* One dense line per object: the name takes the room, its kind and size sit in fixed columns. */
 .cad-elements-object {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 2px;
-	min-height: 44px;
-	padding: 6px 8px;
-	border: 1px solid var(--border-subtle, #1d2530);
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, max-content) max-content;
+	align-items: center;
+	column-gap: 8px;
+	min-height: 32px;
+	padding: 0 8px;
+	border: 1px solid transparent;
+	border-bottom-color: var(--border-subtle, #1d2530);
 	border-radius: 3px;
 	background: none;
 	color: inherit;
 	text-align: left;
+}
+
+.cad-elements-object > strong,
+.cad-elements-object > small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cad-elements-object > strong {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.cad-elements-object-kind {
+	max-width: 12ch;
+}
+
+.cad-elements-object-size {
+	font-variant-numeric: tabular-nums;
+	text-align: right;
 }
 
 .cad-elements-object.is-selected {
@@ -150,8 +173,8 @@
 
 .cad-elements-group-toggle {
 	flex: none;
-	width: 36px;
-	min-height: 44px;
+	width: 32px;
+	min-height: 32px;
 	border: 1px solid var(--border-subtle, #1d2530);
 	border-radius: 3px;
 	background: none;
@@ -162,8 +185,8 @@
 .cad-elements-group-members {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
-	margin: 4px 0 0 40px;
+	gap: 0;
+	margin: 0 0 0 36px;
 }
 
 .cad-drawing-tree-row-actions {

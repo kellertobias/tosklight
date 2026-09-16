@@ -321,14 +321,20 @@ describe("the CAD planning screen", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Add New Page" }));
 		fireEvent.click(screen.getByRole("button", { name: "Add plan page" }));
 		fireEvent.click(await screen.findByRole("menuitem", { name: "Fixture list" }));
-		expect(
-			screen.getByRole("complementary", { name: "Plans" }),
-		).toHaveTextContent("1. Page 1");
-		expect(
-			screen.getByRole("complementary", { name: "Plans" }),
-		).toHaveTextContent("2. Fixture List");
-		expect(screen.getByText("Fixture table")).toBeInTheDocument();
-		expect(screen.getAllByText("A4 landscape")).toHaveLength(2);
+		const planRows = within(screen.getByRole("complementary", { name: "Plans" }))
+			.getAllByRole("button", { name: /^\d+\. / })
+			.map((row) =>
+				[...row.children].map((cell) => cell.textContent),
+			);
+		expect(planRows).toEqual([
+			["1", "Page 1", "Top down", "A4 Landscape"],
+			["2", "Fixture List", "Fixture table", "A4 Landscape"],
+		]);
+		// The page just added stays the selected one, and its row says so.
+		expect(screen.getByRole("button", { name: "2. Fixture List" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
 
 		fireEvent.pointerMove(screen.getByTestId("cad-canvas"));
 		fireEvent.pointerUp(screen.getByTestId("cad-canvas"));
