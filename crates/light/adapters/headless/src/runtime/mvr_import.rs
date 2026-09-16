@@ -106,8 +106,9 @@ pub(super) fn mvr_definitions(
         .installation
         .fixture_definitions()
         .map_err(ApiError::fixture)?;
-    for fixture in
-        light_application::mvr_export::tosklight_mvr_fixture_metadata(document).into_values()
+    for fixture in light_application::mvr_export::tosklight_mvr_fixture_metadata(document)
+        .into_values()
+        .map(|embedded| embedded.fixture)
     {
         if !definitions.iter().any(|definition| {
             definition.id == fixture.definition.id

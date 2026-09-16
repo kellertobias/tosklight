@@ -1,13 +1,5 @@
 use super::*;
 
-/// Where an MVR matrix places a fixture. The desk and a planning document read MVR the same way,
-/// so both use the one conversion.
-pub(super) fn mvr_transform(
-    matrix: [f64; 12],
-) -> (light_fixture::FixtureLocation, light_fixture::FixtureVector) {
-    light_application::mvr_transform::placement_from_mvr(matrix)
-}
-
 type OccupiedPatch = (u16, u16, u16, String);
 
 fn occupied_patches(objects: &[light_show::VersionedObject]) -> Vec<OccupiedPatch> {
@@ -119,9 +111,11 @@ fn patched_mvr_fixture(
     address: (Option<u16>, Option<u16>),
     layer_id: String,
     existing: &[light_show::VersionedObject],
-    embedded: Option<&light_fixture::PatchedFixture>,
+    embedded: Option<&light_application::mvr_export::ToskLightMvrFixture>,
 ) -> light_fixture::PatchedFixture {
-    let (location, rotation) = mvr_transform(source.matrix);
+    // A matrix this desk wrote carries its bracket about its hinge; that comes back out here.
+    let (location, rotation) =
+        light_application::mvr_export::mvr_fixture_placement(source.matrix, embedded);
     let existing_patch = existing
         .iter()
         .find(|object| object.id == fixture_id.0.to_string())
@@ -129,7 +123,7 @@ fn patched_mvr_fixture(
             serde_json::from_value::<light_fixture::PatchedFixture>(object.body.clone()).ok()
         });
     let mut patched = embedded
-        .cloned()
+        .map(|embedded| embedded.fixture.clone())
         .unwrap_or_else(|| light_fixture::PatchedFixture {
             model_scale: None,
             scenery_options: Default::default(),
@@ -276,7 +270,7 @@ pub(super) fn apply_mvr_to_store(
         }
         let embedded = embedded_fixtures.get(&source.uuid);
         let Some(definition) = embedded
-            .map(|fixture| fixture.definition.clone())
+            .map(|embedded| embedded.fixture.definition.clone())
             .or_else(|| resolve_mvr_definition(definitions, source))
         else {
             store_unresolved_mvr_fixture(store, source)?;
@@ -291,7 +285,7 @@ pub(super) fn apply_mvr_to_store(
             .get(&source.uuid)
             .and_then(|id| Uuid::parse_str(id).ok())
             .map(light_core::FixtureId)
-            .or_else(|| embedded.map(|fixture| fixture.fixture_id))
+            .or_else(|| embedded.map(|embedded| embedded.fixture.fixture_id))
             .unwrap_or_default();
         let address = resolved_mvr_address(
             store,

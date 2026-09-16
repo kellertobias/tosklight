@@ -144,3 +144,60 @@ fn scaled_axes_import_as_the_rotation_they_describe() {
     let (_, read_rotation) = placement_from_mvr(scaled);
     assert_rotation_close(read_rotation, rotation(20.0, -35.0, 50.0));
 }
+
+const HINGE: [f32; 3] = [0.0, 0.0, -353.0];
+
+#[test]
+fn a_level_bracket_or_no_hinge_writes_the_same_numbers_as_before() {
+    for (x, y, z) in TURNS {
+        let placed = location(1200, -3400, 6000);
+        let turn = rotation(x, y, z);
+        let bits = |matrix: [f64; 12]| matrix.map(f64::to_bits);
+        assert_eq!(
+            bits(mvr_matrix_hinged(placed, turn, 0.0, Some(HINGE))),
+            bits(mvr_matrix(placed, turn, 0.0))
+        );
+        assert_eq!(
+            bits(mvr_matrix_hinged(placed, turn, 35.0, None)),
+            bits(mvr_matrix(placed, turn, 35.0))
+        );
+    }
+}
+
+#[test]
+fn the_hinge_keeps_its_place_while_the_body_turns_about_it() {
+    for (x, y, z) in TURNS {
+        let placed = location(1200, -3400, 6000);
+        let level = mvr_matrix(placed, rotation(x, y, z), 0.0);
+        let turned = mvr_matrix_hinged(placed, rotation(x, y, z), 40.0, Some(HINGE));
+        let world = |m: [f64; 12], p: [f32; 3]| {
+            let p = p.map(f64::from);
+            [0, 1, 2]
+                .map(|axis| m[9 + axis] + m[axis] * p[0] + m[3 + axis] * p[1] + m[6 + axis] * p[2])
+        };
+        // The hinge itself is where the level lamp has it.
+        let (a, b) = (world(level, HINGE), world(turned, HINGE));
+        assert!(
+            a.iter().zip(b).all(|(a, b)| (a - b).abs() < 1e-6),
+            "{a:?} {b:?}"
+        );
+    }
+}
+
+#[test]
+fn import_takes_the_bracket_and_the_hinge_back_out() {
+    for (x, y, z) in TURNS {
+        for bracket in [45.0, -30.0, 70.0] {
+            let placed = location(1200, -3400, 6000);
+            let written = mvr_matrix_hinged(placed, rotation(x, y, z), bracket, Some(HINGE));
+            let (read_location, read_rotation) =
+                placement_from_mvr_unbracketed(written, bracket, Some(HINGE));
+            assert_eq!(read_location, placed);
+            assert_matrix_close(
+                mvr_matrix_hinged(read_location, read_rotation, bracket, Some(HINGE)),
+                written,
+                1e-3,
+            );
+        }
+    }
+}

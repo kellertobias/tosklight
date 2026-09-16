@@ -121,6 +121,8 @@ impl PlanningDocument {
             &metadata,
             layers,
             &LibraryGdtf(self.ports().library()),
+            // The hinge the Visualizer and the CAD turn the lamp's body about.
+            viz_project::patched_bracket_hinge_millimetres,
         )?;
         let data =
             light_mvr::write(&document).map_err(|error| DocumentError::Mvr(error.to_string()))?;

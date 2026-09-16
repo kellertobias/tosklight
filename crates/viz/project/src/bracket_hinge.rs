@@ -56,6 +56,35 @@ pub fn bracket_hinge(model: &str) -> Option<Vec3> {
     })
 }
 
+/// Where a patched lamp's body turns in its bracket, in fixture-local millimetres on the desk axes
+/// (x across, y upstage, z up), or `None` when it turns as a whole about its origin.
+///
+/// This is the hinge the scene compiler gives the Visualizer's body — the shipped default model's
+/// manifest hinge at the scale that model is drawn for this profile and `model_scale` — carried from
+/// the renderer's axes `(x, y, z)` onto the desk's `(x, −z, y)`. A profile with its own model, and
+/// generated scenery, has none. MVR export places the turned body with it.
+pub fn fixture_bracket_hinge_millimetres(
+    profile: &light_fixture::FixtureProfile,
+    mode_id: Option<uuid::Uuid>,
+    model_scale: f32,
+) -> Option<[f32; 3]> {
+    let chosen = crate::profile_default_model(profile, mode_id)?;
+    let hinge = bracket_hinge(chosen.model.name)? * (chosen.scale * model_scale * 1000.0);
+    Some([hinge.x, -hinge.z, hinge.y])
+}
+
+/// [`fixture_bracket_hinge_millimetres`] for a desk patch entry, read from the profile snapshot its
+/// definition carries.
+pub fn patched_bracket_hinge_millimetres(
+    fixture: &light_fixture::PatchedFixture,
+) -> Option<[f32; 3]> {
+    fixture_bracket_hinge_millimetres(
+        fixture.definition.profile_snapshot.as_deref()?,
+        fixture.definition.mode_id,
+        light_fixture::resolved_model_scale(fixture.model_scale),
+    )
+}
+
 /// Read a shipped model with the hinge its manifest records.
 pub fn read_shipped_model(
     model: &crate::DefaultModel,

@@ -162,6 +162,8 @@ pub(super) fn build_mvr_export(
         &metas,
         layers,
         &InstallationGdtf(state),
+        // The hinge the Visualizer and the CAD turn the lamp's body about.
+        viz_project::patched_bracket_hinge_millimetres,
     )?;
     let preview = MvrExportPreview {
         fixtures: summary.fixtures,

@@ -3,7 +3,7 @@ use super::model::{
     ApplyActiveMvrImportCommand, MvrImportResolution, PlannedFixture, PlannedPatchChange,
     PreparedMvrImportState,
 };
-use super::projection::{mvr_transform, profile_projections, project_fixture};
+use super::projection::{profile_projections, project_fixture};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_fixture::{FixtureDefinition, PatchedFixture, PatchedHead, PortablePatchedFixtureRecord};
 use light_mvr::MvrFixture;
@@ -130,7 +130,7 @@ pub(super) fn plan_import(
         }
         let embedded = embedded_fixtures.get(&source.uuid);
         let Some(definition) = embedded
-            .map(|fixture| fixture.definition.clone())
+            .map(|embedded| embedded.fixture.definition.clone())
             .or_else(|| resolve_mvr_definition(&command.definitions, source))
         else {
             changes.transaction.put(
@@ -149,7 +149,7 @@ pub(super) fn plan_import(
             .get(&source.uuid)
             .and_then(|id| Uuid::parse_str(id).ok())
             .map(light_core::FixtureId)
-            .or_else(|| embedded.map(|fixture| fixture.fixture_id))
+            .or_else(|| embedded.map(|embedded| embedded.fixture.fixture_id))
             .unwrap_or_default();
         if !imported_ids.insert(fixture_id) {
             return Err(invalid(format!(
@@ -301,87 +301,90 @@ fn patched_fixture(
     address: (Option<u16>, Option<u16>),
     layer_id: String,
     existing: &[&light_show::PortableShowObject],
-    embedded: Option<&PatchedFixture>,
+    embedded: Option<&crate::mvr_export::ToskLightMvrFixture>,
 ) -> PatchedFixture {
-    let (location, rotation) = mvr_transform(source.matrix);
+    // A matrix this desk wrote carries its bracket about its hinge; that comes back out here.
+    let (location, rotation) = crate::mvr_export::mvr_fixture_placement(source.matrix, embedded);
     let existing_patch = existing
         .iter()
         .find(|object| object.key().id() == fixture_id.0.to_string())
         .and_then(|object| PortablePatchedFixtureRecord::decode(object.body().clone()).ok())
         .and_then(|record| record.patch().ok());
-    let mut patched = embedded.cloned().unwrap_or_else(|| PatchedFixture {
-        model_scale: None,
-        scenery_options: Default::default(),
-        scenery_size_metres: None,
-        fixture_id,
-        fixture_number: source
-            .fixture_id
-            .as_deref()
-            .and_then(|value| value.parse().ok()),
-        virtual_fixture_number: None,
-        name: source.name.clone(),
-        definition: definition.clone(),
-        universe: address.0,
-        address: address.1,
-        split_patches: Vec::new(),
-        layer_id: layer_id.clone(),
-        // An imported rig is placed against the stage; nothing in MVR describes a 3D Point.
-        note: None,
-        position_master: None,
-        direct_control: None,
-        internal_bindings: Default::default(),
-        location,
-        rotation,
-        logical_heads: definition
-            .heads
-            .iter()
-            .filter(|head| !head.shared)
-            .map(|head| PatchedHead {
-                profile_head_id: None,
-                head_index: head.index,
-                fixture_id: light_core::FixtureId::new(),
-            })
-            .collect(),
-        move_in_black_enabled: existing_patch
-            .as_ref()
-            .is_none_or(|fixture| fixture.move_in_black_enabled),
-        move_in_black_delay_millis: existing_patch
-            .as_ref()
-            .map_or(0, |fixture| fixture.move_in_black_delay_millis),
-        group_masters_enabled: existing_patch
-            .as_ref()
-            .is_none_or(|fixture| fixture.group_masters_enabled),
-        grand_master_enabled: existing_patch
-            .as_ref()
-            .is_none_or(|fixture| fixture.grand_master_enabled),
-        invert_pan: existing_patch
-            .as_ref()
-            .is_some_and(|fixture| fixture.invert_pan),
-        invert_tilt: existing_patch
-            .as_ref()
-            .is_some_and(|fixture| fixture.invert_tilt),
-        // An MVR source owns the root transform and address, but knows nothing about installed
-        // lamp/filter/mechanical settings or desk-owned physical copies. Retain those exact
-        // values across a reference-only portable record as well as a legacy inline record.
-        bracket_angle: existing_patch
-            .as_ref()
-            .map_or(0.0, |fixture| fixture.bracket_angle),
-        shaper_angle: existing_patch
-            .as_ref()
-            .and_then(|fixture| fixture.shaper_angle),
-        installed_appearance: existing_patch
-            .as_ref()
-            .map_or_else(Default::default, |fixture| {
-                fixture.installed_appearance.clone()
-            }),
-        highlight_overrides: Default::default(),
-        freeze: existing_patch
-            .as_ref()
-            .map_or_else(Default::default, |fixture| fixture.freeze.clone()),
-        multipatch: existing_patch
-            .as_ref()
-            .map_or_else(Vec::new, |fixture| fixture.multipatch.clone()),
-    });
+    let mut patched = embedded
+        .map(|embedded| embedded.fixture.clone())
+        .unwrap_or_else(|| PatchedFixture {
+            model_scale: None,
+            scenery_options: Default::default(),
+            scenery_size_metres: None,
+            fixture_id,
+            fixture_number: source
+                .fixture_id
+                .as_deref()
+                .and_then(|value| value.parse().ok()),
+            virtual_fixture_number: None,
+            name: source.name.clone(),
+            definition: definition.clone(),
+            universe: address.0,
+            address: address.1,
+            split_patches: Vec::new(),
+            layer_id: layer_id.clone(),
+            // An imported rig is placed against the stage; nothing in MVR describes a 3D Point.
+            note: None,
+            position_master: None,
+            direct_control: None,
+            internal_bindings: Default::default(),
+            location,
+            rotation,
+            logical_heads: definition
+                .heads
+                .iter()
+                .filter(|head| !head.shared)
+                .map(|head| PatchedHead {
+                    profile_head_id: None,
+                    head_index: head.index,
+                    fixture_id: light_core::FixtureId::new(),
+                })
+                .collect(),
+            move_in_black_enabled: existing_patch
+                .as_ref()
+                .is_none_or(|fixture| fixture.move_in_black_enabled),
+            move_in_black_delay_millis: existing_patch
+                .as_ref()
+                .map_or(0, |fixture| fixture.move_in_black_delay_millis),
+            group_masters_enabled: existing_patch
+                .as_ref()
+                .is_none_or(|fixture| fixture.group_masters_enabled),
+            grand_master_enabled: existing_patch
+                .as_ref()
+                .is_none_or(|fixture| fixture.grand_master_enabled),
+            invert_pan: existing_patch
+                .as_ref()
+                .is_some_and(|fixture| fixture.invert_pan),
+            invert_tilt: existing_patch
+                .as_ref()
+                .is_some_and(|fixture| fixture.invert_tilt),
+            // An MVR source owns the root transform and address, but knows nothing about installed
+            // lamp/filter/mechanical settings or desk-owned physical copies. Retain those exact
+            // values across a reference-only portable record as well as a legacy inline record.
+            bracket_angle: existing_patch
+                .as_ref()
+                .map_or(0.0, |fixture| fixture.bracket_angle),
+            shaper_angle: existing_patch
+                .as_ref()
+                .and_then(|fixture| fixture.shaper_angle),
+            installed_appearance: existing_patch
+                .as_ref()
+                .map_or_else(Default::default, |fixture| {
+                    fixture.installed_appearance.clone()
+                }),
+            highlight_overrides: Default::default(),
+            freeze: existing_patch
+                .as_ref()
+                .map_or_else(Default::default, |fixture| fixture.freeze.clone()),
+            multipatch: existing_patch
+                .as_ref()
+                .map_or_else(Vec::new, |fixture| fixture.multipatch.clone()),
+        });
     patched.fixture_id = fixture_id;
     patched.name = source.name.clone();
     patched.definition = definition.clone();

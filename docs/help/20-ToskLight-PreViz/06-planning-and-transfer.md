@@ -470,7 +470,9 @@ turn: a lamp turned 90° shows its side, and its bracket angle, on the front ele
 blinder hangs face-down like any other lamp; turn the bracket to point it at the audience. A
 multi-patch instance uses its own bracket angle. A fixture drawn from its own 3D model turns as a
 whole by its bracket angle in every view. The plan (top) view keeps each drawing's own pose. LED
-wash moving heads are drawn from the front looking straight at you.
+wash moving heads are drawn from the front looking straight at you. **Export MVR** writes a
+bracketed lamp the same way, turned about the same hinge, so its light leaves the lens where the CAD
+and the 3D view show it; see [Shows, Revisions, and MVR](../10-Desk/10-Show-Setup/10-shows-revisions-and-mvr.md).
 
 Each lamp's direction indicator starts where its light leaves it — the lens of the body it is
 drawn with — and points where the lamp points: its bracket angle and its rotation, as the

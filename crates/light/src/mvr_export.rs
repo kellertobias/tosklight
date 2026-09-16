@@ -28,6 +28,49 @@ struct ToskLightMvrFixtureMetadata {
 struct ToskLightMvrFixtureMetadataEntry {
     mvr_uuid: Uuid,
     fixture: PatchedFixture,
+    /// The hinge the fixture's matrix turns the body about, in fixture-local desk millimetres.
+    /// Absent — as in every archive written before hinges were exported — means the matrix turns
+    /// the whole lamp about its origin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bracket_hinge_millimetres: Option<[f32; 3]>,
+}
+
+/// A fixture ToskLight wrote into an MVR, as its lossless metadata describes it.
+#[derive(Clone, Debug)]
+pub struct ToskLightMvrFixture {
+    pub fixture: PatchedFixture,
+    /// The bracket hinge its matrix was written with; see [`crate::mvr_transform`].
+    pub bracket_hinge_millimetres: Option<[f32; 3]>,
+}
+
+impl ToskLightMvrFixture {
+    /// The mount placement `matrix` describes for a fixture that keeps `bracket_degrees`.
+    ///
+    /// The matrix carries the lamp as it hung when exported, with this entry's bracket and hinge
+    /// folded in. Those are taken back out, so the fixture's own location and rotation return, and
+    /// the bracket it keeps — its own, or the one already on the desk — turns it from there.
+    pub fn placement(
+        &self,
+        matrix: [f64; 12],
+    ) -> (light_fixture::FixtureLocation, light_fixture::FixtureVector) {
+        crate::mvr_transform::placement_from_mvr_unbracketed(
+            matrix,
+            self.fixture.bracket_angle,
+            self.bracket_hinge_millimetres,
+        )
+    }
+}
+
+/// The placement an imported fixture gets from its MVR matrix: unfolded from ToskLight's own
+/// bracket and hinge when this desk wrote it, read as a whole otherwise.
+pub fn mvr_fixture_placement(
+    matrix: [f64; 12],
+    embedded: Option<&ToskLightMvrFixture>,
+) -> (light_fixture::FixtureLocation, light_fixture::FixtureVector) {
+    match embedded {
+        Some(embedded) => embedded.placement(matrix),
+        None => crate::mvr_transform::placement_from_mvr(matrix),
+    }
 }
 
 /// Returns ToskLight's lossless fixture metadata when an MVR was exported by this desk.
@@ -36,7 +79,7 @@ struct ToskLightMvrFixtureMetadataEntry {
 /// Invalid or future manifests are ignored and leave the normal standards-based import intact.
 pub fn tosklight_mvr_fixture_metadata(
     document: &light_mvr::MvrDocument,
-) -> HashMap<Uuid, PatchedFixture> {
+) -> HashMap<Uuid, ToskLightMvrFixture> {
     let Some(data) = document.files.get(TOSKLIGHT_MVR_FIXTURE_METADATA_PATH) else {
         return HashMap::new();
     };
@@ -49,7 +92,15 @@ pub fn tosklight_mvr_fixture_metadata(
     metadata
         .fixtures
         .into_iter()
-        .map(|entry| (entry.mvr_uuid, entry.fixture))
+        .map(|entry| {
+            (
+                entry.mvr_uuid,
+                ToskLightMvrFixture {
+                    fixture: entry.fixture,
+                    bracket_hinge_millimetres: entry.bracket_hinge_millimetres,
+                },
+            )
+        })
         .collect()
 }
 
@@ -179,11 +230,17 @@ impl ExportedType {
 /// belong to, from [`mvr_layers`]. Every fixture's profile revision is
 /// embedded once: as its retained source GDTF where one exists, otherwise as a GDTF generated from
 /// the profile, because an application opening the archive refuses a fixture whose GDTF is absent.
+///
+/// `bracket_hinge` answers where a fixture's body turns in its bracket, in fixture-local desk
+/// millimetres — `viz_project::patched_bracket_hinge_millimetres`, the hinge the Visualizer and the
+/// CAD turn it about — so the exported lamp's light leaves where it does locally. `None` turns the
+/// whole lamp about its origin.
 pub fn build_mvr_document<S: GdtfSource>(
     fixtures: &[(String, PatchedFixture)],
     metadata: &MvrFixtureMetadata,
     layers: Vec<light_mvr::MvrLayer>,
     gdtf: &S,
+    bracket_hinge: impl Fn(&PatchedFixture) -> Option<[f32; 3]>,
 ) -> Result<(light_mvr::MvrDocument, MvrExportSummary), S::Error> {
     // The stored association is looked up by the fixture the body names, which is also how the
     // metadata is keyed; an MVR fixture whose key does not parse as a UUID falls back to the
@@ -245,9 +302,14 @@ pub fn build_mvr_document<S: GdtfSource>(
             .get(id.as_str())
             .and_then(|uuid| Uuid::parse_str(uuid).ok())
             .unwrap_or(fixture.fixture_id.0);
+        // Only a turned bracket moves the body off its mount; a level one exports as it always did.
+        let hinge = (fixture.bracket_angle != 0.0)
+            .then(|| bracket_hinge(fixture))
+            .flatten();
         tosklight_fixtures.push(ToskLightMvrFixtureMetadataEntry {
             mvr_uuid: uuid,
             fixture: fixture.clone(),
+            bracket_hinge_millimetres: hinge,
         });
         document.fixtures.push(light_mvr::MvrFixture {
             uuid,
@@ -261,7 +323,7 @@ pub fn build_mvr_document<S: GdtfSource>(
             gdtf_mode: mode,
             universe: fixture.universe,
             address: fixture.address,
-            matrix: transform_matrix(fixture),
+            matrix: transform_matrix(fixture, hinge),
             layer: Some(fixture.layer_id.clone()),
             class: None,
         });
@@ -383,13 +445,19 @@ fn display_fixture_id(stored_id: &str, fixture: &PatchedFixture) -> String {
 /// The fixture's rotation and location as an MVR transform matrix.
 ///
 /// The bracket angle is part of where the fixture actually points, so it is composed into the
-/// matrix — after the placement rotation, in the fixture's own frame, exactly as the Stage and the
-/// visualizer turn it. Another application opening this archive gets the rig as it hangs, not as it
+/// matrix — after the placement rotation, in the fixture's own frame, about the lamp's bracket
+/// hinge where it has one, exactly as the Stage, the CAD and the visualizer turn it. The matrix is
+/// then the turned body's frame, so the lens and the beam leave where they do locally. Another application opening this archive gets the rig as it hangs, not as it
 /// would hang with every clamp set level. MVR has no separate place to put it, and a rotation nobody
 /// exported is a rotation the other application will never draw. The convention itself is stated
 /// once, in [`crate::mvr_transform`].
-fn transform_matrix(fixture: &PatchedFixture) -> [f64; 12] {
-    crate::mvr_transform::mvr_matrix(fixture.location, fixture.rotation, fixture.bracket_angle)
+fn transform_matrix(fixture: &PatchedFixture, hinge: Option<[f32; 3]>) -> [f64; 12] {
+    crate::mvr_transform::mvr_matrix_hinged(
+        fixture.location,
+        fixture.rotation,
+        fixture.bracket_angle,
+        hinge,
+    )
 }
 
 #[cfg(test)]

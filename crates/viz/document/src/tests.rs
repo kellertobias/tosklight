@@ -527,3 +527,6 @@ fn truss_scenery(section: f32) -> light_fixture::ProfileScenery {
         pattern: Default::default(),
     }
 }
+
+#[path = "mvr_bracket_tests.rs"]
+mod mvr_bracket;

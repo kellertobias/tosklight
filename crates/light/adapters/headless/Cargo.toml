@@ -36,6 +36,8 @@ light-dynamics = { path = "../../domain/dynamics" }
 light-discovery.workspace = true
 light-show = { path = "../../../shared/show" }
 light-wire.workspace = true
+# MVR export turns a lamp's body about the bracket hinge the Visualizer uses (TL-477).
+viz-project.workspace = true
 parking_lot.workspace = true
 rustc-hash.workspace = true
 rusqlite.workspace = true

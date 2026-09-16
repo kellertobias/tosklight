@@ -46,6 +46,7 @@ fn a_profile_without_a_retained_source_is_embedded_as_a_generated_gdtf() {
         &HashMap::new(),
         Vec::new(),
         &Retained(HashMap::new()),
+        |_| None,
     )
     .unwrap();
 
@@ -75,7 +76,7 @@ fn a_retained_source_is_embedded_unchanged_under_the_name_the_fixture_references
     let fixtures = [patched(&profile, 1)];
     let source = Retained(HashMap::from([(profile.id.0, b"source".to_vec())]));
     let (document, summary) =
-        build_mvr_document(&fixtures, &HashMap::new(), Vec::new(), &source).unwrap();
+        build_mvr_document(&fixtures, &HashMap::new(), Vec::new(), &source, |_| None).unwrap();
 
     assert_eq!(summary.embedded_profiles, 1);
     assert_eq!(summary.generated_profiles, 0);
@@ -99,6 +100,7 @@ fn two_revisions_of_one_fixture_get_distinct_archive_names() {
         &HashMap::new(),
         Vec::new(),
         &Retained(HashMap::new()),
+        |_| None,
     )
     .unwrap();
     assert_eq!(document.fixtures[0].gdtf_spec, "Acme@Wash.gdtf");
@@ -161,6 +163,7 @@ fn patch_layers_become_named_mvr_layers_in_patch_order() {
         &HashMap::new(),
         layers.clone(),
         &Retained(HashMap::new()),
+        |_| None,
     )
     .unwrap();
     assert_eq!(document.layers, layers);

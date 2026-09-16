@@ -1,9 +1,6 @@
 use super::model::PlannedFixture;
 use crate::{ActionError, ActionErrorKind, PatchModeProjection, PatchProfileRevisionProjection};
-use light_fixture::{
-    FixtureLocation, FixtureVector, PatchedFixture, PortablePatchedFixtureRecord,
-    migrate_patched_fixture_to_v2,
-};
+use light_fixture::{PatchedFixture, PortablePatchedFixtureRecord, migrate_patched_fixture_to_v2};
 use light_show::FixtureProfileRevision;
 use std::collections::BTreeMap;
 
@@ -72,11 +69,6 @@ pub(super) fn profile_projections(
             .or_insert(projection);
     }
     profiles.into_values().collect()
-}
-
-/// Where an MVR matrix places a fixture, under the convention [`crate::mvr_transform`] states.
-pub(super) fn mvr_transform(matrix: [f64; 12]) -> (FixtureLocation, FixtureVector) {
-    crate::mvr_transform::placement_from_mvr(matrix)
 }
 
 fn invalid(error: impl std::fmt::Display) -> ActionError {

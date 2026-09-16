@@ -376,6 +376,7 @@ fn tosklight_mvr_round_trip_preserves_scenery_markers_and_ordinary_fixtures() {
         &Default::default(),
         Vec::new(),
         &NoGdtf,
+        |_| None,
     )
     .unwrap();
     assert_eq!(summary.fixtures, 4);
