@@ -406,3 +406,124 @@ fn previewing_mvr_reports_what_the_archive_cannot_resolve_without_writing() {
         "a preview writes nothing"
     );
 }
+
+/// A shipped part corrected after a show was built: the element takes the new revision on request.
+///
+/// A patched fixture keeps the exact revision it was placed with, so an old show keeps drawing what
+/// it always drew. The Architect offers the operator the library's newer revision for a selected
+/// element; this is the write that offer makes, and what the show must do with it — read the new
+/// revision from the library, embed it beside the old one, and size the element by it.
+#[test]
+fn an_element_repatched_to_a_newer_revision_takes_it_from_the_library() {
+    let path = temp_path("profile-upgrade");
+    let library_path = path.with_extension("library.sqlite");
+    let library = light_fixture::FixtureLibrary::open(&library_path).expect("library");
+
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Venue".into();
+    profile.name = "Four-Point Truss".into();
+    profile.short_name = "4pt Truss".into();
+    profile.patch_policy = light_fixture::PatchPolicy::VisualOnly;
+    for mode in &mut profile.modes {
+        mode.channels.clear();
+        for split in &mut mode.splits {
+            split.footprint = 0;
+        }
+    }
+    profile.scenery = Some(truss_scenery(0.34));
+    let old = library
+        .save_profile(profile.clone(), 0)
+        .expect("first revision");
+    profile.scenery = Some(truss_scenery(0.29));
+    let new = library
+        .save_profile(profile, old.revision)
+        .expect("corrected revision");
+    assert!(new.revision > old.revision);
+
+    let document = PlanningDocument::create(&path, "Upgrade show")
+        .expect("create show")
+        .with_library(library);
+    let reference = |profile: &FixtureProfile| PatchedFixtureProfileReference {
+        profile_id: profile.id,
+        profile_revision: Revision::from(profile.revision),
+        mode_id: profile.modes[0].id,
+    };
+    let mut command = patch_one(document.show_id(), reference(&old));
+    // Stretched to 8 m while its section was still built at 340 mm.
+    command.fixtures[0].patch.scenery_size_metres = Some(FixtureVector {
+        x: 8000.0,
+        y: 340.0,
+        z: 340.0,
+    });
+    let fixture_id = command.fixtures[0].patch.fixture_id;
+    document
+        .patch_fixtures(command)
+        .expect("patched from the old revision");
+
+    let mut upgrade = patch_one(document.show_id(), reference(&new));
+    upgrade.fixtures[0].patch.fixture_id = fixture_id;
+    upgrade.fixtures[0].patch.scenery_size_metres = Some(FixtureVector {
+        x: 8000.0,
+        y: 290.0,
+        z: 290.0,
+    });
+    document
+        .patch_fixtures(upgrade)
+        .expect("repatched to the newer revision");
+
+    let snapshot = document.patch_snapshot().expect("snapshot");
+    let patched = snapshot
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.patch.fixture_id == fixture_id)
+        .expect("the same element, not a second one");
+    assert_eq!(snapshot.fixtures.len(), 1);
+    assert_eq!(
+        patched.profile.profile_revision,
+        Revision::from(new.revision)
+    );
+    let size = patched.patch.scenery_size_metres.expect("its stored size");
+    assert_eq!((size.x, size.y, size.z), (8000.0, 290.0, 290.0));
+    // Both revisions stay in the show: the old one is what any other element still references.
+    let store = ShowStore::open(&path).expect("reopen the store");
+    for revision in [old.revision, new.revision] {
+        assert!(
+            store
+                .resolve_fixture_profile_revision(old.id, Revision::from(revision))
+                .expect("read the revision")
+                .is_some(),
+            "revision {revision} is embedded in the show"
+        );
+    }
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&library_path);
+}
+
+/// A truss section: made to measure along its length, fixed across it.
+fn truss_scenery(section: f32) -> light_fixture::ProfileScenery {
+    light_fixture::ProfileScenery {
+        kind: light_fixture::ProfileSceneryKind::Truss,
+        chords: 4,
+        default_size_metres: light_fixture::Vector3 {
+            x: 4.0,
+            y: section,
+            z: section,
+        },
+        adjustable: light_fixture::SceneryAxes {
+            width: true,
+            height: false,
+            depth: false,
+        },
+        minimum_size_metres: light_fixture::Vector3 {
+            x: 0.25,
+            y: section,
+            z: section,
+        },
+        maximum_size_metres: light_fixture::Vector3 {
+            x: 24.0,
+            y: section,
+            z: section,
+        },
+        pattern: Default::default(),
+    }
+}

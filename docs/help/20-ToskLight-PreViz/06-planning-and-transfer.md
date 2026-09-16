@@ -610,7 +610,15 @@ raises or lowers the deck without moving the feet. Every other generated object 
 its centre. Its **Parameters** follow: a **Colour** as a hex value, empty for the kind's
 default, and for a chain its **Chain top** and **Chain bottom**. A placed 3D model shows **Scale**. A
 lamp shows its **Bracket angle** and **Barndoors** angle, empty when none are fitted. Every number
-field names its unit. The fields take typing from the keyboard: a change is written when you press
+field names its unit.
+
+An element keeps the exact version of its profile it was placed with, so a show always draws what it
+drew when it was built. When this computer's library holds a newer version of that profile — because
+a shipped part has been corrected since, such as a truss section or the size of a corner block —
+**Placement** says so and offers **Update to the newest version**. It changes nothing else: the
+name, position, rotation, patch and the measurements you set stay as they are, and a measurement the
+profile does not let you set, such as a truss's section, comes back at the corrected one. Elements
+you do not update are left alone. The fields take typing from the keyboard: a change is written when you press
 Enter or leave the field, and Escape puts back what was there.
 
 With several elements selected, **Generic** lists them by **ID**, **Name**, **Model** and **Patch**, and
@@ -635,7 +643,8 @@ With **Settings (⚙) → Enable snapping** on, a moved object that comes within
 lands exactly on it, and a magenta diamond marks the fit while the drag holds it:
 
 * **Trusses** join where their connectors meet: the ends of a straight truss, and the end of each
-  500 mm arm of a corner, T-piece, cross or node, where the coupler egg sits.
+  arm of a corner, T-piece, cross or node, where the coupler egg sits. A corner block is 500 mm
+  overall wherever it has arms, so adding arms makes it busier rather than bigger.
 * **Stage elements** — decks on scissor lifts, stairs and decks on fixed legs — put their corners
   on another's corners, and in a side or front view their feet on another stage element's top. A
   stage element stands on its position: the position is the floor under the middle of its feet.

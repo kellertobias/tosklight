@@ -21,8 +21,23 @@ export interface Segment {
 type Shape = Pick<CadEntity, "positionMillimetres" | "rotationDegrees" | "sizeMillimetres"> &
 	Partial<Pick<CadEntity, "scenery" | "fixtureProfile">>;
 
-/** How far a shipped truss corner piece's arms reach from its node to the connector on their end. */
-export const TRUSS_CORNER_ARM_MILLIMETRES = 500;
+/**
+ * How far each arm of a shipped truss corner piece reaches, from its node to the coupler on the end.
+ *
+ * A corner block is one overall size whatever it is: an axis with an arm each way splits that size
+ * between them, and an arm alone on its axis reaches to the far face, leaving only the section of
+ * the arms that turn away from it behind. Reading it from the placed size rather than from a
+ * constant keeps it right for the blocks in older shows, which were built larger.
+ */
+export function trussCornerArmReach(size: Vec3, arms: readonly Vec3[], arm: Vec3): number {
+	const axis = arm.findIndex((value) => value !== 0);
+	if (axis < 0) return 0;
+	if (arms.some((other) => other[axis] === -arm[axis])) return size[axis] / 2;
+	const behind = [0, 1, 2]
+		.filter((each) => arms.every((other) => other[each] === 0))
+		.map((each) => size[each]);
+	return size[axis] - (behind.length ? Math.min(...behind) : 0) / 2;
+}
 
 /** A deck on a scissor lift, stairs, or a shipped deck on fixed legs. */
 export function isStageElement(entity: Shape): boolean {
@@ -100,9 +115,10 @@ function trussRun(entity: Shape) {
 export function trussConnectors(entity: Shape): Vec3[] {
 	const arms = trussCornerArms(entity);
 	if (arms)
-		return arms.map((arm) =>
-			placedPoint(entity, arm.map((value) => value * TRUSS_CORNER_ARM_MILLIMETRES) as Vec3),
-		);
+		return arms.map((arm) => {
+			const reach = trussCornerArmReach(entity.sizeMillimetres, arms, arm);
+			return placedPoint(entity, arm.map((value) => value * reach) as Vec3);
+		});
 	if (!isTruss(entity)) return [];
 	const { run, length } = trussRun(entity);
 	return [-1, 1].map((sign) => {

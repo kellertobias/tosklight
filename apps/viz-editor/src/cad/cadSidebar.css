@@ -193,6 +193,21 @@
 	font-size: 12px;
 }
 
+/* The offer to bring an element up to a newer version of its profile: a reason, then the button. */
+.cad-info-upgrade {
+	display: grid;
+	gap: 6px;
+	padding: 8px;
+	border: 1px solid var(--border-subtle, #2c333c);
+	border-radius: 6px;
+}
+
+.cad-info-upgrade > p {
+	margin: 0;
+	color: var(--text-secondary, #98a4b3);
+	font-size: 12px;
+}
+
 /* The grid layer sits over the linework and never takes the pointer. */
 .cad-grid {
 	position: absolute;

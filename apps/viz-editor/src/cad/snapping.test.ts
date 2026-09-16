@@ -68,11 +68,20 @@ describe("CAD snapping", () => {
 		expect(far).toEqual({ delta: [-300, 0, 0], targets: [] });
 	});
 
-	it("finds a corner piece's connectors at the end of its 500 mm arms", () => {
-		const corner = base("c", { fixtureProfile: "Venue Four-Point Truss Corner 2-Way" });
-		const [first, second] = trussConnectors(corner);
-		expectVector(first, [-500, 0, 0]);
-		expectVector(second, [0, 500, 0]);
+	it("finds a corner piece's connectors at the end of its arms, whatever size the block is", () => {
+		const block = (part: string, size: V3) =>
+			base("c", { fixtureProfile: `Venue Four-Point Truss ${part}`, sizeMillimetres: size });
+		// A 500 mm corner: the arm alone on its axis reaches the far face, leaving the 290 mm
+		// section of the arm that turns away from it behind.
+		const [left, back] = trussConnectors(block("Corner 2-Way", [500, 500, 290]));
+		expectVector(left, [-355, 0, 0]);
+		expectVector(back, [0, 355, 0]);
+		// A cross is 500 mm across each axis it has an arm each way on, so those arms take half.
+		expectVector(trussConnectors(block("Cross 4-Way", [500, 500, 290]))[0], [-250, 0, 0]);
+		expectVector(trussConnectors(block("Node 6-Way", [500, 500, 500]))[4], [0, 0, 250]);
+		// The larger blocks older shows were built with still join where their couplers are.
+		expectVector(trussConnectors(block("Corner 2-Way", [679, 679, 290]))[0], [-534, 0, 0]);
+		expectVector(trussConnectors(block("Cross 4-Way", [1068, 1068, 290]))[0], [-534, 0, 0]);
 	});
 
 	it("puts two stage elements corner to corner", () => {

@@ -25,7 +25,10 @@ import { type ReactNode, useEffect, useState } from "react";
 import { documentSession } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import { CommitNumber, CommitText, CommitTextArea } from "./cadFields";
+import { useFixtureLibrary } from "./cadPlacement";
 import { MountingFields, PatchFields, SceneryParameters } from "./CadInfoFields";
+import { newerRevision, type UpgradeTarget, upgraded } from "./profileUpgrade";
+import { SIZE_AXES } from "./sceneryAxes";
 import type { CadEntity } from "./types";
 
 export type InfoTab = "generic" | "placement";
@@ -33,12 +36,6 @@ export type InfoTab = "generic" | "placement";
 type Axis = "x" | "y" | "z";
 const AXES: readonly Axis[] = ["x", "y", "z"];
 
-/** The measurements of a generated object, with the key the patch stores each under. */
-const SIZE_AXES = [
-	{ axis: "width", key: "x", label: "Width" },
-	{ axis: "height", key: "y", label: "Height" },
-	{ axis: "depth", key: "z", label: "Depth" },
-] as const;
 
 /** Whether an element can be drawn at another size: placed Venue objects, except crowd areas. */
 export function supportsScale(entity: CadEntity): boolean {
@@ -89,6 +86,7 @@ const transport = new TauriPatchTransport();
 function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 	const [fixture, setFixture] = useState<PatchFixtureProjection | null>(null);
 	const [scenery, setScenery] = useState<FixtureProfileScenery | null>(null);
+	const [modeName, setModeName] = useState<string | undefined>(undefined);
 	const [note, setNote] = useState("");
 	useEffect(() => {
 		let current = true;
@@ -111,6 +109,9 @@ function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 						each.profileRevision === found?.profileRevision,
 				);
 				setScenery(revision?.profileSnapshot?.scenery ?? null);
+				setModeName(
+					revision?.referencedModes?.find((mode) => mode.modeId === found?.modeId)?.name,
+				);
 				setNote(notes.find((each) => each.fixtureId === fixtureId)?.note ?? "");
 			})
 			.catch(() => current && setFixture(null));
@@ -118,7 +119,7 @@ function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 			current = false;
 		};
 	}, [fixtureId, sceneRevision]);
-	return { fixture, setFixture, scenery, note, setNote };
+	return { fixture, setFixture, scenery, modeName, note, setNote };
 }
 
 function PlacementChooser({
@@ -254,7 +255,7 @@ export function CadInfoPanel({
 	/** What Info shows while several elements are selected; a count when absent. */
 	several?: ReactNode;
 }) {
-	const { fixture, setFixture, scenery, note, setNote } = useInfoFixture(
+	const { fixture, setFixture, scenery, modeName, note, setNote } = useInfoFixture(
 		entity?.logicalFixtureId ?? null,
 		sceneRevision,
 	);
@@ -328,6 +329,7 @@ export function CadInfoPanel({
 				<PlacementFields
 					entity={entity}
 					fixture={fixture}
+					modeName={modeName}
 					scenery={scenery}
 					placement={placement}
 					shared={shared}
@@ -339,10 +341,51 @@ export function CadInfoPanel({
 	);
 }
 
+
+/**
+ * The offer to bring an element up to the newest version of its profile.
+ *
+ * It appears only when this computer's library holds a newer revision than the one the element was
+ * placed with, which is exactly when a shipped part has been corrected since. Nothing happens on its
+ * own: an old show keeps drawing what it always drew until the operator asks for the new version.
+ */
+function ProfileUpgrade({
+	fixture,
+	modeName,
+	shared,
+	write,
+}: {
+	fixture: PatchFixtureProjection;
+	modeName?: string;
+	shared: string;
+	write(next: PatchFixtureProjection): void;
+}) {
+	const library = useFixtureLibrary();
+	const target: UpgradeTarget | null =
+		library.state === "ready" ? newerRevision(library.definitions, fixture, modeName) : null;
+	if (!target) return null;
+	return (
+		<div className="cad-info-upgrade">
+			<p>
+				Built from version {fixture.profileRevision} of its profile; version{" "}
+				{target.profileRevision} is in this computer's library.
+			</p>
+			<button
+				type="button"
+				className="ui-button"
+				onClick={() => write(upgraded(fixture, target))}
+			>
+				Update to the newest version{shared}
+			</button>
+		</div>
+	);
+}
+
 /** The Placement tab for one element: where it stands, how it is built or scaled, how it is hung. */
 function PlacementFields({
 	entity,
 	fixture,
+	modeName,
 	scenery,
 	placement,
 	shared,
@@ -351,6 +394,7 @@ function PlacementFields({
 }: {
 	entity: CadEntity;
 	fixture: PatchFixtureProjection | null;
+	modeName?: string;
 	scenery: FixtureProfileScenery | null;
 	placement: Placement | null;
 	shared: string;
@@ -400,6 +444,9 @@ function PlacementFields({
 						fixture && write({ ...fixture, modelScale: scale === 1 ? null : scale })
 					}
 				/>
+			) : null}
+			{fixture ? (
+				<ProfileUpgrade fixture={fixture} modeName={modeName} shared={shared} write={write} />
 			) : null}
 			{fixture && scenery ? (
 				<SceneryParameters
