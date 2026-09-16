@@ -22,12 +22,10 @@ import type {
 	PatchMultiPatch,
 } from "@tosklight/patch";
 import { type ReactNode, useEffect, useState } from "react";
-import { documentSession } from "../document/session";
+import { documentSession, type ProfileUpdate } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import { CommitNumber, CommitText, CommitTextArea } from "./cadFields";
-import { useFixtureLibrary } from "./cadPlacement";
 import { MountingFields, PatchFields, SceneryParameters } from "./CadInfoFields";
-import { newerRevision, type UpgradeTarget, upgraded } from "./profileUpgrade";
 import { SIZE_AXES } from "./sceneryAxes";
 import type { CadEntity } from "./types";
 
@@ -86,7 +84,6 @@ const transport = new TauriPatchTransport();
 function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 	const [fixture, setFixture] = useState<PatchFixtureProjection | null>(null);
 	const [scenery, setScenery] = useState<FixtureProfileScenery | null>(null);
-	const [modeName, setModeName] = useState<string | undefined>(undefined);
 	const [note, setNote] = useState("");
 	useEffect(() => {
 		let current = true;
@@ -109,9 +106,6 @@ function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 						each.profileRevision === found?.profileRevision,
 				);
 				setScenery(revision?.profileSnapshot?.scenery ?? null);
-				setModeName(
-					revision?.referencedModes?.find((mode) => mode.modeId === found?.modeId)?.name,
-				);
 				setNote(notes.find((each) => each.fixtureId === fixtureId)?.note ?? "");
 			})
 			.catch(() => current && setFixture(null));
@@ -119,7 +113,7 @@ function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 			current = false;
 		};
 	}, [fixtureId, sceneRevision]);
-	return { fixture, setFixture, scenery, modeName, note, setNote };
+	return { fixture, setFixture, scenery, note, setNote };
 }
 
 function PlacementChooser({
@@ -255,7 +249,7 @@ export function CadInfoPanel({
 	/** What Info shows while several elements are selected; a count when absent. */
 	several?: ReactNode;
 }) {
-	const { fixture, setFixture, scenery, modeName, note, setNote } = useInfoFixture(
+	const { fixture, setFixture, scenery, note, setNote } = useInfoFixture(
 		entity?.logicalFixtureId ?? null,
 		sceneRevision,
 	);
@@ -329,7 +323,8 @@ export function CadInfoPanel({
 				<PlacementFields
 					entity={entity}
 					fixture={fixture}
-					modeName={modeName}
+					sceneRevision={sceneRevision}
+					onError={onError}
 					scenery={scenery}
 					placement={placement}
 					shared={shared}
@@ -343,37 +338,55 @@ export function CadInfoPanel({
 
 
 /**
- * The offer to bring an element up to the newest version of its profile.
+ * The offer to bring an element up to this computer's copy of its profile.
  *
- * It appears only when this computer's library holds a newer revision than the one the element was
- * placed with, which is exactly when a shipped part has been corrected since. Nothing happens on its
- * own: an old show keeps drawing what it always drew until the operator asks for the new version.
+ * It appears only when the library holds a different copy from the one the element was built with,
+ * which is what happens after a shipped part is corrected. The show answers that by content rather
+ * than by version number, because two libraries number their own versions independently. Nothing
+ * happens on its own: an old show keeps drawing what it always drew until the operator asks.
  */
-function ProfileUpgrade({
-	fixture,
-	modeName,
+function ProfileUpdateOffer({
+	fixtureId,
+	sceneRevision,
 	shared,
-	write,
+	onError,
 }: {
-	fixture: PatchFixtureProjection;
-	modeName?: string;
+	fixtureId: string;
+	sceneRevision: number;
 	shared: string;
-	write(next: PatchFixtureProjection): void;
+	onError(reason: unknown): void;
 }) {
-	const library = useFixtureLibrary();
-	const target: UpgradeTarget | null =
-		library.state === "ready" ? newerRevision(library.definitions, fixture, modeName) : null;
-	if (!target) return null;
+	const [update, setUpdate] = useState<ProfileUpdate | null>(null);
+	const [busy, setBusy] = useState(false);
+	useEffect(() => {
+		let current = true;
+		documentSession
+			.fixtureProfileUpdate(fixtureId)
+			.then((found) => current && setUpdate(found))
+			.catch(() => current && setUpdate(null));
+		return () => {
+			current = false;
+		};
+	}, [fixtureId, sceneRevision]);
+	if (!update) return null;
 	return (
 		<div className="cad-info-upgrade">
 			<p>
-				Built from version {fixture.profileRevision} of its profile; version{" "}
-				{target.profileRevision} is in this computer's library.
+				Built from version {update.fromRevision} of its profile; this computer's library holds a
+				newer one.
 			</p>
 			<button
 				type="button"
 				className="ui-button"
-				onClick={() => write(upgraded(fixture, target))}
+				disabled={busy}
+				onClick={() => {
+					setBusy(true);
+					documentSession
+						.updateFixtureProfile(fixtureId)
+						.then(() => setUpdate(null))
+						.catch(onError)
+						.finally(() => setBusy(false));
+				}}
 			>
 				Update to the newest version{shared}
 			</button>
@@ -385,7 +398,8 @@ function ProfileUpgrade({
 function PlacementFields({
 	entity,
 	fixture,
-	modeName,
+	sceneRevision,
+	onError,
 	scenery,
 	placement,
 	shared,
@@ -394,7 +408,8 @@ function PlacementFields({
 }: {
 	entity: CadEntity;
 	fixture: PatchFixtureProjection | null;
-	modeName?: string;
+	sceneRevision: number;
+	onError(reason: unknown): void;
 	scenery: FixtureProfileScenery | null;
 	placement: Placement | null;
 	shared: string;
@@ -446,7 +461,12 @@ function PlacementFields({
 				/>
 			) : null}
 			{fixture ? (
-				<ProfileUpgrade fixture={fixture} modeName={modeName} shared={shared} write={write} />
+				<ProfileUpdateOffer
+					fixtureId={fixture.fixtureId}
+					sceneRevision={sceneRevision}
+					shared={shared}
+					onError={onError}
+				/>
 			) : null}
 			{fixture && scenery ? (
 				<SceneryParameters

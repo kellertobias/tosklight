@@ -818,6 +818,14 @@ pub fn preview_is_active(session: tauri::State<'_, Session>) -> bool {
     session.source.preview_is_active()
 }
 
+/// This computer's fixture library, when the editor has been pointed at one that exists.
+pub(crate) fn open_library(session: &Session) -> Option<FixtureLibrary> {
+    let path = session.library_path.lock().clone()?;
+    path.exists()
+        .then(|| FixtureLibrary::open(&path).ok())
+        .flatten()
+}
+
 /// The fixtures the operator can patch from, for the sheet's fixture browser.
 #[tauri::command]
 pub fn library_profiles(session: tauri::State<'_, Session>) -> Answer<Vec<LibraryProfile>> {

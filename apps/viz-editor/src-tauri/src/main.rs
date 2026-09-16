@@ -19,6 +19,7 @@ mod mcp;
 mod model_import;
 mod network_sources;
 mod portable;
+mod profile_update;
 mod recent;
 mod session;
 mod underlay;
@@ -353,6 +354,8 @@ fn main() {
             session::apply_media_intent,
             session::import_media_fallback,
             session::library_profiles,
+            profile_update::fixture_profile_update,
+            profile_update::update_fixture_profile,
             session::save_library_profile,
             session::delete_library_profile_revision,
             session::attribute_registry,

@@ -109,6 +109,16 @@ export type PreviewSet =
 	  };
 
 /** One ToskLight desk on the network, with the show it is running. */
+/** A different copy of a placed element's profile, held by this computer's fixture library. */
+export interface ProfileUpdate {
+	/** The version the element was built from, as this show numbers it. */
+	fromRevision: number;
+	/** The version it would move onto. */
+	toRevision: number;
+	/** The profile's name. */
+	name: string;
+}
+
 export interface DeskPeer {
 	instance: string;
 	name: string;
@@ -522,6 +532,18 @@ export const documentSession = {
 		invoke<DocumentSummary>("load_from_desk", { instance }),
 	/** The rig as it currently stands, for surfaces outside the sheet that need the fixtures. */
 	patchSnapshot: () => invoke<PatchSnapshot>("patch_snapshot"),
+	/**
+	 * Whether this computer's library holds a different copy of one element's profile.
+	 *
+	 * Revision numbers are a library's own, so two libraries can each call their copy revision 4.
+	 * The show answers this by content, not by number, which is why it is asked rather than worked
+	 * out from the library listing.
+	 */
+	fixtureProfileUpdate: (fixtureId: string) =>
+		invoke<ProfileUpdate | null>("fixture_profile_update", { fixtureId }),
+	/** Moves one element onto this computer's copy of its profile. */
+	updateFixtureProfile: (fixtureId: string) =>
+		invoke<unknown>("update_fixture_profile", { fixtureId }),
 	mediaLayout: () => invoke<MediaLayoutSnapshot>("media_layout"),
 	/**
 	 * Another window, or a program using the local editing API, changed the media layout.

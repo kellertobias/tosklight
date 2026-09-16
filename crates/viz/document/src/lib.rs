@@ -276,6 +276,20 @@ impl PlanningDocument {
         Ok(())
     }
 
+    /// Every revision of one fixture profile the show carries, in the order they were kept.
+    ///
+    /// A show embeds the exact revision each element was patched with, and two libraries can number
+    /// their own revisions differently, so this is what tells an editor whether the revision it
+    /// wants to patch to is free in this show or already taken by different content.
+    pub fn fixture_profile_revisions_for(
+        &self,
+        profile_id: light_core::FixtureId,
+    ) -> Result<Vec<light_show::FixtureProfileRevision>, DocumentError> {
+        Ok(self
+            .store()?
+            .list_fixture_profile_revisions_for(profile_id)?)
+    }
+
     /// Deletes one optional stored object. Missing objects are an idempotent no-op.
     pub fn delete_object(&self, kind: &str, id: &str) -> Result<bool, DocumentError> {
         Ok(self.store()?.delete_object(kind, id)?)

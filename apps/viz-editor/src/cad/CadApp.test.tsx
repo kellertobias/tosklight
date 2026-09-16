@@ -57,6 +57,8 @@ const documentMocks = vi.hoisted(() => ({
 	savePaperwork: vi.fn(),
 	patchSnapshot: vi.fn(),
 	fixtureProfiles: vi.fn(),
+	fixtureProfileUpdate: vi.fn(),
+	updateFixtureProfile: vi.fn(),
 	fixtureNotes: vi.fn(),
 	saveFixtureNote: vi.fn(),
 }));
@@ -223,6 +225,8 @@ beforeEach(() => {
 		.mockResolvedValue([{ fixtureId, note: "Use secondary safety" }]);
 	documentMocks.saveFixtureNote.mockReset().mockResolvedValue(undefined);
 	documentMocks.fixtureProfiles.mockReset().mockResolvedValue([]);
+	documentMocks.fixtureProfileUpdate.mockReset().mockResolvedValue(null);
+	documentMocks.updateFixtureProfile.mockReset().mockResolvedValue(undefined);
 	transportMocks.patchFixtures.mockReset().mockResolvedValue(undefined);
 	for (const action of Object.values(nativeWindow)) action.mockClear();
 });
@@ -733,17 +737,9 @@ describe("the CAD planning screen", () => {
 		});
 	});
 
-	it("offers a corrected profile to an element built from an older revision of it", async () => {
+	it("offers a corrected profile to an element built from an older version of it", async () => {
 		const trussId = "66666666-6666-4666-8666-666666666666";
 		const [original] = snapshot.entities;
-		const section = (metres: number) => ({
-			kind: "truss",
-			chords: 4,
-			default_size_metres: { x: 4, y: metres, z: metres },
-			adjustable: { width: true, height: false, depth: false },
-			minimum_size_metres: { x: 0.25, y: metres, z: metres },
-			maximum_size_metres: { x: 24, y: metres, z: metres },
-		});
 		mocks.snapshot.mockResolvedValue({
 			...snapshot,
 			selectedIds: [trussId],
@@ -764,48 +760,22 @@ describe("the CAD planning screen", () => {
 					fixtureId: trussId,
 					name: "Four-Point Truss",
 					profileId: "truss-profile",
-					profileRevision: 1,
+					profileRevision: 4,
 					modeId: "truss-mode",
 					location: { x: 0, y: 0, z: 0 },
 					rotation: { x: 0, y: 0, z: 0 },
 					multipatch: [],
-					// Stretched to 8 m when its section was still built at 340 mm.
 					scenerySizeMetres: { x: 8000, y: 340, z: 340 },
 				},
 			],
-			profileRevisions: [
-				{
-					profileId: "truss-profile",
-					profileRevision: 1,
-					referencedModes: [{ modeId: "truss-mode", name: "Default" }],
-					profileSnapshot: { scenery: section(0.34) },
-				},
-			],
+			profileRevisions: [],
 		});
-		// This computer's library holds the corrected profile, with the 290 mm section.
-		documentMocks.fixtureProfiles.mockResolvedValue([
-			{
-				id: "truss-profile",
-				revision: 2,
-				manufacturer: "Venue",
-				name: "Four-Point Truss",
-				short_name: "4pt Truss",
-				fixture_type: "rigging",
-				patch_policy: "visual_only",
-				physical: {},
-				scenery: section(0.29),
-				modes: [
-					{
-						id: "truss-mode",
-						name: "Default",
-						splits: [{ number: 1, footprint: 0 }],
-						heads: [],
-						channels: [],
-						color_systems: [],
-					},
-				],
-			},
-		]);
+		// The show answers by content: this computer's library holds a different copy.
+		documentMocks.fixtureProfileUpdate.mockResolvedValue({
+			fromRevision: 4,
+			toRevision: 5,
+			name: "Four-Point Truss",
+		});
 		render(
 			<ModalProvider>
 				<CadApp />
@@ -814,16 +784,14 @@ describe("the CAD planning screen", () => {
 		const info = await screen.findByRole("region", { name: "Info" });
 		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
 		const update = await within(info).findByRole("button", { name: /Update to the newest version/u });
-		expect(within(info).getByText(/version 2 is in this computer's library/u)).toBeVisible();
+		expect(within(info).getByText(/Built from version 4 of its profile/u)).toBeVisible();
 
 		fireEvent.click(update);
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
-		// The length the operator set is kept; the section they never chose is corrected.
-		expect(transportMocks.patchFixtures.mock.calls[0][2].fixtures[0]).toMatchObject({
-			profileRevision: 2,
-			modeId: "truss-mode",
-			scenerySizeMetres: { x: 8000, y: 290, z: 290 },
-		});
+		await waitFor(() => expect(documentMocks.updateFixtureProfile).toHaveBeenCalledWith(trussId));
+		// The offer goes once it has been taken.
+		await waitFor(() =>
+			expect(within(info).queryByRole("button", { name: /Update to the newest version/u })).toBeNull(),
+		);
 	});
 
 	it("patches a lamp under Generic and sets its bracket and barn doors under Placement", async () => {
