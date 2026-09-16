@@ -1,13 +1,21 @@
 import {
 	Button,
 	CheckboxField,
+	ColorPickerField,
 	FormLayout,
 	NumberField,
 	SelectField,
 	TextField,
 } from "@tosklight/ui";
 import type { ColorSystem, FixtureChannel } from "../wire";
-import { xyyToXyz, xyzToXyy } from "../sheet/fixtureProfileModel";
+import {
+	hexToXyz,
+	wheelSlotDisplayXyz,
+	wheelSlotsFromChannel,
+	xyyToXyz,
+	xyzToHex,
+	xyzToXyy,
+} from "../sheet/fixtureProfileModel";
 
 export function AdditiveColorEditor({
 	system,
@@ -250,13 +258,17 @@ export function HueSaturationColorEditor({
 
 export function DiscreteColorEditor({
 	system,
+	channels,
 	options,
 	onChange,
 }: {
 	system: Extract<ColorSystem, { type: "discrete_wheel" }>;
+	channels: FixtureChannel[];
 	options: Array<{ value: string; label: string }>;
 	onChange: (system: Extract<ColorSystem, { type: "discrete_wheel" }>) => void;
 }) {
+	const wheel = channels.find((channel) => channel.id === system.channel_id);
+	const wheelSlots = wheel ? wheelSlotsFromChannel(wheel, system.slots) : [];
 	const setSlot = (
 		index: number,
 		patch: Partial<(typeof system.slots)[number]>,
@@ -275,7 +287,19 @@ export function DiscreteColorEditor({
 				options={options}
 				onChange={(channel_id) => onChange({ ...system, channel_id })}
 			/>
-			{system.slots.map((slot, index) => (
+			<p>
+				Each slot's display color drives the Visualizer. A slot without one
+				shows the color its name describes, such as Open as white.
+			</p>
+			<Button
+				disabled={!wheelSlots.length}
+				onClick={() => onChange({ ...system, slots: wheelSlots })}
+			>
+				Fill slots from wheel functions
+			</Button>
+			{system.slots.map((slot, index) => {
+				const display = wheelSlotDisplayXyz(slot);
+				return (
 				<article key={`${slot.semantic_id}-${index}`}>
 					<TextField
 						label="Portable color ID"
@@ -305,6 +329,18 @@ export function DiscreteColorEditor({
 							setSlot(index, { dmx_to: Number(event.target.value) })
 						}
 					/>
+					<ColorPickerField
+						label={`${slot.label || slot.semantic_id} display color`}
+						description={
+							slot.measured_xyz
+								? "Defined color"
+								: display
+									? "From the slot name"
+									: "No color: the Visualizer keeps the fixture's own"
+						}
+						value={display ? xyzToHex(display) : ""}
+						onChange={(hex) => setSlot(index, { measured_xyz: hexToXyz(hex) })}
+					/>
 					<CheckboxField
 						label="Measured XYZ available"
 						stateLabel="Use measured color"
@@ -312,7 +348,7 @@ export function DiscreteColorEditor({
 						onChange={(event) =>
 							setSlot(index, {
 								measured_xyz: event.target.checked
-									? { x: 0.33, y: 0.33, z: 0.34 }
+									? (display ?? { x: 0.33, y: 0.33, z: 0.34 })
 									: null,
 							})
 						}
@@ -355,7 +391,8 @@ export function DiscreteColorEditor({
 						Remove slot
 					</Button>
 				</article>
-			))}
+				);
+			})}
 			<Button
 				onClick={() =>
 					onChange({

@@ -1476,7 +1476,34 @@ fn showtec_sunstrip_thirty_channel_mode_projects_one_virtual_dimmer_per_pixel() 
             "{} RGB must be scaled by its virtual dimmer",
             head.name
         );
+        // Each pixel owns its own colour system, bound to its own three channels in chart order.
+        let systems = mode
+            .color_systems
+            .iter()
+            .filter(|system| system.head_id == head.id)
+            .collect::<Vec<_>>();
+        let [system] = systems.as_slice() else {
+            panic!("{} should carry exactly one colour system", head.name);
+        };
+        let ColorSystem::Additive { emitters } = &system.system else {
+            panic!("{} should mix additively", head.name);
+        };
+        assert_eq!(
+            emitters
+                .iter()
+                .map(|emitter| (emitter.name.as_str(), emitter.channel_id, emitter.visible))
+                .collect::<Vec<_>>(),
+            [
+                ("Red", channels[0].id, true),
+                ("Green", channels[1].id, true),
+                ("Blue", channels[2].id, true)
+            ],
+            "{} binds its own channels",
+            head.name
+        );
     }
+    assert_eq!(mode.color_systems.len(), 10);
+    assert_eq!(profile.revision, 2);
 
     let definition = profile
         .resolved_definition(mode.id)

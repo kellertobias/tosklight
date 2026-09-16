@@ -117,7 +117,8 @@ A show patched before this keeps the fixture revision embedded in it and is unaf
   venue's 20-slot 16-bit, gobo-fine, lamp-control personality in addition to its existing modes.
 - **High End Systems Trackspot** — the classic seven-channel mirror scanner in low- and high-resolution DMX personalities.
 - **Showtec Sunstrip Active DMX** — ten independently controlled tungsten lamps.
-- **Showtec Sunstrip LED RGB 42206** — ten independently controlled RGB pixels.
+- **Showtec Sunstrip LED RGB 42206** — ten independently controlled RGB pixels, each with its
+  own additive color system, so every pixel shows its own color in the Visualizer.
 - **ROBE Robin DLS Profile**, **Robin 600X LEDWash**, **Robin LEDBeam 150**, **Robin 300 LEDWash**, and **Robin DLF Wash** — every documented manufacturer personality. The 600X and 300 zone modes expose their three concentric RGBW zones as logical heads.
 - **Claypaky Sharpy**, **ETC Source Four LED Series 2 Lustr**, **CHAUVET Professional COLORado 1 Solo**, and **GLP JDC1**. JDC1 SPix modes expose all twelve RGB plate pixels and twelve white beam segments as logical heads.
 
@@ -258,10 +259,22 @@ Highlight. A per-fixture Highlight override may replace that Highlight raw value
 
 ### Color
 
-Configure the fixture's additive, subtractive, or wheel color system. Each wheel slot gives every
-field room for its value; in a narrow window **DMX from** and **DMX to** move onto their own line
-rather than shrinking. Then use **Generate portable
-presets** in **Control → Special Dialog** when fixed or indexed choices should be added to the show.
+Configure the fixture's additive, subtractive, hue/saturation, or wheel color system. Every head
+has its own section and its own color system, so each cell or pixel of a multi-head fixture is
+configured independently. **Copy to other heads** gives every other head that has the same kind of
+channels its own copy, bound to that head's channels; each copy can then be edited on its own.
+Heads without matching channels, such as a shared master head, keep what they have.
+
+For a **Discrete color wheel**, **Fill slots from wheel functions** creates one slot for each
+named position of the wheel channel. Colors you already defined are kept. Each slot has a
+**display color** that the Visualizer shows while the wheel is in that slot. Choose one in the
+picker to store it with the profile; it is marked **Defined color**. A slot without a defined color
+shows the color its name describes, marked **From the slot name**: Open or White shows white, Deep
+Red a dark red, CTO a warm tint. A slot whose name describes no color leaves the fixture's own
+color in the Visualizer. Each wheel slot gives every field room for its value; in a narrow window
+**DMX from** and **DMX to** move onto their own line rather than shrinking. Then use **Generate
+portable presets** in **Control → Special Dialog** when fixed or indexed choices should be added to
+the show.
 
 ### Emitters & Motion
 

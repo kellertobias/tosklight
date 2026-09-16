@@ -94,7 +94,7 @@ pub(crate) fn profile_visual_color(
             slots
                 .iter()
                 .find(|slot| raw >= slot.dmx_from && raw <= slot.dmx_to)
-                .and_then(|slot| slot.measured_xyz)
+                .and_then(|slot| slot.display_xyz())
                 .or(fallback)
         }
         None => rgb_fallback(mode, head_id, channels).or(fallback),

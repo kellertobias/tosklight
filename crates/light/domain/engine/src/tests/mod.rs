@@ -484,6 +484,7 @@ fn normalized(values: &crate::ResolvedValues, fixture_id: FixtureId, attribute: 
         .unwrap()
 }
 
+mod profile_head_colors;
 mod profile_visualization;
 
 mod patch_and_heads;

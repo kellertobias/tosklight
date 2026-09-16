@@ -38,11 +38,9 @@ const test = base.extend<object, { editorUrl: string }>({
 });
 
 /** A shipped spot with a gobo/color wheel, a Stage geometry, and a beam. */
-function shippedProfile() {
+function shippedProfile(file = "cameo--auro-spot-z300.toskfixture") {
 	const archive = unzipSync(
-		readFileSync(
-			path.join(root, "assets/fixture-library/cameo--auro-spot-z300.toskfixture"),
-		),
+		readFileSync(path.join(root, "assets/fixture-library", file)),
 	);
 	return JSON.parse(strFromU8(archive["fixture.json"])).profile;
 }
@@ -62,8 +60,8 @@ const REGISTRY = [
 	default_unit: null,
 }));
 
-async function openEditor(page: Page, editorUrl: string) {
-	const profile = shippedProfile();
+async function openEditor(page: Page, editorUrl: string, file?: string) {
+	const profile = shippedProfile(file);
 	await page.addInitScript(
 		({ profile, registry }) => {
 			const answers: Record<string, unknown> = {
@@ -131,12 +129,12 @@ async function openTab(dialog: Locator, name: string) {
 	await expect(tab).toHaveAttribute("aria-selected", "true");
 }
 
-async function openModeEditor(page: Page, editor: Locator) {
+async function openModeEditor(page: Page, editor: Locator, name = "17-Channel") {
 	await openTab(editor, "Modes");
 	await page
-		.getByRole("button", { name: "Edit channels for 17-Channel", exact: true })
+		.getByRole("button", { name: `Edit channels for ${name}`, exact: true })
 		.click();
-	const mode = page.getByRole("dialog", { name: "Edit 17-Channel mode" });
+	const mode = page.getByRole("dialog", { name: `Edit ${name} mode` });
 	await expect(mode).toBeVisible();
 	return mode;
 }
@@ -332,3 +330,77 @@ for (const viewport of VIEWPORTS) {
 		});
 	});
 }
+
+for (const viewport of VIEWPORTS) {
+	test(`TL-447 @ui › the ${viewport.name} color wheel shows and edits each slot's display color`, async ({
+		page,
+		editorUrl,
+	}) => {
+		await page.setViewportSize(viewport);
+		const { editor } = await openEditor(page, editorUrl);
+		const mode = await openModeEditor(page, editor);
+		await openTab(mode, "Color");
+		const slots = mode.locator(".color-wheel-editor > article");
+		await expect(slots).toHaveCount(9);
+		// Unmeasured slots already show the colour their name gives the Visualizer.
+		const open = slots.first();
+		const openColor = open.getByRole("button", { name: /#FFFFFF/ });
+		await openColor.scrollIntoViewIfNeeded();
+		await expect(openColor).toBeVisible();
+		await expect(open.getByText("From the slot name", { exact: true })).toBeVisible();
+		const red = slots.nth(1);
+		const picker = red.getByRole("button", { name: /^#/ });
+		await picker.scrollIntoViewIfNeeded();
+		const [pickerBox, slotBox] = await Promise.all([
+			picker.boundingBox(),
+			red.boundingBox(),
+		]);
+		expect(
+			pickerBox && slotBox && pickerBox.x + pickerBox.width <= slotBox.x + slotBox.width,
+		).toBe(true);
+		await picker.click();
+		await page.getByRole("option", { name: "Use color #06b6d4" }).click();
+		await expect(red.getByText("Defined color", { exact: true })).toBeVisible();
+		await expect(red.getByRole("button", { name: /#06B6D4/ })).toBeVisible();
+		await expect(
+			mode.getByRole("button", { name: "Fill slots from wheel functions", exact: true }),
+		).toBeEnabled();
+		expect(await scrollingRegions(mode)).toEqual(["fixture-mode-editor-body y"]);
+		await page.screenshot({
+			path: `${artifactPaths.results}/tl-447-wheel-color-${viewport.name}.png`,
+		});
+	});
+}
+
+test("TL-447 @ui › the Sun Strip configures the color of each of its ten pixels", async ({
+	page,
+	editorUrl,
+}) => {
+	await page.setViewportSize({ width: 1280, height: 720 });
+	const { editor } = await openEditor(
+		page,
+		editorUrl,
+		"showtec--sunstrip-led-rgb-42206.toskfixture",
+	);
+	const mode = await openModeEditor(page, editor, "30 Channel");
+	await openTab(mode, "Color");
+	const sections = mode.locator(".fixture-color-editor > section");
+	// The shared master head plus ten pixels, each pixel with its own additive system.
+	await expect(sections).toHaveCount(11);
+	for (let pixel = 1; pixel <= 10; pixel++) {
+		const section = sections.nth(pixel);
+		await expect(section.getByRole("heading", { name: `pixel ${pixel}`, exact: true })).toBeVisible();
+		await expect(section.locator(".color-emitter-list > article")).toHaveCount(3);
+		const names = section.getByLabel("Emitter name", { exact: true });
+		for (const [index, name] of ["Red", "Green", "Blue"].entries())
+			await expect(names.nth(index)).toHaveValue(name);
+	}
+	await expect(sections.first().locator(".color-emitter-list")).toHaveCount(0);
+	// Editing one pixel leaves the others as they were.
+	const second = sections.nth(2).getByLabel("Emitter name", { exact: true }).first();
+	await second.fill("Pixel 2 red");
+	await expect(
+		sections.nth(1).getByLabel("Emitter name", { exact: true }).first(),
+	).toHaveValue("Red");
+	await page.screenshot({ path: `${artifactPaths.results}/tl-447-sunstrip-color.png` });
+});

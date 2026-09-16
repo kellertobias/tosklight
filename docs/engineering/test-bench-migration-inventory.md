@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **207 root cases across 83 files**.
+Default catalog: **210 root cases across 83 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -220,6 +220,9 @@ Default catalog: **207 root cases across 83 files**.
 | 96-fixture-library-editor-layout.spec.ts | TL-446 @ui › the wide channel mapping window scrolls only its function list | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 96-fixture-library-editor-layout.spec.ts | TL-446 @ui › the narrow mode editor scrolls in one place per tab | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 96-fixture-library-editor-layout.spec.ts | TL-446 @ui › the narrow channel mapping window scrolls only its function list | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 96-fixture-library-editor-layout.spec.ts | TL-447 @ui › the wide color wheel shows and edits each slot's display color | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 96-fixture-library-editor-layout.spec.ts | TL-447 @ui › the narrow color wheel shows and edits each slot's display color | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 96-fixture-library-editor-layout.spec.ts | TL-447 @ui › the Sun Strip configures the color of each of its ten pixels | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 

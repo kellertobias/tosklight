@@ -1,4 +1,4 @@
-import { FormLayout, NumberField, SelectField } from "@tosklight/ui";
+import { Button, FormLayout, NumberField, SelectField } from "@tosklight/ui";
 import type {
 	ColorSystem,
 	FixtureMode,
@@ -86,6 +86,119 @@ export function replaceHeadColorSystem(
 	];
 }
 
+/** Every channel ID a color system names, in a stable order. */
+function colorSystemChannelIds(system: ColorSystem): string[] {
+	if (system.type === "additive")
+		return system.emitters.map((emitter) => emitter.channel_id);
+	if (system.type === "subtractive")
+		return [
+			system.cyan_channel_id,
+			system.magenta_channel_id,
+			system.yellow_channel_id,
+		];
+	if (system.type === "hue_saturation")
+		return [
+			system.hue_channel_id,
+			system.saturation_channel_id,
+			...(system.intensity_channel_id ? [system.intensity_channel_id] : []),
+		];
+	return [system.channel_id];
+}
+
+function rebindColorSystem(
+	system: ColorSystem,
+	rebind: (channelId: string) => string,
+): ColorSystem {
+	if (system.type === "additive")
+		return {
+			...system,
+			emitters: system.emitters.map((emitter) => ({
+				...emitter,
+				channel_id: rebind(emitter.channel_id),
+			})),
+		};
+	if (system.type === "subtractive")
+		return {
+			...system,
+			cyan_channel_id: rebind(system.cyan_channel_id),
+			magenta_channel_id: rebind(system.magenta_channel_id),
+			yellow_channel_id: rebind(system.yellow_channel_id),
+		};
+	if (system.type === "hue_saturation")
+		return {
+			...system,
+			hue_channel_id: rebind(system.hue_channel_id),
+			saturation_channel_id: rebind(system.saturation_channel_id),
+			intensity_channel_id: system.intensity_channel_id
+				? rebind(system.intensity_channel_id)
+				: null,
+		};
+	return { ...system, channel_id: rebind(system.channel_id) };
+}
+
+/** A channel's place in its head: its attribute and how many same-attribute channels precede it. */
+function channelRole(mode: FixtureMode, channelId: string) {
+	const channel = mode.channels.find((candidate) => candidate.id === channelId);
+	if (!channel) return null;
+	const occurrence = mode.channels
+		.filter(
+			(candidate) =>
+				candidate.head_id === channel.head_id &&
+				candidate.attribute === channel.attribute,
+		)
+		.findIndex((candidate) => candidate.id === channelId);
+	return { attribute: channel.attribute, occurrence };
+}
+
+/**
+ * Give every other head that has matching channels its own copy of one head's color system. Each
+ * copy is bound to that head's own channels, matched by attribute and order, so heads stay
+ * independently editable afterwards. Heads without every matching channel keep what they have.
+ */
+export function copyColorSystemToOtherHeads(
+	mode: FixtureMode,
+	sourceHeadId: string,
+): HeadColorSystem[] {
+	const source = mode.color_systems.find(
+		(candidate) => candidate.head_id === sourceHeadId,
+	);
+	if (!source) return mode.color_systems;
+	const roles = new Map(
+		colorSystemChannelIds(source.system).map((id) => [
+			id,
+			channelRole(mode, id),
+		]),
+	);
+	let systems = mode.color_systems;
+	for (const head of mode.heads) {
+		if (head.id === sourceHeadId) continue;
+		const own = mode.channels.filter((channel) => channel.head_id === head.id);
+		const mapping = new Map<string, string>();
+		for (const [id, role] of roles) {
+			const target = role
+				? own.filter((channel) => channel.attribute === role.attribute)[
+						role.occurrence
+					]
+				: undefined;
+			if (target) mapping.set(id, target.id);
+		}
+		if (mapping.size !== roles.size) continue;
+		const copy = structuredClone(source);
+		systems = [
+			...systems.filter((candidate) => candidate.head_id !== head.id),
+			{
+				...copy,
+				head_id: head.id,
+				system: rebindColorSystem(
+					copy.system,
+					(id) => mapping.get(id) ?? id,
+				),
+			},
+		];
+	}
+	return systems;
+}
+
 function newColorSystem(
 	next: string,
 	channels: FixtureMode["channels"],
@@ -108,6 +221,44 @@ function newColorSystem(
 			intensity_channel_id: null,
 		};
 	return { type: "discrete_wheel", channel_id: first, slots: [] };
+}
+
+function CorrectionMatrixFields({
+	headName,
+	matrix,
+	onChange,
+}: {
+	headName: string;
+	matrix: HeadColorSystem["correction_matrix"];
+	onChange: (row: number, column: number, value: number) => void;
+}) {
+	return (
+		<fieldset className="color-correction-matrix">
+			<legend>XYZ correction matrix</legend>
+			<p>
+				Applied before calibrated color matching. Identity leaves requested XYZ
+				unchanged.
+			</p>
+			{/* Narrower than the default column, so the three columns still fit a narrow mode
+			    editor with room for a decimal beside the steppers. */}
+			<FormLayout columns={3} minColumnWidth={200}>
+				{matrix.flatMap((row, rowIndex) =>
+					row.map((value, columnIndex) => (
+						<NumberField
+							key={`${rowIndex}-${columnIndex}`}
+							aria-label={`${headName} correction row ${rowIndex + 1} column ${columnIndex + 1}`}
+							allowDecimal
+							step={0.001}
+							value={value}
+							onChange={(event) =>
+								onChange(rowIndex, columnIndex, Number(event.target.value))
+							}
+						/>
+					)),
+				)}
+			</FormLayout>
+		</fieldset>
+	);
 }
 
 export function ColorEditor({
@@ -154,7 +305,8 @@ export function ColorEditor({
 		<div className="fixture-color-editor">
 			<p>
 				Abstract XYZ color is resolved through one color system per logical
-				head. Direct emitter channels remain available to the programmer.
+				head, so every head of a multi-head fixture is configured on its own.
+				Direct emitter channels remain available to the programmer.
 			</p>
 			{mode.heads.map((head) => {
 				const record = mode.color_systems.find(
@@ -186,38 +338,29 @@ export function ColorEditor({
 									setSystem(head.id, newColorSystem(next, channels));
 								}}
 							/>
+							{record && mode.heads.length > 1 && (
+								<Button
+									onClick={() =>
+										onChange(
+											reconcileColorSystemHighlightDefaults(
+												mode,
+												copyColorSystemToOtherHeads(mode, head.id),
+											),
+										)
+									}
+								>
+									Copy to other heads
+								</Button>
+							)}
 						</header>
 						{record && (
-							<fieldset className="color-correction-matrix">
-								<legend>XYZ correction matrix</legend>
-								<p>
-									Applied before calibrated color matching. Identity leaves
-									requested XYZ unchanged.
-								</p>
-								{/* Narrower than the default column, so the three columns still fit a narrow mode
-								    editor with room for a decimal beside the steppers. */}
-								<FormLayout columns={3} minColumnWidth={200}>
-									{record.correction_matrix.flatMap((row, rowIndex) =>
-										row.map((value, columnIndex) => (
-											<NumberField
-												key={`${rowIndex}-${columnIndex}`}
-												aria-label={`${head.name} correction row ${rowIndex + 1} column ${columnIndex + 1}`}
-												allowDecimal
-												step={0.001}
-												value={value}
-												onChange={(event) =>
-													setCorrection(
-														head.id,
-														rowIndex,
-														columnIndex,
-														Number(event.target.value),
-													)
-												}
-											/>
-										)),
-									)}
-								</FormLayout>
-							</fieldset>
+							<CorrectionMatrixFields
+								headName={head.name}
+								matrix={record.correction_matrix}
+								onChange={(row, column, value) =>
+									setCorrection(head.id, row, column, value)
+								}
+							/>
 						)}
 						{record?.system.type === "additive" && (
 							<AdditiveColorEditor
@@ -237,6 +380,7 @@ export function ColorEditor({
 						{record?.system.type === "discrete_wheel" && (
 							<DiscreteColorEditor
 								system={record.system}
+								channels={channels}
 								options={options}
 								onChange={(system) => setSystem(head.id, system)}
 							/>

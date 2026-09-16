@@ -1273,10 +1273,23 @@
 	border-radius: 7px;
 }
 .fixture-color-editor > section > header {
-	display: grid;
-	grid-template-columns: minmax(160px, 1fr) minmax(220px, 0.7fr);
+	display: flex;
+	flex-wrap: wrap;
 	align-items: end;
 	gap: 8px;
+}
+.fixture-color-editor > section > header > h3 {
+	flex: 1 1 160px;
+}
+.fixture-color-editor > section > header > :not(h3):not(button) {
+	flex: 1 1 220px;
+}
+.color-wheel-editor > p {
+	margin: 0;
+	color: var(--muted);
+}
+.color-wheel-editor > button {
+	justify-self: start;
 }
 .color-emitter-list,
 .color-wheel-editor {
