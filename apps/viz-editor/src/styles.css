@@ -678,7 +678,9 @@ body {
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
-	overflow: hidden;
+	/* Clip, not hidden: a hidden box can still be scrolled by focus or scrollIntoView, which shifted
+	   the whole page up and left the last controls below the window with no way to scroll to them. */
+	overflow: clip;
 }
 
 /* The MCP tab reuses the Visualizer settings layout; these only style what it adds. */
@@ -737,6 +739,10 @@ body {
 }
 
 .viz-renderer-settings-scroll {
+	/* The page's only scroller fills what the title leaves, and holds the controls' hidden native
+	   inputs, so they scroll and clip with the control they belong to instead of overflowing it. */
+	position: relative;
+	flex: 1 1 auto;
 	min-height: 0;
 	overflow-y: auto;
 	overscroll-behavior: contain;
@@ -772,6 +778,13 @@ body {
 
 .viz-renderer-settings-grid.is-responsive {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* A narrow window stacks the boxes, so no box is squeezed below the width of its controls. */
+@container (max-width: 560px) {
+	.viz-renderer-settings-grid.is-responsive {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 
 @container (min-width: 1180px) {
@@ -810,7 +823,9 @@ body {
 	font-size: 12px;
 }
 
-.viz-renderer-settings-grid input:not([type="range"]),
+/* A switch's own checkbox is a hidden one-pixel input; sizing it like a text field spread an
+   invisible input across the page. */
+.viz-renderer-settings-grid input:not([type="range"], [type="checkbox"]),
 .viz-renderer-settings-grid .ui-select-trigger {
 	box-sizing: border-box;
 	width: 100%;
@@ -821,12 +836,16 @@ body {
 	color: inherit;
 }
 
-.viz-renderer-settings-grid input:not([type="range"]) {
+.viz-renderer-settings-grid input:not([type="range"], [type="checkbox"]) {
 	padding-inline: 8px;
 }
 
 .viz-renderer-settings-grid input[type="color"] {
 	padding: 3px;
+}
+
+.viz-renderer-settings-grid .ui-switch-control {
+	position: relative;
 }
 
 .viz-renderer-settings-grid .ui-form-field {

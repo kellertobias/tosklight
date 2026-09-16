@@ -173,7 +173,7 @@ function RenderingSettings({
 	);
 }
 
-/** What the Visualizer draws besides the rig. */
+/** What the Visualizer draws besides the rig, including how many people fill crowd areas. */
 function FeaturesSettings({
 	draft,
 	update,
@@ -215,6 +215,15 @@ function FeaturesSettings({
 					{ value: "false", label: "Hidden" },
 				]}
 			/>
+			<NumberSetting
+				label="Crowd amount"
+				value={draft.crowdAmount}
+				min={0}
+				max={1}
+				step={0.01}
+				onChange={(crowdAmount) => update({ crowdAmount })}
+				format={percent}
+			/>
 			<label>
 				<span>Blender path</span>
 				<input
@@ -227,7 +236,7 @@ function FeaturesSettings({
 	);
 }
 
-/** Persistence, crowds and the background. */
+/** Persistence and the background. */
 function PictureSettings({
 	draft,
 	update,
@@ -254,15 +263,6 @@ function PictureSettings({
 				step={0.1}
 				onChange={(persistenceFalloff) => update({ persistenceFalloff })}
 				format={(value) => `${value.toFixed(1)}×`}
-			/>
-			<NumberSetting
-				label="Crowd amount"
-				value={draft.crowdAmount}
-				min={0}
-				max={1}
-				step={0.01}
-				onChange={(crowdAmount) => update({ crowdAmount })}
-				format={percent}
 			/>
 			<label className="viz-renderer-background">
 				<span>Background color</span>

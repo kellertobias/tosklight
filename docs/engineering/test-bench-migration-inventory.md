@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **198 root cases across 81 files**.
+Default catalog: **202 root cases across 82 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -211,6 +211,10 @@ Default catalog: **198 root cases across 81 files**.
 | 92-fixture-list-scrolling.spec.ts | TL-396 @ui › the fixture list stays where the wheel leaves it | repository contract | @ui | fixture-list-scrolling | standard failure evidence | parallel | pending-semantic-migration |
 | 93-fixture-sheet-shift-range.spec.ts | TL-400 @ui › shift takes the whole run between two fixture-sheet rows | repository contract | @ui | fixture-sheet-shift-range | standard failure evidence | parallel | pending-semantic-migration |
 | 94-semantic-preset-color-across-fixture-types.spec.ts | BENCH-PRESET-COLOR-001 @bench @ui › a Cue on a Group Color Preset follows a replaced fixture from a color wheel to RGBWA mixing | repository contract | @bench @ui | semantic-preset-color-across-fixture-types | standard failure evidence | parallel | migrated-semantic-world |
+| 95-visualizer-settings-responsive.spec.ts | TL-444 @ui › every Visualizer setting stays reachable in a narrow and short window | repository contract | @ui | visualizer-settings-responsive | standard failure evidence | parallel | pending-semantic-migration |
+| 95-visualizer-settings-responsive.spec.ts | TL-444 @ui › every Visualizer setting stays reachable in a wide and short window | repository contract | @ui | visualizer-settings-responsive | standard failure evidence | parallel | pending-semantic-migration |
+| 95-visualizer-settings-responsive.spec.ts | TL-444 @ui › every Visualizer setting stays reachable in a narrow and tall window | repository contract | @ui | visualizer-settings-responsive | standard failure evidence | parallel | pending-semantic-migration |
+| 95-visualizer-settings-responsive.spec.ts | TL-444 @ui › Crowd amount is a Feature, not a Picture setting | repository contract | @ui | visualizer-settings-responsive | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 

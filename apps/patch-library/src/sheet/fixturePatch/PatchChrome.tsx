@@ -325,7 +325,7 @@ export function PatchLayers() {
 		layer.id !== "default" &&
 		ui.layerModal !== "select";
 	return (
-		<aside className="patch-layers">
+		<aside className="patch-layers" aria-busy={data.layersPending || undefined}>
 			<div className="patch-layers-title">
 				<h3>{ui.layerModal === "select" ? "Select layer" : "Layers"}</h3>
 				<SwitchField
@@ -337,6 +337,28 @@ export function PatchLayers() {
 					onChange={(event) => ui.setShowAllLayers(event.target.checked)}
 				/>
 			</div>
+			{data.layersPending ? null : (
+				<PatchLayerRows canDelete={canDelete} onDelete={setDeleting} />
+			)}
+			{deleting ? (
+				<DeleteLayerConfirm layer={deleting} onClose={() => setDeleting(null)} />
+			) : null}
+		</aside>
+	);
+}
+
+/** All fixtures, No Layer Assigned and every listed layer, once the patch they count is known. */
+function PatchLayerRows({
+	canDelete,
+	onDelete,
+}: {
+	canDelete: (layer: PatchLayer) => boolean;
+	onDelete: (layer: PatchLayer) => void;
+}) {
+	const controller = usePatchController();
+	const { data, ui } = controller;
+	return (
+		<>
 			<Button
 				className={ui.activeLayer === "all" ? "active" : ""}
 				onClick={() =>
@@ -390,16 +412,13 @@ export function PatchLayers() {
 						<Button
 							className="patch-layer-delete"
 							aria-label={`Delete layer ${layer.name}`}
-							onClick={() => setDeleting(layer)}
+							onClick={() => onDelete(layer)}
 						>
 							<TrashIcon />
 						</Button>
 					) : null}
 				</div>
 			))}
-			{deleting ? (
-				<DeleteLayerConfirm layer={deleting} onClose={() => setDeleting(null)} />
-			) : null}
-		</aside>
+		</>
 	);
 }

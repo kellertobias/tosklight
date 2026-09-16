@@ -12,7 +12,7 @@ import { FixturePatchSetup } from "./FixturePatchSetup";
 import { blankFixtureProfile } from "./fixtureProfileModel";
 
 const server = vi.hoisted(() => ({
-	patch: { fixtures: [] as unknown[] },
+	patch: { fixtures: [] as unknown[], status: "ready" as "loading" | "ready" },
 	patchLayers: [] as Array<{ body: { id: string; name: string; order: number } }>,
 	fixtureVisibility: new Map(),
 	fixtureNotes: new Map(),
@@ -49,7 +49,7 @@ vi.mock("../state/PatchContext", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../state/PatchContext")>()),
 	PatchViewProvider: ({ children }: { children: ReactNode }) => children,
 	usePatch: () => ({
-		status: "ready",
+		status: server.patch.status,
 		showId: "show",
 		showRevision: 1,
 		patchRevision: 1,
@@ -76,6 +76,7 @@ beforeEach(() => {
 		clear: () => stored.clear(),
 	});
 	server.patchLayers = [];
+	server.patch.status = "ready";
 });
 
 function wash(
@@ -242,6 +243,29 @@ describe("patch sheet layers", () => {
 
 		fireEvent.click(screen.getByRole("switch", { name: "Show all layers" }));
 		expect(rowOrder()).toEqual(["light", "truss"]);
+	});
+
+	it("lists no layers while the patch is still arriving, so none vanish once it is known", () => {
+		server.patchLayers = [
+			{ body: { id: "default", name: "Default", order: 0 } },
+			{ body: { id: "trusses", name: "Trusses", order: 1 } },
+		];
+		server.patch.status = "loading";
+		server.patch.fixtures = [];
+		const { rerender } = render(<FixturePatchSetup scope="patch" />);
+		const sidebar = layersSidebar();
+		expect(sidebar.queryByRole("button", { name: /^Trusses/ })).toBeNull();
+		expect(sidebar.queryByRole("button", { name: /^Default/ })).toBeNull();
+		expect(sidebar.queryByRole("button", { name: /^All fixtures/ })).toBeNull();
+		expect(screen.getByRole("complementary")).toHaveAttribute("aria-busy", "true");
+
+		server.patch.status = "ready";
+		server.patch.fixtures = [wash("light", 1, 1, 1), venue("truss", 2, "trusses")];
+		rerender(<FixturePatchSetup scope="patch" />);
+		expect(sidebar.getByRole("button", { name: /^All fixtures/ })).toBeInTheDocument();
+		expect(sidebar.getByRole("button", { name: /^Default/ })).toBeInTheDocument();
+		expect(sidebar.queryByRole("button", { name: /^Trusses/ })).toBeNull();
+		expect(screen.getByRole("complementary")).not.toHaveAttribute("aria-busy");
 	});
 
 	it("hides No Layer Assigned when this screen has nothing without a layer", () => {

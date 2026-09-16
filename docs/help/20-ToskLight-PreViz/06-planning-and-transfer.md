@@ -174,8 +174,10 @@ the patch sheet, and **DMX** is the address grid described in "The Patch screen'
 
 **Settings**, below the screens, holds the pages that are not a view of the rig: **Visualizer**,
 **Library** and **DMX**. It opens on **Visualizer**. **Visualizer** is one page of boxes that fill the window's width — two to a row, three or four once
-the window is wide enough: **Lamp** and **Laser** atmosphere, then **Rendering**, **Features** and
-**Picture**.
+the window is wide enough, and one to a row in a narrow window: **Lamp** and **Laser** atmosphere,
+then **Rendering**, **Features** and **Picture**. **Features** holds **Crowd amount** beside the
+labels, selection and floor grid. When the boxes are taller than the window, the page scrolls, so
+every control can be reached however short the window is.
 
 Click a column header to order the sheet by that column, for example **Fixture ID** or **Patch**;
 click it again to reverse the order. An arrow marks the column the sheet is ordered by. **Patch**
@@ -229,7 +231,8 @@ of its own: fixtures still on the default layer, and fixtures whose layer no lon
 for example a Trusses layer on the Patch screen — and hides **No Layer Assigned** when it would be
 empty. An empty layer you created stays listed. Selecting fixtures in the drawing switches
 **Show all** on only when that selection happens; returning to the screen later does not switch it
-on again.
+on again. The layer list appears once the screen's fixtures have arrived, already reduced to what
+the screen shows, so no layer flashes up and vanishes as the screen opens.
 
 To delete a layer, press the bin to the right of its fixture count and confirm. Its fixtures stay
 in the show and move to **No Layer Assigned**. A locked layer must be unlocked first, and the

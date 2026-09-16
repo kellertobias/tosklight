@@ -426,6 +426,10 @@ function usePatchDerivedState(
 			: ui.draft.patch;
 	return {
 		layers,
+		// Until the patch has arrived every layer looks empty and would be listed, only for most of
+		// them to vanish a moment later. The list waits for the patch so it appears once, in its
+		// final shape.
+		layersPending: patch.status === "loading",
 		unassigned,
 		showUnassigned,
 		all,
