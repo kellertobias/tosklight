@@ -1245,7 +1245,7 @@ fn assert_moving_lamp_geometry(filename: &str) {
 #[test]
 fn robe_dls_profile_exposes_canonical_framing_controls() {
     let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
-    assert_eq!(profile.revision, 5);
+    assert_eq!(profile.revision, 6);
     assert!(profile.notes.contains("DMX protocol version 1.0"));
     assert!(profile.notes.contains("user manual version 1.3"));
     assert_eq!(
