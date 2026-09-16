@@ -33,8 +33,7 @@ import {
 	type CadViewportContext,
 	useCadViewportInteraction,
 } from "./useCadViewportInteraction";
-import { useLiveCamera } from "./useLiveCamera";
-import { useTopLeftAnchor } from "./useTopLeftAnchor";
+import { useAnchoredCamera } from "./useTopLeftAnchor";
 
 /** Stable empty defaults, so a frame without them does not count as a new picture every render. */
 const NO_UNDERLAYS: readonly CadUnderlay[] = [];
@@ -243,10 +242,8 @@ export function CadViewport({
 	const canvas = useRef<HTMLCanvasElement>(null);
 	// Everything drawn below — canvas, grid, labels, scale bar, print frames — reads this one camera,
 	// which is the pan or zoom in flight, so they all move together.
-	const liveCamera = useLiveCamera(committedCamera, onCamera);
+	const liveCamera = useAnchoredCamera(canvas, committedCamera, onCamera);
 	const { camera } = liveCamera;
-	// Opening, closing or resizing a sidebar keeps the plan's top-left corner and zoom where they are.
-	useTopLeftAnchor(canvas, liveCamera.latest, liveCamera.settle);
 	const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 	const drawingById = useMemo(
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),

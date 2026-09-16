@@ -8,6 +8,7 @@
 import { type RefObject, useLayoutEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import type { TileCamera } from "./types";
+import { useLiveCamera } from "./useLiveCamera";
 
 export interface ViewportSize {
 	width: number;
@@ -60,4 +61,15 @@ export function useTopLeftAnchor(
 		observer.observe(target);
 		return () => observer.disconnect();
 	}, [element]);
+}
+
+/** The viewport's live camera, kept on its top-left corner as the viewport changes size. */
+export function useAnchoredCamera(
+	element: RefObject<Element | null>,
+	camera: TileCamera,
+	onCamera: (camera: TileCamera) => void,
+) {
+	const live = useLiveCamera(camera, onCamera);
+	useTopLeftAnchor(element, live.latest, live.settle);
+	return live;
 }
