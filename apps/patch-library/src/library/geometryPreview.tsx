@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { FixtureMode } from "../wire";
-import { buildFixtureProfileGeometryPreview } from "../stageGeometry";
+import {
+	buildFixtureProfileGeometryPreview,
+	visibleGeometryBounds,
+} from "../stageGeometry";
 import { useFixtureProfileEditorPorts } from "./ports";
 import { NumberField } from "@tosklight/ui";
 
@@ -32,6 +35,26 @@ export function VectorFields({
 	);
 }
 
+/** Dark blue rather than black, so the dark lamp body still reads against it. */
+export const GEOMETRY_PREVIEW_BACKGROUND = 0x14233a;
+
+/** Point the camera at the lamp from above and to the front-right, with it filling most of the view. */
+function frameLamp(camera: THREE.PerspectiveCamera, lamp: THREE.Object3D) {
+	const bounds = visibleGeometryBounds(lamp);
+	const center = bounds.isEmpty()
+		? new THREE.Vector3()
+		: bounds.getCenter(new THREE.Vector3());
+	const radius = bounds.isEmpty()
+		? 0.5
+		: Math.max(0.05, bounds.getSize(new THREE.Vector3()).length() / 2);
+	const distance = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2));
+	const direction = new THREE.Vector3(0.55, 0.4, 1).normalize();
+	camera.near = Math.max(0.001, distance / 100);
+	camera.far = distance * 100;
+	camera.position.copy(center).addScaledVector(direction, distance * 1.15);
+	camera.lookAt(center);
+}
+
 export function GeometryPreview({ mode }: { mode: FixtureMode }) {
 	const host = useRef<HTMLDivElement>(null);
 	const { disposeScene } = useFixtureProfileEditorPorts();
@@ -39,12 +62,15 @@ export function GeometryPreview({ mode }: { mode: FixtureMode }) {
 		const container = host.current;
 		if (!container || typeof WebGLRenderingContext === "undefined") return;
 		const scene = new THREE.Scene();
-		scene.background = new THREE.Color(0x080b0e);
-		scene.add(new THREE.HemisphereLight(0xbfe9ff, 0x101820, 2));
-		scene.add(buildFixtureProfileGeometryPreview(mode));
-		const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
-		camera.position.set(3.5, 2.5, 6.5);
-		camera.lookAt(0, -1.5, 0);
+		scene.background = new THREE.Color(GEOMETRY_PREVIEW_BACKGROUND);
+		scene.add(new THREE.HemisphereLight(0xdcefff, 0x1c2a3c, 2.4));
+		const key = new THREE.DirectionalLight(0xffffff, 1.6);
+		key.position.set(2, 3, 4);
+		scene.add(key);
+		const lamp = buildFixtureProfileGeometryPreview(mode);
+		scene.add(lamp);
+		const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
+		frameLamp(camera, lamp);
 		let renderer: THREE.WebGLRenderer;
 		try {
 			renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -84,12 +110,12 @@ export function GeometryPreview({ mode }: { mode: FixtureMode }) {
 				ref={host}
 				className="geometry-preview-stage"
 				role="img"
-				aria-label="Fixture geometry hierarchy and beams in three dimensions"
+				aria-label="Fixture geometry hierarchy in three dimensions"
 			/>
 			<small>
 				{mode.geometry.nodes.length} parts · {mode.geometry.emitters.length}{" "}
-				emitters. Preview uses the Stage renderer's hierarchy, transforms,
-				source layouts, and beam angles.
+				emitters. Preview shows the lamp with the Stage renderer's hierarchy,
+				transforms, and emitter faces; beams are drawn on Stage.
 			</small>
 		</section>
 	);

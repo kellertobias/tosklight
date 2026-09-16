@@ -375,7 +375,13 @@ function previewFixture() {
 	} as unknown as StageProfileFixture;
 }
 
-/** Build the same hierarchy and beam objects used on Stage for the profile editor's live preview. */
+/**
+ * Build the same part hierarchy used on Stage for the profile editor's live preview.
+ *
+ * The preview shows the lamp itself: its parts, their transforms and the emitter faces. Nothing that
+ * leaves the lens — beam volume, direction line or the dashed guide of a dark beam — is drawn, so the
+ * light never hides or dwarfs the body being authored.
+ */
 export function buildFixtureProfileGeometryPreview(mode: FixtureMode) {
 	return (
 		buildFixtureProfileGeometry({
@@ -385,8 +391,32 @@ export function buildFixtureProfileGeometryPreview(mode: FixtureMode) {
 			selected: false,
 			snapshot: null,
 			projectedOwners: new Set(),
-			showBeamGuides: true,
-			renderQuality: "lines_and_beams",
+			showBeamGuides: false,
+			renderQuality: "none",
 		}) ?? new THREE.Group()
 	);
+}
+
+/**
+ * The box around what the preview actually draws.
+ *
+ * Hidden beam meshes stay in the hierarchy and are scaled to the throw distance, so bounding the
+ * whole group would frame metres of empty air around a lamp a few centimetres wide.
+ */
+export function visibleGeometryBounds(root: THREE.Object3D) {
+	root.updateWorldMatrix(true, true);
+	const bounds = new THREE.Box3();
+	const part = new THREE.Box3();
+	const visit = (object: THREE.Object3D) => {
+		if (!object.visible) return;
+		if (object instanceof THREE.Mesh) {
+			const geometry = object.geometry as THREE.BufferGeometry;
+			if (!geometry.boundingBox) geometry.computeBoundingBox();
+			if (geometry.boundingBox)
+				bounds.union(part.copy(geometry.boundingBox).applyMatrix4(object.matrixWorld));
+		}
+		for (const child of object.children) visit(child);
+	};
+	visit(root);
+	return bounds;
 }

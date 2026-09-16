@@ -234,6 +234,10 @@ row has these columns:
   Master**. **Inverse** makes the channel full while the virtual intensity is at zero and gone at
   full, for a slot that must do the opposite of the dimmer. The table shows it as *−VI*.
 
+The table is the tab's only scrolling area: it scrolls up, down, and sideways under a fixed column
+header, while the mode editor's title bar and split headers stay in place. In a channel's
+**Mapping** window the function table likewise scrolls on its own below the physical range.
+
 Only the Coarse row carries these settings; a further byte shows a dash. Drag a row by the handle
 beside its slot number, or use its move buttons. The red bin removes a slot after asking, and the
 slots after it move up.
@@ -254,7 +258,9 @@ Highlight. A per-fixture Highlight override may replace that Highlight raw value
 
 ### Color
 
-Configure the fixture's additive, subtractive, or wheel color system, then use **Generate portable
+Configure the fixture's additive, subtractive, or wheel color system. Each wheel slot gives every
+field room for its value; in a narrow window **DMX from** and **DMX to** move onto their own line
+rather than shrinking. Then use **Generate portable
 presets** in **Control → Special Dialog** when fixed or indexed choices should be added to the show.
 
 ### Emitters & Motion
@@ -286,11 +292,13 @@ Where a profile's modes genuinely describe different geometry the profile is lef
 was. No shipped fixture is in that position any more: the Venue objects that were are generated
 instead, described below.
 
-Choose a suitable fixture geometry and use the preview to confirm the Stage appearance. Detailed
+Choose a suitable fixture geometry and use the preview to confirm the lamp's shape. Detailed
 model hierarchy, emitter, pivot, and projection authoring is fixture-developer documentation.
 
 The Geometry tab fills the editor window: the part and emitter list, the selected part's
-properties, and the live 3D preview sit side by side, and each scrolls on its own. A part's
+properties, and the live 3D preview sit side by side, and each scrolls on its own. The preview
+shows the lamp itself — its parts, their transforms and the emitter faces — framed on a dark-blue
+background; it draws no beam, so check how the light falls on Stage. A part's
 properties are split into tabs — **Generic** (name, parent part, GLB node binding, and **Remove
 part**), **Translation**, **Rotation**, **Scale**, **Pivot**, and **Animate**.
 

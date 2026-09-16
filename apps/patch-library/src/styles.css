@@ -1638,6 +1638,32 @@
 	padding: 10px;
 }
 
+/* The channel table is the Channels tab's scrolling region, in both directions, so its header stays
+   put and its sideways scrollbar is on screen; the body around it does not scroll as well. */
+.fixture-mode-editor-body:has(> .fixture-channels-editor) {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
+}
+
+.fixture-channels-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.fixture-channels-editor > .fixture-channel-split,
+.fixture-channels-editor > .fixture-split-accordions {
+	flex: 0 1 auto;
+	min-height: 0;
+}
+
+.fixture-channels-editor > .fixture-inline-errors {
+	flex: none;
+	margin-top: 0;
+}
+
 .fixture-mode-editor-body > .fixture-heads-editor,
 .fixture-mode-editor-body > .fixture-channels-editor,
 .fixture-mode-editor-body > .fixture-color-editor,
@@ -1688,14 +1714,30 @@
 }
 
 .fixture-split-accordions {
-	display: grid;
+	display: flex;
+	flex-direction: column;
 	gap: 7px;
+	/* Only scrolls when there are more splits than the tab has room for. */
+	overflow: auto;
 }
 
 .fixture-split-accordions > section {
+	flex: none;
 	border: 1px solid var(--line);
 	border-radius: 7px;
 	overflow: hidden;
+}
+
+.fixture-split-accordions > section.open {
+	flex: 0 1 auto;
+	min-height: 240px;
+	display: flex;
+	flex-direction: column;
+}
+
+.fixture-split-accordions > section.open > .fixture-channel-split {
+	flex: 0 1 auto;
+	min-height: 0;
 }
 
 /* One line per split: its name and channel count to open it, then its own move and remove. */
@@ -1742,8 +1784,18 @@
 }
 
 .fixture-channel-split {
-	display: grid;
+	display: flex;
+	flex-direction: column;
 	gap: 8px;
+}
+
+.fixture-channel-split > * {
+	flex: none;
+}
+
+.fixture-channel-split > .fixture-channel-table-wrap {
+	flex: 0 1 auto;
+	min-height: 0;
 }
 
 /* A slot's drag handle sits beside its number, not above it. */
@@ -1841,16 +1893,18 @@
 	gap: 5px;
 }
 
-.fixture-control-actions {
+/* Sized by its actions, not by the tab: the mode editor body is the one region that scrolls. The
+   desk's System Controls own the `fixture-control-actions` class, which fills its pane. */
+.fixture-mode-control-actions {
 	display: grid;
+	align-content: start;
 	gap: 8px;
-	margin-top: 14px;
 	padding: 10px;
 	border: 1px solid var(--line);
 	border-radius: 7px;
 }
 
-.fixture-control-actions > article {
+.fixture-mode-control-actions > article {
 	display: grid;
 	grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.6fr) minmax(
 			150px,
@@ -1964,11 +2018,27 @@
 
 .fixture-channel-editor-body {
 	display: grid;
-	align-content: start;
+	/* The function list takes the rest of the height and scrolls itself, in both directions; the body
+	   only scrolls when the window is too short to give the list any useful room. */
+	grid-template-rows: auto minmax(220px, 1fr);
 	gap: 14px;
 	min-height: 0;
 	padding: 14px;
 	overflow: auto;
+}
+
+.fixture-channel-editor-body > .fixture-mapping-section:last-child {
+	grid-template-rows: minmax(0, 1fr);
+	min-height: 0;
+}
+
+.fixture-channel-editor-body .fixture-function-table {
+	grid-template-rows: auto minmax(0, 1fr);
+	min-height: 0;
+}
+
+.fixture-channel-editor-body .fixture-function-table > .fixture-channel-table-wrap {
+	min-height: 0;
 }
 
 .fixture-mapping-section {
@@ -2358,9 +2428,11 @@
 	border-radius: 6px;
 }
 
+/* Every field gets room for its stepper and a full 0–255 value; a narrow editor wraps DMX from and to
+   onto their own line rather than squeezing the numbers out of sight. */
 .color-wheel-editor > article {
 	display: grid;
-	grid-template-columns: 1fr 1fr 160px 160px auto;
+	grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
 	align-items: end;
 	gap: 6px;
 	padding: 8px;
@@ -2515,7 +2587,8 @@
 	overflow: hidden;
 	border: 1px solid var(--line);
 	border-radius: 7px;
-	background: #080b0e;
+	/* Matches the renderer's clear color, so the stage never flashes black before the first frame. */
+	background: #14233a;
 }
 
 /* Out of flow, so the canvas never gives the stage a size: the renderer sizes the canvas from the

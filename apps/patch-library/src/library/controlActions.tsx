@@ -17,7 +17,7 @@ export function ControlActionsEditor({
 			),
 		});
 	return (
-		<section className="fixture-control-actions">
+		<section className="fixture-mode-control-actions">
 			{!mode.control_actions.length && (
 				<p className="empty-editor-message">
 					This mode has no control actions. Add one — lamp on, reset, a fan setting — from

@@ -225,7 +225,7 @@ describe("the Architect fixture library", () => {
 		// The Architect draws with the Stage's own geometry code rather than declining to draw.
 		expect(
 			screen.getByRole("img", {
-				name: "Fixture geometry hierarchy and beams in three dimensions",
+				name: "Fixture geometry hierarchy in three dimensions",
 			}),
 		).toBeInTheDocument();
 		expect(screen.queryByText(/no Stage renderer/)).toBeNull();

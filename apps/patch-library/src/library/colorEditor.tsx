@@ -194,7 +194,9 @@ export function ColorEditor({
 									Applied before calibrated color matching. Identity leaves
 									requested XYZ unchanged.
 								</p>
-								<FormLayout columns={3}>
+								{/* Narrower than the default column, so the three columns still fit a narrow mode
+								    editor with room for a decimal beside the steppers. */}
+								<FormLayout columns={3} minColumnWidth={200}>
 									{record.correction_matrix.flatMap((row, rowIndex) =>
 										row.map((value, columnIndex) => (
 											<NumberField

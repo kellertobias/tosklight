@@ -1563,7 +1563,7 @@ describe("FixtureProfileEditor color and geometry editing", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Fixed fixture" }));
 		expect(
 			screen.getByText(
-				"1 parts · 2 emitters. Preview uses the Stage renderer's hierarchy, transforms, source layouts, and beam angles.",
+				"1 parts · 2 emitters. Preview shows the lamp with the Stage renderer's hierarchy, transforms, and emitter faces; beams are drawn on Stage.",
 			),
 		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("treeitem", { name: /Beam 1/ }));
@@ -1573,7 +1573,7 @@ describe("FixtureProfileEditor color and geometry editing", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Moving head" }));
 		expect(
 			screen.getByText(
-				"4 parts · 2 emitters. Preview uses the Stage renderer's hierarchy, transforms, source layouts, and beam angles.",
+				"4 parts · 2 emitters. Preview shows the lamp with the Stage renderer's hierarchy, transforms, and emitter faces; beams are drawn on Stage.",
 			),
 		).toBeInTheDocument();
 
@@ -1596,7 +1596,7 @@ describe("FixtureProfileEditor color and geometry editing", () => {
 		);
 		expect(
 			screen.getByText(
-				"4 parts · 2 emitters. Preview uses the Stage renderer's hierarchy, transforms, source layouts, and beam angles.",
+				"4 parts · 2 emitters. Preview shows the lamp with the Stage renderer's hierarchy, transforms, and emitter faces; beams are drawn on Stage.",
 			),
 		).toBeInTheDocument();
 	});

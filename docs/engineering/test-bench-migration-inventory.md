@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **202 root cases across 82 files**.
+Default catalog: **207 root cases across 83 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -215,6 +215,11 @@ Default catalog: **202 root cases across 82 files**.
 | 95-visualizer-settings-responsive.spec.ts | TL-444 @ui › every Visualizer setting stays reachable in a wide and short window | repository contract | @ui | visualizer-settings-responsive | standard failure evidence | parallel | pending-semantic-migration |
 | 95-visualizer-settings-responsive.spec.ts | TL-444 @ui › every Visualizer setting stays reachable in a narrow and tall window | repository contract | @ui | visualizer-settings-responsive | standard failure evidence | parallel | pending-semantic-migration |
 | 95-visualizer-settings-responsive.spec.ts | TL-444 @ui › Crowd amount is a Feature, not a Picture setting | repository contract | @ui | visualizer-settings-responsive | standard failure evidence | parallel | pending-semantic-migration |
+| 96-fixture-library-editor-layout.spec.ts | TL-446 @ui › the geometry preview shows the lamp on dark blue, without a beam | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 96-fixture-library-editor-layout.spec.ts | TL-446 @ui › the wide mode editor scrolls in one place per tab | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 96-fixture-library-editor-layout.spec.ts | TL-446 @ui › the wide channel mapping window scrolls only its function list | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 96-fixture-library-editor-layout.spec.ts | TL-446 @ui › the narrow mode editor scrolls in one place per tab | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 96-fixture-library-editor-layout.spec.ts | TL-446 @ui › the narrow channel mapping window scrolls only its function list | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 
