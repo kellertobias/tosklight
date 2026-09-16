@@ -29,7 +29,7 @@ function base(id: string, extra: Partial<CadEntity>): CadEntity {
 	};
 }
 
-const truss = (id: string, position: V3, size: V3 = [4000, 340, 340], chords = 4) =>
+const truss = (id: string, position: V3, size: V3 = [4000, 290, 290], chords = 4) =>
 	base(id, {
 		positionMillimetres: position,
 		sizeMillimetres: size,

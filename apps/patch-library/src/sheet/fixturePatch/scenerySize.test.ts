@@ -10,10 +10,10 @@ import {
 const truss: FixtureProfileScenery = {
 	kind: "truss",
 	chords: 4,
-	default_size_metres: { x: 4, y: 0.34, z: 0.34 },
+	default_size_metres: { x: 4, y: 0.29, z: 0.29 },
 	adjustable: { width: true, height: false, depth: false },
-	minimum_size_metres: { x: 0.25, y: 0.34, z: 0.34 },
-	maximum_size_metres: { x: 24, y: 0.34, z: 0.34 },
+	minimum_size_metres: { x: 0.25, y: 0.29, z: 0.29 },
+	maximum_size_metres: { x: 24, y: 0.29, z: 0.29 },
 };
 
 function venueObject(
@@ -35,18 +35,18 @@ function venueObject(
 describe("generated Venue object size", () => {
 	it("reads as the profile's default until a size is placed", () => {
 		const fixture = venueObject(truss);
-		expect(placedSceneryMetres(fixture, truss)).toEqual({ x: 4, y: 0.34, z: 0.34 });
+		expect(placedSceneryMetres(fixture, truss)).toEqual({ x: 4, y: 0.29, z: 0.29 });
 	});
 
 	it("reads a placed size from the millimetres the patch stores", () => {
-		const fixture = venueObject(truss, { x: 6000, y: 340, z: 340 });
+		const fixture = venueObject(truss, { x: 6000, y: 290, z: 290 });
 		expect(placedSceneryMetres(fixture, truss).x).toBe(6);
 	});
 
 	it("sets one measurement and keeps the others as placed", () => {
-		const fixture = venueObject(truss, { x: 6000, y: 340, z: 340 });
+		const fixture = venueObject(truss, { x: 6000, y: 290, z: 290 });
 		expect(sceneryMeasurement(fixture, "scenery_width", "8.5")).toEqual({
-			size: { x: 8500, y: 340, z: 340 },
+			size: { x: 8500, y: 290, z: 290 },
 		});
 	});
 

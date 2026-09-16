@@ -553,11 +553,29 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         standard.scenery.expect("standard").pattern,
         TrussPattern::Standard
     );
+    // The standard family is one product: every section is the 290 mm envelope the shipped
+    // corner blocks are built to, so a corner joins a straight run flush.
+    for filename in [
+        "venue--four-point-truss.toskfixture",
+        "venue--three-point-truss.toskfixture",
+        "venue--two-point-truss.toskfixture",
+        "venue--three-point-deco-truss.toskfixture",
+    ] {
+        let scenery = shipped_profile(filename).scenery.expect(filename);
+        for size in [
+            scenery.default_size_metres,
+            scenery.minimum_size_metres,
+            scenery.maximum_size_metres,
+        ] {
+            assert_eq!(size.y, 0.29, "{filename}");
+            assert_eq!(size.z, 0.29, "{filename}");
+        }
+    }
     // A large truss is braced in its own, deeper section.
     let large = shipped_profile("venue--large-four-point-truss.toskfixture")
         .scenery
         .expect("large truss");
-    assert!(large.default_size_metres.y > 0.34 && large.default_size_metres.z > 0.34);
+    assert!(large.default_size_metres.y > 0.29 && large.default_size_metres.z > 0.29);
 
     // A stage element is the base it is built on; only its rise is made to measure.
     for filename in [

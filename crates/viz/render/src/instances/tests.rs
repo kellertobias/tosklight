@@ -1242,7 +1242,7 @@ mod lines_view {
     #[test]
     fn deco_truss_crosses_its_bracing_in_every_bay() {
         let mut truss = scenery(SceneryKind::Truss);
-        truss.size = Vec3::new(4.0, 0.34, 0.34);
+        truss.size = Vec3::new(4.0, 0.29, 0.29);
         let standard = mesh_count(&drawn(truss.clone()), MeshKind::Cylinder);
         truss.detail.deco = true;
         let deco = mesh_count(&drawn(truss), MeshKind::Cylinder);

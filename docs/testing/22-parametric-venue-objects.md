@@ -25,6 +25,10 @@ choices existed open unchanged.
    with the same bracing: an X in every bay of a four-point truss, an end frame at each end, and a
    coupler at every chord end. Open a side elevation looking down a truss and confirm its chords,
    its end frame and, on a four-point truss, the end frame's diagonal.
+7. Add **Four-Point Truss Corner 2-Way** and butt it against the end of the four-point truss.
+   Confirm both are drawn at the same 290 mm section in the Architect plan and in the Visualizer:
+   the corner's chords continue the straight run's rather than stepping in or out at the joint.
+   Repeat with the two- and three-point trusses and their corner blocks.
 
 ## Curtains
 
