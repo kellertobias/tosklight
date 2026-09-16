@@ -48,13 +48,17 @@ struct Update {
     to_revision: u32,
 }
 
+/// The library's newest copy of one profile, read by itself.
+///
+/// One profile rather than the whole library: a shipped profile carries its model, so listing every
+/// profile to find one would read tens of megabytes each time an element is selected.
 fn newest_in_library(library: &FixtureLibrary, profile_id: FixtureId) -> Option<FixtureProfile> {
-    library
-        .profiles()
+    let newest = library
+        .profile_revisions(profile_id)
         .ok()?
         .into_iter()
-        .filter(|profile| profile.id == profile_id)
-        .max_by_key(|profile| profile.revision)
+        .max()?;
+    library.profile(profile_id, newest).ok().flatten()
 }
 
 /// Whether the show's copy of a revision is the same part as the library's copy.
