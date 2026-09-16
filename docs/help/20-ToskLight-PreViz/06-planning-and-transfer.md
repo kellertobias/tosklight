@@ -147,12 +147,12 @@ assigns the number, and a save is refused rather than silently overwriting work 
 has revised the same fixture in the meantime. A show already patched against an earlier revision
 keeps its own embedded snapshot and is unaffected.
 
-Two differences from the desk are deliberate. The Architect reads the operator's own filesystem
+One difference from the desk is deliberate: the Architect reads the operator's own filesystem
 when choosing a photograph, icon, or GLB, because it has no configured file roots to confine a
-chooser to. And the Geometry tab has no live 3D preview here: the parts, transforms and emitters
-are edited and saved exactly as they are on the desk, but confirming the Stage appearance belongs
-in ToskLight Control, which owns the Stage renderer. The tab says so rather than showing an empty
-frame.
+chooser to. The Geometry tab is the same as on the desk, including its live 3D preview: the lamp
+body alone on a dark-blue background, framed to fill the view, updating as parts, transforms and
+emitters are edited. The preview shows the geometry only, without a beam; how the lamp lights the
+rig is checked in the Visualizer.
 
 Channel work is the same on both products. Channels are ordered by dragging a row or by its move
 buttons, and that order is the DMX slot order within the split. A channel's DMX range is divided
