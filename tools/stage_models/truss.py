@@ -51,11 +51,53 @@ CORNERS: dict[str, tuple[tuple[int, int, int], ...]] = {
     "corner-5-way": ((-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1)),
     "corner-6-way": ((-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1)),
 }
-CORNER_ARM = 500.0
+# A corner block is 500 mm overall in every direction it has arms, the way the real hardware
+# is sold: a 2-way is a 500 x 500 corner, a cross is 500 x 500 across, a 6-way is a 500 cube.
+# An axis with an arm on both sides therefore gets half of that each, while an axis with a
+# single arm reaches to 500 less the section it turns away from.
+CORNER_FOOTPRINT = 500.0
+CORNER_TIP_OPPOSED = CORNER_FOOTPRINT / 2
+# The male spigot on the end of an arm: it sits past where the chords stop, so the chords of
+# an arm have to end that much short of the block's outside.
+CORNER_SPIGOT = 34.0
 # Half the node a corner block is built round: the arms stop at its faces and their chords
 # mitre to each other across it. It is the chord spacing, so on a 4-point the node's edges
 # and the arms' chords are the same lines and the joint comes out flush.
 NODE = SPACING / 2
+
+
+def corner_reach(
+    direction: tuple[int, int, int],
+    directions: tuple[tuple[int, int, int], ...],
+    offsets: tuple[tuple[float, float], ...],
+) -> float:
+    """How far this arm's chords run, so the block ends up 500 mm across that axis.
+
+    An axis with an arm each way splits the 500 between them. An arm that is alone on its
+    axis gets the rest of the 500 after the width the other arms' chords already take up
+    behind it, which is what makes a 2-way a 500 x 500 corner rather than 500 past its own
+    section.
+    """
+
+    axis = next(index for index in range(3) if direction[index])
+    if any(other[axis] == -direction[axis] for other in directions):
+        return CORNER_TIP_OPPOSED - CORNER_SPIGOT
+    behind = max(
+        -direction[axis] * _chord_centre(other, offset)[axis]
+        for other in directions
+        if other[axis] == 0
+        for offset in offsets
+    ) + CHORD / 2
+    return CORNER_FOOTPRINT - behind - CORNER_SPIGOT
+
+
+def _chord_centre(
+    direction: tuple[int, int, int], offset: tuple[float, float]
+) -> tuple[float, float, float]:
+    """Where a chord of an arm sits in the section plane, in the model's own axes."""
+
+    across, up = _perpendicular(direction)
+    return tuple(across[axis] * offset[0] + up[axis] * offset[1] for axis in range(3))
 
 
 def _faces(count: int) -> list[tuple[int, int]]:
@@ -148,6 +190,7 @@ def _corner_arm(
     braces: Part,
     direction: tuple[int, int, int],
     offsets: tuple[tuple[float, float], ...],
+    reach: float,
 ) -> list[tuple[float, float, float]]:
     """One arm of a corner block. Returns where its chords stop at the node.
 
@@ -157,7 +200,6 @@ def _corner_arm(
     """
 
     across, up = _perpendicular(direction)
-    reach = CORNER_ARM
 
     def point(distance: float, offset: tuple[float, float]) -> tuple[float, float, float]:
         return tuple(
@@ -178,11 +220,14 @@ def _corner_arm(
             segments=12,
             rotation=_facing(direction),
         )
-    if len(offsets) > 1:
+    # A stub this short carries its own bracing between the node and the spigot; anything
+    # narrower than a bay gets the one ring it has room for rather than a crowded ladder.
+    if len(offsets) > 1 and reach - NODE > 80.0:
+        near, far = NODE + 30.0, reach - 30.0
         for first, second in _faces(len(offsets)):
-            for distance in (reach - 330.0, reach - 40.0):
+            for distance in (near, far):
                 braces.strut(BRACE, point(distance, offsets[first]), point(distance, offsets[second]))
-            braces.strut(BRACE, point(reach - 330.0, offsets[first]), point(reach - 40.0, offsets[second]))
+            braces.strut(BRACE, point(near, offsets[first]), point(far, offsets[second]))
     return ends
 
 
@@ -242,8 +287,9 @@ def _facing(direction: tuple[int, int, int]) -> tuple[float, float, float]:
 def corner_blocks() -> list[Model]:
     """Every corner a rental stock carries, for the 3-point and the 4-point.
 
-    Each arm is 500 mm from the block centre, so two of them make the 500 x 500 corner
-    the brief asks for and the rest are the same block with more arms welded on.
+    Each block measures 500 mm overall wherever it has arms, as the real blocks do: a 2-way
+    is the 500 x 500 corner the brief asks for, and the rest are the same block with more
+    arms welded on, each arm shortened so the block does not grow as arms are added.
     """
 
     built: list[Model] = []
@@ -253,14 +299,21 @@ def corner_blocks() -> list[Model]:
             model = Model(
                 f"truss-{section}-{name}",
                 "truss",
-                f"{section} {name.replace('-', ' ')} block, {CORNER_ARM:.0f} mm arms",
+                f"{section} {name.replace('-', ' ')} block, {CORNER_FOOTPRINT:.0f} mm overall",
                 origin="the corner node itself",
             )
             chords = model.part("truss-chords", SILVER)
             connectors = model.part("end-connectors", SILVER)
             braces = model.part("truss-braces", SILVER)
             arms = [
-                _corner_arm(chords, connectors, braces, direction, offsets)
+                _corner_arm(
+                    chords,
+                    connectors,
+                    braces,
+                    direction,
+                    offsets,
+                    corner_reach(direction, directions, offsets),
+                )
                 for direction in directions
             ]
             _mitre(chords, arms)

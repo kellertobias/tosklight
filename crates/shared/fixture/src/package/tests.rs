@@ -661,9 +661,17 @@ fn shipped_truss_corners_and_legged_decks_carry_their_catalogue_models() {
         assert_eq!(mode.splits[0].footprint, 0, "{filename}");
         assert!(mode.channels.is_empty(), "{filename}");
     }
+    // Every corner block is 500 mm overall wherever it has arms, the way the real hardware is
+    // sold, so adding arms makes a block busier and not bigger.
+    for (filename, ..) in expected.iter().filter(|(name, ..)| name.contains("truss")) {
+        let corner = shipped_profile(filename);
+        assert_eq!(corner.physical.width_millimetres, Some(500.0), "{filename}");
+        assert_eq!(corner.physical.depth_millimetres, Some(500.0), "{filename}");
+    }
     let corner = shipped_profile("venue--four-point-truss-corner-2-way.toskfixture");
-    assert_eq!(corner.physical.width_millimetres, Some(679.0));
     assert_eq!(corner.physical.height_millimetres, Some(290.0));
+    let node = shipped_profile("venue--four-point-truss-node-6-way.toskfixture");
+    assert_eq!(node.physical.height_millimetres, Some(500.0));
     let deck = shipped_profile("venue--stage-deck-2-1-m-legs-0-4-m.toskfixture");
     assert_eq!(deck.physical.width_millimetres, Some(2000.0));
     assert_eq!(deck.physical.height_millimetres, Some(440.0));
