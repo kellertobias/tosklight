@@ -15,6 +15,8 @@ Use the window that gives the clearest view of the current task; all of them ope
 
 Selections made in Stage, Fixtures, Groups, Presets, or the command line are the same actual programmer selection. Activating [Highlight and Step Through](../20-Programmer-and-Cues/02-selecting-and-setting-values.md#highlight-and-step-through) freezes that ordered selection as its original set. PREV and NEXT replace the actual selection with one original member; ALL restores the whole frozen set. Preset, encoder, dialog, and other value changes use that actual focus and immediately reveal the real value for each touched attribute.
 
+In the Dynamics Speed view, the large tempo button taps the chosen Speed Group. While the Dynamic follows a Speed Group, the circle in the button's upper-right corner lights at the start of every beat of that group as the desk runs it, so it follows taps, tempo changes, and changes made on another surface or over OSC. It stays amber while the group is paused, and turns to a dashed outline when the desk is not answering. The Programmer's Dynamics Speed page shows no lane chooser, because Speed applies to every lane of the Dynamic alike.
+
 In the Dynamics Speed view, choose **Loop** to repeat until Off or **One-shot** to run one complete effective cycle and stop automatically. Run Mode is separate from Start now, Join sync now, and Next boundary, which determine when and where the cycle begins. A completed one-shot does not restart merely because its Cue, Programmer, or Playback value remains active; trigger it again with a new deliberate activation.
 
 The Dynamics editor separates target ordering from phase distribution. **Projection** places

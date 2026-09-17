@@ -76,11 +76,36 @@ describe("ProgrammerDynamicsInstanceContent", () => {
 		).toBeInTheDocument();
 		expect(screen.queryByText("Page 2 of 2")).not.toBeInTheDocument();
 	});
+
+	it("drops the lane label on Speed, where no lane choice applies", () => {
+		const options = {
+			visibleEncoderCount: 6 as const,
+			encoderPage: 1,
+			selectEncoderGroup: vi.fn(),
+			lanes: [{ id: "lane-1", attribute: "Intensity" }],
+		};
+		const { rerender } = renderContent(options);
+		expect(
+			screen.getByRole("button", { name: "Dynamic lane" }),
+		).toBeInTheDocument();
+
+		rerenderContent(rerender, { ...options, view: "speed" });
+		expect(
+			screen.queryByRole("button", { name: "Dynamic lane" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Dynamic instance" }),
+		).toBeInTheDocument();
+		for (const name of ["Instance", "Lanes", "Phase", "Speed"])
+			expect(screen.getByRole("button", { name })).toBeInTheDocument();
+	});
 });
 
 interface RenderOptions {
 	visibleEncoderCount: 4 | 6;
 	encoderPage: number;
+	view?: "instance" | "speed";
+	lanes?: { id: string; attribute: string }[];
 	hardwareConnected?: boolean;
 	selectEncoderGroup: ReturnType<typeof vi.fn>;
 }
@@ -99,6 +124,8 @@ function rerenderContent(
 function content({
 	visibleEncoderCount,
 	encoderPage,
+	view = "instance",
+	lanes = [],
 	hardwareConnected = false,
 	selectEncoderGroup,
 }: RenderOptions) {
@@ -133,11 +160,11 @@ function content({
 				editor={null as unknown as ReturnType<typeof useDynamicEditorSession>}
 				choices={[selected]}
 				selected={selected}
-				selectedLane={null}
-				lanes={[]}
+				selectedLane={(lanes[0] ?? null) as never}
+				lanes={lanes as never}
 				selectedObject={undefined}
 				presets={[]}
-				view="instance"
+				view={view}
 				error={null}
 				onView={vi.fn()}
 				onController={vi.fn()}

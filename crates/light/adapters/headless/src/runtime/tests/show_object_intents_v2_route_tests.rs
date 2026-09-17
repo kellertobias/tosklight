@@ -672,6 +672,48 @@ async fn dynamic_http_routes_use_runtime_instance_identity_and_project_authorita
         runtime["instances"][0]["controllers"][0]["phase_offset_degrees"],
         90.0
     );
+    let groups = runtime["speed_groups"].as_array().unwrap();
+    assert_eq!(
+        groups
+            .iter()
+            .map(|group| group["group"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["A", "B", "C", "D", "E"]
+    );
+
+    // A Speed Group changed from elsewhere, then paused, is reported by the next snapshot
+    // even though the running instance itself uses a fixed speed.
+    let now = u64::try_from(state.output.application_time().timestamp_millis()).unwrap();
+    state
+        .output
+        .set_manual_speed_group(1, 90.0, now, true)
+        .unwrap();
+    state.output.configure_speed_group_test_state(
+        1,
+        state.output.speed_group_sound_config(1),
+        1.0,
+        true,
+        now,
+    );
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/dynamics/runtime")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", &show_id)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let runtime = json(response).await;
+    let group_b = &runtime["speed_groups"][1];
+    assert_eq!(group_b["group"], "B");
+    assert_eq!(group_b["effective_bpm"], 90.0);
+    assert_eq!(group_b["paused"], true);
+    assert_eq!(group_b["phase_advancing"], false);
+    let phase = group_b["beat_phase"].as_f64().unwrap();
+    assert!((0.0..1.0).contains(&phase), "{phase}");
 
     let (status, off) = post_show_object_intent(
         &app,

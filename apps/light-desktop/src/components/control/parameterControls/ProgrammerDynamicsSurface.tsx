@@ -40,6 +40,7 @@ const EMPTY_RUNTIME: DynamicRuntimeSnapshotProjection = {
 	global_paused: false,
 	instances: [],
 	definitions: [],
+	speed_groups: [],
 };
 
 export function DynamicDefinitionEncoderSurface({

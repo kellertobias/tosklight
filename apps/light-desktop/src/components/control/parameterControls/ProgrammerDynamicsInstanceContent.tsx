@@ -110,15 +110,18 @@ function DynamicsToolbar({
 				}))}
 				onChange={onController}
 			/>
-			<SelectField
-				ariaLabel="Dynamic lane"
-				value={selectedLane?.id ?? ""}
-				options={lanes.map((lane) => ({
-					value: lane.id,
-					label: lane.attribute,
-				}))}
-				onChange={onLane}
-			/>
+			{/* Speed is shared by every lane, so a lane label here would name no alternative. */}
+			{view !== "speed" && (
+				<SelectField
+					ariaLabel="Dynamic lane"
+					value={selectedLane?.id ?? ""}
+					options={lanes.map((lane) => ({
+						value: lane.id,
+						label: lane.attribute,
+					}))}
+					onChange={onLane}
+				/>
+			)}
 			{(["instance", "curves", "phase", "speed"] as const).map((candidate) => (
 				<Button
 					key={candidate}

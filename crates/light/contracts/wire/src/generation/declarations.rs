@@ -271,6 +271,7 @@ fn dynamics(config: &Config) -> Vec<String> {
         DynamicInstanceActionOutcome::decl(config),
         DynamicControllerActionOutcome::decl(config),
         DynamicRuntimeSnapshotProjection::decl(config),
+        DynamicSpeedGroupTransportProjection::decl(config),
         DynamicDefinitionStatusProjection::decl(config),
         DynamicRuntimeInstanceProjection::decl(config),
         DynamicRuntimeControllerProjection::decl(config),

@@ -61,6 +61,7 @@ function runtime(controllerIds = ["controller-a", "controller-b"]) {
 				})),
 			},
 		],
+		speed_groups: [],
 	} satisfies RunningDynamicsSnapshot;
 }
 

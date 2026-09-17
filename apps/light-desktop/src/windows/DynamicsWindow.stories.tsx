@@ -175,6 +175,13 @@ const runtime: DynamicRuntimeSnapshotProjection = {
 			],
 		},
 	],
+	speed_groups: (["A", "B", "C", "D", "E"] as const).map((group) => ({
+		group,
+		effective_bpm: 120,
+		beat_phase: 0.38,
+		phase_advancing: true,
+		paused: false,
+	})),
 };
 
 function DynamicsProgrammerSurface({

@@ -506,6 +506,21 @@ pub struct DynamicRuntimeSnapshotProjection {
     pub global_paused: bool,
     pub instances: Vec<DynamicRuntimeInstanceProjection>,
     pub definitions: Vec<DynamicDefinitionStatusProjection>,
+    /// The beat transport of every Speed Group A-E, sampled with the instances, so an editor
+    /// can show the authoritative beat even while no instance of its Dynamic is running.
+    #[serde(default)]
+    pub speed_groups: Vec<DynamicSpeedGroupTransportProjection>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicSpeedGroupTransportProjection {
+    pub group: DynamicSpeedGroupProjection,
+    /// Effective rate after Sound and Speed Master; kept while paused.
+    pub effective_bpm: f64,
+    /// Normalized beat position in `[0, 1)`, frozen while the group does not advance.
+    pub beat_phase: f64,
+    pub phase_advancing: bool,
+    pub paused: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

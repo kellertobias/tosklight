@@ -39,8 +39,12 @@ import {
 	useShowObjectsStore,
 } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
-import { useSpeedGroupRuntimeView } from "../features/speedGroupRuntime/SpeedGroupRuntimeView";
+import {
+	type SpeedGroupRuntimeView,
+	useSpeedGroupRuntimeView,
+} from "../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../state/AppContext";
+import { stampRuntimeReceipt } from "./dynamics/SpeedBeatIndicator";
 import type { WindowProps } from "./windowTypes";
 import "./DynamicsWindow.css";
 
@@ -97,14 +101,14 @@ export function DynamicsWindow({
 		},
 		[closeEditor, selectedId],
 	);
-	const attributes = registry.filter(
-		(attribute) =>
-			attribute.recordable &&
-			attribute.value_type === "continuous" &&
-			attribute.normalized_min != null &&
-			attribute.normalized_max != null,
+	const attributes = registry.filter(isDynamicLaneAttribute);
+	const { runtime, resyncRuntime } = useDynamicsRuntime(
+		active,
+		showId,
+		api,
+		setError,
+		speedGroupRuntime.projection,
 	);
-	const { runtime } = useDynamicsRuntime(active, showId, api, setError);
 	const run = useBusyOperation(setBusy, setError);
 	const { create, mutate } = useDynamicsMutations({
 		showId,
@@ -128,17 +132,13 @@ export function DynamicsWindow({
 				attributes={attributes}
 				presets={presets}
 				runtime={runtime}
-				speedGroupBpms={Object.fromEntries(
-					(speedGroupRuntime.projection?.groups ?? []).map((group) => [
-						group.group,
-						group.manualBpm,
-					]),
-				)}
+				speedGroupBpms={manualSpeedGroupBpms(speedGroupRuntime.projection)}
 				selection={command.selected}
 				selectedGroupId={command.selectedGroupId}
 				showId={showId}
 				api={api}
 				soundToLight={soundToLight}
+				onSpeedGroupTapped={resyncRuntime}
 				run={run}
 				onMutate={mutate}
 				onBack={() => {
@@ -213,12 +213,33 @@ export function DynamicsWindow({
 	);
 }
 
+function isDynamicLaneAttribute(
+	attribute: NonNullable<ReturnType<typeof useAttributeRegistry>>[number],
+) {
+	return (
+		attribute.recordable &&
+		attribute.value_type === "continuous" &&
+		attribute.normalized_min != null &&
+		attribute.normalized_max != null
+	);
+}
+
+function manualSpeedGroupBpms(speedGroups: SpeedGroupRuntimeView["projection"]) {
+	return Object.fromEntries(
+		(speedGroups?.groups ?? []).map((group) => [group.group, group.manualBpm]),
+	);
+}
+
 function useDynamicsRuntime(
 	active: boolean,
 	showId: ReturnType<typeof useActiveShowId>,
 	api: NonNullable<ReturnType<typeof useDynamicsActions>>,
 	setError: (error: string | null) => void,
+	speedGroups: SpeedGroupRuntimeView["projection"],
 ) {
+	const speedGroupRevision = speedGroups
+		? `${speedGroups.authorityId}:${speedGroups.revision}`
+		: null;
 	const [runtime, setRuntime] =
 		useState<DynamicRuntimeSnapshotProjection | null>(null);
 	const refreshRuntime = useCallback(async () => {
@@ -226,7 +247,7 @@ function useDynamicsRuntime(
 			setRuntime(null);
 			return;
 		}
-		setRuntime(await api.dynamics.runtime(showId));
+		setRuntime(stampRuntimeReceipt(await api.dynamics.runtime(showId)));
 	}, [api, showId]);
 	useEffect(() => {
 		if (!active || !showId) return;
@@ -238,7 +259,16 @@ function useDynamicsRuntime(
 		}, 750);
 		return () => window.clearInterval(timer);
 	}, [active, refreshRuntime, setError, showId]);
-	return { runtime, refreshRuntime };
+	const resyncRuntime = useCallback(
+		() => void refreshRuntime().catch(() => undefined),
+		[refreshRuntime],
+	);
+	// A Speed Group changed by a tap, another surface, OSC, or a reconnect repair moves the
+	// beat at once; resample instead of flashing the old tempo until the next poll.
+	useEffect(() => {
+		if (active && speedGroupRevision != null) resyncRuntime();
+	}, [active, resyncRuntime, speedGroupRevision]);
+	return { runtime, resyncRuntime };
 }
 
 function useBusyOperation(
@@ -324,6 +354,7 @@ type ConnectedDynamicEditorProps = Omit<
 	showId: ReturnType<typeof useActiveShowId>;
 	api: NonNullable<ReturnType<typeof useDynamicsActions>>;
 	soundToLight: ReturnType<typeof useSoundToLight>;
+	onSpeedGroupTapped(): void;
 	run(operation: () => Promise<void>): Promise<void>;
 	onBack(): void;
 	onDeleted(): void;
@@ -430,6 +461,7 @@ function ConnectedDynamicEditor({
 	showId,
 	api,
 	soundToLight,
+	onSpeedGroupTapped,
 	run,
 	onBack,
 	onDeleted,
@@ -457,6 +489,7 @@ function ConnectedDynamicEditor({
 						action: "learn",
 						captured_at_millis: monotonicEpochMillis(),
 					});
+					onSpeedGroupTapped();
 				})
 			}
 			onDelete={() =>

@@ -144,7 +144,21 @@ export type DynamicControllerValueActionRequest = { request_id: string, value: n
 export type DynamicFixAtActionRequest = { request_id: string, targets: Array<string>, attribute: string, value: number, timing: DynamicValueTimingProjection, };
 export type DynamicInstanceActionOutcome = { request_id: string, runtime_instance_id: string, controller_id: string, targets: Array<string>, started: boolean, };
 export type DynamicControllerActionOutcome = { request_id: string, controller_id: string, changed: boolean, };
-export type DynamicRuntimeSnapshotProjection = { global_paused: boolean, instances: Array<DynamicRuntimeInstanceProjection>, definitions: Array<DynamicDefinitionStatusProjection>, };
+export type DynamicRuntimeSnapshotProjection = { global_paused: boolean, instances: Array<DynamicRuntimeInstanceProjection>, definitions: Array<DynamicDefinitionStatusProjection>,
+/**
+ * The beat transport of every Speed Group A-E, sampled with the instances, so an editor
+ * can show the authoritative beat even while no instance of its Dynamic is running.
+ */
+speed_groups: Array<DynamicSpeedGroupTransportProjection>, };
+export type DynamicSpeedGroupTransportProjection = { group: DynamicSpeedGroupProjection,
+/**
+ * Effective rate after Sound and Speed Master; kept while paused.
+ */
+effective_bpm: number,
+/**
+ * Normalized beat position in `[0, 1)`, frozen while the group does not advance.
+ */
+beat_phase: number, phase_advancing: boolean, paused: boolean, };
 export type DynamicDefinitionStatusProjection = { dynamic_id: string, target_count: number, compatible_target_count: number, missing_target_count: number, unpatched_target_count: number, lane_count: number, supported_address_count: number, skipped_address_count: number, warning?: string | null, };
 export type DynamicRuntimeInstanceProjection = { instance_id: string, dynamic_id: string, pool_number: number, name: string, targets: Array<string>, pending: boolean, pending_until_millis: bigint | null, paused: boolean, speed_source: string, activation_boundary: DynamicActivationBoundaryProjection, effective_cycle_millis: bigint, effective_bpm: number | null, beat_phase: number | null, phase_advancing: boolean, aliasing_warning: string | null, controllers: Array<DynamicRuntimeControllerProjection>, };
 export type DynamicRuntimeControllerProjection = { controller_id: string, source: string, priority: number, size: number, speed_multiplier: number, phase_offset_degrees: number, paused: boolean, winning: boolean, releasing: boolean, activation_mix: number, };

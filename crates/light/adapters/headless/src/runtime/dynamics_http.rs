@@ -23,7 +23,8 @@ use light_dynamics::{
 use light_wire::v2::dynamics::{
     DynamicDefinitionStatusProjection, DynamicInstanceOverridesProjection,
     DynamicRuntimeControllerProjection, DynamicRuntimeInstanceProjection,
-    DynamicRuntimeSnapshotProjection, DynamicValueTimingProjection,
+    DynamicRuntimeSnapshotProjection, DynamicSpeedGroupProjection,
+    DynamicSpeedGroupTransportProjection, DynamicValueTimingProjection,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -129,7 +130,25 @@ async fn runtime_snapshot(
         global_paused: snapshot.global_paused,
         instances,
         definitions,
+        speed_groups: speed_group_transports(&speed_groups),
     }))
+}
+
+fn speed_group_transports(
+    speed_groups: &[light_control::speed::SpeedSnapshot; 5],
+) -> Vec<DynamicSpeedGroupTransportProjection> {
+    use DynamicSpeedGroupProjection::{A, B, C, D, E};
+    [A, B, C, D, E]
+        .into_iter()
+        .zip(speed_groups)
+        .map(|(group, transport)| DynamicSpeedGroupTransportProjection {
+            group,
+            effective_bpm: transport.effective_bpm,
+            beat_phase: transport.beat_phase,
+            phase_advancing: transport.phase_advancing,
+            paused: transport.paused,
+        })
+        .collect()
 }
 
 fn runtime_instance_projection(

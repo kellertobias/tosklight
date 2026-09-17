@@ -29,6 +29,10 @@ let selectedGroupId: string | null = null;
 const speedGroupAction = vi.fn();
 const toggleDynamic = vi.fn();
 let runtimeDefinitions: Array<Record<string, unknown>> = [];
+let runtimeSpeedGroups: Array<Record<string, unknown>> = [];
+let speedGroupProjection: { authorityId: string; revision: number } | null =
+	null;
+const runtimeSnapshot = vi.fn();
 const showObjectsStore = {
 	subscribe: () => () => undefined,
 	getSnapshot: () => ({ dynamics, authorityGeneration: 1, showRevision: 1 }),
@@ -53,7 +57,9 @@ vi.mock("../components/control/useSoundToLight", () => ({
 }));
 vi.mock("../features/speedGroupRuntime/SpeedGroupRuntimeView", () => ({
 	useSpeedGroupRuntimeView: () => ({
-		projection: null,
+		projection: speedGroupProjection
+			? { ...speedGroupProjection, groups: [] }
+			: null,
 	}),
 }));
 vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
@@ -83,11 +89,7 @@ vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 vi.mock("../features/dynamics/DynamicsActionsContext", () => ({
 	useDynamicsActions: () => ({
 		dynamics: {
-			runtime: vi.fn().mockResolvedValue({
-				global_paused: false,
-				instances: [],
-				definitions: runtimeDefinitions,
-			}),
+			runtime: runtimeSnapshot,
 			toggle: toggleDynamic,
 		},
 		showObjects: {
@@ -201,6 +203,14 @@ describe("DynamicsWindow", () => {
 			);
 		resetCommand.mockReset().mockResolvedValue(true);
 		speedGroupAction.mockReset().mockResolvedValue({});
+		runtimeSpeedGroups = [];
+		speedGroupProjection = null;
+		runtimeSnapshot.mockReset().mockImplementation(async () => ({
+			global_paused: false,
+			instances: [],
+			definitions: runtimeDefinitions,
+			speed_groups: runtimeSpeedGroups,
+		}));
 		toggleDynamic.mockReset().mockResolvedValue({});
 	});
 
@@ -539,6 +549,89 @@ describe("DynamicsWindow", () => {
 				action: "learn",
 				captured_at_millis: expect.any(Number),
 			}),
+		);
+	});
+
+	it("resamples the authoritative beat after a Speed Group tap", async () => {
+		const object = dynamicObject();
+		object.body.speed = {
+			type: "speed_group",
+			group: "A",
+			beats_per_cycle: { numerator: 4, denominator: 1 },
+		};
+		dynamics = [object];
+		renderWindow();
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
+		fireEvent.click(screen.getByRole("tab", { name: "Speed" }));
+		await vi.waitFor(() => expect(runtimeSnapshot).toHaveBeenCalled());
+		const before = runtimeSnapshot.mock.calls.length;
+
+		fireEvent.click(
+			screen.getByRole("button", { name: /^Tap Speed Group A tempo/ }),
+		);
+
+		await vi.waitFor(() => expect(speedGroupAction).toHaveBeenCalled());
+		await vi.waitFor(() =>
+			expect(runtimeSnapshot.mock.calls.length).toBeGreaterThan(before),
+		);
+	});
+
+	it("flashes the upper-right beat circle from the authoritative Speed Group beat", async () => {
+		const object = dynamicObject();
+		object.body.speed = {
+			type: "speed_group",
+			group: "B",
+			beats_per_cycle: { numerator: 4, denominator: 1 },
+		};
+		dynamics = [object];
+		// A very slow beat keeps the sampled phase put for the length of the test.
+		const transport = (phase: number, advancing: boolean) =>
+			(["A", "B", "C", "D", "E"] as const).map((group) => ({
+				group,
+				effective_bpm: group === "B" ? 0.1 : 120,
+				beat_phase: group === "B" ? phase : 0.5,
+				phase_advancing: advancing,
+				paused: !advancing,
+			}));
+		runtimeSpeedGroups = transport(0.05, true);
+		speedGroupProjection = { authorityId: "authority", revision: 1 };
+		const view = renderWindow();
+		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+			shiftKey: true,
+		});
+		fireEvent.click(screen.getByRole("tab", { name: "Speed" }));
+
+		const tap = screen.getByRole("button", {
+			name: /^Tap Speed Group B tempo/,
+		});
+		await vi.waitFor(() =>
+			expect(
+				within(tap).getByRole("img", { name: "Speed Group B beat, beat" }),
+			).toHaveClass("dynamic-beat-indicator"),
+		);
+
+		// Another surface moves Group B off its beat and then pauses it: the authority
+		// revision changes, the editor resamples at once, and the circle follows.
+		runtimeSpeedGroups = transport(0.6, true);
+		speedGroupProjection = { authorityId: "authority", revision: 2 };
+		view.rerender(windowView());
+		await vi.waitFor(() =>
+			expect(
+				within(tap).getByRole("img", {
+					name: "Speed Group B beat, between beats",
+				}),
+			).toBeInTheDocument(),
+		);
+
+		runtimeSpeedGroups = transport(0.05, false);
+		speedGroupProjection = { authorityId: "authority", revision: 3 };
+		view.rerender(windowView());
+		await vi.waitFor(() =>
+			expect(
+				within(tap).getByRole("img", { name: "Speed Group B beat, paused" }),
+			).toBeInTheDocument(),
 		);
 	});
 

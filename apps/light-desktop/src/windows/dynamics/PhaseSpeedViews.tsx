@@ -8,7 +8,7 @@ import {
 	SwitchField,
 	TextField,
 } from "@tosklight/ui";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import type {
 	DynamicDefinitionProjection,
 	DynamicLaneProjection,
@@ -23,6 +23,11 @@ import {
 	spatialMappingForOrdering,
 } from "../../features/dynamics/phaseOrderingShape";
 import type { ShowObject } from "../../features/showObjects/contracts";
+import {
+	type SpeedBeatSample,
+	SpeedBeatIndicator,
+	speedBeatSample,
+} from "./SpeedBeatIndicator";
 
 import {
 	clamp,
@@ -119,11 +124,13 @@ function SpeedTransport({
 	displayedBpm,
 	runtimeState,
 	primaryRuntime,
+	beat,
 	onTapTempo,
 	onMutate,
 }: {
 	dynamic: DynamicObject;
 	speed: DynamicSpeed;
+	beat: SpeedBeatSample | null;
 	beatPhase: number;
 	fixedBpm: number | null;
 	displayedBpm: number;
@@ -185,6 +192,7 @@ function SpeedTransport({
 				}
 				onClick={onTapTempo}
 			>
+				{speed.type === "speed_group" && <SpeedBeatIndicator sample={beat} />}
 				<strong className="speed-group-value">
 					{Math.round(displayedBpm)} BPM
 				</strong>
@@ -713,6 +721,11 @@ export function SpeedView({
 		speed.type === "fixed"
 			? (fixedBpm ?? 120)
 			: (speedGroupBpms?.[speed.group] ?? primaryRuntime?.effective_bpm ?? 120);
+	const beatGroup = speed.type === "speed_group" ? speed.group : null;
+	const beat = useMemo(
+		() => (beatGroup ? speedBeatSample(runtime, beatGroup) : null),
+		[runtime, beatGroup],
+	);
 	const tapTimes = useRef<number[]>([]);
 	const tapTempo = () => {
 		if (speed.type === "speed_group") {
@@ -747,6 +760,7 @@ export function SpeedView({
 				displayedBpm={displayedBpm}
 				runtimeState={runtimeState}
 				primaryRuntime={primaryRuntime}
+				beat={beat}
 				onTapTempo={tapTempo}
 				onMutate={onMutate}
 			/>

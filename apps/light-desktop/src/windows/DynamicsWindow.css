@@ -837,16 +837,35 @@
 	color: #fff;
 }
 
-.dynamic-tap-tempo::before {
+/* Lit only at the start of each authoritative Speed Group beat (see SpeedBeatIndicator). */
+.dynamic-tap-tempo .dynamic-beat-indicator {
 	position: absolute;
 	top: 8px;
 	right: 8px;
-	width: 7px;
-	height: 7px;
+	width: 12px;
+	height: 12px;
+	box-sizing: border-box;
+	border: 1px solid rgb(78 220 255 / 55%);
 	border-radius: 50%;
+	background: rgb(78 220 255 / 10%);
+	pointer-events: none;
+}
+
+.dynamic-tap-tempo .dynamic-beat-indicator[data-state="flash"] {
+	border-color: var(--cyan);
 	background: var(--cyan);
-	box-shadow: 0 0 8px var(--cyan);
-	content: "";
+	box-shadow: 0 0 10px var(--cyan);
+}
+
+.dynamic-tap-tempo .dynamic-beat-indicator[data-state="paused"] {
+	border-color: #f3bc63;
+	background: rgb(243 188 99 / 35%);
+}
+
+.dynamic-tap-tempo .dynamic-beat-indicator[data-state="unavailable"] {
+	border-style: dashed;
+	border-color: #52606b;
+	background: transparent;
 }
 
 .dynamic-tap-tempo .speed-group-label {
