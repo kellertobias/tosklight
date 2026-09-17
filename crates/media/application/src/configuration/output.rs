@@ -123,7 +123,7 @@ const fn first_start_address() -> u16 {
 
 impl OutputConfiguration {
     /// A new output with the shipped defaults: one enabled off-screen 1080p eight-layer output
-    /// at DMX address 1 following its own Playback BPM channels.
+    /// at DMX address 1 following its layers' own Playback BPM.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             id: OutputId::new(),

@@ -22,8 +22,8 @@ CITP discovery is not ToskLight show discovery. CITP describes Media outputs and
 
 ## Follow the desk's Speed Groups
 
-Synchronized play modes can follow a ToskLight Control Speed Group instead of each layer's
-**Playback BPM** channel. The Media Server only receives Speed Groups; the desk stays the
+Synchronized play modes can follow a ToskLight Control Speed Group instead of each layer's own
+**Playback BPM**, which is set in the Media pane rather than over DMX. The Media Server only receives Speed Groups; the desk stays the
 authority.
 
 1. In Media **Settings > Network & DMX**, enter a **Speed Groups** address such as `0.0.0.0:4810`, then

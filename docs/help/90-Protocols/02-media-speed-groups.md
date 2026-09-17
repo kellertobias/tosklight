@@ -75,7 +75,7 @@ Reference datagram: source `desk`, sequence `1`, group `1`, 120 BPM, beat phase 
   applied is refused, so a late datagram never steps the tempo backwards.
 - **Freshness.** A group is live for 1.5 seconds after its last message. After that the output
   keeps the last tempo, reports the group as stale and the desk as lost, and does not fall back
-  to the Playback BPM channel.
+  to the layers' own Playback BPM.
 - **Reconnect.** Once the followed source has been silent for 1.5 seconds, the next valid message
   is accepted whatever its sequence or source. A different source replaces all groups.
 - **Pause.** A paused group holds synchronized playback on its current frame. Resuming continues

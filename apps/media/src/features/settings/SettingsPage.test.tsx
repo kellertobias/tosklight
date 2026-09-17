@@ -607,7 +607,7 @@ describe("the settings page", () => {
 		await openSettings("Network & DMX");
 		await screen.findByRole("article", { name: "Main DMX input settings" });
 		await choose(
-			"Each layer's Playback BPM channel",
+			"Each layer's Playback BPM (Media pane)",
 			"Light desk Speed Group B",
 		);
 
@@ -624,7 +624,7 @@ describe("the settings page", () => {
 			screen.queryByText(/Saved output changes take effect/u),
 		).not.toBeInTheDocument();
 
-		await choose("Light desk Speed Group B", "Each layer's Playback BPM channel");
+		await choose("Light desk Speed Group B", "Each layer's Playback BPM (Media pane)");
 		await waitFor(() => expect(output.writes).toHaveLength(2));
 		expect(output.writes[1]).toEqual({
 			requestId: expect.any(String),

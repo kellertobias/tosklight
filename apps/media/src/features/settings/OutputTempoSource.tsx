@@ -2,7 +2,7 @@
 //
 // Unlike the DMX patch, this applies live: the next frame follows the new source. It is chosen once
 // for the output, never per layer, so there is no priority race between a Speed Group and a
-// layer's own Playback BPM channel.
+// layer's own Playback BPM, set in the Media pane (it is not a DMX channel).
 
 import { SelectField } from "@tosklight/ui/controls";
 import { requestId } from "../../shared/api/editing";
@@ -27,7 +27,7 @@ export function OutputTempoSource({
 			? String(output.speedGroup)
 			: CHANNEL;
 	const options = [
-		{ value: CHANNEL, label: "Each layer's Playback BPM channel" },
+		{ value: CHANNEL, label: "Each layer's Playback BPM (Media pane)" },
 		...DESK_GROUPS.map((letter, index) => ({
 			value: String(index + 1),
 			label: `Light desk Speed Group ${letter}`,

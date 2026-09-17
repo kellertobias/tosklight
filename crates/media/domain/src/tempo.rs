@@ -1,7 +1,7 @@
 //! Tempo sources.
 //!
 //! Each output has exactly one explicit tempo source. There is no implicit priority race between
-//! a desk Speed Group and the per-layer Playback BPM channel: selecting one disables the other
+//! a desk Speed Group and the per-layer Playback BPM (a Media pane control, not a DMX channel): selecting one disables the other
 //! for that output.
 
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,7 @@ pub enum TempoSource {
     /// Follow a Light desk Speed Group. When the group goes stale the output holds the last
     /// clock and warns; it never silently falls back to the channel.
     SpeedGroup { group_id: SpeedGroupId },
-    /// Follow each layer's own Playback BPM channel. Zero on the wire means off.
+    /// Follow each layer's own Playback BPM. Zero on the wire means off.
     #[default]
     PlaybackBpmChannel,
 }
@@ -169,7 +169,7 @@ pub struct OutputTempo {
 }
 
 impl OutputTempo {
-    /// The tempo one layer follows, given its own Playback BPM channel.
+    /// The tempo one layer follows, given its own Playback BPM.
     pub fn resolve(
         &self,
         channel_bpm: Option<u8>,
