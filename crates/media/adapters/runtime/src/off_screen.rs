@@ -54,6 +54,19 @@ fn shown_region(
         .find(|region| region.enabled)
 }
 
+/// Runs [`run`] on its own named thread.
+pub(crate) fn spawn(
+    configuration: &MediaConfiguration,
+    shared: Shared,
+    shutdown: Shutdown,
+) -> Option<std::thread::JoinHandle<()>> {
+    let configuration = configuration.clone();
+    std::thread::Builder::new()
+        .name("media-off-screen".into())
+        .spawn(move || run(&configuration, shared, shutdown))
+        .ok()
+}
+
 pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdown) {
     if !any(configuration) {
         return;

@@ -646,7 +646,7 @@ pub(super) fn native_media_action(fixture: &light_fixture::PatchedFixture) -> Op
 
 /// The Media Server output this fixture was patched to, when the patch names one. A fixture
 /// patched by address only (or before outputs were bound) follows the server's first output.
-fn native_media_bound_output(
+pub(super) fn native_media_bound_output(
     state: &AppState,
     fixture_id: light_core::FixtureId,
 ) -> Result<Option<String>, ApiError> {

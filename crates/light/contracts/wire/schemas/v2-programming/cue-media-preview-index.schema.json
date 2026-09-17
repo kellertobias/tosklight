@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueMediaPreviewIndex",
+  "type": "object",
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CueMediaPreviewEntry"
+      }
+    },
+    "show_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "show_id",
+    "entries"
+  ],
+  "$defs": {
+    "CueMediaPreviewEntry": {
+      "description": "One Cue whose preview a Media Server draws.",
+      "type": "object",
+      "properties": {
+        "cue_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cue_list_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "layer": {
+          "description": "Zero-based layer for a layer preview.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "layer_fixture_id": {
+          "description": "The layer's logical-head fixture for a layer preview.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "output_id": {
+          "description": "The server's patched output, or `None` when the fixture follows the server's first output.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preview_key": {
+          "description": "Changes whenever the picture would: a different server, output, layer, or programmed\nstate. A desk uses it as the image's cache identity.",
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "scope": {
+          "$ref": "#/$defs/CueMediaPreviewScope"
+        },
+        "server_fixture_id": {
+          "description": "The patched Media Server fixture (the parent that owns the master and the layer heads).",
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "cue_id",
+        "cue_list_id",
+        "server_fixture_id",
+        "output_id",
+        "scope",
+        "layer",
+        "layer_fixture_id",
+        "preview_key"
+      ]
+    },
+    "CueMediaPreviewScope": {
+      "description": "Whether a Cue previews a whole output or one logical layer.",
+      "oneOf": [
+        {
+          "description": "The composited Program image of the Media Server output, master included.",
+          "type": "string",
+          "const": "program"
+        },
+        {
+          "description": "One logical layer's composited image, with its transparency kept.",
+          "type": "string",
+          "const": "layer"
+        }
+      ]
+    }
+  }
+}

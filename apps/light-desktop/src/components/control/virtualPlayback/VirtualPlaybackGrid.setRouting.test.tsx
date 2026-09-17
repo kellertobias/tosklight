@@ -17,6 +17,9 @@ vi.mock(
 		}),
 	}),
 );
+vi.mock("./useSingleCuePreviews", () => ({
+	useSingleCuePreviews: () => new Map(),
+}));
 vi.mock("../../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useActiveShowId: () => "show-a",
 }));

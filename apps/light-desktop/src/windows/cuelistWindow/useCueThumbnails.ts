@@ -128,13 +128,30 @@ function trackedStates(
 	groups: readonly ShowObject<"group">[],
 	live: VisualizationSnapshot,
 	geometry: string,
+	independent: boolean,
 ) {
-	let state: VisualizationSnapshot = { ...live, values: [] };
+	const empty: VisualizationSnapshot = { ...live, values: [] };
+	let state = empty;
 	return cues.map((cue) => {
-		state = cueVisualization(state, cueChanges(cue, groups));
+		state = cueVisualization(independent ? empty : state, cueChanges(cue, groups));
 		return { state, hash: cueStateHash(state.values, geometry) };
 	});
 }
+
+export interface CueThumbnailOptions {
+	/**
+	 * Cues pictured elsewhere (by their Media Server). They are neither drawn nor fetched here, so
+	 * a Stage picture never stands in for a media Cue.
+	 */
+	exclude?: ReadonlySet<string>;
+	/**
+	 * Each Cue is the first Cue of its own Cuelist, so none tracks from another. Used for the
+	 * single-Cue Cuelists on Virtual Playbacks.
+	 */
+	independent?: boolean;
+}
+
+const NOTHING_EXCLUDED: ReadonlySet<string> = new Set();
 
 function useGroupAuthorityGeneration(enabled: boolean) {
 	const store = useShowObjectsStore();
@@ -159,7 +176,13 @@ function useGroupAuthorityGeneration(enabled: boolean) {
  * Drawing needs the 3D renderer, but displaying does not: a desk with no renderer still shows the
  * pictures another desk stored.
  */
-export function useCueThumbnails(cues: Cue[], active: boolean) {
+export function useCueThumbnails(
+	cues: Cue[],
+	active: boolean,
+	options: CueThumbnailOptions = {},
+) {
+	const exclude = options.exclude ?? NOTHING_EXCLUDED;
+	const independent = options.independent ?? false;
 	const readVisualization = useVisualizationRuntimeRead();
 	const groups = usePortableGroups(active);
 	const groupsReady = useShowObjectCollectionsReady(GROUP_KINDS, active);
@@ -180,7 +203,7 @@ export function useCueThumbnails(cues: Cue[], active: boolean) {
 			const live = await readVisualization();
 			if (cancelled) return;
 			const geometry = stageGeometryTag(stageFixtures);
-			const tracked = trackedStates(cues, groups, live, geometry);
+			const tracked = trackedStates(cues, groups, live, geometry, independent);
 
 			const stored = new Map<string, string>();
 			if (previews?.available) {
@@ -194,6 +217,7 @@ export function useCueThumbnails(cues: Cue[], active: boolean) {
 			const fetched: number[] = [];
 			for (let index = 0; index < cues.length; index++) {
 				const cueId = cues[index].id;
+				if (cueId && exclude.has(cueId)) continue;
 				const current = cueId ? stored.get(cueId) : undefined;
 				if (current !== undefined && current === tracked[index].hash) {
 					fetched.push(index);
@@ -266,7 +290,9 @@ export function useCueThumbnails(cues: Cue[], active: boolean) {
 		authorityGeneration,
 		canDraw,
 		cues,
+		exclude,
 		groups,
+		independent,
 		groupsReady,
 		previews,
 		readVisualization,

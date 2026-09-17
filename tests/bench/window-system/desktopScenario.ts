@@ -703,10 +703,20 @@ async function applyPaneConfiguration<T extends PaneType>(
 		if (
 			options.cueListSource !== "follow-selection" &&
 			options.fixedCueListNumber !== undefined
-		)
+		) {
+			// A shared select: its button opens a listbox of "<number> · <name>" options.
 			await dialog
-				.getByLabel("Cuelist")
-				.selectOption(String(options.fixedCueListNumber));
+				.getByText("Cuelist", { exact: true })
+				.locator("..")
+				.getByRole("button")
+				.click();
+			await page
+				.getByRole("listbox", { name: "Cuelist" })
+				.getByRole("option", {
+					name: new RegExp(`^${options.fixedCueListNumber} · `),
+				})
+				.click();
+		}
 		await setSwitch(dialog, "Cue sidebar", options.showCueSidebar);
 	}
 	if (options.showGroupShortcuts !== undefined) {

@@ -2,6 +2,7 @@ import { WindowHeader } from "@tosklight/ui/window-kit";
 import { ModalFrame } from "@tosklight/ui/modals";
 import { useState } from "react";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
+import type { Cue } from "../../api/types";
 import type { WindowProps } from "../windowTypes";
 import { CuePropertyModal } from "./CueProperties";
 import {
@@ -12,7 +13,9 @@ import {
 import { useCueTimingProgress } from "./cueTimingProgress";
 import { useCueEditor } from "./useCueEditor";
 import { useSelectedCuelist } from "./useCuelistSelection";
-import { useCueThumbnails } from "./useCueThumbnails";
+import { useCuelistPreviews } from "./useCuelistPreviews";
+
+const NO_CUES: Cue[] = [];
 
 function emptyState(
 	cueListAvailable: boolean,
@@ -86,7 +89,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		props.active,
 		props.fixedCueListId,
 	);
-	const cues = selection.cueList?.cues ?? [];
+	const cues = selection.cueList?.cues ?? NO_CUES;
 	const editor = useCueEditor({
 		cues,
 		selectedCueObject: selection.selectedCueObject,
@@ -94,8 +97,8 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		followActiveCue:
 			props.cueListTab === "cues" && props.cueListSource === "follow-selection",
 	});
-	const generatedThumbnails = useCueThumbnails(cues, props.active);
-	const thumbnails = props.thumbnails ?? generatedThumbnails;
+	const previews = useCuelistPreviews(cues, props.active, props.thumbnails);
+	const opened = previews.pictureAt(previewCue);
 	const timingProgressByRow = useCueTimingProgress(cues, selection.active);
 	const command = useCommandLineSurface({
 		enabled: props.active && !props.viewOnly,
@@ -145,7 +148,9 @@ export function CuelistDetail(props: CuelistDetailProps) {
 					active={selection.active}
 					selectedCue={editor.selectedCue}
 					settingsOpen={props.settingsOpen}
-					thumbnails={thumbnails}
+					thumbnails={previews.thumbnails}
+					mediaPreviews={previews.mediaPreviews}
+					onRetryMediaPreviews={previews.retry}
 					emptyState={emptyState(
 						Boolean(selection.cueList),
 						props.cueListTab,
@@ -196,7 +201,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						}}
 					/>
 				)}
-				{previewCue !== null && cues[previewCue] && thumbnails[previewCue] && (
+				{previewCue !== null && cues[previewCue] && opened && (
 					<ModalFrame
 						id={`cue-preview-${cues[previewCue].id ?? cues[previewCue].number}`}
 						ariaLabel={`Cue ${cues[previewCue].number} preview image`}
@@ -205,9 +210,11 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						dialogClassName="cuelist-preview-modal"
 						onClose={() => setPreviewCue(null)}
 					>
-						<div className="cuelist-preview-modal-body">
+						<div
+							className={`cuelist-preview-modal-body ${opened.scope ? `scope-${opened.scope}` : ""}`.trim()}
+						>
 							<img
-								src={thumbnails[previewCue]}
+								src={opened.src}
 								alt={`Cue ${cues[previewCue].number} preview`}
 							/>
 						</div>

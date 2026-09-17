@@ -28,6 +28,10 @@ import {
 } from "../../../features/poolPresentation/poolPresentation";
 import type { VirtualPlaybackZone } from "../../../features/virtualPlaybackZones/contracts";
 import { cueUpdateTarget, requestUpdateTarget } from "../updateWorkflow";
+import {
+	type SingleCuePreview,
+	useSingleCuePreviews,
+} from "./useSingleCuePreviews";
 
 export const MAX_VIRTUAL_PLAYBACK_CELLS = VIRTUAL_PLAYBACKS_PER_PAGE;
 
@@ -65,6 +69,7 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
 	const surfaceKey = poolSurfaceKey(showId, "cuelist", props.paneId);
+	const singleCuePreviews = useSingleCuePreviews(props.page, props.cueLists);
 	const playbackAt = (slot: number) => {
 		const number = virtualPlaybackNumber(props.pageNumber, slot);
 		return props.page?.virtual_playbacks?.[String(number)] ?? null;
@@ -101,6 +106,7 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 					poolPresentation,
 					showId,
 					surfaceKey,
+					singleCuePreviews,
 				)
 			}
 			callbacks={{
@@ -159,6 +165,7 @@ function boxViewModel(
 	poolPresentation: ReturnType<typeof usePoolPresentationConfiguration>,
 	showId: string,
 	surfaceKey: string,
+	singleCuePreviews: ReadonlyMap<number, SingleCuePreview>,
 ): VirtualPlaybackBoxViewModel {
 	const available = validPlaybackSlot(slot);
 	const number = virtualPlaybackNumber(props.pageNumber, slot);
@@ -214,6 +221,10 @@ function boxViewModel(
 				],
 			})
 		: undefined;
+	// The operator's icon or image always wins; only an unconfigured single-Cue Cuelist shows its
+	// Cue preview (useSingleCuePreviews never lists a configured one).
+	const automatic = playback ? singleCuePreviews.get(number) : undefined;
+	const configuredImage = playback?.presentation_image || undefined;
 	return {
 		number,
 		slot,
@@ -222,7 +233,14 @@ function boxViewModel(
 		label: playback?.name,
 		icon: playback?.presentation_icon,
 		color: playback?.color,
-		backgroundImage: playback?.presentation_image,
+		backgroundImage: configuredImage ?? automatic?.src,
+		backgroundImageSource: configuredImage
+			? "configured"
+			: automatic?.src
+				? "cue-preview"
+				: undefined,
+		backgroundImageTransparent: !configuredImage && automatic?.transparent,
+		previewNotice: configuredImage ? undefined : automatic?.notice,
 		actionLabel:
 			playback && action !== "none"
 				? action.replaceAll("_", " ").toUpperCase()

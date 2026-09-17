@@ -15,6 +15,7 @@ use crate::v2::command_line::{
     ReplaceCommandLineRequest,
 };
 use crate::v2::cue_deletion::{CueDeletionErrorResponse, CueDeletionOutcome, CueDeletionRequest};
+use crate::v2::cue_media_previews::{CueMediaPreviewFailure, CueMediaPreviewIndex};
 use crate::v2::cue_recording::{CueRecordErrorResponse, CueRecordOutcome, CueRecordRequest};
 use crate::v2::cue_thumbnails::{
     CueThumbnailErrorResponse, CueThumbnailIndex, CueThumbnailUpdateOutcome,
@@ -246,6 +247,8 @@ fn programming_artifacts() -> Vec<GeneratedArtifact> {
         programming_response_schema::<CueThumbnailUpdateOutcome>("cue-thumbnail-update-outcome"),
         programming_response_schema::<CueThumbnailIndex>("cue-thumbnail-index"),
         programming_response_schema::<CueThumbnailErrorResponse>("cue-thumbnail-error-response"),
+        programming_response_schema::<CueMediaPreviewIndex>("cue-media-preview-index"),
+        programming_response_schema::<CueMediaPreviewFailure>("cue-media-preview-failure"),
         programming_request_schema::<CueTransferRequest>("cue-transfer-request"),
         programming_response_schema::<CueTransferOutcome>("cue-transfer-outcome"),
         programming_response_schema::<CueTransferErrorResponse>("cue-transfer-error-response"),

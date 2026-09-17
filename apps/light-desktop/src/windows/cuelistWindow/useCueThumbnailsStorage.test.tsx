@@ -254,4 +254,58 @@ describe("persisted cue previews", () => {
 		await waitFor(() => expect(result.current).toEqual({ 0: DRAWN }));
 		expect(mocks.previews.store).not.toHaveBeenCalled();
 	});
+
+	it("never draws, stores, or fetches a Stage picture for a Cue its Media Server pictures", async () => {
+		mocks.previews.index.mockResolvedValue([
+			{
+				cueId: CUE_ID,
+				stateHash: expectedHash(),
+				updatedAt: "2026-08-07T00:00:00Z",
+			},
+		]);
+		const cues = [cue()];
+		const exclude = new Set([CUE_ID]);
+
+		const { result } = renderHook(
+			() => useCueThumbnails(cues, true, { exclude }),
+			{ wrapper: wrapper(readyStore()) },
+		);
+
+		await waitFor(() => expect(mocks.previews.index).toHaveBeenCalled());
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(result.current).toEqual({});
+		expect(mocks.renderStageThumbnail).not.toHaveBeenCalled();
+		expect(mocks.previews.imageUrl).not.toHaveBeenCalled();
+		expect(mocks.previews.store).not.toHaveBeenCalled();
+	});
+
+	it("folds each single-Cue Cuelist's Cue from an empty stage", async () => {
+		const first = cue();
+		const second = { ...cue(), id: "22222222-2222-4222-8222-222222222222" };
+		const folded: unknown[][] = [];
+		mocks.cueVisualization.mockImplementation((state) => {
+			folded.push(state.values);
+			return {
+				...state,
+				values: [
+					...state.values,
+					{
+						fixture_id: "stage-fixture",
+						attribute: "intensity",
+						value: { kind: "normalized", value: 1 },
+					},
+				],
+			};
+		});
+
+		const cues = [first, second];
+		const options = { independent: true };
+		const { result } = renderHook(
+			() => useCueThumbnails(cues, true, options),
+			{ wrapper: wrapper(readyStore()) },
+		);
+
+		await waitFor(() => expect(Object.keys(result.current)).toHaveLength(2));
+		expect(folded).toEqual([[], []]);
+	});
 });

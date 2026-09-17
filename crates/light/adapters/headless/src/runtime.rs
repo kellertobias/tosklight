@@ -126,6 +126,7 @@ mod command_timing;
 mod configuration;
 mod control_desk_configuration_v2;
 mod control_inputs;
+mod cue_media_previews_http;
 mod cue_speed_commands;
 mod cue_thumbnails_http;
 mod desk_management_v2;

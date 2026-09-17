@@ -31,6 +31,7 @@ mod network;
 mod output_effects;
 mod outputs;
 mod playback;
+pub mod snapshot;
 mod telemetry;
 mod text;
 mod time;
@@ -115,6 +116,10 @@ pub struct ApiState {
     pub settle: SettleConfiguration,
     /// Requests the renderer's existing CITP composite preview, when this process presents outputs.
     pub preview: RequestOutputPreview,
+    /// Renders a supplied DMX state off-screen, without touching the live output.
+    pub snapshot: snapshot::RenderSnapshot,
+    /// Snapshots already drawn, keyed by everything that shapes them.
+    pub snapshots: Arc<snapshot::SnapshotCache>,
     /// What the running process can tell the API about itself.
     pub diagnostics: Diagnostics,
     /// What recent edits produced, so a retry is answered rather than executed again.
@@ -256,6 +261,10 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/api/v2/outputs/{output}/layers/{layer}/preview",
             get(outputs::layer_preview),
+        )
+        .route(
+            "/api/v2/outputs/{output}/snapshot",
+            post(snapshot::output_snapshot),
         )
         .route(
             "/api/v2/outputs/{output}/playback/{mode}",

@@ -7,6 +7,11 @@ export interface ClientTransport {
 		authenticate?: boolean,
 	): Promise<T>;
 	blob(path: string, init?: RequestInit): Promise<Blob>;
+	/**
+	 * The authenticated response itself, whatever its status, for a caller that needs headers or
+	 * a typed failure body alongside binary content.
+	 */
+	response?(path: string, init?: RequestInit): Promise<Response>;
 	absoluteUrl(path: string): string;
 }
 

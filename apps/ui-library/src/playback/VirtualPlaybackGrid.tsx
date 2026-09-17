@@ -36,6 +36,15 @@ export interface VirtualPlaybackBoxViewModel {
 	icon?: string;
 	color?: string;
 	backgroundImage?: string;
+	/**
+	 * Where `backgroundImage` comes from: the operator's configured image, or the automatic
+	 * default taken from the preview of the Cuelist's only Cue.
+	 */
+	backgroundImageSource?: "configured" | "cue-preview";
+	/** The automatic preview keeps transparency, so it is drawn over a checkerboard. */
+	backgroundImageTransparent?: boolean;
+	/** Why the automatic Cue preview has no picture right now (loading, offline, empty). */
+	previewNotice?: string;
 	actionLabel?: string;
 	heldAction?: boolean;
 	running?: boolean;
@@ -456,6 +465,7 @@ function VirtualPlaybackBox({
 			data-virtual-playback-number={box.number ?? box.slot}
 			data-grid-position={box.position}
 			data-availability={box.availability}
+			{...imageAttributes(box)}
 			data-exclusion-zones={box.exclusionZones?.join(", ") ?? ""}
 			data-exclusion-fence={
 				box.exclusionFence
@@ -481,6 +491,7 @@ function VirtualPlaybackBox({
 				box.exclusionFence?.bottom && "exclusion-fence-bottom",
 				box.exclusionFence?.left && "exclusion-fence-left",
 				box.exclusionSelected && "exclusion-selected",
+				box.backgroundImageTransparent && "cue-preview-transparent",
 				box.poolPresentation?.className,
 			]
 				.filter(Boolean)
@@ -492,12 +503,7 @@ function VirtualPlaybackBox({
 				color: box.color,
 				iconColor: box.color,
 				icon: box.backgroundImage ? undefined : box.icon,
-				image: box.backgroundImage
-					? {
-							src: box.backgroundImage,
-							alt: `${box.label ?? "Playback"} artwork`,
-						}
-					: undefined,
+				image: boxImage(box),
 				status: box.running
 					? "Running"
 					: actionHeld
@@ -542,6 +548,23 @@ function VirtualPlaybackBox({
 	);
 }
 
+/** The tile image: the operator's artwork, or the automatic Cue preview. */
+function boxImage(box: VirtualPlaybackBoxViewModel) {
+	if (!box.backgroundImage) return undefined;
+	const kind =
+		box.backgroundImageSource === "cue-preview" ? "Cue preview" : "artwork";
+	return { src: box.backgroundImage, alt: `${box.label ?? "Playback"} ${kind}` };
+}
+
+function imageAttributes(box: VirtualPlaybackBoxViewModel) {
+	return {
+		"data-image-source": box.backgroundImage
+			? (box.backgroundImageSource ?? "configured")
+			: undefined,
+		"data-preview-notice": box.previewNotice,
+	};
+}
+
 function virtualPlaybackAvailability(box: VirtualPlaybackBoxViewModel) {
 	const assigned = box.availability === "assigned";
 	return {
@@ -556,7 +579,9 @@ function virtualPlaybackSecondary(
 	assigned: boolean,
 ) {
 	return assigned
-		? [box.actionLabel, box.currentCue].filter(Boolean).join(" · ")
+		? [box.actionLabel, box.currentCue, box.previewNotice]
+				.filter(Boolean)
+				.join(" · ")
 		: "Unassigned";
 }
 

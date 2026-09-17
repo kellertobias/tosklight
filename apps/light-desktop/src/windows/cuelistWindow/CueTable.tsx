@@ -1,12 +1,14 @@
 import { Button } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Cue, PlaybackSnapshot } from "../../api/types";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import {
 	useReleaseFadeMillis,
 	useSequenceMasterFadeMillis,
 } from "../../features/configuration/ConfigurationState";
+import { CueMediaPreviewContent } from "../../features/cueThumbnails/CueMediaPreviewView";
+import type { CueMediaPreview } from "../../features/cueThumbnails/useCueMediaPreviews";
 import {
 	cueCommandAddress,
 	cueMutationCommand,
@@ -236,12 +238,27 @@ function CueTimingCells({
 function CuePreviewCell({
 	cueNumber,
 	thumbnail,
+	mediaPreview,
 	onOpenPreview,
+	onRetryMediaPreview,
 }: {
 	cueNumber: string;
 	thumbnail: string | undefined;
+	mediaPreview: CueMediaPreview | undefined;
 	onOpenPreview: () => void;
+	onRetryMediaPreview?: () => void;
 }) {
+	if (mediaPreview)
+		return (
+			<td className="cue-preview-column">
+				<CueMediaPreviewContent
+					cueNumber={cueNumber}
+					preview={mediaPreview}
+					onOpen={onOpenPreview}
+					onRetry={onRetryMediaPreview}
+				/>
+			</td>
+		);
 	return (
 		<td className="cue-preview-column">
 			{thumbnail && (
@@ -270,14 +287,13 @@ function CueTableRow({
 	disabled,
 	propertyEditable,
 	compactRows,
-	thumbnail,
+	preview,
 	mutationTarget,
 	timingProgress,
 	releaseFadeMillis,
 	sequenceMasterFadeMillis,
 	onActivateCue,
 	onActivateProperty,
-	onOpenPreview,
 }: {
 	cue: Cue;
 	index: number;
@@ -287,14 +303,14 @@ function CueTableRow({
 	disabled: boolean;
 	propertyEditable: boolean;
 	compactRows: boolean;
-	thumbnail: string | undefined;
+	/** The Preview cell, built by the table so a row never decides what a preview is. */
+	preview: ReactNode;
 	mutationTarget: ReturnType<typeof cueMutationTarget>;
 	timingProgress: Partial<Record<CueTimingProgressField, number>> | undefined;
 	releaseFadeMillis: number;
 	sequenceMasterFadeMillis: number;
 	onActivateCue: () => void;
 	onActivateProperty: (property: CueEditableProperty) => void;
-	onOpenPreview: () => void;
 }) {
 	return (
 		<tr
@@ -309,13 +325,7 @@ function CueTableRow({
 			}}
 			className={`${active?.cue_index === index ? "current" : active?.effective_next_cue_number === cue.number ? "next" : ""} ${selected ? "selected" : ""} ${mutationTarget ? `${mutationTarget.operation}-target cue-command-target` : ""}`}
 		>
-			{!compactRows && (
-				<CuePreviewCell
-					cueNumber={cue.number}
-					thumbnail={thumbnail}
-					onOpenPreview={onOpenPreview}
-				/>
-			)}
+			{!compactRows && preview}
 			<td>
 				<b>{cue.number}</b>
 				{mutationTarget && (
@@ -420,10 +430,12 @@ export function CueTable({
 	selectedCue,
 	settingsOpen,
 	thumbnails,
+	mediaPreviews = {},
 	emptyState,
 	onSelectCue,
 	onEditCueProperty,
 	onOpenCuePreview,
+	onRetryMediaPreviews,
 	interactive = true,
 	compactRows = false,
 	timingProgressByRow = {},
@@ -435,10 +447,13 @@ export function CueTable({
 	selectedCue: number;
 	settingsOpen: boolean;
 	thumbnails: Record<number, string>;
+	/** Media Server pictures by row; a row listed here never shows a Stage picture. */
+	mediaPreviews?: Record<number, CueMediaPreview>;
 	emptyState: CueTableEmptyState;
 	onSelectCue: (index: number) => void;
 	onEditCueProperty?: (index: number, property: CueEditableProperty) => void;
 	onOpenCuePreview?: (index: number) => void;
+	onRetryMediaPreviews?: () => void;
 	interactive?: boolean;
 	compactRows?: boolean;
 	timingProgressByRow?: CueTimingProgressByRow;
@@ -489,7 +504,15 @@ export function CueTable({
 										interactive && !settingsOpen && Boolean(onEditCueProperty)
 									}
 									compactRows={compactRows}
-									thumbnail={thumbnails[index]}
+									preview={
+										<CuePreviewCell
+											cueNumber={cue.number}
+											thumbnail={thumbnails[index]}
+											mediaPreview={mediaPreviews[index]}
+											onOpenPreview={() => onOpenCuePreview?.(index)}
+											onRetryMediaPreview={onRetryMediaPreviews}
+										/>
+									}
 									mutationTarget={mutationTarget}
 									timingProgress={timingProgressByRow[index]}
 									releaseFadeMillis={releaseFadeMillis}
@@ -498,7 +521,6 @@ export function CueTable({
 									onActivateProperty={(property) =>
 										activateProperty(index, property)
 									}
-									onOpenPreview={() => onOpenCuePreview?.(index)}
 								/>
 							))}
 						</tbody>

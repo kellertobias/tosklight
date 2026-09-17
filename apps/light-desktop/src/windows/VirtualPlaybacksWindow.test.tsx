@@ -302,6 +302,10 @@ vi.mock("../features/playbackRuntime/PlaybackRuntimeView", () => ({
 vi.mock("../features/virtualPlaybackZones/VirtualPlaybackZonesContext", () => ({
 	useVirtualPlaybackZones: () => ({ ...mocks.zoneCapability }),
 }));
+// Automatic single-Cue images have their own coverage; this suite drives the grid's controls.
+vi.mock("../components/control/virtualPlayback/useSingleCuePreviews", () => ({
+	useSingleCuePreviews: () => new Map(),
+}));
 vi.mock("../features/showObjects/ShowObjectsView", () => ({
 	useShowObjectView: vi.fn(),
 }));

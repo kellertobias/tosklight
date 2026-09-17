@@ -5,6 +5,7 @@ mod channel_slots;
 mod contribution;
 mod contribution_batch;
 mod controls;
+mod cue_preview;
 mod engine;
 mod fixture;
 mod frame_pool;
@@ -40,6 +41,7 @@ mod visualization;
 pub use contribution_batch::{
     ContributionBatch, ContributionSample, ContributionSequenceMaster, ContributionSourceId,
 };
+pub use cue_preview::{CuePreviewState, TrackedCueValue, cue_preview_state, render_fixture_slots};
 pub use engine::Engine;
 pub use lifecycle::PreparedEngineSnapshot;
 pub use model::{

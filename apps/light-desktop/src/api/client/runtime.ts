@@ -55,6 +55,8 @@ export class LightClientRuntime {
 			request: <T>(path: string, init?: RequestInit, authenticate?: boolean) =>
 				this.request<T>(path, init, authenticate),
 			blob: (path: string, init?: RequestInit) => this.requestBlob(path, init),
+			response: (path: string, init?: RequestInit) =>
+				this.requestResponse(path, init),
 			absoluteUrl: (path: string) => `${this.baseUrl}${path}`,
 			sendAction: (action: LiveAction, requestId?: string) =>
 				this.sendAction(action, requestId ?? crypto.randomUUID()),
@@ -317,15 +319,22 @@ export class LightClientRuntime {
 		path: string,
 		init: RequestInit = {},
 	): Promise<Blob> {
+		const response = await this.requestResponse(path, init);
+		if (!response.ok) throw new Error(await response.text());
+		return response.blob();
+	}
+
+	private async requestResponse(
+		path: string,
+		init: RequestInit = {},
+	): Promise<Response> {
 		if (!this.session) throw new Error("A server session is required");
 		const headers = this.boundaryHeaders(new Headers(init.headers));
 		headers.set("authorization", `Bearer ${this.session.token}`);
-		const response = await fetch(`${this.baseUrl}${path}`, {
+		return fetch(`${this.baseUrl}${path}`, {
 			...init,
 			headers,
 		});
-		if (!response.ok) throw new Error(await response.text());
-		return response.blob();
 	}
 
 	private async request<T>(

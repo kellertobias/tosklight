@@ -808,6 +808,69 @@
 	border: 1px solid var(--line2);
 	border-radius: 3px;
 }
+/* Media Server Cue previews: a layer keeps its transparency over a checkerboard, and every state
+   without a picture is a labelled placeholder of the same size. */
+.cue-table td .cue-media-preview {
+	position: relative;
+}
+.cue-media-preview.scope-layer img,
+.cuelist-preview-modal-body.scope-layer img {
+	object-fit: contain;
+	background-color: #161b20;
+	background-image:
+		linear-gradient(45deg, #29313a 25%, transparent 25%),
+		linear-gradient(-45deg, #29313a 25%, transparent 25%),
+		linear-gradient(45deg, transparent 75%, #29313a 75%),
+		linear-gradient(-45deg, transparent 75%, #29313a 75%);
+	background-size: 12px 12px;
+	background-position:
+		0 0,
+		0 6px,
+		6px -6px,
+		-6px 0;
+}
+.cue-media-preview.scope-program img {
+	object-fit: contain;
+	background: #000;
+}
+.cue-table td .cue-media-preview-placeholder {
+	display: grid;
+	width: 82px;
+	min-height: 46px;
+	height: 46px;
+	padding: 2px 4px;
+	place-content: center;
+	gap: 1px;
+	border: 1px dashed var(--line2);
+	border-radius: 3px;
+	background: #10151a;
+	color: var(--muted);
+	font-size: 10px;
+	line-height: 1.15;
+	text-align: center;
+}
+.cue-table td .cue-media-preview-placeholder.state-offline,
+.cue-table td .cue-media-preview-placeholder.state-missing {
+	border-color: color-mix(in srgb, var(--red) 55%, var(--line2));
+	color: var(--red);
+}
+.cue-media-preview-placeholder .cue-media-preview-notice {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.cue-media-preview-action {
+	color: var(--cyan);
+	font-weight: 600;
+}
+.cue-table td .cue-preview-image-button.cue-media-preview .cue-media-preview-notice {
+	position: absolute;
+	inset: auto 1px 1px;
+	padding: 1px 2px;
+	background: rgb(0 0 0 / 70%);
+	color: var(--muted);
+	font-size: 9px;
+	text-align: center;
+}
 .cue-table.compact-cue-rows {
 	min-width: 994px;
 }

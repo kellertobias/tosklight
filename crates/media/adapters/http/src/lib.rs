@@ -31,6 +31,10 @@ pub use diagnostics::{
 pub use error::{ApiError, ApiErrorBody};
 pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};
 pub use replay::Replays;
+pub use routes::snapshot::{
+    MAX_SNAPSHOT_EDGE, RenderSnapshot, SnapshotCache, SnapshotFailure, SnapshotImage,
+    SnapshotRequest, renders_nothing,
+};
 pub use routes::{
     ApiState, ApplyConfiguration, OutputPreviewFrame, RequestOutputPreview, SettleConfiguration,
     applies_nothing, router, settles_at_once,

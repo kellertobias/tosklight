@@ -63,6 +63,8 @@ When the Media fixture is patched but CITP is unavailable, the Media pane still 
 
 With CITP connected, the same numeric addresses gain names, thumbnails, and program/layer previews. Treat these as operator feedback. Art-Net or sACN remains authoritative for playback.
 
+Cue previews for media-only Cues come from the server's administration interface on port 8080, not from CITP. The desk sends the DMX state a Cue would leave, and the server draws it off-screen as a Program or layer picture while its output keeps playing (see [Media Server Cue Snapshots](../90-Protocols/04-media-cue-snapshots.md)). When port 8080 is unreachable, those Cues read **Media Server offline** in the Cue list.
+
 > [!danger] Missing graphic
 > Add a four-state Desk Media pane comparison: no Media Server patched, patched without CITP, patched with CITP, and patched server offline.
 

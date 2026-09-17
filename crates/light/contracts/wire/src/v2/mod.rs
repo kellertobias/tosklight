@@ -4,6 +4,7 @@ pub mod attribute_configuration;
 pub mod command_line;
 pub mod control_desk_configuration;
 pub mod cue_deletion;
+pub mod cue_media_previews;
 pub mod cue_recording;
 pub mod cue_thumbnails;
 pub mod cue_transfer;

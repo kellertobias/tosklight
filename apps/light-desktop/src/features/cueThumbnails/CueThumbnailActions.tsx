@@ -5,6 +5,11 @@ import {
 	useMemo,
 } from "react";
 import type {
+	CueMediaPreviewApiClient,
+	CueMediaPreviewEntry,
+	CueMediaPreviewImage,
+} from "../../api/client/cueMediaPreviews";
+import type {
 	CueThumbnailApiClient,
 	CueThumbnailEntry,
 	CueThumbnailUpload,
@@ -22,6 +27,13 @@ interface CueThumbnailActions {
 	index(): Promise<CueThumbnailEntry[]>;
 	imageUrl(cueId: string): Promise<string>;
 	store(uploads: CueThumbnailUpload[]): Promise<void>;
+	/** Cues the addressed Media Server pictures; empty when this desk cannot ask. */
+	mediaIndex(): Promise<CueMediaPreviewEntry[]>;
+	mediaImage(
+		cueId: string,
+		previewKey: string,
+		size: { width: number; height: number },
+	): Promise<CueMediaPreviewImage>;
 }
 
 const CueThumbnailActionsContext = createContext<CueThumbnailActions | null>(
@@ -31,10 +43,12 @@ const CueThumbnailActionsContext = createContext<CueThumbnailActions | null>(
 export function CueThumbnailActionsProvider({
 	children,
 	client,
+	mediaClient,
 	showId,
 	canWrite,
 }: PropsWithChildren<{
 	client: CueThumbnailApiClient;
+	mediaClient?: CueMediaPreviewApiClient;
 	showId: string | null;
 	canWrite: boolean;
 }>) {
@@ -51,8 +65,16 @@ export function CueThumbnailActionsProvider({
 				if (!showId || !canWrite || !uploads.length) return;
 				await client.store(showId, uploads);
 			},
+			mediaIndex: () =>
+				showId && mediaClient
+					? mediaClient.index(showId)
+					: Promise.resolve([]),
+			mediaImage: (cueId, previewKey, size) =>
+				showId && mediaClient
+					? mediaClient.image(showId, cueId, previewKey, size)
+					: Promise.reject(new Error("no active show")),
 		}),
-		[canWrite, client, showId],
+		[canWrite, client, mediaClient, showId],
 	);
 	return (
 		<CueThumbnailActionsContext.Provider value={actions}>

@@ -88,6 +88,8 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         }),
         settle: crate::routes::settles_at_once(),
         preview: Arc::new(move |_, _, _| requested_preview.lock().unwrap().clone()),
+        snapshot: crate::routes::snapshot::renders_nothing(),
+        snapshots: Arc::new(crate::routes::snapshot::SnapshotCache::default()),
         diagnostics,
         replays: Arc::new(crate::replay::Replays::new()),
         upload_body_limit: 8 * 1024 * 1024 * 1024 + 1024 * 1024,

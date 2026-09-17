@@ -40,6 +40,8 @@ mod command_http_tests;
 mod control_desk_configuration_v2_tests;
 #[path = "control_mapping_tests.rs"]
 mod control_mapping_tests;
+#[path = "cue_media_preview_route_tests.rs"]
+mod cue_media_preview_route_tests;
 #[path = "cue_thumbnail_route_tests.rs"]
 mod cue_thumbnail_route_tests;
 #[path = "discovery_route_tests.rs"]

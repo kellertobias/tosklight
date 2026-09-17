@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueMediaPreviewFailure",
+  "description": "Body of a failed Cue media preview request.",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "string"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "state": {
+      "$ref": "#/$defs/CueMediaPreviewFailureState"
+    }
+  },
+  "required": [
+    "state",
+    "error",
+    "retryable"
+  ],
+  "$defs": {
+    "CueMediaPreviewFailureState": {
+      "description": "Why a Media Server Cue preview has no picture right now.",
+      "oneOf": [
+        {
+          "description": "The Media Server did not answer.",
+          "type": "string",
+          "const": "offline"
+        },
+        {
+          "description": "The Media Server is still loading the selected media.",
+          "type": "string",
+          "const": "loading"
+        },
+        {
+          "description": "The Cue, the server fixture, or the patched output no longer exists, or the server cannot\ndraw this output.",
+          "type": "string",
+          "const": "missing"
+        }
+      ]
+    }
+  }
+}

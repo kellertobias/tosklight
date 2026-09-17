@@ -36,6 +36,7 @@ pub mod pixel_output;
 pub mod presentation;
 mod preview;
 mod shutdown;
+mod snapshot_render;
 mod speed_groups;
 mod standby;
 mod startup;
@@ -178,7 +179,7 @@ fn run_inner() -> anyhow::Result<()> {
 
     // Off-screen outputs render on their own thread with their own device, so they run whether or
     // not this process also hosts a window. A rack server with no display is still a media server.
-    let off_screen = spawn_off_screen(&configuration, shared.clone(), shutdown.clone());
+    let off_screen = off_screen::spawn(&configuration, shared.clone(), shutdown.clone());
 
     let services = Services {
         configuration: shared.configuration.clone(),
@@ -189,6 +190,7 @@ fn run_inner() -> anyhow::Result<()> {
         apply,
         settle: live_settings.settle(),
         previews: Some(shared.previews.clone()),
+        snapshot: snapshot_render::start(shared.clone(), shutdown.clone()),
     };
     // What decides this is whether a desktop is reachable, not whether an output is configured.
     // The Media Server is an application with a menu bar item; a server with nothing assigned to a
@@ -303,18 +305,6 @@ fn configuration_for(arguments: &[String]) -> anyhow::Result<Option<MediaConfigu
         return Ok(None);
     }
     Ok(Some(configuration))
-}
-
-fn spawn_off_screen(
-    configuration: &MediaConfiguration,
-    shared: presentation::Shared,
-    shutdown: Shutdown,
-) -> Option<std::thread::JoinHandle<()>> {
-    let configuration = configuration.clone();
-    std::thread::Builder::new()
-        .name("media-off-screen".into())
-        .spawn(move || off_screen::run(&configuration, shared, shutdown))
-        .ok()
 }
 
 fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
@@ -853,6 +843,7 @@ pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> any
         apply: media_http::applies_nothing(),
         settle: media_http::settles_at_once(),
         previews: None,
+        snapshot: media_http::renders_nothing(),
     })
     .await
 }
@@ -877,6 +868,8 @@ pub struct Services {
     pub settle: media_http::SettleConfiguration,
     /// The compositor/CITP preview slots, when this process owns a renderer.
     pub previews: Option<preview::SharedPreviews>,
+    /// Draws a supplied DMX state off-screen for a desk's Cue preview.
+    pub snapshot: media_http::RenderSnapshot,
 }
 
 /// Brings the API up, waits for shutdown, and takes it back down.
@@ -893,6 +886,7 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
         apply,
         settle,
         previews,
+        snapshot,
     } = services;
     let configuration = live.load_full();
     let resolved = configuration.network.resolved();
@@ -968,6 +962,8 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
                 bytes: frame.bytes.clone(),
             })
         }),
+        snapshot,
+        snapshots: std::sync::Arc::new(media_http::SnapshotCache::default()),
         diagnostics,
         replays: std::sync::Arc::new(media_http::Replays::new()),
         // Multipart framing adds a small amount around the library's authoritative payload bound.

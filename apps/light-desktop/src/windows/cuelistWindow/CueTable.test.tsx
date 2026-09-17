@@ -275,3 +275,125 @@ describe("CueTable command targets", () => {
 		expect(unsupported.command.replace).not.toHaveBeenCalled();
 	});
 });
+
+describe("CueTable Media Server previews", () => {
+	const entry = {
+		cueId: "cue-1",
+		cueListId: "list",
+		serverFixtureId: "server-a",
+		outputId: "output-a",
+		scope: "layer" as const,
+		layer: 1,
+		layerFixtureId: "layer-2",
+		previewKey: "key-1",
+	};
+
+	function table(
+		mediaPreview: Parameters<typeof CueTable>[0]["mediaPreviews"],
+		handlers: { onOpen?: () => void; onRetry?: () => void } = {},
+	) {
+		return render(
+			<CueTable
+				cues={[cue]}
+				active={undefined}
+				selectedCue={0}
+				settingsOpen={false}
+				thumbnails={{ 0: "blob:stage-picture" }}
+				mediaPreviews={mediaPreview}
+				emptyState={{ title: "Empty", description: "Empty", icon: "◎" }}
+				onSelectCue={vi.fn()}
+				onOpenCuePreview={handlers.onOpen}
+				onRetryMediaPreviews={handlers.onRetry}
+			/>,
+		);
+	}
+
+	it("shows the layer picture with its scope instead of any Stage picture", () => {
+		const onOpen = vi.fn();
+		const view = table(
+			{ 0: { state: "ready", entry, src: "blob:layer-picture" } },
+			{ onOpen },
+		);
+		const button = screen.getByRole("button", {
+			name: "Open Cue 1 Layer 2 preview",
+		});
+		expect(button).toHaveAttribute("data-media-scope", "layer");
+		expect(button).toHaveAttribute("data-media-server", "server-a");
+		expect(button).toHaveClass("scope-layer");
+		expect(button.querySelector("img")).toHaveAttribute("src", "blob:layer-picture");
+		expect(
+			view.container.querySelector('img[src="blob:stage-picture"]'),
+		).toBeNull();
+		fireEvent.click(button);
+		expect(onOpen).toHaveBeenCalledOnce();
+	});
+
+	it("labels loading, empty, missing, and offline states without a broken image", () => {
+		const onRetry = vi.fn();
+		const program = { ...entry, scope: "program" as const, layer: null };
+		const { rerender } = table({ 0: { state: "loading", entry: program } });
+		expect(
+			screen.getByRole("status", { name: "Cue 1 Loading media preview" }),
+		).toHaveAttribute("data-media-state", "loading");
+		expect(document.querySelector(".cue-preview-column img")).toBeNull();
+
+		rerender(
+			<CueTable
+				cues={[cue]}
+				active={undefined}
+				selectedCue={0}
+				settingsOpen={false}
+				thumbnails={{}}
+				mediaPreviews={{
+					0: { state: "empty", entry: program, src: "blob:black" },
+				}}
+				emptyState={{ title: "Empty", description: "Empty", icon: "◎" }}
+				onSelectCue={vi.fn()}
+			/>,
+		);
+		expect(
+			screen.getByRole("button", { name: "Open Cue 1 Program preview" }),
+		).toHaveTextContent("Empty media");
+
+		rerender(
+			<CueTable
+				cues={[cue]}
+				active={undefined}
+				selectedCue={0}
+				settingsOpen={false}
+				thumbnails={{}}
+				mediaPreviews={{
+					0: { state: "missing", entry: program, error: "no output" },
+				}}
+				emptyState={{ title: "Empty", description: "Empty", icon: "◎" }}
+				onSelectCue={vi.fn()}
+			/>,
+		);
+		expect(
+			screen.getByRole("status", { name: "Cue 1 Media output missing" }),
+		).toHaveAttribute("title", "no output");
+
+		rerender(
+			<CueTable
+				cues={[cue]}
+				active={undefined}
+				selectedCue={0}
+				settingsOpen={false}
+				thumbnails={{}}
+				mediaPreviews={{
+					0: { state: "offline", entry: program, error: "no answer" },
+				}}
+				emptyState={{ title: "Empty", description: "Empty", icon: "◎" }}
+				onSelectCue={vi.fn()}
+				onRetryMediaPreviews={onRetry}
+			/>,
+		);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Cue 1 Media Server offline. Retry the Program preview",
+			}),
+		);
+		expect(onRetry).toHaveBeenCalledOnce();
+		expect(document.querySelector(".cue-preview-column img")).toBeNull();
+	});
+});

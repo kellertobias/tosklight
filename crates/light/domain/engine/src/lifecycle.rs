@@ -316,6 +316,16 @@ fn snapshot_groups(snapshot: &EngineSnapshot) -> HashMap<String, GroupDefinition
         .collect()
 }
 
+/// The Cuelist as playback registers it, for a Cue preview that must spread Group values the same
+/// way playback does.
+pub(crate) fn expand_group_references_for_preview(
+    source: &CueList,
+    groups: &HashMap<String, GroupDefinition>,
+    stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+) -> CueList {
+    expand_group_references(source, groups, stage_positions)
+}
+
 fn expand_group_references(
     source: &CueList,
     groups: &HashMap<String, GroupDefinition>,

@@ -327,24 +327,8 @@ pub fn encode(
     })
 }
 
-/// Encodes one compositor frame into CITP JPEG and browser-safe bytes.
-fn encode_publication(
-    pixels: &[u8],
-    from: Size,
-    to: Size,
-    layer: bool,
-) -> anyhow::Result<(Thumbnail, WebPreview)> {
-    if !layer {
-        let citp = encode(pixels, from, to)?;
-        let web = WebPreview {
-            width: citp.width,
-            height: citp.height,
-            content_type: "image/jpeg",
-            bytes: citp.jpeg.clone(),
-        };
-        return Ok((citp, web));
-    }
-
+/// Scales a premultiplied compositor frame to at most `to` and converts it to straight alpha.
+pub(crate) fn straight_rgba(pixels: &[u8], from: Size, to: Size) -> (Vec<u8>, u32, u32) {
     let width = to.width.clamp(1, from.width.max(1));
     let height = to.height.clamp(1, from.height.max(1));
     let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
@@ -370,14 +354,41 @@ fn encode_publication(
             *channel = ((u16::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
         }
     }
+    (rgba, width, height)
+}
 
+/// Encodes straight-alpha RGBA as an 8-bit PNG.
+pub(crate) fn encode_png(rgba: &[u8], width: u32, height: u32) -> anyhow::Result<Vec<u8>> {
     let mut png_bytes = Vec::new();
     {
         let mut encoder = png::Encoder::new(&mut png_bytes, width, height);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
-        encoder.write_header()?.write_image_data(&rgba)?;
+        encoder.write_header()?.write_image_data(rgba)?;
     }
+    Ok(png_bytes)
+}
+
+/// Encodes one compositor frame into CITP JPEG and browser-safe bytes.
+fn encode_publication(
+    pixels: &[u8],
+    from: Size,
+    to: Size,
+    layer: bool,
+) -> anyhow::Result<(Thumbnail, WebPreview)> {
+    if !layer {
+        let citp = encode(pixels, from, to)?;
+        let web = WebPreview {
+            width: citp.width,
+            height: citp.height,
+            content_type: "image/jpeg",
+            bytes: citp.jpeg.clone(),
+        };
+        return Ok((citp, web));
+    }
+
+    let (rgba, width, height) = straight_rgba(pixels, from, to);
+    let png_bytes = encode_png(&rgba, width, height)?;
 
     // CITP StFr is JPEG and cannot carry alpha. Composite its representation over the same
     // checkerboard the web UI exposes behind the transparent PNG, so both operator surfaces show

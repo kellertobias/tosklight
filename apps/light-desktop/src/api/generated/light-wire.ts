@@ -378,6 +378,32 @@ export type CueThumbnailUpdateOutcome = { request_id: string, correlation_id: st
 skipped_cue_ids: Array<string>, };
 export type CueThumbnailErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 export type CueThumbnailErrorResponse = { kind: CueThumbnailErrorKind, error: string, retryable: boolean, };
+export type CueMediaPreviewScope = "program" | "layer";
+export type CueMediaPreviewEntry = { cue_id: string, cue_list_id: string,
+/**
+ * The patched Media Server fixture (the parent that owns the master and the layer heads).
+ */
+server_fixture_id: string,
+/**
+ * The server's patched output, or `None` when the fixture follows the server's first output.
+ */
+output_id?: string | null, scope: CueMediaPreviewScope,
+/**
+ * Zero-based layer for a layer preview.
+ */
+layer?: number | null,
+/**
+ * The layer's logical-head fixture for a layer preview.
+ */
+layer_fixture_id?: string | null,
+/**
+ * Changes whenever the picture would: a different server, output, layer, or programmed
+ * state. A desk uses it as the image's cache identity.
+ */
+preview_key: string, };
+export type CueMediaPreviewIndex = { show_id: string, entries: Array<CueMediaPreviewEntry>, };
+export type CueMediaPreviewFailureState = "offline" | "loading" | "missing";
+export type CueMediaPreviewFailure = { state: CueMediaPreviewFailureState, error: string, retryable: boolean, };
 export type CueTransferMode = "plain" | "status";
 export type CueTransferRequest = { request_id: string, choice_id: string, mode: CueTransferMode, expected_command_line_revision: number, };
 export type CueTransferObjectProjection = { cue_list_id: string, object_id: string, object_revision: number, body: unknown, };

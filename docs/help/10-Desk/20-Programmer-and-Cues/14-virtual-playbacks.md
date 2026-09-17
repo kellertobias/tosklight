@@ -10,6 +10,10 @@ same assignment and runtime, even when their pane layouts differ.
 
 Choose **Follow Main** to display the control desk's current main page, or **Pinned** to keep the pane on one fixed page. Changing the effective page changes only the addresses shown; it never operates a Playback. Right-click a cell, or press `[SET]` and then press the cell, to open the same Playback Configuration modal used by physical controls. A virtual cell is a one-button, faderless playback target with an additional icon or image-background choice.
 
+When a Virtual Playback runs a Cuelist with exactly one Cue and no icon or image has been chosen, the cell shows that Cue's preview as its default image. For a media-only Cue, this is the Media Server's Program or layer picture described in [Cues - Cuelist](../30-Windows/03-cues-and-playbacks.md#cues---cuelist). A grid of such cells therefore shows what each media Cue will put on screen. Layer pictures keep their transparency over a checkerboard. While a media picture is loading, empty, missing, or offline, the cell names that state instead of showing an image.
+
+An icon or image chosen in Playback Configuration always wins over the automatic preview. Removing that choice brings the automatic preview back. The automatic image follows the Cuelist: editing its Cue changes the image, and adding a second Cue or removing the Cue returns the cell to its plain label.
+
 Virtual actions have their own Preload capture switch. This allows physical controls to remain live while virtual actions are queued, or the reverse. Test the chosen capture combination before operation.
 
 Use Virtual Playbacks for task-specific buttons, not as a substitute for assigning and documenting the underlying playback. The target, action, page, and release behavior must remain understandable from playback configuration.

@@ -125,6 +125,7 @@ export function ServerDeskBoundaries({
 												<UsbDmxActionsProvider actions={usbDmxActions}>
 													<CueThumbnailActionsProvider
 														client={state.api.cueThumbnails}
+														mediaClient={state.api.cueMediaPreviews}
 														showId={state.bootstrap?.active_show?.id ?? null}
 														canWrite={
 															sessionRole === "primary" &&

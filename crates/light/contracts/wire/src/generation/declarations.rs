@@ -4,6 +4,7 @@ use crate::v2::attribute_configuration::*;
 use crate::v2::command_line::*;
 use crate::v2::control_desk_configuration::*;
 use crate::v2::cue_deletion::*;
+use crate::v2::cue_media_previews::*;
 use crate::v2::cue_recording::*;
 use crate::v2::cue_thumbnails::*;
 use crate::v2::cue_transfer::*;
@@ -770,6 +771,11 @@ fn programming(config: &Config) -> Vec<String> {
         CueThumbnailUpdateOutcome::decl(config),
         CueThumbnailErrorKind::decl(config),
         CueThumbnailErrorResponse::decl(config),
+        CueMediaPreviewScope::decl(config),
+        CueMediaPreviewEntry::decl(config),
+        CueMediaPreviewIndex::decl(config),
+        CueMediaPreviewFailureState::decl(config),
+        CueMediaPreviewFailure::decl(config),
         CueTransferMode::decl(config),
         CueTransferRequest::decl(config),
         CueTransferObjectProjection::decl(config),
