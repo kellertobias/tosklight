@@ -27,9 +27,7 @@ describe("the Media Server operator surface", () => {
 		const dock = screen.getByRole("complementary", {
 			name: "Media Server sections",
 		});
-		expect(
-			within(dock).getByLabelText("ToskLight Pixel"),
-		).toBeInTheDocument();
+		expect(within(dock).getByLabelText("ToskLight Pixel")).toBeInTheDocument();
 		expect(dock.querySelector(".media-operator-mark img")).toHaveAttribute(
 			"src",
 			expect.stringContaining("ToskLight%20Pixel.svg"),
@@ -78,6 +76,51 @@ describe("the Media Server operator surface", () => {
 				.getAllByRole("tab")
 				.map((button) => button.textContent),
 		).toEqual(MEDIA_SETTINGS_SECTIONS.map((section) => section.label));
+	});
+
+	it("scrolls the settings section by keyboard and starts a new section at its top", () => {
+		const scrollTo = vi.fn();
+		Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+			configurable: true,
+			value: scrollTo,
+		});
+		const { rerender } = render(
+			<MediaSettingsLayout active="network">
+				<p>Network content</p>
+			</MediaSettingsLayout>,
+		);
+		const content = screen.getByRole("region", { name: "Settings section" });
+		expect(content).toHaveAttribute("tabindex", "0");
+		expect(content).toHaveTextContent("Network content");
+		scrollTo.mockClear();
+
+		rerender(
+			<MediaSettingsLayout active="picture-output">
+				<p>Picture content</p>
+			</MediaSettingsLayout>,
+		);
+		expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+		Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
+	});
+
+	it("keeps the current dock destination in view", () => {
+		const scrollIntoView = vi.fn();
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: scrollIntoView,
+		});
+		render(
+			<MediaServerShell active="settings" connected now={new Date()}>
+				<p>Settings</p>
+			</MediaServerShell>,
+		);
+		expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+		expect(scrollIntoView.mock.contexts[0]).toHaveAttribute(
+			"aria-current",
+			"page",
+		);
+		expect(scrollIntoView.mock.contexts[0]).toHaveAccessibleName("Settings");
+		Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
 	});
 
 	it("identifies the connected Light Desk by its active show", () => {

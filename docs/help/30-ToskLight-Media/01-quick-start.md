@@ -12,6 +12,8 @@ To keep the configuration and media somewhere else, such as a show drive, choose
 
 Open the administration address shown by the server. On the server machine the usual address is `http://127.0.0.1:8080`. If another computer is administering it, use the Media Server machine's permitted network address and allow the configured HTTP port through the firewall.
 
+In a short browser window, the Pixel dock on the left scrolls as one piece, so **Settings**, **Take over playback**, and the connection state stay reachable, and the dock keeps the open destination in view. Each Settings tab scrolls on its own below the window title with the mouse wheel, a trackpad, or touch. Click or tab into the tab's content, then use the arrow keys, **Page Up**/**Page Down**, or **Home**/**End**. Choosing another Settings tab opens it at its top.
+
 ## Development launch
 
 Repository commands are for development, not the normal installed-operator workflow. `npm run open:media` opens the latest existing development build and seeds a development configuration once. `npm run build:media:open` rebuilds before opening it. Those commands use the repository's runtime artifact directory rather than the packaged application-data location.

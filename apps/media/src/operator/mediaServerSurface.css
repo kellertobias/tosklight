@@ -26,6 +26,16 @@
 	background: color-mix(in srgb, var(--panel) 96%, black);
 	border-right: 1px solid var(--line);
 	box-shadow: none;
+	/* One scroll container for the whole sidebar: on a short window every destination, the
+	   playback take-over and the connection stay reachable, and no inner list traps the wheel. */
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+}
+
+.media-operator-dock > * {
+	flex-shrink: 0;
 }
 
 .media-operator-identity {
@@ -66,12 +76,11 @@
 }
 
 .media-operator-dock .ui-operator-destination-list {
-	min-height: 0;
 	display: flex;
-	flex: 1;
+	flex: 1 0 auto;
 	flex-direction: column;
 	gap: 3px;
-	overflow: auto;
+	overflow: visible;
 }
 
 .media-operator-dock .ui-operator-destination {
@@ -984,8 +993,14 @@
 	min-width: 0;
 	min-height: 0;
 	overflow: auto;
+	overscroll-behavior: contain;
 	padding: 10px;
 	box-sizing: border-box;
+}
+
+.media-settings-content:focus-visible {
+	outline: 2px solid var(--cyan);
+	outline-offset: -2px;
 }
 
 .media-audio-window,

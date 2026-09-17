@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import mediaServerCss from "./mediaServerSurface.css?raw";
 
 describe("Media Server library layout contract", () => {
+	it("scrolls the whole dock as one piece instead of its destination list", () => {
+		expect(mediaServerCss).toMatch(
+			/\.media-operator-dock \{[^}]*overflow-y: auto;[^}]*overscroll-behavior: contain;/,
+		);
+		expect(mediaServerCss).toMatch(
+			/\.media-operator-dock \.ui-operator-destination-list \{[^}]*flex: 1 0 auto;[^}]*overflow: visible;/,
+		);
+		expect(mediaServerCss).toMatch(
+			/\.media-settings-content \{[^}]*overflow: auto;[^}]*overscroll-behavior: contain;/,
+		);
+	});
+
 	it("centres the bare playback takeover without an outer control outline", () => {
 		expect(mediaServerCss).toContain(`.media-playback-takeover-dock {
 	display: flex;

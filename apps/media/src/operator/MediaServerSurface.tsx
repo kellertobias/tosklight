@@ -6,7 +6,7 @@ import {
 	WindowFrame,
 	WindowHeader,
 } from "@tosklight/ui/window-kit";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 export const MEDIA_SERVER_SECTIONS = [
 	{ id: "media", label: "Playback", icon: "▣" },
@@ -38,9 +38,17 @@ export function MediaServerShell({
 	playbackOwnership?: ReactNode;
 	onNavigate?: (section: MediaServerSection) => void;
 }) {
+	const dock = useRef<HTMLElement>(null);
+	// The sidebar scrolls as one piece on a short window; the current destination stays in view.
+	useEffect(() => {
+		dock.current
+			?.querySelector('[aria-current="page"]')
+			?.scrollIntoView?.({ block: "nearest" });
+	}, [active]);
 	return (
 		<div className="media-operator-shell">
 			<aside
+				ref={dock}
 				className="left-dock media-operator-dock"
 				aria-label="Media Server sections"
 			>
@@ -255,6 +263,11 @@ export function MediaSettingsLayout({
 	groups?: TitleActionGroup[];
 	children: ReactNode;
 }) {
+	const content = useRef<HTMLElement>(null);
+	// A newly chosen section starts at its top instead of inheriting the previous scroll offset.
+	useEffect(() => {
+		content.current?.scrollTo?.({ top: 0 });
+	}, [active]);
 	return (
 		<WindowFrame
 			title="Settings"
@@ -277,7 +290,15 @@ export function MediaSettingsLayout({
 				...groups,
 			]}
 		>
-			<div className="media-settings-content">{children}</div>
+			<section
+				ref={content}
+				className="media-settings-content"
+				aria-label="Settings section"
+				// biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region takes focus so arrow, Page and Home/End keys scroll it
+				tabIndex={0}
+			>
+				{children}
+			</section>
 		</WindowFrame>
 	);
 }
