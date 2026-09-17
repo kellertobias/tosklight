@@ -42,6 +42,15 @@ import type {
 import type { LiveClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
 
+/**
+ * A coordinated address change for one discovered output: the universe as the chosen DMX input
+ * protocol numbers it, and that protocol (`art-net` or `sacn`) when the desk route names one.
+ */
+export type DiscoveredMediaAddressUpdate = Omit<
+	DiscoveredMediaAddressUpdateRequest,
+	"requestId"
+>;
+
 export interface MediaPreviewRefresh {
 	fixture_id: string;
 	source: number;
@@ -164,12 +173,9 @@ export class MediaOutputApiClient {
 		return this.transport.request("/api/v2/media-servers/discover");
 	}
 
-	updateDiscoveredMediaAddress(input: {
-		host: string;
-		outputId: string;
-		universe: number;
-		startAddress: number;
-	}): Promise<DiscoveredMediaOutput> {
+	updateDiscoveredMediaAddress(
+		input: DiscoveredMediaAddressUpdate,
+	): Promise<DiscoveredMediaOutput> {
 		const request: DiscoveredMediaAddressUpdateRequest = {
 			requestId: crypto.randomUUID(),
 			...input,

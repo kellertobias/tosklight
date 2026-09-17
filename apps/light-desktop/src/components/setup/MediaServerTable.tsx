@@ -20,6 +20,7 @@ export type RowMessage = { tone: "status" | "alert"; text: string };
 export type MediaServerRowActions = {
 	setDraft: (draft: MediaServerDraft) => void;
 	apply: () => void;
+	checkConnection: () => void;
 	refreshThumbnails: () => void;
 	toggleLive: () => void;
 };
@@ -136,6 +137,12 @@ function MediaServerRow({ row }: { row: MediaServerRowView }) {
 							onClick={actions.apply}
 						>
 							{row.busy === "saving" ? "Applying…" : "Apply"}
+						</Button>
+						<Button
+							disabled={!fixture.direct_control || row.busy !== null}
+							onClick={actions.checkConnection}
+						>
+							{row.busy === "checking" ? "Checking…" : "Check connection"}
 						</Button>
 						<Button
 							disabled={!fixture.direct_control || row.busy !== null}

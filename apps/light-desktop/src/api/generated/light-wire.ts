@@ -502,7 +502,17 @@ export type NativeMediaEffectSlot = { index: number, effect_type?: string | null
 export type NativeMediaSnapshot = { endpoint: string, status: string, instance: string, outputs: number, catalog_revision: number, catalog_items: number, text_slots: Array<NativeMediaTextSlot>, effect_controls_available: boolean, output_id?: string | null, effect_layers: Array<Array<NativeMediaEffectSlot>>, };
 export type NativeMediaTextUpdateRequest = { request_id: string, text: string, };
 export type NativeMediaEffectUpdateRequest = { request_id: string, control_id: string, number_value?: number | null, string_value?: string | null, boolean_value?: boolean | null, };
-export type DiscoveredMediaAddressUpdateRequest = { requestId: string, host: string, outputId: string, universe: number, startAddress: number, };
+export type DiscoveredMediaAddressUpdateRequest = { requestId: string, host: string, outputId: string,
+/**
+ * The universe the Media Server listens to, numbered as the chosen protocol numbers it on
+ * the wire (the desk route's destination universe).
+ */
+universe: number, startAddress: number,
+/**
+ * The DMX input protocol the Media Server should listen with (`art-net` or `sacn`), taken
+ * from the desk route that sends the patched universe. Absent keeps the server's protocol.
+ */
+protocol?: string | null, };
 export type DiscoveredMediaOutput = { id: string, name: string, personality: string, protocol: string, universe: number, startAddress: number, dmxPendingRestart: boolean,
 /**
  * The desk Media Server fixture mode for this output's personality (`2 layers` or

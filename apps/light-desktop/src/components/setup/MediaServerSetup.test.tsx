@@ -11,7 +11,9 @@ import type { MediaServerDiscovery } from "../../api/client/mediaOutput";
 import type {
 	FixtureDefinition,
 	MediaServerFixture,
+	OutputRoute,
 	PatchedFixture,
+	VersionedObject,
 } from "../../api/types";
 import {
 	blankFixtureProfile,
@@ -36,6 +38,7 @@ const mocks = vi.hoisted(() => ({
 	deleteFixture: vi.fn(),
 	fixtureLibrary: [] as FixtureDefinition[],
 	patchError: null as string | null,
+	routes: [] as VersionedObject<OutputRoute>[],
 }));
 
 const server = {
@@ -64,6 +67,9 @@ vi.mock("../../features/fixtureLibrary/FixtureLibraryContext", () => ({
 		fixtureLibrary: mocks.fixtureLibrary,
 		fixtureProfiles: [],
 	}),
+}));
+vi.mock("../../features/dmxDiagnostics/DmxDiagnosticsContext", () => ({
+	useDmxDiagnostics: () => ({ outputRoutes: mocks.routes }),
 }));
 vi.mock("../../features/patch/PatchContext", () => ({
 	usePatch: () => ({
@@ -134,6 +140,11 @@ beforeEach(() => {
 	]);
 	mocks.deleteFixture.mockResolvedValue(true);
 	mocks.fixtureLibrary = [toskMediaDefinition()];
+	mocks.routes = [
+		route(4, "sacn", 4),
+		route(7, "sacn", 7),
+		route(9, "art_net", 12),
+	];
 	server.mediaServers = [];
 	fixture = mediaFixture();
 	patchFixtures = [fixture];
@@ -339,7 +350,7 @@ describe("Media server Patch authority", () => {
 		const row = rowFor("Media One");
 		expect(within(row).getByText("● Offline")).toBeInTheDocument();
 		expect(within(row).getByRole("alert")).toHaveTextContent(
-			"CITP connection refused Check the IP address, port, and that the server is running, then Refresh Thumbnails to retry.",
+			"CITP connection refused Check the IP address, port, and that the server is running, then Check connection to retry.",
 		);
 		expect(mocks.inspectMediaServer).toHaveBeenCalledOnce();
 	});
@@ -503,11 +514,14 @@ describe("Media server Patch authority", () => {
 				outputId: "00000000-0000-4000-8000-000000000040",
 				universe: 7,
 				startAddress: 201,
+				protocol: "sacn",
 			}),
 		);
 		expect(mocks.deleteFixture).toHaveBeenCalledOnce();
 		expect(
-			screen.getByText(/The desk patch was restored; retry/),
+			await screen.findByText(
+				/The desk patch was restored\. Refresh Discovery/,
+			),
 		).toBeInTheDocument();
 	});
 
@@ -541,8 +555,9 @@ describe("Media server Patch authority", () => {
 			screen.getByRole("button", { name: "Confirm patch address" }),
 		);
 
-		await screen.findByText(/Restart the Media Server to activate/);
+		await screen.findByText(/restart it to activate the new DMX input/);
 		expect(screen.getByText(/Suggested DMX 7\.201/)).toBeInTheDocument();
+		expect(screen.getAllByText(/listens to sACN 7/).length).toBeGreaterThan(0);
 		expect(screen.getByText(/DMX change pending restart/)).toBeInTheDocument();
 	});
 
@@ -569,7 +584,7 @@ describe("Media server Patch authority", () => {
 
 		expect(
 			await screen.findByText(
-				"Suggested DMX 4.101 · 2 layers · sACN · Tempo from Speed Group 3",
+				"Suggested DMX 4.101 · 2 layers · listens to sACN 4 · Tempo from Speed Group 3",
 			),
 		).toBeInTheDocument();
 		expect(screen.queryByText(/two-layers/)).not.toBeInTheDocument();
@@ -679,11 +694,389 @@ describe("Media server Patch authority", () => {
 		);
 
 		expect(
-			await screen.findByText(/Check free space and write access/),
+			await screen.findByText(
+				/Check free space and write access/,
+				{},
+				{ timeout: 3000 },
+			),
 		).toHaveTextContent("The desk patch was restored");
 		expect(mocks.deleteFixture).toHaveBeenCalledOnce();
 	});
 });
+
+describe("Coordinated Media Server patching", () => {
+	const OUTPUT = "00000000-0000-4000-8000-000000000040";
+
+	function boundFixture(
+		overrides: Partial<PatchedFixture> = {},
+	): PatchedFixture {
+		return {
+			...mediaFixture(),
+			fixture_id: "patched-media",
+			name: "Pixel Rack Main",
+			definition: toskMediaDefinition(),
+			universe: 4,
+			address: 101,
+			split_patches: [{ split: 1, universe: 4, address: 101 }],
+			direct_control: {
+				protocol: "citp",
+				ip_address: "192.168.1.40",
+				port: 4809,
+			},
+			internal_bindings: { library: null, output: OUTPUT },
+			...overrides,
+		};
+	}
+
+	function confirmAddress(universe: number, address: number) {
+		fireEvent.click(screen.getByRole("button", { name: "Patch address" }));
+		fireEvent.change(screen.getByLabelText("Universe"), {
+			target: { value: String(universe) },
+		});
+		fireEvent.change(screen.getByLabelText("Address"), {
+			target: { value: String(address) },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "Confirm patch address" }),
+		);
+	}
+
+	it("names each discovered server by identity, address, type, and connection", async () => {
+		const discovery = discoveredServer();
+		discovery.servers.push({
+			...discovery.servers[0],
+			key: "192.168.1.41:4809",
+			name: "Pixel Rack B",
+			host: "192.168.1.41",
+			instance: "pixel-rack-b",
+			outputs: [
+				{
+					...discovery.servers[0].outputs[0],
+					id: "00000000-0000-4000-8000-000000000041",
+					name: "Side",
+				},
+			],
+		});
+		discovery.servers.push({
+			key: "192.168.1.42:4809",
+			name: "Pixel Spare",
+			host: "192.168.1.42",
+			citpPort: 4809,
+			status: "Unavailable",
+			instance: null,
+			error:
+				"The discovered Media Server did not answer its configuration API.",
+			outputs: [],
+		});
+		mocks.discoverMediaServers.mockResolvedValue(discovery);
+		patchFixtures = [boundFixture()];
+		server.mediaServers = [
+			{
+				...status("192.168.1.40", true, null),
+				fixture_id: "patched-media",
+			},
+		];
+		render(<MediaServerSetup />);
+
+		const main = (await screen.findByText("Pixel Rack · Main")).closest(
+			"article",
+		) as HTMLElement;
+		expect(main).toHaveTextContent(
+			"192.168.1.40 · ToskLight Media · CITP 4809 · Online · Desk connection: Connected",
+		);
+		expect(main).toHaveAttribute("data-patch-state", "patched");
+		expect(within(main).getByText("Patched")).toBeInTheDocument();
+		expect(main).not.toHaveTextContent("192.168.1.40:4809");
+
+		const side = screen
+			.getByText("Pixel Rack B · Side")
+			.closest("article") as HTMLElement;
+		expect(side).toHaveTextContent(
+			"192.168.1.41 · ToskLight Media · CITP 4809 · Online · Desk connection: Not connected (not patched)",
+		);
+		expect(within(side).getByText("Not patched")).toBeInTheDocument();
+
+		const spare = screen
+			.getByText("Pixel Spare")
+			.closest("article") as HTMLElement;
+		expect(spare).toHaveTextContent(
+			"192.168.1.42 · ToskLight Media · CITP 4809 · Offline",
+		);
+		expect(within(spare).getByText("Unavailable")).toBeInTheDocument();
+
+		fireEvent.click(
+			within(side).getByRole("button", { name: "Patch suggested" }),
+		);
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledOnce());
+		expect(mocks.patchFixtures.mock.calls[0][0][0].input).toMatchObject({
+			directControl: { ipAddress: "192.168.1.41" },
+			internalBindings: { output: "00000000-0000-4000-8000-000000000041" },
+		});
+		expect(within(main).queryByRole("status")).toBeNull();
+	});
+
+	it("suggests the desk universe whose route reaches the server", async () => {
+		const discovery = discoveredServer();
+		discovery.servers[0].outputs[0].protocol = "art-net";
+		discovery.servers[0].outputs[0].universe = 12;
+		mocks.discoverMediaServers.mockResolvedValue(discovery);
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		expect(
+			await screen.findByText(
+				/Suggested DMX 9\.101 · 2 layers · listens to Art-Net 12/,
+			),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Patch suggested" }));
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledOnce());
+		expect(mocks.patchFixtures.mock.calls[0][0][0].input).toMatchObject({
+			splitPatches: [{ split: 1, universe: 9, address: 101 }],
+		});
+		expect(
+			await screen.findByText("Patched at DMX 9.101."),
+		).toBeInTheDocument();
+		expect(mocks.updateDiscoveredMediaAddress).not.toHaveBeenCalled();
+	});
+
+	it("patches a suggestion no route delivers, and says the server receives nothing yet", async () => {
+		mocks.routes = [];
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		expect(
+			await screen.findByText(/listens to sACN 4, which no desk route sends/),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Patch suggested" }));
+		expect(
+			await screen.findByText(
+				/Patched at DMX 4\.101\. No desk output route sends sACN 4, so the server receives nothing yet/,
+			),
+		).toBeInTheDocument();
+	});
+
+	it("moves the server onto the protocol and universe the desk route sends", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		mocks.updateDiscoveredMediaAddress.mockImplementation(async (input) => ({
+			...discoveredServer().servers[0].outputs[0],
+			protocol: input.protocol,
+			universe: input.universe,
+			startAddress: input.startAddress,
+		}));
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		confirmAddress(9, 33);
+
+		expect(
+			await screen.findByText(
+				"Desk and Media Server now use DMX 9.33; the server listens to Art-Net 12.",
+			),
+		).toBeInTheDocument();
+		expect(mocks.patchFixtures.mock.calls[0][0][0].input).toMatchObject({
+			splitPatches: [{ split: 1, universe: 9, address: 33 }],
+		});
+		expect(mocks.updateDiscoveredMediaAddress).toHaveBeenCalledWith({
+			host: "192.168.1.40",
+			outputId: OUTPUT,
+			universe: 12,
+			startAddress: 33,
+			protocol: "art-net",
+		});
+		expect(
+			screen.getByText(
+				"Suggested DMX 9.33 · 2 layers · listens to Art-Net 12",
+				{
+					exact: false,
+				},
+			),
+		).toBeInTheDocument();
+	});
+
+	it("refuses a chosen universe the desk does not send before changing anything", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		confirmAddress(20, 1);
+
+		expect(
+			await screen.findByText(
+				/The desk sends no network output for universe 20.*Nothing was changed\./,
+			),
+		).toBeInTheDocument();
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
+		expect(mocks.updateDiscoveredMediaAddress).not.toHaveBeenCalled();
+	});
+
+	it("rejects a colliding chosen address without touching the server", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		mocks.patchFixtures.mockResolvedValue(null);
+		mocks.patchError =
+			"Fixtures 1 and 3 overlap on universe 7. Move or unpatch one fixture.";
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		confirmAddress(7, 1);
+
+		expect(
+			await screen.findByText(/overlap on universe 7/),
+		).toBeInTheDocument();
+		expect(mocks.updateDiscoveredMediaAddress).not.toHaveBeenCalled();
+	});
+
+	it("restores an existing patch and reports a failed restore as a possible mismatch", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		mocks.updateDiscoveredMediaAddress.mockRejectedValue(
+			new Error("The Media Server is unreachable."),
+		);
+		patchFixtures = [boundFixture()];
+		mocks.patchFixtures
+			.mockResolvedValueOnce([{ fixtureId: "patched-media" }])
+			.mockResolvedValueOnce(null);
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		confirmAddress(7, 1);
+
+		expect(
+			await screen.findByText(
+				/unreachable\. Restoring the desk patch also failed, so the desk and the Media Server may differ\. Refresh Discovery/,
+			),
+		).toBeInTheDocument();
+		expect(mocks.patchFixtures).toHaveBeenCalledTimes(2);
+		expect(mocks.patchFixtures.mock.calls[1][0][0].input).toMatchObject({
+			fixtureId: "patched-media",
+			splitPatches: [{ split: 1, universe: 4, address: 101 }],
+		});
+		expect(mocks.deleteFixture).not.toHaveBeenCalled();
+	});
+
+	it("reports a server that kept another address instead of claiming success", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		confirmAddress(7, 1);
+
+		expect(
+			await screen.findByText(
+				"The desk is patched at DMX 7.1, but the Media Server kept sACN 4 at address 101. Patch suggested or retry Patch address.",
+			),
+		).toBeInTheDocument();
+	});
+
+	it("never reports a differing address or endpoint as patched", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		patchFixtures = [
+			boundFixture({
+				universe: 7,
+				address: 1,
+				split_patches: [{ split: 1, universe: 7, address: 1 }],
+			}),
+		];
+		const { unmount } = render(<MediaServerSetup />);
+
+		const card = (await screen.findByText("Pixel Rack · Main")).closest(
+			"article",
+		) as HTMLElement;
+		expect(card).toHaveAttribute("data-patch-state", "address-differs");
+		expect(within(card).getByText("Address differs")).toBeInTheDocument();
+		expect(within(card).getByRole("alert")).toHaveTextContent(
+			"The desk sends DMX 7.1 as sACN 7, but this output listens to sACN 4 at address 101.",
+		);
+		expect(within(card).queryByText("Patched")).toBeNull();
+		unmount();
+
+		patchFixtures = [
+			boundFixture({
+				direct_control: {
+					protocol: "citp",
+					ip_address: "192.168.1.99",
+					port: 4809,
+				},
+			}),
+		];
+		render(<MediaServerSetup />);
+		const moved = (await screen.findByText("Pixel Rack · Main")).closest(
+			"article",
+		) as HTMLElement;
+		expect(within(moved).getByText("Endpoint differs")).toBeInTheDocument();
+		expect(within(moved).getByRole("alert")).toHaveTextContent(
+			"The desk controls this server at 192.168.1.99:4809, but discovery found it at 192.168.1.40:4809.",
+		);
+		fireEvent.click(
+			within(moved).getByRole("button", { name: "Patch suggested" }),
+		);
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledOnce());
+		expect(mocks.patchFixtures.mock.calls[0][0][0].input).toMatchObject({
+			fixtureId: "patched-media",
+			directControl: { ipAddress: "192.168.1.40", port: 4809 },
+		});
+	});
+
+	it("says a patch whose universe no route sends is not received", async () => {
+		mocks.routes = [];
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		patchFixtures = [boundFixture()];
+		render(<MediaServerSetup />);
+
+		const card = (await screen.findByText("Pixel Rack · Main")).closest(
+			"article",
+		) as HTMLElement;
+		expect(within(card).getByText("Not received")).toBeInTheDocument();
+		expect(within(card).getByRole("alert")).toHaveTextContent(
+			"Add an output route for universe 4 under Setup › Outputs",
+		);
+	});
+
+	it("checks one patched server's connection on request", async () => {
+		patchFixtures = [withEndpoint("192.168.1.50")];
+		server.mediaServers = [status("192.168.1.50", false, "Timed out.")];
+		render(<MediaServerSetup />);
+		mocks.inspectMediaServer.mockClear();
+
+		fireEvent.click(
+			within(rowFor("Media One")).getByRole("button", {
+				name: "Check connection",
+			}),
+		);
+
+		await waitFor(() =>
+			expect(mocks.inspectMediaServer).toHaveBeenCalledWith("fixture-media"),
+		);
+		expect(
+			await within(rowFor("Media One")).findByText("The server answered."),
+		).toBeInTheDocument();
+	});
+});
+
+function route(
+	logical: number,
+	protocol: OutputRoute["protocol"],
+	destination: number,
+): VersionedObject<OutputRoute> {
+	return {
+		kind: "route",
+		id: `route-${logical}-${protocol}`,
+		revision: 1,
+		updated_at: "2026-09-17T00:00:00Z",
+		body: {
+			protocol,
+			logical_universe: logical,
+			destination_universe: destination,
+			delivery_mode: "multicast",
+			destination: null,
+			enabled: true,
+			minimum_slots: 512,
+		},
+	};
+}
 
 function rowFor(name: string): HTMLElement {
 	const header = screen.getByRole("rowheader", { name });

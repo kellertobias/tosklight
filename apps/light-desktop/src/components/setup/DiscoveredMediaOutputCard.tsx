@@ -1,23 +1,27 @@
 import { Button, FormLayout, NumberField } from "@tosklight/ui";
-import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type {
 	DiscoveredMediaOutput,
 	DiscoveredMediaServer,
 } from "../../api/client/mediaOutput";
-import type { FixtureDefinition, PatchedFixture } from "../../api/types";
+import type { PatchedFixture } from "../../api/types";
+import { useDmxDiagnostics } from "../../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { useFixtureLibrary } from "../../features/fixtureLibrary/FixtureLibraryContext";
 import type { MediaServersState } from "../../features/mediaServers/MediaServersContext";
-import {
-	changedPatchFixtureCandidate,
-	newPatchFixtureCandidate,
-} from "../../features/patch/model";
 import { usePatch } from "../../features/patch/PatchContext";
-import { mergeFixtureDefinitions } from "./fixtureProfileModel";
 import {
-	discoveredOutputFacts,
-	mediaServerDefinition,
-	patchedModeMismatch,
-} from "./mediaDiscoveryModel";
+	type PatchChoice,
+	patchDiscoveredServer,
+} from "./discoveredMediaPatch";
+import { mergeFixtureDefinitions } from "./fixtureProfileModel";
+import { discoveredOutputFacts } from "./mediaDiscoveryModel";
+import {
+	DISCOVERED_PATCH_LABELS,
+	deskUniverseReaching,
+	discoveredConnection,
+	discoveredPatchState,
+	matchingDiscoveredFixture,
+} from "./mediaPatchCoordination";
 
 /** One discovered Media Server output, its current configuration, and its patch actions. */
 export function DiscoveredMediaOutputCard({
@@ -26,12 +30,17 @@ export function DiscoveredMediaOutputCard({
 	fixtures,
 	server,
 	onRemoteUpdated,
+	message,
+	onMessage,
 }: {
 	candidate: DiscoveredMediaServer;
 	output: DiscoveredMediaOutput;
 	fixtures: readonly PatchedFixture[];
 	server: MediaServersState | null;
 	onRemoteUpdated: (serverKey: string, output: DiscoveredMediaOutput) => void;
+	/** The latest patch outcome for this output, kept by the discovery owner. */
+	message?: string;
+	onMessage: (text: string) => void;
 }) {
 	const patch = usePatch();
 	const fixtureLibrary = useFixtureLibrary();
@@ -45,71 +54,68 @@ export function DiscoveredMediaOutputCard({
 			),
 		[fixtureLibrary?.fixtureProfiles, fixtureLibrary?.fixtureLibrary],
 	);
-	const key = `${candidate.key}:${output.id}`;
-	const [busy, setBusy] = useState<string | null>(null);
-	const [message, setMessage] = useState<Record<string, string>>({});
+	const routes = useDmxDiagnostics()?.outputRoutes ?? EMPTY_ROUTES;
+	const [busy, setBusy] = useState(false);
 	const [addressOpen, setAddressOpen] = useState(false);
 	const [addressDraft, setAddressDraft] = useState({ universe: 1, address: 1 });
-	const patched = matchingDiscoveredFixture(fixtures, candidate, output);
-	const mismatch = patchedModeMismatch(patched, output);
+	const patched = matchingDiscoveredFixture(
+		fixtures,
+		candidate,
+		output,
+		routes,
+	);
+	const state = discoveredPatchState(patched, candidate, output, routes);
+	const deskUniverse = deskUniverseReaching(routes, output);
 	const patchable = Boolean(output.mode);
-	const patchAt = (universe: number, address: number, changeRemote: boolean) =>
+	const run = (choice: PatchChoice) => {
+		setBusy(true);
 		void patchDiscoveredServer({
 			candidate,
 			output,
 			patched,
-			universe,
-			address,
-			changeRemote,
+			choice,
 			patch,
 			library,
+			routes,
 			server,
-			key,
-			setBusy,
-			setMessage,
+			report: onMessage,
 			onRemoteUpdated,
-		});
+		}).finally(() => setBusy(false));
+	};
 	return (
-		<article className="media-server-card">
+		<article className="media-server-card" data-patch-state={state.kind}>
 			<header>
 				<div>
 					<b>
 						{candidate.name} · {output.name}
 					</b>
 					<small>
-						{candidate.host} · {candidate.status}
+						{discoveredIdentity(candidate)} · Desk connection:{" "}
+						{discoveredConnection(patched, server?.mediaServers ?? [])}
 					</small>
 				</div>
-				<strong>
-					{!patchable
-						? "Needs update"
-						: mismatch
-							? "Mode differs"
-							: patched
-								? "Patched"
-								: "Not patched"}
-				</strong>
+				<strong>{DISCOVERED_PATCH_LABELS[state.kind]}</strong>
 			</header>
-			<p>{discoveredOutputFacts(output)}</p>
+			<p>{discoveredOutputFacts(output, deskUniverse)}</p>
 			{output.issue && <p role="alert">{output.issue}</p>}
-			{mismatch && <p role="alert">{mismatch}</p>}
+			{state.problem && <p role="alert">{state.problem}</p>}
 			{output.dmxPendingRestart && (
 				<p role="status">The Media Server has a DMX change pending restart.</p>
 			)}
 			<div className="media-actions">
 				<Button
-					disabled={!patchable || busy === key}
-					onClick={() => patchAt(output.universe, output.startAddress, false)}
+					disabled={!patchable || busy}
+					onClick={() => run({ kind: "suggested" })}
 				>
 					Patch suggested
 				</Button>
 				<Button
-					disabled={!patchable || busy === key}
+					disabled={!patchable || busy}
 					onClick={() => {
 						setAddressOpen(true);
 						setAddressDraft({
-							universe: output.universe,
-							address: output.startAddress,
+							universe: patched?.universe ?? deskUniverse ?? output.universe,
+							address: patched?.address ?? output.startAddress,
 						});
 					}}
 				>
@@ -143,165 +149,23 @@ export function DiscoveredMediaOutputCard({
 						}
 					/>
 					<Button
-						onClick={() =>
-							patchAt(addressDraft.universe, addressDraft.address, true)
-						}
+						disabled={busy}
+						onClick={() => run({ kind: "address", ...addressDraft })}
 					>
 						Confirm patch address
 					</Button>
 				</FormLayout>
 			)}
-			{message[key] && <p role="status">{message[key]}</p>}
+			{message && <p role="status">{message}</p>}
 		</article>
 	);
 }
 
-function matchingDiscoveredFixture(
-	fixtures: readonly PatchedFixture[],
-	server: DiscoveredMediaServer,
-	output: DiscoveredMediaOutput,
-): PatchedFixture | undefined {
-	return fixtures.find(
-		(fixture) =>
-			fixture.direct_control?.ip_address === server.host &&
-			(fixture.internal_bindings?.output === output.id ||
-				(fixture.universe === output.universe &&
-					fixture.address === output.startAddress)),
-	);
-}
+const EMPTY_ROUTES: never[] = [];
 
-async function patchDiscoveredServer(input: {
-	candidate: DiscoveredMediaServer;
-	output: DiscoveredMediaOutput;
-	patched?: PatchedFixture;
-	universe: number;
-	address: number;
-	changeRemote: boolean;
-	patch: ReturnType<typeof usePatch>;
-	library: readonly FixtureDefinition[];
-	server: MediaServersState | null;
-	key: string;
-	setBusy: Dispatch<SetStateAction<string | null>>;
-	setMessage: Dispatch<SetStateAction<Record<string, string>>>;
-	onRemoteUpdated: (serverKey: string, output: DiscoveredMediaOutput) => void;
-}): Promise<void> {
-	const setMessage = (message: string) =>
-		input.setMessage((current) => ({ ...current, [input.key]: message }));
-	if (
-		!Number.isInteger(input.universe) ||
-		input.universe < 1 ||
-		input.universe > 65535 ||
-		!Number.isInteger(input.address) ||
-		input.address < 1 ||
-		input.address > 512
-	) {
-		setMessage(
-			"Choose a universe from 1 to 65535 and an address from 1 to 512.",
-		);
-		return;
-	}
-	const mode = input.output.mode;
-	if (!mode) {
-		setMessage(
-			input.output.issue ??
-				"This Media Server output cannot be patched from this desk. Update ToskLight Media, then refresh discovery.",
-		);
-		return;
-	}
-	const definition = mediaServerDefinition(input.library, mode);
-	if (!definition) {
-		setMessage(
-			`The ToskLight Media Server ${mode} fixture profile is unavailable. Restore it in the Fixture Library, then retry.`,
-		);
-		return;
-	}
-	input.setBusy(input.key);
-	setMessage("Validating desk patch…");
-	const original = input.patched;
-	const fixture = original
-		? changedPatchFixtureCandidate(original, {
-				definition,
-				universe: input.universe,
-				address: input.address,
-				split_patches: [
-					{ split: 1, universe: input.universe, address: input.address },
-				],
-				direct_control: {
-					protocol: "citp",
-					ip_address: input.candidate.host,
-					port: input.candidate.citpPort,
-				},
-				internal_bindings: {
-					...original.internal_bindings,
-					output: input.output.id,
-				},
-			})
-		: (() => {
-				const nextNumber =
-					Math.max(
-						0,
-						...input.patch.fixtures.map(
-							(candidate) => candidate.fixture_number ?? 0,
-						),
-					) + 1;
-				const fresh = newPatchFixtureCandidate({
-					name: `${input.candidate.name} ${input.output.name}`,
-					fixture_number: nextNumber,
-					definition,
-					universe: input.universe,
-					address: input.address,
-				});
-				return changedPatchFixtureCandidate(fresh.fixture, {
-					direct_control: {
-						protocol: "citp",
-						ip_address: input.candidate.host,
-						port: input.candidate.citpPort,
-					},
-					internal_bindings: { library: null, output: input.output.id },
-				});
-			})();
-	try {
-		const patched = await input.patch.patchFixtures([fixture]);
-		if (!patched) {
-			setMessage(
-				input.patch.error ??
-					"The desk patch was rejected. Resolve the Patch conflict and retry.",
-			);
-			return;
-		}
-		if (!input.changeRemote) {
-			setMessage(`Patched at DMX ${input.universe}.${input.address}.`);
-			return;
-		}
-		setMessage("Updating the selected Media Server…");
-		try {
-			if (!input.server)
-				throw new Error("The Media Server connection is unavailable.");
-			const updated = await input.server.updateDiscoveredMediaAddress({
-				host: input.candidate.host,
-				outputId: input.output.id,
-				universe: input.universe,
-				startAddress: input.address,
-			});
-			input.onRemoteUpdated(input.candidate.key, updated);
-			setMessage(
-				updated.dmxPendingRestart
-					? `Patched at DMX ${input.universe}.${input.address}. Restart the Media Server to activate its new DMX input.`
-					: `Desk and Media Server now use DMX ${input.universe}.${input.address}.`,
-			);
-		} catch (error) {
-			const rolledBack = original
-				? Boolean(
-						await input.patch.patchFixtures([
-							changedPatchFixtureCandidate(original, {}),
-						]),
-					)
-				: await input.patch.deleteFixture(fixture.fixture.fixture_id);
-			setMessage(
-				`${error instanceof Error ? error.message : "The Media Server could not be updated."} ${rolledBack ? "The desk patch was restored; retry when the server is reachable." : "Desk rollback also failed. The addresses may differ; inspect both sides before retrying."}`,
-			);
-		}
-	} finally {
-		input.setBusy(null);
-	}
+/** How the operator recognises a server: its address, type, CITP port, and whether it answers. */
+export function discoveredIdentity(candidate: DiscoveredMediaServer): string {
+	// A server that answered its health check is online, even when it needs an update.
+	const online = Boolean(candidate.instance);
+	return `${candidate.host} · ToskLight Media · CITP ${candidate.citpPort} · ${online ? "Online" : "Offline"}`;
 }

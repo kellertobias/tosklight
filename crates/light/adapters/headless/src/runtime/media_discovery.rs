@@ -256,10 +256,35 @@ pub(super) async fn update_discovered_media_server_address(
             "Media Server start address must be between 1 and 512",
         ));
     }
+    validate_media_input_universe(input.protocol.as_deref(), input.universe)?;
     let base = format!("http://{host}:{TOSKLIGHT_MEDIA_HTTP_PORT}/api/v2");
     update_media_output_address(&native_media_client()?, &base, &input)
         .await
         .map(Json)
+}
+
+/// The universe ranges each Media Server DMX input protocol accepts. Art-Net numbers its 15-bit
+/// Port-Address from 0; sACN numbers universes from 1.
+pub(super) fn validate_media_input_universe(
+    protocol: Option<&str>,
+    universe: u16,
+) -> Result<(), ApiError> {
+    let (label, minimum, maximum) = match protocol {
+        None => return Ok(()),
+        Some("art-net") => ("Art-Net", 0, 32_767),
+        Some("sacn") => ("sACN", 1, 63_999),
+        Some(other) => {
+            return Err(ApiError::bad_request(format!(
+                "Media Server DMX protocol '{other}' is not supported; use art-net or sacn"
+            )));
+        }
+    };
+    if universe < minimum || universe > maximum {
+        return Err(ApiError::bad_request(format!(
+            "{label} universe must be from {minimum} to {maximum}"
+        )));
+    }
+    Ok(())
 }
 
 /// Stores a new DMX address on the Media Server and answers with its authoritative output.
@@ -271,11 +296,7 @@ pub(super) async fn update_media_output_address(
     let url = format!("{base}/outputs/{}/configuration/update", input.output_id);
     let response = client
         .post(url)
-        .json(&serde_json::json!({
-            "requestId": input.request_id,
-            "universe": input.universe,
-            "startAddress": input.start_address,
-        }))
+        .json(&media_address_update_body(input))
         .send()
         .await
         .map_err(native_media_unavailable)?;
@@ -286,6 +307,22 @@ pub(super) async fn update_media_output_address(
         .map_err(|_| ApiError::unavailable("Media Server returned an invalid configuration"))?;
     classify_media_output(None, value)
         .ok_or_else(|| ApiError::unavailable("Media Server returned an invalid configuration"))
+}
+
+/// The Media Server configuration edit: the address, and the input protocol only when the desk
+/// named one, so an omitted protocol never resets the server's own choice.
+pub(super) fn media_address_update_body(
+    input: &DiscoveredMediaAddressUpdateRequest,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "requestId": input.request_id,
+        "universe": input.universe,
+        "startAddress": input.start_address,
+    });
+    if let Some(protocol) = &input.protocol {
+        body["protocol"] = serde_json::json!(protocol);
+    }
+    body
 }
 
 #[cfg(test)]

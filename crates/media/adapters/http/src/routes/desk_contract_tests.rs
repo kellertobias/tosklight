@@ -63,3 +63,30 @@ async fn only_the_two_personalities_the_desk_patches_are_accepted() {
         assert_eq!(status == StatusCode::OK, accepted, "{personality}");
     }
 }
+
+/// The coordinated edit Tos Light Control sends from Show Patch › Patch address: the address plus
+/// the DMX input protocol of the desk route. Art-Net numbers its Port-Address from 0.
+#[tokio::test]
+async fn a_coordinated_desk_edit_moves_the_input_protocol_and_universe() {
+    let bench = bench();
+    for (protocol, universe) in [("art-net", 0), ("art-net", 12), ("sacn", 101)] {
+        let (status, body) = send(
+            &bench.router,
+            post(
+                format!("/api/v2/outputs/{}/configuration/update", bench.output),
+                &format!(
+                    r#"{{"requestId":"desk-coordinated-{protocol}-{universe}","universe":{universe},"startAddress":33,"protocol":"{protocol}"}}"#
+                ),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{protocol} {universe}");
+        assert_eq!(body["protocol"], protocol);
+        assert_eq!(body["universe"], universe);
+        assert_eq!(body["startAddress"], 33);
+        assert_eq!(
+            body["dmxPendingRestart"], false,
+            "an address and protocol move applies live"
+        );
+    }
+}

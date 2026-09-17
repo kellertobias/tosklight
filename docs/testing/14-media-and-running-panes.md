@@ -55,6 +55,32 @@ Given three discovered Media Servers — one whose output reports the current 8-
 
 Given a show with a CITP media server patched at an address where nothing answers and a ToskLight Media Server patched with network control off, **Show Patch > Media Servers** lists both in the **Patched Media Servers** table with the columns **#**, **Name**, **Type**, **Protocol**, **IP address**, **Port**, **Status**, and **Actions**; their types read **CITP media server** and **ToskLight Media**. **Refresh Discovery** is the only button in its own window-title group, left of the Fixtures / Media Servers / Tracking tabs, and repeats discovery; a discovered server at a row's address is reported in that row's status. The CITP row's desk connection attempt turns it from **Checking…** to **Offline** without a manual refresh, and the row shows the server's reason with what to check. **Refresh Thumbnails** on that row reports its failure there only, and the other row stays usable. Choosing **CITP** on the ToskLight row with no address, or with `999.1.1.1`, explains the problem and keeps **Apply** disabled; a valid address applies, the row confirms the endpoint, and it checks the server at the new address. **⚙** on Media Servers opens Show Patch Settings on **Media Servers**, where **Clear Thumbnail Cache** reports how many cached thumbnails were dropped; clearing again reports none. Setting a row to **Off** and applying keeps the server patched and in the table.
 
+## MEDIA-008 — coordinated Media Server patching follows the desk routes
+
+Given the default stage, which sends desk universe 1 as Art-Net 1 and sACN 101, and three discovered Media Servers, **Show Patch > Media Servers** shows:
+
+- Rack A listening to sACN 101 at address 355
+- Rack B listening to Art-Net 30, which no desk route sends
+- a spare server that answers discovery but not its configuration API
+
+Each card names the server's IP address, **ToskLight Media**, its CITP port, **Online** or **Offline**, and the desk connection. Rack A suggests **DMX 1.355** and reads **Not patched**. Rack B says that no desk route sends its universe. The spare reads **Unavailable** and **Offline**.
+
+For Rack B, **Patch address**:
+
+- at 1.1 is refused for the overlap
+- at 1.400 is refused because the 2-layer footprint does not fit the universe
+- at universe 20, which no route sends, is refused before anything changes
+
+Each refusal leaves the Media Server untouched.
+
+A **Patch address** at 1.180 whose server update fails restores the desk: no fixture remains bound to that output, and the card still reads **Not patched**. Retrying sends the server Art-Net universe 1 at address 180. The card then confirms that desk and Media Server use DMX 1.180 and reads **Patched**, and the desk fixture stores that address and the server's CITP endpoint.
+
+**Patch suggested** on Rack A patches DMX 1.355 without contacting the server and reads **Patched**. **Check connection** on its patched row turns the row **Offline** with what to check, and the discovered card follows with **Desk connection: Offline**.
+
+A desk fixture whose address, endpoint, or delivered universe differs from the output reads **Address differs**, **Endpoint differs**, or **Not received** with both sides and the fixing action, never **Patched**.
+
+The coordinated update route refuses a sACN universe 0, an Art-Net universe above 32767, and an unknown protocol. The desk's request carries the route protocol and universe. The Media Server applies an Art-Net 0, Art-Net 12, or sACN 101 move live.
+
 ## PIXEL-001 — desktop recursive multi-file conversion
 
 Given the packaged Pixel application on macOS or Windows, choose **Convert multiple files** from its menu-bar item on macOS or notification-area item on Windows. On macOS, select a mixture of multiple supported videos/images and multiple nested folders in the same native picker. On Windows, select individual supported videos/images in the first optional picker and multiple nested folders in the second optional picker. Clicking and navigating in a dialog keeps it visible until the operator confirms or cancels it; cancelling one Windows step does not discard selections from the other. Audio, unrelated files, duplicate selections, and directory symlinks produce no jobs. Enter a starting folder and file and verify the first source receives that exact address, file `254` continues at file `1` in the next folder, and a selection that exceeds folder `199` is refused before any job starts. An occupied or reserved address is reported as failed and is not overwritten; later sources retain their consecutive assigned addresses.

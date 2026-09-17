@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **242 root cases across 93 files**.
+Default catalog: **244 root cases across 94 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -61,6 +61,8 @@ Default catalog: **242 root cases across 93 files**.
 | 106-screens-setup-layout.spec.ts | TL-471 @ui › the default screen row stays top-aligned with long information text at every width | repository contract | @ui | screens-setup-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 106-screens-setup-layout.spec.ts | TL-471 @ui › Add Screen is a separate Desk Setup title action that adds a top-aligned screen row | repository contract | @ui | screens-setup-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 106-screens-setup-layout.spec.ts | TL-471 @ui › a browser desk without the desktop app shows no Add Screen title action | repository contract | @ui | screens-setup-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 108-media-server-coordinated-patch.spec.ts | MEDIA-008 @ui › Show Patch coordinates discovered Media Servers with the desk routes | docs/testing/14-media-and-running-panes.md | @ui | media-server-coordinated-patch | standard failure evidence | parallel | pending-semantic-migration |
+| 108-media-server-coordinated-patch.spec.ts | MEDIA-008 @api › a coordinated address update validates the protocol universe | docs/testing/14-media-and-running-panes.md | @api | media-server-coordinated-patch | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | FIXTURE-002 @ui @restart › focused assets and physical metadata remain immutable across edit, patch, and restart | repository contract | @ui @restart | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |

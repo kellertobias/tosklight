@@ -122,7 +122,7 @@ test("MEDIA-006 @ui Show Patch tells a configured, outdated, and unavailable Med
 		.locator(".media-server-card")
 		.filter({ hasText: "Rack A · Main" });
 	await expect(configured).toContainText(
-		"Suggested DMX 42.1 · 8 layers · sACN · Tempo from Speed Group 3",
+		"Suggested DMX 42.1 · 8 layers · listens to sACN 42, which no desk route sends · Tempo from Speed Group 3",
 	);
 	await expect(
 		configured.getByText("Not patched", { exact: true }),
@@ -160,9 +160,12 @@ test("MEDIA-006 @ui Show Patch tells a configured, outdated, and unavailable Med
 
 	await configured.getByRole("button", { name: "Patch suggested" }).click();
 	await expect(configured.getByRole("status")).toContainText(
-		"Patched at DMX 42.1.",
+		"Patched at DMX 42.1. No desk output route sends sACN 42",
 	);
-	await expect(configured.getByText("Patched", { exact: true })).toBeVisible();
+	// No default-stage route sends sACN 42, so the patch is kept but never reported as Patched.
+	await expect(
+		configured.getByText("Not received", { exact: true }),
+	).toBeVisible();
 	const patched = await api.request<{
 		fixtures: Array<{ kind: string; layers: unknown[] }>;
 	}>("GET", "/api/v2/media-servers");

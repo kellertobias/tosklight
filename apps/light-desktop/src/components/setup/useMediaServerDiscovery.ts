@@ -12,6 +12,12 @@ export type MediaServerDiscoveryController = {
 	error: string | null;
 	refresh: () => Promise<void>;
 	updateOutput: (serverKey: string, output: DiscoveredMediaOutput) => void;
+	/**
+	 * The latest patch outcome per discovered output. It lives with discovery, not the card, so a
+	 * Patch reload after a refused patch never hides why it was refused.
+	 */
+	notes: Readonly<Record<string, string>>;
+	note: (outputKey: string, text: string) => void;
 };
 
 const UNAVAILABLE =
@@ -32,6 +38,12 @@ export function useMediaServerDiscovery(
 	const [discovery, setDiscovery] = useState<MediaServerDiscovery | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [notes, setNotes] = useState<Record<string, string>>({});
+	const note = useCallback(
+		(outputKey: string, text: string) =>
+			setNotes((current) => ({ ...current, [outputKey]: text })),
+		[],
+	);
 	const refresh = useCallback(async () => {
 		const server = serverRef.current;
 		if (!server) return;
@@ -75,7 +87,7 @@ export function useMediaServerDiscovery(
 	useEffect(() => {
 		if (active && connected) void refresh();
 	}, [active, connected, refresh]);
-	return { discovery, busy, error, refresh, updateOutput };
+	return { discovery, busy, error, refresh, updateOutput, notes, note };
 }
 
 /** Refresh Discovery as its own window-title action group. */

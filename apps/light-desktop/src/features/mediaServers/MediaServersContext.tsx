@@ -1,5 +1,6 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import type {
+	DiscoveredMediaAddressUpdate,
 	DiscoveredMediaOutput,
 	MediaServerDiscovery,
 	MediaServerInspection,
@@ -15,12 +16,9 @@ import type { MatterBridgeStatus, MediaServerFixture } from "../../api/types";
  */
 export interface MediaServersState {
 	discoverMediaServers: () => Promise<MediaServerDiscovery>;
-	updateDiscoveredMediaAddress: (input: {
-		host: string;
-		outputId: string;
-		universe: number;
-		startAddress: number;
-	}) => Promise<DiscoveredMediaOutput>;
+	updateDiscoveredMediaAddress: (
+		input: DiscoveredMediaAddressUpdate,
+	) => Promise<DiscoveredMediaOutput>;
 	mediaServers: MediaServerFixture[];
 	mediaPreviewUrls: Record<string, string>;
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;

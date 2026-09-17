@@ -184,8 +184,15 @@ pub struct DiscoveredMediaAddressUpdateRequest {
     pub request_id: String,
     pub host: String,
     pub output_id: Uuid,
+    /// The universe the Media Server listens to, numbered as the chosen protocol numbers it on
+    /// the wire (the desk route's destination universe).
     pub universe: u16,
     pub start_address: u16,
+    /// The DMX input protocol the Media Server should listen with (`art-net` or `sacn`), taken
+    /// from the desk route that sends the patched universe. Absent keeps the server's protocol.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub protocol: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -285,5 +292,9 @@ mod tests {
             }))
             .unwrap();
         assert_eq!(address.start_address, 177);
+        assert_eq!(
+            address.protocol, None,
+            "an older desk client sends no protocol"
+        );
     }
 }

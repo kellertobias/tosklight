@@ -5,7 +5,10 @@ import {
 	useMediaServers,
 } from "../../features/mediaServers/MediaServersContext";
 import { usePatch, usePatchView } from "../../features/patch/PatchContext";
-import { DiscoveredMediaOutputCard } from "./DiscoveredMediaOutputCard";
+import {
+	DiscoveredMediaOutputCard,
+	discoveredIdentity,
+} from "./DiscoveredMediaOutputCard";
 import {
 	type MediaServerRowView,
 	MediaServerTable,
@@ -124,12 +127,19 @@ function DiscoveredMediaServers({
 							fixtures={fixtures}
 							server={server}
 							onRemoteUpdated={controller.updateOutput}
+							message={controller.notes[`${candidate.key}:${output.id}`]}
+							onMessage={(text) =>
+								controller.note(`${candidate.key}:${output.id}`, text)
+							}
 						/>
 					))
 				) : (
 					<article className="media-server-card" key={candidate.key}>
 						<header>
-							<b>{candidate.name}</b>
+							<div>
+								<b>{candidate.name}</b>
+								<small>{discoveredIdentity(candidate)}</small>
+							</div>
 							<strong>Unavailable</strong>
 						</header>
 						<p role="alert">
@@ -202,6 +212,8 @@ function useMediaServerRows(
 					setDrafts((current) => ({ ...current, [id]: next })),
 				apply: () =>
 					void track(id, "saving", () => applyDraft(patch, fixture, draft)),
+				checkConnection: () =>
+					void track(id, "checking", () => checkConnection(server, id)),
 				refreshThumbnails: () =>
 					void track(id, "thumbnails", () => refreshThumbnails(server, id)),
 				toggleLive: () =>
@@ -291,6 +303,24 @@ async function applyDraft(
 			? `Now using ${endpoint.ip_address}:${endpoint.port}.`
 			: "Network control is off for this server.",
 	};
+}
+
+async function checkConnection(
+	server: Server,
+	fixtureId: string,
+): Promise<RowMessage | null> {
+	if (!server)
+		return {
+			tone: "alert",
+			text: "The desk connection is unavailable. Reconnect, then retry.",
+		};
+	try {
+		await server.inspectMediaServer(fixtureId);
+		return { tone: "status", text: "The server answered." };
+	} catch {
+		// The row's status carries the server's reason and what to check.
+		return null;
+	}
 }
 
 /** Every advertised library folder, bounded so one server cannot push the others out of the cache. */

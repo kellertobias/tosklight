@@ -7,6 +7,7 @@ import type {
 	GelCatalogImportTarget,
 } from "../../api/client/fixtures";
 import type {
+	DiscoveredMediaAddressUpdate,
 	DiscoveredMediaOutput,
 	MediaServerDiscovery,
 	MediaServerInspection,
@@ -23,12 +24,9 @@ import type {
 
 export interface ServerFixtureContext {
 	discoverMediaServers: () => Promise<MediaServerDiscovery>;
-	updateDiscoveredMediaAddress: (input: {
-		host: string;
-		outputId: string;
-		universe: number;
-		startAddress: number;
-	}) => Promise<DiscoveredMediaOutput>;
+	updateDiscoveredMediaAddress: (
+		input: DiscoveredMediaAddressUpdate,
+	) => Promise<DiscoveredMediaOutput>;
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
 	/** Resolves true when the server returned fresh thumbnails; a failure is recorded on the row. */
 	refreshMediaThumbnails: (

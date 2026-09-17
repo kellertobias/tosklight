@@ -6,12 +6,21 @@ const PROTOCOL_LABELS: Record<string, string> = {
 	sacn: "sACN",
 };
 
-/** The discovered output's current Media Server configuration as the operator reads it. */
-export function discoveredOutputFacts(output: DiscoveredMediaOutput): string {
+/**
+ * The discovered output's current Media Server configuration as the operator reads it. The
+ * suggested desk universe is the one whose output route reaches what the server listens to.
+ */
+export function discoveredOutputFacts(
+	output: DiscoveredMediaOutput,
+	deskUniverse: number | null,
+): string {
+	const listens = `${PROTOCOL_LABELS[output.protocol] ?? output.protocol} ${output.universe}`;
 	const facts = [
-		`Suggested DMX ${output.universe}.${output.startAddress}`,
+		`Suggested DMX ${deskUniverse ?? output.universe}.${output.startAddress}`,
 		output.mode ?? "Unsupported personality",
-		PROTOCOL_LABELS[output.protocol] ?? output.protocol,
+		deskUniverse === null
+			? `listens to ${listens}, which no desk route sends`
+			: `listens to ${listens}`,
 	];
 	const tempo = tempoLabel(output);
 	if (tempo) facts.push(tempo);

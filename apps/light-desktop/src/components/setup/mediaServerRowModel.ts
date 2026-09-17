@@ -195,5 +195,5 @@ export function networkState(
 }
 
 export function offlineHint(error: string): string {
-	return `${error} Check the IP address, port, and that the server is running, then Refresh Thumbnails to retry.`;
+	return `${error} Check the IP address, port, and that the server is running, then Check connection to retry.`;
 }

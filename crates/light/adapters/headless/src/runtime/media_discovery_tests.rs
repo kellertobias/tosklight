@@ -202,6 +202,7 @@ async fn an_address_update_refusal_names_the_rejected_value() {
         output_id: OUTPUT_ID.parse().unwrap(),
         universe: 4,
         start_address: 2,
+        protocol: None,
     };
     let error = update_media_output_address(&native_media_client().unwrap(), &base, &request)
         .await
@@ -232,10 +233,87 @@ async fn an_accepted_address_update_answers_the_authoritative_output() {
         output_id: OUTPUT_ID.parse().unwrap(),
         universe: 4,
         start_address: 1,
+        protocol: None,
     };
     let output = update_media_output_address(&native_media_client().unwrap(), &base, &request)
         .await
         .unwrap();
     assert!(output.dmx_pending_restart);
     assert_eq!(output.mode.as_deref(), Some("8 layers"));
+}
+
+#[tokio::test]
+async fn a_coordinated_update_sends_the_desk_route_protocol_and_universe() {
+    let received = std::sync::Arc::new(std::sync::Mutex::new(None::<serde_json::Value>));
+    let seen = received.clone();
+    let router = axum::Router::new().route(
+        "/api/v2/outputs/{output}/configuration/update",
+        axum::routing::post(move |axum::Json(body): axum::Json<serde_json::Value>| {
+            let seen = seen.clone();
+            async move {
+                let mut answer = reference();
+                answer["protocol"] = body["protocol"].clone();
+                answer["universe"] = body["universe"].clone();
+                answer["startAddress"] = body["startAddress"].clone();
+                *seen.lock().unwrap() = Some(body);
+                axum::Json(answer)
+            }
+        }),
+    );
+    let base = serve(router).await;
+    let request = DiscoveredMediaAddressUpdateRequest {
+        request_id: "address-3".into(),
+        host: "127.0.0.1".into(),
+        output_id: OUTPUT_ID.parse().unwrap(),
+        universe: 0,
+        start_address: 17,
+        protocol: Some("art-net".into()),
+    };
+    let output = update_media_output_address(&native_media_client().unwrap(), &base, &request)
+        .await
+        .unwrap();
+    let body = received
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the server was asked");
+    assert_eq!(body["protocol"], "art-net");
+    assert_eq!(body["universe"], 0);
+    assert_eq!(body["startAddress"], 17);
+    assert_eq!(output.protocol, "art-net");
+    assert_eq!((output.universe, output.start_address), (0, 17));
+}
+
+#[test]
+fn an_address_update_without_a_protocol_keeps_the_server_protocol() {
+    let request = DiscoveredMediaAddressUpdateRequest {
+        request_id: "address-4".into(),
+        host: "127.0.0.1".into(),
+        output_id: OUTPUT_ID.parse().unwrap(),
+        universe: 4,
+        start_address: 1,
+        protocol: None,
+    };
+    assert!(
+        media_address_update_body(&request)
+            .get("protocol")
+            .is_none()
+    );
+}
+
+#[test]
+fn media_input_universes_are_checked_per_protocol() {
+    assert!(validate_media_input_universe(None, 0).is_ok());
+    assert!(validate_media_input_universe(Some("art-net"), 0).is_ok());
+    assert!(validate_media_input_universe(Some("art-net"), 32_767).is_ok());
+    assert!(validate_media_input_universe(Some("art-net"), 32_768).is_err());
+    assert!(validate_media_input_universe(Some("sacn"), 0).is_err());
+    assert!(validate_media_input_universe(Some("sacn"), 63_999).is_ok());
+    assert!(validate_media_input_universe(Some("sacn"), 64_000).is_err());
+    let unsupported = validate_media_input_universe(Some("kinet"), 1).unwrap_err();
+    assert!(
+        unsupported.message.contains("art-net or sacn"),
+        "{}",
+        unsupported.message
+    );
 }
