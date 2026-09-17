@@ -60,9 +60,10 @@ async function createOpenScreen(api: ApiDriver, screenId: string) {
 }
 
 /**
- * A screen webview as the desktop host creates it: a fresh window storage holding only the
- * handed-over attachment, a native runtime marker, and an operator setting that points elsewhere
- * so a window that looked for its own server would visibly go wrong.
+ * A screen webview as the desktop host creates it: its own window storage holding only the
+ * handed-over attachment (so no stored desk session to fall back on), a native desktop webview,
+ * and an operator setting that points elsewhere so a window that looked for its own server would
+ * visibly go wrong.
  */
 async function openScreenWindow(
 	page: Page,
@@ -70,18 +71,18 @@ async function openScreenWindow(
 	screenId: string,
 	attachment: ScreenAttachment,
 ) {
-	const screen = await page.context().newPage();
-	await new ControllableDesktopDriver(screen).install();
+	const browser = page.context().browser();
+	if (!browser) throw new Error("A screen window needs its own browser context");
+	const context = await browser.newContext({
+		viewport: page.viewportSize() ?? undefined,
+	});
+	const screen = await context.newPage();
+	await new ControllableDesktopDriver(screen).install({ nativeWebview: true });
 	await screen.addInitScript(
 		({ key, value, unreachable }) => {
-			Object.defineProperty(window, "__TAURI_INTERNALS__", {
-				configurable: true,
-				value: {},
-			});
 			if (sessionStorage.getItem(key) === null)
 				sessionStorage.setItem(key, value);
 			localStorage.setItem("light.server-url", unreachable);
-			localStorage.removeItem("light.primary-session");
 		},
 		{
 			key: ATTACHMENT_KEY,
@@ -176,7 +177,7 @@ test("TL-470 @ui › Open Screen joins the desk's own server and session instead
 			session_id: session.session_id,
 		});
 	} finally {
-		await screen.close();
+		await screen.context().close();
 	}
 });
 
@@ -225,6 +226,6 @@ test("TL-470 @ui › a screen that cannot reach the desk's server says why and r
 		).toEqual([]);
 		expect(await clientIds(api)).toEqual(clientsBefore);
 	} finally {
-		await screen.close();
+		await screen.context().close();
 	}
 });

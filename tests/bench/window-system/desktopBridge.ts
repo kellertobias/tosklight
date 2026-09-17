@@ -17,7 +17,11 @@ export class ControllableDesktopDriver {
 
 	constructor(private readonly page: Page) {}
 
-	async install(): Promise<void> {
+	/**
+	 * Installs the controllable desktop host. `nativeWebview` makes the page behave as a packaged
+	 * desktop webview (such as an external screen window) instead of a browser tab.
+	 */
+	async install(options: { nativeWebview?: boolean } = {}): Promise<void> {
 		if (this.installed) return;
 		this.installed = true;
 		await this.page.exposeBinding(
@@ -29,7 +33,7 @@ export class ControllableDesktopDriver {
 			() => structuredClone(this.displays),
 		);
 		await this.page.addInitScript(
-			({ controlName, actionBinding }) => {
+			({ controlName, actionBinding, nativeWebview }) => {
 				const accept = (window as unknown as Record<string, unknown>)[
 					actionBinding
 				] as (action: unknown) => Promise<void>;
@@ -39,6 +43,7 @@ export class ControllableDesktopDriver {
 				Object.defineProperty(window, controlName, {
 					configurable: true,
 					value: {
+						nativeWebview,
 						perform: (action: unknown) => accept(action),
 						listDisplays,
 						currentWindowState: () => ({
@@ -53,6 +58,7 @@ export class ControllableDesktopDriver {
 			{
 				controlName: DESKTOP_TEST_CONTROL,
 				actionBinding: ACCEPT_DESKTOP_ACTION,
+				nativeWebview: options.nativeWebview === true,
 			},
 		);
 	}

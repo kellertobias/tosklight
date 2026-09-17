@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { test as base, expect, type Page } from "@playwright/test";
 import { createServer, type ViteDevServer } from "vite";
 import artifactResolver from "../tools/artifact-paths.cjs";
+import { mockTauriIpc } from "./bench/window-system/tauriIpc";
 
 /**
  * The PreViz Editor served by its own Vite configuration, with the Tauri bridge answered in the
@@ -64,18 +65,16 @@ const SETTINGS = {
 };
 
 async function openSettingsPage(page: Page, editorUrl: string) {
-	await page.addInitScript((settings) => {
-		// Only the settings are answered; every other request waits, so no error toast covers the page.
-		(window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
-			invoke: (command: string, args: { settings?: unknown }) => {
-				if (command === "renderer_settings") return Promise.resolve(settings);
-				if (command === "save_renderer_settings")
-					return Promise.resolve(args.settings);
-				return new Promise(() => undefined);
-			},
-			transformCallback: () => 0,
-		};
-	}, SETTINGS);
+	// Only the settings are answered; every other request waits, so no error toast covers the page.
+	await mockTauriIpc(
+		page,
+		(command, args, settings) => {
+			if (command === "renderer_settings") return settings;
+			if (command === "save_renderer_settings") return args?.settings;
+			return new Promise(() => undefined);
+		},
+		SETTINGS,
+	);
 	await page.goto(editorUrl);
 	await page.getByRole("button", { name: "Settings", exact: true }).click();
 	const scroller = page.locator(".viz-renderer-settings-scroll");

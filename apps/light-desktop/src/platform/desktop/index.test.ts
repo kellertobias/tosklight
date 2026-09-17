@@ -4,7 +4,7 @@ import {
 	DESKTOP_TEST_CONTROL,
 	type ControllableDesktopPort,
 } from "./controllableBrowserDesktopBridge";
-import { createDesktopBridge } from "./index";
+import { createDesktopBridge, desktopRuntimeAvailable } from "./index";
 import { tauriDesktopBridge } from "./tauriDesktopBridge";
 
 const port: ControllableDesktopPort = {
@@ -37,5 +37,15 @@ describe("desktop bridge selection", () => {
 		expect(
 			createDesktopBridge({ __TAURI_INTERNALS__: {} } as unknown as Window),
 		).toBe(tauriDesktopBridge);
+	});
+
+	it("treats only a native-webview test adapter as a native runtime", () => {
+		const runtime = (nativeWebview?: boolean) =>
+			({
+				[DESKTOP_TEST_CONTROL]: { ...port, nativeWebview },
+			}) as unknown as Window;
+		expect(desktopRuntimeAvailable({} as Window)).toBe(false);
+		expect(desktopRuntimeAvailable(runtime())).toBe(false);
+		expect(desktopRuntimeAvailable(runtime(true))).toBe(true);
 	});
 });

@@ -5,6 +5,7 @@ import { test as base, expect, type Locator, type Page } from "@playwright/test"
 import { unzipSync, strFromU8 } from "fflate";
 import { createServer, type ViteDevServer } from "vite";
 import artifactResolver from "../tools/artifact-paths.cjs";
+import { mockTauriIpc } from "./bench/window-system/tauriIpc";
 
 /**
  * The fixture-library editor as the PreViz Editor hosts it, with the Tauri bridge answered in the
@@ -62,30 +63,25 @@ const REGISTRY = [
 
 async function openEditor(page: Page, editorUrl: string, file?: string) {
 	const profile = shippedProfile(file);
-	await page.addInitScript(
-		({ profile, registry }) => {
-			const answers: Record<string, unknown> = {
-				library_profiles: [
-					{
-						id: profile.id,
-						revision: profile.revision,
-						manufacturer: profile.manufacturer,
-						name: profile.name,
-						profile,
-					},
-				],
-				attribute_registry: registry,
-				fixture_body_catalogue: [],
-			};
-			(window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
-				invoke: (command: string) =>
-					command in answers
-						? Promise.resolve(answers[command])
-						: new Promise(() => undefined),
-				transformCallback: () => 0,
-			};
-		},
-		{ profile, registry: REGISTRY },
+	await mockTauriIpc(
+		page,
+		(command, _args, answers) =>
+			command in answers
+				? answers[command]
+				: new Promise(() => undefined),
+		{
+			library_profiles: [
+				{
+					id: profile.id,
+					revision: profile.revision,
+					manufacturer: profile.manufacturer,
+					name: profile.name,
+					profile,
+				},
+			],
+			attribute_registry: REGISTRY,
+			fixture_body_catalogue: [],
+		} as Record<string, unknown>,
 	);
 	await page.goto(editorUrl);
 	await page.getByRole("button", { name: "Settings", exact: true }).click();

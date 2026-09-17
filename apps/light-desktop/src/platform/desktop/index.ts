@@ -30,8 +30,10 @@ export function createDesktopBridge(
 export function desktopRuntimeAvailable(
 	runtime: ControllableDesktopWindow | undefined = browserWindow(),
 ) {
+	if (!runtime) return false;
+	if (injectedDesktopPort(runtime)?.nativeWebview === true) return true;
 	return Boolean(
-		runtime && "__TAURI_INTERNALS__" in runtime && runtime.__TAURI_INTERNALS__,
+		"__TAURI_INTERNALS__" in runtime && runtime.__TAURI_INTERNALS__,
 	);
 }
 

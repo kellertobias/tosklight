@@ -28,6 +28,11 @@ export type ControllableDesktopEvent =
 	| "current_window_close_requested";
 
 export interface ControllableDesktopPort {
+	/**
+	 * Stands in for a packaged desktop webview rather than a browser tab, so the window resolves
+	 * its server the way a native window does (for example an external screen window).
+	 */
+	readonly nativeWebview?: boolean;
 	perform(action: ControllableDesktopAction): void | Promise<void>;
 	listDisplays(): DesktopDisplay[] | Promise<DesktopDisplay[]>;
 	currentWindowState(): DesktopWindowState | Promise<DesktopWindowState>;
