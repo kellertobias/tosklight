@@ -1,7 +1,9 @@
 // One output's stored identity: where it opens, how it presents, and which DMX block feeds it.
 //
-// None of these values are live controls. Saving stores the next output identity, and the server
-// says explicitly that the running surface is left alone until the next start.
+// The DMX protocol, universe, start address and tempo source reach the running output as soon as
+// they are saved. The picture target, size and frame clock, the sound device, and the personality
+// are created when the output opens, so the server keeps the running output as it is and the page
+// says those wait for the next start.
 
 import {
 	Button,
@@ -117,7 +119,7 @@ export function OutputSettings({
 					<SettingsSaveState
 						busy={editing.busy}
 						failed={editing.failure !== undefined}
-						restartBound
+						restartBound={mode !== "dmx" || output.dmxPendingRestart}
 					/>
 				)}
 			</div>
@@ -139,7 +141,7 @@ export function OutputSettings({
 			) : (
 				<>
 					<OutputFacts output={output} mode={mode} />
-					{output.takesEffectOnRestart && <RestartNotice />}
+					{output.takesEffectOnRestart && <RestartNotice mode={mode} />}
 					<div className="media-settings-actions">
 						<Button onClick={() => editing.begin(output.id)}>
 							{mode === "dmx" ? "Change DMX input" : "Change output settings"}
@@ -159,7 +161,7 @@ export function OutputSettings({
 			)}
 			{direct && pendingRestart && (
 				<>
-					<RestartNotice />
+					<RestartNotice mode={mode} />
 					<div className="media-settings-actions">
 						<Button
 							onClick={() =>
@@ -244,11 +246,16 @@ function describeSoundOutput(output: OutputConfigurationView): string {
 	return output.soundOutputName ?? "Device not set";
 }
 
-function RestartNotice() {
+function RestartNotice({
+	mode,
+}: {
+	mode: "all" | "picture" | "sound" | "dmx";
+}) {
 	return (
 		<p className="media-state is-notice">
-			Saved output changes take effect the next time this server starts. The
-			output running now stays as it is.
+			{mode === "dmx"
+				? "A saved personality takes effect the next time this server starts. Protocol, universe and start address already apply."
+				: "Saved output changes take effect the next time this server starts. The output running now stays as it is."}
 		</p>
 	);
 }
@@ -417,7 +424,7 @@ function DmxInputFields({
 			<legend>DMX input</legend>
 			<SelectField
 				label="Personality"
-				description="Both personalities use the 3D mapping channel layout: 59 slots per layer, then a 40-slot Master."
+				description="Both personalities use the 3D mapping channel layout: 59 slots per layer, then a 40-slot Master. Applies on restart."
 				value={personality}
 				options={[
 					{
@@ -435,8 +442,8 @@ function DmxInputFields({
 				label="Protocol"
 				description={
 					protocol === "sacn"
-						? "Received on the sACN address under Where this server listens."
-						: "Received on the Art-Net address under Where this server listens."
+						? "Received on the sACN address under Where this server listens. Applies immediately."
+						: "Received on the Art-Net address under Where this server listens. Applies immediately."
 				}
 				value={protocol}
 				options={[
@@ -447,6 +454,7 @@ function DmxInputFields({
 			/>
 			<NumberField
 				label="Universe"
+				description="Applies immediately."
 				min={protocol === "sacn" ? 1 : 0}
 				max={protocol === "sacn" ? 63_999 : 32_767}
 				step={1}
@@ -455,7 +463,7 @@ function DmxInputFields({
 			/>
 			<NumberField
 				label="Start address"
-				description={`1 to ${highestStartAddress}; the complete ${footprint}-slot personality must fit in one universe.`}
+				description={`1 to ${highestStartAddress}; the complete ${footprint}-slot personality must fit in one universe. Applies immediately.`}
 				min={1}
 				max={highestStartAddress}
 				step={1}
@@ -559,32 +567,21 @@ export function OutputEditor({
 		}
 	};
 	const form = useRef<HTMLFormElement>(null);
-	const mounted = useRef(false);
+	// Only a draft that differs from what the server stored is saved, so opening the page, a
+	// reload after a save, or React's development double effects never send an edit nobody made.
+	const picture = { targetKind, monitorBy, monitorValue, fullscreen };
+	const size = { width, height, presentation, framesPerSecond };
+	const sound = { soundOutputKind, soundOutputName };
+	const dmx = { personality, protocol, universe, startAddress };
+	const draft = { ...picture, ...size, ...sound, ...dmx };
+	const pending = draftDiffers(output, mode, draft)
+		? JSON.stringify(draft)
+		: "";
 	useEffect(() => {
-		if (showActions) return;
-		if (!mounted.current) {
-			mounted.current = true;
-			return;
-		}
+		if (showActions || pending === "") return;
 		const timer = window.setTimeout(() => form.current?.requestSubmit(), 350);
 		return () => window.clearTimeout(timer);
-	}, [
-		showActions,
-		targetKind,
-		monitorBy,
-		monitorValue,
-		fullscreen,
-		width,
-		height,
-		presentation,
-		framesPerSecond,
-		soundOutputKind,
-		soundOutputName,
-		personality,
-		protocol,
-		universe,
-		startAddress,
-	]);
+	}, [showActions, pending]);
 
 	return (
 		<form
@@ -774,14 +771,64 @@ function revertOutputEdit(
 		});
 	}
 	if (mode === "all" || mode === "dmx") {
+		// Only the personality waits for a restart; the address already applies. The start
+		// address moves only when the running personality would not fit where it is now.
+		const highest = 513 - personalityFootprint(active.personality);
 		Object.assign(edit, {
 			personality: active.personality,
-			protocol: active.protocol,
-			universe: active.universe,
-			startAddress: active.startAddress,
+			...(output.startAddress > highest ? { startAddress: highest } : {}),
 		});
 	}
 	return edit;
+}
+
+interface OutputDraft {
+	targetKind: string;
+	monitorBy: string;
+	monitorValue: string;
+	fullscreen: boolean;
+	width: number;
+	height: number;
+	presentation: string;
+	framesPerSecond: number;
+	soundOutputKind: string;
+	soundOutputName: string;
+	personality: string;
+	protocol: string;
+	universe: number;
+	startAddress: number;
+}
+
+/** Whether the fields this editor saves differ from the stored output. */
+function draftDiffers(
+	output: OutputConfigurationView,
+	mode: "all" | "picture" | "sound" | "dmx",
+	draft: OutputDraft,
+): boolean {
+	const picture =
+		draft.targetKind !== output.targetKind ||
+		(draft.targetKind === "monitor" &&
+			(draft.monitorBy !== (output.monitorBy ?? "index") ||
+				draft.monitorValue.trim() !== (output.monitorValue ?? "0") ||
+				draft.fullscreen !== output.fullscreen)) ||
+		draft.width !== output.width ||
+		draft.height !== output.height ||
+		draft.presentation !== output.presentation ||
+		(draft.presentation === "fixed-fps" &&
+			draft.framesPerSecond !== output.framesPerSecond);
+	const sound =
+		draft.soundOutputKind !== output.soundOutputKind ||
+		(draft.soundOutputKind === "device" &&
+			draft.soundOutputName.trim() !== (output.soundOutputName ?? ""));
+	const dmx =
+		draft.personality !== output.personality ||
+		draft.protocol !== output.protocol ||
+		draft.universe !== output.universe ||
+		draft.startAddress !== output.startAddress;
+	if (mode === "picture") return picture;
+	if (mode === "sound") return sound;
+	if (mode === "dmx") return dmx;
+	return picture || sound || dmx;
 }
 
 function outputEditorKey(

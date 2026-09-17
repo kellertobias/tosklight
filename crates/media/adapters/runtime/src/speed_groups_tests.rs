@@ -26,6 +26,28 @@ fn configuration(listen: Option<SocketAddr>, source: TempoSource) -> MediaConfig
     configuration
 }
 
+/// Starts reception the way the process does, and returns what an edit goes through.
+fn start(
+    configuration: &MediaConfiguration,
+    reception: &SharedSpeedGroups,
+    shutdown: &Shutdown,
+    started: Instant,
+) -> (
+    Arc<ArcSwap<MediaConfiguration>>,
+    crate::live_settings::LiveSettings,
+) {
+    let live = Arc::new(ArcSwap::from_pointee(configuration.clone()));
+    let settings = crate::live_settings::LiveSettings::new();
+    spawn(
+        live.clone(),
+        settings.follow(),
+        reception,
+        shutdown,
+        started,
+    );
+    (live, settings)
+}
+
 fn group(number: u32) -> TempoSource {
     TempoSource::SpeedGroup {
         group_id: SpeedGroupId::new(number),
@@ -72,7 +94,7 @@ async fn a_desk_datagram_retimes_the_output_that_follows_its_group() {
     let reception = shared();
     let shutdown = Shutdown::new();
     let started = Instant::now();
-    spawn(&configuration, &reception, &shutdown, started);
+    let _live = start(&configuration, &reception, &shutdown, started);
     assert_eq!(status(&reception, started).connection, "waiting");
 
     let desk = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -195,8 +217,42 @@ async fn a_port_that_is_already_taken_is_reported_to_the_operator() {
     let configuration = configuration(Some(taken.local_addr().unwrap()), group(1));
     let reception = shared();
     let started = Instant::now();
-    spawn(&configuration, &reception, &Shutdown::new(), started);
+    let _live = start(&configuration, &reception, &Shutdown::new(), started);
     let reported = status(&reception, started);
     assert_eq!(reported.connection, "unavailable");
     assert!(reported.detail.unwrap().contains("Speed Groups"));
+}
+
+#[tokio::test]
+async fn a_new_listen_address_is_taken_without_a_restart() {
+    let first = free_port();
+    let reception = shared();
+    let shutdown = Shutdown::new();
+    let started = Instant::now();
+    let (live, settings) = start(
+        &configuration(Some(first), group(1)),
+        &reception,
+        &shutdown,
+        started,
+    );
+
+    let second = free_port();
+    live.store(Arc::new(configuration(Some(second), group(1))));
+    settings.changed();
+    settings.settled().await;
+    assert_eq!(
+        status(&reception, started).listening,
+        Some(second.to_string())
+    );
+    let desk = UdpSocket::bind("127.0.0.1:0").unwrap();
+    desk.send_to(&encode(&update(1, 1, 100.0)), second).unwrap();
+    wait_for(&reception, started, |status| status.accepted == 1).await;
+    UdpSocket::bind(first).expect("the old Speed Group socket was closed");
+
+    live.store(Arc::new(configuration(None, group(1))));
+    settings.changed();
+    settings.settled().await;
+    assert_eq!(status(&reception, started).listening, None);
+    UdpSocket::bind(second).expect("turning reception off closed the socket");
+    shutdown.request(crate::shutdown::ShutdownReason::Requested);
 }

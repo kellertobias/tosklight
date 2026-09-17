@@ -1,19 +1,25 @@
 //! Speed Group reception for the running process.
 //!
-//! One UDP listener, bound once at startup when the network settings name a Speed Group listen
-//! address. What it hears goes into one shared reception state; every output reads its tempo from
+//! One UDP listener, bound when the network settings name a Speed Group listen address and
+//! rebound whenever an accepted edit changes that address. What it hears goes into one shared reception state; every output reads its tempo from
 //! there each frame, and the API reads the same state for the operator. The Media Server only
 //! receives Speed Groups — nothing here sends one.
 
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
+
+use arc_swap::ArcSwap;
 
 use media_application::MediaConfiguration;
 use media_domain::{OutputId, OutputTempo, Timestamp};
 use media_net::speed_group_osc::SpeedGroupDatagram;
 use media_net::{SpeedGroupListener, SpeedGroupReception, SpeedGroupReceptionStatus};
 
+use tokio::task::JoinHandle;
+
 use crate::Shutdown;
+use crate::live_settings::Follower;
 
 /// The reception state every output and the API share.
 pub type SharedSpeedGroups = Arc<Mutex<SpeedGroupReception>>;
@@ -32,39 +38,76 @@ fn stamp(started: Instant) -> Timestamp {
     Timestamp::from_micros(started.elapsed().as_micros() as u64)
 }
 
-/// Starts listening, when the configuration asks for it.
+/// Starts listening when the configuration asks for it, and moves with later edits.
 ///
 /// A listener that cannot bind is reported to the operator and leaves the rest of the server
-/// running: every output then simply keeps its tempo source without a live group.
+/// running: every output then simply keeps its tempo source without a live group. A changed
+/// listen address closes the old socket and binds the new one without a restart; reception
+/// starts afresh there, because the old sender's state belongs to the old address.
 pub fn spawn(
-    configuration: &MediaConfiguration,
+    live: Arc<ArcSwap<MediaConfiguration>>,
+    mut follower: Follower,
     reception: &SharedSpeedGroups,
     shutdown: &Shutdown,
     started: Instant,
 ) {
-    let Some(address) = configuration.network.resolved().speed_group_endpoint else {
-        return;
+    let mut current = live.load().network.resolved().speed_group_endpoint;
+    let mut task = listen(current, reception, shutdown, started);
+    let (reception, shutdown) = (reception.clone(), shutdown.clone());
+    let mut watcher = shutdown.watcher();
+    tokio::spawn(async move {
+        loop {
+            let generation = tokio::select! {
+                _ = watcher.wait() => break,
+                next = follower.next() => match next {
+                    Some(generation) => generation,
+                    None => break,
+                },
+            };
+            let wanted = live.load().network.resolved().speed_group_endpoint;
+            if wanted != current {
+                if let Some(running) = task.take() {
+                    running.abort();
+                    let _ = running.await;
+                }
+                current = wanted;
+                task = listen(current, &reception, &shutdown, started);
+            }
+            follower.applied(generation);
+        }
+    });
+}
+
+fn listen(
+    address: Option<SocketAddr>,
+    reception: &SharedSpeedGroups,
+    shutdown: &Shutdown,
+    started: Instant,
+) -> Option<JoinHandle<()>> {
+    let Some(address) = address else {
+        *lock(reception) = SpeedGroupReception::default();
+        return None;
     };
     let mut listener = match SpeedGroupListener::bind(address) {
         Ok(listener) => listener,
         Err(error) => {
             tracing::warn!(%error, "Speed Groups will not be received");
             *lock(reception) = SpeedGroupReception::unavailable(error.to_string());
-            return;
+            return None;
         }
     };
     let bound = listener.local_address().unwrap_or(address);
     tracing::info!(address = %bound, "listening for Speed Groups");
     *lock(reception) = SpeedGroupReception::listening(bound);
     let (reception, mut watcher) = (reception.clone(), shutdown.watcher());
-    tokio::spawn(async move {
+    Some(tokio::spawn(async move {
         loop {
             tokio::select! {
                 _ = watcher.wait() => break,
                 datagram = listener.receive() => apply(&reception, datagram, stamp(started)),
             }
         }
-    });
+    }))
 }
 
 /// Applies one received datagram, recording every refusal for the operator.

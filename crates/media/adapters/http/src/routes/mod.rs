@@ -78,6 +78,13 @@ pub type PersistConfiguration =
 /// to while they turn it. Which ones those are is the process's knowledge, not the API's, so the
 /// API simply says that the configuration changed.
 pub type ApplyConfiguration = Arc<dyn Fn(&MediaConfiguration) + Send + Sync>;
+
+/// Resolves once every running listener has caught up with the last applied edit.
+///
+/// A route whose answer depends on a rebind — a listener that could not take its new address —
+/// waits for this before it answers, so the failure arrives with the edit that caused it.
+pub type SettleConfiguration =
+    Arc<dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync>;
 pub type OpenDataDirectory = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
 
 /// Everything the routes read and write.
@@ -105,6 +112,7 @@ pub struct ApiState {
     pub now: Arc<dyn Fn() -> Timestamp + Send + Sync>,
     pub persist: PersistConfiguration,
     pub apply: ApplyConfiguration,
+    pub settle: SettleConfiguration,
     /// Requests the renderer's existing CITP composite preview, when this process presents outputs.
     pub preview: RequestOutputPreview,
     /// What the running process can tell the API about itself.
@@ -124,6 +132,11 @@ impl std::fmt::Debug for ApiState {
 /// An [`ApplyConfiguration`] that does nothing, for a process with nothing to retune.
 pub fn applies_nothing() -> ApplyConfiguration {
     Arc::new(|_| {})
+}
+
+/// A [`SettleConfiguration`] for a process with no listeners to wait for.
+pub fn settles_at_once() -> SettleConfiguration {
+    Arc::new(|| Box::pin(std::future::ready(())))
 }
 
 /// The versioned API.

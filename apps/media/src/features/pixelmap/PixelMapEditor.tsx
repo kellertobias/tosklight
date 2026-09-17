@@ -45,8 +45,9 @@ function withMode(map: PixelMapView, mode: PixelMapView["mode"]): PixelMapView {
 function saveStateLabel(busy: boolean, failed: boolean, dirty: boolean) {
 	if (busy) return "Saving…";
 	if (failed) return "Not saved · Check the error";
-	if (dirty) return "Unsaved changes · Applies on restart";
-	return "Saved · Applies on restart";
+	// A saved pixel map reaches the rig on the next frame; nothing here waits for a restart.
+	if (dirty) return "Unsaved changes";
+	return "Saved · Applies immediately";
 }
 
 /** The draft map and the two selections, with the edits the tables and title actions make. */

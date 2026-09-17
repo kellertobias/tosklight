@@ -22,8 +22,10 @@ pub(super) async fn network(State(state): State<ApiState>) -> impl IntoResponse 
 /// Edits the network settings.
 ///
 /// Every address is validated before anything is written, so a refused edit leaves both the stored
-/// configuration and the running listeners exactly as they were. An accepted one is stored and
-/// takes effect on the next start — the view says so, because a socket is bound once.
+/// configuration and the running listeners exactly as they were. An accepted one is stored, and
+/// the Art-Net, sACN and Speed Group listeners move to it before the answer is sent, so a listener
+/// that could not bind is in this answer's warnings. CITP and the administration interface keep
+/// their sockets until the next start, and the view says so.
 pub(super) async fn update_network(
     State(state): State<ApiState>,
     TolerantJson(body): TolerantJson<UpdateNetwork>,
@@ -38,12 +40,14 @@ pub(super) async fn update_network(
         .applied(&configuration.network)
         .map_err(|error| ApiError::bad_request("network-invalid", error.to_string()))?;
 
+    edit::store(&state, configuration)?;
+    (state.settle)().await;
     let view = NetworkView::of(
-        &configuration.network,
+        &state.configuration.load().network,
         &state.active_configuration.network,
         (state.diagnostics.network_warnings)(),
     );
-    edit::commit(&state, configuration, &body.request_id, &view)
+    Ok(edit::respond(&state, &body.request_id, &view))
 }
 
 #[cfg(test)]
@@ -108,8 +112,18 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["stored"]["artNetListen"], "192.168.1.40:6454");
         assert_eq!(body["activeStored"]["artNetListen"], "0.0.0.0:6454");
-        assert_eq!(body["resolved"]["artNetListen"], "0.0.0.0:6454");
-        assert_eq!(body["pendingRestart"], true);
+        assert_eq!(
+            body["resolved"]["artNetListen"], "127.0.0.1:6454",
+            "Art-Net follows the preset at once"
+        );
+        assert_eq!(
+            body["resolved"]["httpListen"], "127.0.0.1:8080",
+            "HTTP keeps its startup socket"
+        );
+        assert_eq!(
+            body["pendingRestart"], true,
+            "the preset moves CITP to loopback only on the next start"
+        );
 
         let stored = bench.stored.lock().unwrap();
         assert_eq!(stored.len(), 1, "the edit was written, not just answered");

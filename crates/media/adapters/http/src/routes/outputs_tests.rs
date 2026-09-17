@@ -182,6 +182,55 @@ async fn an_output_configuration_edit_is_intent_shaped_written_and_restart_expli
 }
 
 #[tokio::test]
+async fn a_dmx_address_edit_applies_live_and_only_the_personality_waits() {
+    let bench = bench();
+    let uri = format!("/api/v2/outputs/{}/configuration/update", bench.output);
+    let (status, body) = send(
+        &bench.router,
+        post(
+            uri.clone(),
+            r#"{"requestId":"live-dmx","protocol":"sacn","universe":9,"startAddress":20}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["dmxPendingRestart"], false,
+        "the address is rerouted live"
+    );
+    assert_eq!(body["picturePendingRestart"], false);
+    assert_eq!(
+        bench.applied.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "the running process was told at once"
+    );
+    let live = bench.configuration.load();
+    assert_eq!(live.outputs[0].universe, 9);
+    assert_eq!(live.outputs[0].start_address, 20);
+    let restart_fields = body["restartFields"].as_array().unwrap();
+    for field in ["protocol", "universe", "startAddress", "tempoSource"] {
+        assert!(
+            !restart_fields.iter().any(|value| value == field),
+            "{field}"
+        );
+    }
+    assert!(restart_fields.iter().any(|value| value == "personality"));
+
+    let (_, body) = send(
+        &bench.router,
+        post(
+            uri,
+            r#"{"requestId":"personality","personality":"eight-layers","startAddress":1}"#,
+        ),
+    )
+    .await;
+    assert_eq!(
+        body["dmxPendingRestart"], true,
+        "a personality change still needs a restart"
+    );
+}
+
+#[tokio::test]
 async fn an_output_configuration_edit_changes_only_what_it_carries() {
     let bench = bench();
     let uri = format!("/api/v2/outputs/{}/configuration/update", bench.output);

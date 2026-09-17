@@ -8,6 +8,11 @@
 //! The stored settings and the addresses this run actually bound are both reported, because the
 //! same-computer preset makes them differ on purpose: an operator must be able to see what they
 //! typed and what the process is using at the same time.
+//!
+//! Art-Net, sACN and the Speed Group listener are receive-only UDP sockets the running process
+//! rebinds as soon as an edit is accepted. CITP and the administration interface are bound once:
+//! consoles hold TCP sessions to CITP and discover it by the port it announced, and the HTTP
+//! listener serves the very page making the edit. Only those two wait for a restart.
 
 use std::net::SocketAddr;
 
@@ -54,6 +59,9 @@ impl NetworkAddressesView {
     }
 }
 
+/// The network fields a running process cannot rebind.
+pub const RESTART_FIELDS: [&str; 2] = ["citpListen", "httpListen"];
+
 /// The network settings, as the API reports them.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(rename_all = "camelCase")]
@@ -65,14 +73,18 @@ pub struct NetworkView {
     /// What this process was started with, used by Revert to current settings.
     pub active_same_computer_preset: bool,
     pub active_stored: NetworkAddressesView,
-    /// What this run bound, after the preset was applied.
+    /// What this run is bound to now, after the preset was applied. The UDP listeners follow
+    /// accepted edits; CITP and HTTP show the startup addresses until the next start.
     pub resolved: NetworkAddressesView,
     /// The port CITP discovery announces. Always the port CITP actually listens on.
     pub citp_advertised_port: u16,
-    /// Sockets are bound once, at startup. An accepted change is stored and used by the next
-    /// start; the API says so rather than letting a panel imply the change is already live.
+    /// Some listeners are bound once, at startup: the fields named in `restartFields`. A change to
+    /// them is stored and used by the next start; the API says so rather than letting a panel
+    /// imply the change is already live.
     pub takes_effect_on_restart: bool,
-    /// Whether stored next-start values differ from the immutable startup values.
+    /// The fields that apply on the next start. Every other field applies immediately.
+    pub restart_fields: Vec<String>,
+    /// Whether a restart-bound listener would bind somewhere else on the next start.
     pub pending_restart: bool,
     /// A listener that could not bind this run is disabled rather than preventing administration.
     pub warnings: Vec<String>,
@@ -84,16 +96,30 @@ impl NetworkView {
         active: &NetworkConfiguration,
         warnings: Vec<String>,
     ) -> Self {
-        let resolved = active.resolved();
+        let startup = active.resolved();
+        let next = network.resolved();
+        // The UDP listeners already follow the stored settings; CITP and HTTP still run on what
+        // this process started with.
+        let running = ResolvedNetwork {
+            citp_listen: startup.citp_listen,
+            http_listen: startup.http_listen,
+            citp_advertised_port: startup.citp_advertised_port,
+            ..next.clone()
+        };
         Self {
             same_computer_preset: network.same_computer_preset,
             stored: NetworkAddressesView::stored(network),
             active_same_computer_preset: active.same_computer_preset,
             active_stored: NetworkAddressesView::stored(active),
-            resolved: NetworkAddressesView::resolved(&resolved),
-            citp_advertised_port: resolved.citp_advertised_port,
+            resolved: NetworkAddressesView::resolved(&running),
+            citp_advertised_port: running.citp_advertised_port,
             takes_effect_on_restart: true,
-            pending_restart: network != active,
+            restart_fields: RESTART_FIELDS
+                .iter()
+                .map(|field| (*field).to_owned())
+                .collect(),
+            pending_restart: next.citp_listen != startup.citp_listen
+                || next.http_listen != startup.http_listen,
             warnings,
         }
     }
@@ -286,6 +312,48 @@ mod tests {
         assert_eq!(view.citp_advertised_port, 4809);
         assert!(view.takes_effect_on_restart);
         assert!(!view.pending_restart);
+    }
+
+    #[test]
+    fn udp_listeners_apply_live_and_only_citp_and_http_wait_for_a_restart() {
+        let active = NetworkConfiguration::default();
+        let live = NetworkConfiguration {
+            art_net_listen: "10.0.0.5:6454".parse().unwrap(),
+            sacn_listen: "10.0.0.5:5568".parse().unwrap(),
+            speed_group_endpoint: Some("10.0.0.5:4810".parse().unwrap()),
+            ..active.clone()
+        };
+        let view = NetworkView::of(&live, &active, Vec::new());
+        assert_eq!(view.resolved.art_net_listen, "10.0.0.5:6454");
+        assert_eq!(view.resolved.sacn_listen, "10.0.0.5:5568");
+        assert_eq!(
+            view.resolved.speed_group_endpoint.as_deref(),
+            Some("10.0.0.5:4810")
+        );
+        assert!(!view.pending_restart, "nothing here waits for a restart");
+        assert_eq!(view.restart_fields, ["citpListen", "httpListen"]);
+
+        let moved = NetworkConfiguration {
+            citp_listen: "10.0.0.5:4809".parse().unwrap(),
+            ..live.clone()
+        };
+        let view = NetworkView::of(&moved, &active, Vec::new());
+        assert!(view.pending_restart);
+        assert_eq!(
+            view.resolved.citp_listen, "0.0.0.0:4809",
+            "CITP keeps its startup socket until the next start"
+        );
+
+        let preset = NetworkConfiguration {
+            same_computer_preset: true,
+            ..live
+        };
+        let view = NetworkView::of(&preset, &active, Vec::new());
+        assert_eq!(view.resolved.art_net_listen, "127.0.0.1:6454");
+        assert!(
+            view.pending_restart,
+            "the preset moves CITP and HTTP only on the next start"
+        );
     }
 
     #[test]

@@ -1,7 +1,8 @@
 // What this server is, what it listens on, and what it sends to.
 //
-// Output identity is editable as stored configuration. The running surface is deliberately left
-// alone, and the page says so rather than pretending a monitor or resolution changed live.
+// Every setting saves automatically. Most of them reach the running server at once; the few that
+// need a restart — a window, a device, a personality, CITP and this interface's own address — say
+// so beside the section heading only while such a change is actually waiting.
 
 import { Button } from "@tosklight/ui/controls";
 import { useState } from "react";
@@ -137,7 +138,11 @@ function Network({
 		<article className="media-settings-section" aria-label="Network">
 			<div className="media-settings-section-heading">
 				<h2>Network</h2>
-				<SettingsSaveState busy={busy} failed={failed} restartBound />
+				<SettingsSaveState
+					busy={busy}
+					failed={failed}
+					restartBound={network.pendingRestart}
+				/>
 			</div>
 			<NetworkEditor
 				formId={formId}
@@ -155,8 +160,11 @@ function Network({
 			{network.pendingRestart && network.takesEffectOnRestart && (
 				<>
 					<p className="media-state is-notice">
-						A saved change to these addresses is used the next time this server
-						starts. The sockets it is using now stay as they are.
+						The saved CITP or interface address is used the next time this
+						server starts; until then it keeps{" "}
+						<code>{network.resolved.citpListen}</code> and{" "}
+						<code>{network.resolved.httpListen}</code>. Art-Net, sACN and Speed
+						Groups already use the saved addresses.
 					</p>
 					<div className="media-settings-actions">
 						<Button
@@ -164,7 +172,8 @@ function Network({
 								onSave({
 									requestId: requestId(),
 									sameComputerPreset: network.activeSameComputerPreset,
-									...network.activeStored,
+									citpListen: network.activeStored.citpListen,
+									httpListen: network.activeStored.httpListen,
 								})
 							}
 						>

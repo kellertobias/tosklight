@@ -32,6 +32,7 @@ pub use error::{ApiError, ApiErrorBody};
 pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};
 pub use replay::Replays;
 pub use routes::{
-    ApiState, ApplyConfiguration, OutputPreviewFrame, RequestOutputPreview, applies_nothing, router,
+    ApiState, ApplyConfiguration, OutputPreviewFrame, RequestOutputPreview, SettleConfiguration,
+    applies_nothing, router, settles_at_once,
 };
 pub use tolerant::TolerantJson;

@@ -297,12 +297,31 @@ impl OutputView {
     }
 }
 
+/// The output fields a running process cannot change.
+pub const OUTPUT_RESTART_FIELDS: [&str; 11] = [
+    "targetKind",
+    "monitorBy",
+    "monitorValue",
+    "fullscreen",
+    "width",
+    "height",
+    "presentation",
+    "framesPerSecond",
+    "soundOutputKind",
+    "soundOutputName",
+    "personality",
+];
+
 /// The output settings an operator can inspect and edit.
 ///
 /// This deliberately does not expose the retired status overlay. Library transcoding is not an
-/// output setting either, so its target codec does not belong here. Every field this view does
-/// expose is settled when the output and its ingress are created, and therefore takes effect on
-/// restart.
+/// output setting either, so its target codec does not belong here.
+///
+/// The DMX protocol, universe and start address, the tempo source and the pixel map apply to the
+/// running output at once: ingress routing is a table the listeners read per frame, and the render
+/// loops read the rest per frame. What the output *is* — its window or off-screen target, size,
+/// frame clock, sound device and personality — is created when the output opens and takes effect
+/// on restart.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputConfigurationView {
@@ -344,9 +363,13 @@ pub struct OutputConfigurationView {
     pub active: OutputConfigurationValuesView,
     pub picture_pending_restart: bool,
     pub sound_pending_restart: bool,
+    /// Whether the personality waits for a restart. Protocol, universe and start address apply
+    /// immediately and never make this true.
     pub dmx_pending_restart: bool,
-    /// Output surfaces, clocks, personalities, and DMX ingress are created once at startup.
+    /// Output surfaces, clocks, sound devices, and personalities are created once at startup.
     pub takes_effect_on_restart: bool,
+    /// The editable fields that apply on the next start. Every other field applies immediately.
+    pub restart_fields: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
@@ -431,6 +454,10 @@ impl OutputConfigurationView {
             sound_pending_restart,
             dmx_pending_restart,
             takes_effect_on_restart: true,
+            restart_fields: OUTPUT_RESTART_FIELDS
+                .iter()
+                .map(|field| (*field).to_owned())
+                .collect(),
         }
     }
 }
@@ -508,11 +535,9 @@ impl OutputConfigurationValuesView {
             || self.sound_output_name != active.sound_output_name
     }
 
+    /// Only the personality: the DMX address is rerouted live.
     fn dmx_differs(&self, active: &Self) -> bool {
         self.personality != active.personality
-            || self.protocol != active.protocol
-            || self.universe != active.universe
-            || self.start_address != active.start_address
     }
 }
 

@@ -47,9 +47,47 @@ describe("the settings page", () => {
 		await waitFor(() =>
 			expect(server.network.stored.artNetListen).toBe("192.168.1.40:6454"),
 		);
+		// Art-Net rebinds live, so nothing waits for a restart.
+		const network = screen.getByRole("article", { name: "Network" });
+		await waitFor(() =>
+			expect(within(network).getByRole("status")).toHaveTextContent(
+				/^Saved automatically$/u,
+			),
+		);
 		expect(
-			screen.getByText(/used the next time this server starts/u),
+			screen.queryByText(/used the next time this server starts/u),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Revert to current settings" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("sends nothing until a setting is actually changed", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+		await screen.findByLabelText("Art-Net");
+		await screen.findByRole("article", { name: "Main DMX input settings" });
+		await new Promise((resolve) => setTimeout(resolve, 600));
+		expect(server.writes).toEqual([]);
+	});
+
+	it("says a CITP address change waits for a restart", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+		const citp = await screen.findByLabelText("CITP");
+		await userEvent.clear(citp);
+		await userEvent.type(citp, "192.168.1.40:4809");
+		await waitFor(() =>
+			expect(server.network.stored.citpListen).toBe("192.168.1.40:4809"),
+		);
+		expect(
+			await screen.findByText(/used the next time this server starts/u),
 		).toBeVisible();
+		expect(
+			within(screen.getByRole("article", { name: "Network" })).getByRole(
+				"status",
+			),
+		).toHaveTextContent("Saved automatically · Applies on restart");
 	});
 
 	it("keeps the web settings available and warns when Art-Net could not bind", async () => {
@@ -321,7 +359,7 @@ describe("the settings page", () => {
 		).not.toBeInTheDocument();
 		expect(
 			screen.getByText(
-				"1 to 1; the complete 512-slot personality must fit in one universe.",
+				"1 to 1; the complete 512-slot personality must fit in one universe. Applies immediately.",
 			),
 		).toBeInTheDocument();
 		await userEvent.click(
@@ -335,7 +373,7 @@ describe("the settings page", () => {
 		);
 		expect(
 			await screen.findByText(
-				"1 to 355; the complete 158-slot personality must fit in one universe.",
+				"1 to 355; the complete 158-slot personality must fit in one universe. Applies immediately.",
 			),
 		).toBeInTheDocument();
 		await waitFor(() => expect(output.writes).toHaveLength(1));
@@ -365,7 +403,7 @@ describe("the settings page", () => {
 		});
 		expect(output.writes[0]).not.toHaveProperty("targetKind");
 		expect(
-			await screen.findByText(/Saved output changes take effect/u),
+			await screen.findByText(/A saved personality takes effect/u),
 		).toBeVisible();
 	});
 
@@ -402,7 +440,7 @@ describe("the settings page", () => {
 			).toBeNull();
 			expect(
 				screen.getByText(
-					"Received on the Art-Net address under Where this server listens.",
+					"Received on the Art-Net address under Where this server listens. Applies immediately.",
 				),
 			).toBeVisible();
 			view.unmount();
@@ -534,10 +572,16 @@ describe("the settings page", () => {
 		);
 		const status = within(network).getByRole("status");
 		expect(heading).toContainElement(status);
-		expect(status).toHaveTextContent(
+		expect(status).toHaveTextContent(/^Saved automatically$/u);
+		expect(status.closest(".ui-window-header")).toBeNull();
+
+		await openSettings("Picture");
+		const picture = await screen.findByRole("article", {
+			name: "Main output settings",
+		});
+		expect(within(picture).getByRole("status")).toHaveTextContent(
 			"Saved automatically · Applies on restart",
 		);
-		expect(status.closest(".ui-window-header")).toBeNull();
 
 		await openSettings("Libraries");
 		const libraries = await screen.findByRole("article", {
@@ -548,20 +592,32 @@ describe("the settings page", () => {
 		);
 	});
 
-	it("reverts stored network settings to the running values", async () => {
+	it("reverts restart-bound network settings to the running values", async () => {
 		const server = stubSettingsServer();
 		renderSettings();
 		const artNet = await screen.findByLabelText("Art-Net");
 		await userEvent.clear(artNet);
 		await userEvent.type(artNet, "192.168.1.40:6454");
+		await waitFor(() =>
+			expect(server.network.stored.artNetListen).toBe("192.168.1.40:6454"),
+		);
+		const http = screen.getByLabelText("This interface");
+		await userEvent.clear(http);
+		await userEvent.type(http, "0.0.0.0:9090");
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Revert to current settings" }),
 		);
 		await waitFor(() => expect(server.network.pendingRestart).toBe(false));
 		await waitFor(() =>
-			expect(screen.getByLabelText("Art-Net")).toHaveValue("0.0.0.0:6454"),
+			expect(screen.getByLabelText("This interface")).toHaveValue(
+				"127.0.0.1:8080",
+			),
 		);
+		expect(
+			screen.getByLabelText("Art-Net"),
+			"a live listener is already current and stays as saved",
+		).toHaveValue("192.168.1.40:6454");
 		expect(
 			screen.queryByRole("button", { name: "Revert to current settings" }),
 		).not.toBeInTheDocument();
@@ -647,6 +703,56 @@ describe("the settings page", () => {
 			requestId: expect.any(String),
 			tempoSource: "playback-bpm-channel",
 		});
+	});
+
+	it("applies a DMX address live and keeps restart status for the personality", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("Network & DMX");
+		const article = await screen.findByRole("article", {
+			name: "Main DMX input settings",
+		});
+		expect(within(article).getByRole("status")).toHaveTextContent(
+			/^Saved automatically$/u,
+		);
+		await replaceNumber("Universe", "7");
+		await waitFor(() =>
+			expect(output.writes.at(-1)).toMatchObject({ universe: 7 }),
+		);
+		expect(output.configuration.dmxPendingRestart).toBe(false);
+		// Let the reloaded editor settle before opening a menu in it.
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		expect(
+			screen.queryByRole("button", { name: "Revert to current settings" }),
+		).not.toBeInTheDocument();
+
+		await choose("8 layers (512 slots)", "2 layers (158 slots)");
+		await waitFor(() =>
+			expect(output.configuration.personality).toBe("two-layers"),
+		);
+		const pending = await screen.findByRole("article", {
+			name: "Main DMX input settings",
+		});
+		await waitFor(() =>
+			expect(within(pending).getByRole("status")).toHaveTextContent(
+				"Saved automatically · Applies on restart",
+			),
+		);
+		expect(pending).toHaveTextContent(
+			"A saved personality takes effect the next time this server starts.",
+		);
+		await userEvent.click(
+			within(pending).getByRole("button", {
+				name: "Revert to current settings",
+			}),
+		);
+		await waitFor(() =>
+			expect(output.writes.at(-1)).toEqual({
+				requestId: expect.any(String),
+				personality: "eight-layers",
+			}),
+		);
+		expect(output.configuration.universe, "the live address stays").toBe(7);
 	});
 
 	it("turns Speed Group reception off when the field is emptied", async () => {
@@ -835,11 +941,9 @@ function installOutputConfiguration(configuration: OutputConfiguration) {
 						configuration.active.soundOutputKind ||
 					configuration.soundOutputName !==
 						configuration.active.soundOutputName;
+				// The DMX address is rerouted live; only the personality waits.
 				configuration.dmxPendingRestart =
-					configuration.personality !== configuration.active.personality ||
-					configuration.protocol !== configuration.active.protocol ||
-					configuration.universe !== configuration.active.universe ||
-					configuration.startAddress !== configuration.active.startAddress;
+					configuration.personality !== configuration.active.personality;
 				return new Response(JSON.stringify(configuration), {
 					status: 200,
 					headers: { "content-type": "application/json" },

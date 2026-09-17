@@ -87,6 +87,15 @@ pub fn commit<T: Serialize>(
     request_id: &str,
     view: &T,
 ) -> Result<Response, ApiError> {
+    store(state, configuration)?;
+    Ok(respond(state, request_id, view))
+}
+
+/// Writes, publishes, and applies an accepted configuration without answering yet.
+///
+/// For a route whose answer has to reflect what the running process made of the edit; it then
+/// answers through [`respond`].
+pub fn store(state: &ApiState, configuration: MediaConfiguration) -> Result<(), ApiError> {
     (state.persist)(&configuration).map_err(|detail| {
         tracing::error!(%detail, "an accepted edit could not be stored");
         ApiError::new(
@@ -100,10 +109,14 @@ pub fn commit<T: Serialize>(
     // Whatever is already running and can honour the change immediately does so now — after it
     // is both stored and published, so a subsystem never runs ahead of what a reload would show.
     (state.apply)(&stored);
+    Ok(())
+}
 
+/// Remembers and returns the answer to a stored edit, so a retry receives the same one.
+pub fn respond<T: Serialize>(state: &ApiState, request_id: &str, view: &T) -> Response {
     let serialized = serde_json::to_string(view).unwrap_or_default();
     state.replays.remember(request_id, serialized.clone());
-    Ok(([(header::CONTENT_TYPE, "application/json")], serialized).into_response())
+    ([(header::CONTENT_TYPE, "application/json")], serialized).into_response()
 }
 
 #[cfg(test)]

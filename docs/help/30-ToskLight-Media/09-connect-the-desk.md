@@ -26,8 +26,8 @@ Synchronized play modes can follow a ToskLight Control Speed Group instead of ea
 **Playback BPM**, which is set in the Media pane rather than over DMX. The Media Server only receives Speed Groups; the desk stays the
 authority.
 
-1. In Media **Settings > Network & DMX**, enter a **Speed Groups** address such as `0.0.0.0:4810`, then
-   restart the Media Server.
+1. In Media **Settings > Network & DMX**, enter a **Speed Groups** address such as `0.0.0.0:4810`.
+   The Media Server starts listening there as soon as the address is saved.
 2. In the same tab's **DMX input** section, set **Synchronized playback follows** to **Light desk Speed Group
    A**–**E** for each output. This applies immediately.
 3. Keep the Media Server fixture's CITP endpoint set on the desk. While a show is open, the desk
@@ -73,7 +73,7 @@ Check in this order:
 3. the Media **DMX** diagnostics name the expected sender and show changing raw bytes;
 4. the manually configured CITP endpoint is reachable when names or previews are required;
 5. **Settings > Network & DMX** reports the desk as receiving when outputs follow a Speed Group; and
-6. saved Media network/output changes were applied by restarting the Media Server.
+6. no Media section shows **Applies on restart**; a waiting personality, CITP, or display change is applied by restarting the Media Server.
 
 The Media Server administration interface can take over playback for testing. Release that takeover before judging desk DMX control.
 
@@ -87,7 +87,7 @@ layer, including Layer 1; the Master is a separate fixture.
 
 Choose the output's **2 layers** or **8 layers** personality in **Settings > Network & DMX**; the
 **Configure DMX input** action at the top of the **DMX** page, marked with an external-link icon,
-opens that tab. Restart Pixel after changing its startup configuration. Use the connection panel’s
+opens that tab. Protocol, universe, and start address apply as soon as they are saved; restart Pixel after changing the personality. Use the connection panel’s
 actual universe and patch table, which is read from the running decoder. Patch one Layer fixture
 per layer, followed by one Master fixture. Both personalities use the same Layer and Master files:
 each Layer occupies 59 slots and Master occupies 40, so eight layers and Master occupy all 512
@@ -127,16 +127,16 @@ console’s media-server settings where CITP is not supported by its current sof
 
 For both applications on one computer, set MagicQ’s **SETUP > View Settings > Net host options**
 to **Normal + Loopback IP**. Older releases called this setting **Send to applications on this PC**;
-it is the same setting, not another switch. Enable Pixel’s **Same computer** network preset and
-restart. Use `127.0.0.1` as the console’s explicit unicast DMX destination and CITP endpoint.
-If the console cannot transmit on loopback, disable the preset, restart Pixel, and use the
+it is the same setting, not another switch. Enable Pixel’s **Same computer** network preset; its
+DMX listeners move at once, and CITP moves after a restart. Use `127.0.0.1` as the console’s explicit unicast DMX destination and CITP endpoint.
+If the console cannot transmit on loopback, disable the preset, restart Pixel for CITP, and use the
 computer’s reachable LAN address for both. Select the corresponding console network interface.
 A reported listener bind failure must be resolved; a healthy administration page does not prove
 that DMX or CITP listeners are available. Same-computer Art-Net requires Pixel’s listener on
 `127.0.0.1` to share UDP 6454 with the console; use sACN for the LAN-address fallback.
 
 For separate computers, disable **Same computer**, bind Pixel to the lighting-network interface
-or `0.0.0.0`, and restart. Enter Pixel’s actual LAN address at the console. `0.0.0.0` is a listen
+or `0.0.0.0`, and restart Pixel so CITP follows. Enter Pixel’s actual LAN address at the console. `0.0.0.0` is a listen
 address, not a destination; `127.0.0.1` reaches only the console’s own computer. Select the
 reachable lighting interface on the console. For a LAN-address connection in MagicQ, set its
 **IP address** to the active LAN interface and **Net host options** to **Normal**, without
@@ -151,7 +151,7 @@ computers must be able to receive; MSEX control and library transfer use Pixel�
 **TCP port**, normally **4809**. Permit the configured HTTP port to open Pixel’s interface from
 another computer. The connection panel displays active listeners and the advertised port;
 use these values when customized. Check firewall rules and macOS Local Network permissions on
-both computers. Stored network changes need a restart before these active values change.
+both computers. Art-Net and sACN listeners change as soon as they are saved; a stored CITP or interface address needs a restart before its active value changes.
 
 ### Verify the visible result
 

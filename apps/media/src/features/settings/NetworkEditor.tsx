@@ -6,6 +6,10 @@
 //
 // What was typed and what this run actually bound are both shown, because the same-computer preset
 // makes them differ on purpose.
+//
+// Art-Net, sACN and Speed Groups are receive-only UDP listeners the server moves as soon as a
+// change is saved. CITP and this interface keep their sockets until the next start: consoles hold
+// TCP sessions to CITP, and this interface is the page making the edit.
 
 import { Button, CheckboxField, TextField } from "@tosklight/ui/controls";
 import { useEffect, useRef, useState } from "react";
@@ -30,23 +34,25 @@ const LISTENERS = [
 	{
 		field: "artNetListen",
 		label: "Art-Net",
-		description: "UDP 6454. A desk sends layer values here.",
+		description:
+			"UDP 6454. A desk sends layer values here. Applies immediately.",
 	},
 	{
 		field: "sacnListen",
 		label: "sACN",
-		description: "UDP 5568. The same values over E1.31.",
+		description: "UDP 5568. The same values over E1.31. Applies immediately.",
 	},
 	{
 		field: "citpListen",
 		label: "CITP",
 		description:
-			"TCP 4809. A console discovers this server and watches its preview here.",
+			"TCP 4809. A console discovers this server and watches its preview here. Applies on restart.",
 	},
 	{
 		field: "httpListen",
 		label: "This interface",
-		description: "The administration interface you are reading.",
+		description:
+			"The administration interface you are reading. Applies on restart.",
 	},
 ] as const;
 
@@ -72,9 +78,7 @@ export function NetworkEditor({
 		network.stored.speedGroupEndpoint ?? "",
 	);
 	const form = useRef<HTMLFormElement>(null);
-	const mounted = useRef(false);
 	useEffect(() => {
-		mounted.current = false;
 		setPreset(network.sameComputerPreset);
 		setListeners({
 			artNetListen: network.stored.artNetListen,
@@ -84,16 +88,22 @@ export function NetworkEditor({
 		});
 		setEndpoint(network.stored.speedGroupEndpoint ?? "");
 	}, [network]);
+	// Only a draft that differs from what the server stored is saved. Comparing values rather than
+	// counting renders keeps a page load, a reload after a save, or React's development double
+	// effects from sending an edit nobody made.
+	const edited =
+		preset !== network.sameComputerPreset ||
+		LISTENERS.some(
+			(listener) =>
+				listeners[listener.field] !== network.stored[listener.field],
+		) ||
+		endpoint.trim() !== (network.stored.speedGroupEndpoint ?? "");
 	useEffect(() => {
-		if (showActions) return;
-		if (!mounted.current) {
-			mounted.current = true;
-			return;
-		}
+		if (showActions || !edited) return;
 		onChanged?.();
 		const timer = window.setTimeout(() => form.current?.requestSubmit(), 350);
 		return () => window.clearTimeout(timer);
-	}, [preset, listeners, endpoint, onChanged, showActions]);
+	}, [preset, listeners, endpoint, edited, onChanged, showActions]);
 
 	return (
 		<form
@@ -135,14 +145,14 @@ export function NetworkEditor({
 				))}
 				<TextField
 					label="Speed Groups"
-					description="UDP, usually 0.0.0.0:4810. Tos Light Control sends its Speed Group tempos here over OSC. Leave empty to not follow a desk's Speed Groups."
+					description="UDP, usually 0.0.0.0:4810. Tos Light Control sends its Speed Group tempos here over OSC. Leave empty to not follow a desk's Speed Groups. Applies immediately."
 					value={endpoint}
 					onChange={(event) => setEndpoint(event.target.value)}
 				/>
 				<CheckboxField
 					label="Light and Media are on this computer"
 					stateLabel="Listen on 127.0.0.1"
-					description="Listens on 127.0.0.1 for this run without changing the addresses above, so they come back when you turn it off."
+					description="Listens on 127.0.0.1 without changing the addresses above, so they come back when you turn it off. Art-Net, sACN and Speed Groups move immediately; CITP and this interface on restart."
 					checked={preset}
 					onChange={(event) => setPreset(event.target.checked)}
 				/>

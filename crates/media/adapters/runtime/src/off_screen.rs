@@ -76,7 +76,6 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
         return;
     }
     tracing::info!(outputs = hosted.len(), "off-screen outputs presenting");
-
     let started = std::time::Instant::now();
     let mut loader = AsyncClipLoader::new(configuration.playback.cache_budget_bytes);
     let mut pixels = crate::pixel_output::PixelOutputs::default();
@@ -91,8 +90,9 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
         let mut reports = Vec::new();
 
         for output in &mut hosted {
-            // Each output keeps its own clock, so two outputs at different refresh rates present
-            // at their own rates rather than at the slower one's.
+            // A saved pixel map follows at once. Each output keeps its own clock, so two outputs
+            // at different refresh rates present at their own rates rather than the slower one's.
+            crate::pixel_output::follow_pixel_map(&mut output.configuration, &live);
             if !output.renderer.should_present(now) {
                 continue;
             }

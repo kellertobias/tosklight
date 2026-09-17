@@ -86,6 +86,7 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         apply: Arc::new(move |_| {
             applying.fetch_add(1, Ordering::SeqCst);
         }),
+        settle: crate::routes::settles_at_once(),
         preview: Arc::new(move |_, _, _| requested_preview.lock().unwrap().clone()),
         diagnostics,
         replays: Arc::new(crate::replay::Replays::new()),

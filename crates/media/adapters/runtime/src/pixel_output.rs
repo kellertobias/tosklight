@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use media_application::MediaConfiguration;
 use media_application::configuration::{OutputConfiguration, PixelOutputMode, PixelOutputRoute};
 use media_domain::OutputId;
 use media_domain::pixel_map::{
@@ -36,6 +37,19 @@ pub fn sends_pixels(configuration: &OutputConfiguration) -> bool {
             .routes
             .iter()
             .any(|route| route.enabled)
+}
+
+/// Takes the stored pixel map into an output's running configuration.
+///
+/// The pixel map is read every frame, so a saved zone, route, handoff, or region reaches the rig
+/// on the next frame instead of on the next start. Only the pixel map follows: what the output
+/// itself is stays as it was opened.
+pub fn follow_pixel_map(running: &mut OutputConfiguration, live: &MediaConfiguration) {
+    if let Some(stored) = live.output(running.id)
+        && stored.pixel_map != running.pixel_map
+    {
+        running.pixel_map = stored.pixel_map.clone();
+    }
 }
 
 /// A stable sACN source identity for one server.
@@ -331,6 +345,26 @@ mod tests {
         let mut unrouted = mapping_output();
         unrouted.pixel_map.routes.clear();
         assert!(!sends_pixels(&unrouted));
+    }
+
+    #[test]
+    fn a_saved_pixel_map_reaches_the_running_output_and_nothing_else_does() {
+        let mut running = OutputConfiguration::new("Main");
+        let mut stored = mapping_output();
+        stored.id = running.id;
+        stored.universe = 42;
+        let live = MediaConfiguration {
+            outputs: vec![stored.clone()],
+            ..MediaConfiguration::default()
+        };
+        assert!(!sends_pixels(&running));
+        follow_pixel_map(&mut running, &live);
+        assert_eq!(running.pixel_map, stored.pixel_map);
+        assert!(
+            sends_pixels(&running),
+            "the next frame sends without a restart"
+        );
+        assert_ne!(running.universe, 42, "only the pixel map follows");
     }
 
     #[test]

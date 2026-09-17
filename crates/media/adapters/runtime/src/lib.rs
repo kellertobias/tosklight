@@ -19,11 +19,13 @@ mod citp;
 mod citp_console_presence;
 mod data_folder;
 mod dmx;
+mod dmx_listeners;
 mod effect_banks;
 mod fullscreen_hint;
 mod layer_pipeline;
 mod layer_sources;
 mod library_runtime;
+mod live_settings;
 pub mod log_buffer;
 mod logging;
 mod model_store;
@@ -145,7 +147,8 @@ fn run_inner() -> anyhow::Result<()> {
         &speed_groups,
         started,
     );
-    let apply = applies_to(audio.as_ref());
+    let live_settings = live_settings::LiveSettings::new();
+    let apply = applies_to(audio.as_ref(), &live_settings);
 
     let previews = preview::SharedPreviews::configured(&configuration);
     let shared = presentation::Shared {
@@ -169,7 +172,8 @@ fn run_inner() -> anyhow::Result<()> {
         dmx_diagnostics,
         &network_warnings,
         console_identity,
-    )?;
+        &live_settings,
+    );
 
     // Off-screen outputs render on their own thread with their own device, so they run whether or
     // not this process also hosts a window. A rack server with no display is still a media server.
@@ -182,6 +186,7 @@ fn run_inner() -> anyhow::Result<()> {
         catalog: Some(shared.catalog.clone()),
         diagnostics,
         apply,
+        settle: live_settings.settle(),
         previews: Some(shared.previews.clone()),
     };
     // What decides this is whether a desktop is reachable, not whether an output is configured.
@@ -223,7 +228,7 @@ fn run_inner() -> anyhow::Result<()> {
 }
 
 /// Brings up the DMX and CITP listeners on the background runtime, recording any network warnings
-/// DMX startup raised before CITP starts.
+/// DMX startup raised before CITP starts. DMX and Speed Groups then follow accepted edits.
 #[allow(clippy::too_many_arguments)]
 fn start_desk_listeners(
     runtime: &tokio::runtime::Runtime,
@@ -232,22 +237,29 @@ fn start_desk_listeners(
     shutdown: &Shutdown,
     started: std::time::Instant,
     dmx_diagnostics: dmx::SharedDiagnostics,
-    network_warnings: &std::sync::Mutex<Vec<String>>,
+    network_warnings: &dmx_listeners::SharedWarnings,
     console_identity: citp::ConsoleIdentity,
-) -> anyhow::Result<()> {
+    live_settings: &live_settings::LiveSettings,
+) {
     runtime.block_on(async {
-        let warnings = dmx::spawn(
-            configuration,
+        dmx::spawn(
+            shared.configuration.clone(),
+            live_settings.follow(),
             shared.state.clone(),
             shutdown.clone(),
             started,
             dmx_diagnostics,
             shared.universe_inputs.clone(),
-        )?;
-        *network_warnings
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = warnings;
-        speed_groups::spawn(configuration, &shared.speed_groups, shutdown, started);
+            network_warnings.clone(),
+        )
+        .await;
+        speed_groups::spawn(
+            shared.configuration.clone(),
+            live_settings.follow(),
+            &shared.speed_groups,
+            shutdown,
+            started,
+        );
         citp::spawn(
             configuration,
             shared.state.clone(),
@@ -257,8 +269,7 @@ fn start_desk_listeners(
             shutdown.clone(),
             console_identity,
         );
-        anyhow::Ok(())
-    })
+    });
 }
 
 fn stop_background(
@@ -534,18 +545,19 @@ fn diagnostics_asked_for(arguments: &[String]) -> Diagnostics {
 /// The analysis tuning is the one an operator turns while listening, so it reaches the worker
 /// immediately. Everything else about audio — which device is open — is a stream, and a stream is
 /// opened at startup.
-fn applies_to(audio: Option<&media_audio::AudioService>) -> media_http::ApplyConfiguration {
-    match audio {
-        Some(service) => {
-            let tuning = service.tuning();
-            std::sync::Arc::new(move |configuration: &MediaConfiguration| {
-                tuning.store(std::sync::Arc::new(media_audio::tuning_of(
-                    &configuration.audio,
-                )));
-            })
+fn applies_to(
+    audio: Option<&media_audio::AudioService>,
+    live: &live_settings::LiveSettings,
+) -> media_http::ApplyConfiguration {
+    let (tuning, live) = (audio.map(media_audio::AudioService::tuning), live.clone());
+    std::sync::Arc::new(move |configuration: &MediaConfiguration| {
+        if let Some(tuning) = &tuning {
+            tuning.store(std::sync::Arc::new(media_audio::tuning_of(
+                &configuration.audio,
+            )));
         }
-        None => media_http::applies_nothing(),
-    }
+        live.changed();
+    })
 }
 
 /// What this process can tell the API about itself.
@@ -838,6 +850,7 @@ pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> any
         catalog: None,
         diagnostics: media_http::Diagnostics::default(),
         apply: media_http::applies_nothing(),
+        settle: media_http::settles_at_once(),
         previews: None,
     })
     .await
@@ -859,6 +872,8 @@ pub struct Services {
     pub diagnostics: media_http::Diagnostics,
     /// What a running subsystem does when an edit is accepted.
     pub apply: media_http::ApplyConfiguration,
+    /// Waits for the listeners that follow an accepted edit.
+    pub settle: media_http::SettleConfiguration,
     /// The compositor/CITP preview slots, when this process owns a renderer.
     pub previews: Option<preview::SharedPreviews>,
 }
@@ -875,6 +890,7 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
         catalog,
         diagnostics,
         apply,
+        settle,
         previews,
     } = services;
     let configuration = live.load_full();
@@ -934,6 +950,7 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
                 .map_err(|error| error.to_string())
         }),
         apply,
+        settle,
         preview: std::sync::Arc::new(move |output, layer, size| {
             let previews = previews.as_ref()?;
             let preview = match layer {

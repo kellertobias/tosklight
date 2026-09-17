@@ -73,7 +73,7 @@ Start **ToskLight Pixel**, select and test its output, upload content, and wait 
 finish. Verify the physical display before patching the matching Media Server fixture in Control.
 Configure the corresponding Art-Net or sACN address and CITP endpoint in Show Patch.
 
-Network, monitor, resolution, presentation-rate, and audio-device changes are saved configuration and take effect after the Media Server restarts. Layer, playback, and takeover changes are live.
+Media Server settings save automatically. DMX protocol, universe and start address, the Art-Net, sACN and Speed Group listen addresses, the tempo source, the pixel map, audio tuning, and layer, playback, and takeover changes apply immediately. Monitor, resolution, presentation-rate, sound and audio device, personality, CITP and interface address, and library-directory changes take effect after the Media Server restarts.
 
 ### First Architect rig
 

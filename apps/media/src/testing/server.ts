@@ -287,12 +287,16 @@ export function stubServer(
 				if (body.speedGroupEndpoint !== undefined) {
 					server.network.stored.speedGroupEndpoint = body.speedGroupEndpoint;
 				}
-				server.network.pendingRestart =
-					server.network.sameComputerPreset !==
-						server.network.activeSameComputerPreset ||
-					JSON.stringify(server.network.stored) !==
-						JSON.stringify(server.network.activeStored);
-				return jsonResponse(server.network);
+				// Art-Net, sACN and Speed Groups rebind live; only CITP and HTTP wait.
+				const network = server.network;
+				network.resolved.artNetListen = network.stored.artNetListen;
+				network.resolved.sacnListen = network.stored.sacnListen;
+				network.resolved.speedGroupEndpoint = network.stored.speedGroupEndpoint;
+				network.pendingRestart =
+					network.sameComputerPreset !== network.activeSameComputerPreset ||
+					network.stored.citpListen !== network.activeStored.citpListen ||
+					network.stored.httpListen !== network.activeStored.httpListen;
+				return jsonResponse(network);
 			}
 
 			if (path === "/audio/update") {
@@ -1061,6 +1065,19 @@ export function anOutputConfiguration(
 		soundPendingRestart: false,
 		dmxPendingRestart: false,
 		takesEffectOnRestart: false,
+		restartFields: [
+			"targetKind",
+			"monitorBy",
+			"monitorValue",
+			"fullscreen",
+			"width",
+			"height",
+			"presentation",
+			"framesPerSecond",
+			"soundOutputKind",
+			"soundOutputName",
+			"personality",
+		],
 		...overrides,
 	};
 }
@@ -1661,6 +1678,7 @@ export function aNetwork(overrides: Partial<NetworkView> = {}): NetworkView {
 		resolved: { ...stored },
 		citpAdvertisedPort: 4809,
 		takesEffectOnRestart: true,
+		restartFields: ["citpListen", "httpListen"],
 		pendingRestart: false,
 		warnings: [],
 		...overrides,

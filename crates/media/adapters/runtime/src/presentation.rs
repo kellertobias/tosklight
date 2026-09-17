@@ -761,6 +761,7 @@ impl RenderWorkerState {
         let mut reports = Vec::new();
 
         for hosted in &mut self.outputs {
+            crate::pixel_output::follow_pixel_map(&mut hosted.configuration, &configuration);
             if !hosted.output.should_present(now) {
                 continue;
             }

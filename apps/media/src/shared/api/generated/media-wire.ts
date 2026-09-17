@@ -224,11 +224,20 @@ speedGroup: number | null,
 /**
  * Exact startup values, used to restore what the running process is using now.
  */
-active: OutputConfigurationValuesView, picturePendingRestart: boolean, soundPendingRestart: boolean, dmxPendingRestart: boolean,
+active: OutputConfigurationValuesView, picturePendingRestart: boolean, soundPendingRestart: boolean,
 /**
- * Output surfaces, clocks, personalities, and DMX ingress are created once at startup.
+ * Whether the personality waits for a restart. Protocol, universe and start address apply
+ * immediately and never make this true.
  */
-takesEffectOnRestart: boolean, };
+dmxPendingRestart: boolean,
+/**
+ * Output surfaces, clocks, sound devices, and personalities are created once at startup.
+ */
+takesEffectOnRestart: boolean,
+/**
+ * The editable fields that apply on the next start. Every other field applies immediately.
+ */
+restartFields: Array<string>, };
 export type DmxMapView = { outputId: string, outputName: string, universe: number,
 /**
  * The configured one-based DMX address of the first layer slot.
@@ -300,7 +309,8 @@ stored: NetworkAddressesView,
  */
 activeSameComputerPreset: boolean, activeStored: NetworkAddressesView,
 /**
- * What this run bound, after the preset was applied.
+ * What this run is bound to now, after the preset was applied. The UDP listeners follow
+ * accepted edits; CITP and HTTP show the startup addresses until the next start.
  */
 resolved: NetworkAddressesView,
 /**
@@ -308,12 +318,17 @@ resolved: NetworkAddressesView,
  */
 citpAdvertisedPort: number,
 /**
- * Sockets are bound once, at startup. An accepted change is stored and used by the next
- * start; the API says so rather than letting a panel imply the change is already live.
+ * Some listeners are bound once, at startup: the fields named in `restartFields`. A change to
+ * them is stored and used by the next start; the API says so rather than letting a panel
+ * imply the change is already live.
  */
 takesEffectOnRestart: boolean,
 /**
- * Whether stored next-start values differ from the immutable startup values.
+ * The fields that apply on the next start. Every other field applies immediately.
+ */
+restartFields: Array<string>,
+/**
+ * Whether a restart-bound listener would bind somewhere else on the next start.
  */
 pendingRestart: boolean,
 /**

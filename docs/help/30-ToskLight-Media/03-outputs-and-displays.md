@@ -59,8 +59,19 @@ Pixel uses Art-Net or sACN for control and CITP/MSEX for discovery, media names,
 preview. A working CITP connection does not prove the DMX universe and start address are correct;
 verify both the Media window previews and an actual Folder/File/Dimmer change.
 
-If Pixel cannot bind its configured Art-Net port, it starts without Art-Net input instead of withholding the administration interface. The Network settings show an alert naming that condition; release the port or correct the listen address, then restart Pixel before relying on Art-Net control. Other configured protocols retain their normal startup behavior.
+If Pixel cannot bind its configured Art-Net or sACN port, it keeps running without that input instead of withholding the administration interface. The Network settings show an alert naming that condition; release the port or correct the listen address. A corrected Art-Net or sACN address is bound as soon as it is saved, and the alert disappears once the listener is running.
 
 The configuration supports one or more outputs; the shipped and certified baseline is one Main output. Treat additional outputs as an explicit production configuration and verify each monitor, GPU load, audio path, control footprint, and preview identity.
 
-Saved network and output changes apply after restart. The interface can offer to return saved configuration to the active values when a restart should be deferred. Layer and playback changes do not require a restart.
+Settings save automatically, and most of them apply to the running server at once:
+
+| Applies immediately | Applies after a restart, and why |
+| --- | --- |
+| DMX protocol, universe, and start address | Output target, monitor, full-screen, resolution, and presentation rate — the window, graphics surface, and frame clock are created when the output opens |
+| Art-Net, sACN, and Speed Group listen addresses | Sound output device and audio input device — the device stream is opened once |
+| Tempo source (Playback BPM or a Speed Group) | Personality — layer state, render slots, and the layer list consoles read over CITP are sized when the output opens |
+| Pixel map zones, routes, desk handoffs, and regions | CITP listen address — consoles hold a connection to it and discovered its port |
+| Audio gain, auto gain, beat sensitivity, and EQ | Interface (HTTP) address — it serves the page you are editing in |
+| Clip switch hold and server time | Media library directory — the library, importer, and model store are opened at startup |
+
+**Light and Media are on this computer** moves the Art-Net, sACN, and Speed Group listeners at once and CITP and the interface on the next start. A section heading shows **Applies on restart** only while such a change is waiting; **Revert to current settings** then returns the waiting fields to the values the server is running with. Choosing another media and configuration folder restarts the server by itself. Layer and playback changes never require a restart.

@@ -185,8 +185,9 @@ function ConsoleConnection({ outputs }: { outputs: OutputView[] }) {
 			<h3>Configured footprint and patch addresses</h3>
 			<p>
 				Choose the 2-layer or 8-layer personality in Settings → Network &amp;
-				DMX. Apply pending changes by restarting Pixel before patching. Blur is
-				played by selecting a Blur preset in an effect bank.
+				DMX. A changed personality applies after Pixel restarts, so restart
+				before patching; protocol, universe and start address apply at once.
+				Blur is played by selecting a Blur preset in an effect bank.
 			</p>
 			{outputs.length === 0 && (
 				<p>No enabled outputs. Configure an output in Settings first.</p>
@@ -217,7 +218,8 @@ function ConsoleConnection({ outputs }: { outputs: OutputView[] }) {
 						</dl>
 						{value.pendingRestart && (
 							<p role="alert">
-								Network changes are pending. Restart Pixel before connecting.
+								A CITP or interface address change is pending. Restart Pixel
+								before connecting over CITP.
 							</p>
 						)}
 					</>

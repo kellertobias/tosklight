@@ -12,9 +12,9 @@ use arc_swap::ArcSwap;
 use media_application::configuration::{DmxProtocol, MediaConfiguration};
 use media_domain::personality::decode;
 use media_domain::{Command, CommandKind, MediaState, OutputId, Timestamp, apply};
-use media_net::{ArtNetListener, IngressError, SacnListener, UniverseFrame};
+use media_net::UniverseFrame;
 
-use crate::shutdown::Shutdown;
+pub use crate::dmx_listeners::spawn;
 
 /// The authoritative state, published for readers.
 ///
@@ -115,17 +115,17 @@ pub fn diagnostic_snapshot(
 }
 
 /// Which outputs a universe feeds, and how to address them.
-#[derive(Debug, Clone)]
-struct Route {
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Route {
     output: OutputId,
-    universe: u16,
-    protocol: DmxProtocol,
+    pub(crate) universe: u16,
+    pub(crate) protocol: DmxProtocol,
     start_address: u16,
     personality: media_domain::LayerPersonality,
 }
 
 /// Builds the routing table from configuration.
-fn routes(configuration: &MediaConfiguration) -> Vec<Route> {
+pub(crate) fn routes(configuration: &MediaConfiguration) -> Vec<Route> {
     configuration
         .outputs
         .iter()
@@ -144,7 +144,7 @@ fn routes(configuration: &MediaConfiguration) -> Vec<Route> {
 ///
 /// A frame that does not reach an output's footprint is skipped with a reason rather than applied
 /// half-decoded.
-fn apply_frame_with_diagnostics(
+pub(crate) fn apply_frame_with_diagnostics(
     state: &SharedState,
     routes: &[Route],
     frame: &UniverseFrame,
@@ -230,7 +230,7 @@ fn apply_frame_with_diagnostics(
     });
 }
 
-fn capture_handoff_frame(
+pub(crate) fn capture_handoff_frame(
     frame: &UniverseFrame,
     wanted: &[(DmxProtocol, u16)],
     inputs: &SharedUniverseInputs,
@@ -263,121 +263,8 @@ fn apply_frame(state: &SharedState, routes: &[Route], frame: &UniverseFrame) {
     apply_frame_with_diagnostics(state, routes, frame, &diagnostics());
 }
 
-/// Starts the listeners the configuration calls for.
-///
-/// Each protocol is bound only if some enabled output actually uses it, so a show that speaks only
-/// Art-Net never holds the sACN port and cannot collide with something else that wants it.
-pub fn spawn(
-    configuration: &MediaConfiguration,
-    state: SharedState,
-    shutdown: Shutdown,
-    started: std::time::Instant,
-    diagnostics: SharedDiagnostics,
-    inputs: SharedUniverseInputs,
-) -> Result<Vec<String>, IngressError> {
-    let mut warnings = Vec::new();
-    let routes = routes(configuration);
-    let mut handoffs: Vec<(DmxProtocol, u16)> = configuration
-        .outputs
-        .iter()
-        .filter(|output| output.enabled)
-        .flat_map(|output| output.pixel_map.handoffs.iter())
-        .map(|handoff| (handoff.protocol, handoff.input_universe))
-        .collect();
-    handoffs.sort_by_key(|(protocol, universe)| (matches!(protocol, DmxProtocol::Sacn), *universe));
-    handoffs.dedup();
-    let resolved = configuration.network.resolved();
-    let now = move || Timestamp::from_micros(started.elapsed().as_micros() as u64);
-
-    if routes
-        .iter()
-        .any(|route| route.protocol == DmxProtocol::ArtNet)
-        || handoffs
-            .iter()
-            .any(|(protocol, _)| *protocol == DmxProtocol::ArtNet)
-    {
-        match ArtNetListener::bind_for_console(resolved.art_net_listen) {
-            Ok(mut listener) => {
-                tracing::info!(address = %resolved.art_net_listen, "listening for Art-Net");
-                let (routes, state, mut watcher, now, diagnostics, handoffs, inputs) = (
-                    routes.clone(),
-                    state.clone(),
-                    shutdown.watcher(),
-                    now,
-                    diagnostics.clone(),
-                    handoffs.clone(),
-                    inputs.clone(),
-                );
-                tokio::spawn(async move {
-                    loop {
-                        tokio::select! {
-                            _ = watcher.wait() => break,
-                            frame = listener.receive(&now) => {
-                                capture_handoff_frame(&frame, &handoffs, &inputs);
-                                apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics);
-                            },
-                        }
-                    }
-                });
-            }
-            Err(error) => {
-                let warning = format!(
-                    "Art-Net is unavailable at {}. Pixel started without Art-Net input: {error}",
-                    resolved.art_net_listen,
-                );
-                tracing::warn!(%warning);
-                warnings.push(warning);
-            }
-        }
-    }
-
-    if routes
-        .iter()
-        .any(|route| route.protocol == DmxProtocol::Sacn)
-        || handoffs
-            .iter()
-            .any(|(protocol, _)| *protocol == DmxProtocol::Sacn)
-    {
-        let mut universes: Vec<u16> = routes
-            .iter()
-            .filter(|route| route.protocol == DmxProtocol::Sacn)
-            .map(|route| route.universe)
-            .collect();
-        universes.extend(handoffs.iter().filter_map(|(protocol, universe)| {
-            (*protocol == DmxProtocol::Sacn).then_some(*universe)
-        }));
-        universes.sort_unstable();
-        universes.dedup();
-        let mut listener = SacnListener::bind(resolved.sacn_listen, &universes)?;
-        tracing::info!(address = %resolved.sacn_listen, ?universes, "listening for sACN");
-        let (routes, state, mut watcher, diagnostics, handoffs, inputs) = (
-            routes.clone(),
-            state.clone(),
-            shutdown.watcher(),
-            diagnostics.clone(),
-            handoffs,
-            inputs,
-        );
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = watcher.wait() => break,
-                    frame = listener.receive(&now) => {
-                        capture_handoff_frame(&frame, &handoffs, &inputs);
-                        apply_frame_with_diagnostics(&state, &routes, &frame, &diagnostics);
-                    },
-                }
-            }
-        });
-    }
-
-    Ok(warnings)
-}
-
 #[cfg(test)]
 mod tests {
-    use std::net::UdpSocket;
-
     use media_application::configuration::OutputConfiguration;
     use media_domain::{LayerPersonality, MediaAddress, OutputState};
 
@@ -403,26 +290,6 @@ mod tests {
                 .map(|output| OutputState::new(output.id, output.personality))
                 .collect(),
         )))
-    }
-
-    #[tokio::test]
-    async fn an_unavailable_art_net_socket_leaves_the_server_able_to_start() {
-        let occupied = UdpSocket::bind("127.0.0.1:0").unwrap();
-        let mut configuration = configuration(DmxProtocol::ArtNet, 3, 1);
-        configuration.network.art_net_listen = occupied.local_addr().unwrap();
-        let shutdown = Shutdown::new();
-        let warnings = spawn(
-            &configuration,
-            state_for(&configuration),
-            shutdown.clone(),
-            std::time::Instant::now(),
-            diagnostics(),
-            universe_inputs(),
-        )
-        .unwrap();
-        shutdown.request(crate::shutdown::ShutdownReason::Requested);
-        assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("Pixel started without Art-Net input"));
     }
 
     /// A universe where the first layer selects folder 1, file 4 at full dimmer.
