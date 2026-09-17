@@ -12,7 +12,7 @@ Five test models ship with every Media Server and need no import:
 
 | Slot on a new server | Model | Shape and image |
 | --- | --- | --- |
-| 1 | **Plane** | A square facing the output, the whole image upright on it. The default. |
+| 1 | **Plane** | A flat screen facing the output, always in the output's aspect ratio, with the layer's flat picture on it. The default. |
 | 2 | **Cube** | The whole image on each of its six faces. |
 | 3 | **Sphere** | The image wrapped once around it, its top edge at the top pole. |
 | 4 | **Cylinder** | As tall as it is wide; the image wrapped once around its side, the whole image on each end. |
@@ -21,6 +21,10 @@ Five test models ship with every Media Server and need no import:
 To put a built-in model in any slot, select the slot and press its button under **Built-in model**. The choice is saved with the Media Server's configuration and takes effect on the output at once; the slot shows **Built-in** and the model's name, which you can change with **Save name**. Choosing a built-in model for a slot that held an imported model deletes that model's file. **Clear slot** empties a built-in slot too; press the model's button to put it back.
 
 An existing installation receives the built-in models the first time it starts with this version, each in its slot above unless an imported model already occupies it. Imported models never move.
+
+### The Plane has the output's shape
+
+The Plane is never square: it always takes the aspect ratio of the output it is drawn on — 16:9 on a 1920×1080 output, 4:3 on a 1024×768 output — whichever slot it is in and when it stands in for a missing model. At Pan 0°, Tilt 0°, and scale 1 it covers the whole output, and the layer's picture sits on it exactly as the flat layer would draw, **scaling mode included**. A clip on the Plane therefore looks the same as the clip drawn Flat until you turn it; parts of the output the picture leaves empty (for example Fit bars) stay transparent on the Plane. When the output's resolution changes, the Plane takes the new shape on the next frame. Nothing is stored for this: existing slots and cues keep working unchanged.
 
 ### Importing a model
 
@@ -53,7 +57,7 @@ The layer's **3D model** channel (slot 34 of the current layer layout) selects t
 Every output looks at its models through the same fixed camera: a perspective view with a **40° vertical field of view**, looking straight at the centre of the output. A model at scale 1 fills roughly the output height.
 
 - **Position X / Y** move the model across the output in the same units as a flat layer: ±1 puts its centre on the left/right or top/bottom edge.
-- **Scale X / Y** scale the model along its own width and height; its depth follows their average. Scaling mode has no effect on a layer mapped onto a model, because the image follows the model's texture coordinates. A turned Flat layer keeps its scaling mode.
+- **Scale X / Y** scale the model along its own width and height; its depth follows their average. On the Plane they scale the output-shaped screen, so Scale X 0.5 makes it half the output width. Scaling mode has no effect on an imported or other built-in model, because the image follows the model's texture coordinates. A turned Flat layer and the Plane keep the layer's scaling mode.
 - **Rotation** is the model's **roll**.
 
 ### Rotation order: pan, then tilt, then roll

@@ -15,6 +15,12 @@
 //! through exactly the code a flat layer uses. A layer whose selected model is not installed is
 //! mapped onto the built-in Plane — never onto any other model, and never left black.
 //!
+//! The built-in Plane — in any slot, and as that fallback — always has the output's aspect ratio.
+//! Its look is the flat layer's own picture on an output-shaped canvas (scaling mode included,
+//! placement left to the mesh), and it draws on a card that, unturned at scale 1, covers exactly
+//! the output. A clip on the Plane at Pan 0 / Tilt 0 therefore looks exactly like the flat layer,
+//! and the Plane follows a resolution change on the next frame.
+//!
 //! Flat (model 0) at Pan 0 and Tilt 0 never enters this path. Once Pan or Tilt turns a Flat
 //! layer, it draws on a flat card: a quad sized so that, unturned, it projects exactly onto the
 //! flat layer's own rectangle, including its scaling mode.
@@ -131,11 +137,63 @@ pub(super) struct MappingContext<'a> {
     pub now: Timestamp,
 }
 
+/// What a projected layer draws on this frame.
+#[derive(Clone, Copy)]
+enum Surface<'a> {
+    /// An installed model other than the built-in Plane, through its own texture coordinates.
+    Model(&'a GpuModel),
+    /// A turned Flat layer: the card, sized to the flat layer's rectangle.
+    FlatCard,
+    /// The built-in Plane, selected or as the fallback: the card, sized to the output.
+    Plane,
+}
+
+impl<'a> Surface<'a> {
+    fn select(
+        mapping: ModelMapping,
+        models: &'a HashMap<u8, GpuModel>,
+        plane: &Arc<ModelGeometry>,
+    ) -> Self {
+        if mapping.is_flat() {
+            return Self::FlatCard;
+        }
+        match models.get(&mapping.model) {
+            Some(model) if !Arc::ptr_eq(&model.geometry, plane) => Self::Model(model),
+            _ => Self::Plane,
+        }
+    }
+
+    fn mesh(self, flat_card: Option<&'a GpuModel>) -> Option<&'a GpuModel> {
+        match self {
+            Self::Model(model) => Some(model),
+            Self::FlatCard | Self::Plane => flat_card,
+        }
+    }
+
+    /// The proportions of the look texture: the output's for the Plane, the source's otherwise.
+    fn look_shape(self, source: Size, output: Size) -> Size {
+        match self {
+            Self::Plane => output,
+            Self::Model(_) | Self::FlatCard => source,
+        }
+    }
+
+    /// The look's layer state and the space it is laid out in. The Plane's look is laid out in
+    /// output pixels; its texture has the output's proportions, so a size capped below the output
+    /// shows the same picture.
+    fn look(self, layer: &LayerState, look_size: Size, output: Size) -> (LayerState, Size) {
+        match self {
+            Self::Plane => (plane_look_state(layer), output),
+            Self::Model(_) | Self::FlatCard => (look_state(layer), look_size),
+        }
+    }
+}
+
 pub(super) struct ModelMapper {
     models: HashMap<u8, GpuModel>,
-    /// The built-in Plane, drawn for a selection no installed model answers.
-    fallback: Option<GpuModel>,
-    /// The card a turned Flat layer draws on.
+    /// The shared built-in Plane mesh, recognised in any slot so it draws output-proportioned.
+    plane: Arc<ModelGeometry>,
+    /// The `±1` card the turned Flat layer and the built-in Plane draw on.
     flat_card: Option<GpuModel>,
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
@@ -199,7 +257,7 @@ impl ModelMapper {
             .collect();
         Self {
             models: HashMap::new(),
-            fallback: upload(gpu, "default-plane", &BuiltinModel::DEFAULT.geometry()).ok(),
+            plane: BuiltinModel::DEFAULT.geometry(),
             flat_card: upload(gpu, "flat-card", &Arc::new(flat_card())).ok(),
             pipeline: mesh_pipeline(device, &layout),
             layout,
@@ -247,17 +305,13 @@ impl ModelMapper {
             if !mapping.is_projected() || !layer.state.draws() {
                 continue;
             }
-            let model = if mapping.is_flat() {
-                self.flat_card.as_ref()
-            } else {
-                self.models.get(&mapping.model).or(self.fallback.as_ref())
-            };
-            let Some(model) = model else {
+            let surface = Surface::select(mapping, &self.models, &self.plane);
+            let Some(model) = surface.mesh(self.flat_card.as_ref()) else {
                 continue;
             };
             let gpu = context.gpu;
             let look_size = look_size(
-                layer.source.size(),
+                surface.look_shape(layer.source.size(), context.output),
                 context.output,
                 gpu.capabilities.max_texture_dimension,
             );
@@ -281,11 +335,11 @@ impl ModelMapper {
                 continue;
             };
 
-            let look_state = look_state(layer.state);
+            let (look_state, look_space) = surface.look(layer.state, look_size, context.output);
             let uniform = LayerUniform::new(
                 &look_state,
                 layer.source.size(),
-                look_size,
+                look_space,
                 layer.mask,
                 context.output_id,
                 context.now,
@@ -326,7 +380,7 @@ impl ModelMapper {
                 &slot.mesh_uniform,
                 0,
                 bytemuck::bytes_of(&MeshUniform {
-                    model_view_projection: mesh_placement(layer, context.output),
+                    model_view_projection: mesh_placement(layer, surface, context.output),
                 }),
             );
             let mesh_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -454,12 +508,27 @@ fn look_size(source: Size, output: Size, adapter_limit: u32) -> Size {
     }
 }
 
-fn mesh_placement(layer: &LayerDraw<'_>, output: Size) -> Matrix4 {
-    if layer.state.model.is_flat() {
-        let placement = flat_card_placement(layer.state, layer.source.size(), output);
-        model_view_projection(&placement, output)
-    } else {
-        model_view_projection(layer.state, output)
+fn mesh_placement(layer: &LayerDraw<'_>, surface: Surface<'_>, output: Size) -> Matrix4 {
+    match surface {
+        Surface::Model(_) => model_view_projection(layer.state, output),
+        Surface::FlatCard => {
+            let placement = flat_card_placement(layer.state, layer.source.size(), output);
+            model_view_projection(&placement, output)
+        }
+        Surface::Plane => model_view_projection(&plane_placement(layer.state, output), output),
+    }
+}
+
+/// The layer with its scale widened by the output's aspect ratio, so the `±1` card spans the
+/// whole output at scale 1: the world spans `±1` vertically and `±aspect` horizontally. Scale X/Y
+/// stay relative to that output-shaped Plane.
+fn plane_placement(layer: &LayerState, output: Size) -> LayerState {
+    if output.is_empty() {
+        return layer.clone();
+    }
+    LayerState {
+        scale_x: layer.scale_x * output.width as f32 / output.height as f32,
+        ..layer.clone()
     }
 }
 
@@ -512,6 +581,15 @@ fn look_state(layer: &LayerState) -> LayerState {
         strobe_hz: None,
         model: ModelMapping::default(),
         ..layer.clone()
+    }
+}
+
+/// The Plane's look: the flat layer's picture on an output-shaped canvas — its scaling mode kept,
+/// its placement left to the mesh — so the unturned Plane at scale 1 is the flat layer.
+fn plane_look_state(layer: &LayerState) -> LayerState {
+    LayerState {
+        scaling_mode: layer.scaling_mode,
+        ..look_state(layer)
     }
 }
 
@@ -661,6 +739,29 @@ mod tests {
         );
         assert!(composite.model.is_flat());
         assert_eq!(composite.address, layer.address, "it still draws");
+    }
+
+    #[test]
+    fn the_plane_spans_the_output_and_keeps_the_scaling_mode() {
+        let layer = LayerState {
+            scale_x: 0.5,
+            scale_y: 2.0,
+            position_x: 0.3,
+            scaling_mode: ScalingMode::Fit,
+            ..Default::default()
+        };
+        let wide = plane_placement(&layer, Size::new(1920, 1080));
+        assert!((wide.scale_x - 0.5 * 16.0 / 9.0).abs() < 1e-5);
+        assert_eq!((wide.scale_y, wide.position_x), (2.0, 0.3));
+        let classic = plane_placement(&layer, Size::new(1024, 768));
+        assert!((classic.scale_x - 0.5 * 4.0 / 3.0).abs() < 1e-5);
+
+        let look = plane_look_state(&layer);
+        assert_eq!(look.scaling_mode, ScalingMode::Fit);
+        assert_eq!(
+            (look.scale_x, look.scale_y, look.position_x),
+            (1.0, 1.0, 0.0)
+        );
     }
 
     #[test]

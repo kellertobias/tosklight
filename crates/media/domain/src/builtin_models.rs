@@ -155,7 +155,8 @@ impl Mesh {
     }
 }
 
-/// A square facing the camera, the image upright on it.
+/// A square facing the camera, the image upright on it. The renderer recognises this mesh and
+/// draws the Plane as an output-shaped screen instead, so it always has the output's aspect ratio.
 fn plane() -> Mesh {
     let mut mesh = Mesh::default();
     mesh.quad(

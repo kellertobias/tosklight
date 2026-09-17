@@ -162,28 +162,38 @@ fn a_missing_model_is_mapped_onto_the_default_plane() {
     let source = quadrants(&gpu);
     let mut output = renderer(&gpu);
     output.set_models(&models());
-    let on_quad = render(
-        &mut output,
-        &[draw(&mapped(LayerState::default(), 0.0, 0.0), &source)],
+    let mut reference = renderer(&gpu);
+    reference.set_models(&ModelGeometries::from([(
+        1,
+        BuiltinModel::Plane.geometry(),
+    )]));
+    let missing = |pan: f32, tilt: f32| {
+        layer(LayerState {
+            model: ModelMapping {
+                model: 9,
+                pan,
+                tilt,
+            },
+            ..Default::default()
+        })
+    };
+    let on_plane = render(
+        &mut reference,
+        &[draw(&mapped(LayerState::default(), 30.0, 20.0), &source)],
     );
-    let missing = layer(LayerState {
-        model: ModelMapping {
-            model: 9,
-            pan: 0.0,
-            tilt: 0.0,
-        },
-        ..Default::default()
-    });
-    let on_plane = render(&mut output, &[draw(&missing, &source)]);
-    let share = agreement(&on_quad, &on_plane, 2);
+    let fallback = render(&mut output, &[draw(&missing(30.0, 20.0), &source)]);
+    let share = agreement(&on_plane, &fallback, 2);
     assert!(
         share > 0.99,
-        "a missing model draws exactly like the Plane, never black or flat: {share}"
+        "a missing model draws exactly like the Plane, never black: {share}"
     );
-    let flat = render(&mut output, &[draw(&layer(LayerState::default()), &source)]);
+    let on_quad = render(
+        &mut output,
+        &[draw(&mapped(LayerState::default(), 30.0, 20.0), &source)],
+    );
     assert!(
-        agreement(&flat, &on_plane, 12) < 0.9,
-        "it is not the flat layer"
+        agreement(&on_quad, &fallback, 12) < 0.97,
+        "it is not the installed model"
     );
 }
 
@@ -232,7 +242,7 @@ fn every_built_in_model_renders_its_own_shape() {
         }
     }
 
-    // The built-in Plane is the reference quad.
+    // The built-in Plane is output-shaped, not the normalized reference quad.
     let plane = &images[0];
     let mut quad_output = renderer(&gpu);
     quad_output.set_models(&models());
@@ -240,7 +250,7 @@ fn every_built_in_model_renders_its_own_shape() {
         &mut quad_output,
         &[draw(&mapped(LayerState::default(), 30.0, 20.0), &source)],
     );
-    assert!(agreement(plane, &quad, 2) > 0.99);
+    assert!(lit_share(plane) > lit_share(&quad) * 1.5);
 }
 
 #[test]
@@ -364,10 +374,25 @@ fn clearing_the_models_maps_layers_onto_the_plane() {
     output.set_models(&ModelGeometries::new());
     let on_plane = render(&mut output, &[draw(&state, &source)]);
     let mut reference = renderer(&gpu);
-    reference.set_models(&models());
-    let quad = render(&mut reference, &[draw(&state, &source)]);
-    assert!(agreement(&on_plane, &quad, 2) > 0.99);
-    assert!(agreement(&on_sphere, &quad, 12) < 0.97);
+    reference.set_models(&ModelGeometries::from([(
+        7,
+        BuiltinModel::Plane.geometry(),
+    )]));
+    let plane = render(
+        &mut reference,
+        &[draw(
+            &LayerState {
+                model: ModelMapping {
+                    model: 7,
+                    ..state.model
+                },
+                ..state.clone()
+            },
+            &source,
+        )],
+    );
+    assert!(agreement(&on_plane, &plane, 2) > 0.99);
+    assert!(agreement(&on_sphere, &plane, 12) < 0.97);
 }
 
 /// Quadrants like [`quadrants`], at any size.
