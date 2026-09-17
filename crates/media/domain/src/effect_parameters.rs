@@ -85,6 +85,7 @@ pub fn effect_parameter_ids(effect_type: &str) -> &'static [&'static str] {
         BEAT_GRID_WAVE_EFFECT => &BeatGridWaveParameters::IDS,
         BEAT_FORM_FLASH_EFFECT => &BeatFormFlashParameters::IDS,
         DRAWN_IMAGE_EFFECT => &DrawnImageParameters::IDS,
+        crate::outline_effect::OUTLINE_EFFECT => &crate::outline_effect::OutlineParameters::IDS,
         _ => &[],
     }
 }
@@ -191,6 +192,19 @@ const BOUNDS: &[(&str, EffectParameterBounds)] = &[
     ("beat-form-variation", EffectParameterBounds::unit()),
     ("drawn-strength", EffectParameterBounds::unit()),
     ("drawn-line-detail", EffectParameterBounds::unit()),
+    ("outline-intensity", EffectParameterBounds::unit()),
+    ("outline-beat-depth", EffectParameterBounds::unit()),
+    (
+        "outline-thickness",
+        EffectParameterBounds::new(1.0, 8.0, 0.5),
+    ),
+    ("outline-hue", EffectParameterBounds::new(0.0, 360.0, 1.0)),
+    ("outline-saturation", EffectParameterBounds::unit()),
+    ("outline-sensitivity", EffectParameterBounds::unit()),
+    (
+        "outline-beat-decay",
+        EffectParameterBounds::new(0.05, 5.0, 0.05),
+    ),
 ];
 
 /// What this parameter accepts. An unknown id falls back to a normalized amount, which is what
@@ -226,6 +240,7 @@ mod tests {
             BeatGridWaveParameters::IDS.as_slice(),
             BeatFormFlashParameters::IDS.as_slice(),
             DrawnImageParameters::IDS.as_slice(),
+            crate::outline_effect::OutlineParameters::IDS.as_slice(),
             BlurParameters::IDS.as_slice(),
             ["feedback-amount", "feedback-motion"].as_slice(),
             ["feedback-direction", "cycle-interval"].as_slice(),
@@ -254,6 +269,7 @@ mod tests {
             crate::layer::BEAT_GRID_WAVE_EFFECT,
             crate::layer::BEAT_FORM_FLASH_EFFECT,
             crate::layer::DRAWN_IMAGE_EFFECT,
+            crate::outline_effect::OUTLINE_EFFECT,
         ] {
             // A bank drives the first four; an effect with more keeps the rest at its preset.
             let ids = effect_parameter_ids(effect_type);
@@ -281,6 +297,16 @@ mod tests {
 
         let amount = effect_parameter_bounds("blur-amount");
         assert_eq!(amount.from_dmx(255), Some(1.0));
+    }
+
+    /// The typed clamp and the advertised bounds are one contract.
+    #[test]
+    fn outline_bounds_match_the_ranges_its_parameters_clamp_to() {
+        use crate::outline_effect::OutlineParameters;
+        for (id, (low, high)) in OutlineParameters::IDS.iter().zip(OutlineParameters::RANGES) {
+            let bounds = effect_parameter_bounds(id);
+            assert_eq!((bounds.minimum, bounds.maximum), (low, high), "{id}");
+        }
     }
 
     #[test]

@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{EffectSlot, RasterizeMode, RasterizeParameters};
 
+/// Where the shipped Outline preset lives, for new libraries and for the migration that adds it.
+pub const OUTLINE_PRESET_SLOT: u8 = 13;
+pub const OUTLINE_PRESET_NAME: &str = "Outline";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EffectPreset {
@@ -67,6 +71,22 @@ impl EffectLibrary {
         Ok(())
     }
 
+    /// Adds the shipped Outline preset to a library stored before it existed, unless its slot is
+    /// taken or the operator already keeps an Outline elsewhere. Nothing stored is replaced.
+    pub fn add_outline_if_free(&mut self) {
+        let has_outline = self.entries.iter().any(|entry| {
+            entry.effect.effect_type.as_deref() == Some(crate::outline_effect::OUTLINE_EFFECT)
+        });
+        if !has_outline && self.resolve(OUTLINE_PRESET_SLOT).is_none() {
+            self.entries.push(preset(
+                OUTLINE_PRESET_SLOT,
+                OUTLINE_PRESET_NAME,
+                EffectSlot::outline(),
+            ));
+            self.entries.sort_by_key(|entry| entry.slot);
+        }
+    }
+
     pub fn remove(&mut self, slot: u8) -> bool {
         let before = self.entries.len();
         self.entries.retain(|entry| entry.slot != slot);
@@ -117,6 +137,11 @@ impl Default for EffectLibrary {
             preset(9, "Kaleidoscope", EffectSlot::kaleidoscope()),
             preset(10, "B/W Rasterize", EffectSlot::rasterize()),
             preset(12, "Drawn Image Style", EffectSlot::drawn_image()),
+            preset(
+                OUTLINE_PRESET_SLOT,
+                OUTLINE_PRESET_NAME,
+                EffectSlot::outline(),
+            ),
         ];
         let mut cmyk = EffectSlot::rasterize();
         cmyk.parameters = RasterizeParameters {
@@ -151,6 +176,7 @@ mod tests {
         assert!(library.resolve(0).is_none());
         assert_eq!(library.resolve(1).unwrap().name, "TV/CRT/VHS Simulation");
         assert_eq!(library.resolve(11).unwrap().name, "CMYK Rasterize");
+        assert_eq!(library.resolve(13).unwrap().name, "Outline");
         assert!(library.validate().is_ok());
     }
 
@@ -175,6 +201,27 @@ mod tests {
             library.assign(0, "Off", EffectSlot::blur()),
             Err(EffectLibraryError::OffSlot)
         );
+    }
+
+    #[test]
+    fn outline_is_added_to_an_older_library_only_where_nothing_is_stored() {
+        let mut older = EffectLibrary::default();
+        older.remove(OUTLINE_PRESET_SLOT);
+        older.add_outline_if_free();
+        assert_eq!(older, EffectLibrary::default());
+
+        let mut occupied = EffectLibrary::empty();
+        occupied
+            .assign(13, "House blur", EffectSlot::blur())
+            .unwrap();
+        occupied.add_outline_if_free();
+        assert_eq!(occupied.entries.len(), 1);
+        assert_eq!(occupied.resolve(13).unwrap().name, "House blur");
+
+        let mut own = EffectLibrary::empty();
+        own.assign(40, "My lines", EffectSlot::outline()).unwrap();
+        own.add_outline_if_free();
+        assert_eq!(own.entries.len(), 1, "an operator's own Outline is enough");
     }
 
     #[test]

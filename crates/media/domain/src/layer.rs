@@ -1027,22 +1027,6 @@ impl EffectSlot {
         .then(|| BeatFormFlashParameters::from_parameters(&self.parameters))
     }
 
-    pub fn drawn_image() -> Self {
-        Self {
-            effect_type: Some(DRAWN_IMAGE_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: DrawnImageParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
-        }
-    }
-
-    pub fn drawn_image_parameters(&self) -> Option<DrawnImageParameters> {
-        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(DRAWN_IMAGE_EFFECT))
-            .then(|| DrawnImageParameters::from_parameters(&self.parameters))
-    }
-
     pub fn normalize(&mut self) {
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
@@ -1101,6 +1085,10 @@ impl EffectSlot {
             self.parameters = DrawnImageParameters::from_parameters(&self.parameters)
                 .as_array()
                 .to_vec();
+        } else if self.effect_type.as_deref() == Some(crate::outline_effect::OUTLINE_EFFECT) {
+            let outline =
+                crate::outline_effect::OutlineParameters::from_parameters(&self.parameters);
+            self.parameters = outline.as_array().to_vec();
         }
         self.visualizer_parameters = self
             .visualizer_parameters

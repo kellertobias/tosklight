@@ -64,6 +64,7 @@ fn selected_effects(
             BEAT_GRID_WAVE_EFFECT => EffectSlot::beat_grid_wave(),
             BEAT_FORM_FLASH_EFFECT => EffectSlot::beat_form_flash(),
             DRAWN_IMAGE_EFFECT => EffectSlot::drawn_image(),
+            media_domain::OUTLINE_EFFECT => EffectSlot::outline(),
             "none" => EffectSlot::default(),
             _ => {
                 return Err(ApiError::bad_request(

@@ -202,6 +202,7 @@ struct HostedOutput {
     beat_scan: crate::beat_scan::BeatScan,
     beat_grid_wave: crate::beat_grid_wave::BeatGridWave,
     beat_form_flash: crate::beat_form_flash::BeatFormFlash,
+    outline_beat: crate::outline_beat::OutlineBeat,
     standby: Option<SourceTexture>,
     fullscreen_hint: Option<SourceTexture>,
     hint_visible_until: Option<std::time::Instant>,
@@ -472,6 +473,7 @@ impl PresentationHost {
                     beat_scan: crate::beat_scan::BeatScan::default(),
                     beat_grid_wave: crate::beat_grid_wave::BeatGridWave::default(),
                     beat_form_flash: crate::beat_form_flash::BeatFormFlash::default(),
+                    outline_beat: Default::default(),
                     standby,
                     fullscreen_hint,
                     hint_visible_until: None,
@@ -696,7 +698,7 @@ fn windows_command_chord(modifiers: ModifiersState) -> bool {
 
 impl HostedOutput {
     /// Runs this output's beat- and time-driven layer effects over the prepared layers, in their
-    /// fixed order: opacity cycle, move, scale/turn, scan, grid wave, form flash.
+    /// fixed order: opacity cycle, move, scale/turn, scan, grid wave, form flash, outline.
     fn apply_layer_effects(
         &mut self,
         output_state: &media_domain::OutputState,
@@ -722,7 +724,9 @@ impl HostedOutput {
             heard.beat,
             heard.analysis.peak.max(heard.analysis.energy * 4.0),
         );
-        self.beat_form_flash
+        let flash = &mut self.beat_form_flash;
+        let effective_layers = flash.apply(&effective_layers, seconds, heard.beat);
+        self.outline_beat
             .apply(&effective_layers, seconds, heard.beat)
     }
 

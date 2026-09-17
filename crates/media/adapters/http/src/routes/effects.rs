@@ -120,7 +120,7 @@ mod tests {
         let (status, body) = send(&bench.router, get("/api/v2/effects".into())).await;
         assert_eq!(status, StatusCode::OK);
         let entries = body.as_array().expect("an effect list");
-        assert_eq!(entries.len(), 12);
+        assert_eq!(entries.len(), 13);
         assert_eq!(entries[0]["slot"], 1);
         assert!(
             entries
@@ -138,6 +138,31 @@ mod tests {
                 .iter()
                 .any(|entry| entry["name"] == "CMYK Rasterize")
         );
+        let outline = entries
+            .iter()
+            .find(|entry| entry["name"] == "Outline")
+            .expect("Outline ships");
+        assert_eq!(outline["slot"], 13);
+        assert_eq!(outline["effect"]["effectType"], "outline");
+        assert_eq!(outline["effect"]["supported"], true);
+    }
+
+    #[tokio::test]
+    async fn an_outline_preset_assigned_without_parameters_reports_every_default() {
+        let bench = bench();
+        let (status, changed) = send(
+            &bench.router,
+            post(
+                "/api/v2/effects/60/update".into(),
+                r#"{"requestId":"outline-60","name":"Lines","effectType":"outline"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let parameters = changed["effect"]["parameters"].as_array().unwrap();
+        assert_eq!(parameters.len(), 7);
+        assert_eq!(parameters[0]["id"], "outline-intensity");
+        assert_eq!(parameters[0]["value"], 0.5);
     }
 
     #[tokio::test]

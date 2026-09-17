@@ -36,6 +36,7 @@ describe("the effects library", () => {
 			"B/W Rasterize",
 			"CMYK Rasterize",
 			"Drawn Image Style",
+			"Outline",
 		]);
 	});
 

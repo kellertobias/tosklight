@@ -26,7 +26,7 @@ struct Layer {
     mask_source: vec4<f32>,
     // 0: none/unsupported, 1: Analog TV, 2: Digital TV, 3: Blur, 4: Kaleidoscope,
     // 5: Rasterized Print, 6: Beat Scan, 7: Beat Grid Wave, 8: Beat Form Flash,
-    // 9: Drawn Image.
+    // 9: Drawn Image, 10: Outline.
     effect_types: vec4<u32>,
     effect_mixes: vec4<f32>,
     // Typed normalized parameters for slots 1..4. Analog TV is curvature, distortion, grain,
@@ -625,6 +625,49 @@ fn drawn_image_source(uv: vec2<f32>, parameters: vec4<f32>, effect_mix: f32) -> 
     return vec4<f32>(mix(original.rgb, paper, strength), original.a);
 }
 
+// Outline (10). Luminance weighted by alpha, so the edge of a cut-out shape counts as an edge.
+fn outline_level(uv: vec2<f32>) -> f32 {
+    let texel = textureSampleLevel(source, source_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0);
+    return dot(texel.rgb, LUMINANCE) * texel.a;
+}
+
+// A Sobel operator whose taps sit half a line apart, so Line thickness widens the detected edge.
+// Intensity fades the lines in up to one half, then darkens the picture until only the lines
+// remain on black. `parameters` is line colour in rgb and intensity in w.
+fn outline_source(
+    original: vec4<f32>,
+    uv: vec2<f32>,
+    parameters: vec4<f32>,
+    thickness: f32,
+    sensitivity: f32,
+    effect_mix: f32,
+) -> vec4<f32> {
+    let intensity = clamp(parameters.w, 0.0, 1.0) * clamp(effect_mix, 0.0, 1.0);
+    if intensity <= 0.0 { return original; }
+    let dimensions = max(vec2<f32>(textureDimensions(source)), vec2<f32>(1.0));
+    let d = vec2<f32>(max(thickness, 1.0) * 0.5) / dimensions;
+    let top_left = outline_level(uv + vec2<f32>(-d.x, -d.y));
+    let top = outline_level(uv + vec2<f32>(0.0, -d.y));
+    let top_right = outline_level(uv + vec2<f32>(d.x, -d.y));
+    let left = outline_level(uv + vec2<f32>(-d.x, 0.0));
+    let right = outline_level(uv + vec2<f32>(d.x, 0.0));
+    let bottom_left = outline_level(uv + vec2<f32>(-d.x, d.y));
+    let bottom = outline_level(uv + vec2<f32>(0.0, d.y));
+    let bottom_right = outline_level(uv + vec2<f32>(d.x, d.y));
+    let gx = (top_right + 2.0 * right + bottom_right) - (top_left + 2.0 * left + bottom_left);
+    let gy = (bottom_left + 2.0 * bottom + bottom_right) - (top_left + 2.0 * top + top_right);
+    // A full black-to-white step along one axis measures one.
+    let magnitude = length(vec2<f32>(gx, gy)) * 0.25;
+    let threshold = mix(0.35, 0.03, clamp(sensitivity, 0.0, 1.0));
+    let edge = smoothstep(threshold, threshold * 1.6 + 0.02, magnitude);
+    let lines = edge * min(intensity * 2.0, 1.0);
+    let content = original.rgb * (1.0 - max(intensity * 2.0 - 1.0, 0.0));
+    // Straight-alpha "over": the lines stay visible where the picture itself is transparent.
+    let alpha = lines + original.a * (1.0 - lines);
+    let rgb = (parameters.rgb * lines + content * original.a * (1.0 - lines)) / max(alpha, 0.0001);
+    return vec4<f32>(select(content, rgb, alpha > 0.0), alpha);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     return layer_colour(in);
@@ -752,6 +795,15 @@ fn layer_colour(in: VertexOutput) -> vec4<f32> {
             );
         } else if layer.effect_types[slot] == 9u {
             sampled = drawn_image_source(coordinates.uv, layer.effect_parameters[slot], layer.effect_mixes[slot]);
+        } else if layer.effect_types[slot] == 10u {
+            sampled = outline_source(
+                sampled,
+                coordinates.uv,
+                layer.effect_parameters[slot],
+                layer.effect_parameter_tail[slot],
+                layer.effect_seeds[slot],
+                layer.effect_mixes[slot],
+            );
         }
     }
     for (var slot = 0u; slot < 4u; slot += 1u) {

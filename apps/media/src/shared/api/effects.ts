@@ -11,6 +11,7 @@ export const EFFECT_TYPES = [
 	{ value: "rasterize-bw", label: "B/W Rasterize" },
 	{ value: "rasterize-cmyk", label: "CMYK Rasterize" },
 	{ value: "drawn-image", label: "Drawn Image Style" },
+	{ value: "outline", label: "Outline" },
 ] as const;
 
 export type EffectType = (typeof EFFECT_TYPES)[number]["value"];
@@ -23,4 +24,5 @@ export interface UpdateEffectLibrarySlot {
 	parameters?: number[];
 	clear?: boolean;
 }
+
 import type { EffectPresetView } from "./generated/media-wire";

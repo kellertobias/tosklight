@@ -121,6 +121,15 @@ impl LayerUniform {
                 let values = parameters.as_array();
                 effect_parameters[index][0] = values[0];
                 effect_parameters[index][1] = values[1];
+            } else if let Some(parameters) = effect.outline_parameters() {
+                // Line colour and the (beat-modulated) intensity, then thickness and sensitivity
+                // in the spare per-slot rows this effect has no other use for.
+                let [red, green, blue] = parameters.colour();
+                effect_types[index] = 10;
+                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                effect_parameters[index] = [red, green, blue, parameters.intensity];
+                effect_parameter_tail[index] = parameters.thickness;
+                effect_seeds[index] = parameters.sensitivity;
             }
         }
         Self {

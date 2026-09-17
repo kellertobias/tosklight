@@ -185,6 +185,9 @@ fn render_preset(
                 "beat-form-flash" => effect
                     .parameters
                     .extend([0.15, 0.3, 0.45, 1.0, 0.35, 0.7, 0.55, 1.2]),
+                // Lines over a darkened picture read at thumbnail size where the resting half
+                // intensity is too subtle; this is where a beat pushes the preset.
+                "outline" => effect.parameters[0] = 0.8,
                 _ => {}
             }
             let state = layer(Some(effect));

@@ -1,3 +1,5 @@
+use crate::layer::{DRAWN_IMAGE_EFFECT, EffectSlot};
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawnImageParameters {
     pub strength: f32,
@@ -282,5 +284,23 @@ impl DigitalTvParameters {
             self.chroma_damage,
             self.glitching,
         ]
+    }
+}
+
+impl EffectSlot {
+    pub fn drawn_image() -> Self {
+        Self {
+            effect_type: Some(DRAWN_IMAGE_EFFECT.to_owned()),
+            enabled: true,
+            seed: 0,
+            mix: 1.0,
+            parameters: DrawnImageParameters::default().as_array().to_vec(),
+            visualizer_parameters: None,
+        }
+    }
+
+    pub fn drawn_image_parameters(&self) -> Option<DrawnImageParameters> {
+        (self.enabled && self.mix > 0.0 && self.effect_type.as_deref() == Some(DRAWN_IMAGE_EFFECT))
+            .then(|| DrawnImageParameters::from_parameters(&self.parameters))
     }
 }

@@ -10,8 +10,8 @@ use media_domain::{
     BeatFormFlashParameters, BeatGridWaveParameters, BeatMoveParameters, BeatScaleTurnParameters,
     BeatScanParameters, BlurParameters, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters,
     DrawnImageParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackParameters, KALEIDOSCOPE_EFFECT,
-    KaleidoscopeParameters, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, RASTERIZE_EFFECT,
-    RasterizeParameters,
+    KaleidoscopeParameters, OPACITY_CYCLE_EFFECT, OUTLINE_EFFECT, OpacityCycleInterval,
+    OutlineParameters, RASTERIZE_EFFECT, RasterizeParameters,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -84,7 +84,7 @@ pub struct UpdateEffectPreset {
 
 /// Every effect this build renders, with the name an operator reads. Anything outside this list
 /// is reported as unsupported rather than silently renamed or dropped.
-const RENDERED_EFFECTS: [(&str, &str); 13] = [
+const RENDERED_EFFECTS: [(&str, &str); 14] = [
     (ANALOG_TV_EFFECT, "Analog TV"),
     (DIGITAL_TV_EFFECT, "Digital TV"),
     (BLUR_EFFECT, "Blur"),
@@ -98,6 +98,7 @@ const RENDERED_EFFECTS: [(&str, &str); 13] = [
     (BEAT_GRID_WAVE_EFFECT, "Beat Grid Wave"),
     (BEAT_FORM_FLASH_EFFECT, "Beat Form Flash"),
     (DRAWN_IMAGE_EFFECT, "Drawn Image"),
+    (OUTLINE_EFFECT, "Outline"),
 ];
 
 fn rendered_label(effect_type: Option<&str>) -> Option<&'static str> {
@@ -217,6 +218,12 @@ fn effect_parameters(effect: &EffectSlot) -> Vec<EffectParameterView> {
             &DrawnImageParameters::from_parameters(stored).as_array(),
             &DrawnImageParameters::default().as_array(),
         ),
+        Some(OUTLINE_EFFECT) => parameter_views(
+            &OutlineParameters::IDS,
+            &OutlineParameters::LABELS,
+            &OutlineParameters::from_parameters(stored).as_array(),
+            &OutlineParameters::default().as_array(),
+        ),
         _ => Vec::new(),
     }
 }
@@ -267,6 +274,18 @@ mod tests {
             view.capability_detail.as_deref(),
             Some("This Media Server build cannot render the selected effect.")
         );
+    }
+
+    #[test]
+    fn outline_reports_its_controls_in_bank_order_with_their_ranges() {
+        let view = EffectSlotView::of(0, &EffectSlot::outline());
+        assert!(view.supported);
+        assert_eq!(view.label, "Outline");
+        let ids: Vec<_> = view.parameters.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, OutlineParameters::IDS);
+        let thickness = &view.parameters[2];
+        assert_eq!((thickness.minimum, thickness.maximum), (1.0, 8.0));
+        assert_eq!(view.parameters[1].value, 0.0, "beat depth starts off");
     }
 
     /// A desk renders a control from what this server advertises, so every parameter carries the

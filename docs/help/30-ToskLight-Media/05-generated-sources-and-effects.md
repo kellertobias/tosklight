@@ -71,7 +71,8 @@ The Master has no Flip/mirror channel. **Master scale X** and **Master scale Y**
 
 The initial catalogue includes TV/CRT/VHS Simulation, Digital Video/ Glitch Simulation, Blur
 (Gaussian, Shape, Radial, Linear, and Axial), Feedback, Beat Move, Beat Scan, Beat Scale & Turn,
-Beat form Flash, Kaleidoscope, B/W Rasterize, CMYK Rasterize, and Drawn Image Style. Kaleidoscope
+Beat form Flash, Kaleidoscope, B/W Rasterize, CMYK Rasterize, Drawn Image Style, and Outline (slot
+13). Kaleidoscope
 repetitions run from Off through 12. Feedback supports Shake and Tunnel motion and is tuned for a
 longer, smoother trail by default.
 
@@ -85,6 +86,37 @@ Blur **Amount** scales with the source's height, so a 4K clip and a 720p clip so
 default amount a Gaussian blur smooths fine detail completely instead of leaving a ghost of it;
 **Shape** gives an even, lens-like disc, **Radial** a zoom smear toward the centre, **Linear** a
 horizontal motion smear, and **Axial** a rotational smear. An amount of **0** is an exact bypass.
+
+### Outline
+
+**Outline** finds the edges in the layer's picture and draws them as lines. **Intensity** carries the
+whole look:
+
+| Intensity | Result |
+| --- | --- |
+| 0 | The original picture, unchanged. |
+| up to 0.5 | The lines fade in over the picture. |
+| 0.5 | Full lines over the fully visible picture. |
+| above 0.5 | The picture darkens behind the lines. |
+| 1 | Only the lines remain, on black. |
+
+The bank's **Effect Strength** scales Intensity, so a bank at half strength plays half of it.
+**Line thickness** is the line width in source pixels (1–8). **Line hue** and **Line saturation**
+colour the lines; saturation **0** draws white lines whatever the hue. **Edge sensitivity** decides
+how soft a contrast still counts as an edge: raise it for low-contrast footage, lower it to keep only
+strong shapes. The edge of a cut-out picture counts too, and its line stays visible over what is
+beneath the layer.
+
+Outline can follow the music. **Beat depth** above **0** makes every beat the Media Server detects
+push Intensity toward **1** by that amount, and **Beat decay** is how many seconds it takes to fall
+back to the stored Intensity. It uses the same audio input and beat detection as the Beat effects,
+so it rests at the stored Intensity while no audio device is selected. Beat depth is **0** in the
+shipped preset. A bank's four parameters are Intensity, Beat depth, Line thickness, and Line hue;
+the other settings come from the preset.
+
+An installation that already had an effect library receives the Outline preset in slot 13 when that
+slot is free and the library holds no Outline yet; a slot you use for something else keeps its
+preset, and a library you emptied stays empty.
 
 The Master layer has a separate fixed **Effects** section. **Layer Opacity Cycle** advances through
 all currently loaded layers whose dimmer is above zero. Its Multiplier / Divider can be Off or beat

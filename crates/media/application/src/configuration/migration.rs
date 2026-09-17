@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 6;
+pub const CURRENT_VERSION: u32 = 7;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -60,6 +60,7 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             3 => Ok(with_effect_library(current)),
             4 => Ok(onto_the_mapping_layout(current)),
             5 => Ok(with_builtin_models(current)),
+            6 => Ok(with_outline_preset(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
@@ -145,6 +146,26 @@ fn with_builtin_models(mut document: Value) -> Value {
         }
     }
     document["version"] = json!(6);
+    document
+}
+
+/// Version 6 → 7: the effect library gains the shipped Outline preset (TL-426).
+///
+/// It lands in its default slot only when that slot is free and the library holds no Outline yet,
+/// so no stored preset moves or changes. A library the operator emptied stays empty, and one that
+/// cannot be read is left alone for the load to refuse with its own message.
+fn with_outline_preset(mut document: Value) -> Value {
+    if let Some(stored) = document
+        .get_mut("configuration")
+        .and_then(|configuration| configuration.get_mut("effects"))
+        && let Ok(mut library) =
+            serde_json::from_value::<media_domain::EffectLibrary>(stored.clone())
+        && !library.entries.is_empty()
+    {
+        library.add_outline_if_free();
+        *stored = serde_json::to_value(library).expect("an effect library is serializable");
+    }
+    document["version"] = json!(7);
     document
 }
 
@@ -407,7 +428,7 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 6"));
+        assert!(written.contains("\"version\": 7"));
         assert!(
             !written.contains("personalityLayout"),
             "there is one channel layout, so nothing records which one"
@@ -597,8 +618,8 @@ mod tests {
     #[test]
     fn a_current_document_is_left_alone() {
         assert_eq!(
-            CURRENT_VERSION, 6,
-            "documents with built-in models are version 6"
+            CURRENT_VERSION, 7,
+            "documents whose effect library knows Outline are version 7"
         );
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
@@ -636,7 +657,7 @@ mod tests {
             ] })),
         );
         let migrated = migrate_to_current(document.clone()).unwrap();
-        assert_eq!(migrated["version"], json!(6));
+        assert_eq!(migrated["version"], json!(CURRENT_VERSION));
         let models = super::super::load(&document.to_string()).unwrap().models;
         let summary: Vec<(u8, &str, Option<media_domain::BuiltinModel>)> = models
             .entries
@@ -664,6 +685,50 @@ mod tests {
         let document = document_with_models(6, Some(json!({ "entries": [] })));
         let configuration = super::super::load(&document.to_string()).unwrap();
         assert!(configuration.models.entries.is_empty());
+    }
+
+    fn document_with_effects(effects: Value) -> Value {
+        let mut document = document_with_models(6, None);
+        document["configuration"]["effects"] = effects;
+        document
+    }
+
+    #[test]
+    fn a_version_six_effect_library_gains_outline_in_its_free_default_slot() {
+        let mut stored = media_domain::EffectLibrary::default();
+        stored.remove(media_domain::OUTLINE_PRESET_SLOT);
+        stored
+            .assign(40, "House blur", media_domain::EffectSlot::blur())
+            .unwrap();
+        let document = document_with_effects(serde_json::to_value(&stored).unwrap());
+        let effects = super::super::load(&document.to_string()).unwrap().effects;
+        let outline = effects.resolve(13).expect("Outline is added");
+        assert_eq!(outline.name, "Outline");
+        assert_eq!(
+            outline.effect,
+            media_domain::EffectLibrary::default()
+                .resolve(13)
+                .unwrap()
+                .effect
+        );
+        assert_eq!(effects.resolve(40).unwrap().name, "House blur");
+        assert_eq!(effects.entries.len(), stored.entries.len() + 1);
+    }
+
+    #[test]
+    fn a_version_six_effect_library_keeps_an_occupied_slot_and_an_emptied_library() {
+        let occupied = document_with_effects(json!({ "entries": [
+            { "slot": 13, "name": "Tunnel", "effect": {
+                "effectType": "feedback", "enabled": true, "mix": 1.0, "parameters": [0.9, 0.4, 7.0]
+            } }
+        ] }));
+        let effects = super::super::load(&occupied.to_string()).unwrap().effects;
+        assert_eq!(effects.entries.len(), 1);
+        assert_eq!(effects.resolve(13).unwrap().name, "Tunnel");
+
+        let emptied = document_with_effects(json!({ "entries": [] }));
+        let effects = super::super::load(&emptied.to_string()).unwrap().effects;
+        assert!(effects.entries.is_empty());
     }
 
     #[test]

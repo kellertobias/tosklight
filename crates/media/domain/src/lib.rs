@@ -30,6 +30,7 @@ mod layer_effects;
 pub mod master;
 pub mod model_library;
 pub mod model_projection;
+pub mod outline_effect;
 pub mod output;
 pub mod personality;
 pub mod pixel_map;
@@ -54,7 +55,9 @@ pub use color::{FlipMirror, Tint};
 pub use command::{
     Command, CommandKind, CommandSource, ControlOwnership, LayerControls, MasterControls, Timestamp,
 };
-pub use effect_library::{EffectLibrary, EffectLibraryError, EffectPreset};
+pub use effect_library::{
+    EffectLibrary, EffectLibraryError, EffectPreset, OUTLINE_PRESET_NAME, OUTLINE_PRESET_SLOT,
+};
 pub use effect_parameters::{
     EffectParameterBounds, FEEDBACK_PARAMETER_IDS, effect_parameter_bounds, effect_parameter_ids,
 };
@@ -75,6 +78,7 @@ pub use model_library::{
     ModelEntry, ModelGeometry, ModelGeometryError, ModelLibrary, ModelLibraryError, ModelStatus,
     ModelVertex,
 };
+pub use outline_effect::{OUTLINE_EFFECT, OutlineParameters};
 pub use output::{OutputId, OutputName, PresentationMode};
 pub use personality::{LayerPersonality, SlotFootprint, StartAddressError};
 pub use playback::{OnceEndState, PlayMode};

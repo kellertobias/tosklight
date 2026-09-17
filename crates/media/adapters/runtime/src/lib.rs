@@ -31,6 +31,7 @@ mod logging;
 mod model_store;
 pub mod off_screen;
 mod opacity_cycle;
+mod outline_beat;
 pub mod pixel_output;
 pub mod presentation;
 mod preview;
