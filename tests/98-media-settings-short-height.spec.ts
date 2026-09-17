@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	test as base,
+	type CDPSession,
 	expect,
 	type Locator,
 	type Page,
@@ -174,6 +175,41 @@ async function expectAtBottom(scroller: Locator) {
 		.toBeLessThanOrEqual(1);
 }
 
+async function expectScrollSettled(scroller: Locator) {
+	let previous = Number.NaN;
+	await expect
+		.poll(async () => {
+			const { top } = await scrollState(scroller);
+			const settled = top === previous;
+			previous = top;
+			return settled;
+		})
+		.toBe(true);
+}
+
+/** One finger drag through the browser's own touch input, as a touch screen sends it. */
+async function touchSwipe(
+	session: CDPSession,
+	x: number,
+	y: number,
+	distance: number,
+) {
+	const steps = 10;
+	await session.send("Input.dispatchTouchEvent", {
+		type: "touchStart",
+		touchPoints: [{ x, y }],
+	});
+	for (let step = 1; step <= steps; step += 1)
+		await session.send("Input.dispatchTouchEvent", {
+			type: "touchMove",
+			touchPoints: [{ x, y: y + (distance * step) / steps }],
+		});
+	await session.send("Input.dispatchTouchEvent", {
+		type: "touchEnd",
+		touchPoints: [],
+	});
+}
+
 const LAST_CONTROL = "input, button, .ui-select-trigger";
 
 for (const viewport of [
@@ -231,6 +267,8 @@ for (const viewport of [
 			await expect
 				.poll(async () => (await scrollState(content)).top)
 				.toBeGreaterThan(0);
+			// Let the paging scroll finish, so it cannot carry the section past the focused control.
+			await expectScrollSettled(content);
 
 			// Tabbing to the last control brings it into view as well.
 			const revert = content.getByRole("button", {
@@ -250,19 +288,18 @@ for (const viewport of [
 				maxTouchPoints: 5,
 			});
 			const x = box.x + box.width / 2;
-			// How far one swipe carries depends on the section's length and on fling momentum, which
-			// differs between machines, so keep swiping until the section stops at its end.
+			// How many swipes the section needs depends on its length and on how far each drag
+			// carries on this machine, so keep swiping until the section stops at its end.
 			let swipes = 0;
 			for (; swipes < 40; swipes += 1) {
 				const { top, max } = await scrollState(content);
 				if (max - top <= 1) break;
-				await session.send("Input.synthesizeScrollGesture", {
+				await touchSwipe(
+					session,
 					x,
-					y: box.y + box.height - 20,
-					yDistance: -Math.max(80, box.height - 60),
-					gestureSourceType: "touch",
-					speed: 2400,
-				});
+					box.y + box.height - 20,
+					-Math.max(80, box.height - 60),
+				);
 			}
 			expect(swipes).toBeGreaterThan(0);
 			await expectAtBottom(content);
