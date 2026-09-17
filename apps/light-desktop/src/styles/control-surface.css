@@ -1546,6 +1546,16 @@ button.large-action:disabled {
 .fixture-sheet-mode-text-only .fixture-name small {
 	margin-left: 0;
 }
+/* The 64px compact ID column still fits "9999.99" over "BASE INSIDE" when the desk falls back
+   from Inter to a wider sans-serif font. */
+.fixture-sheet-mode-icon-only .fixture-sheet-id > span,
+.fixture-sheet-mode-text-only .fixture-sheet-id > span {
+	font-size: 13px;
+}
+.fixture-sheet-mode-icon-only .fixture-step-marker,
+.fixture-sheet-mode-text-only .fixture-step-marker {
+	letter-spacing: 0.02em;
+}
 /* Compact rows are 32px: the icon-only intensity meter keeps 4px above and below. */
 .fixture-sheet-mode-icon-only .fixture-table .vertical-meter {
 	width: 10px;
