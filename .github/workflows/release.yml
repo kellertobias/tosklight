@@ -663,6 +663,7 @@ jobs:
             headless_binary: light-headless
             desktop: true
             viz: true
+            target_cache: true
           - label: Linux (ARM64 / Raspberry Pi)
             runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
@@ -677,6 +678,7 @@ jobs:
             headless_binary: light-headless.exe
             desktop: true
             viz: true
+            target_cache: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -704,13 +706,15 @@ jobs:
           cache-dependency-path: package-lock.json
 
       # Cargo writes to .artifacts/build/cargo (.cargo/config.toml), not ./target, so without the
-      # explicit mapping this cached only the registry: every run re-fetched about 1,200 sccache
-      # objects and recompiled every proc-macro and build script sccache cannot cache.
+      # explicit mapping rust-cache keeps only the registry: every run re-fetches about 1,200 sccache
+      # objects and recompiles every proc-macro and build script sccache cannot cache. The mapped
+      # caches are 1-2 GB each and share the repository's 10 GB cache with sccache, so only the
+      # Windows and Linux x86_64 jobs, whose Tauri builds gain most, keep their target directory.
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
-          key: release-target-${{ matrix.target }}
+          key: ${{ matrix.target_cache && format('release-target-{0}', matrix.target) || format('release-{0}', matrix.target) }}
           workspaces: |
-            . -> .artifacts/build/cargo
+            ${{ matrix.target_cache && '. -> .artifacts/build/cargo' || '.' }}
             ${{ matrix.slug == 'linux-amd64' && '. -> .artifacts/tmp/performance-probe/cargo' || '' }}
 
       - uses: ./.github/actions/package-mirror

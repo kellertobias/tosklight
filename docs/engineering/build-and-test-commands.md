@@ -311,9 +311,11 @@ Platform build time rules for the `build` job:
 - The Linux x86_64 performance probe (`light-benchmark`, built without default features) starts
   in the background beside the sidecar build in its own target directory and is collected before
   staging, because the second feature set recompiles the whole Desk runtime.
-- `Swatinem/rust-cache` maps the real target directory (`.artifacts/build/cargo`, plus the probe
-  directory on Linux x86_64). Without that mapping it cached only the registry, and every run
-  re-fetched the sccache objects and rebuilt every proc-macro and build script.
+- On Windows and Linux x86_64, `Swatinem/rust-cache` maps the real target directory
+  (`.artifacts/build/cargo`, plus the probe directory on Linux). Without that mapping it caches
+  only the registry, and every run re-fetches the sccache objects and rebuilds every proc-macro
+  and build script. macOS and Linux ARM64 keep the registry-only cache: each mapped cache is
+  1-2 GB of the repository's 10 GB, and sccache objects are evicted when they compete.
 
 `.github/workflows/documentation.yml` checks nightly for a release without the durable
 `report-documentation.json` marker. It builds the handbook and Storybook, refreshes Help and
