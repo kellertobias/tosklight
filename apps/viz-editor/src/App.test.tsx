@@ -520,10 +520,13 @@ describe("the Viz editor window", () => {
 			{ target: { value: "Tobias Keller" } },
 		);
 		fireEvent.click(within(information).getByRole("button", { name: "Save project info" }));
-		await waitFor(() =>
-			expect(invoke).toHaveBeenCalledWith("save_document_paperwork", {
-				paperwork: expect.objectContaining({ lightingDesigner: "Tobias Keller" }),
-			}),
+		// A loaded CI runner can take longer than waitFor's default second to settle the save.
+		await waitFor(
+			() =>
+				expect(invoke).toHaveBeenCalledWith("save_document_paperwork", {
+					paperwork: expect.objectContaining({ lightingDesigner: "Tobias Keller" }),
+				}),
+			{ timeout: 5_000 },
 		);
 	});
 
