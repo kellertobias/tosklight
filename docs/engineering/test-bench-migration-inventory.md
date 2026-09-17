@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **236 root cases across 90 files**.
+Default catalog: **238 root cases across 91 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -55,6 +55,8 @@ Default catalog: **236 root cases across 90 files**.
 | 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › desk merge and validation remain in the workflow | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
 | 104-show-patch-csv-import.spec.ts | TL-469 @ui › Import CSV lives in Show Patch Settings and keeps validation and safe cancellation | repository contract | @ui | show-patch-csv-import | standard failure evidence | parallel | pending-semantic-migration |
 | 104-show-patch-csv-import.spec.ts | TL-469 @ui @touch › a touch tap reaches Import CSV from Settings on another Show Patch view | repository contract | @ui @touch | show-patch-csv-import | standard failure evidence | parallel | pending-semantic-migration |
+| 105-external-screen-desk-session.spec.ts | TL-470 @ui › Open Screen joins the desk's own server and session instead of starting a second desk | repository contract | @ui | external-screen-desk-session | standard failure evidence | parallel | pending-semantic-migration |
+| 105-external-screen-desk-session.spec.ts | TL-470 @ui › a screen that cannot reach the desk's server says why and retries without starting a desk | repository contract | @ui | external-screen-desk-session | standard failure evidence | parallel | pending-semantic-migration |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | FIXTURE-002 @ui @restart › focused assets and physical metadata remain immutable across edit, patch, and restart | repository contract | @ui @restart | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |

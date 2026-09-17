@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import desktopCapability from "../../../src-tauri/capabilities/default.json";
+import type { ScreenAttachment } from "../../api/client/screenAttachment";
 
 const mocks = vi.hoisted(() => ({
 	invoke: vi.fn(),
@@ -50,12 +51,24 @@ describe("Tauri desktop bridge", () => {
 	});
 
 	it("maps typed screen operations to desktop commands", async () => {
+		const attachment = {
+			server_url: "http://127.0.0.1:5000",
+			session: {
+				role: "operator",
+				session_id: "session-1",
+				client_id: "client-1",
+				token: "token-1",
+				desk: { id: "desk-1" },
+			},
+			desk_token: null,
+		} as unknown as ScreenAttachment;
 		await tauriDesktopBridge.openConsoleScreen({
 			screenId: "stage",
 			title: "Stage",
 			displayId: "display-1",
 			bounds: { x: 10, y: 20, width: 800, height: 600 },
 			fullscreen: false,
+			attachment,
 		});
 		expect(mocks.invoke).toHaveBeenCalledWith("open_console_screen", {
 			screenId: "stage",
@@ -63,6 +76,7 @@ describe("Tauri desktop bridge", () => {
 			displayId: "display-1",
 			bounds: { x: 10, y: 20, width: 800, height: 600 },
 			fullscreen: false,
+			attachment,
 		});
 	});
 

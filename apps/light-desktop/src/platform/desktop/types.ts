@@ -1,3 +1,4 @@
+import type { ScreenAttachment } from "../../api/client/screenAttachment";
 import type { ScreenConfiguration } from "../../api/types";
 
 export type DesktopUnsubscribe = () => void;
@@ -19,6 +20,11 @@ export interface ConsoleScreenWindow {
 	displayId: string | null;
 	bounds: ScreenConfiguration["bounds"];
 	fullscreen: boolean;
+	/**
+	 * The desk server and session the screen joins. Null while the desk window has no session;
+	 * the screen then waits and is handed the attachment as soon as one exists.
+	 */
+	attachment: ScreenAttachment | null;
 }
 
 export interface PackagedStageBenchmarkConfig {

@@ -13,6 +13,8 @@ import type {
 	RuntimeDiagnostics,
 	SessionResponse,
 } from "../types";
+import type { ScreenAttachment } from "./screenAttachment";
+import { readScreenAttachment } from "./screenAttachment";
 import { browserStorage, defaultServerUrl } from "./serverLocation";
 import type { LiveClientTransport } from "./transport";
 
@@ -41,7 +43,10 @@ export class LightClientRuntime {
 	private socket: WebSocket | null = null;
 	private readonly listeners = new Set<EventListener>();
 	private readonly pending = new Map<string, PendingCommand>();
-	private deskToken = browserStorage()?.getItem("light.desk-token") ?? "";
+	private deskToken =
+		readScreenAttachment()?.desk_token ??
+		browserStorage()?.getItem("light.desk-token") ??
+		"";
 	protected readonly transport: LiveClientTransport;
 
 	constructor(private readonly baseUrl = defaultServerUrl()) {
@@ -62,6 +67,24 @@ export class LightClientRuntime {
 
 	capabilityTransport(): LiveClientTransport {
 		return this.transport;
+	}
+
+	/** The server this runtime talks to, without a trailing slash. */
+	get serverUrl(): string {
+		return this.baseUrl;
+	}
+
+	/**
+	 * What an external screen window needs to join this desk: the same server, the same
+	 * operator session and the same desk boundary token. Null until a session exists.
+	 */
+	screenAttachment(): ScreenAttachment | null {
+		if (!this.session) return null;
+		return {
+			server_url: this.baseUrl,
+			session: this.session,
+			desk_token: this.deskToken || null,
+		};
 	}
 
 	restoreSession(session: SessionResponse): void {

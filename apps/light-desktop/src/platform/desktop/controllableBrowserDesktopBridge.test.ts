@@ -33,6 +33,7 @@ describe("controllable browser desktop bridge", () => {
 			displayId: "display-a",
 			bounds: null,
 			fullscreen: true,
+			attachment: null,
 		});
 		await bridge.setCurrentWindowFullscreen(true);
 		expect(actions).toEqual([
@@ -45,6 +46,7 @@ describe("controllable browser desktop bridge", () => {
 					displayId: "display-a",
 					bounds: null,
 					fullscreen: true,
+					attachment: null,
 				},
 			},
 			{ type: "set_fullscreen", fullscreen: true },

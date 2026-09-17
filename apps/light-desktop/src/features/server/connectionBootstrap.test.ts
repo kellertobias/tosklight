@@ -86,6 +86,8 @@ function createHarness() {
 			runtime: {
 				bootstrap: client.bootstrap,
 				login: client.login,
+				restoreSession: vi.fn(),
+				serverUrl: "http://127.0.0.1:5471",
 			},
 			desk: {
 				commandHistory: client.commandHistory,
@@ -107,7 +109,7 @@ function createHarness() {
 				screens: client.screens,
 				removeClient: client.removeClient,
 			},
-			shows: { shows: client.shows },
+			shows: { shows: client.shows, createShow: vi.fn(), openShow: vi.fn() },
 		},
 		commandTargetModeRef: { current: "FIXTURE" },
 		setBootstrap: vi.fn(),
@@ -250,5 +252,63 @@ describe("connection bootstrap resources", () => {
 		expect(harness.clientMethods.fixtureProfiles).toHaveBeenCalledOnce();
 		expect(harness.clientMethods.fixtureProfileWarnings).toHaveBeenCalledOnce();
 		expect(harness.clientMethods.shows).toHaveBeenCalledOnce();
+	});
+
+	it("joins a screen window to the handed-over desk session without touching the desk", async () => {
+		const harness = createHarness();
+		const attached = { ...session, token: "desk-token" };
+		const stored = new Map([
+			[
+				"light.screen-attachment",
+				JSON.stringify({
+					server_url: "http://127.0.0.1:5471/",
+					session: attached,
+					desk_token: null,
+				}),
+			],
+		]);
+		vi.stubGlobal("sessionStorage", {
+			getItem: (key: string) => stored.get(key) ?? null,
+		});
+		harness.clientMethods.bootstrap.mockResolvedValue({
+			...bootstrap(),
+			active_show: null,
+			clients: [
+				{
+					client_id: "old-client",
+					connected: false,
+					can_remove: true,
+					desk: { id: "desk-old" },
+				},
+			],
+		});
+		const loadShowObjects = vi.fn().mockResolvedValue(undefined);
+
+		await expect(
+			bootstrapConnection(
+				harness.state,
+				loadShowObjects,
+				() => false,
+				"secondary",
+			),
+		).resolves.toEqual(attached);
+
+		expect(harness.clientMethods.login).not.toHaveBeenCalled();
+		expect(harness.state.api.runtime.restoreSession).toHaveBeenCalledWith(
+			attached,
+		);
+		expect(harness.clientMethods.removeClient).not.toHaveBeenCalled();
+		expect(harness.clientMethods.shows).not.toHaveBeenCalled();
+		expect(harness.state.api.shows.createShow).not.toHaveBeenCalled();
+		expect(loadShowObjects).toHaveBeenCalledWith(null);
+	});
+
+	it("refuses to start a screen window without the desk session", async () => {
+		const harness = createHarness();
+		vi.stubGlobal("sessionStorage", { getItem: () => null });
+		await expect(
+			bootstrapConnection(harness.state, vi.fn(), () => false, "secondary"),
+		).rejects.toThrow("joins the desk session of the main ToskLight window");
+		expect(harness.clientMethods.login).not.toHaveBeenCalled();
 	});
 });

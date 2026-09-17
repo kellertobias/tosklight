@@ -7,11 +7,8 @@ import {
 	serializedModelBytes,
 } from "../frontendWarmup/diagnostics";
 import type { ProgrammingSnapshot } from "../programmingInteraction/contracts";
-import {
-	mayCreateSession,
-	requirePrimarySession,
-	type SessionRole,
-} from "../session/ownership";
+import { mayCreateSession, type SessionRole } from "../session/ownership";
+import { attachedDeskSession } from "../session/screenSession";
 import type { LoadShowObjects } from "./stateEventRouting";
 import type { ServerState } from "./useServerState";
 
@@ -43,9 +40,7 @@ async function restoreOrLogin(
 	role: SessionRole,
 ): Promise<SessionResponse> {
 	if (!mayCreateSession(role)) {
-		const restored = requirePrimarySession(
-			localStorage.getItem("light.primary-session"),
-		);
+		const restored = attachedDeskSession(api.runtime.serverUrl);
 		api.runtime.restoreSession(restored);
 		return restored;
 	}
@@ -56,8 +51,11 @@ async function ensureActiveShow(
 	state: ServerState,
 	bootstrap: BootstrapSnapshot,
 	locked: boolean,
+	role: SessionRole,
 ) {
-	if (bootstrap.active_show || locked) return bootstrap;
+	// Only the desk window owns the show; a screen shows whatever the desk has open.
+	if (bootstrap.active_show || locked || !mayCreateSession(role))
+		return bootstrap;
 	const library = await state.api.shows.shows();
 	const show =
 		library.find((candidate) => candidate.name === "Default Stage Show") ??
@@ -180,17 +178,22 @@ export async function bootstrapConnection(
 	}
 	state.setBootstrap(initial);
 	const session = await restoreOrLogin(state.api, role);
-	const connectedBootstrap = await removeDisconnectedOtherClients(
-		state.api,
-		await state.api.runtime.bootstrap(),
-		session.client_id,
-	);
+	const refreshed = await state.api.runtime.bootstrap();
+	// Client housekeeping belongs to the desk window; a screen is not a client of its own.
+	const connectedBootstrap = mayCreateSession(role)
+		? await removeDisconnectedOtherClients(
+				state.api,
+				refreshed,
+				session.client_id,
+			)
+		: refreshed;
 	state.setBootstrap(connectedBootstrap);
 	const deskLock = await state.api.desk.deskLock();
 	const bootstrap = await ensureActiveShow(
 		state,
 		connectedBootstrap,
 		deskLock.locked,
+		role,
 	);
 	const finishResources =
 		frontendPerformanceDiagnostics.beginPhase("initial-resources");

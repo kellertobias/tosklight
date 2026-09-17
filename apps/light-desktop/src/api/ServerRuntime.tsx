@@ -1,6 +1,7 @@
 import { type PropsWithChildren, useCallback, useMemo } from "react";
 import { AttributeConfigurationActionsProvider } from "../features/attributeConfiguration/AttributeConfigurationActions";
 import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvider";
+import { ConnectionRetryProvider } from "../features/deskConnection/ConnectionRetryContext";
 import { DeskConnectionProvider } from "../features/deskConnection/DeskConnectionContext";
 import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
 import { DeskStateDiagnosticsProvider } from "../features/deskState/DeskStateDiagnosticsState";
@@ -78,8 +79,21 @@ function ServerConnectionOwner({
 	sessionRole: SessionRole;
 }>) {
 	const sessionHandoff = useSessionHandoff();
-	useServerConnection(state, loadShowObjects, sessionRole, sessionHandoff);
-	return children;
+	const retry = useServerConnection(
+		state,
+		loadShowObjects,
+		sessionRole,
+		sessionHandoff,
+	);
+	const connection = useMemo(
+		() => ({ role: sessionRole, retry }),
+		[sessionRole, retry],
+	);
+	return (
+		<ConnectionRetryProvider value={connection}>
+			{children}
+		</ConnectionRetryProvider>
+	);
 }
 
 /** Data-shaped provider sources, extracted from ServerRuntime for size. */
@@ -105,10 +119,15 @@ function useProviderDataSources(
 		systemPickerFallback:
 			state.configuration?.file_manager_system_picker_fallback ?? false,
 	};
+	const screenAttachment = useMemo(
+		() => (value.session ? state.api.runtime.screenAttachment() : null),
+		[state.api, value.session],
+	);
 	const screenSource = {
 		screens: value.screens,
 		bootstrap: value.bootstrap,
 		session: value.session,
+		screenAttachment,
 		saveScreen: value.saveScreen,
 		deleteScreen: value.deleteScreen,
 		setScreenPage: value.setScreenPage,

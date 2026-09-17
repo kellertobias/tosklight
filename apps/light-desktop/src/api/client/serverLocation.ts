@@ -1,4 +1,5 @@
 import { desktopRuntimeAvailable } from "../../platform/desktop";
+import { readScreenAttachment } from "./screenAttachment";
 
 function persistentBrowserStorage(): Storage | null {
 	const storage = globalThis.localStorage;
@@ -34,7 +35,9 @@ export function defaultServerUrl(
 		((location.protocol === "http:" || location.protocol === "https:") &&
 			location.hostname === "tauri.localhost");
 	if (nativeWindow || nativeOrigin) {
+		// An external screen window follows the server of the desk window that opened it.
 		return (
+			readScreenAttachment(browserSessionStorage())?.server_url ||
 			browserSessionStorage()?.getItem("light.test-server-url") ||
 			persistentBrowserStorage()?.getItem("light.server-url") ||
 			"http://127.0.0.1:5000"

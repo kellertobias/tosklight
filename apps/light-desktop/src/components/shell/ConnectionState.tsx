@@ -6,6 +6,7 @@ import { configuredServerUrl } from "../../api/client/serverLocation";
 import { Button, TextField } from "@tosklight/ui";
 import { LoadingSurface } from "../common/LoadingSurface";
 import { useDesktopBridge } from "../../platform/desktop";
+import { useConnectionRetry } from "../../features/deskConnection/ConnectionRetryContext";
 
 export function ConnectionState() {
   const connection = useDeskConnection();
@@ -13,6 +14,8 @@ export function ConnectionState() {
   const connectionStatus = useConnectionStatus();
   const serverError = useServerError();
   const desktop = useDesktopBridge();
+  const retry = useConnectionRetry();
+  const joinsDesk = retry?.role === "secondary";
   const [deskToken, setDeskToken] = useState("");
   const [serverUrl, setServerUrl] = useState(configuredServerUrl());
   const [startupGrace, setStartupGrace] = useState(true);
@@ -52,6 +55,8 @@ export function ConnectionState() {
   const boundaryRequired =
     serverError?.toLowerCase().includes("desk boundary token") ?? false;
   const startingBuiltIn = isTauri && usesBuiltInServer && startupGrace && !boundaryRequired;
+  if (joinsDesk && !boundaryRequired)
+    return <ScreenConnectionState serverUrl={serverUrl} error={serverError} retry={retry.retry} />;
   if (!boundaryRequired && (startingBuiltIn || !serverError))
     return (
       <LoadingSurface
@@ -111,6 +116,43 @@ export function ConnectionState() {
             <div className="connection-form-actions"><Button>Use server</Button></div>
           </form>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A screen window never picks its own server or starts a session: it joins the desk window that
+ * opened it. So it says why joining failed and offers a retry that can only try to join again.
+ */
+function ScreenConnectionState({
+  serverUrl,
+  error,
+  retry,
+}: {
+  serverUrl: string;
+  error: string | null;
+  retry: () => void;
+}) {
+  if (!error)
+    return (
+      <LoadingSurface
+        className="connection-cover"
+        showMark
+        title="Joining the desk"
+        detail={`Connecting to the ToskLight desk session at ${serverUrl}…`}
+        note="This screen uses the same server and session as the main ToskLight window"
+      />
+    );
+  return (
+    <div className="connection-cover" role="status">
+      <div className="connection-card">
+        <h1>Screen cannot join the desk</h1>
+        <p role="alert">{error}</p>
+        <small>Server: {serverUrl} · Retrying automatically</small>
+        <div className="connection-form-actions">
+          <Button onClick={retry}>Retry now</Button>
+        </div>
       </div>
     </div>
   );

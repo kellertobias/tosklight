@@ -38,6 +38,41 @@ fn window_bounds(value: &serde_json::Value) -> Option<WindowBounds> {
     })
 }
 
+/// Where a screen window finds the desk it joins; read by the web interface of that window.
+const SCREEN_ATTACHMENT_KEY: &str = "light.screen-attachment";
+
+/// A script that hands a screen window the desk server and session of the window that opened it.
+///
+/// A screen window is a second webview of this application with its own, initially empty session
+/// storage. Without this it would look for a server and a session of its own and could end up on
+/// a different server, or with no session at all, instead of joining the open desk.
+///
+/// `keep_existing` is for the script that runs on every page load: a reload must not bring back
+/// the attachment the window was created with once the desk has handed over a newer one.
+fn attachment_script(attachment: &serde_json::Value, keep_existing: bool) -> Option<String> {
+    let valid = attachment
+        .get("server_url")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|url| url.starts_with("http://") || url.starts_with("https://"))
+        && attachment
+            .get("session")
+            .and_then(|session| session.get("token"))
+            .is_some_and(serde_json::Value::is_string);
+    if !valid {
+        return None;
+    }
+    let key = serde_json::to_string(SCREEN_ATTACHMENT_KEY).ok()?;
+    let value = serde_json::to_string(&serde_json::to_string(attachment).ok()?).ok()?;
+    let guard = if keep_existing {
+        "sessionStorage.getItem(k)===null"
+    } else {
+        "true"
+    };
+    Some(format!(
+        "(()=>{{try{{const k={key};if({guard})sessionStorage.setItem(k,{value})}}catch(_){{}}}})();"
+    ))
+}
+
 #[tauri::command]
 pub(crate) fn list_console_displays(app: tauri::AppHandle) -> Result<Vec<ConsoleDisplay>, String> {
     app.available_monitors()
@@ -77,9 +112,19 @@ pub(crate) fn open_console_screen(
     display_id: Option<String>,
     bounds: Option<serde_json::Value>,
     fullscreen: bool,
+    attachment: Option<serde_json::Value>,
 ) -> Result<(), String> {
     let label = format!("screen-{screen_id}");
     if let Some(window) = app.get_window(&label) {
+        // The desk reconnected or changed server: hand the open screen the current attachment.
+        if let (Some(webview), Some(script)) = (
+            app.get_webview(&label),
+            attachment
+                .as_ref()
+                .and_then(|value| attachment_script(value, false)),
+        ) {
+            webview.eval(script).map_err(|error| error.to_string())?;
+        }
         window
             .set_title(&title)
             .map_err(|error| error.to_string())?;
@@ -155,15 +200,22 @@ pub(crate) fn open_console_screen(
     let size = window.inner_size().map_err(|error| error.to_string())?;
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
     let logical = size.to_logical::<f64>(scale);
+    let mut webview_builder = tauri::webview::WebviewBuilder::new(
+        &label,
+        tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into()),
+    )
+    .transparent(true)
+    .background_throttling(BackgroundThrottlingPolicy::Disabled)
+    .auto_resize();
+    if let Some(script) = attachment
+        .as_ref()
+        .and_then(|value| attachment_script(value, true))
+    {
+        webview_builder = webview_builder.initialization_script(script);
+    }
     let webview = window
         .add_child(
-            tauri::webview::WebviewBuilder::new(
-                &label,
-                tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into()),
-            )
-            .transparent(true)
-            .background_throttling(BackgroundThrottlingPolicy::Disabled)
-            .auto_resize(),
+            webview_builder,
             LogicalPosition::new(0.0, 0.0),
             LogicalSize::new(logical.width, logical.height),
         )
@@ -179,8 +231,54 @@ pub(crate) fn open_console_screen(
 
 #[cfg(test)]
 mod tests {
-    use super::{WindowBounds, window_bounds};
+    use super::{WindowBounds, attachment_script, window_bounds};
     use serde_json::json;
+
+    fn attachment() -> serde_json::Value {
+        json!({
+            "server_url": "http://127.0.0.1:5471",
+            "session": {"session_id": "s", "client_id": "c", "token": "t</script>\u{2028}", "desk": {"id": "d"}},
+            "desk_token": null
+        })
+    }
+
+    #[test]
+    fn screen_attachment_script_stores_the_exact_attachment_as_one_string_literal() {
+        let script = attachment_script(&attachment(), false).expect("valid attachment");
+        let literal = script
+            .split("sessionStorage.setItem(k,")
+            .nth(1)
+            .and_then(|rest| rest.strip_suffix(")}catch(_){}})();"))
+            .expect("one stored literal");
+        let stored: String = serde_json::from_str(literal).expect("a JSON string literal");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&stored).unwrap(),
+            attachment()
+        );
+        assert!(script.contains("const k=\"light.screen-attachment\";if(true)"));
+    }
+
+    #[test]
+    fn screen_attachment_script_on_page_load_keeps_a_newer_handed_over_attachment() {
+        let script = attachment_script(&attachment(), true).expect("valid attachment");
+        assert!(script.contains("if(sessionStorage.getItem(k)===null)"));
+    }
+
+    #[test]
+    fn screen_attachment_script_rejects_attachments_without_a_server_or_session() {
+        assert_eq!(attachment_script(&json!({}), true), None);
+        assert_eq!(
+            attachment_script(
+                &json!({"server_url": "javascript:alert(1)", "session": {"token": "t"}}),
+                true
+            ),
+            None
+        );
+        assert_eq!(
+            attachment_script(&json!({"server_url": "http://desk", "session": {}}), true),
+            None
+        );
+    }
 
     #[test]
     fn console_bounds_keep_position_and_enforce_the_existing_minimum_size() {

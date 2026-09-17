@@ -1,3 +1,4 @@
+import type { ScreenAttachment } from "../../api/client/screenAttachment";
 import type {
 	BootstrapSnapshot,
 	ControlDesk,
@@ -20,6 +21,8 @@ export interface ScreenCapabilities {
 export interface ScreensContextValue extends ScreenCapabilities {
 	bootstrap: BootstrapSnapshot | null;
 	session: SessionResponse | null;
+	/** What a screen window opened by this desk needs to join the same server and session. */
+	screenAttachment?: ScreenAttachment | null;
 	updateControlDesk: (desk: ControlDesk, options?: { throwOnError?: boolean; hardwareLighting?: import("../../api/types/desk").HardwareLightingPatch }) => Promise<void>;
 	selectControlDesk: (id: string) => void;
 	removeClient: (deskId: string, clientId: string) => Promise<boolean>;

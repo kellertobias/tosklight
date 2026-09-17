@@ -70,6 +70,13 @@ Pressing **X** in an optional screen window closes that window and marks the scr
 stays closed until you open it again from **Setup → Screens** or with its **Open Screen** action.
 The rest of the desk keeps running. Pressing **X** on the main window quits ToskLight.
 
+An optional screen window is part of the same desk as the main window. It uses the main window's
+server and operator session, so it shows the same command line, selection and live state; it never
+starts a desk of its own and has no server setting. If a screen cannot join — for example because
+the server is not reachable or the main window is still connecting — the screen says why and
+retries on its own. **Retry now** tries again at once; pressing it repeatedly never opens another
+desk. Keep the main window open and connected while screens are in use.
+
 ## Encoder placement
 
 Choose **Configure encoder placement** in the Screens & playback title bar. Its **Encoder placement** modal decides which screen carries the encoder section, independently of the

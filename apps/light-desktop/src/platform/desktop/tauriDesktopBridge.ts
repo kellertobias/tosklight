@@ -108,6 +108,7 @@ function screenArguments(screen: ConsoleScreenWindow) {
 		displayId: screen.displayId,
 		bounds: screen.bounds,
 		fullscreen: screen.fullscreen,
+		attachment: screen.attachment,
 	};
 }
 

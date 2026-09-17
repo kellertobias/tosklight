@@ -1,12 +1,18 @@
 import { useEffect, useRef } from "react";
+import type { ScreenAttachment } from "../../api/client/screenAttachment";
 import type { ScreenConfiguration } from "../../api/types";
 import { useScreens } from "../../features/screens/ScreensContext";
 import { type DesktopBridge, useDesktopBridge } from "../../platform/desktop";
 
 type ReconcileState = Map<string, string>;
 
-function screenSignature(screen: ScreenConfiguration, available: boolean) {
+function screenSignature(
+	screen: ScreenConfiguration,
+	available: boolean,
+	attachment: ScreenAttachment | null,
+) {
 	return JSON.stringify({
+		attachment,
 		desiredOpen: screen.desired_open,
 		available,
 		title: screen.name,
@@ -21,9 +27,10 @@ async function reconcileScreen(
 	screen: ScreenConfiguration,
 	displays: ReadonlySet<string>,
 	state: ReconcileState,
+	attachment: ScreenAttachment | null,
 ) {
 	const available = !screen.display_id || displays.has(screen.display_id);
-	const signature = screenSignature(screen, available);
+	const signature = screenSignature(screen, available, attachment);
 	if (state.get(screen.id) === signature) return;
 	if (!screen.desired_open) await desktop.closeConsoleScreen(screen.id);
 	else if (!available) await desktop.hideConsoleScreen(screen.id);
@@ -34,6 +41,7 @@ async function reconcileScreen(
 			displayId: screen.display_id,
 			bounds: screen.bounds,
 			fullscreen: screen.fullscreen,
+			attachment,
 		});
 	state.set(screen.id, signature);
 }
@@ -43,6 +51,7 @@ export async function reconcileScreenWindows(
 	screens: readonly ScreenConfiguration[],
 	state: ReconcileState,
 	cancelled: () => boolean,
+	attachment: ScreenAttachment | null = null,
 ) {
 	const available = new Set(
 		(await desktop.listDisplays()).map((display) => display.id),
@@ -56,13 +65,14 @@ export async function reconcileScreenWindows(
 	}
 	for (const screen of screens) {
 		if (cancelled()) return;
-		await reconcileScreen(desktop, screen, available, state);
+		await reconcileScreen(desktop, screen, available, state, attachment);
 	}
 }
 
 function createReconciler(
 	desktop: DesktopBridge,
 	screens: () => readonly ScreenConfiguration[],
+	attachment: () => ScreenAttachment | null,
 	cancelled: () => boolean,
 ) {
 	let running = false;
@@ -75,7 +85,13 @@ function createReconciler(
 		try {
 			while (requested && !cancelled()) {
 				requested = false;
-				await reconcileScreenWindows(desktop, screens(), state, cancelled);
+				await reconcileScreenWindows(
+					desktop,
+					screens(),
+					state,
+					cancelled,
+					attachment(),
+				);
 			}
 		} finally {
 			running = false;
@@ -85,16 +101,19 @@ function createReconciler(
 
 export function ScreenWindowManager() {
 	const desktop = useDesktopBridge();
-	const screens = useScreens().screens;
+	const { screens, screenAttachment = null } = useScreens();
 	const screensRef = useRef(screens);
+	const attachmentRef = useRef(screenAttachment);
 	const requestReconcile = useRef<() => void>(() => undefined);
 	screensRef.current = screens;
+	attachmentRef.current = screenAttachment;
 	useEffect(() => {
 		if (!desktop.available) return;
 		let cancelled = false;
 		const request = createReconciler(
 			desktop,
 			() => screensRef.current?.screens ?? [],
+			() => attachmentRef.current,
 			() => cancelled,
 		);
 		requestReconcile.current = () => void request();
@@ -106,6 +125,6 @@ export function ScreenWindowManager() {
 			window.clearInterval(timer);
 		};
 	}, [desktop]);
-	useEffect(() => requestReconcile.current(), [screens]);
+	useEffect(() => requestReconcile.current(), [screens, screenAttachment]);
 	return null;
 }

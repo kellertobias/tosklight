@@ -33,6 +33,19 @@ run a playback while the operator is recording, without either disturbing the ot
 7. Confirm the main window is unaffected throughout: its command line, selection and Programmer
    values are exactly as they were.
 
+## Opening a screen joins the open desk
+
+1. Start the desktop application on a server other than the default `127.0.0.1:5000`, with a
+   different server stored as the operator's server setting.
+2. Add a screen and press **Open Screen**. Confirm the screen window appears, reaches only the
+   main window's server, and does not create another client or operator session.
+3. Type on the main window's keypad. Confirm the screen shows the same command line live while the
+   main window stays open and usable.
+4. Make the server unreachable for the screen. Confirm the screen names the server and says it is
+   not reachable, offers no server setting of its own, and offers **Retry now**.
+5. Press **Retry now** several times. Confirm it only tries to join again: no new client, session
+   or window appears.
+
 ## An OSC remote-control surface
 
 1. Subscribe an OSC client on `remote` and another on `desk`.
