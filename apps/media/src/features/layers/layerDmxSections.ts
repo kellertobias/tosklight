@@ -4,8 +4,8 @@ import type {
 	ModelSlotView,
 	OutputView,
 	UpdateLayer,
+	VisualizerChannelView,
 	VisualizerParametersView,
-	VisualizerView,
 } from "../../shared/api/generated/media-wire";
 
 type LayerState = OutputView["layers"][number];
@@ -181,45 +181,53 @@ export function playbackRangeControls(
 	];
 }
 
-function visualizerParameterName(parameter: string) {
-	if (parameter === "primary") return "Colour";
-	if (parameter === "secondary") return "Second colour";
-	return (
-		VISUALIZER_NUMBERS[parameter]?.label ??
-		VISUALIZER_FLAGS[parameter]?.label ??
-		parameter
-	);
-}
-
 /**
- * A shown Visualizer's four DMX bytes, in its kind's own parameter order. They belong to the
- * Visualizer group on the Effects tab and are absent for any other source.
+ * The layer's four dedicated Visualizer Parameter bytes, named and ranged by the visualizer it
+ * shows. They sit in the Visualizer group on the Effects tab, apart from the two effect banks; a
+ * byte the shown visualizer does not use is inert and disabled.
  */
 export function visualizerParameterControls(
 	layer: LayerState,
-	visualizer: VisualizerView,
 	disabled: boolean,
 ): ControlSection["controls"] {
 	return Array.from({ length: 4 }, (_, index) => {
 		const raw = layer.visualizerControls[index] ?? 0;
-		const parameter = visualizer.uses[index];
+		const channel = layer.visualizerChannels.find(
+			(candidate) => candidate.index === index,
+		);
 		return {
 			...valueControl(
 				`media.visualizer.parameter.${index + 1}`,
-				parameter
-					? `Parameter ${index + 1} · ${visualizerParameterName(parameter)}`
+				channel
+					? `Parameter ${index + 1} · ${channel.label}`
 					: `Parameter ${index + 1}`,
 				raw,
 				0,
 				255,
-				disabled || parameter === undefined,
+				disabled || channel === undefined,
 				"",
 				1,
 			),
-			display: raw === 0 ? "Configured" : String(raw),
+			display: channel
+				? raw === 0
+					? `Default · ${visualizerChannelDisplay(channel, channel.defaultValue)}`
+					: visualizerChannelDisplay(channel, channel.value)
+				: "Unused",
 			group: VISUALIZER_GROUP,
 		};
 	});
+}
+
+function visualizerChannelDisplay(
+	channel: VisualizerChannelView,
+	value: number,
+) {
+	if (["mirror", "filled", "wireframe"].includes(channel.parameter))
+		return value >= 0.5 ? "On" : "Off";
+	if (channel.parameter === "primary" || channel.parameter === "secondary")
+		return `${Math.round(value)}° hue`;
+	if (channel.step >= 1) return String(Math.round(value));
+	return String(Number(value.toFixed(3)));
 }
 
 /** Scale, placement and Rotation, then the 3D model that Rotation rolls. */

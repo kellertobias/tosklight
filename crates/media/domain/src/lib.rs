@@ -42,6 +42,7 @@ pub mod text;
 pub mod text_catalog;
 pub mod timeline;
 pub mod visualizer;
+pub mod visualizer_channels;
 
 pub use address::{AddressClass, AssetId, MediaAddress};
 pub use audio::{Analysis, Instrument, Instruments, Tuning};
@@ -95,3 +96,4 @@ pub use visualizer::{
     ALL_KINDS, GeneratedCatalog, GeneratedCatalogError, GeneratedEntry, Parameter,
     VisualizerConfiguration, VisualizerKind, VisualizerParameters,
 };
+pub use visualizer_channels::{VisualizerChannel, VisualizerTuning};

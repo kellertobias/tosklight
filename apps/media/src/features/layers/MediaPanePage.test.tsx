@@ -816,6 +816,12 @@ describe("the production Media pane", () => {
 		};
 		const server = stubServer({ outputs: [output] });
 		server.visualizers[0].uses = ["count", "primary"];
+		server.visualizers[0].channels = server.visualizers[0].channels
+			.filter(
+				(channel) =>
+					channel.parameter === "count" || channel.parameter === "primary",
+			)
+			.map((channel, index) => ({ ...channel, index }));
 		render(<MediaPanePage />);
 		await userEvent.click(
 			await screen.findByRole("switch", { name: "Take over playback" }),
@@ -838,9 +844,23 @@ describe("the production Media pane", () => {
 		const configuredCount = screen.getByRole("slider", { name: "Count" });
 		fireEvent.input(configuredCount, { target: { value: "64" } });
 		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].effects[0].visualizerParameters?.count,
-			).toBe(64),
+			expect(server.outputs[0].layers[0].visualizerParameters?.count).toBe(64),
+		);
+		// The tuning belongs to the layer: no effect slot is addressed or changed.
+		expect(server.writeBodies.at(-1)).not.toHaveProperty("effectSlot");
+		expect(server.outputs[0].layers[0].effects[0].effectType).toBeNull();
+		await userEvent.click(screen.getByText("Reset parameters"));
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].visualizerParameters).toBeNull(),
+		);
+		expect(server.writeBodies.at(-1)).toEqual({
+			resetVisualizerParameters: true,
+		});
+		fireEvent.input(screen.getByRole("slider", { name: "Count" }), {
+			target: { value: "64" },
+		});
+		await waitFor(() =>
+			expect(server.outputs[0].layers[0].visualizerParameters?.count).toBe(64),
 		);
 
 		const count = screen.getByRole("slider", {
@@ -852,7 +872,8 @@ describe("the production Media pane", () => {
 		).toBeEnabled();
 		expect(screen.getByRole("slider", { name: "Parameter 3" })).toBeDisabled();
 		expect(screen.getByRole("slider", { name: "Parameter 4" })).toBeDisabled();
-		expect(screen.getAllByText("Configured")).toHaveLength(4);
+		expect(screen.getByText("Default · 64")).toBeInTheDocument();
+		expect(screen.getAllByText("Unused")).toHaveLength(2);
 		fireEvent.input(count, { target: { value: "200" } });
 		await waitFor(() =>
 			expect(server.outputs[0].layers[0].visualizerControls).toEqual([

@@ -124,7 +124,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: OutlineParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 

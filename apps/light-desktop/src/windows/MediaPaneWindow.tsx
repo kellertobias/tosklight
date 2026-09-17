@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { MediaServerInspection } from "../api/client/mediaOutput";
 import { useMediaServers } from "../features/mediaServers/MediaServersContext";
 import { useProgrammerValuesView } from "../features/programmerValues/ProgrammerValuesView";
 import { useProgrammerValuesMutationQueue } from "../features/programmerValues/useProgrammerValuesMutationQueue";
@@ -179,6 +180,7 @@ export function MediaPaneWindow({
 		),
 		fixtureId: selectedServer?.fixture_id,
 		layer: nativeLayer != null && nativeLayer >= 0 ? nativeLayer : undefined,
+		sourceKey: liveSourceKey(inspection, nativeLayer),
 		load: nativeMedia ?? unavailableNativeMedia,
 		update: updateNativeMediaEffect ?? unavailableNativeMediaEffect,
 	});
@@ -242,8 +244,7 @@ export function MediaPaneWindow({
 				thumbnailUrls,
 				previewUrls: media?.mediaPreviewUrls ?? {},
 				liveProgrammer,
-				nativeEffects: nativeEffects.slots,
-				nativeEffectsError: nativeEffects.error,
+				...nativeEffects.modelInput,
 			}),
 		[
 			browserMode,
@@ -263,8 +264,7 @@ export function MediaPaneWindow({
 			selectedServer,
 			selectedServerId,
 			thumbnailUrls,
-			nativeEffects.error,
-			nativeEffects.slots,
+			nativeEffects.modelInput,
 		],
 	);
 
@@ -280,6 +280,17 @@ export function MediaPaneWindow({
 			}}
 		/>
 	);
+}
+
+/** What a layer shows, as the polled server status reports it. */
+function liveSourceKey(
+	inspection: MediaServerInspection,
+	layer: number | undefined,
+) {
+	const status = inspection.layers.find(
+		(candidate) => candidate.layer === layer,
+	);
+	return status ? `${status.folder}:${status.file}` : "";
 }
 
 function unavailableNativeMedia(): Promise<never> {

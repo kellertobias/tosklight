@@ -379,8 +379,13 @@ impl LayerPipeline {
             beat_phase: context.beat_phase,
             instruments: context.instruments,
         };
-        let parameters = visualizer_parameters(layer, &visualizer.parameters)
-            .with_dmx(visualizer.kind, &layer.visualizer_controls);
+        let parameters = media_domain::VisualizerTuning::effective(
+            layer.visualizer_tuning.as_ref(),
+            layer.address,
+            visualizer.kind,
+            &visualizer.parameters,
+            &layer.visualizer_controls,
+        );
         match self
             .visualizers
             .render(index, visualizer.kind, &parameters, &frame)
@@ -559,16 +564,6 @@ impl LayerPipeline {
     }
 }
 
-fn visualizer_parameters<'a>(
-    layer: &'a LayerState,
-    configured: &'a media_domain::VisualizerParameters,
-) -> &'a media_domain::VisualizerParameters {
-    layer.effects[0]
-        .visualizer_parameters
-        .as_ref()
-        .unwrap_or(configured)
-}
-
 #[cfg(test)]
 mod tests {
     use media_domain::audio::{Analysis, BANDS, WAVEFORM_POINTS};
@@ -587,30 +582,37 @@ mod tests {
     const _: () = assert!(MASTER_MASK_SLOT >= media_render::MAX_LAYERS);
 
     #[test]
-    fn a_layer_visualizer_override_is_the_parameter_block_sent_to_the_renderer() {
+    fn a_visualizer_layer_keeps_its_tuning_when_the_effect_banks_resolve() {
+        // The banks rebuild the effect chain every frame; the layer's visualizer tuning and its
+        // Visualizer Parameter bytes live beside them and survive that rebuild.
         let configured = media_domain::VisualizerParameters::default();
-        let mut overridden = configured;
-        overridden.size = 0.2;
-        let mut layer = LayerState::default();
-        layer.effects[0].visualizer_parameters = Some(overridden);
-
-        assert_eq!(visualizer_parameters(&layer, &configured), &overridden);
-        layer.effects[0].visualizer_parameters = None;
-        assert_eq!(visualizer_parameters(&layer, &configured), &configured);
-    }
-
-    #[test]
-    fn visualizer_parameter_bytes_override_the_configured_block_in_kind_order() {
-        let configured = media_domain::VisualizerParameters::default();
-        let mut layer = LayerState::default();
+        let mut layer = LayerState {
+            address: media_domain::MediaAddress::new(250, 1),
+            ..LayerState::default()
+        };
+        layer.visualizer_tuning = Some(media_domain::VisualizerTuning {
+            address: layer.address,
+            parameters: media_domain::VisualizerParameters {
+                size: 0.2,
+                ..configured
+            },
+        });
         layer.visualizer_controls = [255, 0, 0, 0];
+        layer.effects[0] = EffectSlot::analog_tv();
         let kind = media_domain::VisualizerKind::EqualizerBars;
-        let driven =
-            visualizer_parameters(&layer, &configured).with_dmx(kind, &layer.visualizer_controls);
+        let driven = media_domain::VisualizerTuning::effective(
+            layer.visualizer_tuning.as_ref(),
+            layer.address,
+            kind,
+            &configured,
+            &layer.visualizer_controls,
+        );
         assert_eq!(driven.count, 512, "Equalizer Bars lists Count first");
+        assert_eq!(driven.size, 0.2, "zero keeps the layer's tuned Size");
         assert_eq!(
-            driven.size, configured.size,
-            "zero keeps the configured Size"
+            layer.effects[0].effect_type.as_deref(),
+            Some(media_domain::ANALOG_TV_EFFECT),
+            "effect slot one stays an ordinary effect"
         );
     }
 

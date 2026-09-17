@@ -229,7 +229,11 @@ export function stubServer(
 					"tosklight@pixel_layer@59ch.xml",
 					"tosklight@pixel_master@40ch.xml",
 				]);
-			if (path === "/outputs") return jsonResponse(server.outputs);
+			if (path === "/outputs") {
+				for (const output of server.outputs)
+					withVisualizerChannels(output, server.visualizers);
+				return jsonResponse(server.outputs);
+			}
 			const outputConfiguration = path.match(
 				/^\/outputs\/([^/]+)\/configuration$/u,
 			);
@@ -407,6 +411,23 @@ export function stubServer(
 				)
 					layer.visualizerControls[body.visualizerParameterIndex] =
 						body.visualizerParameterValue;
+				if (body.resetVisualizerParameters) layer.visualizerParameters = null;
+				else if (body.visualizerParameters !== undefined) {
+					const shown = server.visualizers.some(
+						(visualizer) =>
+							visualizer.address.folder === layer.address.folder &&
+							visualizer.address.file === layer.address.file,
+					);
+					if (!shown)
+						return jsonResponse(
+							{
+								code: "visualizer-controls-source",
+								message: "select a generated visualizer on this layer first",
+							},
+							400,
+						);
+					layer.visualizerParameters = body.visualizerParameters;
+				}
 				if (body.maskFolder !== undefined)
 					layer.mask.address.folder = body.maskFolder;
 				if (body.maskFile !== undefined)
@@ -486,8 +507,6 @@ export function stubServer(
 						layer.effects[body.effectSlot] = drawnImageEffect(body.effectSlot);
 					}
 					const selectedEffect = layer.effects[body.effectSlot];
-					if (body.visualizerParameters !== undefined)
-						selectedEffect.visualizerParameters = body.visualizerParameters;
 					if (body.effectEnabled !== undefined)
 						selectedEffect.enabled = body.effectEnabled;
 					if (body.effectMix !== undefined) selectedEffect.mix = body.effectMix;
@@ -604,7 +623,7 @@ export function stubServer(
 							parameter.value = body[key];
 					}
 				}
-				return jsonResponse(output);
+				return jsonResponse(withVisualizerChannels(output, server.visualizers));
 			}
 			const master = path.match(/^\/outputs\/([^/]+)\/master\/update$/u);
 			if (master) {
@@ -1126,6 +1145,8 @@ export function aLayer(index: number): OutputView["layers"][number] {
 		inPoint: 0,
 		outPoint: 0,
 		visualizerControls: [0, 0, 0, 0],
+		visualizerChannels: [],
+		visualizerParameters: null,
 		model: 0,
 		modelPan: 0,
 		modelTilt: 0,
@@ -1542,6 +1563,62 @@ function digitalTvEffect(
 	};
 }
 
+/**
+ * Fills each layer's Visualizer Parameter channels from the visualizer it shows, as the Media
+ * Server does: defaults from the layer's tuning or the configured parameters, values from its bytes.
+ */
+export function withVisualizerChannels(
+	output: OutputView,
+	visualizers: VisualizerView[],
+): OutputView {
+	for (const layer of output.layers) {
+		const shown = visualizers.find(
+			(visualizer) =>
+				visualizer.address.folder === layer.address.folder &&
+				visualizer.address.file === layer.address.file,
+		);
+		layer.visualizerChannels = (shown?.channels ?? []).map((channel) => {
+			const raw = layer.visualizerControls[channel.index] ?? 0;
+			const field = channel.parameter as keyof VisualizerView["parameters"];
+			const tuned = layer.visualizerParameters?.[field];
+			const defaultValue =
+				typeof tuned === "number" ? tuned : channel.defaultValue;
+			return {
+				...channel,
+				defaultValue,
+				raw,
+				value:
+					raw === 0
+						? defaultValue
+						: channel.minimum +
+							((raw - 1) / 254) * (channel.maximum - channel.minimum),
+			};
+		});
+	}
+	return output;
+}
+
+function visualizerChannel(
+	index: number,
+	parameter: string,
+	label: string,
+	range: [number, number, number],
+	defaultValue: number,
+): VisualizerView["channels"][number] {
+	const [minimum, maximum, step] = range;
+	return {
+		index,
+		parameter,
+		label,
+		minimum,
+		maximum,
+		step,
+		defaultValue,
+		raw: 0,
+		value: defaultValue,
+	};
+}
+
 export function aVisualizer(
 	overrides: Partial<VisualizerView> = {},
 ): VisualizerView {
@@ -1586,6 +1663,12 @@ export function aVisualizer(
 			wireframe: false,
 			mode: 0,
 		},
+		channels: [
+			visualizerChannel(0, "count", "Count", [1, 512, 1], 32),
+			visualizerChannel(1, "size", "Size", [0.001, 1, 0.001], 0.05),
+			visualizerChannel(2, "primary", "Colour", [0, 360, 1], 186),
+			visualizerChannel(3, "secondary", "Second colour", [0, 360, 1], 41),
+		],
 		...overrides,
 	};
 }

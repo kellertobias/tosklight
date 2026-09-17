@@ -718,7 +718,7 @@ async fn beat_form_flash_persists_size_lifetime_density_variation_and_bypass() {
 }
 
 #[tokio::test]
-async fn slot_one_persists_visualizer_parameters_only_for_a_visualizer_layer() {
+async fn a_visualizer_layer_keeps_its_tuning_on_the_layer_and_its_effect_slots_ordinary() {
     let bench = bench();
     take_over(&bench).await;
     let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
@@ -732,27 +732,73 @@ async fn slot_one_persists_visualizer_parameters_only_for_a_visualizer_layer() {
     let mut parameters =
         crate::wire::VisualizerParametersView::of(&media_domain::VisualizerParameters::default());
     parameters.size = 0.2;
-    let body = serde_json::json!({
-        "effectSlot": 0,
-        "visualizerParameters": parameters,
-    })
-    .to_string();
+    // No effect slot is named: the tuning belongs to the layer.
+    let body = serde_json::json!({ "visualizerParameters": parameters }).to_string();
     let (status, tuned) = send(&bench.router, post(uri.clone(), &body)).await;
     assert_eq!(status, StatusCode::OK);
+    let layer = &tuned["layers"][0];
+    assert_eq!(layer["visualizerParameters"]["size"], 0.2);
+    assert!(layer["effects"][0].get("visualizerParameters").is_none());
+    let tuning = bench.state.load().output(bench.output).unwrap().layers[0]
+        .visualizer_tuning
+        .unwrap();
+    assert_eq!(tuning.address, media_domain::MediaAddress::new(250, 1));
+    assert_eq!(tuning.parameters.size, 0.2);
+
+    // Equalizer Bars names its channels; its second byte is Size and zero keeps the tuned value.
+    let channels = layer["visualizerChannels"].as_array().unwrap();
+    assert_eq!(channels.len(), 4);
+    assert_eq!(channels[0]["label"], "Count");
+    assert_eq!(channels[1]["label"], "Size");
+    assert_eq!(channels[1]["raw"], 0);
+    assert!((channels[1]["defaultValue"].as_f64().unwrap() - 0.2).abs() < 1e-6);
+
+    let (status, driven) = send(
+        &bench.router,
+        post(
+            uri.clone(),
+            r#"{"visualizerParameterIndex":1,"visualizerParameterValue":255}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let size = &driven["layers"][0]["visualizerChannels"][1];
+    assert_eq!(size["raw"], 255);
+    assert!((size["value"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+    assert_eq!(driven["layers"][0]["visualizerControls"][1], 255);
+
+    // Effect slot one still takes an ordinary effect while the visualizer is shown.
+    let (status, with_effect) = send(
+        &bench.router,
+        post(uri.clone(), r#"{"effectSlot":0,"effectType":"analog-tv"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
     assert_eq!(
-        tuned["layers"][0]["effects"][0]["visualizerParameters"]["size"],
-        0.2
+        with_effect["layers"][0]["effects"][0]["effectType"],
+        "analog-tv"
     );
     assert_eq!(
-        bench.state.load().output(bench.output).unwrap().layers[0].effects[0]
-            .visualizer_parameters
-            .as_ref()
-            .unwrap()
-            .size,
+        with_effect["layers"][0]["visualizerParameters"]["size"],
         0.2
     );
 
-    let (_, _) = send(&bench.router, post(uri.clone(), r#"{"folder":1,"file":1}"#)).await;
+    let (_, reset) = send(
+        &bench.router,
+        post(uri.clone(), r#"{"resetVisualizerParameters":true}"#),
+    )
+    .await;
+    assert!(reset["layers"][0]["visualizerParameters"].is_null());
+
+    // Ordinary media has no visualizer channels, and refuses a tuning.
+    let (_, media) = send(&bench.router, post(uri.clone(), r#"{"folder":1,"file":1}"#)).await;
+    assert_eq!(
+        media["layers"][0]["visualizerChannels"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
     let (status, rejected) = send(&bench.router, post(uri, &body)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(rejected["code"], "visualizer-controls-source");

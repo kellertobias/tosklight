@@ -88,8 +88,13 @@ pub struct LayerView {
     pub in_point: u16,
     /// Frames before the clip's end where the playback range stops; zero is the last frame.
     pub out_point: u16,
-    /// Four raw visualizer parameter bytes in the selected visualizer kind's parameter order.
+    /// The four raw bytes of the layer's dedicated Visualizer Parameter channels.
     pub visualizer_controls: Vec<u8>,
+    /// The Visualizer Parameter channels as the visualizer this layer shows defines them. Empty
+    /// for ordinary media, whose visualizer bytes are inert.
+    pub visualizer_channels: Vec<super::VisualizerChannelView>,
+    /// The layer's own tuning of the visualizer it shows, when it has one for this address.
+    pub visualizer_parameters: Option<super::VisualizerParametersView>,
     /// Zero draws flat; `1..=255` maps the layer onto that numbered 3D model.
     pub model: u8,
     /// Model pan and tilt in degrees. The layer rotation is the roll.
@@ -160,6 +165,12 @@ impl LayerView {
             in_point: layer.in_point,
             out_point: layer.out_point,
             visualizer_controls: layer.visualizer_controls.to_vec(),
+            // Filled in by the route that holds the visualizer catalog.
+            visualizer_channels: Vec::new(),
+            visualizer_parameters: layer
+                .visualizer_tuning
+                .filter(|tuning| tuning.address == layer.address)
+                .map(|tuning| super::VisualizerParametersView::of(&tuning.parameters)),
             model: layer.model.model,
             model_pan: layer.model.pan,
             model_tilt: layer.model.tilt,
@@ -730,9 +741,13 @@ pub struct UpdateLayer {
     pub drawn_strength: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drawn_line_detail: Option<f32>,
-    /// Complete per-layer visualizer settings routed through effect slot one.
+    /// The layer's own complete tuning of the visualizer it shows. It never touches an effect
+    /// slot; the layer must be showing a visualizer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualizer_parameters: Option<VisualizerParametersView>,
+    /// `true` drops the layer's visualizer tuning, so the configured parameters apply again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_visualizer_parameters: Option<bool>,
 }
 
 impl UpdateLayer {
@@ -801,7 +816,6 @@ impl UpdateLayer {
             || self.beat_form_variation.is_some()
             || self.drawn_strength.is_some()
             || self.drawn_line_detail.is_some()
-            || self.visualizer_parameters.is_some()
     }
 
     pub const fn changes_non_effect(&self) -> bool {
@@ -838,6 +852,8 @@ impl UpdateLayer {
             || self.in_point.is_some()
             || self.out_point.is_some()
             || self.visualizer_parameter_value.is_some()
+            || self.visualizer_parameters.is_some()
+            || self.reset_visualizer_parameters.is_some()
             || self.model.is_some()
             || self.model_pan.is_some()
             || self.model_tilt.is_some()

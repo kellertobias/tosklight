@@ -57,6 +57,8 @@ pub struct LayerControls {
     pub in_point: Option<u16>,
     pub out_point: Option<u16>,
     pub visualizer_controls: Option<[u8; crate::personality::VISUALIZER_PARAMETERS]>,
+    /// Sets (`Some(Some(_))`) or clears (`Some(None)`) the layer's own visualizer tuning.
+    pub visualizer_tuning: Option<Option<crate::visualizer_channels::VisualizerTuning>>,
     pub model: Option<crate::layer::ModelMapping>,
 }
 

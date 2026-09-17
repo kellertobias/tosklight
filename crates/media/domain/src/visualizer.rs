@@ -291,63 +291,21 @@ impl VisualizerParameters {
 }
 
 impl VisualizerParameters {
-    /// Applies a layer's visualizer parameter bytes in the order `kind` lists its parameters.
+    /// Applies a layer's visualizer parameter bytes as `kind` defines its channels.
     ///
-    /// Zero keeps the configured value; `1..=255` spans the parameter's accepted range. Colours
-    /// sweep the hue wheel at full saturation, switches turn on at 128, and Mode counts up from
-    /// variant zero.
+    /// Zero keeps the value already here; `1..=255` spans the channel's range. Colours sweep the
+    /// hue wheel at full saturation, switches turn on at 128, and Variant counts up from zero.
+    /// Bytes past the channels `kind` uses are inert.
     pub fn with_dmx(mut self, kind: VisualizerKind, bytes: &[u8]) -> Self {
-        for (parameter, raw) in kind.parameters().iter().zip(bytes.iter().copied()) {
-            if raw != 0 {
-                parameter.apply_dmx(&mut self, raw);
+        for (index, raw) in bytes.iter().copied().enumerate() {
+            if let Some(channel) = kind.channel(index)
+                && let Some(value) = channel.value_of(raw)
+            {
+                channel.apply(&mut self, value);
             }
         }
         self.clamped()
     }
-}
-
-impl Parameter {
-    fn apply_dmx(self, parameters: &mut VisualizerParameters, raw: u8) {
-        let span = |low: f32, high: f32| low + f32::from(raw - 1) / 254.0 * (high - low);
-        match self {
-            Self::Count => parameters.count = span(1.0, 512.0).round() as u32,
-            Self::Size => parameters.size = span(0.001, 1.0),
-            Self::Speed => parameters.speed = span(0.0, 8.0),
-            Self::Amount => parameters.amount = span(0.0, 1.0),
-            Self::Radius => parameters.radius = span(0.0, 1.0),
-            Self::Thickness => parameters.thickness = span(0.0005, 0.5),
-            Self::Reactivity => parameters.reactivity = span(0.0, 8.0),
-            Self::Decay => parameters.decay = span(0.0, 1.0),
-            Self::Zoom => parameters.zoom = span(0.05, 16.0),
-            Self::Iterations => parameters.iterations = span(1.0, 256.0).round() as u32,
-            Self::Threshold => parameters.threshold = span(0.0, 1.0),
-            Self::Smoothing => parameters.smoothing = span(0.0, 1.0),
-            Self::Gravity => parameters.gravity = span(-4.0, 4.0),
-            Self::Lifetime => parameters.lifetime = span(0.05, 60.0),
-            Self::Curvature => parameters.curvature = span(0.0, 1.0),
-            Self::Primary => parameters.primary = hue(span(0.0, 360.0)),
-            Self::Secondary => parameters.secondary = hue(span(0.0, 360.0)),
-            Self::Mirror => parameters.mirror = raw >= 128,
-            Self::Filled => parameters.filled = raw >= 128,
-            Self::Wireframe => parameters.wireframe = raw >= 128,
-            Self::Mode => parameters.mode = raw - 1,
-        }
-    }
-}
-
-/// A fully saturated, full-value colour at `degrees` around the hue wheel.
-fn hue(degrees: f32) -> Tint {
-    let sector = (degrees.rem_euclid(360.0)) / 60.0;
-    let fraction = sector.fract();
-    let (red, green, blue) = match sector as u32 {
-        0 => (1.0, fraction, 0.0),
-        1 => (1.0 - fraction, 1.0, 0.0),
-        2 => (0.0, 1.0, fraction),
-        3 => (0.0, 1.0 - fraction, 1.0),
-        4 => (fraction, 0.0, 1.0),
-        _ => (1.0, 0.0, 1.0 - fraction),
-    };
-    Tint::new(red, green, blue)
 }
 
 fn clamp_unit(value: f32, low: f32, high: f32) -> f32 {

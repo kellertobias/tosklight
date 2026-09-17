@@ -135,6 +135,8 @@ pub(super) fn layer_controls(
         in_point: body.in_point,
         out_point: body.out_point,
         visualizer_controls,
+        // The route resolves the tuning against the visualizer catalog.
+        visualizer_tuning: None,
         model,
     })
 }

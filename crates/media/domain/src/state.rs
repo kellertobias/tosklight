@@ -183,6 +183,7 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             assign!(in_point);
             assign!(out_point);
             assign!(visualizer_controls);
+            assign!(visualizer_tuning);
             assign!(model);
             if let Some(value) = controls.mask_address {
                 changed |= replace(&mut target.mask.address, value);

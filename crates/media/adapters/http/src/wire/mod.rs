@@ -73,5 +73,6 @@ pub use text::{
 };
 pub use time::{TimeEditError, TimeView, UpdateTime};
 pub use visualizer::{
-    CreateVisualizer, UpdateVisualizer, VisualizerParametersView, VisualizerView,
+    CreateVisualizer, UpdateVisualizer, VisualizerChannelView, VisualizerParametersView,
+    VisualizerView,
 };

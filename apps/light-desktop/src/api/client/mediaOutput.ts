@@ -79,6 +79,23 @@ export interface NativeMediaSnapshot {
 	effectControlsAvailable: boolean;
 	outputId: string | null;
 	effectLayers: NativeMediaEffectSlot[][];
+	/** Per layer, the Visualizer Parameter channels the shown visualizer defines. */
+	visualizerLayers: NativeMediaVisualizerChannel[][];
+}
+
+/** One dedicated Visualizer Parameter channel, as the visualizer a layer shows defines it. */
+export interface NativeMediaVisualizerChannel {
+	/** Zero-based byte; attribute `media.visualizer.parameter.{index + 1}`. */
+	index: number;
+	parameter: string;
+	label: string;
+	/** The value byte 1 selects. */
+	minimum: number;
+	/** The value byte 255 selects. */
+	maximum: number;
+	step: number;
+	/** The value byte zero keeps. */
+	defaultValue: number;
 }
 
 export interface NativeMediaEffectParameter {
@@ -396,6 +413,17 @@ function mapNativeMediaSnapshot(
 		outputId: snapshot.output_id ?? null,
 		effectLayers: (snapshot.effect_layers ?? []).map((layer) =>
 			layer.map(mapNativeMediaEffectSlot),
+		),
+		visualizerLayers: (snapshot.visualizer_layers ?? []).map((layer) =>
+			layer.map((channel) => ({
+				index: channel.index,
+				parameter: channel.parameter,
+				label: channel.label,
+				minimum: channel.minimum,
+				maximum: channel.maximum,
+				step: channel.step,
+				defaultValue: channel.default_value,
+			})),
 		),
 	};
 }

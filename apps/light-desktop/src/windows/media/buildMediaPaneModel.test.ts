@@ -1100,7 +1100,7 @@ describe("Media pane disconnected configuration", () => {
 					id: `media.visualizer.parameter.${parameter}`,
 					label: `Parameter ${parameter}`,
 					value: 0,
-					display: "Configured",
+					display: "Default",
 				}),
 			),
 		);

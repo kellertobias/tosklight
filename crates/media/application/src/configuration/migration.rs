@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 7;
+pub const CURRENT_VERSION: u32 = 8;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -61,6 +61,7 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             4 => Ok(onto_the_mapping_layout(current)),
             5 => Ok(with_builtin_models(current)),
             6 => Ok(with_outline_preset(current)),
+            7 => Ok(without_effect_visualizer_tuning(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
@@ -166,6 +167,31 @@ fn with_outline_preset(mut document: Value) -> Value {
         *stored = serde_json::to_value(library).expect("an effect library is serializable");
     }
     document["version"] = json!(7);
+    document
+}
+
+/// Version 7 → 8: visualizer tuning leaves the effect slots.
+///
+/// A layer's visualizer is tuned on the layer and driven by its own Visualizer Parameter
+/// channels, so an effect preset is only ever an effect. The per-slot `visualizerParameters`
+/// block a preset could carry is dropped; the preset keeps its effect, slot, and name. The DMX
+/// footprint is unchanged (59 slots a layer, 158 and 512 in all), so no patch moves.
+fn without_effect_visualizer_tuning(mut document: Value) -> Value {
+    if let Some(entries) = document
+        .get_mut("configuration")
+        .and_then(|configuration| configuration.get_mut("effects"))
+        .and_then(|effects| effects.get_mut("entries"))
+        .and_then(Value::as_array_mut)
+    {
+        for effect in entries
+            .iter_mut()
+            .filter_map(|entry| entry.get_mut("effect"))
+            .filter_map(Value::as_object_mut)
+        {
+            effect.remove("visualizerParameters");
+        }
+    }
+    document["version"] = json!(8);
     document
 }
 
@@ -428,7 +454,7 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 7"));
+        assert!(written.contains("\"version\": 8"));
         assert!(
             !written.contains("personalityLayout"),
             "there is one channel layout, so nothing records which one"
@@ -618,8 +644,8 @@ mod tests {
     #[test]
     fn a_current_document_is_left_alone() {
         assert_eq!(
-            CURRENT_VERSION, 7,
-            "documents whose effect library knows Outline are version 7"
+            CURRENT_VERSION, 8,
+            "documents whose effect presets carry no visualizer tuning are version 8"
         );
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
@@ -729,6 +755,41 @@ mod tests {
         let emptied = document_with_effects(json!({ "entries": [] }));
         let effects = super::super::load(&emptied.to_string()).unwrap().effects;
         assert!(effects.entries.is_empty());
+    }
+
+    #[test]
+    fn a_version_seven_effect_preset_loses_its_visualizer_tuning_and_keeps_its_effect() {
+        let mut document = document_with_effects(json!({ "entries": [
+            { "slot": 1, "name": "Tuned", "effect": {
+                "effectType": "analog-tv", "enabled": true, "mix": 1.0, "seed": 0,
+                "parameters": [0.2, 0.2, 0.2, 0.2],
+                "visualizerParameters": serde_json::to_value(
+                    media_domain::VisualizerParameters::default()
+                ).unwrap()
+            } },
+            { "slot": 2, "name": "Plain", "effect": {
+                "effectType": "blur", "enabled": true, "mix": 1.0, "seed": 0,
+                "parameters": [0.5], "visualizerParameters": null
+            } }
+        ] }));
+        document["version"] = json!(7);
+        let migrated = migrate_to_current(document.clone()).unwrap();
+        assert_eq!(migrated["version"], json!(8));
+        for entry in migrated["configuration"]["effects"]["entries"]
+            .as_array()
+            .unwrap()
+        {
+            assert!(entry["effect"].get("visualizerParameters").is_none());
+        }
+        let effects = super::super::load(&document.to_string()).unwrap().effects;
+        assert_eq!(effects.resolve(1).unwrap().name, "Tuned");
+        assert_eq!(
+            effects.resolve(1).unwrap().effect.effect_type.as_deref(),
+            Some("analog-tv")
+        );
+        assert_eq!(effects.resolve(2).unwrap().name, "Plain");
+        let saved = super::super::save(&super::super::load(&document.to_string()).unwrap());
+        assert!(!saved.contains("visualizerParameters"));
     }
 
     #[test]

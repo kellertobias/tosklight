@@ -30,7 +30,7 @@ use crate::wire::{
     UpdateLibraryItems, UpdateLibraryNotes, UpdateLibrarySettings, UpdateLibraryThumbnail,
     UpdateMaster, UpdateModelSlot, UpdateNetwork, UpdateOutputConfiguration, UpdatePlayback,
     UpdateServerLogLevel, UpdateText, UpdateTime, UpdateVisualizer, UploadAcceptedView,
-    VisualizerParametersView, VisualizerView, WaveformView,
+    VisualizerChannelView, VisualizerParametersView, VisualizerView, WaveformView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -116,6 +116,7 @@ fn declarations(config: &Config) -> Vec<String> {
         CatalogView::decl(config),
         FolderPresentationView::decl(config),
         FolderPresentationsView::decl(config),
+        VisualizerChannelView::decl(config),
         VisualizerParametersView::decl(config),
         VisualizerView::decl(config),
         NetworkAddressesView::decl(config),

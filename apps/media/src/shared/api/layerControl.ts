@@ -415,6 +415,9 @@ function withChange(
 				? null
 				: (change.playbackBpm ?? layer.playbackBpm),
 		effects: applyEffectLocally(layer.effects, change),
+		visualizerParameters: change.resetVisualizerParameters
+			? null
+			: (change.visualizerParameters ?? layer.visualizerParameters),
 		address: {
 			...layer.address,
 			folder: change.folder ?? layer.address.folder,
@@ -516,8 +519,6 @@ function applyEffectLocally(
 				...parameter,
 				value: values[parameter.id] ?? parameter.value,
 			})),
-			visualizerParameters:
-				change.visualizerParameters ?? next.visualizerParameters,
 		};
 	});
 }

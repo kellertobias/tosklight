@@ -295,7 +295,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: DrawnImageParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 

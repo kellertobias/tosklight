@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	NativeMediaEffectSlot,
 	NativeMediaSnapshot,
+	NativeMediaVisualizerChannel,
 } from "../../api/client/mediaOutput";
 
 interface NativeMediaEffectsInput {
 	active: boolean;
 	fixtureId: string | undefined;
 	layer: number | undefined;
+	/**
+	 * What the layer shows. The visualizer channels follow the shown visualizer, so a change reloads
+	 * them.
+	 */
+	sourceKey?: string;
 	load(fixtureId: string): Promise<NativeMediaSnapshot>;
 	update(
 		fixtureId: string,
@@ -21,6 +27,7 @@ export function useNativeMediaEffects({
 	active,
 	fixtureId,
 	layer,
+	sourceKey,
 	load,
 	update,
 }: NativeMediaEffectsInput) {
@@ -29,6 +36,9 @@ export function useNativeMediaEffects({
 	loadRef.current = load;
 	updateRef.current = update;
 	const [slots, setSlots] = useState<NativeMediaEffectSlot[]>([]);
+	const [visualizerChannels, setVisualizerChannels] = useState<
+		NativeMediaVisualizerChannel[]
+	>([]);
 	const [error, setError] = useState<string | null>(null);
 	const changeVersion = useRef(0);
 
@@ -36,14 +46,19 @@ export function useNativeMediaEffects({
 		changeVersion.current += 1;
 		if (!active || !fixtureId || layer == null) {
 			setSlots([]);
+			setVisualizerChannels([]);
 			setError(null);
 			return;
 		}
 		let current = true;
 		setError(null);
+		// A new source reloads the snapshot, whose visualizer channels follow what is shown.
+		void sourceKey;
 		void loadRef.current(fixtureId).then(
 			(snapshot) => {
-				if (current) setSlots(snapshot.effectLayers[layer] ?? []);
+				if (!current) return;
+				setSlots(snapshot.effectLayers[layer] ?? []);
+				setVisualizerChannels(snapshot.visualizerLayers?.[layer] ?? []);
 			},
 			(reason) => {
 				if (current)
@@ -53,7 +68,7 @@ export function useNativeMediaEffects({
 		return () => {
 			current = false;
 		};
-	}, [active, fixtureId, layer]);
+	}, [active, fixtureId, layer, sourceKey]);
 
 	const change = useCallback(
 		(controlId: string, value: string | number | boolean) => {
@@ -74,5 +89,15 @@ export function useNativeMediaEffects({
 		[fixtureId, layer],
 	);
 
-	return { slots, error, change };
+	// What the Media pane model reads, stable while none of it changes.
+	const modelInput = useMemo(
+		() => ({
+			nativeEffects: slots,
+			nativeEffectsError: error,
+			visualizerChannels,
+		}),
+		[slots, error, visualizerChannels],
+	);
+
+	return { slots, visualizerChannels, error, change, modelInput };
 }

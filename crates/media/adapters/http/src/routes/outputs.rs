@@ -248,7 +248,8 @@ async fn update_layer_inner(
         .as_deref()
         .map(parse_scaling_mode)
         .transpose()?;
-    let effects = super::output_effects::updated_effects(&state, &body, &current, layer)?;
+    let effects = super::output_effects::updated_effects(&body, &current, layer)?;
+    let visualizer_tuning = visualizer_tuning(&state, &body, &current)?;
     let command = if native_effect_configuration {
         CommandKind::ConfigureLayerEffects {
             output: id,
@@ -259,12 +260,10 @@ async fn update_layer_inner(
         CommandKind::SetLayerControls {
             output: id,
             layer,
-            controls: Box::new(layer_controls::layer_controls(
-                &body,
-                &current,
-                scaling_mode,
-                effects,
-            )?),
+            controls: Box::new(media_domain::LayerControls {
+                visualizer_tuning,
+                ..layer_controls::layer_controls(&body, &current, scaling_mode, effects)?
+            }),
         }
     };
     submit(&state, vec![command], now)?;
@@ -571,6 +570,38 @@ fn submit_to(
     }
 }
 
+/// The layer's own visualizer tuning edit. It belongs to the layer and the address it shows,
+/// never to an effect slot, so the banks stay ordinary effects while a visualizer is shown.
+fn visualizer_tuning(
+    state: &ApiState,
+    body: &UpdateLayer,
+    current: &media_domain::LayerState,
+) -> Result<Option<Option<media_domain::VisualizerTuning>>, ApiError> {
+    if body.reset_visualizer_parameters == Some(true) {
+        return Ok(Some(None));
+    }
+    let Some(parameters) = body.visualizer_parameters else {
+        return Ok(None);
+    };
+    let address = body.address(current.address);
+    if state
+        .configuration
+        .load()
+        .visualizers
+        .resolve(address)
+        .is_none()
+    {
+        return Err(ApiError::bad_request(
+            "visualizer-controls-source",
+            "select a generated visualizer on this layer first",
+        ));
+    }
+    Ok(Some(Some(media_domain::VisualizerTuning {
+        address,
+        parameters: parameters.into_parameters(),
+    })))
+}
+
 fn view_of(state: &ApiState, output: &media_domain::OutputState, now: Timestamp) -> OutputView {
     let configuration = state.configuration.load();
     let name = configuration
@@ -579,6 +610,20 @@ fn view_of(state: &ApiState, output: &media_domain::OutputState, now: Timestamp)
         .unwrap_or_else(|| output.id.to_string());
 
     let mut view = OutputView::of(output, name, output.ownership.dmx_is_active(now));
+    for (layer_view, layer) in view.layers.iter_mut().zip(&output.layers) {
+        if let Some(visualizer) = configuration.visualizers.resolve(layer.address) {
+            let parameters = media_domain::VisualizerTuning::resolve(
+                layer.visualizer_tuning.as_ref(),
+                layer.address,
+                &visualizer.parameters,
+            );
+            layer_view.visualizer_channels = crate::wire::VisualizerChannelView::all(
+                visualizer.kind,
+                parameters,
+                &layer.visualizer_controls,
+            );
+        }
+    }
     if output.layers.iter().any(|layer| !layer.model.is_flat()) {
         let failures = (state.diagnostics.models.failures)();
         for (layer_view, layer) in view.layers.iter_mut().zip(&output.layers) {

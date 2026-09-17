@@ -138,6 +138,23 @@ pub struct NativeMediaEffectSlot {
     pub parameters: Vec<NativeMediaEffectParameter>,
 }
 
+/// One of a Media Server layer's dedicated Visualizer Parameter channels, as the visualizer the
+/// layer shows defines it. The desk's `media.visualizer.parameter.N` attribute drives this byte.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct NativeMediaVisualizerChannel {
+    /// Zero-based byte position; attribute `media.visualizer.parameter.{index + 1}`.
+    pub index: u8,
+    pub parameter: String,
+    pub label: String,
+    /// The value byte 1 selects.
+    pub minimum: f32,
+    /// The value byte 255 selects.
+    pub maximum: f32,
+    pub step: f32,
+    /// The value byte zero keeps.
+    pub default_value: f32,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct NativeMediaSnapshot {
     pub endpoint: String,
@@ -154,6 +171,10 @@ pub struct NativeMediaSnapshot {
     pub output_id: Option<String>,
     #[serde(default)]
     pub effect_layers: Vec<Vec<NativeMediaEffectSlot>>,
+    /// Per layer, the Visualizer Parameter channels the shown visualizer defines. A layer showing
+    /// ordinary media has none, and its visualizer bytes are inert.
+    #[serde(default)]
+    pub visualizer_layers: Vec<Vec<NativeMediaVisualizerChannel>>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

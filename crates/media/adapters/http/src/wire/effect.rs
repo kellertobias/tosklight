@@ -3,7 +3,6 @@
 //! The bounds travel with every parameter so a desk renders the range this server actually
 //! validates instead of inferring one from the parameter's name.
 
-use super::visualizer::VisualizerParametersView;
 use media_domain::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,
     BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
@@ -42,8 +41,6 @@ pub struct EffectSlotView {
     pub supported: bool,
     pub capability_detail: Option<String>,
     pub parameters: Vec<EffectParameterView>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub visualizer_parameters: Option<VisualizerParametersView>,
 }
 
 /// One numbered, persisted effect preset. Slot zero is deliberately absent: it is the fixed
@@ -125,10 +122,6 @@ impl EffectSlotView {
             capability_detail: (effect_type.is_some() && rendered.is_none())
                 .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
             parameters: effect_parameters(effect),
-            visualizer_parameters: effect
-                .visualizer_parameters
-                .as_ref()
-                .map(VisualizerParametersView::of),
         }
     }
 }
@@ -264,7 +257,6 @@ mod tests {
             mix: 1.0,
             parameters: vec![0.4],
             seed: 7,
-            visualizer_parameters: None,
         };
         let view = EffectSlotView::of(2, &effect);
 

@@ -821,9 +821,6 @@ pub struct EffectSlot {
     /// The normalized primary amount the DMX byte carries.
     pub mix: f32,
     pub parameters: Vec<f32>,
-    /// Per-layer overrides used when slot one controls a generated visualizer source.
-    #[serde(default)]
-    pub visualizer_parameters: Option<crate::visualizer::VisualizerParameters>,
 }
 
 impl EffectSlot {
@@ -834,7 +831,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: AnalogTvParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -850,7 +846,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: DigitalTvParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -866,7 +861,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: vec![OpacityCycleInterval::EveryBeat.parameter()],
-            visualizer_parameters: None,
         }
     }
 
@@ -884,7 +878,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: BlurParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -900,7 +893,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: FeedbackParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -916,7 +908,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: BeatMoveParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -932,7 +923,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: KaleidoscopeParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -948,7 +938,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: RasterizeParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -964,7 +953,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: BeatScanParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -980,7 +968,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: BeatScaleTurnParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -998,7 +985,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: BeatGridWaveParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -1016,7 +1002,6 @@ impl EffectSlot {
             seed: 0,
             mix: 1.0,
             parameters: BeatFormFlashParameters::default().as_array().to_vec(),
-            visualizer_parameters: None,
         }
     }
 
@@ -1090,9 +1075,6 @@ impl EffectSlot {
                 crate::outline_effect::OutlineParameters::from_parameters(&self.parameters);
             self.parameters = outline.as_array().to_vec();
         }
-        self.visualizer_parameters = self
-            .visualizer_parameters
-            .map(crate::visualizer::VisualizerParameters::clamped);
     }
 }
 
@@ -1197,9 +1179,14 @@ pub struct LayerState {
     /// range whose Out point falls before its In point plays through to the clip's end.
     #[serde(default)]
     pub out_point: u16,
-    /// Raw visualizer parameter bytes in the selected visualizer kind's parameter order.
+    /// Raw bytes of the layer's dedicated Visualizer Parameter channels, which the selected
+    /// visualizer kind names and ranges. They never touch the effect banks.
     #[serde(default)]
     pub visualizer_controls: [u8; crate::personality::VISUALIZER_PARAMETERS],
+    /// This layer's own tuning of a visualizer, replacing that visualizer's configured parameter
+    /// block while the layer shows it. Ordinary media and any other address ignore it.
+    #[serde(default)]
+    pub visualizer_tuning: Option<crate::visualizer_channels::VisualizerTuning>,
     #[serde(default)]
     pub model: ModelMapping,
     pub source_status: SourceStatus,
@@ -1233,6 +1220,7 @@ impl Default for LayerState {
             in_point: 0,
             out_point: 0,
             visualizer_controls: [0; crate::personality::VISUALIZER_PARAMETERS],
+            visualizer_tuning: None,
             model: ModelMapping::default(),
             source_status: SourceStatus::default(),
             reset_trigger_id: 0,

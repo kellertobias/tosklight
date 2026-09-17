@@ -40,7 +40,7 @@ minimum: number, maximum: number,
  * A step of one or more marks a whole-number parameter.
  */
 step: number, };
-export type EffectSlotView = { index: number, effectType: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, visualizerParameters?: VisualizerParametersView | null, };
+export type EffectSlotView = { index: number, effectType: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, };
 export type EffectPresetView = { slot: number, name: string, effect: EffectSlotView, };
 export type EffectBankView = { index: number, select: number, strength: number,
 /**
@@ -92,9 +92,18 @@ inPoint: number,
  */
 outPoint: number,
 /**
- * Four raw visualizer parameter bytes in the selected visualizer kind's parameter order.
+ * The four raw bytes of the layer's dedicated Visualizer Parameter channels.
  */
 visualizerControls: Array<number>,
+/**
+ * The Visualizer Parameter channels as the visualizer this layer shows defines them. Empty
+ * for ordinary media, whose visualizer bytes are inert.
+ */
+visualizerChannels: Array<VisualizerChannelView>,
+/**
+ * The layer's own tuning of the visualizer it shows, when it has one for this address.
+ */
+visualizerParameters: VisualizerParametersView | null,
 /**
  * Zero draws flat; `1..=255` maps the layer onto that numbered 3D model.
  */
@@ -270,6 +279,43 @@ export type CatalogFolderView = { folder: number, name: string | null, icon?: st
 export type CatalogView = { revision: number, itemCount: number, folders: Array<CatalogFolderView>, };
 export type FolderPresentationView = { folder: number, name: string | null, icon: string | null, pictureUrl: string | null, };
 export type FolderPresentationsView = { folders: Array<FolderPresentationView>, };
+export type VisualizerChannelView = {
+/**
+ * Zero-based byte position, `0..=3`.
+ */
+index: number,
+/**
+ * The shared parameter this byte moves, such as `size` or `primary`.
+ */
+parameter: string,
+/**
+ * What the active visualizer calls it.
+ */
+label: string,
+/**
+ * The value byte 1 selects. Colours are hue degrees; switches are 0 or 1.
+ */
+minimum: number,
+/**
+ * The value byte 255 selects.
+ */
+maximum: number,
+/**
+ * One or more marks a whole-number, switch, or hue value.
+ */
+step: number,
+/**
+ * The value byte zero keeps: the layer's tuning, else the configured visualizer's.
+ */
+defaultValue: number,
+/**
+ * The raw byte currently received or set; zero keeps the default.
+ */
+raw: number,
+/**
+ * The value in effect on this channel.
+ */
+value: number, };
 export type VisualizerParametersView = { count: number, size: number, speed: number, amount: number, radius: number, thickness: number, reactivity: number, decay: number, zoom: number, iterations: number, threshold: number, smoothing: number, gravity: number, lifetime: number, curvature: number, primaryRed: number, primaryGreen: number, primaryBlue: number, secondaryRed: number, secondaryGreen: number, secondaryBlue: number, mirror: boolean, filled: boolean, wireframe: boolean, mode: number, };
 export type VisualizerView = { address: AddressView,
 /**
@@ -288,7 +334,12 @@ name: string,
  * Which of the shared parameters this kind reads. The rest are present and ignored, so an
  * editor can show only the controls that do something.
  */
-uses: Array<string>, parameters: VisualizerParametersView, };
+uses: Array<string>, parameters: VisualizerParametersView,
+/**
+ * The layer's four Visualizer Parameter channels as this visualizer defines them, in byte
+ * order. A byte past the last entry is inert while this visualizer is shown.
+ */
+channels: Array<VisualizerChannelView>, };
 export type NetworkAddressesView = { artNetListen: string, sacnListen: string, citpListen: string, httpListen: string,
 /**
  * Where this server listens for the Light desk's Speed Group OSC stream. Absent means Speed
@@ -622,9 +673,14 @@ effectType?: string | null, effectEnabled?: boolean | null, effectMix?: number |
  */
 cycleInterval?: string | null, beatMoveAmount?: number | null, beatMoveDirection?: string | null, beatMoveDecay?: number | null, kaleidoscopeRepetitions?: number | null, kaleidoscopeAngle?: number | null, rasterizeMode?: string | null, rasterizeDotSize?: number | null, beatScanWidth?: number | null, beatScanEdge?: string | null, beatScanFalloff?: number | null, beatScanDuration?: number | null, beatScaleAmount?: number | null, beatTurnEnabled?: boolean | null, beatTurnRotation?: number | null, beatScaleDecay?: number | null, beatGridDensity?: number | null, beatGridHeight?: number | null, beatGridDuration?: number | null, beatGridOrigin?: string | null, beatGridHue?: number | null, beatGridBrightness?: number | null, beatFormEnlargement?: number | null, beatFormLifetime?: number | null, beatFormDensity?: number | null, beatFormVariation?: number | null, drawnStrength?: number | null, drawnLineDetail?: number | null,
 /**
- * Complete per-layer visualizer settings routed through effect slot one.
+ * The layer's own complete tuning of the visualizer it shows. It never touches an effect
+ * slot; the layer must be showing a visualizer.
  */
-visualizerParameters?: VisualizerParametersView | null, };
+visualizerParameters?: VisualizerParametersView | null,
+/**
+ * `true` drops the layer's visualizer tuning, so the configured parameters apply again.
+ */
+resetVisualizerParameters?: boolean | null, };
 export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null,
 /**
  * Layer Opacity Cycle beat multiplier/divider encoded by the personality's published bands.

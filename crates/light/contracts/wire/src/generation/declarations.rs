@@ -384,6 +384,7 @@ fn output_control(config: &Config) -> Vec<String> {
         NativeMediaTextSlot::decl(config),
         NativeMediaEffectParameter::decl(config),
         NativeMediaEffectSlot::decl(config),
+        NativeMediaVisualizerChannel::decl(config),
         NativeMediaSnapshot::decl(config),
         NativeMediaTextUpdateRequest::decl(config),
         NativeMediaEffectUpdateRequest::decl(config),

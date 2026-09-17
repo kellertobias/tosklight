@@ -60,8 +60,24 @@ struct NativeMediaEffectSlotResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMediaVisualizerChannelResponse {
+    index: u8,
+    parameter: String,
+    label: String,
+    minimum: f32,
+    maximum: f32,
+    step: f32,
+    default_value: f32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct NativeMediaLayerResponse {
     effects: Vec<NativeMediaEffectSlotResponse>,
+    // A Media Server that predates dedicated visualizer channels reports none.
+    #[serde(default)]
+    visualizer_channels: Vec<NativeMediaVisualizerChannelResponse>,
 }
 
 #[derive(Deserialize)]
@@ -193,6 +209,22 @@ pub(super) async fn native_media_snapshot(
         text_slots: Vec::new(),
         effect_controls_available: output.is_some(),
         output_id: output.as_ref().map(|output| output.id.clone()),
+        visualizer_layers: output
+            .as_ref()
+            .map(|output| {
+                output
+                    .layers
+                    .iter()
+                    .map(|layer| {
+                        layer
+                            .visualizer_channels
+                            .iter()
+                            .map(native_visualizer_channel)
+                            .collect()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
         effect_layers: output
             .map(|output| {
                 output
@@ -263,6 +295,20 @@ pub(super) async fn update_native_media_effect(
             .map(native_effect_slot)
             .collect(),
     ))
+}
+
+fn native_visualizer_channel(
+    channel: &NativeMediaVisualizerChannelResponse,
+) -> light_wire::v2::output_control::NativeMediaVisualizerChannel {
+    light_wire::v2::output_control::NativeMediaVisualizerChannel {
+        index: channel.index,
+        parameter: channel.parameter.clone(),
+        label: channel.label.clone(),
+        minimum: channel.minimum,
+        maximum: channel.maximum,
+        step: channel.step,
+        default_value: channel.default_value,
+    }
 }
 
 fn native_effect_slot(
@@ -1100,6 +1146,26 @@ mod native_output_binding_tests {
             layers: Vec::new(),
         })
         .collect()
+    }
+
+    #[test]
+    fn a_layer_reads_its_visualizer_channels_and_an_older_server_reports_none() {
+        let current: super::NativeMediaLayerResponse = serde_json::from_value(serde_json::json!({
+            "effects": [],
+            "visualizerChannels": [{
+                "index": 1, "parameter": "size", "label": "Size", "minimum": 0.005,
+                "maximum": 0.1, "step": 0.001, "defaultValue": 0.05, "raw": 0, "value": 0.05
+            }]
+        }))
+        .unwrap();
+        let channel = super::native_visualizer_channel(&current.visualizer_channels[0]);
+        assert_eq!((channel.index, channel.label.as_str()), (1, "Size"));
+        assert_eq!((channel.minimum, channel.maximum), (0.005, 0.1));
+        assert_eq!(channel.default_value, 0.05);
+
+        let older: super::NativeMediaLayerResponse =
+            serde_json::from_value(serde_json::json!({ "effects": [] })).unwrap();
+        assert!(older.visualizer_channels.is_empty());
     }
 
     #[test]

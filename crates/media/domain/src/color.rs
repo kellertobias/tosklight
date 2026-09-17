@@ -32,6 +32,39 @@ impl Tint {
         Self { red, green, blue }
     }
 
+    /// A fully saturated, full-value colour at `degrees` around the hue wheel.
+    pub fn from_hue(degrees: f32) -> Self {
+        let sector = degrees.rem_euclid(360.0) / 60.0;
+        let fraction = sector.fract();
+        let (red, green, blue) = match sector as u32 {
+            0 => (1.0, fraction, 0.0),
+            1 => (1.0 - fraction, 1.0, 0.0),
+            2 => (0.0, 1.0, fraction),
+            3 => (0.0, 1.0 - fraction, 1.0),
+            4 => (fraction, 0.0, 1.0),
+            _ => (1.0, 0.0, 1.0 - fraction),
+        };
+        Self::new(red, green, blue)
+    }
+
+    /// This colour's hue in degrees, `0.0..360.0`. A grey reports zero.
+    pub fn hue_degrees(self) -> f32 {
+        let max = self.red.max(self.green).max(self.blue);
+        let min = self.red.min(self.green).min(self.blue);
+        let delta = max - min;
+        if delta <= f32::EPSILON {
+            return 0.0;
+        }
+        let sector = if max == self.red {
+            ((self.green - self.blue) / delta).rem_euclid(6.0)
+        } else if max == self.green {
+            (self.blue - self.red) / delta + 2.0
+        } else {
+            (self.red - self.green) / delta + 4.0
+        };
+        (sector * 60.0).rem_euclid(360.0)
+    }
+
     /// Reads a subtractive cyan/magenta/yellow triple off the wire.
     pub fn from_subtractive(cyan: u8, magenta: u8, yellow: u8) -> Self {
         Self {

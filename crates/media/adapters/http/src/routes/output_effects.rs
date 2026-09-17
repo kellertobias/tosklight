@@ -12,11 +12,9 @@ use media_domain::{
 };
 
 use crate::error::ApiError;
-use crate::routes::ApiState;
 use crate::wire::UpdateLayer;
 
 pub(super) fn updated_effects(
-    state: &ApiState,
     body: &UpdateLayer,
     current: &LayerState,
     layer: usize,
@@ -26,7 +24,7 @@ pub(super) fn updated_effects(
     }
     let (mut effects, slot) = selected_effects(body, current, layer)?;
     let effect = &mut effects[slot];
-    apply_common_edits(state, body, current, slot, effect)?;
+    apply_common_edits(body, effect)?;
     apply_spatial_edits(body, effect)?;
     apply_beat_edits(body, effect)?;
     apply_tv_edits(body, effect)?;
@@ -78,34 +76,7 @@ fn selected_effects(
     Ok((effects, slot))
 }
 
-fn apply_common_edits(
-    state: &ApiState,
-    body: &UpdateLayer,
-    current: &LayerState,
-    slot: usize,
-    effect: &mut EffectSlot,
-) -> Result<(), ApiError> {
-    if let Some(parameters) = body.visualizer_parameters {
-        if slot != 0 {
-            return Err(ApiError::bad_request(
-                "visualizer-controls-slot",
-                "a visualizer is controlled through effectSlot 0",
-            ));
-        }
-        if state
-            .configuration
-            .load()
-            .visualizers
-            .resolve(current.address)
-            .is_none()
-        {
-            return Err(ApiError::bad_request(
-                "visualizer-controls-source",
-                "select a generated visualizer on this layer first",
-            ));
-        }
-        effect.visualizer_parameters = Some(parameters.into_parameters());
-    }
+fn apply_common_edits(body: &UpdateLayer, effect: &mut EffectSlot) -> Result<(), ApiError> {
     if let Some(enabled) = body.effect_enabled {
         effect.enabled = enabled;
     }

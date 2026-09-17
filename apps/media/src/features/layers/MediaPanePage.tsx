@@ -123,8 +123,7 @@ function MediaPanePageContent() {
 		? {
 				...selectedVisualizer,
 				parameters:
-					selected?.layer.effects[0]?.visualizerParameters ??
-					selectedVisualizer.parameters,
+					selected?.layer.visualizerParameters ?? selectedVisualizer.parameters,
 			}
 		: undefined;
 	const runningOutput = runtime.data?.outputs.find(
@@ -505,11 +504,7 @@ function MediaPanePageContent() {
 								displayedVisualizer
 									? [
 											...visualizerControls(displayedVisualizer, !takeover),
-											...visualizerParameterControls(
-												selected.layer,
-												displayedVisualizer,
-												!takeover,
-											),
+											...visualizerParameterControls(selected.layer, !takeover),
 										]
 									: [],
 							),
@@ -594,15 +589,11 @@ function MediaPanePageContent() {
 			onChangeControl={(id, value) => {
 				if (!takeover || !selectedOutput) return;
 				if (displayedVisualizer && selected && id.startsWith("visualizer-")) {
-					const parameters = changeVisualizerParameter(
-						displayedVisualizer.parameters,
-						id.slice("visualizer-".length),
-						value,
+					void control.updateContinuous(
+						selected.output,
+						selected.layer.index,
+						visualizerChange(id, value, displayedVisualizer.parameters),
 					);
-					void control.updateContinuous(selected.output, selected.layer.index, {
-						effectSlot: 0,
-						visualizerParameters: parameters,
-					});
 					return;
 				}
 				if (selectedLayerId === "master") {
@@ -746,34 +737,6 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 	}
 }
 
-const DEFAULT_VISUALIZER_PARAMETERS: VisualizerParametersView = {
-	count: 32,
-	size: 0.05,
-	speed: 1,
-	amount: 1,
-	radius: 0.3,
-	thickness: 0.01,
-	reactivity: 1,
-	decay: 0.1,
-	zoom: 1,
-	iterations: 64,
-	threshold: 0.5,
-	smoothing: 0.5,
-	gravity: 0.5,
-	lifetime: 2,
-	curvature: 0.2,
-	primaryRed: 0.1,
-	primaryGreen: 0.84,
-	primaryBlue: 0.93,
-	secondaryRed: 1,
-	secondaryGreen: 0.7,
-	secondaryBlue: 0.06,
-	mirror: false,
-	filled: false,
-	wireframe: false,
-	mode: 0,
-};
-
 /**
  * A layer's Effects tab: a shown Visualizer's own configuration comes first, as its own
  * Visualizer group, followed by the two DMX effect banks. Other sources show only the banks.
@@ -863,13 +826,28 @@ function visualizerControls(
 	return controls.map((control) => ({ ...control, group: VISUALIZER_GROUP }));
 }
 
+/** A layer's own visualizer tuning edit. It never addresses an effect slot. */
+function visualizerChange(
+	id: string,
+	value: string | number,
+	parameters: VisualizerParametersView,
+): UpdateLayer {
+	if (id === "visualizer-reset")
+		return value === "reset" ? { resetVisualizerParameters: true } : {};
+	return {
+		visualizerParameters: changeVisualizerParameter(
+			parameters,
+			id.slice("visualizer-".length),
+			value,
+		),
+	};
+}
+
 function changeVisualizerParameter(
 	parameters: VisualizerParametersView,
 	parameter: string,
 	value: string | number,
 ): VisualizerParametersView {
-	if (parameter === "reset" && value === "reset")
-		return { ...DEFAULT_VISUALIZER_PARAMETERS };
 	const number = VISUALIZER_NUMBERS[parameter];
 	if (number) return { ...parameters, [number.field]: Number(value) };
 	const flag = VISUALIZER_FLAGS[parameter];

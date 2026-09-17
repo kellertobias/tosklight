@@ -499,7 +499,29 @@ minimum: number | null, maximum: number | null,
  */
 step: number | null, };
 export type NativeMediaEffectSlot = { index: number, effect_type?: string | null, label: string, enabled: boolean, mix: number, supported: boolean, capability_detail?: string | null, parameters: Array<NativeMediaEffectParameter>, };
-export type NativeMediaSnapshot = { endpoint: string, status: string, instance: string, outputs: number, catalog_revision: number, catalog_items: number, text_slots: Array<NativeMediaTextSlot>, effect_controls_available: boolean, output_id?: string | null, effect_layers: Array<Array<NativeMediaEffectSlot>>, };
+export type NativeMediaVisualizerChannel = {
+/**
+ * Zero-based byte position; attribute `media.visualizer.parameter.{index + 1}`.
+ */
+index: number, parameter: string, label: string,
+/**
+ * The value byte 1 selects.
+ */
+minimum: number,
+/**
+ * The value byte 255 selects.
+ */
+maximum: number, step: number,
+/**
+ * The value byte zero keeps.
+ */
+default_value: number, };
+export type NativeMediaSnapshot = { endpoint: string, status: string, instance: string, outputs: number, catalog_revision: number, catalog_items: number, text_slots: Array<NativeMediaTextSlot>, effect_controls_available: boolean, output_id?: string | null, effect_layers: Array<Array<NativeMediaEffectSlot>>,
+/**
+ * Per layer, the Visualizer Parameter channels the shown visualizer defines. A layer showing
+ * ordinary media has none, and its visualizer bytes are inert.
+ */
+visualizer_layers: Array<Array<NativeMediaVisualizerChannel>>, };
 export type NativeMediaTextUpdateRequest = { request_id: string, text: string, };
 export type NativeMediaEffectUpdateRequest = { request_id: string, control_id: string, number_value?: number | null, string_value?: string | null, boolean_value?: boolean | null, };
 export type DiscoveredMediaAddressUpdateRequest = { requestId: string, host: string, outputId: string,

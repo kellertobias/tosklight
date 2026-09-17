@@ -1,6 +1,7 @@
 import type {
 	MediaServerInspection,
 	NativeMediaEffectSlot,
+	NativeMediaVisualizerChannel,
 } from "../../api/client/mediaOutput";
 import type { MediaServerFixture } from "../../api/types";
 import type { ProgrammerFixtureValue } from "../../features/programmerValues/contracts";
@@ -40,6 +41,11 @@ export interface BuildMediaPaneModelInput {
 	nativeEffectsError?: string | null;
 	/** Sparse native-library status; settings remain owned by Pixel's Effects library. */
 	effectLibrarySlots?: readonly MediaEffectLibrarySlot[];
+	/**
+	 * The selected layer's Visualizer Parameter channels as its shown visualizer defines them.
+	 * Empty for ordinary media, whose visualizer bytes are inert.
+	 */
+	visualizerChannels?: readonly NativeMediaVisualizerChannel[];
 }
 
 export function buildMediaPaneModel(

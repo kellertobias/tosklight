@@ -23,6 +23,69 @@ pub struct VisualizerView {
     /// editor can show only the controls that do something.
     pub uses: Vec<String>,
     pub parameters: VisualizerParametersView,
+    /// The layer's four Visualizer Parameter channels as this visualizer defines them, in byte
+    /// order. A byte past the last entry is inert while this visualizer is shown.
+    pub channels: Vec<VisualizerChannelView>,
+}
+
+/// One dedicated Visualizer Parameter channel as the active visualizer defines it.
+///
+/// The desk, the web media controls, and DMX input all address this same byte.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct VisualizerChannelView {
+    /// Zero-based byte position, `0..=3`.
+    pub index: u8,
+    /// The shared parameter this byte moves, such as `size` or `primary`.
+    pub parameter: String,
+    /// What the active visualizer calls it.
+    pub label: String,
+    /// The value byte 1 selects. Colours are hue degrees; switches are 0 or 1.
+    pub minimum: f32,
+    /// The value byte 255 selects.
+    pub maximum: f32,
+    /// One or more marks a whole-number, switch, or hue value.
+    pub step: f32,
+    /// The value byte zero keeps: the layer's tuning, else the configured visualizer's.
+    pub default_value: f32,
+    /// The raw byte currently received or set; zero keeps the default.
+    pub raw: u8,
+    /// The value in effect on this channel.
+    pub value: f32,
+}
+
+impl VisualizerChannelView {
+    /// The channels `kind` defines, with defaults from `parameters` and the current bytes.
+    pub fn all(
+        kind: media_domain::VisualizerKind,
+        parameters: &VisualizerParameters,
+        bytes: &[u8],
+    ) -> Vec<Self> {
+        kind.channels()
+            .map(|channel| {
+                let raw = bytes.get(channel.index).copied().unwrap_or(0);
+                let default_value = channel.default_value(parameters);
+                Self {
+                    index: channel.index as u8,
+                    parameter: parameter_name(channel.parameter),
+                    label: channel.label.to_owned(),
+                    minimum: channel.minimum,
+                    maximum: channel.maximum,
+                    step: channel.step,
+                    default_value,
+                    raw,
+                    value: channel.value_of(raw).unwrap_or(default_value),
+                }
+            })
+            .collect()
+    }
+}
+
+fn parameter_name(parameter: media_domain::Parameter) -> String {
+    serde_json::to_value(parameter)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_default()
 }
 
 /// The shared parameter block, as the API reports it.
@@ -99,14 +162,15 @@ impl VisualizerView {
                 .kind
                 .parameters()
                 .iter()
-                .map(|parameter| {
-                    serde_json::to_value(parameter)
-                        .ok()
-                        .and_then(|value| value.as_str().map(str::to_owned))
-                        .unwrap_or_default()
-                })
+                .copied()
+                .map(parameter_name)
                 .collect(),
             parameters: VisualizerParametersView::of(&configuration.parameters),
+            channels: VisualizerChannelView::all(
+                configuration.kind,
+                &configuration.parameters,
+                &[],
+            ),
         }
     }
 

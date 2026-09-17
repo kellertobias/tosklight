@@ -423,6 +423,35 @@ mod tests {
     }
 
     #[test]
+    fn a_version_seven_file_with_effect_visualizer_tuning_starts_and_keeps_its_presets() {
+        let root = std::env::temp_dir().join("media-startup-effect-visualizer-tuning");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("a folder");
+        let mut document: serde_json::Value =
+            serde_json::from_str(&configuration::save(&MediaConfiguration::default()))
+                .expect("the default document");
+        document["version"] = serde_json::json!(7);
+        let entries = document["configuration"]["effects"]["entries"]
+            .as_array_mut()
+            .expect("shipped presets");
+        let stored = entries.len();
+        let name = entries[0]["name"].clone();
+        entries[0]["effect"]["visualizerParameters"] =
+            serde_json::to_value(media_domain::VisualizerParameters::default()).unwrap();
+        let path = root.join("media-server.json");
+        std::fs::write(&path, document.to_string()).expect("the legacy file");
+
+        let loaded = load_configuration(&ConfigurationSource::File {
+            path,
+            required: true,
+        })
+        .expect("a version 7 file still starts the server");
+        assert_eq!(loaded.effects.entries.len(), stored);
+        assert_eq!(loaded.effects.entries[0].name, name.as_str().unwrap());
+        assert!(!configuration::save(&loaded).contains("visualizerParameters"));
+    }
+
+    #[test]
     fn a_first_run_adopts_the_previous_servers_text_sources() {
         let root = library_with_legacy_text("adopted");
         let mut configuration = MediaConfiguration::default();
