@@ -245,8 +245,17 @@ for (const viewport of [
 			const box = await content.boundingBox();
 			if (!box) throw new Error("The Settings section is not drawn");
 			const session = await page.context().newCDPSession(page);
+			await session.send("Emulation.setTouchEmulationEnabled", {
+				enabled: true,
+				maxTouchPoints: 5,
+			});
 			const x = box.x + box.width / 2;
-			for (let swipe = 0; swipe < 8; swipe += 1)
+			// How far one swipe carries depends on the section's length and on fling momentum, which
+			// differs between machines, so keep swiping until the section stops at its end.
+			let swipes = 0;
+			for (; swipes < 40; swipes += 1) {
+				const { top, max } = await scrollState(content);
+				if (max - top <= 1) break;
 				await session.send("Input.synthesizeScrollGesture", {
 					x,
 					y: box.y + box.height - 20,
@@ -254,6 +263,8 @@ for (const viewport of [
 					gestureSourceType: "touch",
 					speed: 2400,
 				});
+			}
+			expect(swipes).toBeGreaterThan(0);
 			await expectAtBottom(content);
 			await expect(content.locator(LAST_CONTROL).last()).toBeInViewport({
 				ratio: 1,
