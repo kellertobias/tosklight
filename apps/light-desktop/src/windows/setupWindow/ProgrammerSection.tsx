@@ -380,7 +380,7 @@ export function DefaultsSection({
 					<article>
 						<header>
 							<b>Record &amp; Update defaults</b>
-							<small>Also available by pressing Record twice.</small>
+							<small>Also on REC twice.</small>
 						</header>
 						<RecordDefaultsFields
 							settings={controller.recordSettings}
@@ -393,6 +393,7 @@ export function DefaultsSection({
 								})
 							}
 							updateDefault={controller.updateSettings.update_default}
+							describeDefaults={false}
 							onUpdateDefault={(updateDefault) =>
 								controller.setUpdateSettings({
 									...controller.updateSettings,

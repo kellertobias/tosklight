@@ -37,11 +37,14 @@ export function RecordUpdateDefaultField({
 	value,
 	onChange,
 	disabled = false,
+	describe = true,
 }: {
 	kind: "record" | "update";
 	value: RecordUpdateOption;
 	onChange: (value: RecordUpdateOption) => void;
 	disabled?: boolean;
+	/** Compact layouts leave the explanation to the Record/Update choice modal. */
+	describe?: boolean;
 }) {
 	const verb = kind === "record" ? "Record" : "Update";
 	const selected = RECORD_UPDATE_OPTIONS.find(
@@ -58,7 +61,13 @@ export function RecordUpdateDefaultField({
 				value,
 				label,
 			}))}
-			description={kind === "record" ? selected?.record : selected?.update}
+			description={
+				!describe
+					? undefined
+					: kind === "record"
+						? selected?.record
+						: selected?.update
+			}
 		/>
 	);
 }
@@ -71,6 +80,7 @@ export function RecordDefaultsFields({
 	recordDefaultDisabled = false,
 	updateDefault,
 	onUpdateDefault,
+	describeDefaults = true,
 	labelPlacement = "side",
 	columns = 1,
 	minColumnWidth = 240,
@@ -83,6 +93,7 @@ export function RecordDefaultsFields({
 	/** Desk Setup keeps both plain-key defaults side by side. */
 	updateDefault?: RecordUpdateOption;
 	onUpdateDefault?: (value: RecordUpdateOption) => void;
+	describeDefaults?: boolean;
 	labelPlacement?: "side" | "top";
 	columns?: number;
 	minColumnWidth?: number;
@@ -98,12 +109,14 @@ export function RecordDefaultsFields({
 				value={recordDefault}
 				onChange={onRecordDefault}
 				disabled={recordDefaultDisabled}
+				describe={describeDefaults}
 			/>
 			{updateDefault && onUpdateDefault && (
 				<RecordUpdateDefaultField
 					kind="update"
 					value={updateDefault}
 					onChange={onUpdateDefault}
+					describe={describeDefaults}
 				/>
 			)}
 			<SwitchField
