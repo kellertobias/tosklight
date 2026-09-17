@@ -944,6 +944,25 @@ jobs:
           esac
           ls -la "$out"
 
+      # Unpack the portable desk the way an operator does, somewhere unrelated to the build and
+      # with a space in the path, and start it without any data-directory override: the marker
+      # alone must keep the database, log, extensions and WebView2 profile inside that folder.
+      - name: Smoke-test the portable Windows desk from another folder
+        if: matrix.slug == 'windows-amd64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$LIGHT_RELEASE_VERSION"
+          unpack="$(cygpath -u "$RUNNER_TEMP")/portable desk"
+          rm -rf -- "$unpack"
+          mkdir -p "$unpack"
+          7z x -y -o"$(cygpath -w "$unpack")" \
+            ".artifacts/release/tosklight-desk-portable-$version-windows-amd64.zip" >/dev/null
+          folder="$unpack/tosklight-desk-portable-$version-windows-amd64"
+          test -f "$folder/portable.txt"
+          LIGHT_DESKTOP_SMOKE_PORTABLE_DIR="$(cygpath -w "$folder")" \
+            node tools/ci-smoke-built-desktop.mjs
+
       # The API-generated show is produced once by the dedicated demo-show job. Stage that exact
       # artifact where the Tauri resource overlay expects it instead of regenerating it per target.
       - name: Stage the generated demo show for application bundles

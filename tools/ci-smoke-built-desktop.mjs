@@ -8,13 +8,33 @@ import { promisify } from "node:util";
 import { artifactPaths } from "./artifact-paths.mjs";
 
 const target = process.env.LIGHT_DESKTOP_SMOKE_TARGET;
-if (process.env.GITHUB_ACTIONS === "true" && !target)
+if (
+	process.env.GITHUB_ACTIONS === "true" &&
+	!target &&
+	!process.env.LIGHT_DESKTOP_SMOKE_PORTABLE_DIR
+)
 	throw new Error("LIGHT_DESKTOP_SMOKE_TARGET is required in CI.");
 const buildDirectory = target
 	? path.join(artifactPaths.cargo, target, "release")
 	: path.join(artifactPaths.cargo, "debug");
 
-const executable = await packagedExecutable(buildDirectory);
+// A portable folder is started exactly as an operator would start it: from wherever it was
+// unpacked, with no data-directory override, so the portable marker alone decides where it writes.
+const portableDirectory = process.env.LIGHT_DESKTOP_SMOKE_PORTABLE_DIR
+	? path.resolve(process.env.LIGHT_DESKTOP_SMOKE_PORTABLE_DIR)
+	: undefined;
+const executable = portableDirectory
+	? path.join(
+			portableDirectory,
+			process.platform === "win32" ? "ToskLight.exe" : "ToskLight",
+		)
+	: await packagedExecutable(buildDirectory);
+const perUserDataDirectory = portableDirectory
+	? perUserApplicationData()
+	: undefined;
+const perUserDataExisted = perUserDataDirectory
+	? await exists(perUserDataDirectory)
+	: false;
 
 await fs.access(executable);
 const executableDirectory = path.dirname(executable);
@@ -27,9 +47,9 @@ if (process.platform !== "linux") {
 	}
 }
 await fs.mkdir(artifactPaths.tmp, { recursive: true });
-const dataDirectory = await fs.mkdtemp(
-	path.join(artifactPaths.tmp, "tosklight-ci-launch-"),
-);
+const dataDirectory = portableDirectory
+	? path.join(portableDirectory, "data")
+	: await fs.mkdtemp(path.join(artifactPaths.tmp, "tosklight-ci-launch-"));
 const port = await freePort();
 const output = [];
 const child = spawn(executable, [], {
@@ -39,7 +59,9 @@ const child = spawn(executable, [], {
 		...process.env,
 		...(process.platform === "linux" ? { APPIMAGE_EXTRACT_AND_RUN: "1" } : {}),
 		LIGHT_DESKTOP_TEST_BIND: `127.0.0.1:${port}`,
-		LIGHT_DESKTOP_TEST_DATA_DIR: dataDirectory,
+		...(portableDirectory
+			? {}
+			: { LIGHT_DESKTOP_TEST_DATA_DIR: dataDirectory }),
 	},
 	stdio: ["ignore", "pipe", "pipe"],
 });
@@ -56,6 +78,7 @@ try {
 	console.log(
 		`Packaged ToskLight reached healthy readiness on ${process.platform}.`,
 	);
+	if (portableDirectory) await verifyPortableState();
 } catch (error) {
 	const detail = output.join("").trim();
 	const serverLog = await fs
@@ -66,7 +89,52 @@ try {
 	);
 } finally {
 	await terminateProcessTree(child.pid);
-	await fs.rm(dataDirectory, { recursive: true, force: true });
+	if (!portableDirectory)
+		await fs.rm(dataDirectory, { recursive: true, force: true });
+}
+
+async function verifyPortableState() {
+	const expected = [
+		path.join(dataDirectory, "light-headless.log"),
+		path.join(dataDirectory, "extensions"),
+		path.join(dataDirectory, "webview"),
+	];
+	const deadline = Date.now() + 15_000;
+	let missing = expected;
+	while (Date.now() < deadline) {
+		missing = [];
+		for (const entry of expected)
+			if (!(await exists(entry))) missing.push(entry);
+		if (missing.length === 0) break;
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+	if (missing.length > 0)
+		throw new Error(
+			`The portable desk did not keep its state beside itself; missing: ${missing.join(", ")}`,
+		);
+	if (
+		perUserDataDirectory &&
+		!perUserDataExisted &&
+		(await exists(perUserDataDirectory))
+	)
+		throw new Error(
+			`The portable desk created the per-user data directory ${perUserDataDirectory}.`,
+		);
+	console.log(`The portable desk kept its state in ${dataDirectory}.`);
+}
+
+function perUserApplicationData() {
+	const identifier = "de.tokenet.light";
+	if (process.platform === "win32" && process.env.APPDATA)
+		return path.join(process.env.APPDATA, identifier);
+	return undefined;
+}
+
+async function exists(entry) {
+	return fs
+		.access(entry)
+		.then(() => true)
+		.catch(() => false);
 }
 
 async function packagedExecutable(buildDirectory) {

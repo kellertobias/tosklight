@@ -485,6 +485,19 @@ test("Windows ships a portable desk folder built against the static C runtime", 
 	assert.match(assembler, /windows-first-start\.txt/u);
 	assert.match(assembler, /linux-first-start\.txt/u);
 	assert.match(read("docs/release/linux-first-start.txt"), /APPIMAGE_EXTRACT_AND_RUN=1/u);
+	assert.match(assembler, /tosklight-desk-\$asset_slug\.deb/u, "the .deb stays beside the AppImage");
+	// The documented libfuse2-free invocation is the one CI starts the release AppImage with.
+	assert.match(read("tools/ci-smoke-built-desktop.mjs"), /APPIMAGE_EXTRACT_AND_RUN: "1"/u);
+	// The unpacked portable folder is started from elsewhere with no data-directory override.
+	assert.match(
+		workflow,
+		/tosklight-desk-portable-\$version-windows-amd64\.zip[\s\S]*?LIGHT_DESKTOP_SMOKE_PORTABLE_DIR=[\s\S]*?ci-smoke-built-desktop\.mjs/u,
+	);
+	assert.match(
+		read("apps/light-desktop/src-tauri/src/portable.rs"),
+		/data_directory[\s\S]*TOSKLIGHT_VIZ_PREFERENCES|TOSKLIGHT_VIZ_PREFERENCES[\s\S]*data_directory/u,
+		"a portable desk keeps its browser profile and renderer settings in its folder",
+	);
 	for (const app of ["light-desktop", "viz-editor"])
 		assert.match(
 			read(`apps/${app}/src-tauri/src/portable.rs`),

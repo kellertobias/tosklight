@@ -113,10 +113,9 @@ fn launch(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::E
                 .map(PathBuf::from)
                 .unwrap_or_else(debug_data_dir)
         } else {
-            match crate::portable::data_dir() {
-                Some(portable) => portable,
-                None => app.path().app_data_dir()?,
-            }
+            crate::portable::resolve_data_dir(crate::portable::data_dir(), || {
+                app.path().app_data_dir()
+            })?
         });
     let fixture_package_dir = app.path().resource_dir()?.join("fixture-library");
     let extensions_dir = std::env::var_os("LIGHT_EXTENSIONS_DIR")

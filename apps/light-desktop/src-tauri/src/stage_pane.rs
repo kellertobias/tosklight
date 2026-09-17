@@ -300,7 +300,7 @@ impl StagePane {
         };
         // `--embed` implies `--helper` and opens no window: the desk owns the window, and this
         // process only ever draws the rectangle it is given.
-        let mut helper = SupervisedHelper::new(program, vec!["--embed".to_owned()]);
+        let mut helper = crate::portable::renderer(program, vec!["--embed".to_owned()]);
         if let Err(error) = helper.start() {
             eprintln!("stage pane: the renderer would not start: {error}");
             return Err(error);

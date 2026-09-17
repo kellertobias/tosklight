@@ -31,7 +31,7 @@ impl Visualizer {
         let address = crate::server::address();
         // The renderer's desk provider is the authoritative scene path: it reads the active show and
         // follows show events itself, while its normal DMX receivers keep live values current.
-        let mut helper = SupervisedHelper::new(program, desk_arguments(address))
+        let mut helper = crate::portable::renderer(program, desk_arguments(address))
             .with_environment("TOSKLIGHT_VIZ_LAUNCHED_BY", "desk");
         helper.start()?;
         *self.helper.lock().map_err(|_| "visualizer state")? = Some(helper);

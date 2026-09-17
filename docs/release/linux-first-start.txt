@@ -12,6 +12,9 @@ AppImage directly. Run it without FUSE instead; nothing needs to be installed:
 
   APPIMAGE_EXTRACT_AND_RUN=1 ./tosklight-desk-linux_amd64.AppImage
 
+CI starts every release AppImage exactly this way before publishing it. The AppImage keeps its
+shows, database and logs in ~/.local/share/de.tokenet.light, like an installed desk.
+
 ToskLight Architect ("tosklight-architect-linux_amd64") and ToskLight Pixel
 ("tosklight-media-linux_amd64") are plain folders: copy them anywhere and start the executable
 inside. Architect's folder contains portable.txt, so it keeps its shows and library in a "data"

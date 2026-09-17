@@ -54,9 +54,11 @@ pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
     // which is what makes a Stage pane possible at all. `auto_resize` keeps it filling the window
     // without the desk having to follow every resize itself.
     let webview = window.add_child(
-        tauri::webview::WebviewBuilder::new(LABEL, WebviewUrl::default())
-            .transparent(true)
-            .auto_resize(),
+        crate::portable::place_webview(
+            tauri::webview::WebviewBuilder::new(LABEL, WebviewUrl::default())
+                .transparent(true)
+                .auto_resize(),
+        ),
         LogicalPosition::new(0.0, 0.0),
         LogicalSize::new(logical.width, logical.height),
     )?;

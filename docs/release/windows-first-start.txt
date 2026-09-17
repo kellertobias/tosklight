@@ -13,13 +13,18 @@ Portable (no installer, no administrator rights)
    are not yet code-signed. Choose "More info", check that the archive came from the expected
    GitHub release, then "Run anyway".
 
-The folder contains portable.txt, so ToskLight keeps its shows, database, extensions and logs in a
-"data" folder beside ToskLight.exe; deleting the folder removes them. The WebView2 runtime still
-keeps a small browser cache under %LOCALAPPDATA%.
+The folder contains portable.txt, so ToskLight keeps its shows, database, extensions, logs
+(data\light-headless.log), browser cache and Stage renderer settings in a "data" folder beside
+ToskLight.exe instead of your user profile; deleting the folder removes everything. Delete portable.txt to make ToskLight use %APPDATA%\de.tokenet.light instead.
 
-The executables need no Visual C++ redistributable. They use the Microsoft Edge WebView2 Runtime
-that Windows 11 and current Windows 10 already include; if it is missing, ToskLight says so and
-names where to install it.
+Nothing needs to be installed first:
+
+- No Visual C++ redistributable is needed; the executables carry their C runtime.
+- ToskLight uses the Microsoft Edge WebView2 Runtime that Windows 11 and current Windows 10 already
+  include. It is not bundled in the folder. If it is missing, ToskLight shows a message and closes;
+  install the Evergreen WebView2 Runtime from
+  https://developer.microsoft.com/microsoft-edge/webview2/ and start ToskLight.exe again.
+- ToskLight Architect keeps its WebView2 browser cache under %LOCALAPPDATA%.
 
 Installed
 ---------

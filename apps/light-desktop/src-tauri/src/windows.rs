@@ -200,13 +200,15 @@ pub(crate) fn open_console_screen(
     let size = window.inner_size().map_err(|error| error.to_string())?;
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
     let logical = size.to_logical::<f64>(scale);
-    let mut webview_builder = tauri::webview::WebviewBuilder::new(
-        &label,
-        tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into()),
-    )
-    .transparent(true)
-    .background_throttling(BackgroundThrottlingPolicy::Disabled)
-    .auto_resize();
+    let mut webview_builder = crate::portable::place_webview(
+        tauri::webview::WebviewBuilder::new(
+            &label,
+            tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into()),
+        )
+        .transparent(true)
+        .background_throttling(BackgroundThrottlingPolicy::Disabled)
+        .auto_resize(),
+    );
     if let Some(script) = attachment
         .as_ref()
         .and_then(|value| attachment_script(value, true))
