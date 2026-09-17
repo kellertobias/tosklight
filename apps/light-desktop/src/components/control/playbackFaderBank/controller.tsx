@@ -6,6 +6,7 @@ import type {
 } from "../../../api/types";
 import { useSetInteraction } from "../../../features/controlSurfaceInteraction/SetInteractionProvider";
 import { useCueRecording } from "../../../features/cueRecording/CueRecordingProvider";
+import { useProgrammingUpdate } from "../../../features/programmingUpdate/ProgrammingUpdateProvider";
 import {
 	usePlaybackDeskView,
 	usePlaybackProjectionMap,
@@ -57,6 +58,7 @@ export function usePlaybackBankController({
 	const commandLineActions = useProgrammingCommandLineActions();
 	const commandStatus = useProgrammingInteractionStatus();
 	const cueRecording = useCueRecording();
+	const programmingUpdate = useProgrammingUpdate();
 	const setInteraction = useSetInteraction();
 	const { state, dispatch } = useApp();
 	const hardware = Boolean(hardwareConnected || state.midiProfile);
@@ -141,6 +143,7 @@ export function usePlaybackBankController({
 		commandLineActions,
 		commandLine,
 		cueRecording,
+		programmingUpdate,
 		setInteraction,
 		state,
 		dispatch,

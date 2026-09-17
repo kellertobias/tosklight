@@ -4,54 +4,85 @@ import {
 	SelectField,
 	SwitchField,
 } from "@tosklight/ui";
-import type { UpdateSettings } from "../../api/types";
+import type { RecordUpdateOption, UpdateSettings } from "../../api/types";
+import { RECORD_UPDATE_OPTIONS } from "../../features/recordUpdateOptions/options";
 import {
 	cueUpdateModes,
 	existingContentModes,
 } from "../control/updateWorkflow";
 
+/** Browser-local Record preferences. The Record default itself is desk data (`record_default`). */
 export interface RecordSettings {
-	mode: "merge" | "overwrite";
 	cueOnly: boolean;
-	mergeActiveCue: boolean;
 }
 
 export const defaultRecordSettings: RecordSettings = {
-	mode: "merge",
 	cueOnly: false,
-	mergeActiveCue: false,
 };
 
 export function loadRecordSettings(): RecordSettings {
-	const stored = (key: string) =>
+	const stored =
 		typeof globalThis.localStorage?.getItem === "function"
-			? globalThis.localStorage.getItem(key)
+			? globalThis.localStorage.getItem("light.store-cue-only")
 			: null;
-	return {
-		mode: stored("light.store-mode") === "overwrite" ? "overwrite" : "merge",
-		cueOnly: stored("light.store-cue-only") === "true",
-		mergeActiveCue: stored("light.store-merge-active-cue") === "true",
-	};
+	return { cueOnly: stored === "true" };
 }
 
 export function saveRecordSettings(settings: RecordSettings) {
-	localStorage.setItem("light.store-mode", settings.mode);
 	localStorage.setItem("light.store-cue-only", String(settings.cueOnly));
-	localStorage.setItem(
-		"light.store-merge-active-cue",
-		String(settings.mergeActiveCue),
+}
+
+export function RecordUpdateDefaultField({
+	kind,
+	value,
+	onChange,
+	disabled = false,
+}: {
+	kind: "record" | "update";
+	value: RecordUpdateOption;
+	onChange: (value: RecordUpdateOption) => void;
+	disabled?: boolean;
+}) {
+	const verb = kind === "record" ? "Record" : "Update";
+	const selected = RECORD_UPDATE_OPTIONS.find(
+		(option) => option.value === value,
+	);
+	return (
+		<MultiValueToggleField
+			label={`${verb} default`}
+			ariaLabel={`Default ${verb} mode`}
+			value={value}
+			disabled={disabled}
+			onChange={onChange}
+			options={RECORD_UPDATE_OPTIONS.map(({ value, label }) => ({
+				value,
+				label,
+			}))}
+			description={kind === "record" ? selected?.record : selected?.update}
+		/>
 	);
 }
 
 export function RecordDefaultsFields({
 	settings,
 	onChange,
+	recordDefault,
+	onRecordDefault,
+	recordDefaultDisabled = false,
+	updateDefault,
+	onUpdateDefault,
 	labelPlacement = "side",
 	columns = 1,
 	minColumnWidth = 240,
 }: {
 	settings: RecordSettings;
 	onChange: (settings: RecordSettings) => void;
+	recordDefault: RecordUpdateOption;
+	onRecordDefault: (value: RecordUpdateOption) => void;
+	recordDefaultDisabled?: boolean;
+	/** Desk Setup keeps both plain-key defaults side by side. */
+	updateDefault?: RecordUpdateOption;
+	onUpdateDefault?: (value: RecordUpdateOption) => void;
 	labelPlacement?: "side" | "top";
 	columns?: number;
 	minColumnWidth?: number;
@@ -62,17 +93,19 @@ export function RecordDefaultsFields({
 			columns={columns}
 			minColumnWidth={minColumnWidth}
 		>
-			<MultiValueToggleField
-				label="Record mode"
-				ariaLabel="Default Record mode"
-				value={settings.mode}
-				onChange={(mode) => onChange({ ...settings, mode })}
-				options={[
-					{ value: "merge", label: "Merge" },
-					{ value: "overwrite", label: "Overwrite" },
-				]}
-				description="Merge keeps what the target already stores and adds the programmer values. Overwrite replaces the stored values with the programmer values."
+			<RecordUpdateDefaultField
+				kind="record"
+				value={recordDefault}
+				onChange={onRecordDefault}
+				disabled={recordDefaultDisabled}
 			/>
+			{updateDefault && onUpdateDefault && (
+				<RecordUpdateDefaultField
+					kind="update"
+					value={updateDefault}
+					onChange={onUpdateDefault}
+				/>
+			)}
 			<SwitchField
 				label="Cue only"
 				offLabel="Tracking"
@@ -83,16 +116,6 @@ export function RecordDefaultsFields({
 				}
 				description="On: the recorded values last for this Cue only. The next Cue returns those fixture attributes to their earlier values, or releases them. Everything else keeps tracking. Off: values track into later Cues as usual."
 			/>
-			<SwitchField
-				label="Merge into active Cue"
-				offLabel="Off"
-				onLabel="Merge"
-				checked={settings.mergeActiveCue}
-				onChange={(event) =>
-					onChange({ ...settings, mergeActiveCue: event.target.checked })
-				}
-				description="Recording onto a playback adds the programmer values to the Cue that playback is on. Fixture attributes in both are replaced; all other values stored in that Cue stay."
-			/>
 		</FormLayout>
 	);
 }
@@ -100,12 +123,15 @@ export function RecordDefaultsFields({
 export function UpdateDefaultsFields({
 	settings,
 	onChange,
+	showDefault = true,
 	labelPlacement = "side",
 	columns = 1,
 	minColumnWidth = 240,
 }: {
 	settings: UpdateSettings;
 	onChange: (settings: UpdateSettings) => void;
+	/** Off where the Update default is already shown beside the Record default. */
+	showDefault?: boolean;
 	labelPlacement?: "side" | "top";
 	columns?: number;
 	minColumnWidth?: number;
@@ -116,6 +142,15 @@ export function UpdateDefaultsFields({
 			columns={columns}
 			minColumnWidth={minColumnWidth}
 		>
+			{showDefault && (
+				<RecordUpdateDefaultField
+					kind="update"
+					value={settings.update_default}
+					onChange={(value) =>
+						onChange({ ...settings, update_default: value })
+					}
+				/>
+			)}
 			<SelectField
 				label="Cue/Cuelist default"
 				value={settings.cue_mode}

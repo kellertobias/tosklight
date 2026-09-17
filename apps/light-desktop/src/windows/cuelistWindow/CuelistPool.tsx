@@ -31,6 +31,12 @@ import {
 	poolObjectMutationCommand,
 } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
+import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
+import {
+	type CueRecordPlan,
+	recordTouchedTarget,
+	smartChoiceRecordPlan,
+} from "../../features/recordUpdateOptions/options";
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
 import { runtimeMaster } from "../../features/playbackRuntime/legacy";
 import {
@@ -159,12 +165,23 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 	);
 }
 
+function poolCueNumbers(
+	cueLists: ReturnType<typeof useCueLists>,
+	playback: PlaybackDefinition | null,
+) {
+	if (playback?.target.type !== "cue_list") return [];
+	const cueListId = playback.target.cue_list_id;
+	const cueList = cueLists.find((item) => item.body.id === cueListId)?.body;
+	return cueList?.cues.map((cue) => cue.number) ?? [];
+}
+
 function useCuelistPoolActions(props: CuelistPoolProps) {
 	const command = useCommandLineSurface({
 		enabled: props.active,
 		observeCommand: true,
 	});
 	const cueRecording = useCueRecording();
+	const programmingUpdate = useProgrammingUpdate();
 	const runtimeActions = usePlaybackRuntimeActions();
 	const cueLists = useCueLists();
 	const { state, dispatch } = useApp();
@@ -219,24 +236,19 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	const record = (
 		number: number,
 		playback: PlaybackDefinition | null,
-		choice: "add" | "merge" | "overwrite",
+		plan: CueRecordPlan,
 	) => {
 		const settings = loadRecordSettings();
 		const cueListId =
 			playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
-		const cueList =
-			cueListId !== null
-				? cueLists.find((item) => item.body.id === cueListId)?.body
-				: undefined;
-		const cueNumber = choice === "add" ? undefined : cueList?.cues[0]?.number;
 		void cueRecording
 			?.record({
 				target:
 					cueListId !== null
 						? { kind: "cue_list", cueListId }
 						: { kind: "pool", playbackNumber: number },
-				operation: choice === "merge" ? "merge" : "overwrite",
-				...(cueNumber ? { cueNumber } : {}),
+				operation: plan.operation,
+				...(plan.cueNumber ? { cueNumber: plan.cueNumber } : {}),
 				timing: {},
 				cueOnly: settings.cueOnly,
 				capturePolicy: "current_capture",
@@ -248,6 +260,15 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 				await command.reset();
 			});
 	};
+	const recordTouched = (number: number, playback: PlaybackDefinition | null) =>
+		recordTouchedTarget({
+			commandText: command.read().text,
+			update: programmingUpdate,
+			cueNumbers: poolCueNumbers(cueLists, playback),
+			record: (plan) => record(number, playback, plan),
+			ask: (cueNumber) =>
+				playback && setRecordChoice({ number, playback, cueNumber }),
+		});
 	const click = (number: number, playback: PlaybackDefinition | null) => {
 		if (held.current) {
 			held.current = false;
@@ -301,23 +322,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			return;
 		}
 		if (state.storeArmed) {
-			const cueListId =
-				playback?.target.type === "cue_list"
-					? playback.target.cue_list_id
-					: null;
-			const cueList =
-				cueListId !== null
-					? cueLists.find((item) => item.body.id === cueListId)?.body
-					: undefined;
-			if (playback && cueList?.cues.length === 1) {
-				setRecordChoice({
-					number,
-					playback,
-					cueNumber: cueList.cues[0].number,
-				});
-				return;
-			}
-			record(number, playback, "add");
+			void recordTouched(number, playback);
 			return;
 		}
 		if (/^ASSIGN$/i.test(command.read().text.trim())) {
@@ -351,7 +356,12 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		resolveRecordChoice: (choice: "add" | "merge" | "overwrite" | null) => {
 			const pending = recordChoice;
 			setRecordChoice(null);
-			if (pending && choice) record(pending.number, pending.playback, choice);
+			if (pending && choice)
+				record(
+					pending.number,
+					pending.playback,
+					smartChoiceRecordPlan(choice, pending.cueNumber),
+				);
 		},
 	};
 }

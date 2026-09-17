@@ -286,6 +286,8 @@ export interface AppState {
 	updateArmed: boolean;
 	shiftArmed: boolean;
 	storeSettingsOpen: boolean;
+	/** RECORD RECORD: choose how this Record stores the programmer. */
+	recordChoiceOpen: boolean;
 	patchSetArmed: boolean;
 	midiProfile: boolean;
 	debugOpen: boolean;

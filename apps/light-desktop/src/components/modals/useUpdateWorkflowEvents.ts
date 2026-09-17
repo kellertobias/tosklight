@@ -3,13 +3,16 @@ import type {
 	UpdatePreview,
 	UpdateResult,
 	UpdateSettings,
-	UpdateTargetFilter,
 	UpdateTargetRequest,
 } from "../../api/types";
 import type { ControlSurfaceIntent } from "../../features/controlSurfaceInteraction/registry";
 import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import type { UpdatePreviewAuthority } from "../../features/programmingUpdate/contracts";
 import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
+import {
+	effectiveOption,
+	updateModeForOption,
+} from "../../features/recordUpdateOptions/options";
 import { useApp } from "../../state/AppContext";
 import type { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
 import {
@@ -27,13 +30,15 @@ export type UpdateOperation = {
 
 interface UpdateWorkflowEventOptions {
 	commandLine: ReturnType<typeof useCommandLineSurface>;
+	/** UPDATE UPDATE asks how this Update stores the programmer. */
+	openChoice: () => void;
+	/** Update with Add Cue stores the programmer as a new Cue in the touched Cuelist. */
+	recordNewCue: (cueListId: string) => Promise<unknown>;
 	operation: UpdateOperation | null;
 	busy: boolean;
 	disarm: () => void;
-	loadMenu: (filter: UpdateTargetFilter) => Promise<void>;
 	setBusy: Dispatch<SetStateAction<boolean>>;
 	setLocalError: Dispatch<SetStateAction<string | null>>;
-	setMenuOpen: Dispatch<SetStateAction<boolean>>;
 	setOperation: Dispatch<SetStateAction<UpdateOperation | null>>;
 	setResult: Dispatch<SetStateAction<UpdateResult | null>>;
 	setSettings: Dispatch<SetStateAction<UpdateSettings>>;
@@ -42,13 +47,13 @@ interface UpdateWorkflowEventOptions {
 
 export function useUpdateWorkflowEvents({
 	commandLine,
+	openChoice,
+	recordNewCue,
 	operation,
 	busy,
 	disarm,
-	loadMenu,
 	setBusy,
 	setLocalError,
-	setMenuOpen,
 	setOperation,
 	setResult,
 	setSettings,
@@ -81,7 +86,26 @@ export function useUpdateWorkflowEvents({
 							return;
 						}
 						setSettings(nextSettings);
-						const mode = configuredUpdateMode(nextSettings, request);
+						const option = effectiveOption(
+							commandLine.read().text,
+							"UPDATE",
+							nextSettings.update_default,
+						);
+						const mode = updateModeForOption(
+							option,
+							nextSettings,
+							request,
+							configuredUpdateMode,
+						);
+						if (!mode) {
+							const recorded = await recordNewCue(request.object_id);
+							if (scopeKeyRef.current !== requestedScope) return;
+							setBusy(false);
+							disarm();
+							if (!recorded)
+								setLocalError("Add Cue failed; no show data was changed.");
+							return;
+						}
 						if (!nextSettings.show_update_modal_on_touch) {
 							const applied = await update?.applyDirect(request, mode);
 							if (scopeKeyRef.current !== requestedScope) return;
@@ -144,9 +168,7 @@ export function useUpdateWorkflowEvents({
 				return;
 			}
 			if (intent.type === "update_target_menu") {
-				disarm();
-				setMenuOpen(true);
-				void loadMenu("eligible_for_update_existing");
+				openChoice();
 				return;
 			}
 			if (intent.type === "update_armed")

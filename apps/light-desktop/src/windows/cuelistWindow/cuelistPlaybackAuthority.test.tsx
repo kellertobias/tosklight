@@ -695,7 +695,13 @@ describe("Cuelist Pool workflows over scoped authority", () => {
 		fireEvent.click(ui.getByText("Encore").closest("button")!);
 		// The choice lives in the modal, and searching the whole document for it means walking
 		// every tile of a thousand-position pool.
-		const choice = screen.getByRole("dialog", { name: "Record Cue choice" });
+		const choice = await waitFor(() => {
+			const dialog = document.querySelector<HTMLElement>(
+				'[role="dialog"][aria-label="Record Cue choice"]',
+			);
+			if (!dialog) throw new Error("Record Cue choice is not open yet");
+			return dialog;
+		});
 		expect(choice).toHaveTextContent("Add CueMerge CueOverwrite Cue");
 		fireEvent.click(within(choice).getByRole("button", { name: "Overwrite Cue" }));
 

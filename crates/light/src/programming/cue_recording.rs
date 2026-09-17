@@ -207,7 +207,7 @@ impl ProgrammingCueCommit {
             .active_cue
             .as_ref()
             .map(|cue| cue.id)
-            .or_else(|| match cue_list.cues.as_slice() {
+            .or(match cue_list.cues.as_slice() {
                 [only] => Some(only.id),
                 _ => None,
             })

@@ -4,6 +4,7 @@ import {
 	UpdateSettingsDialog,
 	UpdateTargetMenu,
 } from "./UpdateWorkflowDialogs";
+import { RecordUpdateChoiceModal } from "./RecordUpdateChoiceModal";
 import { useUpdateWorkflowController } from "./useUpdateWorkflowController";
 
 export {
@@ -38,6 +39,20 @@ export function UpdateWorkflow() {
 					onMode={(mode) => void workflow.changeOperationMode(mode)}
 					onApply={() => void workflow.applyOperation()}
 					onCancel={workflow.cancelOperation}
+				/>
+			)}
+			{workflow.choice.isOpen && (
+				<RecordUpdateChoiceModal
+					kind="update"
+					storedDefault={workflow.choice.storedDefault}
+					initialOption={workflow.choice.initialOption}
+					busy={workflow.choice.busy}
+					error={workflow.choice.error}
+					onConfirm={(option, setAsDefault) =>
+						void workflow.choice.confirm(option, setAsDefault)
+					}
+					onCancel={workflow.choice.close}
+					onTargets={workflow.choice.targets}
 				/>
 			)}
 			{workflow.settingsOpen && (

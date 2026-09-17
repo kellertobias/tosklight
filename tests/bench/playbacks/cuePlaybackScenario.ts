@@ -532,14 +532,17 @@ export class BrowserRecording {
 			})
 			.toBe(true);
 		await this.desk.click(target);
-		// Recording onto a playback that already holds Cues asks what to do with the new one.
+		// Recording onto a playback that holds one Cue asks what to do with the new one. The desk
+		// first reads its stored Record default, so the question can appear a moment later.
 		const choice = this.page.getByRole("dialog", { name: "Record Cue choice" });
-		if (await choice.isVisible().catch(() => false))
-			await this.desk.click(
-				choice.getByRole("button", { name: "Add Cue", exact: true }),
-			);
 		await expect
-			.poll(async () => (await this.cueListForPlayback(playback)).revision)
+			.poll(async () => {
+				if (await choice.isVisible().catch(() => false))
+					await this.desk.click(
+						choice.getByRole("button", { name: "Add Cue", exact: true }),
+					);
+				return (await this.cueListForPlayback(playback)).revision;
+			})
 			.toBeGreaterThan(before.revision);
 	}
 

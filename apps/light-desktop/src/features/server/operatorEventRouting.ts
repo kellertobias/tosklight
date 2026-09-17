@@ -77,6 +77,9 @@ function routeDeskAction(
 		} else if (payload.action === "record-settings") {
 			window.dispatchEvent(new Event("light:record-settings"));
 			return;
+		} else if (payload.action === "record-choice") {
+			window.dispatchEvent(new Event("light:record-choice"));
+			return;
 		} else if (
 			payload.action === "open-object-editor" &&
 			(payload.control === "macro" || payload.control === "timecode") &&

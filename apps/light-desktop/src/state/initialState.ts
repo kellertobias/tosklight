@@ -39,6 +39,7 @@ export const initialState: AppState = {
 	updateArmed: false,
 	shiftArmed: false,
 	storeSettingsOpen: false,
+	recordChoiceOpen: false,
 	patchSetArmed: false,
 	midiProfile: false,
 	debugOpen: false,

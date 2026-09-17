@@ -53,6 +53,7 @@ const mocks = vi.hoisted(() => ({
 	clearPlaybackSlot: vi.fn(),
 	mapExistingPlayback: vi.fn(),
 	recordCue: vi.fn(),
+	recordDefault: null as string | null,
 	commandLine: "FIXTURE",
 	error: null as string | null,
 	hardwareConnected: false,
@@ -111,6 +112,21 @@ function PlaybackFaderBank(
 
 vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
+}));
+vi.mock("../../features/programmingUpdate/ProgrammingUpdateProvider", () => ({
+	useProgrammingUpdate: () =>
+		mocks.recordDefault === null
+			? null
+			: {
+					loadSettings: async () => ({
+						cue_mode: "existing_in_current_cue",
+						preset_mode: "update_existing",
+						group_mode: "update_existing",
+						show_update_modal_on_touch: true,
+						record_default: mocks.recordDefault,
+						update_default: "smart",
+					}),
+				},
 }));
 vi.mock(
 	"../../features/programmingInteraction/ProgrammingInteractionView",
@@ -347,6 +363,7 @@ function resetPlaybackFaderMocks() {
 		cues: [...cueList.cues],
 	}));
 	mocks.commandLine = "FIXTURE";
+	mocks.recordDefault = null;
 	mocks.error = null;
 	mocks.hardwareConnected = false;
 	mocks.topologyReady = true;
@@ -1145,7 +1162,7 @@ describe("PlaybackFaderBank Record targets", () => {
 				}),
 			);
 			expect(
-				screen.getByRole("dialog", { name: "Record Cue choice" }),
+				await screen.findByRole("dialog", { name: "Record Cue choice" }),
 			).toBeInTheDocument();
 			fireEvent.click(screen.getByRole("button", { name: label }));
 			await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
@@ -1158,6 +1175,57 @@ describe("PlaybackFaderBank Record targets", () => {
 				capturePolicy: "current_capture",
 				activationPolicy: "go_to_if_normal",
 			});
+		},
+	);
+
+	it.each([
+		["merge", "RECORD ", "merge"],
+		["add_existing", "RECORD ", "add_missing"],
+		["add_cue", "RECORD ", "add_cue"],
+		["merge", "RECORD ADD CUE ", "add_cue"],
+		["add_cue", "RECORD SMART ", null],
+	] as const)(
+		"records with the stored %s default or the line's one-off option (%s)",
+		async (recordDefault, commandLine, operation) => {
+			assignPlayback();
+			mocks.state.storeArmed = true;
+			mocks.recordDefault = recordDefault;
+			mocks.commandLine = commandLine;
+			mocks.scopedCueLists[0].cues = [
+				{
+					id: "cue-2-0",
+					number: "2.0",
+					name: "Look",
+					fade_millis: 0,
+					delay_millis: 0,
+					trigger: { type: "manual" },
+					changes: [],
+				},
+			];
+			render(<PlaybackFaderBank count={1} />);
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "Playback representation page 1 playback 1",
+				}),
+			);
+			if (operation === null) {
+				expect(
+					await screen.findByRole("dialog", { name: "Record Cue choice" }),
+				).toBeInTheDocument();
+				expect(mocks.recordCue).not.toHaveBeenCalled();
+				return;
+			}
+			await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
+			expect(
+				screen.queryByRole("dialog", { name: "Record Cue choice" }),
+			).toBeNull();
+			expect(mocks.recordCue).toHaveBeenCalledWith(
+				expect.objectContaining({
+					target: { kind: "page_slot", page: 1, slot: 1 },
+					operation,
+				}),
+			);
+			expect(mocks.recordCue.mock.calls[0][0]).not.toHaveProperty("cueNumber");
 		},
 	);
 

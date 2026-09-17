@@ -68,7 +68,7 @@ Keyboard positions describe the position of the key on a German keyboard. The so
 | `[GRP]`  | Group      | -                 | Select a group. Hold for showing the group built-in. Press twice for `#> DEGROUP`|
 | `[CUE]`  | Cue        | -                 | Select or Target a particular cue. Press twice for `#> CUELIST` |
 | `[PBK]`  | Playback   | -                 | Select or Target a particular playback. Press twice for `#> VPBK` (virtual playback) |
-| `[REC]`  | Record     | `[KBD:END]`       | Store cues, presets, and groups. Hold for record options. |
+| `[REC]`  | Record     | `[KBD:END]`       | Store cues, presets, and groups. Press twice to choose how to record. Hold for record options. |
 | `[PRELD]`| Preload    | `[KBD:^]`         | Run Preload or Preload GO. Hold to inspect and edit the pending Preload. |
 | `[CLR]`  | Clear      | `[KBD:DELETE]`    | First Click: Clear Selection, Second Click: Clear Programmer |
 | `[DEL]`  | Delete     | -                 | Delete a cue, preset, or other supported element.  |
@@ -118,7 +118,7 @@ The following table shows the second layer assignment, the user can reach with h
 | `[^DIV]`  | Go To         | Go directly to a Cue on an addressed playback. Press twice for `#> LOAD`. |
 | `[^OFF]`  | Release       | Enter Release as a recordable programmer value. |
 | `[^MOV]`  | Copy          | Copy a cue or preset. Same as the `[CPY]` button if it is available. |
-| `[^REC]`  | Update        | Updates cues, presets, and groups. Hold for update options. |
+| `[^REC]`  | Update        | Updates cues, presets, and groups. Press twice to choose how to update. Hold for update options. |
 | `[^PRELD]`| Clear Preload | Clear Preload. |
 | `[^ALIGN]`| Align Off     | Turns off Align mode |
 
@@ -330,6 +330,19 @@ The same choice appears when recording onto a playback whose assigned Cuelist co
 > [!danger] Missing graphic
 > Add a Record-target diagram comparing the touch playback area, the attached desk's topmost playback button, a buttonless playback's visible screen area, and the excluded fader.
 
+### Choosing How to Record: `[REC][REC]`
+
+Press `[REC]` a second time while Record is armed to open the **Record** modal. It is the same on the keyboard (`[KBD:END]` twice), the on-screen keys, and an attached desk. Record stays armed; press `[ESC]` to leave Record. Choose one of four options:
+
+- **Smart** is the regular behaviour described above: a Cuelist with exactly one Cue asks Add, Merge, or Overwrite; otherwise a new Cue is added. From the command line, a Cuelist or playback target adds a Cue, and an explicit Cue number overwrites or inserts that Cue.
+- **Merge** merges the programmer into the Cue the playback is on, or into the only Cue of a Cuelist that is not running. Programmer values replace values at the same fixture/attribute; everything else in the Cue stays. With no such Cue, a new Cue is added. With an explicit Cue number it behaves like `[REC][+]`, so that Cue must already exist.
+- **Add Existing** stores into the same Cue as Merge, but adds only what that Cue does not store yet. Values the Cue already has never change.
+- **Add Cue** always stores the programmer as a new Cue at the end. With an explicit Cue number it inserts that Cue, and it refuses a Cue number that already exists instead of replacing it.
+
+Press title-bar **Record** to use the choice. With **Set as default** off (as it is whenever the modal opens), the choice applies to this Record only. The command line shows it after the verb, for example `#> RECORD MERGE`, `#> RECORD ADD EXISTING`, or `#> RECORD ADD CUE`, and the next target you touch, press on the desk, or enter uses it. Turn **Set as default** on to store the choice for the whole desk; every following plain `[REC]` then uses it, from every surface, until you change it again. The modal shows the **Current default**. To return to the regular behaviour, choose **Smart** with **Set as default** on. The default can also be changed under **Record default** in Record Settings (hold `[REC]`) and in Desk Setup › Defaults.
+
+The explicit forms `[REC][+]` (merge) and `[REC][-]` (remove) keep their meaning whatever the default is.
+
 ### Recording a Cue from the Command Line
 
 Set up the scene in the programmer first, press `[REC]`, and then enter the recording target.
@@ -390,7 +403,16 @@ The Cue master fade behaves like a Programmer Fade that belongs only to that Cue
 
 ## Updating Existing Programming
 
-Hold `[^]`, press `[REC]` twice, and then release `[^]`. This is written as `[^REC][^REC]` in this manual. It opens the **Update Targets** modal with everything that can currently be updated from the programmer. Opening the modal does not update anything by itself; press **Update** on a target row to apply it, or press title-bar **Cancel** to close without making a change. In the single-target Update modal, the title bar holds **Cancel** and the **Update** confirmation, which stays disabled while the selected mode would change nothing. **Update Settings** likewise keeps **Cancel** and **Done** in its title bar.
+Hold `[^]`, press `[REC]` twice, and then release `[^]`. This is written as `[^REC][^REC]` in this manual. It opens the **Update** modal, the same layout as the Record choice, with **Smart**, **Merge**, **Add Existing**, and **Add Cue**, a **Set as default** toggle that is off when the modal opens, the **Current default**, and title-bar **Update**:
+
+- **Smart** is the regular behaviour: a touched target opens the Update preview in its configured mode, and a command uses **Update**.
+- **Merge** updates with **All**: every applicable programmer value goes into the current Cue. Presets and Groups also gain new fixtures (**Update All**).
+- **Add Existing** updates Cues with **Known**: programmer values go into the current Cue only for fixture attributes the Cuelist already knows. Presets and Groups change only what they already store.
+- **Add Cue** stores the programmer as a new Cue at the end of the touched or addressed Cuelist; a Cue number in the Update address only names the Cuelist. Presets and Groups are updated as **Smart** would update them.
+
+Press **Update** to arm Update with the choice. The command line shows it, for example `#> UPDATE MERGE`, and the next target uses it. With **Set as default** on, every following plain `[^REC]` uses the choice until you change it; choose **Smart** with **Set as default** on to return to the regular behaviour. The mode words `[-]` (Tracked), `[+][+]` (Known), and `[+]` (All) below always win over the default.
+
+Title-bar **Targets** opens the **Update Targets** modal with everything that can currently be updated from the programmer. Opening that modal does not update anything by itself; press **Update** on a target row to apply it, or press title-bar **Cancel** to close without making a change. In the single-target Update modal, the title bar holds **Cancel** and the **Update** confirmation, which stays disabled while the selected mode would change nothing. **Update Settings** likewise keeps **Cancel** and **Done** in its title bar.
 
 ### Updating Cues
 
@@ -412,7 +434,7 @@ The four Cue Update modes decide where each programmer address is written:
 
 Touch targets open the Update preview with **Update** selected by default and let you choose another mode. A complete keypad command selects the mode before the target:
 
-- `[^REC] <target> [ENT]` uses the default **Update** mode and displays `UPDATE`.
+- `[^REC] <target> [ENT]` uses the stored Update default (**Smart** uses **Update**) and displays `UPDATE`.
 - `[^REC][-] <target> [ENT]` uses **Tracked** and displays `UPDATE TRACKED`.
 - `[^REC][+][+] <target> [ENT]` uses **Known** and displays `UPDATE KNOWN`.
 - `[^REC][+] <target> [ENT]` uses **All** and displays `UPDATE ALL`.

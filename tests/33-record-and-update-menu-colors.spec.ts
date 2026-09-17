@@ -26,8 +26,9 @@ async function assertWorkflowThemes(page: any) {
   expect(await colors(record)).toMatchObject({ border: "rgb(255, 78, 85)", theme: "#ff4e55" });
   const recordTitle = record.locator("header.ui-modal-titlebar");
   await expect(recordTitle.getByRole("heading")).toHaveText("RECORD Settings");
-  await expect(record.getByRole("switch", { name: "Merge into active Cue" })).toBeVisible();
-  await expect(record).toContainText("Fixture attributes in both are replaced; all other values stored in that Cue stay.");
+  await expect(record.getByRole("radiogroup", { name: "Default Record mode" })).toBeVisible();
+  await expect(record.getByRole("switch", { name: "Merge into active Cue" })).toHaveCount(0);
+  await expect(record).toContainText("A Cuelist with one Cue asks whether to add, merge, or overwrite");
   await expect(record).toContainText("the recorded values last for this Cue only");
   await expect(record).not.toContainText("Merge current values into");
   await expect(record.locator(".modal-actions")).toHaveCount(0);
@@ -58,6 +59,9 @@ async function assertWorkflowThemes(page: any) {
   await expect(rec).toContainText("UPDATE");
   await expect.poll(async () => (await colors(rec)).border).toBe("rgb(244, 185, 66)");
   await rec.click({ modifiers: ["Shift"] });
+  const choice = page.getByRole("dialog", { name: "Update", exact: true });
+  expect(await colors(choice)).toMatchObject({ border: "rgb(244, 185, 66)", theme: "#f4b942" });
+  await choice.locator("header.ui-modal-titlebar").getByRole("button", { name: "Targets", exact: true }).click();
   const targets = page.getByRole("dialog", { name: "Update Targets" });
   const targetsTitle = targets.locator("header.ui-modal-titlebar");
   await expect(targetsTitle.getByRole("heading")).toHaveText("UPDATE Targets");

@@ -4,6 +4,9 @@ import { useProgrammingUpdate } from "../../features/programmingUpdate/Programmi
 import { useApp } from "../../state/AppContext";
 import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
 import { defaultUpdateSettings } from "../control/updateWorkflow";
+import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
+import { loadRecordSettings } from "../setup/ProgrammerDefaults";
+import { useUpdateChoice } from "./useUpdateChoice";
 import { useUpdateWorkflowActions } from "./useUpdateWorkflowActions";
 import {
 	type UpdateOperation,
@@ -46,15 +49,35 @@ export function useUpdateWorkflowController() {
 			void commandLine.reset();
 	};
 
+	const cueRecording = useCueRecording();
+	const choice = useUpdateChoice({
+		update,
+		commandLine,
+		openTargets: () => {
+			disarm();
+			menu.setOpen(true);
+			void menu.load("eligible_for_update_existing");
+		},
+	});
+	const recordNewCue = async (cueListId: string) =>
+		(await cueRecording?.record({
+			target: { kind: "cue_list", cueListId },
+			operation: "add_cue",
+			timing: {},
+			cueOnly: loadRecordSettings().cueOnly,
+			capturePolicy: "current_capture",
+			activationPolicy: "hold",
+		})) ?? null;
+
 	useUpdateWorkflowEvents({
 		commandLine,
+		openChoice: () => void choice.show(),
+		recordNewCue,
 		operation,
 		busy,
 		disarm,
-		loadMenu: menu.load,
 		setBusy,
 		setLocalError,
-		setMenuOpen: menu.setOpen,
 		setOperation,
 		setResult,
 		setSettings,
@@ -96,6 +119,7 @@ export function useUpdateWorkflowController() {
 		cancelOperation,
 		cancelSettings,
 		menu,
+		choice,
 		...actions,
 	};
 }

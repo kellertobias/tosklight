@@ -7,6 +7,7 @@ import { QuickSetupModal } from "../modals/QuickSetupModal";
 import { ShowRecoveryModal } from "../modals/ShowRecoveryModal";
 import { SpecialDialogsModal } from "../modals/SpecialDialogsModal";
 import { StoreSettingsModal } from "../modals/StoreSettingsModal";
+import { RecordChoiceHost } from "../modals/RecordChoiceHost";
 import { SystemControlsModal } from "../modals/SystemControlsModal";
 import { UpdateWorkflow } from "../modals/UpdateWorkflow";
 import { ConnectionState } from "./ConnectionState";
@@ -38,6 +39,7 @@ export function AppShell() {
 					<SystemControlsModal />
 					<PreloadStoreModal />
 					<StoreSettingsModal />
+					<RecordChoiceHost />
 					<UpdateWorkflow />
 					<CommandChoiceModal />
 					<ShowRecoveryModal />

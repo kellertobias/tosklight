@@ -239,7 +239,8 @@ export type Action =
 				| "preloadStoreOpen"
 				| "debugOpen"
 				| "deskSettingsOpen"
-				| "storeSettingsOpen";
+				| "storeSettingsOpen"
+				| "recordChoiceOpen";
 			value: boolean;
 	  }
 	| { type: "OPEN_SPECIAL_DIALOG"; family: AppState["specialDialogFamily"] }

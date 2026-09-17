@@ -116,14 +116,11 @@ describe("Desk Setup autosave", () => {
 			expect(first.result.current.programmerSettingsLoaded).toBe(true),
 		);
 		act(() => {
-			first.result.current.setRecordSettings({
-				mode: "overwrite",
-				cueOnly: true,
-				mergeActiveCue: true,
-			});
+			first.result.current.setRecordSettings({ cueOnly: true });
 			first.result.current.setUpdateSettings({
 				...defaultUpdateSettings,
 				show_update_modal_on_touch: false,
+				record_default: "add_existing",
 			});
 		});
 		await waitFor(() =>
@@ -136,14 +133,13 @@ describe("Desk Setup autosave", () => {
 		await waitFor(() =>
 			expect(reopened.result.current.programmerSettingsLoaded).toBe(true),
 		);
-		expect(reopened.result.current.recordSettings).toEqual({
-			mode: "overwrite",
-			cueOnly: true,
-			mergeActiveCue: true,
-		});
+		expect(reopened.result.current.recordSettings).toEqual({ cueOnly: true });
 		expect(
 			reopened.result.current.updateSettings.show_update_modal_on_touch,
 		).toBe(false);
+		expect(reopened.result.current.updateSettings.record_default).toBe(
+			"add_existing",
+		);
 	});
 
 	it("serializes an Attribute edit through its revisioned owner", async () => {

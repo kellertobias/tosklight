@@ -519,7 +519,7 @@ describe("VirtualPlaybacksWindow", () => {
 			}),
 		);
 		expect(
-			screen.getByRole("dialog", { name: "Record Cue choice" }),
+			await screen.findByRole("dialog", { name: "Record Cue choice" }),
 		).toHaveTextContent("Add CueMerge CueOverwrite Cue");
 		fireEvent.click(screen.getByRole("button", { name: "Merge Cue" }));
 

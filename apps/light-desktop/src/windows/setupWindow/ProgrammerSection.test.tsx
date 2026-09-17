@@ -23,17 +23,15 @@ describe("Desk Setup Defaults layout", () => {
 	const controller = {
 		defaultsTab: "record-update",
 		programmerSettingsError: null,
-		recordSettings: {
-			mode: "merge",
-			cueOnly: false,
-			mergeActiveCue: false,
-		},
+		recordSettings: { cueOnly: false },
 		setRecordSettings: vi.fn(),
 		updateSettings: {
 			cue_mode: "add_to_current_cue",
 			preset_mode: "update_existing",
 			group_mode: "update_existing",
 			show_update_modal_on_touch: false,
+			record_default: "smart",
+			update_default: "smart",
 		},
 		setUpdateSettings: vi.fn(),
 		draft: {
@@ -51,13 +49,13 @@ describe("Desk Setup Defaults layout", () => {
 		const group = container.querySelector(".defaults-record-update");
 		expect(group).not.toBeNull();
 		expect(group?.querySelectorAll(":scope > article")).toHaveLength(2);
-		expect(screen.getByText("Record defaults")).toBeInTheDocument();
+		expect(screen.getByText("Record & Update defaults")).toBeInTheDocument();
 		expect(screen.getByText("Update defaults")).toBeInTheDocument();
 	});
 
 	it("mounts only the selected Defaults pane after every tab switch", () => {
 		const view = render(<DefaultsSection controller={controller} />);
-		expect(screen.getByText("Record defaults")).toBeInTheDocument();
+		expect(screen.getByText("Record & Update defaults")).toBeInTheDocument();
 		expect(screen.queryByText("Cuelist playback defaults")).toBeNull();
 		expect(screen.queryByText("Pool color defaults")).toBeNull();
 
@@ -66,14 +64,14 @@ describe("Desk Setup Defaults layout", () => {
 				controller={{ ...controller, defaultsTab: "playback" }}
 			/>,
 		);
-		expect(screen.queryByText("Record defaults")).toBeNull();
+		expect(screen.queryByText("Record & Update defaults")).toBeNull();
 		expect(screen.getByText("Cuelist playback defaults")).toBeInTheDocument();
 		expect(screen.queryByText("Pool color defaults")).toBeNull();
 
 		view.rerender(
 			<DefaultsSection controller={{ ...controller, defaultsTab: "pools" }} />,
 		);
-		expect(screen.queryByText("Record defaults")).toBeNull();
+		expect(screen.queryByText("Record & Update defaults")).toBeNull();
 		expect(screen.queryByText("Cuelist playback defaults")).toBeNull();
 		expect(
 			screen.getByRole("heading", { name: "Pool color defaults" }),

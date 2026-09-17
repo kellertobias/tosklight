@@ -23,73 +23,50 @@ afterEach(() => {
 });
 
 describe("Programmer defaults", () => {
-	it("persists and reloads the Record defaults shared with the hold dialog", () => {
-		saveRecordSettings({
-			mode: "overwrite",
-			cueOnly: true,
-			mergeActiveCue: true,
-		});
-		expect(loadRecordSettings()).toEqual({
-			mode: "overwrite",
-			cueOnly: true,
-			mergeActiveCue: true,
-		});
+	it("persists and reloads the browser-local Cue only preference", () => {
+		saveRecordSettings({ cueOnly: true });
+		expect(loadRecordSettings()).toEqual({ cueOnly: true });
+		expect(localStorage.getItem("light.store-mode")).toBeNull();
+		expect(localStorage.getItem("light.store-merge-active-cue")).toBeNull();
 	});
 
-	it("exposes every Record default through the reusable form", () => {
+	it("offers the four Record defaults and Cue only, and no retired settings", () => {
 		const change = vi.fn();
+		const recordDefault = vi.fn();
 		render(
 			<RecordDefaultsFields
-				settings={{ mode: "merge", cueOnly: false, mergeActiveCue: false }}
+				settings={{ cueOnly: false }}
 				onChange={change}
+				recordDefault="smart"
+				onRecordDefault={recordDefault}
 			/>,
 		);
-		fireEvent.click(screen.getByRole("radio", { name: "Overwrite" }));
-		expect(change).toHaveBeenCalledWith({
-			mode: "overwrite",
-			cueOnly: false,
-			mergeActiveCue: false,
-		});
-		fireEvent.click(screen.getByRole("switch", { name: "Cue only" }));
-		expect(change).toHaveBeenCalledWith({
-			mode: "merge",
-			cueOnly: true,
-			mergeActiveCue: false,
-		});
-	});
-
-	it("labels the Merge and Cue only defaults briefly and explains their effect", () => {
-		const change = vi.fn();
-		render(
-			<RecordDefaultsFields
-				settings={{ mode: "merge", cueOnly: false, mergeActiveCue: false }}
-				onChange={change}
-			/>,
-		);
-		expect(
-			screen.queryByText(/Merge current values into/),
-		).not.toBeInTheDocument();
-		fireEvent.click(
-			screen.getByRole("switch", { name: "Merge into active Cue" }),
-		);
-		expect(change).toHaveBeenCalledWith({
-			mode: "merge",
-			cueOnly: false,
-			mergeActiveCue: true,
+		const group = screen.getByRole("radiogroup", {
+			name: "Default Record mode",
 		});
 		expect(
-			screen.getByText(
-				"Recording onto a playback adds the programmer values to the Cue that playback is on. Fixture attributes in both are replaced; all other values stored in that Cue stay.",
+			Array.from(group.querySelectorAll('[role="radio"]')).map(
+				(radio) => radio.textContent,
 			),
+		).toEqual(["Smart", "Merge", "Add Existing", "Add Cue"]);
+		expect(screen.getByRole("radio", { name: "Smart" })).toHaveAttribute(
+			"aria-checked",
+			"true",
+		);
+		expect(
+			screen.getByText(/A Cuelist with one Cue asks whether to add/),
 		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("radio", { name: "Add Existing" }));
+		expect(recordDefault).toHaveBeenCalledWith("add_existing");
+		fireEvent.click(screen.getByRole("switch", { name: "Cue only" }));
+		expect(change).toHaveBeenCalledWith({ cueOnly: true });
+		expect(screen.queryByText("Merge into active Cue")).toBeNull();
+		expect(screen.queryByText("Record mode")).toBeNull();
 		expect(
 			screen.getByText(/the recorded values last for this Cue only/),
 		).toHaveTextContent(
 			"The next Cue returns those fixture attributes to their earlier values, or releases them. Everything else keeps tracking.",
 		);
-		expect(
-			screen.getByText(/Overwrite replaces the stored values/),
-		).toBeInTheDocument();
 	});
 
 	it("exposes the Update defaults shared with the hold dialog", () => {
@@ -106,6 +83,11 @@ describe("Programmer defaults", () => {
 		expect(change).toHaveBeenCalledWith({
 			...defaultUpdateSettings,
 			show_update_modal_on_touch: false,
+		});
+		fireEvent.click(screen.getByRole("radio", { name: "Merge" }));
+		expect(change).toHaveBeenCalledWith({
+			...defaultUpdateSettings,
+			update_default: "merge",
 		});
 		expect(screen.getByRole("button", { name: "Update" })).toBeInTheDocument();
 	});

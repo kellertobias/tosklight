@@ -19,6 +19,12 @@ import { loadRecordSettings } from "../components/setup/ProgrammerDefaults";
 import { usePaneChromeTargets } from "../components/shell/PaneChromeContext";
 import { useControlSurfaceTarget } from "../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { useCueRecording } from "../features/cueRecording/CueRecordingProvider";
+import { useProgrammingUpdate } from "../features/programmingUpdate/ProgrammingUpdateProvider";
+import {
+	type CueRecordPlan,
+	recordTouchedTarget,
+	smartChoiceRecordPlan,
+} from "../features/recordUpdateOptions/options";
 import type { WindowProps } from "./windowTypes";
 
 export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
@@ -34,19 +40,12 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 		cueNumber: string;
 	} | null>(null);
 	const paneChrome = usePaneChromeTargets();
-	const recordVirtual = async (
-		slot: number,
-		choice: "add" | "merge" | "overwrite",
-	) => {
+	const programmingUpdate = useProgrammingUpdate();
+	const recordVirtual = async (slot: number, plan: CueRecordPlan) => {
 		if (controller.pageNumber == null) return;
 		const playbackNumber = virtualPlaybackNumber(controller.pageNumber, slot);
 		const playback =
 			controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null;
-		const cueList =
-			playback?.target.type === "cue_list"
-				? controller.cueLists.get(playback.target.cue_list_id)
-				: undefined;
-		const cueNumber = choice === "add" ? undefined : cueList?.cues[0]?.number;
 		const settings = loadRecordSettings();
 		const outcome = await cueRecording?.record({
 			target: {
@@ -54,8 +53,8 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 				page: controller.pageNumber,
 				playbackNumber,
 			},
-			operation: choice === "merge" ? "merge" : "overwrite",
-			...(cueNumber ? { cueNumber } : {}),
+			operation: plan.operation,
+			...(plan.cueNumber ? { cueNumber: plan.cueNumber } : {}),
 			timing: {},
 			cueOnly: settings.cueOnly,
 			capturePolicy: "current_capture",
@@ -79,20 +78,15 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 		);
 		if (outcome) await command.reset();
 	};
-	const requestVirtualRecord = (slot: number) => {
+	const requestVirtualRecord = async (slot: number) => {
 		if (controller.pageNumber == null) return;
-		const playbackNumber = virtualPlaybackNumber(controller.pageNumber, slot);
-		const playback =
-			controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null;
-		const cueList =
-			playback?.target.type === "cue_list"
-				? controller.cueLists.get(playback.target.cue_list_id)
-				: undefined;
-		if (cueList?.cues.length === 1) {
-			setRecordChoice({ slot, cueNumber: cueList.cues[0].number });
-			return;
-		}
-		void recordVirtual(slot, "add");
+		await recordTouchedTarget({
+			commandText: command.read().text,
+			update: programmingUpdate,
+			cueNumbers: virtualCueNumbers(controller, slot),
+			record: (plan) => recordVirtual(slot, plan),
+			ask: (cueNumber) => setRecordChoice({ slot, cueNumber }),
+		});
 	};
 	useControlSurfaceTarget({
 		id: `virtual-playback-settings:${paneId ?? "builtin"}`,
@@ -201,7 +195,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 				offPending={offPending}
 				shiftArmed={controller.state.shiftArmed}
 				onConfigure={controller.openConfiguration}
-				onRecord={requestVirtualRecord}
+				onRecord={(slot) => void requestVirtualRecord(slot)}
 				onOff={(slot) => void turnOffVirtual(slot)}
 				onToggleZone={controller.toggleZoneSlot}
 				paneId={paneId}
@@ -211,9 +205,12 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 					cueNumber={recordChoice.cueNumber}
 					onClose={() => setRecordChoice(null)}
 					onChoice={(choice) => {
-						const slot = recordChoice.slot;
+						const { slot, cueNumber } = recordChoice;
 						setRecordChoice(null);
-						void recordVirtual(slot, choice);
+						void recordVirtual(
+							slot,
+							smartChoiceRecordPlan(choice, cueNumber),
+						);
 					}}
 				/>
 			)}
@@ -406,4 +403,19 @@ function CreateZoneModal(props: {
 			</div>
 		</ModalRegistration>
 	);
+}
+
+function virtualCueNumbers(
+	controller: ReturnType<typeof useVirtualPlaybackController>,
+	slot: number,
+) {
+	if (controller.pageNumber == null) return [];
+	const playbackNumber = virtualPlaybackNumber(controller.pageNumber, slot);
+	const playback =
+		controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null;
+	const cueList =
+		playback?.target.type === "cue_list"
+			? controller.cueLists.get(playback.target.cue_list_id)
+			: undefined;
+	return cueList?.cues.map((cue) => cue.number) ?? [];
 }

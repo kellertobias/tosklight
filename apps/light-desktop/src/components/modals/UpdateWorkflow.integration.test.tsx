@@ -32,6 +32,7 @@ const workflow = vi.hoisted(() => {
 	return {
 		state,
 		dispatch,
+		recordCue: vi.fn(),
 		update: {
 			scopeKey: "authority-a",
 			loadSettings: vi.fn(),
@@ -55,6 +56,9 @@ const workflow = vi.hoisted(() => {
 
 vi.mock("../../features/programmingUpdate/ProgrammingUpdateProvider", () => ({
 	useProgrammingUpdate: () => workflow.update,
+}));
+vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
+	useCueRecording: () => ({ record: workflow.recordCue }),
 }));
 vi.mock("../../api/ServerContext", () => ({
 	useServer: () => workflow.server,
@@ -85,13 +89,7 @@ describe("Update workflow integration", () => {
 		workflow.update.confirm.mockResolvedValue(mutationFor());
 		render(<UpdateWorkflow />);
 
-		routeControlSurfaceIntent({
-			type: "update_target_menu",
-			source: "touch",
-		});
-		const dialog = await screen.findByRole("dialog", {
-			name: "Update Targets",
-		});
+		const dialog = await openTargets();
 		expect(workflow.update.targets).toHaveBeenCalledWith(
 			"eligible_for_update_existing",
 		);
@@ -279,13 +277,7 @@ describe("Update workflow integration", () => {
 		);
 		render(<UpdateWorkflow />);
 
-		routeControlSurfaceIntent({
-			type: "update_target_menu",
-			source: "touch",
-		});
-		const dialog = await screen.findByRole("dialog", {
-			name: "Update Targets",
-		});
+		const dialog = await openTargets();
 		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
 			"target query rejected",
 		);
@@ -296,11 +288,7 @@ describe("Update workflow integration", () => {
 		workflow.update.targets.mockReturnValue(pending.promise);
 		const view = render(<UpdateWorkflow />);
 
-		routeControlSurfaceIntent({
-			type: "update_target_menu",
-			source: "touch",
-		});
-		await screen.findByRole("dialog", { name: "Update Targets" });
+		await openTargets();
 		workflow.update.scopeKey = "authority-b";
 		view.rerender(<UpdateWorkflow />);
 		await waitFor(() =>
@@ -316,6 +304,141 @@ describe("Update workflow integration", () => {
 		expect(screen.queryByText("Main Cuelist")).not.toBeInTheDocument();
 	});
 });
+
+describe("UPDATE UPDATE option choice", () => {
+	it("arms a one-off Update option without changing the stored default", async () => {
+		workflow.state.updateArmed = true;
+		const authority = createCommandLineTestAuthority({ text: "UPDATE" });
+		render(authority.wrap(<UpdateWorkflow />));
+		await act(authority.settle);
+
+		routeControlSurfaceIntent({ type: "update_target_menu", source: "osc" });
+		const dialog = await screen.findByRole("dialog", { name: "Update" });
+		await waitFor(() =>
+			expect(within(dialog).getByText("Smart", { selector: "b" })).toBeInTheDocument(),
+		);
+		expect(
+			within(dialog).getByRole("switch", { name: "Set as default" }),
+		).not.toBeChecked();
+		fireEvent.click(within(dialog).getByRole("radio", { name: "Add Existing" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "Update" }));
+
+		await waitFor(() =>
+			expect(authority.writes.at(-1)?.text).toBe("UPDATE ADD EXISTING "),
+		);
+		expect(workflow.update.saveSettings).not.toHaveBeenCalled();
+		expect(workflow.update.targets).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog", { name: "Update" })).toBeNull();
+	});
+
+	it("stores the choice as the default and resets it to Smart", async () => {
+		workflow.update.loadSettings.mockResolvedValue({
+			...defaultUpdateSettings,
+			update_default: "merge",
+		});
+		workflow.update.saveSettings.mockImplementation(async (settings) => settings);
+		const authority = createCommandLineTestAuthority({ text: "UPDATE" });
+		render(authority.wrap(<UpdateWorkflow />));
+		await act(authority.settle);
+
+		routeControlSurfaceIntent({ type: "update_target_menu", source: "touch" });
+		const dialog = await screen.findByRole("dialog", { name: "Update" });
+		await waitFor(() =>
+			expect(within(dialog).getByRole("radio", { name: "Merge" })).toHaveAttribute(
+				"aria-checked",
+				"true",
+			),
+		);
+		fireEvent.click(within(dialog).getByRole("radio", { name: "Smart" }));
+		fireEvent.click(within(dialog).getByRole("switch", { name: "Set as default" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "Update" }));
+
+		await waitFor(() =>
+			expect(workflow.update.saveSettings).toHaveBeenCalledWith({
+				...defaultUpdateSettings,
+				update_default: "smart",
+			}),
+		);
+		await waitFor(() => expect(authority.writes.at(-1)?.text).toBe("UPDATE "));
+		expect(workflow.dispatch).toHaveBeenCalledWith({
+			type: "SET_UPDATE_ARMED",
+			value: true,
+		});
+	});
+
+	it("previews a touched Cuelist in the stored default's mode", async () => {
+		const request: UpdateTargetRequest = {
+			family: { type: "cue" },
+			object_id: "cue-list-a",
+			playback_number: 7,
+			validate_active_context: true,
+		};
+		workflow.state.updateArmed = true;
+		workflow.update.loadSettings.mockResolvedValue({
+			...defaultUpdateSettings,
+			update_default: "add_existing",
+		});
+		render(<UpdateWorkflow />);
+		routeControlSurfaceIntent({
+			type: "update_target",
+			source: "touch",
+			target: request,
+		});
+		await waitFor(() =>
+			expect(workflow.update.preview).toHaveBeenCalledWith(request, {
+				target_type: "cue",
+				mode: "add_to_current_cue",
+			}),
+		);
+	});
+
+	it("stores a new Cue in the touched Cuelist for Add Cue", async () => {
+		const request: UpdateTargetRequest = {
+			family: { type: "cue" },
+			object_id: "cue-list-a",
+			playback_number: 7,
+			validate_active_context: true,
+		};
+		workflow.state.updateArmed = true;
+		workflow.recordCue.mockResolvedValue({ status: "changed" });
+		const authority = createCommandLineTestAuthority({
+			text: "UPDATE ADD CUE ",
+		});
+		render(authority.wrap(<UpdateWorkflow />));
+		await act(authority.settle);
+		routeControlSurfaceIntent({
+			type: "update_target",
+			source: "touch",
+			target: request,
+		});
+		await waitFor(() =>
+			expect(workflow.recordCue).toHaveBeenCalledWith(
+				expect.objectContaining({
+					target: { kind: "cue_list", cueListId: "cue-list-a" },
+					operation: "add_cue",
+				}),
+			),
+		);
+		expect(workflow.update.preview).not.toHaveBeenCalled();
+		expect(workflow.update.applyDirect).not.toHaveBeenCalled();
+	});
+});
+
+/** UPDATE UPDATE asks how to Update; its Targets action opens the target list. */
+async function openTargets() {
+	routeControlSurfaceIntent({
+		type: "update_target_menu",
+		source: "touch",
+	});
+	const choice = await screen.findByRole("dialog", { name: "Update" });
+	await waitFor(() =>
+		expect(
+			within(choice).getByRole("button", { name: "Update" }),
+		).toBeEnabled(),
+	);
+	fireEvent.click(within(choice).getByRole("button", { name: "Targets" }));
+	return screen.findByRole("dialog", { name: "Update Targets" });
+}
 
 function deferred<T>() {
 	let resolve!: (value: T) => void;

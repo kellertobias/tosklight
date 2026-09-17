@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **247 root cases across 96 files**.
+Default catalog: **249 root cases across 97 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -68,6 +68,8 @@ Default catalog: **247 root cases across 96 files**.
 | 109-media-point-time.spec.ts | TL-429 @ui › the layer page types In and Out points as mm:ss.ff at the server's frame rate | repository contract | @ui | media-point-time | standard failure evidence | parallel | pending-semantic-migration |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | FIXTURE-002 @ui @restart › focused assets and physical metadata remain immutable across edit, patch, and restart | repository contract | @ui @restart | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | pending-semantic-migration |
+| 110-record-update-options.spec.ts | RECUPD-001 @ui › RECORD RECORD records a one-off option, stores a default plain RECORD uses, and resets to Smart | docs/testing/24-record-and-update-options.md | @ui | record-update-options | standard failure evidence | parallel | pending-semantic-migration |
+| 110-record-update-options.spec.ts | RECUPD-002 @ui › UPDATE UPDATE uses the same layout and a stored Update default | docs/testing/24-record-and-update-options.md | @ui | record-update-options | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |

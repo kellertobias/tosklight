@@ -1,5 +1,9 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Cue, CueList, PlaybackDefinition } from "../../../api/types";
+import {
+	resolveRecordOption,
+	touchCueRecordPlan,
+} from "../../../features/recordUpdateOptions/options";
 import { loadRecordSettings } from "../../setup/ProgrammerDefaults";
 import {
 	normalizePlaybackTopology,
@@ -191,20 +195,22 @@ export async function recordPlayback(
 		return;
 	event.preventDefault();
 	event.stopPropagation();
+	const page = controller.activePageNumber;
 	const settings = loadRecordSettings();
-	const choice = await controller.chooseCueRecordOperation(
-		cueList?.cues.map((cue) => cue.number) ?? [],
+	const option = await resolveRecordOption(
+		controller.commandLine?.text ?? "",
+		controller.programmingUpdate,
 	);
-	if (!choice) return;
-	const cueNumber = choice === "add" ? undefined : cueList?.cues[0]?.number;
+	const plan = await touchCueRecordPlan(
+		option,
+		cueList?.cues.map((cue) => cue.number) ?? [],
+		controller.chooseCueRecordOperation,
+	);
+	if (!plan) return;
 	const outcome = await controller.cueRecording?.record({
-		target: {
-			kind: "page_slot",
-			page: controller.activePageNumber,
-			slot,
-		},
-		operation: choice === "merge" ? "merge" : "overwrite",
-		...(cueNumber ? { cueNumber } : {}),
+		target: { kind: "page_slot", page, slot },
+		operation: plan.operation,
+		...(plan.cueNumber ? { cueNumber: plan.cueNumber } : {}),
 		timing: {},
 		cueOnly: settings.cueOnly,
 		capturePolicy: "current_capture",

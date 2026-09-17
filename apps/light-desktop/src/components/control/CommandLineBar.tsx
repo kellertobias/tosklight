@@ -190,15 +190,7 @@ function useCommandLineBarModel() {
 				serverError ?? "The command could not be executed.",
 			);
 	};
-	const toggleRecord = () => {
-		const armed = !state.storeArmed;
-		if (armed && state.cueListSetArmed)
-			dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
-		dispatch({ type: "SET_STORE_ARMED", value: armed });
-		if (armed) replaceCommand("RECORD ");
-		else if (/^RECORD\b/i.test(command.text))
-			replaceCommand(command.text.replace(/^RECORD\s*/i, ""));
-	};
+	const toggleRecord = () => armRecordOrChoose(state, dispatch, replaceCommand);
 	const armUpdateOrMenu = () => {
 		if (state.updateArmed) {
 			openUpdateTargetMenu();
@@ -257,15 +249,13 @@ function useCommandLineBarModel() {
 			if (key === "preload") numericPad.press("PRE", "hardware");
 			if (key === "mov") numericPad.press("MOV", "hardware");
 		};
-		const recordSettings = () =>
-			dispatch({ type: "SET_MODAL", modal: "storeSettingsOpen", value: true });
 		window.addEventListener("light:control-mode-toggle", toggle);
 		window.addEventListener("light:programmer-key", programmerKey);
-		window.addEventListener("light:record-settings", recordSettings);
+		const stopRecordModals = listenForRecordModals(dispatch);
 		return () => {
+			stopRecordModals();
 			window.removeEventListener("light:control-mode-toggle", toggle);
 			window.removeEventListener("light:programmer-key", programmerKey);
-			window.removeEventListener("light:record-settings", recordSettings);
 		};
 	});
 	useCommandLineShortcuts(hardware, {
@@ -376,4 +366,36 @@ export function CommandLineBar() {
 			onEscape={model.undo}
 		/>
 	);
+}
+
+type AppDispatch = ReturnType<typeof useApp>["dispatch"];
+
+/** RECORD arms Record; RECORD RECORD asks how this Record stores the programmer. */
+function armRecordOrChoose(
+	state: ReturnType<typeof useApp>["state"],
+	dispatch: AppDispatch,
+	replaceCommand: (text: string) => unknown,
+) {
+	if (state.storeArmed) {
+		dispatch({ type: "SET_MODAL", modal: "recordChoiceOpen", value: true });
+		return;
+	}
+	if (state.cueListSetArmed)
+		dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
+	dispatch({ type: "SET_STORE_ARMED", value: true });
+	replaceCommand("RECORD ");
+}
+
+/** Attached hardware opens Record Settings (hold) and the Record choice (RECORD RECORD). */
+function listenForRecordModals(dispatch: AppDispatch) {
+	const open = (modal: "storeSettingsOpen" | "recordChoiceOpen") => () =>
+		dispatch({ type: "SET_MODAL", modal, value: true });
+	const settings = open("storeSettingsOpen");
+	const choice = open("recordChoiceOpen");
+	window.addEventListener("light:record-settings", settings);
+	window.addEventListener("light:record-choice", choice);
+	return () => {
+		window.removeEventListener("light:record-settings", settings);
+		window.removeEventListener("light:record-choice", choice);
+	};
 }

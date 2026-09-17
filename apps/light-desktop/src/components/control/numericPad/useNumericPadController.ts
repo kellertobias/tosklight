@@ -121,14 +121,15 @@ interface NumericPadContext {
 }
 
 function toggleRecord({ state, dispatch, command }: NumericPadContext) {
-	const currentCommand = command.read();
-	const armed = !state.storeArmed;
-	if (armed && state.cueListSetArmed)
+	if (state.storeArmed) {
+		// RECORD RECORD asks how this Record stores the programmer.
+		dispatch({ type: "SET_MODAL", modal: "recordChoiceOpen", value: true });
+		return;
+	}
+	if (state.cueListSetArmed)
 		dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
-	dispatch({ type: "SET_STORE_ARMED", value: armed });
-	if (armed) void command.replace("RECORD ", false);
-	else if (/^RECORD\b/i.test(currentCommand.text))
-		void command.replace(currentCommand.text.replace(/^RECORD\s*/i, ""), false);
+	dispatch({ type: "SET_STORE_ARMED", value: true });
+	void command.replace("RECORD ", false);
 }
 
 async function advancePreload({ preload }: NumericPadContext) {

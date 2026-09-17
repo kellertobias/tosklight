@@ -379,12 +379,26 @@ export function DefaultsSection({
 				<div className="defaults-record-update">
 					<article>
 						<header>
-							<b>Record defaults</b>
-							<small>Also available by holding Record.</small>
+							<b>Record &amp; Update defaults</b>
+							<small>Also available by pressing Record twice.</small>
 						</header>
 						<RecordDefaultsFields
 							settings={controller.recordSettings}
 							onChange={controller.setRecordSettings}
+							recordDefault={controller.updateSettings.record_default}
+							onRecordDefault={(recordDefault) =>
+								controller.setUpdateSettings({
+									...controller.updateSettings,
+									record_default: recordDefault,
+								})
+							}
+							updateDefault={controller.updateSettings.update_default}
+							onUpdateDefault={(updateDefault) =>
+								controller.setUpdateSettings({
+									...controller.updateSettings,
+									update_default: updateDefault,
+								})
+							}
 							labelPlacement="top"
 							columns={2}
 							minColumnWidth={170}
@@ -398,6 +412,7 @@ export function DefaultsSection({
 						<UpdateDefaultsFields
 							settings={controller.updateSettings}
 							onChange={controller.setUpdateSettings}
+							showDefault={false}
 							labelPlacement="top"
 							columns={2}
 							minColumnWidth={170}
