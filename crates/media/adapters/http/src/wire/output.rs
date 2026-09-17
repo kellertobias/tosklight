@@ -332,8 +332,6 @@ pub struct OutputConfigurationView {
     pub pixel_map: super::PixelMapView,
     /// `two-layers` or `eight-layers`.
     pub personality: String,
-    /// `legacy` preserves the original 35/7-slot blocks; `current` includes mask positioning.
-    pub personality_layout: String,
     /// `art-net` or `sacn`.
     pub protocol: String,
     pub universe: u16,
@@ -365,7 +363,6 @@ pub struct OutputConfigurationValuesView {
     pub sound_output_kind: String,
     pub sound_output_name: Option<String>,
     pub personality: String,
-    pub personality_layout: String,
     pub protocol: String,
     pub universe: u16,
     pub start_address: u16,
@@ -420,7 +417,6 @@ impl OutputConfigurationView {
                 .collect(),
             available_sound_outputs,
             personality: values.personality.clone(),
-            personality_layout: values.personality_layout.clone(),
             protocol: values.protocol.clone(),
             universe: values.universe,
             start_address: values.start_address,
@@ -486,14 +482,6 @@ impl OutputConfigurationValuesView {
                 LayerPersonality::EightLayers => "eight-layers",
             }
             .to_owned(),
-            personality_layout: match output.personality_layout {
-                media_domain::PersonalityLayout::Legacy => "legacy",
-                media_domain::PersonalityLayout::Current => "current",
-                media_domain::PersonalityLayout::Extended => "extended",
-                media_domain::PersonalityLayout::EffectBanks => "effect-banks",
-                media_domain::PersonalityLayout::Mapping => "mapping",
-            }
-            .to_owned(),
             protocol: match output.protocol {
                 DmxProtocol::ArtNet => "art-net",
                 DmxProtocol::Sacn => "sacn",
@@ -522,7 +510,6 @@ impl OutputConfigurationValuesView {
 
     fn dmx_differs(&self, active: &Self) -> bool {
         self.personality != active.personality
-            || self.personality_layout != active.personality_layout
             || self.protocol != active.protocol
             || self.universe != active.universe
             || self.start_address != active.start_address

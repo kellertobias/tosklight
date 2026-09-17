@@ -212,8 +212,8 @@ export function stubServer(
 					"ToskLight Pixel Layer Ranges.csv",
 					"ToskLight Pixel Layer.hed",
 					"ToskLight Pixel Master.hed",
-					"tosklight@pixel_layer@39ch.xml",
-					"tosklight@pixel_master@41ch.xml",
+					"tosklight@pixel_layer@59ch.xml",
+					"tosklight@pixel_master@40ch.xml",
 				]);
 			if (path === "/outputs") return jsonResponse(server.outputs);
 			const outputConfiguration = path.match(
@@ -1021,7 +1021,6 @@ export function anOutputConfiguration(
 		soundOutputKind: "disabled",
 		soundOutputName: null,
 		personality: "two-layers",
-		personalityLayout: "extended",
 		protocol: "art-net",
 		universe: 1,
 		startAddress: 1,

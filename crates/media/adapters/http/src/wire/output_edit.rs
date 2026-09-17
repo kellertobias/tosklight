@@ -41,8 +41,6 @@ pub struct UpdateOutputConfiguration {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub personality: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub personality_layout: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub universe: Option<u16>,
@@ -123,16 +121,6 @@ impl UpdateOutputConfiguration {
             next.personality = match personality.trim() {
                 "two-layers" => LayerPersonality::TwoLayers,
                 "eight-layers" => LayerPersonality::EightLayers,
-                _ => return Err(OutputConfigurationEditError::Personality),
-            };
-        }
-        if let Some(layout) = self.personality_layout.as_deref() {
-            next.personality_layout = match layout.trim() {
-                "legacy" => media_domain::PersonalityLayout::Legacy,
-                "current" => media_domain::PersonalityLayout::Current,
-                "extended" => media_domain::PersonalityLayout::Extended,
-                "effect-banks" => media_domain::PersonalityLayout::EffectBanks,
-                "mapping" => media_domain::PersonalityLayout::Mapping,
                 _ => return Err(OutputConfigurationEditError::Personality),
             };
         }

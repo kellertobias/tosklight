@@ -74,7 +74,7 @@ pub use model_library::{
     ModelVertex,
 };
 pub use output::{OutputId, OutputName, PresentationMode};
-pub use personality::{LayerPersonality, PersonalityLayout, SlotFootprint, StartAddressError};
+pub use personality::{LayerPersonality, SlotFootprint, StartAddressError};
 pub use playback::{OnceEndState, PlayMode};
 pub use speed::SpeedMultiplier;
 pub use state::{Applied, MediaState, OutputState, apply};

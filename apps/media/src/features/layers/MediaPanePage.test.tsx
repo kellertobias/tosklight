@@ -324,10 +324,8 @@ describe("the production Media pane", () => {
 		await waitFor(() => expect(second.master.dimmer).toBeCloseTo(0.35));
 		await userEvent.click(screen.getByRole("tab", { name: "Colour" }));
 		expect(
-			screen.getByRole("radiogroup", { name: "Flip / mirror" }),
-		).toBeInTheDocument();
-		await userEvent.click(screen.getByRole("radio", { name: "both" }));
-		await waitFor(() => expect(second.master.flipMirror).toBe("both"));
+			screen.queryByRole("radiogroup", { name: "Flip / mirror" }),
+		).not.toBeInTheDocument();
 		await userEvent.click(screen.getByRole("tab", { name: "Geometry" }));
 		fireEvent.input(screen.getByLabelText("Position X"), {
 			target: { value: "0.5" },
@@ -797,14 +795,12 @@ describe("the production Media pane", () => {
 			).toBeDisabled();
 	});
 
-	it("mirrors the mapping layout's master through negative scale without Flip / mirror", async () => {
+	it("mirrors the master through negative scale without Flip / mirror", async () => {
 		const output = anOutput();
 		const server = stubServer({
 			outputs: [output],
 			outputConfigurations: {
-				[output.id]: anOutputConfiguration(output.id, output.name, {
-					personalityLayout: "mapping",
-				}),
+				[output.id]: anOutputConfiguration(output.id, output.name),
 			},
 		});
 		render(<MediaPanePage />);

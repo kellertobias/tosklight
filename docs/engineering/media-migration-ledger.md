@@ -97,6 +97,12 @@ document version 2 drops the stored field. There is one personality, and it is t
 speaks. A version 1 document still loads: the migration removes the field rather than refusing the
 document, so a development installation is not stranded on something it wrote itself.
 
+**Resolved, 2026-09-17 (TL-453).** The same reasoning retired the pre-release channel layouts that
+had accumulated since (`legacy`, `current`, `extended`, `effect-banks`). Only the 2-layer and
+8-layer personalities remain, both on the 3D-object-mapping layout (59-slot layer, 40-slot master).
+Document version 5 drops each output's `personalityLayout`, keeps its personality, and moves a start
+address the larger block no longer fits to the highest address that does.
+
 The maintainer resolved that split: discovery and the default advertised TCP endpoint both use the
 industry-standard port **4809**. A configured custom TCP port is preserved and advertised exactly.
 

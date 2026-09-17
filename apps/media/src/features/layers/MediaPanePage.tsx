@@ -133,7 +133,7 @@ function MediaPanePageContent() {
 	};
 	const sourceFailure = outputSourceFailures(outputs.data ?? []);
 	useFailureToast(sourceFailure ? { message: sourceFailure } : undefined);
-	const { previewSize, personalityLayout } = useOutputFacts(selectedOutput?.id);
+	const { previewSize } = useOutputFacts(selectedOutput?.id);
 	useEffect(() => {
 		const timer = window.setInterval(
 			() => setPreviewRevision((revision) => revision + 1),
@@ -330,7 +330,7 @@ function MediaPanePageContent() {
 		draftSelectionLabel: `${draftFolder}/${draftFileId ?? "Choose"}`,
 		controlSections:
 			selectedLayerId === "master" && selectedOutput
-				? masterSections(selectedOutput, takeover, personalityLayout)
+				? masterSections(selectedOutput, takeover)
 				: selected
 					? [
 							{
@@ -1625,8 +1625,6 @@ function masterChange(id: string, value: string | number): UpdateMaster {
 			return tintChange(String(value));
 		case "media.master.effect.opacity_cycle":
 			return { opacityCycleDmx: number };
-		case "flip-mirror":
-			return { flipMirror: String(value) };
 		case "master-scale-x":
 			return { scaleX: number };
 		case "master-scale-y":
@@ -1669,14 +1667,13 @@ function masterChange(id: string, value: string | number): UpdateMaster {
 function masterSections(
 	output: OutputView,
 	takeover: boolean,
-	personalityLayout?: string,
 ): MediaPaneModel["controlSections"] {
 	return [
 		masterOutputSection(output, takeover), masterEffectsSection(output, takeover),
 		masterGeometrySection(output, takeover), masterMaskSection(output, takeover),
 		masterShapersSection(output, takeover),
-		// The mapping layout mirrors through negative scale instead of a Flip / mirror channel.
-		masterColourSection(output, takeover, personalityLayout !== "mapping"),
+		// The master mirrors through negative scale; there is no Flip / mirror channel.
+		masterColourSection(output, takeover),
 	];
 }
 
@@ -1733,11 +1730,9 @@ function masterShapersSection(output: OutputView, takeover: boolean): MasterSect
 		valueControl("shaper-rotation", "Module rotation", output.master.shaperRotation, -180, 180, !takeover, "°", 1),
 	] };
 }
-function masterColourSection(output: OutputView, takeover: boolean, flipMirror: boolean): MasterSection {
+function masterColourSection(output: OutputView, takeover: boolean): MasterSection {
 	return { id: "colour", label: "Colour", controls: [
 		{ id: "master-tint", kind: "color", label: "Tint",
 			value: tintHex(output.master.tintRed, output.master.tintGreen, output.master.tintBlue), disabled: !takeover },
-		...(flipMirror ? [{ id: "flip-mirror", kind: "choice" as const, label: "Flip / mirror", value: output.master.flipMirror,
-			options: ["none", "horizontal", "vertical", "both"].map((value) => ({ value, label: value })), disabled: !takeover }] : []),
 	] };
 }

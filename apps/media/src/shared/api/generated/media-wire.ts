@@ -157,7 +157,7 @@ export type PixelMapView = {
  * `direct` or `desk-merge`.
  */
 mode: string, zones: Array<PixelZoneView>, routes: Array<PixelRouteView>, handoffs: Array<PixelZoneHandoffView>, regions: Array<DisplayRegionView>, };
-export type OutputConfigurationValuesView = { targetKind: string, monitorBy: string | null, monitorValue: string | null, fullscreen: boolean, width: number, height: number, presentation: string, framesPerSecond: number | null, soundOutputKind: string, soundOutputName: string | null, personality: string, personalityLayout: string, protocol: string, universe: number, startAddress: number, };
+export type OutputConfigurationValuesView = { targetKind: string, monitorBy: string | null, monitorValue: string | null, fullscreen: boolean, width: number, height: number, presentation: string, framesPerSecond: number | null, soundOutputKind: string, soundOutputName: string | null, personality: string, protocol: string, universe: number, startAddress: number, };
 export type OutputConfigurationView = { id: string, name: string,
 /**
  * `monitor` or `off-screen`.
@@ -199,10 +199,6 @@ pixelMap: PixelMapView,
  * `two-layers` or `eight-layers`.
  */
 personality: string,
-/**
- * `legacy` preserves the original 35/7-slot blocks; `current` includes mask positioning.
- */
-personalityLayout: string,
 /**
  * `art-net` or `sacn`.
  */
@@ -610,7 +606,7 @@ export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tin
  */
 opacityCycleDmx?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, maskPositionX?: number | null, maskPositionY?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, shaperLeft?: number | null, shaperRight?: number | null, shaperTop?: number | null, shaperBottom?: number | null, shaperLeftRotation?: number | null, shaperRightRotation?: number | null, shaperTopRotation?: number | null, shaperBottomRotation?: number | null, shaperRotation?: number | null, };
 export type UpdateEffectPreset = { requestId: string, name: string | null, effectType: string | null, parameters: Array<number> | null, clear: boolean | null, };
-export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, personalityLayout?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null,
+export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null,
 /**
  * The whole pixel map, replaced at once. A zone is meaningless on its own — its address has
  * to be checked against every other zone's — so the map is edited as a piece.

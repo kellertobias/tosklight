@@ -12,8 +12,8 @@ use crate::master::{MasterShaper, MasterState};
 use crate::playback::PlayMode;
 use crate::speed::SpeedMultiplier;
 
-use super::channels::{effect_bank_master, layer, master};
-use super::{LAYER_SLOTS, LayerPersonality, MASTER_SLOTS, PersonalityLayout};
+use super::channels::{layer, master};
+use super::{LAYER_SLOTS, LayerPersonality, MASTER_SLOTS};
 
 /// One mapping layer's slots.
 pub type LayerSlots = [u8; LAYER_SLOTS as usize];
@@ -22,35 +22,22 @@ pub type MasterSlots = [u8; MASTER_SLOTS as usize];
 
 /// Decodes one layer's slots.
 ///
-/// Every value that is not on the wire keeps the state a fresh layer has, so a short or padded
-/// frame can never invent a selection.
+/// Every value that is not on the wire keeps the state a fresh layer has, so a padded frame can
+/// never invent a selection. Playback BPM and the Blur fader are web-surface controls: the wire
+/// selects Blur as an effect-bank preset.
 pub fn layer_state(slots: &[u8]) -> LayerState {
-    layer_state_for_layout(slots, PersonalityLayout::Extended)
-}
-
-pub fn layer_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> LayerState {
     let sixteen = |offset: usize| dmx::sixteen_bit(slots[offset], slots[offset + 1]);
-    let optional_position = |offset: usize| {
-        slots
-            .get(offset..=offset + 1)
-            .map(|pair| dmx::position(dmx::sixteen_bit(pair[0], pair[1])))
-            .unwrap_or_default()
-    };
-    let mapping = layout == PersonalityLayout::Mapping;
-    // Only the mapping layout carries these bytes; an older layout keeps every configured value.
     let parameters = |offset: usize| {
         let mut bytes = [0; super::EFFECT_BANK_PARAMETERS];
-        if mapping && let Some(wire) = slots.get(offset..offset + super::EFFECT_BANK_PARAMETERS) {
-            bytes.copy_from_slice(wire);
-        }
+        bytes.copy_from_slice(&slots[offset..offset + super::EFFECT_BANK_PARAMETERS]);
         bytes
     };
-    let blend = if mapping {
-        LayerBlend::from_dmx(slots[layer::BLEND])
-    } else {
-        LayerBlend::default()
-    };
-    let mapped_sixteen = |offset: usize| if mapping { sixteen(offset) } else { 0 };
+    let mut visualizer_controls = [0; super::VISUALIZER_PARAMETERS];
+    visualizer_controls.copy_from_slice(
+        &slots[layer::VISUALIZER_PARAMETERS
+            ..layer::VISUALIZER_PARAMETERS + super::VISUALIZER_PARAMETERS],
+    );
+    let blend = LayerBlend::from_dmx(slots[layer::BLEND]);
 
     LayerState {
         address: MediaAddress::new(slots[layer::FOLDER], slots[layer::FILE]),
@@ -73,91 +60,41 @@ pub fn layer_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> LayerS
             address: MediaAddress::new(slots[layer::MASK_FOLDER], slots[layer::MASK_FILE]),
             scale_x: dmx::mask_scale(sixteen(layer::MASK_SCALE_X)),
             scale_y: dmx::mask_scale(sixteen(layer::MASK_SCALE_Y)),
-            position_x: optional_position(layer::MASK_POSITION_X),
-            position_y: optional_position(layer::MASK_POSITION_Y),
+            position_x: dmx::position(sixteen(layer::MASK_POSITION_X)),
+            position_y: dmx::position(sixteen(layer::MASK_POSITION_Y)),
             invert: slots[layer::MASK_INVERT] >= 128,
             opacity: dmx::unit(slots[layer::MASK_OPACITY]),
             ..MaskState::default()
         },
-        effect_banks: if layout.carries_effect_banks() {
-            [
-                EffectBankState {
-                    select: slots[layer::EFFECT_1_SELECT],
-                    strength: dmx::unit(slots[layer::EFFECT_1_STRENGTH]),
-                    parameters: parameters(layer::EFFECT_1_PARAMETERS),
-                },
-                EffectBankState {
-                    select: slots[layer::EFFECT_2_SELECT],
-                    strength: dmx::unit(slots[layer::EFFECT_2_STRENGTH]),
-                    parameters: parameters(layer::EFFECT_2_PARAMETERS),
-                },
-            ]
-        } else {
-            Default::default()
-        },
-        effects: if layout.carries_effect_banks() {
-            Default::default()
-        } else {
-            std::array::from_fn(|index| crate::layer::EffectSlot {
-                seed: index as u32,
-                mix: dmx::unit(slots[layer::EFFECT_1 + index]),
-                ..Default::default()
-            })
-        },
+        effect_banks: [
+            EffectBankState {
+                select: slots[layer::EFFECT_1_SELECT],
+                strength: dmx::unit(slots[layer::EFFECT_1_STRENGTH]),
+                parameters: parameters(layer::EFFECT_1_PARAMETERS),
+            },
+            EffectBankState {
+                select: slots[layer::EFFECT_2_SELECT],
+                strength: dmx::unit(slots[layer::EFFECT_2_STRENGTH]),
+                parameters: parameters(layer::EFFECT_2_PARAMETERS),
+            },
+        ],
         speed_multiplier: SpeedMultiplier::from_dmx(slots[layer::SPEED_MULTIPLIER]),
-        // The mapping layout carries the 3D model where older layouts carried the BPM target.
-        playback_bpm: if mapping {
-            None
-        } else {
-            dmx::playback_bpm(slots[layer::PLAYBACK_BPM])
-        },
-        blur: if layout.carries_effect_banks() {
-            0.0
-        } else {
-            slots
-                .get(layer::BLUR)
-                .copied()
-                .map(dmx::unit)
-                .unwrap_or_default()
-        },
         blend: blend.mode,
         strobe_hz: blend.strobe_hz,
-        in_point: mapped_sixteen(layer::IN_POINT),
-        out_point: mapped_sixteen(layer::OUT_POINT),
-        visualizer_controls: if mapping {
-            let mut bytes = [0; super::VISUALIZER_PARAMETERS];
-            bytes.copy_from_slice(
-                &slots[layer::VISUALIZER_PARAMETERS
-                    ..layer::VISUALIZER_PARAMETERS + super::VISUALIZER_PARAMETERS],
-            );
-            bytes
-        } else {
-            Default::default()
-        },
-        model: if mapping {
-            ModelMapping {
-                model: slots[layer::MODEL],
-                pan: dmx::rotation(sixteen(layer::MODEL_PAN)),
-                tilt: dmx::rotation(sixteen(layer::MODEL_TILT)),
-            }
-        } else {
-            ModelMapping::default()
+        in_point: sixteen(layer::IN_POINT),
+        out_point: sixteen(layer::OUT_POINT),
+        visualizer_controls,
+        model: ModelMapping {
+            model: slots[layer::MODEL],
+            pan: dmx::rotation(sixteen(layer::MODEL_PAN)),
+            tilt: dmx::rotation(sixteen(layer::MODEL_TILT)),
         },
         ..LayerState::default()
     }
 }
 
-/// Decodes the master's slots for a layout.
-pub fn master_state_for_layout(slots: &[u8], layout: PersonalityLayout) -> MasterState {
-    if layout == PersonalityLayout::Mapping {
-        mapping_master_state(slots)
-    } else {
-        master_state(slots)
-    }
-}
-
-/// Decodes the mapping master. Mirroring is a negative scale, so there is no flip byte.
-fn mapping_master_state(slots: &[u8]) -> MasterState {
+/// Decodes the master. Mirroring is a negative scale, so there is no flip byte.
+pub fn master_state(slots: &[u8]) -> MasterState {
     let sixteen = |offset: usize| dmx::sixteen_bit(slots[offset], slots[offset + 1]);
     MasterState {
         dimmer: dmx::unit(slots[master::DIMMER]),
@@ -192,87 +129,6 @@ fn mapping_master_state(slots: &[u8]) -> MasterState {
     }
 }
 
-/// Decodes an effect-bank master, or any older master that is a prefix of it.
-pub fn master_state(slots: &[u8]) -> MasterState {
-    use effect_bank_master as master;
-    let optional_position = |offset: usize| {
-        slots
-            .get(offset..=offset + 1)
-            .map(|pair| dmx::position(dmx::sixteen_bit(pair[0], pair[1])))
-            .unwrap_or_default()
-    };
-    let optional_sixteen = |offset: usize| {
-        slots
-            .get(offset..=offset + 1)
-            .map(|pair| dmx::sixteen_bit(pair[0], pair[1]))
-    };
-    MasterState {
-        dimmer: dmx::unit(slots[master::DIMMER]),
-        volume: dmx::unit(slots[master::VOLUME]),
-        tint: Tint::from_subtractive(
-            slots[master::CYAN],
-            slots[master::MAGENTA],
-            slots[master::YELLOW],
-        ),
-        flip_mirror: FlipMirror::from_dmx(slots[master::FLIP_MIRROR]),
-        // The master mask selects an output-level library mask by file number within the
-        // library's own mask folder, so folder zero here would mean "no mask" on every byte.
-        mask: MediaAddress::new(1, slots[master::MASK]),
-        mask_position_x: optional_position(master::MASK_POSITION_X),
-        mask_position_y: optional_position(master::MASK_POSITION_Y),
-        scale_x: optional_sixteen(master::SCALE_X)
-            .map(dmx::master_scale)
-            .unwrap_or(1.0),
-        scale_y: optional_sixteen(master::SCALE_Y)
-            .map(dmx::master_scale)
-            .unwrap_or(1.0),
-        scaling_mode: slots
-            .get(master::SCALING_MODE)
-            .copied()
-            .map(ScalingMode::from_dmx)
-            .unwrap_or_default(),
-        position_x: optional_position(master::POSITION_X),
-        position_y: optional_position(master::POSITION_Y),
-        rotation: optional_sixteen(master::ROTATION)
-            .map(dmx::master_rotation)
-            .unwrap_or_default(),
-        shaper: MasterShaper {
-            left: optional_sixteen(master::SHAPER_LEFT)
-                .map(dmx::shaper_position)
-                .unwrap_or_default(),
-            right: optional_sixteen(master::SHAPER_RIGHT)
-                .map(dmx::shaper_position)
-                .unwrap_or_default(),
-            top: optional_sixteen(master::SHAPER_TOP)
-                .map(dmx::shaper_position)
-                .unwrap_or_default(),
-            bottom: optional_sixteen(master::SHAPER_BOTTOM)
-                .map(dmx::shaper_position)
-                .unwrap_or_default(),
-            left_rotation: optional_sixteen(master::SHAPER_LEFT_ROTATION)
-                .map(dmx::shaper_angle)
-                .unwrap_or_default(),
-            right_rotation: optional_sixteen(master::SHAPER_RIGHT_ROTATION)
-                .map(dmx::shaper_angle)
-                .unwrap_or_default(),
-            top_rotation: optional_sixteen(master::SHAPER_TOP_ROTATION)
-                .map(dmx::shaper_angle)
-                .unwrap_or_default(),
-            bottom_rotation: optional_sixteen(master::SHAPER_BOTTOM_ROTATION)
-                .map(dmx::shaper_angle)
-                .unwrap_or_default(),
-            rotation: optional_sixteen(master::SHAPER_ROTATION)
-                .map(dmx::master_rotation)
-                .unwrap_or_default(),
-        },
-        opacity_cycle: slots
-            .get(master::OPACITY_CYCLE)
-            .copied()
-            .map(crate::master::BeatRatio::from_dmx)
-            .unwrap_or_default(),
-    }
-}
-
 /// Why a payload cannot be applied to a personality.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum FrameError {
@@ -300,11 +156,10 @@ pub struct DecodedFrame {
 /// offset happens exactly here.
 pub fn frame(
     personality: LayerPersonality,
-    layout: PersonalityLayout,
     start_address: u16,
     payload: &[u8],
 ) -> Result<DecodedFrame, FrameError> {
-    let footprint = personality.footprint_for(layout);
+    let footprint = personality.footprint();
     let offset = usize::from(super::SlotFootprint::payload_offset(start_address));
     let available = payload.len().saturating_sub(offset);
     if available < usize::from(footprint.total()) {
@@ -318,18 +173,18 @@ pub fn frame(
     let block = &payload[offset..offset + usize::from(footprint.total())];
     let layers = (0..usize::from(personality.layer_count()))
         .map(|index| {
-            let layer_slots = usize::from(layout.layer_slots());
+            let layer_slots = usize::from(LAYER_SLOTS);
             let base = index * layer_slots;
-            layer_state_for_layout(&block[base..base + layer_slots], layout)
+            layer_state(&block[base..base + layer_slots])
         })
         .collect();
 
     let master_base = usize::from(footprint.master_offset());
-    let master_slots = &block[master_base..master_base + usize::from(layout.master_slots())];
+    let master_slots = &block[master_base..master_base + usize::from(MASTER_SLOTS)];
 
     Ok(DecodedFrame {
         layers,
-        master: master_state_for_layout(master_slots, layout),
+        master: master_state(master_slots),
     })
 }
 
@@ -376,31 +231,6 @@ mod tests {
     }
 
     #[test]
-    fn the_legacy_layout_keeps_speed_and_layer_boundaries_at_their_published_slots() {
-        let personality = LayerPersonality::TwoLayers;
-        let footprint = personality.footprint_for(PersonalityLayout::Legacy);
-        let mut payload = vec![0; usize::from(footprint.total())];
-        payload[layer::SPEED_MULTIPLIER] = 127;
-        let second = usize::from(PersonalityLayout::Legacy.layer_slots());
-        payload[second + layer::FOLDER] = 12;
-        payload[second + layer::FILE] = 34;
-        payload[second + layer::SPEED_MULTIPLIER] = 135;
-        let master = usize::from(footprint.master_offset());
-        payload[master + master::DIMMER] = 255;
-
-        let decoded = frame(personality, PersonalityLayout::Legacy, 1, &payload).unwrap();
-
-        assert_eq!(decoded.layers[0].speed_multiplier, SpeedMultiplier::Unity);
-        assert_eq!(decoded.layers[0].mask.position_x, 0.0);
-        assert_eq!(decoded.layers[0].mask.position_y, 0.0);
-        assert_eq!(decoded.layers[1].address, MediaAddress::new(12, 34));
-        assert_eq!(decoded.layers[1].speed_multiplier.label(), "2×");
-        assert_eq!(decoded.master.dimmer, 1.0);
-        assert_eq!(decoded.master.mask_position_x, 0.0);
-        assert_eq!(decoded.master.mask_position_y, 0.0);
-    }
-
-    #[test]
     fn each_slot_reaches_the_field_the_table_names() {
         let mut slots = neutral_layer();
         slots[layer::FOLDER] = 12;
@@ -415,8 +245,8 @@ mod tests {
         slots[layer::MASK_OPACITY] = 255;
         slots[layer::MASK_POSITION_X] = 0x40;
         slots[layer::MASK_POSITION_Y] = 0xc0;
-        slots[layer::EFFECT_1 + 2] = 255;
-        slots[layer::PLAYBACK_BPM] = 120;
+        slots[layer::EFFECT_2_SELECT] = 12;
+        slots[layer::EFFECT_2_STRENGTH] = 255;
 
         let layer = layer_state(&slots);
         assert_eq!(layer.address, MediaAddress::new(12, 34));
@@ -434,9 +264,16 @@ mod tests {
         assert_eq!(layer.mask.opacity, 1.0);
         assert!(layer.mask.position_x < 0.0);
         assert!(layer.mask.position_y > 0.0);
-        assert_eq!(layer.effects[2].mix, 1.0);
-        assert_eq!(layer.effects[0].mix, 0.0);
-        assert_eq!(layer.playback_bpm, Some(120));
+        assert_eq!(layer.effect_banks[1].select, 12);
+        assert_eq!(layer.effect_banks[1].strength, 1.0);
+        assert_eq!(layer.effect_banks[0].select, 0);
+        assert_eq!(
+            layer.effects,
+            std::array::from_fn(|_| Default::default()),
+            "the wire selects effects through the banks only"
+        );
+        assert_eq!(layer.playback_bpm, None, "Playback BPM is not a channel");
+        assert_eq!(layer.blur, 0.0, "Blur is a bank preset, not a channel");
         assert_eq!(
             layer.mask.source,
             MaskSource::Luminance,
@@ -445,27 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn current_effect_bank_layout_decodes_two_select_and_strength_pairs() {
-        let mut slots = neutral_layer();
-        slots[layer::EFFECT_1_SELECT] = 11;
-        slots[layer::EFFECT_1_STRENGTH] = 64;
-        slots[layer::EFFECT_2_SELECT] = 255;
-        slots[layer::EFFECT_2_STRENGTH] = 255;
-
-        let layer = layer_state_for_layout(&slots, PersonalityLayout::EffectBanks);
-        assert_eq!(layer.effect_banks[0].select, 11);
-        assert!((layer.effect_banks[0].strength - 64.0 / 255.0).abs() < f32::EPSILON);
-        assert_eq!(layer.effect_banks[1].select, 255);
-        assert_eq!(layer.effect_banks[1].strength, 1.0);
-        assert_eq!(layer.effects, std::array::from_fn(|_| Default::default()));
-        assert_eq!(
-            layer.effect_banks[0].parameters, [0; 4],
-            "the 39-slot bank layout carries no parameters"
-        );
-    }
-
-    #[test]
-    fn the_mapping_layout_decodes_four_parameters_per_bank() {
+    fn each_bank_decodes_select_strength_and_four_parameters() {
         let mut slots = neutral_layer();
         slots[layer::EFFECT_1_SELECT] = 9;
         slots[layer::EFFECT_1_STRENGTH] = 255;
@@ -474,14 +291,15 @@ mod tests {
             slots[layer::EFFECT_2_PARAMETERS + index] = 250 - index as u8;
         }
 
-        let layer = layer_state_for_layout(&slots, PersonalityLayout::Mapping);
+        let layer = layer_state(&slots);
         assert_eq!(layer.effect_banks[0].select, 9);
+        assert_eq!(layer.effect_banks[0].strength, 1.0);
         assert_eq!(layer.effect_banks[0].parameters, [1, 2, 3, 4]);
         assert_eq!(layer.effect_banks[1].parameters, [250, 249, 248, 247]);
     }
 
     #[test]
-    fn the_mapping_layout_decodes_blend_range_visualizer_and_model_controls() {
+    fn blend_range_visualizer_and_model_controls_decode() {
         let mut slots = neutral_layer();
         slots[layer::MODEL] = 3;
         slots[layer::BLEND] = 200;
@@ -495,7 +313,7 @@ mod tests {
         slots[layer::MODEL_PAN + 1] = 0xff;
         slots[layer::MODEL_TILT] = 0x00;
 
-        let layer = layer_state_for_layout(&slots, PersonalityLayout::Mapping);
+        let layer = layer_state(&slots);
         assert_eq!(layer.model.model, 3);
         assert_eq!(layer.model.pan, 360.0);
         assert_eq!(layer.model.tilt, -360.0);
@@ -506,23 +324,13 @@ mod tests {
         assert_eq!(layer.playback_bpm, None, "slot 33 is the model here");
 
         slots[layer::BLEND] = 16;
-        let add = layer_state_for_layout(&slots, PersonalityLayout::Mapping);
+        let add = layer_state(&slots);
         assert_eq!(add.blend, crate::blend::BlendMode::Add);
         assert_eq!(add.strobe_hz, None);
-
-        let older = layer_state_for_layout(&slots, PersonalityLayout::EffectBanks);
-        assert_eq!(
-            older.playback_bpm,
-            Some(3),
-            "the same byte is a BPM target there"
-        );
-        assert_eq!(older.model, ModelMapping::default());
-        assert_eq!(older.blend, crate::blend::BlendMode::Normal);
-        assert_eq!((older.in_point, older.out_point), (0, 0));
     }
 
     #[test]
-    fn the_mapping_master_mirrors_with_negative_scale_and_has_no_flip_byte() {
+    fn the_master_mirrors_with_negative_scale_and_has_no_flip_byte() {
         let mut slots = [0u8; MASTER_SLOTS as usize];
         slots[master::DIMMER] = 255;
         slots[master::MASK] = 5;
@@ -531,7 +339,7 @@ mod tests {
         slots[master::SCALING_MODE] = 200;
         slots[master::OPACITY_CYCLE] = 192;
 
-        let decoded = master_state_for_layout(&slots, PersonalityLayout::Mapping);
+        let decoded = master_state(&slots);
         assert_eq!(decoded.flip_mirror, FlipMirror::None);
         assert_eq!(decoded.mask.file, 5);
         assert_eq!(decoded.scale_x, -1.0);
@@ -563,16 +371,14 @@ mod tests {
 
     #[test]
     fn the_master_block_decodes() {
-        use effect_bank_master as master;
-        let mut slots = [0u8; super::super::EFFECT_BANK_MASTER_SLOTS as usize];
+        let mut slots = [0u8; MASTER_SLOTS as usize];
         slots[master::DIMMER] = 255;
         slots[master::VOLUME] = 128;
         slots[master::MAGENTA] = 255;
-        slots[master::FLIP_MIRROR] = 3;
         slots[master::MASK] = 5;
         slots[master::MASK_POSITION_X] = 0x40;
         slots[master::MASK_POSITION_Y] = 0xc0;
-        slots[master::SCALE_X] = 0x80;
+        slots[master::SCALE_X] = 0xa0;
         slots[master::SCALE_Y] = 0xff;
         slots[master::SCALE_Y + 1] = 0xff;
         slots[master::SCALING_MODE] = 64;
@@ -592,13 +398,13 @@ mod tests {
         let decoded = master_state(&slots);
         assert_eq!(decoded.dimmer, 1.0);
         assert_eq!(decoded.tint, Tint::new(1.0, 0.0, 1.0));
-        assert_eq!(decoded.flip_mirror, FlipMirror::Both);
+        assert_eq!(decoded.flip_mirror, FlipMirror::None);
         assert!(decoded.has_mask());
         assert_eq!(decoded.mask.file, 5);
         assert!(decoded.mask_position_x < 0.0);
         assert!(decoded.mask_position_y > 0.0);
         assert_eq!(decoded.scale_x, 1.0);
-        assert_eq!(decoded.scale_y, 4.0);
+        assert!(decoded.scale_y > 3.99 && decoded.scale_y < 4.0);
         assert_eq!(decoded.scaling_mode, ScalingMode::Fill);
         assert!(decoded.position_x < 0.0);
         assert!(decoded.position_y > 0.0);
@@ -614,20 +420,15 @@ mod tests {
     fn universe(personality: LayerPersonality, start_address: u16) -> Vec<u8> {
         let mut payload = vec![0u8; 512];
         let offset = usize::from(start_address - 1);
-        let layer_slots = usize::from(PersonalityLayout::Current.layer_slots());
+        let layer_slots = usize::from(LAYER_SLOTS);
         for index in 0..usize::from(personality.layer_count()) {
             let base = offset + index * layer_slots;
-            payload[base..base + layer_slots].copy_from_slice(&neutral_layer()[..layer_slots]);
+            payload[base..base + layer_slots].copy_from_slice(&neutral_layer());
             payload[base + layer::FOLDER] = 1;
             payload[base + layer::FILE] = index as u8 + 1;
         }
-        let master_base = offset
-            + usize::from(
-                personality
-                    .footprint_for(PersonalityLayout::Current)
-                    .master_offset(),
-            )
-            + master::DIMMER;
+        let master_base =
+            offset + usize::from(personality.footprint().master_offset()) + master::DIMMER;
         payload[master_base] = 255;
         payload
     }
@@ -636,7 +437,7 @@ mod tests {
     fn an_eight_layer_frame_decodes_eight_layers_and_one_master() {
         let personality = LayerPersonality::EightLayers;
         let payload = universe(personality, 1);
-        let decoded = frame(personality, PersonalityLayout::Current, 1, &payload).unwrap();
+        let decoded = frame(personality, 1, &payload).unwrap();
 
         assert_eq!(decoded.layers.len(), 8);
         for (index, layer) in decoded.layers.iter().enumerate() {
@@ -649,7 +450,7 @@ mod tests {
     fn a_two_layer_frame_reads_only_its_own_slots() {
         let personality = LayerPersonality::TwoLayers;
         let payload = universe(personality, 1);
-        let decoded = frame(personality, PersonalityLayout::Current, 1, &payload).unwrap();
+        let decoded = frame(personality, 1, &payload).unwrap();
         assert_eq!(decoded.layers.len(), 2);
         assert_eq!(decoded.master.dimmer, 1.0);
     }
@@ -658,10 +459,10 @@ mod tests {
     fn the_start_address_is_one_based() {
         let personality = LayerPersonality::TwoLayers;
         let payload = universe(personality, 100);
-        let decoded = frame(personality, PersonalityLayout::Current, 100, &payload).unwrap();
+        let decoded = frame(personality, 100, &payload).unwrap();
         assert_eq!(decoded.layers[0].address, MediaAddress::new(1, 1));
 
-        let shifted = frame(personality, PersonalityLayout::Current, 99, &payload).unwrap();
+        let shifted = frame(personality, 99, &payload).unwrap();
         assert_ne!(
             shifted.layers[0].address,
             MediaAddress::new(1, 1),
@@ -673,13 +474,13 @@ mod tests {
     fn a_frame_that_ends_before_the_footprint_is_refused() {
         let personality = LayerPersonality::EightLayers;
         let payload = vec![0u8; 512];
-        let error = frame(personality, PersonalityLayout::Current, 300, &payload).unwrap_err();
+        let error = frame(personality, 300, &payload).unwrap_err();
         assert_eq!(
             error,
             FrameError::TooShort {
                 offset: 300,
                 available: 213,
-                required: 323
+                required: 512
             }
         );
     }
@@ -688,10 +489,10 @@ mod tests {
     fn both_protocols_would_produce_identical_state_for_identical_payloads() {
         // Art-Net and sACN differ only in how the payload arrives. Decoding the same bytes twice
         // stands in for that here; the adapters own no mapping logic of their own.
-        let personality = LayerPersonality::EightLayers;
+        let personality = LayerPersonality::TwoLayers;
         let payload = universe(personality, 45);
-        let art_net = frame(personality, PersonalityLayout::Current, 45, &payload).unwrap();
-        let sacn = frame(personality, PersonalityLayout::Current, 45, &payload).unwrap();
+        let art_net = frame(personality, 45, &payload).unwrap();
+        let sacn = frame(personality, 45, &payload).unwrap();
         assert_eq!(art_net, sacn);
     }
 }

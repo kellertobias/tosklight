@@ -29,12 +29,9 @@ export function SettingsPage() {
 	const outputs = useOutputs(HEALTH_POLL_MS);
 	const network = useNetwork();
 	const editing = useEditing(network.reload);
+	// `section=dmx` is the address DMX diagnostics link to; DMX input lives with Network now.
 	const initialSection: MediaSettingsSection =
-		window.location.pathname === "/logs"
-			? "logs"
-			: new URLSearchParams(window.location.search).get("section") === "dmx"
-				? "dmx"
-				: "network";
+		window.location.pathname === "/logs" ? "logs" : "network";
 	const [section, setSection] = useState<MediaSettingsSection>(initialSection);
 	useFailureToast(editing.failure);
 
@@ -56,11 +53,6 @@ export function SettingsPage() {
 							/>
 						)}
 					</ResourceState>
-				</section>
-			)}
-
-			{section === "dmx" && (
-				<section className="media-page">
 					<ResourceState
 						resource={outputs}
 						subject="DMX input settings"
@@ -69,10 +61,16 @@ export function SettingsPage() {
 					>
 						{(data) => (
 							<section
+								id="dmx-input"
 								className="media-settings-group"
 								aria-labelledby="dmx-inputs-heading"
 							>
 								<h2 id="dmx-inputs-heading">DMX input</h2>
+								<p className="media-settings-note">
+									Each output reads its personality from the Art-Net or sACN
+									address above. Choose the protocol, universe, and start
+									address here.
+								</p>
 								{data.map((output) => (
 									<OutputSettings
 										key={output.id}

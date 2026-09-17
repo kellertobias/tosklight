@@ -379,89 +379,65 @@ function PictureFields({
 	);
 }
 
+/** Slots one layer and the master occupy; the one channel layout both personalities share. */
+const LAYER_SLOTS = 59;
+const MASTER_SLOTS = 40;
+
+function personalityFootprint(
+	personality: OutputConfigurationView["personality"],
+): number {
+	return (personality === "two-layers" ? 2 : 8) * LAYER_SLOTS + MASTER_SLOTS;
+}
+
 function DmxInputFields({
 	personality,
-	personalityLayout,
 	protocol,
 	universe,
 	startAddress,
 	setPersonality,
-	setPersonalityLayout,
 	setProtocol,
 	setUniverse,
 	setStartAddress,
 }: {
 	personality: OutputConfigurationView["personality"];
-	personalityLayout: OutputConfigurationView["personalityLayout"];
 	protocol: OutputConfigurationView["protocol"];
 	universe: number;
 	startAddress: number;
 	setPersonality: Dispatch<
 		SetStateAction<OutputConfigurationView["personality"]>
 	>;
-	setPersonalityLayout: Dispatch<
-		SetStateAction<OutputConfigurationView["personalityLayout"]>
-	>;
 	setProtocol: Dispatch<SetStateAction<OutputConfigurationView["protocol"]>>;
 	setUniverse: Dispatch<SetStateAction<number>>;
 	setStartAddress: Dispatch<SetStateAction<number>>;
 }) {
-	const slotsPerLayer =
-		personalityLayout === "legacy"
-			? 34
-			: personalityLayout === "mapping"
-				? 59
-				: 39;
-	const masterSlots =
-		personalityLayout === "legacy"
-			? 7
-			: personalityLayout === "current"
-				? 11
-				: personalityLayout === "extended"
-					? 40
-					: personalityLayout === "mapping"
-						? 40
-						: 41;
-	const footprint =
-		(personality === "two-layers" ? 2 : 8) * slotsPerLayer + masterSlots;
+	const footprint = personalityFootprint(personality);
 	const highestStartAddress = 513 - footprint;
-	const personalityLabel =
-		personalityLayout === "extended"
-			? (layers: number) => `${layers} layers (${layers * 39 + 40} slots)`
-			: (layers: number) =>
-					`${layers} layers (${layers * slotsPerLayer + masterSlots} slots)`;
 	return (
 		<fieldset>
 			<legend>DMX input</legend>
 			<SelectField
 				label="Personality"
+				description="Both personalities use the 3D mapping channel layout: 59 slots per layer, then a 40-slot Master."
 				value={personality}
 				options={[
-					{ value: "two-layers", label: personalityLabel(2) },
-					{ value: "eight-layers", label: personalityLabel(8) },
+					{
+						value: "two-layers",
+						label: `2 layers (${personalityFootprint("two-layers")} slots)`,
+					},
+					{
+						value: "eight-layers",
+						label: `8 layers (${personalityFootprint("eight-layers")} slots)`,
+					},
 				]}
 				onChange={setPersonality}
 			/>
 			<SelectField
-				label="Channel layout"
-				value={personalityLayout}
-				options={[
-					{ value: "legacy", label: "Legacy (existing desk patches)" },
-					{ value: "current", label: "Mask positioning (v2)" },
-					{ value: "extended", label: "Full master controls (v3)" },
-					{
-						value: "effect-banks",
-						label: "Effect banks and full master controls",
-					},
-					{
-						value: "mapping",
-						label: "3D mapping, blend, playback range, and parameters",
-					},
-				]}
-				onChange={setPersonalityLayout}
-			/>
-			<SelectField
 				label="Protocol"
+				description={
+					protocol === "sacn"
+						? "Received on the sACN address under Where this server listens."
+						: "Received on the Art-Net address under Where this server listens."
+				}
 				value={protocol}
 				options={[
 					{ value: "art-net", label: "Art-Net" },
@@ -571,9 +547,6 @@ export function OutputEditor({
 		output.soundOutputName ?? "",
 	);
 	const [personality, setPersonality] = useState(output.personality);
-	const [personalityLayout, setPersonalityLayout] = useState(
-		output.personalityLayout,
-	);
 	const [protocol, setProtocol] = useState(output.protocol);
 	const [universe, setUniverse] = useState(output.universe);
 	const [startAddress, setStartAddress] = useState(output.startAddress);
@@ -608,7 +581,6 @@ export function OutputEditor({
 		soundOutputKind,
 		soundOutputName,
 		personality,
-		personalityLayout,
 		protocol,
 		universe,
 		startAddress,
@@ -645,7 +617,6 @@ export function OutputEditor({
 				if (mode === "all" || mode === "dmx") {
 					Object.assign(edit, {
 						personality,
-						personalityLayout,
 						protocol,
 						universe,
 						startAddress,
@@ -729,12 +700,10 @@ export function OutputEditor({
 				<DmxInputFields
 					{...{
 						personality,
-						personalityLayout,
 						protocol,
 						universe,
 						startAddress,
 						setPersonality,
-						setPersonalityLayout,
 						setProtocol,
 						setUniverse,
 						setStartAddress,
@@ -807,7 +776,6 @@ function revertOutputEdit(
 	if (mode === "all" || mode === "dmx") {
 		Object.assign(edit, {
 			personality: active.personality,
-			personalityLayout: active.personalityLayout,
 			protocol: active.protocol,
 			universe: active.universe,
 			startAddress: active.startAddress,
@@ -820,7 +788,7 @@ function outputEditorKey(
 	output: OutputConfigurationView,
 	mode: "all" | "picture" | "sound" | "dmx",
 ): string {
-	return `${mode}:${output.targetKind}:${output.monitorBy}:${output.monitorValue}:${output.fullscreen}:${output.width}:${output.height}:${output.presentation}:${output.framesPerSecond}:${output.soundOutputKind}:${output.soundOutputName}:${output.personality}:${output.personalityLayout}:${output.protocol}:${output.universe}:${output.startAddress}`;
+	return `${mode}:${output.targetKind}:${output.monitorBy}:${output.monitorValue}:${output.fullscreen}:${output.width}:${output.height}:${output.presentation}:${output.framesPerSecond}:${output.soundOutputKind}:${output.soundOutputName}:${output.personality}:${output.protocol}:${output.universe}:${output.startAddress}`;
 }
 
 function monitorOptions(

@@ -4,9 +4,7 @@
 //! adding output two never means replacing singleton state.
 
 use media_domain::output::MonitorSelector;
-use media_domain::{
-    LayerPersonality, OutputId, OutputName, PersonalityLayout, PresentationMode, TempoSource,
-};
+use media_domain::{LayerPersonality, OutputId, OutputName, PresentationMode, TempoSource};
 use serde::{Deserialize, Serialize};
 
 /// Which DMX protocol feeds this output. Both translate into identical domain commands; the
@@ -96,9 +94,6 @@ pub struct OutputConfiguration {
     pub sound_output: SoundOutput,
     #[serde(default)]
     pub personality: LayerPersonality,
-    /// Missing means legacy because configuration files predate the expanded mask-position block.
-    #[serde(default = "legacy_personality_layout")]
-    pub personality_layout: PersonalityLayout,
     #[serde(default)]
     pub protocol: DmxProtocol,
     #[serde(default)]
@@ -126,10 +121,6 @@ const fn first_start_address() -> u16 {
     1
 }
 
-const fn legacy_personality_layout() -> PersonalityLayout {
-    PersonalityLayout::Legacy
-}
-
 impl OutputConfiguration {
     /// A new output with the shipped defaults: one enabled off-screen 1080p eight-layer output
     /// at DMX address 1 following its own Playback BPM channels.
@@ -143,7 +134,6 @@ impl OutputConfiguration {
             presentation: PresentationMode::default(),
             sound_output: SoundOutput::default(),
             personality: LayerPersonality::default(),
-            personality_layout: PersonalityLayout::Mapping,
             protocol: DmxProtocol::default(),
             universe: 0,
             start_address: first_start_address(),
@@ -164,7 +154,6 @@ mod tests {
         let output = OutputConfiguration::new("Main");
         assert_eq!(output.name.as_str(), "Main");
         assert!(output.enabled);
-        assert_eq!(output.personality_layout, PersonalityLayout::Mapping);
         assert_eq!(
             output.resolution,
             Resolution {
@@ -179,19 +168,13 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_configuration_without_a_layout_keeps_the_legacy_dmx_slots() {
+    fn an_output_naming_a_channel_layout_is_refused() {
         let mut json = serde_json::to_value(OutputConfiguration::new("Existing")).unwrap();
-        json.as_object_mut().unwrap().remove("personalityLayout");
-
-        let output: OutputConfiguration = serde_json::from_value(json).unwrap();
-
-        assert_eq!(output.personality_layout, PersonalityLayout::Legacy);
-        assert_eq!(
-            output
-                .personality
-                .footprint_for(output.personality_layout)
-                .total(),
-            279
+        assert!(json.get("personalityLayout").is_none());
+        json["personalityLayout"] = "mapping".into();
+        assert!(
+            serde_json::from_value::<OutputConfiguration>(json).is_err(),
+            "only migration may read the retired field"
         );
     }
 

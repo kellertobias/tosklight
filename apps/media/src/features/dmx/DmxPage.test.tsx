@@ -37,11 +37,20 @@ describe("DMX diagnostics", () => {
 		).toHaveClass("ui-primary", "media-connect-console");
 		expect(container.querySelector(".media-dmx-window")).toBeInTheDocument();
 		expect(container.querySelector(".media-dmx-content")).toBeInTheDocument();
-		await userEvent.click(
-			screen.getByRole("button", { name: "Configure DMX input" }),
-		);
+		const configure = screen.getByRole("button", {
+			name: "Configure DMX input",
+		});
+		expect(configure).toHaveClass("media-external-link-action");
+		expect(
+			configure.querySelector('svg[data-icon="external-link"]'),
+		).toHaveAttribute("aria-hidden", "true");
+		expect(
+			container.querySelector(".ui-window-action-groups"),
+		).toContainElement(configure);
+		await userEvent.click(configure);
 		expect(window.location.pathname).toBe("/settings");
-		expect(window.location.search).toBe("?section=dmx");
+		expect(window.location.search).toBe("?section=network");
+		expect(window.location.hash).toBe("#dmx-input");
 	});
 
 	it("renders the canonical absolute channel map", async () => {
@@ -82,8 +91,17 @@ describe("DMX diagnostics", () => {
 			await screen.findByRole("table", { name: /Suggested .* patch/ }),
 		).toBeInTheDocument();
 		expect(
-			screen.getByText(/not configured for eight layers/),
+			screen.getByText(/2 layers \(158\s+slots\) and 8 layers \(512 slots\)/),
 		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				"2-layer personality: patch two Layer fixtures and one Master.",
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/patch two heads\. Choose Pixel Master/),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/Effect banks|full master/)).toBeNull();
 		expect(await screen.findByText("0.0.0.0:5568")).toBeInTheDocument();
 		expect(screen.getByText(/Same computer:/)).toBeInTheDocument();
 		expect(
@@ -95,7 +113,7 @@ describe("DMX diagnostics", () => {
 			screen.getByText(/Different computers: disable/),
 		).toBeInTheDocument();
 		expect(
-			screen.getByText(/eight distinct layer previews/),
+			screen.getByText(/two distinct layer previews/),
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", { name: "Connect to Console" }),
@@ -116,12 +134,12 @@ describe("DMX diagnostics", () => {
 		await userEvent.selectOptions(selector, "grandMA2");
 		expect(
 			screen.getByRole("link", {
-				name: "Download tosklight@pixel_layer@39ch.xml",
+				name: "Download tosklight@pixel_layer@59ch.xml",
 			}),
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole("link", {
-				name: "Download tosklight@pixel_master@41ch.xml",
+				name: "Download tosklight@pixel_master@40ch.xml",
 			}),
 		).toBeInTheDocument();
 		expect(
@@ -153,7 +171,7 @@ describe("DMX diagnostics", () => {
 		).not.toBeInTheDocument();
 	});
 
-	it("derives all eight layer blocks and the independent master from the running map", async () => {
+	it("derives the 512-slot eight-layer blocks and the independent master from the running map", async () => {
 		const server = stubServer();
 		vi.stubGlobal("WebSocket", undefined);
 		const output = server.outputs[0];
@@ -161,14 +179,14 @@ describe("DMX diagnostics", () => {
 		const channel = map.channels[0];
 		map.layerCount = 8;
 		map.personality = "eightLayers";
-		map.startAddress = 10;
-		map.channels = Array.from({ length: 353 }, (_, index) => ({
+		map.startAddress = 1;
+		map.channels = Array.from({ length: 512 }, (_, index) => ({
 			...channel,
-			absoluteChannel: 10 + index,
-			localOffset: index < 312 ? index % 39 : index - 312,
+			absoluteChannel: 1 + index,
+			localOffset: index < 472 ? index % 59 : index - 472,
 			group:
-				index < 312
-					? { kind: "layer" as const, number: Math.floor(index / 39) + 1 }
+				index < 472
+					? { kind: "layer" as const, number: Math.floor(index / 59) + 1 }
 					: { kind: "master" as const },
 		}));
 		vi.spyOn(api, "dmxMap").mockResolvedValue(map);
@@ -183,13 +201,18 @@ describe("DMX diagnostics", () => {
 		expect(rows).toHaveLength(9);
 		expect(
 			[...rows[0].querySelectorAll("td")].map((cell) => cell.textContent),
-		).toEqual(["Layer 1", "3", "10", "48", "39"]);
+		).toEqual(["Layer 1", "3", "1", "59", "59"]);
 		expect(
 			[...rows[7].querySelectorAll("td")].map((cell) => cell.textContent),
-		).toEqual(["Layer 8", "3", "283", "321", "39"]);
+		).toEqual(["Layer 8", "3", "414", "472", "59"]);
 		expect(
 			[...rows[8].querySelectorAll("td")].map((cell) => cell.textContent),
-		).toEqual(["Master", "3", "322", "362", "41"]);
+		).toEqual(["Master", "3", "473", "512", "40"]);
+		expect(
+			screen.getByText(
+				"8-layer personality: patch eight Layer fixtures and one Master.",
+			),
+		).toBeInTheDocument();
 	});
 
 	it("reports generated download failures instead of showing example links", async () => {

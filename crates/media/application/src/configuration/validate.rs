@@ -597,10 +597,7 @@ fn validate_patch_overlap(outputs: &[OutputConfiguration]) -> Result<(), Configu
 }
 
 fn span(output: &OutputConfiguration) -> (u16, u16) {
-    let total = output
-        .personality
-        .footprint_for(output.personality_layout)
-        .total();
+    let total = output.personality.footprint().total();
     (output.start_address, output.start_address + total - 1)
 }
 

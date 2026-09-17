@@ -540,7 +540,7 @@ export function OutputsSettings() {
 	);
 }
 
-export type NetworkInputsSettingsTab = "network" | "dmx" | "audio";
+export type NetworkInputsSettingsTab = "network" | "audio";
 
 export function NetworkInputsTabs({
 	value,
@@ -555,8 +555,7 @@ export function NetworkInputsTabs({
 			value={value}
 			onChange={onChange}
 			options={[
-				{ value: "network", label: "Network" },
-				{ value: "dmx", label: "DMX" },
+				{ value: "network", label: "Network & DMX" },
 				{ value: "audio", label: "Audio" },
 			]}
 		/>
@@ -575,7 +574,10 @@ export function NetworkInputsSettings({
 			<h2>Network &amp; Inputs</h2>
 			<p>Configure one input family at a time from the window title.</p>
 			{active === "network" && (
-				<SettingsSection title="Network" detail="Addresses used after restart">
+				<SettingsSection
+					title="Network"
+					detail="The transport DMX input arrives on, used after restart"
+				>
 					<FormLayout columns={2} className="media-operator-control-row">
 						<TextField label="Art-Net listen" defaultValue="0.0.0.0:6454" />
 						<TextField label="sACN listen" defaultValue="0.0.0.0:5568" />
@@ -584,9 +586,9 @@ export function NetworkInputsSettings({
 					</FormLayout>
 				</SettingsSection>
 			)}
-			{active === "dmx" && (
+			{active === "network" && (
 				<SettingsSection
-					title="DMX"
+					title="DMX input"
 					detail="The block patched on the Light Desk"
 				>
 					<FormLayout columns={2} className="media-operator-control-row">
@@ -594,8 +596,8 @@ export function NetworkInputsSettings({
 							label="Personality"
 							initialValue="8"
 							options={[
-								{ value: "2", label: "2 layers" },
-								{ value: "8", label: "8 layers" },
+								{ value: "2", label: "2 layers (158 slots)" },
+								{ value: "8", label: "8 layers (512 slots)" },
 							]}
 						/>
 						<StorySelect
@@ -635,7 +637,7 @@ export function NetworkInputsSettings({
 			)}
 			<div className="media-operator-toolbar">
 				<Button variant="primary">
-					Save {active === "audio" ? "audio input" : active} settings
+					Save {active === "audio" ? "audio input" : "network and DMX"} settings
 				</Button>
 			</div>
 		</>
@@ -692,7 +694,7 @@ export function LogsSettings({
 					<MediaMetric
 						label="Patch"
 						value="Address 1"
-						detail="8 layers · 279 slots"
+						detail="8 layers · 512 slots"
 					/>
 				</div>
 				<MediaPanel

@@ -32,9 +32,9 @@ minimum to its maximum. Choices and counts, such as the Rasterize mode or Kaleid
 step through their whole values across that range. A parameter the selected effect does not have is
 ignored, so a bank can change presets without the leftover bytes doing anything.
 
-A bank selected in the Media Server's own layer controls plays on every channel layout. An output
-still on an older layout, which has no effect-bank channels on the wire, keeps its directly
-configured effect slots until a bank is selected there.
+The two banks are the only way a layer plays effects, from the desk and from the Media Server's own
+layer controls alike. **Blur** is not a channel of its own: select a Blur preset in a bank, and use
+the bank's parameters for its amount and type.
 
 ## Blend mode and strobe
 
@@ -64,9 +64,8 @@ at 128, and variants count up from the first.
 
 ## Output mirroring
 
-The Master has no Flip/mirror channel in the current channel layout. **Master scale X** and
-**Master scale Y** run from −4× to +4× with **1×** at raw value 40960; a negative axis mirrors the
-finished output along that axis. Older channel layouts keep their Flip/mirror channel.
+The Master has no Flip/mirror channel. **Master scale X** and **Master scale Y** run from −4× to
++4× with **1×** at raw value 40960; a negative axis mirrors the finished output along that axis.
 
 ## Effect catalogue
 

@@ -41,7 +41,6 @@ function output(map?: Partial<PixelMapView>): OutputConfigurationView {
 			...map,
 		},
 		personality: "two-layers",
-		personalityLayout: "extended",
 		protocol: "art-net",
 		universe: 1,
 		startAddress: 1,

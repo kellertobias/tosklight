@@ -45,7 +45,7 @@ const MEDIA_STORY_BY_SECTION: Record<MediaServerSection, string> = {
 	media: "media",
 	library: "library",
 	audio: "audio",
-	dmx: "settings-dmx-input",
+	dmx: "dmx-diagnostics",
 	settings: "settings-libraries",
 };
 
@@ -54,7 +54,6 @@ const SETTINGS_STORY_BY_SECTION = {
 	"picture-output": "settings-outputs",
 	"sound-output": "settings-outputs",
 	network: "settings-network-and-inputs",
-	dmx: "settings-dmx-input",
 	"pixel-map": "settings-pixel-map",
 	logs: "settings-logs",
 } as const;
@@ -744,18 +743,6 @@ export const SettingsNetworkAndInputs: Story = {
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
 			>
 				<NetworkInputsSettings active="network" />
-			</SettingsScreen>
-		</Frame>
-	),
-};
-export const SettingsDmxInput: Story = {
-	render: () => (
-		<Frame active="settings">
-			<SettingsScreen
-				active="dmx"
-				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
-			>
-				<NetworkInputsSettings active="dmx" />
 			</SettingsScreen>
 		</Frame>
 	),

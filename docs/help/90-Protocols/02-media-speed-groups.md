@@ -24,10 +24,10 @@ the ToskLight message below, over OSC 1.0 on UDP.
 
 ## Configure
 
-1. On the Media Server, open **Settings > Network** and enter a **Speed Groups** listen address.
+1. On the Media Server, open **Settings > Network & DMX** and enter a **Speed Groups** listen address.
    The usual value is `0.0.0.0:4810`. Leave it empty to not receive Speed Groups. The listener
    starts the next time the Media Server starts.
-2. Under **Settings > DMX**, set **Synchronized playback follows** for each output to a **Light
+2. In the same tab's **DMX input** section, set **Synchronized playback follows** for each output to a **Light
    desk Speed Group** from A to E. This applies immediately. **Each layer's Playback BPM
    channel** keeps the per-layer DMX tempo instead. An output follows exactly one of the two
    sources, never both.
@@ -35,7 +35,7 @@ the ToskLight message below, over OSC 1.0 on UDP.
    The desk sends every Speed Group ten times a second to UDP port `4810` on that endpoint's IP
    address, for as long as a show is open.
 
-**Settings > Network** shows reception live:
+**Settings > Network & DMX** shows reception live:
 
 - whether the server is off, listening, receiving, or has lost the desk;
 - which desk it follows, from which address, and when it last heard from it;

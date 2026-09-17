@@ -17,12 +17,14 @@ stored value. A parameter beyond the selected effect's own parameters has no vis
 2-layer and 8-layer personalities occupy 158 and 512 slots, and the Media Server's Connect to Console
 downloads patch the same 59-slot layer and 40-slot master.
 
-Given a Media output still configured for an older channel layout, when an operator selects a bank
-in the Media Server's own layer controls, the output visibly applies that effect.
+Given a Media Server configuration stored with a retired channel layout (legacy, mask positioning,
+full master, or effect banks), when the Media Server starts, then the output keeps its 2-layer or
+8-layer personality on the 3D-object-mapping layout, and Settings offers only those two
+personalities. When an operator selects a Blur preset in a bank, the output visibly blurs; no
+channel is labelled as a legacy or ignored Blur.
 
 When the operator edits either preset in the Effects library, every bank selecting that slot uses
-the new settings without changing its Select or Strength value. The legacy four-amount personality
-continues to decode with its previous meaning.
+the new settings without changing its Select or Strength value.
 
 Given loaded layers have dimmer above zero, when Master **Layer Opacity Cycle** is enabled at a beat
 multiplier or divider, then the effective opacity advances in stable layer order on that timing.
@@ -75,7 +77,7 @@ In Pixel's Library web view, select an imported video and verify its inspector a
 
 ## PIXEL-008 — Art-Net startup fallback
 
-Configure Pixel with an enabled Art-Net output and occupy its configured Art-Net UDP port before starting Pixel. Pixel still starts its administration interface and does not accept Art-Net input for that run. **Settings > Network** visibly warns that Pixel started without Art-Net input and retains the stored address so the operator can correct the conflict. Releasing the port and restarting restores Art-Net; Pixel never silently changes the configured address or reports the listener as active while it is unavailable.
+Configure Pixel with an enabled Art-Net output and occupy its configured Art-Net UDP port before starting Pixel. Pixel still starts its administration interface and does not accept Art-Net input for that run. **Settings > Network & DMX** visibly warns that Pixel started without Art-Net input and retains the stored address so the operator can correct the conflict. Releasing the port and restarting restores Art-Net; Pixel never silently changes the configured address or reports the listener as active while it is unavailable.
 
 ## RUNNING-001 — containment, deduplication, and identity
 

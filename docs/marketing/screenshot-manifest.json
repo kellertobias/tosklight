@@ -293,19 +293,9 @@
 		},
 		{
 			"file": "media-server-network-inputs.png",
-			"title": "Media Server network and inputs",
-			"caption": "The Network title tab keeps configured listeners and their active bindings together.",
+			"title": "Media Server network and DMX input",
+			"caption": "One Network & DMX tab keeps the listeners and the DMX personality, protocol, universe, and start address that arrive on them together.",
 			"storyId": "tosklight-media-server--settings-network-and-inputs",
-			"viewport": { "width": 1440, "height": 900 },
-			"theme": "dark",
-			"mode": "software",
-			"interactions": []
-		},
-		{
-			"file": "media-server-dmx-input.png",
-			"title": "Media Server DMX input",
-			"caption": "The DMX title tab owns personality, protocol, universe, and start address without mixing in other inputs.",
-			"storyId": "tosklight-media-server--settings-dmx-input",
 			"viewport": { "width": 1440, "height": 900 },
 			"theme": "dark",
 			"mode": "software",

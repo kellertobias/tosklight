@@ -156,7 +156,6 @@ fn grandma2_channel_xml(index: usize, channel: &Channel) -> String {
             "MEDIASERVERINPUTFILESELECT",
         ),
         "Dimmer" | "Master dimmer" => ("DIM", "DIMMER", "DIMMER", "DIM"),
-        "Legacy Blur (ignored)" => ("DUMMY", "CONTROL", "CONTROL", "NOFEATURE"),
         _ => (
             custom_attribute.as_str(),
             "TLPIXEL",

@@ -7,7 +7,7 @@
 use media_application::OutputConfiguration;
 use media_domain::personality::LayerPersonality;
 use media_domain::personality::channels::{
-    ChannelSpec, ChannelValueSet, Resolution, layer_channels, master_channels,
+    ChannelSpec, ChannelValueSet, LAYER_CHANNELS, MASTER_CHANNELS, Resolution,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -62,41 +62,32 @@ pub struct DmxMapView {
 
 impl DmxMapView {
     pub fn of(output: &OutputConfiguration) -> Self {
-        let footprint = output.personality.footprint_for(output.personality_layout);
-        let layer_slots = output.personality_layout.layer_slots();
+        let footprint = output.personality.footprint();
+        let layer_slots = media_domain::personality::LAYER_SLOTS;
         let mut channels = Vec::with_capacity(usize::from(footprint.total()));
 
         for layer_index in 0..output.personality.layer_count() {
             let block_offset = layer_index * layer_slots;
-            // Each layout keeps the table a desk patched against it, not the newest one.
-            channels.extend(
-                layer_channels(output.personality_layout)
-                    .iter()
-                    .map(|spec| {
-                        DmxChannelView::of(
-                            spec,
-                            output.start_address + block_offset + spec.offset,
-                            DmxChannelGroupView::Layer {
-                                // The operator-facing layer number is one-based.
-                                number: layer_index + 1,
-                            },
-                        )
-                    }),
-            );
+            channels.extend(LAYER_CHANNELS.iter().map(|spec| {
+                DmxChannelView::of(
+                    spec,
+                    output.start_address + block_offset + spec.offset,
+                    DmxChannelGroupView::Layer {
+                        // The operator-facing layer number is one-based.
+                        number: layer_index + 1,
+                    },
+                )
+            }));
         }
 
         let master_offset = footprint.master_offset();
-        channels.extend(
-            master_channels(output.personality_layout)
-                .iter()
-                .map(|spec| {
-                    DmxChannelView::of(
-                        spec,
-                        output.start_address + master_offset + spec.offset,
-                        DmxChannelGroupView::Master,
-                    )
-                }),
-        );
+        channels.extend(MASTER_CHANNELS.iter().map(|spec| {
+            DmxChannelView::of(
+                spec,
+                output.start_address + master_offset + spec.offset,
+                DmxChannelGroupView::Master,
+            )
+        }));
 
         Self {
             output_id: output.id.to_string(),
@@ -341,22 +332,17 @@ mod tests {
             "the mapping master mirrors through a negative scale"
         );
 
-        let mut older = configured_output();
-        older.personality_layout = media_domain::PersonalityLayout::EffectBanks;
-        let older = DmxMapView::of(&older);
-        let flip = older
-            .channels
-            .iter()
-            .find(|channel| channel.name == "Flip/mirror")
-            .unwrap();
-        assert_eq!(flip.value_sets.len(), 4);
-        assert!(flip.value_sets.iter().all(|set| set.step == 4));
         assert!(
-            older
-                .channels
+            view.channels
                 .iter()
-                .any(|channel| channel.name == "Playback BPM"),
-            "an older layout keeps its own table"
+                .all(|channel| channel.name != "Playback BPM" && channel.implemented),
+            "every slot of the mapping layout is a working control"
+        );
+        assert!(
+            view.channels
+                .iter()
+                .all(|channel| !channel.name.to_ascii_lowercase().contains("blur")),
+            "Blur is an effect-bank preset, not a separate or retired channel"
         );
     }
 

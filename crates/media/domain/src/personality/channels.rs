@@ -1,19 +1,17 @@
 //! The canonical channel tables.
 //!
-//! The current mapping layer occupies 59 consecutive slots and its master 40. Fine channels are
+//! The 3D-object-mapping layer occupies 59 consecutive slots and its master 40. Fine channels are
 //! big-endian coarse/fine pairs. These tables are the single source the receivers, the API, UI
-//! metadata, the tests, and the GDTF export all read — nothing restates them.
+//! metadata, the tests, and the GDTF and MagicQ exports all read — nothing restates them.
 //!
-//! The effect-bank tables are the frozen published layout every older channel layout is a prefix
-//! of, so a desk patched against one of those keeps the meaning it was programmed with.
+//! They are the only channel layout. The earlier effect-bank, extended, mask-positioning, and
+//! legacy layouts were retired before launch; configuration migration moves stored outputs here.
 
 use crate::blend::{BlendMode, STROBE_DMX};
 use crate::layer::ScalingMode;
 use crate::master::BeatRatio;
 use crate::playback::PlayMode;
 use crate::speed::SpeedMultiplier;
-
-use super::PersonalityLayout;
 
 /// A slot's meaning, for GDTF channel functions, UI metadata, and the DMX map view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,9 +55,7 @@ pub enum ValueKind {
         off: &'static str,
         on: &'static str,
     },
-    FlipMirror,
     SpeedMultiplier,
-    PlaybackBpm,
     BeatRatio,
     /// One effect-bank parameter byte: zero keeps the selected preset's stored value, and
     /// 1–255 spans whatever range that preset's effect gives the parameter.
@@ -71,8 +67,6 @@ pub enum ValueKind {
     BlendMode,
     /// Zero draws the layer flat; 1–255 selects a numbered 3D model.
     ModelSelect,
-    /// A declared channel with no effect implementation to select or describe yet.
-    Unimplemented,
 }
 
 /// Whether receiving this slot currently changes an implemented operator feature.
@@ -97,8 +91,8 @@ impl ChannelImplementation {
 
 /// One raw value set, inclusive at both ends.
 ///
-/// Most sets use `step = 1`. Flip/mirror uses `step = 4` because the decoder intentionally
-/// normalizes every byte modulo four; expressing that stride keeps values 4..=255 truthful.
+/// Every current set uses `step = 1`; the stride stays in the wire contract so a set can describe
+/// a value that repeats modulo some step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelValueSet {
     pub name: String,
@@ -115,16 +109,6 @@ impl ChannelValueSet {
             from: u16::from(from),
             to: u16::from(to),
             step: 1,
-            implemented: true,
-        }
-    }
-
-    fn strided(name: impl Into<String>, from: u8, to: u8, step: u16) -> Self {
-        Self {
-            name: name.into(),
-            from: u16::from(from),
-            to: u16::from(to),
-            step,
             implemented: true,
         }
     }
@@ -162,19 +146,9 @@ impl ValueKind {
                 ChannelValueSet::range(off, 0, 127),
                 ChannelValueSet::range(on, 128, 255),
             ],
-            Self::FlipMirror => vec![
-                ChannelValueSet::strided("None", 0, 252, 4),
-                ChannelValueSet::strided("Horizontal", 1, 253, 4),
-                ChannelValueSet::strided("Vertical", 2, 254, 4),
-                ChannelValueSet::strided("Both", 3, 255, 4),
-            ],
             Self::SpeedMultiplier => {
                 contiguous_byte_sets(|value| SpeedMultiplier::from_dmx(value).label())
             }
-            Self::PlaybackBpm => vec![
-                ChannelValueSet::range("Off", 0, 0),
-                ChannelValueSet::range("1–255 BPM", 1, 255),
-            ],
             Self::BeatRatio => [
                 BeatRatio::Disabled,
                 BeatRatio::Divide(16),
@@ -225,13 +199,6 @@ impl ValueKind {
                 ChannelValueSet::range("Flat", 0, 0),
                 ChannelValueSet::range("Model", 1, 255),
             ],
-            Self::Unimplemented => vec![ChannelValueSet {
-                name: "Declared — effect engine not implemented".to_owned(),
-                from: 0,
-                to: 255,
-                step: 1,
-                implemented: false,
-            }],
         }
     }
 }
@@ -269,9 +236,6 @@ macro_rules! channel_table {
 }
 
 const IMPLEMENTED: ChannelImplementation = ChannelImplementation::Implemented;
-const LEGACY_ONLY: ChannelImplementation = ChannelImplementation::Unimplemented {
-    reason: "reserved for legacy Blur; current effect-bank personalities select Blur from the Effects library",
-};
 
 channel_table! { LAYER_CHANNELS;
      0 "Folder"                  Byte       0, ValueKind::Continuous, IMPLEMENTED;
@@ -308,7 +272,6 @@ channel_table! { LAYER_CHANNELS;
     30 "Effect 2 Select"         Byte       0, ValueKind::Continuous, IMPLEMENTED;
     31 "Effect 2 Strength"       Byte       0, ValueKind::Continuous, IMPLEMENTED;
     32 "Speed multiplier"        Byte     127, ValueKind::SpeedMultiplier, IMPLEMENTED;
-    // The effect-bank layout's Playback BPM and ignored Blur bytes carry these two instead.
     33 "3D model"                Byte       0, ValueKind::ModelSelect, IMPLEMENTED;
     34 "Blend mode"              Byte       0, ValueKind::BlendMode, IMPLEMENTED;
     35 "Mask position X"         Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
@@ -337,50 +300,6 @@ channel_table! { LAYER_CHANNELS;
     56 "Model pan fine"          Fine       0, ValueKind::Continuous, IMPLEMENTED;
     57 "Model tilt"              Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
     58 "Model tilt fine"         Fine       0, ValueKind::Continuous, IMPLEMENTED;
-}
-
-channel_table! { EFFECT_BANK_LAYER_CHANNELS;
-     0 "Folder"                Byte       0, ValueKind::Continuous, IMPLEMENTED;
-     1 "File"                  Byte       0, ValueKind::Continuous, IMPLEMENTED;
-     2 "Play mode"             Byte       0, ValueKind::PlayMode, IMPLEMENTED;
-     3 "Scale X"               Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-     4 "Scale X fine"          Fine       0, ValueKind::Continuous, IMPLEMENTED;
-     5 "Scale Y"               Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-     6 "Scale Y fine"          Fine       0, ValueKind::Continuous, IMPLEMENTED;
-     7 "Scaling mode"          Byte       0, ValueKind::ScalingMode, IMPLEMENTED;
-     8 "Position X"            Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-     9 "Position X fine"       Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    10 "Position Y"            Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    11 "Position Y fine"       Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    12 "Rotation"              Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    13 "Rotation fine"         Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    14 "Dimmer"                Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    15 "Volume"                Byte     255, ValueKind::Continuous, IMPLEMENTED;
-    16 "Cyan"                  Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    17 "Magenta"               Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    18 "Yellow"                Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    19 "Grayscale"             Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    20 "Mask folder"           Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    21 "Mask file"             Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    22 "Mask scale X"          Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    23 "Mask scale X fine"     Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    24 "Mask scale Y"          Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    25 "Mask scale Y fine"     Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    26 "Mask invert"           Byte       0, ValueKind::Binary { off: "Normal", on: "Inverted" }, IMPLEMENTED;
-    27 "Mask opacity"          Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    28 "Effect 1 Select"       Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    29 "Effect 1 Strength"     Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    30 "Effect 2 Select"       Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    31 "Effect 2 Strength"     Byte       0, ValueKind::Continuous, IMPLEMENTED;
-    32 "Speed multiplier"      Byte     127, ValueKind::SpeedMultiplier, IMPLEMENTED;
-    33 "Playback BPM"          Byte       0, ValueKind::PlaybackBpm, IMPLEMENTED;
-    34 "Legacy Blur (ignored)" Byte       0, ValueKind::Unimplemented, LEGACY_ONLY;
-    // New controls append to the published block. Existing desks therefore keep sending every
-    // pre-existing control, especially playback speed, at the slot they originally patched.
-    35 "Mask position X"       Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    36 "Mask position X fine"  Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    37 "Mask position Y"       Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    38 "Mask position Y fine"  Fine       0, ValueKind::Continuous, IMPLEMENTED;
 }
 
 channel_table! { MASTER_CHANNELS;
@@ -427,68 +346,6 @@ channel_table! { MASTER_CHANNELS;
     39 "Layer Opacity Cycle"         Byte       0, ValueKind::BeatRatio, IMPLEMENTED;
 }
 
-channel_table! { EFFECT_BANK_MASTER_CHANNELS;
-     0 "Master dimmer"               Byte     255, ValueKind::Continuous, IMPLEMENTED;
-     1 "Master volume"               Byte     255, ValueKind::Continuous, IMPLEMENTED;
-     2 "Master cyan"                 Byte       0, ValueKind::Continuous, IMPLEMENTED;
-     3 "Master magenta"              Byte       0, ValueKind::Continuous, IMPLEMENTED;
-     4 "Master yellow"               Byte       0, ValueKind::Continuous, IMPLEMENTED;
-     5 "Flip/mirror"                 Byte       0, ValueKind::FlipMirror, IMPLEMENTED;
-     6 "Master mask"                 Byte       0, ValueKind::Continuous, IMPLEMENTED;
-     7 "Master mask position X"      Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-     8 "Master mask position X fine" Fine       0, ValueKind::Continuous, IMPLEMENTED;
-     9 "Master mask position Y"      Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    10 "Master mask position Y fine" Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    11 "Master scale X"              Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    12 "Master scale X fine"         Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    13 "Master scale Y"              Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    14 "Master scale Y fine"         Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    15 "Master scaling mode"         Byte       0, ValueKind::ScalingMode, IMPLEMENTED;
-    16 "Master position X"           Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    17 "Master position X fine"      Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    18 "Master position Y"           Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    19 "Master position Y fine"      Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    20 "Master rotation"             Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    21 "Master rotation fine"        Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    22 "Shaper left"                 Coarse     0, ValueKind::Continuous, IMPLEMENTED;
-    23 "Shaper left fine"            Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    24 "Shaper right"                Coarse     0, ValueKind::Continuous, IMPLEMENTED;
-    25 "Shaper right fine"           Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    26 "Shaper top"                  Coarse     0, ValueKind::Continuous, IMPLEMENTED;
-    27 "Shaper top fine"             Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    28 "Shaper bottom"               Coarse     0, ValueKind::Continuous, IMPLEMENTED;
-    29 "Shaper bottom fine"          Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    30 "Shaper left rotation"        Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    31 "Shaper left rotation fine"   Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    32 "Shaper right rotation"       Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    33 "Shaper right rotation fine"  Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    34 "Shaper top rotation"         Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    35 "Shaper top rotation fine"    Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    36 "Shaper bottom rotation"      Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    37 "Shaper bottom rotation fine" Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    38 "Shaper rotation"             Coarse 32768, ValueKind::Continuous, IMPLEMENTED;
-    39 "Shaper rotation fine"        Fine       0, ValueKind::Continuous, IMPLEMENTED;
-    40 "Layer Opacity Cycle"         Byte       0, ValueKind::BeatRatio, IMPLEMENTED;
-}
-
-/// The layer table a layout decodes. Every older layout is a prefix of the effect-bank table.
-pub fn layer_channels(layout: PersonalityLayout) -> &'static [ChannelSpec] {
-    let table = match layout {
-        PersonalityLayout::Mapping => LAYER_CHANNELS,
-        _ => EFFECT_BANK_LAYER_CHANNELS,
-    };
-    &table[..usize::from(layout.layer_slots())]
-}
-
-/// The master table a layout decodes. Every older layout is a prefix of the effect-bank table.
-pub fn master_channels(layout: PersonalityLayout) -> &'static [ChannelSpec] {
-    let table = match layout {
-        PersonalityLayout::Mapping => MASTER_CHANNELS,
-        _ => EFFECT_BANK_MASTER_CHANNELS,
-    };
-    &table[..usize::from(layout.master_slots())]
-}
-
 /// Zero-based layer offsets, named so the decoder reads as the published table does.
 pub mod layer {
     pub const FOLDER: usize = 0;
@@ -512,16 +369,11 @@ pub mod layer {
     pub const MASK_SCALE_Y: usize = 24;
     pub const MASK_INVERT: usize = 26;
     pub const MASK_OPACITY: usize = 27;
-    pub const EFFECT_1: usize = 28;
     pub const EFFECT_1_SELECT: usize = 28;
     pub const EFFECT_1_STRENGTH: usize = 29;
     pub const EFFECT_2_SELECT: usize = 30;
     pub const EFFECT_2_STRENGTH: usize = 31;
     pub const SPEED_MULTIPLIER: usize = 32;
-    /// Older layouts only; the mapping layout carries the 3D model here.
-    pub const PLAYBACK_BPM: usize = 33;
-    /// Older layouts only; the mapping layout carries Blend mode here.
-    pub const BLUR: usize = 34;
     pub const MODEL: usize = 33;
     pub const BLEND: usize = 34;
     pub const MASK_POSITION_X: usize = 35;
@@ -535,7 +387,7 @@ pub mod layer {
     pub const MODEL_TILT: usize = 57;
 }
 
-/// Zero-based offsets of the current mapping master.
+/// Zero-based master offsets.
 pub mod master {
     pub const DIMMER: usize = 0;
     pub const VOLUME: usize = 1;
@@ -563,57 +415,18 @@ pub mod master {
     pub const OPACITY_CYCLE: usize = 39;
 }
 
-/// Zero-based offsets of the effect-bank master, which every older master layout is a prefix of.
-pub mod effect_bank_master {
-    pub const DIMMER: usize = 0;
-    pub const VOLUME: usize = 1;
-    pub const CYAN: usize = 2;
-    pub const MAGENTA: usize = 3;
-    pub const YELLOW: usize = 4;
-    pub const FLIP_MIRROR: usize = 5;
-    pub const MASK: usize = 6;
-    pub const MASK_POSITION_X: usize = 7;
-    pub const MASK_POSITION_Y: usize = 9;
-    pub const SCALE_X: usize = 11;
-    pub const SCALE_Y: usize = 13;
-    pub const SCALING_MODE: usize = 15;
-    pub const POSITION_X: usize = 16;
-    pub const POSITION_Y: usize = 18;
-    pub const ROTATION: usize = 20;
-    pub const SHAPER_LEFT: usize = 22;
-    pub const SHAPER_RIGHT: usize = 24;
-    pub const SHAPER_TOP: usize = 26;
-    pub const SHAPER_BOTTOM: usize = 28;
-    pub const SHAPER_LEFT_ROTATION: usize = 30;
-    pub const SHAPER_RIGHT_ROTATION: usize = 32;
-    pub const SHAPER_TOP_ROTATION: usize = 34;
-    pub const SHAPER_BOTTOM_ROTATION: usize = 36;
-    pub const SHAPER_ROTATION: usize = 38;
-    pub const OPACITY_CYCLE: usize = 40;
-}
-
 #[cfg(test)]
 mod tests {
-    use super::super::{
-        EFFECT_BANK_LAYER_SLOTS, EFFECT_BANK_MASTER_SLOTS, EFFECT_BANK_PARAMETERS, LAYER_SLOTS,
-        MASTER_SLOTS, VISUALIZER_PARAMETERS,
-    };
+    use super::super::{EFFECT_BANK_PARAMETERS, LAYER_SLOTS, MASTER_SLOTS, VISUALIZER_PARAMETERS};
     use super::*;
 
-    const TABLES: [&[ChannelSpec]; 4] = [
-        LAYER_CHANNELS,
-        MASTER_CHANNELS,
-        EFFECT_BANK_LAYER_CHANNELS,
-        EFFECT_BANK_MASTER_CHANNELS,
-    ];
+    const TABLES: [&[ChannelSpec]; 2] = [LAYER_CHANNELS, MASTER_CHANNELS];
 
     #[test]
     fn the_table_covers_every_slot_exactly_once_in_order() {
         for (table, slots) in [
             (LAYER_CHANNELS, LAYER_SLOTS),
             (MASTER_CHANNELS, MASTER_SLOTS),
-            (EFFECT_BANK_LAYER_CHANNELS, EFFECT_BANK_LAYER_SLOTS),
-            (EFFECT_BANK_MASTER_CHANNELS, EFFECT_BANK_MASTER_SLOTS),
         ] {
             assert_eq!(table.len(), usize::from(slots));
             for (index, channel) in table.iter().enumerate() {
@@ -669,14 +482,9 @@ mod tests {
                 .count()
         };
         assert_eq!(
-            pairs(EFFECT_BANK_LAYER_CHANNELS),
-            9,
-            "scale X/Y, position X/Y, rotation, and mask scale plus position axes"
-        );
-        assert_eq!(
             pairs(LAYER_CHANNELS),
             13,
-            "plus in point, out point, model pan, and model tilt"
+            "scale, position, rotation, mask scale and position, in and out point, model pan and tilt"
         );
     }
 
@@ -703,14 +511,6 @@ mod tests {
         );
         assert_eq!(LAYER_CHANNELS[layer::MODEL_PAN].name, "Model pan");
         assert_eq!(LAYER_CHANNELS[layer::MODEL_TILT].name, "Model tilt");
-        assert_eq!(
-            EFFECT_BANK_LAYER_CHANNELS[layer::PLAYBACK_BPM].name,
-            "Playback BPM"
-        );
-        assert_eq!(
-            EFFECT_BANK_MASTER_CHANNELS[effect_bank_master::FLIP_MIRROR].name,
-            "Flip/mirror"
-        );
         assert_eq!(MASTER_CHANNELS[master::MASK].name, "Master mask");
         assert_eq!(MASTER_CHANNELS[master::SCALE_X].name, "Master scale X");
         assert_eq!(
@@ -718,73 +518,55 @@ mod tests {
             "Layer Opacity Cycle"
         );
         assert_eq!(
-            EFFECT_BANK_MASTER_CHANNELS[effect_bank_master::MASK_POSITION_Y].name,
+            MASTER_CHANNELS[master::MASK_POSITION_Y].name,
             "Master mask position Y"
         );
     }
 
     #[test]
-    fn the_mapping_layer_keeps_every_shared_control_at_its_published_slot() {
-        for (current, published) in LAYER_CHANNELS.iter().zip(EFFECT_BANK_LAYER_CHANNELS) {
-            if matches!(usize::from(published.offset), layer::MODEL | layer::BLEND) {
-                continue;
-            }
-            assert_eq!(current, published);
-        }
-    }
-
-    #[test]
-    fn the_mapping_master_drops_flip_and_keeps_the_order() {
-        let published: Vec<&str> = EFFECT_BANK_MASTER_CHANNELS
-            .iter()
-            .map(|channel| channel.name)
-            .filter(|name| *name != "Flip/mirror")
-            .collect();
-        let current: Vec<&str> = MASTER_CHANNELS.iter().map(|channel| channel.name).collect();
-        assert_eq!(current, published);
+    fn the_master_mirrors_through_negative_scale_without_a_flip_channel() {
+        assert!(
+            MASTER_CHANNELS
+                .iter()
+                .all(|channel| channel.name != "Flip/mirror")
+        );
         assert_eq!(
             MASTER_CHANNELS[master::SCALE_X].default_value,
             crate::dmx::SIGNED_MASTER_SCALE_HOME
         );
     }
 
+    /// Every slot of the layout is a working control. Blur is played by selecting a Blur preset
+    /// in an effect bank, so no slot is reserved for, or labelled as, a retired Blur byte.
     #[test]
-    fn older_layouts_read_prefixes_of_the_effect_bank_tables() {
-        for layout in [
-            PersonalityLayout::Legacy,
-            PersonalityLayout::Current,
-            PersonalityLayout::Extended,
-            PersonalityLayout::EffectBanks,
-        ] {
-            assert_eq!(
-                layer_channels(layout),
-                &EFFECT_BANK_LAYER_CHANNELS[..usize::from(layout.layer_slots())]
+    fn every_slot_is_implemented_and_none_is_a_retired_placeholder() {
+        for channel in TABLES.into_iter().flatten() {
+            assert!(channel.implementation.is_implemented(), "{}", channel.name);
+            let name = channel.name.to_ascii_lowercase();
+            assert!(
+                !name.contains("legacy") && !name.contains("ignored") && name != "blur",
+                "{}",
+                channel.name
             );
-            assert_eq!(
-                master_channels(layout),
-                &EFFECT_BANK_MASTER_CHANNELS[..usize::from(layout.master_slots())]
+            assert!(
+                !matches!(channel.name, "Playback BPM" | "Flip/mirror"),
+                "{} belongs to a retired layout",
+                channel.name
             );
         }
-        assert_eq!(layer_channels(PersonalityLayout::Mapping), LAYER_CHANNELS);
-        assert_eq!(master_channels(PersonalityLayout::Mapping), MASTER_CHANNELS);
     }
 
     #[test]
     fn every_channel_name_is_distinct() {
-        for (layer_table, master_table) in [
-            (LAYER_CHANNELS, MASTER_CHANNELS),
-            (EFFECT_BANK_LAYER_CHANNELS, EFFECT_BANK_MASTER_CHANNELS),
-        ] {
-            let mut names: Vec<&str> = layer_table
-                .iter()
-                .chain(master_table)
-                .map(|channel| channel.name)
-                .collect();
-            let total = names.len();
-            names.sort_unstable();
-            names.dedup();
-            assert_eq!(names.len(), total);
-        }
+        let mut names: Vec<&str> = LAYER_CHANNELS
+            .iter()
+            .chain(MASTER_CHANNELS)
+            .map(|channel| channel.name)
+            .collect();
+        let total = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), total);
     }
 
     fn matching_set(sets: &[ChannelValueSet], value: u8) -> &ChannelValueSet {
@@ -822,27 +604,6 @@ mod tests {
     }
 
     #[test]
-    fn flip_mirror_sets_describe_all_modulo_four_values() {
-        let sets = EFFECT_BANK_MASTER_CHANNELS[effect_bank_master::FLIP_MIRROR]
-            .values
-            .sets();
-        assert_eq!(sets.len(), 4);
-        assert!(sets.iter().all(|set| set.step == 4));
-
-        for raw in 0..=255u8 {
-            assert_eq!(
-                matching_set(&sets, raw).name,
-                match crate::color::FlipMirror::from_dmx(raw) {
-                    crate::color::FlipMirror::None => "None",
-                    crate::color::FlipMirror::Horizontal => "Horizontal",
-                    crate::color::FlipMirror::Vertical => "Vertical",
-                    crate::color::FlipMirror::Both => "Both",
-                }
-            );
-        }
-    }
-
-    #[test]
     fn speed_multiplier_sets_are_the_actual_quantized_bands() {
         let sets = LAYER_CHANNELS[layer::SPEED_MULTIPLIER].values.sets();
         assert_eq!(sets.len(), 31);
@@ -870,7 +631,7 @@ mod tests {
 
     #[test]
     fn the_effect_slots_are_normalized_mix_controls() {
-        for effect in &LAYER_CHANNELS[layer::EFFECT_1..layer::EFFECT_1 + 4] {
+        for effect in &LAYER_CHANNELS[layer::EFFECT_1_SELECT..layer::EFFECT_1_SELECT + 4] {
             assert!(effect.implementation.is_implemented(), "{}", effect.name);
             assert!(effect.implementation.reason().is_none(), "{}", effect.name);
             assert_eq!(effect.values, ValueKind::Continuous, "{}", effect.name);

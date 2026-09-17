@@ -236,8 +236,7 @@ export const MEDIA_SETTINGS_SECTIONS = [
 	{ id: "libraries", label: "Libraries" },
 	{ id: "picture-output", label: "Picture" },
 	{ id: "sound-output", label: "Sound" },
-	{ id: "network", label: "Network" },
-	{ id: "dmx", label: "DMX" },
+	{ id: "network", label: "Network & DMX" },
 	{ id: "pixel-map", label: "Pixel Map" },
 	{ id: "logs", label: "Logs" },
 ] as const;

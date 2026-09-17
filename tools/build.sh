@@ -740,7 +740,6 @@ seed_media_configuration() {
         "resolution": { "width": 1280, "height": 720 },
         "presentation": "display-synchronized",
         "personality": "two-layers",
-        "personalityLayout": "mapping",
         "protocol": "art-net",
         "universe": 9,
         "startAddress": 177

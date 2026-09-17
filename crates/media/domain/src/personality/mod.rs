@@ -4,16 +4,13 @@
 //! their channel layout from here rather than restating it, so the runtime and the exported
 //! fixture can never disagree about what a slot means.
 //!
-//! The full per-channel table lands with the domain slice; this module owns the sizes and the
-//! one-universe constraint that configuration validates at startup.
+//! This module owns the sizes and the one-universe constraint that configuration validates at
+//! startup.
 
 pub mod channels;
 pub mod decode;
 
-pub use channels::{
-    ChannelSpec, EFFECT_BANK_LAYER_CHANNELS, EFFECT_BANK_MASTER_CHANNELS, LAYER_CHANNELS,
-    MASTER_CHANNELS, Resolution, layer_channels, master_channels,
-};
+pub use channels::{ChannelSpec, LAYER_CHANNELS, MASTER_CHANNELS, Resolution};
 pub use decode::{DecodedFrame, FrameError};
 
 use serde::{Deserialize, Serialize};
@@ -23,80 +20,29 @@ use serde::{Deserialize, Serialize};
 /// Eight of these layers and the master fill one universe exactly.
 pub const LAYER_SLOTS: u16 = 59;
 
-/// The effect-bank layer before blend, playback range, parameters, and 3D mapping were added.
-pub const EFFECT_BANK_LAYER_SLOTS: u16 = 39;
-
-/// Parameter bytes each effect bank carries in the current personality.
+/// Parameter bytes each effect bank carries.
 pub const EFFECT_BANK_PARAMETERS: usize = 4;
 
-/// Visualizer parameter bytes each layer carries in the current personality.
+/// Visualizer parameter bytes each layer carries.
 pub const VISUALIZER_PARAMETERS: usize = 4;
 
-/// Slots the current master section occupies. Mirroring is a negative scale, not a channel.
+/// Slots the master section occupies. Mirroring is a negative scale, not a channel.
 pub const MASTER_SLOTS: u16 = 40;
-
-/// The effect-bank master, which still carries Flip/mirror.
-pub const EFFECT_BANK_MASTER_SLOTS: u16 = 41;
-
-/// The original published block before Blur and mask-position controls were appended.
-pub const LEGACY_LAYER_SLOTS: u16 = 34;
-pub const LEGACY_MASTER_SLOTS: u16 = 7;
-/// The v2 block added master-mask positioning but predates master geometry and shapers.
-pub const CURRENT_MASTER_SLOTS: u16 = 11;
-/// The v3 expanded master before the fixed Layer Opacity Cycle channel was appended.
-pub const EXTENDED_MASTER_SLOTS: u16 = 40;
 
 /// Slots in one DMX universe.
 pub const UNIVERSE_SLOTS: u16 = 512;
 
 /// How many layers a configured output exposes to the desk.
 ///
-/// Both personalities are supported products, not a migration step: two layers for a compact
-/// patch, eight for a full one.
+/// These are the only two personalities: two layers for a compact patch, eight for a full one.
+/// Both use the 3D-object-mapping channel layout; the earlier layouts were retired before launch
+/// and stored configurations are migrated onto this one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum LayerPersonality {
     TwoLayers,
     #[default]
     EightLayers,
-}
-
-/// Which immutable channel layout a configured output decodes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum PersonalityLayout {
-    Legacy,
-    Current,
-    Extended,
-    EffectBanks,
-    /// Blend, playback range, effect and visualizer parameters, and 3D model mapping.
-    #[default]
-    Mapping,
-}
-
-impl PersonalityLayout {
-    pub const fn layer_slots(self) -> u16 {
-        match self {
-            Self::Legacy => LEGACY_LAYER_SLOTS,
-            Self::Current | Self::Extended | Self::EffectBanks => EFFECT_BANK_LAYER_SLOTS,
-            Self::Mapping => LAYER_SLOTS,
-        }
-    }
-
-    pub const fn master_slots(self) -> u16 {
-        match self {
-            Self::Legacy => LEGACY_MASTER_SLOTS,
-            Self::Current => CURRENT_MASTER_SLOTS,
-            Self::Extended => EXTENDED_MASTER_SLOTS,
-            Self::EffectBanks => EFFECT_BANK_MASTER_SLOTS,
-            Self::Mapping => MASTER_SLOTS,
-        }
-    }
-
-    /// Whether the wire carries the two Effect Select/Strength banks.
-    pub const fn carries_effect_banks(self) -> bool {
-        matches!(self, Self::EffectBanks | Self::Mapping)
-    }
 }
 
 impl LayerPersonality {
@@ -114,13 +60,9 @@ impl LayerPersonality {
 
     /// The contiguous slot footprint this personality needs, layers followed by the master.
     pub const fn footprint(self) -> SlotFootprint {
-        self.footprint_for(PersonalityLayout::Mapping)
-    }
-
-    pub const fn footprint_for(self, layout: PersonalityLayout) -> SlotFootprint {
         SlotFootprint {
-            layer_slots: self.layer_count() * layout.layer_slots(),
-            master_slots: layout.master_slots(),
+            layer_slots: self.layer_count() * LAYER_SLOTS,
+            master_slots: MASTER_SLOTS,
         }
     }
 }
@@ -215,20 +157,6 @@ mod tests {
 
         assert_eq!(SlotFootprint::SINGLE_LAYER.total(), 59);
         assert_eq!(SlotFootprint::MASTER_ONLY.total(), 40);
-
-        assert_eq!(
-            LayerPersonality::TwoLayers
-                .footprint_for(PersonalityLayout::Current)
-                .total(),
-            89
-        );
-        assert_eq!(
-            LayerPersonality::EightLayers
-                .footprint_for(PersonalityLayout::EffectBanks)
-                .total(),
-            353,
-            "the effect-bank layout keeps its published footprint"
-        );
     }
 
     #[test]
@@ -271,12 +199,17 @@ mod tests {
     }
 
     #[test]
-    fn the_extended_blocks_include_complete_master_control() {
+    fn only_the_two_mapping_personalities_exist() {
         assert_eq!(LAYER_SLOTS, 59);
-        assert_eq!(EFFECT_BANK_LAYER_SLOTS, 39);
-        assert_eq!(CURRENT_MASTER_SLOTS, 11);
         assert_eq!(MASTER_SLOTS, 40);
-        assert_eq!(EFFECT_BANK_MASTER_SLOTS, 41);
-        assert_eq!(EXTENDED_MASTER_SLOTS, 40);
+        assert_eq!(
+            serde_json::to_value(LayerPersonality::TwoLayers).unwrap(),
+            "two-layers"
+        );
+        assert_eq!(
+            serde_json::to_value(LayerPersonality::EightLayers).unwrap(),
+            "eight-layers"
+        );
+        assert!(serde_json::from_value::<LayerPersonality>("mapping".into()).is_err());
     }
 }

@@ -3,22 +3,18 @@ use media_domain::{EffectBankState, EffectLibrary, LayerState, OutputState};
 
 /// Resolves the two lightweight effect-bank selectors into the typed renderer effect chain.
 ///
-/// A layout that carries the banks on the wire always plays them. An older layout keeps its four
-/// directly configured slots, unless the operator selected a bank from the web surface: that
-/// selection is shown as active there, so it must reach the output rather than be ignored.
+/// Every output carries the banks on the wire, so a configured output always plays them. The
+/// banks are the only effect path, and Blur is one of the presets they select.
 pub(crate) fn resolve_output(
     output: &OutputState,
     configuration: &MediaConfiguration,
 ) -> OutputState {
-    let Some(configured) = configuration.output(output.id) else {
+    if configuration.output(output.id).is_none() {
         return output.clone();
-    };
-    let wire_banks = configured.personality_layout.carries_effect_banks();
+    }
     let mut resolved = output.clone();
     for (layer_index, layer) in resolved.layers.iter_mut().enumerate() {
-        if wire_banks || layer.effect_banks.iter().any(|bank| bank.select != 0) {
-            resolve_layer(layer, &configuration.effects, layer_index);
-        }
+        resolve_layer(layer, &configuration.effects, layer_index);
     }
     resolved
 }
@@ -64,7 +60,7 @@ fn apply_parameters(effect: &mut media_domain::EffectSlot, bank: &EffectBankStat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use media_domain::{LayerPersonality, PersonalityLayout};
+    use media_domain::LayerPersonality;
 
     #[test]
     fn two_banks_resolve_in_order_and_zero_or_missing_is_off() {
@@ -91,39 +87,40 @@ mod tests {
         assert_eq!(resolved.layers[0].effects[0].mix, 0.4);
         assert!(resolved.layers[0].effects[1].effect_type.is_none());
 
-        configuration.outputs[0].personality_layout = PersonalityLayout::EffectBanks;
+        configuration.outputs.clear();
         assert_eq!(
-            resolve_output(&output, &configuration).layers[0].effects[0]
-                .effect_type
-                .as_deref(),
-            Some("digital-tv")
+            resolve_output(&output, &configuration),
+            output,
+            "an output this configuration does not know is left as it is"
         );
     }
 
-    /// The development seed and every configuration written before effect banks decode the
-    /// legacy layout. An operator's bank selection from the web surface must still render there.
+    /// Blur is played by selecting its library preset in a bank, never by a separate channel.
     #[test]
-    fn a_selected_bank_renders_on_an_older_layout_and_configured_slots_stay_otherwise() {
-        let mut configuration = MediaConfiguration::default();
-        configuration.outputs[0].personality_layout = PersonalityLayout::Legacy;
+    fn a_bank_plays_a_blur_preset_and_directly_set_slots_do_not_survive() {
+        let configuration = MediaConfiguration::default();
+        let slot = 3;
+        assert_eq!(configuration.effects.resolve(slot).unwrap().name, "Blur");
         let id = configuration.outputs[0].id;
         let mut output = OutputState::new(id, LayerPersonality::TwoLayers);
         output.layers[1].effects[2] = media_domain::EffectSlot::blur();
-
-        let untouched = resolve_output(&output, &configuration);
-        assert_eq!(untouched.layers[1].effects, output.layers[1].effects);
-
         output.layers[0].effect_banks[0] = EffectBankState {
-            select: 10,
+            select: slot,
             strength: 1.0,
             ..Default::default()
         };
+
         let resolved = resolve_output(&output, &configuration);
         assert_eq!(
             resolved.layers[0].effects[0].effect_type.as_deref(),
-            Some("rasterize")
+            Some(media_domain::BLUR_EFFECT)
         );
-        assert_eq!(resolved.layers[1].effects, output.layers[1].effects);
+        assert!(resolved.layers[0].effects[0].blur_parameters().is_some());
+        assert_eq!(
+            resolved.layers[1].effects,
+            std::array::from_fn(|_| Default::default()),
+            "the banks are the only effect path"
+        );
     }
 
     #[test]

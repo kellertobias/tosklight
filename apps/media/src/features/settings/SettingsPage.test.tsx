@@ -19,7 +19,7 @@ describe("the settings page", () => {
 
 		const tabs = screen.getByRole("tablist");
 		expect(tabs).toHaveTextContent(
-			"LibrariesPictureSoundNetworkDMXPixel MapLogs",
+			"LibrariesPictureSoundNetwork & DMXPixel MapLogs",
 		);
 		expect(tabs).not.toHaveTextContent("Audio");
 		expect(await screen.findByLabelText("Art-Net")).toBeVisible();
@@ -29,7 +29,10 @@ describe("the settings page", () => {
 		expect(
 			screen.queryByRole("button", { name: /Save settings/ }),
 		).not.toBeInTheDocument();
-		expect(screen.getByRole("status")).toHaveTextContent("Saved automatically");
+		const network = screen.getByRole("article", { name: "Network" });
+		expect(within(network).getByRole("status")).toHaveTextContent(
+			"Saved automatically",
+		);
 	});
 
 	it("saves network settings automatically", async () => {
@@ -302,56 +305,47 @@ describe("the settings page", () => {
 		).toBeVisible();
 	});
 
-	it("offers the generated mapping layout that fills one universe", async () => {
+	it("offers only the 2-layer and 8-layer mapping personalities", async () => {
 		const output = stubOutputConfiguration();
 		renderSettings();
-		await openSettings("DMX");
+		await openSettings("Network & DMX");
 		await screen.findByRole("article", { name: "Main DMX input settings" });
-		await choose(
-			"Full master controls (v3)",
-			"3D mapping, blend, playback range, and parameters",
-		);
 		expect(
-			await screen.findByRole("button", { name: "8 layers (512 slots)" }),
-		).toBeInTheDocument();
+			screen.queryByRole("button", { name: /Channel layout|Effect banks|Legacy/u }),
+		).not.toBeInTheDocument();
 		expect(
 			screen.getByText(
 				"1 to 1; the complete 512-slot personality must fit in one universe.",
 			),
 		).toBeInTheDocument();
-		await waitFor(() => expect(output.writes).toHaveLength(1));
-		expect(output.writes[0]).toMatchObject({
-			personalityLayout: "mapping",
-		});
-	});
-
-	it("keeps the earlier 353-slot effect-bank layout for existing desk patches", async () => {
-		const output = stubOutputConfiguration();
-		renderSettings();
-		await openSettings("DMX");
-		await screen.findByRole("article", { name: "Main DMX input settings" });
-		await choose(
-			"Full master controls (v3)",
-			"Effect banks and full master controls",
+		await userEvent.click(
+			screen.getByRole("button", { name: "8 layers (512 slots)" }),
 		);
 		expect(
-			await screen.findByRole("button", { name: "8 layers (353 slots)" }),
+			screen.getAllByRole("option").map((option) => option.textContent),
+		).toEqual(["2 layers (158 slots)", "8 layers (512 slots)"]);
+		await userEvent.click(
+			screen.getByRole("option", { name: "2 layers (158 slots)" }),
+		);
+		expect(
+			await screen.findByText(
+				"1 to 355; the complete 158-slot personality must fit in one universe.",
+			),
 		).toBeInTheDocument();
 		await waitFor(() => expect(output.writes).toHaveLength(1));
-		expect(output.writes[0]).toMatchObject({
-			personalityLayout: "effect-banks",
-		});
+		expect(output.writes[0]).toMatchObject({ personality: "two-layers" });
+		expect(output.writes[0]).not.toHaveProperty("personalityLayout");
 	});
 
 	it("opens DMX directly and saves only the DMX intent", async () => {
 		const output = stubOutputConfiguration();
 		renderSettings();
-		await openSettings("DMX");
+		await openSettings("Network & DMX");
 		await screen.findByRole("article", { name: "Main DMX input settings" });
 		expect(
 			screen.queryByText(/Saved output changes take effect/u),
 		).not.toBeInTheDocument();
-		await choose("8 layers (352 slots)", "2 layers (118 slots)");
+		await choose("8 layers (512 slots)", "2 layers (158 slots)");
 		await choose("Art-Net", "sACN");
 		await replaceNumber("Universe", "12");
 		await replaceNumber("Start address", "101");
@@ -369,18 +363,38 @@ describe("the settings page", () => {
 		).toBeVisible();
 	});
 
-	it("opens DMX input from the diagnostics settings link", async () => {
-		window.history.replaceState(null, "", "/settings?section=dmx");
-		stubOutputConfiguration();
-		renderSettings();
+	it("shows Network and DMX input as one surface, also from the diagnostics link", async () => {
+		for (const address of [
+			"/settings?section=network#dmx-input",
+			"/settings?section=dmx",
+		]) {
+			window.history.replaceState(null, "", address);
+			stubOutputConfiguration();
+			const view = renderSettings();
 
-		expect(screen.getByRole("tab", { name: "DMX" })).toHaveAttribute(
-			"aria-selected",
-			"true",
-		);
-		expect(
-			await screen.findByRole("heading", { name: "DMX input" }),
-		).toBeVisible();
+			expect(
+				screen.getByRole("tab", { name: "Network & DMX" }),
+			).toHaveAttribute("aria-selected", "true");
+			expect(screen.queryByRole("tab", { name: "DMX" })).toBeNull();
+			const network = await screen.findByRole("article", { name: "Network" });
+			const dmx = await screen.findByRole("heading", { name: "DMX input" });
+			expect(dmx.closest("#dmx-input")).not.toBeNull();
+			expect(
+				network.compareDocumentPosition(dmx) &
+					Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+			// Listen addresses live once, under Network; each output only picks a protocol.
+			expect(screen.getAllByRole("textbox", { name: "Art-Net" })).toHaveLength(1);
+			expect(
+				within(dmx.closest("#dmx-input") as HTMLElement).queryByRole("textbox", {
+					name: /Art-Net|sACN/u,
+				}),
+			).toBeNull();
+			expect(
+				screen.getByText("Received on the Art-Net address under Where this server listens."),
+			).toBeVisible();
+			view.unmount();
+		}
 	});
 
 	it("keeps Logs as its own settings tab without DMX diagnostics", async () => {
@@ -506,11 +520,10 @@ describe("the settings page", () => {
 		expect(heading).toContainElement(
 			screen.getByRole("heading", { name: "Network" }),
 		);
-		expect(heading).toContainElement(screen.getByRole("status"));
-		expect(screen.getByRole("status")).toHaveTextContent(
-			"Saved automatically · Applies on restart",
-		);
-		expect(screen.getByRole("status").closest(".ui-window-header")).toBeNull();
+		const status = within(network).getByRole("status");
+		expect(heading).toContainElement(status);
+		expect(status).toHaveTextContent("Saved automatically · Applies on restart");
+		expect(status.closest(".ui-window-header")).toBeNull();
 
 		await openSettings("Libraries");
 		const libraries = await screen.findByRole("article", {
@@ -591,7 +604,7 @@ describe("the settings page", () => {
 	it("lets synchronized playback follow a Light desk Speed Group live", async () => {
 		const output = stubOutputConfiguration();
 		renderSettings();
-		await openSettings("DMX");
+		await openSettings("Network & DMX");
 		await screen.findByRole("article", { name: "Main DMX input settings" });
 		await choose(
 			"Each layer's Playback BPM channel",
@@ -656,7 +669,11 @@ describe("the settings page", () => {
 		expect(alert).toHaveTextContent("citpListen is not an address");
 		expect(alert).toHaveClass("media-toast");
 		expect(alert.closest(".ui-window-header")).toBeNull();
-		expect(screen.getByRole("status")).toHaveTextContent("Not saved");
+		expect(
+			within(screen.getByRole("article", { name: "Network" })).getByRole(
+				"status",
+			),
+		).toHaveTextContent("Not saved");
 	});
 });
 
@@ -682,12 +699,6 @@ type OutputConfigurationValues = {
 	soundOutputKind: "disabled" | "system-default" | "device";
 	soundOutputName: string | null;
 	personality: "two-layers" | "eight-layers";
-	personalityLayout:
-		| "legacy"
-		| "current"
-		| "extended"
-		| "effect-banks"
-		| "mapping";
 	protocol: "art-net" | "sacn";
 	universe: number;
 	startAddress: number;
@@ -809,8 +820,6 @@ function installOutputConfiguration(configuration: OutputConfiguration) {
 						configuration.active.soundOutputName;
 				configuration.dmxPendingRestart =
 					configuration.personality !== configuration.active.personality ||
-					configuration.personalityLayout !==
-						configuration.active.personalityLayout ||
 					configuration.protocol !== configuration.active.protocol ||
 					configuration.universe !== configuration.active.universe ||
 					configuration.startAddress !== configuration.active.startAddress;
@@ -839,7 +848,6 @@ function activeOutputConfiguration(): OutputConfigurationValues {
 		soundOutputKind: "disabled",
 		soundOutputName: null,
 		personality: "eight-layers",
-		personalityLayout: "extended",
 		protocol: "art-net",
 		universe: 0,
 		startAddress: 1,
@@ -874,7 +882,7 @@ async function replaceNumber(label: string, value: string) {
 }
 
 async function openSettings(
-	name: "Libraries" | "Picture" | "Sound" | "Network" | "DMX" | "Logs",
+	name: "Libraries" | "Picture" | "Sound" | "Network & DMX" | "Logs",
 ) {
 	await userEvent.click(screen.getByRole("tab", { name }));
 }

@@ -4,13 +4,13 @@ ToskLight Control operates ToskLight Pixel through ordinary Art-Net or sACN chan
 
 ## Patch the Media Server fixture
 
-Open **Show > Show Patch**, choose the **ToskLight** manufacturer, and add the combined **Media Server** fixture in its 2-layer or 8-layer mode. Match its personality, protocol, universe, start address, and **3D mapping, blend, playback range, and parameters** channel layout to the Media Server output under **Settings > DMX**. The 2-layer personality occupies 158 slots and the 8-layer personality occupies 512 slots, so an 8-layer patch fills its universe and must start at address 1. Existing shows using the earlier 119/353-slot layout remain compatible when Pixel is set to **Effect banks and full master controls**, and shows using the 89/323-slot layout when it is set to **Mask positioning (v2)**.
+Open **Show > Show Patch**, choose the **ToskLight** manufacturer, and add the combined **Media Server** fixture in its 2-layer or 8-layer mode. Match its personality, protocol, universe, and start address to the Media Server output under **Settings > Network & DMX**. There are exactly two personalities, and both use the 3D-object-mapping channel layout: the 2-layer personality occupies 158 slots and the 8-layer personality occupies 512 slots, so an 8-layer patch fills its universe and must start at address 1. The earlier legacy, mask-positioning, and effect-bank layouts were retired before release. A Media Server configuration that still names one of them loads with the same personality on the current layout, and a show patched against one of them must be repatched.
 
 The fixture contains independent logical heads for its layers and one shared master head. It remains a normal show fixture, so its values can be selected, programmed, stored in Presets and Cues, and assigned to playbacks. Unpatching it preserves that show programming but suppresses DMX output.
 
 The shared Master homes at 100% intensity. Every media layer homes at 0% intensity so patching a server does not unexpectedly place all layers on air; raise the selected layer's **Intensity** when it should contribute to the output. Layer heads expose the regular Desk controls for intensity, volume, RGB colour, frame position, scale, rotation, playback with **In point** and **Out point**, **Blend mode** and strobe, mask, four **Visualizer Parameters**, **3D model** with **Model pan** and **Model tilt**, and two ordered effect banks. Each bank has **Effect Select**, **Effect Strength**, and **Parameter 1**–**Parameter 4**; Blur is selected as a configured library preset rather than a separate playback fader. The RGB operator controls are translated to the Media Server personality's physical CMY channels.
 
-Selecting **Master** in the Media pane selects **Mask** automatically because Master has no content address. Its control sections remain available in this order: **Output**, **Geometry**, **Mask position**, **Shapers**, and **Colour**. Geometry provides scale, scaling mode, position, and rotation. A negative scale mirrors the output along that axis; only older channel layouts have a separate flip/mirror control. Shapers provide independent left, right, top, and bottom insertion and rotation plus complete module rotation.
+Selecting **Master** in the Media pane selects **Mask** automatically because Master has no content address. Its control sections remain available in this order: **Output**, **Geometry**, **Mask position**, **Shapers**, and **Colour**. Geometry provides scale, scaling mode, position, and rotation. A negative scale mirrors the output along that axis; there is no separate flip/mirror control. Shapers provide independent left, right, top, and bottom insertion and rotation plus complete module rotation.
 
 If no Media Server fixture is patched, the Desk's Media pane shows only **No media server is patched** and **Open Patch**. Use that action to open Show Patch. The pane does not display invented layers or stale server content.
 
@@ -26,14 +26,14 @@ Synchronized play modes can follow a ToskLight Control Speed Group instead of ea
 **Playback BPM** channel. The Media Server only receives Speed Groups; the desk stays the
 authority.
 
-1. In Media **Settings > Network**, enter a **Speed Groups** address such as `0.0.0.0:4810`, then
+1. In Media **Settings > Network & DMX**, enter a **Speed Groups** address such as `0.0.0.0:4810`, then
    restart the Media Server.
-2. In Media **Settings > DMX**, set **Synchronized playback follows** to **Light desk Speed Group
+2. In the same tab's **DMX input** section, set **Synchronized playback follows** to **Light desk Speed Group
    A**–**E** for each output. This applies immediately.
 3. Keep the Media Server fixture's CITP endpoint set on the desk. While a show is open, the desk
    sends every Speed Group to UDP port `4810` on that address.
 
-**Settings > Network** then shows the followed desk, each group's tempo, and any refused messages.
+**Settings > Network & DMX** then shows the followed desk, each group's tempo, and any refused messages.
 If the desk stops sending, the output keeps its last tempo and the panel reports the desk as lost.
 When the desk returns, the output follows it again without a restart. The message format is
 described in [Media Server Speed Groups](../90-Protocols/02-media-speed-groups.md).
@@ -72,7 +72,7 @@ Check in this order:
 2. the Desk output route uses the intended protocol and wire universe;
 3. the Media **DMX** diagnostics name the expected sender and show changing raw bytes;
 4. the manually configured CITP endpoint is reachable when names or previews are required;
-5. **Settings > Network** reports the desk as receiving when outputs follow a Speed Group; and
+5. **Settings > Network & DMX** reports the desk as receiving when outputs follow a Speed Group; and
 6. saved Media network/output changes were applied by restarting the Media Server.
 
 The Media Server administration interface can take over playback for testing. Release that takeover before judging desk DMX control.
@@ -85,12 +85,13 @@ Open Pixel’s **DMX** page and press **Connect to Console** at the top. Choose 
 same canonical channel definition used by Pixel’s decoder. The Layer file is used for every
 layer, including Layer 1; the Master is a separate fixture.
 
-Configure one output with **8 layers** and **3D mapping, blend, playback range, and parameters** in **Settings > DMX**.
-Restart Pixel after changing its startup configuration. Use the connection panel’s actual
-universe and patch table, which is read from the running decoder. Patch eight Layer fixtures,
-followed by one Master fixture. Do not use the current generated files with a legacy output
-layout. For the full layout, each Layer occupies 59 slots and Master occupies 40; eight layers
-and Master occupy all 512 slots. The Layer starts are 1, 60, 119, 178, 237, 296, 355, and 414;
+Choose the output's **2 layers** or **8 layers** personality in **Settings > Network & DMX**; the
+**Configure DMX input** action at the top of the **DMX** page, marked with an external-link icon,
+opens that tab. Restart Pixel after changing its startup configuration. Use the connection panel’s
+actual universe and patch table, which is read from the running decoder. Patch one Layer fixture
+per layer, followed by one Master fixture. Both personalities use the same Layer and Master files:
+each Layer occupies 59 slots and Master occupies 40, so eight layers and Master occupy all 512
+slots. The Layer starts are 1, 60, 119, 178, 237, 296, 355, and 414;
 Master starts at 473 and ends at 512. Because the block fills the universe, an eight-layer output
 must start at address 1. A two-layer output occupies 158 slots and can start anywhere up to 355.
 

@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 4;
+pub const CURRENT_VERSION: u32 = 5;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -58,6 +58,7 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             1 => Ok(without_personality_version(current)),
             2 => visualizers_into_final_banks(current),
             3 => Ok(with_effect_library(current)),
+            4 => Ok(onto_the_mapping_layout(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
@@ -79,6 +80,39 @@ fn with_effect_library(mut document: Value) -> Value {
         });
     }
     document["version"] = json!(4);
+    document
+}
+
+/// Version 4 → 5: every output decodes the 3D-object-mapping layout.
+///
+/// The legacy, mask-positioning, full-master, and effect-bank channel layouts were retired before
+/// launch, so the stored `personalityLayout` choice is dropped rather than translated. The 2-layer
+/// and 8-layer personalities themselves are kept. The mapping layout is larger than any retired
+/// one, so a start address that no longer leaves room for the whole block moves to the highest
+/// address that does; the desk must then be repatched to match, which it already had to be.
+fn onto_the_mapping_layout(mut document: Value) -> Value {
+    if let Some(outputs) = document
+        .get_mut("configuration")
+        .and_then(|configuration| configuration.get_mut("outputs"))
+        .and_then(Value::as_array_mut)
+    {
+        for output in outputs.iter_mut().filter_map(Value::as_object_mut) {
+            output.remove("personalityLayout");
+            let personality = output
+                .get("personality")
+                .cloned()
+                .and_then(|value| serde_json::from_value::<LayerPersonality>(value).ok())
+                .unwrap_or_default();
+            let footprint = personality.footprint();
+            let highest = media_domain::personality::UNIVERSE_SLOTS - footprint.total() + 1;
+            if let Some(start) = output.get("startAddress").and_then(Value::as_u64)
+                && start > u64::from(highest)
+            {
+                output.insert("startAddress".to_owned(), json!(highest));
+            }
+        }
+    }
+    document["version"] = json!(5);
     document
 }
 
@@ -341,7 +375,11 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 4"));
+        assert!(written.contains("\"version\": 5"));
+        assert!(
+            !written.contains("personalityLayout"),
+            "there is one channel layout, so nothing records which one"
+        );
     }
 
     #[test]
@@ -363,7 +401,7 @@ mod tests {
         let entries = migrated["configuration"]["visualizers"]["entries"]
             .as_array()
             .expect("entries");
-        assert_eq!(migrated["version"], json!(4));
+        assert_eq!(migrated["version"], json!(CURRENT_VERSION));
         assert_eq!(entries[0]["address"], json!({ "folder": 250, "file": 1 }));
         assert_eq!(entries[1]["address"], json!({ "folder": 250, "file": 2 }));
         assert_eq!(entries[0]["configuration"]["name"], json!("First"));
@@ -376,11 +414,113 @@ mod tests {
             "configuration": {}
         }))
         .expect("version three migrates");
-        assert_eq!(migrated["version"], json!(4));
+        assert_eq!(migrated["version"], json!(CURRENT_VERSION));
         let effects: media_domain::EffectLibrary =
             serde_json::from_value(migrated["configuration"]["effects"].clone()).unwrap();
         assert_eq!(effects.resolve(1).unwrap().name, "TV/CRT/VHS Simulation");
         assert_eq!(media_domain::EffectBankState::default().select, 0);
+    }
+
+    fn version_four_output(personality: &str, layout: &str, start_address: u16) -> Value {
+        json!({
+            "id": OutputId::new(),
+            "name": personality,
+            "personality": personality,
+            "personalityLayout": layout,
+            "protocol": "sacn",
+            // One universe per personality, so two outputs in one document never overlap.
+            "universe": if personality == "two-layers" { 3 } else { 4 },
+            "startAddress": start_address,
+        })
+    }
+
+    /// Every retired channel layout, stored by a version 4 document, loads as the mapping layout
+    /// with the personality the operator chose.
+    #[test]
+    fn version_four_outputs_on_retired_layouts_load_as_the_mapping_personalities() {
+        for layout in ["legacy", "current", "extended", "effect-banks", "mapping"] {
+            let document = json!({
+                "version": 4,
+                "configuration": {
+                    "outputs": [
+                        version_four_output("two-layers", layout, 200),
+                        version_four_output("eight-layers", layout, 1),
+                    ]
+                }
+            });
+            let migrated = migrate_to_current(document.clone()).expect("version four migrates");
+            assert_eq!(migrated["version"], json!(5));
+            for output in migrated["configuration"]["outputs"].as_array().unwrap() {
+                assert!(output.get("personalityLayout").is_none(), "{layout}");
+            }
+
+            let configuration = super::super::load(&document.to_string())
+                .unwrap_or_else(|error| panic!("{layout}: {error}"));
+            let outputs = &configuration.outputs;
+            assert_eq!(outputs[0].personality, LayerPersonality::TwoLayers);
+            assert_eq!(outputs[0].start_address, 200);
+            assert_eq!(outputs[0].personality.footprint().total(), 158);
+            assert_eq!(outputs[1].personality, LayerPersonality::EightLayers);
+            assert_eq!(outputs[1].personality.footprint().total(), 512);
+        }
+    }
+
+    /// An eight-layer effect-bank output fit 353 slots from address 100. The 512-slot mapping block
+    /// only fits from address 1, so the migrated output moves there instead of refusing to start.
+    #[test]
+    fn a_start_address_the_mapping_block_no_longer_fits_moves_to_the_highest_valid_one() {
+        let document = json!({
+            "version": 4,
+            "configuration": {
+                "outputs": [version_four_output("eight-layers", "effect-banks", 100)]
+            }
+        });
+        let configuration = super::super::load(&document.to_string()).unwrap();
+        assert_eq!(configuration.outputs[0].start_address, 1);
+
+        let two_layers = json!({
+            "version": 4,
+            "configuration": {
+                "outputs": [version_four_output("two-layers", "legacy", 400)]
+            }
+        });
+        let configuration = super::super::load(&two_layers.to_string()).unwrap();
+        assert_eq!(configuration.outputs[0].start_address, 355);
+    }
+
+    #[test]
+    fn an_unknown_personality_is_still_refused_after_migration() {
+        let document = json!({
+            "version": 4,
+            "configuration": {
+                "outputs": [version_four_output("four-layers", "mapping", 1)]
+            }
+        });
+        assert!(super::super::load(&document.to_string()).is_err());
+    }
+
+    #[test]
+    fn a_version_five_document_naming_a_channel_layout_is_refused() {
+        let document = json!({
+            "version": 5,
+            "configuration": {
+                "outputs": [version_four_output("two-layers", "legacy", 1)]
+            }
+        });
+        assert!(
+            super::super::load(&document.to_string()).is_err(),
+            "version five has no channel-layout field to choose a retired layout with"
+        );
+    }
+
+    #[test]
+    fn an_eight_layer_legacy_info_document_starts_where_the_block_fits() {
+        let configuration = load(r#"{ "fullMode": true, "artNetStartAddress": 45 }"#).unwrap();
+        assert_eq!(
+            configuration.outputs[0].personality,
+            LayerPersonality::EightLayers
+        );
+        assert_eq!(configuration.outputs[0].start_address, 1);
     }
 
     #[test]
@@ -424,7 +564,7 @@ mod tests {
 
     #[test]
     fn a_current_document_is_left_alone() {
-        assert_eq!(CURRENT_VERSION, 4, "effect-library documents are version 4");
+        assert_eq!(CURRENT_VERSION, 5, "mapping-only documents are version 5");
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
     }

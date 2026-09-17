@@ -19,7 +19,9 @@ Choose the output's sound device explicitly when content carries audio. The syst
 
 ## Control personality and DMX
 
-Choose the Media personality and configure its Art-Net or sACN universe and start address. The master and layer profiles patched in ToskLight Control must match that personality and address layout. Art-Net normally listens on UDP `6454`, sACN on UDP `5568`, and CITP/MSEX on the configured TCP/UDP port, normally `4809`.
+Open **Settings > Network & DMX**. Network and DMX input share one tab because the listen addresses at the top are the transport DMX arrives on. Below them, **DMX input** sets each output's personality, protocol, universe, and start address; the protocol only chooses which of the listeners above feeds that output. Art-Net normally listens on UDP `6454`, sACN on UDP `5568`, and CITP/MSEX on the configured TCP/UDP port, normally `4809`.
+
+Choose **2 layers** (158 slots) or **8 layers** (512 slots). These are the only personalities, and both use the 3D-object-mapping channel layout of 59 slots per layer followed by a 40-slot Master. The master and layer profiles patched in ToskLight Control must match that personality and address. An eight-layer output fills its universe, so it starts at address 1.
 
 ### Download console personalities
 
