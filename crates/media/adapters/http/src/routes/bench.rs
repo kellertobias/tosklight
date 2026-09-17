@@ -72,6 +72,7 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         configuration_path: "/tmp/tosklight-media/media-server.json".into(),
         data_directory: Some("/tmp/tosklight-media".into()),
         open_data_directory: Arc::new(|| Ok(())),
+        data_folders: crate::data_folder::DataFolders::default(),
         state: state.clone(),
         catalog: Arc::new(ArcSwap::from_pointee(CatalogSnapshot::default())),
         now: Arc::new(|| Timestamp::from_millis(0)),

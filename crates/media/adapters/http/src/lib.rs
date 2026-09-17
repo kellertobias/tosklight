@@ -10,6 +10,7 @@
 //! says and carries no authentication of its own.
 
 pub mod assets;
+pub mod data_folder;
 pub mod diagnostics;
 pub mod error;
 pub mod generation;
@@ -18,6 +19,7 @@ pub mod routes;
 pub mod tolerant;
 pub mod wire;
 
+pub use data_folder::{DataFolders, FolderChange, FolderEntry, FolderListing, FolderRefusal};
 pub use diagnostics::{
     AudioSource, AudioTelemetry, DeskIdentityTelemetry, DeviceLister, Diagnostics, DmxTelemetry,
     FolderPresentation, ImportJob, ImportOutcome, ImportedModel, Imports, LibraryAccess,

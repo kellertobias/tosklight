@@ -1,10 +1,12 @@
 import { Button } from "@tosklight/ui/controls";
+import { NumberField } from "@tosklight/ui/forms";
 import { useEffect, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { useFailureToast } from "../../app/ToastContext";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type {
+	DataFolderChangeView,
 	Health,
 	LibrarySettingsView,
 	PlaybackView,
@@ -18,6 +20,7 @@ import {
 	useRuntime,
 	useTime,
 } from "../../shared/api/queries";
+import { DataFolderPicker } from "./DataFolderPicker";
 import { SettingsSaveState } from "./SettingsSaveState";
 
 export function LibrarySettingsSection() {
@@ -53,7 +56,7 @@ export function LibrarySettingsSection() {
 						busy={timeEditing.busy}
 						failed={timeEditing.failure !== undefined}
 						onSave={(minutes) =>
-							void timeEditing.save(() =>
+							timeEditing.saveLive(() =>
 								api.updateTime({
 									requestId: requestId(),
 									utcOffsetMinutes: minutes,
@@ -90,7 +93,7 @@ export function LibrarySettingsSection() {
 						busy={playbackEditing.busy}
 						failed={playbackEditing.failure !== undefined}
 						onSave={(millis) =>
-							void playbackEditing.save(() =>
+							playbackEditing.saveLive(() =>
 								api.updatePlayback({
 									requestId: requestId(),
 									switchHoldMillis: millis,
@@ -117,12 +120,8 @@ function ClipSwitch({
 	onSave: (switchHoldMillis: number) => void;
 }) {
 	const [draft, setDraft] = useState(String(playback.switchHoldMillis));
-	const millis = Number(draft);
-	const valid =
-		draft.trim() !== "" &&
-		Number.isInteger(millis) &&
-		millis >= 0 &&
-		millis <= playback.maximumSwitchHoldMillis;
+	const valid = (text: string) =>
+		wholeNumberIn(text, 0, playback.maximumSwitchHoldMillis);
 	return (
 		<article className="media-settings-section" aria-label="Clip switch">
 			<div className="media-settings-section-heading">
@@ -134,25 +133,43 @@ function ClipSwitch({
 				showed before instead of going black. After this time it lets go and
 				shows nothing until the new clip is ready. 0 turns the hold off.
 			</p>
-			<label className="media-field">
-				<span>Hold previous clip for (ms)</span>
-				<input
-					type="number"
-					step={50}
-					min={0}
-					max={playback.maximumSwitchHoldMillis}
-					value={draft}
-					onChange={(event) => setDraft(event.target.value)}
-				/>
-			</label>
-			<Button
-				disabled={busy || !valid || millis === playback.switchHoldMillis}
-				onClick={() => onSave(millis)}
-			>
-				Save clip switch
-			</Button>
+			<NumberField
+				label="Hold previous clip for (ms)"
+				step={50}
+				min={0}
+				max={playback.maximumSwitchHoldMillis}
+				unit="ms"
+				value={draft}
+				error={
+					unfinished(draft) || valid(draft)
+						? undefined
+						: `Enter whole milliseconds from 0 to ${playback.maximumSwitchHoldMillis}.`
+				}
+				onChange={(event) => {
+					const next = event.target.value;
+					setDraft(next);
+					if (valid(next) && Number(next) !== playback.switchHoldMillis)
+						onSave(Number(next));
+				}}
+			/>
 		</article>
 	);
+}
+
+/// Whether text is a whole number inside an inclusive range.
+function wholeNumberIn(text: string, minimum: number, maximum: number) {
+	const value = Number(text);
+	return (
+		text.trim() !== "" &&
+		Number.isInteger(value) &&
+		value >= minimum &&
+		value <= maximum
+	);
+}
+
+/// Text an operator is still typing, which is not yet worth an error.
+function unfinished(text: string) {
+	return text.trim() === "" || text === "-";
 }
 
 function LibraryDirectory({
@@ -225,6 +242,13 @@ function LibraryDirectory({
 function PortableDataFolder({ runtime }: { runtime: RunningServerView }) {
 	const [opening, setOpening] = useState(false);
 	const [failure, setFailure] = useState<string>();
+	const [picking, setPicking] = useState(false);
+	const [changed, setChanged] = useState<DataFolderChangeView>();
+	const changeFolder = (
+		<Button disabled={changed !== undefined} onClick={() => setPicking(true)}>
+			Change folder…
+		</Button>
+	);
 	return (
 		<article className="media-settings-section" aria-label="Portable data folder">
 			<h2>Media and configuration folder</h2>
@@ -256,16 +280,65 @@ function PortableDataFolder({ runtime }: { runtime: RunningServerView }) {
 						>
 							{opening ? "Opening on Media Server…" : "Show folder on Media Server"}
 						</Button>
+						{changeFolder}
 					</div>
 					{failure && <p role="alert">{failure}</p>}
 				</>
 			) : (
-				<p role="status">
-					The media library is outside the configuration folder. Move it beside
-					the configuration before copying this server.
-				</p>
+				<>
+					<p role="status">
+						The media library is outside the configuration folder. Move it
+						beside the configuration before copying this server, or choose a
+						folder that holds both.
+					</p>
+					<div className="media-settings-actions">{changeFolder}</div>
+				</>
+			)}
+			{changed && <RestartNotice change={changed} />}
+			{picking && (
+				<DataFolderPicker
+					onClose={() => setPicking(false)}
+					onChanged={(change) => {
+						setPicking(false);
+						setChanged(change);
+					}}
+				/>
 			)}
 		</article>
+	);
+}
+
+/// Says what happens while the server restarts into the chosen folder, then reloads the page.
+function RestartNotice({ change }: { change: DataFolderChangeView }) {
+	const [late, setLate] = useState(false);
+	useEffect(() => {
+		let stopped = false;
+		const started = Date.now();
+		const poll = window.setInterval(async () => {
+			if (Date.now() - started > 30_000) setLate(true);
+			try {
+				const running = await api.runtime();
+				if (!stopped && running.dataDirectory === change.directory)
+					window.location.reload();
+			} catch {
+				// The server is still restarting.
+			}
+		}, 1_000);
+		return () => {
+			stopped = true;
+			window.clearInterval(poll);
+		};
+	}, [change.directory]);
+	return (
+		<p className="media-state is-notice" role="status">
+			{change.loadedExisting
+				? "Loading the configuration found in "
+				: "Using a new configuration in "}
+			<code>{change.directory}</code>. Pixel is restarting; this page reloads
+			when it is back.
+			{late &&
+				" Pixel has not come back yet. Start it again on the Media Server computer if it stays away."}
+		</p>
 	);
 }
 
@@ -281,11 +354,8 @@ function ServerTime({
 	onSave: (utcOffsetMinutes: number) => void;
 }) {
 	const [draft, setDraft] = useState(String(time.utcOffsetMinutes));
-	const minutes = Number(draft);
-	const valid =
-		draft.trim() !== "" &&
-		Number.isInteger(minutes) &&
-		Math.abs(minutes) <= time.maximumUtcOffsetMinutes;
+	const limit = time.maximumUtcOffsetMinutes;
+	const valid = (text: string) => wholeNumberIn(text, -limit, limit);
 	return (
 		<article className="media-settings-section" aria-label="Server time">
 			<div className="media-settings-section-heading">
@@ -297,23 +367,25 @@ function ServerTime({
 				clock with its own offset keeps it. Currently{" "}
 				<strong>{offsetLabel(time.utcOffsetMinutes)}</strong>.
 			</p>
-			<label className="media-field">
-				<span>UTC offset in minutes</span>
-				<input
-					type="number"
-					step={15}
-					min={-time.maximumUtcOffsetMinutes}
-					max={time.maximumUtcOffsetMinutes}
-					value={draft}
-					onChange={(event) => setDraft(event.target.value)}
-				/>
-			</label>
-			<Button
-				disabled={busy || !valid || minutes === time.utcOffsetMinutes}
-				onClick={() => onSave(minutes)}
-			>
-				Save server time
-			</Button>
+			<NumberField
+				label="UTC offset in minutes"
+				step={15}
+				min={-limit}
+				max={limit}
+				unit="min"
+				value={draft}
+				error={
+					unfinished(draft) || valid(draft)
+						? undefined
+						: `Enter whole minutes from -${limit} to ${limit}.`
+				}
+				onChange={(event) => {
+					const next = event.target.value;
+					setDraft(next);
+					if (valid(next) && Number(next) !== time.utcOffsetMinutes)
+						onSave(Number(next));
+				}}
+			/>
 		</article>
 	);
 }

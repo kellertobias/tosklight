@@ -14,6 +14,7 @@
 
 mod audio;
 mod catalog;
+mod data_folder;
 mod dmx;
 mod effect;
 mod health;
@@ -35,6 +36,10 @@ pub use audio::{
     DeskIdentityView, TelemetryFrame, UpdateAudio, WaveformView,
 };
 pub use catalog::{CatalogFolderView, CatalogItemView, CatalogView};
+pub use data_folder::{
+    DataFolderChangeView, DataFolderEntryView, DataFolderListingView, DataFolderQuery,
+    UpdateDataFolder,
+};
 pub use dmx::{
     DmxChannelGroupView, DmxChannelView, DmxIngressView, DmxMapView, DmxPersonalityView,
     DmxResolutionView, DmxValueSetView,

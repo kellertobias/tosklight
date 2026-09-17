@@ -14,6 +14,7 @@
 mod audio;
 #[cfg(test)]
 pub(crate) mod bench;
+mod data_folder;
 mod edit;
 mod effects;
 mod fixtures;
@@ -94,6 +95,8 @@ pub struct ApiState {
     pub configuration_path: PathBuf,
     pub data_directory: Option<PathBuf>,
     pub open_data_directory: OpenDataDirectory,
+    /// Browsing for and switching to another configuration and media folder.
+    pub data_folders: crate::data_folder::DataFolders,
     pub state: Arc<ArcSwap<MediaState>>,
     pub catalog: Arc<ArcSwap<CatalogSnapshot>>,
     /// Stamps commands. Injected so the API's behaviour is testable without real time passing.
@@ -133,6 +136,14 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/api/v2/runtime/data-directory/open",
             post(health::open_data_directory),
+        )
+        .route(
+            "/api/v2/runtime/data-directory/folders",
+            get(data_folder::folders),
+        )
+        .route(
+            "/api/v2/runtime/data-directory/update",
+            post(data_folder::update),
         )
         .route("/api/v2/catalog", get(health::catalog))
         .route("/api/v2/library/settings", get(library_settings::settings))

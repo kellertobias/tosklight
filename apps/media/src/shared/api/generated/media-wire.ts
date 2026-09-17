@@ -307,6 +307,13 @@ pendingRestart: boolean,
  */
 warnings: Array<string>, };
 export type LibrarySettingsView = { storedDirectory: string, activeDirectory: string, takesEffectOnRestart: boolean, pendingRestart: boolean, };
+export type DataFolderEntryView = { name: string, directory: string, hasConfiguration: boolean, };
+export type DataFolderListingView = { directory: string, parent: string | null,
+/**
+ * The folder already holds a Media Server configuration, which choosing it loads.
+ */
+hasConfiguration: boolean, folders: Array<DataFolderEntryView>, };
+export type DataFolderChangeView = { directory: string, loadedExisting: boolean, restarting: boolean, };
 export type TimeView = {
 /**
  * Minutes east of UTC. Negative is west; 0 is UTC itself.
@@ -606,6 +613,7 @@ export type UpdateNetwork = { requestId: string, sameComputerPreset?: boolean | 
  */
 speedGroupEndpoint?: string | null, };
 export type UpdateLibrarySettings = { requestId: string, directory?: string | null, };
+export type UpdateDataFolder = { requestId: string, directory: string, };
 export type UpdateTime = { requestId: string, utcOffsetMinutes?: number | null, };
 export type UpdatePlayback = { requestId: string, switchHoldMillis?: number | null, };
 export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null,

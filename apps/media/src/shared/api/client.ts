@@ -21,6 +21,8 @@ import type {
 	LibrarySettingsView,
 	ModelSlotView,
 	ClearedModelSlotView,
+	DataFolderChangeView,
+	DataFolderListingView,
 	UpdateModelSlot,
 	NetworkView,
 	OutputConfigurationView,
@@ -32,6 +34,7 @@ import type {
 	TextSlotView,
 	TimeView,
 	UpdateAudio,
+	UpdateDataFolder,
 	UpdateFolderPresentation,
 	UpdateLayer,
 	UpdateLibraryFolder,
@@ -214,6 +217,17 @@ export const api = {
 	runtime: () => request<RunningServerView>("/runtime"),
 	openDataDirectory: () =>
 		request<void>("/runtime/data-directory/open", { method: "POST" }),
+	dataFolders: (directory?: string) =>
+		request<DataFolderListingView>(
+			`/runtime/data-directory/folders${
+				directory ? `?${new URLSearchParams({ directory })}` : ""
+			}`,
+		),
+	updateDataFolder: (edit: UpdateDataFolder) =>
+		request<DataFolderChangeView>("/runtime/data-directory/update", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
 	catalog: () => request<CatalogView>("/catalog"),
 	folderPresentations: () =>
 		request<FolderPresentationsView>("/folder-presentations"),

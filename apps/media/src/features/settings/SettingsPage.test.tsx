@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { ToastProvider } from "../../app/ToastContext";
 import { aNetwork, stubServer } from "../../testing/server";
 import { SettingsPage } from "./SettingsPage";
@@ -119,6 +120,88 @@ describe("the settings page", () => {
 			}),
 		);
 		expect(server.writes).toContain("/runtime/data-directory/open");
+	});
+
+	it("chooses another folder on the Media Server and restarts to load its configuration", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+		await openSettings("Libraries");
+		const portable = await screen.findByRole("article", {
+			name: "Portable data folder",
+		});
+		const actions = within(portable).getByRole("button", {
+			name: "Show folder on Media Server",
+		}).parentElement;
+		await userEvent.click(
+			within(actions!).getByRole("button", { name: "Change folder…" }),
+		);
+
+		const picker = await screen.findByRole("dialog", {
+			name: "Choose media and configuration folder",
+		});
+		await waitFor(() =>
+			expect(within(picker).getByLabelText("Open folder")).toHaveTextContent(
+				"/Users/Shared/ToskLight Pixel",
+			),
+		);
+		await userEvent.click(
+			within(picker).getByRole("button", { name: "↑ Up one folder" }),
+		);
+		await userEvent.click(
+			await within(picker).findByRole("button", {
+				name: "Autumn Gala Configuration",
+			}),
+		);
+		await waitFor(() =>
+			expect(picker).toHaveTextContent(/already holds a Media Server configuration/u),
+		);
+		await userEvent.click(
+			within(picker).getByRole("button", { name: "Use this folder" }),
+		);
+
+		expect(server.writeBodies.at(-1)).toMatchObject({
+			directory: "/Users/Shared/Autumn Gala",
+		});
+		expect(
+			await within(portable).findByText(/Loading the configuration found in/u),
+		).toHaveTextContent(/Autumn Gala.*Pixel is restarting/u);
+		expect(
+			screen.queryByRole("dialog", {
+				name: "Choose media and configuration folder",
+			}),
+		).not.toBeInTheDocument();
+	});
+
+	it("keeps the current folder when the chosen one is refused", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+		await openSettings("Libraries");
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Change folder…" }),
+		);
+		const picker = await screen.findByRole("dialog", {
+			name: "Choose media and configuration folder",
+		});
+		await within(picker).findByRole("button", { name: "Use this folder" });
+		server.refuseWrites = {
+			code: "data-folder-configuration-invalid",
+			message: "media-server.json is not a usable Media Server configuration.",
+			status: 422,
+		};
+		await userEvent.click(
+			within(picker).getByRole("button", { name: "Use this folder" }),
+		);
+
+		expect(await within(picker).findByRole("alert")).toHaveTextContent(
+			"not a usable Media Server configuration. The current folder is still in use.",
+		);
+		expect(screen.queryByText(/Pixel is restarting/u)).not.toBeInTheDocument();
+		await userEvent.click(within(picker).getByRole("button", { name: "Cancel" }));
+		expect(
+			screen.queryByRole("dialog", {
+				name: "Choose media and configuration folder",
+			}),
+		).not.toBeInTheDocument();
 	});
 
 	it("offers actual monitors on a direct picture-output form and saves only picture fields", async () => {
@@ -330,14 +413,52 @@ describe("the settings page", () => {
 		});
 		expect(article).toHaveTextContent("+00:00");
 		const offset = within(article).getByLabelText("UTC offset in minutes");
+		expect(offset).toHaveAttribute("inputmode", "numeric");
+		expect(
+			within(article).getByRole("button", { name: "Increase value" }),
+		).toBeVisible();
+		expect(
+			within(article).queryByRole("button", { name: /Save server time/u }),
+		).not.toBeInTheDocument();
+
+		await userEvent.clear(offset);
+		await userEvent.type(offset, "900");
+		expect(article).toHaveTextContent("Enter whole minutes from -840 to 840.");
 		await userEvent.clear(offset);
 		await userEvent.type(offset, "345");
-		await userEvent.click(
-			within(article).getByRole("button", { name: "Save server time" }),
-		);
 
 		await waitFor(() => expect(server.time.utcOffsetMinutes).toBe(345));
-		expect(server.writes).toContain("/time/update");
+		expect(server.writeBodies).not.toContainEqual(
+			expect.objectContaining({ utcOffsetMinutes: 900 }),
+		);
+		await waitFor(() =>
+			expect(within(article).getByRole("status")).toHaveTextContent(
+				"Saved automatically",
+			),
+		);
+		expect(article).toHaveTextContent("+05:45");
+	});
+
+	it("says when an automatically saved server time was refused", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+		await openSettings("Libraries");
+		const article = await screen.findByRole("article", {
+			name: "Server time",
+		});
+		server.refuseWrites = {
+			code: "configuration-not-written",
+			message: "the change could not be saved; it has not been applied",
+			status: 500,
+		};
+		await replaceNumber("UTC offset in minutes", "60");
+
+		await waitFor(() =>
+			expect(within(article).getByRole("status")).toHaveTextContent(
+				"Not saved · Check the error",
+			),
+		);
+		expect(server.time.utcOffsetMinutes).toBe(0);
 	});
 
 	it("edits how long a layer holds its previous clip while a new one loads", async () => {
@@ -349,22 +470,31 @@ describe("the settings page", () => {
 			name: "Clip switch",
 		});
 		const hold = within(article).getByLabelText("Hold previous clip for (ms)");
-		expect(hold).toHaveValue(500);
-		const save = within(article).getByRole("button", {
-			name: "Save clip switch",
-		});
-		expect(save).toBeDisabled();
+		expect(hold).toHaveValue("500");
+		expect(hold).toHaveAttribute("inputmode", "numeric");
+		expect(
+			within(article).queryByRole("button", { name: /Save clip switch/u }),
+		).not.toBeInTheDocument();
 
 		await userEvent.clear(hold);
 		await userEvent.type(hold, "20000");
-		expect(save).toBeDisabled();
+		expect(article).toHaveTextContent(
+			"Enter whole milliseconds from 0 to 10000.",
+		);
 
 		await userEvent.clear(hold);
 		await userEvent.type(hold, "800");
-		await userEvent.click(save);
 
 		await waitFor(() => expect(server.playback.switchHoldMillis).toBe(800));
 		expect(server.writes).toContain("/playback/update");
+		expect(server.writeBodies).not.toContainEqual(
+			expect.objectContaining({ switchHoldMillis: 20000 }),
+		);
+		await waitFor(() =>
+			expect(within(article).getByRole("status")).toHaveTextContent(
+				"Saved automatically",
+			),
+		);
 	});
 
 	it("places restart-aware status beside the content heading", async () => {
@@ -502,9 +632,11 @@ describe("the settings page", () => {
 
 function renderSettings() {
 	return render(
-		<ToastProvider>
-			<SettingsPage />
-		</ToastProvider>,
+		<ModalProvider>
+			<ToastProvider>
+				<SettingsPage />
+			</ToastProvider>
+		</ModalProvider>,
 	);
 }
 

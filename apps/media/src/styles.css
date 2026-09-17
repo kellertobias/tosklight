@@ -540,6 +540,46 @@ body {
 	gap: 0.5rem;
 }
 
+.media-folder-picker {
+	width: min(640px, calc(100vw - 32px));
+}
+
+.media-folder-picker-body {
+	display: grid;
+	gap: 0.75rem;
+	padding: 1rem;
+}
+
+.media-folder-picker-list {
+	display: grid;
+	gap: 0.35rem;
+	max-height: min(50vh, 420px);
+	margin: 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+}
+
+/* Rows are touch targets: full width, at least 44px tall. */
+.media-folder-picker-list button {
+	justify-content: space-between;
+	width: 100%;
+	min-height: 44px;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+
+.media-folder-picker-badge {
+	margin-left: 0.75rem;
+	color: var(--muted, inherit);
+	font-size: 0.8em;
+}
+
+.media-folder-picker-empty {
+	padding: 0.65rem 0.75rem;
+	color: var(--muted, inherit);
+}
+
 .media-text-editor {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

@@ -17,6 +17,7 @@ mod bulk_import;
 mod catalog_publication;
 mod citp;
 mod citp_console_presence;
+mod data_folder;
 mod dmx;
 mod effect_banks;
 mod fullscreen_hint;
@@ -80,7 +81,7 @@ pub const PLAY_ARGUMENT: &str = "--play";
 /// to the outputs. A process whose outputs are all off-screen never builds an event loop and
 /// simply blocks on the services.
 pub fn run() -> anyhow::Result<()> {
-    let result = run_inner();
+    let result = run_inner().inspect(|()| data_folder::relaunch_if_requested());
     if let Err(error) = &result {
         show_startup_error(error);
     }
@@ -932,6 +933,7 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
         administration_endpoint: administration_endpoint(&configuration),
         configuration_path: configuration_path_for_view,
         data_directory,
+        data_folders: data_folder::access(&configuration, shutdown.clone()),
         open_data_directory: std::sync::Arc::new(move || {
             let path = open_data_directory
                 .as_deref()

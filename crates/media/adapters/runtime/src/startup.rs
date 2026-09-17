@@ -36,18 +36,37 @@ impl ConfigurationSource {
     }
 
     /// Honors an explicit `MEDIA_CONFIG` override and otherwise looks in the default location.
+    ///
+    /// A data folder the operator chose in Settings redirects either of them; see
+    /// [`crate::data_folder`].
     pub fn from_environment() -> Self {
-        match std::env::var(CONFIGURATION_PATH_VARIABLE) {
-            Ok(path) if !path.trim().is_empty() => Self::File {
-                path: PathBuf::from(path.trim()),
-                required: true,
-            },
-            _ => Self::File {
-                path: macos_application_support_path()
-                    .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIGURATION_PATH)),
+        let (base, required) = base_configuration();
+        match crate::data_folder::redirected_configuration(&base) {
+            Some(path) => Self::File {
+                path,
                 required: false,
             },
+            None => Self::File {
+                path: base,
+                required,
+            },
         }
+    }
+}
+
+/// The configuration location before any operator-chosen data folder is applied.
+pub fn base_configuration_path() -> PathBuf {
+    base_configuration().0
+}
+
+fn base_configuration() -> (PathBuf, bool) {
+    match std::env::var(CONFIGURATION_PATH_VARIABLE) {
+        Ok(path) if !path.trim().is_empty() => (PathBuf::from(path.trim()), true),
+        _ => (
+            macos_application_support_path()
+                .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIGURATION_PATH)),
+            false,
+        ),
     }
 }
 
@@ -99,7 +118,9 @@ pub fn resolve_portable_library_root(configuration: &mut MediaConfiguration, pat
         return;
     }
     if let Some(parent) = absolute_path(path).parent() {
-        configuration.library.root = parent.join(root);
+        // Collecting the components drops a `.` segment, so a library stored as `.` reads as the
+        // configuration folder itself rather than `folder/.`.
+        configuration.library.root = parent.join(root).components().collect();
     }
 }
 

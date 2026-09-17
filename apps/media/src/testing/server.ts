@@ -8,6 +8,7 @@ import { withEffectParameterBounds } from "../shared/api/effectParameters";
 import type {
 	AudioPanelView,
 	CatalogView,
+	DataFolderListingView,
 	DmxMapView,
 	FolderPresentationsView,
 	Health,
@@ -26,7 +27,7 @@ import type {
 } from "../shared/api/generated/media-wire";
 import { resetResources } from "../shared/api/resource";
 
-import { settingsRoute } from "./serverSettingsRoutes";
+import { aDataFolderTree, settingsRoute } from "./serverSettingsRoutes";
 
 export interface StubbedServer {
 	outputs: OutputView[];
@@ -37,6 +38,8 @@ export interface StubbedServer {
 	health: Health;
 	visualizers: VisualizerView[];
 	librarySettings: LibrarySettingsView;
+	/** Folders the data-folder picker can list, by full path. */
+	dataFolders: Record<string, DataFolderListingView>;
 	network: NetworkView;
 	time: TimeView;
 	playback: PlaybackView;
@@ -82,6 +85,7 @@ export function stubServer(
 		catalog: aCatalog(),
 		folderPresentations: aFolderPresentations(),
 		visualizers: [aVisualizer()],
+		dataFolders: aDataFolderTree(),
 		librarySettings: {
 			storedDirectory: "/Users/Shared/ToskLight Pixel/Media",
 			activeDirectory: "/Users/Shared/ToskLight Pixel/Media",
@@ -1782,3 +1786,4 @@ export function anImportState(
 		...overrides,
 	};
 }
+
