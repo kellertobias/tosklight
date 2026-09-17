@@ -703,9 +703,15 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      # Cargo writes to .artifacts/build/cargo (.cargo/config.toml), not ./target, so without the
+      # explicit mapping this cached only the registry: every run re-fetched about 1,200 sccache
+      # objects and recompiled every proc-macro and build script sccache cannot cache.
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
-          key: release-${{ matrix.target }}
+          key: release-target-${{ matrix.target }}
+          workspaces: |
+            . -> .artifacts/build/cargo
+            ${{ matrix.slug == 'linux-amd64' && '. -> .artifacts/tmp/performance-probe/cargo' || '' }}
 
       - uses: ./.github/actions/package-mirror
         if: runner.os == 'Linux'
@@ -767,6 +773,29 @@ jobs:
         shell: bash
         run: npm ci
 
+      # The probe is light-headless without its default features, so it recompiles the whole
+      # Desk runtime with a second feature set. Serially that added five minutes after the
+      # sidecar build; the runtime compile is mostly single-threaded, so it runs beside it in its
+      # own target directory (Cargo locks one directory per build) and is collected before staging.
+      - name: Start the release performance probe build
+        if: matrix.slug == 'linux-amd64'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          # The cargo directory below is restored by rust-cache; keep it.
+          probe="$(npm run --silent artifact-path -- tmp)/performance-probe"
+          mkdir -p "$probe"
+          rm -f -- "$probe/status" "$probe/build.log"
+          echo "PERFORMANCE_PROBE_DIR=$probe" >> "$GITHUB_ENV"
+          nohup bash -c '
+            cargo build --release --locked --target "$1" --target-dir "$2/cargo" \
+              --no-default-features -p light-headless --bin light-benchmark >"$2/build.log" 2>&1
+            echo "$?" >"$2/status.partial"
+            mv "$2/status.partial" "$2/status"
+          ' probe "$TARGET" "$probe" >/dev/null 2>&1 &
+
       # Cargo can schedule both independent application graphs across the runner when they are
       # selected in one invocation. Separate calls made the visualizer wait for all Headless work.
       - name: Build the Desk server, Stage renderer, and Media Server
@@ -812,13 +841,6 @@ jobs:
           LIGHT_MEDIA_SMOKE_TARGET: ${{ matrix.target }}
         run: node tools/ci-smoke-media-server.mjs
 
-      - name: Build the release performance probe
-        if: matrix.slug == 'linux-amd64'
-        shell: bash
-        run: >-
-          cargo build --release --locked --target ${{ matrix.target }}
-          --no-default-features -p light-headless --bin light-benchmark
-
       - name: Smoke-test the standalone visualizer
         if: matrix.viz
         shell: bash
@@ -863,7 +885,15 @@ jobs:
         run: |
           config="$(npm run --silent artifact-path -- tmp)/tauri-control-release.json"
           node tools/write-tauri-artifact-config.mjs control "$config"
-          npm run --prefix apps/light-desktop tauri:build -- --target ${{ matrix.target }} --config "$config"
+          # Build only the installer formats "Stage release artifacts" ships. The configuration's
+          # "all" also produced an RPM on Linux (about three minutes) and an MSI on Windows that
+          # nothing staged, verified, or published.
+          bundle_args=()
+          case "$RUNNER_OS" in
+            Linux) bundle_args=(--bundles deb,appimage) ;;
+            Windows) bundle_args=(--bundles nsis) ;;
+          esac
+          npm run --prefix apps/light-desktop tauri:build -- --target ${{ matrix.target }} --config "$config" "${bundle_args[@]}"
 
       - name: Seal the completed macOS Desk bundle
         if: matrix.desktop && matrix.slug == 'macos-arm64'
@@ -884,6 +914,24 @@ jobs:
           else
             node tools/ci-smoke-built-desktop.mjs
           fi
+
+      - name: Collect the release performance probe
+        if: matrix.slug == 'linux-amd64'
+        timeout-minutes: 30
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          while [[ ! -f "$PERFORMANCE_PROBE_DIR/status" ]]; do sleep 5; done
+          cat "$PERFORMANCE_PROBE_DIR/build.log"
+          status="$(cat "$PERFORMANCE_PROBE_DIR/status")"
+          if [[ "$status" != 0 ]]; then
+            echo "::error title=Release performance probe build failed::cargo exited with $status"
+            exit 1
+          fi
+          cp "$PERFORMANCE_PROBE_DIR/cargo/$TARGET/release/light-benchmark" \
+            ".artifacts/build/cargo/$TARGET/release/light-benchmark"
 
       - name: Stage release artifacts
         shell: bash
