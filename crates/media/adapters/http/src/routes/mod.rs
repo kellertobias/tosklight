@@ -15,6 +15,8 @@ mod audio;
 #[cfg(test)]
 pub(crate) mod bench;
 mod data_folder;
+#[cfg(test)]
+mod desk_contract_tests;
 mod edit;
 mod effects;
 mod fixtures;

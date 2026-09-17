@@ -1,18 +1,14 @@
 use super::media_audio_player::audio_player_projection;
 use super::*;
-use light_wire::v2::output_control::{
-    DiscoveredMediaAddressUpdateRequest, DiscoveredMediaOutput, DiscoveredMediaServer,
-    MediaServerDiscovery,
-};
 
 const TOSKLIGHT_MEDIA_SERVER_PROFILE_ID: &str = "0a14fb60-280d-5ef1-aa4a-2ff11bd06943";
-const TOSKLIGHT_MEDIA_HTTP_PORT: u16 = 8080;
+pub(super) const TOSKLIGHT_MEDIA_HTTP_PORT: u16 = 8080;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct NativeMediaHealth {
-    status: String,
-    instance: String,
+pub(super) struct NativeMediaHealth {
+    pub(super) status: String,
+    pub(super) instance: String,
     outputs: usize,
     catalog_revision: u64,
     catalog_items: usize,
@@ -72,188 +68,6 @@ struct NativeMediaLayerResponse {
 struct NativeMediaOutputResponse {
     id: String,
     layers: Vec<NativeMediaLayerResponse>,
-}
-
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NativeMediaOutputSummary {
-    id: String,
-}
-
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NativeMediaOutputConfiguration {
-    id: Uuid,
-    name: String,
-    personality: String,
-    protocol: String,
-    universe: u16,
-    start_address: u16,
-    dmx_pending_restart: bool,
-}
-
-pub(super) async fn discover_native_media_servers(
-    State(state): State<AppState>,
-    show: ShowContext,
-    headers: HeaderMap,
-) -> Result<Json<MediaServerDiscovery>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
-    show.verify(&state)?;
-    let discovered = match discover_servers(Duration::from_millis(750)).await {
-        Ok(servers) => servers,
-        Err(error) => {
-            return Ok(Json(MediaServerDiscovery {
-                servers: Vec::new(),
-                discovery_error: Some(format!("Media Server discovery failed: {error}")),
-            }));
-        }
-    };
-    let client = native_media_client()?;
-    let servers = futures_util::future::join_all(
-        discovered
-            .into_iter()
-            .map(|server| inspect_discovered_native_media_server(client.clone(), server)),
-    )
-    .await;
-    Ok(Json(MediaServerDiscovery {
-        servers,
-        discovery_error: None,
-    }))
-}
-
-async fn inspect_discovered_native_media_server(
-    client: reqwest::Client,
-    server: light_media::DiscoveredCitpServer,
-) -> DiscoveredMediaServer {
-    let key = format!("{}:{}", server.host, server.port);
-    let base = format!("http://{}:{TOSKLIGHT_MEDIA_HTTP_PORT}/api/v2", server.host);
-    let health = native_media_get::<NativeMediaHealth>(&client, &format!("{base}/health")).await;
-    let Ok(health) = health else {
-        return DiscoveredMediaServer {
-            key,
-            name: server.name,
-            host: server.host,
-            citp_port: server.port,
-            status: "Unavailable".to_owned(),
-            instance: None,
-            outputs: Vec::new(),
-            error: Some(
-                "The discovered Media Server did not answer its native configuration API"
-                    .to_owned(),
-            ),
-        };
-    };
-    let operator_name = format!("ToskLight Pixel Media - {}", health.instance);
-    let summaries =
-        native_media_get::<Vec<NativeMediaOutputSummary>>(&client, &format!("{base}/outputs"))
-            .await;
-    let Ok(summaries) = summaries else {
-        return DiscoveredMediaServer {
-            key,
-            name: operator_name,
-            host: server.host,
-            citp_port: server.port,
-            status: health.status,
-            instance: Some(health.instance),
-            outputs: Vec::new(),
-            error: Some("The Media Server output configuration is unavailable".to_owned()),
-        };
-    };
-    let outputs = futures_util::future::join_all(summaries.into_iter().map(|output| {
-        let client = client.clone();
-        let base = base.clone();
-        async move {
-            native_media_get::<NativeMediaOutputConfiguration>(
-                &client,
-                &format!("{base}/outputs/{}/configuration", output.id),
-            )
-            .await
-            .ok()
-        }
-    }))
-    .await
-    .into_iter()
-    .flatten()
-    .map(|output| DiscoveredMediaOutput {
-        id: output.id,
-        name: output.name,
-        personality: output.personality,
-        protocol: output.protocol,
-        universe: output.universe,
-        start_address: output.start_address,
-        dmx_pending_restart: output.dmx_pending_restart,
-    })
-    .collect::<Vec<_>>();
-    let error = outputs
-        .is_empty()
-        .then(|| "The Media Server has no readable output configuration".to_owned());
-    DiscoveredMediaServer {
-        key,
-        name: operator_name,
-        host: server.host,
-        citp_port: server.port,
-        status: health.status,
-        instance: Some(health.instance),
-        outputs,
-        error,
-    }
-}
-
-pub(super) async fn update_discovered_media_server_address(
-    State(state): State<AppState>,
-    show: ShowContext,
-    desk: DeskContext,
-    headers: HeaderMap,
-    TolerantJson(input): TolerantJson<DiscoveredMediaAddressUpdateRequest>,
-) -> Result<Json<DiscoveredMediaOutput>, ApiError> {
-    let _session = command_http::authenticate_desk_mutation(&state, &headers, &desk)?;
-    show.verify(&state)?;
-    if input.request_id.trim().is_empty() {
-        return Err(ApiError::bad_request(
-            "Media Server address request_id is required",
-        ));
-    }
-    let host = input
-        .host
-        .parse::<Ipv4Addr>()
-        .map_err(|_| ApiError::bad_request("Media Server host is invalid"))?;
-    if host.is_unspecified() || host.is_multicast() {
-        return Err(ApiError::bad_request("Media Server host is not reachable"));
-    }
-    if input.start_address == 0 || input.start_address > 512 {
-        return Err(ApiError::bad_request(
-            "Media Server start address must be between 1 and 512",
-        ));
-    }
-    let client = native_media_client()?;
-    let url = format!(
-        "http://{host}:{TOSKLIGHT_MEDIA_HTTP_PORT}/api/v2/outputs/{}/configuration/update",
-        input.output_id
-    );
-    let response = client
-        .post(url)
-        .json(&serde_json::json!({
-            "requestId": input.request_id,
-            "universe": input.universe,
-            "startAddress": input.start_address,
-        }))
-        .send()
-        .await
-        .map_err(native_media_unavailable)?;
-    let output = native_media_response(response)
-        .await?
-        .json::<NativeMediaOutputConfiguration>()
-        .await
-        .map_err(|_| ApiError::unavailable("Media Server returned an invalid configuration"))?;
-    Ok(Json(DiscoveredMediaOutput {
-        id: output.id,
-        name: output.name,
-        personality: output.personality,
-        protocol: output.protocol,
-        universe: output.universe,
-        start_address: output.start_address,
-        dmx_pending_restart: output.dmx_pending_restart,
-    }))
 }
 
 #[derive(Default, Deserialize)]
@@ -360,7 +174,10 @@ pub(super) async fn native_media_snapshot(
         native_media_get::<NativeMediaHealth>(&client, &health_url),
         native_media_get::<Vec<NativeMediaOutputResponse>>(&client, &outputs_url),
     )?;
-    let output = outputs.into_iter().next();
+    let output = select_native_output(
+        outputs,
+        native_media_bound_output(&state, fixture_id)?.as_deref(),
+    )?;
     Ok(Json(light_wire::v2::output_control::NativeMediaSnapshot {
         endpoint: format!("http://{endpoint}"),
         status: health.status,
@@ -405,9 +222,12 @@ pub(super) async fn update_native_media_effect(
     let outputs =
         native_media_get::<Vec<NativeMediaOutputResponse>>(&client, &format!("{base}/outputs"))
             .await?;
-    let output = outputs
-        .first()
-        .ok_or_else(|| ApiError::unavailable("Media Server has no configured output"))?;
+    let output = select_native_output(
+        outputs,
+        native_media_bound_output(&state, fixture_id)?.as_deref(),
+    )?
+    .ok_or_else(|| ApiError::unavailable("Media Server has no configured output"))?;
+    let output = &output;
     if usize::from(layer) >= output.layers.len() {
         return Err(ApiError::bad_request("Media Server layer is unavailable"));
     }
@@ -672,7 +492,7 @@ fn native_text_slot(
     }
 }
 
-fn native_media_client() -> Result<reqwest::Client, ApiError> {
+pub(super) fn native_media_client() -> Result<reqwest::Client, ApiError> {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(2))
         .timeout(Duration::from_secs(4))
@@ -680,7 +500,7 @@ fn native_media_client() -> Result<reqwest::Client, ApiError> {
         .map_err(|_| ApiError::unavailable("Native Media client is unavailable"))
 }
 
-async fn native_media_get<T: serde::de::DeserializeOwned>(
+pub(super) async fn native_media_get<T: serde::de::DeserializeOwned>(
     client: &reqwest::Client,
     url: &str,
 ) -> Result<T, ApiError> {
@@ -698,29 +518,55 @@ async fn native_media_get<T: serde::de::DeserializeOwned>(
 
 /// The Media Server explains its own refusals; a bare status code leaves the operator guessing
 /// which control it disliked, so its message travels with the failure.
-async fn native_media_response(response: reqwest::Response) -> Result<reqwest::Response, ApiError> {
+pub(super) async fn native_media_response(
+    response: reqwest::Response,
+) -> Result<reqwest::Response, ApiError> {
     if response.status().is_success() {
         return Ok(response);
     }
     let status = response.status();
-    let detail = response
-        .json::<NativeMediaErrorResponse>()
-        .await
-        .ok()
-        .map(|error| error.message)
-        .filter(|message| !message.trim().is_empty());
-    Err(ApiError::unavailable(match detail {
-        Some(detail) => format!("Media Server refused this change: {detail}"),
-        None => format!("Media Server native API answered {status}"),
-    }))
+    let error = response.json::<NativeMediaErrorResponse>().await.ok();
+    Err(ApiError::unavailable(native_media_refusal(status, error)))
+}
+
+/// Words a Media Server refusal as what the operator should do next. The Media Server's stable
+/// `code` decides the advice; its own message says which value it disliked.
+pub(super) fn native_media_refusal(
+    status: reqwest::StatusCode,
+    error: Option<NativeMediaErrorResponse>,
+) -> String {
+    let code = error.as_ref().and_then(|error| error.code.as_deref());
+    let detail = error
+        .as_ref()
+        .map(|error| error.message.trim())
+        .filter(|message| !message.is_empty());
+    match (code, detail) {
+        (Some("configuration-not-written"), _) => "The Media Server could not save this change, \
+            so it did not apply it. Check free space and write access for its configuration \
+            folder, then retry."
+            .to_owned(),
+        (Some("output-configuration-invalid"), Some(detail)) => format!(
+            "The Media Server refused this configuration: {detail}. Choose another value and retry."
+        ),
+        (Some("unknown-output" | "malformed-output-id"), _) => "The Media Server no longer has \
+            this output. Refresh discovery and patch the output again."
+            .to_owned(),
+        (_, Some(detail)) => format!("Media Server refused this change: {detail}"),
+        (_, None) if status == reqwest::StatusCode::NOT_FOUND => "The Media Server does not offer \
+            this configuration. Update ToskLight Media to the current version, then retry."
+            .to_owned(),
+        (_, None) => format!("Media Server native API answered {status}"),
+    }
 }
 
 #[derive(Deserialize)]
-struct NativeMediaErrorResponse {
+pub(super) struct NativeMediaErrorResponse {
+    #[serde(default)]
+    code: Option<String>,
     message: String,
 }
 
-fn native_media_unavailable(_: reqwest::Error) -> ApiError {
+pub(super) fn native_media_unavailable(_: reqwest::Error) -> ApiError {
     ApiError::unavailable("Media Server native API is unavailable")
 }
 
@@ -741,6 +587,48 @@ pub(super) fn native_media_action(fixture: &light_fixture::PatchedFixture) -> Op
     let profile_id = fixture.definition.profile_id?;
     (profile_id.0.to_string() == TOSKLIGHT_MEDIA_SERVER_PROFILE_ID)
         .then(|| "tosklight_media_v2".to_owned())
+}
+
+/// The Media Server output this fixture was patched to, when the patch names one. A fixture
+/// patched by address only (or before outputs were bound) follows the server's first output.
+fn native_media_bound_output(
+    state: &AppState,
+    fixture_id: light_core::FixtureId,
+) -> Result<Option<String>, ApiError> {
+    let snapshot = state.output.snapshot();
+    let fixture = snapshot
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.fixture_id == fixture_id)
+        .ok_or_else(|| ApiError::not_found("fixture"))?;
+    Ok(fixture
+        .internal_bindings
+        .output
+        .as_deref()
+        .map(str::trim)
+        .filter(|output| !output.is_empty() && *output != "default")
+        .map(str::to_owned))
+}
+
+/// Picks the patched output from a Media Server's outputs. A bound output that the server no
+/// longer has is an operator problem, not a reason to control a different screen.
+fn select_native_output(
+    outputs: Vec<NativeMediaOutputResponse>,
+    bound: Option<&str>,
+) -> Result<Option<NativeMediaOutputResponse>, ApiError> {
+    let Some(bound) = bound else {
+        return Ok(outputs.into_iter().next());
+    };
+    outputs
+        .into_iter()
+        .find(|output| output.id.eq_ignore_ascii_case(bound))
+        .map(Some)
+        .ok_or_else(|| {
+            ApiError::unavailable(
+                "The Media Server no longer has the output this fixture is patched to. \
+                 Refresh discovery and patch the output again.",
+            )
+        })
 }
 
 fn native_media_endpoint(
@@ -1172,4 +1060,42 @@ pub(super) fn cached_image_response(
             .expect("valid height header"),
     );
     Ok(response)
+}
+
+#[cfg(test)]
+mod native_output_binding_tests {
+    use super::{NativeMediaOutputResponse, select_native_output};
+
+    fn outputs() -> Vec<NativeMediaOutputResponse> {
+        [
+            "00000000-0000-4000-8000-00000000000a",
+            "00000000-0000-4000-8000-00000000000b",
+        ]
+        .into_iter()
+        .map(|id| NativeMediaOutputResponse {
+            id: id.to_owned(),
+            layers: Vec::new(),
+        })
+        .collect()
+    }
+
+    #[test]
+    fn native_controls_follow_the_patched_output() {
+        let bound = select_native_output(outputs(), Some("00000000-0000-4000-8000-00000000000B"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(bound.id, "00000000-0000-4000-8000-00000000000b");
+        let unbound = select_native_output(outputs(), None).unwrap().unwrap();
+        assert_eq!(unbound.id, "00000000-0000-4000-8000-00000000000a");
+    }
+
+    #[test]
+    fn a_missing_patched_output_is_reported_instead_of_controlling_another() {
+        let Err(error) =
+            select_native_output(outputs(), Some("00000000-0000-4000-8000-0000000000ff"))
+        else {
+            panic!("the bound output is gone");
+        };
+        assert!(error.message.contains("Refresh discovery"));
+    }
 }

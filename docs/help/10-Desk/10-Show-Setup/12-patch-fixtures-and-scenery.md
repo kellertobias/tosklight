@@ -56,9 +56,18 @@ Rows with an unusable cell are listed as **Not imported** with the reason and ne
 
 ## Discovering a ToskLight Pixel Media Server
 
-Open **Show Patch > Media Servers** to discover ToskLight Pixel Media servers on the local network. **Refresh discovery** repeats the search without restarting either application. Each output is shown by its Media Server and output name, network address, reachability, layer personality, and configured DMX `universe.address`. A discovered output remains explicitly **Not patched** until you choose an action; discovery alone never changes the show.
+Open **Show Patch > Media Servers** to discover ToskLight Pixel Media servers on the local network. **Refresh discovery** repeats the search without restarting either application. Each output is shown by its Media Server and output name, network address, and reachability, followed by its current configuration: the suggested DMX `universe.address`, the **2 layers** or **8 layers** personality, the protocol (Art-Net or sACN), and whether its tempo follows the Playback BPM channel or a desk Speed Group. A discovered output remains explicitly **Not patched** until you choose an action; discovery alone never changes the show.
 
-**Patch suggested** creates the matching ToskLight Pixel fixture at the address proposed by that output. The normal Patch footprint and collision checks run before the desk accepts it. **Patch address** lets you choose another universe and address. On confirmation the desk patch is validated first, then the selected Media Server output is updated. If the remote update fails, the desk restores its previous patch (or removes the newly created fixture) and reports whether recovery succeeded. It never silently reports mismatched addresses as patched.
+The status beside each output tells you what to do next:
+
+- **Patched** – a desk fixture already controls this output with the matching personality.
+- **Mode differs** – the desk fixture uses the other personality. Every layer after the first would be misaddressed, so the card explains the difference, and **Patch suggested** switches the desk fixture to the output's personality.
+- **Needs update** – the Media Server reports a personality the desk cannot patch, or is too old to describe its outputs in the current format (for example, it still offers the retired channel layouts). The patch actions stay disabled. Update ToskLight Media, or choose 2 or 8 layers under its **Settings > Network & DMX**, then **Refresh discovery**.
+- **Unavailable** – the server answered discovery but not its configuration API. Check that it is running and reachable on port 8080, then refresh.
+
+**Patch suggested** creates the matching ToskLight Pixel fixture at the address proposed by that output. The normal Patch footprint and collision checks run before the desk accepts it. **Patch address** lets you choose another universe and address. On confirmation the desk patch is validated first, then the selected Media Server output is updated. If the remote update fails, the desk restores its previous patch (or removes the newly created fixture) and reports whether recovery succeeded. It never silently reports mismatched addresses as patched. When the Media Server refuses the change, the message says why and what to do: a value it rejected (such as an 8-layer block that no longer fits the universe) names that value, a change it could not save asks you to check free space and write access for its configuration folder, and an output it no longer has asks you to refresh discovery.
+
+Native Media controls (effects and text) act on the output the fixture was patched to. If that output has since been removed from the Media Server, the desk reports it instead of controlling a different screen; refresh discovery and patch the output again.
 
 The Media Server may report that its DMX input change needs a restart; Show Patch keeps that state visible. An unreachable server or discovery failure does not disable the ordinary fixture-library and manual Media Server patch workflows.
 

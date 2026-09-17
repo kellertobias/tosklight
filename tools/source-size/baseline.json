@@ -24,7 +24,7 @@
     "apps/light-desktop/src/components/modals/SpecialDialogsModal.tsx::javascript:function:SpecialDialogsModal:8f00c5dcbdc5:1": 191,
     "apps/light-desktop/src/components/modals/SystemControlsModal.tsx::javascript:function:useSystemControlsModel:e0900c5a21a7:1": 153,
     "apps/light-desktop/src/components/modals/VisualizationPaneSettings.tsx::javascript:function:WidgetEditor:6778b594cf10:1": 271,
-    "apps/light-desktop/src/components/setup/MediaServerSetup.tsx::javascript:function:MediaServerSetup:ebeb8fab2a0b:1": 257,
+    "apps/light-desktop/src/components/setup/MediaServerSetup.tsx::javascript:function:MediaServerSetup:ebeb8fab2a0b:1": 182,
     "apps/light-desktop/src/components/setup/screens/ScreenSettingsCards.tsx::javascript:function:ScreenSettingsCard:38f146401d3b:1": 154,
     "apps/light-desktop/src/features/controlSurfaceInteraction/SetInteractionProvider.tsx::javascript:function:SetInteractionProvider:7ad4c5cbb6a4:1": 155,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimecodeTimelineEditor:6909217a8925:1": 343,

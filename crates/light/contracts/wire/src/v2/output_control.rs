@@ -199,6 +199,19 @@ pub struct DiscoveredMediaOutput {
     pub universe: u16,
     pub start_address: u16,
     pub dmx_pending_restart: bool,
+    /// The desk Media Server fixture mode for this output's personality (`2 layers` or
+    /// `8 layers`), or null when the desk cannot patch it.
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// `playback-bpm-channel` or `speed-group`, as the Media Server reports it.
+    #[serde(default)]
+    pub tempo_source: Option<String>,
+    /// The followed desk Speed Group when `tempoSource` is `speed-group`.
+    #[serde(default)]
+    pub speed_group: Option<u32>,
+    /// Why the desk cannot patch this output, worded as what the operator should do.
+    #[serde(default)]
+    pub issue: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

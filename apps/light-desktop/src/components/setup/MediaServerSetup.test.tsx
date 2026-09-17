@@ -6,6 +6,7 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MediaServerDiscovery } from "../../api/client/mediaOutput";
 import type {
 	FixtureDefinition,
 	MediaServerFixture,
@@ -56,7 +57,10 @@ vi.mock("../../features/mediaServers/MediaServersContext", () => ({
 	useMediaServers: () => server,
 }));
 vi.mock("../../features/fixtureLibrary/FixtureLibraryContext", () => ({
-	useFixtureLibrary: () => ({ fixtureLibrary: mocks.fixtureLibrary }),
+	useFixtureLibrary: () => ({
+		fixtureLibrary: mocks.fixtureLibrary,
+		fixtureProfiles: [],
+	}),
 }));
 vi.mock("../../features/patch/PatchContext", () => ({
 	usePatch: () => ({
@@ -116,6 +120,10 @@ beforeEach(() => {
 		universe: 4,
 		startAddress: 101,
 		dmxPendingRestart: false,
+		mode: "2 layers",
+		tempoSource: "playback-bpm-channel",
+		speedGroup: null,
+		issue: null,
 	});
 	mocks.patchFixtures.mockResolvedValue([
 		{ fixtureId: "patched-media", selectionFixtureIds: ["patched-media"] },
@@ -337,6 +345,10 @@ describe("Media server Patch authority", () => {
 			universe: 7,
 			startAddress: 201,
 			dmxPendingRestart: true,
+			mode: "2 layers",
+			tempoSource: "playback-bpm-channel",
+			speedGroup: null,
+			issue: null,
 		});
 		patchFixtures = [];
 		render(<MediaServerSetup />);
@@ -355,9 +367,7 @@ describe("Media server Patch authority", () => {
 
 		await screen.findByText(/Restart the Media Server to activate/);
 		expect(screen.getByText(/Suggested DMX 7\.201/)).toBeInTheDocument();
-		expect(
-			screen.getByText(/DMX change pending restart/),
-		).toBeInTheDocument();
+		expect(screen.getByText(/DMX change pending restart/)).toBeInTheDocument();
 	});
 
 	it("keeps the server untouched when normal desk collision validation rejects the patch", async () => {
@@ -375,9 +385,131 @@ describe("Media server Patch authority", () => {
 		expect(mocks.updateDiscoveredMediaAddress).not.toHaveBeenCalled();
 		expect(screen.getAllByRole("alert")[0]).toHaveTextContent("overlap");
 	});
+
+	it("shows the output's current personality, protocol, and tempo source", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		expect(
+			await screen.findByText(
+				"Suggested DMX 4.101 · 2 layers · sACN · Tempo from Speed Group 3",
+			),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/two-layers/)).not.toBeInTheDocument();
+	});
+
+	it("lists an outdated Media Server without offering a patch", async () => {
+		const outdated = discoveredServer();
+		outdated.servers[0].error =
+			"This Media Server needs an update before the desk can patch it. Update ToskLight Media to the current version, then refresh discovery.";
+		Object.assign(outdated.servers[0].outputs[0], {
+			mode: null,
+			tempoSource: null,
+			speedGroup: null,
+			issue: outdated.servers[0].error,
+		});
+		mocks.discoverMediaServers.mockResolvedValue(outdated);
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		expect(screen.getByText("Needs update")).toBeInTheDocument();
+		expect(screen.getByText(/Unsupported personality/)).toBeInTheDocument();
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Update ToskLight Media",
+		);
+		expect(
+			screen.getByRole("button", { name: "Patch suggested" }),
+		).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: "Patch address" }),
+		).toBeDisabled();
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
+	});
+
+	it("explains an unreachable Media Server", async () => {
+		const unavailable = discoveredServer();
+		unavailable.servers[0].outputs = [];
+		unavailable.servers[0].status = "Unavailable";
+		unavailable.servers[0].error =
+			"The discovered Media Server did not answer its configuration API. Check that it is running and reachable on port 8080, then refresh discovery.";
+		mocks.discoverMediaServers.mockResolvedValue(unavailable);
+		render(<MediaServerSetup />);
+
+		expect(await screen.findByText("Unavailable")).toBeInTheDocument();
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"reachable on port 8080",
+		);
+	});
+
+	it("switches a patched fixture to the output's personality", async () => {
+		const [twoLayers, eightLayers] = toskMediaDefinitions();
+		mocks.fixtureLibrary = [twoLayers, eightLayers];
+		const server = discoveredServer();
+		Object.assign(server.servers[0].outputs[0], {
+			personality: "eight-layers",
+			mode: "8 layers",
+			startAddress: 1,
+		});
+		mocks.discoverMediaServers.mockResolvedValue(server);
+		patchFixtures = [
+			{
+				...mediaFixture(),
+				fixture_id: "patched-media",
+				definition: twoLayers,
+				universe: 4,
+				address: 1,
+				split_patches: [{ split: 1, universe: 4, address: 1 }],
+				direct_control: {
+					protocol: "citp",
+					ip_address: "192.168.1.40",
+					port: 4809,
+				},
+			},
+		];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		expect(screen.getByText("Mode differs")).toBeInTheDocument();
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"The desk patch uses 2 layers, but this output uses 8 layers.",
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Patch suggested" }));
+
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledOnce());
+		const candidate = mocks.patchFixtures.mock.calls[0][0][0];
+		expect(candidate.input).toMatchObject({
+			fixtureId: "patched-media",
+			modeId: "b134a5f3-1adf-5bba-a2be-dbfb2c654395",
+			splitPatches: [{ split: 1, universe: 4, address: 1 }],
+		});
+	});
+
+	it("words a Media Server save refusal as an operator action and restores the desk", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		mocks.updateDiscoveredMediaAddress.mockRejectedValue(
+			new Error(
+				"The Media Server could not save this change, so it did not apply it. Check free space and write access for its configuration folder, then retry.",
+			),
+		);
+		patchFixtures = [];
+		render(<MediaServerSetup />);
+
+		await screen.findByText("Pixel Rack · Main");
+		fireEvent.click(screen.getByRole("button", { name: "Patch address" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Confirm patch address" }),
+		);
+
+		expect(
+			await screen.findByText(/Check free space and write access/),
+		).toHaveTextContent("The desk patch was restored");
+		expect(mocks.deleteFixture).toHaveBeenCalledOnce();
+	});
 });
 
-function discoveredServer() {
+function discoveredServer(): MediaServerDiscovery {
 	return {
 		servers: [
 			{
@@ -397,12 +529,34 @@ function discoveredServer() {
 						universe: 4,
 						startAddress: 101,
 						dmxPendingRestart: false,
+						mode: "2 layers",
+						tempoSource: "speed-group",
+						speedGroup: 3,
+						issue: null,
 					},
 				],
 			},
 		],
 		discoveryError: null,
 	};
+}
+
+function toskMediaDefinitions() {
+	const profile = blankFixtureProfile();
+	profile.id = "0a14fb60-280d-5ef1-aa4a-2ff11bd06943";
+	profile.revision = 9;
+	profile.manufacturer = "ToskLight";
+	profile.name = "Media Server";
+	profile.short_name = "Media Server";
+	profile.direct_control_protocols = ["citp"];
+	profile.modes[0].id = "a134a5f3-1adf-5bba-a2be-dbfb2c654395";
+	profile.modes[0].name = "2 layers";
+	profile.modes.push({
+		...structuredClone(profile.modes[0]),
+		id: "b134a5f3-1adf-5bba-a2be-dbfb2c654395",
+		name: "8 layers",
+	});
+	return fixtureDefinitionsFromProfiles([profile]);
 }
 
 function toskMediaDefinition() {

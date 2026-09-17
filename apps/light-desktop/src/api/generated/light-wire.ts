@@ -503,7 +503,24 @@ export type NativeMediaSnapshot = { endpoint: string, status: string, instance: 
 export type NativeMediaTextUpdateRequest = { request_id: string, text: string, };
 export type NativeMediaEffectUpdateRequest = { request_id: string, control_id: string, number_value?: number | null, string_value?: string | null, boolean_value?: boolean | null, };
 export type DiscoveredMediaAddressUpdateRequest = { requestId: string, host: string, outputId: string, universe: number, startAddress: number, };
-export type DiscoveredMediaOutput = { id: string, name: string, personality: string, protocol: string, universe: number, startAddress: number, dmxPendingRestart: boolean, };
+export type DiscoveredMediaOutput = { id: string, name: string, personality: string, protocol: string, universe: number, startAddress: number, dmxPendingRestart: boolean,
+/**
+ * The desk Media Server fixture mode for this output's personality (`2 layers` or
+ * `8 layers`), or null when the desk cannot patch it.
+ */
+mode: string | null,
+/**
+ * `playback-bpm-channel` or `speed-group`, as the Media Server reports it.
+ */
+tempoSource: string | null,
+/**
+ * The followed desk Speed Group when `tempoSource` is `speed-group`.
+ */
+speedGroup: number | null,
+/**
+ * Why the desk cannot patch this output, worded as what the operator should do.
+ */
+issue: string | null, };
 export type DiscoveredMediaServer = { key: string, name: string, host: string, citpPort: number, status: string, instance: string | null, outputs: Array<DiscoveredMediaOutput>, error: string | null, };
 export type MediaServerDiscovery = { servers: Array<DiscoveredMediaServer>, discoveryError: string | null, };
 export type NetworkEndpointDirection = "send" | "receive";
