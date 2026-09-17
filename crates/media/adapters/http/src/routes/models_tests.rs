@@ -69,7 +69,11 @@ async fn uploading_assigns_a_slot_named_after_the_file_and_persists_it() {
     let (bench, _) = models_bench();
     let (status, list) = send(&bench.router, get("/api/v2/models".into())).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(list, serde_json::json!([]));
+    assert_eq!(
+        list.as_array().unwrap().len(),
+        5,
+        "only the built-in models"
+    );
 
     let (status, view) = send(
         &bench.router,
@@ -224,4 +228,120 @@ async fn the_layer_view_reports_what_the_model_selection_resolved_to() {
     let (_, list) = send(&bench.router, get("/api/v2/models".into())).await;
     assert_eq!(list[1]["status"], "unloadable");
     assert_eq!(list[1]["detail"], "cannot read model-002.glb");
+}
+
+#[tokio::test]
+async fn a_new_server_lists_every_built_in_model_with_the_plane_in_slot_one() {
+    let (bench, _) = models_bench();
+    let (status, list) = send(&bench.router, get("/api/v2/models".into())).await;
+    assert_eq!(status, StatusCode::OK);
+    let summary: Vec<_> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|slot| {
+            (
+                slot["slot"].as_u64().unwrap(),
+                slot["name"].as_str().unwrap().to_owned(),
+                slot["builtin"].as_str().unwrap().to_owned(),
+                slot["status"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    let expected: Vec<_> = [
+        (1, "Plane", "plane"),
+        (2, "Cube", "cube"),
+        (3, "Sphere", "sphere"),
+        (4, "Cylinder", "cylinder"),
+        (5, "Pyramid", "pyramid"),
+    ]
+    .into_iter()
+    .map(|(slot, name, id)| (slot, name.to_owned(), id.to_owned(), "ready".to_owned()))
+    .collect();
+    assert_eq!(summary, expected);
+}
+
+#[tokio::test]
+async fn selecting_a_built_in_model_persists_it_and_deletes_a_replaced_import() {
+    let (bench, store) = models_bench();
+    send(
+        &bench.router,
+        multipart(
+            "/api/v2/models/20/upload?requestId=u20",
+            "Wall.glb",
+            b"glTF",
+        ),
+    )
+    .await;
+
+    for (index, id) in ["plane", "cube", "sphere", "cylinder", "pyramid"]
+        .into_iter()
+        .enumerate()
+    {
+        let (status, view) = send(
+            &bench.router,
+            post(
+                "/api/v2/models/20/update".into(),
+                &format!(r#"{{"requestId":"builtin-{index}","builtin":"{id}"}}"#),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{view}");
+        assert_eq!(view["builtin"], id);
+        assert_eq!(view["status"], "ready");
+        let stored = bench.stored.lock().unwrap();
+        let entry = stored.last().unwrap().models.resolve(20).unwrap().clone();
+        assert_eq!(
+            entry.builtin.map(media_domain::BuiltinModel::id),
+            Some(id),
+            "the stored configuration follows the selection"
+        );
+        assert!(entry.file.is_empty());
+        assert_eq!(view["name"], entry.name);
+        assert_eq!(
+            bench.configuration.load().models.resolve(20),
+            Some(&entry),
+            "the running configuration the mapper reads follows too"
+        );
+    }
+    assert_eq!(
+        *store.removed.lock().unwrap(),
+        vec!["model-020.glb".to_owned()],
+        "only the replaced import's file is deleted"
+    );
+
+    // Uploading onto a built-in slot names it after the file, not after the shape.
+    let (_, view) = send(
+        &bench.router,
+        multipart(
+            "/api/v2/models/20/upload?requestId=u20b",
+            "Arch.glb",
+            b"glTF",
+        ),
+    )
+    .await;
+    assert_eq!(view["name"], "Arch");
+    assert_eq!(view["builtin"], serde_json::Value::Null);
+
+    // Clearing a built-in slot deletes no file.
+    let (status, _) = send(
+        &bench.router,
+        post(
+            "/api/v2/models/1/update".into(),
+            r#"{"requestId":"clear-plane","clear":true}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(store.removed.lock().unwrap().len(), 1);
+
+    let (status, _) = send(
+        &bench.router,
+        post(
+            "/api/v2/models/1/update".into(),
+            r#"{"requestId":"torus","builtin":"torus"}"#,
+        ),
+    )
+    .await;
+    assert!(status.is_client_error(), "an unknown built-in is refused");
 }

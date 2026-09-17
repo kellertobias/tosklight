@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 5;
+pub const CURRENT_VERSION: u32 = 6;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -59,6 +59,7 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             2 => visualizers_into_final_banks(current),
             3 => Ok(with_effect_library(current)),
             4 => Ok(onto_the_mapping_layout(current)),
+            5 => Ok(with_builtin_models(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
@@ -113,6 +114,37 @@ fn onto_the_mapping_layout(mut document: Value) -> Value {
         }
     }
     document["version"] = json!(5);
+    document
+}
+
+/// Version 5 → 6: the model library receives the built-in models.
+///
+/// A document without a model library receives the default one, Plane in slot 1. A stored
+/// library keeps every imported model at its number and gains each built-in model whose default
+/// slot is still empty, so no cue is redirected. A library that cannot be read is left alone for
+/// the load to refuse with its own message.
+fn with_builtin_models(mut document: Value) -> Value {
+    if let Some(configuration) = document
+        .get_mut("configuration")
+        .and_then(Value::as_object_mut)
+    {
+        let library = match configuration.get("models") {
+            None => Some(media_domain::ModelLibrary::default()),
+            Some(stored) => serde_json::from_value::<media_domain::ModelLibrary>(stored.clone())
+                .ok()
+                .map(|mut library| {
+                    library.add_builtins_to_free_slots();
+                    library
+                }),
+        };
+        if let Some(library) = library {
+            configuration.insert(
+                "models".to_owned(),
+                serde_json::to_value(library).expect("a model library is serializable"),
+            );
+        }
+    }
+    document["version"] = json!(6);
     document
 }
 
@@ -375,7 +407,7 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 5"));
+        assert!(written.contains("\"version\": 6"));
         assert!(
             !written.contains("personalityLayout"),
             "there is one channel layout, so nothing records which one"
@@ -449,7 +481,7 @@ mod tests {
                 }
             });
             let migrated = migrate_to_current(document.clone()).expect("version four migrates");
-            assert_eq!(migrated["version"], json!(5));
+            assert_eq!(migrated["version"], json!(CURRENT_VERSION));
             for output in migrated["configuration"]["outputs"].as_array().unwrap() {
                 assert!(output.get("personalityLayout").is_none(), "{layout}");
             }
@@ -564,9 +596,74 @@ mod tests {
 
     #[test]
     fn a_current_document_is_left_alone() {
-        assert_eq!(CURRENT_VERSION, 5, "mapping-only documents are version 5");
+        assert_eq!(
+            CURRENT_VERSION, 6,
+            "documents with built-in models are version 6"
+        );
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
+    }
+
+    /// A stored document of `version` with this build's default outputs and the given library.
+    fn document_with_models(version: u32, models: Option<Value>) -> Value {
+        let mut document =
+            serde_json::to_value(super::super::ConfigurationDocument::default()).unwrap();
+        document["version"] = json!(version);
+        let configuration = document["configuration"].as_object_mut().unwrap();
+        match models {
+            Some(models) => configuration.insert("models".to_owned(), models),
+            None => configuration.remove("models"),
+        };
+        document
+    }
+
+    #[test]
+    fn a_version_five_document_without_a_model_library_receives_the_built_in_models() {
+        let document = document_with_models(5, None);
+        let configuration = super::super::load(&document.to_string()).unwrap();
+        assert_eq!(configuration.models, media_domain::ModelLibrary::default());
+        let plane = configuration.models.resolve(1).unwrap();
+        assert_eq!(plane.builtin, Some(media_domain::BuiltinModel::Plane));
+    }
+
+    #[test]
+    fn a_version_five_model_library_keeps_its_imports_and_gains_built_ins_in_free_slots() {
+        let document = document_with_models(
+            5,
+            Some(json!({ "entries": [
+                { "slot": 2, "name": "Truss", "file": "model-002.glb", "vertices": 8, "triangles": 12 },
+                { "slot": 40, "name": "Screen", "file": "model-040.glb" }
+            ] })),
+        );
+        let migrated = migrate_to_current(document.clone()).unwrap();
+        assert_eq!(migrated["version"], json!(6));
+        let models = super::super::load(&document.to_string()).unwrap().models;
+        let summary: Vec<(u8, &str, Option<media_domain::BuiltinModel>)> = models
+            .entries
+            .iter()
+            .map(|entry| (entry.slot, entry.name.as_str(), entry.builtin))
+            .collect();
+        use media_domain::BuiltinModel as B;
+        assert_eq!(
+            summary,
+            vec![
+                (1, "Plane", Some(B::Plane)),
+                (2, "Truss", None),
+                (3, "Sphere", Some(B::Sphere)),
+                (4, "Cylinder", Some(B::Cylinder)),
+                (5, "Pyramid", Some(B::Pyramid)),
+                (40, "Screen", None),
+            ],
+            "the imported slot 2 keeps its number; the Cube waits for the operator to place it"
+        );
+        assert_eq!(models.resolve(2).unwrap().file, "model-002.glb");
+    }
+
+    #[test]
+    fn a_version_six_library_the_operator_emptied_stays_empty() {
+        let document = document_with_models(6, Some(json!({ "entries": [] })));
+        let configuration = super::super::load(&document.to_string()).unwrap();
+        assert!(configuration.models.entries.is_empty());
     }
 
     #[test]

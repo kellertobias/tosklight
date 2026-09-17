@@ -15,6 +15,7 @@ pub mod address;
 pub mod audio;
 pub mod authored_tempo;
 pub mod blend;
+pub mod builtin_models;
 pub mod catalog;
 pub mod clock;
 pub mod color;
@@ -44,6 +45,7 @@ pub mod visualizer;
 pub use address::{AddressClass, AssetId, MediaAddress};
 pub use audio::{Analysis, Instrument, Instruments, Tuning};
 pub use blend::{BlendMode, LayerBlend, strobe_lit};
+pub use builtin_models::BuiltinModel;
 pub use catalog::{
     CatalogError, CatalogFolder, CatalogItem, CatalogLocation, CatalogSnapshot, ItemKind,
 };

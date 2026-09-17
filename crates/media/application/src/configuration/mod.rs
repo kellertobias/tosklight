@@ -97,9 +97,9 @@ pub struct MediaConfiguration {
     pub effects: EffectLibrary,
     /// Numbered 3D models a layer's `3D model` channel maps it onto.
     ///
-    /// Optional in the document: a configuration written before the model library existed has
-    /// no `models` section and loads as an empty library, so every layer keeps drawing flat.
-    /// No version bump is needed because nothing about an existing field changed.
+    /// A new configuration holds the built-in models, Plane in slot 1. A document without a
+    /// `models` section loads that same default library; version 6 added the built-in models to
+    /// the free default slots of older stored libraries.
     #[serde(default)]
     pub models: ModelLibrary,
     /// One or more logical outputs. The first release ships one; the collection is never
@@ -228,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn a_current_document_without_a_model_library_loads_an_empty_one() {
+    fn a_current_document_without_a_model_library_loads_the_built_in_models() {
         let mut document = serde_json::to_value(ConfigurationDocument::default()).unwrap();
         document["configuration"]
             .as_object_mut()
@@ -241,10 +241,54 @@ mod tests {
     }
 
     #[test]
-    fn a_legacy_document_migrates_to_an_empty_model_library() {
+    fn a_legacy_document_migrates_to_the_default_model_library_with_the_plane_first() {
         let legacy = r#"{ "fullMode": true, "dmxProtocol": "art-net" }"#;
         let loaded = load(legacy).unwrap();
-        assert!(loaded.models.entries.is_empty());
+        assert_eq!(loaded.models, ModelLibrary::default());
+        assert_eq!(
+            loaded.models.resolve(1).unwrap().builtin,
+            Some(media_domain::BuiltinModel::Plane)
+        );
+    }
+
+    #[test]
+    fn every_built_in_model_and_the_plane_default_survive_a_save_and_load() {
+        let configuration = MediaConfiguration::default();
+        let loaded = load(&save(&configuration)).unwrap();
+        assert_eq!(loaded.models, configuration.models);
+        for model in media_domain::BuiltinModel::ALL {
+            assert_eq!(
+                loaded.models.resolve(model.default_slot()).unwrap().builtin,
+                Some(model)
+            );
+        }
+
+        // A built-in chosen for another slot, replacing the Plane in slot 1, is stored as chosen.
+        let mut edited = configuration.clone();
+        edited
+            .models
+            .assign(media_domain::ModelEntry::builtin(
+                1,
+                media_domain::BuiltinModel::Cube,
+            ))
+            .unwrap();
+        edited
+            .models
+            .assign(media_domain::ModelEntry::builtin(
+                77,
+                media_domain::BuiltinModel::Plane,
+            ))
+            .unwrap();
+        let reloaded = load(&save(&edited)).unwrap();
+        assert_eq!(reloaded.models, edited.models);
+        assert_eq!(
+            reloaded.models.resolve(1).unwrap().builtin,
+            Some(media_domain::BuiltinModel::Cube)
+        );
+        assert_eq!(
+            reloaded.models.resolve(77).unwrap().builtin,
+            Some(media_domain::BuiltinModel::Plane)
+        );
     }
 
     #[test]
@@ -256,6 +300,7 @@ mod tests {
                 slot: 42,
                 name: "Stage cube".to_owned(),
                 file: ModelLibrary::stored_file_name(42),
+                builtin: None,
                 vertices: 24,
                 triangles: 12,
             })
@@ -272,6 +317,7 @@ mod tests {
             slot: 9,
             name: "Twice".to_owned(),
             file: ModelLibrary::stored_file_name(9),
+            builtin: None,
             vertices: 3,
             triangles: 1,
         };

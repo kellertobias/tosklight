@@ -4,12 +4,17 @@
 //! and always means "draw flat"; usable models occupy `1..=255` and keep their number across
 //! restarts, so a cue that maps a layer onto model 12 keeps doing so after the library is edited.
 //!
-//! The library records which stored file belongs to which slot. The mesh itself is imported and
-//! stored by the library adapter; this module owns only the addressing rules, the transport-neutral
-//! mesh value the renderer draws, and the normalization every imported mesh goes through.
+//! The library records which stored file — or which [built-in model](BuiltinModel) — belongs to
+//! which slot. An imported mesh is stored by the library adapter; this module owns only the
+//! addressing rules, the transport-neutral mesh value the renderer draws, and the normalization
+//! every mesh goes through.
+//!
+//! A new library holds the five built-in models in slots 1–5, Plane first. A layer whose selected
+//! slot cannot be drawn is mapped onto the Plane.
 
 use serde::{Deserialize, Serialize};
 
+use crate::builtin_models::BuiltinModel;
 use crate::layer::ModelMapping;
 
 /// The most vertices one imported model may carry after triangulation. Far more than a stage
@@ -22,8 +27,13 @@ pub const MAX_MODEL_VERTICES: usize = 4_000_000;
 pub struct ModelEntry {
     pub slot: u8,
     pub name: String,
-    /// The stored file's name inside the library's model store. Never a path.
+    /// The stored file's name inside the library's model store. Never a path. Empty for a
+    /// built-in model, which has no file.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub file: String,
+    /// The built-in model this slot holds instead of an imported file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builtin: Option<BuiltinModel>,
     /// Vertex and triangle counts measured at import, so the library can describe a model
     /// without loading it.
     #[serde(default)]
@@ -32,11 +42,50 @@ pub struct ModelEntry {
     pub triangles: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+impl ModelEntry {
+    /// A slot holding a built-in model under its own name.
+    pub fn builtin(slot: u8, model: BuiltinModel) -> Self {
+        let geometry = model.geometry();
+        Self {
+            slot,
+            name: model.label().to_owned(),
+            file: String::new(),
+            builtin: Some(model),
+            vertices: u32::try_from(geometry.vertices.len()).unwrap_or(u32::MAX),
+            triangles: u32::try_from(geometry.triangle_count()).unwrap_or(u32::MAX),
+        }
+    }
+
+    /// A slot holding an imported file.
+    pub fn imported(slot: u8, name: impl Into<String>, file: impl Into<String>) -> Self {
+        Self {
+            slot,
+            name: name.into(),
+            file: file.into(),
+            builtin: None,
+            vertices: 0,
+            triangles: 0,
+        }
+    }
+}
+
+/// The numbered model slots.
+///
+/// `Default` is the library a new installation starts with: the built-in models in slots 1–5.
+/// A stored library with no entries stays empty; an operator may have cleared every slot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelLibrary {
     #[serde(default)]
     pub entries: Vec<ModelEntry>,
+}
+
+impl Default for ModelLibrary {
+    fn default() -> Self {
+        let mut library = Self::empty();
+        library.add_builtins_to_free_slots();
+        library
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -52,6 +101,29 @@ pub enum ModelLibraryError {
 }
 
 impl ModelLibrary {
+    /// A library with every slot empty.
+    pub const fn empty() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Assigns each built-in model to its default slot when that slot is empty. An imported model
+    /// already in the slot keeps its number, so a cue pointing at it is never redirected.
+    /// Returns the built-in models that were added.
+    pub fn add_builtins_to_free_slots(&mut self) -> Vec<BuiltinModel> {
+        let mut added = Vec::new();
+        for model in BuiltinModel::ALL {
+            if self.resolve(model.default_slot()).is_none() {
+                self.entries
+                    .push(ModelEntry::builtin(model.default_slot(), model));
+                added.push(model);
+            }
+        }
+        self.entries.sort_by_key(|entry| entry.slot);
+        added
+    }
+
     pub fn resolve(&self, slot: u8) -> Option<&ModelEntry> {
         (slot != 0)
             .then(|| self.entries.iter().find(|entry| entry.slot == slot))
@@ -122,7 +194,11 @@ fn validate_entry(entry: &ModelEntry) -> Result<(), ModelLibraryError> {
     if entry.name.trim().is_empty() {
         return Err(ModelLibraryError::EmptyName { slot: entry.slot });
     }
-    if !is_plain_file_name(&entry.file) {
+    let file_is_valid = match entry.builtin {
+        Some(_) => entry.file.is_empty(),
+        None => is_plain_file_name(&entry.file),
+    };
+    if !file_is_valid {
         return Err(ModelLibraryError::InvalidFile { slot: entry.slot });
     }
     Ok(())
@@ -145,9 +221,10 @@ pub enum ModelStatus {
     Flat,
     /// The selected model resolved and the layer is drawn onto it.
     Mapped,
-    /// The selected slot holds no model. The layer draws flat.
+    /// The selected slot holds no model. The layer is mapped onto the default Plane.
     Missing,
-    /// The slot is assigned but its stored file could not be loaded. The layer draws flat.
+    /// The slot is assigned but its stored file could not be loaded. The layer is mapped onto
+    /// the default Plane.
     Unloadable,
 }
 
@@ -284,6 +361,7 @@ mod tests {
             slot,
             name: name.to_owned(),
             file: ModelLibrary::stored_file_name(slot),
+            builtin: None,
             vertices: 4,
             triangles: 2,
         }
@@ -291,7 +369,7 @@ mod tests {
 
     #[test]
     fn slots_are_addressed_and_zero_is_flat() {
-        let mut library = ModelLibrary::default();
+        let mut library = ModelLibrary::empty();
         assert!(library.resolve(0).is_none());
         library.assign(entry(12, " Cube ")).unwrap();
         library.assign(entry(3, "Sphere")).unwrap();
@@ -313,7 +391,7 @@ mod tests {
 
     #[test]
     fn assigning_an_occupied_slot_replaces_it_and_clearing_frees_it() {
-        let mut library = ModelLibrary::default();
+        let mut library = ModelLibrary::empty();
         library.assign(entry(7, "Old")).unwrap();
         library.assign(entry(7, "New")).unwrap();
         assert_eq!(library.entries.len(), 1);
@@ -354,8 +432,83 @@ mod tests {
     }
 
     #[test]
-    fn the_library_round_trips_through_json_and_defaults_to_empty() {
-        let mut library = ModelLibrary::default();
+    fn a_new_library_holds_every_built_in_model_with_the_plane_in_slot_one() {
+        let library = ModelLibrary::default();
+        library.validate().unwrap();
+        assert_eq!(library.entries.len(), BuiltinModel::ALL.len());
+        let plane = library.resolve(1).unwrap();
+        assert_eq!(plane.builtin, Some(BuiltinModel::Plane));
+        assert_eq!(plane.name, "Plane");
+        assert!(plane.file.is_empty());
+        assert_eq!((plane.vertices, plane.triangles), (4, 2));
+        for model in BuiltinModel::ALL {
+            let entry = library.resolve(model.default_slot()).unwrap();
+            assert_eq!(entry.builtin, Some(model));
+            assert_eq!(entry.name, model.label());
+        }
+        let text = serde_json::to_string(&library).unwrap();
+        assert!(
+            !text.contains("\"file\""),
+            "a built-in slot stores no file: {text}"
+        );
+        assert_eq!(
+            serde_json::from_str::<ModelLibrary>(&text).unwrap(),
+            library
+        );
+    }
+
+    #[test]
+    fn built_ins_fill_only_free_default_slots() {
+        let mut library = ModelLibrary::empty();
+        library.assign(entry(1, "Imported")).unwrap();
+        library.assign(entry(4, "Also imported")).unwrap();
+        assert_eq!(
+            library.add_builtins_to_free_slots(),
+            vec![
+                BuiltinModel::Cube,
+                BuiltinModel::Sphere,
+                BuiltinModel::Pyramid
+            ]
+        );
+        assert_eq!(library.resolve(1).unwrap().name, "Imported");
+        assert_eq!(library.resolve(4).unwrap().builtin, None);
+        assert_eq!(
+            library.resolve(5).unwrap().builtin,
+            Some(BuiltinModel::Pyramid)
+        );
+        assert!(library.add_builtins_to_free_slots().is_empty());
+        let slots: Vec<u8> = library.entries.iter().map(|e| e.slot).collect();
+        assert_eq!(slots, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn a_built_in_slot_may_not_name_a_file_and_an_imported_one_must() {
+        let mut builtin = ModelEntry::builtin(9, BuiltinModel::Cube);
+        builtin.file = "model-009.glb".to_owned();
+        assert_eq!(
+            ModelLibrary::empty().assign(builtin),
+            Err(ModelLibraryError::InvalidFile { slot: 9 })
+        );
+        assert_eq!(
+            ModelLibrary::empty().assign(ModelEntry::imported(9, "Bare", "")),
+            Err(ModelLibraryError::InvalidFile { slot: 9 })
+        );
+        let mut library = ModelLibrary::empty();
+        library
+            .assign(ModelEntry::imported(9, "Glb", "model-009.glb"))
+            .unwrap();
+        library
+            .assign(ModelEntry::builtin(9, BuiltinModel::Sphere))
+            .unwrap();
+        assert_eq!(
+            library.resolve(9).unwrap().builtin,
+            Some(BuiltinModel::Sphere)
+        );
+    }
+
+    #[test]
+    fn the_library_round_trips_through_json_and_an_explicit_empty_one_stays_empty() {
+        let mut library = ModelLibrary::empty();
         library.assign(entry(200, "Screen")).unwrap();
         let text = serde_json::to_string(&library).unwrap();
         assert_eq!(
@@ -364,13 +517,13 @@ mod tests {
         );
         assert_eq!(
             serde_json::from_str::<ModelLibrary>("{}").unwrap(),
-            ModelLibrary::default()
+            ModelLibrary::empty()
         );
     }
 
     #[test]
     fn status_distinguishes_flat_missing_unloadable_and_mapped() {
-        let mut library = ModelLibrary::default();
+        let mut library = ModelLibrary::empty();
         library.assign(entry(1, "Loads")).unwrap();
         library.assign(entry(2, "Broken")).unwrap();
         let mapping = |model| ModelMapping {

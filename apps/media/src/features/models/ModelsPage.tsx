@@ -11,14 +11,29 @@ import { ResourceState } from "../../app/ResourceState";
 import { MediaErrorToast } from "../../app/ToastContext";
 import { ApiFailure, api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
-import type { ModelSlotView } from "../../shared/api/generated/media-wire";
+import type {
+	BuiltinModelId,
+	ModelSlotView,
+} from "../../shared/api/generated/media-wire";
 import { useModels } from "../../shared/api/queries";
 import {
-	librarySourceGroups,
 	type LibrarySourceType,
+	librarySourceGroups,
 } from "../media-library/GeneratedLibraryBrowserView";
 
 const MODEL_SLOT_COUNT = 255;
+
+/** The models every Media Server ships, in their default slot order. Plane is the default. */
+export const BUILTIN_MODELS: ReadonlyArray<{
+	id: BuiltinModelId;
+	label: string;
+}> = [
+	{ id: "plane", label: "Plane" },
+	{ id: "cube", label: "Cube" },
+	{ id: "sphere", label: "Sphere" },
+	{ id: "cylinder", label: "Cylinder" },
+	{ id: "pyramid", label: "Pyramid" },
+];
 
 /** Where the selected slot's upload has got to. Nothing about an upload is silent. */
 export type ModelUpload =
@@ -101,6 +116,14 @@ export function ModelsPage({
 								}),
 							)
 						}
+						onBuiltin={(builtin) =>
+							editing.save(() =>
+								api.updateModel(selectedSlot, {
+									requestId: requestId(),
+									builtin,
+								}),
+							)
+						}
 					/>
 				)}
 			</ResourceState>
@@ -119,6 +142,7 @@ export function ModelsLibraryView({
 	onRejected,
 	onRename,
 	onClear,
+	onBuiltin,
 }: {
 	models: ModelSlotView[];
 	selectedSlot: number;
@@ -130,6 +154,7 @@ export function ModelsLibraryView({
 	onRejected(message: string): void;
 	onRename(name: string): void;
 	onClear(): void;
+	onBuiltin(builtin: BuiltinModelId): void;
 }) {
 	const bySlot = useMemo(
 		() => new Map(models.map((model) => [model.slot, model])),
@@ -163,9 +188,11 @@ export function ModelsLibraryView({
 								number: model.slot,
 								primary: model.name,
 								secondary:
-									model.status === "ready"
-										? `${model.triangles} triangles`
-										: "Cannot load",
+									model.status !== "ready"
+										? "Cannot load"
+										: model.builtin
+											? "Built-in"
+											: `${model.triangles} triangles`,
 								color: DEFAULT_POOL_COLOR_PALETTE.dynamic,
 								states: model.slot === selectedSlot ? ["selected"] : [],
 							},
@@ -195,7 +222,7 @@ export function ModelsLibraryView({
 				</WindowScrollArea>
 				<WindowScrollArea className="media-library-inspector media-effects-library-inspector">
 					<ModelSlotEditor
-						key={`${selectedSlot}:${selected?.name ?? "empty"}`}
+						key={`${selectedSlot}:${selected?.name ?? "empty"}:${selected?.builtin ?? ""}`}
 						slot={selectedSlot}
 						model={selected}
 						busy={busy}
@@ -204,6 +231,7 @@ export function ModelsLibraryView({
 						onRejected={onRejected}
 						onRename={onRename}
 						onClear={onClear}
+						onBuiltin={onBuiltin}
 					/>
 				</WindowScrollArea>
 			</div>
@@ -220,6 +248,7 @@ function ModelSlotEditor({
 	onRejected,
 	onRename,
 	onClear,
+	onBuiltin,
 }: {
 	slot: number;
 	model?: ModelSlotView;
@@ -229,6 +258,7 @@ function ModelSlotEditor({
 	onRejected(message: string): void;
 	onRename(name: string): void;
 	onClear(): void;
+	onBuiltin(builtin: BuiltinModelId): void;
 }) {
 	const [name, setName] = useState(model?.name ?? "");
 	const picker = useRef<HTMLInputElement>(null);
@@ -242,17 +272,37 @@ function ModelSlotEditor({
 			<h2>Slot {String(slot).padStart(3, "0")}</h2>
 			{model ? (
 				<p>
+					{model.builtin ? "Built-in · " : ""}
 					{model.vertices} vertices · {model.triangles} triangles
 				</p>
 			) : (
-				<p>Upload a model to assign this empty slot.</p>
+				<p>
+					Choose a built-in model or upload one to assign this empty slot.
+					Layers selecting an empty slot are mapped onto the Plane.
+				</p>
 			)}
 			{model?.status === "unloadable" && (
 				<p className="media-model-status-error" role="alert">
-					This model cannot be loaded, so layers selecting it draw flat:{" "}
-					{model.detail}
+					This model cannot be loaded, so layers selecting it are mapped onto
+					the Plane: {model.detail}
 				</p>
 			)}
+			<fieldset className="media-model-builtins">
+				<legend>Built-in model</legend>
+				<div className="media-operator-toolbar">
+					{BUILTIN_MODELS.map((builtin) => (
+						<Button
+							key={builtin.id}
+							aria-pressed={model?.builtin === builtin.id}
+							active={model?.builtin === builtin.id}
+							disabled={disabled}
+							onClick={() => onBuiltin(builtin.id)}
+						>
+							{builtin.label}
+						</Button>
+					))}
+				</div>
+			</fieldset>
 			{model && (
 				<>
 					<TextField
@@ -316,7 +366,8 @@ function ModelSlotEditor({
 			<p className="media-field-help">
 				The model is centred and scaled to fit the output height at scale 1. The
 				layer&apos;s look is wrapped onto it through its texture coordinates.
-				Select it with the layer&apos;s 3D model channel; 0 draws the layer flat.
+				Select it with the layer&apos;s 3D model channel; 0 draws the layer
+				flat. No imported file is needed for the built-in models.
 			</p>
 		</div>
 	);

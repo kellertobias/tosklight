@@ -6,11 +6,29 @@ A layer can be drawn onto a 3D model instead of as a flat picture. The layer's c
 
 Models live in numbered slots **1–255** in the Library's **Models** tab. A slot keeps its number across restarts and edits, so a Cue that maps a layer onto model 12 keeps doing so.
 
+### Built-in models
+
+Five test models ship with every Media Server and need no import:
+
+| Slot on a new server | Model | Shape and image |
+| --- | --- | --- |
+| 1 | **Plane** | A square facing the output, the whole image upright on it. The default. |
+| 2 | **Cube** | The whole image on each of its six faces. |
+| 3 | **Sphere** | The image wrapped once around it, its top edge at the top pole. |
+| 4 | **Cylinder** | As tall as it is wide; the image wrapped once around its side, the whole image on each end. |
+| 5 | **Pyramid** | A square base; the image as a triangle on each side, the whole image on the base. |
+
+To put a built-in model in any slot, select the slot and press its button under **Built-in model**. The choice is saved with the Media Server's configuration and takes effect on the output at once; the slot shows **Built-in** and the model's name, which you can change with **Save name**. Choosing a built-in model for a slot that held an imported model deletes that model's file. **Clear slot** empties a built-in slot too; press the model's button to put it back.
+
+An existing installation receives the built-in models the first time it starts with this version, each in its slot above unless an imported model already occupies it. Imported models never move.
+
+### Importing a model
+
 1. Open **Library > Models** and select a slot.
 2. Drop a `.glb` file on **Model file**, or open the picker. The upload shows its progress, then **Importing…** while the server reads the model.
 3. When the import succeeds the slot shows the model's name (taken from the file name), its vertex count, and its triangle count. When it fails, the slot stays as it was and the reason is shown under the upload field.
 
-Uploading onto an assigned slot replaces its model and keeps its name. **Save name** renames the slot; **Clear slot** empties it and deletes the stored file. Models are stored with the Media Server's library (in the hidden `.models` folder of the library root) and their slot assignments with its configuration.
+Uploading onto a slot holding an imported model replaces it and keeps its name; uploading onto a built-in slot names the slot after the file. **Save name** renames the slot; **Clear slot** empties it and deletes the stored file. Models are stored with the Media Server's library (in the hidden `.models` folder of the library root) and their slot assignments with its configuration.
 
 ### Import requirements
 
@@ -26,7 +44,7 @@ Every node transform in the default scene is applied, then the whole model is **
 
 The layer's **3D model** channel (slot 34 of the current layer layout) selects the model. **0 draws the layer flat, exactly as before.** Values **1–255** select that model slot. **Model pan** and **Model tilt** are 16-bit channels covering −360° to 360°. The Media Server's own layer controls expose the same three values. On the desk they are the Media attributes **Model Pan** and **Model Tilt**, beside **3D Model** on Media encoder page 9. They are separate from a moving light's Pan and Tilt, so Aim, position presets, and the Pan/Tilt tools never turn a media layer.
 
-When the selected slot is empty, or its file cannot be loaded, the layer is drawn **flat** rather than black. The server logs the problem once, the Models tab marks an unloadable slot **Cannot load** with the reason, and the layer's status reports `missing` or `unloadable`.
+**3D mapping defaults to the Plane.** When the selected slot is empty, or its file cannot be loaded, the layer is mapped onto the built-in **Plane** — never onto another model, and never drawn black. The server logs the problem once, the Models tab marks an unloadable slot **Cannot load** with the reason, and the layer's status reports `missing` or `unloadable`.
 
 ## Camera and placement
 

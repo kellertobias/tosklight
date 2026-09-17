@@ -103,6 +103,11 @@ had accumulated since (`legacy`, `current`, `extended`, `effect-banks`). Only th
 Document version 5 drops each output's `personalityLayout`, keeps its personality, and moves a start
 address the larger block no longer fits to the highest address that does.
 
+**Resolved, 2026-09-17 (TL-456).** Document version 6 adds the built-in models (Plane, Cube,
+Sphere, Cylinder, Pyramid) to the model library. A document without a library receives them in slots
+1–5; a stored library gains each one whose default slot is empty, and imported models keep their
+numbers. A mapped layer whose model cannot be drawn uses the Plane instead of drawing flat.
+
 The maintainer resolved that split: discovery and the default advertised TCP endpoint both use the
 industry-standard port **4809**. A configured custom TCP port is preserved and advertised exactly.
 

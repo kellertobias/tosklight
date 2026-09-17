@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModelSlotView } from "../../shared/api/generated/media-wire";
@@ -15,9 +21,28 @@ const cube: ModelSlotView = {
 	name: "Stage cube",
 	vertices: 24,
 	triangles: 12,
+	builtin: null,
 	status: "ready",
 	detail: null,
 };
+
+const BUILT_INS: ModelSlotView[] = (
+	[
+		["plane", "Plane", 4, 2],
+		["cube", "Cube", 24, 12],
+		["sphere", "Sphere", 1225, 2208],
+		["cylinder", "Cylinder", 198, 192],
+		["pyramid", "Pyramid", 16, 6],
+	] as const
+).map(([builtin, name, vertices, triangles], index) => ({
+	slot: index + 1,
+	name,
+	vertices,
+	triangles,
+	builtin,
+	status: "ready",
+	detail: null,
+}));
 
 /** An upload the test finishes by hand, so every intermediate state is observable. */
 class FakeUpload {
@@ -77,10 +102,23 @@ function stubModels(initial: ModelSlotView[]) {
 					models.splice(index, 1);
 					return Response.json({ slot, assigned: false });
 				}
+				if (body.builtin) {
+					const template = BUILT_INS.find(
+						(model) => model.builtin === body.builtin,
+					);
+					if (!template) throw new Error(`unknown built-in ${body.builtin}`);
+					const assigned = { ...template, slot };
+					if (index < 0) models.push(assigned);
+					else models[index] = assigned;
+					return Response.json(assigned);
+				}
 				models[index] = { ...models[index], name: String(body.name) };
 				return Response.json(models[index]);
 			}
-			return Response.json({ code: "not-found", message: path }, { status: 404 });
+			return Response.json(
+				{ code: "not-found", message: path },
+				{ status: 404 },
+			);
 		}),
 	);
 	return { models, writes };
@@ -104,6 +142,7 @@ describe("the 3D model library", () => {
 				name: "Broken",
 				vertices: 3,
 				triangles: 1,
+				builtin: null,
 				status: "unloadable",
 				detail: "cannot read model-004.glb",
 			},
@@ -135,7 +174,9 @@ describe("the 3D model library", () => {
 		expect(
 			await screen.findByLabelText("Model upload progress"),
 		).toHaveAttribute("value", "0.25");
-		expect(screen.getAllByText("Uploading Stage cube.glb — 25%").length).toBeGreaterThan(0);
+		expect(
+			screen.getAllByText("Uploading Stage cube.glb — 25%").length,
+		).toBeGreaterThan(0);
 
 		act(() => upload?.progress(100, 100));
 		expect(
@@ -199,5 +240,64 @@ describe("the 3D model library", () => {
 		await waitFor(() => expect(writes).toHaveLength(2));
 		expect(writes[1].body).toMatchObject({ clear: true });
 		expect(await screen.findByText("0/255 assigned")).toBeInTheDocument();
+	});
+
+	it("lists the built-in models a new server holds, Plane first", async () => {
+		stubModels(BUILT_INS);
+		const { container } = render(<ModelsPage />);
+		expect(await screen.findByText("5/255 assigned")).toBeInTheDocument();
+		const cards = [
+			...container.querySelectorAll(".media-models-pool-grid .pool-card"),
+		].slice(0, 6);
+		expect(cards.map((card) => card.textContent)).toEqual([
+			expect.stringContaining("Plane"),
+			expect.stringContaining("Cube"),
+			expect.stringContaining("Sphere"),
+			expect.stringContaining("Cylinder"),
+			expect.stringContaining("Pyramid"),
+			expect.stringContaining("Empty"),
+		]);
+		expect(screen.getAllByText("Built-in")).toHaveLength(5);
+		const plane = screen.getByRole("button", { name: "Plane" });
+		expect(plane).toHaveAttribute("aria-pressed", "true");
+		expect(screen.getByText(/^Built-in ·/u)).toHaveTextContent(
+			"Built-in · 4 vertices · 2 triangles",
+		);
+	});
+
+	it("assigns every built-in model to a slot without an upload", async () => {
+		const user = userEvent.setup();
+		const { writes } = stubModels([]);
+		render(<ModelsPage />);
+		await screen.findByText("0/255 assigned");
+		for (const button of ["Plane", "Cube", "Sphere", "Cylinder", "Pyramid"]) {
+			expect(screen.getByRole("button", { name: button })).toHaveAttribute(
+				"aria-pressed",
+				"false",
+			);
+		}
+
+		const ids = ["plane", "cube", "sphere", "cylinder", "pyramid"];
+		for (const [index, label] of [
+			"Plane",
+			"Cube",
+			"Sphere",
+			"Cylinder",
+			"Pyramid",
+		].entries()) {
+			await user.click(await screen.findByRole("button", { name: label }));
+			await waitFor(() => expect(writes).toHaveLength(index + 1));
+			expect(writes[index].path).toBe("/api/v2/models/1/update");
+			expect(writes[index].body).toMatchObject({ builtin: ids[index] });
+			expect(writes[index].body.requestId).toEqual(expect.any(String));
+			await waitFor(() =>
+				expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+					"aria-pressed",
+					"true",
+				),
+			);
+		}
+		expect(FakeUpload.last).toBeUndefined();
+		expect(screen.getByText("1/255 assigned")).toBeInTheDocument();
 	});
 });

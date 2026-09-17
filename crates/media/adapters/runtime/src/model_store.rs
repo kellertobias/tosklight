@@ -2,8 +2,10 @@
 //!
 //! One instance per process, shared by every output and by the API. It imports uploads, loads
 //! each assigned model once, keeps the parsed mesh for as long as its slot points at the same
-//! file, and reports a model that is selected but cannot be drawn — once, never every frame. A
-//! layer whose model is missing or unloadable draws flat; the API's `modelStatus` says why.
+//! file, and reports a model that is selected but cannot be drawn — once, never every frame.
+//! Built-in models come from the domain's generated meshes and never touch the store. A layer
+//! whose model is missing or unloadable is mapped onto the built-in Plane; the API's
+//! `modelStatus` says why.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -59,6 +61,10 @@ impl Models {
         }
         let mut resolved = ResolvedModels::default();
         for entry in &library.entries {
+            if let Some(builtin) = entry.builtin {
+                resolved.geometries.insert(entry.slot, builtin.geometry());
+                continue;
+            }
             let result = inner.loaded.entry(entry.file.clone()).or_insert_with(|| {
                 let loaded = self.store.load(&entry.file).map(Arc::new);
                 if let Err(detail) = &loaded {
@@ -66,7 +72,7 @@ impl Models {
                         slot = entry.slot,
                         name = %entry.name,
                         %detail,
-                        "a 3D model cannot be loaded; layers selecting it draw flat"
+                        "a 3D model cannot be loaded; layers selecting it are mapped onto the Plane"
                     );
                 }
                 loaded
@@ -81,6 +87,7 @@ impl Models {
         let files: HashSet<&str> = library
             .entries
             .iter()
+            .filter(|entry| entry.builtin.is_none())
             .map(|entry| entry.file.as_str())
             .collect();
         inner.loaded.retain(|file, _| files.contains(file.as_str()));
@@ -151,7 +158,7 @@ impl Models {
                     output = %output.id,
                     layer = index + 1,
                     slot,
-                    "a layer selects 3D model {slot}, but that slot holds no model; the layer draws flat"
+                    "a layer selects 3D model {slot}, but that slot holds no model; the layer is mapped onto the Plane"
                 );
             }
         }
@@ -183,7 +190,7 @@ impl InstalledModels {
                 %output,
                 slot,
                 %detail,
-                "a 3D model cannot be drawn on this output; layers selecting it draw flat"
+                "a 3D model cannot be drawn on this output; layers selecting it are mapped onto the Plane"
             );
         }
         self.current = Some(Arc::clone(resolved));
@@ -204,12 +211,13 @@ mod tests {
     }
 
     fn library_with(imported: &ImportedModel, slot: u8) -> ModelLibrary {
-        let mut library = ModelLibrary::default();
+        let mut library = ModelLibrary::empty();
         library
             .assign(ModelEntry {
                 slot,
                 name: "Quad".to_owned(),
                 file: imported.file.clone(),
+                builtin: None,
                 vertices: imported.vertices,
                 triangles: imported.triangles,
             })
@@ -236,6 +244,37 @@ mod tests {
         let restarted = Models::new(&root).resolve(&library);
         assert_eq!(restarted.geometries[&4].triangle_count(), 2);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn built_in_models_resolve_without_a_store_and_follow_a_changed_selection() {
+        let root = root("builtin");
+        let models = Models::new(&root);
+        let library = ModelLibrary::default();
+        let resolved = models.resolve(&library);
+        assert!(resolved.failures.is_empty());
+        for model in media_domain::BuiltinModel::ALL {
+            assert!(Arc::ptr_eq(
+                &resolved.geometries[&model.default_slot()],
+                &model.geometry()
+            ));
+        }
+        assert!(
+            !root.exists(),
+            "built-in models never touch the library root"
+        );
+
+        // Selecting another built-in for slot 1 hands the mapper that mesh on the next resolve.
+        let mut edited = library.clone();
+        edited
+            .assign(ModelEntry::builtin(1, media_domain::BuiltinModel::Sphere))
+            .unwrap();
+        let changed = models.resolve(&edited);
+        assert!(!Arc::ptr_eq(&changed, &resolved));
+        assert!(Arc::ptr_eq(
+            &changed.geometries[&1],
+            &media_domain::BuiltinModel::Sphere.geometry()
+        ));
     }
 
     #[test]

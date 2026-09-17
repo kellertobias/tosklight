@@ -1,7 +1,7 @@
 //! The 3D model library.
 //!
-//! Reads list the assigned slots. Assigning a model is an upload of one self-contained `.glb`;
-//! renaming and clearing are object-intent edits. The runtime's model store validates, imports,
+//! Reads list the assigned slots. Assigning an imported model is an upload of one self-contained
+//! `.glb`; renaming, clearing, and assigning a built-in model are object-intent edits. The runtime's model store validates, imports,
 //! and stores the file — this adapter carries bytes and intent, and records the accepted slot in
 //! the configuration through the same edit order every other stored change follows.
 
@@ -139,13 +139,15 @@ pub(super) async fn upload_model(
     // edit cannot overwrite it with an older document.
     let _transaction = state.replays.transaction().await;
     let mut configuration = MediaConfiguration::clone(&state.configuration.load());
+    let replaced = configuration.models.resolve(slot).cloned();
     let name = query
         .name
         .filter(|name| !name.trim().is_empty())
+        // A built-in model's name describes that shape, not the uploaded one.
         .or_else(|| {
-            configuration
-                .models
-                .resolve(slot)
+            replaced
+                .as_ref()
+                .filter(|entry| entry.builtin.is_none())
                 .map(|entry| entry.name.clone())
         })
         .or_else(|| {
@@ -161,6 +163,7 @@ pub(super) async fn upload_model(
             slot,
             name,
             file: imported.file,
+            builtin: None,
             vertices: imported.vertices,
             triangles: imported.triangles,
         })
@@ -209,7 +212,7 @@ pub(super) async fn update_model(
             },
         )?;
         // The file goes only once the slot no longer points at it.
-        if let Some(entry) = removed
+        if let Some(entry) = removed.filter(|entry| entry.builtin.is_none())
             && let Err(detail) = (state.diagnostics.models.remove)(&entry.file)
         {
             tracing::warn!(slot, %detail, "a cleared model's file could not be removed");
@@ -217,10 +220,15 @@ pub(super) async fn update_model(
         return Ok(response);
     }
 
+    if let Some(builtin) = body.builtin {
+        return assign_builtin(&state, configuration, slot, builtin.into(), body);
+    }
+
     let Some(name) = body.name else {
         return Err(ApiError::bad_request(
             "nothing-to-update",
-            "send a name to rename the slot, or clear to empty it; upload a .glb to assign a model",
+            "send a name to rename the slot, builtin to put a built-in model in it, or clear to \
+             empty it; upload a .glb to assign an imported model",
         ));
     };
     let renamed = configuration.models.rename(slot, &name).map_err(|_| {
@@ -244,6 +252,40 @@ pub(super) async fn update_model(
         failure_for(&failures, slot),
     );
     edit::commit(&state, configuration, &body.request_id, &view)
+}
+
+/// Puts a built-in model in a slot. An imported file the slot held is deleted once the stored
+/// configuration no longer points at it.
+fn assign_builtin(
+    state: &ApiState,
+    mut configuration: MediaConfiguration,
+    slot: u8,
+    builtin: media_domain::BuiltinModel,
+    body: UpdateModelSlot,
+) -> Result<Response, ApiError> {
+    let mut entry = ModelEntry::builtin(slot, builtin);
+    if let Some(name) = body.name.filter(|name| !name.trim().is_empty()) {
+        entry.name = name;
+    }
+    let replaced = configuration.models.resolve(slot).cloned();
+    configuration
+        .models
+        .assign(entry)
+        .map_err(|error| ApiError::bad_request("model-not-assigned", error.to_string()))?;
+    let view = ModelSlotView::of(
+        configuration
+            .models
+            .resolve(slot)
+            .expect("the assigned model is immediately addressable"),
+        None,
+    );
+    let response = edit::commit(state, configuration, &body.request_id, &view)?;
+    if let Some(replaced) = replaced.filter(|entry| entry.builtin.is_none())
+        && let Err(detail) = (state.diagnostics.models.remove)(&replaced.file)
+    {
+        tracing::warn!(slot, %detail, "a replaced model's file could not be removed");
+    }
+    Ok(response)
 }
 
 #[cfg(test)]

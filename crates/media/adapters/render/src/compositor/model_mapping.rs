@@ -12,8 +12,8 @@
 //! The compositor then draws that output-sized texture as an ordinary, untransformed flat layer
 //! that keeps the original layer's blend mode and strobe. Blend, strobe and the opacity cycle
 //! (which rides in the dimmer, already inside the look) therefore apply to the mapped result
-//! through exactly the code a flat layer uses. A layer whose model is not installed is left
-//! untouched and draws flat.
+//! through exactly the code a flat layer uses. A layer whose selected model is not installed is
+//! mapped onto the built-in Plane — never onto any other model, and never left black.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -22,8 +22,8 @@ use bytemuck::{Pod, Zeroable};
 use media_domain::geometry::Size;
 use media_domain::model_projection::model_view_projection;
 use media_domain::{
-    BlendMode, LayerState, MaskState, ModelGeometry, ModelMapping, OutputId, ScalingMode,
-    Timestamp, Tint,
+    BlendMode, BuiltinModel, LayerState, MaskState, ModelGeometry, ModelMapping, OutputId,
+    ScalingMode, Timestamp, Tint,
 };
 use wgpu::util::DeviceExt as _;
 
@@ -31,6 +31,49 @@ use super::{LayerDraw, LayerUniform, MAX_LAYERS, bind_group};
 use crate::feedback::FeedbackProcessor;
 use crate::gpu::Gpu;
 use crate::texture::{SourceTexture, VISUALIZER_FORMAT};
+
+/// Uploads one mesh, or says why this GPU cannot hold it.
+fn upload(gpu: &Gpu, label: &str, geometry: &Arc<ModelGeometry>) -> Result<GpuModel, String> {
+    let limit = gpu.device.limits().max_buffer_size;
+    let vertex_bytes = (geometry.vertices.len() * std::mem::size_of::<GpuVertex>()) as u64;
+    let index_bytes = (geometry.indices.len() * std::mem::size_of::<u32>()) as u64;
+    if geometry.indices.len() < 3 || geometry.vertices.is_empty() {
+        return Err("the model has no triangles".to_owned());
+    }
+    if vertex_bytes > limit || index_bytes > limit {
+        return Err(format!(
+            "the model needs a {vertex_bytes}-byte buffer; this GPU allows {limit}"
+        ));
+    }
+    let vertices: Vec<GpuVertex> = geometry
+        .vertices
+        .iter()
+        .map(|vertex| GpuVertex {
+            position: vertex.position,
+            normal: vertex.normal,
+            uv: vertex.uv,
+        })
+        .collect();
+    let whole = geometry.indices.len() / 3 * 3;
+    Ok(GpuModel {
+        geometry: Arc::clone(geometry),
+        vertices: gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("media-model-{label}-vertices")),
+                contents: bytemuck::cast_slice(&vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            }),
+        indices: gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("media-model-{label}-indices")),
+                contents: bytemuck::cast_slice(&geometry.indices[..whole]),
+                usage: wgpu::BufferUsages::INDEX,
+            }),
+        index_count: whole as u32,
+    })
+}
 
 /// The models an output can map layers onto, by slot. Shared, immutable CPU meshes: each output
 /// uploads its own GPU copy because each output may own its own device.
@@ -86,6 +129,8 @@ pub(super) struct MappingContext<'a> {
 
 pub(super) struct ModelMapper {
     models: HashMap<u8, GpuModel>,
+    /// The built-in Plane, drawn for a selection no installed model answers.
+    fallback: Option<GpuModel>,
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     depth: Option<(wgpu::TextureView, Size)>,
@@ -148,6 +193,7 @@ impl ModelMapper {
             .collect();
         Self {
             models: HashMap::new(),
+            fallback: upload(gpu, "default-plane", &BuiltinModel::DEFAULT.geometry()).ok(),
             pipeline: mesh_pipeline(device, &layout),
             layout,
             depth: None,
@@ -157,65 +203,24 @@ impl ModelMapper {
 
     /// Makes exactly `models` available. A mesh already uploaded from the same shared geometry is
     /// kept; anything else is uploaded or dropped. Returns the slots that could not be uploaded and
-    /// why — those layers keep drawing flat.
+    /// why — those layers are mapped onto the Plane.
     pub(super) fn install(&mut self, gpu: &Gpu, models: &ModelGeometries) -> Vec<(u8, String)> {
         self.models.retain(|slot, installed| {
             models
                 .get(slot)
                 .is_some_and(|geometry| Arc::ptr_eq(geometry, &installed.geometry))
         });
-        let limit = gpu.device.limits().max_buffer_size;
         let mut rejected = Vec::new();
         for (slot, geometry) in models {
             if self.models.contains_key(slot) {
                 continue;
             }
-            let vertex_bytes = (geometry.vertices.len() * std::mem::size_of::<GpuVertex>()) as u64;
-            let index_bytes = (geometry.indices.len() * std::mem::size_of::<u32>()) as u64;
-            if geometry.indices.len() < 3 || geometry.vertices.is_empty() {
-                rejected.push((*slot, "the model has no triangles".to_owned()));
-                continue;
+            match upload(gpu, &slot.to_string(), geometry) {
+                Ok(model) => {
+                    self.models.insert(*slot, model);
+                }
+                Err(reason) => rejected.push((*slot, reason)),
             }
-            if vertex_bytes > limit || index_bytes > limit {
-                rejected.push((
-                    *slot,
-                    format!(
-                        "the model needs a {vertex_bytes}-byte buffer; this GPU allows {limit}"
-                    ),
-                ));
-                continue;
-            }
-            let vertices: Vec<GpuVertex> = geometry
-                .vertices
-                .iter()
-                .map(|vertex| GpuVertex {
-                    position: vertex.position,
-                    normal: vertex.normal,
-                    uv: vertex.uv,
-                })
-                .collect();
-            let whole = geometry.indices.len() / 3 * 3;
-            self.models.insert(
-                *slot,
-                GpuModel {
-                    geometry: Arc::clone(geometry),
-                    vertices: gpu
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some(&format!("media-model-{slot}-vertices")),
-                            contents: bytemuck::cast_slice(&vertices),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        }),
-                    indices: gpu
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some(&format!("media-model-{slot}-indices")),
-                            contents: bytemuck::cast_slice(&geometry.indices[..whole]),
-                            usage: wgpu::BufferUsages::INDEX,
-                        }),
-                    index_count: whole as u32,
-                },
-            );
         }
         rejected
     }
@@ -230,15 +235,12 @@ impl ModelMapper {
         for slot in &mut self.slots {
             slot.active = false;
         }
-        if self.models.is_empty() {
-            return;
-        }
         for (index, layer) in layers.iter().take(MAX_LAYERS).enumerate() {
             let mapping = layer.state.model;
             if mapping.is_flat() || !layer.state.draws() {
                 continue;
             }
-            let Some(model) = self.models.get(&mapping.model) else {
+            let Some(model) = self.models.get(&mapping.model).or(self.fallback.as_ref()) else {
                 continue;
             };
             let gpu = context.gpu;

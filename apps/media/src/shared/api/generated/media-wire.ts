@@ -48,17 +48,27 @@ export type EffectBankView = { index: number, select: number, strength: number,
  * stored value; `1..=255` spans the parameter's advertised range.
  */
 parameters: Array<number>, };
+export type BuiltinModelId = "plane" | "cube" | "sphere" | "cylinder" | "pyramid";
 export type ModelSlotView = { slot: number, name: string, vertices: number, triangles: number,
 /**
+ * The built-in model this slot holds, or null for an imported `.glb`.
+ */
+builtin: BuiltinModelId | null,
+/**
  * `ready`, or `unloadable` when the stored file could not be loaded; a layer selecting an
- * unloadable model draws flat.
+ * unloadable model is mapped onto the Plane.
  */
 status: string,
 /**
  * Why the model is unloadable.
  */
 detail: string | null, };
-export type UpdateModelSlot = { requestId: string, name?: string, clear?: boolean, };
+export type UpdateModelSlot = { requestId: string, name?: string, clear?: boolean,
+/**
+ * Puts this built-in model in the slot, replacing whatever it held. The slot takes the
+ * model's name unless `name` is sent too.
+ */
+builtin?: BuiltinModelId, };
 export type ClearedModelSlotView = { slot: number, assigned: boolean, };
 export type LayerView = { index: number, address: AddressView, playMode: string, playModeDmx: number, dimmer: number, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, grayscale: number, volume: number, tintRed: number, tintGreen: number, tintBlue: number, speedMultiplier: string, speedMultiplierDmx: number, playbackBpm: number | null, blur: number, sourceStatus: SourceStatusView, mask: MaskView, effects: Array<EffectSlotView>,
 /**

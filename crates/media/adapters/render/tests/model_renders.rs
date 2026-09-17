@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use media_domain::geometry::Size;
 use media_domain::{
-    BlendMode, LayerState, MasterState, MediaAddress, ModelGeometry, ModelMapping, ModelVertex,
-    OutputId, PresentationMode, ScalingMode, SourceStatus, Timestamp,
+    BlendMode, BuiltinModel, LayerState, MasterState, MediaAddress, ModelGeometry, ModelMapping,
+    ModelVertex, OutputId, PresentationMode, ScalingMode, SourceStatus, Timestamp,
 };
 use media_render::{Gpu, LayerDraw, ModelGeometries, OutputRenderer, SourceTexture};
 
@@ -138,7 +138,7 @@ fn lit_share(image: &[u8]) -> f32 {
 }
 
 #[test]
-fn model_zero_and_a_missing_model_render_byte_for_byte_like_today() {
+fn model_zero_renders_byte_for_byte_like_today() {
     let gpu = gpu();
     let source = quadrants(&gpu);
     let mut plain = renderer(&gpu);
@@ -154,20 +154,93 @@ fn model_zero_and_a_missing_model_render_byte_for_byte_like_today() {
     });
     let today = render(&mut plain, &[draw(&state, &source)]);
     assert_eq!(render(&mut with_models, &[draw(&state, &source)]), today);
+}
 
-    let missing = LayerState {
+#[test]
+fn a_missing_model_is_mapped_onto_the_default_plane() {
+    let gpu = gpu();
+    let source = quadrants(&gpu);
+    let mut output = renderer(&gpu);
+    output.set_models(&models());
+    let on_quad = render(
+        &mut output,
+        &[draw(&mapped(LayerState::default(), 0.0, 0.0), &source)],
+    );
+    let missing = layer(LayerState {
         model: ModelMapping {
             model: 9,
-            pan: 45.0,
-            tilt: 10.0,
+            pan: 0.0,
+            tilt: 0.0,
         },
-        ..state.clone()
-    };
-    assert_eq!(
-        render(&mut with_models, &[draw(&missing, &source)]),
-        today,
-        "a model that is not installed draws the layer flat, never black"
+        ..Default::default()
+    });
+    let on_plane = render(&mut output, &[draw(&missing, &source)]);
+    let share = agreement(&on_quad, &on_plane, 2);
+    assert!(
+        share > 0.99,
+        "a missing model draws exactly like the Plane, never black or flat: {share}"
     );
+    let flat = render(&mut output, &[draw(&layer(LayerState::default()), &source)]);
+    assert!(
+        agreement(&flat, &on_plane, 12) < 0.9,
+        "it is not the flat layer"
+    );
+}
+
+#[test]
+fn every_built_in_model_renders_its_own_shape() {
+    let gpu = gpu();
+    let source = quadrants(&gpu);
+    let mut output = renderer(&gpu);
+    let library: ModelGeometries = BuiltinModel::ALL
+        .into_iter()
+        .map(|model| (model.default_slot(), model.geometry()))
+        .collect();
+    assert!(output.set_models(&library).is_empty());
+
+    let at_slot = |slot: u8| {
+        layer(LayerState {
+            model: ModelMapping {
+                model: slot,
+                pan: 30.0,
+                tilt: 20.0,
+            },
+            ..Default::default()
+        })
+    };
+    let images: Vec<Vec<u8>> = BuiltinModel::ALL
+        .iter()
+        .map(|model| {
+            render(
+                &mut output,
+                &[draw(&at_slot(model.default_slot()), &source)],
+            )
+        })
+        .collect();
+    for (model, image) in BuiltinModel::ALL.iter().zip(&images) {
+        let share = lit_share(image);
+        assert!(share > 0.1 && share < 0.9, "{model:?} lights {share}");
+    }
+    for (a, first) in images.iter().enumerate() {
+        for (b, second) in images.iter().enumerate().skip(a + 1) {
+            assert!(
+                agreement(first, second, 12) < 0.97,
+                "{:?} and {:?} render alike",
+                BuiltinModel::ALL[a],
+                BuiltinModel::ALL[b]
+            );
+        }
+    }
+
+    // The built-in Plane is the reference quad.
+    let plane = &images[0];
+    let mut quad_output = renderer(&gpu);
+    quad_output.set_models(&models());
+    let quad = render(
+        &mut quad_output,
+        &[draw(&mapped(LayerState::default(), 30.0, 20.0), &source)],
+    );
+    assert!(agreement(plane, &quad, 2) > 0.99);
 }
 
 #[test]
@@ -280,16 +353,19 @@ fn position_dimmer_and_blend_apply_to_the_mapped_result_like_a_flat_layer() {
 }
 
 #[test]
-fn clearing_the_models_returns_layers_to_flat() {
+fn clearing_the_models_maps_layers_onto_the_plane() {
     let gpu = gpu();
     let source = quadrants(&gpu);
     let mut output = renderer(&gpu);
-    output.set_models(&models());
-    let state = mapped(LayerState::default(), 90.0, 0.0);
-    assert!(lit_share(&render(&mut output, &[draw(&state, &source)])) < 0.03);
+    let sphere = ModelGeometries::from([(1, BuiltinModel::Sphere.geometry())]);
+    output.set_models(&sphere);
+    let state = mapped(LayerState::default(), 0.0, 0.0);
+    let on_sphere = render(&mut output, &[draw(&state, &source)]);
     output.set_models(&ModelGeometries::new());
-    assert!(
-        lit_share(&render(&mut output, &[draw(&state, &source)])) > 0.9,
-        "the unmapped layer fills the output again"
-    );
+    let on_plane = render(&mut output, &[draw(&state, &source)]);
+    let mut reference = renderer(&gpu);
+    reference.set_models(&models());
+    let quad = render(&mut reference, &[draw(&state, &source)]);
+    assert!(agreement(&on_plane, &quad, 2) > 0.99);
+    assert!(agreement(&on_sphere, &quad, 12) < 0.97);
 }
