@@ -99,16 +99,24 @@ function outputColumns(
 ): DataTableColumn<PixelZoneView>[] {
 	return [
 		{
+			id: "zone",
+			header: "Zone",
+			width: "minmax(88px,1fr)",
+			render: (zone) => (
+				<span className="media-pixel-row-name">{zone.name}</span>
+			),
+		},
+		{
 			id: "layout",
 			header: "Fixture type",
-			width: "minmax(150px,1fr)",
+			width: "minmax(120px,1fr)",
 			render: (zone) => (
 				<SelectCell
 					label={`${zone.name} fixture type`}
 					value={zone.layout.name}
 					options={PIXEL_LAYOUTS.map((layout) => ({
 						value: layout.name,
-						label: `${layout.name} · ${layout.components.length} ch`,
+						label: layout.name,
 					}))}
 					onChange={(name) => {
 						const layout = PIXEL_LAYOUTS.find((entry) => entry.name === name);
@@ -126,7 +134,7 @@ function outputColumns(
 		{
 			id: "order",
 			header: "Wiring",
-			width: "minmax(170px,1fr)",
+			width: "minmax(140px,1.2fr)",
 			render: (zone) => (
 				<SelectCell
 					label={`${zone.name} wiring order`}
@@ -168,14 +176,14 @@ function outputColumns(
 		{
 			id: "footprint",
 			header: "Slots",
-			width: "56px",
+			width: "48px",
 			align: "right",
 			render: (zone) => <span>{footprintOf(zone)}</span>,
 		},
 		{
 			id: "enabled",
 			header: "Send",
-			width: "64px",
+			width: "72px",
 			align: "center",
 			render: (zone) => (
 				<CheckCell
@@ -224,17 +232,23 @@ export function PixelZoneTable({
 			</p>
 		);
 	}
-	return (
-		<div className="media-pixel-table-scroll">
+	// Two narrower tables rather than one wide one, so both read without scrolling sideways: where
+	// each zone sits, then what it sends where. A row in either selects the zone.
+	const table = (
+		label: string,
+		columns: DataTableColumn<PixelZoneView>[],
+		rowLabel: (zone: PixelZoneView) => string,
+	) => (
+		<section className="media-pixel-table-scroll" aria-label={label}>
 			<DataTable
 				className="media-pixel-table"
-				columns={[...placementColumns(edit), ...outputColumns(edit, onRemove)]}
+				columns={columns}
 				rows={zones}
 				rowKey={(zone) => zone.id}
 				selected={(zone) => zone.id === selectedId}
 				rowDataAttributes={(zone) => ({
 					"aria-selected": zone.id === selectedId ? "true" : "false",
-					"aria-label": zone.name,
+					"aria-label": rowLabel(zone),
 				})}
 				activeIndex={Math.max(
 					0,
@@ -243,7 +257,23 @@ export function PixelZoneTable({
 				onActivate={(zone) => onSelect(zone.id)}
 				rowHeight={52}
 			/>
-		</div>
+		</section>
+	);
+	return (
+		<>
+			<h3 className="media-pixel-map-table-heading">Placement</h3>
+			{table(
+				"Pixel zone placement",
+				placementColumns(edit),
+				(zone) => zone.name,
+			)}
+			<h3 className="media-pixel-map-table-heading">Patch</h3>
+			{table(
+				"Pixel zone patch",
+				outputColumns(edit, onRemove),
+				(zone) => `${zone.name} patch`,
+			)}
+		</>
 	);
 }
 
@@ -299,7 +329,7 @@ export function PixelRouteTable({
 		{
 			id: "destination",
 			header: "Destination (empty = broadcast)",
-			width: "minmax(190px,1.4fr)",
+			width: "minmax(170px,1.4fr)",
 			render: (route) => (
 				<TextCell
 					label={`${route.name} destination`}
@@ -313,7 +343,7 @@ export function PixelRouteTable({
 		{
 			id: "enabled",
 			header: "Send",
-			width: "64px",
+			width: "72px",
 			align: "center",
 			render: (route) => (
 				<CheckCell

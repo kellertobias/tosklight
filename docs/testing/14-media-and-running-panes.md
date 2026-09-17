@@ -87,6 +87,14 @@ In Pixel's Library web view, select an imported video and verify its inspector a
 
 Configure Pixel with an enabled Art-Net output and occupy its configured Art-Net UDP port before starting Pixel. Pixel still starts its administration interface and does not accept Art-Net input for that run. **Settings > Network & DMX** visibly warns that Pixel started without Art-Net input and retains the stored address so the operator can correct the conflict. Releasing the port and restarting restores Art-Net; Pixel never silently changes the configured address or reports the listener as active while it is unavailable.
 
+## PIXEL-009 — Pixel Map workflow and the reference multi-output layout
+
+Open **Pixel Map** from the Media Server dock. The window shows the chosen output's live picture beside its configuration, with **Display Regions** and **Pixel Zones** as window-title tabs; Settings no longer carries a pixel-map editor. Display regions are one table; pixel zones are a **Placement** table and a **Patch** table that both fit beside the picture in a 1280-pixel window without scrolling sideways. Selecting a row marks its shape on the picture, and pressing a shape selects its row in every table of the open tab; the other tab's shapes stay visible but do not answer a press.
+
+Drag the selected shape on the picture with a mouse or a finger to move it, and drag one of its finger-sized corner handles to resize it. The shape never leaves the canvas and a corner never crosses the opposite one; the moved values appear in the row at once, a tap without movement only selects, and the arrow keys (Shift for larger steps, Alt to resize) do the same from the keyboard. Nothing is sent until **Save pixel map**.
+
+On an HDMI output, configure the reference layout: a **Centre** display region covering the middle third of the canvas and turned clockwise, and **Left strip** and **Right strip** RGB zones at the canvas edges, one sent over Art-Net and one over sACN. Choose a second, projector output and give it two independent display regions that overlap the HDMI slice. Save both. Each save carries only that output's pixel map, so neither output's resolution, monitor, nor canvas changes. Reload the page: each output reopens with exactly what was saved, and the first output's shapes and rows are unchanged by the second output's edits. Switching to **Desk merge** still offers a desk input patch per zone, and a zone whose universe no enabled route carries still blocks the save with a named problem.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.

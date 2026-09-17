@@ -1,4 +1,4 @@
-// Display regions as one editable table: which slice of the canvas each screen shows.
+// Display regions as editable tables: which slice of the canvas each screen shows, and how.
 
 import { DataTable, type DataTableColumn } from "@tosklight/ui/window-kit";
 import type { DisplayRegionView } from "../../shared/api/generated/media-wire";
@@ -20,20 +20,13 @@ const CORNERS: Corner[] = [
 	{ corner: "end", axis: "y", label: "Bottom" },
 ];
 
-export function PixelRegionTable({
-	regions,
-	selectedId,
-	onSelect,
-	onChange,
-	onRemove,
-}: {
-	regions: DisplayRegionView[];
-	selectedId: string | null;
-	onSelect: (id: string) => void;
-	onChange: (region: DisplayRegionView) => void;
-	onRemove: (id: string) => void;
-}) {
-	const columns: DataTableColumn<DisplayRegionView>[] = [
+type Edit = (region: DisplayRegionView) => void;
+
+/** Which slice of the canvas the region shows. */
+function placementColumns(
+	onChange: Edit,
+): DataTableColumn<DisplayRegionView>[] {
+	return [
 		{
 			id: "name",
 			header: "Name",
@@ -67,6 +60,23 @@ export function PixelRegionTable({
 				),
 			}),
 		),
+	];
+}
+
+/** How the screen shows its slice, and the row's own actions. */
+function presentationColumns(
+	onChange: Edit,
+	onRemove: (id: string) => void,
+): DataTableColumn<DisplayRegionView>[] {
+	return [
+		{
+			id: "region",
+			header: "Region",
+			width: "minmax(110px,1fr)",
+			render: (region) => (
+				<span className="media-pixel-row-name">{region.name}</span>
+			),
+		},
 		{
 			id: "rotation",
 			header: "Rotation",
@@ -119,6 +129,21 @@ export function PixelRegionTable({
 			),
 		},
 	];
+}
+
+export function PixelRegionTable({
+	regions,
+	selectedId,
+	onSelect,
+	onChange,
+	onRemove,
+}: {
+	regions: DisplayRegionView[];
+	selectedId: string | null;
+	onSelect: (id: string) => void;
+	onChange: (region: DisplayRegionView) => void;
+	onRemove: (id: string) => void;
+}) {
 	if (regions.length === 0) {
 		return (
 			<p className="media-state is-empty">
@@ -127,8 +152,14 @@ export function PixelRegionTable({
 			</p>
 		);
 	}
-	return (
-		<div className="media-pixel-table-scroll">
+	// Where each screen's slice sits, then how the screen shows it: two tables that each fit beside
+	// the picture. A row in either selects the region.
+	const table = (
+		label: string,
+		columns: DataTableColumn<DisplayRegionView>[],
+		rowLabel: (region: DisplayRegionView) => string,
+	) => (
+		<section className="media-pixel-table-scroll" aria-label={label}>
 			<DataTable
 				className="media-pixel-table"
 				columns={columns}
@@ -137,7 +168,7 @@ export function PixelRegionTable({
 				selected={(region) => region.id === selectedId}
 				rowDataAttributes={(region) => ({
 					"aria-selected": region.id === selectedId ? "true" : "false",
-					"aria-label": region.name,
+					"aria-label": rowLabel(region),
 				})}
 				activeIndex={Math.max(
 					0,
@@ -146,6 +177,22 @@ export function PixelRegionTable({
 				onActivate={(region) => onSelect(region.id)}
 				rowHeight={52}
 			/>
-		</div>
+		</section>
+	);
+	return (
+		<>
+			<h3 className="media-pixel-map-table-heading">Placement</h3>
+			{table(
+				"Display region placement",
+				placementColumns(onChange),
+				(region) => region.name,
+			)}
+			<h3 className="media-pixel-map-table-heading">Presentation</h3>
+			{table(
+				"Display region presentation",
+				presentationColumns(onChange, onRemove),
+				(region) => `${region.name} presentation`,
+			)}
+		</>
 	);
 }

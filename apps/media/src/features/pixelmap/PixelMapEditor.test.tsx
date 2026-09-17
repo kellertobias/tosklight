@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -249,7 +249,7 @@ describe("the Pixel Map dock", () => {
 		expect(screen.getByLabelText("Floor output address")).toHaveValue("31");
 		expect(
 			screen.getByRole("button", { name: "Floor wiring order" }),
-		).toHaveTextContent("Rows, folding back");
+		).toHaveTextContent("Rows, folded");
 		expect(
 			screen.getByRole("switch", { name: "Send Floor" }),
 		).not.toBeChecked();
@@ -279,7 +279,7 @@ describe("the Pixel Map dock", () => {
 		expect(rowNamed("Zone 1")).toHaveAttribute("aria-selected", "true");
 		expect(screen.getByLabelText("Zone 1 pixels across")).toHaveValue("12");
 		await replace("Zone 1 pixels across", "24");
-		expect(within(rowNamed("Zone 1")).getByText("72")).toBeVisible();
+		expect(within(rowNamed("Zone 1 patch")).getByText("72")).toBeVisible();
 		await replace("Zone 1 name", "Rail");
 		await userEvent.click(screen.getByRole("switch", { name: "Send Rail" }));
 		await userEvent.click(save());
@@ -355,6 +355,78 @@ describe("the Pixel Map dock", () => {
 			screen.getByRole("button", { name: "Truss pixel zone" }),
 		).toHaveAttribute("aria-pressed", "true");
 		expect(floor).toHaveAttribute("aria-pressed", "false");
+	});
+
+	it("moves and resizes the selected shape by dragging it on the picture", async () => {
+		const onSave = renderEditor(output(storedMap));
+		const picture = screen.getByRole("group", {
+			name: "Output picture, 1920 by 1080",
+		});
+		// jsdom lays nothing out, so the picture is given a size to measure drags against.
+		vi.spyOn(picture, "getBoundingClientRect").mockReturnValue({
+			x: 0,
+			y: 0,
+			left: 0,
+			top: 0,
+			width: 400,
+			height: 200,
+			right: 400,
+			bottom: 200,
+			toJSON: () => ({}),
+		});
+		const right = screen.getByRole("button", {
+			name: "Right screen display region",
+		});
+		const drag = (target: Element, dx: number, dy: number) => {
+			fireEvent.pointerDown(target, {
+				pointerId: 1,
+				button: 0,
+				clientX: 100,
+				clientY: 100,
+			});
+			fireEvent.pointerMove(target, {
+				pointerId: 1,
+				clientX: 100 + dx,
+				clientY: 100 + dy,
+			});
+			fireEvent.pointerUp(target, { pointerId: 1 });
+		};
+
+		// A press that barely moves is a tap: it selects and changes nothing.
+		drag(right, 2, 1);
+		fireEvent.click(right);
+		expect(right).toHaveAttribute("aria-pressed", "true");
+		expect(rowNamed("Right screen")).toHaveAttribute("aria-selected", "true");
+		expect(save()).toBeDisabled();
+
+		// Dragging the body moves the region; its right edge stops at the canvas edge.
+		drag(right, -40, 20);
+		expect(screen.getByLabelText("Right screen left")).toHaveValue("0.4");
+		expect(screen.getByLabelText("Right screen right")).toHaveValue("0.9");
+		expect(screen.getByLabelText("Right screen top")).toHaveValue("0");
+
+		// The selected region's corner handles resize it.
+		const handle = picture.querySelector(
+			'.media-pixel-handle[data-handle="bottom-right"]',
+		);
+		if (!handle) throw new Error("The selected region has no handles");
+		drag(handle, -80, -100);
+		expect(screen.getByLabelText("Right screen right")).toHaveValue("0.7");
+		expect(screen.getByLabelText("Right screen bottom")).toHaveValue("0.5");
+
+		// The arrow keys nudge the selected region too.
+		right.focus();
+		await userEvent.keyboard("{ArrowRight}");
+		expect(screen.getByLabelText("Right screen left")).toHaveValue("0.41");
+
+		await userEvent.click(save());
+		const saved = onSave.mock.calls[0][0] as PixelMapView;
+		expect(saved.regions[1]).toEqual({
+			...storedMap.regions?.[1],
+			start: { x: 0.41, y: 0 },
+			end: { x: 0.71, y: 0.5 },
+		});
+		expect(saved.regions[0]).toEqual(storedMap.regions?.[0]);
 	});
 
 	it("removes a zone from its row", async () => {

@@ -27,7 +27,7 @@
 
 .media-pixel-map-layout {
 	display: grid;
-	grid-template-columns: minmax(240px, 32%) minmax(0, 1fr);
+	grid-template-columns: minmax(220px, 28%) minmax(0, 1fr);
 	gap: 12px;
 	align-items: start;
 	min-height: 0;
@@ -205,4 +205,59 @@
 	padding: 0.75rem;
 	border: 1px solid var(--line);
 	border-radius: 6px;
+}
+
+/* The open tab's shapes follow a finger instead of scrolling the page. */
+.media-pixel-region:not(:disabled),
+.media-pixel-zone:not(:disabled) {
+	touch-action: none;
+	cursor: move;
+}
+
+/* Corner handles of the selected shape: finger-sized, and kept inside the picture. */
+.media-pixel-canvas {
+	--handle-size: 32px;
+}
+
+.media-pixel-handle {
+	position: absolute;
+	width: var(--handle-size);
+	height: var(--handle-size);
+	box-sizing: border-box;
+	display: grid;
+	place-items: center;
+	touch-action: none;
+	z-index: 1;
+}
+
+.media-pixel-handle::after {
+	content: "";
+	width: 14px;
+	height: 14px;
+	border: 2px solid #000;
+	border-radius: 3px;
+	background: #fff;
+	box-shadow: 0 0 0 1px #fff;
+}
+
+.media-pixel-handle[data-handle="top-left"],
+.media-pixel-handle[data-handle="bottom-right"] {
+	cursor: nwse-resize;
+}
+
+.media-pixel-handle[data-handle="top-right"],
+.media-pixel-handle[data-handle="bottom-left"] {
+	cursor: nesw-resize;
+}
+
+.media-pixel-map-table-heading {
+	margin: 4px 0 0;
+	font-size: 13px;
+}
+
+.media-pixel-row-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
 }

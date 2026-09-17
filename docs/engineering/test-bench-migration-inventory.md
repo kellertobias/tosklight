@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **231 root cases across 89 files**.
+Default catalog: **236 root cases across 90 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -48,6 +48,11 @@ Default catalog: **231 root cases across 89 files**.
 | 100-show-patch-configuration-layout.spec.ts | TL-467 @ui › Tracking Settings keep, validate, and explain the source values | repository contract | @ui | show-patch-configuration-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 101-media-server-table.spec.ts | MEDIA-007 @ui › Show Patch manages patched Media Servers in one live table | docs/testing/14-media-and-running-panes.md | @ui | media-server-table | standard failure evidence | parallel | pending-semantic-migration |
 | 101-media-server-table.spec.ts | MEDIA-007 @api › clearing the thumbnail cache is repeatable | docs/testing/14-media-and-running-panes.md | @api | media-server-table | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › the dock shows the picture beside tables that fit without sideways scrolling | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
+| 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › rows and shapes stay selected together in both directions | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
+| 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › shapes move and resize by mouse, finger, and keyboard | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
+| 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › the reference layout is built on two outputs, saved, and reopened | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
+| 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › desk merge and validation remain in the workflow | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
 | 104-show-patch-csv-import.spec.ts | TL-469 @ui › Import CSV lives in Show Patch Settings and keeps validation and safe cancellation | repository contract | @ui | show-patch-csv-import | standard failure evidence | parallel | pending-semantic-migration |
 | 104-show-patch-csv-import.spec.ts | TL-469 @ui @touch › a touch tap reaches Import CSV from Settings on another Show Patch view | repository contract | @ui @touch | show-patch-csv-import | standard failure evidence | parallel | pending-semantic-migration |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |

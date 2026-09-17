@@ -3,7 +3,6 @@
 //
 // Kept apart from the component so the rules can be read and tested without rendering anything.
 
-import { newIdentity } from "../../shared/api/identity";
 import type {
 	DisplayRegionView,
 	PixelMapView,
@@ -11,6 +10,7 @@ import type {
 	PixelZoneHandoffView,
 	PixelZoneView,
 } from "../../shared/api/generated/media-wire";
+import { newIdentity } from "../../shared/api/identity";
 
 /// The channel layouts offered by name. The model takes any sequence of components, so this is a
 /// convenience for the common fixtures rather than the limit of what a zone can hold.
@@ -25,11 +25,13 @@ export const PIXEL_LAYOUTS: { name: string; components: string[] }[] = [
 	{ name: "Dimmer RGB", components: ["dimmer", "red", "green", "blue"] },
 ];
 
+/// Short enough to read in a table cell beside the picture: rows run left to right and columns top
+/// to bottom; a folded order turns back at the end of each row or column.
 export const PIXEL_ORDERS = [
-	{ value: "row-major", label: "Rows, left to right" },
-	{ value: "column-major", label: "Columns, top to bottom" },
-	{ value: "serpentine-rows", label: "Rows, folding back" },
-	{ value: "serpentine-columns", label: "Columns, folding back" },
+	{ value: "row-major", label: "Rows" },
+	{ value: "column-major", label: "Columns" },
+	{ value: "serpentine-rows", label: "Rows, folded" },
+	{ value: "serpentine-columns", label: "Columns, folded" },
 ];
 
 export const REGION_ROTATIONS = [

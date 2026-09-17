@@ -288,6 +288,8 @@ export function PixelMapEditor({
 						selectedZoneId={draft.selectedZoneId}
 						onSelectRegion={draft.setSelectedRegionId}
 						onSelectZone={draft.setSelectedZoneId}
+						onChangeRegion={draft.replaceRegion}
+						onChangeZone={draft.replaceZone}
 					/>
 					<div className="media-pixel-map-tables">
 						{tab === "regions" ? (
