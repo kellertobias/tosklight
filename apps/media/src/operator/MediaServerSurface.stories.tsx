@@ -17,9 +17,12 @@ import {
 	allocateFreeAddresses,
 	LibraryBrowserView,
 } from "../features/media-library/LibraryPage";
+import { PixelMapEditor } from "../features/pixelmap/PixelMapEditor";
+import type { PixelMapTab } from "../features/pixelmap/PixelMapPage";
 import type {
 	AudioView,
 	CatalogView,
+	OutputConfigurationView,
 } from "../shared/api/generated/media-wire";
 import {
 	LibrariesSettings,
@@ -46,6 +49,7 @@ const MEDIA_STORY_BY_SECTION: Record<MediaServerSection, string> = {
 	library: "library",
 	audio: "audio",
 	dmx: "dmx-diagnostics",
+	"pixel-map": "pixel-map",
 	settings: "settings-libraries",
 };
 
@@ -54,7 +58,6 @@ const SETTINGS_STORY_BY_SECTION = {
 	"picture-output": "settings-outputs",
 	"sound-output": "settings-outputs",
 	network: "settings-network-and-inputs",
-	"pixel-map": "settings-pixel-map",
 	logs: "settings-logs",
 } as const;
 
@@ -209,6 +212,103 @@ function Frame({
 				{children}
 			</MediaServerShell>
 		</div>
+	);
+}
+
+const pixelMapOutput = {
+	id: "main",
+	name: "Main",
+	width: 1920,
+	height: 1080,
+	pixelMap: {
+		mode: "direct",
+		zones: [
+			{
+				id: "zone-truss",
+				name: "Truss strip",
+				start: { x: 0.05, y: 0.08 },
+				end: { x: 0.95, y: 0.16 },
+				columns: 60,
+				rows: 1,
+				layout: { name: "RGB", components: ["red", "green", "blue"] },
+				order: "row-major",
+				universe: 1,
+				startAddress: 1,
+				enabled: true,
+				footprint: 180,
+			},
+			{
+				id: "zone-floor",
+				name: "Floor tiles",
+				start: { x: 0.2, y: 0.7 },
+				end: { x: 0.8, y: 0.95 },
+				columns: 8,
+				rows: 4,
+				layout: { name: "RGBW", components: ["red", "green", "blue", "white"] },
+				order: "serpentine-rows",
+				universe: 2,
+				startAddress: 1,
+				enabled: false,
+				footprint: 128,
+			},
+		],
+		routes: [
+			{
+				id: "route-1",
+				name: "Universe 1",
+				protocol: "art-net",
+				universe: 1,
+				destination: null,
+				enabled: true,
+			},
+			{
+				id: "route-2",
+				name: "Universe 2",
+				protocol: "sacn",
+				universe: 2,
+				destination: "10.0.0.40",
+				enabled: true,
+			},
+		],
+		handoffs: [],
+		regions: [
+			{
+				id: "region-left",
+				name: "Left screen",
+				start: { x: 0, y: 0 },
+				end: { x: 0.5, y: 1 },
+				rotation: "none",
+				fit: "fill",
+				enabled: true,
+			},
+			{
+				id: "region-right",
+				name: "Right screen",
+				start: { x: 0.5, y: 0 },
+				end: { x: 1, y: 1 },
+				rotation: "clockwise-90",
+				fit: "contain",
+				enabled: true,
+			},
+		],
+	},
+} as unknown as OutputConfigurationView;
+
+function StatefulPixelMap() {
+	const [tab, setTab] = useState<PixelMapTab>("regions");
+	return (
+		<Frame active="pixel-map">
+			<PixelMapEditor
+				output={pixelMapOutput}
+				outputs={[]}
+				onOutputChange={() => undefined}
+				tab={tab}
+				onTabChange={setTab}
+				busy={false}
+				failed={false}
+				onSave={() => undefined}
+			/>
+		</Frame>
 	);
 }
 
@@ -710,6 +810,8 @@ export const Audio: Story = {
 		</Frame>
 	),
 };
+
+export const PixelMap: Story = { render: () => <StatefulPixelMap /> };
 
 export const SettingsLibraries: Story = {
 	render: () => (

@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModalProvider } from "@tosklight/ui/modals";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../../app/ToastContext";
 import { aNetwork, stubServer } from "../../testing/server";
 import { SettingsPage } from "./SettingsPage";
@@ -18,10 +18,10 @@ describe("the settings page", () => {
 		renderSettings();
 
 		const tabs = screen.getByRole("tablist");
-		expect(tabs).toHaveTextContent(
-			"LibrariesPictureSoundNetwork & DMXPixel MapLogs",
-		);
+		expect(tabs).toHaveTextContent("LibrariesPictureSoundNetwork & DMXLogs");
 		expect(tabs).not.toHaveTextContent("Audio");
+		// Pixel Map has its own dock entry and is no longer a Settings section.
+		expect(tabs).not.toHaveTextContent("Pixel Map");
 		expect(await screen.findByLabelText("Art-Net")).toBeVisible();
 		expect(
 			screen.queryByRole("button", { name: "Change network settings" }),
@@ -96,8 +96,8 @@ describe("the settings page", () => {
 		});
 		expect(library).toHaveTextContent(/still using.*Users\/Shared/u);
 		const revert = within(library).getByRole("button", {
-				name: "Revert to current directory",
-			});
+			name: "Revert to current directory",
+		});
 		expect(revert).toBeVisible();
 		await userEvent.click(revert);
 		await waitFor(() =>
@@ -156,7 +156,9 @@ describe("the settings page", () => {
 			}),
 		);
 		await waitFor(() =>
-			expect(picker).toHaveTextContent(/already holds a Media Server configuration/u),
+			expect(picker).toHaveTextContent(
+				/already holds a Media Server configuration/u,
+			),
 		);
 		await userEvent.click(
 			within(picker).getByRole("button", { name: "Use this folder" }),
@@ -199,7 +201,9 @@ describe("the settings page", () => {
 			"not a usable Media Server configuration. The current folder is still in use.",
 		);
 		expect(screen.queryByText(/Pixel is restarting/u)).not.toBeInTheDocument();
-		await userEvent.click(within(picker).getByRole("button", { name: "Cancel" }));
+		await userEvent.click(
+			within(picker).getByRole("button", { name: "Cancel" }),
+		);
 		expect(
 			screen.queryByRole("dialog", {
 				name: "Choose media and configuration folder",
@@ -311,7 +315,9 @@ describe("the settings page", () => {
 		await openSettings("Network & DMX");
 		await screen.findByRole("article", { name: "Main DMX input settings" });
 		expect(
-			screen.queryByRole("button", { name: /Channel layout|Effect banks|Legacy/u }),
+			screen.queryByRole("button", {
+				name: /Channel layout|Effect banks|Legacy/u,
+			}),
 		).not.toBeInTheDocument();
 		expect(
 			screen.getByText(
@@ -380,18 +386,24 @@ describe("the settings page", () => {
 			const dmx = await screen.findByRole("heading", { name: "DMX input" });
 			expect(dmx.closest("#dmx-input")).not.toBeNull();
 			expect(
-				network.compareDocumentPosition(dmx) &
-					Node.DOCUMENT_POSITION_FOLLOWING,
+				network.compareDocumentPosition(dmx) & Node.DOCUMENT_POSITION_FOLLOWING,
 			).toBeTruthy();
 			// Listen addresses live once, under Network; each output only picks a protocol.
-			expect(screen.getAllByRole("textbox", { name: "Art-Net" })).toHaveLength(1);
+			expect(screen.getAllByRole("textbox", { name: "Art-Net" })).toHaveLength(
+				1,
+			);
 			expect(
-				within(dmx.closest("#dmx-input") as HTMLElement).queryByRole("textbox", {
-					name: /Art-Net|sACN/u,
-				}),
+				within(dmx.closest("#dmx-input") as HTMLElement).queryByRole(
+					"textbox",
+					{
+						name: /Art-Net|sACN/u,
+					},
+				),
 			).toBeNull();
 			expect(
-				screen.getByText("Received on the Art-Net address under Where this server listens."),
+				screen.getByText(
+					"Received on the Art-Net address under Where this server listens.",
+				),
 			).toBeVisible();
 			view.unmount();
 		}
@@ -522,7 +534,9 @@ describe("the settings page", () => {
 		);
 		const status = within(network).getByRole("status");
 		expect(heading).toContainElement(status);
-		expect(status).toHaveTextContent("Saved automatically · Applies on restart");
+		expect(status).toHaveTextContent(
+			"Saved automatically · Applies on restart",
+		);
 		expect(status.closest(".ui-window-header")).toBeNull();
 
 		await openSettings("Libraries");
@@ -624,7 +638,10 @@ describe("the settings page", () => {
 			screen.queryByText(/Saved output changes take effect/u),
 		).not.toBeInTheDocument();
 
-		await choose("Light desk Speed Group B", "Each layer's Playback BPM (Media pane)");
+		await choose(
+			"Light desk Speed Group B",
+			"Each layer's Playback BPM (Media pane)",
+		);
 		await waitFor(() => expect(output.writes).toHaveLength(2));
 		expect(output.writes[1]).toEqual({
 			requestId: expect.any(String),

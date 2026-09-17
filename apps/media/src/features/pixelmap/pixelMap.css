@@ -1,0 +1,208 @@
+/* The Pixel Map dock: the output picture beside the open table. */
+.media-route-surface > .media-pixel-map-window,
+.media-pixel-map-window > .ui-window-layout,
+.media-pixel-map-window > .ui-window-layout > .ui-window-center {
+	height: 100%;
+	min-height: 0;
+}
+
+.media-pixel-map-content {
+	height: 100%;
+	min-height: 0;
+	overflow: auto;
+	padding: 10px;
+	box-sizing: border-box;
+	display: grid;
+	grid-template-rows: auto 1fr;
+	gap: 10px;
+}
+
+.media-pixel-map-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.media-pixel-map-layout {
+	display: grid;
+	grid-template-columns: minmax(240px, 32%) minmax(0, 1fr);
+	gap: 12px;
+	align-items: start;
+	min-height: 0;
+}
+
+@media (max-width: 900px) {
+	.media-pixel-map-layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.media-pixel-map-tables {
+	display: grid;
+	gap: 12px;
+	min-width: 0;
+	align-content: start;
+}
+
+.media-pixel-map-tables > section {
+	display: grid;
+	gap: 8px;
+	min-width: 0;
+}
+
+.media-pixel-table-scroll {
+	min-width: 0;
+	overflow-x: auto;
+}
+
+.media-pixel-map-subheading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.media-pixel-map-subheading > h3 {
+	margin: 0;
+	font-size: 13px;
+}
+
+.media-pixel-picture {
+	margin: 0;
+	display: grid;
+	gap: 6px;
+	position: sticky;
+	top: 0;
+}
+
+.media-pixel-picture > figcaption {
+	color: var(--muted, inherit);
+	font-size: 12px;
+}
+
+/* The live frame, with the zones and screens drawn on it. */
+.media-pixel-canvas {
+	position: relative;
+	width: 100%;
+	background:
+		repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%) 0 0 / 24px
+		24px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.media-pixel-canvas-frame {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: fill;
+	pointer-events: none;
+	user-select: none;
+}
+
+.media-pixel-region,
+.media-pixel-zone {
+	position: absolute;
+	display: grid;
+	place-items: center;
+	min-width: 12px;
+	min-height: 12px;
+	padding: 0;
+	color: #fff;
+	font: inherit;
+	font-size: 11px;
+	text-shadow: 0 1px 2px #000;
+	cursor: pointer;
+}
+
+.media-pixel-region {
+	border: 1px dashed var(--accent, #58d4ef);
+	background: rgb(88 212 239 / 8%);
+}
+
+.media-pixel-zone {
+	border: 1px solid #f2b84b;
+	background: rgb(242 184 75 / 22%);
+}
+
+/* Shapes are drawn largest first, so a selected shape is never raised over a smaller one. */
+
+/* The other tab's shapes stay visible for reference but do not answer a press. */
+.media-pixel-region:disabled,
+.media-pixel-zone:disabled {
+	cursor: default;
+	opacity: 0.35;
+	pointer-events: none;
+}
+
+.media-pixel-region[aria-pressed="true"] {
+	border: 2px solid var(--accent, #58d4ef);
+	background: rgb(88 212 239 / 30%);
+}
+
+.media-pixel-zone[aria-pressed="true"] {
+	border-width: 2px;
+	background: rgb(242 184 75 / 45%);
+}
+
+/* A zone or screen that is switched off is drawn, but plainly not live. */
+.media-pixel-region[data-enabled="false"],
+.media-pixel-zone[data-enabled="false"] {
+	border-style: dotted;
+	opacity: 0.5;
+}
+
+.media-pixel-table {
+	min-width: 0;
+}
+
+.media-pixel-table .media-pixel-cell {
+	width: 100%;
+	min-width: 0;
+}
+
+.media-pixel-table .media-pixel-cell input:not([type="checkbox"]) {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+/* Table cells keep the keypad and keyboard buttons, a little smaller than in a form. */
+.media-pixel-table .ui-number-control.without-steppers,
+.media-pixel-table .ui-text-control {
+	grid-template-columns: minmax(0, 1fr) 40px;
+}
+
+.media-pixel-table .ui-number-control > .ui-button,
+.media-pixel-table .ui-text-control > .ui-button {
+	width: 40px;
+	min-width: 40px;
+	min-height: 40px;
+	font-size: 18px;
+}
+
+.media-pixel-table .ui-number-control > .ui-input,
+.media-pixel-table .ui-text-control > .ui-input {
+	min-height: 40px;
+	padding-inline: 8px;
+	font-size: 14px;
+}
+
+.media-pixel-table .ui-select-trigger {
+	min-height: 40px;
+	font-size: 14px;
+}
+
+.media-pixel-zone-editor {
+	display: grid;
+	min-width: 0;
+	margin: 0;
+	gap: 0.6rem;
+	padding: 0.75rem;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}

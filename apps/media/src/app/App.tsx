@@ -8,6 +8,7 @@ import { AudioPage } from "../features/audio/AudioPage";
 import { DmxPage } from "../features/dmx/DmxPage";
 import { MediaPanePage } from "../features/layers/MediaPanePage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
+import { PixelMapPage } from "../features/pixelmap/PixelMapPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { DeskIdentityProvider } from "../operator/DeskIdentityContext";
 import {
@@ -37,6 +38,7 @@ const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/models": () => <LibraryPage mode="models" />,
 	"/audio": AudioPage,
 	"/dmx": DmxPage,
+	"/pixel-map": PixelMapPage,
 	"/settings": SettingsPage,
 };
 
@@ -49,6 +51,7 @@ const SECTION_BY_PATH: Record<RoutePath, MediaServerSection> = {
 	"/models": "library",
 	"/audio": "audio",
 	"/dmx": "dmx",
+	"/pixel-map": "pixel-map",
 	"/settings": "settings",
 };
 
@@ -79,6 +82,7 @@ function AppSurface() {
 		path === "/models" ||
 		path === "/audio" ||
 		path === "/dmx" ||
+		path === "/pixel-map" ||
 		path === "/settings";
 	const libraryMode =
 		path === "/models"

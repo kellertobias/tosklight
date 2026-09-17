@@ -31,6 +31,7 @@ describe("routing", () => {
 			"Models",
 			"Audio",
 			"Diagnostics",
+			"Pixel Map",
 			"Settings",
 		]);
 	});

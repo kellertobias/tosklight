@@ -13,6 +13,7 @@ export const MEDIA_SERVER_SECTIONS = [
 	{ id: "library", label: "Library", icon: "▦" },
 	{ id: "audio", label: "Audio", icon: "≋" },
 	{ id: "dmx", label: "DMX", icon: "↯" },
+	{ id: "pixel-map", label: "Pixel Map", icon: "▩" },
 	{ id: "settings", label: "Settings", icon: "⚙" },
 ] as const;
 
@@ -237,7 +238,6 @@ export const MEDIA_SETTINGS_SECTIONS = [
 	{ id: "picture-output", label: "Picture" },
 	{ id: "sound-output", label: "Sound" },
 	{ id: "network", label: "Network & DMX" },
-	{ id: "pixel-map", label: "Pixel Map" },
 	{ id: "logs", label: "Logs" },
 ] as const;
 

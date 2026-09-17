@@ -12,6 +12,7 @@ export const ROUTES = [
 	{ path: "/models", label: "Models" },
 	{ path: "/audio", label: "Audio" },
 	{ path: "/dmx", label: "Diagnostics" },
+	{ path: "/pixel-map", label: "Pixel Map" },
 	{ path: "/settings", label: "Settings" },
 ] as const;
 

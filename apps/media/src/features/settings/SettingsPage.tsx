@@ -18,7 +18,6 @@ import { useNetwork, useOutputs } from "../../shared/api/queries";
 import { LogsPage } from "../logs/LogsPage";
 import { LibrarySettingsSection } from "./LibrarySettingsSection";
 import { NetworkEditor } from "./NetworkEditor";
-import { OutputPixelMap } from "../pixelmap/OutputPixelMap";
 import { OutputSettings } from "./OutputSettings";
 import { SettingsSaveState } from "./SettingsSaveState";
 import { SpeedGroupStatus } from "./SpeedGroupStatus";
@@ -110,30 +109,6 @@ export function SettingsPage() {
 									outputName={output.name}
 									mode={section === "picture-output" ? "picture" : "sound"}
 									direct
-								/>
-							))}
-						</section>
-					)}
-				</ResourceState>
-			)}
-			{section === "pixel-map" && (
-				<ResourceState
-					resource={outputs}
-					subject="pixel mapping"
-					isEmpty={(data) => data.length === 0}
-					empty="No outputs are enabled."
-				>
-					{(data) => (
-						<section
-							className="media-settings-group"
-							aria-labelledby="pixel-map-heading"
-						>
-							<h2 id="pixel-map-heading">Pixel mapping</h2>
-							{data.map((output) => (
-								<OutputPixelMap
-									key={output.id}
-									outputId={output.id}
-									outputName={output.name}
 								/>
 							))}
 						</section>

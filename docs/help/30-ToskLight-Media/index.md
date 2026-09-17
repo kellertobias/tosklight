@@ -10,7 +10,7 @@ Use these chapters in order:
 
 1. [Start the Media Server](01-quick-start.md) — open administration, select a display, run the test pattern, and distinguish live controls from restart-required configuration.
 2. [Build the Media Library](02-library-and-uploads.md) — choose addressed slots, upload or replace content, and monitor conversion jobs.
-3. [Configure Outputs and Displays](03-outputs-and-displays.md) — monitor/off-screen targets, resolution, rate, audio, personalities, and network addresses.
+3. [Configure Outputs and Displays](03-outputs-and-displays.md) — monitor/off-screen targets, resolution, rate, the Pixel Map, audio, personalities, and network addresses.
 4. [Operate Outputs, Master, and Layers](04-playback-and-layers.md) — take control, choose content and masks, transform layers, and release them back to DMX.
 5. [Generated Sources and Effects](05-generated-sources-and-effects.md) — text, visualizers, audio-reactive content, and effect configuration.
 6. [3D Model Mapping](06-3d-model-mapping.md) — the Models library, glTF import requirements, the output camera, and the pan → tilt → roll order.

@@ -13,6 +13,19 @@ On Windows, fullscreen picture outputs are borderless, have no title bar or wind
 > [!danger] Missing graphic
 > Add an output-configuration screenshot showing physical versus off-screen destination, monitor selection, fullscreen, render resolution, presentation rate, and test pattern.
 
+## Pixel Map
+
+Open **Pixel Map** in the Pixel dock. Pixel mapping is no longer a Settings tab. The window shows the output's live picture beside the configuration, with the display regions and pixel zones drawn over it at the output's aspect ratio. When more than one output is enabled, choose the output above the picture.
+
+The two title tabs switch between the two kinds of rectangle:
+
+- **Display Regions** lists each screen's slice of the canvas as one table row: **Name**, **Left**, **Top**, **Right**, **Bottom**, **Rotation**, **Fit**, and **Show**. **Add display region** in the title bar adds a row covering the whole canvas.
+- **Pixel Zones** lists each zone as one row: **Name**, the four edges, **Across** and **Down** pixel counts, **Fixture type**, **Wiring** order, output **Universe** and **Address**, the resulting **Slots**, and **Send**. **Add pixel zone** in the title bar adds a zone at the next free address. The same tab holds the **Operating mode**, the **Output routes** table (name, Art-Net or sACN, universe, destination, send), and, in **Desk merge** mode, the desk handoff form for the selected zone.
+
+Edges are fractions of the canvas from `0` to `1`. Selecting a row, or editing one of its cells, marks its rectangle on the picture; pressing a rectangle on the picture selects its row. Only the open tab's rectangles respond to a press; the other tab's are drawn faintly for reference.
+
+Edits stay a draft until **Save pixel map**, which stores the whole map for that output and nothing else. The button stays unavailable while nothing has changed or while the map has a problem, which is listed under the tables. Saved maps open in the Pixel Map window unchanged, including maps created before the window existed.
+
 ## Audio
 
 Choose the output's sound device explicitly when content carries audio. The system default is useful for a portable workstation but may change when an interface is connected or disconnected. Rehearse the actual device and latency path used in production.
