@@ -75,6 +75,17 @@ Beat form Flash, Kaleidoscope, B/W Rasterize, CMYK Rasterize, and Drawn Image St
 repetitions run from Off through 12. Feedback supports Shake and Tunnel motion and is tuned for a
 longer, smoother trail by default.
 
+Every slot in the Library's **Effects** tab shows a thumbnail of its effect type, and the slot
+editor's thumbnail follows the **Effect type** you choose before you save. The thumbnails are
+pictures rendered ahead of time by the Media Server's own compositor, so browsing the library never
+renders anything on the output or interrupts playback. They show each shipped preset on one
+reference picture; your own parameter values are not reflected in them.
+
+Blur **Amount** scales with the source's height, so a 4K clip and a 720p clip soften alike. At the
+default amount a Gaussian blur smooths fine detail completely instead of leaving a ghost of it;
+**Shape** gives an even, lens-like disc, **Radial** a zoom smear toward the centre, **Linear** a
+horizontal motion smear, and **Axial** a rotational smear. An amount of **0** is an exact bypass.
+
 The Master layer has a separate fixed **Effects** section. **Layer Opacity Cycle** advances through
 all currently loaded layers whose dimmer is above zero. Its Multiplier / Divider can be Off or beat
 divisions/multiples; cycling changes only effective output opacity and never rewrites stored layer

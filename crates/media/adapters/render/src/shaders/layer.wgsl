@@ -305,58 +305,93 @@ fn rotated_about_centre(uv: vec2<f32>, angle: f32) -> vec2<f32> {
     ) + vec2<f32>(0.5);
 }
 
+// One blur tap in source texels. Taps land on texel corners, so bilinear filtering averages the
+// four texels around each one: even a sparse kernel then smooths the finest detail instead of
+// picking a moire pattern out of it.
+fn blur_tap(texel: vec2<f32>, dimensions: vec2<f32>) -> vec4<f32> {
+    let corner = clamp(round(texel), vec2<f32>(1.0), max(dimensions - vec2<f32>(1.0), vec2<f32>(1.0)));
+    return textureSample(source, source_sampler, corner / dimensions);
+}
+
+fn blur_weight(offset: vec2<f32>, sigma: f32) -> f32 {
+    return exp(-dot(offset, offset) / (2.0 * sigma * sigma));
+}
+
+// Blur radius in source texels. It follows the source height so a 4K clip and a 720p clip look
+// equally soft at the same amount, with a floor that keeps small sources visibly blurred.
+fn blur_radius(amount: f32, dimensions: vec2<f32>) -> f32 {
+    return amount * max(24.0, dimensions.y * 0.06);
+}
+
 fn blurred_source(uv: vec2<f32>, amount: f32, blur_type: f32, effect_mix: f32) -> vec4<f32> {
     let original = textureSample(source, source_sampler, uv);
     if amount <= 0.0 || effect_mix <= 0.0 {
         return original;
     }
-    let dimensions = vec2<f32>(textureDimensions(source));
-    let radius = amount * 18.0 / max(dimensions, vec2<f32>(1.0));
+    let dimensions = max(vec2<f32>(textureDimensions(source)), vec2<f32>(1.0));
+    let centre = uv * dimensions;
+    let radius = max(blur_radius(amount, dimensions), 0.75);
     let mode = u32(clamp(round(blur_type), 0.0, 4.0));
-    var blurred = original;
+    var total = vec4<f32>(0.0);
+    var weights = 0.0;
     if mode == 0u {
-        // Nine-tap Gaussian approximation.
-        blurred = original * 0.24;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.12;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.12;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(0.0,  radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.12;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(0.0, -radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.12;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x,  radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.07;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x,  radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.07;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x, -radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.07;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x, -radius.y), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.07;
+        // Gaussian: a 6 x 6 grid across two standard deviations, weighted by true distance.
+        let sigma = radius * 0.5;
+        let step = radius / 2.5;
+        for (var row = 0u; row < 6u; row += 1u) {
+            for (var column = 0u; column < 6u; column += 1u) {
+                let offset = (vec2<f32>(f32(column), f32(row)) - vec2<f32>(2.5)) * step;
+                let texel = round(centre + offset);
+                let weight = blur_weight(texel - centre, sigma);
+                total += blur_tap(texel, dimensions) * weight;
+                weights += weight;
+            }
+        }
     } else if mode == 1u {
-        // Shape blur keeps a visible octagonal aperture.
-        blurred = original * 0.2;
-        for (var sample_index = 0u; sample_index < 8u; sample_index += 1u) {
-            let angle = f32(sample_index) * 0.78539816339;
-            let offset = vec2<f32>(cos(angle) * radius.x, sin(angle) * radius.y);
-            blurred += textureSample(source, source_sampler, clamp(uv + offset, vec2<f32>(0.0), vec2<f32>(1.0))) * 0.1;
+        // Shape: an even-weighted octagonal aperture in three rings, like an out-of-focus lens.
+        total = blur_tap(centre, dimensions);
+        weights = 1.0;
+        for (var ring = 1u; ring <= 3u; ring += 1u) {
+            let ring_radius = radius * f32(ring) / 3.0;
+            for (var corner = 0u; corner < 8u; corner += 1u) {
+                let angle = (f32(corner) + 0.5 * f32(ring % 2u)) * 0.78539816339;
+                let offset = vec2<f32>(cos(angle), sin(angle)) * ring_radius;
+                total += blur_tap(centre + offset, dimensions);
+                weights += 1.0;
+            }
         }
     } else if mode == 2u {
-        // Radial blur pulls samples along a ray toward the centre.
-        let ray = (vec2<f32>(0.5) - uv) * amount * 0.12;
-        blurred = original * 0.25;
-        blurred += textureSample(source, source_sampler, clamp(uv + ray * 0.33, vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
-        blurred += textureSample(source, source_sampler, clamp(uv + ray * 0.66, vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
-        blurred += textureSample(source, source_sampler, clamp(uv + ray, vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
+        // Radial: a zoom smear along the ray toward the frame centre.
+        let ray = (vec2<f32>(0.5) - uv) * dimensions * amount * 0.25;
+        for (var index = 0u; index < 16u; index += 1u) {
+            let progress = f32(index) / 15.0;
+            let weight = 1.0 - progress * 0.5;
+            total += blur_tap(centre + ray * progress, dimensions) * weight;
+            weights += weight;
+        }
     } else if mode == 3u {
-        // Linear blur follows one horizontal axis.
-        blurred = original * 0.2;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.2;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.2;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>( radius.x * 0.5, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.2;
-        blurred += textureSample(source, source_sampler, clamp(uv + vec2<f32>(-radius.x * 0.5, 0.0), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.2;
+        // Linear: a horizontal motion smear with a triangular falloff.
+        for (var index = 0u; index < 16u; index += 1u) {
+            let position = (f32(index) - 7.5) / 7.5;
+            let weight = 1.0 - abs(position) * 0.75;
+            total += blur_tap(centre + vec2<f32>(position * radius * 1.5, 0.0), dimensions) * weight;
+            weights += weight;
+        }
     } else {
-        // Axial blur samples around the centre, producing a rotational smear.
-        let angle = amount * 0.12;
-        blurred = original * 0.25;
-        blurred += textureSample(source, source_sampler, clamp(rotated_about_centre(uv, angle), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
-        blurred += textureSample(source, source_sampler, clamp(rotated_about_centre(uv, -angle), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.25;
-        blurred += textureSample(source, source_sampler, clamp(rotated_about_centre(uv, angle * 0.5), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.125;
-        blurred += textureSample(source, source_sampler, clamp(rotated_about_centre(uv, -angle * 0.5), vec2<f32>(0.0), vec2<f32>(1.0))) * 0.125;
+        // Axial: a rotational smear about the frame centre.
+        let angle = amount * 0.3;
+        for (var index = 0u; index < 16u; index += 1u) {
+            let position = (f32(index) - 7.5) / 7.5;
+            let weight = 1.0 - abs(position) * 0.5;
+            let turned = rotated_about_centre(uv, angle * position) * dimensions;
+            total += blur_tap(turned, dimensions) * weight;
+            weights += weight;
+        }
     }
-    return mix(original, blurred, effect_mix);
+    let blurred = total / max(weights, 0.0001);
+    // Ease the first percent of travel in, so the corner-aligned taps never make a step at the
+    // bypass threshold.
+    return mix(original, blurred, effect_mix * clamp(amount * 40.0, 0.0, 1.0));
 }
 
 fn kaleidoscope_coordinates(

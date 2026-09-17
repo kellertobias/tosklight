@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EFFECT_TYPES, type EffectLibrarySlot } from "../../shared/api/effects";
 import { resetResources } from "../../shared/api/resource";
 import { EffectsPage } from "./EffectsPage";
+import { effectThumbnailTypes, effectThumbnailUrl } from "./thumbnails";
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -84,6 +85,63 @@ describe("the effects library", () => {
 
 		await waitFor(() => expect(server.writes).toHaveLength(1));
 		expect(server.writes[0]?.body.parameters).toEqual([0.7]);
+	});
+
+	it("ships one rendered thumbnail for every effect type and nothing else", () => {
+		expect(effectThumbnailTypes()).toEqual(
+			EFFECT_TYPES.map((effect) => effect.value).sort(),
+		);
+		for (const effect of EFFECT_TYPES)
+			expect(effectThumbnailUrl(effect.value)).toMatch(/\.png/u);
+	});
+
+	it("shows each assigned slot's thumbnail and follows the chosen type", async () => {
+		stubEffects([
+			anEffect(),
+			typedEffect(2, "Soft", "blur", "blur-type", "Blur type", 0, 0, 4),
+			{
+				...typedEffect(
+					3,
+					"Print",
+					"rasterize",
+					"rasterize-mode",
+					"Mode",
+					1,
+					0,
+					1,
+				),
+			},
+		]);
+		const { container } = render(<EffectsPage />);
+		await screen.findByText("3/255 assigned");
+
+		const images = [
+			...container.querySelectorAll<HTMLImageElement>(
+				".media-effects-pool-grid .pool-card-image",
+			),
+		];
+		expect(images.map((image) => image.alt)).toEqual([
+			"TV/CRT/VHS Simulation thumbnail",
+			"Blur thumbnail",
+			"CMYK Rasterize thumbnail",
+		]);
+		expect(images[1]?.getAttribute("src")).toBe(effectThumbnailUrl("blur"));
+		expect(images[2]?.getAttribute("src")).toBe(
+			effectThumbnailUrl("rasterize-cmyk"),
+		);
+		expect(
+			container.querySelectorAll(".media-effects-pool-grid .pool-card-image"),
+		).toHaveLength(3);
+
+		const inspector = () =>
+			container.querySelector<HTMLImageElement>(".media-effect-thumbnail img");
+		expect(inspector()?.alt).toBe("TV/CRT/VHS Simulation thumbnail");
+		await userEvent.click(screen.getByRole("button", { name: "Effect type" }));
+		await userEvent.click(screen.getByRole("option", { name: "Feedback" }));
+		expect(inspector()?.alt).toBe("Feedback thumbnail");
+		expect(inspector()?.getAttribute("src")).toBe(
+			effectThumbnailUrl("feedback"),
+		);
 	});
 
 	it("names Blur, Feedback, and Kaleidoscope choices exactly", async () => {

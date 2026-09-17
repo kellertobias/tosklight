@@ -18,9 +18,10 @@ import {
 } from "../../shared/api/effects";
 import { useEffects } from "../../shared/api/queries";
 import {
-	librarySourceGroups,
 	type LibrarySourceType,
+	librarySourceGroups,
 } from "../media-library/GeneratedLibraryBrowserView";
+import { effectThumbnailUrl } from "./thumbnails";
 
 const EFFECT_SLOT_COUNT = 255;
 
@@ -118,17 +119,26 @@ export function EffectsLibraryView({
 						className="media-file-pool-grid media-effects-pool-grid"
 						slotCount={EFFECT_SLOT_COUNT}
 						minimumCardWidth={112}
-						slots={effects.map((effect) => ({
-							id: `effect-${effect.slot}`,
-							position: effect.slot - 1,
-							card: {
-								number: effect.slot,
-								primary: effect.name,
-								secondary: catalogueLabel(effect),
-								color: DEFAULT_POOL_COLOR_PALETTE.dynamic,
-								states: effect.slot === selectedSlot ? ["selected"] : [],
-							},
-						}))}
+						slots={effects.map((effect) => {
+							const thumbnail = effectThumbnailUrl(uiEffectType(effect));
+							return {
+								id: `effect-${effect.slot}`,
+								position: effect.slot - 1,
+								card: {
+									number: effect.slot,
+									primary: effect.name,
+									secondary: catalogueLabel(effect),
+									color: DEFAULT_POOL_COLOR_PALETTE.dynamic,
+									...(thumbnail && {
+										image: {
+											src: thumbnail,
+											alt: `${catalogueLabel(effect)} thumbnail`,
+										},
+									}),
+									states: effect.slot === selectedSlot ? ["selected"] : [],
+								},
+							};
+						})}
 						emptySlot={(index) => ({
 							id: `empty-effect-${index + 1}`,
 							position: index,
@@ -215,6 +225,7 @@ function EffectSlotEditor({
 				value={name}
 				onChange={(event) => setName(event.target.value)}
 			/>
+			<EffectThumbnail type={effectType} />
 			<SelectField
 				label="Effect type"
 				ariaLabel="Effect type"
@@ -269,6 +280,17 @@ function EffectSlotEditor({
 				)}
 			</div>
 		</div>
+	);
+}
+
+/** Follows the chosen type immediately, before the slot is saved. */
+function EffectThumbnail({ type }: { type: EffectType }) {
+	const src = effectThumbnailUrl(type);
+	if (!src) return null;
+	return (
+		<figure className="media-effect-thumbnail">
+			<img src={src} alt={`${effectLabel(type)} thumbnail`} decoding="async" />
+		</figure>
 	);
 }
 
