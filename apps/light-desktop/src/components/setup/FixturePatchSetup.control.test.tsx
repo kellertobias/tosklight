@@ -1454,13 +1454,12 @@ describe("selected split selection and SET editing", () => {
 		expect(
 			within(actions)
 				.getAllByRole("button")
-				.slice(0, 6)
+				.slice(0, 5)
 				.map((button) => button.textContent),
 		).toEqual([
 			"Open Stage Renderer",
 			"+ Add layer",
 			"+ Add fixture",
-			"Import CSV",
 			"+ Add multi-patch",
 			"Delete",
 		]);
@@ -1485,7 +1484,7 @@ describe("selected split selection and SET editing", () => {
 			),
 		).toEqual([
 			["Open Stage Renderer"],
-			["+ Add layer", "+ Add fixture", "Import CSV", "+ Add multi-patch"],
+			["+ Add layer", "+ Add fixture", "+ Add multi-patch"],
 			["Delete"],
 			["Fixtures", "Media Servers"],
 		]);
@@ -1494,13 +1493,12 @@ describe("selected split selection and SET editing", () => {
 		expect(
 			within(actions)
 				.getAllByRole("button")
-				.slice(0, 6)
+				.slice(0, 5)
 				.map((button) => button.textContent),
 		).toEqual([
 			"Open Stage Renderer",
 			"+ Add layer",
 			"+ Add fixture",
-			"Import CSV",
 			"+ Add multi-patch",
 			"Delete",
 		]);
@@ -2991,6 +2989,24 @@ describe("schema-v2 all-conflict resolution", () => {
 });
 
 describe("CSV patch import", () => {
+	/** Import CSV lives in the Show Patch Settings title, not in the Fixtures header. */
+	function openCsvImport() {
+		const header = screen
+			.getByText("Show Patch")
+			.closest("header") as HTMLElement;
+		expect(
+			within(header).queryByRole("button", { name: "Import CSV" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(within(header).getByRole("button", { name: "Settings" }));
+		const settings = screen.getByRole("dialog", { name: "Show Patch" });
+		fireEvent.click(
+			within(settings).getByRole("button", { name: "Import CSV" }),
+		);
+		expect(
+			screen.queryByRole("dialog", { name: "Show Patch" }),
+		).not.toBeInTheDocument();
+	}
+
 	function libraryProfile(manufacturer: string, name: string, id: string) {
 		const profile = blankFixtureProfile();
 		profile.id = id;
@@ -3010,7 +3026,7 @@ describe("CSV patch import", () => {
 			{ fixtureId: "b", selectionFixtureIds: ["b"] },
 		]);
 		render(<FixturePatchSetup />);
-		fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
+		openCsvImport();
 		const csv = [
 			"Patch;Fixture ID;Fixture Name;Manufacturer;Fixture Type;Mode;X;Y;Z;RotX;RotY;RotZ;Notes",
 			`1.1;201;Dim A;generic;DIMMER;${dimmer.modes[0].name};1;2;3;0;0;90;front`,
@@ -3076,6 +3092,81 @@ describe("CSV patch import", () => {
 		);
 	});
 
+	it("cancels safely: Stay keeps the file, Yes, close imports nothing", async () => {
+		server.fixtureProfiles = [
+			libraryProfile("Generic", "Dimmer", "profile-dimmer"),
+		];
+		server.patch.fixtures = [];
+		render(<FixturePatchSetup />);
+		openCsvImport();
+		// Nothing chosen yet: closing needs no confirmation.
+		fireEvent.click(screen.getByRole("button", { name: "Close Import CSV" }));
+		expect(
+			screen.queryByRole("dialog", { name: /Import CSV/ }),
+		).not.toBeInTheDocument();
+
+		openCsvImport();
+		fireEvent.change(screen.getByLabelText("CSV file"), {
+			target: {
+				files: [
+					new File(["Fixture Type,Patch\nDimmer,1.1\n"], "one.csv", {
+						type: "text/csv",
+					}),
+				],
+			},
+		});
+		await screen.findByRole("list", { name: "Column assignments" });
+		fireEvent.click(screen.getByRole("button", { name: "Close Import CSV" }));
+		fireEvent.click(screen.getByRole("button", { name: "Stay in Import CSV" }));
+		expect(
+			screen.getByRole("list", { name: "Column assignments" }),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Close Import CSV" }));
+		fireEvent.click(screen.getByRole("button", { name: "Yes, close" }));
+		expect(
+			screen.queryByRole("dialog", { name: /Import CSV/ }),
+		).not.toBeInTheDocument();
+		expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
+	});
+
+	it("explains an empty file and marks invalid rows Not imported", async () => {
+		server.fixtureProfiles = [
+			libraryProfile("Generic", "Dimmer", "profile-dimmer"),
+		];
+		server.patch.fixtures = [];
+		render(<FixturePatchSetup />);
+		openCsvImport();
+		fireEvent.change(screen.getByLabelText("CSV file"), {
+			target: { files: [new File([""], "empty.csv", { type: "text/csv" })] },
+		});
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"empty.csv contains no rows.",
+		);
+		expect(
+			screen.queryByRole("button", { name: "Next: fixture types" }),
+		).toBeDisabled();
+
+		fireEvent.change(screen.getByLabelText("CSV file"), {
+			target: {
+				files: [
+					new File(
+						["Fixture Type,Patch\nDimmer,1.1\nDimmer,99.999\n"],
+						"bad.csv",
+						{ type: "text/csv" },
+					),
+				],
+			},
+		});
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Next: fixture types" }),
+		);
+		const table = screen.getByRole("table", { name: "Fixtures to import" });
+		expect(within(table).getByText("Not imported")).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Import 1 fixture" }),
+		).toBeInTheDocument();
+	});
+
 	it("keeps the dialog open with a visible error when the server rejects the import", async () => {
 		const dimmer = libraryProfile("Generic", "Dimmer", "profile-dimmer");
 		server.fixtureProfiles = [dimmer];
@@ -3084,7 +3175,7 @@ describe("CSV patch import", () => {
 			new Error("Fixture ID 1 is already patched"),
 		);
 		render(<FixturePatchSetup />);
-		fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
+		openCsvImport();
 		fireEvent.change(screen.getByLabelText("CSV file"), {
 			target: {
 				files: [

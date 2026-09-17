@@ -1,4 +1,4 @@
-import { SwitchField } from "@tosklight/ui";
+import { SwitchField, type TitleActionGroup } from "@tosklight/ui";
 import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useApp } from "../../../state/AppContext";
 import { PATCH_COLUMNS, type PatchColumn } from "../../../types";
@@ -45,6 +45,32 @@ export function PatchColumnSwitches({
 
 export type ShowPatchSettingsTab = "columns" | "media" | "tracking";
 
+/** Event a pane's settings send so that pane's Show Patch opens Import CSV. */
+export const PATCH_IMPORT_CSV_EVENT = "light:patch-import-csv";
+
+/**
+ * The Show Patch settings title action that starts a regular-fixture CSV import. Pressing it
+ * closes the settings first so the import dialog is the only modal in front.
+ */
+export function importCsvGroup(
+	onImportCsv: () => void,
+	onClose: () => void,
+): TitleActionGroup {
+	return {
+		id: "patch-import",
+		actions: [
+			{
+				id: "csv-import",
+				label: "Import CSV",
+				onPress: () => {
+					onClose();
+					onImportCsv();
+				},
+			},
+		],
+	};
+}
+
 /**
  * The Show Patch window's own settings, opened from the same top-right ⚙ on Fixtures, Media
  * Servers and Tracking so the header never changes shape between them. A pane reaches the same
@@ -54,10 +80,13 @@ export function ShowPatchSettings({
 	anchor,
 	initialTab = "columns",
 	onClose,
+	onImportCsv,
 }: {
 	anchor: DOMRect;
 	initialTab?: ShowPatchSettingsTab;
 	onClose: () => void;
+	/** Opens the Fixtures view's CSV import; the title action is hidden without it. */
+	onImportCsv?: () => void;
 }) {
 	const { state, dispatch } = useApp();
 	return (
@@ -67,6 +96,7 @@ export function ShowPatchSettings({
 			title="Show Patch"
 			initialTab={initialTab}
 			onClose={onClose}
+			groups={onImportCsv ? [importCsvGroup(onImportCsv, onClose)] : []}
 			tabs={[
 				{
 					id: "columns",

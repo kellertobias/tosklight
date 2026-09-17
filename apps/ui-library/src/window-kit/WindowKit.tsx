@@ -229,9 +229,12 @@ export function WindowSettings({
 	onClose,
 	modal = true,
 	anchor,
+	groups = [],
 }: {
 	title?: string;
 	tabs: WindowSettingsTab[];
+	/** Title actions for the settings as a whole; they sit before the page tabs. */
+	groups?: TitleActionGroup[];
 	initialTab?: string;
 	/**
 	 * Which tab is open, when the caller owns that rather than the panel.
@@ -261,8 +264,9 @@ export function WindowSettings({
 		<>
 			<ModalTitleBar
 				title={title}
-				groups={
-					tabs.length > 1
+				groups={[
+					...groups,
+					...(tabs.length > 1
 						? [
 								{
 									id: "settings-tabs",
@@ -270,10 +274,10 @@ export function WindowSettings({
 									activeId: active ?? tabs[0]?.id ?? "",
 									onActiveChange: setActive,
 									actions: tabs.map(({ id, label }) => ({ id, label })),
-								},
+								} satisfies TitleActionGroup,
 							]
-						: undefined
-				}
+						: []),
+				]}
 				closeLabel="Close settings"
 				onClose={onClose}
 			/>

@@ -46,12 +46,15 @@ export function ShowPatchViewHeader({
 	compact,
 	onView,
 	groups = [],
+	onImportCsv,
 }: {
 	view: Exclude<ShowPatchView, "fixtures">;
 	compact: boolean;
 	onView: (view: ShowPatchView) => void;
 	/** The view's own action groups; they sit before the view switch so it never moves. */
 	groups?: TitleActionGroup[];
+	/** Import CSV from Settings; it switches to Fixtures and opens the import there. */
+	onImportCsv?: () => void;
 }) {
 	const [anchor, setAnchor] = useState<DOMRect | null>(null);
 	return (
@@ -71,6 +74,7 @@ export function ShowPatchViewHeader({
 					anchor={anchor}
 					initialTab={settingsTabFor(view)}
 					onClose={() => setAnchor(null)}
+					onImportCsv={onImportCsv}
 				/>
 			) : null}
 		</>

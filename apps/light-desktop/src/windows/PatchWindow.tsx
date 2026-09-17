@@ -1,6 +1,7 @@
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FixturePatchSetupContent } from "../components/setup/FixturePatchSetup";
+import { PATCH_IMPORT_CSV_EVENT } from "../components/setup/fixturePatch/ShowPatchSettings";
 import {
 	type ShowPatchView,
 	ShowPatchViewHeader,
@@ -20,8 +21,30 @@ export function PatchWindow({
 	compact = false,
 	patchView = "fixtures",
 	patchHiddenColumns,
+	paneId,
 }: WindowProps) {
-	const [tab, setTab] = useState<ShowPatchView>(patchView);
+	const [tab, setTabState] = useState<ShowPatchView>(patchView);
+	// A pending Import CSV; cleared on every view change so a remount never reopens it.
+	const [csvImportRequest, setCsvImportRequest] = useState(0);
+	const setTab = (view: ShowPatchView) => {
+		setCsvImportRequest(0);
+		setTabState(view);
+	};
+	const importCsv = () => {
+		setTabState("fixtures");
+		setCsvImportRequest((request) => request + 1);
+	};
+	useEffect(() => {
+		if (!paneId) return;
+		const onRequest = (event: Event) => {
+			if ((event as CustomEvent<{ paneId?: string }>).detail?.paneId !== paneId)
+				return;
+			setTabState("fixtures");
+			setCsvImportRequest((request) => request + 1);
+		};
+		window.addEventListener(PATCH_IMPORT_CSV_EVENT, onRequest);
+		return () => window.removeEventListener(PATCH_IMPORT_CSV_EVENT, onRequest);
+	}, [paneId]);
 	return (
 		<PatchFeatureBoundary>
 			{tab !== "fixtures" && (
@@ -30,6 +53,7 @@ export function PatchWindow({
 					active={active}
 					compact={compact}
 					onView={setTab}
+					onImportCsv={importCsv}
 				/>
 			)}
 			{tab === "fixtures" && (
@@ -37,6 +61,7 @@ export function PatchWindow({
 					active={active}
 					compact={compact}
 					hiddenColumns={patchHiddenColumns}
+					csvImportRequest={csvImportRequest}
 					onMedia={() => setTab("media")}
 					onTracking={() => setTab("tracking")}
 				/>
@@ -49,12 +74,14 @@ function PatchWindowContent({
 	active,
 	compact,
 	hiddenColumns,
+	csvImportRequest,
 	onMedia,
 	onTracking,
 }: {
 	active: boolean;
 	compact: boolean;
 	hiddenColumns: WindowProps["patchHiddenColumns"];
+	csvImportRequest: number;
 	onMedia: () => void;
 	onTracking: () => void;
 }) {
@@ -78,6 +105,7 @@ function PatchWindowContent({
 				active={active}
 				compact={compact}
 				hiddenColumns={hiddenColumns}
+				csvImportRequest={csvImportRequest}
 				onMedia={onMedia}
 				onTracking={onTracking}
 				onOpenStageWindow={desktop.available ? openStageRenderer : undefined}
@@ -99,11 +127,13 @@ function PatchConfigurationWindow({
 	active,
 	compact,
 	onView,
+	onImportCsv,
 }: {
 	view: "media" | "tracking";
 	active: boolean;
 	compact: boolean;
 	onView: (view: ShowPatchView) => void;
+	onImportCsv: () => void;
 }) {
 	// Discovery belongs to the window so Refresh Discovery can sit in the title.
 	const discovery = useMediaServerDiscovery(active && view === "media");
@@ -113,6 +143,7 @@ function PatchConfigurationWindow({
 				view={view}
 				compact={compact}
 				onView={onView}
+				onImportCsv={onImportCsv}
 				groups={view === "media" ? [mediaDiscoveryGroup(discovery)] : []}
 			/>
 			<WindowScrollArea className="patch-configuration-scroll">

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { PatchWindow } from "./PatchWindow";
@@ -11,14 +17,20 @@ const desktop = vi.hoisted(() => ({
 vi.mock("../components/setup/FixturePatchSetup", () => ({
 	FixturePatchSetupContent: ({
 		active,
+		csvImportRequest,
 		onOpenStageWindow,
 		onMedia,
 	}: {
 		active?: boolean;
+		csvImportRequest?: number;
 		onOpenStageWindow?: () => void;
 		onMedia?: () => void;
 	}) => (
-		<div data-testid="patch-content" data-active={String(active)}>
+		<div
+			data-testid="patch-content"
+			data-active={String(active)}
+			data-csv-import-request={String(csvImportRequest)}
+		>
 			<button type="button" onClick={onOpenStageWindow}>
 				Open Stage Renderer
 			</button>
@@ -44,9 +56,21 @@ vi.mock("../components/setup/PsnSetup", () => ({
 }));
 
 vi.mock("../components/setup/fixturePatch/ShowPatchSettings", () => ({
-	ShowPatchSettings: ({ initialTab }: { initialTab?: string }) => (
+	PATCH_IMPORT_CSV_EVENT: "light:patch-import-csv",
+	ShowPatchSettings: ({
+		initialTab,
+		onImportCsv,
+	}: {
+		initialTab?: string;
+		onImportCsv?: () => void;
+	}) => (
 		<div role="dialog" aria-label="Show Patch">
 			{`Settings on ${initialTab}`}
+			{onImportCsv && (
+				<button type="button" onClick={onImportCsv}>
+					Import CSV
+				</button>
+			)}
 		</div>
 	),
 }));
@@ -188,6 +212,46 @@ describe("Show Patch Media Servers and Tracking header", () => {
 				":scope > .ui-window-scroll-area .patch-configuration-content",
 			),
 		).not.toBeNull();
+	});
+
+	it("opens Import CSV on Fixtures from the Settings of another view", () => {
+		render(<PatchWindow patchView="media" />);
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
+		expect(screen.getByTestId("patch-content")).toHaveAttribute(
+			"data-csv-import-request",
+			"1",
+		);
+		// Leaving Fixtures drops the request so coming back never reopens the import.
+		fireEvent.click(screen.getByRole("button", { name: "Media Servers" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+		expect(screen.getByTestId("patch-content")).toHaveAttribute(
+			"data-csv-import-request",
+			"0",
+		);
+	});
+
+	it("opens Import CSV when that pane's settings ask for it", () => {
+		render(<PatchWindow patchView="media" compact paneId="pane-a" />);
+		act(() => {
+			window.dispatchEvent(
+				new CustomEvent("light:patch-import-csv", {
+					detail: { paneId: "pane-b" },
+				}),
+			);
+		});
+		expect(screen.queryByTestId("patch-content")).toBeNull();
+		act(() => {
+			window.dispatchEvent(
+				new CustomEvent("light:patch-import-csv", {
+					detail: { paneId: "pane-a" },
+				}),
+			);
+		});
+		expect(screen.getByTestId("patch-content")).toHaveAttribute(
+			"data-csv-import-request",
+			"1",
+		);
 	});
 
 	it("leaves Settings to the pane when the Show Patch is a pane", () => {

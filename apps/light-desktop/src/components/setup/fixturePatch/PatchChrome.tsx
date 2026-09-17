@@ -58,11 +58,6 @@ export function PatchHeader() {
 								onPress: () => ui.setBrowserOpen(true),
 							},
 							{
-								id: "csv-import",
-								label: "Import CSV",
-								onPress: () => ui.setCsvImportOpen(true),
-							},
-							{
 								id: "multipatch",
 								label: "+ Add multi-patch",
 								// A Venue object is placed one object at a time; it has no copies.
@@ -115,6 +110,7 @@ export function PatchHeader() {
 				<ShowPatchSettings
 					anchor={settingsAnchor}
 					onClose={() => setSettingsAnchor(null)}
+					onImportCsv={() => ui.setCsvImportOpen(true)}
 				/>
 			) : null}
 		</>

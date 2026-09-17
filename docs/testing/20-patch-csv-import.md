@@ -8,14 +8,22 @@ wizard before one atomic Patch change.
 
 ## Column assignment
 
-1. Open **Show > Show Patch** and press **Import CSV** in the title bar, directly after
-   **+ Add fixture**.
-2. Choose a CSV whose header row names Patch, Fixture ID, Fixture Name, Manufacturer, Fixture Type,
+1. Open **Show > Show Patch**. Confirm the Fixtures title bar has no **Import CSV** action.
+2. Press the top-right **⚙ Settings** and then **Import CSV** in the Show Patch Settings title.
+   Confirm Settings closes and Import CSV opens. Repeat with the keyboard (focus the ⚙, press
+   Space, focus **Import CSV**, press Space) and with touch taps.
+3. From **Media Servers** or **Tracking**, press **⚙ Settings > Import CSV**. Confirm the window
+   switches to **Fixtures** and opens Import CSV there.
+4. In a Show Patch pane, open **Pane Settings** and press **Import CSV** in its title. Confirm that
+   pane (and no other Show Patch pane) opens Import CSV.
+5. Choose a CSV whose header row names Patch, Fixture ID, Fixture Name, Manufacturer, Fixture Type,
    Mode, X, Y, Z, RotX, RotY, RotZ, plus one unrelated column. Confirm every named column is
    suggested and the unrelated column shows **Ignore**.
-3. Assign **Patch** to a different column. Confirm the previous Patch column returns to **Ignore**
+6. Assign **Patch** to a different column. Confirm the previous Patch column returns to **Ignore**
    and the assignment summary names the new column.
-4. Repeat with a semicolon-separated file and a file without a header row. Confirm the delimiter is
+7. Choose an empty file. Confirm the dialog explains that it contains no rows and
+   **Next: fixture types** stays disabled.
+8. Repeat with a semicolon-separated file and a file without a header row. Confirm the delimiter is
    detected and **Fixture data** keeps the first row as a fixture.
 
 ## Exact matches and the fixture-type wizard

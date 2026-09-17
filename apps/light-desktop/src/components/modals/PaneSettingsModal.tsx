@@ -42,7 +42,11 @@ import {
 } from "../../windows/fixtureSheetCuelistAuthority";
 import { StageVizSettings } from "../../windows/stageWindow/StageVizSettings";
 import { useVirtualPlaybackSurfaceZones } from "../control/virtualPlayback/useVirtualPlaybackSurfaceZones";
-import { PatchColumnSwitches } from "../setup/fixturePatch/ShowPatchSettings";
+import {
+	importCsvGroup,
+	PATCH_IMPORT_CSV_EVENT,
+	PatchColumnSwitches,
+} from "../setup/fixturePatch/ShowPatchSettings";
 import { TrackingSettingsForm } from "../setup/PsnSourceForm";
 import { PoolColorSettings } from "../shared/PoolColorSettings";
 import { requestPaneRemoval } from "../shell/paneRemovalGuard";
@@ -979,5 +983,27 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 			close,
 		),
 	];
-	return <WindowSettings title="Pane Settings" tabs={tabs} onClose={close} />;
+	// A Show Patch pane has no header ⚙ of its own, so its Import CSV lives here.
+	const groups =
+		pane.kind === "patch"
+			? [
+					importCsvGroup(
+						() =>
+							window.dispatchEvent(
+								new CustomEvent(PATCH_IMPORT_CSV_EVENT, {
+									detail: { paneId: pane.id },
+								}),
+							),
+						close,
+					),
+				]
+			: [];
+	return (
+		<WindowSettings
+			title="Pane Settings"
+			tabs={tabs}
+			groups={groups}
+			onClose={close}
+		/>
+	);
 }

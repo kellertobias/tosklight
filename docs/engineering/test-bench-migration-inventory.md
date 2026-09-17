@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **229 root cases across 88 files**.
+Default catalog: **231 root cases across 89 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -48,6 +48,8 @@ Default catalog: **229 root cases across 88 files**.
 | 100-show-patch-configuration-layout.spec.ts | TL-467 @ui › Tracking Settings keep, validate, and explain the source values | repository contract | @ui | show-patch-configuration-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 101-media-server-table.spec.ts | MEDIA-007 @ui › Show Patch manages patched Media Servers in one live table | docs/testing/14-media-and-running-panes.md | @ui | media-server-table | standard failure evidence | parallel | pending-semantic-migration |
 | 101-media-server-table.spec.ts | MEDIA-007 @api › clearing the thumbnail cache is repeatable | docs/testing/14-media-and-running-panes.md | @api | media-server-table | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 104-show-patch-csv-import.spec.ts | TL-469 @ui › Import CSV lives in Show Patch Settings and keeps validation and safe cancellation | repository contract | @ui | show-patch-csv-import | standard failure evidence | parallel | pending-semantic-migration |
+| 104-show-patch-csv-import.spec.ts | TL-469 @ui @touch › a touch tap reaches Import CSV from Settings on another Show Patch view | repository contract | @ui @touch | show-patch-csv-import | standard failure evidence | parallel | pending-semantic-migration |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | FIXTURE-002 @ui @restart › focused assets and physical metadata remain immutable across edit, patch, and restart | repository contract | @ui @restart | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |

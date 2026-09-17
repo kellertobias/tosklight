@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PaneModel } from "../../types";
 import {
 	FixtureSheetPaneSettings,
+	PaneSettingsModal,
 	PatchPaneSettings,
 	StagePaneSettings,
 } from "./PaneSettingsModal";
@@ -10,6 +11,7 @@ import {
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
 	state: {
+		paneSettingsId: null as string | null,
 		stageShowFloorGrid: true,
 		stageShowSelection: true,
 		stageVizAtmosphere: 0.2,
@@ -31,6 +33,15 @@ const mocks = vi.hoisted(() => ({
 						laserFogCloudiness: 0.55,
 						laserFogTurbulence: 0.65,
 					},
+					{
+						id: "patch-pane",
+						kind: "patch",
+						title: "Show Patch",
+						x: 0,
+						y: 0,
+						width: 8,
+						height: 6,
+					},
 				],
 			},
 		],
@@ -41,6 +52,15 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
+}));
+vi.mock("./cuePaneCuelistAuthority", () => ({
+	useCuePaneCuelistPlaybacks: () => [],
+}));
+vi.mock("../../windows/fixtureSheetCuelistAuthority", () => ({
+	useFixtureSheetCuelistAuthority: () => ({
+		cueLists: [],
+		selectedCueListId: "",
+	}),
 }));
 vi.mock("../../platform/desktop", () => ({
 	useDesktopBridge: () => ({
@@ -153,5 +173,36 @@ describe("Show Patch pane settings", () => {
 			id: "patch-pane",
 			columns: [],
 		});
+	});
+});
+
+describe("Show Patch pane Import CSV", () => {
+	afterEach(() => {
+		mocks.state.paneSettingsId = null;
+	});
+
+	it("closes the pane settings and asks that pane to open Import CSV", () => {
+		mocks.state.paneSettingsId = "patch-pane";
+		const requests: unknown[] = [];
+		const listen = (event: Event) =>
+			requests.push((event as CustomEvent).detail);
+		window.addEventListener("light:patch-import-csv", listen);
+		try {
+			render(<PaneSettingsModal />);
+			fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
+		} finally {
+			window.removeEventListener("light:patch-import-csv", listen);
+		}
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_PANE_SETTINGS",
+			id: null,
+		});
+		expect(requests).toEqual([{ paneId: "patch-pane" }]);
+	});
+
+	it("offers no Import CSV on other panes", () => {
+		mocks.state.paneSettingsId = "stage-pane";
+		render(<PaneSettingsModal />);
+		expect(screen.queryByRole("button", { name: "Import CSV" })).toBeNull();
 	});
 });

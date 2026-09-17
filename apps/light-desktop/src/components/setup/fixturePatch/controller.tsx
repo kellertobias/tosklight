@@ -92,13 +92,21 @@ export type FixturePatchSetupProps = {
 	compact?: boolean;
 	/** The pane's hidden columns; the desk-wide choice applies when this is not a pane. */
 	hiddenColumns?: PatchColumn[];
+	/**
+	 * Import CSV requests from outside the Fixtures header (another Show Patch view or pane
+	 * settings). Each new non-zero value opens the import.
+	 */
+	csvImportRequest?: number;
 };
 
-function usePatchUiState() {
+function usePatchUiState(csvImportRequest = 0) {
 	const [activeLayer, setActiveLayer] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
 	const [browserOpen, setBrowserOpen] = useState(false);
 	const [csvImportOpen, setCsvImportOpen] = useState(false);
+	useEffect(() => {
+		if (csvImportRequest > 0) setCsvImportOpen(true);
+	}, [csvImportRequest]);
 	const [placementOpen, setPlacementOpen] = useState(false);
 	const [placementAddressOpen, setPlacementAddressOpen] = useState(false);
 	const [layerModal, setLayerModal] = useState<"add" | "select" | null>(null);
@@ -368,7 +376,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	const stagePositions3d = useStagePositions3d();
 	const stageActions = useStageLayoutActions();
 	const app = useApp();
-	const ui = usePatchUiState();
+	const ui = usePatchUiState(props.csvImportRequest);
 	const data = usePatchDerivedState(server, patch, ui);
 	useEffect(() => {
 		if (!data.family) return;
