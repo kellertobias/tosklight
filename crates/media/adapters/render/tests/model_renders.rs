@@ -369,3 +369,91 @@ fn clearing_the_models_maps_layers_onto_the_plane() {
     assert!(agreement(&on_plane, &quad, 2) > 0.99);
     assert!(agreement(&on_sphere, &quad, 12) < 0.97);
 }
+
+/// Quadrants like [`quadrants`], at any size.
+fn quadrants_of(gpu: &Gpu, size: Size) -> SourceTexture {
+    let mut pixels = Vec::new();
+    for y in 0..size.height {
+        for x in 0..size.width {
+            let colour = match (x < size.width / 2, y < size.height / 2) {
+                (true, true) => [255, 0, 0, 255],
+                (false, true) => [0, 255, 0, 255],
+                (true, false) => [0, 0, 255, 255],
+                (false, false) => [255, 255, 255, 255],
+            };
+            pixels.extend_from_slice(&colour);
+        }
+    }
+    SourceTexture::from_rgba8(gpu, size, &pixels).unwrap()
+}
+
+fn flat_turned(state: LayerState, pan: f32, tilt: f32) -> LayerState {
+    LayerState {
+        model: ModelMapping {
+            model: 0,
+            pan,
+            tilt,
+        },
+        ..state
+    }
+}
+
+#[test]
+fn a_flat_layer_turned_by_pan_or_tilt_keeps_its_rectangle_and_turns() {
+    let gpu = gpu();
+    // A wide output and a tall source, so aspect and the Fit scaling mode both matter.
+    let output_size = Size::new(96, 54);
+    let source = quadrants_of(&gpu, Size::new(40, 60));
+    let mut output = OutputRenderer::off_screen(
+        &gpu,
+        OutputId::new(),
+        output_size,
+        PresentationMode::Unlocked,
+    )
+    .unwrap();
+    // Fill overflows the output at the other modes' scale, which would hide the foreshortening.
+    for (mode, scale) in [
+        (ScalingMode::Fit, 1.0),
+        (ScalingMode::Fill, 0.5),
+        (ScalingMode::Stretch, 1.0),
+    ] {
+        let flat = LayerState {
+            address: MediaAddress::new(1, 1),
+            source_status: SourceStatus::Ready,
+            scaling_mode: mode,
+            scale_x: 0.6 * scale,
+            scale_y: 0.7 * scale,
+            position_x: 0.1,
+            rotation: 10.0,
+            ..Default::default()
+        };
+        let reference = render(&mut output, &[draw(&flat, &source)]);
+        // A barely turned Flat layer takes the 3D path and still lands on the flat rectangle.
+        let nudged = render(
+            &mut output,
+            &[draw(&flat_turned(flat.clone(), 0.01, -0.01), &source)],
+        );
+        let share = agreement(&reference, &nudged, 12);
+        assert!(share > 0.97, "{mode:?}: only {share} of the pixels agree");
+
+        let panned = render(
+            &mut output,
+            &[draw(&flat_turned(flat.clone(), 60.0, 0.0), &source)],
+        );
+        let tilted = render(
+            &mut output,
+            &[draw(&flat_turned(flat.clone(), 0.0, 60.0), &source)],
+        );
+        for (name, turned) in [("pan", &panned), ("tilt", &tilted)] {
+            assert!(
+                agreement(&reference, turned, 12) < 0.95,
+                "{mode:?}: {name} 60 changes the image"
+            );
+            assert!(
+                lit_share(turned) < lit_share(&reference) * 0.8,
+                "{mode:?}: {name} 60 foreshortens the layer"
+            );
+            assert!(lit_share(turned) > 0.02, "{mode:?}: {name} 60 still draws");
+        }
+    }
+}

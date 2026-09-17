@@ -14,16 +14,20 @@
 //! (which rides in the dimmer, already inside the look) therefore apply to the mapped result
 //! through exactly the code a flat layer uses. A layer whose selected model is not installed is
 //! mapped onto the built-in Plane — never onto any other model, and never left black.
+//!
+//! Flat (model 0) at Pan 0 and Tilt 0 never enters this path. Once Pan or Tilt turns a Flat
+//! layer, it draws on a flat card: a quad sized so that, unturned, it projects exactly onto the
+//! flat layer's own rectangle, including its scaling mode.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use media_domain::geometry::Size;
-use media_domain::model_projection::model_view_projection;
+use media_domain::geometry::{Size, scaling_mode_factor};
+use media_domain::model_projection::{Matrix4, model_view_projection};
 use media_domain::{
-    BlendMode, BuiltinModel, LayerState, MaskState, ModelGeometry, ModelMapping, OutputId,
-    ScalingMode, Timestamp, Tint,
+    BlendMode, BuiltinModel, LayerState, MaskState, ModelGeometry, ModelMapping, ModelVertex,
+    OutputId, ScalingMode, Timestamp, Tint,
 };
 use wgpu::util::DeviceExt as _;
 
@@ -131,6 +135,8 @@ pub(super) struct ModelMapper {
     models: HashMap<u8, GpuModel>,
     /// The built-in Plane, drawn for a selection no installed model answers.
     fallback: Option<GpuModel>,
+    /// The card a turned Flat layer draws on.
+    flat_card: Option<GpuModel>,
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     depth: Option<(wgpu::TextureView, Size)>,
@@ -194,6 +200,7 @@ impl ModelMapper {
         Self {
             models: HashMap::new(),
             fallback: upload(gpu, "default-plane", &BuiltinModel::DEFAULT.geometry()).ok(),
+            flat_card: upload(gpu, "flat-card", &Arc::new(flat_card())).ok(),
             pipeline: mesh_pipeline(device, &layout),
             layout,
             depth: None,
@@ -237,10 +244,15 @@ impl ModelMapper {
         }
         for (index, layer) in layers.iter().take(MAX_LAYERS).enumerate() {
             let mapping = layer.state.model;
-            if mapping.is_flat() || !layer.state.draws() {
+            if !mapping.is_projected() || !layer.state.draws() {
                 continue;
             }
-            let Some(model) = self.models.get(&mapping.model).or(self.fallback.as_ref()) else {
+            let model = if mapping.is_flat() {
+                self.flat_card.as_ref()
+            } else {
+                self.models.get(&mapping.model).or(self.fallback.as_ref())
+            };
+            let Some(model) = model else {
                 continue;
             };
             let gpu = context.gpu;
@@ -314,7 +326,7 @@ impl ModelMapper {
                 &slot.mesh_uniform,
                 0,
                 bytemuck::bytes_of(&MeshUniform {
-                    model_view_projection: model_view_projection(layer.state, context.output),
+                    model_view_projection: mesh_placement(layer, context.output),
                 }),
             );
             let mesh_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -439,6 +451,50 @@ fn look_size(source: Size, output: Size, adapter_limit: u32) -> Size {
         Size::new(long, scaled(source.height, source.width))
     } else {
         Size::new(scaled(source.width, source.height), long)
+    }
+}
+
+fn mesh_placement(layer: &LayerDraw<'_>, output: Size) -> Matrix4 {
+    if layer.state.model.is_flat() {
+        let placement = flat_card_placement(layer.state, layer.source.size(), output);
+        model_view_projection(&placement, output)
+    } else {
+        model_view_projection(layer.state, output)
+    }
+}
+
+/// A square quad facing the camera, `±1` on both axes and deliberately not normalized; its
+/// placement scale makes it the flat layer's rectangle.
+fn flat_card() -> ModelGeometry {
+    let vertex = |x: f32, y: f32, u: f32, v: f32| ModelVertex {
+        position: [x, y, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [u, v],
+    };
+    ModelGeometry {
+        vertices: vec![
+            vertex(-1.0, -1.0, 0.0, 1.0),
+            vertex(1.0, -1.0, 1.0, 1.0),
+            vertex(1.0, 1.0, 1.0, 0.0),
+            vertex(-1.0, 1.0, 0.0, 0.0),
+        ],
+        indices: vec![0, 1, 2, 0, 2, 3],
+    }
+}
+
+/// The layer with its scale replaced so the flat card covers what the flat quad would: the world
+/// spans `±1` vertically and `±aspect` horizontally, so the card's half-width in world units is
+/// the flat layer's width over the output height.
+fn flat_card_placement(layer: &LayerState, source: Size, output: Size) -> LayerState {
+    if output.is_empty() {
+        return layer.clone();
+    }
+    let (fit_x, fit_y) = scaling_mode_factor(layer.scaling_mode, source, output);
+    let height = output.height as f32;
+    LayerState {
+        scale_x: layer.scale_x * fit_x * source.width as f32 / height,
+        scale_y: layer.scale_y * fit_y * source.height as f32 / height,
+        ..layer.clone()
     }
 }
 

@@ -345,3 +345,41 @@ async fn selecting_a_built_in_model_persists_it_and_deletes_a_replaced_import() 
     .await;
     assert!(status.is_client_error(), "an unknown built-in is refused");
 }
+
+#[tokio::test]
+async fn a_flat_layer_keeps_pan_and_tilt_and_stays_flat() {
+    let (bench, _) = models_bench();
+    let (status, _) = send(
+        &bench.router,
+        get(format!(
+            "/api/v2/outputs/{}/playback/take-over",
+            bench.output
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let state = format!("/api/v2/outputs/{}/state", bench.output);
+    let (_, fresh) = send(&bench.router, get(state.clone())).await;
+    let layer = &fresh["layers"][0];
+    assert_eq!(
+        (&layer["model"], &layer["modelPan"], &layer["modelTilt"]),
+        (&0.into(), &0.0.into(), &0.0.into()),
+        "a new mapping is Flat at Pan 0 and Tilt 0"
+    );
+
+    let uri = format!("/api/v2/outputs/{}/layers/0/update", bench.output);
+    let (status, _) = send(
+        &bench.router,
+        post(uri, r#"{"modelPan":25,"modelTilt":-40}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, turned) = send(&bench.router, get(state)).await;
+    let layer = &turned["layers"][0];
+    assert_eq!(layer["model"], 0);
+    assert_eq!(layer["modelStatus"], "flat");
+    assert_eq!(layer["modelPan"], 25.0);
+    assert_eq!(layer["modelTilt"], -40.0);
+    let mapping = bench.state.load().outputs[0].layers[0].model;
+    assert!(mapping.is_flat() && mapping.is_projected());
+}

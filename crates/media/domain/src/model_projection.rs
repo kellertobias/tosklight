@@ -19,7 +19,15 @@
 //! Matrices are column-major (`matrix[column][row]`), the layout WGSL's `mat4x4<f32>` expects.
 
 use crate::geometry::Size;
-use crate::layer::LayerState;
+use crate::layer::{LayerState, ModelMapping};
+
+impl ModelMapping {
+    /// Whether the layer draws in 3D: a mapped model, or Flat turned away from Pan 0 / Tilt 0.
+    pub fn is_projected(self) -> bool {
+        let turned = |degrees: f32| degrees.is_finite() && degrees != 0.0;
+        !self.is_flat() || turned(self.pan) || turned(self.tilt)
+    }
+}
 
 pub type Matrix4 = [[f32; 4]; 4];
 
@@ -165,7 +173,6 @@ pub fn model_view_projection(layer: &LayerState, output: Size) -> Matrix4 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layer::ModelMapping;
 
     const OUTPUT: Size = Size::new(1920, 1080);
 
@@ -260,5 +267,43 @@ mod tests {
         // Roll last spins about the model's own facing axis, leaving that axis where it was.
         let rolled = transform(&model_rotation(90.0, 45.0, 30.0), [0.0, 0.0, 1.0]);
         assert!((0..3).all(|axis| close(rolled[axis], front[axis])));
+    }
+
+    #[test]
+    fn a_new_mapping_is_flat_at_pan_and_tilt_zero_and_turning_flat_projects_it() {
+        let mapping = LayerState::default().model;
+        assert_eq!(
+            mapping,
+            ModelMapping {
+                model: 0,
+                pan: 0.0,
+                tilt: 0.0
+            }
+        );
+        assert!(mapping.is_flat() && !mapping.is_projected());
+        let panned = ModelMapping {
+            pan: 15.0,
+            ..mapping
+        };
+        let tilted = ModelMapping {
+            tilt: -10.0,
+            ..mapping
+        };
+        assert!(panned.is_flat() && panned.is_projected());
+        assert!(tilted.is_flat() && tilted.is_projected());
+        assert!(
+            !ModelMapping {
+                pan: f32::NAN,
+                ..mapping
+            }
+            .is_projected()
+        );
+        assert!(
+            ModelMapping {
+                model: 1,
+                ..mapping
+            }
+            .is_projected()
+        );
     }
 }
