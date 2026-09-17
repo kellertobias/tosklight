@@ -204,22 +204,15 @@ export class BrowserOperatorShell {
 			const mvr = this.page.getByRole("dialog", {
 				name: "MVR import and export",
 			});
-			// Loading from MVR asks for the file itself, so the chooser may already be up. Waiting
-			// for it is the only safe way to ask: a count() is a snapshot, and a chooser that opens
-			// in the gap between the snapshot and the click lands on top of the button being
-			// clicked, so the click retries against the overlay until it times out. The timeout is
-			// the answer "it did not open on its own", not a failure.
-			const mvrPicker = this.page.getByRole("dialog", {
-				name: "Choose files or folders",
-			});
-			const pickerAlreadyOpen = await mvrPicker
-				.waitFor({ state: "visible", timeout: 2000 })
-				.then(() => true)
-				.catch(() => false);
-			if (!pickerAlreadyOpen)
-				await mvr
-					.getByRole("button", { name: "Choose MVR file", exact: true })
-					.click();
+			// Loading from MVR opens its dialog and asks for the file straight away, so the
+			// chooser always comes up on top of it. Waiting for either one with a guessed window
+			// raced on both sides: a slow runner clicked "Choose MVR file" just as the chooser
+			// covered it, and a fast desk found the chooser up before the bench looked. Asserting
+			// both states in order leaves no timing to guess.
+			await expect(mvr).toBeVisible();
+			await expect(
+				this.page.getByRole("dialog", { name: "Choose files or folders" }),
+			).toBeVisible();
 			await this.expectPickerConstraint(files.invalid, files.mvr);
 			await mvr.getByRole("button", { name: "Close modal" }).click();
 			await this.page
