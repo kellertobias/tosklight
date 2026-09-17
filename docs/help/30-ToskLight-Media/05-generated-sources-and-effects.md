@@ -57,10 +57,29 @@ ignore the range.
 
 ## Visualizer parameters
 
-A layer showing a generated visualizer carries four **Visualizer Parameters**. They follow the order
-the visualizer's kind lists its parameters in the Visualizers editor. **0** keeps the configured
-value; **1–255** sweeps the parameter across its range. Colours sweep the hue wheel, switches turn on
-at 128, and variants count up from the first.
+Every layer carries four dedicated **Visualizer Parameter** channels (slots 52–55 of each 59-slot
+layer block), separate from the two effect banks. **FX1** and **FX2** therefore stay ordinary effect
+slots whether the layer shows a visualizer or ordinary media.
+
+The visualizer the layer shows defines what each channel means: its name, its range, and its
+default. The channels take the first four parameters in the order the Visualizers editor lists
+them, so Equalizer Bars reads **Count**, **Size**, **Colour**, and **Second colour**, and
+Waveform Oscilloscope reads **Size** (0.005–0.1 of the picture), **Thickness**, **Amount**, and
+**Colour**. **0** keeps the default, which is the layer's own tuning when it has one and otherwise the
+configured visualizer's value; **1–255** sweeps the parameter across that visualizer's range.
+Colours sweep the hue wheel, switches turn on at 128, and variants count up from the first. A
+visualizer with fewer than four parameters leaves the remaining channels inert, and a layer showing
+library media, text, or nothing ignores all four.
+
+The Media pane's **Effects › Visualizer** tab, ToskLight Control's Media pane, and DMX input all
+address these same four bytes, and each names a channel as the shown visualizer does. The
+Visualizer tab's settings above the four channels tune the whole visualizer for this layer only;
+that tuning belongs to the layer, applies only while the layer shows that visualizer, and
+**Reset parameters** returns the layer to the configured values.
+
+Pixel configuration files from before this change are brought forward on load: an effect preset
+no longer carries visualizer settings, and the preset keeps its slot, name, and effect. The channel
+layout and footprint (158 and 512 slots) are unchanged, so existing patches keep working.
 
 ## Output mirroring
 

@@ -26,7 +26,7 @@ The Media pane groups a layer's controls into tabs:
 - **Playback** — Play mode, Dimmer, Volume, Speed, Playback BPM, and Blur, followed by the **Playback range** heading with **In point** and **Out point**. The range is shown on this tab only.
 - **Frame** — Scale, Scaling mode, Position, and Rotation, followed by the **3D model** heading with **Model**, **Pan**, and **Tilt**. **Model** lists **Flat** and every slot in **Library › Models**. A new layer is **Flat** at Pan 0° and Tilt 0°, and Pan and Tilt still turn a Flat layer.
 - **Colour**, **Mask**, and **Blend** — tint and greyscale, the mask placement, and blend mode with strobe.
-- **Effects** — the two effect banks. When the layer shows a generated visualizer, a **Visualizer** tab comes first with that visualizer's own settings and its four Visualizer Parameters. Other content shows only **Bank 1** and **Bank 2**.
+- **Effects** — the two effect banks. When the layer shows a generated visualizer, a **Visualizer** tab comes first with that visualizer's own settings for this layer and its four Visualizer Parameter channels, each named by the visualizer; a channel the visualizer does not use reads **Unused** and is disabled. The Visualizer tab never changes **Bank 1** or **Bank 2**. Other content shows only **Bank 1** and **Bank 2**.
 
 ## Master output
 
