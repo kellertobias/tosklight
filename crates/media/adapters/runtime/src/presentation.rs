@@ -24,6 +24,7 @@ use media_domain::{MasterState, MediaState, Timestamp};
 
 use crate::dmx::SharedState;
 use crate::layer_pipeline::LayerPipeline;
+use crate::speed_groups::output_tempo as tempo_of;
 use media_playback::{AsyncClipLoader, ClipLoader, MediaLoader, PlaybackSession};
 use media_render::{LayerDraw, SourceTexture, SurfaceLost, WindowedOutput, select_monitor};
 use winit::application::ApplicationHandler;
@@ -89,6 +90,7 @@ pub fn run_event_loop(
         previews,
         universe_inputs,
         models,
+        speed_groups,
     } = shared;
     let event_loop = EventLoop::new()?;
     // Cocoa owns this thread. Rendering and surface reconstruction happen on the presentation
@@ -104,6 +106,7 @@ pub fn run_event_loop(
         configuration: live,
         catalog,
         analysis,
+        speed_groups,
         previews,
         universe_inputs,
         last_preview_millis: std::collections::BTreeMap::new(),
@@ -171,6 +174,8 @@ pub struct Shared {
     pub universe_inputs: crate::dmx::SharedUniverseInputs,
     /// The 3D model library every output maps layers onto.
     pub models: crate::model_store::Models,
+    /// Speed Groups received from the Light desk.
+    pub speed_groups: crate::speed_groups::SharedSpeedGroups,
 }
 
 /// The published library snapshot, shared with the services so both read one catalog.
@@ -218,6 +223,7 @@ struct PresentationHost {
     catalog: SharedCatalog,
     /// The newest audio analysis, which generated sources react to.
     analysis: media_audio::SharedAnalysis,
+    speed_groups: crate::speed_groups::SharedSpeedGroups,
     /// The output preview a subscribed console receives.
     previews: crate::preview::SharedPreviews,
     universe_inputs: crate::dmx::SharedUniverseInputs,
@@ -283,6 +289,7 @@ struct RenderWorkerState {
     configuration: SharedConfiguration,
     catalog: SharedCatalog,
     analysis: media_audio::SharedAnalysis,
+    speed_groups: crate::speed_groups::SharedSpeedGroups,
     sinks: CaptureSinks,
     outputs: Vec<HostedOutput>,
     state: SharedState,
@@ -504,6 +511,7 @@ impl PresentationHost {
             configuration: self.configuration.clone(),
             catalog: self.catalog.clone(),
             analysis: self.analysis.clone(),
+            speed_groups: self.speed_groups.clone(),
             sinks: CaptureSinks {
                 previews: self.previews.clone(),
                 last_preview_millis: std::mem::take(&mut self.last_preview_millis),
@@ -804,7 +812,12 @@ impl RenderWorkerState {
                     unix_millis(),
                     seconds,
                     now,
-                ),
+                )
+                .with_tempo(tempo_of(
+                    &configuration,
+                    output_state.id,
+                    &self.speed_groups,
+                )),
                 &mut self.loader,
             );
             reports.extend(

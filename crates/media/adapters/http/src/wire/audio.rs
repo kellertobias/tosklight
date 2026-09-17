@@ -126,6 +126,8 @@ pub struct TelemetryFrame {
     pub dmx: Vec<crate::wire::DmxIngressView>,
     /// The current show name published by the connected Light Desk over CITP discovery.
     pub desk_identity: Option<DeskIdentityView>,
+    /// Speed Groups received from the Light desk, and the state of that stream.
+    pub speed_groups: crate::wire::SpeedGroupReceptionView,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]

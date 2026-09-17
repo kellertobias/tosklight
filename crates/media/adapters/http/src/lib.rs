@@ -24,7 +24,9 @@ pub use diagnostics::{
     AudioSource, AudioTelemetry, DeskIdentityTelemetry, DeviceLister, Diagnostics, DmxTelemetry,
     FolderPresentation, ImportJob, ImportOutcome, ImportedModel, Imports, LibraryAccess,
     LibraryEdit, LibraryNoteTarget, LogEntry, LogLevelControl, LogPage, LogQuery, LogSource,
-    ModelAccess, ModelRejection, MonitorDevice, MonitorLister, PendingImport, UploadStream,
+    ModelAccess, ModelRejection, MonitorDevice, MonitorLister, PendingImport,
+    SpeedGroupReadingTelemetry, SpeedGroupRejectionTelemetry, SpeedGroupSource,
+    SpeedGroupTelemetry, UploadStream,
 };
 pub use error::{ApiError, ApiErrorBody};
 pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};

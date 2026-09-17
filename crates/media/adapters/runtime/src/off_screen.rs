@@ -20,6 +20,7 @@ use media_render::{Gpu, LayerDraw, OutputRenderer};
 use crate::layer_pipeline::{FrameContext, LayerPipeline};
 use crate::presentation::Shared;
 use crate::shutdown::Shutdown;
+use crate::speed_groups::output_tempo;
 
 /// Whether this configuration has any output to run here.
 pub fn any(configuration: &MediaConfiguration) -> bool {
@@ -115,7 +116,8 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
                     unix_millis(),
                     started.elapsed().as_secs_f32(),
                     now,
-                ),
+                )
+                .with_tempo(output_tempo(&live, state.id, &shared.speed_groups)),
                 &mut loader,
             );
             reports.extend(

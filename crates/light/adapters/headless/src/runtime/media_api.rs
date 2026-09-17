@@ -737,7 +737,7 @@ fn native_media_action_for(
     Ok(native_media_action(fixture))
 }
 
-fn native_media_action(fixture: &light_fixture::PatchedFixture) -> Option<String> {
+pub(super) fn native_media_action(fixture: &light_fixture::PatchedFixture) -> Option<String> {
     let profile_id = fixture.definition.profile_id?;
     (profile_id.0.to_string() == TOSKLIGHT_MEDIA_SERVER_PROFILE_ID)
         .then(|| "tosklight_media_v2".to_owned())

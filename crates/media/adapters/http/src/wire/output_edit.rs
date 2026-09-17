@@ -6,7 +6,7 @@
 use media_application::configuration::{
     DmxProtocol, MonitorSelector, OutputConfiguration, OutputTarget, Resolution, SoundOutput,
 };
-use media_domain::{LayerPersonality, PresentationMode};
+use media_domain::{LayerPersonality, PresentationMode, SpeedGroupId, TempoSource};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -52,6 +52,12 @@ pub struct UpdateOutputConfiguration {
     /// to be checked against every other zone's — so the map is edited as a piece.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pixel_map: Option<super::PixelMapView>,
+    /// `playback-bpm-channel` or `speed-group`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tempo_source: Option<String>,
+    /// The Speed Group to follow; required when switching to `speed-group`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed_group: Option<u32>,
 }
 
 /// Why an output settings edit could not describe a usable configuration.
@@ -87,6 +93,12 @@ pub enum OutputConfigurationEditError {
     Personality,
     #[error("protocol must be 'art-net' or 'sacn'")]
     Protocol,
+    #[error("tempoSource must be 'playback-bpm-channel' or 'speed-group'")]
+    TempoSource,
+    #[error("a speed-group tempo source needs speedGroup from 1 to 64")]
+    SpeedGroupMissing,
+    #[error("speedGroup only applies to a speed-group tempo source")]
+    SpeedGroupForChannel,
 }
 
 impl UpdateOutputConfiguration {
@@ -137,7 +149,34 @@ impl UpdateOutputConfiguration {
         if let Some(start_address) = self.start_address {
             next.start_address = start_address;
         }
+        next.tempo_source = self.tempo_source(current.tempo_source)?;
         Ok(next)
+    }
+
+    fn tempo_source(
+        &self,
+        current: TempoSource,
+    ) -> Result<TempoSource, OutputConfigurationEditError> {
+        let wants_group = match self.tempo_source.as_deref().map(str::trim) {
+            Some("speed-group") => true,
+            Some("playback-bpm-channel") => false,
+            Some(_) => return Err(OutputConfigurationEditError::TempoSource),
+            None => current.speed_group().is_some(),
+        };
+        if !wants_group {
+            if self.speed_group.is_some() {
+                return Err(OutputConfigurationEditError::SpeedGroupForChannel);
+            }
+            return Ok(TempoSource::PlaybackBpmChannel);
+        }
+        let group = self
+            .speed_group
+            .or_else(|| current.speed_group().map(SpeedGroupId::value))
+            .filter(|group| (1..=64).contains(group))
+            .ok_or(OutputConfigurationEditError::SpeedGroupMissing)?;
+        Ok(TempoSource::SpeedGroup {
+            group_id: SpeedGroupId::new(group),
+        })
     }
 
     fn sound_output(
@@ -291,5 +330,72 @@ impl UpdateOutputConfiguration {
                 .or(fixed_fps)
                 .ok_or(OutputConfigurationEditError::FixedFpsMissing)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn edit(body: &str) -> UpdateOutputConfiguration {
+        serde_json::from_str(body).expect("an output edit")
+    }
+
+    #[test]
+    fn an_output_follows_a_speed_group_until_it_is_switched_back() {
+        let current = OutputConfiguration::new("Main");
+        assert_eq!(current.tempo_source, TempoSource::PlaybackBpmChannel);
+
+        let following = edit(r#"{"requestId":"a","tempoSource":"speed-group","speedGroup":3}"#)
+            .applied(&current)
+            .expect("accepted");
+        assert_eq!(
+            following.tempo_source,
+            TempoSource::SpeedGroup {
+                group_id: SpeedGroupId::new(3)
+            }
+        );
+
+        let regrouped = edit(r#"{"requestId":"b","speedGroup":2}"#)
+            .applied(&following)
+            .expect("a group change keeps the mode");
+        assert_eq!(
+            regrouped.tempo_source.speed_group(),
+            Some(SpeedGroupId::new(2))
+        );
+        let untouched = edit(r#"{"requestId":"c","universe":4}"#)
+            .applied(&regrouped)
+            .expect("accepted");
+        assert_eq!(untouched.tempo_source, regrouped.tempo_source);
+
+        let channel = edit(r#"{"requestId":"d","tempoSource":"playback-bpm-channel"}"#)
+            .applied(&regrouped)
+            .expect("accepted");
+        assert_eq!(channel.tempo_source, TempoSource::PlaybackBpmChannel);
+    }
+
+    #[test]
+    fn an_incomplete_or_contradictory_tempo_source_is_refused() {
+        let current = OutputConfiguration::new("Main");
+        for (body, error) in [
+            (
+                r#"{"requestId":"a","tempoSource":"speed-group"}"#,
+                OutputConfigurationEditError::SpeedGroupMissing,
+            ),
+            (
+                r#"{"requestId":"b","tempoSource":"speed-group","speedGroup":0}"#,
+                OutputConfigurationEditError::SpeedGroupMissing,
+            ),
+            (
+                r#"{"requestId":"c","speedGroup":2}"#,
+                OutputConfigurationEditError::SpeedGroupForChannel,
+            ),
+            (
+                r#"{"requestId":"d","tempoSource":"audio"}"#,
+                OutputConfigurationEditError::TempoSource,
+            ),
+        ] {
+            assert_eq!(edit(body).applied(&current), Err(error), "{body}");
+        }
     }
 }

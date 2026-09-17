@@ -1,9 +1,8 @@
 // The network settings.
 //
-// Listen addresses and destinations are shown as two groups, because they are two different things
-// and confusing them is the mistake this panel exists to prevent: a listen address is somewhere
-// this server waits, and `0.0.0.0` means every interface on this machine. A destination is
-// somewhere it sends, and `0.0.0.0` is never one.
+// Every address here is somewhere this server waits, and `0.0.0.0` means every interface on this
+// machine. The Media Server sends nothing a desk configures here: it only receives, including the
+// Speed Groups a Light desk publishes.
 //
 // What was typed and what this run actually bound are both shown, because the same-computer preset
 // makes them differ on purpose.
@@ -107,8 +106,8 @@ export function NetworkEditor({
 					requestId: requestId(),
 					sameComputerPreset: preset,
 					...listeners,
-					// An empty field means "no destination", which the API takes as an explicit
-					// null rather than as a field left alone.
+					// An empty field turns Speed Group reception off, which the API takes as an
+					// explicit null rather than as a field left alone.
 					speedGroupEndpoint: endpoint.trim() === "" ? null : endpoint.trim(),
 				});
 			}}
@@ -134,22 +133,18 @@ export function NetworkEditor({
 						}
 					/>
 				))}
+				<TextField
+					label="Speed Groups"
+					description="UDP, usually 0.0.0.0:4810. Tos Light Control sends its Speed Group tempos here over OSC. Leave empty to not follow a desk's Speed Groups."
+					value={endpoint}
+					onChange={(event) => setEndpoint(event.target.value)}
+				/>
 				<CheckboxField
 					label="Light and Media are on this computer"
 					stateLabel="Listen on 127.0.0.1"
 					description="Listens on 127.0.0.1 for this run without changing the addresses above, so they come back when you turn it off."
 					checked={preset}
 					onChange={(event) => setPreset(event.target.checked)}
-				/>
-			</fieldset>
-
-			<fieldset>
-				<legend>Where this server sends</legend>
-				<TextField
-					label="Speed Group stream"
-					description="Where the Light desk publishes its Speed Groups. Leave empty when Media is not following one. A real address, never 0.0.0.0."
-					value={endpoint}
-					onChange={(event) => setEndpoint(event.target.value)}
 				/>
 			</fieldset>
 
@@ -190,15 +185,13 @@ export function BoundAddresses({ network }: { network: NetworkView }) {
 					</tr>
 				))}
 				<tr>
-					<th scope="row">Speed Group stream</th>
+					<th scope="row">Speed Groups</th>
 					<td>
-						<code>
-							{network.stored.speedGroupEndpoint ?? "not following one"}
-						</code>
+						<code>{network.stored.speedGroupEndpoint ?? "not receiving"}</code>
 					</td>
 					<td>
 						<code>
-							{network.resolved.speedGroupEndpoint ?? "not following one"}
+							{network.resolved.speedGroupEndpoint ?? "not receiving"}
 						</code>
 					</td>
 				</tr>

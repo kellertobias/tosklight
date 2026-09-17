@@ -15,6 +15,8 @@ pub const SACN_PORT: u16 = 5568;
 /// CITP/MSEX 1.2 listens on TCP 4809. One configured port, published in discovery and status;
 /// neither product may silently substitute a different one.
 pub const CITP_PORT: u16 = 4809;
+/// The conventional UDP port for incoming Speed Group OSC. Tos Light Control sends here.
+pub const SPEED_GROUP_PORT: u16 = 4810;
 /// The administration HTTP service, matching the legacy application's port.
 pub const HTTP_PORT: u16 = 8080;
 
@@ -43,7 +45,11 @@ pub struct NetworkConfiguration {
     pub citp_listen: SocketAddr,
     #[serde(default = "default_http_listen")]
     pub http_listen: SocketAddr,
-    /// Where the Light desk publishes its Speed Group stream, when Media consumes one.
+    /// The UDP address this server listens on for the Light desk's Speed Group OSC stream.
+    /// Absent means Speed Groups are not received. Media only ever receives Speed Groups.
+    ///
+    /// Stored under its original name so configuration written before reception existed loads
+    /// unchanged.
     #[serde(default)]
     pub speed_group_endpoint: Option<SocketAddr>,
 }
@@ -168,6 +174,25 @@ mod tests {
         assert_eq!(
             configuration.resolved().http_listen,
             "127.0.0.1:9090".parse().unwrap()
+        );
+    }
+
+    #[test]
+    fn speed_group_reception_is_off_unless_configured_and_follows_the_preset() {
+        let older: NetworkConfiguration = serde_json::from_str("{}").unwrap();
+        assert_eq!(older.speed_group_endpoint, None);
+
+        let stored: NetworkConfiguration = serde_json::from_str(
+            r#"{"sameComputerPreset":true,"speedGroupEndpoint":"0.0.0.0:4810"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            stored.speed_group_endpoint,
+            Some(SocketAddr::from((UNSPECIFIED, SPEED_GROUP_PORT)))
+        );
+        assert_eq!(
+            stored.resolved().speed_group_endpoint,
+            Some("127.0.0.1:4810".parse().unwrap())
         );
     }
 

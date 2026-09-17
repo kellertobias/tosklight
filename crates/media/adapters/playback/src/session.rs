@@ -102,6 +102,9 @@ pub struct PlaybackSession {
     /// Whether the current pass has shown anything yet. Before it has, a range is simply taken
     /// over: there is no playhead on screen to preserve.
     delivered: bool,
+    /// The tempo the transport last advanced at, so a tempo change continues from the frame on
+    /// screen instead of re-deriving the whole pass at the new rate.
+    tempo_bpm: Option<f64>,
 }
 
 impl PlaybackSession {
@@ -125,6 +128,7 @@ impl PlaybackSession {
             range: full,
             requested: full,
             delivered: false,
+            tempo_bpm: None,
         }
     }
 
@@ -192,6 +196,7 @@ impl PlaybackSession {
         tempo: ResolvedTempo,
         now: Timestamp,
     ) -> Delivery {
+        self.retime(layer, tempo, now);
         if self.requested != self.range {
             self.adopt_requested_range(layer, tempo, now);
         }
@@ -224,6 +229,23 @@ impl PlaybackSession {
             status,
             presentation,
         }
+    }
+
+    /// Keeps a synchronized playhead continuous when the tempo it follows changes.
+    ///
+    /// The distance travelled so far is fixed at the old tempo and the pass continues from there
+    /// at the new one, so a desk moving its Speed Group never makes the clip jump. The same
+    /// tempo sequence always yields the same frames, whatever the frame rate of the output.
+    fn retime(&mut self, layer: &LayerState, tempo: ResolvedTempo, now: Timestamp) {
+        let bpm = tempo.bpm();
+        let previous = std::mem::replace(&mut self.tempo_bpm, bpm);
+        if previous == bpm || !self.delivered || !self.mode.is_synchronized() {
+            return;
+        }
+        let before = previous.map_or(ResolvedTempo::None, |bpm| ResolvedTempo::Live { bpm });
+        let (_, _, advanced) = self.locate(layer, before, now);
+        self.anchor = now;
+        self.offset = advanced;
     }
 
     /// Stills, and anything else with a single frame, have no range to honour.
@@ -621,6 +643,65 @@ mod tests {
         // A 60 BPM asset against a 120 BPM master runs at double speed.
         let delivery = session.deliver(&layer, ResolvedTempo::Live { bpm: 120.0 }, at(250));
         assert_eq!(delivery.frame, Some(5));
+    }
+
+    #[test]
+    fn a_speed_group_change_continues_from_the_frame_on_screen() {
+        let timings: Vec<u64> = (0..10).map(|index| index * 100_000).collect();
+        let mut session = PlaybackSession::new(
+            AssetId::new(),
+            MediaTiming::from_frames(10, 10.0).with_intrinsic_bpm(60.0),
+            Arc::from(timings.into_boxed_slice()),
+            Timestamp::ZERO,
+            PlayMode::LoopSynced,
+        );
+        let layer = layer(PlayMode::LoopSynced);
+        let mut frame = |bpm: f64, millis| {
+            session
+                .deliver(&layer, ResolvedTempo::Live { bpm }, at(millis))
+                .frame
+        };
+
+        assert_eq!(frame(60.0, 0), Some(0));
+        assert_eq!(frame(60.0, 300), Some(3));
+        // Doubling the tempo does not re-derive the first 300 ms at the new rate.
+        assert_eq!(frame(120.0, 300), Some(3));
+        assert_eq!(frame(120.0, 400), Some(5));
+        // A paused group (tempo zero) holds the frame, and resuming continues from it.
+        assert_eq!(frame(0.0, 400), Some(5));
+        assert_eq!(frame(0.0, 900), Some(5));
+        assert_eq!(frame(60.0, 900), Some(5));
+        assert_eq!(frame(60.0, 1_000), Some(6));
+    }
+
+    #[test]
+    fn a_tempo_change_is_the_same_whatever_the_frame_rate_of_the_output() {
+        let make = || {
+            let timings: Vec<u64> = (0..100).map(|index| index * 10_000).collect();
+            PlaybackSession::new(
+                AssetId::new(),
+                MediaTiming::from_frames(100, 100.0).with_intrinsic_bpm(120.0),
+                Arc::from(timings.into_boxed_slice()),
+                Timestamp::ZERO,
+                PlayMode::LoopSynced,
+            )
+        };
+        let layer = layer(PlayMode::LoopSynced);
+        let tempo = |millis: u64| ResolvedTempo::Live {
+            bpm: if millis < 250 { 120.0 } else { 90.0 },
+        };
+        let mut coarse = make();
+        let mut fine = make();
+        for millis in (0..=500).step_by(50) {
+            coarse.deliver(&layer, tempo(millis), at(millis));
+        }
+        for millis in (0..=500).step_by(50) {
+            fine.deliver(&layer, tempo(millis), at(millis));
+            fine.deliver(&layer, tempo(millis + 10), at(millis + 10));
+        }
+        let last =
+            |session: &mut PlaybackSession| session.deliver(&layer, tempo(600), at(600)).frame;
+        assert_eq!(last(&mut coarse), last(&mut fine));
     }
 
     #[test]

@@ -160,6 +160,25 @@ pub fn resolve_tempo(
     }
 }
 
+/// What one output's layers resolve their tempo against on one frame: the output's tempo source
+/// and, in Speed Group mode, the clock that group last published.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct OutputTempo {
+    pub source: TempoSource,
+    pub speed_group: Option<SpeedGroupSnapshot>,
+}
+
+impl OutputTempo {
+    /// The tempo one layer follows, given its own Playback BPM channel.
+    pub fn resolve(
+        &self,
+        channel_bpm: Option<u8>,
+        now: crate::command::Timestamp,
+    ) -> ResolvedTempo {
+        resolve_tempo(self.source, self.speed_group, channel_bpm, now)
+    }
+}
+
 /// The effective playback rate, as a positive magnitude.
 ///
 /// Unsynchronized modes ignore both the intrinsic BPM and the tempo source entirely:

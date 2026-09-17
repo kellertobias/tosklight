@@ -21,6 +21,7 @@ import { NetworkEditor } from "./NetworkEditor";
 import { OutputPixelMap } from "../pixelmap/OutputPixelMap";
 import { OutputSettings } from "./OutputSettings";
 import { SettingsSaveState } from "./SettingsSaveState";
+import { SpeedGroupStatus } from "./SpeedGroupStatus";
 
 const HEALTH_POLL_MS = 15_000;
 
@@ -172,6 +173,7 @@ function Network({
 				onSave={onSave}
 				showActions={false}
 			/>
+			<SpeedGroupStatus />
 			{network.warnings.map((warning) => (
 				<p key={warning} className="media-state is-error" role="alert">
 					{warning}

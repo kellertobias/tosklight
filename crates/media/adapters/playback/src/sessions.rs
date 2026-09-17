@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use media_domain::catalog::CatalogSnapshot;
 use media_domain::{
-    AssetId, LayerState, MediaAddress, OutputId, PlayMode, SourceFailure, SourceStatus, Timestamp,
+    AssetId, LayerState, MediaAddress, OutputId, OutputTempo, PlayMode, SourceFailure,
+    SourceStatus, Timestamp,
 };
 use media_library::LibraryStorage;
 
@@ -79,6 +80,8 @@ pub struct LayerSessions {
     outgoing: HashMap<usize, Outgoing>,
     /// How long a replaced clip may stay on screen. Zero drops it at once.
     switch_hold: Duration,
+    /// The output's tempo source and Speed Group clock for the current frame.
+    tempo: OutputTempo,
 }
 
 impl LayerSessions {
@@ -92,6 +95,7 @@ impl LayerSessions {
             failed: HashMap::new(),
             outgoing: HashMap::new(),
             switch_hold: Duration::ZERO,
+            tempo: OutputTempo::default(),
         }
     }
 
@@ -103,6 +107,12 @@ impl LayerSessions {
     /// the next switch; a hold already running keeps the limit it started with.
     pub fn set_switch_hold(&mut self, hold: Duration) {
         self.switch_hold = hold;
+    }
+
+    /// Sets the tempo every layer of this output follows from now on. Synchronized play modes
+    /// retime to it; the others ignore it.
+    pub fn set_tempo(&mut self, tempo: OutputTempo) {
+        self.tempo = tempo;
     }
 
     /// Lets go of a layer's previous clip, because its new selection is on screen or can never
@@ -233,9 +243,8 @@ impl LayerSessions {
         };
         selected.reset_trigger_id = layer.reset_trigger_id;
         selected.session.reconcile(layer, now);
-        let delivery = selected
-            .session
-            .deliver(layer, media_domain::ResolvedTempo::None, now);
+        let tempo = self.tempo.resolve(layer.playback_bpm, now);
+        let delivery = selected.session.deliver(layer, tempo, now);
         let size = self.sizes.get(&selected.asset).copied().unwrap_or((0, 0));
 
         Some(LayerSource {
@@ -254,11 +263,8 @@ impl LayerSessions {
     fn held(&mut self, layer_index: usize, layer: &LayerState, now: Timestamp) -> Option<HeldClip> {
         let outgoing = self.outgoing.get_mut(&layer_index)?;
         let asset = outgoing.selected.asset;
-        let delivery =
-            outgoing
-                .selected
-                .session
-                .deliver(layer, media_domain::ResolvedTempo::None, now);
+        let tempo = self.tempo.resolve(layer.playback_bpm, now);
+        let delivery = outgoing.selected.session.deliver(layer, tempo, now);
         Some(HeldClip {
             asset,
             frame: delivery.frame,

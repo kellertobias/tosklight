@@ -11,7 +11,7 @@
 
 use std::net::SocketAddr;
 
-use media_application::configuration::{NetworkConfiguration, ResolvedNetwork};
+use media_application::configuration::{NetworkConfiguration, ResolvedNetwork, SPEED_GROUP_PORT};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -23,8 +23,8 @@ pub struct NetworkAddressesView {
     pub sacn_listen: String,
     pub citp_listen: String,
     pub http_listen: String,
-    /// Where the Light desk publishes its Speed Group stream. A destination, not a listen
-    /// address; absent means Media is not consuming one.
+    /// Where this server listens for the Light desk's Speed Group OSC stream. Absent means Speed
+    /// Groups are not received. Media never publishes Speed Groups.
     pub speed_group_endpoint: Option<String>,
 }
 
@@ -117,8 +117,8 @@ pub struct UpdateNetwork {
     pub citp_listen: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub http_listen: Option<String>,
-    /// A destination rather than a listener. `null` clears it; leaving the field out keeps it,
-    /// which is why an absent field and an explicit null have to be different things here.
+    /// The Speed Group listen address. `null` or an empty string turns reception off; leaving
+    /// the field out keeps it, which is why an absent field and an explicit null differ here.
     #[serde(
         default,
         deserialize_with = "explicit_null",
@@ -183,12 +183,20 @@ impl UpdateNetwork {
             next.speed_group_endpoint = match endpoint {
                 None => None,
                 Some(text) if text.trim().is_empty() => None,
-                Some(text) => Some(parse(
+                Some(text) => Some(listen(
                     "speedGroupEndpoint",
-                    text,
-                    "192.168.1.10:9000".to_owned(),
+                    Some(text),
+                    SocketAddr::from(([0, 0, 0, 0], SPEED_GROUP_PORT)),
                 )?),
             };
+        }
+        if let Some(speed_groups) = next.speed_group_endpoint {
+            for (field, other) in [
+                ("artNetListen", next.art_net_listen),
+                ("sacnListen", next.sacn_listen),
+            ] {
+                collision(field, other, "speedGroupEndpoint", speed_groups, "UDP")?;
+            }
         }
 
         // Two listeners on one port fail at bind time. Catching it here means the operator is
@@ -293,7 +301,41 @@ mod tests {
     }
 
     #[test]
-    fn a_destination_can_be_set_and_cleared_but_omitting_it_keeps_it() {
+    fn the_speed_group_listener_is_validated_like_every_other_listener() {
+        let current = NetworkConfiguration::default();
+        let wildcard = edit(r#"{"requestId":"a","speedGroupEndpoint":"0.0.0.0:4810"}"#)
+            .applied(&current)
+            .expect("every interface is a valid place to listen");
+        assert_eq!(
+            wildcard.speed_group_endpoint,
+            Some("0.0.0.0:4810".parse().unwrap())
+        );
+        let empty = edit(r#"{"requestId":"b","speedGroupEndpoint":"  "}"#)
+            .applied(&wildcard)
+            .expect("an empty field turns reception off");
+        assert_eq!(empty.speed_group_endpoint, None);
+
+        let ephemeral = edit(r#"{"requestId":"c","speedGroupEndpoint":"0.0.0.0:0"}"#)
+            .applied(&current)
+            .expect_err("refused");
+        assert_eq!(
+            ephemeral,
+            NetworkEditError::EphemeralPort {
+                field: "speedGroupEndpoint"
+            }
+        );
+        let garbage = edit(r#"{"requestId":"d","speedGroupEndpoint":"desk"}"#)
+            .applied(&current)
+            .expect_err("refused");
+        assert!(garbage.to_string().contains("0.0.0.0:4810"), "{garbage}");
+        let shared = edit(r#"{"requestId":"e","speedGroupEndpoint":"0.0.0.0:6454"}"#)
+            .applied(&current)
+            .expect_err("refused");
+        assert!(matches!(shared, NetworkEditError::PortCollision { .. }));
+    }
+
+    #[test]
+    fn the_speed_group_listener_can_be_set_and_cleared_but_omitting_it_keeps_it() {
         let mut current = NetworkConfiguration::default();
         let set = edit(r#"{"requestId":"a","speedGroupEndpoint":"192.168.1.9:9000"}"#)
             .applied(&current)

@@ -27,6 +27,7 @@ mod output;
 mod output_edit;
 mod pixel_map;
 mod playback;
+mod speed_group;
 mod text;
 mod time;
 mod visualizer;
@@ -66,6 +67,7 @@ pub use pixel_map::{
     PixelRouteView, PixelZoneHandoffView, PixelZoneView,
 };
 pub use playback::{PlaybackEditError, PlaybackView, UpdatePlayback};
+pub use speed_group::{SpeedGroupReadingView, SpeedGroupReceptionView, SpeedGroupRejectionView};
 pub use text::{
     CreateText, DeleteText, TextEditError, TextFormatView, TextSlotView, TextStyleView, UpdateText,
 };

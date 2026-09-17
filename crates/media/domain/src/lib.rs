@@ -79,7 +79,8 @@ pub use playback::{OnceEndState, PlayMode};
 pub use speed::SpeedMultiplier;
 pub use state::{Applied, MediaState, OutputState, apply};
 pub use tempo::{
-    ResolvedTempo, SpeedGroupId, SpeedGroupSnapshot, TempoSource, effective_rate, resolve_tempo,
+    OutputTempo, ResolvedTempo, SpeedGroupId, SpeedGroupSnapshot, TempoSource, effective_rate,
+    resolve_tempo,
 };
 pub use text::{Countdown, TextEntry, TextKind, Visibility};
 pub use text_catalog::{Alignment, TextCatalog, TextCatalogError, TextSlot, TextStyle};

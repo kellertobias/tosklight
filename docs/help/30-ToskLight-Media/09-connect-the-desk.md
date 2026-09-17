@@ -20,6 +20,24 @@ After patching, configure the Media endpoint's IP address and CITP port in the p
 
 CITP discovery is not ToskLight show discovery. CITP describes Media outputs and libraries; ToskLight's local-network discovery offers read-only `.show` copies between Desk and the PreViz Rig Editor.
 
+## Follow the desk's Speed Groups
+
+Synchronized play modes can follow a ToskLight Control Speed Group instead of each layer's
+**Playback BPM** channel. The Media Server only receives Speed Groups; the desk stays the
+authority.
+
+1. In Media **Settings > Network**, enter a **Speed Groups** address such as `0.0.0.0:4810`, then
+   restart the Media Server.
+2. In Media **Settings > DMX**, set **Synchronized playback follows** to **Light desk Speed Group
+   A**–**E** for each output. This applies immediately.
+3. Keep the Media Server fixture's CITP endpoint set on the desk. While a show is open, the desk
+   sends every Speed Group to UDP port `4810` on that address.
+
+**Settings > Network** then shows the followed desk, each group's tempo, and any refused messages.
+If the desk stops sending, the output keeps its last tempo and the panel reports the desk as lost.
+When the desk returns, the output follows it again without a restart. The message format is
+described in [Media Server Speed Groups](../90-Protocols/02-media-speed-groups.md).
+
 ## Configure effect presets
 
 The Effects tab in the Media Server Library stores the effect type, operator name, and typed
@@ -53,8 +71,9 @@ Check in this order:
 1. the Desk patch personality, logical universe, and start address match the Media output;
 2. the Desk output route uses the intended protocol and wire universe;
 3. the Media **DMX** diagnostics name the expected sender and show changing raw bytes;
-4. the manually configured CITP endpoint is reachable when names or previews are required; and
-5. saved Media network/output changes were applied by restarting the Media Server.
+4. the manually configured CITP endpoint is reachable when names or previews are required;
+5. **Settings > Network** reports the desk as receiving when outputs follow a Speed Group; and
+6. saved Media network/output changes were applied by restarting the Media Server.
 
 The Media Server administration interface can take over playback for testing. Release that takeover before judging desk DMX control.
 

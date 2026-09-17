@@ -362,6 +362,61 @@ pub struct DeskIdentityTelemetry {
 
 pub type DeskIdentitySource = Arc<dyn Fn() -> Option<DeskIdentityTelemetry> + Send + Sync>;
 
+/// One Speed Group as the desk last published it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpeedGroupReadingTelemetry {
+    pub group: u32,
+    pub bpm: f64,
+    pub beat_phase: f64,
+    pub running: bool,
+    pub fresh: bool,
+    pub age_millis: u64,
+}
+
+/// A refused Speed Group datagram.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpeedGroupRejectionTelemetry {
+    pub from: Option<String>,
+    pub reason: String,
+    pub age_millis: u64,
+}
+
+/// Speed Group reception. The Media Server only receives Speed Groups; it never publishes them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpeedGroupTelemetry {
+    /// `disabled`, `unavailable`, `waiting`, `connected`, or `lost`.
+    pub connection: String,
+    pub listening: Option<String>,
+    pub detail: Option<String>,
+    pub sender: Option<String>,
+    pub sender_address: Option<String>,
+    pub last_update_age_millis: Option<u64>,
+    pub accepted: u64,
+    pub rejected: u64,
+    pub rejections: Vec<SpeedGroupRejectionTelemetry>,
+    pub groups: Vec<SpeedGroupReadingTelemetry>,
+}
+
+impl Default for SpeedGroupTelemetry {
+    /// A process that was not asked to receive Speed Groups.
+    fn default() -> Self {
+        Self {
+            connection: "disabled".to_owned(),
+            listening: None,
+            detail: None,
+            sender: None,
+            sender_address: None,
+            last_update_age_millis: None,
+            accepted: 0,
+            rejected: 0,
+            rejections: Vec::new(),
+            groups: Vec::new(),
+        }
+    }
+}
+
+pub type SpeedGroupSource = Arc<dyn Fn() -> SpeedGroupTelemetry + Send + Sync>;
+
 impl Default for Imports {
     /// A process that imports nothing: it reports nothing waiting, and says it cannot import.
     fn default() -> Self {
@@ -482,6 +537,7 @@ pub struct Diagnostics {
     pub dmx: DmxSource,
     pub network_warnings: NetworkWarningSource,
     pub desk_identity: DeskIdentitySource,
+    pub speed_groups: SpeedGroupSource,
 }
 
 impl Default for Diagnostics {
@@ -503,6 +559,7 @@ impl Default for Diagnostics {
             dmx: Arc::new(Vec::new),
             network_warnings: Arc::new(Vec::new),
             desk_identity: Arc::new(|| None),
+            speed_groups: Arc::new(SpeedGroupTelemetry::default),
         }
     }
 }

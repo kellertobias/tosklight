@@ -18,6 +18,7 @@ import type {
 	OutputConfigurationView,
 	UpdateOutputConfiguration,
 } from "../../shared/api/generated/media-wire";
+import { OutputTempoSource } from "./OutputTempoSource";
 import { SettingsSaveState } from "./SettingsSaveState";
 
 interface ConfigurationResource {
@@ -145,6 +146,16 @@ export function OutputSettings({
 						</Button>
 					</div>
 				</>
+			)}
+			{mode === "dmx" && (
+				<OutputTempoSource
+					output={output}
+					onSave={(edit) =>
+						void editing.save(() =>
+							api.updateOutputConfiguration(output.id, edit),
+						)
+					}
+				/>
 			)}
 			{direct && pendingRestart && (
 				<>

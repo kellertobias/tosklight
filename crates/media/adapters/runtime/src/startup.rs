@@ -373,6 +373,31 @@ fn read_file(path: &Path, required: bool) -> Result<MediaConfiguration, StartupE
     })
 }
 
+/// The literal administration address an operator can reach this run on.
+pub(crate) fn administration_endpoint(configuration: &MediaConfiguration) -> String {
+    let listen = configuration.network.resolved().http_listen;
+    let ip = if listen.ip().is_unspecified() {
+        primary_ipv4().unwrap_or(media_application::configuration::LOOPBACK)
+    } else {
+        match listen.ip() {
+            std::net::IpAddr::V4(ip) => ip,
+            std::net::IpAddr::V6(_) => media_application::configuration::LOOPBACK,
+        }
+    };
+    format!("{ip}:{}", listen.port())
+}
+
+fn primary_ipv4() -> Option<std::net::Ipv4Addr> {
+    let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    socket
+        .connect((std::net::Ipv4Addr::new(192, 0, 2, 1), 9))
+        .ok()?;
+    match socket.local_addr().ok()?.ip() {
+        std::net::IpAddr::V4(ip) if !ip.is_loopback() => Some(ip),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -208,6 +208,14 @@ personalityLayout: string,
  */
 protocol: string, universe: number, startAddress: number,
 /**
+ * `playback-bpm-channel` or `speed-group`. Applies live, without a restart.
+ */
+tempoSource: string,
+/**
+ * The followed Light desk Speed Group when `tempoSource` is `speed-group`.
+ */
+speedGroup: number | null,
+/**
  * Exact startup values, used to restore what the running process is using now.
  */
 active: OutputConfigurationValuesView, picturePendingRestart: boolean, soundPendingRestart: boolean, dmxPendingRestart: boolean,
@@ -268,8 +276,8 @@ name: string,
 uses: Array<string>, parameters: VisualizerParametersView, };
 export type NetworkAddressesView = { artNetListen: string, sacnListen: string, citpListen: string, httpListen: string,
 /**
- * Where the Light desk publishes its Speed Group stream. A destination, not a listen
- * address; absent means Media is not consuming one.
+ * Where this server listens for the Light desk's Speed Group OSC stream. Absent means Speed
+ * Groups are not received. Media never publishes Speed Groups.
  */
 speedGroupEndpoint: string | null, };
 export type NetworkView = {
@@ -470,6 +478,22 @@ export type ImportsView = { pending: Array<PendingImportView>, jobs: Array<Impor
  */
 canImport: boolean, };
 export type DeskIdentityView = { showName: string, };
+export type SpeedGroupReadingView = { group: number, bpm: number, beatPhase: number,
+/**
+ * False while the desk has the group paused; synchronized playback then holds its frame.
+ */
+running: boolean,
+/**
+ * False once the group has not been refreshed within the freshness window. The output keeps
+ * the last tempo and warns.
+ */
+fresh: boolean, ageMillis: number, };
+export type SpeedGroupRejectionView = { from: string | null, reason: string, ageMillis: number, };
+export type SpeedGroupReceptionView = {
+/**
+ * `disabled`, `unavailable`, `waiting`, `connected`, or `lost`.
+ */
+connection: string, listening: string | null, detail: string | null, sender: string | null, senderAddress: string | null, lastUpdateAgeMillis: number | null, accepted: number, rejected: number, rejections: Array<SpeedGroupRejectionView>, groups: Array<SpeedGroupReadingView>, };
 export type TelemetryFrame = { audio: AudioView,
 /**
  * Every import this run has seen. Pushed rather than polled for the same reason as the
@@ -483,7 +507,11 @@ dmx: Array<DmxIngressView>,
 /**
  * The current show name published by the connected Light Desk over CITP discovery.
  */
-deskIdentity: DeskIdentityView | null, };
+deskIdentity: DeskIdentityView | null,
+/**
+ * Speed Groups received from the Light desk, and the state of that stream.
+ */
+speedGroups: SpeedGroupReceptionView, };
 export type LogRecordView = {
 /**
  * Monotonically increasing, so a viewer asks for everything after what it already holds.
@@ -587,7 +615,15 @@ export type UpdateOutputConfiguration = { requestId: string, targetKind?: string
  * The whole pixel map, replaced at once. A zone is meaningless on its own — its address has
  * to be checked against every other zone's — so the map is edited as a piece.
  */
-pixelMap?: PixelMapView | null, };
+pixelMap?: PixelMapView | null,
+/**
+ * `playback-bpm-channel` or `speed-group`.
+ */
+tempoSource?: string | null,
+/**
+ * The Speed Group to follow; required when switching to `speed-group`.
+ */
+speedGroup?: number | null, };
 export type CreateVisualizer = {
 /**
  * Client-generated. A resend with the same id returns the first outcome.
@@ -608,8 +644,8 @@ requestId: string,
 typeId?: number | null, name?: string | null, parameters?: VisualizerParametersView | null, };
 export type UpdateNetwork = { requestId: string, sameComputerPreset?: boolean | null, artNetListen?: string | null, sacnListen?: string | null, citpListen?: string | null, httpListen?: string | null,
 /**
- * A destination rather than a listener. `null` clears it; leaving the field out keeps it,
- * which is why an absent field and an explicit null have to be different things here.
+ * The Speed Group listen address. `null` or an empty string turns reception off; leaving
+ * the field out keeps it, which is why an absent field and an explicit null differ here.
  */
 speedGroupEndpoint?: string | null, };
 export type UpdateLibrarySettings = { requestId: string, directory?: string | null, };

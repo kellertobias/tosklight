@@ -568,27 +568,58 @@ describe("the settings page", () => {
 		).not.toBeInTheDocument();
 	});
 
-	it("keeps a destination separate from every listen address", async () => {
+	it("listens for Speed Groups among the other listen addresses", async () => {
 		const server = stubSettingsServer();
 		renderSettings();
-		await screen.findByLabelText("Speed Group stream");
-		// The destination lives under its own heading, not among the listeners.
-		const sends = screen.getByRole("group", {
-			name: "Where this server sends",
+		const field = await screen.findByLabelText("Speed Groups");
+		// Media only receives Speed Groups, so the address is a listener, not a destination.
+		const listens = screen.getByRole("group", {
+			name: "Where this server listens",
 		});
-		expect(sends).toBeInTheDocument();
-		await userEvent.type(
-			screen.getByLabelText("Speed Group stream"),
-			"192.168.1.9:9000",
-		);
+		expect(within(listens).getByLabelText("Speed Groups")).toBe(field);
+		expect(
+			screen.queryByRole("group", { name: "Where this server sends" }),
+		).not.toBeInTheDocument();
+		await userEvent.type(field, "0.0.0.0:4810");
 
 		await waitFor(() =>
-			expect(server.network.stored.speedGroupEndpoint).toBe("192.168.1.9:9000"),
+			expect(server.network.stored.speedGroupEndpoint).toBe("0.0.0.0:4810"),
 		);
 		expect(server.network.stored.artNetListen).toBe("0.0.0.0:6454");
 	});
 
-	it("clears a destination when the field is emptied", async () => {
+	it("lets synchronized playback follow a Light desk Speed Group live", async () => {
+		const output = stubOutputConfiguration();
+		renderSettings();
+		await openSettings("DMX");
+		await screen.findByRole("article", { name: "Main DMX input settings" });
+		await choose(
+			"Each layer's Playback BPM channel",
+			"Light desk Speed Group B",
+		);
+
+		await waitFor(() => expect(output.writes).toHaveLength(1));
+		expect(output.writes[0]).toEqual({
+			requestId: expect.any(String),
+			tempoSource: "speed-group",
+			speedGroup: 2,
+		});
+		expect(
+			await screen.findByRole("button", { name: "Light desk Speed Group B" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByText(/Saved output changes take effect/u),
+		).not.toBeInTheDocument();
+
+		await choose("Light desk Speed Group B", "Each layer's Playback BPM channel");
+		await waitFor(() => expect(output.writes).toHaveLength(2));
+		expect(output.writes[1]).toEqual({
+			requestId: expect.any(String),
+			tempoSource: "playback-bpm-channel",
+		});
+	});
+
+	it("turns Speed Group reception off when the field is emptied", async () => {
 		const server = stubSettingsServer({
 			network: aNetwork({
 				stored: {
@@ -601,8 +632,7 @@ describe("the settings page", () => {
 			}),
 		});
 		renderSettings();
-		await screen.findByLabelText("Speed Group stream");
-		await userEvent.clear(screen.getByLabelText("Speed Group stream"));
+		await userEvent.clear(await screen.findByLabelText("Speed Groups"));
 
 		await waitFor(() =>
 			expect(server.network.stored.speedGroupEndpoint).toBeNull(),
@@ -666,6 +696,8 @@ type OutputConfigurationValues = {
 type OutputConfiguration = OutputConfigurationValues & {
 	id: string;
 	name: string;
+	tempoSource?: "playback-bpm-channel" | "speed-group";
+	speedGroup?: number | null;
 	availableMonitors: Array<{
 		index: number;
 		name: string;

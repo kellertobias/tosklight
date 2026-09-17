@@ -338,6 +338,10 @@ pub struct OutputConfigurationView {
     pub protocol: String,
     pub universe: u16,
     pub start_address: u16,
+    /// `playback-bpm-channel` or `speed-group`. Applies live, without a restart.
+    pub tempo_source: String,
+    /// The followed Light desk Speed Group when `tempoSource` is `speed-group`.
+    pub speed_group: Option<u32>,
     /// Exact startup values, used to restore what the running process is using now.
     pub active: OutputConfigurationValuesView,
     pub picture_pending_restart: bool,
@@ -420,6 +424,12 @@ impl OutputConfigurationView {
             protocol: values.protocol.clone(),
             universe: values.universe,
             start_address: values.start_address,
+            tempo_source: match output.tempo_source {
+                media_domain::TempoSource::PlaybackBpmChannel => "playback-bpm-channel",
+                media_domain::TempoSource::SpeedGroup { .. } => "speed-group",
+            }
+            .to_owned(),
+            speed_group: output.tempo_source.speed_group().map(|group| group.value()),
             active,
             picture_pending_restart,
             sound_pending_restart,

@@ -33,6 +33,7 @@ pub mod pixel_output;
 pub mod presentation;
 mod preview;
 mod shutdown;
+mod speed_groups;
 mod standby;
 mod startup;
 mod text_sources;
@@ -54,6 +55,7 @@ use media_domain::{MediaState, OutputState, Timestamp};
 use std::sync::Arc;
 
 use library_runtime::{RuntimeUpload, edit_library, imports_of, update_folder_presentation};
+use startup::administration_endpoint;
 
 /// The argument that reads, migrates, and validates configuration, then exits.
 ///
@@ -126,6 +128,7 @@ fn run_inner() -> anyhow::Result<()> {
     // One model store for every output and the API, so a mesh is parsed once and an upload
     // reaches the outputs on their next frame.
     let models = model_store::Models::new(&configuration.library.root);
+    let speed_groups = speed_groups::shared();
     let diagnostics = diagnostics_of(
         &models,
         &live,
@@ -139,6 +142,7 @@ fn run_inner() -> anyhow::Result<()> {
         &network_warnings,
         &console_identity,
         &available_monitors,
+        &speed_groups,
         started,
     );
     let apply = applies_to(audio.as_ref());
@@ -152,6 +156,7 @@ fn run_inner() -> anyhow::Result<()> {
         previews,
         universe_inputs,
         models,
+        speed_groups,
     };
 
     // The desk drives the outputs, so the listeners come up before anything presents.
@@ -242,6 +247,7 @@ fn start_desk_listeners(
         *network_warnings
             .lock()
             .unwrap_or_else(|error| error.into_inner()) = warnings;
+        speed_groups::spawn(configuration, &shared.speed_groups, shutdown, started);
         citp::spawn(
             configuration,
             shared.state.clone(),
@@ -350,30 +356,6 @@ fn show_startup_error(error: &anyhow::Error) {
                 &message,
             ])
             .status();
-    }
-}
-
-fn administration_endpoint(configuration: &MediaConfiguration) -> String {
-    let listen = configuration.network.resolved().http_listen;
-    let ip = if listen.ip().is_unspecified() {
-        primary_ipv4().unwrap_or(media_application::configuration::LOOPBACK)
-    } else {
-        match listen.ip() {
-            std::net::IpAddr::V4(ip) => ip,
-            std::net::IpAddr::V6(_) => media_application::configuration::LOOPBACK,
-        }
-    };
-    format!("{ip}:{}", listen.port())
-}
-
-fn primary_ipv4() -> Option<std::net::Ipv4Addr> {
-    let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).ok()?;
-    socket
-        .connect((std::net::Ipv4Addr::new(192, 0, 2, 1), 9))
-        .ok()?;
-    match socket.local_addr().ok()?.ip() {
-        std::net::IpAddr::V4(ip) if !ip.is_loopback() => Some(ip),
-        _ => None,
     }
 }
 
@@ -586,6 +568,7 @@ fn diagnostics_of(
     network_warnings: &std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     console_identity: &citp::ConsoleIdentity,
     available_monitors: &std::sync::Arc<std::sync::RwLock<Vec<media_http::MonitorDevice>>>,
+    received_speed_groups: &speed_groups::SharedSpeedGroups,
     started: std::time::Instant,
 ) -> media_http::Diagnostics {
     let importing = models.clone();
@@ -669,6 +652,7 @@ fn diagnostics_of(
                 .unwrap_or_default()
         }),
         desk_identity: std::sync::Arc::new(move || console_identity.snapshot()),
+        speed_groups: speed_groups::diagnostics(received_speed_groups, started),
     }
 }
 

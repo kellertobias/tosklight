@@ -1039,6 +1039,8 @@ export function anOutputConfiguration(
 		},
 		availableMonitors: [],
 		availableSoundOutputs: [],
+		tempoSource: "playback-bpm-channel",
+		speedGroup: null,
 		active,
 		picturePendingRestart: false,
 		soundPendingRestart: false,

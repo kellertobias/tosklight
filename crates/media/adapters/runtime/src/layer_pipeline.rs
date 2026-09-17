@@ -73,6 +73,8 @@ pub struct FrameContext<'a> {
     /// Seconds since the process started, for time-driven generated sources.
     pub seconds: f32,
     pub now: Timestamp,
+    /// The output's tempo source and, in Speed Group mode, the group's received clock.
+    pub tempo: media_domain::OutputTempo,
 }
 
 impl<'a> FrameContext<'a> {
@@ -96,7 +98,13 @@ impl<'a> FrameContext<'a> {
             instruments: heard.instruments,
             seconds,
             now,
+            tempo: media_domain::OutputTempo::default(),
         }
+    }
+
+    /// The same instant, resolved against an output's tempo.
+    pub const fn with_tempo(self, tempo: media_domain::OutputTempo) -> Self {
+        Self { tempo, ..self }
     }
 }
 
@@ -164,6 +172,7 @@ impl LayerPipeline {
         // black, so there is no flash to cover.
         self.media
             .set_switch_hold(frame.configuration.playback.switch_hold());
+        self.media.set_tempo(frame.tempo);
 
         for (index, layer) in output
             .layers
@@ -678,6 +687,7 @@ mod tests {
             instruments: media_domain::Instruments::default(),
             seconds: 1.25,
             now: Timestamp::from_millis(1_250),
+            tempo: media_domain::OutputTempo::default(),
         };
         let prepared = pipeline.prepare(&output, context, &mut loader);
         let prepared_layer = prepared.layers.first().unwrap_or_else(|| {
@@ -906,6 +916,7 @@ mod tests {
                 instruments: media_domain::Instruments::default(),
                 seconds: 0.0,
                 now: Timestamp::from_millis(millis),
+                tempo: media_domain::OutputTempo::default(),
             };
             let prepared = pipeline.prepare(output, context, loader);
             let status = prepared
@@ -1001,6 +1012,7 @@ mod tests {
             instruments: media_domain::Instruments::default(),
             seconds: 1.25,
             now: Timestamp::from_millis(1_250),
+            tempo: media_domain::OutputTempo::default(),
         };
         let mut output = OutputState::new(output_id, LayerPersonality::TwoLayers);
         output.layers[0] = LayerState {
