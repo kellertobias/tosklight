@@ -149,6 +149,7 @@ export function useSetupWindowController() {
 	const [deskLockSettingsOpen, setDeskLockSettingsOpen] = useState(false);
 	const [encoderPlacementOpen, setEncoderPlacementOpen] = useState(false);
 	const [screenCanUndo, setScreenCanUndo] = useState(false);
+	const [screenCanAdd, setScreenCanAdd] = useState(false);
 	const [attributeTab, setAttributeTab] =
 		useState<AttributeSettingsTab>("encoder-groups");
 	const [networkTab, setNetworkTab] =
@@ -157,6 +158,7 @@ export function useSetupWindowController() {
 		useState<DefaultsSettingsTab>("record-update");
 	const [outputsTab, setOutputsTab] = useState<OutputsSettingsTab>("engine");
 	const screenUndo = useRef<(() => void) | null>(null);
+	const screenAdd = useRef<(() => void) | null>(null);
 	const deskSaveQueue = useRef(Promise.resolve());
 	const lastQueuedConfiguration = useRef<string | null>(null);
 
@@ -188,6 +190,10 @@ export function useSetupWindowController() {
 		(available: boolean) => setScreenCanUndo(available),
 		[],
 	);
+	const updateScreenAddAvailability = useCallback(
+		(available: boolean) => setScreenCanAdd(available),
+		[],
+	);
 
 	return {
 		attributeTab,
@@ -208,6 +214,8 @@ export function useSetupWindowController() {
 		restartRequired,
 		networkTab,
 		outputsTab,
+		screenCanAdd,
+		screenAdd,
 		screenCanUndo,
 		screenUndo,
 		section,
@@ -223,6 +231,7 @@ export function useSetupWindowController() {
 		setServerUrl,
 		setUpdateSettings,
 		updateSettings,
+		updateScreenAddAvailability,
 		updateScreenUndoAvailability,
 	};
 }

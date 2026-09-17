@@ -97,6 +97,23 @@ export function SetupHeader({
 	const groups =
 		controller.section === "screens"
 			? [
+					// Add Screen sits in its own title group, apart from the page's
+					// configuration actions, and only where screens can be opened.
+					...(controller.screenCanAdd
+						? [
+								{
+									id: "screens",
+									actions: [
+										{
+											id: "add-screen",
+											label: "Add Screen",
+											icon: <span aria-hidden="true">＋</span>,
+											onPress: () => controller.screenAdd.current?.(),
+										},
+									],
+								},
+							]
+						: []),
 					{
 						id: "screen-configuration",
 						actions: [

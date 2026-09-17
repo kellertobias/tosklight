@@ -430,17 +430,26 @@
 	border-left: 1px solid var(--line2);
 }
 .default-screen-settings > header {
-	align-items: center;
+	align-items: flex-start;
 	justify-content: space-between;
 }
 .default-screen-compact-row {
 	display: grid;
 	grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
-	align-items: end;
+	/* Top-aligned so multi-line field information never shifts neighbouring controls. */
+	align-items: start;
 	gap: 10px;
 }
 .default-screen-compact-row > .ui-form-field {
+	min-width: 0;
 	margin: 0;
+	overflow-wrap: anywhere;
+}
+.default-screen-compact-row > .screen-settings-actions {
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	/* Clears the field label line so the buttons start level with the field controls. */
+	padding-top: 18px;
 }
 .screen-configuration-modal {
 	width: min(980px, 100%) !important;

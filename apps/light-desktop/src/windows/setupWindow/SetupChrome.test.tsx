@@ -70,6 +70,8 @@ describe("Desk Setup focused title tabs", () => {
 			setAttributeTab: vi.fn(),
 			screenCanUndo: false,
 			screenUndo: { current: null },
+			screenCanAdd: false,
+			screenAdd: { current: null },
 			setDeskLockSettingsOpen: vi.fn(),
 			setEncoderPlacementOpen: vi.fn(),
 			...overrides,
@@ -114,5 +116,41 @@ describe("Desk Setup focused title tabs", () => {
 		expect(screens.setEncoderPlacementOpen).toHaveBeenCalledWith(true);
 		expect(screens.setDeskLockSettingsOpen).toHaveBeenCalledWith(true);
 		expect(screen.queryByRole("button", { name: "Desk Lock" })).toBeNull();
+	});
+
+	it("puts Add Screen in its own title group only where screens can open", () => {
+		const add = vi.fn();
+		const screens = controller({
+			section: "screens",
+			screenCanAdd: true,
+			screenAdd: { current: add },
+		});
+		const { container, rerender } = render(
+			<SetupHeader controller={screens} />,
+		);
+		const addScreen = screen.getByRole("button", { name: "Add Screen" });
+		const groups = [
+			...container.querySelectorAll(".ui-title-chrome-group"),
+		] as HTMLElement[];
+		const addGroup = groups.find((group) => group.contains(addScreen));
+		expect(addGroup).toBeDefined();
+		expect(within(addGroup as HTMLElement).getAllByRole("button")).toHaveLength(
+			1,
+		);
+		expect(groups[0]).toBe(addGroup);
+		expect(
+			within(groups[1] as HTMLElement).getByRole("button", { name: "Undo" }),
+		).toBeInTheDocument();
+		fireEvent.click(addScreen);
+		expect(add).toHaveBeenCalledOnce();
+
+		rerender(<SetupHeader controller={controller({ section: "screens" })} />);
+		expect(screen.queryByRole("button", { name: "Add Screen" })).toBeNull();
+		rerender(
+			<SetupHeader
+				controller={controller({ section: "network", screenCanAdd: true })}
+			/>,
+		);
+		expect(screen.queryByRole("button", { name: "Add Screen" })).toBeNull();
 	});
 });

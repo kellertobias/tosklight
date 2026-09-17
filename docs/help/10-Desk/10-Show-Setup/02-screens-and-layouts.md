@@ -14,7 +14,14 @@ Choose **Configure desk lock** in the Screens & playback title bar to open its c
 
 When hardware is connected, **Hardware lighting** provides virtual faders for **LED brightness**, **Gooseneck brightness**, and **Gooseneck color**. Move a fader from 0 to 100%; changes apply automatically while you move it. On Compact Connect, color blends its two lamp channels: 0 is blue, 100 is white, and intermediate values mix them. A brightness of 0 turns that illumination off. The settings are saved with the desk and restored when the hardware reconnects. They apply while ToskLight controls the hardware; another application that takes ownership keeps its own lighting settings.
 
-The Tauri desktop application can add optional screens. Each optional screen can use its normal
+The fields of the default screen line up along their top edges. Explanations such as the keyboard
+shortcut note wrap below their own control and never shift the controls or buttons beside them.
+
+The Tauri desktop application can add optional screens. Choose **Add Screen** in the Screens &
+playback title bar; it sits in its own button group, apart from **Undo** and the configuration
+actions. The browser version shows no **Add Screen** action. Each new screen appears as a row with
+its name and the **Copy browser link**, **Configure screen**, **Open Screen**, and **Remove Screen**
+buttons. Each optional screen can use its normal
 configurable **Desktop** or a **Fixed full-screen pane**. A fixed pane fills the screen's pane
 workspace without pane headers, resizing, settings, selection, or editing controls. Configure it
 from the controlling screen; the external display remains view-only.

@@ -636,8 +636,10 @@ export class BrowserScreens {
 		// them shares the class without being a screen.
 		const cards = this.page.locator(".screen-settings-card[data-screen-id]");
 		const before = await cards.count();
+		// Add Screen is a Desk Setup title action in its own group.
 		await this.page
-			.getByRole("button", { name: "+ Add screen", exact: true })
+			.locator(".setup-window .ui-window-header")
+			.getByRole("button", { name: "Add Screen", exact: true })
 			.click();
 		const card = cards.nth(before);
 		await expect(card).toBeVisible();

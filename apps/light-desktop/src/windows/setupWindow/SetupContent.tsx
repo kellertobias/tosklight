@@ -51,6 +51,10 @@ export function SetupContent({
 					<div hidden={controller.section !== "screens"}>
 						<ScreensSetup
 							undoRef={controller.screenUndo}
+							addScreenRef={controller.screenAdd}
+							onAddScreenAvailabilityChange={
+								controller.updateScreenAddAvailability
+							}
 							onUndoAvailabilityChange={controller.updateScreenUndoAvailability}
 						/>
 					</div>

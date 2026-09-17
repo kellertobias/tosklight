@@ -1015,7 +1015,7 @@
 }
 .screens-setup-list header {
 	display: flex;
-	align-items: end;
+	align-items: flex-start;
 	gap: 6px;
 }
 .screens-setup-list header > .ui-field {
@@ -1073,7 +1073,7 @@
 .screen-settings-header {
 	display: grid !important;
 	grid-template-columns: minmax(0, 1fr) auto;
-	align-items: center !important;
+	align-items: start !important;
 	gap: 12px !important;
 }
 .screen-settings-header > .ui-form-field {
@@ -1088,7 +1088,8 @@
 }
 .screen-settings-actions {
 	display: flex;
-	align-items: center;
+	flex-wrap: wrap;
+	align-items: flex-start;
 	justify-content: flex-end;
 	gap: 6px;
 	white-space: nowrap;

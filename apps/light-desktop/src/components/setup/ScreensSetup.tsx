@@ -1,5 +1,5 @@
 import { Button, FormLayout, SelectField } from "@tosklight/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	PlaybackSurfaceLayout,
 	ScreenConfiguration,
@@ -41,13 +41,7 @@ function cueListOptions(cueLists: ReturnType<typeof useCueLists>) {
 	}));
 }
 
-function ScreensSetupHeader({
-	desktopAvailable,
-	onCreate,
-}: {
-	desktopAvailable: boolean;
-	onCreate: () => void;
-}) {
+function ScreensSetupHeader() {
 	return (
 		<header>
 			<div>
@@ -57,11 +51,6 @@ function ScreensSetupHeader({
 					then optional operator screens.
 				</p>
 			</div>
-			{desktopAvailable && (
-				<Button variant="primary" onClick={onCreate}>
-					+ Add screen
-				</Button>
-			)}
 		</header>
 	);
 }
@@ -189,12 +178,47 @@ export function ProgrammerControlSurfaceSettings() {
 	);
 }
 
+/** Hands the Desk Setup title bar its Add Screen action while screens can be opened. */
+function useAddScreenAction(
+	available: boolean,
+	actionRef: ScreenUndoHandle | undefined,
+	onAvailabilityChange: ((available: boolean) => void) | undefined,
+) {
+	const server = useScreens();
+	const { state } = useApp();
+	const create = () =>
+		void server.saveScreen(
+			createScreenConfiguration(server.screens?.screens ?? [], {
+				desks: state.desks,
+				activeDeskId: state.activeDeskId,
+			}),
+		);
+	const createRef = useRef(create);
+	createRef.current = create;
+	useEffect(() => {
+		if (!actionRef) return;
+		actionRef.current = () => createRef.current();
+		return () => {
+			actionRef.current = null;
+		};
+	}, [actionRef]);
+	useEffect(() => {
+		onAvailabilityChange?.(available);
+		return () => onAvailabilityChange?.(false);
+	}, [available, onAvailabilityChange]);
+}
+
 export function ScreensSetup({
 	undoRef,
 	onUndoAvailabilityChange,
+	addScreenRef,
+	onAddScreenAvailabilityChange,
 }: {
 	undoRef?: ScreenUndoHandle;
 	onUndoAvailabilityChange?: (available: boolean) => void;
+	/** Receives the Add Screen action the Desk Setup title bar presses. */
+	addScreenRef?: ScreenUndoHandle;
+	onAddScreenAvailabilityChange?: (available: boolean) => void;
 } = {}) {
 	const server = useScreens();
 	useShowObjectView("cue_list", true);
@@ -230,23 +254,18 @@ export function ScreensSetup({
 		undoRef,
 		onUndoAvailabilityChange,
 	});
-	const create = () =>
-		void server.saveScreen(
-			createScreenConfiguration(server.screens?.screens ?? [], {
-				desks: state.desks,
-				activeDeskId: state.activeDeskId,
-			}),
-		);
+	useAddScreenAction(
+		desktop.available,
+		addScreenRef,
+		onAddScreenAvailabilityChange,
+	);
 	const remove = async (screen: ScreenConfiguration) => {
 		await desktop.closeConsoleScreen(screen.id);
 		await server.deleteScreen(screen.id);
 	};
 	return (
 		<div className="screens-playback-setup">
-			<ScreensSetupHeader
-				desktopAvailable={desktop.available}
-				onCreate={create}
-			/>
+			<ScreensSetupHeader />
 			<div className="screens-setup-list">
 				<DefaultScreenSettings
 					deskName={defaultScreen.draft?.name ?? ""}
