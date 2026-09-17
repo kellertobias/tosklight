@@ -21,6 +21,21 @@ configuration and library live under Application Support.
 
 The separate **ToskLight Hardware Controls** application is used for the attached hardware-control surface when that artifact is included in the release.
 
+Hardware Controls has an **OSC | Native Hardware** mode switch in its title bar, and the status
+beside it always names the active mode:
+
+- **OSC** sends the on-screen controls to the desk over the documented
+  [OSC protocol](../90-Protocols/01-osc.md) and shows whether the desk is connected, its current
+  page, and the last control sent.
+- **Native Hardware** exercises a device attached to the desk through its native extension. The
+  device's controls go straight to the desk, so the on-screen controls are dimmed and only mirror
+  feedback. The status shows whether the device is connected, starting, unavailable (no extension
+  configured) or in error, with the extension's last error. It reads that health from the desk
+  server, so set **Desk HTTP port** in Settings when the server does not use port 5000.
+
+Switching mode closes the previous connection before the new one opens, and the choice is kept for
+the next launch.
+
 ## Standalone server and browser desk
 
 Choose the archive matching macOS Apple Silicon, Windows AMD64, Linux AMD64, or Linux ARM64. Start `light-headless` with a writable data directory, then open the displayed address in a supported browser. Use `--bind 0.0.0.0:5000` only on a trusted lighting network.

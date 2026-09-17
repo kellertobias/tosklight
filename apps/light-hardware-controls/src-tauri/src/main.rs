@@ -9,6 +9,7 @@ fn main() {
         .manage(osc::ClientState::default())
         .invoke_handler(tauri::generate_handler![
             osc::connect_osc,
+            osc::disconnect_osc,
             osc::send_control
         ])
         .setup(|app| {

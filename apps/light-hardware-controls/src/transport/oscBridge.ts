@@ -15,6 +15,8 @@ export type DisposeFeedbackListener = () => void;
 export interface OscBridge {
   connect(settings: Pick<ControllerSettings, "host" | "port" | "desk">): Promise<void>;
   send(path: string, arguments_: ControlArgument[]): Promise<void>;
+  /** Withdraws the desk subscription; optional for injected test ports. */
+  disconnect?(): Promise<void>;
   listenFeedback(
     listener: (feedback: FeedbackMessage) => void,
   ): Promise<DisposeFeedbackListener>;
@@ -27,6 +29,10 @@ export const tauriOscBridge: OscBridge = {
 
   async send(path, arguments_) {
     await invoke("send_control", { path, args: arguments_ });
+  },
+
+  async disconnect() {
+    await invoke("disconnect_osc");
   },
 
   async listenFeedback(listener) {

@@ -1,21 +1,35 @@
 import { useState } from "react";
 import { useHardwareController } from "./controller/useHardwareController";
+import type { NativeHardwareBridge } from "./transport/nativeBridge";
 import type { OscBridge } from "./transport/oscBridge";
 import { GridSurface } from "./surfaces/GridSurface";
 import { PlaybackSurface } from "./surfaces/PlaybackSurface";
 import { ProgrammerSurface } from "./surfaces/ProgrammerSurface";
 import { SettingsSurface } from "./surfaces/SettingsSurface";
+import { LinkStatus, ModeSelector } from "./surfaces/ModeSelector";
 import { NavigationRail } from "./surfaces/playback/NavigationRail";
 
 type ControllerTab = "console" | "grid" | "settings";
 
-export function App({ bridge }: { bridge?: OscBridge } = {}) {
-  const controller = useHardwareController({ bridge });
+interface AppProps {
+  bridge?: OscBridge;
+  nativeBridge?: NativeHardwareBridge;
+}
+
+export function App({ bridge, nativeBridge }: AppProps = {}) {
+  const controller = useHardwareController({ bridge, nativeBridge });
   const [tab, setTab] = useState<ControllerTab>("console");
   const { feedback, settings, send } = controller;
 
   return (
-    <main className={feedback.updateArmed ? "update-armed" : ""}>
+    <main
+      className={[
+        feedback.updateArmed ? "update-armed" : "",
+        controller.activeMode === "native" ? "native-mode" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <header>
         <h1>ToskLight <span>Hardware Controls</span></h1>
         {feedback.updateArmed && (
@@ -23,11 +37,18 @@ export function App({ bridge }: { bridge?: OscBridge } = {}) {
             UPDATE ARMED · touch an assigned playback
           </strong>
         )}
-        <i className={feedback.connected ? "connected" : ""}>
-          {feedback.connected
-            ? `● Connected · page ${feedback.page}`
-            : "○ Connecting…"}
-        </i>
+        <ModeSelector
+          activeMode={controller.activeMode}
+          setMode={controller.setMode}
+        />
+        <LinkStatus
+          activeMode={controller.activeMode}
+          connected={feedback.connected}
+          page={feedback.page}
+          device={controller.device}
+          lastInput={controller.lastInput}
+          linkError={controller.linkError}
+        />
       </header>
       <ControllerNavigation
         tab={tab}
@@ -61,6 +82,7 @@ export function App({ bridge }: { bridge?: OscBridge } = {}) {
       ) : (
         <SettingsSurface
           connected={feedback.connected}
+          activeMode={controller.activeMode}
           settings={settings}
           updateSettings={controller.updateSettings}
           connect={controller.connect}

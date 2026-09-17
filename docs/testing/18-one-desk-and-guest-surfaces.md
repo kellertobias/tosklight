@@ -46,7 +46,33 @@ run a playback while the operator is recording, without either disturbing the ot
 6. Confirm the `remote` client cannot operate by addressing `/light/desk/...`, and the `desk`
    client cannot operate by addressing `/light/remote/...`.
 
-## Desk Lock
+## Hardware Controls input modes
+
+1. Start Hardware Controls against a running desk. Confirm the title bar shows **OSC** selected and
+   the status reads *OSC* with the desk connected and its page. Press an encoder; the status names
+   the control that was sent and the desk reacts once.
+2. Select **Native Hardware** with no native extension configured. Confirm the status reads
+   *No device available* with the desk's reason, the console is dimmed, and on-screen presses do
+   nothing on the desk.
+3. Stop the desk server. Confirm the status turns into a *Device error* naming the unreachable
+   desk rather than keeping the last good state.
+4. Select **OSC** again. Confirm only one mode is shown as selected, the status no longer mentions a
+   device, the desk sees one Hardware Controls subscription, and an on-screen press arrives once.
+5. Quit and relaunch. Confirm the last chosen mode is restored.
+
+### Real-device check (manual)
+
+With an approved control-surface extension package and its device attached to the desk:
+
+1. Select **Native Hardware**. Confirm the status reads *Device connected* with the package name.
+2. Move a fader and press a Programmer key on the device. Confirm the desk reacts once, the
+   on-screen console mirrors the change, and nothing is sent from Hardware Controls itself.
+3. Unplug the device. Confirm the status changes to starting or error with the extension's last
+   error within a few seconds, and recovers to *Device connected* after plugging it back in.
+4. Switch to **OSC** and back. Confirm no input is doubled and the device still drives the desk.
+5. Record the device, package version, operating system and result in the release test log.
+
+
 
 1. Lock the desk from the main window.
 2. Confirm the optional screen, the browser session and both OSC surfaces are all locked — the lock

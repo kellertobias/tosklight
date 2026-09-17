@@ -7,6 +7,8 @@ export const defaultControllerSettings: ControllerSettings = {
   port: 9000,
   desk: "main",
   top: true,
+  mode: "osc",
+  serverPort: 5000,
 };
 
 export interface SettingsStorage {
@@ -32,6 +34,13 @@ function parseSavedSettings(value: string | null): Partial<ControllerSettings> {
       ...(typeof candidate.port === "number" ? { port: candidate.port } : {}),
       ...(typeof candidate.desk === "string" ? { desk: candidate.desk } : {}),
       ...(typeof candidate.top === "boolean" ? { top: candidate.top } : {}),
+      // Settings saved before the mode switch existed have no mode and stay on OSC.
+      ...(candidate.mode === "osc" || candidate.mode === "native"
+        ? { mode: candidate.mode }
+        : {}),
+      ...(typeof candidate.serverPort === "number"
+        ? { serverPort: candidate.serverPort }
+        : {}),
     };
   } catch {
     return {};

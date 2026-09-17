@@ -54,7 +54,15 @@ describe("hardware controller surfaces", () => {
 		const markup = renderToStaticMarkup(
 			<SettingsSurface
 				connected
-				settings={{ host: "light.local", port: 9000, desk: "wing", top: true }}
+				activeMode="osc"
+				settings={{
+					host: "light.local",
+					port: 9000,
+					desk: "wing",
+					top: true,
+					mode: "osc",
+					serverPort: 5000,
+				}}
 				updateSettings={() => undefined}
 				connect={async () => undefined}
 			/>,

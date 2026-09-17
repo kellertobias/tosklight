@@ -29,3 +29,5 @@
 .speed-groups .speed-touch-fader strong{margin-top:0;margin-left:auto}
 .speed-groups .speed-touch-fader input{writing-mode:horizontal-tb;direction:ltr}
 .fade-times{grid-template-columns:repeat(3,minmax(0,1fr))}
+.mode-selector{display:flex;margin:0;padding:0;border:1px solid var(--line);border-radius:5px;overflow:hidden}.mode-selector>button{min-height:36px;white-space:nowrap;padding:0 12px;border:0;color:#b9c5cc;background:var(--panel)}.mode-selector>button.active{color:#061015;background:var(--cyan);font-weight:700}.link-status{display:grid;gap:1px;min-width:220px;max-width:440px;font-size:11px;font-style:normal;color:#7d8991}.link-mode{color:var(--cyan)}.device-state-connected{color:#5ee084}.device-state-error,.device-state-unavailable{color:#ff8a70}
+.native-mode>.console-layout,.native-mode>.grid-layout{opacity:.6}

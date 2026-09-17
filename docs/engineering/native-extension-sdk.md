@@ -135,6 +135,11 @@ control and telemetry, malformed and oversized frames, stale/lost/excess-rate sa
 restart recovery, bounded queues/logs, and graceful or forced shutdown. External repositories
 should port these cases against their codec and run them on every supported OS/architecture.
 
+ToskLight Hardware Controls has a **Native Hardware** mode for that physical acceptance. It
+observes this host through a read-only `visualizer` session and `GET /api/v2/extensions` and never
+relays device input itself; the host only routes extension input through operator sessions. The
+manual real-device steps are in `docs/testing/18-one-desk-and-guest-surfaces.md`.
+
 The host contract tests are not physical-device acceptance. A controller repository still owns
 real HID/MIDI/serial/RTP lifecycle and feedback tests. Built-in USB DMX is a separate core output
 boundary documented in `docs/engineering/native-extensions-and-usb-dmx.md`.

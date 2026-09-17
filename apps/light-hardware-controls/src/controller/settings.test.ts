@@ -37,6 +37,8 @@ describe("hardware controller settings", () => {
       port: 9010,
       desk: "wing",
       top: false,
+      mode: "osc",
+      serverPort: 5000,
     });
 
     const malformed = memoryStorage("{not-json");
@@ -52,8 +54,37 @@ describe("hardware controller settings", () => {
       port: 9001,
       desk: "main",
       top: false,
+      mode: "native" as const,
+      serverPort: 5010,
     };
     saveControllerSettings(memory.storage, settings);
     expect(JSON.parse(memory.value() ?? "null")).toEqual(settings);
+  });
+
+  it("migrates settings saved before the mode switch to OSC mode", () => {
+    const legacy = memoryStorage(JSON.stringify({
+      host: "10.0.0.4",
+      port: 9000,
+      desk: "main",
+      top: true,
+    }));
+    expect(loadControllerSettings(legacy.storage)).toMatchObject({
+      host: "10.0.0.4",
+      mode: "osc",
+      serverPort: 5000,
+    });
+  });
+
+  it("restores a saved Native Hardware mode and rejects unknown modes", () => {
+    const native = memoryStorage(JSON.stringify({ mode: "native", serverPort: 5010 }));
+    expect(loadControllerSettings(native.storage)).toMatchObject({
+      mode: "native",
+      serverPort: 5010,
+    });
+    const unknown = memoryStorage(JSON.stringify({ mode: "midi", serverPort: "5010" }));
+    expect(loadControllerSettings(unknown.storage)).toMatchObject({
+      mode: "osc",
+      serverPort: 5000,
+    });
   });
 });

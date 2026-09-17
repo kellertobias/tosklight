@@ -115,6 +115,11 @@ fn spawn_feedback_listener(app: tauri::AppHandle, socket: Arc<UdpSocket>, stop: 
                     address, arguments, ..
                 }) = parse_osc_message(&buffer[..length])
             {
+                // A replaced or closed connection must not deliver feedback that arrived while
+                // it was closing.
+                if stop.load(Ordering::Acquire) {
+                    break;
+                }
                 let _ = app.emit("osc-feedback", Feedback { address, arguments });
             }
         }
@@ -184,6 +189,17 @@ pub(crate) fn send_control(
             .map(json_argument)
             .collect::<Result<Vec<_>, _>>()?,
     )
+}
+
+/// Closes the desk link: dropping the client withdraws the subscription and stops its threads.
+#[tauri::command]
+pub(crate) fn disconnect_osc(state: tauri::State<ClientState>) -> Result<(), String> {
+    state
+        .0
+        .lock()
+        .map_err(|_| "OSC client lock is poisoned")?
+        .take();
+    Ok(())
 }
 
 #[cfg(test)]
