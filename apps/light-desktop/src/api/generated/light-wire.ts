@@ -521,7 +521,12 @@ export type NativeMediaSnapshot = { endpoint: string, status: string, instance: 
  * Per layer, the Visualizer Parameter channels the shown visualizer defines. A layer showing
  * ordinary media has none, and its visualizer bytes are inert.
  */
-visualizer_layers: Array<Array<NativeMediaVisualizerChannel>>, };
+visualizer_layers: Array<Array<NativeMediaVisualizerChannel>>,
+/**
+ * Frames per second the bound output's In and Out points count in. Absent when the Media
+ * Server predates the setting; the desk then asks for an update instead of assuming a rate.
+ */
+frame_rate: number | null, };
 export type NativeMediaTextUpdateRequest = { request_id: string, text: string, };
 export type NativeMediaEffectUpdateRequest = { request_id: string, control_id: string, number_value?: number | null, string_value?: string | null, boolean_value?: boolean | null, };
 export type DiscoveredMediaAddressUpdateRequest = { requestId: string, host: string, outputId: string,

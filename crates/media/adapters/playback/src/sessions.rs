@@ -80,6 +80,8 @@ pub struct LayerSessions {
     outgoing: HashMap<usize, Outgoing>,
     /// How long a replaced clip may stay on screen. Zero drops it at once.
     switch_hold: Duration,
+    /// The rate In and Out points count in; `None` counts each clip's own frames.
+    point_rate: Option<u8>,
     /// The output's tempo source and Speed Group clock for the current frame.
     tempo: OutputTempo,
 }
@@ -95,6 +97,7 @@ impl LayerSessions {
             failed: HashMap::new(),
             outgoing: HashMap::new(),
             switch_hold: Duration::ZERO,
+            point_rate: None,
             tempo: OutputTempo::default(),
         }
     }
@@ -107,6 +110,12 @@ impl LayerSessions {
     /// the next switch; a hold already running keeps the limit it started with.
     pub fn set_switch_hold(&mut self, hold: Duration) {
         self.switch_hold = hold;
+    }
+
+    /// Sets the rate every layer's In and Out points count in. Running ranges follow it on the
+    /// next frame, keeping the playhead where it is.
+    pub fn set_point_rate(&mut self, frames_per_second: Option<u8>) {
+        self.point_rate = frames_per_second;
     }
 
     /// Sets the tempo every layer of this output follows from now on. Synchronized play modes
@@ -242,6 +251,7 @@ impl LayerSessions {
             });
         };
         selected.reset_trigger_id = layer.reset_trigger_id;
+        selected.session.set_point_rate(self.point_rate);
         selected.session.reconcile(layer, now);
         let tempo = self.tempo.resolve(layer.playback_bpm, now);
         let delivery = selected.session.deliver(layer, tempo, now);
@@ -486,6 +496,26 @@ mod tests {
 
         let later = bench.reconcile(&pointing_at(1, 4), 500).unwrap();
         assert_eq!(later.frame, Some(5), "and it advances");
+    }
+
+    #[test]
+    fn a_changed_point_rate_moves_a_held_in_point_on_the_next_frame() {
+        let mut bench = Bench::new("point-rate");
+        bench.add(1, 4, "Clip", 20);
+        let paused = LayerState {
+            play_mode: media_domain::PlayMode::Stop,
+            in_point: 5,
+            ..pointing_at(1, 4)
+        };
+        // Counting the clip's own 10 fps frames, In 5 is frame 5.
+        assert_eq!(bench.reconcile(&paused, 0).unwrap().frame, Some(5));
+        // At 25 fps In 5 is 0.2 s, which is frame 2 of a 10 fps clip.
+        bench.sessions.set_point_rate(Some(25));
+        let reset = LayerState {
+            reset_trigger_id: 1,
+            ..paused
+        };
+        assert_eq!(bench.reconcile(&reset, 100).unwrap().frame, Some(2));
     }
 
     #[test]

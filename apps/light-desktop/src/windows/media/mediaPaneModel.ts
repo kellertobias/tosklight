@@ -132,6 +132,39 @@ export interface MediaValueControl extends MediaControlBase {
 	accentColor?: string;
 }
 
+/**
+ * A Media In or Out point: a 16-bit frame count shown and entered as `mm:ss.ff` at the Media
+ * Server's frame rate.
+ */
+export interface MediaPointTimeControl extends MediaControlBase {
+	kind: "point-time";
+	/** The DMX frame count. */
+	value: number;
+	/** The In point counts from the clip's start, the Out point back from its end. */
+	reference: "start" | "end";
+	/** Null while the server's rate is unknown; entry then takes a frame count. */
+	framesPerSecond: number | null;
+	display: string;
+	/** Why the rate is unknown and what the operator can do about it. */
+	rateNotice?: string;
+	/** Asks the Media Server for its frame rate again; offered with a notice. */
+	onRetryFrameRate?(): void;
+}
+
+/**
+ * What the desk knows about the rate a Media Server's In and Out points count in. The desk never
+ * assumes one: an unknown rate is shown and the points fall back to frame counts.
+ */
+export type MediaPointFrameRate =
+	| { kind: "known"; framesPerSecond: number }
+	| { kind: "loading" }
+	| {
+			kind: "unknown";
+			detail: string;
+			/** Whether asking the server again can help. */
+			retryable?: boolean;
+	  };
+
 export interface MediaColorControl extends MediaControlBase {
 	kind: "color";
 	value: string;
@@ -145,6 +178,7 @@ export interface MediaReadoutControl extends MediaControlBase {
 export type MediaSecondaryControl =
 	| MediaChoiceControl
 	| MediaValueControl
+	| MediaPointTimeControl
 	| MediaColorControl
 	| MediaReadoutControl;
 

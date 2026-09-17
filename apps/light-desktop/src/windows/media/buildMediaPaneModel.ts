@@ -10,6 +10,7 @@ import { libraryModel, selectionModel } from "./mediaPaneLibraryModel";
 import type {
 	MediaEffectLibrarySlot,
 	MediaPaneModel,
+	MediaPointFrameRate,
 	MediaSourceFilter,
 } from "./mediaPaneModel";
 import {
@@ -46,6 +47,13 @@ export interface BuildMediaPaneModelInput {
 	 * Empty for ordinary media, whose visualizer bytes are inert.
 	 */
 	visualizerChannels?: readonly NativeMediaVisualizerChannel[];
+	/**
+	 * The rate the selected server's In and Out points count in. Absent is unknown: the points are
+	 * then shown and entered as frame counts with a notice.
+	 */
+	pointFrameRate?: MediaPointFrameRate;
+	/** Asks the selected server for its point frame rate again. */
+	retryPointFrameRate?: () => void;
 }
 
 export function buildMediaPaneModel(

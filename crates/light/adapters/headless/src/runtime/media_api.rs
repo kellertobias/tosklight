@@ -81,9 +81,12 @@ struct NativeMediaLayerResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct NativeMediaOutputResponse {
     id: String,
     layers: Vec<NativeMediaLayerResponse>,
+    #[serde(default)] // None from a server older than the In/Out point frame rate.
+    frame_rate: Option<u8>,
 }
 
 #[derive(Default, Deserialize)]
@@ -209,6 +212,7 @@ pub(super) async fn native_media_snapshot(
         text_slots: Vec::new(),
         effect_controls_available: output.is_some(),
         output_id: output.as_ref().map(|output| output.id.clone()),
+        frame_rate: output.as_ref().and_then(|output| output.frame_rate),
         visualizer_layers: output
             .as_ref()
             .map(|output| {
@@ -1144,6 +1148,7 @@ mod native_output_binding_tests {
         .map(|id| NativeMediaOutputResponse {
             id: id.to_owned(),
             layers: Vec::new(),
+            frame_rate: None,
         })
         .collect()
     }
@@ -1188,3 +1193,7 @@ mod native_output_binding_tests {
         assert!(error.message.contains("Refresh discovery"));
     }
 }
+
+#[cfg(test)]
+#[path = "media_api_frame_rate_tests.rs"]
+mod frame_rate_tests;

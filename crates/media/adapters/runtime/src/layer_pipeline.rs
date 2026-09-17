@@ -172,6 +172,8 @@ impl LayerPipeline {
         // black, so there is no flash to cover.
         self.media
             .set_switch_hold(frame.configuration.playback.switch_hold());
+        self.media
+            .set_point_rate(Some(frame.configuration.playback.frame_rate));
         self.media.set_tempo(frame.tempo);
 
         for (index, layer) in output

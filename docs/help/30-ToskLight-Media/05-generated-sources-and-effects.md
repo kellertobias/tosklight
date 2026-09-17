@@ -68,6 +68,16 @@ and an Out point that would end the range before the In point plays through to t
 keeps the playhead where it is when it is still inside the range. Stills, text, and visualizers
 ignore the range.
 
+The points count frames at the server-wide **Frame rate** in **Settings > Libraries > In and Out
+points**, 25 fps by default and 1–120 fps. The rate turns a count into a time in the clip: at 25 fps
+an In point of 250 starts 10 seconds in, whatever the clip's own frame rate, and a clip recorded at
+that rate starts exactly on frame 250. The setting saves automatically and applies immediately,
+also to layers that are playing; a stored configuration from before the setting reads 25 fps. Every
+output reports the rate over the Media API, so the desk Media pane and this server's own layer page
+both show and take the points as `mm:ss.ff`: the In point from the clip's start, the Out point before
+its end, with **End of clip** for an Out point of zero. Touch the value to type a time; there is no
+0–65535 fader.
+
 ## Visualizer parameters
 
 Every layer carries four dedicated **Visualizer Parameter** channels (slots 52–55 of each 59-slot

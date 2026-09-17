@@ -83,6 +83,11 @@ export interface NativeMediaSnapshot {
 	effectLayers: NativeMediaEffectSlot[][];
 	/** Per layer, the Visualizer Parameter channels the shown visualizer defines. */
 	visualizerLayers: NativeMediaVisualizerChannel[][];
+	/**
+	 * Frames per second the bound output's In and Out points count in; null when the Media Server
+	 * does not report one.
+	 */
+	frameRate: number | null;
 }
 
 /** One dedicated Visualizer Parameter channel, as the visualizer a layer shows defines it. */
@@ -420,6 +425,7 @@ function mapNativeMediaSnapshot(
 		effectLayers: (snapshot.effect_layers ?? []).map((layer) =>
 			layer.map(mapNativeMediaEffectSlot),
 		),
+		frameRate: snapshot.frame_rate ?? null,
 		visualizerLayers: (snapshot.visualizer_layers ?? []).map((layer) =>
 			layer.map((channel) => ({
 				index: channel.index,

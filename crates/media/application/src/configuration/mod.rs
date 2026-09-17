@@ -29,8 +29,9 @@ pub use pixel_map::{
     PixelMapConfiguration, PixelOutputMode, PixelOutputRoute, PixelZoneHandoff, zone_last_address,
 };
 pub use service::{
-    AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, MAXIMUM_SWITCH_HOLD_MILLIS,
-    MAXIMUM_UTC_OFFSET_MINUTES, PlaybackConfiguration, TargetCodec, TimeConfiguration,
+    AudioConfiguration, AudioDeviceSelector, DEFAULT_POINT_FRAME_RATE, LibraryConfiguration,
+    MAXIMUM_POINT_FRAME_RATE, MAXIMUM_SWITCH_HOLD_MILLIS, MAXIMUM_UTC_OFFSET_MINUTES,
+    PlaybackConfiguration, TargetCodec, TimeConfiguration,
 };
 pub use validate::ConfigurationError;
 
@@ -325,6 +326,36 @@ mod tests {
         let error = load(&save(&configuration)).unwrap_err();
         assert!(
             matches!(error, ConfigurationError::ModelLibrary(_)),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn a_stored_document_without_a_point_frame_rate_counts_points_at_25_fps() {
+        let mut document = serde_json::to_value(ConfigurationDocument::default()).unwrap();
+        document["configuration"]["playback"]
+            .as_object_mut()
+            .unwrap()
+            .remove("frameRate")
+            .expect("the current document writes its point frame rate");
+        let loaded = load(&document.to_string()).unwrap();
+        assert_eq!(loaded.playback.frame_rate, 25);
+
+        let mut configuration = MediaConfiguration::default();
+        configuration.playback.frame_rate = 30;
+        assert_eq!(load(&save(&configuration)).unwrap().playback.frame_rate, 30);
+
+        let legacy = r#"{ "fullMode": true, "dmxProtocol": "art-net" }"#;
+        assert_eq!(load(legacy).unwrap().playback.frame_rate, 25);
+    }
+
+    #[test]
+    fn a_point_frame_rate_of_zero_is_refused_at_load() {
+        let mut configuration = MediaConfiguration::default();
+        configuration.playback.frame_rate = 0;
+        let error = load(&save(&configuration)).unwrap_err();
+        assert!(
+            matches!(error, ConfigurationError::InvalidPointFrameRate { fps: 0 }),
             "{error:?}"
         );
     }

@@ -10,6 +10,13 @@ import {
 import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
 import { WindowFrame } from "@tosklight/ui/window-kit";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+	MediaCompositePreview,
+	MusicNote,
+	PreviewStateMessage,
+	SafePreviewImage,
+} from "./MediaPanePreview";
+import { MediaPointTimeField } from "./MediaPointTimeField";
 import type {
 	MediaBrowserMode,
 	MediaControlSection,
@@ -21,12 +28,6 @@ import type {
 	MediaSecondaryControl,
 	MediaSourceFilter,
 } from "./mediaPaneModel";
-import {
-	MediaCompositePreview,
-	MusicNote,
-	PreviewStateMessage,
-	SafePreviewImage,
-} from "./MediaPanePreview";
 import "./MediaPaneSurface.css";
 
 export type {
@@ -804,6 +805,26 @@ function MediaControl({
 				{control.description && <small>{control.description}</small>}
 			</div>
 		);
+	if (control.kind === "point-time")
+		return (
+			<div className="media-control-with-reset">
+				<MediaPointTimeField
+					control={control}
+					disabled={Boolean(disabled)}
+					onChange={onChange}
+				/>
+				{onReset ? (
+					<Button
+						className="media-control-reset"
+						disabled={disabled}
+						aria-label={`Reset ${control.label}`}
+						onClick={() => onReset(control.id)}
+					>
+						Reset
+					</Button>
+				) : null}
+			</div>
+		);
 	return (
 		<div className="media-control-with-reset">
 			<MediaControlEditor
@@ -830,7 +851,7 @@ function MediaControlEditor({
 	disabled,
 	onChange,
 }: {
-	control: Exclude<MediaSecondaryControl, { kind: "readout" }>;
+	control: Exclude<MediaSecondaryControl, { kind: "readout" | "point-time" }>;
 	disabled: boolean;
 	onChange(controlId: string, value: string | number): void;
 }) {

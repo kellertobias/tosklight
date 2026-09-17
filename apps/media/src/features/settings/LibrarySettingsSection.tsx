@@ -21,6 +21,7 @@ import {
 	useTime,
 } from "../../shared/api/queries";
 import { DataFolderPicker } from "./DataFolderPicker";
+import { PointFrameRateSettings } from "./PointFrameRateSettings";
 import { SettingsSaveState } from "./SettingsSaveState";
 
 export function LibrarySettingsSection() {
@@ -97,6 +98,23 @@ export function LibrarySettingsSection() {
 								api.updatePlayback({
 									requestId: requestId(),
 									switchHoldMillis: millis,
+								}),
+							)
+						}
+					/>
+				)}
+			</ResourceState>
+			<ResourceState resource={playback} subject="the In and Out point rate">
+				{(data) => (
+					<PointFrameRateSettings
+						playback={data}
+						busy={playbackEditing.busy}
+						failed={playbackEditing.failure !== undefined}
+						onSave={(frameRate) =>
+							playbackEditing.saveLive(() =>
+								api.updatePlayback({
+									requestId: requestId(),
+									frameRate,
 								}),
 							)
 						}
@@ -184,7 +202,10 @@ function LibraryDirectory({
 	onSave: (directory: string) => void;
 }) {
 	const [draft, setDraft] = useState(settings.storedDirectory);
-	useEffect(() => setDraft(settings.storedDirectory), [settings.storedDirectory]);
+	useEffect(
+		() => setDraft(settings.storedDirectory),
+		[settings.storedDirectory],
+	);
 	const directory = draft.trim();
 	return (
 		<article
@@ -250,7 +271,10 @@ function PortableDataFolder({ runtime }: { runtime: RunningServerView }) {
 		</Button>
 	);
 	return (
-		<article className="media-settings-section" aria-label="Portable data folder">
+		<article
+			className="media-settings-section"
+			aria-label="Portable data folder"
+		>
 			<h2>Media and configuration folder</h2>
 			{runtime.dataDirectory ? (
 				<>
@@ -278,7 +302,9 @@ function PortableDataFolder({ runtime }: { runtime: RunningServerView }) {
 								}
 							}}
 						>
-							{opening ? "Opening on Media Server…" : "Show folder on Media Server"}
+							{opening
+								? "Opening on Media Server…"
+								: "Show folder on Media Server"}
 						</Button>
 						{changeFolder}
 					</div>

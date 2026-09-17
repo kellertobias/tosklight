@@ -11,6 +11,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use media_domain::timeline::{MediaTiming, Presentation, present};
+
+pub use crate::frame_range::FrameRange;
 use media_domain::{
     AssetId, LayerState, PlayMode, ResolvedTempo, SourceStatus, Timestamp, effective_rate,
 };
@@ -24,49 +26,6 @@ pub struct Delivery {
     pub status: SourceStatus,
     /// The presentation the timeline resolved, for status projections and diagnostics.
     pub presentation: Presentation,
-}
-
-/// A layer's In and Out points resolved against one clip, as inclusive frame indices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FrameRange {
-    pub first: usize,
-    pub last: usize,
-}
-
-impl FrameRange {
-    /// Resolves the wire In and Out points against a clip of `frame_count` frames.
-    ///
-    /// The In point counts frames from the clip's start and the Out point counts frames back from
-    /// its end, so zero on both is the whole clip. An In point past the clip's last frame clamps to
-    /// that frame. An Out point that would end the range before its In point, including one longer
-    /// than the clip, plays through to the clip's end.
-    pub fn resolve(in_point: u16, out_point: u16, frame_count: usize) -> Self {
-        let end = frame_count.saturating_sub(1);
-        let first = usize::from(in_point).min(end);
-        let last = end
-            .checked_sub(usize::from(out_point))
-            .filter(|last| *last >= first)
-            .unwrap_or(end);
-        Self { first, last }
-    }
-
-    /// The whole clip.
-    pub const fn full(frame_count: usize) -> Self {
-        Self {
-            first: 0,
-            last: frame_count.saturating_sub(1),
-        }
-    }
-
-    const fn clamp(self, frame: usize) -> usize {
-        if frame < self.first {
-            self.first
-        } else if frame > self.last {
-            self.last
-        } else {
-            frame
-        }
-    }
 }
 
 /// The stretch of the clip one pass runs over: where it starts, and its timing as if it were a
@@ -105,6 +64,8 @@ pub struct PlaybackSession {
     /// The tempo the transport last advanced at, so a tempo change continues from the frame on
     /// screen instead of re-deriving the whole pass at the new rate.
     tempo_bpm: Option<f64>,
+    /// The rate In and Out points count in. `None` counts the clip's own frames.
+    point_rate: Option<u8>,
 }
 
 impl PlaybackSession {
@@ -129,7 +90,14 @@ impl PlaybackSession {
             requested: full,
             delivered: false,
             tempo_bpm: None,
+            point_rate: None,
         }
+    }
+
+    /// Sets the rate In and Out points count in, from the next [`PlaybackSession::reconcile`].
+    /// `None` counts the clip's own frames.
+    pub fn set_point_rate(&mut self, frames_per_second: Option<u8>) {
+        self.point_rate = frames_per_second;
     }
 
     pub const fn asset(&self) -> AssetId {
@@ -174,7 +142,16 @@ impl PlaybackSession {
         self.requested = if self.ignores_range() {
             FrameRange::full(self.frame_count())
         } else {
-            FrameRange::resolve(layer.in_point, layer.out_point, self.frame_count())
+            match self.point_rate {
+                Some(fps) => FrameRange::resolve_timed(
+                    layer.in_point,
+                    layer.out_point,
+                    fps,
+                    &self.presentation_micros,
+                    self.timing.duration,
+                ),
+                None => FrameRange::resolve(layer.in_point, layer.out_point, self.frame_count()),
+            }
         };
         if layer.reset_trigger_id != self.reset_trigger {
             self.reset_trigger = layer.reset_trigger_id;
@@ -792,6 +769,19 @@ mod tests {
         let mut session = session(mode);
         session.reconcile(layer, at(0));
         session
+    }
+
+    #[test]
+    fn a_session_resolves_points_at_the_configured_rate() {
+        // Ten frames at 10 fps; In 5 at 25 fps is 0.2 s, frame 2 rather than frame 5.
+        let layer = ranged(PlayMode::Pause, 5, 0);
+        let mut counted = session(PlayMode::Pause);
+        counted.reconcile(&layer, at(0));
+        assert_eq!(counted.range().first, 5);
+        let mut timed = session(PlayMode::Pause);
+        timed.set_point_rate(Some(25));
+        timed.reconcile(&layer, at(0));
+        assert_eq!(timed.range(), FrameRange { first: 2, last: 9 });
     }
 
     #[test]

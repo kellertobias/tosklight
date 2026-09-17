@@ -783,6 +783,42 @@
 	font-size: 9px;
 }
 
+.media-point-time-control {
+	min-width: 0;
+	display: grid;
+	gap: 4px;
+}
+.media-point-time-label {
+	color: #b9c5cd;
+	font-size: 10px;
+}
+.media-point-time-control .media-point-time-value.ui-button {
+	min-height: 44px;
+	justify-content: flex-start;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 15px;
+	font-variant-numeric: tabular-nums;
+}
+.media-point-time-control > small,
+.media-point-time-notice > small {
+	color: var(--muted);
+	font-size: 9px;
+}
+.media-point-time-notice {
+	display: grid;
+	gap: 4px;
+	padding: 6px;
+	border: 1px solid #8a6d2b;
+	border-radius: 4px;
+	background: #231d10;
+}
+.media-point-time-notice > small {
+	color: #f0d9a0;
+}
+.media-point-time-control.disabled {
+	opacity: 0.45;
+}
+
 .media-control-readout {
 	min-height: 58px;
 	padding: 7px;

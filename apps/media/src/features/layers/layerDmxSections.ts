@@ -1,4 +1,5 @@
 import type { MediaPaneModel } from "../../../../light-desktop/src/windows/media/MediaPaneSurface";
+import { pointDisplay } from "../../../../light-desktop/src/windows/media/mediaPointTime";
 import type { api } from "../../shared/api/client";
 import type {
 	ModelSlotView,
@@ -141,44 +142,32 @@ export function blendSection(
 	};
 }
 
-/** In and Out point, shown at the end of the Playback tab under a Playback range heading. */
+/**
+ * In and Out point, shown at the end of the Playback tab under a Playback range heading. They are
+ * shown and typed as `mm:ss.ff` at the server's point frame rate, exactly as the desk Media pane
+ * shows them; the channel values stay frame counts.
+ */
 export function playbackRangeControls(
 	layer: LayerState,
+	framesPerSecond: number,
 	disabled: boolean,
 ): ControlSection["controls"] {
-	return [
-		{
-			...valueControl(
-				"in-point",
-				"In point",
-				layer.inPoint,
-				0,
-				65535,
-				disabled,
-				"",
-				1,
-			),
-			display: `Frame ${layer.inPoint}`,
-			group: "Playback range",
-		},
-		{
-			...valueControl(
-				"out-point",
-				"Out point",
-				layer.outPoint,
-				0,
-				65535,
-				disabled,
-				"",
-				1,
-			),
-			display:
-				layer.outPoint === 0
-					? "End of clip"
-					: `${layer.outPoint} frames before end`,
-			group: "Playback range",
-		},
-	];
+	return (
+		[
+			["in-point", "In point", layer.inPoint, "start"],
+			["out-point", "Out point", layer.outPoint, "end"],
+		] as const
+	).map(([id, label, frames, reference]) => ({
+		id,
+		label,
+		kind: "point-time" as const,
+		value: frames,
+		reference,
+		framesPerSecond,
+		display: pointDisplay(reference, frames, framesPerSecond),
+		disabled,
+		group: "Playback range",
+	}));
 }
 
 /**

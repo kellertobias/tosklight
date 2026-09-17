@@ -84,9 +84,10 @@ pub struct LayerView {
     pub blend_mode: String,
     /// Flashes per second while the layer strobes.
     pub strobe_hz: Option<f32>,
-    /// First frame of the playback range.
+    /// First frame of the playback range, counted at the output's `frameRate`.
     pub in_point: u16,
-    /// Frames before the clip's end where the playback range stops; zero is the last frame.
+    /// Frames before the clip's end where the playback range stops, counted at the output's
+    /// `frameRate`; zero is the last frame.
     pub out_point: u16,
     /// The four raw bytes of the layer's dedicated Visualizer Parameter channels.
     pub visualizer_controls: Vec<u8>,
@@ -287,10 +288,13 @@ pub struct OutputView {
     pub dmx_active: bool,
     /// Whether this server explicitly ignores network playback control in favour of the web UI.
     pub playback_takeover: bool,
+    /// Frames per second the layers' In and Out points count in, so a desk or panel can show and
+    /// enter them as `mm:ss.ff`. Server-wide; every output reports the same rate.
+    pub frame_rate: u8,
 }
 
 impl OutputView {
-    pub fn of(output: &OutputState, name: String, dmx_active: bool) -> Self {
+    pub fn of(output: &OutputState, name: String, dmx_active: bool, frame_rate: u8) -> Self {
         Self {
             id: output.id.to_string(),
             name,
@@ -304,6 +308,7 @@ impl OutputView {
             master: MasterView::of(output.master),
             dmx_active,
             playback_takeover: output.ownership.web_takeover,
+            frame_rate,
         }
     }
 }

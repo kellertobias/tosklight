@@ -102,4 +102,64 @@ describe("native Media effect controls", () => {
 		await act(async () => resolveFirst?.([{ ...blur, mix: 0.6 }]));
 		expect(result.current.slots).toEqual([newest]);
 	});
+
+	it("reports the server's point frame rate and never assumes one", async () => {
+		const load = vi
+			.fn()
+			.mockResolvedValueOnce({ effectLayers: [[]] })
+			.mockResolvedValueOnce({ effectLayers: [[]], frameRate: 30 });
+		const { result, rerender } = renderHook(
+			({ active }) =>
+				useNativeMediaEffects({
+					active,
+					fixtureId: "fixture-1",
+					layer: 0,
+					load,
+					update: vi.fn(),
+				}),
+			{ initialProps: { active: false } },
+		);
+		expect(result.current.pointFrameRate).toMatchObject({
+			kind: "unknown",
+			detail: expect.stringContaining("Show Patch > Media Servers"),
+		});
+		expect(result.current.pointFrameRate).not.toHaveProperty("retryable");
+		rerender({ active: true });
+		await waitFor(() =>
+			expect(result.current.pointFrameRate).toMatchObject({
+				kind: "unknown",
+				detail: expect.stringContaining("does not report"),
+			}),
+		);
+		act(() => result.current.retryPointFrameRate());
+		await waitFor(() =>
+			expect(result.current.pointFrameRate).toEqual({
+				kind: "known",
+				framesPerSecond: 30,
+			}),
+		);
+		expect(result.current.modelInput.pointFrameRate).toEqual({
+			kind: "known",
+			framesPerSecond: 30,
+		});
+		expect(load).toHaveBeenCalledTimes(2);
+	});
+
+	it("names an unreachable server as the reason the rate is unknown", async () => {
+		const { result } = renderHook(() =>
+			useNativeMediaEffects({
+				active: true,
+				fixtureId: "fixture-1",
+				layer: 0,
+				load: vi.fn().mockRejectedValue(new Error("connection refused")),
+				update: vi.fn(),
+			}),
+		);
+		await waitFor(() =>
+			expect(result.current.pointFrameRate).toMatchObject({
+				kind: "unknown",
+				detail: expect.stringContaining("connection refused"),
+			}),
+		);
+	});
 });

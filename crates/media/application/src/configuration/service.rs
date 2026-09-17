@@ -86,6 +86,15 @@ pub struct PlaybackConfiguration {
     /// server look as though it ignored the desk. Zero switches the hold off.
     #[serde(default = "default_switch_hold_millis")]
     pub switch_hold_millis: u32,
+    /// Frames per second the layer In and Out point channels count in.
+    ///
+    /// A programmed point is a frame count; this rate turns it into a time in the clip, so
+    /// `mm:ss.ff` means the same position on the desk, on this server's pages, and in every clip
+    /// whatever the clip's own frame rate. Server-wide rather than per output, because a cue that
+    /// moves between outputs must keep its points. A document stored before the setting existed
+    /// reads 25, the rate its frame counts already meant for the 25 fps clips it shipped with.
+    #[serde(default = "default_point_frame_rate")]
+    pub frame_rate: u8,
 }
 
 /// Two gibibytes. Enough for several minutes of 1080p at measured rates, and small enough not to
@@ -100,13 +109,32 @@ const fn default_switch_hold_millis() -> u32 {
     500
 }
 
+/// PAL video and the European broadcast default.
+pub const DEFAULT_POINT_FRAME_RATE: u8 = 25;
+/// The fastest point rate accepted. A 16-bit point still reaches past nine minutes at this rate.
+pub const MAXIMUM_POINT_FRAME_RATE: u8 = 120;
+
+const fn default_point_frame_rate() -> u8 {
+    DEFAULT_POINT_FRAME_RATE
+}
+
 /// The longest hold the server accepts. Beyond this the old clip would outstay a cue change.
 pub const MAXIMUM_SWITCH_HOLD_MILLIS: u32 = 10_000;
 
 impl PlaybackConfiguration {
-    /// True when the hold is within the accepted range.
+    /// True when the hold and the point frame rate are within their accepted ranges.
     pub const fn is_valid(&self) -> bool {
+        self.hold_is_valid() && self.frame_rate_is_valid()
+    }
+
+    /// True when the hold is within the accepted range.
+    pub const fn hold_is_valid(&self) -> bool {
         self.switch_hold_millis <= MAXIMUM_SWITCH_HOLD_MILLIS
+    }
+
+    /// True when In and Out points count at a rate between 1 and [`MAXIMUM_POINT_FRAME_RATE`].
+    pub const fn frame_rate_is_valid(&self) -> bool {
+        self.frame_rate >= 1 && self.frame_rate <= MAXIMUM_POINT_FRAME_RATE
     }
 
     /// The hold as a duration.
@@ -120,6 +148,7 @@ impl Default for PlaybackConfiguration {
         Self {
             cache_budget_bytes: default_cache_budget(),
             switch_hold_millis: default_switch_hold_millis(),
+            frame_rate: DEFAULT_POINT_FRAME_RATE,
         }
     }
 }
@@ -217,6 +246,27 @@ mod tests {
             ..stored
         };
         assert!(!too_long.is_valid());
+    }
+
+    #[test]
+    fn in_and_out_points_count_at_25_fps_unless_configured_and_the_rate_is_bounded() {
+        assert_eq!(PlaybackConfiguration::default().frame_rate, 25);
+        let stored: PlaybackConfiguration =
+            serde_json::from_str(r#"{"switchHoldMillis":100}"#).unwrap();
+        assert_eq!(stored.frame_rate, 25, "an older section reads 25 fps");
+        let thirty: PlaybackConfiguration = serde_json::from_str(r#"{"frameRate":30}"#).unwrap();
+        assert_eq!(thirty.frame_rate, 30);
+        assert!(thirty.is_valid());
+        for rate in [0, MAXIMUM_POINT_FRAME_RATE + 1] {
+            assert!(
+                !PlaybackConfiguration {
+                    frame_rate: rate,
+                    ..thirty
+                }
+                .is_valid(),
+                "{rate} fps"
+            );
+        }
     }
 
     #[test]

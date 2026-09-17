@@ -718,17 +718,23 @@ describe("the production Media pane", () => {
 			within(playback).getByRole("heading", { name: "Playback range" }),
 		).toBeInTheDocument();
 		expect(within(playback).getByText("End of clip")).toBeInTheDocument();
-		fireEvent.input(screen.getByRole("slider", { name: "In point" }), {
-			target: { value: "300" },
-		});
-		fireEvent.input(screen.getByRole("slider", { name: "Out point" }), {
-			target: { value: "600" },
-		});
+		// Points are typed as mm:ss.ff at the server's 25 fps, never dragged on a fader.
+		expect(screen.queryByRole("slider", { name: "In point" })).toBeNull();
+		expect(within(playback).getByText("00:00.00")).toBeInTheDocument();
+		fireEvent.click(
+			within(playback).getByRole("button", { name: /^In point: 00:00.00/ }),
+		);
+		typeInModal("In point (mm:ss.ff)", "00:12.00", 8);
+		fireEvent.click(
+			within(playback).getByRole("button", { name: /^Out point: End of clip/ }),
+		);
+		typeInModal("Out point (mm:ss.ff before end)", "00:24.00", 8);
 		await waitFor(() => {
 			expect(layer.inPoint).toBe(300);
 			expect(layer.outPoint).toBe(600);
 		});
-		expect(screen.getByText("600 frames before end")).toBeInTheDocument();
+		expect(screen.getByText("00:12.00")).toBeInTheDocument();
+		expect(screen.getByText("00:24.00 before end")).toBeInTheDocument();
 
 		await userEvent.click(screen.getByRole("tab", { name: "Frame" }));
 		const frame = screen.getByRole("tabpanel", { name: "Frame controls" });
@@ -773,9 +779,8 @@ describe("the production Media pane", () => {
 		const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent ?? "");
 		for (const retired of ["Playback range", "3D mapping", "Visualizer"])
 			expect(tabs).not.toContain(retired);
+		const points = ["In point", "Out point"];
 		const owners = new Map([
-			["In point", "Playback"],
-			["Out point", "Playback"],
 			["Pan", "Frame"],
 			["Tilt", "Frame"],
 			["Parameter 1 · Count", "Effects"],
@@ -794,6 +799,10 @@ describe("the production Media pane", () => {
 			expect(
 				screen.getByRole("tabpanel", { name: `${tab} controls` }),
 			).toBeInTheDocument();
+			for (const point of points)
+				expect(
+					screen.queryAllByRole("button", { name: new RegExp(`^${point}:`) }),
+				).toHaveLength(tab === "Playback" ? 1 : 0);
 			for (const [slider, owner] of owners)
 				if (owner === tab)
 					expect(screen.getByRole("slider", { name: slider })).toBeVisible();
@@ -977,4 +986,13 @@ async function chooseNamedChoice(labelText: string, name: string) {
 	await waitFor(() => expect(trigger).toBeEnabled());
 	fireEvent.click(trigger as HTMLButtonElement);
 	fireEvent.click(screen.getByRole("option", { name }));
+}
+
+/** Replaces the text in the open entry modal and commits it with Enter. */
+function typeInModal(title: string, text: string, clear: number) {
+	screen.getByRole("dialog", { name: title });
+	for (let index = 0; index < clear; index += 1)
+		fireEvent.keyDown(window, { key: "Backspace" });
+	for (const key of text) fireEvent.keyDown(window, { key });
+	fireEvent.keyDown(window, { key: "Enter" });
 }

@@ -994,7 +994,11 @@ describe("Media pane disconnected configuration", () => {
 			master_attributes: ["intensity", "media.scale.x"],
 			status: { online: false, last_success: null, last_error: null },
 		};
-		const live = (attribute: string, value: number, programmerOrder: number) => ({
+		const live = (
+			attribute: string,
+			value: number,
+			programmerOrder: number,
+		) => ({
 			fixtureId: "layer-1",
 			attribute,
 			value: { kind: "normalized" as const, value },
@@ -1022,17 +1026,89 @@ describe("Media pane disconnected configuration", () => {
 			model.controlSections.find((candidate) => candidate.id === id)
 				?.controls ?? [];
 
-		expect(model.controlSections.map(({ id, label }) => ({ id, label }))).toEqual(
-			[
-				{ id: "playback", label: "Playback" },
-				{ id: "frame", label: "Frame" },
-				{ id: "model", label: "3D model" },
-				{ id: "colour", label: "Colour" },
-				{ id: "mask-controls", label: "Mask" },
-				{ id: "visualizer", label: "Visualizer" },
-				{ id: "effects", label: "Effects" },
-			],
+		const timed = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				pointFrameRate: { kind: "known", framesPerSecond: 25 },
+				liveProgrammer: [
+					live("media.in_point", 1234 / 65535, 0),
+					live("media.out_point", 1500 / 65535, 1),
+				],
+			}),
 		);
+		const timedPlayback =
+			timed.controlSections.find((candidate) => candidate.id === "playback")
+				?.controls ?? [];
+		expect(timedPlayback[4]).toMatchObject({
+			kind: "point-time",
+			value: 1234,
+			framesPerSecond: 25,
+			display: "00:49.09",
+			rateNotice: undefined,
+		});
+		expect(timedPlayback[5]).toMatchObject({
+			kind: "point-time",
+			value: 1500,
+			reference: "end",
+			display: "01:00.00 before end",
+		});
+		const retry = () => undefined;
+		const unreachable = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				pointFrameRate: {
+					kind: "unknown",
+					detail: "the Media Server could not be read (timeout).",
+					retryable: true,
+				},
+				retryPointFrameRate: retry,
+			}),
+		);
+		expect(
+			unreachable.controlSections.find(
+				(candidate) => candidate.id === "playback",
+			)?.controls[4],
+		).toMatchObject({
+			framesPerSecond: null,
+			display: "Frame 0",
+			rateNotice:
+				"Frame rate unknown: the Media Server could not be read (timeout). Points are entered as frame counts until it is known.",
+			onRetryFrameRate: retry,
+		});
+		const loading = buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				pointFrameRate: { kind: "loading" },
+			}),
+		);
+		expect(
+			loading.controlSections.find((candidate) => candidate.id === "playback")
+				?.controls[4],
+		).toMatchObject({
+			framesPerSecond: null,
+			rateNotice: "Reading the Media Server's frame rate…",
+		});
+
+		expect(
+			model.controlSections.map(({ id, label }) => ({ id, label })),
+		).toEqual([
+			{ id: "playback", label: "Playback" },
+			{ id: "frame", label: "Frame" },
+			{ id: "model", label: "3D model" },
+			{ id: "colour", label: "Colour" },
+			{ id: "mask-controls", label: "Mask" },
+			{ id: "visualizer", label: "Visualizer" },
+			{ id: "effects", label: "Effects" },
+		]);
 		// The mapping layout has no Playback BPM, so the control is left out.
 		expect(section("playback").map((control) => control.id)).toEqual([
 			"media.play_mode",
@@ -1042,13 +1118,17 @@ describe("Media pane disconnected configuration", () => {
 			"media.in_point",
 			"media.out_point",
 		]);
+		// No frame rate is known, so the point is a frame count with a notice, not a fader.
 		expect(section("playback")[4]).toMatchObject({
 			label: "In point",
+			kind: "point-time",
 			value: 1200,
-			minimum: 0,
-			maximum: 65535,
+			reference: "start",
+			framesPerSecond: null,
 			display: "Frame 1200",
+			rateNotice: expect.stringContaining("Frame rate unknown"),
 		});
+		expect(section("playback")[4]).not.toHaveProperty("maximum");
 		expect(section("playback")[5]).toMatchObject({
 			label: "Out point",
 			value: 0,
@@ -1257,7 +1337,9 @@ describe("Media pane disconnected configuration", () => {
 		expect(mediaControlNormalizedValue("media.scale.x", 0, true, true)).toBe(
 			32768 / 65535,
 		);
-		expect(mediaControlNormalizedValue("media.scale.x", -4, true, true)).toBe(0);
+		expect(mediaControlNormalizedValue("media.scale.x", -4, true, true)).toBe(
+			0,
+		);
 		expect(
 			mediaControlOperatorValue("media.scale.x", 24576 / 65535, true, true),
 		).toBeCloseTo(-1);

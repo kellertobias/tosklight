@@ -58,6 +58,11 @@ pub enum ConfigurationError {
     )]
     InvalidSwitchHold { millis: u32 },
     #[error(
+        "the In/Out point frame rate is {fps} fps; choose a rate from 1 to {} fps",
+        super::service::MAXIMUM_POINT_FRAME_RATE
+    )]
+    InvalidPointFrameRate { fps: u8 },
+    #[error(
         "outputs '{first}' and '{second}' both consume universe {universe} at address {start_address}"
     )]
     OverlappingPatch {
@@ -152,9 +157,14 @@ pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), Configu
             minutes: configuration.time.utc_offset_minutes,
         });
     }
-    if !configuration.playback.is_valid() {
+    if !configuration.playback.hold_is_valid() {
         return Err(ConfigurationError::InvalidSwitchHold {
             millis: configuration.playback.switch_hold_millis,
+        });
+    }
+    if !configuration.playback.frame_rate_is_valid() {
+        return Err(ConfigurationError::InvalidPointFrameRate {
+            fps: configuration.playback.frame_rate,
         });
     }
     configuration.effects.validate()?;

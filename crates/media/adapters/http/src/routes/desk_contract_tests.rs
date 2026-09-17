@@ -41,6 +41,38 @@ async fn the_output_configuration_carries_every_field_the_desk_reads() {
     );
 }
 
+/// Shared with `crates/light/adapters/headless/src/runtime/media_api.rs`: the fields of
+/// `GET /api/v2/outputs` the desk's native Media snapshot reads, including the rate the desk
+/// converts In and Out points with.
+const DESK_OUTPUTS_REFERENCE: &str =
+    r#"{"frameRate":30,"layers":[{"effects":[],"visualizerChannels":[]}]}"#;
+
+#[tokio::test]
+async fn the_outputs_list_carries_the_point_frame_rate_the_desk_reads() {
+    let bench = bench();
+    let (status, _) = send(
+        &bench.router,
+        post(
+            "/api/v2/playback/update".into(),
+            r#"{"requestId":"desk-frame-rate","frameRate":30}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = send(&bench.router, get("/api/v2/outputs".into())).await;
+    assert_eq!(status, StatusCode::OK);
+    let reference: serde_json::Value = serde_json::from_str(DESK_OUTPUTS_REFERENCE).unwrap();
+    let output = &body[0];
+    assert!(output["id"].is_string());
+    assert_eq!(output["frameRate"], reference["frameRate"]);
+    for field in ["effects", "visualizerChannels"] {
+        assert!(
+            output["layers"][0][field].is_array(),
+            "desk-read layer field {field}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn only_the_two_personalities_the_desk_patches_are_accepted() {
     let bench = bench();

@@ -13,7 +13,11 @@ import {
 	mediaControlOperatorValue,
 	mediaMasterScaleIsSigned,
 } from "./mediaControlValue";
-import type { MediaControlSection } from "./mediaPaneModel";
+import type {
+	MediaControlSection,
+	MediaPointFrameRate,
+} from "./mediaPaneModel";
+import { pointDisplay } from "./mediaPointTime";
 import {
 	normalizedValue,
 	specializedControl,
@@ -151,12 +155,47 @@ function advertisedControl(
 			display: `${percent}%`,
 		};
 	}
+	if (isMediaFrameAttribute(attribute))
+		return pointTimeControl(
+			attribute,
+			value,
+			input.pointFrameRate,
+			input.retryPointFrameRate,
+		);
 	return rangedMediaControl(
 		attribute,
 		value,
 		selectedMaster,
 		signedMasterScale,
 	);
+}
+
+/** An In or Out point in `mm:ss.ff` at the server's rate, or in frames with a notice without one. */
+function pointTimeControl(
+	attribute: string,
+	frames: number,
+	rate: MediaPointFrameRate | undefined,
+	retry: (() => void) | undefined,
+): MediaControlSection["controls"][number] {
+	const reference = attribute === "media.out_point" ? "end" : "start";
+	const framesPerSecond = rate?.kind === "known" ? rate.framesPerSecond : null;
+	return {
+		id: attribute,
+		label: mediaControlLabel(attribute),
+		kind: "point-time",
+		value: frames,
+		reference,
+		framesPerSecond,
+		display: pointDisplay(reference, frames, framesPerSecond),
+		onRetryFrameRate:
+			rate?.kind === "unknown" && rate.retryable ? retry : undefined,
+		rateNotice:
+			rate?.kind === "known"
+				? undefined
+				: rate?.kind === "loading"
+					? "Reading the Media Server's frame rate…"
+					: `Frame rate unknown: ${rate?.detail ?? "this Media Server does not report the rate its In and Out points count in."} Points are entered as frame counts until it is known.`,
+	};
 }
 
 function rangedMediaControl(
@@ -175,21 +214,15 @@ function rangedMediaControl(
 			0.01,
 			`${value.toFixed(2)}×`,
 		);
-	if (isMediaFrameAttribute(attribute))
+	if (isMediaModelAngleAttribute(attribute))
 		return valueControl(
 			attribute,
 			value,
-			0,
-			65535,
+			-360,
+			360,
 			1,
-			attribute !== "media.out_point"
-				? `Frame ${value}`
-				: value === 0
-					? "End of clip"
-					: `${value} frames before end`,
+			`${Math.round(value)}°`,
 		);
-	if (isMediaModelAngleAttribute(attribute))
-		return valueControl(attribute, value, -360, 360, 1, `${Math.round(value)}°`);
 	if (attribute === "media.mask.scale.x" || attribute === "media.mask.scale.y")
 		return valueControl(attribute, value, 0, 2, 0.01, `${value.toFixed(2)}×`);
 	if (

@@ -84,11 +84,12 @@ blendMode: string,
  */
 strobeHz: number | null,
 /**
- * First frame of the playback range.
+ * First frame of the playback range, counted at the output's `frameRate`.
  */
 inPoint: number,
 /**
- * Frames before the clip's end where the playback range stops; zero is the last frame.
+ * Frames before the clip's end where the playback range stops, counted at the output's
+ * `frameRate`; zero is the last frame.
  */
 outPoint: number,
 /**
@@ -131,7 +132,12 @@ dmxActive: boolean,
 /**
  * Whether this server explicitly ignores network playback control in favour of the web UI.
  */
-playbackTakeover: boolean, };
+playbackTakeover: boolean,
+/**
+ * Frames per second the layers' In and Out points count in, so a desk or panel can show and
+ * enter them as `mm:ss.ff`. Server-wide; every output reports the same rate.
+ */
+frameRate: number, };
 export type AvailableMonitorView = { index: number, name: string, width: number, height: number, refreshMillihertz: number | null, };
 export type CanvasPointView = { x: number, y: number, };
 export type PixelLayoutView = { name: string,
@@ -412,7 +418,15 @@ switchHoldMillis: number,
 /**
  * The longest hold the server accepts, so a panel can bound its own control.
  */
-maximumSwitchHoldMillis: number, };
+maximumSwitchHoldMillis: number,
+/**
+ * Frames per second the layer In and Out point channels count in.
+ */
+frameRate: number,
+/**
+ * The fastest point rate the server accepts.
+ */
+maximumFrameRate: number, };
 export type TextStyleView = {
 /**
  * A family name this machine is asked for. An absent family falls back rather than failing.
@@ -728,7 +742,7 @@ speedGroupEndpoint?: string | null, };
 export type UpdateLibrarySettings = { requestId: string, directory?: string | null, };
 export type UpdateDataFolder = { requestId: string, directory: string, };
 export type UpdateTime = { requestId: string, utcOffsetMinutes?: number | null, };
-export type UpdatePlayback = { requestId: string, switchHoldMillis?: number | null, };
+export type UpdatePlayback = { requestId: string, switchHoldMillis?: number | null, frameRate?: number | null, };
 export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null,
 /**
  * Absent means the shipped default appearance, which is what a new slot should look like.

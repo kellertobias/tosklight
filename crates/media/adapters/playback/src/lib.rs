@@ -6,6 +6,7 @@
 //! clips resident so playback never waits on storage.
 
 pub mod async_loader;
+pub mod frame_range;
 pub mod loader;
 pub use async_loader::AsyncClipLoader;
 pub mod session;

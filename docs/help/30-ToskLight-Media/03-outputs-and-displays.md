@@ -82,6 +82,6 @@ Settings save automatically, and most of them apply to the running server at onc
 | Tempo source (Playback BPM or a Speed Group) | Personality — layer state, render slots, and the layer list consoles read over CITP are sized when the output opens |
 | Pixel map zones, routes, desk handoffs, and regions | CITP listen address — consoles hold a connection to it and discovered its port |
 | Audio gain, auto gain, beat sensitivity, and EQ | Interface (HTTP) address — it serves the page you are editing in |
-| Clip switch hold and server time | Media library directory — the library, importer, and model store are opened at startup |
+| Clip switch hold, In and Out point frame rate, and server time | Media library directory — the library, importer, and model store are opened at startup |
 
 **Light and Media are on this computer** moves the Art-Net, sACN, and Speed Group listeners at once and CITP and the interface on the next start. A section heading shows **Applies on restart** only while such a change is waiting; **Revert to current settings** then returns the waiting fields to the values the server is running with. Choosing another media and configuration folder restarts the server by itself. Layer and playback changes never require a restart.

@@ -561,6 +561,42 @@ describe("the settings page", () => {
 		);
 	});
 
+	it("stores the In and Out point frame rate and applies it without a restart", async () => {
+		const server = stubSettingsServer();
+		renderSettings();
+
+		await openSettings("Libraries");
+		const article = await screen.findByRole("article", {
+			name: "In and Out points",
+		});
+		expect(article).toHaveTextContent("Applies immediately");
+		expect(article).toHaveTextContent("mm:ss.ff");
+		const rate = within(article).getByLabelText("Frame rate (fps)");
+		expect(rate).toHaveValue("25");
+
+		await userEvent.clear(rate);
+		await userEvent.type(rate, "0");
+		expect(article).toHaveTextContent(
+			"Enter whole frames per second from 1 to 120.",
+		);
+		await userEvent.clear(rate);
+		await userEvent.type(rate, "30");
+
+		await waitFor(() => expect(server.playback.frameRate).toBe(30));
+		expect(server.outputs[0].frameRate).toBe(30);
+		expect(server.writeBodies).not.toContainEqual(
+			expect.objectContaining({ frameRate: 0 }),
+		);
+		await waitFor(() =>
+			expect(within(article).getByRole("status")).toHaveTextContent(
+				"Saved automatically",
+			),
+		);
+		expect(within(article).getByRole("status")).not.toHaveTextContent(
+			"Applies on restart",
+		);
+	});
+
 	it("places restart-aware status beside the content heading", async () => {
 		stubSettingsServer();
 		renderSettings();

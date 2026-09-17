@@ -609,7 +609,12 @@ fn view_of(state: &ApiState, output: &media_domain::OutputState, now: Timestamp)
         .map(|configured| configured.name.to_string())
         .unwrap_or_else(|| output.id.to_string());
 
-    let mut view = OutputView::of(output, name, output.ownership.dmx_is_active(now));
+    let mut view = OutputView::of(
+        output,
+        name,
+        output.ownership.dmx_is_active(now),
+        configuration.playback.frame_rate,
+    );
     for (layer_view, layer) in view.layers.iter_mut().zip(&output.layers) {
         if let Some(visualizer) = configuration.visualizers.resolve(layer.address) {
             let parameters = media_domain::VisualizerTuning::resolve(

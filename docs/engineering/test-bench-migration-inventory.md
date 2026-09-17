@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **246 root cases across 95 files**.
+Default catalog: **247 root cases across 96 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -65,6 +65,7 @@ Default catalog: **246 root cases across 95 files**.
 | 107-configure-screen-layout.spec.ts | TL-472 @ui › a constrained Configure Screen stacks, scrolls, and keeps typed values | repository contract | @ui | configure-screen-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 108-media-server-coordinated-patch.spec.ts | MEDIA-008 @ui › Show Patch coordinates discovered Media Servers with the desk routes | docs/testing/14-media-and-running-panes.md | @ui | media-server-coordinated-patch | standard failure evidence | parallel | pending-semantic-migration |
 | 108-media-server-coordinated-patch.spec.ts | MEDIA-008 @api › a coordinated address update validates the protocol universe | docs/testing/14-media-and-running-panes.md | @api | media-server-coordinated-patch | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 109-media-point-time.spec.ts | TL-429 @ui › the layer page types In and Out points as mm:ss.ff at the server's frame rate | repository contract | @ui | media-point-time | standard failure evidence | parallel | pending-semantic-migration |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | FIXTURE-002 @ui @restart › focused assets and physical metadata remain immutable across edit, patch, and restart | repository contract | @ui @restart | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |

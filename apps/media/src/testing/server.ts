@@ -107,7 +107,12 @@ export function stubServer(
 		},
 		network: aNetwork(),
 		time: { utcOffsetMinutes: 0, maximumUtcOffsetMinutes: 840 },
-		playback: { switchHoldMillis: 500, maximumSwitchHoldMillis: 10_000 },
+		playback: {
+			switchHoldMillis: 500,
+			maximumSwitchHoldMillis: 10_000,
+			frameRate: 25,
+			maximumFrameRate: 120,
+		},
 		text: [aClock(), aCountdown()],
 		audio: anAudioPanel(),
 		logs: aLog(),
@@ -1010,6 +1015,7 @@ export function anOutput(overrides: Partial<OutputView> = {}): OutputView {
 		layerCount: 2,
 		dmxActive: false,
 		playbackTakeover: false,
+		frameRate: 25,
 		master: {
 			dimmer: 1,
 			volume: 1,

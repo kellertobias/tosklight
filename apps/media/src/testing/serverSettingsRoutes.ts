@@ -45,9 +45,14 @@ export function settingsRoute(
 	}
 	if (path === "/playback") return jsonResponse(server.playback);
 	if (path === "/playback/update") {
-		const { switchHoldMillis } = body();
+		const { switchHoldMillis, frameRate } = body();
 		if (switchHoldMillis !== undefined)
 			server.playback = { ...server.playback, switchHoldMillis };
+		if (frameRate !== undefined) {
+			server.playback = { ...server.playback, frameRate };
+			// The rate is server-wide; every output advertises it for its In/Out points.
+			for (const output of server.outputs) output.frameRate = frameRate;
+		}
 		return jsonResponse(server.playback);
 	}
 	if (path === "/logs/level") return jsonResponse(server.serverLogLevel);

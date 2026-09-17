@@ -407,7 +407,11 @@ function MediaPanePageContent() {
 										!takeover,
 										"%",
 									),
-									...playbackRangeControls(selected.layer, !takeover),
+									...playbackRangeControls(
+										selected.layer,
+										selected.output.frameRate,
+										!takeover,
+									),
 								],
 							},
 							frameSection(selected.layer, models.data ?? [], !takeover),

@@ -175,6 +175,10 @@ pub struct NativeMediaSnapshot {
     /// ordinary media has none, and its visualizer bytes are inert.
     #[serde(default)]
     pub visualizer_layers: Vec<Vec<NativeMediaVisualizerChannel>>,
+    /// Frames per second the bound output's In and Out points count in. Absent when the Media
+    /// Server predates the setting; the desk then asks for an update instead of assuming a rate.
+    #[serde(default)]
+    pub frame_rate: Option<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
