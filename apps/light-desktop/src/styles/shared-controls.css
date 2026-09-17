@@ -223,6 +223,35 @@
 .server-error-toast small {
 	color: var(--muted);
 }
+.desk-notice-lane {
+	position: fixed;
+	z-index: 1240;
+	top: 12px;
+	left: 50%;
+	width: min(520px, calc(100vw - 24px));
+	transform: translateX(-50%);
+	pointer-events: none;
+}
+.desk-notice-lane:empty {
+	display: none;
+}
+.desk-notice-toast {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 6px 6px 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel2);
+	box-shadow: 0 8px 24px #0008;
+	color: var(--text);
+	pointer-events: auto;
+}
+.desk-notice-toast span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
 .system-controls-card {
 	width: min(680px, calc(100vw - 30px));
 }

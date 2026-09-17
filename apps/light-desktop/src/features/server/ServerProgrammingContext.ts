@@ -20,9 +20,10 @@ export interface ServerProgrammingContext {
 	generateFixturePresets: (
 		fixtureIds: string[],
 	) => Promise<import("../../api/types").GeneratedFixturePresetResult | null>;
+	/** Resolves to the resulting Align mode; "off" after a no-op activation. */
 	alignSelection: (
 		mode: "off" | "left" | "right" | "out" | "in",
-	) => Promise<void>;
+	) => Promise<"off" | "left" | "right" | "out" | "in" | undefined>;
 	storePreload: (
 		input: {
 			target: "preset" | "cue";

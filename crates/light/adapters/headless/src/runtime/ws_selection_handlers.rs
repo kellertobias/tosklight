@@ -22,7 +22,12 @@ pub(super) fn ws_programmer_align(
         .map_err(|error| error.message)?;
     Ok(light_wire::v2::live_action::ProgrammingAlignOutcome {
         request_id: request.request_id,
-        mode: request.mode,
+        // The resulting mode: an Align activation that changed nothing (no selection) is Off.
+        mode: if state.is_some() {
+            request.mode
+        } else {
+            WireMode::Off
+        },
         revision: state.as_ref().map(|state| state.revision),
         bound_attribute: state
             .as_ref()

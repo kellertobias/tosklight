@@ -8,6 +8,9 @@ use light_programmer::{
 
 impl ProgrammingService {
     /// Change the desk-local Align modifier without changing Programmer values or Undo history.
+    ///
+    /// `Ok(None)` means Align is Off afterwards. Activating Align while nothing is selected
+    /// returns `Ok(None)` without changing any state.
     pub fn set_alignment(
         &self,
         context: &ActionContext,
@@ -41,11 +44,13 @@ impl ProgrammingService {
         mode: ProgrammerAlignmentMode,
     ) -> Result<Option<ProgrammerAlignmentState>, ActionError> {
         let Some(current) = self.programmers.alignment(session) else {
-            return self
-                .programmers
-                .activate_alignment(session, mode)
-                .map(Some)
-                .map_err(alignment_error);
+            return match self.programmers.activate_alignment(session, mode) {
+                Ok(state) => Ok(Some(state)),
+                // Align with nothing selected is a harmless no-op: Align stays Off and nothing
+                // else changes. The caller reports the resulting Off mode as a quiet notice.
+                Err(ProgrammerAlignmentError::EmptySelection) => Ok(None),
+                Err(error) => Err(alignment_error(error)),
+            };
         };
         if current.mode == mode {
             return Ok(Some(current));

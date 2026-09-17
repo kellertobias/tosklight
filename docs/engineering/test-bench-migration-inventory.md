@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **238 root cases across 91 files**.
+Default catalog: **239 root cases across 92 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -53,6 +53,7 @@ Default catalog: **238 root cases across 91 files**.
 | 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › shapes move and resize by mouse, finger, and keyboard | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
 | 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › the reference layout is built on two outputs, saved, and reopened | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
 | 103-media-pixel-map-workflow.spec.ts | PIXEL-009 @ui › desk merge and validation remain in the workflow | docs/testing/14-media-and-running-panes.md | @ui | media-pixel-map-workflow | standard failure evidence | parallel | pending-semantic-migration |
+| 104-quiet-no-op-feedback.spec.ts | NOTICE-001 @ui › Align with nothing selected shows a brief notice instead of a desk error | docs/testing/23-quiet-no-op-feedback.md | @ui | quiet-no-op-feedback | standard failure evidence | parallel | pending-semantic-migration |
 | 104-show-patch-csv-import.spec.ts | TL-469 @ui › Import CSV lives in Show Patch Settings and keeps validation and safe cancellation | repository contract | @ui | show-patch-csv-import | standard failure evidence | parallel | pending-semantic-migration |
 | 104-show-patch-csv-import.spec.ts | TL-469 @ui @touch › a touch tap reaches Import CSV from Settings on another Show Patch view | repository contract | @ui @touch | show-patch-csv-import | standard failure evidence | parallel | pending-semantic-migration |
 | 105-external-screen-desk-session.spec.ts | TL-470 @ui › Open Screen joins the desk's own server and session instead of starting a second desk | repository contract | @ui | external-screen-desk-session | standard failure evidence | parallel | pending-semantic-migration |

@@ -11,6 +11,7 @@ import { SystemControlsModal } from "../modals/SystemControlsModal";
 import { UpdateWorkflow } from "../modals/UpdateWorkflow";
 import { ConnectionState } from "./ConnectionState";
 import { DeskLoadingOverlay } from "./DeskLoadingOverlay";
+import { DeskNoticeToast } from "./DeskNoticeToast";
 import { LayoutPersistence } from "./LayoutPersistence";
 import { LeftDock } from "./LeftDock";
 import { NativeDragStrip } from "./NativeDragStrip";
@@ -46,6 +47,7 @@ export function AppShell() {
 				<>
 					<ConnectionState />
 					<ServerErrorToast />
+					<DeskNoticeToast />
 				</>
 			}
 			loadingOverlay={<DeskLoadingOverlay />}

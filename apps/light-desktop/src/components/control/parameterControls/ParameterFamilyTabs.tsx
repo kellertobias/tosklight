@@ -40,8 +40,10 @@ function AlignmentControl({ controller }: { controller: ParameterController }) {
 	const setMode = async (mode: ParameterController["alignMode"]) => {
 		if (!controller.programmerActions) return;
 		try {
-			await controller.programmerActions.alignSelection(mode ?? "off");
-			controller.setAlignMode(mode);
+			const resulting = await controller.programmerActions.alignSelection(
+				mode ?? "off",
+			);
+			controller.setAlignMode(resulting === "off" ? null : mode);
 		} catch {
 			// The server error is already projected by the programming action owner.
 		}

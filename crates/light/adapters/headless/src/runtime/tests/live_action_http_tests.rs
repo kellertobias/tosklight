@@ -21,11 +21,18 @@ async fn post_live_action(
 }
 
 #[tokio::test]
-async fn programming_align_http_and_websocket_reject_the_same_empty_selection() {
+async fn programming_align_http_and_websocket_report_the_same_empty_selection_no_op() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario
         .create_and_open_show("Align HTTP and WebSocket convergence")
         .await;
+    let undo_before = scenario
+        .state
+        .programming
+        .get(scenario.session.id)
+        .unwrap()
+        .undo
+        .len();
     let request = light_wire::v2::live_action::ProgrammingAlignLiveActionRequest {
         request_id: "align-empty-selection".into(),
         mode: light_wire::v2::live_action::ProgrammingAlignMode::Left,
@@ -39,7 +46,12 @@ async fn programming_align_http_and_websocket_reject_the_same_empty_selection() 
             light_wire::v2::live_action::LiveAction::ProgrammingAlign(request.clone()),
         ),
     );
-    assert!(!websocket.ok);
+    // Nothing selected: the desk stays healthy, Align stays Off, and nothing changes.
+    assert!(websocket.ok, "{:?}", websocket.error);
+    let payload = websocket.payload.unwrap();
+    assert_eq!(payload["mode"], "off");
+    assert_eq!(payload["fixture_count"], 0);
+    assert_eq!(payload["revision"], serde_json::Value::Null);
 
     let http = post_live_action(
         &scenario,
@@ -51,9 +63,34 @@ async fn programming_align_http_and_websocket_reject_the_same_empty_selection() 
         }),
     )
     .await;
-    assert_eq!(http.status(), StatusCode::BAD_REQUEST);
-    let error = json(http).await["error"].as_str().unwrap().to_owned();
-    assert_eq!(websocket.error.as_deref(), Some(error.as_str()));
+    assert_eq!(http.status(), StatusCode::OK);
+    let http = json(http).await;
+    assert_eq!(http["mode"], "off");
+    assert_eq!(http["fixture_count"], 0);
+    assert!(!scenario.state.programming.alignment_active(scenario.session.id));
+    let programmer = scenario
+        .state
+        .programming
+        .get(scenario.session.id)
+        .unwrap();
+    assert!(programmer.values.is_empty());
+    assert_eq!(programmer.undo.len(), undo_before);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn programming_align_http_refuses_an_unknown_mode_with_a_validation_error() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("Align validation refusal").await;
+    let response = post_live_action(
+        &scenario,
+        &show_id,
+        "/api/v2/programming-align/actions",
+        serde_json::json!({"mode":"sideways"}),
+    )
+    .await;
+    assert!(response.status().is_client_error(), "{}", response.status());
+    assert!(!scenario.state.programming.alignment_active(scenario.session.id));
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

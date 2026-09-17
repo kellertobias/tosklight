@@ -179,6 +179,28 @@ impl ValuesSetup {
 }
 
 #[test]
+fn align_without_a_selection_is_a_value_neutral_no_op() {
+    let setup = ValuesSetup::new();
+    let before = setup.registry.get(setup.session).unwrap();
+
+    let outcome = setup
+        .service
+        .set_alignment(
+            &setup.context,
+            &setup.ports,
+            Some(ProgrammerAlignmentMode::Left),
+        )
+        .expect("Align with nothing selected is not an error");
+
+    assert_eq!(outcome, None, "Align stays Off");
+    assert!(setup.registry.alignment(setup.session).is_none());
+    let after = setup.registry.get(setup.session).unwrap();
+    assert_eq!(after.values, before.values);
+    assert_eq!(after.undo.len(), before.undo.len());
+    assert_eq!(setup.registry.normal_values_revision(), 0);
+}
+
+#[test]
 fn align_modifies_future_relative_steps_and_reanchors_without_mutating_on_activation() {
     let mut setup = ValuesSetup::new();
     let pan = AttributeKey("pan".into());

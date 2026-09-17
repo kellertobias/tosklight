@@ -1703,6 +1703,20 @@ describe("ParameterControls Group targets and alignment", () => {
 		expect(align).toHaveClass("align-off");
 	});
 
+	it("keeps Align Off when the authoritative activation changed nothing", async () => {
+		server.alignSelection.mockResolvedValueOnce("off");
+		render(<ParameterControls />);
+		const align = screen.getByRole("button", { name: "Align Off" });
+
+		fireEvent.click(align);
+
+		await waitFor(() =>
+			expect(server.alignSelection).toHaveBeenCalledWith("left"),
+		);
+		expect(align).toHaveAccessibleName("Align Off");
+		expect(align).toHaveClass("align-off");
+	});
+
 	it("routes the attached-hardware Align gesture through the same authoritative mode cycle", async () => {
 		server.alignSelection.mockResolvedValueOnce(undefined);
 		render(<ParameterControls />);

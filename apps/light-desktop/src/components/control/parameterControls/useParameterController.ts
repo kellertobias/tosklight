@@ -154,7 +154,7 @@ export function useParameterController(active = true) {
 				nextIndex >= alignModes.length ? null : alignModes[nextIndex];
 			void programmerActions
 				.alignSelection(next ?? "off")
-				.then(() => setAlignMode(next))
+				.then((resulting) => setAlignMode(resulting === "off" ? null : next))
 				.catch(() => undefined);
 		};
 		const handleAlignOff = () => {
