@@ -146,12 +146,42 @@ function refreshShows(event: RuntimeCapabilityEvent, state: ServerState) {
 		.catch(() => undefined);
 }
 
+const MEDIA_FIXTURE_TYPES = new Set(["media_server", "audio_player"]);
+
+/** Whether a patch change adds, edits, or removes a Media Server or Audio Player fixture. */
+function patchTouchesMediaServers(
+	delta: Extract<
+		RuntimeCapabilityEvent,
+		{ type: "show_patch_changed" }
+	>["delta"],
+	known: readonly { fixture_id: string }[],
+) {
+	const knownIds = new Set(known.map((server) => server.fixture_id));
+	if (delta.removed_fixture_ids.some((id) => knownIds.has(id))) return true;
+	const mediaProfiles = new Set(
+		delta.profile_revisions
+			.filter((profile) =>
+				MEDIA_FIXTURE_TYPES.has(profile.fixture_type.trim()),
+			)
+			.map((profile) => `${profile.profile_id}@${profile.profile_revision}`),
+	);
+	return delta.fixtures.some(
+		(fixture) =>
+			knownIds.has(fixture.fixture_id) ||
+			mediaProfiles.has(`${fixture.profile_id}@${fixture.profile_revision}`),
+	);
+}
+
 function refreshMedia(event: RuntimeCapabilityEvent, state: ServerState) {
-	// A patch change resets the affected servers' connection state on the desk, so the rows
-	// re-read it instead of showing the previous endpoint's status.
+	// A patch change to a Media Server resets its connection state on the desk, so the rows
+	// re-read it instead of showing the previous endpoint's status. Other patch edits leave the
+	// Media Server list alone.
+	const mediaPatchChange =
+		event.type === "show_patch_changed" &&
+		patchTouchesMediaServers(event.delta, state.mediaServers);
 	if (
 		event.type !== "media_changed" &&
-		event.type !== "show_patch_changed" &&
+		!mediaPatchChange &&
 		!isShowLibraryEvent(event, ["show_opened"])
 	)
 		return;

@@ -258,6 +258,7 @@ function createHarness(showId = "show-a") {
 		commandLineEpoch: { current: 0 },
 		commandTargetModeRef: { current: "FIXTURE" },
 		highlightEpoch: { current: 0 },
+		mediaServers: [{ fixture_id: "media-1" }],
 		highlightWrite: { current: Promise.resolve() },
 		highlightErrorSticky: { current: false },
 		setBootstrap: vi.fn((next) => {
@@ -771,5 +772,40 @@ describe("broad state hydration boundaries", () => {
 		expect(harness.api.mediaOutput.highlight).not.toHaveBeenCalled();
 		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
+	});
+
+	it("re-reads Media Servers only for a patch change that touches one", async () => {
+		const patchEvent = (
+			fixtureId: string,
+			fixtureType: string,
+			removed: string[] = [],
+		) =>
+			({
+				type: "show_patch_changed",
+				delta: {
+					show_id: "show-a",
+					show_revision: 2,
+					patch_revision: 2,
+					fixtures: fixtureId
+						? [{ fixture_id: fixtureId, profile_id: "p", profile_revision: 1 }]
+						: [],
+					removed_fixture_ids: removed,
+					profile_revisions: [
+						{ profile_id: "p", profile_revision: 1, fixture_type: fixtureType },
+					],
+				},
+			}) as unknown as RuntimeCapabilityEvent;
+		const harness = createHarness("show-a");
+		harness.route(patchEvent("dimmer-1", "dimmer"));
+		harness.route(patchEvent("", "dimmer", ["dimmer-2"]));
+		await Promise.resolve();
+		expect(harness.api.mediaOutput.mediaServers).not.toHaveBeenCalled();
+
+		harness.route(patchEvent("media-2", "media_server"));
+		harness.route(patchEvent("media-1", "dimmer"));
+		harness.route(patchEvent("", "dimmer", ["media-1"]));
+		await vi.waitFor(() =>
+			expect(harness.api.mediaOutput.mediaServers).toHaveBeenCalledTimes(3),
+		);
 	});
 });
