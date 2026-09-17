@@ -557,3 +557,72 @@ fn extension_feedback_context_reaches_the_desk_and_carries_show_generation() {
     }
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn canonical_extension_controls_never_act_through_a_read_only_visualizer_session() {
+    let (state, data_dir) = test_state();
+    let desk = state.installation.desk().unwrap();
+    // A Hardware Controls app in Native Hardware mode watches extension health with a
+    // read-only session; that session has no Programmer and must not own device input.
+    let watcher = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: light_core::SessionId::new(),
+        token: "native-hardware-watcher".into(),
+        connected: true,
+        desk: desk.clone(),
+    };
+    state.sessions.insert_session(watcher.clone());
+    state.sessions.set_role(
+        watcher.id,
+        light_wire::v2::runtime::RuntimeSessionRole::Visualizer,
+    );
+    let host = HostControlContext {
+        extension_id: "de.tosklight.surface".into(),
+        extension_instance_id: "main-surface".into(),
+        desk_id: desk.id.to_string(),
+        source: "native_extension",
+    };
+    let press = |input_id, control_id: &str, key| {
+        extensions_runtime::apply_bound_control(
+            &state,
+            &host,
+            &BoundControlInput {
+                input: ControlInputEvent {
+                    input_id,
+                    occurred_at_micros: 300 + input_id,
+                    control: ControlInput::Button {
+                        control_id: control_id.into(),
+                        pressed: true,
+                    },
+                },
+                intent: CanonicalControlIntent::ProgrammerKey { key },
+            },
+        )
+    };
+
+    let refused = press(1, "set", ProgrammerKey::Set).unwrap_err();
+    assert!(
+        refused
+            .to_string()
+            .contains("requires a connected desk session"),
+        "{refused}"
+    );
+
+    let operator = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: light_core::SessionId::new(),
+        token: "native-hardware-operator".into(),
+        connected: true,
+        desk: desk.clone(),
+    };
+    state.programming.start(operator.id);
+    state.sessions.insert_session(operator.clone());
+    press(2, "set", ProgrammerKey::Set).unwrap();
+    press(3, "one", ProgrammerKey::One).unwrap();
+    assert_eq!(
+        state.programming.get(operator.id).unwrap().command_line,
+        "F1"
+    );
+    assert!(state.programming.get(watcher.id).is_none());
+    let _ = std::fs::remove_dir_all(data_dir);
+}

@@ -66,6 +66,23 @@ impl SessionResource {
         self.sessions.read().values().cloned().collect()
     }
 
+    /// A connected operator session on the desk. Read-only visualizer sessions (for example
+    /// Hardware Controls watching native-extension health) have no Programmer and never qualify.
+    pub(in crate::runtime) fn operator_session_on_desk(&self, desk_id: Uuid) -> Option<Session> {
+        let roles = self.roles.read();
+        self.sessions
+            .read()
+            .values()
+            .find(|session| {
+                session.connected
+                    && session.desk.id == desk_id
+                    && !roles
+                        .get(&session.id)
+                        .is_some_and(|role| role.is_read_only())
+            })
+            .cloned()
+    }
+
     pub(in crate::runtime) fn set_visualizer_connected(&self, id: SessionId, connected: bool) {
         if connected {
             *self.visualizer_connections.write().entry(id).or_default() += 1;

@@ -54,13 +54,8 @@ impl ExtensionApplicationPorts for HeadlessExtensionPorts {
             .as_ref()
             .and_then(|state| extension_desk(state, context));
         let session = state.as_ref().and_then(|state| {
-            desk.as_ref().and_then(|desk| {
-                state
-                    .sessions
-                    .sessions()
-                    .into_iter()
-                    .find(|session| session.connected && session.desk.id == desk.id)
-            })
+            desk.as_ref()
+                .and_then(|desk| state.sessions.operator_session_on_desk(desk.id))
         });
         let highlight = state.as_ref().and_then(|state| {
             session.as_ref().and_then(|session| {
@@ -550,11 +545,7 @@ pub(super) fn apply_bound_control(
         .installation
         .desk()
         .map_err(|error| PortError::new(format!("the desk is unavailable: {error}")))?;
-    let session = state
-        .sessions
-        .sessions()
-        .into_iter()
-        .find(|session| session.connected && session.desk.id == desk.id);
+    let session = state.sessions.operator_session_on_desk(desk.id);
     let context = light_application::ActionContext::system(
         desk.id,
         light_application::ActionSource::Extension,
