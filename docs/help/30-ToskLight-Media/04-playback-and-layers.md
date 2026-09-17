@@ -19,6 +19,15 @@ A clip that has not been played recently has to be read from disk before its fir
 
 Layer controls include position, scale, rotation, opacity, crop or shaper behavior, blending, color treatment, and typed effects supported by the active personality. Edit one control at a time while watching both the isolated and composite previews. A correct isolated layer can still disappear in the composite because of its order, blend, opacity, mask, Master, or another layer.
 
+### Where each layer control lives
+
+The Media pane groups a layer's controls into tabs:
+
+- **Playback** — Play mode, Dimmer, Volume, Speed, Playback BPM, and Blur, followed by the **Playback range** heading with **In point** and **Out point**. The range is shown on this tab only.
+- **Frame** — Scale, Scaling mode, Position, and Rotation, followed by the **3D model** heading with **Model**, **Pan**, and **Tilt**. **Model** lists **Flat** and every slot in **Library › Models**. A new layer is **Flat** at Pan 0° and Tilt 0°, and Pan and Tilt still turn a Flat layer.
+- **Colour**, **Mask**, and **Blend** — tint and greyscale, the mask placement, and blend mode with strobe.
+- **Effects** — the two effect banks. When the layer shows a generated visualizer, a **Visualizer** tab comes first with that visualizer's own settings and its four Visualizer Parameters. Other content shows only **Bank 1** and **Bank 2**.
+
 ## Master output
 
 The Master controls the output-wide result and owns output-level configuration exposed by the selected personality. A layer can be correct and still remain black when the Master is black, stopped, or owned by another source.

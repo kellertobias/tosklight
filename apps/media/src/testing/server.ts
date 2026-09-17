@@ -15,6 +15,7 @@ import type {
 	ImportsView,
 	LogsView,
 	LibrarySettingsView,
+	ModelSlotView,
 	NetworkView,
 	OutputConfigurationView,
 	OutputView,
@@ -37,6 +38,7 @@ export interface StubbedServer {
 	folderPresentations: FolderPresentationsView;
 	health: Health;
 	visualizers: VisualizerView[];
+	models: ModelSlotView[];
 	librarySettings: LibrarySettingsView;
 	/** Folders the data-folder picker can list, by full path. */
 	dataFolders: Record<string, DataFolderListingView>;
@@ -85,6 +87,17 @@ export function stubServer(
 		catalog: aCatalog(),
 		folderPresentations: aFolderPresentations(),
 		visualizers: [aVisualizer()],
+		models: (["Plane", "Cube", "Sphere", "Cylinder", "Pyramid"] as const).map(
+			(name, index) => ({
+				slot: index + 1,
+				name,
+				vertices: 24,
+				triangles: 12,
+				builtin: name.toLowerCase() as ModelSlotView["builtin"],
+				status: "ready",
+				detail: null,
+			}),
+		),
 		dataFolders: aDataFolderTree(),
 		librarySettings: {
 			storedDirectory: "/Users/Shared/ToskLight Pixel/Media",
@@ -170,6 +183,7 @@ export function stubServer(
 			const folderPresentation = writeFolderPresentation(server, path, init);
 			if (folderPresentation) return folderPresentation;
 			if (path === "/visualizers") return jsonResponse(server.visualizers);
+			if (path === "/models") return jsonResponse(server.models);
 			if (path === "/visualizers/create") {
 				const body = JSON.parse(String(init?.body ?? "{}"));
 				const source = server.visualizers.find(
@@ -377,7 +391,9 @@ export function stubServer(
 					// Decoded exactly like the Blend mode / Strobe DMX byte.
 					const raw = body.blendDmx;
 					layer.blendMode =
-						raw < 128 ? (BLEND_MODES[Math.floor(raw / 16)] ?? "normal") : "normal";
+						raw < 128
+							? (BLEND_MODES[Math.floor(raw / 16)] ?? "normal")
+							: "normal";
 					layer.strobeHz =
 						raw >= 128 && raw <= 249 ? 1 + ((raw - 128) / 121) * 24 : null;
 				}
@@ -1787,4 +1803,3 @@ export function anImportState(
 		...overrides,
 	};
 }
-

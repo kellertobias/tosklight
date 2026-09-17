@@ -25,6 +25,7 @@ import type {
 import {
 	useCatalog,
 	useEffects,
+	useModels,
 	useRuntime,
 	useText,
 	useVisualizers,
@@ -33,12 +34,16 @@ import { textPreviewUrl } from "../text-sources/TextSourcesPage";
 import { visualizerPreviewUrl } from "../visualizers/preview";
 import { effectLayerChange } from "./effectLayerChange";
 import {
+	blendSection,
 	effectBankSection,
+	frameSection,
 	layerDmxChange,
-	layerDmxSections,
+	playbackRangeControls,
 	VISUALIZER_FLAGS,
+	VISUALIZER_GROUP,
 	VISUALIZER_NUMBERS,
 	valueControl,
+	visualizerParameterControls,
 } from "./layerDmxSections";
 import { useOutputFacts } from "./useOutputFacts";
 
@@ -65,6 +70,7 @@ function MediaPanePageContent() {
 	const text = useText();
 	const visualizers = useVisualizers();
 	const effects = useEffects();
+	const models = useModels();
 	const layers = useMemo(
 		() =>
 			(outputs.data ?? []).flatMap((output) =>
@@ -402,65 +408,10 @@ function MediaPanePageContent() {
 										!takeover,
 										"%",
 									),
+									...playbackRangeControls(selected.layer, !takeover),
 								],
 							},
-							{
-								id: "frame",
-								label: "Frame",
-								controls: [
-									valueControl(
-										"scale-x",
-										"Scale X",
-										selected.layer.scaleX,
-										0,
-										10,
-										!takeover,
-									),
-									valueControl(
-										"scale-y",
-										"Scale Y",
-										selected.layer.scaleY,
-										0,
-										10,
-										!takeover,
-									),
-									{
-										id: "scaling-mode",
-										kind: "choice",
-										label: "Scaling mode",
-										value: selected.layer.scalingMode,
-										options: ["fit", "fill", "original", "stretch"].map(
-											(value) => ({ value, label: value }),
-										),
-										disabled: !takeover,
-									},
-									valueControl(
-										"position-x",
-										"Position X",
-										selected.layer.positionX,
-										-2,
-										2,
-										!takeover,
-									),
-									valueControl(
-										"position-y",
-										"Position Y",
-										selected.layer.positionY,
-										-2,
-										2,
-										!takeover,
-									),
-									valueControl(
-										"rotation",
-										"Rotation",
-										selected.layer.rotation,
-										-360,
-										360,
-										!takeover,
-										"°",
-									),
-								],
-							},
+							frameSection(selected.layer, models.data ?? [], !takeover),
 							{
 								id: "colour",
 								label: "Colour",
@@ -545,18 +496,24 @@ function MediaPanePageContent() {
 									),
 								],
 							},
-							{
-								...effectBankSection(
+							layerEffectsSection(
+								effectBankSection(
 									selected.layer.effectBanks,
 									effects.data ?? [],
 									!takeover,
 								),
-							},
-							...layerDmxSections(
-								selected.layer,
-								selected.layer.address.folder >= 250 ? selectedVisualizer : undefined,
-								!takeover,
+								displayedVisualizer
+									? [
+											...visualizerControls(displayedVisualizer, !takeover),
+											...visualizerParameterControls(
+												selected.layer,
+												displayedVisualizer,
+												!takeover,
+											),
+										]
+									: [],
 							),
+							blendSection(selected.layer, !takeover),
 						]
 					: [],
 		selectedControlSectionId,
@@ -676,7 +633,9 @@ function outputSourceFailures(outputs: OutputView[]) {
 		.flatMap((output) =>
 			output.layers.flatMap((layer) =>
 				layer.sourceStatus.failure
-					? [`${output.name} layer ${layer.index + 1}: ${layer.sourceStatus.failure}`]
+					? [
+							`${output.name} layer ${layer.index + 1}: ${layer.sourceStatus.failure}`,
+						]
 					: [],
 			),
 		)
@@ -787,708 +746,6 @@ function layerChange(id: string, value: string | number): UpdateLayer {
 	}
 }
 
-function effectControls(
-	effects: OutputView["layers"][number]["effects"],
-	disabled: boolean,
-	visualizer?: VisualizerView,
-) {
-	return effects.flatMap((effect) => {
-		if (effect.index === 0 && visualizer)
-			return visualizerControls(visualizer, disabled);
-		const prefix = `effect-${effect.index}`;
-		const slot = `Slot ${effect.index + 1}`;
-		const controls = [
-			{
-				id: `${prefix}-type`,
-				kind: "choice" as const,
-				label: `${slot} effect`,
-				value: effect.effectType ?? "none",
-				options: [
-					{ value: "none", label: "None" },
-					{ value: "analog-tv", label: "Analog TV" },
-					{ value: "digital-tv", label: "Digital TV" },
-					{ value: "blur", label: "Blur" },
-					{ value: "feedback", label: "Feedback" },
-					{ value: "opacity-cycle", label: "Layer opacity cycle" },
-					{ value: "beat-move", label: "Beat Move" },
-					{ value: "kaleidoscope", label: "Kaleidoscope" },
-					{ value: "rasterize", label: "Rasterized Print" },
-					{ value: "beat-scan", label: "Beat Scan" },
-					{ value: "beat-scale-turn", label: "Beat Scale and Turn" },
-					{ value: "beat-grid-wave", label: "Beat Grid Wave" },
-					{ value: "beat-form-flash", label: "Beat Form Flash" },
-					{ value: "drawn-image", label: "Drawn Image" },
-				],
-				disabled,
-			},
-		];
-		if (effect.effectType === "opacity-cycle")
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				{
-					id: `${prefix}-cycle-interval`,
-					kind: "choice" as const,
-					label: `${slot} · Interval`,
-					value: ["every-beat", "every-half-beat", "every-second"][
-						Math.round(effect.parameters[0]?.value ?? 0)
-					],
-					options: [
-						{ value: "every-beat", label: "Every beat" },
-						{ value: "every-half-beat", label: "Every half beat" },
-						{ value: "every-second", label: "Every second" },
-					],
-					disabled,
-				},
-			];
-		if (effect.effectType === "feedback") {
-			const amount = effect.parameters.find(
-				(parameter) => parameter.id === "feedback-amount",
-			);
-			const motion = effect.parameters.find(
-				(parameter) => parameter.id === "feedback-motion",
-			);
-			const direction = effect.parameters.find(
-				(parameter) => parameter.id === "feedback-direction",
-			);
-			const directions = [
-				{ value: "top", label: "Top" },
-				{ value: "bottom", label: "Bottom" },
-				{ value: "left", label: "Left" },
-				{ value: "right", label: "Right" },
-				{ value: "rotate-left", label: "Rotate Left" },
-				{ value: "rotate-right", label: "Rotate Right" },
-			];
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-feedback-amount`,
-					`${slot} · Feedback amount`,
-					(amount?.value ?? 0.82) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-feedback-motion`,
-					`${slot} · Motion speed`,
-					(motion?.value ?? 0.25) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				{
-					id: `${prefix}-feedback-direction`,
-					kind: "choice" as const,
-					label: `${slot} · Motion direction`,
-					value: directions[Math.round(direction?.value ?? 0)]?.value ?? "top",
-					options: directions,
-					disabled,
-				},
-			];
-		}
-		if (effect.effectType === "beat-move") {
-			const amount = effect.parameters.find(
-				(parameter) => parameter.id === "beat-move-amount",
-			);
-			const direction = effect.parameters.find(
-				(parameter) => parameter.id === "beat-move-direction",
-			);
-			const decay = effect.parameters.find(
-				(parameter) => parameter.id === "beat-move-decay",
-			);
-			const directions = [
-				{ value: "up", label: "Up" },
-				{ value: "down", label: "Down" },
-				{ value: "left", label: "Left" },
-				{ value: "right", label: "Right" },
-			];
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-beat-move-amount`,
-					`${slot} · Movement amount`,
-					(amount?.value ?? 0.15) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				{
-					id: `${prefix}-beat-move-direction`,
-					kind: "choice" as const,
-					label: `${slot} · Direction`,
-					value: directions[Math.round(direction?.value ?? 0)]?.value ?? "up",
-					options: directions,
-					disabled,
-				},
-				valueControl(
-					`${prefix}-beat-move-decay`,
-					`${slot} · Return time`,
-					decay?.value ?? 0.35,
-					0.05,
-					5,
-					disabled,
-					" s",
-					0.05,
-				),
-			];
-		}
-		if (effect.effectType === "kaleidoscope") {
-			const repetitions = effect.parameters.find(
-				(parameter) => parameter.id === "kaleidoscope-repetitions",
-			);
-			const angle = effect.parameters.find(
-				(parameter) => parameter.id === "kaleidoscope-angle",
-			);
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				{
-					id: `${prefix}-kaleidoscope-repetitions`,
-					kind: "choice" as const,
-					label: `${slot} · Mirror repetitions`,
-					value: String(Math.round(repetitions?.value ?? 6)),
-					options: [1, 2, 4, 6, 8, 12, 16].map((value) => ({
-						value: String(value),
-						label: String(value),
-					})),
-					disabled,
-				},
-				valueControl(
-					`${prefix}-kaleidoscope-angle`,
-					`${slot} · Angle`,
-					angle?.value ?? 0,
-					-180,
-					180,
-					disabled,
-					"°",
-					1,
-				),
-			];
-		}
-		if (effect.effectType === "rasterize") {
-			const mode = effect.parameters.find(
-				(parameter) => parameter.id === "rasterize-mode",
-			);
-			const dotSize = effect.parameters.find(
-				(parameter) => parameter.id === "rasterize-dot-size",
-			);
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				{
-					id: `${prefix}-rasterize-mode`,
-					kind: "choice" as const,
-					label: `${slot} · Print mode`,
-					value: (mode?.value ?? 0) >= 0.5 ? "cmyk" : "black-and-white",
-					options: [
-						{ value: "black-and-white", label: "Black and White" },
-						{ value: "cmyk", label: "CMYK" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-rasterize-dot-size`,
-					`${slot} · Dot size`,
-					dotSize?.value ?? 8,
-					2,
-					32,
-					disabled,
-					" px",
-					1,
-				),
-			];
-		}
-		if (effect.effectType === "beat-scan") {
-			const width = effect.parameters.find(
-				(parameter) => parameter.id === "beat-scan-width",
-			);
-			const edge = effect.parameters.find(
-				(parameter) => parameter.id === "beat-scan-edge",
-			);
-			const falloff = effect.parameters.find(
-				(parameter) => parameter.id === "beat-scan-falloff",
-			);
-			const duration = effect.parameters.find(
-				(parameter) => parameter.id === "beat-scan-duration",
-			);
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-beat-scan-width`,
-					`${slot} · Scan width`,
-					(width?.value ?? 0.06) * 100,
-					1,
-					25,
-					disabled,
-					"%",
-				),
-				{
-					id: `${prefix}-beat-scan-edge`,
-					kind: "choice" as const,
-					label: `${slot} · Edge`,
-					value: (edge?.value ?? 0) >= 0.5 ? "soft" : "sharp",
-					options: [
-						{ value: "sharp", label: "Sharp" },
-						{ value: "soft", label: "Soft" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-beat-scan-falloff`,
-					`${slot} · Edge falloff`,
-					(falloff?.value ?? 0.45) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-beat-scan-duration`,
-					`${slot} · Travel time`,
-					duration?.value ?? 1,
-					0.2,
-					3,
-					disabled,
-					" s",
-					0.05,
-				),
-			];
-		}
-		if (effect.effectType === "beat-scale-turn") {
-			const scale = effect.parameters.find(
-				(parameter) => parameter.id === "beat-scale-amount",
-			);
-			const turn = effect.parameters.find(
-				(parameter) => parameter.id === "beat-turn-enabled",
-			);
-			const rotation = effect.parameters.find(
-				(parameter) => parameter.id === "beat-turn-rotation",
-			);
-			const decay = effect.parameters.find(
-				(parameter) => parameter.id === "beat-scale-decay",
-			);
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-beat-scale-amount`,
-					`${slot} · Scale amount`,
-					(scale?.value ?? 0.15) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				{
-					id: `${prefix}-beat-turn-enabled`,
-					kind: "choice" as const,
-					label: `${slot} · Turn`,
-					value: String((turn?.value ?? 0) >= 0.5),
-					options: [
-						{ value: "false", label: "Off" },
-						{ value: "true", label: "On" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-beat-turn-rotation`,
-					`${slot} · Rotation amount`,
-					rotation?.value ?? 5,
-					-30,
-					30,
-					disabled,
-					"°",
-				),
-				valueControl(
-					`${prefix}-beat-scale-decay`,
-					`${slot} · Return time`,
-					decay?.value ?? 0.35,
-					0.05,
-					5,
-					disabled,
-					" s",
-					0.05,
-				),
-			];
-		}
-		if (effect.effectType === "beat-grid-wave") {
-			const parameter = (id: string, fallback: number) =>
-				effect.parameters.find((candidate) => candidate.id === id)?.value ??
-				fallback;
-			const origins = ["centre", "top", "right", "bottom", "left"];
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-beat-grid-density`,
-					`${slot} · Grid density`,
-					parameter("beat-grid-density", 24),
-					6,
-					64,
-					disabled,
-					" lines",
-					1,
-				),
-				valueControl(
-					`${prefix}-beat-grid-height`,
-					`${slot} · Wave height`,
-					parameter("beat-grid-height", 0.5) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-beat-grid-duration`,
-					`${slot} · Travel time`,
-					parameter("beat-grid-duration", 1.2),
-					0.2,
-					4,
-					disabled,
-					" s",
-					0.05,
-				),
-				{
-					id: `${prefix}-beat-grid-origin`,
-					kind: "choice" as const,
-					label: `${slot} · Wave origin`,
-					value:
-						origins[Math.round(parameter("beat-grid-origin", 0))] ?? "centre",
-					options: [
-						{ value: "centre", label: "Centre" },
-						{ value: "top", label: "Top" },
-						{ value: "right", label: "Right" },
-						{ value: "bottom", label: "Bottom" },
-						{ value: "left", label: "Left" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-beat-grid-hue`,
-					`${slot} · Grid hue`,
-					parameter("beat-grid-hue", 190),
-					0,
-					360,
-					disabled,
-					"°",
-					1,
-				),
-				valueControl(
-					`${prefix}-beat-grid-brightness`,
-					`${slot} · Brightness`,
-					parameter("beat-grid-brightness", 1) * 100,
-					10,
-					200,
-					disabled,
-					"%",
-				),
-			];
-		}
-		if (effect.effectType === "beat-form-flash") {
-			const parameter = (id: string, fallback: number) =>
-				effect.parameters.find((candidate) => candidate.id === id)?.value ??
-				fallback;
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-beat-form-enlargement`,
-					`${slot} · Start size`,
-					parameter("beat-form-enlargement", 1.6) * 100,
-					100,
-					400,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-beat-form-lifetime`,
-					`${slot} · Lifetime`,
-					parameter("beat-form-lifetime", 0.9),
-					0.1,
-					5,
-					disabled,
-					" s",
-					0.05,
-				),
-				valueControl(
-					`${prefix}-beat-form-density`,
-					`${slot} · Forms per beat`,
-					parameter("beat-form-density", 1),
-					1,
-					4,
-					disabled,
-					" forms",
-					1,
-				),
-				valueControl(
-					`${prefix}-beat-form-variation`,
-					`${slot} · Variation`,
-					parameter("beat-form-variation", 0.35) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-			];
-		}
-		if (effect.effectType === "drawn-image") {
-			const parameter = (id: string, fallback: number) =>
-				effect.parameters.find((candidate) => candidate.id === id)?.value ??
-				fallback;
-			return [
-				...controls,
-				{
-					id: `${prefix}-enabled`,
-					kind: "choice" as const,
-					label: `${slot} state`,
-					value: String(effect.enabled),
-					options: [
-						{ value: "true", label: "Enabled" },
-						{ value: "false", label: "Bypassed" },
-					],
-					disabled,
-				},
-				valueControl(
-					`${prefix}-mix`,
-					`${slot} mix`,
-					effect.mix * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-drawn-strength`,
-					`${slot} · Stylization strength`,
-					parameter("drawn-strength", 0.8) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-				valueControl(
-					`${prefix}-drawn-line-detail`,
-					`${slot} · Line detail`,
-					parameter("drawn-line-detail", 0.55) * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-			];
-		}
-		if (
-			effect.effectType !== "analog-tv" &&
-			effect.effectType !== "digital-tv" &&
-			effect.effectType !== "blur"
-		)
-			return controls;
-		return [
-			...controls,
-			{
-				id: `${prefix}-enabled`,
-				kind: "choice" as const,
-				label: `${slot} state`,
-				value: String(effect.enabled),
-				options: [
-					{ value: "true", label: "Enabled" },
-					{ value: "false", label: "Bypassed" },
-				],
-				disabled,
-			},
-			valueControl(
-				`${prefix}-mix`,
-				`${slot} mix`,
-				effect.mix * 100,
-				0,
-				100,
-				disabled,
-				"%",
-			),
-			...effect.parameters.map((parameter) =>
-				valueControl(
-					`${prefix}-${parameter.id}`,
-					`${slot} · ${parameter.label}`,
-					parameter.value * 100,
-					0,
-					100,
-					disabled,
-					"%",
-				),
-			),
-		];
-	});
-}
-
 const DEFAULT_VISUALIZER_PARAMETERS: VisualizerParametersView = {
 	count: 32,
 	size: 0.05,
@@ -1517,12 +774,27 @@ const DEFAULT_VISUALIZER_PARAMETERS: VisualizerParametersView = {
 	mode: 0,
 };
 
-function visualizerControls(visualizer: VisualizerView, disabled: boolean) {
+/**
+ * A layer's Effects tab: a shown Visualizer's own configuration comes first, as its own
+ * Visualizer group, followed by the two DMX effect banks. Other sources show only the banks.
+ */
+function layerEffectsSection(
+	banks: MediaPaneModel["controlSections"][number],
+	visualizer: MediaSecondaryControl[],
+): MediaPaneModel["controlSections"][number] {
+	return { ...banks, controls: [...visualizer, ...banks.controls] };
+}
+
+/** A shown Visualizer's live configuration, grouped under Visualizer on the Effects tab. */
+function visualizerControls(
+	visualizer: VisualizerView,
+	disabled: boolean,
+): MediaSecondaryControl[] {
 	const controls: MediaSecondaryControl[] = [
 		{
 			id: "visualizer-reset",
 			kind: "choice",
-			label: `Slot 1 · ${visualizer.name}`,
+			label: visualizer.name,
 			value: "current",
 			options: [
 				{ value: "current", label: "Current" },
@@ -1547,7 +819,7 @@ function visualizerControls(visualizer: VisualizerView, disabled: boolean) {
 			controls.push(
 				valueControl(
 					`visualizer-${parameter}`,
-					`Slot 1 · ${label}`,
+					label,
 					Number(visualizer.parameters[number.field]),
 					minimum,
 					maximum,
@@ -1563,7 +835,7 @@ function visualizerControls(visualizer: VisualizerView, disabled: boolean) {
 			controls.push({
 				id: `visualizer-${parameter}`,
 				kind: "choice" as const,
-				label: `Slot 1 · ${flag.label}`,
+				label: flag.label,
 				value: String(visualizer.parameters[flag.field]),
 				options: [
 					{ value: "true", label: "On" },
@@ -1578,7 +850,7 @@ function visualizerControls(visualizer: VisualizerView, disabled: boolean) {
 			controls.push({
 				id: `visualizer-${parameter}`,
 				kind: "color" as const,
-				label: `Slot 1 · ${parameter === "primary" ? "Colour" : "Second colour"}`,
+				label: parameter === "primary" ? "Colour" : "Second colour",
 				value: tintHex(
 					visualizer.parameters[`${prefix}Red`],
 					visualizer.parameters[`${prefix}Green`],
@@ -1588,7 +860,7 @@ function visualizerControls(visualizer: VisualizerView, disabled: boolean) {
 			});
 		}
 	}
-	return controls;
+	return controls.map((control) => ({ ...control, group: VISUALIZER_GROUP }));
 }
 
 function changeVisualizerParameter(
@@ -1669,8 +941,10 @@ function masterSections(
 	takeover: boolean,
 ): MediaPaneModel["controlSections"] {
 	return [
-		masterOutputSection(output, takeover), masterEffectsSection(output, takeover),
-		masterGeometrySection(output, takeover), masterMaskSection(output, takeover),
+		masterOutputSection(output, takeover),
+		masterEffectsSection(output, takeover),
+		masterGeometrySection(output, takeover),
+		masterMaskSection(output, takeover),
 		masterShapersSection(output, takeover),
 		// The master mirrors through negative scale; there is no Flip / mirror channel.
 		masterColourSection(output, takeover),
@@ -1678,61 +952,275 @@ function masterSections(
 }
 
 type MasterSection = MediaPaneModel["controlSections"][number];
-function masterOutputSection(output: OutputView, takeover: boolean): MasterSection {
-	return { id: "output", label: "Output", controls: [
-		valueControl("master-dimmer", "Dimmer", output.master.dimmer * 100, 0, 100, !takeover, "%"),
-		valueControl("master-volume", "Volume", output.master.volume * 100, 0, 100, !takeover, "%"),
-	] };
+function masterOutputSection(
+	output: OutputView,
+	takeover: boolean,
+): MasterSection {
+	return {
+		id: "output",
+		label: "Output",
+		controls: [
+			valueControl(
+				"master-dimmer",
+				"Dimmer",
+				output.master.dimmer * 100,
+				0,
+				100,
+				!takeover,
+				"%",
+			),
+			valueControl(
+				"master-volume",
+				"Volume",
+				output.master.volume * 100,
+				0,
+				100,
+				!takeover,
+				"%",
+			),
+		],
+	};
 }
-function masterEffectsSection(output: OutputView, takeover: boolean): MasterSection {
-	return { id: "effects", label: "Effects", controls: [{
-		id: "media.master.effect.opacity_cycle", kind: "choice", label: "Multiplier / Divider",
-		group: "Layer Opacity Cycle", value: String(output.master.opacityCycleDmx),
-		options: [
-			{ value: "0", label: "Off" }, { value: "1", label: "/16" },
-			{ value: "32", label: "/8" }, { value: "64", label: "/4" },
-			{ value: "96", label: "/2" }, { value: "128", label: "1x" },
-			{ value: "160", label: "2x" }, { value: "192", label: "4x" },
-			{ value: "224", label: "8x" }, { value: "240", label: "16x" },
-		], disabled: !takeover,
-	}] };
+function masterEffectsSection(
+	output: OutputView,
+	takeover: boolean,
+): MasterSection {
+	return {
+		id: "effects",
+		label: "Effects",
+		controls: [
+			{
+				id: "media.master.effect.opacity_cycle",
+				kind: "choice",
+				label: "Multiplier / Divider",
+				group: "Layer Opacity Cycle",
+				value: String(output.master.opacityCycleDmx),
+				options: [
+					{ value: "0", label: "Off" },
+					{ value: "1", label: "/16" },
+					{ value: "32", label: "/8" },
+					{ value: "64", label: "/4" },
+					{ value: "96", label: "/2" },
+					{ value: "128", label: "1x" },
+					{ value: "160", label: "2x" },
+					{ value: "192", label: "4x" },
+					{ value: "224", label: "8x" },
+					{ value: "240", label: "16x" },
+				],
+				disabled: !takeover,
+			},
+		],
+	};
 }
-function masterGeometrySection(output: OutputView, takeover: boolean): MasterSection {
-	return { id: "geometry", label: "Geometry", controls: [
-		valueControl("master-position-x", "Position X", output.master.positionX, -2, 2, !takeover),
-		valueControl("master-position-y", "Position Y", output.master.positionY, -2, 2, !takeover),
-		valueControl("master-scale-x", "Scale X", output.master.scaleX, -4, 4, !takeover),
-		valueControl("master-scale-y", "Scale Y", output.master.scaleY, -4, 4, !takeover),
-		valueControl("master-rotation", "Rotation", output.master.rotation, -180, 180, !takeover, "°", 1),
-		{ id: "master-scaling-mode", kind: "choice", label: "Scale mode",
-			value: output.master.scalingMode, options: [
-				{ value: "fit", label: "Fit" }, { value: "fill", label: "Fill" },
-				{ value: "original", label: "Native" }, { value: "stretch", label: "Stretch" },
-			], disabled: !takeover },
-	] };
+function masterGeometrySection(
+	output: OutputView,
+	takeover: boolean,
+): MasterSection {
+	return {
+		id: "geometry",
+		label: "Geometry",
+		controls: [
+			valueControl(
+				"master-position-x",
+				"Position X",
+				output.master.positionX,
+				-2,
+				2,
+				!takeover,
+			),
+			valueControl(
+				"master-position-y",
+				"Position Y",
+				output.master.positionY,
+				-2,
+				2,
+				!takeover,
+			),
+			valueControl(
+				"master-scale-x",
+				"Scale X",
+				output.master.scaleX,
+				-4,
+				4,
+				!takeover,
+			),
+			valueControl(
+				"master-scale-y",
+				"Scale Y",
+				output.master.scaleY,
+				-4,
+				4,
+				!takeover,
+			),
+			valueControl(
+				"master-rotation",
+				"Rotation",
+				output.master.rotation,
+				-180,
+				180,
+				!takeover,
+				"°",
+				1,
+			),
+			{
+				id: "master-scaling-mode",
+				kind: "choice",
+				label: "Scale mode",
+				value: output.master.scalingMode,
+				options: [
+					{ value: "fit", label: "Fit" },
+					{ value: "fill", label: "Fill" },
+					{ value: "original", label: "Native" },
+					{ value: "stretch", label: "Stretch" },
+				],
+				disabled: !takeover,
+			},
+		],
+	};
 }
-function masterMaskSection(output: OutputView, takeover: boolean): MasterSection {
-	return { id: "mask-controls", label: "Mask position", controls: [
-		valueControl("master-mask-position-x", "Mask position X", output.master.maskPositionX, -2, 2, !takeover),
-		valueControl("master-mask-position-y", "Mask position Y", output.master.maskPositionY, -2, 2, !takeover),
-	] };
+function masterMaskSection(
+	output: OutputView,
+	takeover: boolean,
+): MasterSection {
+	return {
+		id: "mask-controls",
+		label: "Mask position",
+		controls: [
+			valueControl(
+				"master-mask-position-x",
+				"Mask position X",
+				output.master.maskPositionX,
+				-2,
+				2,
+				!takeover,
+			),
+			valueControl(
+				"master-mask-position-y",
+				"Mask position Y",
+				output.master.maskPositionY,
+				-2,
+				2,
+				!takeover,
+			),
+		],
+	};
 }
-function masterShapersSection(output: OutputView, takeover: boolean): MasterSection {
-	return { id: "shapers", label: "Shapers", controls: [
-		valueControl("shaper-left", "Left", output.master.shaperLeft * 100, 0, 100, !takeover, "%"),
-		valueControl("shaper-right", "Right", output.master.shaperRight * 100, 0, 100, !takeover, "%"),
-		valueControl("shaper-top", "Top", output.master.shaperTop * 100, 0, 100, !takeover, "%"),
-		valueControl("shaper-bottom", "Bottom", output.master.shaperBottom * 100, 0, 100, !takeover, "%"),
-		valueControl("shaper-left-rotation", "Left rotation", output.master.shaperLeftRotation, -45, 45, !takeover, "°", 1),
-		valueControl("shaper-right-rotation", "Right rotation", output.master.shaperRightRotation, -45, 45, !takeover, "°", 1),
-		valueControl("shaper-top-rotation", "Top rotation", output.master.shaperTopRotation, -45, 45, !takeover, "°", 1),
-		valueControl("shaper-bottom-rotation", "Bottom rotation", output.master.shaperBottomRotation, -45, 45, !takeover, "°", 1),
-		valueControl("shaper-rotation", "Module rotation", output.master.shaperRotation, -180, 180, !takeover, "°", 1),
-	] };
+function masterShapersSection(
+	output: OutputView,
+	takeover: boolean,
+): MasterSection {
+	return {
+		id: "shapers",
+		label: "Shapers",
+		controls: [
+			valueControl(
+				"shaper-left",
+				"Left",
+				output.master.shaperLeft * 100,
+				0,
+				100,
+				!takeover,
+				"%",
+			),
+			valueControl(
+				"shaper-right",
+				"Right",
+				output.master.shaperRight * 100,
+				0,
+				100,
+				!takeover,
+				"%",
+			),
+			valueControl(
+				"shaper-top",
+				"Top",
+				output.master.shaperTop * 100,
+				0,
+				100,
+				!takeover,
+				"%",
+			),
+			valueControl(
+				"shaper-bottom",
+				"Bottom",
+				output.master.shaperBottom * 100,
+				0,
+				100,
+				!takeover,
+				"%",
+			),
+			valueControl(
+				"shaper-left-rotation",
+				"Left rotation",
+				output.master.shaperLeftRotation,
+				-45,
+				45,
+				!takeover,
+				"°",
+				1,
+			),
+			valueControl(
+				"shaper-right-rotation",
+				"Right rotation",
+				output.master.shaperRightRotation,
+				-45,
+				45,
+				!takeover,
+				"°",
+				1,
+			),
+			valueControl(
+				"shaper-top-rotation",
+				"Top rotation",
+				output.master.shaperTopRotation,
+				-45,
+				45,
+				!takeover,
+				"°",
+				1,
+			),
+			valueControl(
+				"shaper-bottom-rotation",
+				"Bottom rotation",
+				output.master.shaperBottomRotation,
+				-45,
+				45,
+				!takeover,
+				"°",
+				1,
+			),
+			valueControl(
+				"shaper-rotation",
+				"Module rotation",
+				output.master.shaperRotation,
+				-180,
+				180,
+				!takeover,
+				"°",
+				1,
+			),
+		],
+	};
 }
-function masterColourSection(output: OutputView, takeover: boolean): MasterSection {
-	return { id: "colour", label: "Colour", controls: [
-		{ id: "master-tint", kind: "color", label: "Tint",
-			value: tintHex(output.master.tintRed, output.master.tintGreen, output.master.tintBlue), disabled: !takeover },
-	] };
+function masterColourSection(
+	output: OutputView,
+	takeover: boolean,
+): MasterSection {
+	return {
+		id: "colour",
+		label: "Colour",
+		controls: [
+			{
+				id: "master-tint",
+				kind: "color",
+				label: "Tint",
+				value: tintHex(
+					output.master.tintRed,
+					output.master.tintGreen,
+					output.master.tintBlue,
+				),
+				disabled: !takeover,
+			},
+		],
+	};
 }

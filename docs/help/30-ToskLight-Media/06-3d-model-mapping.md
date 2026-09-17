@@ -42,16 +42,18 @@ Every node transform in the default scene is applied, then the whole model is **
 
 ## Selecting a model on a layer
 
-The layer's **3D model** channel (slot 34 of the current layer layout) selects the model. **0 draws the layer flat, exactly as before.** Values **1–255** select that model slot. **Model pan** and **Model tilt** are 16-bit channels covering −360° to 360°. The Media Server's own layer controls expose the same three values. On the desk they are the Media attributes **Model Pan** and **Model Tilt**, beside **3D Model** on Media encoder page 9. They are separate from a moving light's Pan and Tilt, so Aim, position presets, and the Pan/Tilt tools never turn a media layer.
+The layer's **3D model** channel (slot 34 of the current layer layout) selects the model. **0 is Flat.** Values **1–255** select that model slot. **Model pan** and **Model tilt** are 16-bit channels covering −360° to 360°. In the Media Server's Media pane, the same three values are **Model**, **Pan**, and **Tilt** under the **3D model** heading on the layer's **Frame** tab. On the desk they are the Media attributes **Model Pan** and **Model Tilt**, beside **3D Model** on Media encoder page 9. They are separate from a moving light's Pan and Tilt, so Aim, position presets, and the Pan/Tilt tools never turn a media layer.
 
-**3D mapping defaults to the Plane.** When the selected slot is empty, or its file cannot be loaded, the layer is mapped onto the built-in **Plane** — never onto another model, and never drawn black. The server logs the problem once, the Models tab marks an unloadable slot **Cannot load** with the reason, and the layer's status reports `missing` or `unloadable`.
+**Flat is the default.** A new layer is Flat at Pan 0° and Tilt 0°, and draws exactly like a layer without 3D mapping. Pan and Tilt still turn a Flat layer: it then draws as a flat card in 3D, which starts at the same size, position, and scaling mode as the flat layer and turns from there. Setting both back to 0° returns it to the plain flat drawing.
+
+**A missing model falls back to the Plane.** When the selected slot is empty, or its file cannot be loaded, the layer is mapped onto the built-in **Plane** — never onto another model, and never drawn black. The server logs the problem once, the Models tab marks an unloadable slot **Cannot load** with the reason, and the layer's status reports `missing` or `unloadable`.
 
 ## Camera and placement
 
 Every output looks at its models through the same fixed camera: a perspective view with a **40° vertical field of view**, looking straight at the centre of the output. A model at scale 1 fills roughly the output height.
 
 - **Position X / Y** move the model across the output in the same units as a flat layer: ±1 puts its centre on the left/right or top/bottom edge.
-- **Scale X / Y** scale the model along its own width and height; its depth follows their average. Scaling mode has no effect on a mapped layer — the image follows the model's texture coordinates instead.
+- **Scale X / Y** scale the model along its own width and height; its depth follows their average. Scaling mode has no effect on a layer mapped onto a model, because the image follows the model's texture coordinates. A turned Flat layer keeps its scaling mode.
 - **Rotation** is the model's **roll**.
 
 ### Rotation order: pan, then tilt, then roll

@@ -1,6 +1,7 @@
 import type { MediaPaneModel } from "../../../../light-desktop/src/windows/media/MediaPaneSurface";
 import type { api } from "../../shared/api/client";
 import type {
+	ModelSlotView,
 	OutputView,
 	UpdateLayer,
 	VisualizerParametersView,
@@ -47,7 +48,7 @@ const BLEND_MODES: Array<[string, string]> = [
 const STROBE_OFF = 127;
 const STROBE_FASTEST = 249;
 
-/** Translates the effect-bank and mapping-layout controls into layer updates. */
+/** Translates the Blend, Playback range, Visualizer byte, effect-bank and 3D model controls into layer updates. */
 export function layerDmxChange(
 	id: string,
 	value: string | number,
@@ -97,26 +98,18 @@ export function layerDmxChange(
 	}
 }
 
-/** The mapping layout's Blend, Playback range, Visualizer, and 3D mapping sections. */
-export function layerDmxSections(
-	layer: LayerState,
-	visualizer: VisualizerView | undefined,
-	disabled: boolean,
-): ControlSection[] {
-	return [
-		blendSection(layer, disabled),
-		playbackRangeSection(layer, disabled),
-		layerVisualizerSection(layer, visualizer, disabled),
-		mappingSection(layer, disabled),
-	];
-}
+/** The group heading a shown Visualizer's controls carry on the Effects tab. */
+export const VISUALIZER_GROUP = "Visualizer";
 
 function strobeByte(strobeHz: number | null) {
 	if (strobeHz === null) return STROBE_OFF;
 	return Math.round(128 + ((strobeHz - 1) / 24) * (STROBE_FASTEST - 128));
 }
 
-function blendSection(layer: LayerState, disabled: boolean): ControlSection {
+export function blendSection(
+	layer: LayerState,
+	disabled: boolean,
+): ControlSection {
 	return {
 		id: "blend",
 		label: "Blend",
@@ -148,45 +141,44 @@ function blendSection(layer: LayerState, disabled: boolean): ControlSection {
 	};
 }
 
-function playbackRangeSection(
+/** In and Out point, shown at the end of the Playback tab under a Playback range heading. */
+export function playbackRangeControls(
 	layer: LayerState,
 	disabled: boolean,
-): ControlSection {
-	return {
-		id: "playback-range",
-		label: "Playback range",
-		controls: [
-			{
-				...valueControl(
-					"in-point",
-					"In point",
-					layer.inPoint,
-					0,
-					65535,
-					disabled,
-					"",
-					1,
-				),
-				display: `Frame ${layer.inPoint}`,
-			},
-			{
-				...valueControl(
-					"out-point",
-					"Out point",
-					layer.outPoint,
-					0,
-					65535,
-					disabled,
-					"",
-					1,
-				),
-				display:
-					layer.outPoint === 0
-						? "End of clip"
-						: `${layer.outPoint} frames before end`,
-			},
-		],
-	};
+): ControlSection["controls"] {
+	return [
+		{
+			...valueControl(
+				"in-point",
+				"In point",
+				layer.inPoint,
+				0,
+				65535,
+				disabled,
+				"",
+				1,
+			),
+			display: `Frame ${layer.inPoint}`,
+			group: "Playback range",
+		},
+		{
+			...valueControl(
+				"out-point",
+				"Out point",
+				layer.outPoint,
+				0,
+				65535,
+				disabled,
+				"",
+				1,
+			),
+			display:
+				layer.outPoint === 0
+					? "End of clip"
+					: `${layer.outPoint} frames before end`,
+			group: "Playback range",
+		},
+	];
 }
 
 function visualizerParameterName(parameter: string) {
@@ -199,47 +191,127 @@ function visualizerParameterName(parameter: string) {
 	);
 }
 
-/** Four DMX bytes follow the shown visualizer kind's own parameter order. */
-function layerVisualizerSection(
+/**
+ * A shown Visualizer's four DMX bytes, in its kind's own parameter order. They belong to the
+ * Visualizer group on the Effects tab and are absent for any other source.
+ */
+export function visualizerParameterControls(
 	layer: LayerState,
-	visualizer: VisualizerView | undefined,
+	visualizer: VisualizerView,
+	disabled: boolean,
+): ControlSection["controls"] {
+	return Array.from({ length: 4 }, (_, index) => {
+		const raw = layer.visualizerControls[index] ?? 0;
+		const parameter = visualizer.uses[index];
+		return {
+			...valueControl(
+				`media.visualizer.parameter.${index + 1}`,
+				parameter
+					? `Parameter ${index + 1} · ${visualizerParameterName(parameter)}`
+					: `Parameter ${index + 1}`,
+				raw,
+				0,
+				255,
+				disabled || parameter === undefined,
+				"",
+				1,
+			),
+			display: raw === 0 ? "Configured" : String(raw),
+			group: VISUALIZER_GROUP,
+		};
+	});
+}
+
+/** Scale, placement and Rotation, then the 3D model that Rotation rolls. */
+export function frameSection(
+	layer: LayerState,
+	models: ModelSlotView[],
 	disabled: boolean,
 ): ControlSection {
 	return {
-		id: "visualizer",
-		label: "Visualizer",
-		controls: Array.from({ length: 4 }, (_, index) => {
-			const raw = layer.visualizerControls[index] ?? 0;
-			const parameter = visualizer?.uses[index];
-			return {
-				...valueControl(
-					`media.visualizer.parameter.${index + 1}`,
-					parameter
-						? `Parameter ${index + 1} · ${visualizerParameterName(parameter)}`
-						: `Parameter ${index + 1}`,
-					raw,
-					0,
-					255,
-					disabled || parameter === undefined,
-					"",
-					1,
-				),
-				display: raw === 0 ? "Configured" : String(raw),
-			};
-		}),
+		id: "frame",
+		label: "Frame",
+		controls: [
+			valueControl("scale-x", "Scale X", layer.scaleX, 0, 10, disabled),
+			valueControl("scale-y", "Scale Y", layer.scaleY, 0, 10, disabled),
+			{
+				id: "scaling-mode",
+				kind: "choice",
+				label: "Scaling mode",
+				value: layer.scalingMode,
+				options: ["fit", "fill", "original", "stretch"].map((value) => ({
+					value,
+					label: value,
+				})),
+				disabled,
+			},
+			valueControl(
+				"position-x",
+				"Position X",
+				layer.positionX,
+				-2,
+				2,
+				disabled,
+			),
+			valueControl(
+				"position-y",
+				"Position Y",
+				layer.positionY,
+				-2,
+				2,
+				disabled,
+			),
+			valueControl(
+				"rotation",
+				"Rotation",
+				layer.rotation,
+				-360,
+				360,
+				disabled,
+				"°",
+			),
+			...modelControls(layer, models, disabled),
+		],
 	};
 }
 
-function mappingSection(layer: LayerState, disabled: boolean): ControlSection {
-	return {
-		id: "mapping",
-		label: "3D mapping",
-		controls: [
-			{
-				...valueControl("model", "Model", layer.model, 0, 255, disabled, "", 1),
-				display: layer.model === 0 ? "Flat" : `Model ${layer.model}`,
-			},
-			valueControl(
+/** The 3D model heading on the Frame tab. */
+const MODEL_GROUP = "3D model";
+
+/**
+ * 3D model selection, Pan and Tilt, shown on the Frame tab after Rotation, which is the model's
+ * roll. Flat at Pan 0 and Tilt 0 is the baseline; Pan and Tilt still turn a Flat layer.
+ */
+function modelControls(
+	layer: LayerState,
+	models: ModelSlotView[],
+	disabled: boolean,
+): ControlSection["controls"] {
+	const options = [
+		{ value: "0", label: "Flat" },
+		...models.map((model) => ({
+			value: String(model.slot),
+			label: `${model.slot} · ${model.name}`,
+		})),
+	];
+	if (!options.some((option) => option.value === String(layer.model)))
+		options.push({
+			value: String(layer.model),
+			label: `${layer.model} · Missing`,
+		});
+	return [
+		{
+			id: "model",
+			kind: "choice",
+			label: "Model",
+			value: String(layer.model),
+			options,
+			disabled,
+			group: MODEL_GROUP,
+			description: "Rotation above is the model's roll.",
+		},
+		{
+			...valueControl(
 				"model-pan",
 				"Pan",
 				layer.modelPan,
@@ -249,7 +321,10 @@ function mappingSection(layer: LayerState, disabled: boolean): ControlSection {
 				"°",
 				1,
 			),
-			valueControl(
+			group: MODEL_GROUP,
+		},
+		{
+			...valueControl(
 				"model-tilt",
 				"Tilt",
 				layer.modelTilt,
@@ -259,15 +334,9 @@ function mappingSection(layer: LayerState, disabled: boolean): ControlSection {
 				"°",
 				1,
 			),
-			{
-				id: "model-roll",
-				kind: "readout",
-				label: "Roll",
-				value: `${Number(layer.rotation.toFixed(2))}°`,
-				description: "Rotation on the Frame tab is the model's roll.",
-			},
-		],
-	};
+			group: MODEL_GROUP,
+		},
+	];
 }
 
 export function effectBankSection(

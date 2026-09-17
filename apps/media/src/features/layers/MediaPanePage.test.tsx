@@ -710,8 +710,14 @@ describe("the production Media pane", () => {
 		expect(server.writeBodies.at(-1)).toEqual({ blendDmx: 32 });
 		expect(await screen.findByText("Off")).toBeInTheDocument();
 
-		await userEvent.click(screen.getByRole("tab", { name: "Playback range" }));
-		expect(screen.getByText("End of clip")).toBeInTheDocument();
+		await userEvent.click(screen.getByRole("tab", { name: "Playback" }));
+		const playback = screen.getByRole("tabpanel", {
+			name: "Playback controls",
+		});
+		expect(
+			within(playback).getByRole("heading", { name: "Playback range" }),
+		).toBeInTheDocument();
+		expect(within(playback).getByText("End of clip")).toBeInTheDocument();
 		fireEvent.input(screen.getByRole("slider", { name: "In point" }), {
 			target: { value: "300" },
 		});
@@ -724,14 +730,18 @@ describe("the production Media pane", () => {
 		});
 		expect(screen.getByText("600 frames before end")).toBeInTheDocument();
 
-		await userEvent.click(screen.getByRole("tab", { name: "3D mapping" }));
-		expect(screen.getByText("Flat")).toBeInTheDocument();
+		await userEvent.click(screen.getByRole("tab", { name: "Frame" }));
+		const frame = screen.getByRole("tabpanel", { name: "Frame controls" });
 		expect(
-			screen.getByText("Rotation on the Frame tab is the model's roll."),
+			within(frame).getByRole("heading", { name: "3D model" }),
 		).toBeInTheDocument();
-		fireEvent.input(screen.getByRole("slider", { name: "Model" }), {
-			target: { value: "3" },
-		});
+		expect(
+			within(frame).getByText("Rotation above is the model's roll."),
+		).toBeInTheDocument();
+		// A new mapping is Flat at Pan 0 and Tilt 0, and Flat still turns.
+		expect(choiceTrigger("Model")).toHaveTextContent("Flat");
+		expect(layer.model).toBe(0);
+		expect(within(frame).getAllByText("0°")).toHaveLength(3);
 		fireEvent.input(screen.getByRole("slider", { name: "Pan" }), {
 			target: { value: "-90" },
 		});
@@ -739,13 +749,65 @@ describe("the production Media pane", () => {
 			target: { value: "45" },
 		});
 		await waitFor(() => {
-			expect(layer.model).toBe(3);
 			expect(layer.modelPan).toBe(-90);
 			expect(layer.modelTilt).toBe(45);
 		});
+		expect(layer.model).toBe(0);
+		await chooseNamedChoice("Model", "3 · Sphere");
+		await waitFor(() => expect(layer.model).toBe(3));
+		expect(server.writeBodies.at(-1)).toEqual({ model: 3 });
 	});
 
-	it("labels the four visualizer parameters in the shown kind's order", async () => {
+	it("shows playback range, the 3D model, and visualizer settings on exactly one tab each", async () => {
+		const output = anOutput();
+		output.layers[0].address = {
+			folder: 250,
+			file: 1,
+			class: "generated-visualizer",
+		};
+		stubServer({ outputs: [output] });
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent ?? "");
+		for (const retired of ["Playback range", "3D mapping", "Visualizer"])
+			expect(tabs).not.toContain(retired);
+		const owners = new Map([
+			["In point", "Playback"],
+			["Out point", "Playback"],
+			["Pan", "Frame"],
+			["Tilt", "Frame"],
+			["Parameter 1 · Count", "Effects"],
+		]);
+		for (const tab of [
+			"Playback",
+			"Frame",
+			"Colour",
+			"Mask",
+			"Effects",
+			"Blend",
+		]) {
+			// Mask is also a browser mode; the control-section tab is the later one.
+			const [button] = screen.getAllByRole("tab", { name: tab }).slice(-1);
+			await userEvent.click(button);
+			expect(
+				screen.getByRole("tabpanel", { name: `${tab} controls` }),
+			).toBeInTheDocument();
+			for (const [slider, owner] of owners)
+				if (owner === tab)
+					expect(screen.getByRole("slider", { name: slider })).toBeVisible();
+				else
+					expect(
+						screen.queryByRole("slider", { name: slider }),
+					).not.toBeInTheDocument();
+			expect(
+				screen.queryAllByText("Model", { selector: "label" }),
+			).toHaveLength(tab === "Frame" ? 1 : 0);
+		}
+	});
+
+	it("configures a shown visualizer under Visualizer on the Effects tab", async () => {
 		const output = anOutput();
 		output.layers[0].address = {
 			folder: 250,
@@ -758,9 +820,30 @@ describe("the production Media pane", () => {
 		await userEvent.click(
 			await screen.findByRole("switch", { name: "Take over playback" }),
 		);
-		await userEvent.click(screen.getByRole("tab", { name: "Visualizer" }));
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		const bankTabs = screen.getByRole("tablist", { name: "Effect bank" });
+		expect(
+			within(bankTabs)
+				.getAllByRole("tab")
+				.map((tab) => tab.textContent),
+		).toEqual(["Visualizer", "Bank 1", "Bank 2"]);
+		expect(
+			within(bankTabs).getByRole("tab", { name: "Visualizer" }),
+		).toHaveAttribute("aria-selected", "true");
+		const effects = screen.getByRole("tabpanel", { name: "Effects controls" });
+		expect(
+			within(effects).getByRole("heading", { name: "Visualizer" }),
+		).toBeInTheDocument();
 
-		const count = await screen.findByRole("slider", {
+		const configuredCount = screen.getByRole("slider", { name: "Count" });
+		fireEvent.input(configuredCount, { target: { value: "64" } });
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].effects[0].visualizerParameters?.count,
+			).toBe(64),
+		);
+
+		const count = screen.getByRole("slider", {
 			name: "Parameter 1 · Count",
 		});
 		expect(count).toBeEnabled();
@@ -780,19 +863,38 @@ describe("the production Media pane", () => {
 			visualizerParameterIndex: 0,
 			visualizerParameterValue: 200,
 		});
+
+		await userEvent.click(
+			within(bankTabs).getByRole("tab", { name: "Bank 1" }),
+		);
+		expect(screen.queryByRole("slider", { name: "Count" })).toBeNull();
+		expect(
+			screen.getByRole("slider", { name: "Effect Strength" }),
+		).toBeInTheDocument();
 	});
 
-	it("disables visualizer parameters for a layer showing library media", async () => {
+	it("shows no visualizer controls for a layer showing library media", async () => {
 		stubServer();
 		render(<MediaPanePage />);
 		await userEvent.click(
 			await screen.findByRole("switch", { name: "Take over playback" }),
 		);
-		await userEvent.click(screen.getByRole("tab", { name: "Visualizer" }));
-		for (const number of [1, 2, 3, 4])
-			expect(
-				screen.getByRole("slider", { name: `Parameter ${number}` }),
-			).toBeDisabled();
+		await userEvent.click(screen.getByRole("tab", { name: "Effects" }));
+		const bankTabs = screen.getByRole("tablist", { name: "Effect bank" });
+		expect(
+			within(bankTabs)
+				.getAllByRole("tab")
+				.map((tab) => tab.textContent),
+		).toEqual(["Bank 1", "Bank 2"]);
+		expect(
+			screen.queryByRole("heading", { name: "Visualizer" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryAllByRole("slider", { name: /^Parameter \d/u }),
+		).toHaveLength(4);
+		expect(
+			screen.queryByRole("slider", { name: /^Parameter \d · /u }),
+		).toBeNull();
 	});
 
 	it("mirrors the master through negative scale without Flip / mirror", async () => {
@@ -840,12 +942,17 @@ async function chooseEffect(slot: number, name: string) {
 	await chooseNamedChoice(`Slot ${slot} effect`, name);
 }
 
-async function chooseNamedChoice(labelText: string, name: string) {
+function choiceTrigger(labelText: string) {
 	const label = screen.getByText(labelText, { selector: "label" });
 	const trigger = label.parentElement?.querySelector<HTMLButtonElement>(
 		'button[aria-haspopup="listbox"]',
 	);
 	expect(trigger).toBeTruthy();
+	return trigger as HTMLButtonElement;
+}
+
+async function chooseNamedChoice(labelText: string, name: string) {
+	const trigger = choiceTrigger(labelText);
 	await waitFor(() => expect(trigger).toBeEnabled());
 	fireEvent.click(trigger as HTMLButtonElement);
 	fireEvent.click(screen.getByRole("option", { name }));

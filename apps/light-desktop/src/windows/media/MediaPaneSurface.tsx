@@ -673,13 +673,36 @@ function MediaSecondaryControls({
 	onChange(controlId: string, value: string | number): void;
 	onReset?(controlId: string): void;
 }) {
-	const [effectBank, setEffectBank] = useState(1);
+	const [effectTab, setEffectTab] = useState<string>();
 	const section =
 		sections.find((candidate) => candidate.id === selectedSectionId) ??
 		sections[0];
 	const showsEffectBanks = section?.controls.some((control) =>
 		control.id.startsWith("media.effect.bank."),
 	);
+	// Source-owned effect controls, such as a Visualizer's configuration, get their own tab
+	// ahead of the two banks, named by their group.
+	const sourceEffectTabs = showsEffectBanks
+		? [
+				...new Set(
+					(section?.controls ?? []).flatMap((control) =>
+						effectControlBank(control.id) === undefined && control.group
+							? [control.group]
+							: [],
+					),
+				),
+			]
+		: [];
+	const effectTabs = [
+		...sourceEffectTabs.map((group) => ({
+			id: `group-${group}`,
+			label: group,
+		})),
+		{ id: "bank-1", label: "Bank 1" },
+		{ id: "bank-2", label: "Bank 2" },
+	];
+	const activeEffectTab =
+		effectTabs.find((tab) => tab.id === effectTab)?.id ?? effectTabs[0].id;
 	return (
 		<section
 			className="media-secondary-controls"
@@ -709,15 +732,15 @@ function MediaSecondaryControls({
 								role="tablist"
 								aria-label="Effect bank"
 							>
-								{[1, 2].map((bank) => (
+								{effectTabs.map((tab) => (
 									<Button
-										key={bank}
+										key={tab.id}
 										role="tab"
-										aria-selected={effectBank === bank}
-										active={effectBank === bank}
-										onClick={() => setEffectBank(bank)}
+										aria-selected={activeEffectTab === tab.id}
+										active={activeEffectTab === tab.id}
+										onClick={() => setEffectTab(tab.id)}
 									>
-										Bank {bank}
+										{tab.label}
 									</Button>
 								))}
 							</div>
@@ -727,7 +750,7 @@ function MediaSecondaryControls({
 								.filter(
 									(control) =>
 										!showsEffectBanks ||
-										effectControlBelongsToBank(control.id, effectBank),
+										effectControlTab(control) === activeEffectTab,
 								)
 								.map((control, index, visibleControls) => (
 									<Fragment key={control.id}>
@@ -751,8 +774,14 @@ function MediaSecondaryControls({
 	);
 }
 
-function effectControlBelongsToBank(controlId: string, bank: number) {
-	return controlId.startsWith(`media.effect.bank.${bank}.`);
+function effectControlBank(controlId: string) {
+	return /^media\.effect\.bank\.(\d+)\./u.exec(controlId)?.[1];
+}
+
+function effectControlTab(control: MediaSecondaryControl) {
+	const bank = effectControlBank(control.id);
+	if (bank !== undefined) return `bank-${bank}`;
+	return control.group ? `group-${control.group}` : undefined;
 }
 
 function MediaControl({
