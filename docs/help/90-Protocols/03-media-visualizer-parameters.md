@@ -31,6 +31,18 @@ How a byte becomes a value:
 | Mirror, Filled, Wireframe | Off below 128, on from 128 |
 | Variant | `raw − 1` |
 
+Some visualizers name or range a channel their own way. Flying Props, for example, names Variant
+**Flight pattern** (bytes 1, 2, 3 and 4 select Fly-through, Drift, Orbit and Rise, and byte 5
+starts the list again), names Count
+**Density** with a range of 1–48, and narrows Size to 0.02–0.5:
+
+| Channel | Flying Props parameter | Byte 1 | Byte 255 |
+| --- | --- | --- | --- |
+| 1 | Flight pattern | 0 (Fly-through) | 254 (pattern 254 mod 4 = Orbit) |
+| 2 | Speed | 0 | 8 |
+| 3 | Density | 1 | 48 |
+| 4 | Size | 0.02 | 0.5 |
+
 ## Media Server HTTP
 
 `GET /api/v2/outputs` reports, for every layer:

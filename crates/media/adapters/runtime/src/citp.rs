@@ -422,6 +422,9 @@ fn visualizer_preview_png(kind: VisualizerKind) -> &'static [u8] {
         VisualizerKind::TriangularNet => include_bytes!(
             "../../../../../apps/media/src/features/visualizers/previews/054-triangular-net.png"
         ),
+        VisualizerKind::FlyingProps => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/055-flying-props.png"
+        ),
     }
 }
 

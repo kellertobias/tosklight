@@ -18,6 +18,19 @@ Audio-reactive visualizers depend on the Media Server's configured audio input a
 
 Triangular Net is carried by the beat rather than by a clock: a kick heaves its big swells and raises them into mountains, a snare shoves the mid-scale chop, and a hi-hat ripples the fine detail, each easing out at the rate **Decay** sets. Between songs it holds its shape and stands still, so a still net on a playing input means the instruments are not being heard — check the lamps on the **Audio** page.
 
+Flying Props flies music props through the picture: headphones, cassettes, records, microphones, and beamed notes, drawn in **Colour** with their labels and cushions in **Second colour**. The props ship with the visualizer; operator-supplied models are not supported. Its four Visualizer Parameter channels are **Flight pattern**, **Speed**, **Density**, and **Size**:
+
+| Flight pattern | Motion |
+| --- | --- |
+| 0 — Fly-through | Props come out of the distance toward the camera and fade before they fill the picture |
+| 1 — Drift | Props cross the picture sideways at different depths |
+| 2 — Orbit | Props circle the middle of the picture on a tilted carousel |
+| 3 — Rise | Props float up from below the picture and out of the top |
+
+Values past 3 repeat the list. **Density** sets how many props fly, from 1 to 48, and **Size** how big each one is. The props keep flying in silence. A held kick swells them and pushes their flight forward, and a snare or the beat flash brightens their accents; **Reactivity** scales both, and a loud input cannot enlarge them further than a full kick does.
+
+A new Media Server configuration assigns Flying Props to `250/025`. A configuration saved before Flying Props shipped keeps its own visualizer assignments; add Flying Props to an empty slot on the **Visualizers** page.
+
 ## Effects and masks
 
 Masks are selected independently from content and can be combined with the layer's shaper and

@@ -98,6 +98,12 @@ impl VisualizerChannel {
     }
 }
 
+/// The most props Flying Props draws, whatever its Density says.
+pub const FLYING_PROPS_MOST: u32 = 48;
+
+/// The flight patterns Flying Props cycles through as its Flight pattern value counts up.
+pub const FLYING_PROPS_PATTERNS: [&str; 4] = ["Fly-through", "Drift", "Orbit", "Rise"];
+
 impl VisualizerKind {
     /// The layer's visualizer parameter channels this kind uses, in byte order.
     ///
@@ -130,6 +136,8 @@ impl VisualizerKind {
     pub const fn parameter_label(self, parameter: Parameter) -> &'static str {
         match (self, parameter) {
             (Self::EqualizerBars, Parameter::Amount) => "Bloom",
+            (Self::FlyingProps, Parameter::Mode) => "Flight pattern",
+            (Self::FlyingProps, Parameter::Count) => "Density",
             _ => parameter.label(),
         }
     }
@@ -139,6 +147,9 @@ impl VisualizerKind {
     pub const fn range(self, parameter: Parameter) -> (f32, f32) {
         match (self, parameter) {
             (Self::WaveformOscilloscope, Parameter::Size) => (0.005, 0.1),
+            // More props than this crowd the picture into noise and cost every pixel a test each.
+            (Self::FlyingProps, Parameter::Count) => (1.0, FLYING_PROPS_MOST as f32),
+            (Self::FlyingProps, Parameter::Size) => (0.02, 0.5),
             _ => parameter.range(),
         }
     }
@@ -305,6 +316,24 @@ mod tests {
         assert_eq!(bars.parameter_label(Parameter::Amount), "Bloom");
         assert_eq!(bars.channel(0).unwrap().label, "Count");
         assert_eq!(bars.channel(2).unwrap().label, "Colour");
+    }
+
+    #[test]
+    fn flying_props_puts_pattern_speed_density_and_size_on_its_four_channels() {
+        let kind = VisualizerKind::FlyingProps;
+        let labels: Vec<_> = kind.channels().map(|channel| channel.label).collect();
+        assert_eq!(labels, ["Flight pattern", "Speed", "Density", "Size"]);
+
+        let density = kind.channel(2).unwrap();
+        assert_eq!((density.minimum, density.maximum), (1.0, 48.0));
+        let driven = VisualizerConfiguration::new(kind)
+            .parameters
+            .with_dmx(kind, &[3, 0, 255, 1]);
+        assert_eq!(driven.mode, 2, "byte 3 selects the third pattern, Orbit");
+        assert_eq!(FLYING_PROPS_PATTERNS[usize::from(driven.mode)], "Orbit");
+        assert_eq!(driven.count, 48);
+        assert!((driven.size - 0.02).abs() < 1e-6);
+        assert_eq!(driven.speed, 1.0, "a zero byte keeps the configured speed");
     }
 
     #[test]

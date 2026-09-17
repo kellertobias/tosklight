@@ -43,7 +43,7 @@ describe("the visualizers page", () => {
 	});
 
 	it("has an actual renderer frame for every shipped built-in kind", () => {
-		expect(BUILTIN_VISUALIZER_KINDS).toHaveLength(24);
+		expect(BUILTIN_VISUALIZER_KINDS).toHaveLength(25);
 		expect(
 			BUILTIN_VISUALIZER_KINDS.every(({ typeId }) =>
 				hasRenderedVisualizerPreview(typeId),

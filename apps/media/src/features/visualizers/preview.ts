@@ -40,6 +40,7 @@ export const BUILTIN_VISUALIZER_KINDS = [
 	{ typeId: 52, label: "City Tunnel" },
 	{ typeId: 53, label: "Grid Landscape" },
 	{ typeId: 54, label: "Triangular Net" },
+	{ typeId: 55, label: "Flying Props" },
 ] as const;
 
 /** A representative frame rendered by the actual built-in visualizer implementation. */

@@ -222,6 +222,7 @@ fn a_visualizer_animates_without_audio() {
         VisualizerKind::CityTunnel,
         VisualizerKind::GridLandscape,
         VisualizerKind::MatrixDigitalRain,
+        VisualizerKind::FlyingProps,
     ] {
         let early = draw(
             &gpu,
@@ -388,6 +389,138 @@ fn the_triangular_net_never_goes_blank_however_hard_it_is_kicked() {
         assert!(
             brightness(&pixels) > 0.0,
             "Triangular Net rendered an empty frame {step} frames into being kicked"
+        );
+    }
+}
+
+/// How much of a frame something covers.
+fn coverage(pixels: &[u8]) -> f64 {
+    let chunks = pixels.as_chunks::<4>().0;
+    chunks.iter().filter(|pixel| pixel[3] > 0).count() as f64 / chunks.len() as f64
+}
+
+fn flying_props(mode: u8) -> VisualizerParameters {
+    let mut parameters = VisualizerConfiguration::new(VisualizerKind::FlyingProps).parameters;
+    parameters.mode = mode;
+    parameters
+}
+
+#[test]
+fn flying_props_flies_each_pattern_its_own_way() {
+    // Fly-through, Drift, Orbit and Rise each place the same props differently, and every one of
+    // them has something on screen at an ordinary moment.
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(160, 90));
+    let quiet = silence();
+    let kind = VisualizerKind::FlyingProps;
+    let frames: Vec<Vec<u8>> = (0..4)
+        .map(|mode| {
+            draw(
+                &gpu,
+                &mut renderer,
+                kind,
+                &flying_props(mode),
+                &frame(&quiet, 3.7, 0.0),
+            )
+        })
+        .collect();
+    for (mode, pixels) in frames.iter().enumerate() {
+        assert!(coverage(pixels) > 0.0, "pattern {mode} shows no props");
+    }
+    for first in 0..4 {
+        for second in first + 1..4 {
+            assert_ne!(
+                frames[first], frames[second],
+                "patterns {first} and {second} fly identically"
+            );
+        }
+    }
+    // The pattern repeats every four, so a desk byte past the last pattern still flies.
+    assert_eq!(
+        frames[1],
+        draw(
+            &gpu,
+            &mut renderer,
+            kind,
+            &flying_props(5),
+            &frame(&quiet, 3.7, 0.0)
+        )
+    );
+}
+
+#[test]
+fn flying_props_density_and_size_fill_more_of_the_picture() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(160, 90));
+    let quiet = silence();
+    let kind = VisualizerKind::FlyingProps;
+    let now = frame(&quiet, 3.7, 0.0);
+    let mut sparse = flying_props(2);
+    sparse.count = 3;
+    let mut dense = flying_props(2);
+    dense.count = 48;
+    let sparse = coverage(&draw(&gpu, &mut renderer, kind, &sparse, &now));
+    let dense = coverage(&draw(&gpu, &mut renderer, kind, &dense, &now));
+    assert!(
+        dense > sparse,
+        "Density 48 covers {dense}, Density 3 {sparse}"
+    );
+
+    let mut small = flying_props(2);
+    small.size = 0.05;
+    let mut large = flying_props(2);
+    large.size = 0.3;
+    let small = coverage(&draw(&gpu, &mut renderer, kind, &small, &now));
+    let large = coverage(&draw(&gpu, &mut renderer, kind, &large, &now));
+    assert!(large > small, "Size 0.3 covers {large}, Size 0.05 {small}");
+}
+
+#[test]
+fn flying_props_keep_their_shape_on_a_raw_live_input_and_a_pounding_beat() {
+    // A live input reaches the shader unbounded -- a band of 931, energy near 5, a peak of 10 --
+    // and a hard beat holds every instrument at full. The props may swell and flash, but every
+    // frame must still show props and none may flood the picture.
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let raw = Analysis {
+        waveform: vec![10.0; WAVEFORM_POINTS],
+        spectrum: vec![931.0; BANDS],
+        bass: 400.0,
+        mid: 200.0,
+        treble: 90.0,
+        energy: 4.9,
+        peak: 10.3,
+    };
+    let strike = media_domain::Instrument {
+        level: 1.0,
+        hit: 1.0,
+    };
+    let pounding = media_domain::Instruments {
+        kick: strike,
+        snare: strike,
+        hihat: strike,
+    };
+    let mut parameters = flying_props(2);
+    parameters.reactivity = 8.0;
+    parameters.speed = 8.0;
+    let kind = VisualizerKind::FlyingProps;
+    let calm = coverage(&draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&silence(), 0.5, 0.0),
+    ));
+    for step in 0..120 {
+        let driven = VisualizerFrame {
+            instruments: pounding,
+            ..frame(&raw, 0.5 + step as f32 / 60.0, 1.0)
+        };
+        let covered = coverage(&draw(&gpu, &mut renderer, kind, &parameters, &driven));
+        assert!(covered > 0.0, "an empty frame {step} frames into the beat");
+        assert!(
+            covered < (calm * 3.0).max(0.6),
+            "the beat flooded the picture: {covered} against {calm} at rest"
         );
     }
 }

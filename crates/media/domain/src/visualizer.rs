@@ -54,10 +54,11 @@ pub enum VisualizerKind {
     CityTunnel = 52,
     GridLandscape = 53,
     TriangularNet = 54,
+    FlyingProps = 55,
 }
 
 /// Every kind, in the order the shipped catalog assigns them.
-pub const ALL_KINDS: [VisualizerKind; 24] = [
+pub const ALL_KINDS: [VisualizerKind; 25] = [
     VisualizerKind::EqualizerBars,
     VisualizerKind::WaveformOscilloscope,
     VisualizerKind::CircularSpectrum,
@@ -82,6 +83,7 @@ pub const ALL_KINDS: [VisualizerKind; 24] = [
     VisualizerKind::CityTunnel,
     VisualizerKind::GridLandscape,
     VisualizerKind::TriangularNet,
+    VisualizerKind::FlyingProps,
 ];
 
 impl VisualizerKind {
@@ -120,6 +122,7 @@ impl VisualizerKind {
             Self::CityTunnel => "City Tunnel",
             Self::GridLandscape => "Grid Landscape",
             Self::TriangularNet => "Triangular Net",
+            Self::FlyingProps => "Flying Props",
         }
     }
 
@@ -163,6 +166,9 @@ impl VisualizerKind {
                 Speed, Count, Size, Thickness, Amount, Reactivity, Decay, Zoom, Curvature, Primary,
                 Secondary,
             ],
+            // Flight pattern, speed, density and size lead, so they are the four Visualizer
+            // Parameter channels a desk reaches.
+            Self::FlyingProps => &[Mode, Speed, Count, Size, Reactivity, Primary, Secondary],
         }
     }
 }
@@ -348,6 +354,16 @@ impl VisualizerConfiguration {
             parameters.curvature = 0.5;
             parameters.primary = Tint::new(0.90, 0.92, 0.96);
             parameters.secondary = Tint::new(0.90, 0.11, 0.0);
+        } else if kind == VisualizerKind::FlyingProps {
+            // A dozen props flying at the camera, big enough to read as headphones and cassettes
+            // on a wall, in white bodies with a warm accent on their labels and cushions.
+            parameters.mode = 0;
+            parameters.speed = 1.0;
+            parameters.count = 12;
+            parameters.size = 0.16;
+            parameters.reactivity = 1.0;
+            parameters.primary = Tint::new(0.92, 0.93, 0.96);
+            parameters.secondary = Tint::new(1.0, 0.35, 0.12);
         } else if kind == VisualizerKind::MatrixDigitalRain {
             parameters.count = 48;
             parameters.speed = 1.0;
@@ -511,6 +527,7 @@ mod tests {
         assert_eq!(VisualizerKind::FractalMorph.type_id(), 51);
         assert_eq!(VisualizerKind::CityTunnel.type_id(), 52);
         assert_eq!(VisualizerKind::GridLandscape.type_id(), 53);
+        assert_eq!(VisualizerKind::FlyingProps.type_id(), 55);
         assert_eq!(VisualizerKind::from_type_id(999), None);
     }
 

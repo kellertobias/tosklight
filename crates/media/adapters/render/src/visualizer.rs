@@ -63,6 +63,7 @@ const fn body(kind: VisualizerKind) -> &'static str {
         VisualizerKind::TriangularNet => {
             include_str!("shaders/visualizers/triangular-net.wgsl")
         }
+        VisualizerKind::FlyingProps => include_str!("shaders/visualizers/flying-props.wgsl"),
     }
 }
 
