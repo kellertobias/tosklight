@@ -303,6 +303,18 @@ products. Each OS job smoke-tests its Media executable and directly assembles th
 ZIP; publication still waits for linting, unit/architecture, comprehensive Rust, USB/native
 extension, Playwright, demo-show, and every platform result.
 
+Platform build time rules for the `build` job:
+
+- The Desk Tauri build asks only for the installer formats that staging ships: deb and AppImage
+  on Linux, NSIS on Windows. Tauri's `"all"` also produced an unused RPM (about three minutes)
+  and MSI.
+- The Linux x86_64 performance probe (`light-benchmark`, built without default features) starts
+  in the background beside the sidecar build in its own target directory and is collected before
+  staging, because the second feature set recompiles the whole Desk runtime.
+- `Swatinem/rust-cache` maps the real target directory (`.artifacts/build/cargo`, plus the probe
+  directory on Linux x86_64). Without that mapping it cached only the registry, and every run
+  re-fetched the sccache objects and rebuilt every proc-macro and build script.
+
 `.github/workflows/documentation.yml` checks nightly for a release without the durable
 `report-documentation.json` marker. It builds the handbook and Storybook, refreshes Help and
 marketing screenshot candidates, measures the published Linux bundle, deploys Pages, attaches the
