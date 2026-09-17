@@ -457,22 +457,50 @@
 	display: flex;
 	flex-direction: column;
 	overflow: hidden !important;
+	container: screen-configuration / inline-size;
 }
+/* The tab body is the form itself: fields sit directly in this one scrolling grid. */
 .screen-configuration-modal-content {
 	min-height: 0;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-content: start;
+	align-items: start;
+	gap: 10px;
 	overflow: auto;
 	padding: 12px;
 }
-.screen-configuration-modal-content > section {
-	padding: 10px;
-	border: 1px solid var(--line);
-	border-radius: 7px;
-	background: var(--panel2);
+.screen-save-error {
+	color: var(--red);
 }
-.screen-playbacks-tab {
-	display: grid;
-	justify-items: start;
-	gap: 10px;
+.screen-configuration-modal-content[data-tab="layout"] {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.screen-configuration-modal-content > .screen-configuration-wide {
+	grid-column: 1 / -1;
+}
+.screen-configuration-modal-content > .ui-form-field {
+	min-width: 0;
+	margin: 0;
+}
+.screen-configuration-modal-content .ui-form-control,
+.screen-configuration-modal-content .ui-text-control {
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+}
+@container screen-configuration (max-width: 560px) {
+	.screen-configuration-modal-content[data-tab="layout"] {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+@container screen-configuration (max-width: 620px) {
+	.screen-configuration-modal-content .playback-row-configuration {
+		grid-template-columns: 1fr 1fr;
+	}
+	.screen-configuration-modal-content .playback-row-remove {
+		justify-self: end;
+	}
 }
 @container setup-window (max-width: 920px) {
 	.default-screen-compact-row {
@@ -530,7 +558,7 @@
 	border-radius: 8px;
 	background: var(--panel2);
 }
-.playback-row-configuration + .playback-row-configuration {
+.playback-row-list .playback-row-configuration + .playback-row-configuration {
 	margin-top: 7px;
 }
 .playback-row-drag {

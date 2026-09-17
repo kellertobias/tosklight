@@ -190,7 +190,50 @@ describe("additional screen settings", () => {
 		});
 	});
 
-	it("configures playback rows and page mode in one save", async () => {
+	it("lays the Layout switches out as one form without framed sections", () => {
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				save={vi.fn(async () => {})}
+				remove={vi.fn()}
+			/>,
+		);
+
+		openScreenConfiguration();
+		const dialog = screen.getByRole("dialog", { name: "Configure Screen 1" });
+		const form = dialog.querySelector(".screen-configuration-modal-content");
+		expect(form).toHaveAttribute("data-tab", "layout");
+		expect(dialog.querySelector("section section, h3")).toBeNull();
+		const names = ["Dock", "Playbacks", "Command line", "Programming"].map(
+			(name) => screen.getByRole("switch", { name }),
+		);
+		// The four switches are direct form children in reading order, so the
+		// two-column grid shows Dock | Playbacks over Command line | Programming.
+		for (const control of names)
+			expect(control.closest(".ui-form-field")?.parentElement).toBe(form);
+		expect(
+			names.map((control) =>
+				[...(form?.children ?? [])].indexOf(
+					control.closest(".ui-form-field") as Element,
+				),
+			),
+		).toEqual([2, 3, 4, 5]);
+		const pageControls = screen
+			.getByRole("switch", { name: "Page controls" })
+			.closest(".ui-form-field");
+		expect(pageControls).toHaveClass("screen-configuration-wide");
+		expect(
+			screen.getByRole("button", { name: "Desktop" }).closest(".ui-form-field"),
+		).toHaveClass("screen-configuration-wide");
+
+		fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+		expect(form).toHaveAttribute("data-tab", "settings");
+		expect(form?.firstElementChild).toHaveClass("screen-settings-note");
+		expect(dialog.querySelector("section section, h3")).toBeNull();
+	});
+
+	it("edits playback rows and page mode inside Configure Screen", async () => {
 		const saved: ScreenConfiguration[] = [];
 		const save = vi.fn(async (value: ScreenConfiguration) => {
 			saved.push(value);
@@ -205,33 +248,26 @@ describe("additional screen settings", () => {
 		);
 
 		openScreenConfiguration("Playbacks");
-		fireEvent.click(
-			screen.getByRole("button", { name: "Configure Playbacks" }),
-		);
+		expect(screen.getAllByRole("dialog")).toHaveLength(1);
 		expect(
-			screen.getByRole("dialog", { name: "Configure Playbacks" }),
-		).toBeInTheDocument();
+			screen.queryByRole("button", { name: "Configure Playbacks" }),
+		).toBeNull();
+		expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 		const addRow = screen.getByRole("button", { name: "Add Row" });
-		const saveAction = screen.getByRole("button", { name: "Save" });
 		expect(addRow.closest(".ui-title-chrome-group")).not.toBeNull();
-		expect(saveAction.closest(".ui-title-chrome-terminals")).not.toBeNull();
-		expect(
-			screen.queryByRole("button", { name: "Cancel" }),
-		).not.toBeInTheDocument();
 		fireEvent.click(addRow);
 		expect(
 			screen.getByRole("button", { name: "Remove row 2" }),
 		).toBeInTheDocument();
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
 		const secondRowHandle = screen.getByRole("button", {
 			name: "Reorder playback row 2",
 		});
-		const firstRowHandle = screen.getByRole("button", {
-			name: "Reorder playback row 1",
-		});
-		const firstRow = firstRowHandle.closest(".playback-row-configuration");
+		const firstRow = screen
+			.getByRole("button", { name: "Reorder playback row 1" })
+			.closest(".playback-row-configuration");
 		expect(firstRow).not.toBeNull();
 		expect(secondRowHandle).toHaveTextContent("⠿");
-		expect(secondRowHandle).not.toHaveTextContent("Row 2");
 		const elementFromPoint = document.elementFromPoint;
 		Object.defineProperty(secondRowHandle, "setPointerCapture", {
 			configurable: true,
@@ -259,10 +295,9 @@ describe("additional screen settings", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Follow Main" }));
 		fireEvent.click(screen.getByRole("option", { name: "Dedicated Page" }));
-		fireEvent.click(saveAction);
 
-		await waitFor(() => expect(save).toHaveBeenCalledOnce());
-		expect(saved[0]).toMatchObject({
+		await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+		expect(saved[2]).toMatchObject({
 			page_mode: "independent",
 			playback_count: 16,
 			playback_rows: 2,
@@ -271,6 +306,72 @@ describe("additional screen settings", () => {
 				rows: [{ first_playback_slot: 9 }, { first_playback_slot: 1 }],
 			},
 		});
+	});
+
+	it("keeps an unsavable playback value visible across tabs without saving it", async () => {
+		const save = vi.fn(async () => {});
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				save={save}
+				remove={vi.fn()}
+			/>,
+		);
+
+		openScreenConfiguration("Playbacks");
+		fireEvent.change(screen.getByLabelText("Playbacks per row"), {
+			target: { value: "40" },
+		});
+		expect(screen.getByRole("alert")).toHaveTextContent("Not saved yet");
+		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Playbacks" }));
+		expect(screen.getByLabelText("Playbacks per row")).toHaveValue("40");
+		expect(save).not.toHaveBeenCalled();
+		fireEvent.change(screen.getByLabelText("Playbacks per row"), {
+			target: { value: "4" },
+		});
+		expect(screen.queryByRole("alert")).toBeNull();
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		expect(save).toHaveBeenCalledWith(
+			expect.objectContaining({
+				playback_count: 4,
+				playback_layout: expect.objectContaining({ playbacks_per_row: 4 }),
+			}),
+		);
+	});
+
+	it("reports a rejected save and keeps saving later changes", async () => {
+		const save = vi
+			.fn<(value: ScreenConfiguration) => Promise<void>>()
+			.mockRejectedValueOnce(new Error("invalid screen configuration"))
+			.mockResolvedValue(undefined);
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				save={save}
+				remove={vi.fn()}
+			/>,
+		);
+
+		openScreenConfiguration("Placement");
+		fireEvent.change(screen.getByLabelText("Window X"), {
+			target: { value: "20" },
+		});
+		expect(
+			await screen.findByText(
+				"Could not save this screen: invalid screen configuration",
+			),
+		).toHaveAttribute("role", "alert");
+		fireEvent.change(screen.getByLabelText("Window X"), {
+			target: { value: "30" },
+		});
+		await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+		await waitFor(() =>
+			expect(screen.queryByText(/Could not save this screen/)).toBeNull(),
+		);
+		expect(save.mock.calls[1][0].bounds).toMatchObject({ x: 30 });
 	});
 
 	it("offers only the fixed-pane allowlist and enforces the Dock constraint", async () => {

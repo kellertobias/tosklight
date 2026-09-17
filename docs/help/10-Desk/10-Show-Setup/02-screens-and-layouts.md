@@ -21,7 +21,20 @@ The Tauri desktop application can add optional screens. Choose **Add Screen** in
 playback title bar; it sits in its own button group, apart from **Undo** and the configuration
 actions. The browser version shows no **Add Screen** action. Each new screen appears as a row with
 its name and the **Copy browser link**, **Configure screen**, **Open Screen**, and **Remove Screen**
-buttons. Each optional screen can use its normal
+buttons.
+
+**Configure screen** opens one modal with the **Layout**, **Settings**, **Placement**, and
+**Playbacks** tabs in its title bar. Each tab is a single form without extra frames or headings, and
+every change saves immediately. On **Layout**, **Content** and the chosen pane or Desktop span the
+form; **Dock** and **Playbacks** sit side by side above **Command line** and **Programming**, and
+**Page controls** follows below. In a narrow modal the four switches stack in one column and the
+form scrolls. **Playbacks** edits the screen's playback rows in place, without a second dialog:
+choose **Add Row** in the modal title bar, drag a row by its handle to reorder it, or remove it with
+its delete button. A row layout that would run past playback 127 stays on screen with a
+**Not saved yet** note until you correct it; switching tabs keeps what you typed. If the desk
+rejects a change, the modal says **Could not save this screen** with the reason.
+
+Each optional screen can use its normal
 configurable **Desktop** or a **Fixed full-screen pane**. A fixed pane fills the screen's pane
 workspace without pane headers, resizing, settings, selection, or editing controls. Configure it
 from the controlling screen; the external display remains view-only.
@@ -64,9 +77,10 @@ the main screen: the Dock reaches down to it and no further.
 
 Each optional screen can also select a physical display and enter native fullscreen. Native
 fullscreen controls the application window on the physical display; **Fixed full-screen pane**
-controls the content inside that window. Its **Configure Playbacks** dialog provides the same row
-controls as the default screen and also selects its page mode. Choose **Follow Main** when its page
-tracks the primary page. Choose **Dedicated Page** for an independent operator surface.
+controls the content inside that window. Its **Playbacks** tab provides the same row controls as
+the default screen's **Configure Playbacks** dialog and also selects its page mode. Choose **Follow
+Main** when its page tracks the primary page. Choose **Dedicated Page** for an independent operator
+surface.
 Browser-only operation displays the default-screen controls but cannot create or claim support for
 native optional-screen windows.
 

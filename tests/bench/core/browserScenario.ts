@@ -656,7 +656,12 @@ export class BrowserScreens {
 		});
 		await expect(settings).toBeVisible();
 		if (configuration.fixedPane) {
-			await chooseOption(this.page, settings, "Content", "Fixed full-screen pane");
+			await chooseOption(
+				this.page,
+				settings,
+				"Content",
+				"Fixed full-screen pane",
+			);
 			const fixedPaneLabels: Record<FixedScreenPane["type"], string> = {
 				fixture_sheet: "Fixture Sheet",
 				stage_2d: "Stage - 2D",
@@ -699,9 +704,16 @@ export class BrowserScreens {
 			await settings
 				.getByRole("tab", { name: "Playbacks", exact: true })
 				.click();
-			await this.configurePlaybacks(settings, runtimeId, configuration.playbacks);
+			await this.configurePlaybacks(
+				settings,
+				runtimeId,
+				configuration.playbacks,
+			);
 		}
-		await settings.getByRole("button", { name: /^Close/ }).first().click();
+		await settings
+			.getByRole("button", { name: /^Close/ })
+			.first()
+			.click();
 		await expect(settings).toBeHidden();
 		const handle = new BrowserScreenHandle(
 			configuration.name,
@@ -728,24 +740,24 @@ export class BrowserScreens {
 	}
 
 	private async configurePlaybacks(
-		card: Locator,
+		settings: Locator,
 		screenId: string,
 		playback: NonNullable<ScreenConfigurationIntent["playbacks"]>,
 	): Promise<void> {
-		await card.getByRole("button", { name: "Configure Playbacks" }).click();
-		const dialog = this.page.getByRole("dialog", {
-			name: "Configure Playbacks",
-		});
-		await dialog.getByLabel("Playbacks per row").fill(String(playback.perRow));
+		// Playback rows are edited inside Configure Screen's Playbacks tab and apply as they
+		// change; Add Row sits in that modal's title bar.
+		await settings
+			.getByLabel("Playbacks per row")
+			.fill(String(playback.perRow));
 		await chooseOption(
 			this.page,
-			dialog,
+			settings,
 			"Page Mode",
 			playback.pageMode === "dedicated" ? "Dedicated Page" : "Follow Main",
 		);
-		const rows = dialog.locator("[data-playback-row-index]");
+		const rows = settings.locator("[data-playback-row-index]");
 		while ((await rows.count()) < playback.rows.length)
-			await dialog.getByRole("button", { name: "Add Row" }).click();
+			await settings.getByRole("button", { name: "Add Row" }).click();
 		while ((await rows.count()) > playback.rows.length)
 			await rows
 				.last()
@@ -758,17 +770,42 @@ export class BrowserScreens {
 			await setSwitch(row, "Fader", desired.fader);
 			await row.getByLabel("Buttons").fill(String(desired.buttons));
 		}
-		await dialog.getByRole("button", { name: "Save", exact: true }).click();
-		await expect(dialog).toBeHidden();
 		await expect
 			.poll(async () => {
 				const snapshot = await this.api.request<{
-					screens: Array<{ id: string; page_mode: string }>;
+					screens: Array<{
+						id: string;
+						page_mode: string;
+						playback_layout?: {
+							playbacks_per_row: number;
+							rows: Array<{
+								first_playback_slot: number;
+								has_fader: boolean;
+								button_count: number;
+							}>;
+						};
+					}>;
 				}>("GET", "/api/v2/screens");
-				return snapshot.screens.find((screen) => screen.id === screenId)
-					?.page_mode;
+				const stored = snapshot.screens.find(
+					(screen) => screen.id === screenId,
+				);
+				return {
+					pageMode: stored?.page_mode,
+					layout: stored?.playback_layout,
+				};
 			})
-			.toBe(playback.pageMode === "dedicated" ? "independent" : "follow_main");
+			.toEqual({
+				pageMode:
+					playback.pageMode === "dedicated" ? "independent" : "follow_main",
+				layout: {
+					playbacks_per_row: playback.perRow,
+					rows: playback.rows.map((row) => ({
+						first_playback_slot: row.first,
+						has_fader: row.fader,
+						button_count: row.buttons,
+					})),
+				},
+			});
 	}
 }
 

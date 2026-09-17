@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **244 root cases across 94 files**.
+Default catalog: **246 root cases across 95 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -61,6 +61,8 @@ Default catalog: **244 root cases across 94 files**.
 | 106-screens-setup-layout.spec.ts | TL-471 @ui › the default screen row stays top-aligned with long information text at every width | repository contract | @ui | screens-setup-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 106-screens-setup-layout.spec.ts | TL-471 @ui › Add Screen is a separate Desk Setup title action that adds a top-aligned screen row | repository contract | @ui | screens-setup-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 106-screens-setup-layout.spec.ts | TL-471 @ui › a browser desk without the desktop app shows no Add Screen title action | repository contract | @ui | screens-setup-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 107-configure-screen-layout.spec.ts | TL-472 @ui › Configure Screen shows its switches as a 2x2 grid and edits playbacks without a nested modal | repository contract | @ui | configure-screen-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 107-configure-screen-layout.spec.ts | TL-472 @ui › a constrained Configure Screen stacks, scrolls, and keeps typed values | repository contract | @ui | configure-screen-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 108-media-server-coordinated-patch.spec.ts | MEDIA-008 @ui › Show Patch coordinates discovered Media Servers with the desk routes | docs/testing/14-media-and-running-panes.md | @ui | media-server-coordinated-patch | standard failure evidence | parallel | pending-semantic-migration |
 | 108-media-server-coordinated-patch.spec.ts | MEDIA-008 @api › a coordinated address update validates the protocol universe | docs/testing/14-media-and-running-panes.md | @api | media-server-coordinated-patch | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |

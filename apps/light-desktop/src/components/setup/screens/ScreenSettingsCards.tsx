@@ -1,6 +1,5 @@
 import {
 	Button,
-	FormLayout,
 	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
@@ -12,11 +11,18 @@ import { useEffect, useRef, useState } from "react";
 import { configuredServerUrl } from "../../../api/client/serverLocation";
 import type {
 	FixedScreenPane,
+	PlaybackSurfaceLayout,
 	ProgrammerControlSurfacePatch,
 	ScreenConfiguration,
 } from "../../../api/types";
 import type { DeskModel } from "../../../types";
-import { PlaybackLayoutModal } from "../PlaybackLayoutModal";
+import {
+	addPlaybackRow,
+	canAddPlaybackRow,
+	PlaybackLayoutFields,
+	type PlaybackPageMode,
+	playbackLayoutInvalid,
+} from "../PlaybackLayoutModal";
 import {
 	browserScreenUrl,
 	DEFAULT_FIXED_SCREEN_PANE,
@@ -25,381 +31,18 @@ import {
 	screenPlaybackLayout,
 	updateScreenConfiguration,
 } from "../screenConfiguration";
-
-type CuelistOption = { id: string; name: string };
-type TextFileOption = {
-	root: string;
-	rootLabel: string;
-	path: string;
-	name: string;
-};
+import {
+	type CuelistOption,
+	defaultFixedPane,
+	FixedPaneSettings,
+	fixedPaneLabels,
+	type TextFileOption,
+} from "./FixedPaneSettings";
 
 /** Content that dedicates its whole layout to the control region. */
 function hasControlSurface(content: ScreenConfiguration["content"]) {
 	return (
 		content.type === "control_surface" || content.type === "fixed_side_pane"
-	);
-}
-
-const fixedPaneLabels: Record<FixedScreenPane["type"], string> = {
-	fixture_sheet: "Fixture Sheet",
-	stage_2d: "Stage - 2D",
-	stage_3d: "Stage - 3D",
-	cues: "Cues - Cuelist",
-	text: "Text",
-};
-
-function defaultFixedPane(type: FixedScreenPane["type"]): FixedScreenPane {
-	switch (type) {
-		case "fixture_sheet":
-			return DEFAULT_FIXED_SCREEN_PANE;
-		case "stage_2d":
-			return { type, follow_preload: false, show_floor_grid: true };
-		case "stage_3d":
-			return {
-				type,
-				follow_preload: false,
-				show_floor_grid: true,
-				show_beam_guides: true,
-				render_quality: "lines_and_beams",
-				environment_brightness: 1,
-			};
-		case "cues":
-			return { type, cue_list_id: "" };
-		case "text":
-			return { type, root: "", path: "", mode: "plain" };
-	}
-}
-
-function FixtureSheetFixedSettings({
-	pane,
-	cueLists,
-	update,
-}: {
-	pane: Extract<FixedScreenPane, { type: "fixture_sheet" }>;
-	cueLists: readonly CuelistOption[];
-	update: (pane: FixedScreenPane) => void;
-}) {
-	const columnOptions = [
-		["id", "Fixture ID"],
-		["icon", "Icon"],
-		["name", "Name"],
-		["patch", "Patch address"],
-		["intensity", "Intensity"],
-		["color", "Color"],
-		["position", "Position"],
-		["beam", "Beam"],
-		["shapers", "Shapers"],
-		["focus", "Focus"],
-		["control", "Control"],
-		["media", "Media"],
-	] as const;
-	return (
-		<div className="fixed-screen-pane-settings">
-			<SelectField
-				label="Compact mode"
-				value={pane.compact_mode}
-				onChange={(compact_mode) => update({ ...pane, compact_mode })}
-				options={[
-					{ value: "off", label: "Off" },
-					{ value: "icon_only", label: "Icon only" },
-					{ value: "text_only", label: "Text only" },
-				]}
-			/>
-			<SelectField
-				label="Fixture heads"
-				value={pane.included_heads}
-				onChange={(included_heads) => update({ ...pane, included_heads })}
-				options={[
-					{ value: "all", label: "All" },
-					{ value: "no_sub_heads", label: "No sub heads" },
-					{ value: "no_master_heads", label: "No master heads" },
-				]}
-			/>
-			<SelectField
-				label="Ordering"
-				value={pane.order}
-				onChange={(order) => update({ ...pane, order })}
-				options={[
-					{ value: "fixture_id", label: "Fixture ID" },
-					{ value: "active", label: "Active fixtures first" },
-				]}
-			/>
-			<SwitchField
-				label="Fixture filter"
-				offLabel="All fixtures"
-				onLabel="Active only"
-				checked={pane.active_only}
-				onChange={(event) =>
-					update({ ...pane, active_only: event.target.checked })
-				}
-			/>
-			<SelectField
-				label="Cuelist filter"
-				value={pane.cue_list_id ?? ""}
-				onChange={(cue_list_id) =>
-					update({ ...pane, cue_list_id: cue_list_id || null })
-				}
-				options={[
-					{ value: "", label: "All fixtures" },
-					...(pane.cue_list_id &&
-					!cueLists.some((cueList) => cueList.id === pane.cue_list_id)
-						? [
-								{
-									value: pane.cue_list_id,
-									label: "Configured Cuelist is unavailable",
-								},
-							]
-						: []),
-					...cueLists.map((cueList) => ({
-						value: cueList.id,
-						label: cueList.name,
-					})),
-				]}
-			/>
-			<SwitchField
-				label="Name details"
-				offLabel="Names only"
-				onLabel="Show fixture type"
-				checked={pane.show_type}
-				onChange={(event) =>
-					update({ ...pane, show_type: event.target.checked })
-				}
-			/>
-			<SwitchField
-				label="Group shortcuts"
-				offLabel="Hidden"
-				onLabel="Visible"
-				checked={pane.show_group_shortcuts}
-				onChange={(event) =>
-					update({ ...pane, show_group_shortcuts: event.target.checked })
-				}
-			/>
-			<fieldset className="fixed-screen-column-settings">
-				<legend>Columns</legend>
-				{columnOptions.map(([column, label]) => (
-					<SwitchField
-						key={column}
-						label={label}
-						offLabel="Hidden"
-						onLabel="Visible"
-						checked={pane.columns.includes(column)}
-						disabled={pane.columns.length === 1 && pane.columns[0] === column}
-						onChange={(event) =>
-							update({
-								...pane,
-								columns: event.target.checked
-									? [...pane.columns, column]
-									: pane.columns.filter((candidate) => candidate !== column),
-							})
-						}
-					/>
-				))}
-			</fieldset>
-		</div>
-	);
-}
-
-function Stage2dFixedSettings({
-	pane,
-	update,
-}: {
-	pane: Extract<FixedScreenPane, { type: "stage_2d" }>;
-	update: (pane: FixedScreenPane) => void;
-}) {
-	return (
-		<div className="fixed-screen-pane-settings">
-			<SwitchField
-				label="Preload source"
-				offLabel="Live"
-				onLabel="Follow preload"
-				checked={pane.follow_preload}
-				onChange={(event) =>
-					update({ ...pane, follow_preload: event.target.checked })
-				}
-			/>
-		</div>
-	);
-}
-
-function Stage3dFixedSettings({
-	pane,
-	update,
-}: {
-	pane: Extract<FixedScreenPane, { type: "stage_3d" }>;
-	update: (pane: FixedScreenPane) => void;
-}) {
-	return (
-		<div className="fixed-screen-pane-settings">
-			<SwitchField
-				label="Preload source"
-				offLabel="Live"
-				onLabel="Follow preload"
-				checked={pane.follow_preload}
-				onChange={(event) =>
-					update({ ...pane, follow_preload: event.target.checked })
-				}
-			/>
-			<SwitchField
-				label="Floor grid"
-				offLabel="Hidden"
-				onLabel="Visible"
-				checked={pane.show_floor_grid}
-				onChange={(event) =>
-					update({ ...pane, show_floor_grid: event.target.checked })
-				}
-			/>
-			<SwitchField
-				label="Beam direction guidelines"
-				offLabel="Hidden"
-				onLabel="Visible"
-				checked={pane.show_beam_guides}
-				onChange={(event) =>
-					update({ ...pane, show_beam_guides: event.target.checked })
-				}
-			/>
-			<SelectField
-				label="Render quality"
-				value={pane.render_quality}
-				onChange={(render_quality) => update({ ...pane, render_quality })}
-				options={[
-					{ value: "lines_only", label: "Lines only" },
-					{ value: "lines_and_beams", label: "Lines and beams" },
-					{ value: "full", label: "Full" },
-				]}
-			/>
-			<NumberField
-				label="Environment brightness"
-				min="0"
-				max="1"
-				step="0.05"
-				value={pane.environment_brightness}
-				onChange={(event) =>
-					update({
-						...pane,
-						environment_brightness: Number(event.target.value),
-					})
-				}
-			/>
-		</div>
-	);
-}
-
-function CuesFixedSettings({
-	pane,
-	cueLists,
-	update,
-}: {
-	pane: Extract<FixedScreenPane, { type: "cues" }>;
-	cueLists: readonly CuelistOption[];
-	update: (pane: FixedScreenPane) => void;
-}) {
-	return (
-		<SelectField
-			label="Cuelist"
-			value={pane.cue_list_id}
-			onChange={(cue_list_id) => update({ ...pane, cue_list_id })}
-			options={[
-				...(!pane.cue_list_id
-					? [{ value: "", label: "Unavailable - choose a Cuelist" }]
-					: cueLists.some((cueList) => cueList.id === pane.cue_list_id)
-						? []
-						: [
-								{
-									value: pane.cue_list_id,
-									label: "Configured Cuelist is unavailable",
-								},
-							]),
-				...cueLists.map((cueList) => ({
-					value: cueList.id,
-					label: cueList.name,
-				})),
-			]}
-		/>
-	);
-}
-
-function TextFixedSettings({
-	pane,
-	textFiles,
-	update,
-}: {
-	pane: Extract<FixedScreenPane, { type: "text" }>;
-	textFiles: readonly TextFileOption[];
-	update: (pane: FixedScreenPane) => void;
-}) {
-	const selectedTextValue =
-		pane.root && pane.path ? `${pane.root}\u0000${pane.path}` : "";
-	return (
-		<div className="fixed-screen-pane-settings">
-			<SelectField
-				label="Text"
-				value={selectedTextValue}
-				onChange={(value) => {
-					const [root = "", path = ""] = value.split("\u0000");
-					update({ ...pane, root, path });
-				}}
-				options={[
-					...(!selectedTextValue
-						? [{ value: "", label: "Unavailable - choose a text file" }]
-						: textFiles.some(
-									(file) => file.root === pane.root && file.path === pane.path,
-								)
-							? []
-							: [
-									{
-										value: selectedTextValue,
-										label: "Configured text is unavailable",
-									},
-								]),
-					...textFiles.map((file) => ({
-						value: `${file.root}\u0000${file.path}`,
-						label: `${file.rootLabel} · ${file.name}`,
-					})),
-				]}
-			/>
-			<SelectField
-				label="Text view"
-				value={pane.mode}
-				onChange={(mode) => update({ ...pane, mode })}
-				options={[
-					{ value: "plain", label: "Plain Text" },
-					{ value: "markdown", label: "Rendered Markdown" },
-				]}
-			/>
-		</div>
-	);
-}
-
-function FixedPaneSettings({
-	pane,
-	cueLists,
-	textFiles,
-	update,
-}: {
-	pane: FixedScreenPane;
-	cueLists: readonly CuelistOption[];
-	textFiles: readonly TextFileOption[];
-	update: (pane: FixedScreenPane) => void;
-}) {
-	if (pane.type === "fixture_sheet")
-		return (
-			<FixtureSheetFixedSettings
-				pane={pane}
-				cueLists={cueLists}
-				update={update}
-			/>
-		);
-	if (pane.type === "stage_2d")
-		return <Stage2dFixedSettings pane={pane} update={update} />;
-	if (pane.type === "stage_3d")
-		return <Stage3dFixedSettings pane={pane} update={update} />;
-	if (pane.type === "cues")
-		return (
-			<CuesFixedSettings pane={pane} cueLists={cueLists} update={update} />
-		);
-	return (
-		<TextFixedSettings pane={pane} textFiles={textFiles} update={update} />
 	);
 }
 
@@ -424,142 +67,139 @@ function ScreenLayoutFields({
 			: null;
 	const fixedPane = fixedContent?.pane ?? null;
 	return (
-		<section>
-			<h3>Layout</h3>
-			<div className="screen-settings-fields">
+		<>
+			<SelectField
+				className="screen-configuration-wide"
+				label="Content"
+				value={
+					draft.content.type === "fixed_side_pane"
+						? `fixed_side_pane_${draft.content.side}`
+						: draft.content.type
+				}
+				onChange={(type) =>
+					update({
+						content:
+							type === "fixed_pane"
+								? {
+										type,
+										pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
+									}
+								: type === "control_surface"
+									? { type }
+									: type === "fixed_side_pane_left" ||
+											type === "fixed_side_pane_right"
+										? {
+												type: "fixed_side_pane",
+												pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
+												side:
+													type === "fixed_side_pane_left" ? "left" : "right",
+												width_percent:
+													draft.content.type === "fixed_side_pane"
+														? draft.content.width_percent
+														: DEFAULT_FIXED_SIDE_WIDTH_PERCENT,
+											}
+										: { type: "desktop" },
+					})
+				}
+				options={[
+					{ value: "desktop", label: "Desktop" },
+					{ value: "control_surface", label: "Controls only" },
+					{ value: "fixed_pane", label: "Fixed full-screen pane" },
+					{ value: "fixed_side_pane_left", label: "Fixed left pane" },
+					{ value: "fixed_side_pane_right", label: "Fixed right pane" },
+				]}
+			/>
+			{fixedPane && (
 				<SelectField
-					label="Content"
-					value={
-						draft.content.type === "fixed_side_pane"
-							? `fixed_side_pane_${draft.content.side}`
-							: draft.content.type
-					}
-					onChange={(type) =>
+					className="screen-configuration-wide"
+					label="Pane"
+					value={fixedPane.type}
+					onChange={(type) => {
+						if (!fixedContent) return;
 						update({
-							content:
-								type === "fixed_pane"
-									? {
-											type,
-											pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
-										}
-									: type === "control_surface"
-										? { type }
-										: type === "fixed_side_pane_left" ||
-												type === "fixed_side_pane_right"
-											? {
-													type: "fixed_side_pane",
-													pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
-													side:
-														type === "fixed_side_pane_left" ? "left" : "right",
-													width_percent:
-														draft.content.type === "fixed_side_pane"
-															? draft.content.width_percent
-															: DEFAULT_FIXED_SIDE_WIDTH_PERCENT,
-												}
-											: { type: "desktop" },
-						})
-					}
-					options={[
-						{ value: "desktop", label: "Desktop" },
-						{ value: "control_surface", label: "Controls only" },
-						{ value: "fixed_pane", label: "Fixed full-screen pane" },
-						{ value: "fixed_side_pane_left", label: "Fixed left pane" },
-						{ value: "fixed_side_pane_right", label: "Fixed right pane" },
-					]}
+							content: { ...fixedContent, pane: defaultFixedPane(type) },
+						});
+					}}
+					options={Object.entries(fixedPaneLabels).map(([value, label]) => ({
+						value: value as FixedScreenPane["type"],
+						label,
+					}))}
 				/>
-				{fixedPane && (
-					<SelectField
-						label="Pane"
-						value={fixedPane.type}
-						onChange={(type) => {
-							if (!fixedContent) return;
-							update({
-								content: { ...fixedContent, pane: defaultFixedPane(type) },
-							});
-						}}
-						options={Object.entries(fixedPaneLabels).map(([value, label]) => ({
-							value: value as FixedScreenPane["type"],
-							label,
-						}))}
-					/>
-				)}
-				{draft.content.type === "desktop" && (
-					<SelectField
-						label="Desktop"
-						value={draft.layout.activeDeskId}
-						onChange={(activeDeskId) =>
-							update({ layout: { desks, activeDeskId } })
-						}
-						options={desks.map((desk) => ({
-							value: desk.id,
-							label: desk.name,
-						}))}
-					/>
-				)}
+			)}
+			{draft.content.type === "desktop" && (
+				<SelectField
+					className="screen-configuration-wide"
+					label="Desktop"
+					value={draft.layout.activeDeskId}
+					onChange={(activeDeskId) =>
+						update({ layout: { desks, activeDeskId } })
+					}
+					options={desks.map((desk) => ({
+						value: desk.id,
+						label: desk.name,
+					}))}
+				/>
+			)}
+			<SwitchField
+				label="Dock"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={draft.show_dock}
+				disabled={draft.content.type !== "desktop"}
+				description={
+					draft.content.type === "fixed_pane"
+						? "Dock is unavailable with a fixed full-screen pane."
+						: draft.content.type === "fixed_side_pane"
+							? "Dock is unavailable with a fixed side pane."
+							: draft.content.type === "control_surface"
+								? "Dock is unavailable without Desktop content."
+								: undefined
+				}
+				onChange={(event) => update({ show_dock: event.target.checked })}
+			/>
+			<SwitchField
+				label="Playbacks"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={draft.show_playbacks}
+				onChange={(event) =>
+					update(
+						event.target.checked
+							? { show_playbacks: true }
+							: /* Without Playbacks there is no page to control. */
+								{ show_playbacks: false, show_page_controls: false },
+					)
+				}
+			/>
+			<SwitchField
+				label="Command line"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={draft.show_programmer}
+				onChange={(event) => update({ show_programmer: event.target.checked })}
+				description="The encoder section of this screen always keeps the keypad, the programmer fader and the Delete/Move tools on the main screen. Visible adds the command line above its encoders."
+			/>
+			<SwitchField
+				label="Programming"
+				offLabel="Not editable"
+				onLabel="Allowed"
+				checked={!draft.not_editable}
+				onChange={(event) => update({ not_editable: !event.target.checked })}
+				description="Not editable makes this a guest screen: it still shows the fixture sheet, the Stage and the desk's values, and still runs playbacks, macros and timecodes, but it cannot record, update or assign. Use it for a repeater somebody else is standing at while you program."
+			/>
+			{draft.show_playbacks && (
 				<SwitchField
-					label="Dock"
+					className="screen-configuration-wide"
+					label="Page controls"
 					offLabel="Hidden"
 					onLabel="Visible"
-					checked={draft.show_dock}
-					disabled={draft.content.type !== "desktop"}
-					description={
-						draft.content.type === "fixed_pane"
-							? "Dock is unavailable with a fixed full-screen pane."
-							: draft.content.type === "fixed_side_pane"
-								? "Dock is unavailable with a fixed side pane."
-								: draft.content.type === "control_surface"
-									? "Dock is unavailable without Desktop content."
-									: undefined
-					}
-					onChange={(event) => update({ show_dock: event.target.checked })}
-				/>
-				<SwitchField
-					label="Playbacks"
-					offLabel="Hidden"
-					onLabel="Visible"
-					checked={draft.show_playbacks}
+					checked={draft.show_page_controls}
 					onChange={(event) =>
-						update(
-							event.target.checked
-								? { show_playbacks: true }
-								: /* Without Playbacks there is no page to control. */
-									{ show_playbacks: false, show_page_controls: false },
-						)
+						update({ show_page_controls: event.target.checked })
 					}
 				/>
-				{draft.show_playbacks && (
-					<SwitchField
-						label="Page controls"
-						offLabel="Hidden"
-						onLabel="Visible"
-						checked={draft.show_page_controls}
-						onChange={(event) =>
-							update({ show_page_controls: event.target.checked })
-						}
-					/>
-				)}
-				<SwitchField
-					label="Command line"
-					offLabel="Hidden"
-					onLabel="Visible"
-					checked={draft.show_programmer}
-					onChange={(event) =>
-						update({ show_programmer: event.target.checked })
-					}
-					description="The encoder section of this screen always keeps the keypad, the programmer fader and the Delete/Move tools on the main screen. Visible adds the command line above its encoders."
-				/>
-				<SwitchField
-					label="Programming"
-					offLabel="Not editable"
-					onLabel="Allowed"
-					checked={!draft.not_editable}
-					onChange={(event) =>
-						update({ not_editable: !event.target.checked })
-					}
-					description="Not editable makes this a guest screen: it still shows the fixture sheet, the Stage and the desk's values, and still runs playbacks, macros and timecodes, but it cannot record, update or assign. Use it for a repeater somebody else is standing at while you program."
-				/>
-			</div>
-		</section>
+			)}
+		</>
 	);
 }
 
@@ -580,45 +220,37 @@ function ScreenPaneSettings({
 	const fixedPane = fixedContent?.pane ?? null;
 	const sideContent =
 		draft.content.type === "fixed_side_pane" ? draft.content : null;
-	return (
-		<section>
-			<h3>Settings</h3>
-			<div className="screen-settings-fields">
-				{fixedPane ? (
-					<>
-						<FixedPaneSettings
-							pane={fixedPane}
-							cueLists={cueLists}
-							textFiles={textFiles}
-							update={(pane) => {
-								if (fixedContent)
-									update({ content: { ...fixedContent, pane } });
-							}}
-						/>
-						{sideContent ? (
-							<NumberField
-								label="Pane width (%)"
-								min={10}
-								max={80}
-								value={sideContent.width_percent}
-								onChange={(event) =>
-									update({
-										content: {
-											...sideContent,
-											width_percent: Number(event.target.value),
-										},
-									})
-								}
-							/>
-						) : null}
-					</>
-				) : (
-					<p className="screen-settings-note">
-						This screen follows the selected Desktop layout.
-					</p>
-				)}
-			</div>
-		</section>
+	return fixedPane ? (
+		<>
+			<FixedPaneSettings
+				pane={fixedPane}
+				cueLists={cueLists}
+				textFiles={textFiles}
+				update={(pane) => {
+					if (fixedContent) update({ content: { ...fixedContent, pane } });
+				}}
+			/>
+			{sideContent ? (
+				<NumberField
+					label="Pane width (%)"
+					min={10}
+					max={80}
+					value={sideContent.width_percent}
+					onChange={(event) =>
+						update({
+							content: {
+								...sideContent,
+								width_percent: Number(event.target.value),
+							},
+						})
+					}
+				/>
+			) : null}
+		</>
+	) : (
+		<p className="screen-settings-note">
+			This screen follows the selected Desktop layout.
+		</p>
 	);
 }
 
@@ -637,67 +269,61 @@ function ScreenPlacementFields({
 		...changes,
 	});
 	return (
-		<section>
-			<h3>Placement</h3>
-			<div className="screen-settings-fields">
-				<SelectField
-					label="Physical Display"
-					value={draft.display_id ?? ""}
-					onChange={(value) => update({ display_id: value || null })}
-					options={[
-						{ value: "", label: "Choose when opened" },
-						...displays.map((display) => ({
-							value: display.id,
-							label: display.name,
-						})),
-					]}
-				/>
-				<SwitchField
-					label="Window mode"
-					offLabel="Windowed"
-					onLabel="Fullscreen"
-					checked={draft.fullscreen}
-					onChange={(event) => update({ fullscreen: event.target.checked })}
-				/>
-				{/* Stacked: the four labels do not fit beside each other at this width. */}
-				<FormLayout columns={1} minColumnWidth={90}>
-					<NumberField
-						label="Window X"
-						value={draft.bounds?.x ?? 0}
-						onChange={(event) =>
-							update({ bounds: bounds({ x: Number(event.target.value) }) })
-						}
-					/>
-					<NumberField
-						label="Window Y"
-						value={draft.bounds?.y ?? 0}
-						onChange={(event) =>
-							update({ bounds: bounds({ y: Number(event.target.value) }) })
-						}
-					/>
-					<NumberField
-						label="Window width"
-						min="1"
-						value={draft.bounds?.width ?? 1280}
-						onChange={(event) =>
-							update({
-								bounds: bounds({ width: Number(event.target.value) }),
-							})
-						}
-					/>
-					<NumberField
-						label="Window height"
-						min="1"
-						value={draft.bounds?.height ?? 720}
-						onChange={(event) =>
-							update({
-								bounds: bounds({ height: Number(event.target.value) }),
-							})
-						}
-					/>
-				</FormLayout>
-			</div>
-		</section>
+		<>
+			<SelectField
+				label="Physical Display"
+				value={draft.display_id ?? ""}
+				onChange={(value) => update({ display_id: value || null })}
+				options={[
+					{ value: "", label: "Choose when opened" },
+					...displays.map((display) => ({
+						value: display.id,
+						label: display.name,
+					})),
+				]}
+			/>
+			<SwitchField
+				label="Window mode"
+				offLabel="Windowed"
+				onLabel="Fullscreen"
+				checked={draft.fullscreen}
+				onChange={(event) => update({ fullscreen: event.target.checked })}
+			/>
+			<NumberField
+				label="Window X"
+				value={draft.bounds?.x ?? 0}
+				onChange={(event) =>
+					update({ bounds: bounds({ x: Number(event.target.value) }) })
+				}
+			/>
+			<NumberField
+				label="Window Y"
+				value={draft.bounds?.y ?? 0}
+				onChange={(event) =>
+					update({ bounds: bounds({ y: Number(event.target.value) }) })
+				}
+			/>
+			<NumberField
+				label="Window width"
+				min="1"
+				value={draft.bounds?.width ?? 1280}
+				onChange={(event) =>
+					update({
+						bounds: bounds({ width: Number(event.target.value) }),
+					})
+				}
+			/>
+			<NumberField
+				label="Window height"
+				min="1"
+				value={draft.bounds?.height ?? 720}
+				onChange={(event) =>
+					update({
+						bounds: bounds({ height: Number(event.target.value) }),
+					})
+				}
+			/>
+		</>
 	);
 }
 
@@ -753,14 +379,66 @@ function ScreenCardHeader(props: {
 
 type ScreenConfigurationTab = "layout" | "settings" | "placement" | "playbacks";
 
+/**
+ * The Playbacks tab keeps its own draft so a value that cannot be stored yet (for example a
+ * cleared number) stays visible across tab switches. Every storable draft applies at once, like
+ * the other tabs of Configure Screen.
+ */
+/** A screen's playbacks must fit slots 1-127 from its first row onwards. */
+function screenPlaybackDraftInvalid(layout: PlaybackSurfaceLayout) {
+	const first = layout.rows[0]?.first_playback_slot ?? 1;
+	return (
+		playbackLayoutInvalid(layout) ||
+		first + layout.playbacks_per_row * layout.rows.length - 1 > 127
+	);
+}
+
+function useScreenPlaybackDraft(
+	draft: ScreenConfiguration,
+	update: (changes: Partial<ScreenConfiguration>) => void,
+) {
+	const [layout, setLayout] = useState(() =>
+		structuredClone(screenPlaybackLayout(draft)),
+	);
+	const layoutRef = useRef(layout);
+	const apply = (next: PlaybackSurfaceLayout, pageMode: PlaybackPageMode) => {
+		if (screenPlaybackDraftInvalid(next)) return;
+		const legacy = playbackLayoutLegacyFields(next);
+		update({
+			playback_layout: next,
+			page_mode: pageMode,
+			playback_count: legacy.playback_count,
+			playback_rows: legacy.playback_rows,
+			first_playback_slot: legacy.first_playback_slot,
+		});
+	};
+	const changeLayout = (
+		change: (current: PlaybackSurfaceLayout) => PlaybackSurfaceLayout,
+	) => {
+		const next = change(layoutRef.current);
+		if (next === layoutRef.current) return;
+		layoutRef.current = next;
+		setLayout(next);
+		apply(next, draft.page_mode);
+	};
+	return {
+		layout,
+		invalid: screenPlaybackDraftInvalid(layout),
+		changeLayout,
+		changePageMode: (pageMode: PlaybackPageMode) =>
+			apply(layoutRef.current, pageMode),
+	};
+}
+
 function ScreenConfigurationModal(
 	props: ScreenSettingsFieldsProps & {
 		programmerOwner: boolean;
+		saveError: string | null;
 		onClose: () => void;
-		onConfigurePlaybacks: () => void;
 	},
 ) {
 	const [tab, setTab] = useState<ScreenConfigurationTab>("layout");
+	const playbacks = useScreenPlaybackDraft(props.draft, props.update);
 	return (
 		<ModalRegistration onClose={props.onClose}>
 			<div className="stacked-modal-layer">
@@ -785,11 +463,34 @@ function ScreenConfigurationModal(
 									{ id: "playbacks", label: "Playbacks" },
 								],
 							},
+							...(tab === "playbacks"
+								? [
+										{
+											id: "playback-rows",
+											actions: [
+												{
+													id: "add-row",
+													label: "Add Row",
+													disabled: !canAddPlaybackRow(playbacks.layout),
+													onPress: () => playbacks.changeLayout(addPlaybackRow),
+												},
+											],
+										},
+									]
+								: []),
 						]}
 						closeLabel="Close screen configuration"
 						onClose={props.onClose}
 					/>
-					<div className="screen-configuration-modal-content">
+					<div className="screen-configuration-modal-content" data-tab={tab}>
+						{props.saveError && (
+							<p
+								className="screen-settings-note screen-configuration-wide screen-save-error"
+								role="alert"
+							>
+								Could not save this screen: {props.saveError}
+							</p>
+						)}
 						{tab === "layout" && (
 							<ScreenLayoutFields
 								draft={props.draft}
@@ -819,14 +520,21 @@ function ScreenConfigurationModal(
 							/>
 						)}
 						{tab === "playbacks" && (
-							<div className="screen-playbacks-tab">
-								<p>
-									Configure the Playback rows, faders, buttons, and page mode.
-								</p>
-								<Button variant="primary" onClick={props.onConfigurePlaybacks}>
-									Configure Playbacks
-								</Button>
-							</div>
+							<>
+								<PlaybackLayoutFields
+									layout={playbacks.layout}
+									onLayout={playbacks.changeLayout}
+									pageMode={props.draft.page_mode}
+									onPageMode={playbacks.changePageMode}
+								/>
+								{playbacks.invalid && (
+									<p className="screen-settings-note" role="alert">
+										Not saved yet: use at most 32 playbacks per row and keep
+										every row within playbacks 1-127, counted from the first
+										row's first playback number.
+									</p>
+								)}
+							</>
 						)}
 					</div>
 				</section>
@@ -947,7 +655,6 @@ export function ScreenSettingsCard({
 	) => Promise<void>;
 }) {
 	const [draft, setDraft] = useState(screen);
-	const [playbackModalOpen, setPlaybackModalOpen] = useState(false);
 	const [configurationOpen, setConfigurationOpen] = useState(false);
 	const [copyState, setCopyState] = useState<"idle" | "success" | "error">(
 		"idle",
@@ -956,6 +663,7 @@ export function ScreenSettingsCard({
 	const [removeError, setRemoveError] = useState<string | null>(null);
 	const [removing, setRemoving] = useState(false);
 	const draftRef = useRef(screen);
+	const [saveError, setSaveError] = useState<string | null>(null);
 	const saveQueue = useRef(Promise.resolve());
 	const pending = useRef(0);
 	useEffect(() => {
@@ -985,6 +693,14 @@ export function ScreenSettingsCard({
 				)
 					await updateProgrammerOwner?.({ assign_to_main: true });
 			})
+			// A rejected save is reported and must not stop the saves queued after it.
+			.then(
+				() => setSaveError(null),
+				(error: unknown) =>
+					setSaveError(
+						error instanceof Error ? error.message : "The desk rejected it.",
+					),
+			)
 			.finally(() => {
 				pending.current -= 1;
 			});
@@ -1033,6 +749,11 @@ export function ScreenSettingsCard({
 					programmerOwner ? setRemoveConfirmationOpen(true) : void remove(draft)
 				}
 			/>
+			{saveError && !configurationOpen && (
+				<p className="screen-settings-note screen-save-error" role="alert">
+					Could not save this screen: {saveError}
+				</p>
+			)}
 			{removeConfirmationOpen && (
 				<ScreenRemovalConfirmation
 					draft={draft}
@@ -1052,26 +773,8 @@ export function ScreenSettingsCard({
 					textFiles={textFiles}
 					update={update}
 					programmerOwner={programmerOwner}
+					saveError={saveError}
 					onClose={() => setConfigurationOpen(false)}
-					onConfigurePlaybacks={() => setPlaybackModalOpen(true)}
-				/>
-			)}
-			{playbackModalOpen && (
-				<PlaybackLayoutModal
-					initialLayout={screenPlaybackLayout(draft)}
-					pageMode={draft.page_mode}
-					onClose={() => setPlaybackModalOpen(false)}
-					onSave={(playback_layout, page_mode) => {
-						const legacy = playbackLayoutLegacyFields(playback_layout);
-						update({
-							playback_layout,
-							page_mode,
-							playback_count: legacy.playback_count,
-							playback_rows: legacy.playback_rows,
-							first_playback_slot: legacy.first_playback_slot,
-						});
-						setPlaybackModalOpen(false);
-					}}
 				/>
 			)}
 		</article>

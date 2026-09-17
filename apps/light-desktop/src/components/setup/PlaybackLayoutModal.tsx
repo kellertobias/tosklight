@@ -1,11 +1,4 @@
 import {
-	type PointerEvent as ReactPointerEvent,
-	type RefObject,
-	useRef,
-	useState,
-} from "react";
-import type { PlaybackSurfaceLayout } from "../../api/types";
-import {
 	Button,
 	FormLayout,
 	ModalRegistration,
@@ -15,6 +8,13 @@ import {
 	SwitchField,
 } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
+import {
+	type PointerEvent as ReactPointerEvent,
+	type RefObject,
+	useRef,
+	useState,
+} from "react";
+import type { PlaybackSurfaceLayout } from "../../api/types";
 
 export function reorderPlaybackRows(
 	rows: PlaybackSurfaceLayout["rows"],
@@ -37,7 +37,7 @@ export function reorderPlaybackRows(
 
 type PlaybackRow = PlaybackSurfaceLayout["rows"][number];
 type DraggedPlaybackRow = { pointerId: number; from: number };
-type PlaybackPageMode = "follow_main" | "independent";
+export type PlaybackPageMode = "follow_main" | "independent";
 
 function releaseRowDrag(
 	event: ReactPointerEvent<HTMLButtonElement>,
@@ -140,64 +140,122 @@ function PlaybackRowConfiguration({
 	);
 }
 
-function PlaybackLayoutControls({
-	columns,
-	rowCount,
+const MAX_PLAYBACK_ROWS = 127;
+
+/** Whether a draft layout can be stored; an invalid draft stays on screen unsaved. */
+export function playbackLayoutInvalid(layout: PlaybackSurfaceLayout) {
+	const maxFirst = 128 - layout.playbacks_per_row;
+	return (
+		layout.playbacks_per_row < 1 ||
+		layout.playbacks_per_row > 32 ||
+		layout.rows.length === 0 ||
+		layout.rows.length > MAX_PLAYBACK_ROWS ||
+		layout.playbacks_per_row * layout.rows.length > 127 ||
+		layout.rows.some(
+			(row) =>
+				row.first_playback_slot < 1 ||
+				row.first_playback_slot > maxFirst ||
+				row.button_count < 0 ||
+				row.button_count > 3,
+		)
+	);
+}
+
+/** Adds a row after the last one, continuing its playback numbering. */
+export function addPlaybackRow(
+	current: PlaybackSurfaceLayout,
+): PlaybackSurfaceLayout {
+	if (current.rows.length >= MAX_PLAYBACK_ROWS) return current;
+	const previous = current.rows.at(-1);
+	return {
+		...current,
+		rows: [
+			...current.rows,
+			{
+				first_playback_slot: Math.min(
+					128 - current.playbacks_per_row,
+					(previous?.first_playback_slot ?? 1) + current.playbacks_per_row,
+				),
+				has_fader: true,
+				button_count: 3,
+			},
+		],
+	};
+}
+
+export function canAddPlaybackRow(layout: PlaybackSurfaceLayout) {
+	return layout.rows.length < MAX_PLAYBACK_ROWS;
+}
+
+type LayoutUpdate = (
+	change: (current: PlaybackSurfaceLayout) => PlaybackSurfaceLayout,
+) => void;
+
+/**
+ * The playback layout form: playbacks per row, page mode, and one form row per playback row.
+ * The Configure Playbacks modal and the Playbacks tab of Configure Screen both render it.
+ */
+export function PlaybackLayoutFields({
+	layout,
+	onLayout,
 	pageMode,
-	pageModeLocked,
-	invalid,
-	onColumns,
+	pageModeLocked = false,
 	onPageMode,
-	onAddRow,
-	onSave,
-	onClose,
+	scrollRows = false,
 }: {
-	columns: number;
-	rowCount: number;
+	layout: PlaybackSurfaceLayout;
+	onLayout: LayoutUpdate;
 	pageMode: PlaybackPageMode;
-	pageModeLocked: boolean;
-	invalid: boolean;
-	onColumns: (columns: number) => void;
+	pageModeLocked?: boolean;
 	onPageMode: (mode: PlaybackPageMode) => void;
-	onAddRow: () => void;
-	onSave: () => void;
-	onClose: () => void;
+	/** The modal scrolls its rows; an embedded form scrolls with its host. */
+	scrollRows?: boolean;
 }) {
+	const dragRow = useRef<DraggedPlaybackRow | null>(null);
+	const maxFirst = 128 - layout.playbacks_per_row;
+	const rows = layout.rows.map((row, index) => (
+		<PlaybackRowConfiguration
+			key={index}
+			row={row}
+			index={index}
+			rowCount={layout.rows.length}
+			maxFirst={maxFirst}
+			dragRow={dragRow}
+			onMove={(from, to) => {
+				if (from === to) return;
+				onLayout((current) => ({
+					...current,
+					rows: reorderPlaybackRows(current.rows, from, to),
+				}));
+			}}
+			onUpdate={(changes) =>
+				onLayout((current) => ({
+					...current,
+					rows: current.rows.map((candidate, rowIndex) =>
+						rowIndex === index ? { ...candidate, ...changes } : candidate,
+					),
+				}))
+			}
+			onRemove={() =>
+				onLayout((current) => ({
+					...current,
+					rows: current.rows.filter((_, rowIndex) => rowIndex !== index),
+				}))
+			}
+		/>
+	));
 	return (
 		<>
-			<ModalTitleBar
-				title="Configure Playbacks"
-				groups={[
-					{
-						id: "layout",
-						actions: [
-							{
-								id: "add-row",
-								label: "Add Row",
-								disabled: rowCount >= 127,
-								onPress: onAddRow,
-							},
-						],
-					},
-				]}
-				accept={{
-					id: "save",
-					label: "Save",
-					className: "playback-layout-save",
-					variant: "primary",
-					disabled: invalid,
-					onPress: onSave,
-				}}
-				closeLabel="Close playback configuration"
-				onClose={onClose}
-			/>
 			<FormLayout columns={2} minColumnWidth={190}>
 				<NumberField
 					label="Playbacks per row"
 					min="1"
 					max="32"
-					value={columns}
-					onChange={(event) => onColumns(Number(event.target.value))}
+					value={layout.playbacks_per_row}
+					onChange={(event) => {
+						const playbacks_per_row = Number(event.target.value);
+						onLayout((current) => ({ ...current, playbacks_per_row }));
+					}}
 				/>
 				<SelectField
 					label="Page Mode"
@@ -219,6 +277,13 @@ function PlaybackLayoutControls({
 					The default screen owns the main playback page.
 				</small>
 			)}
+			{scrollRows ? (
+				<WindowScrollArea className="playback-row-list">
+					{rows}
+				</WindowScrollArea>
+			) : (
+				rows
+			)}
 		</>
 	);
 }
@@ -238,57 +303,7 @@ export function PlaybackLayoutModal({
 }) {
 	const [layout, setLayout] = useState(() => structuredClone(initialLayout));
 	const [draftPageMode, setDraftPageMode] = useState(pageMode);
-	const dragRow = useRef<DraggedPlaybackRow | null>(null);
-	const maxRows = 127;
-	const maxFirst = 128 - layout.playbacks_per_row;
-	const invalid =
-		layout.playbacks_per_row < 1 ||
-		layout.playbacks_per_row > 32 ||
-		layout.rows.length === 0 ||
-		layout.rows.length > maxRows ||
-		layout.playbacks_per_row * layout.rows.length > 127 ||
-		layout.rows.some(
-			(row) =>
-				row.first_playback_slot < 1 ||
-				row.first_playback_slot > maxFirst ||
-				row.button_count < 0 ||
-				row.button_count > 3,
-		);
-	const updateRow = (
-		index: number,
-		changes: Partial<PlaybackSurfaceLayout["rows"][number]>,
-	) =>
-		setLayout((current) => ({
-			...current,
-			rows: current.rows.map((row, rowIndex) =>
-				rowIndex === index ? { ...row, ...changes } : row,
-			),
-		}));
-	const addRow = () =>
-		setLayout((current) => {
-			const previous = current.rows.at(-1);
-			return {
-				...current,
-				rows: [
-					...current.rows,
-					{
-						first_playback_slot: Math.min(
-							128 - current.playbacks_per_row,
-							(previous?.first_playback_slot ?? 1) + current.playbacks_per_row,
-						),
-						has_fader: true,
-						button_count: 3,
-					},
-				],
-			};
-		});
-	const moveRow = (from: number, to: number) => {
-		if (from === to) return;
-		setLayout((current) => ({
-			...current,
-			rows: reorderPlaybackRows(current.rows, from, to),
-		}));
-	};
+	const invalid = playbackLayoutInvalid(layout);
 
 	return (
 		<ModalRegistration onClose={onClose}>
@@ -304,42 +319,40 @@ export function PlaybackLayoutModal({
 					aria-modal="true"
 					aria-label="Configure Playbacks"
 				>
-					<PlaybackLayoutControls
-						columns={layout.playbacks_per_row}
-						rowCount={layout.rows.length}
-						pageMode={draftPageMode}
-						pageModeLocked={pageModeLocked}
-						invalid={invalid}
-						onColumns={(playbacks_per_row) =>
-							setLayout((current) => ({ ...current, playbacks_per_row }))
-						}
-						onPageMode={setDraftPageMode}
-						onAddRow={addRow}
-						onSave={() => onSave(layout, draftPageMode)}
+					<ModalTitleBar
+						title="Configure Playbacks"
+						groups={[
+							{
+								id: "layout",
+								actions: [
+									{
+										id: "add-row",
+										label: "Add Row",
+										disabled: !canAddPlaybackRow(layout),
+										onPress: () => setLayout(addPlaybackRow),
+									},
+								],
+							},
+						]}
+						accept={{
+							id: "save",
+							label: "Save",
+							className: "playback-layout-save",
+							variant: "primary",
+							disabled: invalid,
+							onPress: () => onSave(layout, draftPageMode),
+						}}
+						closeLabel="Close playback configuration"
 						onClose={onClose}
 					/>
-					<WindowScrollArea className="playback-row-list">
-						{layout.rows.map((row, index) => (
-							<PlaybackRowConfiguration
-								key={index}
-								row={row}
-								index={index}
-								rowCount={layout.rows.length}
-								maxFirst={maxFirst}
-								dragRow={dragRow}
-								onMove={moveRow}
-								onUpdate={(changes) => updateRow(index, changes)}
-								onRemove={() =>
-									setLayout((current) => ({
-										...current,
-										rows: current.rows.filter(
-											(_, rowIndex) => rowIndex !== index,
-										),
-									}))
-								}
-							/>
-						))}
-					</WindowScrollArea>
+					<PlaybackLayoutFields
+						layout={layout}
+						onLayout={setLayout}
+						pageMode={draftPageMode}
+						pageModeLocked={pageModeLocked}
+						onPageMode={setDraftPageMode}
+						scrollRows
+					/>
 				</section>
 			</div>
 		</ModalRegistration>

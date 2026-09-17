@@ -1094,46 +1094,11 @@
 	gap: 6px;
 	white-space: nowrap;
 }
-.screen-settings-columns {
-	min-width: 0;
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 10px;
-	margin-top: 12px;
-}
-.screen-settings-columns > section {
-	min-width: 0;
-	padding: 10px;
-	border: 1px solid var(--line);
-	border-radius: 7px;
-	background: var(--panel2);
-}
-.screen-settings-columns h3 {
-	margin: 0 0 10px;
-	padding-bottom: 8px;
-	border-bottom: 1px solid var(--line);
-	color: var(--cyan);
-	font-size: 13px;
-}
-.screen-settings-fields {
-	min-width: 0;
-	display: grid;
-	align-content: start;
-	gap: 9px;
-}
 .screen-settings-note {
 	margin: 0;
 	color: var(--muted);
 	font-size: 12px;
 	line-height: 1.4;
-}
-.fixed-screen-pane-settings {
-	display: grid;
-	gap: 8px;
-	padding: 8px;
-	border: 1px solid var(--line);
-	border-radius: 7px;
-	background: color-mix(in srgb, var(--panel) 70%, transparent);
 }
 .fixed-screen-column-settings {
 	display: grid;
@@ -1151,21 +1116,6 @@
 	font-size: 0.78rem;
 	font-weight: 700;
 	text-transform: uppercase;
-}
-.screen-settings-fields > .ui-form-field,
-.screen-settings-fields .ui-form-control,
-.screen-settings-fields .ui-text-control,
-.screen-settings-fields input,
-.screen-settings-fields select,
-.screen-settings-fields button {
-	min-width: 0;
-	max-width: 100%;
-}
-.screen-settings-fields .ui-form-control,
-.screen-settings-fields .ui-text-control,
-.screen-settings-fields input,
-.screen-settings-fields select {
-	width: 100%;
 }
 @media (max-width: 900px) {
 	.screen-settings-header {
