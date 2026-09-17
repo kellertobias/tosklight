@@ -1595,6 +1595,18 @@ button.large-action:disabled {
 .fixture-sheet-mode-text-only .fixture-name small {
 	margin-left: 0;
 }
+/* Compact rows are 32px: the icon-only intensity meter keeps 4px above and below. */
+.fixture-sheet-mode-icon-only .fixture-table .vertical-meter {
+	width: 10px;
+	height: 20px;
+	margin-block: 4px;
+	flex: none;
+}
+.fixture-sheet-mode-icon-only .fixture-table .ui-data-table-row.header,
+.fixture-sheet-mode-text-only .fixture-table .ui-data-table-row.header {
+	min-height: 26px;
+	line-height: 1.1;
+}
 .patch-window > .show-patch-layout {
 	flex: 1;
 	min-height: 0;

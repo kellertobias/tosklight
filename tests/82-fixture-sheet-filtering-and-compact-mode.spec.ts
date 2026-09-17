@@ -384,6 +384,147 @@ test("FIXTURE-SHEET-002-003 @ui › a Dynamic changes DMX while the Fixture Shee
 	await expect(row).toContainText("50%");
 });
 
+test("FIXTURE-SHEET-002-005 @ui › compact modes tighten the ID column, header row, and intensity meter", async ({
+	api,
+	desk,
+	page,
+}) => {
+	test.setTimeout(90_000);
+	await desk.open(api.baseUrl);
+	const desktops = new BrowserDesktops(page, async () => undefined);
+	const configuration = desktops.configure("Compact Fixture Sheet geometry");
+	configuration.addPane(PaneType.Fixtures, {
+		slug: "fixture-sheet-wide",
+		column: 1,
+		row: 1,
+		width: 16,
+		height: 18,
+	});
+	configuration.addPane(PaneType.Fixtures, {
+		slug: "fixture-sheet-narrow",
+		column: 17,
+		row: 1,
+		width: 5,
+		height: 18,
+	});
+	await configuration.apply();
+	const panes = page
+		.locator(".desk-pane")
+		.filter({ has: page.locator(".fixture-window") });
+	await expect(panes).toHaveCount(2);
+	const wide = panes.nth(0);
+	const narrow = panes.nth(1);
+
+	const full = await sheetGeometry(wide);
+	expect(full).toMatchObject({ idWidth: 88, meterHeight: 30, rowHeight: 43 });
+	expect(full.headerHeight).toBeGreaterThanOrEqual(40);
+
+	for (const mode of ["icon-only", "text-only"] as const) {
+		for (const pane of [wide, narrow]) {
+			await setCompactMode(page, pane, mode);
+			const geometry = await sheetGeometry(pane);
+			expect(geometry.idWidth).toBe(64);
+			expect(geometry.idWidth).toBeLessThan(full.idWidth);
+			expect(geometry.rowHeight).toBe(32);
+			expect(geometry.headerHeight).toBeGreaterThanOrEqual(24);
+			expect(geometry.headerHeight).toBeLessThan(full.headerHeight);
+			expect(geometry.headerFontSize).toBeGreaterThanOrEqual(11);
+			expect(geometry.headerClipped).toBe(false);
+			expect(geometry.idClipped).toBe(false);
+			expect(geometry.widestIdClipped).toBe(false);
+			if (mode === "icon-only") {
+				expect(geometry.meterHeight).toBe(20);
+				expect(geometry.meterHeight).toBeLessThan(full.meterHeight);
+				expect(geometry.meterWidth).toBeGreaterThanOrEqual(10);
+				expect(geometry.meterTopGap).toBeGreaterThanOrEqual(4);
+				expect(geometry.meterBottomGap).toBeGreaterThanOrEqual(4);
+			} else {
+				expect(geometry.meterHeight).toBe(0);
+			}
+		}
+	}
+
+	await setCompactMode(page, wide, "off");
+	expect(await sheetGeometry(wide)).toEqual(full);
+});
+
+async function setCompactMode(
+	page: Page,
+	pane: ReturnType<Page["locator"]>,
+	mode: "off" | "icon-only" | "text-only",
+) {
+	const label = { off: "Off", "icon-only": "Icon only", "text-only": "Text only" }[
+		mode
+	];
+	await pane.getByRole("button", { name: "Settings" }).click();
+	const settings = page.getByRole("dialog", { name: "Pane Settings" });
+	await settings.getByRole("tab", { name: "Fixture Sheet" }).click();
+	await settings
+		.locator(".ui-form-field")
+		.filter({ hasText: "Compact mode" })
+		.locator(".ui-select-trigger")
+		.click();
+	await page.getByRole("option", { name: label, exact: true }).click();
+	await page.keyboard.press("Escape");
+	await expect(settings).toHaveCount(0);
+	await expect(pane.locator(".fixture-window")).toHaveAttribute(
+		"data-fixture-sheet-compact-mode",
+		mode,
+	);
+}
+
+function sheetGeometry(pane: ReturnType<Page["locator"]>) {
+	return pane.locator(".fixture-window .fixture-table").evaluate((table) => {
+		const header = table.querySelector<HTMLElement>(".ui-data-table-row.header");
+		const row = table.querySelector<HTMLElement>(
+			".ui-data-table-row:not(.header)[data-fixture-id]",
+		);
+		const idHeader = header?.querySelector<HTMLElement>("[role=columnheader]");
+		const idCell = row?.querySelector<HTMLElement>(":scope > span");
+		const meter = row?.querySelector<HTMLElement>(".vertical-meter");
+		if (!header || !row || !idHeader || !idCell)
+			throw new Error("Fixture Sheet geometry probe is incomplete");
+		const clipped = (element: HTMLElement) =>
+			element.scrollWidth > element.clientWidth ||
+			element.scrollHeight > element.clientHeight;
+		const probe = idCell.cloneNode(true) as HTMLElement;
+		const id = probe.querySelector(".fixture-sheet-id");
+		if (!id) throw new Error("Fixture Sheet ID cell has no ID content");
+		id.innerHTML =
+			'<span>9999.99</span><small class="fixture-step-marker">BASE INSIDE</small>';
+		idCell.after(probe);
+		probe.style.position = "absolute";
+		probe.style.width = `${idCell.getBoundingClientRect().width}px`;
+		probe.style.height = `${idCell.getBoundingClientRect().height}px`;
+		const widestIdClipped = [probe, ...probe.querySelectorAll<HTMLElement>(
+			".fixture-sheet-id, .fixture-sheet-id > *",
+		)].some((element) => element.scrollWidth > element.clientWidth);
+		probe.remove();
+		const rowBounds = row.getBoundingClientRect();
+		const meterBounds = meter?.getBoundingClientRect();
+		const visibleMeter = meterBounds && meterBounds.height > 0;
+		return {
+			idWidth: Math.round(idHeader.getBoundingClientRect().width),
+			rowHeight: Math.round(rowBounds.height),
+			headerHeight: Math.round(header.getBoundingClientRect().height),
+			headerFontSize: Number.parseFloat(getComputedStyle(header).fontSize),
+			headerClipped: Array.from(
+				header.querySelectorAll<HTMLElement>("[role=columnheader]"),
+			).some((cell) => cell.scrollHeight > cell.clientHeight),
+			idClipped: clipped(idCell),
+			widestIdClipped,
+			meterWidth: visibleMeter ? Math.round(meterBounds.width) : 0,
+			meterHeight: visibleMeter ? Math.round(meterBounds.height) : 0,
+			meterTopGap: visibleMeter
+				? Math.round(meterBounds.top - rowBounds.top)
+				: 0,
+			meterBottomGap: visibleMeter
+				? Math.round(rowBounds.bottom - meterBounds.bottom)
+				: 0,
+		};
+	});
+}
+
 function fixtureRow(page: Page, fixtureId: string) {
 	return page.locator(
 		`.fixture-window .ui-data-table-row:not(.header)[data-fixture-id="${fixtureId}"]`,

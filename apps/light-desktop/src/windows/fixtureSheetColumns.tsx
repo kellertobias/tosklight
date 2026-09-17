@@ -22,11 +22,15 @@ function stepMarker(fixture: FixtureSheetRow, present: FixtureStepPresenter) {
 	return null;
 }
 
-function fixtureIdColumn(present: FixtureStepPresenter): Column {
+function fixtureIdColumn(
+	present: FixtureStepPresenter,
+	compactMode: FixtureSheetCompactMode,
+): Column {
 	return {
 		id: "id",
 		header: "ID",
-		width: "88px",
+		// Compact modes trim the ID column; full mode keeps its established width.
+		width: compactMode === "off" ? "88px" : "64px",
 		render: (fixture) => {
 			const marker = stepMarker(fixture, present);
 			return (
@@ -485,7 +489,7 @@ export function fixtureSheetColumns(
 	compactMode: FixtureSheetCompactMode = "off",
 ): Column[] {
 	return [
-		fixtureIdColumn(present),
+		fixtureIdColumn(present, compactMode),
 		fixtureIconColumn(),
 		fixtureNameColumn(showType, compactMode),
 		patchColumn(),

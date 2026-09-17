@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **210 root cases across 83 files**.
+Default catalog: **211 root cases across 83 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -189,6 +189,7 @@ Default catalog: **210 root cases across 83 files**.
 | 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-001 @ui › independent scenery identities stay out of the programmable sheet | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
 | 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-004 @ui › narrow Beam members do not paint into their neighbor | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
 | 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-003 @ui › a Dynamic changes DMX while the Fixture Sheet base stays stable | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
+| 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-005 @ui › compact modes tighten the ID column, header row, and intensity meter | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
 | 83-show-patch-installed-appearance.spec.ts | PATCH-APPEARANCE-003-001 @ui › exact table, combined MIB, and emitterless source state survive reopen | repository contract | @ui | show-patch-installed-appearance | standard failure evidence | parallel | pending-semantic-migration |
 | 84-dynamic-pool-visibility.spec.ts | DYNAMICS-POOL-001 @ui › stored Dynamic 29 stays painted through navigation and reconnect | repository contract | @ui | dynamic-pool-visibility | standard failure evidence | parallel | pending-semantic-migration |
 | 84-semantic-media-running-panes.spec.ts | MEDIA-001 @ui › Media is absent without an eligible patched server | docs/testing/14-media-and-running-panes.md | @ui | semantic-media-running-panes | standard failure evidence | parallel | pending-semantic-migration |
